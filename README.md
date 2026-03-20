@@ -6,7 +6,7 @@ Este diretório contém a estrutura centralizada para automações via Excel (VB
 - `MonitorAutomacoes.ps1`: Script principal que gerencia o agendamento e execução.
 - `config.json`: Cadastro centralizado de todas as automações ativas.
 - `_Template/`: Modelo base para criar novas automações.
-- `Módulos/` (Receitas Bloqueadas, etc): Pastas individuais para cada processo.
+- `Módulos`: Pastas individuais na raiz (Receitas Bloqueadas, etc) para cada processo.
 
 ## Como Adicionar uma Nova Automação
 1.  **Copie a pasta `_Template`**: Dê o nome da sua nova automação à pasta copiada.
