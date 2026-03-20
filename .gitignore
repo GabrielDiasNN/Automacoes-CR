@@ -1,0 +1,9 @@
+# Ignorar logs e arquivos de texto temporários
+**/Logs/
+*.log
+*.txt
+
+# Ignorar arquivos temporários do Excel
+~$*.xlsm
+~$*.xlsx
+~$*.xls
