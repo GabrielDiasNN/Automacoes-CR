@@ -1,0 +1,61 @@
+{
+  "app": {
+    "enabled": true
+  },
+  "paths": {
+    "attachmentPath": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+    "logFile": "C:\\Automacoes\\Receitas Bloqueadas\\ReceitasBloqueadas.txt",
+    "stateFile": "whatsapp-state.json",
+    "authDir": ".wwebjs_auth"
+  },
+  "target": {
+    "enabled": true,
+    "type": "contact",
+    "groupName": "",
+    "contactPhone": "5547999999999",
+    "contactId": "",
+    "mentions": {
+      "enabled": false,
+      "list": []
+    }
+  },
+  "message": {
+    "sendAttachment": true,
+    "caption": {
+      "enabled": true,
+      "title": {
+        "enabled": true,
+        "text": "Receitas Bloqueadas"
+      },
+      "body": {
+        "enabled": true,
+        "text": "Segue planilha atualizada em anexo."
+      },
+      "execId": {
+        "enabled": false,
+        "label": "Execução:",
+        "fallback": "sem-exec-id"
+      }
+    }
+  },
+  "idempotency": {
+    "enabled": true
+  },
+  "terminal": {
+    "showQr": true
+  },
+  "auth": {
+    "clientId": "receitas-bloqueadas"
+  },
+  "runtime": {
+    "headless": true
+  },
+  "retry": {
+    "enabled": true,
+    "maxAttempts": 3,
+    "attemptDelayMs": 20000,
+    "sendSettleMs": 8000,
+    "finalWaitMs": 5000,
+    "initTimeoutMs": 180000
+  }
+}

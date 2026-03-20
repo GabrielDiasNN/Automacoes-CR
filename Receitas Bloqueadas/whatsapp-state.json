@@ -1,0 +1,114 @@
+{
+  "sentExecutions": {
+    "contact|5547999999999|VALIDACAO_CAMADA1|66395|1773746592103": {
+      "sentAtBR": "17/03/2026 08:54:22",
+      "execId": "VALIDACAO_CAMADA1",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB0028D10071F2FFA1F9E"
+    },
+    "contact|5547999999999|VALIDACAO_CAMADA2|66706|1773748744128": {
+      "sentAtBR": "17/03/2026 09:02:25",
+      "execId": "VALIDACAO_CAMADA2",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB0F72057D0755213AE3D"
+    },
+    "contact|5547999999999|UNIT_TEST_QUOTE|66666|1773749039092": {
+      "sentAtBR": "17/03/2026 09:15:39",
+      "execId": "UNIT_TEST_QUOTE",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB01506D6F37EE727707D"
+    },
+    "contact|5547999999999|20260317_092149|66961|1773750109129": {
+      "sentAtBR": "17/03/2026 09:22:18",
+      "execId": "20260317_092149",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB0B10BCDE2F6975B8E90"
+    },
+    "contact|5547999999999|20260317_153014|65913|1773772214097": {
+      "sentAtBR": "17/03/2026 15:30:58",
+      "execId": "20260317_153014",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB01FD897A71A0F489444"
+    },
+    "contact|5547999999999|20260318_073018|65705|1773829818090": {
+      "sentAtBR": "18/03/2026 07:31:06",
+      "execId": "20260318_073018",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB0DF85F3A1288A086EB4"
+    },
+    "contact|5547999999999|20260318_153016|65197|1773858616086": {
+      "sentAtBR": "18/03/2026 15:31:36",
+      "execId": "20260318_153016",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB0AAA06FD6DEDE6CE7C4"
+    },
+    "contact|5547999999999|20260319_073028|64570|1773916228086": {
+      "sentAtBR": "19/03/2026 07:31:21",
+      "execId": "20260319_073028",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB00D5882D63C155F9ACE"
+    },
+    "contact|5547999999999|20260319_153027|64534|1773945027100": {
+      "sentAtBR": "19/03/2026 15:31:16",
+      "execId": "20260319_153027",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB00D6B9CCF75F8FDA8EB"
+    },
+    "contact|5547999999999|20260320_073012|64610|1774002612093": {
+      "sentAtBR": "20/03/2026 07:31:14",
+      "execId": "20260320_073012",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB0C9B9ABEEA169813C30"
+    },
+    "contact|5547999999999|20260320_153027|64222|1774031427202": {
+      "sentAtBR": "20/03/2026 15:31:39",
+      "execId": "20260320_153027",
+      "targetType": "contact",
+      "targetLabel": "5547999999999",
+      "targetSource": "getNumberId + getChatById",
+      "mentions": [],
+      "attachment": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+      "messageId": "true_5547999999999@c.us_3EB00F2157EA520CAD359E"
+    }
+  }
+}

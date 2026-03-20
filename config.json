@@ -1,0 +1,44 @@
+{
+  "settings": {
+    "logDirectory": "C:\\Automacoes\\Logs",
+    "checkIntervalSeconds": 20
+  },
+  "tasks": [
+    {
+      "name": "Receitas Bloqueadas",
+      "scriptPath": "C:\\Automacoes\\Receitas Bloqueadas\\Trigger_Automation.vbs",
+      "enabled": true,
+      "preventOverlap": true,
+      "waitForExit": false,
+      "schedule": {
+        "daysOfWeek": [1, 2, 3, 4, 5],
+        "hours": [7, 15],
+        "minutes": [30]
+      }
+    },
+    {
+      "name": "Montagem Terceirizados",
+      "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\Trigger_Automation.vbs",
+      "enabled": true,
+      "preventOverlap": true,
+      "waitForExit": false,
+      "schedule": {
+        "daysOfWeek": [1, 2, 3, 4, 5],
+        "hours": [],
+        "minutes": [0]
+      }
+    },
+    {
+      "name": "Receitas Emitidas",
+      "scriptPath": "C:\\Automacoes\\Receitas Emitidas\\Trigger_Automation.vbs",
+      "enabled": true,
+      "preventOverlap": true,
+      "waitForExit": false,
+      "schedule": {
+        "daysOfWeek": [5],
+        "hours": [7],
+        "minutes": [5]
+      }
+    }
+  ]
+}
