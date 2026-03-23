@@ -54,8 +54,8 @@
     "enabled": true,
     "maxAttempts": 3,
     "attemptDelayMs": 20000,
-    "sendSettleMs": 8000,
-    "finalWaitMs": 5000,
+    "sendSettleMs": 20000,
+    "finalWaitMs": 15000,
     "initTimeoutMs": 180000
   }
 }

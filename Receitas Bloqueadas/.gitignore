@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# WhatsApp Web Session & Cache
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Runtime Logs
+Logs/
+*.log
+ReceitasBloqueadas.txt
+
+# State & Temp Files
+whatsapp-state.json
+diagnose.js
+
+# Data files (usually kept locally)
+*.xlsm

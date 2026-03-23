@@ -1015,11 +1015,10 @@ async function enviarUmaTentativa(tentativa) {
             `Envio concluído com sucesso para ${destino.targetLabel}. ID=${messageId || 'sem-id'}`
           );
 
+          escreverLog('NODE', `Aguardando ${CONFIG.retry.sendSettleMs / 1000}s para estabilização do envio (settle).`);
           await sleep(CONFIG.retry.sendSettleMs);
-          escreverLog(
-            'NODE',
-            `Aguardando ${CONFIG.retry.finalWaitMs / 1000}s antes de encerrar.`
-          );
+          
+          escreverLog('NODE', `Aguardando mais ${CONFIG.retry.finalWaitMs / 1000}s para sincronização multi-device antes de encerrar.`);
           await sleep(CONFIG.retry.finalWaitMs);
 
           await sucesso({ messageId, destino });
