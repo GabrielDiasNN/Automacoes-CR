@@ -1,7 +1,17 @@
 {
   "settings": {
     "logDirectory": "C:\\Automacoes\\Logs",
-    "checkIntervalSeconds": 20
+    "basePath": "C:\\Automacoes",
+    "checkIntervalSeconds": 20,
+    "exitCodeMap": {
+      "0": "Sucesso",
+      "1": "Workbook não encontrado",
+      "2": "Falha ao iniciar Excel",
+      "3": "Falha ao abrir workbook",
+      "4": "Falha na macro",
+      "5": "Timeout VBA",
+      "6": "VBA reportou falha ou erro fatal"
+    }
   },
   "tasks": [
     {

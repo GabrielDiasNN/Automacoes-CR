@@ -5,11 +5,12 @@
 
 $ErrorActionPreference = "Stop"
 
-$Utf8Bom = New-Object System.Text.UTF8Encoding($true)
+$Utf8Bom   = New-Object System.Text.UTF8Encoding($true)
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 try {
-    [Console]::InputEncoding  = $Utf8Bom
-    [Console]::OutputEncoding = $Utf8Bom
-    $OutputEncoding = $Utf8Bom
+    [Console]::InputEncoding  = $Utf8NoBom
+    [Console]::OutputEncoding = $Utf8NoBom
+    $OutputEncoding = $Utf8NoBom
 } catch {}
 
 $MutexName = "Global\MonitorAutomacoesMutex"
@@ -217,7 +218,17 @@ function Remove-FinishedTasks {
 
         try {
             if ($proc.HasExited) {
-                Write-Log "Tarefa '$taskName' finalizada. ExitCode=$($proc.ExitCode) PID=$($proc.Id)"
+                $exitCode = $proc.ExitCode
+                $desc = ""
+                if ($script:Config.settings.exitCodeMap -and $script:Config.settings.exitCodeMap."$exitCode") {
+                    $desc = " - $($script:Config.settings.exitCodeMap."$exitCode")"
+                }
+
+                if ($exitCode -ne 0) {
+                    Write-Log "Tarefa '$taskName' finalizada com ERRO. ExitCode=$exitCode$desc PID=$($proc.Id)" -Type "ERRO"
+                } else {
+                    Write-Log "Tarefa '$taskName' finalizada. ExitCode=$exitCode$desc PID=$($proc.Id)"
+                }
                 $toRemove += $taskName
             }
         } catch {
@@ -246,20 +257,21 @@ function Start-TaskProcess {
     try {
         $ext = [System.IO.Path]::GetExtension($Path).ToLower()
         $proc = $null
+        $execId = "$(Get-Date -Format 'yyyyMMdd_HHmmss')_$(Get-Random -Minimum 1000 -Maximum 9999)"
 
         if ($ext -eq ".vbs") {
-            $proc = Start-Process "wscript.exe" -ArgumentList "`"$Path`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
+            $proc = Start-Process "wscript.exe" -ArgumentList "`"$Path`" `"$execId`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
         } elseif ($ext -eq ".ps1") {
-            $proc = Start-Process "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$Path`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
+            $proc = Start-Process "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$Path`" `"$execId`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
         } else {
             throw "Extensão '$ext' não suportada."
         }
 
-        Write-Log "Tarefa '$Name' iniciada. PID=$($proc.Id) | Script=$Path" -LogDir $LogDir
+        Write-Log "Tarefa '$Name' iniciada. [ExecId=$execId] PID=$($proc.Id) | Script=$Path" -LogDir $LogDir
 
         if ($WaitForExit) {
             $proc.WaitForExit()
-            Write-Log "Tarefa '$Name' finalizada em modo síncrono. ExitCode=$($proc.ExitCode) PID=$($proc.Id)" -LogDir $LogDir
+            Write-Log "Tarefa '$Name' finalizada em modo síncrono. [ExecId=$execId] ExitCode=$($proc.ExitCode) PID=$($proc.Id)" -LogDir $LogDir
         } else {
             $script:RunningTasks[$Name] = $proc
         }
@@ -330,6 +342,13 @@ function Invoke-ScheduledTask {
 }
 
 if (-not (Update-Configuration -Force)) { Exit }
+
+# Registra shutdown gracioso (encerra com log)
+try {
+    Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+        Write-Log "Monitor encerrando (sinal de saída recebido)." -Type "WARN"
+    } | Out-Null
+} catch {}
 
 Write-Log "Monitor iniciado v3.5 (hot reload ativo). Tarefas carregadas: $($script:Config.tasks.Count)"
 

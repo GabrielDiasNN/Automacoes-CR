@@ -1,27 +1,74 @@
-# Central de Automações
+# Central de Automações (Automacoes Hub)
 
-Este diretório contém a estrutura centralizada para automações via Excel (VBA) e PowerShell.
+Este repositório é o núcleo técnico para orquestração de automações fiscais e operacionais. Utiliza um modelo **Monitor-Trigger-Action** para garantir execução resiliente, logs centralizados e monitoramento em tempo real.
 
-## Estrutura de Pastas
-- `MonitorAutomacoes.ps1`: Script principal que gerencia o agendamento e execução.
-- `config.json`: Cadastro centralizado de todas as automações ativas.
-- `_Template/`: Modelo base para criar novas automações.
-- `Módulos`: Pastas individuais na raiz (Receitas Bloqueadas, etc) para cada processo.
+## 🏗️ Arquitetura Técnica
 
-## Como Adicionar uma Nova Automação
-1.  **Copie a pasta `_Template`**: Dê o nome da sua nova automação à pasta copiada.
-2.  **Adicione sua Planilha**: Coloque seu arquivo `.xlsm` dentro da nova pasta.
-3.  **Configure o Disparador**: Edite o arquivo `Trigger_Automation.vbs` na nova pasta:
-    - `excelPath`: Ajuste para o nome da sua planilha.
-    - `macroName`: Nome da macro que deve ser chamada inicialmente.
-    - `logPath`: Ajuste o nome do arquivo de log se desejar.
-4.   **Cadastre no Monitor**: Abra o arquivo `C:\Automacoes\config.json` e adicione a nova tarefa no array `"tasks"`.
-5.  **Reinicie o Monitor**: O monitor recarregará a configuração automaticamente em até 20 segundos.
-
-## Padronização Necessária
-- O arquivo principal de disparo deve sempre se chamar `Trigger_Automation.vbs`.
-- Utilize a subpasta `Logs/` para os registros de execução.
-- Se possível, retorne ExitCodes específicos para erros conhecidos.
+```mermaid
+graph TD
+    A[MonitorAutomacoes.ps1] -->|Agenda/Hot-Reload| B(config.json)
+    A -->|Dispara| C{Trigger_Automation.vbs}
+    C -->|Instancia| D[Excel VBA / Power Query]
+    D -->|SQL/PQ| E[(Oracle DB)]
+    D -->|Saídas| F[Email / Dashboard]
+    D -->|Opcional| G[Node.js WhatsApp]
+    G -->|web-js| H[WhatsApp Business]
+```
 
 ---
-*Mantido por Antigravity AI*
+
+## 🚀 Módulos de Automação
+
+### 1. **Montagem de Terceirizados** (Robô Fiscal v8.8.0)
+*   **Objetivo**: Validação fiscal determinística de ordens de montagem externa.
+*   **Frequência**: Segunda a Sexta, de hora em hora.
+*   **Core Business**:
+    *   **Refresh Deterministico**: Através da coluna `VALIDA_ATUALIZACAO` no Oracle, o robô garante que os dados foram efetivamente renovados antes de prosseguir.
+    *   **Validação NF/OB**: Cruzamento de dados de notas fiscais e ordens de fabricação (OBs).
+    *   **Telemetria**: Registro de tempo de conexão, processamento e envio de indicadores.
+*   **Tecnologia**: Excel/VBA, Power Query, Oracle SQL.
+
+### 2. **Receitas Bloqueadas**
+*   **Objetivo**: Processamento de receitas retidas e distribuição multicanal.
+*   **Frequência**: Segunda a Sexta, às 07:30 e 15:30.
+*   **Core Business**:
+    *   **Distribuição Híbrida**: Envio concomitante via E-mail (HTML) e WhatsApp.
+    *   **WhatsApp Gateway**: Utiliza Node.js (`whatsapp-web.js`) com sistema de idempotência para evitar envios duplicados.
+    *   **Sessão Resiliente**: Gestão de autenticação estável com fallback para pareamento manual se necessário.
+*   **Tecnologia**: Excel/VBA, Power Query, Node.js, WhatsApp API.
+
+### 3. **Receitas Emitidas**
+*   **Objetivo**: Controle semanal para conferência física na Cozinha de Químicos.
+*   **Frequência**: Sextas-feiras às 07:05.
+*   **Core Business**:
+    *   **Agrupamento por Máquina**: Relatório compacto gerado via Tabela Dinâmica e convertido para HTML otimizado para Outlook.
+    *   **Interface**: Destinado à equipe operacional (Cozinha).
+*   **Tecnologia**: Excel/VBA, Power Query.
+
+---
+
+## 🛠️ Operação e Monitoramento
+
+### Monitor Central (`MonitorAutomacoes.ps1`)
+*   Executa em background controlado por um **Mutex** global.
+*   **Hot-Reload**: Alterações no `config.json` são aplicadas automaticamente em 20s.
+*   **Logs Consolidados**: Localizados em `C:\Automacoes\Logs\yyyy-MM_Monitor.log`.
+
+### Tabela de Erros Padronizada
+| Código | Descrição |
+| :--- | :--- |
+| **0** | Sucesso |
+| **1-3** | Falha de Arquivo ou Ambiente |
+| **4** | Falha interna na Macro VBA |
+| **5** | Timeout (Oracle/Processamento) |
+| **6** | Erro Fatal reportado pela lógica de negócio |
+
+---
+
+## 📏 Padrões de Desenvolvimento
+1.  **Codificação**: Todo código VBA (`.bas`) deve seguir o padrão **ANSI (Windows-1252)** via skill `vba-vbe-ansi`.
+2.  **Entrada**: O ponto de entrada obrigatório é o script `Trigger_Automation.vbs` dentro de cada módulo.
+3.  **Logs Localizados**: Cada módulo deve manter logs internos detalhados na subpasta `Logs/` para diagnóstico profundo.
+
+---
+*Mantido pela equipe de Automações & Antigravity AI*

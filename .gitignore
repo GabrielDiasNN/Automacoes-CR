@@ -10,3 +10,7 @@
 ~$*.xlsm
 ~$*.xlsx
 ~$*.xls
+
+# Ignorar pastas de sessão do WhatsApp
+.wwebjs_auth/
+.wwebjs_cache/
