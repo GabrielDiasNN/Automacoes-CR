@@ -16,3 +16,4 @@ diagnose.js
 
 # Data files (usually kept locally)
 *.xlsm
+!Receitas Bloqueadas.xlsm
