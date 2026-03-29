@@ -88,7 +88,10 @@ End Sub
 ' ESTRUTURA VISUAL
 ' ====================================================================================
 Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
-    On Error Resume Next
+    Dim blnScreenUpdatingOriginal As Boolean
+
+    blnScreenUpdatingOriginal = Application.ScreenUpdating
+    On Error GoTo TratarErro
     Application.ScreenUpdating = False
     
     With ws
@@ -192,8 +195,14 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         ' Removida dependência de ActiveWindow
     End With
 
-    Application.ScreenUpdating = True
+Saida:
+    Application.ScreenUpdating = blnScreenUpdatingOriginal
     On Error GoTo 0
+    Exit Sub
+
+TratarErro:
+    GravarLogEx "AVISO: CriarEstruturaDashboard falhou: " & Err.Description, LOG_WARNING
+    Resume Saida
 End Sub
 
 ' ====================================================================================

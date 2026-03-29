@@ -155,6 +155,7 @@ excelApp.AskToUpdateLinks = False
 
 Set wb = excelApp.Workbooks.Open(excelPath)
 If Err.Number <> 0 Or (wb Is Nothing) Then Call EncerrarComErro(3, "Falha ao abrir workbook. Err=" & Err.Number)
+If wb.ReadOnly Then Call EncerrarComErro(7, "Workbook aberto em modo somente leitura. Possivel bloqueio por outra instancia: " & excelPath)
 
 WriteLog "INFO", "Executando macro: " & macroName
 Err.Clear

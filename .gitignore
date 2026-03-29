@@ -14,3 +14,7 @@
 # Ignorar pastas de sessão do WhatsApp
 .wwebjs_auth/
 .wwebjs_cache/
+
+# Artefatos de auditoria e locks operacionais
+Audit/
+**/.sendwhatsapp.lock/

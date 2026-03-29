@@ -10,7 +10,10 @@
       "3": "Falha ao abrir workbook",
       "4": "Falha na macro",
       "5": "Timeout VBA",
-      "6": "VBA reportou falha ou erro fatal"
+      "6": "VBA reportou falha ou erro fatal",
+      "7": "Workbook bloqueado (aberto em modo somente leitura)",
+      "23": "Bridge de WhatsApp em cooldown de retry (envio adiado)",
+      "40": "Execucao concorrente bloqueada no bridge de WhatsApp"
     }
   },
   "tasks": [

@@ -5,7 +5,6 @@ Option Explicit
 ' PRIVATE STATE
 ' ====================================================================================
 Private m_Telemetria  As Telemetria
-Private m_RunId       As String
 Private m_OutlookApp  As Object
 
 ' ====================================================================================
@@ -33,12 +32,15 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
         Set .WorkbookAlvo = ThisWorkbook
         If strExecId <> "" Then
             .RunId = strExecId
-            m_RunId = strExecId ' Compatibilidade legada com modLogging
+            DefinirRunId strExecId
         Else
             Call IniciarRunId(True)
             .RunId = GetRunId()
         End If
     End With
+
+    LimparEstadoNotificacao
+    LimparTelemetriaExecucao
 
     InicializarAplicacao objContexto
     
@@ -80,7 +82,7 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
     
     ExecutarRefreshSincrono objConexaoAlvo
     
-    GravarLogEx "Refresh Oracle: fim | Duracao=" & Format$(Timer - dblTempoInicio, "0.00") & "s", LOG_INFO
+    GravarLogEx "Refresh Oracle: fim | Duracao=" & Format$(TimerElapsed(dblTempoInicio), "0.00") & "s", LOG_INFO
     LogStepEnd "Refresh concluido"
 
     ' Snapshot DEPOIS + Validacao STAMP
@@ -108,7 +110,7 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
     RegistrarHistorico True, m_Telemetria
     LogStepEnd "OK"
 
-    GravarLogEx "FIM DO PROCESSO. Resultado=Sucesso | Tempo=" & Format$(Timer - m_Telemetria.InicioExecucao, "0.00") & "s", LOG_INFO
+    GravarLogEx "FIM DO PROCESSO. Resultado=Sucesso | Tempo=" & Format$(TimerElapsed(m_Telemetria.InicioExecucao), "0.00") & "s", LOG_INFO
     
     If Not blnModoRobo Then
         MsgBox "Processo concluido!" & vbCrLf & _
@@ -147,22 +149,53 @@ Private Sub ValidarPreCondicoes(ByVal objContexto As clsAppContext)
     End If
 End Sub
 
+Private Sub LimparTelemetriaExecucao()
+    With m_Telemetria
+        .InicioExecucao = 0#
+        .FimConexao = 0#
+        .FimValidacao = 0#
+        .FimEmail = 0#
+        .totalLinhas = 0
+        .totalErros = 0
+    End With
+End Sub
+
 Private Sub ExecutarRefreshSincrono(ByVal objConexao As Object)
+    On Error GoTo TratarErro
+
+    ConfigurarConexaoRefresh objConexao
+    objConexao.Refresh
+    Exit Sub
+
+TratarErro:
+    Err.Raise vbObjectError + 704, "ExecutarRefreshSincrono", "Falha no refresh Oracle: " & Err.Description
+End Sub
+
+Private Sub ConfigurarConexaoRefresh(ByVal objConexao As Object)
+    Dim blnConfigurado As Boolean
+
     On Error Resume Next
-    
-    ' Tenta configurar OLEDB (Silencioso se nao suportado)
+
+    Err.Clear
     objConexao.OLEDBConnection.BackgroundQuery = False
     objConexao.OLEDBConnection.CommandTimeout = ORACLE_TIMEOUT_SECONDS
-    
-    ' Tenta configurar ODBC (Silencioso se nao suportado)
+    If Err.Number = 0 Then
+        blnConfigurado = True
+        GravarLogEx "Refresh Oracle: timeout OLEDB=" & ORACLE_TIMEOUT_SECONDS & "s", LOG_DEBUG
+    End If
+
+    Err.Clear
     objConexao.ODBCConnection.BackgroundQuery = False
     objConexao.ODBCConnection.CommandTimeout = ORACLE_TIMEOUT_SECONDS
-    
-    Err.Clear
-    objConexao.Refresh
-    
-    If Err.Number <> 0 Then
-        Err.Raise Err.Number, "ExecutarRefreshSincrono", Err.Description
+    If Err.Number = 0 Then
+        blnConfigurado = True
+        GravarLogEx "Refresh Oracle: timeout ODBC=" & ORACLE_TIMEOUT_SECONDS & "s", LOG_DEBUG
+    End If
+
+    On Error GoTo 0
+
+    If Not blnConfigurado Then
+        GravarLogEx "Refresh Oracle: timeout de conexao nao aplicado (tipo de conexao nao suportado).", LOG_WARNING
     End If
 End Sub
 
@@ -224,4 +257,4 @@ Public Sub FinalizarAplicacao(ByVal objContexto As clsAppContext)
     
     Set m_OutlookApp = Nothing
     On Error GoTo 0
-End Sub
+End Sub

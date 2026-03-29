@@ -252,7 +252,13 @@ If POST_EXECUTION_BAT <> "" Then
         wshTemp.CurrentDirectory = fso.GetParentFolderName(POST_EXECUTION_BAT)
         batExitCode = wshTemp.Run(comandoBat, 0, True)
         
-        If batExitCode <> 0 Then WriteLog "WARN", "Script pos-execucao retornou ExitCode " & batExitCode
+        If batExitCode = 40 Then
+            WriteLog "INFO", "Script pos-execucao ignorado por lock ativo (ExitCode 40)."
+        ElseIf batExitCode = 23 Then
+            WriteLog "INFO", "Script pos-execucao adiado por cooldown de retry no bridge WhatsApp (ExitCode 23)."
+        ElseIf batExitCode <> 0 Then
+            WriteLog "WARN", "Script pos-execucao retornou ExitCode " & batExitCode
+        End If
         WriteLog "INFO", "Pos-execucao concluida."
         Set wshTemp = Nothing
     Else

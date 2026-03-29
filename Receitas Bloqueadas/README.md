@@ -37,6 +37,7 @@ Atua como um validador de ambiente e bootstrap para o Node.js:
 - Gerencia o modo de execução (AUTO vs PAIRING).
 - Se a sessão do WhatsApp estiver expirada ou ausente, lança automaticamente uma janela CMD visível para o pareamento do QR Code.
 - Captura e loga o `ERRORLEVEL` do Node.js.
+- Aplica lock local de execução (`.sendwhatsapp.lock`) para evitar concorrência entre duas instâncias silenciosas.
 
 ### 4. Distribuidor Node.js (`sendWhatsApp.js`)
 Utiliza a biblioteca `whatsapp-web.js` para o envio das mensagens:
@@ -57,6 +58,10 @@ O comportamento do envio via WhatsApp é totalmente parametrizável:
 - **runtime**: `headless: true` para execução em segundo plano ou `false` para depuração visual.
 - **retry**: Configurações de tempo e tentativas para garantir a entrega.
 - **paths**: Define os caminhos dos arquivos de log, estado e autenticação.
+- **idempotency**:
+  - `enabled`: ativa prevenção de reenvio por execução.
+  - `retryFailedAfterMs`: define cooldown para tentar novamente a mesma entrega após falha.
+  - `keepSuccessForMs` e `keepFailureForMs`: definem retenção de histórico no `whatsapp-state.json`.
 
 ---
 
@@ -74,9 +79,14 @@ O comportamento do envio via WhatsApp é totalmente parametrizável:
 
 ### Códigos de Erro Comuns (Exportados pelo Node)
 - `11`: Anexo não encontrado no caminho configurado.
+- `20`: Falha final após esgotar tentativas de envio.
 - `21`: Reautenticação necessária (Sessão expirada).
 - `22`: Erro de validação no arquivo de configuração (`whatsapp-config.json`).
+- `23`: Cooldown de retry ativo para a mesma entrega (envio adiado sem nova tentativa).
 - `0`: Sucesso ou recurso desabilitado por configuração.
+
+### Códigos Operacionais do BAT
+- `40`: Execução concorrente detectada (lock ativo). Nesse caso o envio é ignorado para evitar corrida de sessão.
 
 ---
 
@@ -84,14 +94,4 @@ O comportamento do envio via WhatsApp é totalmente parametrizável:
 1. **Ordem de Precedência**: O envio do WhatsApp é a última etapa e só ocorre após o salvamento bem-sucedido da planilha pelo VBA.
 2. **Segurança de Dados**: O e-mail e o WhatsApp só são disparados se a planilha processada contiver dados válidos.
 3. **Persistência de Sessão**: A autenticação do WhatsApp é mantida na pasta `.wwebjs_auth` para evitar pareamentos repetitivos.
- "headless": true
-  },
-  "retry": {
-    "enabled": true,
-    "maxAttempts": 3,
-    "attemptDelayMs": 20000,
-    "sendSettleMs": 8000,
-    "finalWaitMs": 5000,
-    "initTimeoutMs": 180000
-  }
-}
+4. **Proteção contra concorrência**: Apenas uma execução silenciosa do bridge pode ficar ativa por vez.

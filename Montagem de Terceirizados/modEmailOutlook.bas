@@ -2,6 +2,7 @@ Attribute VB_Name = "modEmailOutlook"
 Option Explicit
 
 Public m_objOutlookApp As Object  ' Outlook.Application (late binding)
+Private m_strLastEmailKey As String
 
 ' ====================================================================================
 ' RETRY WRAPPERS
@@ -9,10 +10,20 @@ Public m_objOutlookApp As Object  ' Outlook.Application (late binding)
 Public Sub EnviarEmailComErrosRetry(ByRef udtTel As Telemetria)
     Dim lngTentativa      As Long
     Dim lngDelaySegundos  As Long
+    Dim strEmailKey       As String
+
+    strEmailKey = MontarEmailKeyExecucao("ERRO", udtTel)
+    If JaNotificacaoEnviada(strEmailKey) Then
+        GravarLogEx "Email ERRO ignorado por idempotencia no mesmo run.", LOG_WARNING
+        Exit Sub
+    End If
     
     For lngTentativa = 1 To MAX_EMAIL_RETRIES
         GravarLogEx "Email ERRO | tentativa " & lngTentativa & "/" & MAX_EMAIL_RETRIES, LOG_INFO
-        If EnviarEmailComErros(udtTel) Then Exit Sub
+        If EnviarEmailComErros(udtTel) Then
+            RegistrarNotificacaoEnviada strEmailKey
+            Exit Sub
+        End If
         
         If lngTentativa < MAX_EMAIL_RETRIES Then
             lngDelaySegundos = RETRY_DELAY_BASE ^ lngTentativa
@@ -27,10 +38,20 @@ End Sub
 Public Sub EnviarEmailSucessoRetry(ByRef udtTel As Telemetria)
     Dim lngTentativa      As Long
     Dim lngDelaySegundos  As Long
+    Dim strEmailKey       As String
+
+    strEmailKey = MontarEmailKeyExecucao("SUCESSO", udtTel)
+    If JaNotificacaoEnviada(strEmailKey) Then
+        GravarLogEx "Email OK ignorado por idempotencia no mesmo run.", LOG_WARNING
+        Exit Sub
+    End If
     
     For lngTentativa = 1 To MAX_EMAIL_RETRIES
         GravarLogEx "Email OK | tentativa " & lngTentativa & "/" & MAX_EMAIL_RETRIES, LOG_INFO
-        If EnviarEmailSucesso(udtTel) Then Exit Sub
+        If EnviarEmailSucesso(udtTel) Then
+            RegistrarNotificacaoEnviada strEmailKey
+            Exit Sub
+        End If
         
         If lngTentativa < MAX_EMAIL_RETRIES Then
             lngDelaySegundos = RETRY_DELAY_BASE ^ lngTentativa
@@ -40,6 +61,10 @@ Public Sub EnviarEmailSucessoRetry(ByRef udtTel As Telemetria)
     Next lngTentativa
     
     GravarLogEx "FALHA DEFINITIVA: Email OK nao enviado.", LOG_ERROR
+End Sub
+
+Public Sub LimparEstadoNotificacao()
+    m_strLastEmailKey = ""
 End Sub
 
 ' ====================================================================================
@@ -203,6 +228,18 @@ Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As T
     
     MontarTemplateEmail = strHTML
 End Function
+
+Private Function MontarEmailKeyExecucao(ByVal strTipo As String, ByRef udtTel As Telemetria) As String
+    MontarEmailKeyExecucao = strTipo & "|" & GetRunId() & "|" & CStr(udtTel.totalLinhas) & "|" & CStr(udtTel.totalErros)
+End Function
+
+Private Function JaNotificacaoEnviada(ByVal strEmailKey As String) As Boolean
+    JaNotificacaoEnviada = (Len(m_strLastEmailKey) > 0 And StrComp(m_strLastEmailKey, strEmailKey, vbBinaryCompare) = 0)
+End Function
+
+Private Sub RegistrarNotificacaoEnviada(ByVal strEmailKey As String)
+    m_strLastEmailKey = strEmailKey
+End Sub
 
 Public Function ObterEValidarDestinatarios(ByRef strTo As String, ByRef strCC As String) As Boolean
     Const TO_PADRAO As String = "email1@empresa.com.br;email2@empresa.com.br"

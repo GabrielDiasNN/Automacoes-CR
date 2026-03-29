@@ -24,6 +24,15 @@ Public Function GetRunId() As String
     GetRunId = m_strRunId
 End Function
 
+Public Sub DefinirRunId(ByVal strRunId As String)
+    Dim strLimpo As String
+    strLimpo = Trim$(strRunId)
+
+    If Len(strLimpo) > 0 Then
+        m_strRunId = strLimpo
+    End If
+End Sub
+
 ' ====================================================================================
 ' STEPS
 ' ====================================================================================
@@ -90,4 +99,4 @@ Private Function NivelToString(ByVal lngNivel As Long) As String
         Case LOG_ERROR:   NivelToString = "ERROR"
         Case Else:        NivelToString = "LOG  "
     End Select
-End Function
+End Function

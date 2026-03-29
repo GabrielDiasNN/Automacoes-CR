@@ -9,6 +9,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 ::   3. Captura de ERRORLEVEL com EnableDelayedExpansion (evita perda em if blocks)
 ::   4. Timestamp via wmic (sem depender do PowerShell no :log)
 ::   5. Limpeza de sessão corrompida ao detectar reauth request (ExitCode=21)
+::   6. Lock de execução para evitar concorrência entre instâncias (ExitCode=40)
 :: =============================================================================
 
 set "EXEC_ID=%~1"
@@ -23,6 +24,10 @@ set "AUTH_DIR=%BASE_DIR%\.wwebjs_auth"
 set "CLIENT_ID=receitas-bloqueadas"
 set "SESSION_DIR=%AUTH_DIR%\session-%CLIENT_ID%"
 set "REAUTH_EXIT=21"
+set "COOLDOWN_EXIT=23"
+set "LOCK_DIR=%BASE_DIR%\.sendwhatsapp.lock"
+set "LOCK_EXIT=40"
+set "LOCK_ACQUIRED=0"
 
 :: ---------------------------------------------------------------------------
 :: BOOTSTRAP LOG — Primeiro registro, ANTES de qualquer call ou validação.
@@ -103,8 +108,17 @@ if /I "%MODE%"=="AUTO" (
 call :log AVISO: MODE desconhecido [%MODE%]. Assumindo AUTO silencioso.
 
 :run_silent_flow
+call :acquire_lock
+set "LOCK_RESULT=!ERRORLEVEL!"
+if !LOCK_RESULT! NEQ 0 (
+    call :log FIM - BAT finalizado sem executar NODE por lock ativo. ExitCode=!LOCK_RESULT! ExecId=%EXEC_ID%
+    call :log =========================================================
+    exit /b !LOCK_RESULT!
+)
+
 call :run_node_silent
 set "NODE_EXIT=!ERRORLEVEL!"
+call :release_lock
 call :log NODE finalizado em modo silencioso. ExitCode=!NODE_EXIT! ExecId=%EXEC_ID%
 
 :: Se Node solicitou reautenticação interativa (ExitCode=21)
@@ -126,6 +140,10 @@ if "!NODE_EXIT!"=="!REAUTH_EXIT!" (
     goto :launch_visible
 )
 
+if "!NODE_EXIT!"=="!COOLDOWN_EXIT!" (
+    call :log NODE informou cooldown de retry ativo (ExitCode=!COOLDOWN_EXIT!). Nenhum novo envio foi realizado nesta execução.
+)
+
 call :log FIM - BAT finalizado. ExitCode=!NODE_EXIT! ExecId=%EXEC_ID%
 call :log =========================================================
 exit /b !NODE_EXIT!
@@ -144,6 +162,60 @@ if !START_EXIT! NEQ 0 (
 call :log Janela interativa aberta com sucesso. Controle transferido ao usuario.
 call :log FIM - BAT finalizado. ExitCode=0 ExecId=%EXEC_ID%
 call :log =========================================================
+exit /b 0
+
+:: ---------------------------------------------------------------------------
+:acquire_lock
+:: ---------------------------------------------------------------------------
+if exist "%LOCK_DIR%\" (
+    call :check_bridge_running
+    if "!BRIDGE_RUNNING!"=="0" (
+        call :log LOCK: lock obsoleto detectado. Tentando limpar %LOCK_DIR%
+        rmdir /s /q "%LOCK_DIR%" 2>nul
+    )
+)
+
+if exist "%LOCK_DIR%\" (
+    call :log LOCK: execucao concorrente detectada. Lock em uso: %LOCK_DIR%
+    exit /b %LOCK_EXIT%
+)
+
+mkdir "%LOCK_DIR%" 2>nul
+set "MKDIR_EXIT=!ERRORLEVEL!"
+if !MKDIR_EXIT! NEQ 0 (
+    call :log LOCK: falha ao adquirir lock (mkdir retornou !MKDIR_EXIT!).
+    exit /b %LOCK_EXIT%
+)
+
+set "LOCK_ACQUIRED=1"
+> "%LOCK_DIR%\owner.txt" echo ExecId=%EXEC_ID%;Mode=%MODE%;Started=%date% %time:~0,8% 2>nul
+call :log LOCK: lock adquirido com sucesso em %LOCK_DIR%
+exit /b 0
+
+:: ---------------------------------------------------------------------------
+:release_lock
+:: ---------------------------------------------------------------------------
+if "!LOCK_ACQUIRED!"=="1" (
+    if exist "%LOCK_DIR%\" (
+        rmdir /s /q "%LOCK_DIR%" 2>nul
+        if exist "%LOCK_DIR%\" (
+            call :log AVISO: nao foi possivel liberar lock em %LOCK_DIR%
+        ) else (
+            call :log LOCK: lock liberado com sucesso.
+        )
+    )
+    set "LOCK_ACQUIRED=0"
+)
+exit /b 0
+
+:: ---------------------------------------------------------------------------
+:check_bridge_running
+:: ---------------------------------------------------------------------------
+set "BRIDGE_RUNNING=0"
+for /f "usebackq delims=" %%a in (
+    `powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" | Where-Object { $_.CommandLine -match 'sendWhatsApp\\.js' }; if($p){'1'} else {'0'}" 2^>nul`
+) do set "BRIDGE_RUNNING=%%a"
+if not defined BRIDGE_RUNNING set "BRIDGE_RUNNING=0"
 exit /b 0
 
 :: ---------------------------------------------------------------------------

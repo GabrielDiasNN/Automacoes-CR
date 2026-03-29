@@ -50,9 +50,43 @@ graph TD
 ## 🛠️ Operação e Monitoramento
 
 ### Monitor Central (`MonitorAutomacoes.ps1`)
-*   Executa em background controlado por um **Mutex** global.
-*   **Hot-Reload**: Alterações no `config.json` são aplicadas automaticamente em 20s.
+*   Executa em background controlado por um **Mutex** global, com tentativa de aquisição por até **5 segundos** para evitar espera indefinida no startup.
+*   Em caso de mutex abandonado (encerramento abrupto da instância anterior), o monitor assume o controle de forma segura e continua a execução.
+*   **Hot-Reload**: Alterações no `config.json` são detectadas por hash (**SHA-256**) e aplicadas sem reinício.
+*   **Resiliência de Configuração**: Em caso de leitura inválida/transiente do `config.json`, o monitor tenta recarregar até 3 vezes antes de manter a configuração anterior.
+*   **Diagnóstico de Startup**: Falhas de inicialização (mutex e carga inicial da configuração) são registradas em `C:\Automacoes\Startup_Error.txt`.
+*   **Validação de Contrato**: O monitor valida caminhos absolutos, tipos booleanos e faixas numéricas de agenda (`daysOfWeek 0-6`, `hours 0-23`, `minutes 0-59`).
+*   **Heartbeat Operacional**: O heartbeat consolida contadores acumulados e também métricas por janela de 1 hora (disparos, conclusões e não-zero).
+*   **Snapshot de Métricas**: O monitor persiste `C:\Automacoes\Logs\Monitor_Metrics.json` com os blocos `cumulative` (acumulado) e `window` (janela operacional reiniciada a cada heartbeat), além de referência ao snapshot anterior para comparação entre reinícios.
 *   **Logs Consolidados**: Localizados em `C:\Automacoes\Logs\yyyy-MM_Monitor.log`.
+
+Modo seguro para validacao de startup/metricas (sem disparar tarefas):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Automacoes\MonitorAutomacoes.ps1 -RunOnce -SkipTaskExecution -MutexNameOverride "Global\MonitorAutomacoesMutex-SmokeTest"
+```
+
+Modo DryRun para validar agenda real sem executar scripts (loga apenas o que seria disparado):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Automacoes\MonitorAutomacoes.ps1 -RunOnce -DryRun -MutexNameOverride "Global\MonitorAutomacoesMutex-DryRun"
+```
+
+### Contrato de Agendamento (`config.json`)
+*   `schedule.daysOfWeek`: filtro opcional de dias da semana (`0` a `6`).
+*   `schedule.hours`: filtro opcional de horas (`0` a `23`). Quando vazio (`[]`), significa **sem filtro por hora**.
+*   `schedule.minutes`: filtro obrigatório de minutos (`0` a `59`).
+
+### Auditoria de Arquivos XLSM
+Para revisar metadados de workbooks binarios em texto versionavel, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\Automacoes\Tools\ExportarAuditoriaXlsm.ps1
+```
+
+Resultado padrao:
+- `C:\Automacoes\Audit\xlsm\index.json`
+- `C:\Automacoes\Audit\xlsm\...\manifest.json`
 
 ### Tabela de Erros Padronizada
 | Código | Descrição |
@@ -62,6 +96,9 @@ graph TD
 | **4** | Falha interna na Macro VBA |
 | **5** | Timeout (Oracle/Processamento) |
 | **6** | Erro Fatal reportado pela lógica de negócio |
+| **7** | Workbook bloqueado (aberto em modo somente leitura) |
+| **23** | Bridge WhatsApp em cooldown de retry (envio adiado) |
+| **40** | Execução concorrente bloqueada no bridge WhatsApp |
 
 ---
 
