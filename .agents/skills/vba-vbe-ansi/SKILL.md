@@ -1,94 +1,75 @@
 ---
 name: vba-vbe-ansi
-description: Padrao obrigatorio para gerar, revisar e refatorar codigo VBA compativel com o VBE, evitando problemas de codificacao com ANSI/Windows-1252.
+description: "Use when generating, reviewing, or refactoring VBA code that must remain safe inside the VBE and compatible with ANSI or Windows-1252 workflows."
 ---
 
-# Skill: VBA/VBE ANSI
+> Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
 
-## Objetivo
+# VBA VBE ANSI Safety Standard
 
-Garantir que todo codigo VBA gerado, revisado ou refatorado seja compativel com o Visual Basic Editor (VBE), evitando corrupcao de caracteres causada por diferencas entre UTF-8 e ANSI/Windows-1252.
+## Purpose
+Use this skill whenever VBA code may be edited, stored, or displayed inside the Visual Basic Editor. Its role is to prevent mojibake, broken identifiers, and visual corruption caused by the mismatch between Unicode-oriented tooling and the VBE ANSI ecosystem.
 
-## Regra principal
+## Core Rule
+If text belongs to the internal VBA or VBE surface, default to ASCII-safe content.
 
-Considere que o ecossistema interno do VBA/VBE deve usar apenas caracteres ASCII simples sempre que houver risco de o texto residir, ser exibido ou ser editado dentro do VBE.
+## Mandatory ASCII Normalization
+Apply ASCII normalization to the following categories:
 
-## Aplicacao obrigatoria
+- Variable, constant, function, sub, and module names.
+- Form and control names when they are part of the VBA project surface.
+- Comments.
+- MsgBox and Debug.Print strings.
+- Internal status messages that live primarily inside VBA code.
 
-Aplique normalizacao ASCII nestes elementos:
+## Safe vs Unsafe Contexts
+| Context | Keep accents? | Rule |
+|---|---|---|
+| Identifiers | No | Always normalize to ASCII |
+| Comments | No | Prefer ASCII-safe wording |
+| MsgBox and Debug.Print | No | Avoid visual corruption inside VBE |
+| MailItem.Subject or HTMLBody | Yes, if external | Preserve user-facing language when the destination supports it |
+| JSON, SQL, HTML, external files | Yes, when required | Keep fidelity only if the external system supports the encoding |
 
-- Nomes de variaveis
-- Nomes de constantes
-- Nomes de funcoes
-- Nomes de subs
-- Nomes de modulos
-- Nomes de formularios e controles, quando relevante
-- Comentarios
-- Literais exibidos via `MsgBox`
-- Literais exibidos via `Debug.Print`
-- Textos internos usados apenas no VBA/VBE
+## Normalization Examples
+| Preferred | Avoid |
+|---|---|
+| dataUltima | dataÚltima |
+| ProcessarRelatorio | ProcessarRelatório |
+| ' Verifica se a data e valida | ' Verifica se a data é válida |
+| Debug.Print "Erro ao carregar configuracao" | Debug.Print "Erro ao carregar configuração" |
+| MsgBox "Operacao concluida com sucesso" | MsgBox "Operação concluída com sucesso" |
 
-## Exemplo de normalizacao
+## Priority Rule
+When there is any doubt between preserving accents and preserving VBE compatibility, choose VBE compatibility.
 
-Use:
-- `dataUltima`
-- `ProcessarRelatorio`
-- `' Verifica se a data e valida`
-- `Debug.Print "Erro ao carregar configuracao"`
-- `MsgBox "Operacao concluida com sucesso"`
+## Corrupted Text Recovery
+If source text already contains mojibake or corrupted characters, normalize it to the ASCII-safe form.
 
-Evite:
-- `dataÚltima`
-- `ProcessarRelatório`
-- `' Verifica se a data é válida`
-- `Debug.Print "configuração"`
-- `MsgBox "Operação concluída"`
+| Corrupted | Safe replacement |
+|---|---|
+| InformaÃ§Ã£o | Informacao |
+| AtenÃ§Ã£o | Atencao |
+| UsuÃ¡rio | Usuario |
+| ConfiguraÃ§Ã£o | Configuracao |
 
-## Excecoes permitidas
+## Expected Agent Behavior
+1. Remove accents from identifiers and internal VBE-facing strings.
+2. Preserve accents only for clearly external strings.
+3. Default to ASCII if the destination is unclear.
+4. Normalize legacy code whenever encoding risk is visible.
+5. Never deliver VBA identifiers with accents.
 
-Mantenha acentuacao somente quando a string for destinada a um ambiente externo que suporte UTF-8, Unicode ou renderizacao correta fora do VBE.
+## Troubleshooting
+| Symptom | Root Cause | Action |
+|---|---|---|
+| Text appears corrupted inside VBE | Unicode text passed into ANSI editor surface | Normalize internal strings to ASCII |
+| Identifier cannot be trusted across exports/imports | Non-ASCII naming | Rename to ASCII-safe identifiers |
+| Message text is readable outside but broken inside editor | Wrong string kept accented in VBE path | Split internal ASCII text from external Unicode content |
 
-Casos comuns:
-- `MailItem.HTMLBody`
-- `MailItem.Subject`
-- SQL enviado ao banco
-- Conteudo HTML
-- JSON para APIs
-- Arquivos texto externos com codificacao definida
-- Dados exibidos fora do editor VBA
-
-## Regra de prioridade
-
-Se houver duvida entre manter acentuacao ou garantir compatibilidade no VBE, priorize compatibilidade no VBE.
-
-## Tratamento de texto corrompido
-
-Se o prompt trouxer texto com mojibake ou caracteres corrompidos, corrija para a versao ASCII segura.
-
-Exemplos:
-- `InformaÃ§Ã£o` -> `Informacao`
-- `AtenÃ§Ã£o` -> `Atencao`
-- `UsuÃ¡rio` -> `Usuario`
-- `ConfiguraÃ§Ã£o` -> `Configuracao`
-
-## Comportamento esperado do agente
-
-Ao gerar ou refatorar codigo VBA:
-1. Remova acentos de todos os identificadores e textos internos do VBE.
-2. Preserve acentos apenas em strings claramente externas.
-3. Se o contexto nao estiver claro, use ASCII.
-4. Ao revisar codigo legado, normalize o que puder causar problema de codificacao.
-5. Nunca entregue codigo VBA com nomes acentuados.
-
-## Checklist final
-
-Antes de responder, valide:
-- Ha acentos em nomes de variaveis, funcoes, subs ou constantes?
-- Ha comentarios com caracteres especiais desnecessarios?
-- Ha `MsgBox` ou `Debug.Print` com acentuacao?
-- Strings externas foram preservadas apenas quando fizer sentido?
-- O codigo pode ser colado no VBE sem risco de corrupcao visual?
-
-## Observacao final
-
-O objetivo nao e "proibir Unicode em qualquer contexto", e sim evitar problemas no que pertence ao ambiente interno do VBA/VBE.
+## Pre-Delivery Checklist
+- [ ] No identifiers contain accents.
+- [ ] Comments are ASCII-safe.
+- [ ] MsgBox and Debug.Print strings are ASCII-safe unless clearly external.
+- [ ] External Unicode strings were preserved only where justified.
+- [ ] The code can be pasted into VBE without visual corruption.

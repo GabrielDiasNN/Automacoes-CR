@@ -1,54 +1,80 @@
 ---
 name: automacao-comms-whatsapp
-description: Use esta skill para suporte técnico à ponte de comunicação via WhatsApp (Node.js + whatsapp-web.js).
+description: "Use when implementing, reviewing, or troubleshooting WhatsApp delivery bridges built with Node.js and whatsapp-web.js."
 ---
 
-# Bridge de Comunicação WhatsApp
+> Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
 
-## Objetivo
-Manter e depurar a integração de saída de dados via WhatsApp no projeto Automacoes.
+# Enterprise WhatsApp Delivery Bridge
 
-## Estrutura Técnica
-- **Trigger**: `Trigger_Automation.vbs` com `POST_EXECUTION_BAT` apontando para `RunWhatsApp.bat`.
-- **BAT**: `RunWhatsApp.bat` — resolve `%ComSpec%`, valida pré-requisitos e passa `ExecId` + `MODE` ao Node.
-- **Node.js**: `sendWhatsApp.js` — carrega config, gerencia sessão e envia via `whatsapp-web.js`.
-- **Config**: `whatsapp-config.json` (destino, anexo, mensagem, retry).
-- **Auth**: Pasta `.wwebjs_auth` (mantém sessão do QR Code. **Não apagar.**).
-- **Estado**: `whatsapp-state.json` (controle de idempotência por `execKey`).
+## Purpose
+Use this skill for automation flows that hand off outbound delivery to a WhatsApp bridge. The standard emphasizes authentication resilience, idempotent sends, structured exit codes, bootstrap logging, and controlled recovery from session failures.
 
-## Fluxo de Execução
-```
-Trigger_Automation.vbs
-  └─► RunWhatsApp.bat (ExecId + MODE=AUTO)
-        └─► sendWhatsApp.js
-              ├─ Carrega whatsapp-config.json
-              ├─ Verifica sessão (.wwebjs_auth)
-              ├─ Verifica idempotência (whatsapp-state.json)
-              └─ Envia mensagem/anexo → WhatsApp
-```
-
-## Exit Codes do Node.js (`sendWhatsApp.js`)
-| Code | Significado |
+## Architecture Overview
+| Layer | Responsibility |
 |---|---|
-| `0` | Sucesso ou desabilitado por config |
-| `11` | Anexo não encontrado |
-| `20` | Erro final após todas as tentativas |
-| `21` | Sessão expirada → BAT relança em modo PAIRING |
-| `22` | `whatsapp-config.json` inválido |
-| `99` | Erro fatal inesperado |
+| Trigger layer | Pass execution identity and start the bridge |
+| BAT orchestration | Validate prerequisites, choose execution mode, preserve exit codes |
+| Node.js bridge | Load config, initialize client, manage retries, send messages |
+| Session store | Persist authenticated client state |
+| State store | Persist idempotency and sent execution records |
 
-## Workflow de Depuração
-1. **Bootstrap**: Inicie por `sendWhatsApp-bootstrap.log` — captura erros antes de qualquer `require`.
-2. **Log Principal**: `ReceitasBloqueadas.txt` (ou o `logFile` configurado) — fluxo completo de execução.
-3. **Autenticação**: Se `ExitCode=21`, a sessão expirou. O BAT limpa `.wwebjs_auth/session-*` e reabre em modo PAIRING (janela visível com QR).
-4. **Config**: Valide o `whatsapp-config.json` com foco em `app.enabled`, `target.groupName` e `paths.attachmentPath`.
+## Non-Negotiable Rules
+1. The bridge must log before heavy imports or client initialization so bootstrap failures are diagnosable.
+2. Delivery must be idempotent. The same execution must not send more than once.
+3. Session assets must not be deleted casually. Re-authentication is an operational event, not a default recovery step.
+4. Exit codes must be explicit and documented so upstream VBS or BAT layers can react deterministically.
+5. Retry logic must stop on authentication-expired scenarios and hand control back to the orchestrator.
 
-## Procedimentos de Manutenção
-- **Atualizar Destinatários**: Editar `whatsapp-config.json`. Formato: `5511999999999@c.us`.
-- **`npm install` corrompido**: Deletar `node_modules` e rodar `npm install` na pasta da automação.
-- **Execução sob demanda**: O Node é disparado pelo VBS/BAT. Não fica em memória.
+## Execution Flow
+```text
+Trigger layer
+      -> BAT orchestrator (ExecId + mode)
+            -> Node.js bridge
+                  -> Load config
+                  -> Restore session
+                  -> Validate idempotency state
+                  -> Send message and optional attachment
+```
 
-## Cuidados
-- **Rate Limit**: Evitar disparos em curto intervalo para prevenir banimento.
-- **Idempotência**: A `execKey` (hash de destino + ExecId + tamanho do arquivo) impede reenvios duplicados.
-- **Sessão**: Não apague `.wwebjs_auth` sem necessidade — exige novo pareamento QR.
+## Exit Codes
+| Code | Meaning |
+|---|---|
+| 0 | Success or feature disabled by configuration |
+| 11 | Attachment missing |
+| 20 | Final failure after all attempts |
+| 21 | Re-authentication required |
+| 22 | Invalid configuration |
+| 99 | Unexpected fatal failure |
+
+## Enterprise Patterns
+| Pattern | Standard |
+|---|---|
+| Bootstrap log | Write a minimal synchronous log before require or client initialization |
+| Idempotency | Compute an execKey from stable execution inputs and persist it in a state file |
+| Retry | Use bounded attempts with delay and stop immediately on auth-expired paths |
+| Visibility mode | Support silent and visible modes; visible mode is reserved for pairing or diagnostics |
+| Session recovery | Escalate to re-auth instead of masking session corruption silently |
+
+## Maintenance Rules
+| Topic | Guidance |
+|---|---|
+| Recipient updates | Change configuration, not code |
+| Dependency corruption | Reinstall packages only after confirming the lock or install state is broken |
+| On-demand execution | Keep the bridge process short-lived; do not leave background clients running without need |
+| Rate limits | Avoid tight repeated sends that resemble abuse patterns |
+
+## Troubleshooting
+| Symptom | Root Cause | Action |
+|---|---|---|
+| Bridge fails before main log starts | Failure occurs before runtime initialization | Inspect bootstrap log first |
+| Exit code 21 repeats | Session expired or corrupted | Re-enter pairing flow and regenerate session cleanly |
+| Duplicate sends | Missing or unstable idempotency key | Rework execKey inputs and persist send state correctly |
+| Attachment send fails | File path invalid or file not ready | Validate path, save completion, and access timing |
+
+## Pre-Delivery Checklist
+- [ ] Bootstrap logging happens before imports or client startup.
+- [ ] Exit codes are explicit and stable.
+- [ ] Re-authentication paths are handled separately from generic retries.
+- [ ] Idempotency state prevents duplicate messages.
+- [ ] Session storage is treated as persistent operational state.

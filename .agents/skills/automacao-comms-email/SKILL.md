@@ -1,36 +1,71 @@
 ---
 name: automacao-comms-email
-description: Use esta skill para suporte técnico à automação de envio de e-mails via Outlook (VBA).
+description: "Use when implementing, reviewing, or troubleshooting Outlook email delivery from VBA automation flows."
 ---
 
-# Automação de E-mail (Outlook)
+> Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
 
-## Objetivo
-Garantir o envio confiável de e-mails e anexos através do Microsoft Outlook a partir das macros VBA do projeto.
+# Enterprise Outlook Email Automation
 
-## Padrão de Implementação (VBA)
-- **Objeto**: `CreateObject("Outlook.Application")`.
-- **Verificação do Anexo**: Sempre validar existência e tamanho (`> 0`) via `Dir()` ou `FSO` antes de anexar ao `MailItem`.
-- **Envio**: Usar `.Send` para envio automático.
-- **Assinatura**: Usar `.HTMLBody = "<salutation>" & .HTMLBody` para preservar a assinatura padrão do Outlook.
+## Purpose
+Use this skill for VBA routines that compose and send email through Microsoft Outlook. The standard focuses on reliable attachment handling, professional HTML composition, deterministic object cleanup, and predictable unattended delivery.
 
-## Troubleshooting Comum
-| Sintoma | Causa Provável | Ação |
+## Architecture Overview
+| Component | Responsibility |
+|---|---|
+| Outlook.Application | Mail client automation boundary |
+| MailItem | Message composition, recipients, subject, body, and attachments |
+| VBA caller | Validates data, saves workbook outputs, handles failures |
+
+## Non-Negotiable Rules
+1. Always create Outlook through CreateObject("Outlook.Application") unless the project already standardizes a shared instance pattern.
+2. Never attach a file before validating both existence and size greater than zero.
+3. Use .Send for unattended automation. Use .Display only for explicit interactive workflows.
+4. Preserve the user signature by appending to HTMLBody instead of replacing it blindly.
+5. Release Outlook COM objects in all exit paths.
+
+## Implementation Standard
+| Concern | Standard |
+|---|---|
+| Outlook object | CreateObject("Outlook.Application") |
+| Attachment validation | Dir() or FileSystemObject plus FileLen > 0 |
+| Delivery mode | .Send for automation |
+| Signature preservation | Prepend custom HTML to existing HTMLBody |
+| Error handling | On Error GoTo ErrHandler with deterministic cleanup |
+
+## Recommended Flow
+1. Save or export the workbook output before composing the email.
+2. Validate recipients, subject, and attachment path.
+3. Create the MailItem and assign To, CC, BCC, Subject, and HTMLBody.
+4. Attach files only after validation succeeds.
+5. Send and release all COM references.
+
+## Professional Patterns
+| Pattern | Rule |
+|---|---|
+| HTML body | Use structured HTML for readable, corporate-safe formatting |
+| Audit trail | Use BCC only when the process truly requires audit copy behavior |
+| Attachment timing | Save workbook outputs before Add attachment is called |
+| Error surface | Bubble meaningful failure reason back to the caller or log layer |
+
+## Security and Reliability Notes
+| Topic | Guidance |
+|---|---|
+| Outlook security prompt | If corporate policy triggers prompts, solve through trusted enterprise configuration, not ad hoc bypasses |
+| Draft instead of send | Check whether .Display replaced .Send or exceptions interrupted the send path |
+| Broken attachment | Validate save completion before mail composition |
+
+## Troubleshooting
+| Symptom | Root Cause | Action |
 |---|---|---|
-| Erro ao criar objeto Outlook | Outlook não está instalado/aberto | Verificar se Outlook está no path; iniciar ou alertar |
-| Pop-up de segurança | Política de segurança do Office | Desabilitar via GPO ou usar add-in confiável |
-| Anexo não encontrado | Excel bloqueado por outro processo ou macro não salvou | Incluir `wb.Save` antes do envio; validar com `FSO.FileExists` |
-| E-mail vai para Rascunhos | `.Send` substituído por `.Display` acidentalmente | Verificar chamada do método |
+| Outlook object creation fails | Outlook unavailable or misconfigured | Validate installation, profile availability, and runtime context |
+| Security prompt appears | Office policy or untrusted automation context | Align with enterprise trust policy or approved add-in strategy |
+| Attachment not found | Workbook not saved yet or wrong path | Save first, then validate with Dir or FileSystemObject |
+| Message stays in drafts | .Display used or send interrupted | Review delivery method and error handling path |
 
-## Melhores Práticas
-1. **HTML Body**: Usar `.HTMLBody` para e-mails com formatação profissional.
-2. **BCC para Auditoria**: `mail.BCC = "auditoria@empresa.com"` se necessário.
-3. **Tratamento de Erro**: Envolver a rotina em `On Error GoTo ErrHandler` para capturar falhas de conexão.
-4. **Limpeza de Objeto**: Executar `Set mail = Nothing` e `Set outlookApp = Nothing` ao final.
-
-## Checklist de Revisão
-- [ ] O destinatário (`To`) está correto e existe no Outlook?
-- [ ] O assunto (`Subject`) inclui a data de referência?
-- [ ] O anexo foi validado (existe + `tamanho > 0`)?
-- [ ] O processo Excel libera o objeto Outlook ao final (sem instâncias orphans)?
-- [ ] O corpo do e-mail usa `.HTMLBody` para preservar a assinatura?
+## Pre-Delivery Checklist
+- [ ] Recipients, subject, and reference date are validated.
+- [ ] Attachment exists and has non-zero size.
+- [ ] HTMLBody preserves the Outlook signature when required.
+- [ ] The routine uses .Send for unattended execution.
+- [ ] MailItem and Outlook.Application are released on all exits.

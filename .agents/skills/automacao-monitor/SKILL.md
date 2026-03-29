@@ -1,58 +1,84 @@
 ---
 name: automacao-monitor
-description: Use esta skill para gerenciar o MonitorAutomacoes.ps1 e o arquivo de configuração de agendamentos config.json.
+description: "Use when changing the central PowerShell scheduler, its config.json contract, or the operational rules for unattended automation execution."
 ---
 
-# Gestão do Monitor de Automações
+> Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
 
-## Objetivo
-Operar o sistema central de agendamento, garantindo que as tarefas rodem nos horários previstos e que novos scripts sejam integrados corretamente sem conflitos.
+# Enterprise Automation Monitor Standard
 
-## Arquivos Chave
-| Arquivo | Descrição |
+## Purpose
+Use this skill for the central scheduler and monitor layer that loads tasks from config.json, enforces singleton execution, and launches automations safely in unattended mode. The standard prioritizes configuration validation, operational observability, and predictable process control.
+
+## Architecture Overview
+| Asset | Responsibility |
 |---|---|
-| `MonitorAutomacoes.ps1` (v3.5) | Core do monitor — Hot Reload, Mutex, gestão de processos |
-| `config.json` | Definição de tarefas e horários (codificação: UTF-8) |
-| `Logs/YYYY-MM_Monitor.log` | Log central do monitor |
-| `Startup_Error.txt` | Criado automaticamente em erros críticos de inicialização |
+| MonitorAutomacoes.ps1 | Scheduler core, reload logic, task lifecycle management |
+| config.json | Declarative task registry and schedule contract |
+| Logs/YYYY-MM_Monitor.log | Central operational log |
+| Startup_Error.txt | Early fatal startup diagnostics |
 
-## Procedimentos Comuns
+## Non-Negotiable Rules
+1. The monitor must run as a singleton protected by a global mutex.
+2. config.json must be treated as a contract and validated before task execution begins.
+3. New tasks must be proven manually before they are scheduled.
+4. Paths in the scheduler must be absolute and operationally valid.
+5. Encoding must be explicit. Do not rely on default shell encoding behavior.
 
-### Adicionar Nova Tarefa
-1. Certifique-se de que o `Trigger_Automation.vbs` da automação funciona **manualmente** antes de cadastrá-la.
-2. Adicione o bloco no `config.json` seguindo o schema:
-   ```json
-   {
-     "name": "Nome Amigável",
-     "scriptPath": "C:\\Automacoes\\NomePasta\\Trigger_Automation.vbs",
-     "enabled": true,
-     "preventOverlap": true,
-     "waitForExit": false,
-     "schedule": {
-       "daysOfWeek": [1, 2, 3, 4, 5],
-       "hours": [8, 14],
-       "minutes": [0]
-     }
-   }
-   ```
-3. O monitor detecta a mudança automaticamente (**Hot Reload** ativo — sem reinício necessário).
+## Task Registration Standard
+```json
+{
+  "name": "Friendly Task Name",
+  "scriptPath": "C:\\Automacoes\\Module\\Trigger_Automation.vbs",
+  "enabled": true,
+  "preventOverlap": true,
+  "waitForExit": false,
+  "schedule": {
+    "daysOfWeek": [1, 2, 3, 4, 5],
+    "hours": [8, 14],
+    "minutes": [0]
+  }
+}
+```
 
-### Parâmetros do `config.json`
-| Campo | Descrição |
+## Configuration Contract
+| Field | Meaning |
 |---|---|
-| `enabled` | `false` para desabilitar sem remover |
-| `preventOverlap` | `true` = não inicia nova execução se a anterior ainda roda |
-| `waitForExit` | `true` = monitor aguarda o fim do processo (síncrono) |
-| `hours: []` | Array vazio = nunca dispara por hora (somente por `minutes`) |
+| enabled | Disable safely without deleting the task |
+| preventOverlap | Do not start a second instance while one is still active |
+| waitForExit | Decide whether the monitor blocks on process completion |
+| schedule.daysOfWeek | Day filter using the scheduler convention |
+| schedule.hours | Hour filter; empty array means no hour-based trigger |
+| schedule.minutes | Minute filter for execution windows |
 
-## Troubleshooting do Monitor
-- **Monitor não inicia**: Verifique o `Startup_Error.txt` na raiz. Geralmente JSON malformado.
-- **Tarefa não disparou em UTC**: O monitor usa o relógio do sistema Windows (hora local). Verifique se o `config.json` está em hora local, não UTC.
-- **Sobreposição ignorada**: Se `preventOverlap=true` e o processo anterior ainda está rodando (PID ativo), o disparo é suprimido e registrado como `WARN` no log.
-- **Hot Reload não funcionou**: Verifique se o `config.json` foi salvo em **UTF-8** (sem BOM problemático).
+## Enterprise Patterns
+| Pattern | Standard |
+|---|---|
+| Mutex | Use a single named global mutex to prevent duplicate monitor instances |
+| Hot reload | Detect config changes and reload without requiring process restart |
+| Structured logging | Emit timestamped INFO, WARN, and ERROR records to a rotating log |
+| Startup diagnostics | Write a dedicated emergency file for failures that happen before full logging starts |
+| Validation first | Refuse to run invalid task definitions |
 
-## Regras
-- **Mutex**: Apenas uma instância do monitor por vez (`Global\MonitorAutomacoesMutex`).
-- **UTF-8**: O `config.json` deve ser salvo com codificação UTF-8.
-- **Caminhos**: Sempre use caminhos absolutos começando com `C:\Automacoes\`.
-- **Heartbeat**: O monitor registra sua saúde a cada 1 hora no log — use para confirmar que está ativo.
+## Operational Rules
+| Topic | Guidance |
+|---|---|
+| Manual validation first | Only register a task after Trigger_Automation.vbs succeeds manually |
+| Local time | Scheduler uses Windows local time unless explicitly designed otherwise |
+| UTF-8 | Save config in UTF-8 and avoid ambiguous encoding writers |
+| Heartbeat | Emit periodic health log entries to prove the scheduler is still alive |
+
+## Troubleshooting
+| Symptom | Root Cause | Action |
+|---|---|---|
+| Monitor does not start | Invalid JSON or startup failure before normal logging | Inspect Startup_Error.txt first |
+| Task never fires | Schedule mismatch or disabled task | Validate enabled flag and schedule arrays against system local time |
+| Overlap prevention suppresses execution | Prior process still active | Confirm whether preventOverlap is intended and inspect task runtime |
+| Hot reload does not react | File encoding or save semantics interfere with change detection | Re-save config in explicit UTF-8 and verify file watcher logic |
+
+## Pre-Delivery Checklist
+- [ ] config.json changes are schema-valid and use absolute paths.
+- [ ] The target automation succeeds manually before scheduling.
+- [ ] Singleton behavior remains enforced by a mutex.
+- [ ] Logs cover startup, task launch, suppression, and fatal errors.
+- [ ] Encoding behavior is explicit and safe.

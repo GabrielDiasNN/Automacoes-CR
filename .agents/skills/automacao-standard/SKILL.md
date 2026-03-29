@@ -1,61 +1,98 @@
 ---
 name: automacao-standard
-description: Use esta skill para criar ou modificar automações no projeto Automacoes, garantindo padronização de VBS, Excel/VBA e definição clara de canais de saída (WhatsApp/Email).
+description: "Use when creating, reviewing, or refactoring automation flows that follow the VBS -> Excel/VBA -> notification architecture."
 ---
 
-# Padrão de Desenvolvimento de Automações
+> Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
 
-## Objetivo
-Garantir que toda nova automação ou modificação siga a arquitetura **VBS → Excel/VBA → Notificação**, com tratamento de erro e logging padronizados. O ponto de entrada é sempre o `Trigger_Automation.vbs` baseado no **Template Universal v3.0**.
+# Enterprise Automation Standard
 
-## Definição de Saída (Scope)
-Ao iniciar uma tarefa, identifique os canais de comunicação necessários:
-- **WhatsApp**: Ative `POST_EXECUTION_BAT` no VBS apontando para `RunWhatsApp.bat`.
-- **Email**: Implemente a macro VBA interagindo com `Outlook.Application`.
-- **Híbrido**: Ambos.
-- **Relatório**: Apenas execução de cálculos/arquivos, sem envio externo.
+## Purpose
+Use this skill to design or modify automations that follow the repository execution model: a VBS entrypoint orchestrates Excel/VBA work, then optionally triggers outbound communication such as email or WhatsApp. The goal is operational reliability, deterministic cleanup, traceability, and safe restarts.
 
-## Componentes Obrigatórios
-1. **`Trigger_Automation.vbs`** (baseado em `_Template`): Ponto de entrada. Gerencia Excel, executa macro e captura erros fatais.
-2. **`Logs/Execution.log`**: Toda automação deve ter sua pasta `Logs` local com este arquivo.
-3. **Idempotência**: O script deve poder ser reiniciado sem duplicar envios ou corromper dados.
+## Architecture Overview
+| Layer | Responsibility | Required Outcome |
+|---|---|---|
+| VBS entrypoint | Open Excel, run macro, handle fatal failures, emit execution logs | Deterministic process lifecycle |
+| Excel/VBA core | Execute business rules, validations, refreshes, exports | Business result produced once |
+| Notification layer | Send email, WhatsApp, or report-only output | No duplicate external side effects |
+| Scheduler integration | Register task in config and run under monitor | Safe unattended execution |
 
-## Template Universal v3.0 — Feature Flags
-Ao copiar o `_Template\Trigger_Automation.vbs`, configure as flags no cabeçalho:
+## Non-Negotiable Rules
+1. Every automation must start from a dedicated Trigger_Automation.vbs derived from the project template.
+2. Every automation must maintain a local Logs directory and write execution traces from the first meaningful step.
+3. The flow must be restart-safe. Re-running the same execution must not duplicate sends, corrupt files, or leave orphan Excel processes.
+4. Excel automation must always disable UI interference: DisplayAlerts = False, Visible = False, AskToUpdateLinks = False, and VBA must disable ScreenUpdating and EnableEvents when appropriate.
+5. Cleanup is mandatory on every failure path. Excel objects and external processes must be released even when macro execution fails.
+
+## Output Scope Selection
+| Output mode | Implementation rule |
+|---|---|
+| WhatsApp | Enable POST_EXECUTION_BAT in VBS and route to a BAT orchestrator |
+| Email | Implement Outlook automation in VBA and validate attachments before send |
+| Hybrid | Combine both channels with explicit ordering and idempotency rules |
+| Report only | Generate files or calculations without external delivery |
+
+## Required Components
+| Component | Why it exists |
+|---|---|
+| Trigger_Automation.vbs | Stable entrypoint and infrastructure boundary |
+| Local Logs folder | Operational diagnostics and audit trail |
+| Main VBA macro | Encapsulates business execution |
+| Idempotency guard | Prevents duplicate downstream side effects |
+
+## Feature Flags Pattern
+Configure the VBS header explicitly. Do not infer runtime behavior from file presence alone.
 
 ```vbscript
-' ========== CONFIGURACOES DO MODULO ==========
-excelPath = "C:\Automacoes\NomePasta\Arquivo.xlsm"
-macroName = "NomeDaMacro"
-logPath   = "C:\Automacoes\NomePasta\Logs\Execution.log"
+' ========== MODULE CONFIGURATION ==========
+excelPath = "C:\Automacoes\ModuleName\Workbook.xlsm"
+macroName = "MainMacro"
+logPath   = "C:\Automacoes\ModuleName\Logs\Execution.log"
 
-' [Flag] Monitoramento assíncrono via Log VBA (Robo Fiscal / Timeout)
-USE_TIMEOUT_MONITOR = False       ' True para módulos com macro longa
-vbaLogPath          = "C:\Automacoes\NomePasta\Logs\VBA_Internal.log"
+' [Flag] Long-running VBA timeout monitor
+USE_TIMEOUT_MONITOR = False
+vbaLogPath          = "C:\Automacoes\ModuleName\Logs\VBA_Internal.log"
 maxTimeoutSeconds   = 300
 
-' [Flag] Script pós-macro (BAT/Node.js)
-POST_EXECUTION_BAT  = ""          ' Ex: "C:\Automacoes\NomePasta\RunWhatsApp.bat"
+' [Flag] Post-execution bridge
+POST_EXECUTION_BAT  = ""
 ```
 
-### Quando usar cada flag:
-| Módulo | `USE_TIMEOUT_MONITOR` | `POST_EXECUTION_BAT` |
+| Scenario | USE_TIMEOUT_MONITOR | POST_EXECUTION_BAT |
 |---|---|---|
-| Simples (ex: Receitas Emitidas) | `False` | `""` |
-| Robo Fiscal (ex: Montagem) | `True` | `""` |
-| WhatsApp Bridge (ex: Receitas Bloqueadas) | `False` | Caminho do `.bat` |
+| Short synchronous job | False | Empty |
+| Long-running Excel/VBA job | True | Empty |
+| Job with external bridge | False | BAT absolute path |
+| Long-running job with bridge | True | BAT absolute path |
 
-## Passo a Passo para Novas Automações
-1. Copie a pasta `_Template` e renomeie para o nome do módulo.
-2. Configure o cabeçalho do `Trigger_Automation.vbs` com os caminhos e flags corretos.
-3. No Excel (`.xlsm`), crie a macro principal (ex: `ExecutarProcesso`).
-4. Se **WhatsApp**: configure `whatsapp-config.json` e garanta que `RunWhatsApp.bat` existe.
-5. Se **Email**: implemente a verificação do anexo via `Dir()` ou `FSO` antes do envio.
-6. Adicione a tarefa no `config.json` da raiz seguindo o schema da skill `automacao-monitor`.
+## Implementation Workflow
+1. Copy the _Template module structure and rename it to the new automation name.
+2. Configure Trigger_Automation.vbs with absolute paths, feature flags, and log destinations.
+3. Implement the main VBA macro with explicit entrypoint signature and deterministic cleanup.
+4. Add outbound integrations only after the core business path is stable when executed manually.
+5. Register the automation in the root config.json only after the manual execution path succeeds.
 
-## Regras de Ouro
-- **`DisplayAlerts = False`** e **`Visible = False`** sempre.
-- **`ScreenUpdating = False`** e **`EnableEvents = False`**: reduz interferências externas.
-- **`AskToUpdateLinks = False`**: evita pop-ups ao abrir planilhas com links externos.
-- **Cleanup garantido**: O bloco `LimparObjetosExcel()` fecha o processo mesmo em caso de erro.
-- **`On Error GoTo 0`**: sempre restaurar o handler após blocos `On Error Resume Next`.
+## Engineering Patterns
+| Pattern | Standard |
+|---|---|
+| ExecId | Generate a unique execution identifier and propagate it across all layers |
+| Logging | Log start, key transitions, exit path, and fatal failures |
+| Error handling | Use selective error suppression only around expected failure points; restore normal handling immediately |
+| Cleanup | Centralize object disposal in a single routine and call it on all exits |
+| Idempotency | Prevent duplicate sends, duplicate exports, and duplicate state transitions |
+
+## Troubleshooting
+| Symptom | Root Cause | Action |
+|---|---|---|
+| Excel remains open after failure | Cleanup path not centralized | Move teardown into a single cleanup routine and call it on all exits |
+| Duplicate outbound messages | No idempotency key or repeated trigger | Add execution identity and persist send state |
+| Monitor runs but job does nothing | Trigger misconfigured or macro name mismatch | Validate VBS header values and manual execution first |
+| Long job terminates early | Timeout monitoring too aggressive | Recalibrate maxTimeoutSeconds and validate VBA log heartbeat |
+
+## Pre-Delivery Checklist
+- [ ] Trigger_Automation.vbs was created from the template and configured with absolute paths.
+- [ ] Local Logs directory exists and the automation writes traceable logs.
+- [ ] Excel and VBA cleanup are guaranteed on both success and failure.
+- [ ] Output channel behavior is explicit and idempotent.
+- [ ] Manual execution succeeds before scheduler registration.
