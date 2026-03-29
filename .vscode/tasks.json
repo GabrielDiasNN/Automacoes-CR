@@ -1,0 +1,85 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Monitor: Dry Run",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\MonitorAutomacoes.ps1",
+                "-RunOnce",
+                "-DryRun"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Monitor: Run Once",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\MonitorAutomacoes.ps1",
+                "-RunOnce"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Monitor: Setup Startup Shortcut",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\SetupMonitor.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Audit: Export XLSM",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ExportarAuditoriaXlsm.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Receitas Bloqueadas: npm install",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "install"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}\\Receitas Bloqueadas"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Receitas Bloqueadas: enviar WhatsApp",
+            "type": "shell",
+            "command": "node",
+            "args": [
+                "sendWhatsApp.js"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}\\Receitas Bloqueadas"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

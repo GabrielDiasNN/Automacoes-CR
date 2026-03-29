@@ -1,0 +1,113 @@
+{
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "files.eol": "\r\n",
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.exclude": {
+        "**/Logs/**": true,
+        "**/*.log": true,
+        "**/node_modules": true,
+        "**/.wwebjs_auth": true
+    },
+    "search.exclude": {
+        "**/Logs/**": true,
+        "**/*.log": true,
+        "**/node_modules": true,
+        "**/.wwebjs_auth": true
+    },
+    "files.watcherExclude": {
+        "**/Logs/**": true,
+        "**/*.log": true,
+        "**/node_modules/**": true,
+        "**/.wwebjs_auth/**": true
+    },
+    "eslint.validate": [
+        "javascript",
+        "javascriptreact",
+        "typescript",
+        "html"
+    ],
+    "eslint.workingDirectories": [
+        {
+            "mode": "auto"
+        }
+    ],
+    "javascript.validate.enable": false,
+    "typescript.validate.enable": false,
+    "powershell.scriptAnalysis.enable": true,
+    "powershell.powerShellExePath": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.profiles.windows": {
+        "PowerShell": {
+            "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+        },
+        "Windows PowerShell": {
+            "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+        }
+    },
+    "terminal.integrated.enableMultiLinePasteWarning": false,
+    "python.languageServer": "Pylance",
+    "python.defaultInterpreterPath": "python",
+    "vbaLanguageServer.trace.server": "off",
+    "vbaLanguageServer.environment.os": "Win64",
+    "vbaLanguageServer.environment.version": "Vba7",
+    "vbaLanguageServer.maxDocumentLines": 10000,
+    "vbaLanguageServer.maxNumberOfProblems": 200,
+    "vbaLanguageServer.doWarnOptionExplicitMissing": true,
+    "[vba]": {
+        "editor.formatOnSave": false,
+        "editor.defaultFormatter": null,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+    "files.associations": {
+        "*.bas": "vba",
+        "*.cls": "vba",
+        "*.frm": "vba",
+        "*.vbs": "vbscript"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "[powershell]": {
+        "editor.defaultFormatter": "ms-vscode.powershell"
+    },
+    "git.autofetch": true,
+    "git.confirmSync": false,
+    "gitlens.currentLine.enabled": true,
+    "gitlens.currentLine.format": "${author|15} (${agoOrDate}) ${message|50?}",
+    "gitlens.currentLine.scrollable": false,
+    "gitlens.hovers.enabled": true,
+    "gitlens.hovers.currentLine.over": "line",
+    "gitlens.hovers.currentLine.details": true,
+    "gitlens.hovers.currentLine.changes": true,
+    "gitlens.codeLens.enabled": true,
+    "gitlens.codeLens.authors.enabled": true,
+    "gitlens.codeLens.recentChange.enabled": true,
+    "gitlens.codeLens.scopes": [
+        "document"
+    ],
+    "gitlens.blame.highlight.enabled": true,
+    "gitlens.blame.highlight.locations": [
+        "gutter",
+        "line"
+    ],
+    "gitlens.statusBar.enabled": true,
+    "gitlens.statusBar.format": "${author|20}, ${agoOrDate}",
+    "gitlens.statusBar.alignment": "left",
+    "gitlens.defaultDateFormat": "DD/MM/YYYY HH:mm",
+    "gitlens.defaultDateShortFormat": "DD/MM/YY",
+    "gitlens.defaultTimeFormat": "HH:mm",
+    "gitlens.graph.layout": "panel",
+    "gitlens.graph.minimap.enabled": true,
+    "gitlens.views.commits.files.layout": "list",
+    "gitlens.views.branches.files.layout": "list",
+    "gitlens.views.fileHistory.avatars": false
+}

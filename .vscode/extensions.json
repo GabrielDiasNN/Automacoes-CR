@@ -1,0 +1,19 @@
+{
+    "recommendations": [
+        "github.copilot-chat",
+        "github.vscode-pull-request-github",
+        "eamodio.gitlens",
+        "editorconfig.editorconfig",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "streetsidesoftware.code-spell-checker",
+        "darfka.vbscript",
+        "notisdataanalytics.vba-lsp",
+        "sbroenne.excel-mcp",
+        "powerquery.vscode-powerquery",
+        "ms-vscode.powershell",
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+    ],
+    "unwantedRecommendations": []
+}
