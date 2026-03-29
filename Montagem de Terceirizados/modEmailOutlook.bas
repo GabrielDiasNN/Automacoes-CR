@@ -72,30 +72,30 @@ End Sub
 ' ====================================================================================
 Private Function EnviarEmailComErros(ByRef udtTel As Telemetria) As Boolean
     Dim strTo      As String, strCC As String
-    Dim strHTML    As String, strAssunto As String
+    Dim strHtml    As String, strAssunto As String
 
-    If Not ObterEValidarDestinatarios(strTo, strCC) Then 
+    If Not ObterEValidarDestinatarios(strTo, strCC) Then
         EnviarEmailComErros = False: Exit Function
     End If
 
-    strHTML = MontarTemplateEmail(True, udtTel)
+    strHtml = MontarTemplateEmail(True, udtTel)
     strAssunto = "[ALERTA] Divergencias - Controle NF - " & FormatarDataBR(Now)
     
-    EnviarEmailComErros = EnviarEmailCore(strAssunto, strHTML, strTo, strCC)
+    EnviarEmailComErros = EnviarEmailCore(strAssunto, strHtml, strTo, strCC)
 End Function
 
 Private Function EnviarEmailSucesso(ByRef udtTel As Telemetria) As Boolean
     Dim strTo      As String, strCC As String
-    Dim strHTML    As String, strAssunto As String
+    Dim strHtml    As String, strAssunto As String
 
-    If Not ObterEValidarDestinatarios(strTo, strCC) Then 
+    If Not ObterEValidarDestinatarios(strTo, strCC) Then
         EnviarEmailSucesso = False: Exit Function
     End If
 
-    strHTML = MontarTemplateEmail(False, udtTel)
+    strHtml = MontarTemplateEmail(False, udtTel)
     strAssunto = "[OK] Validacao Aprovada - Controle NF - " & FormatarDataBR(Now)
     
-    EnviarEmailSucesso = EnviarEmailCore(strAssunto, strHTML, strTo, strCC)
+    EnviarEmailSucesso = EnviarEmailCore(strAssunto, strHtml, strTo, strCC)
 End Function
 
 ' ====================================================================================
@@ -110,7 +110,7 @@ Private Function EnviarEmailCore(ByVal strSubject As String, ByVal strBodyHTML A
     On Error GoTo TratarErro
 
     Set objApp = GetOutlookAppSafe()
-    If objApp Is Nothing Then 
+    If objApp Is Nothing Then
         GravarLogEx "E-MAIL: Nao foi possivel obter instancia do Outlook.", LOG_ERROR
         EnviarEmailCore = False: Exit Function
     End If
@@ -122,11 +122,11 @@ Private Function EnviarEmailCore(ByVal strSubject As String, ByVal strBodyHTML A
 
     Set objItem = objApp.CreateItem(0)
     With objItem
-        .To         = strTo
-        .CC         = strCC
-        .Subject    = strSubject
+        .To = strTo
+        .CC = strCC
+        .Subject = strSubject
         .BodyFormat = 2 ' olFormatHTML
-        .htmlBody   = strBodyHTML
+        .htmlBody = strBodyHTML
         
         If Len(strAttachmentPath) > 0 Then
             If Dir$(strAttachmentPath) <> "" Then
@@ -188,45 +188,45 @@ End Function
 ' HELPERS
 ' ====================================================================================
 Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As Telemetria) As String
-    Dim strHTML As String
+    Dim strHtml As String
     Dim strCor  As String
     Dim strIcon As String
     Dim strMsg  As String
     
     If blnErro Then
-        strCor  = "#d32f2f"
+        strCor = "#d32f2f"
         strIcon = HTML_ICON_WARNING
-        strMsg  = "Divergencias Detectadas"
+        strMsg = "Divergencias Detectadas"
     Else
-        strCor  = "#388e3c"
+        strCor = "#388e3c"
         strIcon = HTML_ICON_CHECK
-        strMsg  = "Validacao Aprovada"
+        strMsg = "Validacao Aprovada"
     End If
 
-    strHTML = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body>"
-    strHTML = strHTML & "<div style='font-family:Calibri,Arial,sans-serif;font-size:11pt;max-width:800px;margin:0 auto;'>"
-    strHTML = strHTML & "<div style='background:linear-gradient(135deg," & strCor & " 0%,#222 100%);padding:20px;border-radius:8px 8px 0 0;'>"
-    strHTML = strHTML & "<h1 style='color:white;margin:0;font-size:24pt;'><span style='font-size:32pt;vertical-align:middle;'>" & strIcon & "</span> " & strMsg & "</h1></div>"
-    strHTML = strHTML & "<div style='background:#fff;padding:25px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;'>"
+    strHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body>"
+    strHtml = strHtml & "<div style='font-family:Calibri,Arial,sans-serif;font-size:11pt;max-width:800px;margin:0 auto;'>"
+    strHtml = strHtml & "<div style='background:linear-gradient(135deg," & strCor & " 0%,#222 100%);padding:20px;border-radius:8px 8px 0 0;'>"
+    strHtml = strHtml & "<h1 style='color:white;margin:0;font-size:24pt;'><span style='font-size:32pt;vertical-align:middle;'>" & strIcon & "</span> " & strMsg & "</h1></div>"
+    strHtml = strHtml & "<div style='background:#fff;padding:25px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;'>"
     
     If blnErro Then
-        strHTML = strHTML & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas divergencias na validacao.</b></p>"
-        strHTML = strHTML & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Consulte a aba <b style='color:#d32f2f;'>Erros NF</b> no Excel.</p>"
+        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas divergencias na validacao.</b></p>"
+        strHtml = strHtml & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Consulte a aba <b style='color:#d32f2f;'>Erros NF</b> no Excel.</p>"
     Else
-        strHTML = strHTML & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma divergencia encontrada.</b></p>"
+        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma divergencia encontrada.</b></p>"
     End If
     
-    strHTML = strHTML & "<div style='background:#f9f9f9;border-left:4px solid " & strCor & ";padding:15px;margin:20px 0;border-radius:4px;'>"
-    strHTML = strHTML & "<p><span style='font-size:14pt;'>" & HTML_ICON_CHART & "</span> <b>Total de linhas:</b> " & udtTel.totalLinhas & "</p>"
-    strHTML = strHTML & "<p><span style='font-size:14pt;'>" & IIf(blnErro, HTML_ICON_CROSS, HTML_ICON_CHECK) & "</span> <b>Resultado:</b> " & IIf(blnErro, udtTel.totalErros & " erros", "100% OK") & "</p>"
-    strHTML = strHTML & "<p><span style='font-size:14pt;'>" & HTML_ICON_STOPWATCH & "</span> <b>Tempo de Processamento:</b> " & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</p></div>"
+    strHtml = strHtml & "<div style='background:#f9f9f9;border-left:4px solid " & strCor & ";padding:15px;margin:20px 0;border-radius:4px;'>"
+    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & HTML_ICON_CHART & "</span> <b>Total de linhas:</b> " & udtTel.totalLinhas & "</p>"
+    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & IIf(blnErro, HTML_ICON_CROSS, HTML_ICON_CHECK) & "</span> <b>Resultado:</b> " & IIf(blnErro, udtTel.totalErros & " erros", "100% OK") & "</p>"
+    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & HTML_ICON_STOPWATCH & "</span> <b>Tempo de Processamento:</b> " & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</p></div>"
     
-    strHTML = strHTML & "<hr style='border:0;border-top:1px solid #ddd;margin:30px 0;'>"
-    strHTML = strHTML & "<p style='font-size:9pt;color:#888;'><span style='font-size:12pt;'>" & HTML_ICON_ROBOT & "</span> <i>Robo Fiscal " & ROBO_VERSAO_DASH & "</i><br>"
-    strHTML = strHTML & "<span style='font-size:12pt;'>" & HTML_ICON_CALENDAR & "</span> Data/Hora: <b>" & FormatarDataBR(Now, True) & "</b></p>"
-    strHTML = strHTML & "</div></div></body></html>"
+    strHtml = strHtml & "<hr style='border:0;border-top:1px solid #ddd;margin:30px 0;'>"
+    strHtml = strHtml & "<p style='font-size:9pt;color:#888;'><span style='font-size:12pt;'>" & HTML_ICON_ROBOT & "</span> <i>Robo Fiscal " & ROBO_VERSAO_DASH & "</i><br>"
+    strHtml = strHtml & "<span style='font-size:12pt;'>" & HTML_ICON_CALENDAR & "</span> Data/Hora: <b>" & FormatarDataBR(Now, True) & "</b></p>"
+    strHtml = strHtml & "</div></div></body></html>"
     
-    MontarTemplateEmail = strHTML
+    MontarTemplateEmail = strHtml
 End Function
 
 Private Function MontarEmailKeyExecucao(ByVal strTipo As String, ByRef udtTel As Telemetria) As String

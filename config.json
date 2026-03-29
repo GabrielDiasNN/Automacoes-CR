@@ -12,6 +12,7 @@
       "5": "Timeout VBA",
       "6": "VBA reportou falha ou erro fatal",
       "7": "Workbook bloqueado (aberto em modo somente leitura)",
+      "8": "Falha ao preparar/ler log de monitoramento",
       "23": "Bridge de WhatsApp em cooldown de retry (envio adiado)",
       "40": "Execucao concorrente bloqueada no bridge de WhatsApp"
     }
@@ -24,9 +25,20 @@
       "preventOverlap": true,
       "waitForExit": false,
       "schedule": {
-        "daysOfWeek": [1, 2, 3, 4, 5],
-        "hours": [7, 15],
-        "minutes": [30]
+        "daysOfWeek": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours": [
+          7,
+          15
+        ],
+        "minutes": [
+          30
+        ]
       }
     },
     {
@@ -36,9 +48,17 @@
       "preventOverlap": true,
       "waitForExit": false,
       "schedule": {
-        "daysOfWeek": [1, 2, 3, 4, 5],
+        "daysOfWeek": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
         "hours": [],
-        "minutes": [0]
+        "minutes": [
+          0
+        ]
       }
     },
     {
@@ -48,9 +68,15 @@
       "preventOverlap": true,
       "waitForExit": false,
       "schedule": {
-        "daysOfWeek": [5],
-        "hours": [7],
-        "minutes": [5]
+        "daysOfWeek": [
+          5
+        ],
+        "hours": [
+          7
+        ],
+        "minutes": [
+          5
+        ]
       }
     }
   ]

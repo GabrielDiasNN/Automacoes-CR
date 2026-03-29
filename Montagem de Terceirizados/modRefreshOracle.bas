@@ -35,7 +35,7 @@ Public Function GetStampValue() As Variant
     Set objLo = FindListObjectByName(STAMP_TABLE_NAME)
     If objLo Is Nothing Then GoTo Fallback
     
-    If objLo.ListRows.Count = 0 Or objLo.DataBodyRange Is Nothing Then
+    If objLo.ListRows.count = 0 Or objLo.DataBodyRange Is Nothing Then
         GetStampValue = Empty: Exit Function
     End If
     
@@ -67,7 +67,7 @@ Public Function StampKey(ByVal varValue As Variant) As String
     On Error GoTo Fallback
     If IsEmpty(varValue) Then StampKey = "": Exit Function
     If IsNumeric(varValue) Then StampKey = "N:" & Format$(CDbl(varValue), "0.0000000000"): Exit Function
-    If IsDate(varValue)    Then StampKey = "D:" & Format$(CDbl(CDate(varValue)), "0.0000000000"): Exit Function
+    If IsDate(varValue) Then StampKey = "D:" & Format$(CDbl(CDate(varValue)), "0.0000000000"): Exit Function
     
     StampKey = "S:" & Trim$(CStr(varValue))
     Exit Function
@@ -87,7 +87,7 @@ Public Function IsStampInconclusivoPorTabelaVazia() As Boolean
     If objLo Is Nothing Then
         IsStampInconclusivoPorTabelaVazia = False
     Else
-        IsStampInconclusivoPorTabelaVazia = (objLo.ListRows.Count = 0)
+        IsStampInconclusivoPorTabelaVazia = (objLo.ListRows.count = 0)
     End If
 End Function
 
@@ -98,7 +98,7 @@ Private Function StampValorParaLog(ByVal varValue As Variant) As String
     On Error GoTo Falha
     If IsEmpty(varValue) Then StampValorParaLog = "(vazio)": Exit Function
     If IsError(varValue) Then StampValorParaLog = "(erro)":  Exit Function
-    If IsDate(varValue)   Then StampValorParaLog = FormatarDataBR(CDate(varValue), True): Exit Function
+    If IsDate(varValue) Then StampValorParaLog = FormatarDataBR(CDate(varValue), True): Exit Function
     
     If IsNumeric(varValue) Then
         dblVal = CDbl(varValue)
@@ -171,18 +171,18 @@ Public Function ObterFingerprintTabelaAtiva(Optional ByVal objWsForcado As Works
     End If
     
     If objWs Is Nothing Then Exit Function
-    If objWs.ListObjects.Count = 0 Then Exit Function
+    If objWs.ListObjects.count = 0 Then Exit Function
     
     Set objLo = objWs.ListObjects(1)
     If objLo.DataBodyRange Is Nothing Then Exit Function
 
     Set rngDados = objLo.DataBodyRange
-    Dim lngRCount As Long: lngRCount = rngDados.Rows.Count
-    Dim lngCCount As Long: lngCCount = rngDados.Columns.Count
+    Dim lngRCount As Long: lngRCount = rngDados.Rows.count
+    Dim lngCCount As Long: lngCCount = rngDados.Columns.count
     If lngRCount <= 0 Or lngCCount <= 0 Then Exit Function
 
     Dim varFirst As Variant: varFirst = rngDados.Cells(1, 1).Value2
-    Dim varLast  As Variant: varLast  = rngDados.Cells(lngRCount, lngCCount).Value2
+    Dim varLast  As Variant: varLast = rngDados.Cells(lngRCount, lngCCount).Value2
     Dim strStampK As String: strStampK = StampKey(GetStampValue())
 
     strBase = objWs.Name & "|" & objLo.Name & "|" & lngRCount & "x" & lngCCount & "|" & _

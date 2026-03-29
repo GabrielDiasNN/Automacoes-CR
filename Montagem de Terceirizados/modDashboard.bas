@@ -18,12 +18,12 @@ Public Sub RegistrarHistorico(ByVal blnSucesso As Boolean, ByRef udtTel As Telem
     On Error GoTo Falha
 
     If objWs Is Nothing Then
-        Set objWs = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+        Set objWs = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.count))
         objWs.Name = "Dashboard"
         CriarEstruturaDashboard objWs
     End If
 
-    lngUltima = objWs.Cells(objWs.Rows.Count, 1).End(xlUp).Row + 1
+    lngUltima = objWs.Cells(objWs.Rows.count, 1).End(xlUp).Row + 1
     If lngUltima > 59 Then
         objWs.Rows(10).Delete
         lngUltima = 59
@@ -97,24 +97,24 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
     With ws
         .Cells.Delete
         .Cells(1, 1).Value = "DASHBOARD DE MONITORAMENTO - " & ROBO_VERSAO_TEXTO
-        .Cells(1, 1).Font.Size  = 16
-        .Cells(1, 1).Font.Bold  = True
+        .Cells(1, 1).Font.Size = 16
+        .Cells(1, 1).Font.Bold = True
         .Cells(1, 1).Font.Color = RGB(255, 255, 255)
         .Range("A1:H1").Merge
         .Range("A1").HorizontalAlignment = xlCenter
-        .Range("A1").VerticalAlignment   = xlCenter
+        .Range("A1").VerticalAlignment = xlCenter
         .Rows(1).RowHeight = 38
         .Range("A1:H1").Interior.Color = RGB(31, 78, 120)
 
         .Rows(2).RowHeight = 5
 
         .Cells(3, 1).Value = ChrW(&H25B2) & " INDICADORES PRINCIPAIS"
-        .Cells(3, 1).Font.Bold  = True
-        .Cells(3, 1).Font.Size  = 11
+        .Cells(3, 1).Font.Bold = True
+        .Cells(3, 1).Font.Size = 11
         .Range("A3:H3").Merge
         .Range("A3").HorizontalAlignment = xlLeft
-        .Range("A3:H3").Interior.Color   = RGB(237, 125, 49)
-        .Range("A3:H3").Font.Color       = RGB(255, 255, 255)
+        .Range("A3:H3").Interior.Color = RGB(237, 125, 49)
+        .Range("A3:H3").Font.Color = RGB(255, 255, 255)
         .Rows(3).RowHeight = 26
 
         .Cells(4, 1).Value = "Total Execuções"
@@ -126,8 +126,8 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         .Range("E4:F4").Merge
         .Range("G4:H4").Merge
         .Range("A4:H4").HorizontalAlignment = xlCenter
-        .Range("A4:H4").Font.Bold           = True
-        .Range("A4:H4").Interior.Color      = RGB(217, 225, 242)
+        .Range("A4:H4").Font.Bold = True
+        .Range("A4:H4").Interior.Color = RGB(217, 225, 242)
 
         .Cells(5, 1).Value = "0"
         .Cells(5, 3).Value = "0.0%"
@@ -139,14 +139,14 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         .Range("G5:H5").Merge
 
         With .Range("A5:F5")
-            .Font.Size  = 20
-            .Font.Bold  = True
+            .Font.Size = 20
+            .Font.Bold = True
             .Font.Color = RGB(0, 102, 204)
             .HorizontalAlignment = xlCenter
         End With
         With .Range("G5:H5")
-            .Font.Size  = 16
-            .Font.Bold  = True
+            .Font.Size = 16
+            .Font.Bold = True
             .Font.Color = RGB(0, 102, 204)
             .HorizontalAlignment = xlCenter
         End With
@@ -157,12 +157,12 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         .Rows(6).RowHeight = 5
 
         .Cells(7, 1).Value = ChrW(&H25BA) & " HISTÓRICO DE EXECUÇÕES (Últimas 50)"
-        .Cells(7, 1).Font.Bold  = True
-        .Cells(7, 1).Font.Size  = 11
+        .Cells(7, 1).Font.Bold = True
+        .Cells(7, 1).Font.Size = 11
         .Range("A7:H7").Merge
-        .Range("A7").HorizontalAlignment  = xlLeft
-        .Range("A7:H7").Interior.Color    = RGB(68, 114, 196)
-        .Range("A7:H7").Font.Color        = RGB(255, 255, 255)
+        .Range("A7").HorizontalAlignment = xlLeft
+        .Range("A7:H7").Interior.Color = RGB(68, 114, 196)
+        .Range("A7:H7").Font.Color = RGB(255, 255, 255)
         .Rows(7).RowHeight = 26
         .Rows(8).RowHeight = 3
 
@@ -175,11 +175,11 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         .Cells(9, 7).Value = "Taxa Acerto %"
         .Cells(9, 8).Value = "Versão"
         With .Range("A9:H9")
-            .Font.Bold       = True
-            .Font.Color      = RGB(255, 255, 255)
-            .Interior.Color  = RGB(68, 114, 196)
+            .Font.Bold = True
+            .Font.Color = RGB(255, 255, 255)
+            .Interior.Color = RGB(68, 114, 196)
             .HorizontalAlignment = xlCenter
-            .Borders.LineStyle   = xlContinuous
+            .Borders.LineStyle = xlContinuous
         End With
         .Rows(9).RowHeight = 26
 
@@ -218,11 +218,11 @@ Private Sub AtualizarKPIsDashboard(ByVal ws As Worksheet)
 
     On Error Resume Next
 
-    ultimaLinha = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    ultimaLinha = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
     If ultimaLinha < 10 Then Exit Sub
 
-    totalExec  = ultimaLinha - 9
-    sucessos   = 0
+    totalExec = ultimaLinha - 9
+    sucessos = 0
     somaTempos = 0#
 
     For Each c In ws.Range("C10:C" & ultimaLinha).Cells
@@ -262,7 +262,7 @@ Private Sub AtualizarGraficoDashboard(ByVal ws As Worksheet)
 
     On Error Resume Next
 
-    ultimaLinha = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    ultimaLinha = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
     If ultimaLinha < 10 Then Exit Sub
 
     For Each cht In ws.ChartObjects
@@ -274,44 +274,44 @@ Private Sub AtualizarGraficoDashboard(ByVal ws As Worksheet)
 
     With grafico.Chart
         .ChartType = xlLineMarkers
-        Do While .SeriesCollection.Count > 0
+        Do While .SeriesCollection.count > 0
             .SeriesCollection(1).Delete
         Loop
 
         Set serie1 = .SeriesCollection.NewSeries
         With serie1
-            .Name   = "Quantidade de Erros"
+            .Name = "Quantidade de Erros"
             .Values = ws.Range("E10:E" & ultimaLinha)
             .XValues = ws.Range("A10:A" & ultimaLinha)
-            .Format.Line.ForeColor.RGB = RGB(192, 0, 0)
-            .Format.Line.Weight        = 2.5
+            .Format.line.ForeColor.RGB = RGB(192, 0, 0)
+            .Format.line.Weight = 2.5
             .MarkerStyle = xlMarkerStyleCircle
-            .MarkerSize  = 6
-            .AxisGroup   = xlPrimary
+            .MarkerSize = 6
+            .AxisGroup = xlPrimary
         End With
 
         Set serie2 = .SeriesCollection.NewSeries
         With serie2
-            .Name   = "Taxa de Acerto %"
+            .Name = "Taxa de Acerto %"
             .Values = ws.Range("G10:G" & ultimaLinha)
             .XValues = ws.Range("A10:A" & ultimaLinha)
-            .Format.Line.ForeColor.RGB = RGB(0, 176, 80)
-            .Format.Line.Weight        = 2.5
+            .Format.line.ForeColor.RGB = RGB(0, 176, 80)
+            .Format.line.Weight = 2.5
             .MarkerStyle = xlMarkerStyleSquare
-            .MarkerSize  = 6
-            .AxisGroup   = xlSecondary
+            .MarkerSize = 6
+            .AxisGroup = xlSecondary
         End With
 
-        .HasAxis(xlValue, xlSecondary)          = True
+        .HasAxis(xlValue, xlSecondary) = True
         .Axes(xlValue, xlSecondary).MinimumScale = 0
         .Axes(xlValue, xlSecondary).MaximumScale = 100
 
-        .HasTitle          = True
-        .ChartTitle.Text   = ChrW(&H25B2) & " EVOLUCAO DE PERFORMANCE"
+        .HasTitle = True
+        .ChartTitle.Text = ChrW(&H25B2) & " EVOLUCAO DE PERFORMANCE"
         .ChartTitle.Font.Size = 12
         .ChartTitle.Font.Bold = True
-        .HasLegend             = True
-        .Legend.Position       = xlLegendPositionBottom
+        .HasLegend = True
+        .Legend.Position = xlLegendPositionBottom
     End With
 
     On Error GoTo 0

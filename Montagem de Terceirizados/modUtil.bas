@@ -57,4 +57,4 @@ Public Function WorksheetExists(ByVal strName As String) As Boolean
     Set objWs = ThisWorkbook.Worksheets(strName)
     WorksheetExists = (Not objWs Is Nothing)
     On Error GoTo 0
-End Function
+End Function

@@ -3,9 +3,12 @@ Option Explicit
 
 Private gLogFile As String
 Private gLogReady As Boolean
+Private gInLogWrite As Boolean
 Private Const LOG_MAX_LINES As Long = 5000
 Private Const LOG_FOLDER As String = "C:\Automacoes\Receitas Emitidas\Logs"
-Private Const RECIPIENT_TO As String = "acacio.klann@costaricamalhas.ind.br"
+Private Const DEFAULT_RECIPIENT_TO As String = "acacio.klann@costaricamalhas.ind.br"
+Private Const CONFIG_SHEET_NAME As String = "Config"
+Private Const CONFIG_TABLE_NAME As String = "EnderecosEmail"
 Private Const ITEM_SEPARATOR_CODE As Long = 30
 Private Const FIELD_SEPARATOR_CODE As Long = 31
 
@@ -48,7 +51,7 @@ Public Sub AtualizarEEnviarOutlook(Optional ByVal execId As String = "", Optiona
     Dim pivotTable As pivotTable
     Dim sourceRange As Range
 
-    mExecId = execId
+    mExecId = NormalizeExecId(execId)
     InitLog
 
     WriteLog "INFO", "MACRO", "Rotina iniciada"
@@ -76,17 +79,17 @@ Public Sub AtualizarEEnviarOutlook(Optional ByVal execId As String = "", Optiona
     EnviarEmailOutlookAdaptativo sourceRange, previewOnly
 
     WriteLog "INFO", "MACRO", "Rotina finalizada com sucesso"
-    FinalizeLog
+    FinalizeLog True
     Exit Sub
 
 TratarErro:
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
     If gLogReady Then
-        WriteLog "ERROR", "MACRO", "Erro " & Err.Number & " - " & Err.Description
-        WriteLog "INFO", "LOGGER", "FIM DO PROCESSO. Resultado=Erro"   ' <-- adicionar
-        FinalizeLog
+        WriteLog "ERROR", "MACRO", "Erro " & errNum & " - " & errDesc
+        FinalizeLog False
     End If
-    MsgBox "Erro na rotina: " & Err.Number & " - " & Err.Description, vbCritical
-    Err.Raise Err.Number, Err.Source, Err.Description
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Sub
 
 Public Sub PreVisualizarOutlook()
@@ -102,14 +105,15 @@ Private Sub EnviarEmailOutlookAdaptativo(ByVal sourceRange As Range, Optional By
 
     Dim outlookApp As Object
     Dim outlookMail As Object
+    Dim outlookInspector As Object
     Dim htmlBody As String
     Dim signatureHtml As String
-
-    WriteLog "INFO", "EMAIL", "Criando Outlook.Application"
-    Set outlookApp = CreateObject("Outlook.Application")
+    Dim recipientTo As String
+        Dim sendErr As Long, sendDesc As String
+    Set outlookApp = PrepararOutlook()
 
     If outlookApp Is Nothing Then
-        Err.Raise vbObjectError + 5004, , "Nao foi possivel criar Outlook.Application"
+        Err.Raise vbObjectError + 5004, , "Outlook inacessivel apos tentativas de inicializacao"
     End If
 
     Set outlookMail = outlookApp.CreateItem(0)
@@ -122,24 +126,39 @@ Private Sub EnviarEmailOutlookAdaptativo(ByVal sourceRange As Range, Optional By
 
     htmlBody = MontarHtmlAdaptativo(sourceRange)
 
+    recipientTo = GetRecipientTo()
+    WriteLog "INFO", "EMAIL", "TO=" & recipientTo
+    If Len(recipientTo) = 0 Or InStr(1, recipientTo, "@") = 0 Then
+        Err.Raise vbObjectError + 5006, , "Destinatario de email nao informado ou invalido"
+    End If
+
     With outlookMail
-        .To = RECIPIENT_TO
-        .Subject = GetEmailSubject()
-        .Attachments.Add ThisWorkbook.FullName
-        WriteLog "INFO", "EMAIL", "Anexo adicionado: " & ThisWorkbook.Name
-
-        .Display
-        DoEvents
-
-        signatureHtml = .htmlBody
-        .htmlBody = htmlBody & signatureHtml
-        WriteLog "INFO", "EMAIL", "HTMLBody montado com sucesso"
+            WriteLog "INFO", "EMAIL", "Definindo Subject"
+            .Subject = GetEmailSubject()
+            WriteLog "INFO", "EMAIL", "Definindo To"
+            .To = recipientTo
+            WriteLog "INFO", "EMAIL", "Adicionando anexo"
+            .Attachments.Add ThisWorkbook.FullName
+            WriteLog "INFO", "EMAIL", "Anexo adicionado: " & ThisWorkbook.Name
+            WriteLog "INFO", "EMAIL", "Definindo HTMLBody"
+            .htmlBody = htmlBody
+            WriteLog "INFO", "EMAIL", "HTMLBody montado com sucesso"
 
         If previewOnly Then
-            WriteLog "INFO", "EMAIL", "Email exibido em modo de pre-visualizacao"
+                WriteLog "INFO", "EMAIL", "Chamando Display"
+                .Display
+                WriteLog "INFO", "EMAIL", "Email exibido em modo de pre-visualizacao"
         Else
-            .Send
-            WriteLog "INFO", "EMAIL", "E-mail enviado com sucesso"
+                WriteLog "INFO", "EMAIL", "Chamando Send"
+                On Error Resume Next
+                .Send
+                sendErr = Err.Number: sendDesc = Err.Description
+                On Error GoTo TratarErro
+                If sendErr <> 0 Then
+                    WriteLog "ERROR", "EMAIL", "Send falhou | Err=" & sendErr & " | Desc=" & sendDesc
+                    Err.Raise sendErr, "EMAIL.Send", sendDesc
+                End If
+                WriteLog "INFO", "EMAIL", "E-mail enviado com sucesso"
         End If
     End With
 
@@ -148,13 +167,51 @@ Private Sub EnviarEmailOutlookAdaptativo(ByVal sourceRange As Range, Optional By
     Exit Sub
 
 TratarErro:
-    WriteLog "ERROR", "EMAIL", "Erro " & Err.Number & " - " & Err.Description
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    WriteLog "ERROR", "EMAIL", "Erro " & errNum & " - " & errDesc
     On Error Resume Next
     Set outlookMail = Nothing
     Set outlookApp = Nothing
     On Error GoTo 0
-    Err.Raise Err.Number, Err.Source, Err.Description
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Sub
+
+Private Function PrepararOutlook() As Object
+    Dim oApp As Object
+
+    On Error Resume Next
+
+    Set oApp = GetObject(, "Outlook.Application")
+    If Not oApp Is Nothing Then
+        WriteLog "INFO", "EMAIL", "Outlook conectado por instancia existente"
+        Set PrepararOutlook = oApp
+        Exit Function
+    End If
+
+    Err.Clear
+    Set oApp = CreateObject("Outlook.Application")
+    If Not oApp Is Nothing Then
+        WriteLog "INFO", "EMAIL", "Outlook iniciado por nova instancia"
+        Set PrepararOutlook = oApp
+        Exit Function
+    End If
+
+    WriteLog "WARN", "EMAIL", "Outlook nao respondeu. Tentando iniciar via Shell"
+
+    Err.Clear
+    Shell "outlook.exe", 2
+    Application.Wait Now + TimeValue("0:00:08")
+    Set oApp = GetObject(, "Outlook.Application")
+    If Not oApp Is Nothing Then
+        WriteLog "INFO", "EMAIL", "Outlook iniciado via Shell"
+        Set PrepararOutlook = oApp
+        Exit Function
+    End If
+
+    WriteLog "ERROR", "EMAIL", "FALHA FINAL: Nao foi possivel iniciar o Outlook"
+    On Error GoTo 0
+End Function
 
 Private Function MontarHtmlAdaptativo(ByVal sourceRange As Range) As String
     On Error GoTo TratarErro
@@ -219,8 +276,10 @@ Private Function MontarHtmlAdaptativo(ByVal sourceRange As Range) As String
     Exit Function
 
 TratarErro:
-    WriteLog "ERROR", "HTML", "Erro " & Err.Number & " - " & Err.Description
-    Err.Raise Err.Number, Err.Source, Err.Description
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    WriteLog "ERROR", "HTML", "Erro " & errNum & " - " & errDesc
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Function
 
 Private Sub ParsePivotRange( _
@@ -280,7 +339,9 @@ Private Sub ParsePivotRange( _
     Exit Sub
 
 TratarErro:
-    Err.Raise Err.Number, Err.Source, Err.Description
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Sub
 
 Private Sub ComputeReportStats( _
@@ -925,12 +986,111 @@ Private Sub AtualizarConsultaControleReceitas()
     Exit Sub
 
 TratarErro:
-    WriteLog "ERROR", "POWER QUERY", "Erro " & Err.Number & " - " & Err.Description
-    Err.Raise Err.Number, Err.Source, Err.Description
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    WriteLog "ERROR", "POWER QUERY", "Erro " & errNum & " - " & errDesc
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Sub
 
 Private Function GetEmailSubject() As String
     GetEmailSubject = "Relatorio Semanal: Controle de Receitas Emitidas - " & Format$(Date, "dd/mm/yyyy")
+End Function
+
+Private Function GetRecipientTo() As String
+    Dim configValue As String
+
+    configValue = TryGetRecipientFromConfig()
+    If Len(configValue) > 0 Then
+        GetRecipientTo = configValue
+        Exit Function
+    End If
+
+    If Len(DEFAULT_RECIPIENT_TO) > 0 Then
+        WriteLog "WARN", "EMAIL", "Destinatario nao encontrado na tabela Config. Usando default."
+    Else
+        WriteLog "ERROR", "EMAIL", "Destinatario nao informado (config e default vazios)."
+    End If
+
+    GetRecipientTo = DEFAULT_RECIPIENT_TO
+End Function
+
+Private Function TryGetRecipientFromConfig() As String
+    Dim ws As Worksheet
+    Dim lo As ListObject
+    Dim idx As Long
+    Dim rawValue As String
+
+    On Error GoTo TratarErro
+
+    Set ws = ThisWorkbook.Worksheets(CONFIG_SHEET_NAME)
+    If ws Is Nothing Then Exit Function
+
+    Set lo = ws.ListObjects(CONFIG_TABLE_NAME)
+    If lo Is Nothing Then Exit Function
+    If lo.DataBodyRange Is Nothing Then Exit Function
+
+    idx = ObterIndiceColunaPorSinonimos(lo, Array("PARA", "TO", "DESTINATARIO", "DESTINATARIO PRINCIPAL", "EMAIL"))
+    If idx = 0 Then Exit Function
+
+    rawValue = CStr(lo.DataBodyRange.Cells(1, idx).Value)
+    rawValue = LimparEmails(rawValue)
+    If Len(rawValue) > 0 Then
+        TryGetRecipientFromConfig = rawValue
+    End If
+    Exit Function
+
+TratarErro:
+    TryGetRecipientFromConfig = vbNullString
+End Function
+
+Private Function ObterIndiceColunaPorSinonimos(ByVal lo As ListObject, ByVal sinonimos As Variant) As Long
+    Dim i As Long
+    Dim j As Long
+    Dim nomeColuna As String
+    Dim nomeSinonimo As String
+
+    For i = 1 To lo.ListColumns.Count
+        nomeColuna = NormalizarCabecalhoEmail(CStr(lo.ListColumns(i).Name))
+
+        For j = LBound(sinonimos) To UBound(sinonimos)
+            nomeSinonimo = NormalizarCabecalhoEmail(CStr(sinonimos(j)))
+            If nomeColuna = nomeSinonimo Then
+                ObterIndiceColunaPorSinonimos = i
+                Exit Function
+            End If
+        Next j
+    Next i
+End Function
+
+Private Function NormalizarCabecalhoEmail(ByVal textValue As String) As String
+    Dim normalizedText As String
+
+    normalizedText = NormalizarTexto(textValue)
+    normalizedText = Replace(normalizedText, "_", " ")
+    normalizedText = Replace(normalizedText, "-", " ")
+    normalizedText = Replace(normalizedText, ".", " ")
+
+    Do While InStr(1, normalizedText, "  ", vbBinaryCompare) > 0
+        normalizedText = Replace(normalizedText, "  ", " ")
+    Loop
+
+    NormalizarCabecalhoEmail = Trim$(normalizedText)
+End Function
+
+Private Function LimparEmails(ByVal textValue As String) As String
+    Dim cleaned As String
+
+    cleaned = Trim$(textValue)
+    If Len(cleaned) = 0 Then
+        LimparEmails = vbNullString
+        Exit Function
+    End If
+
+    cleaned = Replace(cleaned, " ", "")
+    cleaned = Replace(cleaned, vbTab, "")
+    cleaned = Replace(cleaned, vbCr, "")
+    cleaned = Replace(cleaned, vbLf, "")
+    LimparEmails = cleaned
 End Function
 
 Private Sub InitLog()
@@ -939,7 +1099,7 @@ Private Sub InitLog()
     baseFolder = LOG_FOLDER
     EnsureFolderExists baseFolder
 
-    gLogFile = baseFolder & "\Execution.log"
+    gLogFile = baseFolder & "\VBA_Internal.log"
     RotateLogFile gLogFile, LOG_MAX_LINES
 
     gLogReady = True
@@ -970,8 +1130,10 @@ Private Sub EnsureFolderExists(ByVal folderPath As String)
     Exit Sub
 
 TratarErro:
-    If Err.Number <> 75 And Err.Number <> 76 Then
-        Err.Raise Err.Number, Err.Source, Err.Description
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    If errNum <> 75 And errNum <> 76 Then
+        Err.Raise errNum, errSrc, errDesc
     End If
 End Sub
 
@@ -1034,6 +1196,9 @@ Private Sub WriteLog(ByVal logLevel As String, ByVal stepName As String, ByVal m
     Dim execPrefix As String
 
     If Not gLogReady Then Exit Sub
+    If gInLogWrite Then Exit Sub
+
+    gInLogWrite = True
 
     If Len(mExecId) > 0 Then
         execPrefix = "[ExecId=" & mExecId & "] "
@@ -1045,22 +1210,153 @@ Private Sub WriteLog(ByVal logLevel As String, ByVal stepName As String, ByVal m
 
     Open gLogFile For Append As #fileNumber
     Print #fileNumber, Format$(Now, "dd/mm/yyyy hh:nn:ss") & _
-                       " | VBA | " & logLevel & _
-                       " | " & stepName & _
-                       " | " & execPrefix & messageText
+                       " | VBA | " & SanitizarTextoLog(logLevel) & _
+                       " | " & SanitizarTextoLog(stepName) & _
+                       " | " & execPrefix & SanitizarTextoLog(messageText)
     Close #fileNumber
+    gInLogWrite = False
     Exit Sub
 
 Falha:
     On Error Resume Next
     If fileNumber <> 0 Then Close #fileNumber
+    gInLogWrite = False
 End Sub
 
-Private Sub FinalizeLog()
+Private Function SanitizarTextoLog(ByVal texto As String) As String
+    texto = Replace(texto, vbCr, " ")
+    texto = Replace(texto, vbLf, " ")
+    texto = Replace(texto, vbTab, " ")
+    texto = RemoverAcentos(texto)
+    texto = SomenteAsciiSeguro(texto)
+
+    Do While InStr(1, texto, "  ", vbBinaryCompare) > 0
+        texto = Replace(texto, "  ", " ")
+    Loop
+
+    SanitizarTextoLog = Trim$(texto)
+End Function
+
+Private Function NormalizeExecId(ByVal texto As String) As String
+    Dim i As Long
+    Dim codigo As Long
+    Dim ch As String
+    Dim resultado As String
+
+    texto = Trim$(texto)
+    If Len(texto) = 0 Then
+        NormalizeExecId = vbNullString
+        Exit Function
+    End If
+
+    texto = RemoverAcentos(texto)
+
+    For i = 1 To Len(texto)
+        ch = Mid$(texto, i, 1)
+        codigo = AscW(ch)
+
+        If codigo < 0 Then codigo = codigo + 65536
+
+        If (codigo >= 48 And codigo <= 57) _
+           Or (codigo >= 65 And codigo <= 90) _
+           Or (codigo >= 97 And codigo <= 122) _
+           Or ch = "_" _
+           Or ch = "-" Then
+            resultado = resultado & ch
+        Else
+            resultado = resultado & "_"
+        End If
+    Next i
+
+    If Len(resultado) > 64 Then resultado = Left$(resultado, 64)
+    NormalizeExecId = resultado
+End Function
+
+Private Function RemoverAcentos(ByVal texto As String) As String
+    texto = Replace(texto, ChrW$(193), "A")
+    texto = Replace(texto, ChrW$(192), "A")
+    texto = Replace(texto, ChrW$(194), "A")
+    texto = Replace(texto, ChrW$(195), "A")
+    texto = Replace(texto, ChrW$(196), "A")
+    texto = Replace(texto, ChrW$(225), "a")
+    texto = Replace(texto, ChrW$(224), "a")
+    texto = Replace(texto, ChrW$(226), "a")
+    texto = Replace(texto, ChrW$(227), "a")
+    texto = Replace(texto, ChrW$(228), "a")
+    texto = Replace(texto, ChrW$(201), "E")
+    texto = Replace(texto, ChrW$(200), "E")
+    texto = Replace(texto, ChrW$(202), "E")
+    texto = Replace(texto, ChrW$(203), "E")
+    texto = Replace(texto, ChrW$(233), "e")
+    texto = Replace(texto, ChrW$(232), "e")
+    texto = Replace(texto, ChrW$(234), "e")
+    texto = Replace(texto, ChrW$(235), "e")
+    texto = Replace(texto, ChrW$(205), "I")
+    texto = Replace(texto, ChrW$(204), "I")
+    texto = Replace(texto, ChrW$(206), "I")
+    texto = Replace(texto, ChrW$(207), "I")
+    texto = Replace(texto, ChrW$(237), "i")
+    texto = Replace(texto, ChrW$(236), "i")
+    texto = Replace(texto, ChrW$(238), "i")
+    texto = Replace(texto, ChrW$(239), "i")
+    texto = Replace(texto, ChrW$(211), "O")
+    texto = Replace(texto, ChrW$(210), "O")
+    texto = Replace(texto, ChrW$(212), "O")
+    texto = Replace(texto, ChrW$(213), "O")
+    texto = Replace(texto, ChrW$(214), "O")
+    texto = Replace(texto, ChrW$(243), "o")
+    texto = Replace(texto, ChrW$(242), "o")
+    texto = Replace(texto, ChrW$(244), "o")
+    texto = Replace(texto, ChrW$(245), "o")
+    texto = Replace(texto, ChrW$(246), "o")
+    texto = Replace(texto, ChrW$(218), "U")
+    texto = Replace(texto, ChrW$(217), "U")
+    texto = Replace(texto, ChrW$(219), "U")
+    texto = Replace(texto, ChrW$(220), "U")
+    texto = Replace(texto, ChrW$(250), "u")
+    texto = Replace(texto, ChrW$(249), "u")
+    texto = Replace(texto, ChrW$(251), "u")
+    texto = Replace(texto, ChrW$(252), "u")
+    texto = Replace(texto, ChrW$(199), "C")
+    texto = Replace(texto, ChrW$(231), "c")
+    texto = Replace(texto, ChrW$(209), "N")
+    texto = Replace(texto, ChrW$(241), "n")
+    texto = Replace(texto, ChrW$(8211), "-")
+    texto = Replace(texto, ChrW$(8212), "-")
+    texto = Replace(texto, ChrW$(8220), Chr$(34))
+    texto = Replace(texto, ChrW$(8221), Chr$(34))
+    texto = Replace(texto, ChrW$(8216), "'")
+    texto = Replace(texto, ChrW$(8217), "'")
+    RemoverAcentos = texto
+End Function
+
+Private Function SomenteAsciiSeguro(ByVal texto As String) As String
+    Dim i As Long
+    Dim codigo As Long
+    Dim ch As String
+    Dim resultado As String
+
+    For i = 1 To Len(texto)
+        ch = Mid$(texto, i, 1)
+        codigo = AscW(ch)
+
+        If codigo < 0 Then codigo = codigo + 65536
+
+        If codigo >= 32 And codigo <= 126 Then
+            resultado = resultado & ch
+        Else
+            resultado = resultado & " "
+        End If
+    Next i
+
+    SomenteAsciiSeguro = resultado
+End Function
+
+Private Sub FinalizeLog(Optional ByVal blnSucesso As Boolean = True)
     On Error GoTo TratarErro
 
     WriteLog "INFO", "LOGGER", "Fim da execucao VBA"
-    WriteLog "INFO", "LOGGER", "FIM DO PROCESSO. Resultado=Sucesso"
+    WriteLog "INFO", "LOGGER", "FIM DO PROCESSO. Resultado=" & IIf(blnSucesso, "Sucesso", "Erro")
     Exit Sub
 
 TratarErro:
@@ -1084,4 +1380,29 @@ Private Sub LogarConexoesDisponiveis()
     If connectionCount = 0 Then
         WriteLog "WARN", "CONEXAO", "Nenhuma conexao encontrada em ThisWorkbook.Connections"
     End If
+End Sub
+
+' ====================================================================================
+' SMOKE TEST - Executar via VBE sem disparar conexoes ou envio de e-mail
+' ====================================================================================
+Public Sub TestarLogger()
+    Dim idSaida As String
+
+    idSaida = NormalizeExecId("Teste ExecId #01 com espaco & acento!")
+    mExecId = idSaida
+
+    InitLog
+
+    Debug.Print "=== TestarLogger: ModuloPrincipal ==="
+    Debug.Print "ExecId : [" & mExecId & "]"
+    Debug.Print "Log    : " & gLogFile
+
+    WriteLog "INFO", "SMOKE", "Linha 1 - mensagem simples"
+    WriteLog "INFO", "SMOKE", "Linha 2 - chars especiais: & < > ; -- SELECT 1"
+    WriteLog "WARN", "SMOKE", "Linha 3 - nivel WARN"
+    WriteLog "ERROR", "SMOKE", "Linha 4 - nivel ERROR"
+
+    FinalizeLog True
+
+    Debug.Print "Concluido. Verifique: " & gLogFile
 End Sub

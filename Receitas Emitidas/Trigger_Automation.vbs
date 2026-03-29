@@ -22,6 +22,7 @@ Dim execId
 Const EXCEL_PATH = "C:\Automacoes\Receitas Emitidas\Controle de Receitas Emitidas.xlsm"
 Const MACRO_NAME = "AtualizarEEnviarOutlook"
 Const LOG_PATH_MASTER = "C:\Automacoes\Receitas Emitidas\Logs\Execution.log"
+Const LOG_PATH_VBA = "C:\Automacoes\Receitas Emitidas\Logs\VBA_Internal.log"
 
 Const USE_TIMEOUT_MONITOR = True
 Const MAX_TIMEOUT_SECONDS = 300
@@ -344,12 +345,12 @@ fatalVba = False
 versionText = ""
 
 If USE_TIMEOUT_MONITOR Then
-    If Not EnsureLogFile(LOG_PATH_MASTER) Then
-        EncerrarComErro 7, "Falha ao preparar arquivo de log: " & LOG_PATH_MASTER
+    If Not EnsureLogFile(LOG_PATH_VBA) Then
+        EncerrarComErro 8, "Falha ao preparar arquivo de log: " & LOG_PATH_VBA
     End If
 
-    If Not TryGetFileSize(LOG_PATH_MASTER, initialLogSize) Then
-        EncerrarComErro 8, "Falha ao obter tamanho inicial do log: " & LOG_PATH_MASTER
+    If Not TryGetFileSize(LOG_PATH_VBA, initialLogSize) Then
+        EncerrarComErro 8, "Falha ao obter tamanho inicial do log: " & LOG_PATH_VBA
     End If
 
     WriteLog "INFO", "Monitoramento de Timeout Ativado. LogVBAInicial=" & initialLogSize & " bytes"
@@ -373,6 +374,9 @@ Set wb = excelApp.Workbooks.Open(EXCEL_PATH)
 If Err.Number <> 0 Or (wb Is Nothing) Then
     EncerrarComErro 3, "Falha ao abrir workbook. Err=" & Err.Number
 End If
+If wb.ReadOnly Then
+    EncerrarComErro 7, "Workbook aberto em modo somente leitura. Possivel bloqueio por outra instancia: " & EXCEL_PATH
+End If
 
 WriteLog "INFO", "Executando macro: " & MACRO_NAME
 Err.Clear
@@ -393,9 +397,13 @@ If USE_TIMEOUT_MONITOR Then
     previousLogSize = initialLogSize
 
     Do While (Not foundEnd) And (SecondsSince(waitStart) < MAX_TIMEOUT_SECONDS)
-        If TryGetFileSize(LOG_PATH_MASTER, currentLogSize) Then
-            If currentLogSize > previousLogSize Then
-                If TryReadAllText(LOG_PATH_MASTER, fullLogContent) Then
+        If TryGetFileSize(LOG_PATH_VBA, currentLogSize) Then
+            If currentLogSize < previousLogSize Then
+                WriteLog "WARN", "Log VBA truncado. Reiniciando baseline."
+                initialLogSize = currentLogSize
+                previousLogSize = currentLogSize
+            ElseIf currentLogSize > previousLogSize Then
+                If TryReadAllText(LOG_PATH_VBA, fullLogContent) Then
                     If Len(fullLogContent) > initialLogSize Then
                         newLogContent = Mid(fullLogContent, initialLogSize + 1)
 

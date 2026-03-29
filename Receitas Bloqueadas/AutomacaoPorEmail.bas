@@ -2,8 +2,9 @@ Attribute VB_Name = "AutomacaoPorEmail"
 Option Explicit
 
 Private m_execId As String
+Private m_blnInLogWrite As Boolean
 
-Private Const CAMINHO_LOG As String = "C:\Automacoes\Receitas Bloqueadas\Logs\Execution.log"
+Private Const CAMINHO_LOG As String = "C:\Automacoes\Receitas Bloqueadas\Logs\VBA_Internal.log"
 Private Const NOME_TABELA_DADOS As String = "ReceitasBloqueadas"
 Private Const NOME_TABELA_EMAIL As String = "EnderecosEmailDestinatarios"
 Private Const ABA_CONFIG As String = "Config"
@@ -18,7 +19,7 @@ Private Const VB_MINIMIZED_FOCUS As Long = 2
 Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")
     Dim corpoHTML As String
 
-    m_execId = Trim$(execId)
+    m_execId = NormalizeExecId(execId)
 
     On Error GoTo TratarErro
 
@@ -51,6 +52,7 @@ Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")
 
 TratarErro:
     RegistrarLog "ERRO FATAL: " & Err.Description & " (" & CStr(Err.Number) & ")"
+    RegistrarLog "FIM DO PROCESSO. Resultado=Erro"
 End Sub
 
 Private Sub AtualizarConexaoComGarantia(ByVal nomeConexao As String)
@@ -314,6 +316,8 @@ Private Sub EnviarEmailOutlook(ByVal htmlBody As String)
     Dim sPara As String
     Dim sCopia As String
     Dim sCco As String
+    Dim sendErr As Long
+    Dim sendDesc As String
 
     On Error GoTo TratarErro
 
@@ -335,23 +339,41 @@ Private Sub EnviarEmailOutlook(ByVal htmlBody As String)
 
     If email Is Nothing Then
         RegistrarLog "ERRO: Falha ao criar MailItem"
+        Set appOutlook = Nothing
         Exit Sub
     End If
 
     With email
+        RegistrarLog "Definindo assunto e destinatarios"
         .To = sPara
         If Len(sCopia) > 0 Then .CC = sCopia
         If Len(sCco) > 0 Then .BCC = sCco
         .Subject = TextoEmailAssuntoPrefixo() & Format$(Date, "dd/MM/yyyy")
         .htmlBody = htmlBody
+        RegistrarLog "Chamando Send"
+        On Error Resume Next
         .Send
+        sendErr = Err.Number
+        sendDesc = Err.Description
+        On Error GoTo TratarErro
+        If sendErr <> 0 Then
+            Err.Raise sendErr, "EnviarEmailOutlook.Send", sendDesc
+        End If
     End With
 
     RegistrarLog "E-mail enviado com sucesso"
+    On Error Resume Next
+    Set email = Nothing
+    Set appOutlook = Nothing
+    On Error GoTo 0
     Exit Sub
 
 TratarErro:
     RegistrarLog "ERRO no envio do e-mail: " & Err.Description & " (" & CStr(Err.Number) & ")"
+    On Error Resume Next
+    Set email = Nothing
+    Set appOutlook = Nothing
+    On Error GoTo 0
 End Sub
 
 Private Sub ObterDestinatariosEmail(ByRef sPara As String, ByRef sCopia As String, ByRef sCco As String)
@@ -452,14 +474,6 @@ Private Function PrepararOutlookComForcaBruta() As Object
         Exit Function
     End If
 
-    Err.Clear
-    Set oApp = CreateObject("Outlook.Application")
-    If Not oApp Is Nothing Then
-        RegistrarLog "Outlook iniciado por nova instancia"
-        Set PrepararOutlookComForcaBruta = oApp
-        Exit Function
-    End If
-
     RegistrarLog "AVISO: Outlook nao respondeu. Tentando iniciar processo"
 
     Err.Clear
@@ -473,31 +487,40 @@ Private Function PrepararOutlookComForcaBruta() As Object
         Exit Function
     End If
 
-    RegistrarLog "AVISO: Falha ao iniciar Outlook. Tentando reset do processo"
-
     Err.Clear
-    Shell "taskkill /F /IM OUTLOOK.EXE", vbHide
-    Application.Wait Now + TimeValue("0:00:05")
+    Set oApp = CreateObject("Outlook.Application")
+    If Not oApp Is Nothing Then
+        RegistrarLog "Outlook iniciado por nova instancia (fallback)"
+        Set PrepararOutlookComForcaBruta = oApp
+        Exit Function
+    End If
+
+    RegistrarLog "AVISO: Falha ao iniciar Outlook. Terceira tentativa via shell"
 
     Err.Clear
     Shell "outlook.exe", VB_MINIMIZED_FOCUS
-    Application.Wait Now + TimeValue("0:00:10")
+    Application.Wait Now + TimeValue("0:00:08")
     Set oApp = GetObject(, "Outlook.Application")
 
     If Not oApp Is Nothing Then
-        RegistrarLog "SUCESSO: Outlook recuperado apos reset"
+        RegistrarLog "Outlook iniciado via shell"
         Set PrepararOutlookComForcaBruta = oApp
-    Else
-        RegistrarLog "FALHA FINAL: Nao foi possivel iniciar o Outlook"
+        Exit Function
     End If
+
+    RegistrarLog "FALHA FINAL: Nao foi possivel iniciar o Outlook"
 
     On Error GoTo 0
 End Function
 
 Private Sub RegistrarLog(ByVal msg As String)
     Dim linha As String
-    Dim conteudoAtual As String
     Dim prefixoId As String
+    Dim fsoLog As Object
+    Dim txtStream As Object
+
+    If m_blnInLogWrite Then Exit Sub
+    m_blnInLogWrite = True
 
     If Len(m_execId) > 0 Then
         prefixoId = "[ExecId=" & m_execId & "] "
@@ -509,11 +532,18 @@ Private Sub RegistrarLog(ByVal msg As String)
 
     GarantirPastaDoLog CAMINHO_LOG
 
-    linha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] " & prefixoId & SanitizarTextoLog(msg) & vbCrLf
-    conteudoAtual = LerArquivoUtf8(CAMINHO_LOG)
-    GravarArquivoUtf8 CAMINHO_LOG, conteudoAtual & linha
+    Set fsoLog = CreateObject("Scripting.FileSystemObject")
+    linha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] " & prefixoId & SanitizarTextoLog(msg)
+    Set txtStream = fsoLog.OpenTextFile(CAMINHO_LOG, 8, True)
+    If Err.Number = 0 Then
+        txtStream.WriteLine linha
+        txtStream.Close
+    End If
+    Set txtStream = Nothing
+    Set fsoLog = Nothing
 
     On Error GoTo 0
+    m_blnInLogWrite = False
 End Sub
 
 Private Function SanitizarTextoLog(ByVal texto As String) As String
@@ -528,6 +558,41 @@ Private Function SanitizarTextoLog(ByVal texto As String) As String
     Loop
 
     SanitizarTextoLog = Trim$(texto)
+End Function
+
+Private Function NormalizeExecId(ByVal texto As String) As String
+    Dim i As Long
+    Dim codigo As Long
+    Dim ch As String
+    Dim resultado As String
+
+    texto = Trim$(texto)
+    If Len(texto) = 0 Then
+        NormalizeExecId = vbNullString
+        Exit Function
+    End If
+
+    texto = RemoverAcentos(texto)
+
+    For i = 1 To Len(texto)
+        ch = Mid$(texto, i, 1)
+        codigo = AscW(ch)
+
+        If codigo < 0 Then codigo = codigo + 65536
+
+        If (codigo >= 48 And codigo <= 57) _
+           Or (codigo >= 65 And codigo <= 90) _
+           Or (codigo >= 97 And codigo <= 122) _
+           Or ch = "_" _
+           Or ch = "-" Then
+            resultado = resultado & ch
+        Else
+            resultado = resultado & "_"
+        End If
+    Next i
+
+    If Len(resultado) > 64 Then resultado = Left$(resultado, 64)
+    NormalizeExecId = resultado
 End Function
 
 Private Function RemoverAcentos(ByVal texto As String) As String
@@ -779,4 +844,31 @@ End Function
 Private Function TextoEmailAssinatura() As String
     TextoEmailAssinatura = "Mensagem autom" & ChrW$(225) & "tica gerada pelo VBA."
 End Function
+
+' ====================================================================================
+' SMOKE TEST - Executar via VBE sem disparar conexoes ou envio de e-mail
+' ====================================================================================
+Public Sub TestarLogger()
+    Dim idEntrada As String
+    Dim idSaida   As String
+
+    idEntrada = "Teste ExecId #01 com espaco & acento!"
+    idSaida = NormalizeExecId(idEntrada)
+
+    Debug.Print "=== TestarLogger: AutomacaoPorEmail ==="
+    Debug.Print "Input  : [" & idEntrada & "]"
+    Debug.Print "ExecId : [" & idSaida & "]"
+    Debug.Print "Log    : " & CAMINHO_LOG
+
+    m_execId = idSaida
+
+    RegistrarLog "SMOKE 1: mensagem simples sem acento"
+    RegistrarLog "SMOKE 2: acento: execucao, acao, configuracao"
+    RegistrarLog "SMOKE 3: chars especiais: & < > ; -- SELECT 1"
+    RegistrarLog "SMOKE 4: tab" & vbTab & " e newline" & vbCrLf & "inline"
+
+    m_execId = vbNullString
+
+    Debug.Print "Concluido. Verifique: " & CAMINHO_LOG
+End Sub
 

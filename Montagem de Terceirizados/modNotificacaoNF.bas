@@ -56,7 +56,7 @@ Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd
     Application.DisplayAlerts = True
     On Error GoTo 0
     
-    Set objWsErro = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+    Set objWsErro = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.count))
     objWsErro.Name = "Erros NF"
     
     ' Cabecalho fixo para analise rapida
@@ -70,15 +70,15 @@ Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd
     
     For lngI = 1 To lngQtd
         With arrErros(lngI)
-            varDados(lngI, 1)  = .SitOB
-            varDados(lngI, 2)  = .Progr
-            varDados(lngI, 3)  = .Faccao
-            varDados(lngI, 4)  = .pcsProg
-            varDados(lngI, 5)  = .NumOB
-            varDados(lngI, 6)  = .Kanban
-            varDados(lngI, 7)  = .FaseAtual
-            varDados(lngI, 8)  = .StatusFase
-            varDados(lngI, 9)  = .refCliente
+            varDados(lngI, 1) = .SitOB
+            varDados(lngI, 2) = .Progr
+            varDados(lngI, 3) = .Faccao
+            varDados(lngI, 4) = .pcsProg
+            varDados(lngI, 5) = .NumOB
+            varDados(lngI, 6) = .Kanban
+            varDados(lngI, 7) = .FaseAtual
+            varDados(lngI, 8) = .StatusFase
+            varDados(lngI, 9) = .refCliente
             varDados(lngI, 10) = .qtpcnf
             varDados(lngI, 11) = .ObsOB
             varDados(lngI, 12) = .detalheErro
@@ -96,4 +96,4 @@ Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd
     
     objWsErro.Columns.AutoFit
     GravarLogEx "Aba 'Erros NF' gerada com " & lngQtd & " registros.", LOG_DEBUG
-End Sub
+End Sub

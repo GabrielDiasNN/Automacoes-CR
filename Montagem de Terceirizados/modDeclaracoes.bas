@@ -51,10 +51,10 @@ End Type
 ' Enum
 ' =========================
 Public Enum NivelLog
-    LOG_DEBUG   = 0
-    LOG_INFO    = 1
+    LOG_DEBUG = 0
+    LOG_INFO = 1
     LOG_WARNING = 2
-    LOG_ERROR   = 3
+    LOG_ERROR = 3
 End Enum
 
 ' =========================
@@ -119,9 +119,9 @@ Public Const HTML_ICON_FIRE      As String = "&#128293;"
 ' =========================
 ' Log
 ' =========================
-Public Const LOG_MIN_LEVEL         As Long   = 0
-Public Const LOG_MAX_BYTES         As Long   = 2097152
-Public Const LOG_MAX_BACKUPS       As Long   = 5
+Public Const LOG_MIN_LEVEL         As Long = 0
+Public Const LOG_MAX_BYTES         As Long = 2097152
+Public Const LOG_MAX_BACKUPS       As Long = 5
 Public Const LOG_SEPARADOR_DUPLO   As String = "================================================================================"
 Public Const LOG_SEPARADOR_SIMPLES As String = "--------------------------------------------------------------------------------"
 Public Const LOG_PATH_PADRAO       As String = "C:\Automacoes\Montagem de Terceirizados\Logs\VBA_Internal.log"

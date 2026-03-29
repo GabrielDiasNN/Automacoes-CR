@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
 TITLE MODO DEBUG - MONITOR DE AUTOMACOES
 COLOR 0E

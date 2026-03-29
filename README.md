@@ -42,6 +42,7 @@ graph TD
 *   **Frequência**: Sextas-feiras às 07:05.
 *   **Core Business**:
     *   **Agrupamento por Máquina**: Relatório compacto gerado via Tabela Dinâmica e convertido para HTML otimizado para Outlook.
+    *   **Destinatarios configuraveis**: Aba `Config` com tabela `EnderecosEmail` (coluna Para/To/Destinatario).
     *   **Interface**: Destinado à equipe operacional (Cozinha).
 *   **Tecnologia**: Excel/VBA, Power Query.
 
@@ -106,6 +107,7 @@ Resultado padrao:
 1.  **Codificação**: Todo código VBA (`.bas`) deve seguir o padrão **ANSI (Windows-1252)** via skill `vba-vbe-ansi`.
 2.  **Entrada**: O ponto de entrada obrigatório é o script `Trigger_Automation.vbs` dentro de cada módulo.
 3.  **Logs Localizados**: Cada módulo deve manter logs internos detalhados na subpasta `Logs/` para diagnóstico profundo.
+4.  **Logs Separados**: `Execution.log` para VBS e `VBA_Internal.log` para o log de VBA quando há monitoramento por leitura de log.
 
 ---
 *Mantido pela equipe de Automações & Antigravity AI*

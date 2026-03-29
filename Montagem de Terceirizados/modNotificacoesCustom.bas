@@ -21,7 +21,7 @@ Private Type MudancasDetectadas
 End Type
 
 Private Const CACHE_ESTADO_FILE As String = "Cache_Estado_Detalhado.txt"
-Private Const LIMITE_ANOMALIA    As Long   = 50
+Private Const LIMITE_ANOMALIA    As Long = 50
 
 ' ====================================================================================
 ' ENTRY POINT (PLUGIN HOOK)
@@ -42,11 +42,11 @@ Public Function ProcessarNotificacoesCustomizadas(ByVal lngTotalLinhas As Long, 
 
     ' 1. Snapshot do Estado
     With udtEstadoAtual
-        .dtmSnapshot    = Now
+        .dtmSnapshot = Now
         .lngTotalLinhas = lngTotalLinhas
-        .lngTotalErros  = lngTotalErros
-        .arrItensErro   = arrErros
-        .strHashEstado  = GerarHashEstadoAtual(arrErros)
+        .lngTotalErros = lngTotalErros
+        .arrItensErro = arrErros
+        .strHashEstado = GerarHashEstadoAtual(arrErros)
     End With
 
     ' 2. Carregar Cache e Comparar (Lógica Inteligente)

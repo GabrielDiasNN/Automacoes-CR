@@ -31,7 +31,7 @@ Public Sub ValidarNotasFiscais(ByRef udtTel As Telemetria, _
     ' 2. Execucao
     blnSucesso = ExecutarValidacaoCompleta(objWsTrabalho, udtTel, blnSilencioso)
     
-    If Not blnSucesso Then 
+    If Not blnSucesso Then
         GravarLogEx "AVISO: ExecutarValidacaoCompleta retornou FALSE.", LOG_WARNING
     End If
 
@@ -72,12 +72,12 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
 
     InicializarRegex
 
-    If objWs.ListObjects.Count = 0 Then
+    If objWs.ListObjects.count = 0 Then
         Err.Raise vbObjectError + 602, "ExecutarValidacaoCompleta", "Nenhuma tabela encontrada na aba " & objWs.Name
     End If
 
     Set objTblPrincipal = objWs.ListObjects(1)
-    If objTblPrincipal.ListRows.Count < 1 Or objTblPrincipal.DataBodyRange Is Nothing Then
+    If objTblPrincipal.ListRows.count < 1 Or objTblPrincipal.DataBodyRange Is Nothing Then
         GravarLogEx "AVISO: Tabela vazia (" & objTblPrincipal.Name & ").", LOG_WARNING
         If Not blnSilencioso Then MsgBox "Tabela vazia.", vbExclamation
         ExecutarValidacaoCompleta = True ' Nao e erro fatal, apenas nada a fazer
@@ -85,8 +85,8 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
     End If
 
     Set rngCabecalho = objTblPrincipal.HeaderRowRange
-    lngLinhaInicial  = objTblPrincipal.DataBodyRange.Row
-    lngColStart      = objTblPrincipal.Range.Column
+    lngLinhaInicial = objTblPrincipal.DataBodyRange.Row
+    lngColStart = objTblPrincipal.Range.Column
 
     Set dicColunas = CreateObject("Scripting.Dictionary")
     dicColunas.CompareMode = 1
@@ -128,7 +128,7 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
         On Error Resume Next
         varArrAlternativo = objWs.Range( _
             objWs.Cells(lngLinhaInicial, CLng(dicColunas(C_ALTERNATIVO))), _
-            objWs.Cells(lngLinhaInicial + objTblPrincipal.ListRows.Count - 1, CLng(dicColunas(C_ALTERNATIVO)))).Value2
+            objWs.Cells(lngLinhaInicial + objTblPrincipal.ListRows.count - 1, CLng(dicColunas(C_ALTERNATIVO)))).Value2
         If Err.Number <> 0 Then blnTemAlternativo = False
         On Error GoTo ErroValidacao
     End If
@@ -153,13 +153,13 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
 
         strRefCliente = Trim$(CStr(varDadosArray(lngI, CLng(dicColunas(C_REF_CLIENTE)) - lngColStart + 1)))
         blnMontagemOk = ValidarMultiplosNFs(CStr(varDadosArray(lngI, CLng(dicColunas(C_QT_PC_NF)) - lngColStart + 1)), strRefCliente)
-        strNfObsOB    = ExtrairNFPosNF(CStr(varDadosArray(lngI, CLng(dicColunas(C_OBS_OB)) - lngColStart + 1)))
-        blnProgErro   = (strRefCliente <> strNfObsOB)
+        strNfObsOB = ExtrairNFPosNF(CStr(varDadosArray(lngI, CLng(dicColunas(C_OBS_OB)) - lngColStart + 1)))
+        blnProgErro = (strRefCliente <> strNfObsOB)
 
         strDetalheErro = ""
-        If (Not blnMontagemOk) And blnProgErro      Then strDetalheErro = "Erro de Montagem e Programacao"
+        If (Not blnMontagemOk) And blnProgErro Then strDetalheErro = "Erro de Montagem e Programacao"
         If (Not blnMontagemOk) And (Not blnProgErro) Then strDetalheErro = "Erro de Montagem"
-        If blnMontagemOk       And blnProgErro       Then strDetalheErro = "Erro de Programacao"
+        If blnMontagemOk And blnProgErro Then strDetalheErro = "Erro de Programacao"
 
         Set objCelVal = objWs.Cells(lngLinhaInicial + lngI - 1, lngIdxColVal)
 
@@ -216,18 +216,18 @@ End Sub
 
 Private Sub PreencherEstruturaErro(ByRef udtErro As DadosErro, ByVal varDados As Variant, ByVal lngI As Long, ByVal lngColStart As Long, ByVal dicCol As Object, ByVal strRef As String, ByVal strObs As String, ByVal strDet As String, ByVal varAlt As Variant, ByVal blnAlt As Boolean)
     With udtErro
-        If dicCol.Exists(C_SIT_OB)    Then .SitOB    = varDados(lngI, CLng(dicCol(C_SIT_OB))    - lngColStart + 1)
-        If dicCol.Exists(C_PROGR)     Then .Progr     = varDados(lngI, CLng(dicCol(C_PROGR))     - lngColStart + 1)
-        If dicCol.Exists(C_FACCAO)    Then .Faccao    = varDados(lngI, CLng(dicCol(C_FACCAO))    - lngColStart + 1)
-        If dicCol.Exists(C_PCS_PROG)  Then .pcsProg   = varDados(lngI, CLng(dicCol(C_PCS_PROG))  - lngColStart + 1)
-        If dicCol.Exists(C_NUM_OB)    Then .NumOB     = varDados(lngI, CLng(dicCol(C_NUM_OB))    - lngColStart + 1)
-        If dicCol.Exists(C_KANBAN)    Then .Kanban    = varDados(lngI, CLng(dicCol(C_KANBAN))    - lngColStart + 1)
+        If dicCol.Exists(C_SIT_OB) Then .SitOB = varDados(lngI, CLng(dicCol(C_SIT_OB)) - lngColStart + 1)
+        If dicCol.Exists(C_PROGR) Then .Progr = varDados(lngI, CLng(dicCol(C_PROGR)) - lngColStart + 1)
+        If dicCol.Exists(C_FACCAO) Then .Faccao = varDados(lngI, CLng(dicCol(C_FACCAO)) - lngColStart + 1)
+        If dicCol.Exists(C_PCS_PROG) Then .pcsProg = varDados(lngI, CLng(dicCol(C_PCS_PROG)) - lngColStart + 1)
+        If dicCol.Exists(C_NUM_OB) Then .NumOB = varDados(lngI, CLng(dicCol(C_NUM_OB)) - lngColStart + 1)
+        If dicCol.Exists(C_KANBAN) Then .Kanban = varDados(lngI, CLng(dicCol(C_KANBAN)) - lngColStart + 1)
         If dicCol.Exists(C_FASE_ATUAL) Then .FaseAtual = varDados(lngI, CLng(dicCol(C_FASE_ATUAL)) - lngColStart + 1)
-        If dicCol.Exists(C_ST_FASE)   Then .StatusFase = varDados(lngI, CLng(dicCol(C_ST_FASE))  - lngColStart + 1)
+        If dicCol.Exists(C_ST_FASE) Then .StatusFase = varDados(lngI, CLng(dicCol(C_ST_FASE)) - lngColStart + 1)
         If dicCol.Exists(C_DT_ULT_CONF) Then .DtUltConf = varDados(lngI, CLng(dicCol(C_DT_ULT_CONF)) - lngColStart + 1)
         .refCliente = strRef
-        .qtpcnf     = CStr(varDados(lngI, CLng(dicCol(C_QT_PC_NF)) - lngColStart + 1))
-        .ObsOB      = strObs
+        .qtpcnf = CStr(varDados(lngI, CLng(dicCol(C_QT_PC_NF)) - lngColStart + 1))
+        .ObsOB = strObs
         .detalheErro = strDet
         If blnAlt Then
             .Alternativo = Trim$(CStr(varAlt(lngI, 1)))
@@ -244,8 +244,8 @@ Private Sub InicializarRegex()
     If m_objRegexNF Is Nothing Then
         Set m_objRegexNF = CreateObject("VBScript.RegExp")
         With m_objRegexNF
-            .Pattern    = "NF:\s*(\d+)"
-            .Global     = False
+            .Pattern = "NF:\s*(\d+)"
+            .Global = False
             .IgnoreCase = True
         End With
     End If
@@ -279,4 +279,4 @@ Private Function ExtrairNFPosNF(ByVal strTexto As String) As String
     Else
         ExtrairNFPosNF = ""
     End If
-End Function
+End Function
