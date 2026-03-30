@@ -1,6 +1,7 @@
+# cSpell:words cscript nologo RESUMO
 $ErrorActionPreference = "Stop"
 
-function Run-Automacao {
+function Start-Automacao {
     param(
         [string]$Name,
         [string]$Dir,
@@ -64,9 +65,9 @@ function Run-Automacao {
 }
 
 $results = [ordered]@{}
-$results['RE'] = Run-Automacao -Name 'Receitas Emitidas' -Dir 'C:\Automacoes\Receitas Emitidas' -ExecId 'BATCH_FINAL_RE_20260329'
-$results['RB'] = Run-Automacao -Name 'Receitas Bloqueadas' -Dir 'C:\Automacoes\Receitas Bloqueadas' -ExecId 'BATCH_FINAL_RB_20260329' -TimeoutSec 420
-$results['MT'] = Run-Automacao -Name 'Montagem Terceirizados' -Dir 'C:\Automacoes\Montagem de Terceirizados' -ExecId 'BATCH_FINAL_MT_20260329'
+$results['RE'] = Start-Automacao -Name 'Receitas Emitidas' -Dir 'C:\Automacoes\Receitas Emitidas' -ExecId 'BATCH_FINAL_RE_20260329'
+$results['RB'] = Start-Automacao -Name 'Receitas Bloqueadas' -Dir 'C:\Automacoes\Receitas Bloqueadas' -ExecId 'BATCH_FINAL_RB_20260329' -TimeoutSec 420
+$results['MT'] = Start-Automacao -Name 'Montagem Terceirizados' -Dir 'C:\Automacoes\Montagem de Terceirizados' -ExecId 'BATCH_FINAL_MT_20260329'
 
 Write-Host '=== RESUMO FINAL ==='
 foreach ($kv in $results.GetEnumerator()) {

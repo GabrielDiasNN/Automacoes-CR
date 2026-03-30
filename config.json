@@ -78,6 +78,30 @@
           5
         ]
       }
+    },
+    {
+      "name": "Retencao Arquivos",
+      "scriptPath": "C:\\Automacoes\\Tools\\AplicarPoliticaRetencao.ps1",
+      "enabled": true,
+      "preventOverlap": true,
+      "waitForExit": false,
+      "schedule": {
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "hours": [
+          2
+        ],
+        "minutes": [
+          20
+        ]
+      }
     }
   ]
 }

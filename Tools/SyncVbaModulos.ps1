@@ -40,7 +40,7 @@ function Write-Utf8Line {
     }
 }
 
-function Release-ComObject {
+function Remove-ComObjectReference {
     param([object]$Obj)
 
     if ($null -eq $Obj) {
@@ -198,7 +198,7 @@ foreach ($workbookPath in $WorkbookPaths) {
     finally {
         if ($wb) {
             try { $wb.Close($false) | Out-Null } catch {}
-            Release-ComObject -Obj $wb
+            Remove-ComObjectReference -Obj $wb
         }
     }
 }
@@ -210,7 +210,7 @@ try {
 }
 catch {}
 finally {
-    Release-ComObject -Obj $excel
+    Remove-ComObjectReference -Obj $excel
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 }

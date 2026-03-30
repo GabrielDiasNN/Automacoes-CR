@@ -80,6 +80,60 @@
                 "cwd": "${workspaceFolder}\\Receitas Bloqueadas"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Retencao: Dry Run",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\AplicarPoliticaRetencao.ps1",
+                "-DryRun"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Retencao: Executar",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\AplicarPoliticaRetencao.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Docs: Corrigir Markdown",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Fix-MarkdownStyle.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Docs: Corrigir Markdown (Dry Run)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Fix-MarkdownStyle.ps1",
+                "-DryRun"
+            ],
+            "problemMatcher": []
         }
     ]
 }

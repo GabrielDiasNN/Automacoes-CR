@@ -64,7 +64,7 @@ function Get-RelativePath {
     return $relativePath.Replace('/', $separator)
 }
 
-function Sanitize-FileName {
+function ConvertTo-SafeFileName {
     param([string]$Name)
 
     if ([string]::IsNullOrWhiteSpace($Name)) {
@@ -86,7 +86,7 @@ function Get-ComponentTypeInfo {
     }
 }
 
-function Release-ComObject {
+function Remove-ComObjectReference {
     param([object]$Obj)
 
     if ($null -eq $Obj) {
@@ -161,7 +161,7 @@ foreach ($xlsm in $xlsmFiles) {
                 continue
             }
 
-            $safeName = Sanitize-FileName -Name $component.Name
+            $safeName = ConvertTo-SafeFileName -Name $component.Name
             $exportPath = Join-Path $workbookOutputRoot ($safeName + $typeInfo.Extension)
 
             if (Test-Path -LiteralPath $exportPath) {
@@ -197,7 +197,7 @@ foreach ($xlsm in $xlsmFiles) {
     finally {
         if ($wb) {
             try { $wb.Close($false) | Out-Null } catch {}
-            Release-ComObject -Obj $wb
+            Remove-ComObjectReference -Obj $wb
         }
     }
 
@@ -229,7 +229,7 @@ try {
 }
 catch {}
 finally {
-    Release-ComObject -Obj $excel
+    Remove-ComObjectReference -Obj $excel
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 }
