@@ -281,6 +281,8 @@ Public Sub FinalizarAplicacao(ByVal objContexto As clsAppContext)
             .Calculation = objContexto.CalculationOriginal
             .StatusBar = False
         End With
+
+        objContexto.ResetInfraDependencies
     End If
 
     Set m_OutlookApp = Nothing

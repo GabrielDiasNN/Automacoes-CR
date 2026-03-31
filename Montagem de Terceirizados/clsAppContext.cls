@@ -18,6 +18,8 @@ Private pWorkbookAlvo As Workbook
 Private pWsBase As Worksheet
 Private pModoRobo As Boolean
 Private pRunId As String
+Private pOutlookAdapter As ClsOutlookAdapter
+Private pEmailComposerService As ClsEmailComposerService
 
 ' Estado original do Excel para restauracao
 Private pScreenUpdatingOriginal As Boolean
@@ -89,3 +91,30 @@ End Property
 Public Property Let CalculationOriginal(ByVal enmValor As XlCalculation)
     pCalculationOriginal = enmValor
 End Property
+
+Public Property Get OutlookAdapter() As ClsOutlookAdapter
+    If pOutlookAdapter Is Nothing Then
+        Set pOutlookAdapter = New ClsOutlookAdapter
+    End If
+
+    Set OutlookAdapter = pOutlookAdapter
+End Property
+
+Public Property Get EmailComposerService() As ClsEmailComposerService
+    If pEmailComposerService Is Nothing Then
+        Set pEmailComposerService = New ClsEmailComposerService
+    End If
+
+    Set EmailComposerService = pEmailComposerService
+End Property
+
+Public Sub ResetInfraDependencies()
+    On Error Resume Next
+
+    If Not pOutlookAdapter Is Nothing Then
+        pOutlookAdapter.ResetState
+    End If
+
+    Set pOutlookAdapter = Nothing
+    Set pEmailComposerService = Nothing
+End Sub

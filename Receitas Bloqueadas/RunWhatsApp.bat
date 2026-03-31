@@ -199,7 +199,7 @@ exit /b 0
 set "BRIDGE_RUNNING=0"
 call :log DEBUG: enter check_bridge_running
 for /f "usebackq delims=" %%a in (
-    `powershell -NoProfile -ExecutionPolicy Bypass -Command "if(Get-CimInstance Win32_Process -Filter 'Name = ''node.exe''' | Where-Object { $_.CommandLine -match 'sendWhatsApp\.js' }){'1'}else{'0'}" 2^>nul`
+    `powershell -NoProfile -ExecutionPolicy Bypass -Command "$scriptPath='%NODE_SCRIPT%'; if(Get-CimInstance Win32_Process -Filter 'Name = ''node.exe''' | Where-Object { $_.CommandLine -match [regex]::Escape($scriptPath) }){'1'}else{'0'}" 2^>nul`
 ) do set "BRIDGE_RUNNING=%%a"
 if not defined BRIDGE_RUNNING set "BRIDGE_RUNNING=0"
 call :log DEBUG: leaving check_bridge_running with BRIDGE_RUNNING=!BRIDGE_RUNNING!

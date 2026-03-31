@@ -36,9 +36,14 @@ Function AgoraBR()
               Right("0" & Hour(d), 2) & ":" & Right("0" & Minute(d), 2) & ":" & Right("0" & Second(d), 2)
 End Function
 
-Function ElapsedSeconds()
-    Dim diff: diff = Timer - scriptStart
+Function SecondsSince(ByVal startTimer)
+    Dim diff: diff = Timer - startTimer
     If diff < 0 Then diff = diff + 86400
+    SecondsSince = diff
+End Function
+
+Function ElapsedSeconds()
+    Dim diff: diff = SecondsSince(scriptStart)
     ElapsedSeconds = Replace(FormatNumber(diff, 2, -1, 0, 0), ",", ".")
 End Function
 
@@ -184,7 +189,7 @@ If USE_TIMEOUT_MONITOR Then
     ultimaChecagem = Timer
     tamanhoAnterior = tamanhoInicialLogVBA
 
-    Do While Not encontrouFim And (Timer - tempoRegInicio) < maxTimeoutSeconds
+    Do While Not encontrouFim And SecondsSince(tempoRegInicio) < maxTimeoutSeconds
         On Error Resume Next
         tamanhoAtual = fso.GetFile(vbaLogPath).Size
 

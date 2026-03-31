@@ -397,12 +397,15 @@ Private m_logger As ClsLogger
 Private m_oracleAdapter As ClsOracleAdapter
 Private m_outlookAdapter As ClsOutlookAdapter
 Private m_configRepository As ClsConfigRepository
+Private m_blnReady As Boolean
 
 Public Sub Initialize()
+    If m_blnReady Then Exit Sub
     Set m_logger = New ClsLogger
     Set m_configRepository = New ClsConfigRepository
     Set m_oracleAdapter = New ClsOracleAdapter
     Set m_outlookAdapter = New ClsOutlookAdapter
+    m_blnReady = True
 End Sub
 
 Public Property Get Logger() As ClsLogger
@@ -420,6 +423,13 @@ End Property
 Public Property Get ConfigRepository() As ClsConfigRepository
     Set ConfigRepository = m_configRepository
 End Property
+
+Private Sub Class_Terminate()
+    Set m_logger           = Nothing
+    Set m_configRepository = Nothing
+    Set m_oracleAdapter    = Nothing
+    Set m_outlookAdapter   = Nothing
+End Sub
 ```
 
 ### Template: `ClsDashboardOrchestrator`

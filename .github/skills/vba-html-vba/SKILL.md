@@ -11,6 +11,8 @@ description: "Use when creating, reviewing, or refactoring HTML content generate
 
 Use this skill for HTML markup authored or assembled from VBA. The standard focuses on deterministic rendering in Outlook and Office surfaces, safe variable interpolation, and consistent delivery in unattended automation.
 
+> **Related skill:** Apply `vba-css-vba` together with this skill for all CSS and inline styling decisions in the generated HTML. This skill covers structure and content; `vba-css-vba` covers styling constraints and Outlook rendering safety.
+
 ## Non-Negotiable Rules
 
 1. Build HTML from validated data only; never concatenate unchecked user input into markup.
@@ -73,3 +75,4 @@ Use this skill for HTML markup authored or assembled from VBA. The standard focu
 - [ ] Templates are modular and not scattered in ad hoc concatenations.
 - [ ] Required fields are validated before rendering starts.
 - [ ] Output generation is deterministic for the same input set.
+- [ ] CSS and inline styles follow the `vba-css-vba` Outlook compatibility constraints.

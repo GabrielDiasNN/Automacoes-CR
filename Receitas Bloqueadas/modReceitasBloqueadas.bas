@@ -1,8 +1,9 @@
-Attribute VB_Name = "AutomacaoPorEmail"
+Attribute VB_Name = "modReceitasBloqueadas"
 Option Explicit
 
 Private m_execId As String
 Private m_blnInLogWrite As Boolean
+Private m_outlookAdapter As ClsRBOutlookAdapter
 
 Private Const CAMINHO_LOG As String = "C:\Automacoes\Receitas Bloqueadas\Logs\VBA_Internal.log"
 Private Const NOME_TABELA_DADOS As String = "ReceitasBloqueadas"
@@ -53,6 +54,42 @@ Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")
 TratarErro:
     RegistrarLog "ERRO FATAL: " & Err.Description & " (" & CStr(Err.Number) & ")"
     RegistrarLog "FIM DO PROCESSO. Resultado=Erro"
+End Sub
+
+Public Sub PreVisualizarEmail()
+    Dim corpoHTML As String
+
+    m_execId = NormalizeExecId("PREVIEW_" & Format$(Now, "yyyymmdd_hhnnss"))
+
+    On Error GoTo TratarErro
+
+    RegistrarLog "INICIO - Pre-visualizacao do email iniciada"
+    RegistrarLog "Atualizando conexoes"
+
+    AtualizarConexaoComGarantia NOME_CONEXAO_DADOS
+    AtualizarConexaoComGarantia NOME_CONEXAO_OBS
+
+    Application.Wait Now + TimeValue("0:00:02")
+
+    AjustarFormatoDatasReceitasBloqueadas
+
+    ThisWorkbook.Save
+    RegistrarLog "Workbook salvo"
+
+    corpoHTML = GerarHTMLDinamico()
+
+    If Len(corpoHTML) = 0 Then
+        RegistrarLog "AVISO: Tabela vazia ou nao encontrada. Pre-visualizacao cancelada"
+        Exit Sub
+    End If
+
+    RegistrarLog "Abrindo pre-visualizacao do email"
+    EnviarEmailOutlook corpoHTML, True
+    RegistrarLog "Pre-visualizacao exibida com sucesso"
+    Exit Sub
+
+TratarErro:
+    RegistrarLog "ERRO FATAL na pre-visualizacao: " & Err.Description & " (" & CStr(Err.Number) & ")"
 End Sub
 
 Private Sub AtualizarConexaoComGarantia(ByVal nomeConexao As String)
@@ -168,17 +205,17 @@ Private Function GerarHTMLDinamico() As String
     html = html & "<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='width:100%;max-width:1100px;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
 
     html = html & "<tr>"
-    html = html & "<td align='center' style='background:#0f4c81;color:#ffffff;padding:16px 20px;text-align:center;'>"
+        html = html & "<td align='center' style='background:#0f4c81;color:#ffffff;padding:18px 22px 14px 22px;text-align:center;'>"
 
     html = html & "<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
     html = html & "<tr>"
-    html = html & "<td align='center' style='text-align:center;font-size:16pt;font-weight:bold;line-height:1.3;padding:0 0 6px 0;'>"
+        html = html & "<td align='center' style='text-align:center;font-size:17pt;font-weight:bold;line-height:1.25;padding:0 0 8px 0;color:#ffffff;'>"
     html = html & HtmlEncode(TextoEmailTitulo())
     html = html & "</td>"
     html = html & "</tr>"
 
     html = html & "<tr>"
-    html = html & "<td align='center' style='text-align:center;font-size:11pt;line-height:1.4;padding:0;'>"
+        html = html & "<td align='center' style='text-align:center;font-size:10.5pt;line-height:1.5;padding:0;color:#e8f1ff;'>"
     html = html & HtmlEncode(TextoEmailIntro()) & Format$(Now, "dd/MM/yyyy HH:mm")
     html = html & "</td>"
     html = html & "</tr>"
@@ -227,12 +264,6 @@ Private Function GerarHTMLDinamico() As String
     html = html & "<tr>"
     html = html & "<td style='padding-top:14px;color:#b91c1c;font-weight:bold;'>"
     html = html & HtmlEncode(TextoEmailRodape())
-    html = html & "</td>"
-    html = html & "</tr>"
-
-    html = html & "<tr>"
-    html = html & "<td style='padding-top:18px;color:#6b7280;font-size:9pt;border-top:1px solid #e5e7eb;padding-bottom:0;'>"
-    html = html & HtmlEncode(TextoEmailAssinatura())
     html = html & "</td>"
     html = html & "</tr>"
     html = html & "</table>"
@@ -310,14 +341,13 @@ Private Function HtmlEncode(ByVal texto As String) As String
     HtmlEncode = texto
 End Function
 
-Private Sub EnviarEmailOutlook(ByVal htmlBody As String)
-    Dim appOutlook As Object
-    Dim email As Object
+Private Sub EnviarEmailOutlook(ByVal htmlBody As String, Optional ByVal previewOnly As Boolean = False)
     Dim sPara As String
     Dim sCopia As String
     Dim sCco As String
-    Dim sendErr As Long
-    Dim sendDesc As String
+    Dim strIntro As String
+    Dim strLegenda As String
+    Dim outlookAdapter As ClsRBOutlookAdapter
 
     On Error GoTo TratarErro
 
@@ -328,53 +358,37 @@ Private Sub EnviarEmailOutlook(ByVal htmlBody As String)
         Exit Sub
     End If
 
-    Set appOutlook = PrepararOutlookComForcaBruta()
+    strIntro = "Segue relatorio atualizado de receitas bloqueadas."
+    strLegenda = HtmlEncode(TextoEmailAssinatura())
 
-    If appOutlook Is Nothing Then
-        RegistrarLog "ERRO FATAL: Outlook inacessivel apos tentativas de inicializacao"
-        Exit Sub
+    Set outlookAdapter = GetOutlookAdapter()
+    RegistrarLog "Definindo assunto e destinatarios"
+
+    If Not outlookAdapter.EnviarEmail(sPara, sCopia, sCco, TextoEmailAssuntoPrefixo() & Format$(Date, "dd/MM/yyyy"), htmlBody, strIntro, strLegenda, previewOnly) Then
+        Err.Raise vbObjectError + 5101, "EnviarEmailOutlook", outlookAdapter.LastError
     End If
 
-    Set email = appOutlook.CreateItem(OL_MAIL_ITEM)
-
-    If email Is Nothing Then
-        RegistrarLog "ERRO: Falha ao criar MailItem"
-        Set appOutlook = Nothing
-        Exit Sub
+    If previewOnly Then
+        RegistrarLog "E-mail exibido em pre-visualizacao"
+    Else
+        RegistrarLog "E-mail enviado com sucesso"
     End If
-
-    With email
-        RegistrarLog "Definindo assunto e destinatarios"
-        .To = sPara
-        If Len(sCopia) > 0 Then .CC = sCopia
-        If Len(sCco) > 0 Then .BCC = sCco
-        .Subject = TextoEmailAssuntoPrefixo() & Format$(Date, "dd/MM/yyyy")
-        .htmlBody = htmlBody
-        RegistrarLog "Chamando Send"
-        On Error Resume Next
-        .Send
-        sendErr = Err.Number
-        sendDesc = Err.Description
-        On Error GoTo TratarErro
-        If sendErr <> 0 Then
-            Err.Raise sendErr, "EnviarEmailOutlook.Send", sendDesc
-        End If
-    End With
-
-    RegistrarLog "E-mail enviado com sucesso"
-    On Error Resume Next
-    Set email = Nothing
-    Set appOutlook = Nothing
-    On Error GoTo 0
+Saida:
+    Set outlookAdapter = Nothing
     Exit Sub
 
 TratarErro:
     RegistrarLog "ERRO no envio do e-mail: " & Err.Description & " (" & CStr(Err.Number) & ")"
-    On Error Resume Next
-    Set email = Nothing
-    Set appOutlook = Nothing
-    On Error GoTo 0
+    Resume Saida
 End Sub
+
+Private Function GetOutlookAdapter() As ClsRBOutlookAdapter
+    If m_outlookAdapter Is Nothing Then
+        Set m_outlookAdapter = New ClsRBOutlookAdapter
+    End If
+
+    Set GetOutlookAdapter = m_outlookAdapter
+End Function
 
 Private Sub ObterDestinatariosEmail(ByRef sPara As String, ByRef sCopia As String, ByRef sCco As String)
     Dim wsC As Worksheet
@@ -460,57 +474,6 @@ Private Function ColetarEmailsColuna(ByVal lo As ListObject, ByVal indiceColuna 
     Next i
 
     ColetarEmailsColuna = resultado
-End Function
-
-Private Function PrepararOutlookComForcaBruta() As Object
-    Dim oApp As Object
-
-    On Error Resume Next
-
-    Set oApp = GetObject(, "Outlook.Application")
-    If Not oApp Is Nothing Then
-        RegistrarLog "Outlook conectado por instancia existente"
-        Set PrepararOutlookComForcaBruta = oApp
-        Exit Function
-    End If
-
-    RegistrarLog "AVISO: Outlook nao respondeu. Tentando iniciar processo"
-
-    Err.Clear
-    Shell "outlook.exe", VB_MINIMIZED_FOCUS
-    Application.Wait Now + TimeValue("0:00:08")
-    Set oApp = GetObject(, "Outlook.Application")
-
-    If Not oApp Is Nothing Then
-        RegistrarLog "Outlook iniciado via shell"
-        Set PrepararOutlookComForcaBruta = oApp
-        Exit Function
-    End If
-
-    Err.Clear
-    Set oApp = CreateObject("Outlook.Application")
-    If Not oApp Is Nothing Then
-        RegistrarLog "Outlook iniciado por nova instancia (fallback)"
-        Set PrepararOutlookComForcaBruta = oApp
-        Exit Function
-    End If
-
-    RegistrarLog "AVISO: Falha ao iniciar Outlook. Terceira tentativa via shell"
-
-    Err.Clear
-    Shell "outlook.exe", VB_MINIMIZED_FOCUS
-    Application.Wait Now + TimeValue("0:00:08")
-    Set oApp = GetObject(, "Outlook.Application")
-
-    If Not oApp Is Nothing Then
-        RegistrarLog "Outlook iniciado via shell"
-        Set PrepararOutlookComForcaBruta = oApp
-        Exit Function
-    End If
-
-    RegistrarLog "FALHA FINAL: Nao foi possivel iniciar o Outlook"
-
-    On Error GoTo 0
 End Function
 
 Private Sub RegistrarLog(ByVal msg As String)
@@ -855,7 +818,7 @@ Public Sub TestarLogger()
     idEntrada = "Teste ExecId #01 com espaco & acento!"
     idSaida = NormalizeExecId(idEntrada)
 
-    Debug.Print "=== TestarLogger: AutomacaoPorEmail ==="
+    Debug.Print "=== TestarLogger: modReceitasBloqueadas ==="
     Debug.Print "Input  : [" & idEntrada & "]"
     Debug.Print "ExecId : [" & idSaida & "]"
     Debug.Print "Log    : " & CAMINHO_LOG
@@ -871,4 +834,5 @@ Public Sub TestarLogger()
 
     Debug.Print "Concluido. Verifique: " & CAMINHO_LOG
 End Sub
+
 

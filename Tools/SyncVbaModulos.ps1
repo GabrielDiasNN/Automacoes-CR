@@ -140,6 +140,11 @@ foreach ($workbookPath in $WorkbookPaths) {
         foreach ($moduleFile in $modules) {
             $moduleName = [System.IO.Path]::GetFileNameWithoutExtension($moduleFile.Name)
 
+            if ($moduleName.Length -gt 31) {
+                Write-Log -Level "ERROR" -Message ("Skipping module with invalid VBA name length (>31): {0}" -f $moduleName)
+                continue
+            }
+
             if ($existingMap.ContainsKey($moduleName)) {
                 $existingComponent = $existingMap[$moduleName]
                 if ($existingComponent.Type -eq 100) {
@@ -157,30 +162,26 @@ foreach ($workbookPath in $WorkbookPaths) {
             }
 
             try {
+                $importedComponent = $vbComponents.Import($moduleFile.FullName)
+                if ($null -eq $importedComponent) {
+                    Write-Log -Level "ERROR" -Message ("Import returned null for module: {0}" -f $moduleName)
+                    continue
+                }
+
+                if ($importedComponent.Name -ne $moduleName) {
+                    try {
+                        $importedComponent.Name = $moduleName
+                        Write-Log -Level "WARN" -Message ("Imported module name adjusted: {0} -> {1}" -f $importedComponent.Name, $moduleName)
+                    }
+                    catch {
+                        Write-Log -Level "WARN" -Message ("Imported module name mismatch: expected {0}, actual {1}" -f $moduleName, $importedComponent.Name)
+                    }
+                }
+
                 if ($moduleFile.Extension -ieq ".cls") {
-                    $newComponent = $vbComponents.Add(2)
-                    $newComponent.Name = $moduleName
-
-                    $rawContent = Get-Content -LiteralPath $moduleFile.FullName -Raw
-                    $lines = $rawContent -split "`r?`n"
-                    $filtered = @()
-                    foreach ($line in $lines) {
-                        if ($line -match '^\s*VERSION\s') { continue }
-                        if ($line -match '^\s*BEGIN\s*$') { continue }
-                        if ($line -match '^\s*END\s*$') { continue }
-                        if ($line -match '^\s*Attribute\s+VB_Name\b') { continue }
-                        $filtered += $line
-                    }
-
-                    $cleanContent = ($filtered -join "`r`n").Trim()
-                    if ($cleanContent.Length -gt 0) {
-                        $newComponent.CodeModule.AddFromString($cleanContent)
-                    }
-
                     Write-Log -Level "INFO" -Message "Imported class module: $moduleName"
                 }
                 else {
-                    $null = $vbComponents.Import($moduleFile.FullName)
                     Write-Log -Level "INFO" -Message "Imported module: $moduleName"
                 }
             }

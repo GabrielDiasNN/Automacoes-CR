@@ -41,13 +41,13 @@ Use this skill for HTML and CSS delivered outside VBA, including Node.js-generat
 
 ## Security and Reliability Baseline
 
-| Topic                 | Rule                                                                 |
-| --------------------- | -------------------------------------------------------------------- |
-| XSS prevention        | Escape untrusted text and sanitize allowed rich content              |
-| CSP readiness         | Prefer architecture compatible with strict content security policies |
-| External dependencies | Bound remote fetches with timeout and fallback behavior              |
-| Path safety           | Resolve output paths safely and prevent directory traversal          |
-| Secret handling       | Never embed credentials in generated HTML or CSS                     |
+| Topic                 | Rule                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| XSS prevention        | Escape untrusted text and sanitize allowed rich content                                                             |
+| CSP readiness         | Prefer architecture compatible with strict content security policies                                                |
+| External dependencies | Bound remote fetches with timeout and fallback behavior                                                             |
+| Path safety           | Resolve output paths with `path.resolve()` and validate against an allowed base directory to prevent path traversal |
+| Secret handling       | Never embed credentials in generated HTML or CSS                                                                    |
 
 ## Suggested Delivery Flow
 

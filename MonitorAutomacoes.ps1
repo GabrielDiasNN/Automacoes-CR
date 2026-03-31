@@ -34,23 +34,27 @@ function Write-StartupDiagnostic {
         try {
             $sw.WriteLine($line)
             $sw.Flush()
-        } finally {
+        }
+        finally {
             $sw.Close()
             $sw.Dispose()
         }
-    } catch {}
+    }
+    catch {}
 }
 
 $Utf8Encoding = New-Object System.Text.UTF8Encoding($false)
 try {
-    [Console]::InputEncoding  = $Utf8Encoding
+    [Console]::InputEncoding = $Utf8Encoding
     [Console]::OutputEncoding = $Utf8Encoding
     $OutputEncoding = $Utf8Encoding
-} catch {}
+}
+catch {}
 
 $MutexName = if ([string]::IsNullOrWhiteSpace($MutexNameOverride)) {
     "Global\MonitorAutomacoesMutex"
-} else {
+}
+else {
     $MutexNameOverride
 }
 $MutexWaitSeconds = 5
@@ -60,7 +64,8 @@ try {
     # Mantemos o objeto Mutex no escopo do script para garantir que ele não seja coletado
     # pelo Garbage Collector enquanto o monitor estiver rodando.
     $script:MonitorMutex = New-Object System.Threading.Mutex($false, $MutexName)
-} catch {
+}
+catch {
     $msg = "Falha crítica ao inicializar Mutex: $_"
     Write-Host "ERRO: $msg" -ForegroundColor Red
     Write-StartupDiagnostic -Message $msg -Type "ERRO"
@@ -69,12 +74,14 @@ try {
 
 try {
     $script:MutexAcquired = $script:MonitorMutex.WaitOne([TimeSpan]::FromSeconds($MutexWaitSeconds), $false)
-} catch [System.Threading.AbandonedMutexException] {
+}
+catch [System.Threading.AbandonedMutexException] {
     $script:MutexAcquired = $true
     $msg = "Mutex abandonado detectado. Assumindo controle desta instância."
     Write-Host "AVISO: $msg" -ForegroundColor Yellow
     Write-StartupDiagnostic -Message $msg -Type "WARN"
-} catch {
+}
+catch {
     $msg = "Falha ao adquirir Mutex: $_"
     Write-Host "ERRO: $msg" -ForegroundColor Red
     Write-StartupDiagnostic -Message $msg -Type "ERRO"
@@ -100,30 +107,30 @@ $script:MainLoopMaxConsecutiveErrors = 5
 $script:PreviousMetricsSnapshot = $null
 $script:SkipTaskExecutionLogged = $false
 $script:Metrics = @{
-    TasksTriggered = 0
-    TasksDryRunEligible = 0
-    TasksSkippedOverlap = 0
-    TasksCompleted = 0
+    TasksTriggered       = 0
+    TasksDryRunEligible  = 0
+    TasksSkippedOverlap  = 0
+    TasksCompleted       = 0
     TasksFinishedNonZero = 0
-    TasksFinishedWarn = 0
-    ExitCode7ReadOnly = 0
-    ExitCode23Cooldown = 0
+    TasksFinishedWarn    = 0
+    ExitCode7ReadOnly    = 0
+    ExitCode23Cooldown   = 0
     ExitCode40Concurrent = 0
-    ConfigReloadSuccess = 0
-    ConfigReloadFailure = 0
+    ConfigReloadSuccess  = 0
+    ConfigReloadFailure  = 0
 }
 $script:MetricsWindow = @{
-    TasksTriggered = 0
-    TasksDryRunEligible = 0
-    TasksSkippedOverlap = 0
-    TasksCompleted = 0
+    TasksTriggered       = 0
+    TasksDryRunEligible  = 0
+    TasksSkippedOverlap  = 0
+    TasksCompleted       = 0
     TasksFinishedNonZero = 0
-    TasksFinishedWarn = 0
-    ExitCode7ReadOnly = 0
-    ExitCode23Cooldown = 0
+    TasksFinishedWarn    = 0
+    ExitCode7ReadOnly    = 0
+    ExitCode23Cooldown   = 0
     ExitCode40Concurrent = 0
-    ConfigReloadSuccess = 0
-    ConfigReloadFailure = 0
+    ConfigReloadSuccess  = 0
+    ConfigReloadFailure  = 0
 }
 $script:MetricsWindowStartedAt = Get-Date
 
@@ -146,17 +153,17 @@ function Get-MetricsCountersSnapshot {
     param([hashtable]$Source)
 
     return [ordered]@{
-        TasksTriggered = [int]$Source.TasksTriggered
-        TasksDryRunEligible = [int]$Source.TasksDryRunEligible
-        TasksSkippedOverlap = [int]$Source.TasksSkippedOverlap
-        TasksCompleted = [int]$Source.TasksCompleted
+        TasksTriggered       = [int]$Source.TasksTriggered
+        TasksDryRunEligible  = [int]$Source.TasksDryRunEligible
+        TasksSkippedOverlap  = [int]$Source.TasksSkippedOverlap
+        TasksCompleted       = [int]$Source.TasksCompleted
         TasksFinishedNonZero = [int]$Source.TasksFinishedNonZero
-        TasksFinishedWarn = [int]$Source.TasksFinishedWarn
-        ExitCode7ReadOnly = [int]$Source.ExitCode7ReadOnly
-        ExitCode23Cooldown = [int]$Source.ExitCode23Cooldown
+        TasksFinishedWarn    = [int]$Source.TasksFinishedWarn
+        ExitCode7ReadOnly    = [int]$Source.ExitCode7ReadOnly
+        ExitCode23Cooldown   = [int]$Source.ExitCode23Cooldown
         ExitCode40Concurrent = [int]$Source.ExitCode40Concurrent
-        ConfigReloadSuccess = [int]$Source.ConfigReloadSuccess
-        ConfigReloadFailure = [int]$Source.ConfigReloadFailure
+        ConfigReloadSuccess  = [int]$Source.ConfigReloadSuccess
+        ConfigReloadFailure  = [int]$Source.ConfigReloadFailure
     }
 }
 
@@ -183,22 +190,24 @@ function Save-MetricsSnapshot {
         if (-not $windowStart) { $windowStart = $WindowEnd }
 
         $snapshot = [ordered]@{
-            generatedAt = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssK")
-            monitorVersion = "3.6"
-            runningTasks = [int]$script:RunningTasks.Count
+            generatedAt                 = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssK")
+            monitorVersion              = "3.6"
+            runningTasks                = [int]$script:RunningTasks.Count
             previousSnapshotGeneratedAt = if ($script:PreviousMetricsSnapshot) { [string]$script:PreviousMetricsSnapshot.generatedAt } else { $null }
-            cumulative = Get-MetricsCountersSnapshot -Source $script:Metrics
-            window = [ordered]@{
+            cumulative                  = Get-MetricsCountersSnapshot -Source $script:Metrics
+            window                      = [ordered]@{
                 startedAt = $windowStart.ToString("yyyy-MM-ddTHH:mm:ssK")
-                endedAt = $WindowEnd.ToString("yyyy-MM-ddTHH:mm:ssK")
-                counters = Get-MetricsCountersSnapshot -Source $script:MetricsWindow
+                endedAt   = $WindowEnd.ToString("yyyy-MM-ddTHH:mm:ssK")
+                counters  = Get-MetricsCountersSnapshot -Source $script:MetricsWindow
             }
         }
 
         Set-Utf8Content -FilePath $snapshotPath -Content ($snapshot | ConvertTo-Json -Depth 6)
-    } catch {
+    }
+    catch {
         Write-Log "Falha ao persistir snapshot de metricas: $_" -Type "WARN"
-    } finally {
+    }
+    finally {
         if ($ResetWindow) {
             Reset-WindowMetrics -WindowStart $WindowEnd
         }
@@ -217,7 +226,8 @@ function Import-PreviousMetricsSnapshot {
         if ($snapshot -and $snapshot.cumulative) {
             return $snapshot
         }
-    } catch {
+    }
+    catch {
         Write-Log "Falha ao carregar snapshot anterior de metricas: $_" -Type "WARN"
     }
 
@@ -228,8 +238,8 @@ function Get-ExitCodeLogType {
     param([int]$ExitCode)
 
     switch ($ExitCode) {
-        0  { return "INFO" }
-        7  { return "WARN" }
+        0 { return "INFO" }
+        7 { return "WARN" }
         23 { return "WARN" }
         40 { return "WARN" }
         default { return "ERRO" }
@@ -309,7 +319,8 @@ function Add-Utf8Line {
     try {
         $sw.WriteLine($Line)
         $sw.Flush()
-    } finally {
+    }
+    finally {
         $sw.Close()
         $sw.Dispose()
     }
@@ -328,7 +339,8 @@ function Set-Utf8Content {
     try {
         $sw.Write($Content)
         $sw.Flush()
-    } finally {
+    }
+    finally {
         $sw.Close()
         $sw.Dispose()
     }
@@ -351,10 +363,10 @@ function Write-Log {
     if (-not $LogDir) { $LogDir = Get-LogDirectory }
     Initialize-Directory $LogDir
 
-    $fileName  = "$(Get-Date -Format 'yyyy-MM')_Monitor.log"
-    $logPath   = Join-Path -Path $LogDir -ChildPath $fileName
+    $fileName = "$(Get-Date -Format 'yyyy-MM')_Monitor.log"
+    $logPath = Join-Path -Path $LogDir -ChildPath $fileName
     $timestamp = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
-    $line      = "[$timestamp] [$type] $msg"
+    $line = "[$timestamp] [$type] $msg"
 
     try { Add-Utf8Line -FilePath $logPath -Line $line } catch {}
 
@@ -458,7 +470,8 @@ function Get-ConfigHash {
 
     try {
         return (Get-FileHash -Path $Path -Algorithm SHA256 -ErrorAction Stop).Hash
-    } catch {
+    }
+    catch {
         return $null
     }
 }
@@ -525,7 +538,8 @@ function Import-Configuration {
         $config = $rawJson | ConvertFrom-Json
         Test-Configuration -Config $config
         return $config
-    } catch {
+    }
+    catch {
         $err = "ERRO CRÍTICO: Falha ao carregar config.json. Detalhes: $_"
         Set-Utf8Content -FilePath $EmergencyLog -Content $err
         return $null
@@ -608,7 +622,8 @@ function Remove-FinishedTasks {
                 Write-TaskCompletionLog -TaskName $taskName -ExitCode $exitCode -ProcessId $proc.Id -LogDir $logDir
                 $toRemove += $taskName
             }
-        } catch {
+        }
+        catch {
             $toRemove += $taskName
         }
     }
@@ -638,9 +653,11 @@ function Start-TaskProcess {
 
         if ($ext -eq ".vbs") {
             $proc = Start-Process "wscript.exe" -ArgumentList "`"$Path`" `"$execId`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
-        } elseif ($ext -eq ".ps1") {
-            $proc = Start-Process "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$Path`" `"$execId`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
-        } else {
+        }
+        elseif ($ext -eq ".ps1") {
+            $proc = Start-Process "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$Path`" `"$execId`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
+        }
+        else {
             throw "Extensão '$ext' não suportada."
         }
 
@@ -650,12 +667,14 @@ function Start-TaskProcess {
             $proc.WaitForExit()
             Write-TaskCompletionLog -TaskName $Name -ExitCode $proc.ExitCode -ProcessId $proc.Id -LogDir $LogDir
             Write-Log "Tarefa '$Name' finalizada em modo síncrono. [ExecId=$execId]" -LogDir $LogDir
-        } else {
+        }
+        else {
             $script:RunningTasks[$Name] = $proc
         }
 
         return $true
-    } catch {
+    }
+    catch {
         Write-Log "ERRO: Falha ao iniciar processo para '$Name': $_" -Type "ERRO" -LogDir $LogDir
         return $false
     }
@@ -672,7 +691,7 @@ function Test-TaskExecution {
 
     $diaSemanaInt = [int]$Now.DayOfWeek
     $hora = $Now.Hour
-    $min  = $Now.Minute
+    $min = $Now.Minute
 
     if ($Task.schedule.daysOfWeek -and ($Task.schedule.daysOfWeek -notcontains $diaSemanaInt)) { return $false }
 
@@ -709,7 +728,8 @@ function Invoke-ScheduledTask {
                 Add-MetricCounter -MetricName "TasksSkippedOverlap"
                 return
             }
-        } catch {
+        }
+        catch {
             Write-Log "Falha ao validar sobreposição de '$taskName'. Estado local será limpo. Erro: $_" -Type "WARN" -LogDir $logDir
             $script:RunningTasks.Remove($taskName) | Out-Null
         }
@@ -735,7 +755,8 @@ if ($script:PreviousMetricsSnapshot) {
     $previousCompleted = [int]$script:PreviousMetricsSnapshot.cumulative.TasksCompleted
     $previousNonZero = [int]$script:PreviousMetricsSnapshot.cumulative.TasksFinishedNonZero
     Write-Log "Snapshot anterior carregado. GeradoEm=$previousGeneratedAt | PrevConcluidas=$previousCompleted | PrevNaoZero=$previousNonZero"
-} else {
+}
+else {
     Write-Log "Nenhum snapshot anterior de metricas encontrado. Iniciando baseline local."
 }
 
@@ -744,7 +765,8 @@ try {
     Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
         Write-Log "Monitor encerrando (sinal de saída recebido)." -Type "WARN"
     } | Out-Null
-} catch {}
+}
+catch {}
 
 $executionMode = @()
 if ($RunOnce) { $executionMode += "RunOnce" }
@@ -765,8 +787,8 @@ while ($true) {
         Remove-FinishedTasks
         Update-Configuration | Out-Null
 
-    $agora = Get-Date
-    $timeKey = $agora.ToString("yyyy-MM-dd HH:mm")
+        $agora = Get-Date
+        $timeKey = $agora.ToString("yyyy-MM-dd HH:mm")
 
         # Heartbeat log a cada 1 hora
         if ($agora -gt $lastHeartbeat.AddHours(1)) {
@@ -776,47 +798,51 @@ while ($true) {
             $lastHeartbeat = $agora
         }
 
-    if ($SkipTaskExecution) {
-        if (-not $script:SkipTaskExecutionLogged) {
-            Write-Log "Modo SkipTaskExecution ativo. Disparo de tarefas suprimido para validacao segura." -Type "WARN"
-            $script:SkipTaskExecutionLogged = $true
-        }
-    } elseif ($DryRun) {
-        foreach ($task in $script:Config.tasks) {
-            if (Test-TaskExecution -Task $task -Now $agora -TimeKey $timeKey) {
-                $taskName = [string]$task.name
-                $taskPath = [string]$task.scriptPath
-                Write-Log "DRY-RUN: tarefa '$taskName' seria disparada neste ciclo. Script=$taskPath" -Type "WARN"
-                $script:StateControl[$taskName] = $timeKey
-                Add-MetricCounter -MetricName "TasksDryRunEligible"
+        if ($SkipTaskExecution) {
+            if (-not $script:SkipTaskExecutionLogged) {
+                Write-Log "Modo SkipTaskExecution ativo. Disparo de tarefas suprimido para validacao segura." -Type "WARN"
+                $script:SkipTaskExecutionLogged = $true
             }
         }
-    } else {
-        foreach ($task in $script:Config.tasks) {
-            if (Test-TaskExecution -Task $task -Now $agora -TimeKey $timeKey) {
-                Invoke-ScheduledTask -Task $task -Now $agora
+        elseif ($DryRun) {
+            foreach ($task in $script:Config.tasks) {
+                if (Test-TaskExecution -Task $task -Now $agora -TimeKey $timeKey) {
+                    $taskName = [string]$task.name
+                    $taskPath = [string]$task.scriptPath
+                    Write-Log "DRY-RUN: tarefa '$taskName' seria disparada neste ciclo. Script=$taskPath" -Type "WARN"
+                    $script:StateControl[$taskName] = $timeKey
+                    Add-MetricCounter -MetricName "TasksDryRunEligible"
+                }
             }
         }
-    }
+        else {
+            foreach ($task in $script:Config.tasks) {
+                if (Test-TaskExecution -Task $task -Now $agora -TimeKey $timeKey) {
+                    Invoke-ScheduledTask -Task $task -Now $agora
+                }
+            }
+        }
 
-    if ($agora.Minute -eq 0 -and $agora.Second -lt 10) {
-        [System.GC]::Collect()
-    }
+        if ($agora.Minute -eq 0 -and $agora.Second -lt 10) {
+            [System.GC]::Collect()
+        }
 
-    if ($RunOnce) {
-        Write-Log "RunOnce ativo. Encerrando monitor apos ciclo unico." -Type "WARN"
-        break
-    }
+        if ($RunOnce) {
+            Write-Log "RunOnce ativo. Encerrando monitor apos ciclo unico." -Type "WARN"
+            break
+        }
 
-    $sleepTime = if ($script:Config.settings.checkIntervalSeconds) {
-        [int]$script:Config.settings.checkIntervalSeconds
-    } else {
-        20
-    }
+        $sleepTime = if ($script:Config.settings.checkIntervalSeconds) {
+            [int]$script:Config.settings.checkIntervalSeconds
+        }
+        else {
+            20
+        }
 
-    Start-Sleep -Seconds $sleepTime
-    $script:MainLoopConsecutiveErrors = 0
-    } catch {
+        Start-Sleep -Seconds $sleepTime
+        $script:MainLoopConsecutiveErrors = 0
+    }
+    catch {
         $script:MainLoopConsecutiveErrors++
         Write-Log "ERRO CRÍTICO no Loop Principal: $_ | Falhas consecutivas=$($script:MainLoopConsecutiveErrors)/$($script:MainLoopMaxConsecutiveErrors)" -Type "ERRO"
 
@@ -840,6 +866,7 @@ try {
         }
         $script:MonitorMutex.Dispose()
     }
-} catch {}
+}
+catch {}
 
 Exit $script:MonitorExitCode

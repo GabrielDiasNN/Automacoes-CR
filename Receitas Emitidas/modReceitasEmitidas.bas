@@ -1,4 +1,4 @@
-Attribute VB_Name = "ModuloPrincipal"
+Attribute VB_Name = "modReceitasEmitidas"
 Option Explicit
 
 Private gLogFile As String
@@ -8,11 +8,12 @@ Private Const LOG_MAX_LINES As Long = 5000
 Private Const LOG_FOLDER As String = "C:\Automacoes\Receitas Emitidas\Logs"
 Private Const DEFAULT_RECIPIENT_TO As String = "acacio.klann@costaricamalhas.ind.br"
 Private Const CONFIG_SHEET_NAME As String = "Config"
-Private Const CONFIG_TABLE_NAME As String = "EnderecosEmail"
+Private Const CONFIG_TABLE_NAME As String = "EnderecosEmailDestinatarios"
 Private Const ITEM_SEPARATOR_CODE As Long = 30
 Private Const FIELD_SEPARATOR_CODE As Long = 31
 
 Private mExecId As String
+Private mOutlookAdapter As ClsREOutlookAdapter
 
 Private Type ReportStats
     MachineCount As Long
@@ -103,28 +104,18 @@ End Sub
 Private Sub EnviarEmailOutlookAdaptativo(ByVal sourceRange As Range, Optional ByVal previewOnly As Boolean = False)
     On Error GoTo TratarErro
 
-    Dim outlookApp As Object
-    Dim outlookMail As Object
-    Dim outlookInspector As Object
+    Dim outlookAdapter As ClsREOutlookAdapter
     Dim htmlBody As String
-    Dim signatureHtml As String
+    Dim introText As String
+    Dim legendaHtml As String
     Dim recipientTo As String
-        Dim sendErr As Long, sendDesc As String
-    Set outlookApp = PrepararOutlook()
-
-    If outlookApp Is Nothing Then
-        Err.Raise vbObjectError + 5004, , "Outlook inacessivel apos tentativas de inicializacao"
-    End If
-
-    Set outlookMail = outlookApp.CreateItem(0)
-
-    If outlookMail Is Nothing Then
-        Err.Raise vbObjectError + 5005, , "Nao foi possivel criar MailItem"
-    End If
-
-    WriteLog "INFO", "EMAIL", "MailItem criado com sucesso"
+    Dim errNum As Long
+    Dim errSrc As String
+    Dim errDesc As String
 
     htmlBody = MontarHtmlAdaptativo(sourceRange)
+    introText = "Segue relatorio atualizado para conferencia operacional."
+    legendaHtml = vbNullString
 
     recipientTo = GetRecipientTo()
     WriteLog "INFO", "EMAIL", "TO=" & recipientTo
@@ -132,85 +123,45 @@ Private Sub EnviarEmailOutlookAdaptativo(ByVal sourceRange As Range, Optional By
         Err.Raise vbObjectError + 5006, , "Destinatario de email nao informado ou invalido"
     End If
 
-    With outlookMail
-            WriteLog "INFO", "EMAIL", "Definindo Subject"
-            .Subject = GetEmailSubject()
-            WriteLog "INFO", "EMAIL", "Definindo To"
-            .To = recipientTo
-            WriteLog "INFO", "EMAIL", "Adicionando anexo"
-            .Attachments.Add ThisWorkbook.FullName
-            WriteLog "INFO", "EMAIL", "Anexo adicionado: " & ThisWorkbook.Name
-            WriteLog "INFO", "EMAIL", "Definindo HTMLBody"
-            .htmlBody = htmlBody
-            WriteLog "INFO", "EMAIL", "HTMLBody montado com sucesso"
+    On Error Resume Next
+    ThisWorkbook.Save
+    If Err.Number <> 0 Then
+        WriteLog "ERROR", "EMAIL", "Falha ao salvar workbook antes do envio: " & Err.Description
+        Err.Clear
+    Else
+        WriteLog "INFO", "EMAIL", "Workbook salvo com sucesso antes do envio"
+    End If
+    On Error GoTo TratarErro
 
-        If previewOnly Then
-                WriteLog "INFO", "EMAIL", "Chamando Display"
-                .Display
-                WriteLog "INFO", "EMAIL", "Email exibido em modo de pre-visualizacao"
-        Else
-                WriteLog "INFO", "EMAIL", "Chamando Send"
-                On Error Resume Next
-                .Send
-                sendErr = Err.Number: sendDesc = Err.Description
-                On Error GoTo TratarErro
-                If sendErr <> 0 Then
-                    WriteLog "ERROR", "EMAIL", "Send falhou | Err=" & sendErr & " | Desc=" & sendDesc
-                    Err.Raise sendErr, "EMAIL.Send", sendDesc
-                End If
-                WriteLog "INFO", "EMAIL", "E-mail enviado com sucesso"
-        End If
-    End With
+    Set outlookAdapter = GetOutlookAdapter()
+    WriteLog "INFO", "EMAIL", "Preparando envio via adapter"
 
-    Set outlookMail = Nothing
-    Set outlookApp = Nothing
+    If Not outlookAdapter.EnviarEmail(GetEmailSubject(), recipientTo, htmlBody, introText, legendaHtml, previewOnly, ThisWorkbook.FullName) Then
+        Err.Raise vbObjectError + 5007, , "Falha no envio Outlook: " & outlookAdapter.LastError
+    End If
+
+    If previewOnly Then
+        WriteLog "INFO", "EMAIL", "Email exibido em modo de pre-visualizacao"
+    Else
+        WriteLog "INFO", "EMAIL", "E-mail enviado com sucesso"
+    End If
+
+Saida:
+    Set outlookAdapter = Nothing
     Exit Sub
 
 TratarErro:
-    Dim errNum As Long, errSrc As String, errDesc As String
     errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
     WriteLog "ERROR", "EMAIL", "Erro " & errNum & " - " & errDesc
-    On Error Resume Next
-    Set outlookMail = Nothing
-    Set outlookApp = Nothing
-    On Error GoTo 0
-    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
+    Resume Saida
 End Sub
 
-Private Function PrepararOutlook() As Object
-    Dim oApp As Object
-
-    On Error Resume Next
-
-    Set oApp = GetObject(, "Outlook.Application")
-    If Not oApp Is Nothing Then
-        WriteLog "INFO", "EMAIL", "Outlook conectado por instancia existente"
-        Set PrepararOutlook = oApp
-        Exit Function
+Private Function GetOutlookAdapter() As ClsREOutlookAdapter
+    If mOutlookAdapter Is Nothing Then
+        Set mOutlookAdapter = New ClsREOutlookAdapter
     End If
 
-    Err.Clear
-    Set oApp = CreateObject("Outlook.Application")
-    If Not oApp Is Nothing Then
-        WriteLog "INFO", "EMAIL", "Outlook iniciado por nova instancia"
-        Set PrepararOutlook = oApp
-        Exit Function
-    End If
-
-    WriteLog "WARN", "EMAIL", "Outlook nao respondeu. Tentando iniciar via Shell"
-
-    Err.Clear
-    Shell "outlook.exe", 2
-    Application.Wait Now + TimeValue("0:00:08")
-    Set oApp = GetObject(, "Outlook.Application")
-    If Not oApp Is Nothing Then
-        WriteLog "INFO", "EMAIL", "Outlook iniciado via Shell"
-        Set PrepararOutlook = oApp
-        Exit Function
-    End If
-
-    WriteLog "ERROR", "EMAIL", "FALHA FINAL: Nao foi possivel iniciar o Outlook"
-    On Error GoTo 0
+    Set GetOutlookAdapter = mOutlookAdapter
 End Function
 
 Private Function MontarHtmlAdaptativo(ByVal sourceRange As Range) As String
@@ -444,7 +395,7 @@ Private Function BuildDocumentHtml( _
         headerRowHtml = headerRowHtml & _
             "<td width='" & profile.ColumnWidth & "' align='center' valign='middle' " & _
             "style='width:" & profile.ColumnWidth & "px;padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;" & _
-            "border:1px solid #000000;background-color:#D9E2F3;font-family:Arial,Calibri,sans-serif;" & _
+            "border:1px solid #000000;background-color:#D9E2F3;font-family:inherit;" & _
             "font-size:" & FormatPt(profile.HeaderFontPt) & ";font-weight:bold;line-height:" & profile.HeaderLinePx & "px;" & _
             "text-align:center;'>M&aacute;quina / Grupo / OB / In&iacute;cio</td>"
 
@@ -486,9 +437,9 @@ Private Function BuildDocumentHtml( _
     html = html & "<td style='padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;border:1px solid #D9E2F3;background-color:#FFFFFF;'>"
 
     html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;'>"
-    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:Arial,Calibri,sans-serif;font-size:" & FormatPt(profile.TitleFontPt) & ";font-weight:bold;line-height:" & profile.TitleLinePx & "px;color:#000000;text-align:center;'>Controle de Receitas Emitidas</td></tr>"
-    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:Arial,Calibri,sans-serif;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Confer&ecirc;ncia f&iacute;sica - cozinha de qu&iacute;micos</td></tr>"
-    html = html & "<tr><td align='center' style='padding:0 0 " & profile.BlockPadY & "px 0;font-family:Arial,Calibri,sans-serif;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Emitido em " & Format(Now, "dd/mm/yyyy HH:nn") & " | M&aacute;quinas listadas: " & stats.MachineCount & " | Receitas: " & stats.RecipeCount & "</td></tr>"
+    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:inherit;font-size:" & FormatPt(profile.TitleFontPt) & ";font-weight:bold;line-height:" & profile.TitleLinePx & "px;color:#000000;text-align:center;'>Controle de Receitas Emitidas</td></tr>"
+    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:inherit;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Confer&ecirc;ncia f&iacute;sica - cozinha de qu&iacute;micos</td></tr>"
+    html = html & "<tr><td align='center' style='padding:0 0 " & profile.BlockPadY & "px 0;font-family:inherit;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Emitido em " & Format(Now, "dd/mm/yyyy HH:nn") & " | M&aacute;quinas listadas: " & stats.MachineCount & " | Receitas: " & stats.RecipeCount & "</td></tr>"
     html = html & "</table>"
 
     html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;'>"
@@ -533,7 +484,7 @@ Private Function BuildMachineBlock( _
     html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ColumnWidth & "' style='width:" & profile.ColumnWidth & "px;margin:0;page-break-inside:avoid;'>"
 
     html = html & "<tr>"
-    html = html & "<td colspan='2' align='center' style='padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;border:1px solid #000000;background-color:#E9EEF7;font-family:Arial,Calibri,sans-serif;font-size:" & FormatPt(profile.SectionFontPt) & ";font-weight:bold;line-height:" & profile.SectionLinePx & "px;text-align:center;'>"
+    html = html & "<td colspan='2' align='center' style='padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;border:1px solid #000000;background-color:#E9EEF7;font-family:inherit;font-size:" & FormatPt(profile.SectionFontPt) & ";font-weight:bold;line-height:" & profile.SectionLinePx & "px;text-align:center;'>"
     html = html & HtmlEncode(machineName) & " | " & RecipeCount & " receita"
     If RecipeCount <> 1 Then html = html & "s"
     html = html & "</td>"
@@ -547,7 +498,7 @@ Private Function BuildMachineBlock( _
 
             If groupName <> "0" Then
                 html = html & "<tr>"
-                html = html & "<td colspan='2' align='center' style='padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;background-color:#F2F2F2;font-family:Arial,Calibri,sans-serif;font-size:" & FormatPt(profile.HeaderFontPt) & ";font-weight:bold;line-height:" & profile.HeaderLinePx & "px;text-align:center;'>"
+                html = html & "<td colspan='2' align='center' style='padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;background-color:#F2F2F2;font-family:inherit;font-size:" & FormatPt(profile.HeaderFontPt) & ";font-weight:bold;line-height:" & profile.HeaderLinePx & "px;text-align:center;'>"
                 html = html & "Grupo " & HtmlEncode(groupName)
                 html = html & "</td>"
                 html = html & "</tr>"
@@ -595,8 +546,8 @@ Private Function BuildDetailRows(ByVal encodedRows As String, ByRef profile As L
             End If
 
             html = html & "<tr>"
-            html = html & "<td width='" & profile.ObWidth & "' style='width:" & profile.ObWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:Arial,Calibri,sans-serif;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;'>" & HtmlEncode(obText) & "</td>"
-            html = html & "<td width='" & profile.InicioWidth & "' align='center' style='width:" & profile.InicioWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:Arial,Calibri,sans-serif;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;text-align:center;'>" & HtmlEncode(inicioText) & "</td>"
+            html = html & "<td width='" & profile.ObWidth & "' style='width:" & profile.ObWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:inherit;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;'>" & HtmlEncode(obText) & "</td>"
+            html = html & "<td width='" & profile.InicioWidth & "' align='center' style='width:" & profile.InicioWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:inherit;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;text-align:center;'>" & HtmlEncode(inicioText) & "</td>"
             html = html & "</tr>"
         End If
     Next itemIndex
@@ -1019,14 +970,32 @@ Private Function TryGetRecipientFromConfig() As String
     Dim lo As ListObject
     Dim idx As Long
     Dim rawValue As String
+    Dim i As Long
 
     On Error GoTo TratarErro
 
     Set ws = ThisWorkbook.Worksheets(CONFIG_SHEET_NAME)
     If ws Is Nothing Then Exit Function
 
-    Set lo = ws.ListObjects(CONFIG_TABLE_NAME)
-    If lo Is Nothing Then Exit Function
+    Dim tableNames As Variant
+    tableNames = Array(CONFIG_TABLE_NAME, "EnderecosEmail")
+
+    For i = LBound(tableNames) To UBound(tableNames)
+        On Error Resume Next
+        Set lo = ws.ListObjects(tableNames(i))
+        On Error GoTo TratarErro
+
+        If Not lo Is Nothing Then
+            WriteLog "INFO", "EMAIL", "Tabela de destinatarios encontrada: " & tableNames(i)
+            Exit For
+        End If
+    Next i
+
+    If lo Is Nothing Then
+        WriteLog "WARN", "EMAIL", "Tabela de destinatarios nao encontrada: " & Join(tableNames, ", ")
+        Exit Function
+    End If
+
     If lo.DataBodyRange Is Nothing Then Exit Function
 
     idx = ObterIndiceColunaPorSinonimos(lo, Array("PARA", "TO", "DESTINATARIO", "DESTINATARIO PRINCIPAL", "EMAIL"))
@@ -1393,7 +1362,7 @@ Public Sub TestarLogger()
 
     InitLog
 
-    Debug.Print "=== TestarLogger: ModuloPrincipal ==="
+    Debug.Print "=== TestarLogger: modReceitasEmitidas ==="
     Debug.Print "ExecId : [" & mExecId & "]"
     Debug.Print "Log    : " & gLogFile
 

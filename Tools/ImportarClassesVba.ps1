@@ -1,7 +1,8 @@
+
 param(
-    [string]$XlsmPath = (Join-Path $PSScriptRoot "..\Receitas Emitidas\Controle de Receitas Emitidas.xlsm"),
-    [string]$BasPath = (Join-Path $PSScriptRoot "..\Receitas Emitidas\modReceitasEmitidas.bas"),
-    [string]$ModName = "modReceitasEmitidas"
+    [string]$XlsmPath,
+    [string]$ClassPath,
+    [string]$ClassName
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,15 +14,17 @@ function Write-Log {
 }
 
 $XlsmPath = [System.IO.Path]::GetFullPath($XlsmPath)
-$BasPath = [System.IO.Path]::GetFullPath($BasPath)
+$ClassPath = [System.IO.Path]::GetFullPath($ClassPath)
 
 if (-not (Test-Path $XlsmPath)) { Write-Log "ERROR" "Arquivo nao encontrado: $XlsmPath"; exit 1 }
-if (-not (Test-Path $BasPath)) { Write-Log "ERROR" "Arquivo .bas nao encontrado: $BasPath"; exit 1 }
+if (-not (Test-Path $ClassPath)) { Write-Log "ERROR" "Arquivo .cls nao encontrado: $ClassPath"; exit 1 }
+if ([string]::IsNullOrWhiteSpace($ClassName)) { Write-Log "ERROR" "ClassName nao pode ser vazio"; exit 1 }
+if ($ClassName.Length -gt 31) { Write-Log "ERROR" "ClassName excede 31 caracteres (limite VBA): $ClassName"; exit 1 }
 
-Write-Log "INFO" "Workbook : $XlsmPath"
-Write-Log "INFO" "Modulo   : $BasPath"
+Write-Log "INFO" "Workbook: $XlsmPath"
+Write-Log "INFO" "Classe  : $ClassPath"
 
-# Habilita acesso programatico ao VBA Project via registro (necessario para VBOM)
+# Habilita acesso programatico ao VBA Project via registro
 $regPath = "HKCU:\Software\Microsoft\Office\16.0\Excel\Security"
 $prevVal = $null
 try {
@@ -46,10 +49,10 @@ try {
 
     $vbProj = $wb.VBProject
 
-    # Remove modulo existente
+    # Remove classe existente
     $existing = $null
     foreach ($comp in $vbProj.VBComponents) {
-        if ($comp.Name -eq $ModName) {
+        if ($comp.Name -eq $ClassName) {
             $existing = $comp
             break
         }
@@ -57,15 +60,15 @@ try {
 
     if ($null -ne $existing) {
         $vbProj.VBComponents.Remove($existing)
-        Write-Log "INFO" "Modulo '$ModName' removido"
+        Write-Log "INFO" "Classe '$ClassName' removida"
     }
     else {
-        Write-Log "WARN" "Modulo '$ModName' nao encontrado no projeto (sera importado como novo)"
+        Write-Log "WARN" "Classe '$ClassName' nao encontrada no projeto (sera importada como nova)"
     }
 
-    # Importa o .bas atualizado
-    $vbProj.VBComponents.Import($BasPath) | Out-Null
-    Write-Log "INFO" "Modulo '$ModName' importado com sucesso"
+    # Importa a classe usando Import() (mais simples e robusto que AddFromString)
+    $vbProj.VBComponents.Import($ClassPath) | Out-Null
+    Write-Log "INFO" "Classe '$ClassName' importada com sucesso"
 
     $wb.Save()
     Write-Log "INFO" "Workbook salvo"
@@ -97,4 +100,4 @@ finally {
     }
 }
 
-Write-Log "INFO" "Concluido. Modulo '$ModName' atualizado em: $(Split-Path -Leaf $XlsmPath)"
+Write-Log "INFO" "Concluido. Classe '$ClassName' atualizada em: $(Split-Path -Leaf $XlsmPath)"

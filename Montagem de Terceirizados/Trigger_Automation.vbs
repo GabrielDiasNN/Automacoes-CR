@@ -37,9 +37,14 @@ Function AgoraBR()
               Right("0" & Hour(d), 2) & ":" & Right("0" & Minute(d), 2) & ":" & Right("0" & Second(d), 2)
 End Function
 
-Function ElapsedSeconds()
-    Dim diff: diff = Timer - scriptStart
+Function SecondsSince(ByVal startTimer)
+    Dim diff: diff = Timer - startTimer
     If diff < 0 Then diff = diff + 86400
+    SecondsSince = diff
+End Function
+
+Function ElapsedSeconds()
+    Dim diff: diff = SecondsSince(scriptStart)
     ElapsedSeconds = Replace(FormatNumber(diff, 2, -1, 0, 0), ",", ".")
 End Function
 
@@ -170,36 +175,36 @@ On Error GoTo 0
 ' BLOCO: MONITORAMENTO DE TIMEOUT (OPCIONAL)
 ' ---------------------------------------------------------------------------
 Dim encontrouFim, sucessoVBA
-encontrouFim = True 
+encontrouFim = True
 sucessoVBA = True
 
 If USE_TIMEOUT_MONITOR Then
     encontrouFim = False
     sucessoVBA = False
     WriteLog "INFO", "Aguardando conclusao via leitura de Log (Max Timeout: " & maxTimeoutSeconds & "s)..."
-    
+
     Dim tempoRegInicio, ultimaChecagem, tamanhoAnterior, tamanhoAtual
     Dim streamArq, conteudoNovo, ver
-    
+
     tempoRegInicio = Timer
     ultimaChecagem = Timer
     tamanhoAnterior = tamanhoInicialLogVBA
-    
-    Do While Not encontrouFim And (Timer - tempoRegInicio) < maxTimeoutSeconds
+
+    Do While Not encontrouFim And SecondsSince(tempoRegInicio) < maxTimeoutSeconds
         On Error Resume Next
         tamanhoAtual = fso.GetFile(vbaLogPath).Size
-        
+
         If tamanhoAtual > tamanhoAnterior Then
             ultimaChecagem = Timer
             Set streamArq = fso.OpenTextFile(vbaLogPath, 1)
             Dim conteudoCompleto: conteudoCompleto = streamArq.ReadAll
             streamArq.Close
-            
+
             If Len(conteudoCompleto) > tamanhoInicialLogVBA Then
                 conteudoNovo = Mid(conteudoCompleto, tamanhoInicialLogVBA + 1)
                 ver = ExtrairVersao(conteudoNovo)
                 If ver <> "" And ver <> roboVersao Then roboVersao = ver
-                
+
                 If InStr(conteudoNovo, "FIM DO PROCESSO.") > 0 Then
                     encontrouFim = True
                     sucessoVBA = (InStr(conteudoNovo, "Resultado=Sucesso") > 0)
@@ -246,14 +251,14 @@ If POST_EXECUTION_BAT <> "" Then
         Set wshTemp = CreateObject("WScript.Shell")
         cmdExe = wshTemp.ExpandEnvironmentStrings("%ComSpec%")
         If cmdExe = "" Or cmdExe = "%ComSpec%" Then cmdExe = "cmd.exe"
-        
+
         comandoBat = """" & cmdExe & """ /c """"" & POST_EXECUTION_BAT & """ """ & execId & """ AUTO"""
-        
+
         WriteLog "INFO", "Disparando BAT pos-execucao. ExecId=" & execId & " | Comando=" & comandoBat
-        
+
         wshTemp.CurrentDirectory = fso.GetParentFolderName(POST_EXECUTION_BAT)
         batExitCode = wshTemp.Run(comandoBat, 0, True)
-        
+
         If batExitCode <> 0 Then WriteLog "WARN", "Script pos-execucao retornou ExitCode " & batExitCode
         WriteLog "INFO", "Pos-execucao concluida."
         Set wshTemp = Nothing
