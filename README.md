@@ -172,6 +172,26 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\Test-PowerShellApprovedVer
 
 Guia de nomenclatura: `docs/padroes-nomenclatura-powershell.md`.
 
+### Governança PT-BR (VBA ASCII-safe)
+
+Para validar governança de texto PT-BR mantendo ASCII no VBE:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\ValidarAutomacoes.ps1 -OnlyGovernance
+```
+
+Modo strict (também reprova termos de UI sem acentuação adequada):
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\ValidarAutomacoes.ps1 -OnlyGovernance -FailOnTermWarnings
+```
+
+Validador dedicado:
+
+- `Tools/Test-VbaPtBrGovernance.ps1`
+- Reprova quando encontrar non-ASCII em `.bas/.cls/.frm`
+- Emite warning para termos PT-BR sem acentuação em contexto visível ao usuário
+
 ---
 
 Mantido pela equipe de Automações & Antigravity AI

@@ -49,7 +49,7 @@ Public Function ProcessarNotificacoesCustomizadas(ByVal lngTotalLinhas As Long, 
         .strHashEstado = GerarHashEstadoAtual(arrErros)
     End With
 
-    ' 2. Carregar Cache e Comparar (Lógica Inteligente)
+    ' 2. Carregar Cache e Comparar (Logica Inteligente)
     ' udtEstadoAnterior = CarregarEstadoAnterior()
     ' udtMudancas = CompararEstados(udtEstadoAtual, udtEstadoAnterior)
 
@@ -76,14 +76,14 @@ End Function
 Private Function GerarHashEstadoAtual(ByRef arr() As DadosErro) As String
     Dim lngI    As Long
     Dim strBase As String
-    
+
     On Error Resume Next
     strBase = ""
     For lngI = LBound(arr) To UBound(arr)
         strBase = strBase & arr(lngI).NumOB & "|" & arr(lngI).detalheErro
         If Len(strBase) > 5000 Then Exit For
     Next lngI
-    
+
     GerarHashEstadoAtual = GerarHashDJB2(strBase)
 End Function
 
@@ -93,10 +93,10 @@ End Function
 Private Function GerarTabelaErrosHTML(ByRef arrErros() As DadosErro, ByVal lngTotal As Long) As String
     Dim strHtml     As String
     Dim lngI        As Long
-    
+
     strHtml = "<table border='1' style='border-collapse:collapse; font-family:Calibri; font-size:10pt;'>"
     strHtml = strHtml & "<tr style='background-color:#D0CECE;'><th>OB</th><th>Progr</th><th>Erro</th></tr>"
-    
+
     For lngI = 1 To lngTotal
         strHtml = strHtml & "<tr>"
         strHtml = strHtml & "<td>" & HTMLEncode(CStr(arrErros(lngI).NumOB)) & "</td>"
@@ -104,7 +104,7 @@ Private Function GerarTabelaErrosHTML(ByRef arrErros() As DadosErro, ByVal lngTo
         strHtml = strHtml & "<td style='color:red;'>" & HTMLEncode(arrErros(lngI).detalheErro) & "</td>"
         strHtml = strHtml & "</tr>"
     Next lngI
-    
+
     strHtml = strHtml & "</table>"
     GerarTabelaErrosHTML = strHtml
 End Function
@@ -116,21 +116,21 @@ Private Sub SalvarEstadoCache(ByRef udtEstado As EstadoSistemaDetalhado)
     Dim intFileNum As Integer
     Dim strPath    As String
     Dim strLinha   As String
-    
+
     On Error GoTo Falha
     strPath = ThisWorkbook.Path & "\" & CACHE_ESTADO_FILE
     intFileNum = FreeFile
-    
+
     ' Formato: Data|Linhas|Erros|Alertas|Hash
     strLinha = Format$(udtEstado.dtmSnapshot, "dd/mm/yyyy hh:nn:ss") & "|" & _
                udtEstado.lngTotalLinhas & "|" & _
                udtEstado.lngTotalErros & "|0|" & _
                udtEstado.strHashEstado
-               
+
     Open strPath For Output As #intFileNum
     Print #intFileNum, strLinha
     Close #intFileNum
-    
+
     GravarLogEx "Cache atualizado: " & strPath, LOG_DEBUG
     Exit Sub
 Falha:

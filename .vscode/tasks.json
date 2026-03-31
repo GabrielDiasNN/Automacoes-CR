@@ -134,6 +134,36 @@
                 "-DryRun"
             ],
             "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca PT-BR",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca PT-BR (Strict)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance",
+                "-FailOnTermWarnings"
+            ],
+            "problemMatcher": []
         }
     ]
 }

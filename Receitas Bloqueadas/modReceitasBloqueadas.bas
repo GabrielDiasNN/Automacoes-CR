@@ -40,7 +40,7 @@ Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")
     corpoHTML = GerarHTMLDinamico()
 
     If Len(corpoHTML) = 0 Then
-        RegistrarLog "AVISO: Tabela vazia ou nao encontrada. E-mail cancelado"
+        RegistrarLog "AVISO: Tabela vazia ou n" & ChrW$(227) & "o encontrada. E-mail cancelado"
         RegistrarLog "FIM DO PROCESSO. Resultado=Sem envio"
         Exit Sub
     End If
@@ -79,7 +79,7 @@ Public Sub PreVisualizarEmail()
     corpoHTML = GerarHTMLDinamico()
 
     If Len(corpoHTML) = 0 Then
-        RegistrarLog "AVISO: Tabela vazia ou nao encontrada. Pre-visualizacao cancelada"
+        RegistrarLog "AVISO: Tabela vazia ou n" & ChrW$(227) & "o encontrada. Pr" & ChrW$(233) & "-visualiza" & ChrW$(231) & ChrW$(227) & "o cancelada"
         Exit Sub
     End If
 
@@ -93,7 +93,7 @@ TratarErro:
 End Sub
 
 Private Sub AtualizarConexaoComGarantia(ByVal nomeConexao As String)
-    Dim conn As WorkbookConnection
+    Dim conn As workbookConnection
 
     On Error GoTo TratarErro
 
@@ -104,7 +104,7 @@ Private Sub AtualizarConexaoComGarantia(ByVal nomeConexao As String)
     On Error GoTo TratarErro
 
     If conn Is Nothing Then
-        RegistrarLog "ERRO: Conexao '" & nomeConexao & "' nao encontrada"
+        RegistrarLog "ERRO: Conex" & ChrW$(227) & "o '" & nomeConexao & "' n" & ChrW$(227) & "o encontrada"
         Exit Sub
     End If
 
@@ -133,7 +133,7 @@ Private Sub AjustarFormatoDatasReceitasBloqueadas()
     Set lo = ObterTabela(ws, NOME_TABELA_DADOS)
 
     If lo Is Nothing Then
-        RegistrarLog "AVISO: Tabela '" & NOME_TABELA_DADOS & "' nao encontrada para formatacao"
+        RegistrarLog "AVISO: Tabela '" & NOME_TABELA_DADOS & "' n" & ChrW$(227) & "o encontrada para formata" & ChrW$(231) & ChrW$(227) & "o"
         Exit Sub
     End If
 
@@ -160,7 +160,7 @@ Private Sub AplicarFormatoColunaData(ByVal lo As ListObject, ByVal nomeColuna As
     Set lc = ObterListColumn(lo, nomeColuna)
 
     If lc Is Nothing Then
-        RegistrarLog "AVISO: Coluna '" & nomeColuna & "' nao encontrada"
+        RegistrarLog "AVISO: Coluna '" & nomeColuna & "' n" & ChrW$(227) & "o encontrada"
         Exit Sub
     End If
 
@@ -354,11 +354,11 @@ Private Sub EnviarEmailOutlook(ByVal htmlBody As String, Optional ByVal previewO
     ObterDestinatariosEmail sPara, sCopia, sCco
 
     If Len(sPara) = 0 Then
-        RegistrarLog "ERRO: Destinatario principal nao informado"
+        RegistrarLog "ERRO: Destinat" & ChrW$(225) & "rio principal n" & ChrW$(227) & "o informado"
         Exit Sub
     End If
 
-    strIntro = "Segue relatorio atualizado de receitas bloqueadas."
+    strIntro = "Segue relat" & ChrW$(243) & "rio atualizado de receitas bloqueadas."
     strLegenda = HtmlEncode(TextoEmailAssinatura())
 
     Set outlookAdapter = GetOutlookAdapter()
@@ -407,7 +407,7 @@ Private Sub ObterDestinatariosEmail(ByRef sPara As String, ByRef sCopia As Strin
     Set tblE = ObterTabela(wsC, NOME_TABELA_EMAIL)
 
     If tblE Is Nothing Then
-        RegistrarLog "ERRO: Tabela de destinatarios '" & NOME_TABELA_EMAIL & "' nao encontrada"
+        RegistrarLog "ERRO: Tabela de destinat" & ChrW$(225) & "rios '" & NOME_TABELA_EMAIL & "' n" & ChrW$(227) & "o encontrada"
         Exit Sub
     End If
 

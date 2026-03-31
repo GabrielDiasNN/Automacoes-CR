@@ -59,7 +59,7 @@ Public Sub AtualizarEEnviarOutlook(Optional ByVal execId As String = "", Optiona
 
     Set pivotTable = ObterPivotControleReceitas()
     If pivotTable Is Nothing Then
-        Err.Raise vbObjectError + 5002, , "Nenhuma Tabela Dinamica foi encontrada na pasta de trabalho"
+        Err.Raise vbObjectError + 5002, , "Nenhuma Tabela Din" & ChrW$(226) & "mica foi encontrada na pasta de trabalho"
     End If
 
     WriteLog "INFO", "PIVOT", "Tabela Dinamica localizada: " & pivotTable.Name & " | Aba: " & pivotTable.Parent.Name
@@ -72,7 +72,7 @@ Public Sub AtualizarEEnviarOutlook(Optional ByVal execId As String = "", Optiona
 
     Set sourceRange = pivotTable.TableRange1
     If sourceRange Is Nothing Then
-        Err.Raise vbObjectError + 5003, , "Nao foi possivel obter o intervalo da Tabela Dinamica"
+        Err.Raise vbObjectError + 5003, , "N" & ChrW$(227) & "o foi poss" & ChrW$(237) & "vel obter o intervalo da Tabela Din" & ChrW$(226) & "mica"
     End If
 
     WriteLog "INFO", "PIVOT", "Intervalo capturado: " & sourceRange.Address(False, False)
@@ -114,13 +114,13 @@ Private Sub EnviarEmailOutlookAdaptativo(ByVal sourceRange As Range, Optional By
     Dim errDesc As String
 
     htmlBody = MontarHtmlAdaptativo(sourceRange)
-    introText = "Segue relatorio atualizado para conferencia operacional."
+    introText = "Segue relat" & ChrW$(243) & "rio atualizado para confer" & ChrW$(234) & "ncia operacional."
     legendaHtml = vbNullString
 
     recipientTo = GetRecipientTo()
     WriteLog "INFO", "EMAIL", "TO=" & recipientTo
     If Len(recipientTo) = 0 Or InStr(1, recipientTo, "@") = 0 Then
-        Err.Raise vbObjectError + 5006, , "Destinatario de email nao informado ou invalido"
+        Err.Raise vbObjectError + 5006, , "Destinat" & ChrW$(225) & "rio de email n" & ChrW$(227) & "o informado ou inv" & ChrW$(225) & "lido"
     End If
 
     On Error Resume Next
@@ -196,7 +196,7 @@ Private Function MontarHtmlAdaptativo(ByVal sourceRange As Range) As String
                     stats
 
     If machineOrder.Count = 0 Then
-        Err.Raise vbObjectError + 5010, , "Nenhum dado valido foi encontrado para montar o email"
+        Err.Raise vbObjectError + 5010, , "Nenhum dado v" & ChrW$(225) & "lido foi encontrado para montar o email"
     End If
 
     BuildLayoutProfile stats, profile
@@ -253,7 +253,7 @@ Private Sub ParsePivotRange( _
     Dim currentGroup As String
 
     If sourceRange Is Nothing Then
-        Err.Raise vbObjectError + 5011, , "Intervalo de origem nao informado"
+        Err.Raise vbObjectError + 5011, , "Intervalo de origem n" & ChrW$(227) & "o informado"
     End If
 
     If sourceRange.Columns.Count < 2 Then
@@ -903,9 +903,9 @@ Private Sub AtualizarConsultaControleReceitas()
     Set workbookConnection = ObterConexaoControleReceitas()
 
     If workbookConnection Is Nothing Then
-        WriteLog "ERROR", "POWER QUERY", "Conexao da consulta 'ControleReceitasEmitidas' nao encontrada"
+        WriteLog "ERROR", "POWER QUERY", "Conex" & ChrW$(227) & "o da consulta 'ControleReceitasEmitidas' n" & ChrW$(227) & "o encontrada"
         LogarConexoesDisponiveis
-        Err.Raise vbObjectError + 5001, , "Conexao da consulta 'ControleReceitasEmitidas' nao encontrada"
+        Err.Raise vbObjectError + 5001, , "Conex" & ChrW$(227) & "o da consulta 'ControleReceitasEmitidas' n" & ChrW$(227) & "o encontrada"
     End If
 
     WriteLog "INFO", "POWER QUERY", "Conexao localizada: " & workbookConnection.Name & " | Tipo=" & workbookConnection.Type
@@ -944,7 +944,7 @@ TratarErro:
 End Sub
 
 Private Function GetEmailSubject() As String
-    GetEmailSubject = "Relatorio Semanal: Controle de Receitas Emitidas - " & Format$(Date, "dd/mm/yyyy")
+    GetEmailSubject = "Relat" & ChrW$(243) & "rio Semanal: Controle de Receitas Emitidas - " & Format$(Date, "dd/mm/yyyy")
 End Function
 
 Private Function GetRecipientTo() As String

@@ -23,9 +23,13 @@ Public Function ComposeHtmlBodyWithSignature(ByVal email As Object, _
     strIntroMarkup = BuildIntroMarkup(strIntro)
     strLegendaMarkup = BuildLegendaMarkup(strLegenda)
     strBodyMarkup = ExtractBodyMarkup(htmlBody)
-    strContentMarkup = strIntroMarkup & strBodyMarkup & strLegendaMarkup
+    strContentMarkup = strIntroMarkup & strBodyMarkup & strLegendaMarkup & BuildSignatureSpacingMarkup()
 
     ComposeHtmlBodyWithSignature = InjectContentBeforeSignature(strSignatureHtml, strContentMarkup)
+End Function
+
+Private Function BuildSignatureSpacingMarkup() As String
+    BuildSignatureSpacingMarkup = "<p class=MsoNormal><o:p>&nbsp;</o:p></p>"
 End Function
 
 Private Function CaptureOutlookSignatureHtml(ByVal email As Object) As String
@@ -88,6 +92,11 @@ Private Function InjectContentBeforeSignature(ByVal strSignatureHtml As String, 
     Dim lngSignatureAnchor As Long
     Dim lngInsertPos As Long
     Dim lngBodyClose As Long
+    Dim lngCurrentEnd As Long
+    Dim lngPrevStart As Long
+    Dim lngPrevEnd As Long
+    Dim strPrevParagraph As String
+    Dim strBetween As String
 
     If Len(strSignatureHtml) = 0 Then
         InjectContentBeforeSignature = strContentMarkup
@@ -98,6 +107,29 @@ Private Function InjectContentBeforeSignature(ByVal strSignatureHtml As String, 
     If lngSignatureAnchor > 0 Then
         lngInsertPos = InStrRev(strSignatureHtml, "<p", lngSignatureAnchor, vbTextCompare)
         If lngInsertPos > 0 Then
+            ' Move insertion point above consecutive empty Outlook paragraphs so they stay
+            ' as spacing before signature instead of creating a gap before the intro.
+            Do
+                lngCurrentEnd = InStr(lngInsertPos, strSignatureHtml, "</p>", vbTextCompare)
+                If lngCurrentEnd <= 0 Then Exit Do
+
+                lngPrevEnd = InStrRev(strSignatureHtml, "</p>", lngInsertPos - 1, vbTextCompare)
+                If lngPrevEnd <= 0 Then Exit Do
+
+                lngPrevStart = InStrRev(strSignatureHtml, "<p", lngPrevEnd, vbTextCompare)
+                If lngPrevStart <= 0 Then Exit Do
+
+                strBetween = Mid$(strSignatureHtml, lngPrevEnd + 4, lngInsertPos - lngPrevEnd - 4)
+                If Not IsWhitespaceOnly(strBetween) Then Exit Do
+
+                strPrevParagraph = Mid$(strSignatureHtml, lngPrevStart, lngPrevEnd - lngPrevStart + 4)
+                If IsOutlookEmptyParagraph(strPrevParagraph) Then
+                    lngInsertPos = lngPrevStart
+                Else
+                    Exit Do
+                End If
+            Loop
+
             InjectContentBeforeSignature = Left$(strSignatureHtml, lngInsertPos - 1) & strContentMarkup & Mid$(strSignatureHtml, lngInsertPos)
             Exit Function
         End If
@@ -109,6 +141,44 @@ Private Function InjectContentBeforeSignature(ByVal strSignatureHtml As String, 
     Else
         InjectContentBeforeSignature = strContentMarkup & strSignatureHtml
     End If
+End Function
+
+Private Function IsWhitespaceOnly(ByVal strTextValue As String) As Boolean
+    Dim strNormalized As String
+
+    strNormalized = strTextValue
+    strNormalized = Replace(strNormalized, vbCr, vbNullString)
+    strNormalized = Replace(strNormalized, vbLf, vbNullString)
+    strNormalized = Replace(strNormalized, vbTab, vbNullString)
+    strNormalized = Replace(strNormalized, " ", vbNullString)
+
+    IsWhitespaceOnly = (Len(strNormalized) = 0)
+End Function
+
+Private Function IsOutlookEmptyParagraph(ByVal strParagraphHtml As String) As Boolean
+    Dim strNormalized As String
+    Dim regex As Object
+
+    strNormalized = LCase$(strParagraphHtml)
+    If InStr(1, strNormalized, "<img", vbTextCompare) > 0 Then
+        IsOutlookEmptyParagraph = False
+        Exit Function
+    End If
+
+    Set regex = CreateObject("VBScript.RegExp")
+    regex.Global = True
+    regex.IgnoreCase = True
+    regex.Pattern = "<[^>]+>"
+    strNormalized = regex.Replace(strNormalized, vbNullString)
+
+    strNormalized = Replace(strNormalized, "&nbsp;", vbNullString)
+    strNormalized = Replace(strNormalized, "&#160;", vbNullString)
+    strNormalized = Replace(strNormalized, vbCr, vbNullString)
+    strNormalized = Replace(strNormalized, vbLf, vbNullString)
+    strNormalized = Replace(strNormalized, vbTab, vbNullString)
+    strNormalized = Replace(strNormalized, " ", vbNullString)
+
+    IsOutlookEmptyParagraph = (Len(strNormalized) = 0)
 End Function
 
 Private Function HtmlEncodeText(ByVal textValue As String) As String

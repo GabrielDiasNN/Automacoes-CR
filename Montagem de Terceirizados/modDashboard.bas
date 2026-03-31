@@ -30,7 +30,7 @@ Public Sub RegistrarHistorico(ByVal blnSucesso As Boolean, ByRef udtTel As Telem
     End If
 
     dblTempo = TimerElapsed(udtTel.InicioExecucao)
-    
+
     If udtTel.totalLinhas > 0 Then
         dblTaxa = ((udtTel.totalLinhas - udtTel.totalErros) / udtTel.totalLinhas) * 100#
     Else
@@ -93,7 +93,7 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
     blnScreenUpdatingOriginal = Application.ScreenUpdating
     On Error GoTo TratarErro
     Application.ScreenUpdating = False
-    
+
     With ws
         .Cells.Delete
         .Cells(1, 1).Value = "DASHBOARD DE MONITORAMENTO - " & ROBO_VERSAO_TEXTO
@@ -117,10 +117,10 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         .Range("A3:H3").Font.Color = RGB(255, 255, 255)
         .Rows(3).RowHeight = 26
 
-        .Cells(4, 1).Value = "Total Execuções"
+        .Cells(4, 1).Value = "Total Execu" & ChrW(&HE7) & ChrW(&HF5) & "es"
         .Cells(4, 3).Value = "Taxa de Sucesso"
-        .Cells(4, 5).Value = "Tempo Médio"
-        .Cells(4, 7).Value = "Última Execução"
+        .Cells(4, 5).Value = "Tempo M" & ChrW(&HE9) & "dio"
+        .Cells(4, 7).Value = ChrW(&HDA) & "ltima Execu" & ChrW(&HE7) & ChrW(&HE3) & "o"
         .Range("A4:B4").Merge
         .Range("C4:D4").Merge
         .Range("E4:F4").Merge
@@ -156,7 +156,7 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
 
         .Rows(6).RowHeight = 5
 
-        .Cells(7, 1).Value = ChrW(&H25BA) & " HISTÓRICO DE EXECUÇÕES (Últimas 50)"
+        .Cells(7, 1).Value = ChrW(&H25BA) & " HIST" & ChrW(&HD3) & "RICO DE EXECU" & ChrW(&HE7) & ChrW(&HF5) & "ES (" & ChrW(&HDA) & "ltimas 50)"
         .Cells(7, 1).Font.Bold = True
         .Cells(7, 1).Font.Size = 11
         .Range("A7:H7").Merge
@@ -173,7 +173,7 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         .Cells(9, 5).Value = "Erros"
         .Cells(9, 6).Value = "Tempo (s)"
         .Cells(9, 7).Value = "Taxa Acerto %"
-        .Cells(9, 8).Value = "Versão"
+        .Cells(9, 8).Value = "Vers" & ChrW(&HE3) & "o"
         With .Range("A9:H9")
             .Font.Bold = True
             .Font.Color = RGB(255, 255, 255)
@@ -192,7 +192,7 @@ Private Sub CriarEstruturaDashboard(ByVal ws As Worksheet)
         .Columns("G:G").ColumnWidth = 15
         .Columns("H:H").ColumnWidth = 9
 
-        ' Removida dependência de ActiveWindow
+        ' Removida dependencia de ActiveWindow
     End With
 
 Saida:

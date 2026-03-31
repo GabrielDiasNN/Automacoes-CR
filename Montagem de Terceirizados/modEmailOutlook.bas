@@ -83,10 +83,10 @@ Private Function EnviarEmailComErros(ByRef udtTel As Telemetria) As Boolean
         EnviarEmailComErros = False: Exit Function
     End If
 
-    strIntro = "Segue relatorio automatizado da validacao de notas fiscais."
-    strLegenda = "<span style='color:#b91c1c;font-weight:bold;'>Atencao: divergencias detectadas. Consulte a aba Erros NF para tratar os itens.</span>"
+    strIntro = "Segue relat" & ChrW$(243) & "rio automatizado da valida" & ChrW$(231) & "" & ChrW$(227) & "o de notas fiscais."
+    strLegenda = "<span style='color:#b91c1c;font-weight:bold;'>Aten&ccedil;&atilde;o: diverg&ecirc;ncias detectadas. Consulte a aba Erros NF para tratar os itens.</span>"
     strHtml = MontarTemplateEmail(True, udtTel)
-    strAssunto = "[ALERTA] Divergencias - Controle NF - " & FormatarDataBR(Now)
+    strAssunto = "[ALERTA] Diverg" & ChrW$(234) & "ncias - Controle NF - " & FormatarDataBR(Now)
 
     EnviarEmailComErros = EnviarEmailCore(strAssunto, strHtml, strTo, strCC, "", strIntro, strLegenda)
 End Function
@@ -101,10 +101,10 @@ Private Function EnviarEmailSucesso(ByRef udtTel As Telemetria) As Boolean
         EnviarEmailSucesso = False: Exit Function
     End If
 
-    strIntro = "Segue relatorio automatizado da validacao de notas fiscais."
+    strIntro = "Segue relat" & ChrW$(243) & "rio automatizado da valida" & ChrW$(231) & "" & ChrW$(227) & "o de notas fiscais."
     strLegenda = vbNullString
     strHtml = MontarTemplateEmail(False, udtTel)
-    strAssunto = "[OK] Validacao Aprovada - Controle NF - " & FormatarDataBR(Now)
+    strAssunto = "[OK] Valida" & ChrW$(231) & "" & ChrW$(227) & "o Aprovada - Controle NF - " & FormatarDataBR(Now)
 
     EnviarEmailSucesso = EnviarEmailCore(strAssunto, strHtml, strTo, strCC, "", strIntro, strLegenda)
 End Function
@@ -149,11 +149,11 @@ Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As T
     If blnErro Then
         strCor = "#d32f2f"
         strIcon = HTML_ICON_WARNING
-        strMsg = "Divergencias Detectadas"
+        strMsg = "Diverg&ecirc;ncias Detectadas"
     Else
         strCor = "#388e3c"
         strIcon = HTML_ICON_CHECK
-        strMsg = "Validacao Aprovada"
+        strMsg = "Valida&ccedil;&atilde;o Aprovada"
     End If
 
     strHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body>"
@@ -163,10 +163,10 @@ Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As T
     strHtml = strHtml & "<div style='background:#fff;padding:25px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;'>"
 
     If blnErro Then
-        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas divergencias na validacao.</b></p>"
+        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas diverg&ecirc;ncias na valida&ccedil;&atilde;o.</b></p>"
         strHtml = strHtml & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Consulte a aba <b style='color:#d32f2f;'>Erros NF</b> no Excel.</p>"
     Else
-        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma divergencia encontrada.</b></p>"
+        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma diverg&ecirc;ncia encontrada.</b></p>"
     End If
 
     strHtml = strHtml & "<div style='background:#f9f9f9;border-left:4px solid " & strCor & ";padding:15px;margin:20px 0;border-radius:4px;'>"
@@ -175,7 +175,7 @@ Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As T
     strHtml = strHtml & "<p><span style='font-size:14pt;'>" & HTML_ICON_STOPWATCH & "</span> <b>Tempo de Processamento:</b> " & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</p></div>"
 
     strHtml = strHtml & "<hr style='border:0;border-top:1px solid #ddd;margin:30px 0;'>"
-    strHtml = strHtml & "<p style='font-size:9pt;color:#888;'><span style='font-size:12pt;'>" & HTML_ICON_ROBOT & "</span> <i>Robo Fiscal " & ROBO_VERSAO_DASH & "</i><br>"
+    strHtml = strHtml & "<p style='font-size:9pt;color:#888;'><span style='font-size:12pt;'>" & HTML_ICON_ROBOT & "</span> <i>Rob" & ChrW$(244) & " Fiscal " & ROBO_VERSAO_DASH & "</i><br>"
     strHtml = strHtml & "<span style='font-size:12pt;'>" & HTML_ICON_CALENDAR & "</span> Data/Hora: <b>" & FormatarDataBR(Now, True) & "</b></p>"
     strHtml = strHtml & "</div></div></body></html>"
 
