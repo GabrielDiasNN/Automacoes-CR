@@ -17,3 +17,11 @@
 # Artefatos de auditoria e locks operacionais
 Audit/
 **/.sendwhatsapp.lock/
+
+# Manter .xlsm ignorados por padrão (evita rastrear arquivos de auditoria)
+*.xlsm
+
+# Exceções: apenas os arquivos oficiais de produção abaixo devem ser rastreados
+!Montagem de Terceirizados/Validador_Notas_Montagem.xlsm
+!Receitas Emitidas/Controle de Receitas Emitidas.xlsm
+!Receitas Bloqueadas/Receitas Bloqueadas.xlsm
