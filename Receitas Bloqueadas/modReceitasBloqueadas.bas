@@ -797,7 +797,7 @@ Private Function TextoEmailTitulo() As String
 End Function
 
 Private Function TextoEmailIntro() As String
-    TextoEmailIntro = "Seguem as receitas bloqueadas atualizadas em "
+    TextoEmailIntro = "Atualizado em "
 End Function
 
 Private Function TextoEmailRodape() As String

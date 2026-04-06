@@ -3,17 +3,33 @@
         "github.copilot-chat",
         "github.vscode-pull-request-github",
         "eamodio.gitlens",
-        "editorconfig.editorconfig",
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "streetsidesoftware.code-spell-checker",
-        "darfka.vbscript",
-        "notisdataanalytics.vba-lsp",
         "sbroenne.excel-mcp",
         "powerquery.vscode-powerquery",
         "ms-vscode.powershell",
-        "ms-python.python",
-        "ms-python.vscode-pylance"
+        "streetsidesoftware.code-spell-checker",
+        "davidanson.vscode-markdownlint"
     ],
-    "unwantedRecommendations": []
+    "unwantedRecommendations": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.autopep8",
+        "ms-python.isort",
+        "ms-python.vscode-python-envs",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "editorconfig.editorconfig",
+        "ms-vscode.cpptools",
+        "golang.go",
+        "docker.docker",
+        "ms-azuretools.vscode-containers",
+        "ms-azuretools.vscode-docker",
+        "formulahendry.code-runner",
+        "ritwickdey.liveserver",
+        "google.geminicodeassist",
+        "github.remotehub",
+        "grapecity.gc-excelviewer",
+        "ms-vscode.remote-explorer",
+        "ms-vscode.remote-repositories",
+        "ms-vscode-remote.remote-wsl"
+    ]
 }

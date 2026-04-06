@@ -1,12 +1,7 @@
 {
     "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": "explicit",
-        "source.organizeImports": "explicit"
-    },
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
     "files.eol": "\r\n",
     "files.trimTrailingWhitespace": true,
     "files.insertFinalNewline": true,
@@ -28,19 +23,6 @@
         "**/node_modules/**": true,
         "**/.wwebjs_auth/**": true
     },
-    "eslint.validate": [
-        "javascript",
-        "javascriptreact",
-        "typescript",
-        "html"
-    ],
-    "eslint.workingDirectories": [
-        {
-            "mode": "auto"
-        }
-    ],
-    "javascript.validate.enable": false,
-    "typescript.validate.enable": false,
     "powershell.scriptAnalysis.enable": true,
     "powershell.powerShellExePath": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
     "terminal.integrated.defaultProfile.windows": "PowerShell",
@@ -138,8 +120,6 @@
         "xlsm",
         "vbaproject"
     ],
-    "python.languageServer": "Pylance",
-    "python.defaultInterpreterPath": "python",
     "vbaLanguageServer.trace.server": "off",
     "vbaLanguageServer.environment.os": "Win64",
     "vbaLanguageServer.environment.version": "Vba7",
@@ -160,6 +140,9 @@
     },
     "[json]": {
         "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features"
     },
     "[powershell]": {
         "editor.defaultFormatter": "ms-vscode.powershell"
@@ -194,5 +177,6 @@
     "gitlens.graph.minimap.enabled": true,
     "gitlens.views.commits.files.layout": "list",
     "gitlens.views.branches.files.layout": "list",
-    "gitlens.views.fileHistory.avatars": false
+    "gitlens.views.fileHistory.avatars": false,
+    "snyk.advanced.autoSelectOrganization": true
 }

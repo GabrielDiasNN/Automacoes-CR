@@ -57,7 +57,7 @@ Private Function BuildIntroMarkup(ByVal introText As String) As String
     normalizedText = Replace(normalizedText, vbCr, "<br>")
     normalizedText = Replace(normalizedText, vbLf, "<br>")
 
-    BuildIntroMarkup = "<p class=MsoNormal>" & normalizedText & "<o:p></o:p></p>"
+    BuildIntroMarkup = "<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='width:100%;margin:0 0 12px 0;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'><tr><td style='font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1f2937;padding:0;line-height:1.4;'>" & normalizedText & "</td></tr></table>"
 End Function
 
 Private Function BuildLegendaMarkup(ByVal legendaHtml As String) As String
