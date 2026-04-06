@@ -1170,7 +1170,7 @@ Private Sub WriteLog(ByVal logLevel As String, ByVal stepName As String, ByVal m
     gInLogWrite = True
 
     If Len(mExecId) > 0 Then
-        execPrefix = "[ExecId=" & mExecId & "] "
+        execPrefix = "[ExecId:" & mExecId & "] "
     Else
         execPrefix = vbNullString
     End If
@@ -1178,10 +1178,7 @@ Private Sub WriteLog(ByVal logLevel As String, ByVal stepName As String, ByVal m
     fileNumber = FreeFile
 
     Open gLogFile For Append As #fileNumber
-    Print #fileNumber, Format$(Now, "dd/mm/yyyy hh:nn:ss") & _
-                       " | VBA | " & SanitizarTextoLog(logLevel) & _
-                       " | " & SanitizarTextoLog(stepName) & _
-                       " | " & execPrefix & SanitizarTextoLog(messageText)
+    Print #fileNumber, "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] [" & SanitizarTextoLog(logLevel) & "] [" & SanitizarTextoLog(stepName) & "] " & execPrefix & SanitizarTextoLog(messageText)
     Close #fileNumber
     gInLogWrite = False
     Exit Sub

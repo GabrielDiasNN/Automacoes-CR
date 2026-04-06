@@ -27,7 +27,7 @@ function Write-StartupDiagnostic {
 
     try {
         $timestamp = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
-        $line = "[$timestamp] [$Type] $Message"
+        $line = "[$timestamp] [PS] [$Type] $Message"
         $encoding = if ($Utf8Encoding) { $Utf8Encoding } else { New-Object System.Text.UTF8Encoding($false) }
 
         $sw = New-Object System.IO.StreamWriter($EmergencyLog, $true, $encoding)
@@ -93,6 +93,10 @@ if (-not $script:MutexAcquired) {
     Write-Host "AVISO: $msg" -ForegroundColor Yellow
     Write-StartupDiagnostic -Message $msg -Type "WARN"
     Exit 0
+}
+
+if (Test-Path $EmergencyLog) {
+    Remove-Item $EmergencyLog -ErrorAction SilentlyContinue
 }
 
 $ConfigFilePath = Join-Path $ScriptPath "config.json"
@@ -366,7 +370,7 @@ function Write-Log {
     $fileName = "$(Get-Date -Format 'yyyy-MM')_Monitor.log"
     $logPath = Join-Path -Path $LogDir -ChildPath $fileName
     $timestamp = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
-    $line = "[$timestamp] [$type] $msg"
+    $line = "[$timestamp] [PS] [$type] $msg"
 
     try { Add-Utf8Line -FilePath $logPath -Line $line } catch {}
 
@@ -573,8 +577,10 @@ function Update-Configuration {
             if ($newConfig) { break }
 
             if ($attempt -lt $maxAttempts) {
-                Write-Log "Falha ao carregar config.json (tentativa $attempt/$maxAttempts). Nova tentativa em 2s." -Type "WARN"
-                Start-Sleep -Seconds 2
+                $jitter = Get-Random -Minimum 0 -Maximum 2000
+                $delayMs = 2000 + $jitter
+                Write-Log "Falha ao carregar config.json (tentativa $attempt/$maxAttempts). Nova tentativa em $([math]::Round($delayMs/1000,1))s." -Type "WARN"
+                Start-Sleep -Milliseconds $delayMs
             }
         }
 
@@ -593,6 +599,11 @@ function Update-Configuration {
         $script:ConfigLastWrite = $currentWrite
         $script:ConfigHash = $currentHash
 
+        # Purgar entradas obsoletas do StateControl após hot-reload
+        $validTaskNames = @($script:Config.tasks | ForEach-Object { [string]$_.name })
+        $staleKeys = @($script:StateControl.Keys | Where-Object { $_ -notin $validTaskNames })
+        foreach ($key in $staleKeys) { $script:StateControl.Remove($key) | Out-Null }
+
         if (Test-Path $EmergencyLog) {
             Remove-Item $EmergencyLog -ErrorAction SilentlyContinue
         }
@@ -610,17 +621,29 @@ function Remove-FinishedTasks {
     $logDir = Get-LogDirectory
 
     foreach ($taskName in $script:RunningTasks.Keys) {
-        $proc = $script:RunningTasks[$taskName]
-        if ($null -eq $proc) {
+        $record = $script:RunningTasks[$taskName]
+        if ($null -eq $record) {
             $toRemove += $taskName
             continue
         }
+
+        $proc = if ($record -is [hashtable]) { $record.Proc } else { $record }
 
         try {
             if ($proc.HasExited) {
                 $exitCode = $proc.ExitCode
                 Write-TaskCompletionLog -TaskName $taskName -ExitCode $exitCode -ProcessId $proc.Id -LogDir $logDir
                 $toRemove += $taskName
+            }
+            elseif ($record -is [hashtable] -and $record.MaxRuntimeMinutes -gt 0) {
+                $elapsed = (New-TimeSpan -Start $record.StartedAt -End (Get-Date)).TotalMinutes
+                if ($elapsed -ge $record.MaxRuntimeMinutes) {
+                    Write-Log "Tarefa '$taskName' excedeu limite de $($record.MaxRuntimeMinutes) min (decorrido=$([math]::Round($elapsed,1)) min). Encerrando PID=$($proc.Id)." -Type "WARN" -LogDir $logDir
+                    try { $proc.Kill() } catch {}
+                    Add-MetricCounter -MetricName "TasksCompleted"
+                    Add-MetricCounter -MetricName "TasksFinishedNonZero"
+                    $toRemove += $taskName
+                }
             }
         }
         catch {
@@ -638,7 +661,8 @@ function Start-TaskProcess {
         [string]$Path,
         [string]$Name,
         [string]$LogDir,
-        [bool]$WaitForExit = $false
+        [bool]$WaitForExit = $false,
+        [int]$MaxRuntimeMinutes = 0
     )
 
     if (-not (Test-Path $Path)) {
@@ -669,7 +693,11 @@ function Start-TaskProcess {
             Write-Log "Tarefa '$Name' finalizada em modo síncrono. [ExecId=$execId]" -LogDir $LogDir
         }
         else {
-            $script:RunningTasks[$Name] = $proc
+            $script:RunningTasks[$Name] = @{
+                Proc              = $proc
+                StartedAt         = Get-Date
+                MaxRuntimeMinutes = $MaxRuntimeMinutes
+            }
         }
 
         return $true
@@ -722,9 +750,10 @@ function Invoke-ScheduledTask {
 
     if ($preventOverlap -and $script:RunningTasks.ContainsKey($taskName)) {
         try {
-            $proc = $script:RunningTasks[$taskName]
-            if ($proc -and -not $proc.HasExited) {
-                Write-Log "Tarefa '$taskName' ignorada por sobreposição. PID em execução=$($proc.Id)" -Type "WARN" -LogDir $logDir
+            $record = $script:RunningTasks[$taskName]
+            $runningProc = if ($record -is [hashtable]) { $record.Proc } else { $record }
+            if ($runningProc -and -not $runningProc.HasExited) {
+                Write-Log "Tarefa '$taskName' ignorada por sobreposição. PID em execução=$($runningProc.Id)" -Type "WARN" -LogDir $logDir
                 Add-MetricCounter -MetricName "TasksSkippedOverlap"
                 return
             }
@@ -736,7 +765,9 @@ function Invoke-ScheduledTask {
     }
 
     Write-Log "DISPARANDO: $taskName" -LogDir $logDir
-    $started = Start-TaskProcess -Path ([string]$Task.scriptPath) -Name $taskName -LogDir $logDir -WaitForExit $waitForExit
+    $maxRuntimeMinutes = 0
+    if ($Task.maxRuntimeMinutes) { [int]::TryParse([string]$Task.maxRuntimeMinutes, [ref]$maxRuntimeMinutes) | Out-Null }
+    $started = Start-TaskProcess -Path ([string]$Task.scriptPath) -Name $taskName -LogDir $logDir -WaitForExit $waitForExit -MaxRuntimeMinutes $maxRuntimeMinutes
 
     if ($started) {
         $script:StateControl[$taskName] = $Now.ToString("yyyy-MM-dd HH:mm")

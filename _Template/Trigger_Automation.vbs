@@ -94,10 +94,10 @@ Sub LimparObjetosExcel()
 End Sub
 
 Sub EncerrarComErro(exitCode, msg)
-    WriteLog "ERRO", msg & " | elapsedSec=" & ElapsedSeconds()
+    WriteLog "ERROR", msg & " | elapsedSec=" & ElapsedSeconds()
     Call LimparObjetosExcel()
     WriteLog "INFO", "FIM - VBScript com erro. ExitCode=" & exitCode & " | elapsedSec=" & ElapsedSeconds()
-    WriteLog "INFO", "========================================================="
+    WriteLog "INFO", "================================================================================"
     WScript.Quit exitCode
 End Sub
 
@@ -127,7 +127,7 @@ Else
     execId = "MANUAL_" & GerarExecId()
 End If
 
-WriteLog "INFO", "========================================================="
+WriteLog "INFO", "================================================================================"
 WriteLog "INFO", "INICIO - Execucao via VBScript (Template Universal) [ExecId=" & execId & "]"
 WriteLog "INFO", "Workbook=" & excelPath
 
@@ -268,5 +268,5 @@ If POST_EXECUTION_BAT <> "" Then
 End If
 
 WriteLog "INFO", "FIM - VBScript com sucesso. elapsedSec=" & ElapsedSeconds()
-WriteLog "INFO", "========================================================="
+WriteLog "INFO", "================================================================================"
 WScript.Quit 0

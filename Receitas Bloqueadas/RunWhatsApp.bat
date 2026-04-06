@@ -28,9 +28,10 @@ set "COOLDOWN_EXIT=23"
 set "LOCK_DIR=%BASE_DIR%\.sendwhatsapp.lock"
 set "LOCK_EXIT=40"
 set "LOCK_ACQUIRED=0"
-
->> "%LOG_FILE%" echo([%date% %time:~0,8%] [BAT] ========================================================= 2>nul
->> "%LOG_FILE%" echo([%date% %time:~0,8%] [BAT] BOOTSTRAP: BAT iniciado. Args: ExecId=%EXEC_ID% Mode=%MODE% 2>nul
+set "HORA_TMP=%TIME: =0%"
+set "TS_BOOT=%DATE:~0,2%/%DATE:~3,2%/%DATE:~6,4% %HORA_TMP:~0,8%"
+>> "%LOG_FILE%" echo([%TS_BOOT%] [BAT] ================================================================================ 2>nul
+>> "%LOG_FILE%" echo([%TS_BOOT%] [BAT] BOOTSTRAP: BAT iniciado. Args: ExecId=%EXEC_ID% Mode=%MODE% 2>nul
 
 if not defined EXEC_ID set "EXEC_ID=sem-exec-id"
 if not defined MODE set "MODE=AUTO"
@@ -54,7 +55,7 @@ set "PRE_EXIT=!ERRORLEVEL!"
 if !PRE_EXIT! NEQ 0 (
     call :log ERRO: Validacao de pre-requisitos falhou. ExitCode=!PRE_EXIT!
     call :log FIM - BAT finalizado com erro. ExitCode=!PRE_EXIT! ExecId=%EXEC_ID%
-    call :log =========================================================
+    call :log ================================================================================
     exit /b !PRE_EXIT!
 )
 
@@ -98,7 +99,7 @@ call :acquire_lock
 set "LOCK_RESULT=!ERRORLEVEL!"
 if !LOCK_RESULT! NEQ 0 (
     call :log FIM - BAT finalizado sem executar NODE por lock ativo. ExitCode=!LOCK_RESULT! ExecId=%EXEC_ID%
-    call :log =========================================================
+    call :log ================================================================================
     exit /b !LOCK_RESULT!
 )
 
@@ -127,7 +128,7 @@ if "!NODE_EXIT!"=="!COOLDOWN_EXIT!" (
 )
 
 call :log FIM - BAT finalizado. ExitCode=!NODE_EXIT! ExecId=%EXEC_ID%
-call :log =========================================================
+call :log ================================================================================
 exit /b !NODE_EXIT!
 
 :launch_visible
@@ -141,7 +142,7 @@ if !START_EXIT! NEQ 0 (
 )
 call :log Janela interativa aberta com sucesso. Controle transferido ao usuario.
 call :log FIM - BAT finalizado. ExitCode=0 ExecId=%EXEC_ID%
-call :log =========================================================
+call :log ================================================================================
 exit /b 0
 
 :acquire_lock
@@ -233,6 +234,7 @@ call :log Pre-requisitos validados com sucesso.
 exit /b 0
 
 :log
-set "TS=%DATE:~0,2%/%DATE:~3,2%/%DATE:~6,4% %TIME:~0,8%"
+set "HORA_TMP=%TIME: =0%"
+set "TS=%DATE:~0,2%/%DATE:~3,2%/%DATE:~6,4% %HORA_TMP:~0,8%"
 >> "%LOG_FILE%" echo([%TS%] [BAT] %* 2>nul
 goto :eof

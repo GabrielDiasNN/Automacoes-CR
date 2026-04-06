@@ -59,7 +59,7 @@ function Write-RunLog {
         [string]$Message
     )
 
-    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $ts = Get-Date -Format "dd-MM-yyyy HH:mm:ss"
     $line = "[{0}] [{1}] [RunId={2}] {3}" -f $ts, $Level, $RunId, $Message
 
     Write-Host $line
@@ -126,7 +126,8 @@ function Remove-OldLogFiles {
     param(
         [string]$DirectoryPath,
         [datetime]$Cutoff,
-        [string]$Reason
+        [string]$Reason,
+        [string]$Filter = "*.log"
     )
 
     if (-not (Test-Path -LiteralPath $DirectoryPath)) {
@@ -134,7 +135,7 @@ function Remove-OldLogFiles {
         return
     }
 
-    $files = Get-ChildItem -LiteralPath $DirectoryPath -File -Filter "*.log" -ErrorAction SilentlyContinue |
+    $files = Get-ChildItem -LiteralPath $DirectoryPath -File -Filter $Filter -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -lt $Cutoff }
 
     foreach ($file in $files) {
@@ -151,7 +152,6 @@ try {
     $bootstrapCutoff = (Get-Date).AddDays(-1 * [math]::Abs($KeepBootstrapDays))
 
     $logFolders = @(
-        (Join-Path $BasePath "Logs"),
         (Join-Path $BasePath "_Template\Logs"),
         (Join-Path $BasePath "Montagem de Terceirizados\Logs"),
         (Join-Path $BasePath "Receitas Bloqueadas\Logs"),
@@ -162,6 +162,14 @@ try {
     foreach ($folder in $logFolders) {
         Remove-OldLogFiles -DirectoryPath $folder -Cutoff $logsCutoff -Reason "retencao-logs"
     }
+
+    # Monitor logs — política padrão (KeepLogsDays)
+    Remove-OldLogFiles -DirectoryPath (Join-Path $BasePath "Logs") `
+        -Cutoff $logsCutoff -Reason "retencao-monitor-log" -Filter "Monitor_*.log"
+
+    # Logs de retenção próprios — política de auditoria (KeepAuditDays)
+    Remove-OldLogFiles -DirectoryPath (Join-Path $BasePath "Logs") `
+        -Cutoff $auditCutoff -Reason "retencao-logs-retencao" -Filter "Retention_*.log"
 
     $bootstrapFile = Join-Path $BasePath "Receitas Bloqueadas\sendWhatsApp-bootstrap.log"
     if (Test-Path -LiteralPath $bootstrapFile) {

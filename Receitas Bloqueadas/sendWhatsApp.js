@@ -17,16 +17,16 @@ const BOOTSTRAP_LOG_FILE = path.join(__dirname, 'sendWhatsApp-bootstrap.log');
 function _bootstrapTs() {
   const d = new Date();
   const p = (n, w) => String(n).padStart(w || 2, '0');
-  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 function _bootstrapLog(msg) {
-  const linha = `[${_bootstrapTs()}] [NODE] ${msg}\r\n`;
-  try { fs.appendFileSync(BOOTSTRAP_LOG_FILE, linha, 'utf8'); } catch (_) {}
+  const linha = `[${_bootstrapTs()}] [NODE] [INFO] ${msg}\r\n`;
+  try { fs.appendFileSync(BOOTSTRAP_LOG_FILE, linha, 'utf8'); } catch (_) { }
   try {
     const main = path.join(__dirname, 'ReceitasBloqueadas.txt');
     fs.appendFileSync(main, linha, 'utf8');
-  } catch (_) {}
+  } catch (_) { }
 }
 
 _bootstrapLog(`=== BOOTSTRAP NODE INICIADO ===`);
@@ -89,8 +89,10 @@ function appendLine(filePath, line) {
   fs.appendFileSync(filePath, line, { encoding: 'utf8' });
 }
 
-function escreverLog(origem, mensagem) {
-  const linha = `[${agoraBR()}] [${origem}] ${mensagem}\r\n`;
+function log(nivel, mensagem) {
+  let execId;
+  try { execId = EXEC_ID || 'sem-exec-id'; } catch (_) { execId = 'sem-exec-id'; }
+  const linha = `[${agoraBR()}] [NODE] [${nivel}] [ExecId:${execId}] ${mensagem}\r\n`;
 
   try {
     appendLine(getActiveLogFile(), linha);
@@ -99,16 +101,20 @@ function escreverLog(origem, mensagem) {
       appendLine(BOOTSTRAP_LOG_FILE, linha);
       appendLine(
         BOOTSTRAP_LOG_FILE,
-        `[${agoraBR()}] [NODE] AVISO: Falha ao gravar no log principal (${erroLogPrincipal.message}).\r\n`
+        `[${agoraBR()}] [NODE] [WARN] [ExecId:${execId}] AVISO: Falha ao gravar no log principal (${erroLogPrincipal.message}).\r\n`
       );
-    } catch (_) {}
+    } catch (_) { }
   }
 
   try {
     if (process.stdout && process.stdout.isTTY) {
       process.stdout.write(linha);
     }
-  } catch (_) {}
+  } catch (_) { }
+}
+
+function escreverLog(origem, mensagem) {
+  log('INFO', mensagem);
 }
 
 function formatarErro(erro) {
@@ -120,10 +126,10 @@ function formatarErro(erro) {
     const exitCode = erro.exitCode ? ` | exitCode=${erro.exitCode}` : '';
     const stack = erro.stack
       ? erro.stack
-          .split('\n')
-          .slice(1, 4)
-          .map(l => l.trim())
-          .join(' | ')
+        .split('\n')
+        .slice(1, 4)
+        .map(l => l.trim())
+        .join(' | ')
       : '';
 
     return `${name}: ${message}${exitCode}${stack ? ` | stack=${stack}` : ''}`;
@@ -317,7 +323,7 @@ try {
   _bootstrapLog(`Config carregada com sucesso. logFile=${CONFIG.paths.logFile}`);
 } catch (erro) {
   _bootstrapLog(`ERRO FATAL AO CARREGAR CONFIG: ${String(erro?.message || erro)}`);
-  escreverLog('NODE', `ERRO FATAL AO CARREGAR CONFIG: ${formatarErro(erro)}`);
+  log('ERROR', `ERRO FATAL AO CARREGAR CONFIG: ${formatarErro(erro)}`);
   process.exit(erro.exitCode || EXIT_CODES.FATAL);
 }
 
@@ -325,7 +331,8 @@ const EXEC_ID = (process.argv[2] || '').trim();
 const RUNTIME_MODE = String(process.argv[3] || '').trim().toUpperCase();
 
 // Log imediato com contexto de execução (antes de qualquer operação de negócio)
-escreverLog('NODE', `=== INICIO EXECUCAO NODE ===`);
+log('INFO', '================================================================================');
+log('INFO', 'INICIO EXECUCAO NODE');
 escreverLog('NODE', `pid=${process.pid} | node=${process.version} | cwd=${process.cwd()}`);
 escreverLog('NODE', `argv=${JSON.stringify(process.argv)}`);
 escreverLog('NODE', `EXEC_ID=${EXEC_ID || 'sem-exec-id'} | RUNTIME_MODE=${RUNTIME_MODE || 'AUTO'}`);
@@ -338,12 +345,12 @@ function getSessionDir() {
   return path.join(CONFIG.paths.authDir, `session-${CONFIG.auth.clientId}`);
 }
 
-function countFilesRecursively(dirPath, limit = 2000) {
+function countFilesRecursively(dirPath, limit = 2000, maxDepth = 8) {
   let count = 0;
-  const queue = [dirPath];
+  const queue = [{ p: dirPath, depth: 0 }];
 
   while (queue.length > 0) {
-    const atual = queue.shift();
+    const { p: atual, depth } = queue.shift();
     let entries = [];
 
     try {
@@ -355,7 +362,7 @@ function countFilesRecursively(dirPath, limit = 2000) {
     for (const entry of entries) {
       const full = path.join(atual, entry.name);
       if (entry.isDirectory()) {
-        queue.push(full);
+        if (depth < maxDepth) queue.push({ p: full, depth: depth + 1 });
       } else {
         count += 1;
         if (count >= limit) return count;
@@ -474,7 +481,7 @@ function carregarEstado() {
     const parsed = safeJsonParse(raw, CONFIG.paths.stateFile);
     return garantirEstruturaEstado(parsed);
   } catch (erro) {
-    escreverLog('NODE', `AVISO: Falha ao carregar stateFile. Reiniciando estrutura. Detalhe=${formatarErro(erro)}`);
+    log('WARN', `AVISO: Falha ao carregar stateFile. Reiniciando estrutura. Detalhe=${formatarErro(erro)}`);
     return {
       sentExecutions: {},
       failedDeliveries: {}
@@ -494,7 +501,7 @@ function salvarEstado(estado) {
       if (fs.existsSync(tempPath)) {
         fs.unlinkSync(tempPath);
       }
-    } catch (_) {}
+    } catch (_) { }
     throw erro;
   }
 }
@@ -751,12 +758,12 @@ async function tentarResolverPorNumero(client, phone) {
         };
       }
 
-      escreverLog('NODE', `getNumberId retornou vazio para ${numero}.`);
+      log('WARN', `getNumberId retornou vazio para ${numero}.`);
     } catch (erro) {
-      escreverLog('NODE', `AVISO: getNumberId falhou para ${numero}: ${formatarErro(erro)}`);
+      log('WARN', `AVISO: getNumberId falhou para ${numero}: ${formatarErro(erro)}`);
     }
   } else {
-    escreverLog('NODE', 'AVISO: client.getNumberId não está disponível nesta versão.');
+    log('WARN', 'AVISO: client.getNumberId não está disponível nesta versão.');
   }
 
   try {
@@ -781,9 +788,9 @@ async function tentarResolverPorNumero(client, phone) {
       };
     }
 
-    escreverLog('NODE', `Contato ${numero} não encontrado em getChats.`);
+    log('WARN', `Contato ${numero} não encontrado em getChats.`);
   } catch (erro) {
-    escreverLog('NODE', `AVISO: getChats falhou ao procurar ${numero}: ${formatarErro(erro)}`);
+    log('WARN', `AVISO: getChats falhou ao procurar ${numero}: ${formatarErro(erro)}`);
   }
 
   return null;
@@ -795,7 +802,7 @@ async function validarDestinoContato(client, chatId, label, source, allowUnvalid
 
   try {
     if (typeof client.getChatById !== 'function') {
-      escreverLog('NODE', 'AVISO: client.getChatById não está disponível nesta versão.');
+      log('WARN', 'AVISO: client.getChatById não está disponível nesta versão.');
       return {
         chatId: serialized,
         targetLabel: label || extrairNumero(serialized),
@@ -813,10 +820,10 @@ async function validarDestinoContato(client, chatId, label, source, allowUnvalid
       source: `${source} + getChatById`
     };
   } catch (erro) {
-    escreverLog('NODE', `AVISO: getChatById falhou para ${serialized}: ${formatarErro(erro)}`);
+    log('WARN', `AVISO: getChatById falhou para ${serialized}: ${formatarErro(erro)}`);
 
     if (allowUnvalidated && validarChatId(serialized)) {
-      escreverLog('NODE', `Prosseguindo com chatId não validado: ${serialized}`);
+      log('WARN', `Prosseguindo com chatId não validado: ${serialized}`);
       return {
         chatId: serialized,
         targetLabel: label || extrairNumero(serialized),
@@ -977,7 +984,7 @@ async function destroyClientSilently(client) {
   try {
     await client.destroy();
   } catch (erro) {
-    escreverLog('NODE', `AVISO: Falha ao destruir client: ${formatarErro(erro)}`);
+    log('WARN', `AVISO: Falha ao destruir client: ${formatarErro(erro)}`);
   }
 }
 
@@ -1013,10 +1020,7 @@ async function enviarUmaTentativa(tentativa) {
       if (qrAbortRequested || finalizado) return;
       qrAbortRequested = true;
 
-      escreverLog(
-        'NODE',
-        `REAUTH: QR recebido em modo silencioso (FORCE_VISIBLE=NAO). Sessao expirada/invalida. Abortando tentativa ${tentativa} imediatamente com ExitCode=${EXIT_CODES.REAUTH_REQUIRED}.`
-      );
+      log('WARN', `REAUTH: QR recebido em modo silencioso (FORCE_VISIBLE=NAO). Sessao expirada/invalida. Abortando tentativa ${tentativa} imediatamente com ExitCode=${EXIT_CODES.REAUTH_REQUIRED}.`);
 
       await falha(
         new ManagedError(
@@ -1078,10 +1082,7 @@ async function enviarUmaTentativa(tentativa) {
         if (!FORCE_VISIBLE) {
           // Modo silencioso: QR = sessão inválida → abortar IMEDIATAMENTE
           // Não aguardar os 5 retries do qrMaxRetries (evita ~5 min de espera inútil)
-          escreverLog(
-            'NODE',
-            `REAUTH: Modo silencioso (headless) e QR recebido no count=${qrCount}. Abortando imediatamente.`
-          );
+          log('WARN', `REAUTH: Modo silencioso (headless) e QR recebido no count=${qrCount}. Abortando imediatamente.`);
           void abortarPorReautenticacao();
           return;
         }
@@ -1092,7 +1093,7 @@ async function enviarUmaTentativa(tentativa) {
             qrcode.generate(qr, { small: true });
             escreverLog('NODE', `QR Code exibido no terminal. count=${qrCount}`);
           } catch (erro) {
-            escreverLog('NODE', `AVISO: Falha ao renderizar QR no terminal: ${formatarErro(erro)}`);
+            log('WARN', `AVISO: Falha ao renderizar QR no terminal: ${formatarErro(erro)}`);
           }
         } else {
           escreverLog('NODE', `QR nao exibido (terminal.showQr=false). count=${qrCount}`);
@@ -1167,7 +1168,7 @@ async function enviarUmaTentativa(tentativa) {
 
           escreverLog('NODE', `Aguardando ${CONFIG.retry.sendSettleMs / 1000}s para estabilização do envio (settle).`);
           await sleep(CONFIG.retry.sendSettleMs);
-          
+
           escreverLog('NODE', `Aguardando mais ${CONFIG.retry.finalWaitMs / 1000}s para sincronização multi-device antes de encerrar.`);
           await sleep(CONFIG.retry.finalWaitMs);
 
@@ -1198,7 +1199,7 @@ async function enviarUmaTentativa(tentativa) {
 async function shutdownWithLog(signal) {
   if (globalShutdownInProgress) return;
   globalShutdownInProgress = true;
-  escreverLog('NODE', `Sinal recebido: ${signal}. Encerrando processo.`);
+  log('WARN', `Sinal recebido: ${signal}. Encerrando processo.`);
   process.exit(EXIT_CODES.FATAL);
 }
 
@@ -1211,19 +1212,19 @@ process.on('SIGTERM', () => {
 });
 
 process.on('uncaughtException', erro => {
-  escreverLog('NODE', `UNCAUGHT_EXCEPTION: ${formatarErro(erro)}`);
+  log('ERROR', `UNCAUGHT_EXCEPTION: ${formatarErro(erro)}`);
   process.exit(erro?.exitCode || EXIT_CODES.FATAL);
 });
 
 process.on('unhandledRejection', motivo => {
-  escreverLog('NODE', `UNHANDLED_REJECTION: ${formatarErro(motivo)}`);
+  log('ERROR', `UNHANDLED_REJECTION: ${formatarErro(motivo)}`);
   process.exit(motivo?.exitCode || EXIT_CODES.FATAL);
 });
 
 (async () => {
   try {
     if (!CONFIG.app.enabled) {
-      escreverLog('NODE', 'AVISO: envio global desabilitado por configuração.');
+      log('WARN', 'AVISO: envio global desabilitado por configuração.');
       process.exit(EXIT_CODES.DISABLED);
     }
 
@@ -1242,7 +1243,7 @@ process.on('unhandledRejection', motivo => {
 
     if (CONFIG.message.sendAttachment) {
       if (!fs.existsSync(CONFIG.paths.attachmentPath)) {
-        escreverLog('NODE', `ERRO: Arquivo de anexo não encontrado: ${CONFIG.paths.attachmentPath}`);
+        log('ERROR', `ERRO: Arquivo de anexo não encontrado: ${CONFIG.paths.attachmentPath}`);
         process.exit(EXIT_CODES.MISSING_ATTACHMENT);
       }
 

@@ -5,7 +5,7 @@ Private m_execId As String
 Private m_blnInLogWrite As Boolean
 Private m_outlookAdapter As ClsRBOutlookAdapter
 
-Private Const CAMINHO_LOG As String = "C:\Automacoes\Receitas Bloqueadas\Logs\VBA_Internal.log"
+Private Const LOG_BASE_FOLDER As String = "C:\Automacoes\Receitas Bloqueadas\Logs"
 Private Const NOME_TABELA_DADOS As String = "ReceitasBloqueadas"
 Private Const NOME_TABELA_EMAIL As String = "EnderecosEmailDestinatarios"
 Private Const ABA_CONFIG As String = "Config"
@@ -16,6 +16,13 @@ Private Const NOME_CONEXAO_OBS As String = "Consulta - OBsReceitasBloqueadas"
 
 Private Const OL_MAIL_ITEM As Long = 0
 Private Const VB_MINIMIZED_FOCUS As Long = 2
+
+Private Function ObterCaminhoLog() As String
+    ObterCaminhoLog = LOG_BASE_FOLDER & "\log_" & _
+                      Right("0" & Day(Now), 2) & "-" & _
+                      Right("0" & Month(Now), 2) & "-" & _
+                      Year(Now) & ".log"
+End Function
 
 Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")
     Dim corpoHTML As String
@@ -486,18 +493,18 @@ Private Sub RegistrarLog(ByVal msg As String)
     m_blnInLogWrite = True
 
     If Len(m_execId) > 0 Then
-        prefixoId = "[ExecId=" & m_execId & "] "
+        prefixoId = "[ExecId:" & m_execId & "] "
     Else
         prefixoId = vbNullString
     End If
 
     On Error Resume Next
 
-    GarantirPastaDoLog CAMINHO_LOG
+    GarantirPastaDoLog ObterCaminhoLog()
 
     Set fsoLog = CreateObject("Scripting.FileSystemObject")
-    linha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] " & prefixoId & SanitizarTextoLog(msg)
-    Set txtStream = fsoLog.OpenTextFile(CAMINHO_LOG, 8, True)
+    linha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] [INFO] " & prefixoId & SanitizarTextoLog(msg)
+    Set txtStream = fsoLog.OpenTextFile(ObterCaminhoLog(), 8, True)
     If Err.Number = 0 Then
         txtStream.WriteLine linha
         txtStream.Close
@@ -821,7 +828,7 @@ Public Sub TestarLogger()
     Debug.Print "=== TestarLogger: modReceitasBloqueadas ==="
     Debug.Print "Input  : [" & idEntrada & "]"
     Debug.Print "ExecId : [" & idSaida & "]"
-    Debug.Print "Log    : " & CAMINHO_LOG
+    Debug.Print "Log    : " & ObterCaminhoLog()
 
     m_execId = idSaida
 
@@ -832,7 +839,7 @@ Public Sub TestarLogger()
 
     m_execId = vbNullString
 
-    Debug.Print "Concluido. Verifique: " & CAMINHO_LOG
+    Debug.Print "Concluido. Verifique: " & ObterCaminhoLog()
 End Sub
 
 

@@ -212,10 +212,10 @@ Sub CleanupExcelObjects(ByVal shouldSaveWorkbook)
 End Sub
 
 Sub EncerrarComErro(ByVal exitCode, ByVal messageText)
-    WriteLog "ERRO", messageText & " | elapsedSec=" & ElapsedSeconds()
+    WriteLog "ERROR", messageText & " | elapsedSec=" & ElapsedSeconds()
     CleanupExcelObjects False
     WriteLog "INFO", "FIM - VBScript com erro. ExitCode=" & exitCode & " | elapsedSec=" & ElapsedSeconds()
-    WriteLog "INFO", "========================================================="
+    WriteLog "INFO", "================================================================================"
     WScript.Quit exitCode
 End Sub
 
@@ -313,7 +313,7 @@ Else
     execId = "MANUAL_" & GerarExecId()
 End If
 
-WriteLog "INFO", "========================================================="
+WriteLog "INFO", "================================================================================"
 WriteLog "INFO", "INICIO - Execucao via VBScript (Receitas Emitidas) [ExecId=" & execId & "]"
 WriteLog "INFO", "Workbook=" & EXCEL_PATH
 
@@ -447,5 +447,5 @@ CleanupExcelObjects True
 RunPostExecutionBat POST_EXECUTION_BAT, execId
 
 WriteLog "INFO", "FIM - VBScript com sucesso. elapsedSec=" & ElapsedSeconds()
-WriteLog "INFO", "========================================================="
+WriteLog "INFO", "================================================================================"
 WScript.Quit 0

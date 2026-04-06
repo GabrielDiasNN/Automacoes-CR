@@ -4,9 +4,12 @@
         "github.vscode-pull-request-github",
         "eamodio.gitlens",
         "sbroenne.excel-mcp",
+        "ms-vscode.powershell",
+        "sbroenne.excel-mcp",
+        "GrapeCity.gc-excelviewer",
+        "local-smart.excel-live-server",
         "powerquery.vscode-powerquery",
         "ms-vscode.powershell",
-        "streetsidesoftware.code-spell-checker",
         "davidanson.vscode-markdownlint"
     ],
     "unwantedRecommendations": [

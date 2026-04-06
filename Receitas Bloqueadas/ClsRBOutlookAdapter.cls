@@ -97,16 +97,7 @@ Private Function PrepararOutlookComForcaBruta() As Object
     End If
 
     Err.Clear
-    Shell "outlook.exe", 2
-    Application.Wait Now + TimeValue("0:00:08")
-    Set oApp = GetObject(, "Outlook.Application")
-
-    If Not oApp Is Nothing Then
-        Set PrepararOutlookComForcaBruta = oApp
-        Exit Function
-    End If
-
-    Err.Clear
     Set oApp = CreateObject("Outlook.Application")
     Set PrepararOutlookComForcaBruta = oApp
+    On Error GoTo 0
 End Function

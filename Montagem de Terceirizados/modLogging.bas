@@ -96,10 +96,10 @@ Public Sub GravarLogEx(ByVal strMensagem As String, Optional ByVal lngNivel As L
     IniciarRunId
 
     ' 1. Formatar Mensagem
-    strLinha = "[" & Format$(Now, "yyyy-mm-dd hh:mm:ss") & "] [" & NivelToString(lngNivel) & "] [Run:" & m_strRunId & "] " & strMensagem
+    strLinha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] [" & NivelToString(lngNivel) & "] [ExecId:" & m_strRunId & "] " & strMensagem
 
     ' 2. Caminho do Log
-    strArquivo = ThisWorkbook.Path & "\Logs\log_" & Format$(Now, "yyyy-mm-dd") & ".log"
+    strArquivo = ThisWorkbook.Path & "\Logs\log_" & Format$(Now, "dd-mm-yyyy") & ".log"
 
     On Error Resume Next
     If Dir$(ThisWorkbook.Path & "\Logs", vbDirectory) = "" Then MkDir ThisWorkbook.Path & "\Logs"
@@ -126,10 +126,10 @@ End Sub
 Private Function NivelToString(ByVal lngNivel As Long) As String
     Select Case lngNivel
         Case LOG_DEBUG:   NivelToString = "DEBUG"
-        Case LOG_INFO:    NivelToString = "INFO "
-        Case LOG_WARNING: NivelToString = "WARN "
+        Case LOG_INFO:    NivelToString = "INFO"
+        Case LOG_WARNING: NivelToString = "WARN"
         Case LOG_ERROR:   NivelToString = "ERROR"
-        Case Else:        NivelToString = "LOG  "
+        Case Else:        NivelToString = "LOG"
     End Select
 End Function
 

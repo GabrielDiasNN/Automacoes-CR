@@ -24,6 +24,7 @@
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
+      "maxRuntimeMinutes": 30,
       "schedule": {
         "daysOfWeek": [
           1,
@@ -47,6 +48,7 @@
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
+      "maxRuntimeMinutes": 45,
       "schedule": {
         "daysOfWeek": [
           1,
@@ -67,6 +69,7 @@
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
+      "maxRuntimeMinutes": 30,
       "schedule": {
         "daysOfWeek": [
           5
@@ -85,6 +88,7 @@
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
+      "maxRuntimeMinutes": 20,
       "schedule": {
         "daysOfWeek": [
           0,

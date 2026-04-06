@@ -41,7 +41,7 @@
   "idempotency": {
     "enabled": true,
     "retryFailedAfterMs": 0,
-    "keepSuccessForMs": 2592000000,
+    "keepSuccessForMs": 604800000,
     "keepFailureForMs": 604800000
   },
   "terminal": {
