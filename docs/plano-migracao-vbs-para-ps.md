@@ -1,9 +1,19 @@
 # Plano de Migração: VBS Triggers → PS-nativo (`run.ps1`)
 
-> **Versão:** 2.0
+> **Versão:** 3.0
 > **Data:** Abril 2026
-> **Status:** Cutover RE + RB executado — aguardando validação em produção
+> **Status:** RE + RB com `run.ps1` criados e corrigidos — aguardando validação em produção | Montagem: `run.ps1` criado, aguarda cutover
 > **Pré-requisito:** Estabilização concluída — VBA classes corrigidas (ClassModule), VBS triggers ExitCode=0 para todas as 3 automações.
+
+---
+
+## 0. Histórico de Alterações
+
+| Versão | Data       | Alteração                                                                                                                         |
+| ------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0    | Mar 2026   | Plano inicial — RE piloto                                                                                                         |
+| 2.0    | Abr 2026   | Cutover RE + RB executado                                                                                                         |
+| 3.0    | 07/04/2026 | **Correção bug crítico** (`Get-AutomacaoLogPath` antes de `Import-Module` em RE e RB) + criação `run.ps1` Montagem (Continuidade) |
 
 ---
 
@@ -21,10 +31,10 @@
 ### Ordem de migração
 
 ```
-RE (Receitas Emitidas) → RB (Receitas Bloqueadas) → Montagem (futuro, fora de escopo)
+RE (Receitas Emitidas) → RB (Receitas Bloqueadas) → Montagem de Terceirizados
 ```
 
-**Justificativa:** RE é a mais simples (sem WhatsApp, roda 1x/semana sexta 07:05). RB envolve WhatsApp (componente não testado em produção). Montagem não tem `run.ps1` criado.
+**Justificativa:** RE é a mais simples (sem WhatsApp, roda 1x/semana sexta 07:05). RB envolve WhatsApp (componente não testado em produção). Montagem tem `run.ps1` criado em 07/04/2026 — aguarda teste manual e cutover.
 
 ---
 
@@ -236,17 +246,106 @@ exit /b %ERRORLEVEL%
 
 ---
 
-## 5. Etapa 3 — Montagem de Terceirizados (futuro)
+## 5. Etapa 3 — Montagem de Terceirizados
 
-> **Fora de escopo desta migração.** Montagem não possui `run.ps1` criado.
+> **`run.ps1` criado em 07/04/2026.** Pronto para teste manual e cutover.
 
-Quando for implementar:
+### Particularidades da Montagem
 
-1. Criar `Montagem de Terceirizados/run.ps1` seguindo o padrão de RB/RE
-2. Macro: `ExecutarValidacao` (verificar nome exato no VBA)
-3. Log VBA: dinâmico por data (padrão `log_DD-MM-YYYY.log`)
-4. Sem WhatsApp
-5. Testar manualmente → cutover → validar 5+ execuções (roda a cada hora cheia seg-sex)
+| Item                | Valor                                            |
+| ------------------- | ------------------------------------------------ |
+| **Workbook**        | `Validador_Notas_Montagem.xlsm`                  |
+| **Macro**           | `AtualizarEValidar(blnModoRobo=True, strExecId)` |
+| **Log unificado**   | `Logs/Montagem.log` (PS + VBA no mesmo arquivo)  |
+| **Timeout**         | 300s                                             |
+| **WhatsApp**        | Não — sem pós-execução                           |
+| **Retenção de log** | 30 dias (roda a cada hora cheia seg-sex)         |
+| **Schedule**        | Seg-sex, a cada hora cheia (`minutes: [0]`)      |
+
+> **Atenção na assinatura da macro:** `AtualizarEValidar` recebe dois parâmetros opcionais:
+> `blnModoRobo As Boolean` e `strExecId As String`. O VBS chamava com `True, execId` —
+> o `run.ps1` replica via `$excel.Run($MacroName, $true, $ExecId)`.
+
+### 5.1. Pré-validações (já executadas em 07/04/2026)
+
+- [x] `run.ps1` criado: `Montagem de Terceirizados/run.ps1`
+- [x] Sintaxe PS válida (`Parser::ParseFile` sem erros)
+- [x] Verbos aprovados (`Test-PowerShellApprovedVerbs.ps1` OK)
+- [x] `Test-VbaDrift.ps1` → `[OK] VBA sincronizado`
+- [x] Nenhum processo Excel zumbi (`Get-Process excel` vazio)
+
+### 5.2. Teste manual isolado
+
+**Objetivo:** Validar `run.ps1` Montagem sem envolver o Monitor.
+
+```powershell
+# 1. Garantir Excel fechado
+Get-Process excel -ErrorAction SilentlyContinue
+
+# 2. Executar run.ps1 manualmente
+pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Automacoes\Montagem de Terceirizados\run.ps1" "TESTE_MANUAL_MT_001"
+
+# 3. Verificar exit code
+echo "ExitCode: $LASTEXITCODE"
+
+# 4. Conferir log
+Get-Content "C:\Automacoes\Montagem de Terceirizados\Logs\Montagem.log" -Tail 40
+```
+
+**Critérios de aprovação:**
+
+- ExitCode = 0
+- Log mostra `[PS]` `INICIO`, execução da macro `AtualizarEValidar`, monitoramento VBA, `FIM - Finalizado. ExitCode=0`
+- Log VBA mostra `FIM DO PROCESSO. Resultado=Sucesso`
+- Nenhum processo Excel zumbi após conclusão
+
+**Rollback:** Nenhuma alteração no `config.json` neste passo. Se falhar, basta diagnosticar o `run.ps1`.
+
+### 5.3. Cutover para Monitor
+
+**Somente após teste manual ExitCode=0.**
+
+```powershell
+# 1. PARAR o Monitor
+
+# 2. Alterar config.json:
+# DE:   "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\Trigger_Automation.vbs"
+# PARA: "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\run.ps1"
+
+# 3. Reiniciar o Monitor
+```
+
+### 5.4. Validação pós-cutover
+
+**Montagem roda a cada hora cheia seg-sex.** Critério: **5 execuções consecutivas ExitCode=0** (~5 horas em dia útil).
+
+- [ ] Execução 1: ExitCode=0
+- [ ] Execução 2: ExitCode=0
+- [ ] Execução 3: ExitCode=0
+- [ ] Execução 4: ExitCode=0
+- [ ] Execução 5: ExitCode=0
+
+```powershell
+# Conferir logs do Monitor
+Get-Content "C:\Automacoes\Logs\Monitor_*.log" -Tail 80 | Select-String "Montagem"
+
+# Conferir log unificado
+Get-Content "C:\Automacoes\Montagem de Terceirizados\Logs\Montagem.log" -Tail 40
+```
+
+### 5.5. Rollback Montagem
+
+```powershell
+# 1. PARAR o Monitor
+
+# 2. Reverter config.json
+# DE:   "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\run.ps1"
+# PARA: "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\Trigger_Automation.vbs"
+
+# 3. Reiniciar o Monitor
+```
+
+Tempo de rollback: < 1 minuto.
 
 ---
 
@@ -266,80 +365,133 @@ Quando for implementar:
 
 ### Log paths (diferença a observar)
 
-| Automação | VBS log path             | PS log path              | Observação                       |
-| --------- | ------------------------ | ------------------------ | -------------------------------- |
-| **RB**    | `ReceitasBloqueadas.txt` | `ReceitasBloqueadas.txt` | ✅ Idêntico                      |
-| **RE**    | Log via echo/VBS interno | `Logs/Execution.log`     | ⚠ PS grava em arquivo (melhoria) |
+| Automação    | VBS log path                    | PS log path                     | Observação                              |
+| ------------ | ------------------------------- | ------------------------------- | --------------------------------------- |
+| **RB**       | `ReceitasBloqueadas.txt`        | `Logs/ReceitasBloqueadas.log`   | ⚠ PS usa subpasta `Logs/`               |
+| **RE**       | Log via echo/VBS interno        | `Logs/ReceitasEmitidas.log`     | ⚠ PS cria log estruturado               |
+| **Montagem** | `Logs/Montagem.log` (unificado) | `Logs/Montagem.log` (unificado) | ✅ Idêntico — PS e VBA no mesmo arquivo |
+
+> **Atenção RB:** O VBS antigo escrevia em `ReceitasBloqueadas.txt` (raiz da pasta). O `run.ps1` usa `Logs/ReceitasBloqueadas.log`. Histórico VBS continua no `.txt`; histórico PS começa no `.log`.
 
 ---
 
 ## 7. Checklist de validação final
 
-### Pós-migração RE + RB
+### Correções aplicadas em 07/04/2026 (v3.0)
+
+- [x] **Bug crítico corrigido:** `Get-AutomacaoLogPath` chamada antes de `Import-Module` em `RE/run.ps1` e `RB/run.ps1` → módulo agora importado primeiro
+- [x] **Guard adicionado:** `Invoke-LogRotation` protegido com `Get-Command` guard em RE e RB
+- [x] `run.ps1` Montagem criado seguindo o padrão correto (import-first)
+- [x] Sintaxe validada nos 3 `run.ps1` (`Parser::ParseFile` OK)
+- [x] `Test-PowerShellApprovedVerbs.ps1` OK nos 3 `run.ps1`
+- [x] `Test-VbaDrift.ps1` → `[OK] VBA sincronizado`
+- [x] Nenhum processo Excel zumbi confirmado
+
+### Pós-migração RE + RB (pendente validação em produção)
 
 - [x] `config.json` aponta para `run.ps1` em RE e RB
-- [x] Monitor recarregou config (verificar hash no log)
-- [ ] RE: 2+ execuções sexta ExitCode=0
-- [ ] RB: 3+ execuções seg-sex ExitCode=0
+- [ ] RE: 2+ execuções sexta ExitCode=0 com log `[PS]` em `Logs/ReceitasEmitidas.log`
+- [ ] RB: 3+ execuções seg-sex ExitCode=0 com log `[PS]` em `Logs/ReceitasBloqueadas.log`
 - [ ] WhatsApp entregue em pelo menos 1 execução RB
-- [ ] Nenhum processo Excel zumbi (`Get-Process excel` vazio entre execuções)
-- [ ] `Test-VbaDrift.ps1` retorna `[OK] VBA sincronizado`
+- [ ] Nenhum processo Excel zumbi entre execuções
 - [ ] Logs estruturados com ExecId em todos os registros
 
-### Commit final
+### Pós-migração Montagem (pendente)
 
-Após validação completa:
+- [x] `run.ps1` criado: `Montagem de Terceirizados/run.ps1`
+- [ ] Teste manual ExitCode=0
+- [ ] `config.json` atualizado para Montagem
+- [ ] 5+ execuções consecutivas ExitCode=0
+
+### Commits por fase
+
+**Fase 1 — Correção e criação (07/04/2026 — já feito):**
+
+```powershell
+git add "Receitas Emitidas/run.ps1" "Receitas Bloqueadas/run.ps1" "Montagem de Terceirizados/run.ps1" docs/plano-migracao-vbs-para-ps.md
+git commit -m "fix(run): corrigir ordem Import-Module em RE e RB; criar run.ps1 Montagem
+
+- RE/run.ps1: Get-AutomacaoLogPath chamada antes de Import-Module (bug silencioso)
+- RB/run.ps1: mesmo bug corrigido; guard Invoke-LogRotation adicionado
+- Montagem/run.ps1: criado com import-first, macro AtualizarEValidar(True, ExecId)
+- Montagem: log unificado Montagem.log, retencao 30d, sem WhatsApp
+- Plano v3.0: continuidade Montagem documentada, checklist atualizado"
+```
+
+**Fase 2 — Validação RE + RB (após 2+ sextas + 3+ exec RB):**
 
 ```powershell
 git add config.json
-git commit -m "feat(config): migrar RE e RB de VBS triggers para run.ps1 PS-nativo
+git commit -m "feat(config): validar run.ps1 RE e RB em producao
 
-- Receitas Emitidas: scriptPath → run.ps1 (validado 2 sextas consecutivas)
-- Receitas Bloqueadas: scriptPath → run.ps1 (validado 3+ execuções)
-- WhatsApp migrado de RunWhatsApp.bat para Send-WhatsApp.ps1
-- Exit codes compatíveis, sem impacto no MonitorAutomacoes.ps1"
+- Receitas Emitidas: X execucoes sexta ExitCode=0
+- Receitas Bloqueadas: X execucoes ExitCode=0, WhatsApp entregue"
+```
+
+**Fase 3 — Cutover Montagem (após teste manual OK):**
+
+```powershell
+git add config.json
+git commit -m "feat(config): cutover Montagem de VBS para run.ps1 PS-nativo
+
+- Montagem Terceirizados: scriptPath -> run.ps1
+- Macro AtualizarEValidar chamada com blnModoRobo=True
+- Log unificado Montagem.log compativel com historico VBS"
 ```
 
 ---
 
 ## 8. Riscos e mitigações
 
-| Risco                              | Probabilidade | Impacto | Mitigação                                                                                     |
-| ---------------------------------- | ------------- | ------- | --------------------------------------------------------------------------------------------- |
-| `run.ps1` falha no COM Excel       | Baixa         | Alto    | Teste manual antes do cutover; rollback em < 1min                                             |
-| WhatsApp sessão expirada           | Média         | Médio   | `Send-WhatsApp.ps1` auto-redireciona para PAIRING (exit 21)                                   |
-| Excel zumbi (processo não encerra) | Baixa         | Alto    | `ReleaseComObject` + `Quit()` no finally; Monitor tem `maxRuntimeMinutes`                     |
-| `Lib-Logging.psm1` ausente         | Muito baixa   | Baixo   | Fallback inline na função `_Log` (já implementado)                                            |
-| Git CRLF → LF em `.cls`            | Baixa         | Alto    | Já mitigado: `Test-VbaDrift.ps1` usa hash byte-level; importação via `ImportarClassesVba.ps1` |
-| Node.js crash no WhatsApp          | Baixa         | Médio   | Lock + cleanup automático em `Send-WhatsApp.ps1`; exit code pass-through                      |
+| Risco                                         | Probabilidade | Impacto  | Mitigação                                                                                     |
+| --------------------------------------------- | ------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `run.ps1` falha no COM Excel                  | Baixa         | Alto     | Teste manual antes do cutover; rollback em < 1min                                             |
+| WhatsApp sessão expirada                      | Média         | Médio    | `Send-WhatsApp.ps1` auto-redireciona para PAIRING (exit 21)                                   |
+| Excel zumbi (processo não encerra)            | Baixa         | Alto     | `ReleaseComObject` + `Quit()` no finally; Monitor tem `maxRuntimeMinutes`                     |
+| `Lib-Logging.psm1` ausente                    | Muito baixa   | Baixo    | Fallback inline em todos os `run.ps1`; `Get-Command` guards em Invoke-LogRotation             |
+| Import-Module antes de `Get-AutomacaoLogPath` | ~~Alta~~      | ~~Alto~~ | **✅ CORRIGIDO em 07/04/2026** — import-first em todos os `run.ps1`                           |
+| Git CRLF → LF em `.cls`                       | Baixa         | Alto     | Já mitigado: `Test-VbaDrift.ps1` usa hash byte-level; importação via `ImportarClassesVba.ps1` |
+| Node.js crash no WhatsApp                     | Baixa         | Médio    | Lock + cleanup automático em `Send-WhatsApp.ps1`; exit code pass-through                      |
+| Montagem: `blnModoRobo` incorreto             | Baixa         | Médio    | `run.ps1` passa `$true` explicitamente; valida no teste manual antes do cutover               |
 
 ---
 
 ## 9. Sequência resumida
 
 ```
-┌─────────────────────────────────────────────────┐
-│  1. Teste manual RE run.ps1     → ExitCode=0?   │
-│     SIM → Cutover RE config.json                 │
-│     NÃO → Diagnosticar, não prosseguir           │
-├─────────────────────────────────────────────────┤
-│  2. Validar 2 sextas RE         → 2x ExitCode=0? │
-│     SIM → Prosseguir para RB                     │
-│     NÃO → Rollback RE → VBS                      │
-├─────────────────────────────────────────────────┤
-│  3. Teste Send-WhatsApp.ps1     → Sessão ativa?  │
-│     SIM → Teste manual RB run.ps1                │
-│     NÃO → PAIRING primeiro                       │
-├─────────────────────────────────────────────────┤
-│  4. Teste manual RB run.ps1     → ExitCode=0?    │
-│     SIM → Cutover RB config.json                 │
-│     NÃO → Diagnosticar, não prosseguir           │
-├─────────────────────────────────────────────────┤
-│  5. Validar 3 exec RB           → 3x ExitCode=0? │
-│     SIM → Migração concluída ✅                  │
-│     NÃO → Rollback RB → VBS                      │
-├─────────────────────────────────────────────────┤
-│  6. (Opcional) Shim RunWhatsApp.bat               │
-│  7. (Futuro) Montagem run.ps1                     │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  ✅ CONCLUÍDO (07/04/2026)                                       │
+│  Bug fix: Import-Module antes de Get-AutomacaoLogPath em RE+RB  │
+│  Criação: Montagem de Terceirizados/run.ps1                      │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Teste manual RE run.ps1      → ExitCode=0?                  │
+│     SIM → RE validado em produção (2x sexta)                     │
+│     NÃO → Diagnosticar, não prosseguir                           │
+├─────────────────────────────────────────────────────────────────┤
+│  2. Validar 2 sextas RE          → 2x ExitCode=0?               │
+│     SIM → Prosseguir para RB                                      │
+│     NÃO → Rollback RE → VBS                                       │
+├─────────────────────────────────────────────────────────────────┤
+│  3. Teste Send-WhatsApp.ps1      → Sessão ativa?                 │
+│     SIM → Teste manual RB run.ps1                                 │
+│     NÃO → PAIRING primeiro                                        │
+├─────────────────────────────────────────────────────────────────┤
+│  4. Teste manual RB run.ps1      → ExitCode=0?                  │
+│     SIM → Cutover RB config.json                                  │
+│     NÃO → Diagnosticar, não prosseguir                            │
+├─────────────────────────────────────────────────────────────────┤
+│  5. Validar 3 exec RB            → 3x ExitCode=0?               │
+│     SIM → RE + RB migrados ✅                                    │
+│     NÃO → Rollback RB → VBS                                       │
+├─────────────────────────────────────────────────────────────────┤
+│  6. Teste manual Montagem run.ps1 → ExitCode=0?                  │
+│     SIM → Cutover Montagem config.json                            │
+│     NÃO → Diagnosticar, não prosseguir                            │
+├─────────────────────────────────────────────────────────────────┤
+│  7. Validar 5 exec Montagem      → 5x ExitCode=0?               │
+│     SIM → Migração completa ✅✅✅                               │
+│     NÃO → Rollback Montagem → VBS                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  8. (Opcional) Shim RunWhatsApp.bat                               │
+└─────────────────────────────────────────────────────────────────┘
 ```

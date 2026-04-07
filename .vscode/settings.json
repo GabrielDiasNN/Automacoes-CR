@@ -133,7 +133,7 @@
         "editor.insertSpaces": true
     },
     "files.associations": {
-        "*.bas": "vba",
+        "*.bas": "vb",
         "*.cls": "vba",
         "*.frm": "vba",
         "*.vbs": "vbscript"

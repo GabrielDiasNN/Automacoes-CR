@@ -85,7 +85,7 @@ function Get-TargetFiles {
         $files = @()
         foreach ($ext in $extensions) {
             $files += Get-ChildItem -Path $RootPath -Filter $ext -Recurse -File -ErrorAction SilentlyContinue |
-                Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.git\\|\\Audit\\|\\Tools\\' }
+            Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.git\\|\\Audit\\|\\Tools\\' }
         }
         return $files | Select-Object -ExpandProperty FullName
     }

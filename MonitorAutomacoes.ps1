@@ -137,6 +137,8 @@ $script:MetricsWindow = @{
     ConfigReloadFailure  = 0
 }
 $script:MetricsWindowStartedAt = Get-Date
+$script:TaskLastResult = @{}
+$script:MonitorStartedAt = Get-Date
 
 function Add-MetricCounter {
     param(
@@ -238,6 +240,166 @@ function Import-PreviousMetricsSnapshot {
     return $null
 }
 
+function Get-NextScheduledRun {
+    param($Schedule)
+
+    if (-not $Schedule) { return $null }
+
+    $candidate = (Get-Date).AddMinutes(1)
+    $candidate = $candidate.AddSeconds(-$candidate.Second)
+    $candidate = [datetime]::new($candidate.Year, $candidate.Month, $candidate.Day, $candidate.Hour, $candidate.Minute, 0)
+
+    for ($i = 0; $i -lt 10080; $i++) {
+        $dow = [int]$candidate.DayOfWeek
+        $h = $candidate.Hour
+        $m = $candidate.Minute
+
+        $dowOk = $Schedule.daysOfWeek -contains $dow
+        $hourOk = ($Schedule.hours.Count -eq 0) -or ($Schedule.hours -contains $h)
+        $minOk = $Schedule.minutes -contains $m
+
+        if ($dowOk -and $hourOk -and $minOk) { return $candidate }
+
+        $candidate = $candidate.AddMinutes(1)
+    }
+    return $null
+}
+
+function Save-DashboardHtml {
+    try {
+        $logDir = Get-LogDirectory
+        $now = Get-Date
+        $htmlPath = Join-Path $logDir "dashboard.html"
+
+        $dayNames = @("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab")
+        $taskRows = ""
+
+        foreach ($task in $script:Config.tasks) {
+            $tName = [string]$task.name
+            $enabled = [bool]$task.enabled
+
+            # Agendamento legível
+            $schedText = ""
+            if ($task.schedule) {
+                $dowStr = ($task.schedule.daysOfWeek | ForEach-Object { $dayNames[[int]$_] }) -join ","
+                $hhStr = if ($task.schedule.hours.Count -gt 0) {
+                    ($task.schedule.hours | ForEach-Object { $_.ToString("00") }) -join "/"
+                }
+                else { "cada" }
+                $mmStr = ($task.schedule.minutes | ForEach-Object { $_.ToString("00") }) -join ","
+                $schedText = "$dowStr $hhStr`:$mmStr"
+            }
+
+            # Próxima execução
+            $nextRunText = "-"
+            if ($enabled -and $task.schedule) {
+                $nr = Get-NextScheduledRun -Schedule $task.schedule
+                if ($nr) { $nextRunText = $nr.ToString("dd/MM HH:mm") }
+            }
+
+            # Último resultado
+            $exitCodeCell = "-"
+            $lastFinishCell = "-"
+            $badgeClass = "off"
+            $badgeText = "N/A"
+
+            $isRunning = $script:RunningTasks.ContainsKey($tName)
+            if ($isRunning) {
+                $badgeClass = "running"; $badgeText = "Executando"
+                $rec = $script:RunningTasks[$tName]
+                if ($rec -is [hashtable] -and $rec.StartedAt) {
+                    $lastFinishCell = "desde " + $rec.StartedAt.ToString("HH:mm")
+                }
+            }
+            elseif ($script:TaskLastResult.ContainsKey($tName)) {
+                $lr = $script:TaskLastResult[$tName]
+                $exitCodeCell = "$($lr.ExitCode)"
+                $lastFinishCell = $lr.FinishedAt.ToString("dd/MM HH:mm")
+                if ($lr.ExitCode -eq 0) { $badgeClass = "ok"; $badgeText = "OK" }
+                elseif ($lr.ExitCode -in @(7, 23, 40)) { $badgeClass = "warn"; $badgeText = "Aviso" }
+                else { $badgeClass = "err"; $badgeText = "Erro" }
+            }
+            elseif (-not $enabled) {
+                $badgeClass = "off"; $badgeText = "Desabilitado"
+            }
+
+            $taskRows += "<tr>"
+            $taskRows += "<td>$tName</td>"
+            $taskRows += "<td class='mono'>$schedText</td>"
+            $taskRows += "<td><span class='badge $badgeClass'>$badgeText</span></td>"
+            $taskRows += "<td class='r'>$exitCodeCell</td>"
+            $taskRows += "<td>$lastFinishCell</td>"
+            $taskRows += "<td>$nextRunText</td>"
+            $taskRows += "</tr>`n"
+        }
+
+        # Métricas
+        $mRows = ""
+        $metricLabels = [ordered]@{
+            TasksTriggered       = "Disparos"
+            TasksCompleted       = "Concluidas"
+            TasksFinishedNonZero = "Exit Nao-Zero"
+            TasksFinishedWarn    = "Avisos Operacionais"
+            ExitCode7ReadOnly    = "Exit 7 (Bloqueado)"
+            ExitCode23Cooldown   = "Exit 23 (Cooldown)"
+            ExitCode40Concurrent = "Exit 40 (Concorrente)"
+            TasksSkippedOverlap  = "Skips Sobreposicao"
+            ConfigReloadSuccess  = "Reloads Config OK"
+            ConfigReloadFailure  = "Reloads Config Falha"
+        }
+        foreach ($key in $metricLabels.Keys) {
+            $label = $metricLabels[$key]
+            $cum = [int]$script:Metrics[$key]
+            $win = [int]$script:MetricsWindow[$key]
+            $mRows += "<tr><td>$label</td><td class='r'>$cum</td><td class='r'>$win</td></tr>`n"
+        }
+
+        $startedStr = $script:MonitorStartedAt.ToString("dd/MM/yyyy HH:mm:ss")
+        $refreshStr = $now.ToString("dd/MM/yyyy HH:mm:ss")
+        $taskCount = $script:Config.tasks.Count
+        $runningCount = $script:RunningTasks.Count
+        $windowMinStr = ""
+        if ($script:MetricsWindowStartedAt) {
+            $wm = [math]::Round((New-TimeSpan -Start $script:MetricsWindowStartedAt -End $now).TotalMinutes, 0)
+            $windowMinStr = " (ultimos $wm min)"
+        }
+
+        $html = "<!DOCTYPE html><html lang=`"pt-BR`"><head><meta charset=`"UTF-8`">" +
+        "<meta http-equiv=`"refresh`" content=`"300`"><title>Monitor Automacoes</title>" +
+        "<style>" +
+        "body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;margin:0;padding:24px;color:#333}" +
+        "h1{color:#1a1a2e;margin:0 0 4px}" +
+        ".meta{color:#666;font-size:12px;margin-bottom:20px}" +
+        ".card{background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.1);padding:16px 20px;margin-bottom:20px}" +
+        "h2{margin:0 0 12px;font-size:14px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:8px}" +
+        "table{border-collapse:collapse;width:100%;font-size:13px}" +
+        "th{background:#f8f9fa;text-align:left;padding:7px 10px;border-bottom:2px solid #dee2e6;color:#555;font-weight:600}" +
+        "td{padding:7px 10px;border-bottom:1px solid #f5f5f5}" +
+        "tr:last-child td{border-bottom:none}" +
+        ".badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600}" +
+        ".ok{background:#d4edda;color:#155724}.warn{background:#fff3cd;color:#856404}" +
+        ".err{background:#f8d7da;color:#721c24}.off{background:#e9ecef;color:#6c757d}" +
+        ".running{background:#cce5ff;color:#004085}" +
+        ".r{text-align:right;font-variant-numeric:tabular-nums}" +
+        ".mono{font-family:Consolas,monospace;font-size:12px}" +
+        "</style></head><body>" +
+        "<h1>Monitor de Automacoes</h1>" +
+        "<div class='meta'>Versao 3.6 &nbsp;|&nbsp; Iniciado: $startedStr &nbsp;|&nbsp; Atualizado: $refreshStr &nbsp;|&nbsp; Tarefas: $taskCount &nbsp;|&nbsp; Em execucao: $runningCount</div>" +
+        "<div class='card'><h2>Tarefas</h2><table>" +
+        "<tr><th>Nome</th><th>Agendamento</th><th>Status</th><th class='r'>Exit</th><th>Ultima Execucao</th><th>Proxima Execucao</th></tr>" +
+        "$taskRows</table></div>" +
+        "<div class='card'><h2>Metricas$windowMinStr</h2><table>" +
+        "<tr><th>Contador</th><th class='r'>Acumulado</th><th class='r'>Janela</th></tr>" +
+        "$mRows</table></div>" +
+        "</body></html>"
+
+        Set-Utf8Content -FilePath $htmlPath -Content $html
+    }
+    catch {
+        Write-Log "Falha ao gerar dashboard HTML: $_" -Type "WARN"
+    }
+}
+
 function Get-ExitCodeLogType {
     param([int]$ExitCode)
 
@@ -293,6 +455,7 @@ function Write-TaskCompletionLog {
 
     Register-TaskCompletionMetrics -ExitCode $ExitCode
     $logType = Get-ExitCodeLogType -ExitCode $ExitCode
+    $script:TaskLastResult[$TaskName] = @{ ExitCode = $ExitCode; FinishedAt = (Get-Date) }
 
     if ($ExitCode -eq 0) {
         Write-Log "Tarefa '$TaskName' finalizada. ExitCode=$ExitCode$desc PID=$ProcessId" -LogDir $LogDir
@@ -810,6 +973,7 @@ if ($SkipTaskExecution -and $DryRun) {
     Write-Log "SkipTaskExecution e DryRun ativos simultaneamente. SkipTaskExecution tera precedencia." -Type "WARN"
 }
 Save-MetricsSnapshot -WindowEnd (Get-Date)
+Save-DashboardHtml
 
 $lastHeartbeat = Get-Date
 
@@ -826,6 +990,7 @@ while ($true) {
             $windowMinutes = [math]::Round((New-TimeSpan -Start $script:MetricsWindowStartedAt -End $agora).TotalMinutes, 1)
             Write-Log "Heartbeat: Monitor ativo. EmExecucao=$($script:RunningTasks.Count) | Disparos=$($script:Metrics.TasksTriggered) | DryRunElegiveis=$($script:Metrics.TasksDryRunEligible) | Concluidas=$($script:Metrics.TasksCompleted) | NaoZero=$($script:Metrics.TasksFinishedNonZero) | WarnOperacional=$($script:Metrics.TasksFinishedWarn) | E7=$($script:Metrics.ExitCode7ReadOnly) | E23=$($script:Metrics.ExitCode23Cooldown) | E40=$($script:Metrics.ExitCode40Concurrent) | SkipsOverlap=$($script:Metrics.TasksSkippedOverlap) | ReloadOk=$($script:Metrics.ConfigReloadSuccess) | ReloadFail=$($script:Metrics.ConfigReloadFailure) | JanelaMin=$windowMinutes | WDisparos=$($script:MetricsWindow.TasksTriggered) | WDryRunElegiveis=$($script:MetricsWindow.TasksDryRunEligible) | WConcluidas=$($script:MetricsWindow.TasksCompleted) | WNaoZero=$($script:MetricsWindow.TasksFinishedNonZero) | WWarn=$($script:MetricsWindow.TasksFinishedWarn)"
             Save-MetricsSnapshot -WindowEnd $agora -ResetWindow
+            Save-DashboardHtml
             $lastHeartbeat = $agora
         }
 
