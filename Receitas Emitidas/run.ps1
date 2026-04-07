@@ -28,19 +28,32 @@ $ErrorActionPreference = "Stop"
 $BasePath = "C:\Automacoes\Receitas Emitidas"
 $ExcelPath = Join-Path $BasePath "Controle de Receitas Emitidas.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
-$LogFile = Get-AutomacaoLogPath -Slug "ReceitasEmitidas" -LogDir $LogDir
-$VbaLogFile = $LogFile
 $MacroName = "AtualizarEEnviarOutlook"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
 
+# Importar Lib-Logging ANTES de derivar o caminho do log
 $libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
 if (Test-Path $libPath) {
     Import-Module $libPath -Force
 }
 
+if (Get-Command Get-AutomacaoLogPath -ErrorAction SilentlyContinue) {
+    $LogFile = Get-AutomacaoLogPath -Slug "ReceitasEmitidas" -LogDir $LogDir
+}
+else {
+    if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
+    $LogFile = Join-Path $LogDir "ReceitasEmitidas.log"
+}
+$VbaLogFile = $LogFile
+
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
-    $ExecId = (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    if (Get-Command New-ExecId -ErrorAction SilentlyContinue) {
+        $ExecId = New-ExecId
+    }
+    else {
+        $ExecId = (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    }
 }
 
 function Write-Log {
@@ -69,7 +82,9 @@ function Exit-WithCode {
 }
 
 # ============================================================
-Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
+    Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+}
 
 Write-Log "========================================================================================="
 Write-Log "INICIO - run.ps1 Receitas Emitidas. ExecId=$ExecId"

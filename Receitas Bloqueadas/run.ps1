@@ -30,20 +30,33 @@ $ErrorActionPreference = "Stop"
 $BasePath = "C:\Automacoes\Receitas Bloqueadas"
 $ExcelPath = Join-Path $BasePath "Receitas Bloqueadas.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
-$LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
 $MacroName = "ExecutarProcessoCompleto"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
-
 $SendWhatsAppScript = "C:\Automacoes\lib\Send-WhatsApp.ps1"
 
+# Importar Lib-Logging ANTES de derivar o caminho do log
 $libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
 if (Test-Path $libPath) {
     Import-Module $libPath -Force
 }
 
+if (Get-Command Get-AutomacaoLogPath -ErrorAction SilentlyContinue) {
+    $LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
+}
+else {
+    if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
+    $LogFile = Join-Path $LogDir "ReceitasBloqueadas.log"
+}
+$vbaLogFile = $LogFile
+
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
-    $ExecId = (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    if (Get-Command New-ExecId -ErrorAction SilentlyContinue) {
+        $ExecId = New-ExecId
+    }
+    else {
+        $ExecId = (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    }
 }
 
 function Write-Log {
@@ -72,7 +85,9 @@ function Exit-WithCode {
 }
 
 # ============================================================
-Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
+    Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+}
 
 Write-Log "========================================================================================="
 Write-Log "INICIO - run.ps1 Receitas Bloqueadas. ExecId=$ExecId"

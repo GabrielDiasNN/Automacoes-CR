@@ -9,24 +9,24 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
 
+' ==============================================================================
+' ClsREEmailComposerService  (wrapper de compatibilidade -> ClsEmailComposerService)
+' Preserva a assinatura publica original; delega para a classe canonica shared.
+' ==============================================================================
+
+Private m_composer As ClsEmailComposerService
+
 Public Function ComposeHtmlBodyWithSignature(ByVal objMailItem As Object, _
-                                             ByVal introText As String, _
-                                             ByVal bodyHtml As String, _
-                                             ByVal legendaHtml As String) As String
-    Dim signatureHtml As String
-    Dim introMarkup As String
-    Dim legendaMarkup As String
-    Dim bodyMarkup As String
-    Dim contentMarkup As String
-
-    signatureHtml = CaptureOutlookSignatureHtml(objMailItem)
-    introMarkup = BuildIntroMarkup(introText)
-    legendaMarkup = BuildLegendaMarkup(legendaHtml)
-    bodyMarkup = ExtractBodyMarkup(bodyHtml)
-    contentMarkup = introMarkup & bodyMarkup & legendaMarkup & BuildSignatureSpacingMarkup()
-
-    ComposeHtmlBodyWithSignature = InjectContentBeforeSignature(signatureHtml, contentMarkup)
+                                              ByVal introText As String, _
+                                              ByVal bodyHtml As String, _
+                                              ByVal legendaHtml As String) As String
+    If m_composer Is Nothing Then Set m_composer = New ClsEmailComposerService
+    ComposeHtmlBodyWithSignature = m_composer.ComposeHtmlBodyWithSignature(objMailItem, introText, bodyHtml, legendaHtml)
 End Function
+
+Private Sub Class_Terminate()
+    Set m_composer = Nothing
+End Sub
 
 Private Function BuildSignatureSpacingMarkup() As String
     BuildSignatureSpacingMarkup = "<p class=MsoNormal><o:p>&nbsp;</o:p></p>"
