@@ -288,24 +288,34 @@ End Function
 ' RESOLUCAO DE PLANILHA
 ' ====================================================================================
 Private Function ResolverPlanilhaDados() As Worksheet
-    ' Localiza a planilha de dados via NamedRange de controle Oracle (STAMP_NAMED_RANGE).
-    ' Tolerante a cenarios onde ActiveSheet nao e a planilha de dados:
-    ' ex.: o XLSM foi salvo com a aba "Erros NF" como aba ativa.
-    Dim objNm As Name
-    Dim objWs As Worksheet
+    ' Localiza a planilha de dados via ListObject (tolerante a NamedRanges de formula).
+    ' Estrategia 1: planilha que contem ListObject cujo nome contem STAMP_TABLE_NAME.
+    ' Estrategia 2: qualquer planilha com ListObjects, exceto "Erros NF".
+    ' Ultimo fallback com aviso: ActiveSheet.
+    Dim objWs  As Worksheet
+    Dim objLo  As ListObject
 
-    On Error Resume Next
-    Set objNm = ThisWorkbook.Names(STAMP_NAMED_RANGE)
-    If Not objNm Is Nothing Then
-        Set objWs = objNm.RefersToRange.Worksheet
-    End If
-    On Error GoTo 0
+    ' Estrategia 1 - ListObject com nome da tabela Oracle
+    For Each objWs In ThisWorkbook.Worksheets
+        For Each objLo In objWs.ListObjects
+            If InStr(1, objLo.Name, STAMP_TABLE_NAME, vbTextCompare) > 0 Then
+                GravarLogEx "Planilha de dados: " & objWs.Name & " (via ListObject)", LOG_DEBUG
+                Set ResolverPlanilhaDados = objWs
+                Exit Function
+            End If
+        Next objLo
+    Next objWs
 
-    If Not objWs Is Nothing Then
-        GravarLogEx "Planilha de dados: " & objWs.Name & " (via NamedRange)", LOG_DEBUG
-        Set ResolverPlanilhaDados = objWs
-    Else
-        GravarLogEx "AVISO: NamedRange '" & STAMP_NAMED_RANGE & "' nao encontrado. Usando ActiveSheet.", LOG_WARNING
-        Set ResolverPlanilhaDados = ActiveSheet
-    End If
+    ' Estrategia 2 - qualquer planilha com ListObjects exceto "Erros NF"
+    For Each objWs In ThisWorkbook.Worksheets
+        If objWs.Name <> "Erros NF" And objWs.ListObjects.count > 0 Then
+            GravarLogEx "Planilha de dados: " & objWs.Name & " (via fallback ListObject)", LOG_WARNING
+            Set ResolverPlanilhaDados = objWs
+            Exit Function
+        End If
+    Next objWs
+
+    ' Ultimo fallback com aviso
+    GravarLogEx "AVISO: Nenhuma planilha de dados encontrada. Usando ActiveSheet.", LOG_WARNING
+    Set ResolverPlanilhaDados = ActiveSheet
 End Function

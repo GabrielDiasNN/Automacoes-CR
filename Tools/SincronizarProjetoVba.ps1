@@ -3,7 +3,12 @@ param(
     [string]$XlsmPath,
 
     [Parameter(Mandatory = $true)]
-    [string]$SourceDir
+    [string]$SourceDir,
+
+    # Opcional: pasta com classes/modulos compartilhados (ex: _Shared\VBA).
+    # Importados APOS os arquivos de SourceDir para garantir que a versao
+    # canonica shared sempre sobrescreve eventuais copias locais.
+    [string]$SharedDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +17,20 @@ function Write-Log {
     param([string]$Level, [string]$Message)
     $ts = Get-Date -Format "HH:mm:ss"
     Write-Host "[$ts] [$Level] $Message"
+}
+
+function Invoke-ActivateDataSheet {
+    param($Workbook)
+    # Ativa a aba de dados Oracle antes de salvar, evitando que o workbook
+    # seja persistido com uma aba auxiliar (ex.: 'Erros NF') como aba ativa.
+    foreach ($sh in $Workbook.Worksheets) {
+        if ($sh.Name -ne "Erros NF" -and $sh.ListObjects.Count -gt 0) {
+            $sh.Activate()
+            Write-Log "INFO" "Aba ativa antes de salvar: $($sh.Name)"
+            return
+        }
+    }
+    Write-Log "WARN" "Nenhuma aba com ListObjects encontrada para ativar antes de salvar"
 }
 
 $XlsmPath = [System.IO.Path]::GetFullPath($XlsmPath)
@@ -70,8 +89,44 @@ try {
         Write-Log "INFO" "Importado: $($file.Name)"
     }
 
+    Invoke-ActivateDataSheet -Workbook $wb
     $wb.Save()
     Write-Log "INFO" "Workbook salvo com projeto VBA sincronizado"
+
+    # -------------------------------------------------------------------------
+    # Importar arquivos shared (sobrescreve componentes de mesmo nome, se houver)
+    # -------------------------------------------------------------------------
+    if ($SharedDir -ne "" -and (Test-Path $SharedDir)) {
+        $sharedFiles = Get-ChildItem -Path $SharedDir -File | Where-Object {
+            $_.Extension -in ".bas", ".cls"
+        } | Sort-Object Name
+
+        foreach ($file in $sharedFiles) {
+            $modName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+
+            $existing = $null
+            foreach ($comp in $vbProj.VBComponents) {
+                if ($comp.Name -eq $modName) {
+                    if ($comp.Type -eq 1 -or $comp.Type -eq 2 -or $comp.Type -eq 3) {
+                        $existing = $comp
+                    }
+                    break
+                }
+            }
+
+            if ($null -ne $existing) {
+                $vbProj.VBComponents.Remove($existing)
+                Write-Log "INFO" "[Shared] Substituindo componente existente: $modName"
+            }
+
+            $vbProj.VBComponents.Import($file.FullName) | Out-Null
+            Write-Log "INFO" "[Shared] Importado: $($file.Name)"
+        }
+
+        Invoke-ActivateDataSheet -Workbook $wb
+        $wb.Save()
+        Write-Log "INFO" "Workbook salvo apos importacao shared"
+    }
 }
 finally {
     if ($null -ne $wb) {
