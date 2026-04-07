@@ -44,7 +44,7 @@
     },
     {
       "name": "Montagem Terceirizados",
-      "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\Trigger_Automation.vbs",
+      "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\run.ps1",
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
