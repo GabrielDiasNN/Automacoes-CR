@@ -50,11 +50,16 @@ End Sub
 ' REPORT GENERATION
 ' ====================================================================================
 Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd As Long)
-    Dim objWsErro  As Worksheet
-    Dim objLo      As ListObject
-    Dim lngI       As Long
+    Dim objWsErro   As Worksheet
+    Dim objWsOrigem As Worksheet  ' planilha ativa antes da criacao - restaurada no final
+    Dim objLo       As ListObject
+    Dim lngI        As Long
 
+    ' Guarda a aba original para restaurar depois da criacao.
+    ' Worksheets.Add torna a nova aba o ActiveSheet; sem restaurar, o XLSM e
+    ' salvo com "Erros NF" como aba ativa, contaminando execucoes futuras.
     On Error Resume Next
+    Set objWsOrigem = ActiveSheet
     Application.DisplayAlerts = False
     ThisWorkbook.Worksheets("Erros NF").Delete
     Application.DisplayAlerts = True
@@ -99,5 +104,11 @@ Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd
     objLo.TableStyle = "TableStyleLight10"
 
     objWsErro.Columns.AutoFit
+
+    ' Restaura a planilha de dados como ativa para nao contaminar o ActiveSheet.
+    On Error Resume Next
+    If Not objWsOrigem Is Nothing Then objWsOrigem.Activate
+    On Error GoTo 0
+
     GravarLogEx "Aba 'Erros NF' gerada com " & lngQtd & " registros.", LOG_DEBUG
 End Sub

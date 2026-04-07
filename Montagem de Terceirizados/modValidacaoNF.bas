@@ -15,9 +15,12 @@ Public Sub ValidarNotasFiscais(ByRef udtTel As Telemetria, _
     
     On Error GoTo TratarErro
 
-    ' 1. Resolucao da Worksheet (Elimina ActiveSheet)
+    ' 1. Resolucao da Worksheet
+    ' Protecao: nao usa ActiveSheet diretamente. Apos GerarAbaErrosParaAnalise criar
+    ' a aba "Erros NF", ela fica como ActiveSheet ate o workbook ser reaberto.
+    ' ResolverPlanilhaDados() localiza a sheet correta via NamedRange Oracle.
     If objWsAlvo Is Nothing Then
-        Set objWsTrabalho = ActiveSheet
+        Set objWsTrabalho = ResolverPlanilhaDados()
     Else
         Set objWsTrabalho = objWsAlvo
     End If
@@ -278,5 +281,31 @@ Private Function ExtrairNFPosNF(ByVal strTexto As String) As String
         ExtrairNFPosNF = CStr(m_objRegexNF.Execute(strTexto)(0).SubMatches(0))
     Else
         ExtrairNFPosNF = ""
+    End If
+End Function
+
+' ====================================================================================
+' RESOLUCAO DE PLANILHA
+' ====================================================================================
+Private Function ResolverPlanilhaDados() As Worksheet
+    ' Localiza a planilha de dados via NamedRange de controle Oracle (STAMP_NAMED_RANGE).
+    ' Tolerante a cenarios onde ActiveSheet nao e a planilha de dados:
+    ' ex.: o XLSM foi salvo com a aba "Erros NF" como aba ativa.
+    Dim objNm As Name
+    Dim objWs As Worksheet
+
+    On Error Resume Next
+    Set objNm = ThisWorkbook.Names(STAMP_NAMED_RANGE)
+    If Not objNm Is Nothing Then
+        Set objWs = objNm.RefersToRange.Worksheet
+    End If
+    On Error GoTo 0
+
+    If Not objWs Is Nothing Then
+        GravarLogEx "Planilha de dados: " & objWs.Name & " (via NamedRange)", LOG_DEBUG
+        Set ResolverPlanilhaDados = objWs
+    Else
+        GravarLogEx "AVISO: NamedRange '" & STAMP_NAMED_RANGE & "' nao encontrado. Usando ActiveSheet.", LOG_WARNING
+        Set ResolverPlanilhaDados = ActiveSheet
     End If
 End Function

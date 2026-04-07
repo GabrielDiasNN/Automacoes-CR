@@ -1,23 +1,29 @@
 # ==============================================================================
 # ARQUIVO: ReenviarAlertaErros.ps1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Força o reenvio do e-mail de alerta de erros NF sem refazer o
+# VERSAO: 2.0
+# DESCRICAO: Forca o reenvio do e-mail de alerta de erros NF sem refazer o
 #            refresh do Oracle. Apaga o cache de estado anterior (para que o
 #            plugin trate os erros atuais como "novos") e chama a macro
-#            RevalidarENotificar, que revalida os dados já carregados e dispara
-#            a notificação via FallbackNotificacaoPadrao.
+#            RevalidarENotificar, que revalida os dados ja carregados e dispara
+#            a notificacao.
 #
 # USO:
 #   pwsh -File "C:\Automacoes\Montagem de Terceirizados\ReenviarAlertaErros.ps1"
 #
 # QUANDO USAR:
-#   - A automação rodou mas o e-mail de erro não foi enviado
-#   - Deseja renotificar sem aguardar o próximo ciclo agendado
-#   - A execução mais recente está refletida no workbook
+#   - A automacao rodou mas o e-mail de erro nao foi enviado
+#   - Deseja renotificar sem aguardar o proximo ciclo agendado
+#   - A execucao mais recente esta refletida no workbook
+#
+# ARGUMENTOS:
+#   -KeepCache  Nao apaga Cache_Estado_Detalhado.txt (usa logica de delta normal)
+#               Por padrao, o cache e apagado para tratar erros atuais como novos.
 # ==============================================================================
 
 [CmdletBinding()]
-param()
+param(
+    [switch]$KeepCache
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -27,8 +33,6 @@ $LogDir      = Join-Path $BasePath "Logs"
 $LogFile     = Join-Path $LogDir "Montagem.log"
 $CacheFile   = Join-Path $BasePath "Cache_Estado_Detalhado.txt"
 $MacroName   = "RevalidarENotificar"
-$MaxWaitSec  = 120
-$PollMs      = 2000
 
 $libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
 if (Test-Path $libPath) { Import-Module $libPath -Force }
@@ -54,15 +58,19 @@ if (-not (Test-Path $ExcelPath)) {
 }
 
 # --- 2. Apagar cache para forçar detecção de mudança ---
-if (Test-Path $CacheFile) {
-    try {
-        Remove-Item $CacheFile -Force
-        Write-Log "Cache de estado apagado. Erros serão tratados como novos."
-    } catch {
-        Write-Log "Aviso: nao foi possivel apagar o cache: $_" "WARN"
+if (-not $KeepCache) {
+    if (Test-Path $CacheFile) {
+        try {
+            Remove-Item $CacheFile -Force
+            Write-Log "Cache de estado apagado. Erros serao tratados como novos."
+        } catch {
+            Write-Log "Aviso: nao foi possivel apagar o cache: $_" "WARN"
+        }
+    } else {
+        Write-Log "Cache nao encontrado (primeira execucao ou ja apagado)."
     }
 } else {
-    Write-Log "Cache nao encontrado (primeira execucao ou ja apagado)."
+    Write-Log "Cache mantido (-KeepCache). Logica de delta normal sera aplicada."
 }
 
 # --- 3. Abrir Excel via COM ---
@@ -106,59 +114,86 @@ try {
     exit 4
 }
 
-# --- 6. Aguardar sentinela no log VBA ---
-Write-Log "Aguardando conclusao da macro (max ${MaxWaitSec}s)..."
-$deadline  = (Get-Date).AddSeconds($MaxWaitSec)
-$resultado = $null
+# --- 6. Analisar resultado no log ---
+# excel.Run() e sincrono: quando retorna, o VBA ja terminou e o log esta completo.
+# Lemos apenas as linhas gravadas APOS o inicio desta execucao (via offset de bytes).
+Write-Log "Analisando resultado..."
 
-while ((Get-Date) -lt $deadline) {
-    Start-Sleep -Milliseconds $PollMs
-    if (-not (Test-Path $LogFile)) { continue }
-
+$linhasNovas = @()
+if (Test-Path $LogFile) {
     try {
-        $linhasNovas = Get-Content $LogFile -Encoding UTF8 -Raw
-        if ($logOffsetBefore -gt 0) {
-            $stream = [System.IO.File]::Open($LogFile, 'Open', 'Read', 'ReadWrite')
-            $stream.Seek($logOffsetBefore, 'Begin') | Out-Null
-            $reader = New-Object System.IO.StreamReader($stream)
-            $linhasNovas = $reader.ReadToEnd()
-            $reader.Close(); $stream.Close()
-        }
-
-        if ($linhasNovas -match "REENVIO FORCADO: Concluido") {
-            $resultado = "SUCESSO"
-            break
-        }
-        if ($linhasNovas -match "\[ERROR\]") {
-            $resultado = "ERRO_VBA"
-            break
-        }
-    } catch {}
+        $stream = [System.IO.File]::Open($LogFile, 'Open', 'Read', 'ReadWrite')
+        $stream.Seek($logOffsetBefore, 'Begin') | Out-Null
+        $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+        $conteudo = $reader.ReadToEnd()
+        $reader.Close()
+        $stream.Close()
+        $linhasNovas = $conteudo -split "`n" | Where-Object { $_.Trim() -ne "" }
+    } catch {
+        Write-Log "Aviso: nao foi possivel ler novas entradas do log: $_" "WARN"
+    }
 }
 
-if (-not $resultado) {
-    Write-Log "Timeout ($MaxWaitSec s) aguardando conclusao da macro." "WARN"
-    $resultado = "TIMEOUT"
+# Exibe as novas linhas geradas pelo VBA nesta execucao
+if ($linhasNovas.Count -gt 0) {
+    Write-Host ""
+    Write-Host "--- Log VBA desta execucao ---" -ForegroundColor Cyan
+    $linhasNovas | ForEach-Object { Write-Host "  $_" }
+    Write-Host "--- Fim ---" -ForegroundColor Cyan
+    Write-Host ""
 }
+
+# Categoriza o resultado
+$emailEnviado  = $linhasNovas | Where-Object { $_ -match "E-MAIL: Enviado com sucesso" }
+$emailFalhou   = $linhasNovas | Where-Object { $_ -match "FALHA DEFINITIVA: Email" }
+$semMudanca    = $linhasNovas | Where-Object { $_ -match "Estado inalterado" }
+$idempotencia  = $linhasNovas | Where-Object { $_ -match "ignorado por idempotencia" }
+$errosVba      = $linhasNovas | Where-Object { $_ -match "\[ERROR\]" }
+$concluido     = $linhasNovas | Where-Object { $_ -match "REENVIO FORCADO: Concluido" }
 
 # --- 7. Fechar Excel ---
 try { $wb.Close($false) } catch {}
 try { $excel.Quit() } catch {}
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
 
-# --- 8. Resultado ---
-switch ($resultado) {
-    "SUCESSO" {
-        Write-Log "Reenvio concluido com sucesso."
-        Write-Log "=== FIM ==="
-        exit 0
-    }
-    "ERRO_VBA" {
-        Write-Log "Macro reportou erro. Verifique o log VBA em: $LogFile" "ERROR"
-        exit 6
-    }
-    default {
-        Write-Log "Finalizando com status: $resultado" "WARN"
-        exit 5
-    }
+# --- 8. Resultado final ---
+if ($emailEnviado) {
+    Write-Log "E-MAIL ENVIADO COM SUCESSO."
+    Write-Log "=== FIM ==="
+    exit 0
 }
+
+if ($idempotencia) {
+    Write-Log "E-mail ignorado por idempotencia (ja enviado nesta sessao do Excel). Feche e reabra o workbook antes de reenviar." "WARN"
+    Write-Log "=== FIM ==="
+    exit 0
+}
+
+if ($semMudanca) {
+    Write-Log "Estado inalterado: nenhuma mudanca de erros detectada desde a ultima execucao." "WARN"
+    Write-Log "Para forcar envio mesmo sem mudanca: execute sem -KeepCache (padrao)." "WARN"
+    Write-Log "=== FIM ==="
+    exit 7
+}
+
+if ($emailFalhou) {
+    Write-Log "FALHA DEFINITIVA no envio do e-mail apos todas as tentativas. Verifique o Outlook e os destinatarios." "ERROR"
+    Write-Log "=== FIM ==="
+    exit 6
+}
+
+if ($errosVba) {
+    Write-Log "Macro completou com erros VBA internos. Consulte o log acima." "ERROR"
+    Write-Log "=== FIM ==="
+    exit 5
+}
+
+if ($concluido) {
+    Write-Log "Macro concluida sem envio de e-mail detectado. Verifique o log acima." "WARN"
+    Write-Log "=== FIM ==="
+    exit 8
+}
+
+Write-Log "Macro nao gerou as entradas esperadas no log. Verifique manualmente: $LogFile" "WARN"
+Write-Log "=== FIM ==="
+exit 9
