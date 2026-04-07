@@ -306,9 +306,9 @@ Private Function ResolverPlanilhaDados() As Worksheet
         Next objLo
     Next objWs
 
-    ' Estrategia 2 - qualquer planilha com ListObjects exceto "Erros NF"
+    ' Estrategia 2 - qualquer planilha com ListObjects exceto abas auxiliares conhecidas
     For Each objWs In ThisWorkbook.Worksheets
-        If objWs.Name <> "Erros NF" And objWs.ListObjects.count > 0 Then
+        If objWs.Name <> "Erros NF" And objWs.Name <> "Config" And objWs.ListObjects.count > 0 Then
             GravarLogEx "Planilha de dados: " & objWs.Name & " (via fallback ListObject)", LOG_WARNING
             Set ResolverPlanilhaDados = objWs
             Exit Function

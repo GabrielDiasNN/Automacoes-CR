@@ -22,15 +22,28 @@ function Write-Log {
 function Invoke-ActivateDataSheet {
     param($Workbook)
     # Ativa a aba de dados Oracle antes de salvar, evitando que o workbook
-    # seja persistido com uma aba auxiliar (ex.: 'Erros NF') como aba ativa.
+    # seja persistido com uma aba auxiliar (ex.: 'Erros NF' ou 'Config') como aba ativa.
+    # Estrategia 1: planilha que contem o ListObject da tabela Oracle (VW_EXC_OB_PED_ROM_Faccao).
+    $oracleTableName = "VW_EXC_OB_PED_ROM_Faccao"
     foreach ($sh in $Workbook.Worksheets) {
-        if ($sh.Name -ne "Erros NF" -and $sh.ListObjects.Count -gt 0) {
+        foreach ($lo in $sh.ListObjects) {
+            if ($lo.Name -like "*$oracleTableName*") {
+                $sh.Activate()
+                Write-Log "INFO" "Aba ativa antes de salvar: $($sh.Name) (via ListObject Oracle)"
+                return
+            }
+        }
+    }
+    # Estrategia 2: qualquer sheet com ListObjects, exceto abas auxiliares conhecidas.
+    $abasAuxiliares = @("Erros NF", "Config")
+    foreach ($sh in $Workbook.Worksheets) {
+        if ($sh.Name -notin $abasAuxiliares -and $sh.ListObjects.Count -gt 0) {
             $sh.Activate()
-            Write-Log "INFO" "Aba ativa antes de salvar: $($sh.Name)"
+            Write-Log "INFO" "Aba ativa antes de salvar: $($sh.Name) (via fallback ListObject)"
             return
         }
     }
-    Write-Log "WARN" "Nenhuma aba com ListObjects encontrada para ativar antes de salvar"
+    Write-Log "WARN" "Nenhuma aba de dados Oracle encontrada para ativar antes de salvar"
 }
 
 $XlsmPath = [System.IO.Path]::GetFullPath($XlsmPath)
