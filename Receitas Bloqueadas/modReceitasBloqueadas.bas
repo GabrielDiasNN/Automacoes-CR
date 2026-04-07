@@ -18,10 +18,7 @@ Private Const OL_MAIL_ITEM As Long = 0
 Private Const VB_MINIMIZED_FOCUS As Long = 2
 
 Private Function ObterCaminhoLog() As String
-    ObterCaminhoLog = LOG_BASE_FOLDER & "\log_" & _
-                      Right("0" & Day(Now), 2) & "-" & _
-                      Right("0" & Month(Now), 2) & "-" & _
-                      Year(Now) & ".log"
+    ObterCaminhoLog = LOG_BASE_FOLDER & "\ReceitasBloqueadas.log"
 End Function
 
 Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")

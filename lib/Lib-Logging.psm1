@@ -83,4 +83,79 @@ function Write-AutomacaoLog {
     Write-Host $line -ForegroundColor $color
 }
 
-Export-ModuleMember -Function New-ExecId, Write-AutomacaoLog
+# ------------------------------------------------------------------------------
+# Get-AutomacaoLogPath
+# Retorna o caminho canônico do log unificado para uma automação.
+# Formato: <LogDir>\<Slug>.log  (arquivo único, sem data no nome)
+#
+# Parâmetros:
+#   -Slug     Nome curto da automação (ex: "ReceitasBloqueadas", "Montagem")
+#   -LogDir   Diretório base dos logs (obrigatório)
+# ------------------------------------------------------------------------------
+function Get-AutomacaoLogPath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Slug,
+
+        [Parameter(Mandatory = $true)]
+        [string]$LogDir
+    )
+
+    if (-not (Test-Path $LogDir)) {
+        New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+    }
+
+    return (Join-Path $LogDir "$Slug.log")
+}
+
+# ------------------------------------------------------------------------------
+# Invoke-LogRotation
+# Rotação por conteúdo: mantém apenas linhas com data >= (hoje - KeepDays).
+# Linhas sem prefixo de data reconhecível são preservadas (safe default).
+# Escrita atômica: grava em .tmp → Move-Item -Force sobre o original.
+#
+# Parâmetros:
+#   -LogPath    Caminho absoluto do arquivo de log
+#   -KeepDays   Quantidade de dias a reter (padrão: 15)
+# ------------------------------------------------------------------------------
+function Invoke-LogRotation {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LogPath,
+
+        [int]$KeepDays = 15
+    )
+
+    if (-not (Test-Path $LogPath)) { return }
+
+    $cutoff = (Get-Date).Date.AddDays(-1 * [Math]::Abs($KeepDays))
+    $lines = [System.IO.File]::ReadAllLines($LogPath, $script:Lib_Utf8NoBom)
+
+    $kept = [System.Collections.Generic.List[string]]::new($lines.Length)
+
+    foreach ($line in $lines) {
+        # Extrai data no formato [dd/MM/yyyy ...] no início da linha
+        if ($line -match '^\[(\d{2}/\d{2}/\d{4})') {
+            $dateStr = $Matches[1]
+            $parsed = [datetime]::MinValue
+            if ([datetime]::TryParseExact($dateStr, 'dd/MM/yyyy', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+                if ($parsed -lt $cutoff) {
+                    continue  # linha expirada — descartar
+                }
+            }
+        }
+        # Linha sem data ou com data >= cutoff → preservar
+        $kept.Add($line)
+    }
+
+    if ($kept.Count -eq $lines.Length) { return }  # nada para rotacionar
+
+    $tmpPath = "$LogPath.tmp"
+    [System.IO.File]::WriteAllLines($tmpPath, $kept.ToArray(), $script:Lib_Utf8NoBom)
+    Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
+}
+
+Export-ModuleMember -Function New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation

@@ -34,4 +34,26 @@ else
   echo "[WARN] Script de validacao nao encontrado: $PTBR_SCRIPT_PATH"
 fi
 
+DRIFT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-VbaDrift.ps1"
+if [ -f "$DRIFT_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$DRIFT_SCRIPT_PATH" -RootPath "$REPO_ROOT" -StagedOnly
+  rc=$?
+  if [ $rc -eq 1 ]; then
+    exit 1
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $DRIFT_SCRIPT_PATH"
+fi
+
+LOGCONF_SCRIPT_PATH="$REPO_ROOT/Tools/Test-LogConformidade.ps1"
+if [ -f "$LOGCONF_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$LOGCONF_SCRIPT_PATH" -RootPath "$REPO_ROOT" -StagedOnly
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    exit $rc
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $LOGCONF_SCRIPT_PATH"
+fi
+
 exit 0

@@ -30,7 +30,7 @@ $ErrorActionPreference = "Stop"
 $BasePath = "C:\Automacoes\Receitas Bloqueadas"
 $ExcelPath = Join-Path $BasePath "Receitas Bloqueadas.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
-$LogFile = Join-Path $BasePath "ReceitasBloqueadas.txt"
+$LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
 $MacroName = "ExecutarProcessoCompleto"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
@@ -72,6 +72,8 @@ function Exit-WithCode {
 }
 
 # ============================================================
+Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+
 Write-Log "========================================================================================="
 Write-Log "INICIO - run.ps1 Receitas Bloqueadas. ExecId=$ExecId"
 
@@ -80,8 +82,8 @@ if (-not (Test-Path $ExcelPath)) {
     Exit-WithCode 1 "Workbook nao encontrado: $ExcelPath"
 }
 
-# VBA log com nome baseado na data (igual ao VBS trigger)
-$vbaLogFile = Join-Path $LogDir ("log_" + (Get-Date -Format 'dd-MM-yyyy') + ".log")
+# VBA log unificado (mesmo arquivo que PS)
+$vbaLogFile = $LogFile
 
 $excel = $null
 $wb = $null

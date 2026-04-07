@@ -99,7 +99,7 @@ Public Sub GravarLogEx(ByVal strMensagem As String, Optional ByVal lngNivel As L
     strLinha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] [" & NivelToString(lngNivel) & "] [ExecId:" & m_strRunId & "] " & strMensagem
 
     ' 2. Caminho do Log
-    strArquivo = ThisWorkbook.Path & "\Logs\log_" & Format$(Now, "dd-mm-yyyy") & ".log"
+    strArquivo = ThisWorkbook.Path & "\Logs\Montagem.log"
 
     On Error Resume Next
     If Dir$(ThisWorkbook.Path & "\Logs", vbDirectory) = "" Then MkDir ThisWorkbook.Path & "\Logs"

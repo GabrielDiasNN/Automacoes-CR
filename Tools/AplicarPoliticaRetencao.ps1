@@ -159,8 +159,38 @@ try {
         (Join-Path $BasePath "Audit\vba")
     )
 
+    # Limpar logs diários legados (log_DD-MM-YYYY.log, Execution.log, VBA_Internal.log)
+    $legacyFilters = @("log_*.log", "Execution.log", "VBA_Internal.log")
     foreach ($folder in $logFolders) {
-        Remove-OldLogFiles -DirectoryPath $folder -Cutoff $logsCutoff -Reason "retencao-logs"
+        foreach ($filter in $legacyFilters) {
+            Remove-OldLogFiles -DirectoryPath $folder -Cutoff $logsCutoff -Reason "retencao-logs-legado" -Filter $filter
+        }
+    }
+
+    # Logs unificados (ReceitasBloqueadas.log, ReceitasEmitidas.log, Montagem.log)
+    # Safety net: remover apenas se nao modificados ha 15+ dias (rotação de conteúdo é feita pelo run.ps1)
+    $unifiedCutoff = (Get-Date).AddDays(-15)
+    $unifiedLogs = @(
+        (Join-Path $BasePath "Montagem de Terceirizados\Logs\Montagem.log"),
+        (Join-Path $BasePath "Receitas Bloqueadas\Logs\ReceitasBloqueadas.log"),
+        (Join-Path $BasePath "Receitas Emitidas\Logs\ReceitasEmitidas.log")
+    )
+    foreach ($logFile in $unifiedLogs) {
+        if (Test-Path -LiteralPath $logFile) {
+            $item = Get-Item -LiteralPath $logFile
+            if ($item.LastWriteTime -lt $unifiedCutoff) {
+                Remove-FileSafe -File $item -Reason "retencao-log-unificado-inativo"
+            }
+        }
+    }
+
+    # Arquivo legado ReceitasBloqueadas.txt na raiz do módulo
+    $legacyRbTxt = Join-Path $BasePath "Receitas Bloqueadas\ReceitasBloqueadas.txt"
+    if (Test-Path -LiteralPath $legacyRbTxt) {
+        $rbTxtItem = Get-Item -LiteralPath $legacyRbTxt
+        if ($rbTxtItem.LastWriteTime -lt $logsCutoff) {
+            Remove-FileSafe -File $rbTxtItem -Reason "retencao-log-legado-txt"
+        }
     }
 
     # Monitor logs — política padrão (KeepLogsDays)

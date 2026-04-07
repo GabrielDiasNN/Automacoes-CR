@@ -28,8 +28,8 @@ $ErrorActionPreference = "Stop"
 $BasePath = "C:\Automacoes\Receitas Emitidas"
 $ExcelPath = Join-Path $BasePath "Controle de Receitas Emitidas.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
-$LogFile = Join-Path $LogDir "Execution.log"
-$VbaLogFile = Join-Path $LogDir "VBA_Internal.log"
+$LogFile = Get-AutomacaoLogPath -Slug "ReceitasEmitidas" -LogDir $LogDir
+$VbaLogFile = $LogFile
 $MacroName = "AtualizarEEnviarOutlook"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
@@ -69,6 +69,8 @@ function Exit-WithCode {
 }
 
 # ============================================================
+Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+
 Write-Log "========================================================================================="
 Write-Log "INICIO - run.ps1 Receitas Emitidas. ExecId=$ExecId"
 

@@ -21,8 +21,8 @@ Dim execId
 
 Const EXCEL_PATH = "C:\Automacoes\Receitas Emitidas\Controle de Receitas Emitidas.xlsm"
 Const MACRO_NAME = "AtualizarEEnviarOutlook"
-Const LOG_PATH_MASTER = "C:\Automacoes\Receitas Emitidas\Logs\Execution.log"
-Const LOG_PATH_VBA = "C:\Automacoes\Receitas Emitidas\Logs\VBA_Internal.log"
+Const LOG_PATH_MASTER = "C:\Automacoes\Receitas Emitidas\Logs\ReceitasEmitidas.log"
+Const LOG_PATH_VBA = "C:\Automacoes\Receitas Emitidas\Logs\ReceitasEmitidas.log"
 
 Const USE_TIMEOUT_MONITOR = True
 Const MAX_TIMEOUT_SECONDS = 300

@@ -1068,7 +1068,7 @@ Private Sub InitLog()
     baseFolder = LOG_FOLDER
     EnsureFolderExists baseFolder
 
-    gLogFile = baseFolder & "\VBA_Internal.log"
+    gLogFile = baseFolder & "\ReceitasEmitidas.log"
     RotateLogFile gLogFile, LOG_MAX_LINES
 
     gLogReady = True

@@ -13,13 +13,12 @@ Dim scriptStart, logPath, execId
 Dim excelPath, macroName
 excelPath = "C:\Automacoes\Receitas Bloqueadas\Receitas Bloqueadas.xlsm"
 macroName = "ExecutarProcessoCompleto"
-logPath   = "C:\Automacoes\Receitas Bloqueadas\Logs\Execution.log"
+logPath   = "C:\Automacoes\Receitas Bloqueadas\Logs\ReceitasBloqueadas.log"
 
 ' [FEATURE FLAG] Monitoramento de Timeout via Log VBA (Estilo "Robo Fiscal")
-Dim USE_TIMEOUT_MONITOR, vbaLogPath, maxTimeoutSeconds, datedLogName
+Dim USE_TIMEOUT_MONITOR, vbaLogPath, maxTimeoutSeconds
 USE_TIMEOUT_MONITOR = True
-datedLogName        = "log_" & Right("0" & Day(Now), 2) & "-" & Right("0" & Month(Now), 2) & "-" & Year(Now) & ".log"
-vbaLogPath          = "C:\Automacoes\Receitas Bloqueadas\Logs\" & datedLogName
+vbaLogPath          = "C:\Automacoes\Receitas Bloqueadas\Logs\ReceitasBloqueadas.log"
 maxTimeoutSeconds   = 300
 
 ' [FEATURE FLAG] Script Pos-Execucao (Ex: WhatsApp Node.js Bridge)
