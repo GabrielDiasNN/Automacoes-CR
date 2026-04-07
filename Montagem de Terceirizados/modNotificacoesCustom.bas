@@ -8,7 +8,6 @@ Private Type EstadoSistemaDetalhado
     dtmSnapshot      As Date
     lngTotalLinhas   As Long
     lngTotalErros    As Long
-    arrItensErro()   As DadosErro
     strHashEstado    As String
 End Type
 
@@ -33,7 +32,8 @@ Public Function ProcessarNotificacoesCustomizadas(ByVal lngTotalLinhas As Long, 
     Dim udtEstadoAtual    As EstadoSistemaDetalhado
     Dim udtEstadoAnterior As EstadoSistemaDetalhado
     Dim udtMudancas       As MudancasDetectadas
-    Dim blnAnomalia      As Boolean
+    Dim blnAnomalia       As Boolean
+    Dim udtTelLocal       As Telemetria
 
     On Error GoTo TratarErro
     ProcessarNotificacoesCustomizadas = False
@@ -45,13 +45,12 @@ Public Function ProcessarNotificacoesCustomizadas(ByVal lngTotalLinhas As Long, 
         .dtmSnapshot = Now
         .lngTotalLinhas = lngTotalLinhas
         .lngTotalErros = lngTotalErros
-        .arrItensErro = arrErros
-        .strHashEstado = GerarHashEstadoAtual(arrErros)
+        .strHashEstado = GerarHashEstadoAtual(lngTotalLinhas, lngTotalErros, arrErros)
     End With
 
-    ' 2. Carregar Cache e Comparar (Logica Inteligente)
-    ' udtEstadoAnterior = CarregarEstadoAnterior()
-    ' udtMudancas = CompararEstados(udtEstadoAtual, udtEstadoAnterior)
+    ' 2. Carregar Cache e Comparar (Logica de Delta)
+    udtEstadoAnterior = CarregarEstadoAnterior()
+    udtMudancas = CompararEstados(udtEstadoAtual, udtEstadoAnterior)
 
     ' 3. Logica de anomalia
     blnAnomalia = (lngTotalErros >= LIMITE_ANOMALIA)
@@ -59,8 +58,23 @@ Public Function ProcessarNotificacoesCustomizadas(ByVal lngTotalLinhas As Long, 
         GravarLogEx "ANOMALIA DETECTADA: Pico de erros (" & lngTotalErros & ")", LOG_WARNING
     End If
 
-    ' 4. Persistencia
+    ' 4. Persistencia (antes do envio para evitar reenvio em loop de erro)
     SalvarEstadoCache udtEstadoAtual
+
+    ' 5. Notificacao por mudanca de estado ou anomalia
+    If udtMudancas.blnHouveMudanca Or blnAnomalia Then
+        GravarLogEx "Mudanca de estado detectada. Disparando notificacao de e-mail.", LOG_INFO
+        With udtTelLocal
+            .totalLinhas = lngTotalLinhas
+            .totalErros = lngTotalErros
+            .InicioExecucao = Timer
+        End With
+        If lngTotalErros > 0 Then
+            modNotificacaoNF.FallbackNotificacaoPadrao udtTelLocal, arrErros, Nothing
+        End If
+    Else
+        GravarLogEx "Estado inalterado. Nenhuma notificacao necessaria.", LOG_DEBUG
+    End If
 
     ProcessarNotificacoesCustomizadas = True
     GravarLogEx "ProcessarNotificacoesCustomizadas finalizado.", LOG_DEBUG
@@ -73,18 +87,84 @@ End Function
 ' ====================================================================================
 ' INTERNOS / AUXILIARES
 ' ====================================================================================
-Private Function GerarHashEstadoAtual(ByRef arr() As DadosErro) As String
+Private Function GerarHashEstadoAtual(ByVal lngLinhas As Long, ByVal lngErros As Long, ByRef arr() As DadosErro) As String
     Dim lngI    As Long
     Dim strBase As String
+    Dim strResult As String
+
+    ' Base estavel pelo contador - garante hash nao-vazio mesmo se array vazio
+    strBase = CStr(lngLinhas) & "E" & CStr(lngErros) & ":"
 
     On Error Resume Next
-    strBase = ""
-    For lngI = LBound(arr) To UBound(arr)
-        strBase = strBase & arr(lngI).NumOB & "|" & arr(lngI).detalheErro
+    For lngI = 1 To lngErros
+        strBase = strBase & CStr(arr(lngI).NumOB) & "|" & arr(lngI).detalheErro & ";"
         If Len(strBase) > 5000 Then Exit For
     Next lngI
+    On Error GoTo 0
 
-    GerarHashEstadoAtual = GerarHashDJB2(strBase)
+    strResult = GerarHashDJB2(strBase)
+    If Len(strResult) = 0 Then strResult = CStr(lngErros) & "fallback"
+    GerarHashEstadoAtual = strResult
+End Function
+
+Private Function CarregarEstadoAnterior() As EstadoSistemaDetalhado
+    Dim udtEstado  As EstadoSistemaDetalhado
+    Dim intFileNum As Integer
+    Dim strPath    As String
+    Dim strLinha   As String
+    Dim arrPartes() As String
+
+    On Error GoTo Falha
+    strPath = ThisWorkbook.Path & "\" & CACHE_ESTADO_FILE
+
+    If Dir(strPath) = "" Then
+        GravarLogEx "Cache anterior nao encontrado. Primeira execucao.", LOG_DEBUG
+        GoTo Falha
+    End If
+
+    intFileNum = FreeFile
+    Open strPath For Input As #intFileNum
+    Line Input #intFileNum, strLinha
+    Close #intFileNum
+
+    arrPartes = Split(strLinha, "|")
+    If UBound(arrPartes) >= 4 Then
+        On Error Resume Next
+        udtEstado.dtmSnapshot = CDate(arrPartes(0))
+        udtEstado.lngTotalLinhas = CLng(arrPartes(1))
+        udtEstado.lngTotalErros = CLng(arrPartes(2))
+        udtEstado.strHashEstado = arrPartes(4)
+        On Error GoTo Falha
+        GravarLogEx "Cache anterior: " & arrPartes(2) & " erros | Hash=" & arrPartes(4), LOG_DEBUG
+    End If
+
+Falha:
+    CarregarEstadoAnterior = udtEstado
+End Function
+
+Private Function CompararEstados(ByRef udtAtual As EstadoSistemaDetalhado, ByRef udtAnterior As EstadoSistemaDetalhado) As MudancasDetectadas
+    Dim udtMud As MudancasDetectadas
+
+    ' Sem estado anterior (primeira execucao ou cache apagado) - trata erros como novos
+    If udtAnterior.dtmSnapshot = 0 Then
+        udtMud.blnHouveMudanca = (udtAtual.lngTotalErros > 0)
+        If udtMud.blnHouveMudanca Then
+            GravarLogEx "Sem estado anterior: " & udtAtual.lngTotalErros & " erro(s) encontrado(s) - notificando.", LOG_INFO
+        End If
+        CompararEstados = udtMud
+        Exit Function
+    End If
+
+    ' Compara hash e contagem de erros
+    If udtAtual.strHashEstado <> udtAnterior.strHashEstado Or _
+       udtAtual.lngTotalErros <> udtAnterior.lngTotalErros Then
+        udtMud.blnHouveMudanca = True
+        GravarLogEx "Delta de estado: " & udtAnterior.lngTotalErros & " -> " & udtAtual.lngTotalErros & " erro(s). Hash: " & udtAnterior.strHashEstado & " -> " & udtAtual.strHashEstado, LOG_INFO
+    Else
+        GravarLogEx "Estado inalterado: " & udtAtual.lngTotalErros & " erro(s). Sem notificacao.", LOG_DEBUG
+    End If
+
+    CompararEstados = udtMud
 End Function
 
 ' --------------------------------------------------------------------------------------------

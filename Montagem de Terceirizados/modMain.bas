@@ -134,6 +134,41 @@ TratarErro:
 End Sub
 
 ' ====================================================================================
+' REVALIDACAO SEM REFRESH ORACLE (para reenvio forcado de alerta)
+' ====================================================================================
+Public Sub RevalidarENotificar()
+    ' Revalida os dados existentes na planilha (sem refresh Oracle) e dispara
+    ' a logica de notificacao. Use para enviar alertas sem aguardar o proximo ciclo.
+    On Error GoTo TratarErro
+
+    Dim objContexto As clsAppContext
+    Set objContexto = New clsAppContext
+    With objContexto
+        .ModoRobo = True
+        Set .WorkbookAlvo = ThisWorkbook
+        Call IniciarRunId(True)
+        .RunId = GetRunId()
+    End With
+
+    LimparEstadoNotificacao
+    LimparTelemetriaExecucao
+    InicializarAplicacao objContexto
+
+    GravarLogEx "REENVIO FORCADO: Revalidando dados sem refresh Oracle.", LOG_INFO
+    Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=True, blnGerenciarConfig:=False)
+    GravarLogEx "REENVIO FORCADO: Concluido.", LOG_INFO
+
+    FinalizarAplicacao objContexto
+    Set objContexto = Nothing
+    Exit Sub
+
+TratarErro:
+    GravarLogEx "ERRO em RevalidarENotificar: " & Err.Description, LOG_ERROR
+    On Error Resume Next
+    FinalizarAplicacao objContexto
+End Sub
+
+' ====================================================================================
 ' AUXILIARES DE ORQUESTRACAO
 ' ====================================================================================
 
