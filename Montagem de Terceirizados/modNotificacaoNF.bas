@@ -35,6 +35,7 @@ Public Sub FallbackNotificacaoPadrao(ByRef udtTel As Telemetria, ByRef arrErros(
     ' 1. Geracao de aba de erros para anexo/consulta
     If udtTel.totalErros > 0 Then
         GerarAbaErrosParaAnalise arrErros, udtTel.totalErros
+        modEmailOutlook.PrepararErrosParaEmail arrErros, udtTel.totalErros
         EnviarEmailComErrosRetry udtTel
     Else
         EnviarEmailSucessoRetry udtTel

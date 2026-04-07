@@ -2,7 +2,9 @@ Attribute VB_Name = "modEmailOutlook"
 Option Explicit
 
 Private m_objOutlookAdapter As ClsOutlookAdapter
-Private m_strLastEmailKey As String
+Private m_strLastEmailKey   As String
+Private m_arrUltimosErros() As DadosErro   ' Staged via PrepararErrosParaEmail
+Private m_lngUltimosErrosCount As Long     ' 0 = nenhum erro em staging
 
 ' ====================================================================================
 ' RETRY WRAPPERS
@@ -65,9 +67,26 @@ End Sub
 
 Public Sub LimparEstadoNotificacao()
     m_strLastEmailKey = ""
+    m_lngUltimosErrosCount = 0
     If Not m_objOutlookAdapter Is Nothing Then
         m_objOutlookAdapter.ResetState
     End If
+End Sub
+
+' Staging de erros para incluir na tabela HTML do email de alerta.
+' Deve ser chamado em modNotificacaoNF antes de EnviarEmailComErrosRetry.
+Public Sub PrepararErrosParaEmail(ByRef arrErros() As DadosErro, ByVal lngQtd As Long)
+    Dim lngI As Long
+    m_lngUltimosErrosCount = 0
+    If lngQtd < 1 Then Exit Sub
+    On Error Resume Next
+    ReDim m_arrUltimosErros(1 To lngQtd)
+    For lngI = 1 To lngQtd
+        m_arrUltimosErros(lngI) = arrErros(lngI)
+    Next lngI
+    If Err.Number = 0 Then m_lngUltimosErrosCount = lngQtd
+    On Error GoTo 0
+    GravarLogEx "PrepararErrosParaEmail: " & m_lngUltimosErrosCount & " erros em staging.", LOG_DEBUG
 End Sub
 
 ' ====================================================================================
@@ -194,6 +213,10 @@ Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As T
     If blnErro Then
         strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas diverg&ecirc;ncias na valida&ccedil;&atilde;o.</b></p>"
         strHtml = strHtml & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Consulte a aba <b style='color:#d32f2f;'>Erros NF</b> no Excel.</p>"
+        ' Tabela de erros (disponivel se PrepararErrosParaEmail foi chamado antes)
+        If m_lngUltimosErrosCount > 0 Then
+            strHtml = strHtml & GerarTabelaErrosHtml(m_arrUltimosErros, m_lngUltimosErrosCount)
+        End If
     Else
         strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma diverg&ecirc;ncia encontrada.</b></p>"
     End If
@@ -235,26 +258,114 @@ Public Function ObterEValidarDestinatarios(ByRef strTo As String, ByRef strCC As
     Const TO_PADRAO As String = "email1@empresa.com.br;email2@empresa.com.br"
     Const CC_PADRAO As String = "email3@empresa.com.br;email4@empresa.com.br"
 
-    Dim objWs      As Worksheet
-    Dim objTbl     As ListObject
-    Dim strTempTo  As String
-    Dim strTempCC  As String
+    Dim objWs        As Worksheet
+    Dim objTbl       As ListObject
+    Dim objCol       As ListColumn
+    Dim strTempTo    As String
+    Dim strTempCC    As String
     Dim blnLeuConfig As Boolean
+    Dim lngColPara   As Long
+    Dim lngColCopia  As Long
+    Dim strNomeCol   As String
 
+    ' 1. Localiza a aba Config
     On Error Resume Next
     Set objWs = ThisWorkbook.Worksheets("Config")
-    If Not objWs Is Nothing Then
-        Set objTbl = objWs.ListObjects("EnderecosEmail")
-        If Not objTbl Is Nothing Then
-            strTempTo = CStr(objTbl.ListColumns("Para").DataBodyRange.Cells(1, 1).Value)
-            strTempCC = CStr(objTbl.ListColumns("Copia").DataBodyRange.Cells(1, 1).Value)
-            blnLeuConfig = (Err.Number = 0)
-        End If
+    On Error GoTo 0
+    If objWs Is Nothing Then
+        GravarLogEx "Config: aba 'Config' nao encontrada. Usando destinatarios padrao.", LOG_WARNING
+        GoTo Fallback
     End If
+
+    ' 2. Localiza a tabela (tenta nomes conhecidos, depois qualquer tabela da aba)
+    On Error Resume Next
+    Set objTbl = objWs.ListObjects("EnderecosEmail")
+    If objTbl Is Nothing Then Set objTbl = objWs.ListObjects("EnderecosEmailDestinatarios")
+    If objTbl Is Nothing And objWs.ListObjects.count >= 1 Then Set objTbl = objWs.ListObjects(1)
     On Error GoTo 0
 
-    strTo = IIf(blnLeuConfig And Len(Trim$(strTempTo)) > 0, Replace(Trim$(strTempTo), " ", ""), TO_PADRAO)
-    strCC = IIf(blnLeuConfig And Len(Trim$(strTempCC)) > 0, Replace(Trim$(strTempCC), " ", ""), CC_PADRAO)
+    If objTbl Is Nothing Then
+        GravarLogEx "Config: nenhuma tabela encontrada na aba Config. Usando destinatarios padrao.", LOG_WARNING
+        GoTo Fallback
+    End If
+    If objTbl.DataBodyRange Is Nothing Then
+        GravarLogEx "Config: tabela '" & objTbl.Name & "' sem dados. Usando destinatarios padrao.", LOG_WARNING
+        GoTo Fallback
+    End If
+
+    ' 3. Resolve colunas por sinonimos (case-insensitive) + fallback por posicao
+    For Each objCol In objTbl.ListColumns
+        strNomeCol = UCase$(Trim$(objCol.Name))
+        If lngColPara = 0 Then
+            If strNomeCol = "PARA" Or strNomeCol = "TO" Or strNomeCol = "DESTINATARIO" _
+               Or InStr(strNomeCol, "EMAIL") > 0 Then lngColPara = objCol.index
+        End If
+        If lngColCopia = 0 Then
+            If strNomeCol = "CC" Or strNomeCol = "COPIA" Or strNomeCol = "COM COPIA" Then lngColCopia = objCol.index
+        End If
+    Next objCol
+    If lngColPara = 0 And objTbl.ListColumns.count >= 1 Then lngColPara = 1
+    If lngColCopia = 0 And objTbl.ListColumns.count >= 2 Then lngColCopia = 2
+
+    ' 4. Le os valores
+    On Error Resume Next
+    Err.Clear
+    If lngColPara > 0 Then strTempTo = Trim$(CStr(objTbl.DataBodyRange.Cells(1, lngColPara).Value))
+    If lngColCopia > 0 Then strTempCC = Trim$(CStr(objTbl.DataBodyRange.Cells(1, lngColCopia).Value))
+    blnLeuConfig = (Err.Number = 0)
+    On Error GoTo 0
+
+    GravarLogEx "Config: tabela='" & objTbl.Name & "' | Para='" & strTempTo & "' | CC='" & strTempCC & "'", LOG_DEBUG
+
+Fallback:
+    strTo = IIf(blnLeuConfig And Len(strTempTo) > 0, Replace(strTempTo, " ", ""), TO_PADRAO)
+    strCC = IIf(blnLeuConfig And Len(strTempCC) > 0, Replace(strTempCC, " ", ""), CC_PADRAO)
 
     ObterEValidarDestinatarios = (InStr(1, strTo, "@") > 0)
+End Function
+
+' ====================================================================================
+' HTML - TABELA DE ERROS PARA O CORPO DO EMAIL
+' ====================================================================================
+Private Function GerarTabelaErrosHtml(ByRef arrErros() As DadosErro, ByVal lngQtd As Long) As String
+    Const MAX_LINHAS_EMAIL As Long = 30
+
+    Dim strHtml   As String
+    Dim lngI      As Long
+    Dim lngExibir As Long
+    Dim strFundo  As String
+
+    If lngQtd < 1 Then Exit Function
+    lngExibir = IIf(lngQtd > MAX_LINHAS_EMAIL, MAX_LINHAS_EMAIL, lngQtd)
+
+    strHtml = "<p style='font-size:10pt;margin-top:18px;'><b>" & HTML_ICON_CROSS & " Detalhamento dos erros encontrados:</b></p>"
+    strHtml = strHtml & "<table style='border-collapse:collapse;width:100%;font-size:9pt;'>"
+    strHtml = strHtml & "<tr style='background:#d32f2f;color:white;'>"
+    strHtml = strHtml & "<th style='padding:6px 8px;border:1px solid #b71c1c;text-align:left;'>Num OB</th>"
+    strHtml = strHtml & "<th style='padding:6px 8px;border:1px solid #b71c1c;text-align:left;'>Ref Cliente</th>"
+    strHtml = strHtml & "<th style='padding:6px 8px;border:1px solid #b71c1c;text-align:left;'>Qtd NF</th>"
+    strHtml = strHtml & "<th style='padding:6px 8px;border:1px solid #b71c1c;text-align:left;'>Tipo Erro</th>"
+    strHtml = strHtml & "<th style='padding:6px 8px;border:1px solid #b71c1c;text-align:left;'>OBS_OB</th>"
+    strHtml = strHtml & "</tr>"
+
+    For lngI = 1 To lngExibir
+        strFundo = IIf(lngI Mod 2 = 0, "#fff5f5", "#ffffff")
+        With arrErros(lngI)
+            strHtml = strHtml & "<tr style='background:" & strFundo & ";'>"
+            strHtml = strHtml & "<td style='padding:5px 8px;border:1px solid #ddd;'>" & .NumOB & "</td>"
+            strHtml = strHtml & "<td style='padding:5px 8px;border:1px solid #ddd;'>" & .refCliente & "</td>"
+            strHtml = strHtml & "<td style='padding:5px 8px;border:1px solid #ddd;'>" & .qtpcnf & "</td>"
+            strHtml = strHtml & "<td style='padding:5px 8px;border:1px solid #ddd;color:#b91c1c;font-weight:bold;'>" & .detalheErro & "</td>"
+            strHtml = strHtml & "<td style='padding:5px 8px;border:1px solid #ddd;font-size:8pt;'>" & .ObsOB & "</td>"
+            strHtml = strHtml & "</tr>"
+        End With
+    Next lngI
+
+    strHtml = strHtml & "</table>"
+
+    If lngQtd > MAX_LINHAS_EMAIL Then
+        strHtml = strHtml & "<p style='font-size:9pt;color:#888;margin-top:8px;'>... e mais " & (lngQtd - MAX_LINHAS_EMAIL) & " erro(s). Consulte a aba <b>Erros NF</b> no Excel para ver todos.</p>"
+    End If
+
+    GerarTabelaErrosHtml = strHtml
 End Function

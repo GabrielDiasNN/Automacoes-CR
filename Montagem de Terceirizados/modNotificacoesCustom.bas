@@ -179,7 +179,7 @@ End Function
 ' --------------------------------------------------------------------------------------------
 ' FUNCAO PARA GERACAO DE TABELA HTML (Pode ser usada por emails customizados)
 ' --------------------------------------------------------------------------------------------
-Private Function GerarTabelaErrosHTML(ByRef arrErros() As DadosErro, ByVal lngTotal As Long) As String
+Private Function GerarTabelaErrosHtml(ByRef arrErros() As DadosErro, ByVal lngTotal As Long) As String
     Dim strHtml     As String
     Dim lngI        As Long
 
@@ -195,7 +195,7 @@ Private Function GerarTabelaErrosHTML(ByRef arrErros() As DadosErro, ByVal lngTo
     Next lngI
 
     strHtml = strHtml & "</table>"
-    GerarTabelaErrosHTML = strHtml
+    GerarTabelaErrosHtml = strHtml
 End Function
 
 ' --------------------------------------------------------------------------------------------

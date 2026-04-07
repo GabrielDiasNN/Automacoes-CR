@@ -161,6 +161,11 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
         strNfObsOB = ExtrairNFPosNF(strObsOBValor)                   ' 1o NF extraido (para relatorio)
         blnProgErro = Not ContainsNfRef(strObsOBValor, strRefCliente) ' VUL-06: qualquer NF da OBS_OB
 
+        ' Diagnostico: log das primeiras 5 linhas para verificar comparacoes
+        If lngI <= 5 Then
+            GravarLogEx "DiagRow" & lngI & " Ref=[" & strRefCliente & "] QT=[" & CStr(varDadosArray(lngI, CLng(dicColunas(C_QT_PC_NF)) - lngColStart + 1)) & "] OBS=[" & Left$(strObsOBValor, 60) & "] Montagem=" & blnMontagemOk & " ProgErro=" & blnProgErro, LOG_DEBUG
+        End If
+
         strDetalheErro = ""
         If (Not blnMontagemOk) And blnProgErro Then strDetalheErro = "Erro de Montagem e Programacao"
         If (Not blnMontagemOk) And (Not blnProgErro) Then strDetalheErro = "Erro de Montagem"
