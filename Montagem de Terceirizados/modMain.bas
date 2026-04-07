@@ -2,7 +2,7 @@ Attribute VB_Name = "modMain"
 Option Explicit
 
 ' ====================================================================================
-' PRIVATE STATE
+' Private STATE
 ' ====================================================================================
 Private m_Telemetria  As Telemetria
 Private m_OutlookApp  As Object
@@ -11,126 +11,131 @@ Private m_OutlookApp  As Object
 ' ENTRY POINT
 ' ====================================================================================
 Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
-                              Optional ByVal strExecId As String = "")
+    Optional ByVal strExecId As String = "")
     On Error GoTo TratarErro
 
-    Dim objContexto     As clsAppContext
-    Dim objConexaoAlvo  As workbookConnection
-    Dim strFpAntes      As String
-    Dim strFpDepois     As String
-    Dim blnStampOK      As Boolean
-    Dim varStampAntes   As Variant
-    Dim varStampDepois  As Variant
-    Dim strStampAntesK  As String
-    Dim strStampDepoisK As String
-    Dim dblTempoInicio  As Double
+        Dim objContexto     As clsAppContext
+        Dim objConexaoAlvo  As workbookConnection
+        Dim strFpAntes      As String
+        Dim strFpDepois     As String
+        Dim blnStampOK      As Boolean
+        Dim varStampAntes   As Variant
+        Dim varStampDepois  As Variant
+        Dim strStampAntesK  As String
+        Dim strStampDepoisK As String
+        Dim dblTempoInicio  As Double
 
-    ' 1. Inicializacao do Contexto
-    Set objContexto = New clsAppContext
-    With objContexto
-        .ModoRobo = blnModoRobo
-        Set .WorkbookAlvo = ThisWorkbook
-        If strExecId <> "" Then
-            .RunId = strExecId
-            DefinirRunId strExecId
-        Else
-            Call IniciarRunId(True)
-            .RunId = GetRunId()
+        ' 1. Inicializacao Do Contexto
+        Set objContexto = New clsAppContext
+        With objContexto
+            .ModoRobo = blnModoRobo
+            Set .WorkbookAlvo = ThisWorkbook
+            If strExecId <> "" Then
+                .RunId = strExecId
+                DefinirRunId strExecId
+            Else
+                Call IniciarRunId(True)
+                .RunId = GetRunId()
+            End If
+        End With
+
+        LimparEstadoNotificacao
+        LimparTelemetriaExecucao
+
+        InicializarAplicacao objContexto
+
+        m_Telemetria.InicioExecucao = Timer
+        GravarLogEx LOG_SEPARADOR_DUPLO, LOG_INFO
+        GravarLogEx "INICIO. Modo Robo: " & IIf(blnModoRobo, "Sim", "Nao") & _
+        " | Versao: " & ROBO_VERSAO_TEXTO, LOG_INFO
+
+        ' 2. Pre-condicoes
+        LogStepStart "PRECOND"
+        ValidarPreCondicoes objContexto
+        LogStepEnd "OK"
+
+        ' 3. Refresh Oracle
+        LogStepStart "REFRESH"
+        Set objConexaoAlvo = FindConnectionByPartialName(STAMP_TABLE_NAME)
+        If objConexaoAlvo Is Nothing Then
+            Err.Raise vbObjectError + 701, "modMain", "Conexao '" & STAMP_TABLE_NAME & "' nao encontrada."
         End If
-    End With
 
-    LimparEstadoNotificacao
-    LimparTelemetriaExecucao
+        ' Snapshot ANTES
+        ' VUL-08: resolve a planilha de dados explicitamente pelo ListObject Oracle
+        ' para evitar que ObterFingerprintTabelaAtiva use ActiveSheet como fallback.
+        Dim objLoFp   As ListObject
+        Dim objWsDados As Worksheet
+        Set objLoFp = FindListObjectByName(STAMP_TABLE_NAME)
+        If Not objLoFp Is Nothing Then Set objWsDados = objLoFp.Parent
+            Set objLoFp = Nothing
+            strFpAntes = ObterFingerprintTabelaAtiva(objWsDados)
 
-    InicializarAplicacao objContexto
+            ' VUL-03: EnsureStampNamedRange propaga erro se a coluna STAMP nao existe
+            ' (schema drift / view renomeada). O TratarErro abaixo captura e aborta
+            ' com ERRO FATAL, evitando validacao silenciosa de dados desatualizados.
+            EnsureStampNamedRange
+            blnStampOK = True
+            varStampAntes = GetStampValue()
+            strStampAntesK = StampKey(varStampAntes)
+            LogStampSnapshot "ANTES", varStampAntes
 
-    m_Telemetria.InicioExecucao = Timer
-    GravarLogEx LOG_SEPARADOR_DUPLO, LOG_INFO
-    GravarLogEx "INICIO. Modo Robo: " & IIf(blnModoRobo, "Sim", "Nao") & _
-                " | Versao: " & ROBO_VERSAO_TEXTO, LOG_INFO
+            If Not blnModoRobo Then Application.StatusBar = ">> [10%] Atualizando Oracle..."
 
-    ' 2. Pre-condicoes
-    LogStepStart "PRECOND"
-    ValidarPreCondicoes objContexto
-    LogStepEnd "OK"
+                GravarLogEx "Refresh Oracle: inicio | Conexao='" & objConexaoAlvo.Name & "'", LOG_INFO
+                dblTempoInicio = Timer
 
-    ' 3. Refresh Oracle
-    LogStepStart "REFRESH"
-    Set objConexaoAlvo = FindConnectionByPartialName(STAMP_TABLE_NAME)
-    If objConexaoAlvo Is Nothing Then
-        Err.Raise vbObjectError + 701, "modMain", "Conexao '" & STAMP_TABLE_NAME & "' nao encontrada."
-    End If
+                ExecutarRefreshSincrono objConexaoAlvo
 
-    ' Snapshot ANTES
-    strFpAntes = ObterFingerprintTabelaAtiva() ' TODO: Mudar para aceitar ws explicito
-    On Error Resume Next
-    EnsureStampNamedRange
-    blnStampOK = (Err.Number = 0)
-    Err.Clear
-    On Error GoTo TratarErro
+                GravarLogEx "Refresh Oracle: fim | Duracao=" & Format$(TimerElapsed(dblTempoInicio), "0.00") & "s", LOG_INFO
+                LogStepEnd "Refresh concluido"
 
-    If blnStampOK Then
-        varStampAntes = GetStampValue()
-        strStampAntesK = StampKey(varStampAntes)
-        LogStampSnapshot "ANTES", varStampAntes
-    End If
+                ' Snapshot DEPOIS + Validacao STAMP
+                If blnStampOK Then
+                    varStampDepois = GetStampValue()
+                    strStampDepoisK = StampKey(varStampDepois)
+                    LogStampSnapshot "DEPOIS", varStampDepois
 
-    If Not blnModoRobo Then Application.StatusBar = ">> [10%] Atualizando Oracle..."
+                    ValidarMudancaStamp strStampAntesK, strStampDepoisK, blnModoRobo
+                End If
 
-    GravarLogEx "Refresh Oracle: inicio | Conexao='" & objConexaoAlvo.Name & "'", LOG_INFO
-    dblTempoInicio = Timer
+                ' Salvar se modo robo
+                If blnModoRobo Then ThisWorkbook.Save
 
-    ExecutarRefreshSincrono objConexaoAlvo
+                    ' 4. Validacao de Dados
+                    If Not blnModoRobo Then Application.StatusBar = ">> [50%] Validando dados..."
+                        LogStepStart "VALIDAR"
+                        ' Passamos o contexto ou a sheet resolvida.
+                        ' Passamos o contexto ou a sheet resolvida.
+                        Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=blnModoRobo, blnGerenciarConfig:=False)
+                        LogStepEnd "Validacao concluida"
 
-    GravarLogEx "Refresh Oracle: fim | Duracao=" & Format$(TimerElapsed(dblTempoInicio), "0.00") & "s", LOG_INFO
-    LogStepEnd "Refresh concluido"
+                        ' 5. Dashboard e Finalizacao
+                        LogStepStart "DASH"
+                        RegistrarHistorico True, m_Telemetria
+                        LogStepEnd "OK"
 
-    ' Snapshot DEPOIS + Validacao STAMP
-    If blnStampOK Then
-        varStampDepois = GetStampValue()
-        strStampDepoisK = StampKey(varStampDepois)
-        LogStampSnapshot "DEPOIS", varStampDepois
+                        GravarLogEx "FIM DO PROCESSO. Resultado=Sucesso | Tempo=" & Format$(TimerElapsed(m_Telemetria.InicioExecucao), "0.00") & "s", LOG_INFO
 
-        ValidarMudancaStamp strStampAntesK, strStampDepoisK, blnModoRobo
-    End If
-
-    ' Salvar se modo robo
-    If blnModoRobo Then ThisWorkbook.Save
-
-    ' 4. Validacao de Dados
-    If Not blnModoRobo Then Application.StatusBar = ">> [50%] Validando dados..."
-    LogStepStart "VALIDAR"
-    ' Passamos o contexto ou a sheet resolvida.
-    ' Passamos o contexto ou a sheet resolvida.
-    Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=blnModoRobo, blnGerenciarConfig:=False)
-    LogStepEnd "Validacao concluida"
-
-    ' 5. Dashboard e Finalizacao
-    LogStepStart "DASH"
-    RegistrarHistorico True, m_Telemetria
-    LogStepEnd "OK"
-
-    GravarLogEx "FIM DO PROCESSO. Resultado=Sucesso | Tempo=" & Format$(TimerElapsed(m_Telemetria.InicioExecucao), "0.00") & "s", LOG_INFO
-
-    If Not blnModoRobo Then
-        MsgBox "Processo concluido!" & vbCrLf & _
-               "Linhas: " & m_Telemetria.totalLinhas & vbCrLf & _
-               "Erros: " & m_Telemetria.totalErros, vbInformation
-    End If
+                        If Not blnModoRobo Then
+                            MsgBox "Processo concluido!" & vbCrLf & _
+                            "Linhas: " & m_Telemetria.totalLinhas & vbCrLf & _
+                            "Erros: " & m_Telemetria.totalErros, vbInformation
+                        End If
 
 SaidaLimpa:
-    FinalizarAplicacao objContexto
-    Set objContexto = Nothing
-    Exit Sub
+                        FinalizarAplicacao objContexto
+                        Set objContexto = Nothing
+                     Exit Sub
 
 TratarErro:
-    Dim strErro As String
-    strErro = "ERRO FATAL: " & Err.Description & " [Num: " & Err.Number & "]"
-    GravarLogEx strErro, LOG_ERROR
-    If Not blnModoRobo Then MsgBox strErro, vbCritical
-    On Error Resume Next
-    RegistrarHistorico False, m_Telemetria
-    Resume SaidaLimpa
+                        Dim strErro As String
+                        strErro = "ERRO FATAL: " & Err.Description & " [Num: " & Err.Number & "]"
+                        GravarLogEx strErro, LOG_ERROR
+                        If Not blnModoRobo Then MsgBox strErro, vbCritical
+                            On Error Resume Next
+                            RegistrarHistorico False, m_Telemetria
+                            Resume SaidaLimpa
 End Sub
 
 ' ====================================================================================
@@ -141,31 +146,31 @@ Public Sub RevalidarENotificar()
     ' a logica de notificacao. Use para enviar alertas sem aguardar o proximo ciclo.
     On Error GoTo TratarErro
 
-    Dim objContexto As clsAppContext
-    Set objContexto = New clsAppContext
-    With objContexto
-        .ModoRobo = True
-        Set .WorkbookAlvo = ThisWorkbook
-        Call IniciarRunId(True)
-        .RunId = GetRunId()
-    End With
+        Dim objContexto As clsAppContext
+        Set objContexto = New clsAppContext
+        With objContexto
+            .ModoRobo = True
+            Set .WorkbookAlvo = ThisWorkbook
+            Call IniciarRunId(True)
+            .RunId = GetRunId()
+        End With
 
-    LimparEstadoNotificacao
-    LimparTelemetriaExecucao
-    InicializarAplicacao objContexto
+        LimparEstadoNotificacao
+        LimparTelemetriaExecucao
+        InicializarAplicacao objContexto
 
-    GravarLogEx "REENVIO FORCADO: Revalidando dados sem refresh Oracle.", LOG_INFO
-    Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=True, blnGerenciarConfig:=False)
-    GravarLogEx "REENVIO FORCADO: Concluido.", LOG_INFO
+        GravarLogEx "REENVIO FORCADO: Revalidando dados sem refresh Oracle.", LOG_INFO
+        Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=True, blnGerenciarConfig:=False)
+        GravarLogEx "REENVIO FORCADO: Concluido.", LOG_INFO
 
-    FinalizarAplicacao objContexto
-    Set objContexto = Nothing
-    Exit Sub
+        FinalizarAplicacao objContexto
+        Set objContexto = Nothing
+     Exit Sub
 
 TratarErro:
-    GravarLogEx "ERRO em RevalidarENotificar: " & Err.Description, LOG_ERROR
-    On Error Resume Next
-    FinalizarAplicacao objContexto
+        GravarLogEx "ERRO em RevalidarENotificar: " & Err.Description, LOG_ERROR
+        On Error Resume Next
+        FinalizarAplicacao objContexto
 End Sub
 
 ' ====================================================================================
@@ -175,13 +180,13 @@ End Sub
 Private Sub ValidarPreCondicoes(ByVal objContexto As clsAppContext)
     If objContexto Is Nothing Then Err.Raise vbObjectError + 500, "ValidarPreCondicoes", "Contexto nulo"
 
-    If objContexto.WorkbookAlvo.Path = "" Then
-        Err.Raise vbObjectError + 501, "ValidarPreCondicoes", "O arquivo deve ser salvo antes de executar."
-    End If
+        If objContexto.WorkbookAlvo.Path = "" Then
+            Err.Raise vbObjectError + 501, "ValidarPreCondicoes", "O arquivo deve ser salvo antes de executar."
+        End If
 
-    If objContexto.WorkbookAlvo.Connections.count = 0 Then
-        Err.Raise vbObjectError + 502, "ValidarPreCondicoes", "Nenhuma conexao encontrada no Workbook."
-    End If
+        If objContexto.WorkbookAlvo.Connections.count = 0 Then
+            Err.Raise vbObjectError + 502, "ValidarPreCondicoes", "Nenhuma conexao encontrada no Workbook."
+        End If
 End Sub
 
 Private Sub LimparTelemetriaExecucao()
@@ -198,38 +203,38 @@ End Sub
 Private Sub ExecutarRefreshSincrono(ByVal objConexao As Object)
     On Error GoTo TratarErro
 
-    Dim lngTipoConexao As Long
-    Dim blnRefreshDireto As Boolean
+        Dim lngTipoConexao As Long
+        Dim blnRefreshDireto As Boolean
 
-    On Error Resume Next
-    lngTipoConexao = CLng(objConexao.Type)
-    On Error GoTo TratarErro
+        On Error Resume Next
+        lngTipoConexao = CLng(objConexao.Type)
+        On Error GoTo TratarErro
 
-    GravarLogEx "Refresh Oracle: tipo de conexao=" & CStr(lngTipoConexao), LOG_DEBUG
+            GravarLogEx "Refresh Oracle: tipo de conexao=" & CStr(lngTipoConexao), LOG_DEBUG
 
-    blnRefreshDireto = ConfigurarConexaoRefresh(objConexao)
+            blnRefreshDireto = ConfigurarConexaoRefresh(objConexao)
 
-    If blnRefreshDireto Then
-        GravarLogEx "Refresh Oracle: executando objConexao.Refresh", LOG_DEBUG
-        objConexao.Refresh
-    Else
-        ' Fallback para conexoes nao OLEDB/ODBC (ex.: Power Query/Data Model)
-        GravarLogEx "Refresh Oracle: usando fallback ThisWorkbook.RefreshAll", LOG_WARNING
-        ThisWorkbook.RefreshAll
-    End If
+            If blnRefreshDireto Then
+                GravarLogEx "Refresh Oracle: executando objConexao.Refresh", LOG_DEBUG
+                objConexao.Refresh
+            Else
+                ' Fallback para conexoes nao OLEDB/ODBC (ex.: Power Query/Data Model)
+                GravarLogEx "Refresh Oracle: usando fallback ThisWorkbook.RefreshAll", LOG_WARNING
+                ThisWorkbook.RefreshAll
+            End If
 
-    On Error Resume Next
-    Application.CalculateUntilAsyncQueriesDone
-    If Err.Number <> 0 Then
-        GravarLogEx "Refresh Oracle: CalculateUntilAsyncQueriesDone retornou erro " & Err.Number & " - " & Err.Description, LOG_WARNING
-        Err.Clear
-    End If
-    On Error GoTo TratarErro
+            On Error Resume Next
+            Application.CalculateUntilAsyncQueriesDone
+            If Err.Number <> 0 Then
+                GravarLogEx "Refresh Oracle: CalculateUntilAsyncQueriesDone retornou erro " & Err.Number & " - " & Err.Description, LOG_WARNING
+                Err.Clear
+            End If
+            On Error GoTo TratarErro
 
-    Exit Sub
+             Exit Sub
 
 TratarErro:
-    Err.Raise vbObjectError + 704, "ExecutarRefreshSincrono", "Falha no refresh Oracle: " & Err.Description
+                Err.Raise vbObjectError + 704, "ExecutarRefreshSincrono", "Falha no refresh Oracle: " & Err.Description
 End Sub
 
 Private Function ConfigurarConexaoRefresh(ByVal objConexao As Object) As Boolean
@@ -255,11 +260,11 @@ Private Function ConfigurarConexaoRefresh(ByVal objConexao As Object) As Boolean
 
     On Error GoTo 0
 
-    If Not blnConfigurado Then
-        GravarLogEx "Refresh Oracle: timeout de conexao nao aplicado (tipo de conexao nao suportado).", LOG_WARNING
-    End If
+        If Not blnConfigurado Then
+            GravarLogEx "Refresh Oracle: timeout de conexao nao aplicado (tipo de conexao nao suportado).", LOG_WARNING
+        End If
 
-    ConfigurarConexaoRefresh = blnConfigurado
+        ConfigurarConexaoRefresh = blnConfigurado
 End Function
 
 Private Sub ValidarMudancaStamp(ByVal strAntes As String, ByVal strDepois As String, ByVal blnModoRobo As Boolean)
@@ -278,23 +283,23 @@ Private Sub ValidarMudancaStamp(ByVal strAntes As String, ByVal strDepois As Str
 End Sub
 
 ' ====================================================================================
-' GESTAO DE ESTADO DO EXCEL (ENGINE)
+' GESTAO DE ESTADO Do EXCEL (ENGINE)
 ' ====================================================================================
 
 Public Sub InicializarAplicacao(ByVal objContexto As clsAppContext)
     If objContexto Is Nothing Then Exit Sub
 
-    With Application
-        objContexto.ScreenUpdatingOriginal = .ScreenUpdating
-        objContexto.EnableEventsOriginal = .EnableEvents
-        objContexto.DisplayAlertsOriginal = .DisplayAlerts
-        objContexto.CalculationOriginal = .Calculation
+        With Application
+            objContexto.ScreenUpdatingOriginal = .ScreenUpdating
+            objContexto.EnableEventsOriginal = .EnableEvents
+            objContexto.DisplayAlertsOriginal = .DisplayAlerts
+            objContexto.CalculationOriginal = .Calculation
 
-        .ScreenUpdating = False
-        .EnableEvents = False
-        .DisplayAlerts = False
-        .Calculation = xlCalculationManual
-    End With
+            .ScreenUpdating = False
+            .EnableEvents = False
+            .DisplayAlerts = False
+            .Calculation = xlCalculationManual
+        End With
 End Sub
 
 Public Sub FinalizarAplicacao(ByVal objContexto As clsAppContext)

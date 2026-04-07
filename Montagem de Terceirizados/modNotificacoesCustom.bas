@@ -5,18 +5,18 @@ Option Explicit
 ' PRIVADOS (ESTADO / CONFIG)
 ' ====================================================================================
 Private Type EstadoSistemaDetalhado
-    dtmSnapshot      As Date
-    lngTotalLinhas   As Long
-    lngTotalErros    As Long
-    strHashEstado    As String
+dtmSnapshot      As Date
+lngTotalLinhas   As Long
+lngTotalErros    As Long
+strHashEstado    As String
 End Type
 
 Private Type MudancasDetectadas
-    arrNovos()       As DadosErro
-    arrCorrigidos()  As DadosErro
-    lngTotalNovos    As Long
-    lngTotalCorrigidos As Long
-    blnHouveMudanca  As Boolean
+arrNovos()       As DadosErro
+arrCorrigidos()  As DadosErro
+lngTotalNovos    As Long
+lngTotalCorrigidos As Long
+blnHouveMudanca  As Boolean
 End Type
 
 Private Const CACHE_ESTADO_FILE As String = "Cache_Estado_Detalhado.txt"
@@ -26,9 +26,9 @@ Private Const LIMITE_ANOMALIA    As Long = 50
 ' ENTRY POINT (PLUGIN HOOK)
 ' ====================================================================================
 Public Function ProcessarNotificacoesCustomizadas(ByVal lngTotalLinhas As Long, _
-                                                 ByVal lngTotalErros As Long, _
-                                                 ByRef arrErros() As DadosErro, _
-                                                 ByVal blnSilencioso As Boolean) As Boolean
+    ByVal lngTotalErros As Long, _
+    ByRef arrErros() As DadosErro, _
+    ByVal blnSilencioso As Boolean) As Boolean
     Dim udtEstadoAtual    As EstadoSistemaDetalhado
     Dim udtEstadoAnterior As EstadoSistemaDetalhado
     Dim udtMudancas       As MudancasDetectadas
@@ -36,52 +36,61 @@ Public Function ProcessarNotificacoesCustomizadas(ByVal lngTotalLinhas As Long, 
     Dim udtTelLocal       As Telemetria
 
     On Error GoTo TratarErro
-    ProcessarNotificacoesCustomizadas = False
+        ProcessarNotificacoesCustomizadas = False
 
-    GravarLogEx "Iniciando ProcessarNotificacoesCustomizadas (Plugin)", LOG_DEBUG
+        GravarLogEx "Iniciando ProcessarNotificacoesCustomizadas (Plugin)", LOG_DEBUG
 
-    ' 1. Snapshot do Estado
-    With udtEstadoAtual
-        .dtmSnapshot = Now
-        .lngTotalLinhas = lngTotalLinhas
-        .lngTotalErros = lngTotalErros
-        .strHashEstado = GerarHashEstadoAtual(lngTotalLinhas, lngTotalErros, arrErros)
-    End With
-
-    ' 2. Carregar Cache e Comparar (Logica de Delta)
-    udtEstadoAnterior = CarregarEstadoAnterior()
-    udtMudancas = CompararEstados(udtEstadoAtual, udtEstadoAnterior)
-
-    ' 3. Logica de anomalia
-    blnAnomalia = (lngTotalErros >= LIMITE_ANOMALIA)
-    If blnAnomalia Then
-        GravarLogEx "ANOMALIA DETECTADA: Pico de erros (" & lngTotalErros & ")", LOG_WARNING
-    End If
-
-    ' 4. Persistencia (antes do envio para evitar reenvio em loop de erro)
-    SalvarEstadoCache udtEstadoAtual
-
-    ' 5. Notificacao por mudanca de estado ou anomalia
-    If udtMudancas.blnHouveMudanca Or blnAnomalia Then
-        GravarLogEx "Mudanca de estado detectada. Disparando notificacao de e-mail.", LOG_INFO
-        With udtTelLocal
-            .totalLinhas = lngTotalLinhas
-            .totalErros = lngTotalErros
-            .InicioExecucao = Timer
+        ' 1. Snapshot Do Estado
+        With udtEstadoAtual
+            .dtmSnapshot = Now
+            .lngTotalLinhas = lngTotalLinhas
+            .lngTotalErros = lngTotalErros
+            .strHashEstado = GerarHashEstadoAtual(lngTotalLinhas, lngTotalErros, arrErros)
         End With
-        If lngTotalErros > 0 Then
-            modNotificacaoNF.FallbackNotificacaoPadrao udtTelLocal, arrErros, Nothing
-        End If
-    Else
-        GravarLogEx "Estado inalterado. Nenhuma notificacao necessaria.", LOG_DEBUG
-    End If
 
-    ProcessarNotificacoesCustomizadas = True
-    GravarLogEx "ProcessarNotificacoesCustomizadas finalizado.", LOG_DEBUG
-    Exit Function
+        ' 2. Carregar Cache e Comparar (Logica de Delta)
+        udtEstadoAnterior = CarregarEstadoAnterior()
+        udtMudancas = CompararEstados(udtEstadoAtual, udtEstadoAnterior)
+
+        ' 3. Logica de anomalia
+        blnAnomalia = (lngTotalErros >= LIMITE_ANOMALIA)
+        If blnAnomalia Then
+            GravarLogEx "ANOMALIA DETECTADA: Pico de erros (" & lngTotalErros & ")", LOG_WARNING
+        End If
+
+        ' 4. Persistencia (antes Do envio para evitar reenvio em Loop de erro)
+        SalvarEstadoCache udtEstadoAtual
+
+        ' 5. Notificacao por mudanca de estado ou anomalia
+        If udtMudancas.blnHouveMudanca Or blnAnomalia Then
+            GravarLogEx "Mudanca de estado detectada. Disparando notificacao de e-mail.", LOG_INFO
+            With udtTelLocal
+                .totalLinhas = lngTotalLinhas
+                .totalErros = lngTotalErros
+                .InicioExecucao = Timer
+            End With
+            ' VUL-07: FallbackNotificacaoPadrao ja trata totalErros=0 enviando e-mail
+            ' de resolucao (EnviarEmailSucessoRetry). A guarda anterior (If lngTotalErros>0)
+            ' suprimia esse envio, deixando destinatarios sem notificacao de correcao.
+            '   VUL-04: envio isolado em On Error Resume Next para que falha no Outlook
+            ' nao propague excecao ate o wrapper, evitando chamada dupla Do fallback.
+            On Error Resume Next
+            modNotificacaoNF.FallbackNotificacaoPadrao udtTelLocal, arrErros, Nothing
+            If Err.Number <> 0 Then
+                GravarLogEx "Falha ao enviar notificacao no plugin: " & Err.Description, LOG_WARNING
+            End If
+            Err.Clear
+            On Error GoTo TratarErro
+            Else
+                GravarLogEx "Estado inalterado. Nenhuma notificacao necessaria.", LOG_DEBUG
+            End If
+
+            ProcessarNotificacoesCustomizadas = True
+            GravarLogEx "ProcessarNotificacoesCustomizadas finalizado.", LOG_DEBUG
+         Exit Function
 
 TratarErro:
-    GravarLogEx "ERRO no Plugin de Notificacao: " & Err.Description, LOG_ERROR
+            GravarLogEx "ERRO no Plugin de Notificacao: " & Err.Description, LOG_ERROR
 End Function
 
 ' ====================================================================================
@@ -99,12 +108,12 @@ Private Function GerarHashEstadoAtual(ByVal lngLinhas As Long, ByVal lngErros As
     For lngI = 1 To lngErros
         strBase = strBase & CStr(arr(lngI).NumOB) & "|" & arr(lngI).detalheErro & ";"
         If Len(strBase) > 5000 Then Exit For
-    Next lngI
-    On Error GoTo 0
+        Next lngI
+        On Error GoTo 0
 
-    strResult = GerarHashDJB2(strBase)
-    If Len(strResult) = 0 Then strResult = CStr(lngErros) & "fallback"
-    GerarHashEstadoAtual = strResult
+            strResult = modUtil.GerarHashDJB2(strBase)
+            If Len(strResult) = 0 Then strResult = CStr(lngErros) & "fallback"
+                GerarHashEstadoAtual = strResult
 End Function
 
 Private Function CarregarEstadoAnterior() As EstadoSistemaDetalhado
@@ -115,31 +124,31 @@ Private Function CarregarEstadoAnterior() As EstadoSistemaDetalhado
     Dim arrPartes() As String
 
     On Error GoTo Falha
-    strPath = ThisWorkbook.Path & "\" & CACHE_ESTADO_FILE
+        strPath = ThisWorkbook.Path & "\" & CACHE_ESTADO_FILE
 
-    If Dir(strPath) = "" Then
-        GravarLogEx "Cache anterior nao encontrado. Primeira execucao.", LOG_DEBUG
-        GoTo Falha
-    End If
+        If Dir(strPath) = "" Then
+            GravarLogEx "Cache anterior nao encontrado. Primeira execucao.", LOG_DEBUG
+            GoTo Falha
+            End If
 
-    intFileNum = FreeFile
-    Open strPath For Input As #intFileNum
-    Line Input #intFileNum, strLinha
-    Close #intFileNum
+            intFileNum = FreeFile
+            Open strPath For Input As #intFileNum
+            Line Input #intFileNum, strLinha
+            Close #intFileNum
 
-    arrPartes = Split(strLinha, "|")
-    If UBound(arrPartes) >= 4 Then
-        On Error Resume Next
-        udtEstado.dtmSnapshot = CDate(arrPartes(0))
-        udtEstado.lngTotalLinhas = CLng(arrPartes(1))
-        udtEstado.lngTotalErros = CLng(arrPartes(2))
-        udtEstado.strHashEstado = arrPartes(4)
-        On Error GoTo Falha
-        GravarLogEx "Cache anterior: " & arrPartes(2) & " erros | Hash=" & arrPartes(4), LOG_DEBUG
-    End If
+            arrPartes = Split(strLinha, "|")
+            If UBound(arrPartes) >= 4 Then
+                On Error Resume Next
+                udtEstado.dtmSnapshot = CDate(arrPartes(0))
+                udtEstado.lngTotalLinhas = CLng(arrPartes(1))
+                udtEstado.lngTotalErros = CLng(arrPartes(2))
+                udtEstado.strHashEstado = arrPartes(4)
+                On Error GoTo Falha
+                    GravarLogEx "Cache anterior: " & arrPartes(2) & " erros | Hash=" & arrPartes(4), LOG_DEBUG
+                End If
 
 Falha:
-    CarregarEstadoAnterior = udtEstado
+                CarregarEstadoAnterior = udtEstado
 End Function
 
 Private Function CompararEstados(ByRef udtAtual As EstadoSistemaDetalhado, ByRef udtAnterior As EstadoSistemaDetalhado) As MudancasDetectadas
@@ -152,12 +161,12 @@ Private Function CompararEstados(ByRef udtAtual As EstadoSistemaDetalhado, ByRef
             GravarLogEx "Sem estado anterior: " & udtAtual.lngTotalErros & " erro(s) encontrado(s) - notificando.", LOG_INFO
         End If
         CompararEstados = udtMud
-        Exit Function
+     Exit Function
     End If
 
     ' Compara hash e contagem de erros
     If udtAtual.strHashEstado <> udtAnterior.strHashEstado Or _
-       udtAtual.lngTotalErros <> udtAnterior.lngTotalErros Then
+        udtAtual.lngTotalErros <> udtAnterior.lngTotalErros Then
         udtMud.blnHouveMudanca = True
         GravarLogEx "Delta de estado: " & udtAnterior.lngTotalErros & " -> " & udtAtual.lngTotalErros & " erro(s). Hash: " & udtAnterior.strHashEstado & " -> " & udtAtual.strHashEstado, LOG_INFO
     Else
@@ -198,23 +207,23 @@ Private Sub SalvarEstadoCache(ByRef udtEstado As EstadoSistemaDetalhado)
     Dim strLinha   As String
 
     On Error GoTo Falha
-    strPath = ThisWorkbook.Path & "\" & CACHE_ESTADO_FILE
-    intFileNum = FreeFile
+        strPath = ThisWorkbook.Path & "\" & CACHE_ESTADO_FILE
+        intFileNum = FreeFile
 
-    ' Formato: Data|Linhas|Erros|Alertas|Hash
-    strLinha = Format$(udtEstado.dtmSnapshot, "dd/mm/yyyy hh:nn:ss") & "|" & _
-               udtEstado.lngTotalLinhas & "|" & _
-               udtEstado.lngTotalErros & "|0|" & _
-               udtEstado.strHashEstado
+        ' Formato: Data|Linhas|Erros|Alertas|Hash
+        strLinha = Format$(udtEstado.dtmSnapshot, "dd/mm/yyyy hh:nn:ss") & "|" & _
+        udtEstado.lngTotalLinhas & "|" & _
+        udtEstado.lngTotalErros & "|0|" & _
+        udtEstado.strHashEstado
 
-    Open strPath For Output As #intFileNum
-    Print #intFileNum, strLinha
-    Close #intFileNum
+        Open strPath For Output As #intFileNum
+        Print #intFileNum, strLinha
+        Close #intFileNum
 
-    GravarLogEx "Cache atualizado: " & strPath, LOG_DEBUG
-    Exit Sub
+        GravarLogEx "Cache atualizado: " & strPath, LOG_DEBUG
+     Exit Sub
 Falha:
-    GravarLogEx "Erro ao salvar cache: " & Err.Description, LOG_WARNING
+        GravarLogEx "Erro ao salvar cache: " & Err.Description, LOG_WARNING
 End Sub
 
 Private Function HTMLEncode(ByVal strIn As String) As String
@@ -225,16 +234,5 @@ Private Function HTMLEncode(ByVal strIn As String) As String
     HTMLEncode = strIn
 End Function
 
-Private Function GerarHashDJB2(ByVal texto As String) As String
-    ' DJB2 implementado em Double puro para evitar VBA Error 6 (Overflow).
-    ' O operador Mod converte Double->Long antes do calculo, causando Overflow
-    ' quando h > 2^31-1. Substituido por subtracao aritmetica equivalente.
-    Dim i As Long
-    Dim h As Double
-    h = 5381
-    For i = 1 To Len(texto)
-        h = (h * 33) + AscW(Mid$(texto, i, 1))
-        If h > 2147483647 Then h = h - (Int(h / 2147483647) * 2147483647)
-    Next i
-    GerarHashDJB2 = CStr(Int(h))
-End Function
+' VUL-09: GerarHashDJB2 removida deste modulo.
+' Uso centralizado em modUtil.GerarHashDJB2 (canonica, ASCII-safe, Hex output).
