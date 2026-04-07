@@ -15,7 +15,7 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
     On Error GoTo TratarErro
 
     Dim objContexto     As clsAppContext
-    Dim objConexaoAlvo  As WorkbookConnection
+    Dim objConexaoAlvo  As workbookConnection
     Dim strFpAntes      As String
     Dim strFpDepois     As String
     Dim blnStampOK      As Boolean
