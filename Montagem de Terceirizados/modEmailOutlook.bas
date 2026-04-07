@@ -71,6 +71,29 @@ Public Sub LimparEstadoNotificacao()
 End Sub
 
 ' ====================================================================================
+' SMOKE TEST (USE NO VBE PARA VALIDAR ENVIO ISOLADO SEM PASSAR PELO PLUGIN)
+' ====================================================================================
+Public Sub TestarEnvioEmail()
+    ' Executa um envio de e-mail de erro direto, sem acionar o plugin de delta.
+    ' Util para verificar se o Outlook esta configurado e os destinatarios corretos.
+    Dim udtTelTeste As Telemetria
+
+    LimparEstadoNotificacao
+
+    With udtTelTeste
+        .InicioExecucao = Timer
+        .totalLinhas = 84
+        .totalErros = 3
+    End With
+
+    GravarLogEx "[SMOKE TEST] Iniciando test de envio direto de e-mail de erro...", LOG_INFO
+    EnviarEmailComErrosRetry udtTelTeste
+    GravarLogEx "[SMOKE TEST] Concluido.", LOG_INFO
+
+    MsgBox "Smoke test concluido. Verifique o log e o Outlook.", vbInformation, "TestarEnvioEmail"
+End Sub
+
+' ====================================================================================
 ' CONSTRUTORES DE EMAIL
 ' ====================================================================================
 Private Function EnviarEmailComErros(ByRef udtTel As Telemetria) As Boolean
@@ -122,7 +145,13 @@ Private Function EnviarEmailCore(ByVal strSubject As String, ByVal strBodyHtml A
     On Error GoTo TratarErro
 
     Set objAdapter = GetOutlookAdapter()
-    EnviarEmailCore = objAdapter.EnviarEmailHtml(strSubject, strBodyHtml, strTo, strCC, strAttachmentPath, strIntro, strLegenda)
+    GravarLogEx "E-MAIL: Enviando para [" & strTo & "] | Assunto: [" & strSubject & "]", LOG_INFO
+    EnviarEmailCore = objAdapter.EnviarEmail(strSubject, strBodyHtml, strTo, strCC, vbNullString, strIntro, strLegenda, False, strAttachmentPath)
+    If EnviarEmailCore Then
+        GravarLogEx "E-MAIL: Enviado com sucesso.", LOG_INFO
+    Else
+        GravarLogEx "E-MAIL: FALHA: " & objAdapter.LastError, LOG_ERROR
+    End If
 
 Saida:
     Set objAdapter = Nothing

@@ -226,15 +226,15 @@ Private Function HTMLEncode(ByVal strIn As String) As String
 End Function
 
 Private Function GerarHashDJB2(ByVal texto As String) As String
+    ' DJB2 implementado em Double puro para evitar VBA Error 6 (Overflow).
+    ' O operador Mod converte Double->Long antes do calculo, causando Overflow
+    ' quando h > 2^31-1. Substituido por subtracao aritmetica equivalente.
     Dim i As Long
-    Dim h As Double ' Usar Double para evitar overflow em somas grandes antes do And
+    Dim h As Double
     h = 5381
     For i = 1 To Len(texto)
-        ' h = ((h * 33) + AscW(Mid$(texto, i, 1)))
-        ' No VBA, DJB2 simplificado para 32-bit:
-        h = ((h * 33) + AscW(Mid$(texto, i, 1)))
-        ' Simula 32-bit (aproximado para strings curtas)
-        If h > 2147483647 Then h = h Mod 2147483647
+        h = (h * 33) + AscW(Mid$(texto, i, 1))
+        If h > 2147483647 Then h = h - (Int(h / 2147483647) * 2147483647)
     Next i
     GerarHashDJB2 = CStr(Int(h))
 End Function
