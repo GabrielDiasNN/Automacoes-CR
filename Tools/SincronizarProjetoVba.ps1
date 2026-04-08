@@ -46,6 +46,30 @@ function Invoke-ActivateDataSheet {
     Write-Log "WARN" "Nenhuma aba de dados Oracle encontrada para ativar antes de salvar"
 }
 
+function New-CrlfTempCopy {
+    param([string]$SourcePath)
+
+    $tempPath = Join-Path $env:TEMP ("{0}_{1}{2}" -f [System.IO.Path]::GetFileNameWithoutExtension($SourcePath), [Guid]::NewGuid().ToString("N"), [System.IO.Path]::GetExtension($SourcePath))
+    $bytes = [System.IO.File]::ReadAllBytes($SourcePath)
+    $normalized = New-Object System.Collections.Generic.List[byte]
+
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        $byte = $bytes[$i]
+        if ($byte -eq 10) {
+            if ($i -eq 0 -or $bytes[$i - 1] -ne 13) {
+                $normalized.Add(13)
+            }
+            $normalized.Add(10)
+        }
+        else {
+            $normalized.Add($byte)
+        }
+    }
+
+    [System.IO.File]::WriteAllBytes($tempPath, $normalized.ToArray())
+    return $tempPath
+}
+
 $XlsmPath = [System.IO.Path]::GetFullPath($XlsmPath)
 $SourceDir = [System.IO.Path]::GetFullPath($SourceDir)
 
@@ -98,8 +122,33 @@ try {
             Write-Log "INFO" "Removido modulo existente: $modName"
         }
 
-        $vbProj.VBComponents.Import($file.FullName) | Out-Null
-        Write-Log "INFO" "Importado: $($file.Name)"
+        $expectedType = if ($file.Extension -ieq ".cls") { 2 } else { 1 }
+        $tempImportPath = $null
+        $importPath = $file.FullName
+
+        try {
+            if ($file.Extension -ieq ".cls") {
+                $tempImportPath = New-CrlfTempCopy -SourcePath $file.FullName
+                $importPath = $tempImportPath
+            }
+
+            $importedComponent = $vbProj.VBComponents.Import($importPath)
+            if ($null -eq $importedComponent) {
+                throw "Import retornou nulo para '$($file.Name)'."
+            }
+
+            if ([int]$importedComponent.Type -ne $expectedType) {
+                try { $vbProj.VBComponents.Remove($importedComponent) } catch {}
+                throw "Componente '$($file.Name)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $expectedType."
+            }
+
+            Write-Log "INFO" "Importado: $($file.Name)"
+        }
+        finally {
+            if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
+                try { Remove-Item -LiteralPath $tempImportPath -Force } catch {}
+            }
+        }
     }
 
     Invoke-ActivateDataSheet -Workbook $wb
@@ -132,8 +181,33 @@ try {
                 Write-Log "INFO" "[Shared] Substituindo componente existente: $modName"
             }
 
-            $vbProj.VBComponents.Import($file.FullName) | Out-Null
-            Write-Log "INFO" "[Shared] Importado: $($file.Name)"
+            $expectedType = if ($file.Extension -ieq ".cls") { 2 } else { 1 }
+            $tempImportPath = $null
+            $importPath = $file.FullName
+
+            try {
+                if ($file.Extension -ieq ".cls") {
+                    $tempImportPath = New-CrlfTempCopy -SourcePath $file.FullName
+                    $importPath = $tempImportPath
+                }
+
+                $importedComponent = $vbProj.VBComponents.Import($importPath)
+                if ($null -eq $importedComponent) {
+                    throw "Import shared retornou nulo para '$($file.Name)'."
+                }
+
+                if ([int]$importedComponent.Type -ne $expectedType) {
+                    try { $vbProj.VBComponents.Remove($importedComponent) } catch {}
+                    throw "Componente shared '$($file.Name)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $expectedType."
+                }
+
+                Write-Log "INFO" "[Shared] Importado: $($file.Name)"
+            }
+            finally {
+                if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
+                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch {}
+                }
+            }
         }
 
         Invoke-ActivateDataSheet -Workbook $wb
