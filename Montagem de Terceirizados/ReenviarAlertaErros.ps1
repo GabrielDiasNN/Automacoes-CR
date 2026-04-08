@@ -27,12 +27,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$BasePath    = "C:\Automacoes\Montagem de Terceirizados"
-$ExcelPath   = Join-Path $BasePath "Validador_Notas_Montagem.xlsm"
-$LogDir      = Join-Path $BasePath "Logs"
-$LogFile     = Join-Path $LogDir "Montagem.log"
-$CacheFile   = Join-Path $BasePath "Cache_Estado_Detalhado.txt"
-$MacroName   = "RevalidarENotificar"
+$BasePath = "C:\Automacoes\Montagem de Terceirizados"
+$ExcelPath = Join-Path $BasePath "Validador_Notas_Montagem.xlsm"
+$LogDir = Join-Path $BasePath "Logs"
+$LogFile = Join-Path $LogDir "Montagem.log"
+$CacheFile = Join-Path $BasePath "Cache_Estado_Detalhado.txt"
+$MacroName = "RevalidarENotificar"
 
 $libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
 if (Test-Path $libPath) { Import-Module $libPath -Force }
@@ -63,33 +63,38 @@ if (-not $KeepCache) {
         try {
             Remove-Item $CacheFile -Force
             Write-Log "Cache de estado apagado. Erros serao tratados como novos."
-        } catch {
+        }
+        catch {
             Write-Log "Aviso: nao foi possivel apagar o cache: $_" "WARN"
         }
-    } else {
+    }
+    else {
         Write-Log "Cache nao encontrado (primeira execucao ou ja apagado)."
     }
-} else {
+}
+else {
     Write-Log "Cache mantido (-KeepCache). Logica de delta normal sera aplicada."
 }
 
 # --- 3. Abrir Excel via COM ---
 Write-Log "Iniciando Excel via COM..."
 $excel = $null
-$wb    = $null
+$wb = $null
 try {
     $excel = New-Object -ComObject Excel.Application
-    $excel.Visible           = $false
-    $excel.DisplayAlerts     = $false
-    $excel.AskToUpdateLinks  = $false
-} catch {
+    $excel.Visible = $false
+    $excel.DisplayAlerts = $false
+    $excel.AskToUpdateLinks = $false
+}
+catch {
     Write-Log "Falha ao criar instancia Excel: $_" "ERROR"
     exit 2
 }
 
 try {
     $wb = $excel.Workbooks.Open($ExcelPath, 0, $false)
-} catch {
+}
+catch {
     Write-Log "Falha ao abrir workbook: $_" "ERROR"
     try { $excel.Quit() } catch {}
     [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
@@ -106,7 +111,8 @@ if (Test-Path $LogFile) {
 Write-Log "Executando macro: $MacroName"
 try {
     $excel.Run($MacroName)
-} catch {
+}
+catch {
     Write-Log "Falha ao executar macro: $_" "ERROR"
     try { $wb.Close($false) } catch {}
     try { $excel.Quit() } catch {}
@@ -129,7 +135,8 @@ if (Test-Path $LogFile) {
         $reader.Close()
         $stream.Close()
         $linhasNovas = $conteudo -split "`n" | Where-Object { $_.Trim() -ne "" }
-    } catch {
+    }
+    catch {
         Write-Log "Aviso: nao foi possivel ler novas entradas do log: $_" "WARN"
     }
 }
@@ -144,12 +151,12 @@ if ($linhasNovas.Count -gt 0) {
 }
 
 # Categoriza o resultado
-$emailEnviado  = $linhasNovas | Where-Object { $_ -match "E-MAIL: Enviado com sucesso" }
-$emailFalhou   = $linhasNovas | Where-Object { $_ -match "FALHA DEFINITIVA: Email" }
-$semMudanca    = $linhasNovas | Where-Object { $_ -match "Estado inalterado" }
-$idempotencia  = $linhasNovas | Where-Object { $_ -match "ignorado por idempotencia" }
-$errosVba      = $linhasNovas | Where-Object { $_ -match "\[ERROR\]" }
-$concluido     = $linhasNovas | Where-Object { $_ -match "REENVIO FORCADO: Concluido" }
+$emailEnviado = $linhasNovas | Where-Object { $_ -match "E-MAIL: Enviado com sucesso" }
+$emailFalhou = $linhasNovas | Where-Object { $_ -match "FALHA DEFINITIVA: Email" }
+$semMudanca = $linhasNovas | Where-Object { $_ -match "Estado inalterado" }
+$idempotencia = $linhasNovas | Where-Object { $_ -match "ignorado por idempotencia" }
+$errosVba = $linhasNovas | Where-Object { $_ -match "\[ERROR\]" }
+$concluido = $linhasNovas | Where-Object { $_ -match "REENVIO FORCADO: Concluido" }
 
 # --- 7. Fechar Excel ---
 try { $wb.Close($false) } catch {}

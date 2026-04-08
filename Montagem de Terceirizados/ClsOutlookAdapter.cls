@@ -9,127 +9,108 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
 
-' ==============================================================================
-' ClsOutlookAdapter  (FONTE CANONICA: _Shared/VBA/)
-' Responsabilidade: interface com Outlook para envio de emails HTML.
-' Sem dependencias externas: erros sao expostos via LastError.
-' O caller e responsavel por logar LastError apos cada chamada.
-' ==============================================================================
+Private m_objOutlookApp As Object
 
-Private m_oApp      As Object
-Private m_lastError As String
-
-Public Property Get LastError() As String
-    LastError = m_lastError
-End Property
-
-' strPara    : destinatario principal (obrigatorio; deve conter "@")
-' strCopia   : CC (opcional)
-' strCco     : BCC (opcional)
-' strIntro   : texto de introducao antes do corpo (opcional)
-' strLegenda : rodape/legenda abaixo do corpo (opcional)
-' bPreviewOnly: True exibe o email sem enviar
-' strAttachmentPath: caminho completo do arquivo a anexar (opcional)
-Public Function EnviarEmail(ByVal strSubject As String, _
-                             ByVal strBodyHtml As String, _
-                             ByVal strPara As String, _
-                             Optional ByVal strCopia As String = "", _
-                             Optional ByVal strCco As String = "", _
-                             Optional ByVal strIntro As String = "", _
-                             Optional ByVal strLegenda As String = "", _
-                             Optional ByVal bPreviewOnly As Boolean = False, _
-                             Optional ByVal strAttachmentPath As String = "") As Boolean
-    Dim oApp     As Object
-    Dim oItem    As Object
-    Dim composer As ClsEmailComposerService
+Public Function EnviarEmailHtml(ByVal strSubject As String, _
+                                ByVal strBodyHtml As String, _
+                                ByVal strTo As String, _
+                                ByVal strCC As String, _
+                                Optional ByVal strAttachmentPath As String = "", _
+                                Optional ByVal strIntro As String = "", _
+                                Optional ByVal strLegenda As String = "") As Boolean
+    Dim objApp As Object
+    Dim objItem As Object
+    Dim objComposer As ClsEmailComposerService
 
     On Error GoTo TratarErro
 
-    m_lastError = vbNullString
-
-    If InStr(1, strPara, "@") = 0 Then
-        m_lastError = "Destinatario invalido: " & strPara
+    Set objApp = GetOutlookAppSafe()
+    If objApp Is Nothing Then
+        GravarLogEx "E-MAIL: Nao foi possivel obter instancia do Outlook.", LOG_ERROR
+        EnviarEmailHtml = False
         Exit Function
     End If
 
-    Set oApp = GetOutlookAppSafe()
-    If oApp Is Nothing Then
-        m_lastError = "Outlook inacessivel"
+    If InStr(1, strTo, "@") = 0 Then
+        GravarLogEx "E-MAIL: Destinatario invalido: '" & strTo & "'", LOG_ERROR
+        EnviarEmailHtml = False
         Exit Function
     End If
 
-    Set oItem = oApp.CreateItem(0)
-    If oItem Is Nothing Then
-        m_lastError = "Falha ao criar MailItem"
-        Exit Function
-    End If
+    Set objItem = objApp.CreateItem(0)
+    Set objComposer = New ClsEmailComposerService
 
-    Set composer = New ClsEmailComposerService
-
-    With oItem
+    With objItem
+        .To = strTo
+        .CC = strCC
         .Subject = strSubject
-        .To = strPara
-        If Len(strCopia) > 0 Then .CC = strCopia
-        If Len(strCco) > 0 Then .BCC = strCco
-        .BodyFormat = 2  ' olFormatHTML
-        .htmlBody = composer.ComposeHtmlBodyWithSignature(oItem, strIntro, strBodyHtml, strLegenda)
+        .BodyFormat = 2 ' olFormatHTML
+        .htmlBody = objComposer.ComposeHtmlBodyWithSignature(objItem, strIntro, strBodyHtml, strLegenda)
 
         If Len(strAttachmentPath) > 0 Then
-            TryAddAttachment oItem, strAttachmentPath
+            If TryAddAttachment(objItem, strAttachmentPath) Then
+                GravarLogEx "E-MAIL: Anexo adicionado: " & strAttachmentPath, LOG_DEBUG
+            Else
+                GravarLogEx "E-MAIL: Anexo nao encontrado/invalidado: " & strAttachmentPath, LOG_WARNING
+            End If
         End If
 
-        If bPreviewOnly Then
-            .Display
-        Else
-            .Send
-        End If
+        GravarLogEx "E-MAIL: Enviando para [" & strTo & "] | Assunto: [" & strSubject & "]", LOG_INFO
+        .Send
     End With
 
-    EnviarEmail = True
+    GravarLogEx "E-MAIL: Enviado com sucesso.", LOG_INFO
+    EnviarEmailHtml = True
 
 Saida:
-    Set composer = Nothing
-    Set oItem = Nothing
+    Set objComposer = Nothing
+    Set objItem = Nothing
     Exit Function
 
 TratarErro:
-    If Len(m_lastError) = 0 Then m_lastError = Err.Description
-    EnviarEmail = False
+    GravarLogEx "E-MAIL: FALHA: " & Err.Description, LOG_ERROR
+    EnviarEmailHtml = False
     Resume Saida
 End Function
 
 Public Function GetOutlookAppSafe() As Object
     On Error Resume Next
 
-    If m_oApp Is Nothing Then
-        Set m_oApp = GetObject(, "Outlook.Application")
+    If m_objOutlookApp Is Nothing Then
+        Set m_objOutlookApp = GetObject(, "Outlook.Application")
     End If
 
-    If m_oApp Is Nothing Then
+    If m_objOutlookApp Is Nothing Then
         Err.Clear
-        Set m_oApp = CreateObject("Outlook.Application")
+        Set m_objOutlookApp = CreateObject("Outlook.Application")
     End If
 
-    If Not m_oApp Is Nothing Then
-        If m_oApp.Session Is Nothing Then
-            m_oApp.GetNamespace("MAPI").Logon
+    If m_objOutlookApp Is Nothing Then
+        GravarLogEx "OUTLOOK: Falha ao obter instancia. Verifique se o Outlook esta travado.", LOG_ERROR
+    Else
+        If m_objOutlookApp.Session Is Nothing Then
+            m_objOutlookApp.GetNamespace("MAPI").Logon
         End If
     End If
 
-    Set GetOutlookAppSafe = m_oApp
+    Set GetOutlookAppSafe = m_objOutlookApp
     On Error GoTo 0
 End Function
 
 Public Sub ResetState()
-    Set m_oApp = Nothing
-    m_lastError = vbNullString
+    Set m_objOutlookApp = Nothing
 End Sub
 
-Private Sub TryAddAttachment(ByVal oItem As Object, ByVal strAttachmentPath As String)
-    On Error Resume Next
+Private Function TryAddAttachment(ByVal objItem As Object, ByVal strAttachmentPath As String) As Boolean
+    On Error GoTo TratarErro
 
-    If Dir$(strAttachmentPath) = vbNullString Then Exit Sub
-    If FileLen(strAttachmentPath) <= 0 Then Exit Sub
+    If Dir$(strAttachmentPath) = vbNullString Then Exit Function
+    If FileLen(strAttachmentPath) <= 0 Then Exit Function
 
-    oItem.Attachments.Add strAttachmentPath
-End Sub
+    objItem.Attachments.Add strAttachmentPath
+    TryAddAttachment = True
+    Exit Function
+
+TratarErro:
+    TryAddAttachment = False
+End Function

@@ -62,23 +62,18 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
         End If
 
         ' Snapshot ANTES
-        ' VUL-08: resolve a planilha de dados explicitamente pelo ListObject Oracle
-        ' para evitar que ObterFingerprintTabelaAtiva use ActiveSheet como fallback.
-        Dim objLoFp   As ListObject
-        Dim objWsDados As Worksheet
-        Set objLoFp = FindListObjectByName(STAMP_TABLE_NAME)
-        If Not objLoFp Is Nothing Then Set objWsDados = objLoFp.Parent
-            Set objLoFp = Nothing
-            strFpAntes = ObterFingerprintTabelaAtiva(objWsDados)
+        strFpAntes = ObterFingerprintTabelaAtiva() ' TODO: Mudar para aceitar ws explicito
+        On Error Resume Next
+        EnsureStampNamedRange
+        blnStampOK = (Err.Number = 0)
+        Err.Clear
+        On Error GoTo TratarErro
 
-            ' VUL-03: EnsureStampNamedRange propaga erro se a coluna STAMP nao existe
-            ' (schema drift / view renomeada). O TratarErro abaixo captura e aborta
-            ' com ERRO FATAL, evitando validacao silenciosa de dados desatualizados.
-            EnsureStampNamedRange
-            blnStampOK = True
-            varStampAntes = GetStampValue()
-            strStampAntesK = StampKey(varStampAntes)
-            LogStampSnapshot "ANTES", varStampAntes
+            If blnStampOK Then
+                varStampAntes = GetStampValue()
+                strStampAntesK = StampKey(varStampAntes)
+                LogStampSnapshot "ANTES", varStampAntes
+            End If
 
             If Not blnModoRobo Then Application.StatusBar = ">> [10%] Atualizando Oracle..."
 
@@ -115,7 +110,7 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
                         RegistrarHistorico True, m_Telemetria
                         LogStepEnd "OK"
 
-                        GravarLogEx "FIM DO PROCESSO. Resultado=Sucesso | Tempo=" & Format$(TimerElapsed(m_Telemetria.InicioExecucao), "0.00") & "s", LOG_INFO
+                        GravarLogEx "FIM Do PROCESSO. Resultado=Sucesso | Tempo=" & Format$(TimerElapsed(m_Telemetria.InicioExecucao), "0.00") & "s", LOG_INFO
 
                         If Not blnModoRobo Then
                             MsgBox "Processo concluido!" & vbCrLf & _
@@ -163,14 +158,14 @@ Public Sub RevalidarENotificar()
         Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=True, blnGerenciarConfig:=False)
         GravarLogEx "REENVIO FORCADO: Concluido.", LOG_INFO
 
+SaidaLimpaReenvio:
         FinalizarAplicacao objContexto
         Set objContexto = Nothing
      Exit Sub
 
 TratarErro:
         GravarLogEx "ERRO em RevalidarENotificar: " & Err.Description, LOG_ERROR
-        On Error Resume Next
-        FinalizarAplicacao objContexto
+        Resume SaidaLimpaReenvio
 End Sub
 
 ' ====================================================================================

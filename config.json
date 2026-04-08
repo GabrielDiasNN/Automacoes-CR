@@ -20,11 +20,10 @@
   "tasks": [
     {
       "name": "Receitas Bloqueadas",
-      "scriptPath": "C:\\Automacoes\\Receitas Bloqueadas\\run.ps1",
+      "scriptPath": "C:\\Automacoes\\Receitas Bloqueadas\\Trigger_Automation.vbs",
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
-      "maxRuntimeMinutes": 30,
       "schedule": {
         "daysOfWeek": [
           1,
@@ -44,11 +43,10 @@
     },
     {
       "name": "Montagem Terceirizados",
-      "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\run.ps1",
+      "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\Trigger_Automation.vbs",
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
-      "maxRuntimeMinutes": 45,
       "schedule": {
         "daysOfWeek": [
           1,
@@ -65,11 +63,10 @@
     },
     {
       "name": "Receitas Emitidas",
-      "scriptPath": "C:\\Automacoes\\Receitas Emitidas\\run.ps1",
+      "scriptPath": "C:\\Automacoes\\Receitas Emitidas\\Trigger_Automation.vbs",
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
-      "maxRuntimeMinutes": 30,
       "schedule": {
         "daysOfWeek": [
           5
@@ -88,7 +85,6 @@
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
-      "maxRuntimeMinutes": 20,
       "schedule": {
         "daysOfWeek": [
           0,

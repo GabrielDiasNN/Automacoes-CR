@@ -12,15 +12,12 @@ Public Sub ValidarNotasFiscais(ByRef udtTel As Telemetria, _
                                 Optional ByVal objWsAlvo As Worksheet = Nothing)
     Dim objWsTrabalho  As Worksheet
     Dim blnSucesso     As Boolean
-
+    
     On Error GoTo TratarErro
 
-    ' 1. Resolucao da Worksheet
-    ' Protecao: nao usa ActiveSheet diretamente. Apos GerarAbaErrosParaAnalise criar
-    ' a aba "Erros NF", ela fica como ActiveSheet ate o workbook ser reaberto.
-    ' ResolverPlanilhaDados() localiza a sheet correta via ListObject Oracle.
+    ' 1. Resolucao da Worksheet (Elimina ActiveSheet)
     If objWsAlvo Is Nothing Then
-        Set objWsTrabalho = ResolverPlanilhaDados()
+        Set objWsTrabalho = ActiveSheet
     Else
         Set objWsTrabalho = objWsAlvo
     End If
@@ -33,7 +30,7 @@ Public Sub ValidarNotasFiscais(ByRef udtTel As Telemetria, _
 
     ' 2. Execucao
     blnSucesso = ExecutarValidacaoCompleta(objWsTrabalho, udtTel, blnSilencioso)
-
+    
     If Not blnSucesso Then
         GravarLogEx "AVISO: ExecutarValidacaoCompleta retornou FALSE.", LOG_WARNING
     End If
@@ -68,7 +65,6 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
     Dim lngLinhaInicial   As Long
     Dim lngColStart       As Long
     Dim dblPercentual     As Double
-    Dim strObsOBValor     As String  ' VUL-06: cache do campo OBS_OB para reuso
 
     On Error GoTo ErroValidacao
     ExecutarValidacaoCompleta = False
@@ -108,11 +104,11 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
     End If
 
     lngIdxColVal = CLng(dicColunas(C_OUTPUT_VAL))
-
+    
     ' Limpeza previa (Protegido contra Nothing)
     Dim rngLimpeza As Range
     Set rngLimpeza = Intersect(objTblPrincipal.DataBodyRange, objWs.Columns(lngIdxColVal))
-
+    
     If Not rngLimpeza Is Nothing Then
         With rngLimpeza
             .ClearContents
@@ -157,14 +153,8 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
 
         strRefCliente = Trim$(CStr(varDadosArray(lngI, CLng(dicColunas(C_REF_CLIENTE)) - lngColStart + 1)))
         blnMontagemOk = ValidarMultiplosNFs(CStr(varDadosArray(lngI, CLng(dicColunas(C_QT_PC_NF)) - lngColStart + 1)), strRefCliente)
-        strObsOBValor = CStr(varDadosArray(lngI, CLng(dicColunas(C_OBS_OB)) - lngColStart + 1))
-        strNfObsOB = ExtrairNFPosNF(strObsOBValor)                   ' 1o NF extraido (para relatorio)
-        blnProgErro = Not ContainsNfRef(strObsOBValor, strRefCliente) ' VUL-06: qualquer NF da OBS_OB
-
-        ' Diagnostico: log das primeiras 5 linhas para verificar comparacoes
-        If lngI <= 5 Then
-            GravarLogEx "DiagRow" & lngI & " Ref=[" & strRefCliente & "] QT=[" & CStr(varDadosArray(lngI, CLng(dicColunas(C_QT_PC_NF)) - lngColStart + 1)) & "] OBS=[" & Left$(strObsOBValor, 60) & "] Montagem=" & blnMontagemOk & " ProgErro=" & blnProgErro, LOG_DEBUG
-        End If
+        strNfObsOB = ExtrairNFPosNF(CStr(varDadosArray(lngI, CLng(dicColunas(C_OBS_OB)) - lngColStart + 1)))
+        blnProgErro = (strRefCliente <> strNfObsOB)
 
         strDetalheErro = ""
         If (Not blnMontagemOk) And blnProgErro Then strDetalheErro = "Erro de Montagem e Programacao"
@@ -207,6 +197,7 @@ End Function
 ' ====================================================================================
 ' AUXILIARES DE LOGICA
 ' ====================================================================================
+
 Private Sub HandleUserInterruption(ByVal lngAtual As Long, ByVal lngTotal As Long)
     If (lngAtual Mod 100) = 0 Then
         If GetAsyncKeyState(vbKeyEscape) <> 0 Then
@@ -254,7 +245,7 @@ Private Sub InicializarRegex()
         Set m_objRegexNF = CreateObject("VBScript.RegExp")
         With m_objRegexNF
             .Pattern = "NF:\s*(\d+)"
-            .Global = True   ' VUL-06: Global=True permite capturar todos os NFs da OBS_OB
+            .Global = False
             .IgnoreCase = True
         End With
     End If
@@ -265,7 +256,6 @@ Private Function ValidarMultiplosNFs(ByVal strTexto As String, ByVal strRefClien
     Dim varParte       As Variant
     Dim arrSubPartes() As String
     Dim strNfAtual     As String
-    Dim lngJ           As Long
 
     ValidarMultiplosNFs = True
     If Len(Trim$(strTexto)) = 0 Then Exit Function
@@ -274,13 +264,7 @@ Private Function ValidarMultiplosNFs(ByVal strTexto As String, ByVal strRefClien
     For Each varParte In arrPartes
         arrSubPartes = Split(CStr(varParte), "-")
         If UBound(arrSubPartes) >= 1 Then
-            ' VUL-05: reconstroi todos os segmentos apos o primeiro hifen
-            ' (suporta referencias de cliente que contem hifen, ex: "REF-A01")
-            strNfAtual = arrSubPartes(1)
-            For lngJ = 2 To UBound(arrSubPartes)
-                strNfAtual = strNfAtual & "-" & arrSubPartes(lngJ)
-            Next lngJ
-            strNfAtual = Trim$(strNfAtual)
+            strNfAtual = Trim$(CStr(arrSubPartes(1)))
             If strNfAtual <> strRefCliente Then
                 ValidarMultiplosNFs = False: Exit Function
             End If
@@ -290,64 +274,9 @@ End Function
 
 Private Function ExtrairNFPosNF(ByVal strTexto As String) As String
     InicializarRegex
-    Dim objMatches As Object
-    Set objMatches = m_objRegexNF.Execute(strTexto)
-    If objMatches.count > 0 Then
-        ExtrairNFPosNF = CStr(objMatches(0).SubMatches(0))
+    If m_objRegexNF.Test(strTexto) Then
+        ExtrairNFPosNF = CStr(m_objRegexNF.Execute(strTexto)(0).SubMatches(0))
     Else
         ExtrairNFPosNF = ""
     End If
-End Function
-
-' VUL-06: verifica se QUALQUER NF extraido de strTexto corresponde a strRef.
-' Evita falso positivo de "Erro de Programacao" quando OBS_OB lista multiplos NFs
-' e o NF correto nao e o primeiro.
-Private Function ContainsNfRef(ByVal strTexto As String, ByVal strRef As String) As Boolean
-    InicializarRegex
-    Dim objMatches As Object
-    Dim objMatch   As Object
-    Set objMatches = m_objRegexNF.Execute(strTexto)
-    For Each objMatch In objMatches
-        If CStr(objMatch.SubMatches(0)) = strRef Then
-            ContainsNfRef = True
-            Exit Function
-        End If
-    Next objMatch
-    ContainsNfRef = False
-End Function
-
-' ====================================================================================
-' RESOLUCAO DE PLANILHA
-' ====================================================================================
-Private Function ResolverPlanilhaDados() As Worksheet
-    ' Localiza a planilha de dados via ListObject (tolerante a troca de ActiveSheet).
-    ' Estrategia 1: planilha que contem ListObject cujo nome contem STAMP_TABLE_NAME.
-    ' Estrategia 2: qualquer planilha com ListObjects, exceto abas auxiliares conhecidas.
-    ' Ultimo fallback com aviso: ActiveSheet.
-    Dim objWs  As Worksheet
-    Dim objLo  As ListObject
-
-    ' Estrategia 1 - ListObject com nome da tabela Oracle
-    For Each objWs In ThisWorkbook.Worksheets
-        For Each objLo In objWs.ListObjects
-            If InStr(1, objLo.Name, STAMP_TABLE_NAME, vbTextCompare) > 0 Then
-                GravarLogEx "Planilha de dados: " & objWs.Name & " (via ListObject)", LOG_DEBUG
-                Set ResolverPlanilhaDados = objWs
-                Exit Function
-            End If
-        Next objLo
-    Next objWs
-
-    ' Estrategia 2 - qualquer planilha com ListObjects exceto abas auxiliares conhecidas
-    For Each objWs In ThisWorkbook.Worksheets
-        If objWs.Name <> "Erros NF" And objWs.Name <> "Config" And objWs.ListObjects.count > 0 Then
-            GravarLogEx "Planilha de dados: " & objWs.Name & " (via fallback ListObject)", LOG_WARNING
-            Set ResolverPlanilhaDados = objWs
-            Exit Function
-        End If
-    Next objWs
-
-    ' Ultimo fallback com aviso
-    GravarLogEx "AVISO: Nenhuma planilha de dados encontrada. Usando ActiveSheet.", LOG_WARNING
-    Set ResolverPlanilhaDados = ActiveSheet
 End Function

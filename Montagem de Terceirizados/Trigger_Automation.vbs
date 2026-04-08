@@ -13,12 +13,13 @@ Dim scriptStart, logPath, execId
 Dim excelPath, macroName
 excelPath = "C:\Automacoes\Montagem de Terceirizados\Validador_Notas_Montagem.xlsm"
 macroName = "AtualizarEValidar"
-logPath   = "C:\Automacoes\Montagem de Terceirizados\Logs\Montagem.log"
+logPath   = "C:\Automacoes\Montagem de Terceirizados\Logs\Execution.log"
 
 ' [FEATURE FLAG] Monitoramento de Timeout via Log VBA (Estilo "Robo Fiscal")
-Dim USE_TIMEOUT_MONITOR, vbaLogPath, maxTimeoutSeconds
+Dim USE_TIMEOUT_MONITOR, vbaLogPath, maxTimeoutSeconds, datedLogName
 USE_TIMEOUT_MONITOR = True
-vbaLogPath          = "C:\Automacoes\Montagem de Terceirizados\Logs\Montagem.log"
+datedLogName       = "log_" & Year(Now) & "-" & Right("0" & Month(Now), 2) & "-" & Right("0" & Day(Now), 2) & ".log"
+vbaLogPath          = "C:\Automacoes\Montagem de Terceirizados\Logs\" & datedLogName
 maxTimeoutSeconds   = 300
 
 ' [FEATURE FLAG] Script Pos-Execucao (Ex: WhatsApp Node.js Bridge)
@@ -92,10 +93,10 @@ Sub LimparObjetosExcel()
 End Sub
 
 Sub EncerrarComErro(exitCode, msg)
-    WriteLog "ERROR", msg & " | elapsedSec=" & ElapsedSeconds()
+    WriteLog "ERRO", msg & " | elapsedSec=" & ElapsedSeconds()
     Call LimparObjetosExcel()
     WriteLog "INFO", "FIM - VBScript com erro. ExitCode=" & exitCode & " | elapsedSec=" & ElapsedSeconds()
-    WriteLog "INFO", "================================================================================"
+    WriteLog "INFO", "========================================================="
     WScript.Quit exitCode
 End Sub
 
@@ -125,7 +126,7 @@ Else
     execId = "MANUAL_" & GerarExecId()
 End If
 
-WriteLog "INFO", "================================================================================"
+WriteLog "INFO", "========================================================="
 WriteLog "INFO", "INICIO - Execucao via VBScript (Montagem Terceirizados) [ExecId=" & execId & "]"
 WriteLog "INFO", "Workbook=" & excelPath
 
@@ -267,5 +268,5 @@ If POST_EXECUTION_BAT <> "" Then
 End If
 
 WriteLog "INFO", "FIM - VBScript com sucesso. elapsedSec=" & ElapsedSeconds()
-WriteLog "INFO", "================================================================================"
+WriteLog "INFO", "========================================================="
 WScript.Quit 0
