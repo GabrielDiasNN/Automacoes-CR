@@ -1,9 +1,10 @@
 # ==============================================================================
 # ARQUIVO: SimularErroAcertoMontagem.ps1
-# VERSAO: 1.0
-# DESCRICAO: Executa validacao E2E da Montagem com dois cenarios controlados:
+# VERSAO: 1.1
+# DESCRICAO: Executa validacao E2E da Montagem com tres cenarios controlados:
 #            1) Forca erro de validacao e confirma envio de e-mail de alerta.
-#            2) Restaura os dados e confirma envio de e-mail de acerto.
+#            2) Simula alteracao de estado e confirma envio de e-mail de alteracao.
+#            3) Restaura os dados e confirma envio de e-mail de acerto.
 #
 # IMPORTANTE:
 # - Este script altera 1 celula temporariamente e restaura ao final.
@@ -31,7 +32,7 @@ if ([string]::IsNullOrWhiteSpace($LogPath)) {
 }
 
 $legacyLogPath = Join-Path $montagemPath "Logs\Montagem.log"
-if (-not (Test-Path -LiteralPath $LogPath) -and (Test-Path -LiteralPath $legacyLogPath)) {
+if (Test-Path -LiteralPath $legacyLogPath) {
     $LogPath = $legacyLogPath
 }
 
@@ -119,7 +120,7 @@ function Find-TargetTable {
             if ([string]$lo.Name -eq $script:TableName) {
                 return @{
                     Worksheet = $ws
-                    Table = $lo
+                    Table     = $lo
                 }
             }
         }
@@ -160,6 +161,77 @@ function Find-DataRow {
     }
 
     throw "Nao foi encontrada linha elegivel para simulacao (ref + OBS_OB com NF)."
+}
+
+function Get-SimulationRows {
+    param([string]$Path)
+
+    $excel = $null
+    $wb = $null
+
+    try {
+        $excel = New-Object -ComObject Excel.Application
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
+        $excel.ScreenUpdating = $false
+        $excel.EnableEvents = $false
+        $excel.AskToUpdateLinks = $false
+
+        $wb = $excel.Workbooks.Open($Path, 0, $false)
+
+        $target = Find-TargetTable -Workbook $wb
+        $ws = $target.Worksheet
+        $lo = $target.Table
+
+        $refIndex = Get-ColumnIndex -Table $lo -ColumnName $script:ColRef
+        $obsIndex = Get-ColumnIndex -Table $lo -ColumnName $script:ColObs
+
+        $data = $lo.DataBodyRange
+        if ($null -eq $data) {
+            throw "Tabela '$($script:TableName)' sem DataBodyRange."
+        }
+
+        $rows = @()
+        for ($r = 1; $r -le $data.Rows.Count; $r++) {
+            $ref = [string]$data.Cells.Item($r, $refIndex).Value2
+            $obs = [string]$data.Cells.Item($r, $obsIndex).Value2
+
+            if (-not [string]::IsNullOrWhiteSpace($ref) -and $obs -match "NF:\s*\d+") {
+                $rows += [PSCustomObject]@{
+                    Row = $r
+                    Ref = $ref
+                }
+
+                if ($rows.Count -ge 2) {
+                    break
+                }
+            }
+        }
+
+        if ($rows.Count -lt 2) {
+            throw "Nao foi possivel selecionar 2 linhas elegiveis para os cenarios ERRO/ALTERACAO."
+        }
+
+        return @{
+            RowPrimary    = [int]$rows[0].Row
+            RowSecondary  = [int]$rows[1].Row
+            PrimaryRef    = [string]$rows[0].Ref
+            SecondaryRef  = [string]$rows[1].Ref
+            WorksheetName = [string]$ws.Name
+        }
+    }
+    finally {
+        if ($wb) {
+            try { $wb.Close($false) | Out-Null } catch {}
+            Remove-ComObject -Object $wb
+        }
+        if ($excel) {
+            try { $excel.Quit() } catch {}
+            Remove-ComObject -Object $excel
+        }
+        [System.GC]::Collect()
+        [System.GC]::WaitForPendingFinalizers()
+    }
 }
 
 function Set-ReferenceValue {
@@ -262,24 +334,29 @@ if (-not (Test-Path -LiteralPath (Split-Path -Parent $LogPath))) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $LogPath) -Force | Out-Null
 }
 
-$rowIndex = 0
-$originalRef = ""
+$rowIndexPrimary = 0
+$rowIndexSecondary = 0
+$originalRefPrimary = ""
+$originalRefSecondary = ""
 $worksheetName = ""
-$needsRestore = $false
+$needsRestorePrimary = $false
+$needsRestoreSecondary = $false
 
-Write-Stage "Iniciando simulacao E2E de erro/acerto na Montagem."
+Write-Stage "Iniciando simulacao E2E de erro/alteracao/acerto na Montagem."
 
 try {
-    $forcedRef = ""
+    $scenarioRows = Get-SimulationRows -Path $WorkbookPath
+    $rowIndexPrimary = [int]$scenarioRows.RowPrimary
+    $rowIndexSecondary = [int]$scenarioRows.RowSecondary
+    $originalRefPrimary = [string]$scenarioRows.PrimaryRef
+    $originalRefSecondary = [string]$scenarioRows.SecondaryRef
+    $worksheetName = [string]$scenarioRows.WorksheetName
 
-    Write-Stage "Aplicando erro controlado na coluna $($script:ColRef)."
-    $rowIndex = Set-ReferenceValue -Path $WorkbookPath -RowIndex 0 -NewValue "__SIM_PLACEHOLDER__" -OriginalRef ([ref]$originalRef) -WorksheetName ([ref]$worksheetName)
+    Write-Stage "Linhas selecionadas: A=$rowIndexPrimary (Ref '$originalRefPrimary') | B=$rowIndexSecondary (Ref '$originalRefSecondary') | Aba: $worksheetName."
 
-    $forcedRef = "$originalRef`_SIM_ERRO"
-    [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndex -NewValue $forcedRef -OriginalRef ([ref]$originalRef) -WorksheetName ([ref]$worksheetName))
-    $needsRestore = $true
-
-    Write-Stage "Linha de simulacao selecionada: $rowIndex (Aba: $worksheetName). Ref original: '$originalRef'."
+    Write-Stage "Aplicando cenario A (ERRO): forcar divergencia na linha A."
+    [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexPrimary -NewValue "$originalRefPrimary`_SIM_ERRO_A" -OriginalRef ([ref]$originalRefPrimary) -WorksheetName ([ref]$worksheetName))
+    $needsRestorePrimary = $true
 
     $offsetErro = Get-LogOffset -Path $LogPath
 
@@ -295,14 +372,35 @@ try {
     Assert-Markers -Text $deltaErro -Markers @("Email ERRO | tentativa", "E-MAIL: Enviado com sucesso") -Scenario "Erro"
     Write-Stage "Cenario A validado com sucesso."
 
-    Write-Stage "Restaurando valor original para cenario de acerto."
-    [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndex -NewValue $originalRef -OriginalRef ([ref]$originalRef) -WorksheetName ([ref]$worksheetName))
-    $needsRestore = $false
+    Write-Stage "Aplicando cenario B (ALTERACAO): restaurar linha A e forcar divergencia na linha B."
+    [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexPrimary -NewValue $originalRefPrimary -OriginalRef ([ref]$originalRefPrimary) -WorksheetName ([ref]$worksheetName))
+    $needsRestorePrimary = $false
+
+    [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexSecondary -NewValue "$originalRefSecondary`_SIM_ERRO_B" -OriginalRef ([ref]$originalRefSecondary) -WorksheetName ([ref]$worksheetName))
+    $needsRestoreSecondary = $true
+
+    $offsetAlteracao = Get-LogOffset -Path $LogPath
+
+    if (-not $SkipExecution) {
+        Write-Stage "Executando cenario B: envio de e-mail de alteracao (cache preservado)."
+        $exitAlteracao = Invoke-Reenviar -ScriptPath $ReenviarScriptPath -KeepCache
+        if ($exitAlteracao -ne 0) {
+            throw "Cenario de alteracao retornou exit code $exitAlteracao"
+        }
+    }
+
+    $deltaAlteracao = Read-LogDelta -Path $LogPath -Offset $offsetAlteracao
+    Assert-Markers -Text $deltaAlteracao -Markers @("Email ALTERACAO | tentativa", "Delta detalhado | Novos=", "E-MAIL: Enviado com sucesso") -Scenario "Alteracao"
+    Write-Stage "Cenario B validado com sucesso."
+
+    Write-Stage "Aplicando cenario C (ACERTO): restaurar linha B."
+    [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexSecondary -NewValue $originalRefSecondary -OriginalRef ([ref]$originalRefSecondary) -WorksheetName ([ref]$worksheetName))
+    $needsRestoreSecondary = $false
 
     $offsetOk = Get-LogOffset -Path $LogPath
 
     if (-not $SkipExecution) {
-        Write-Stage "Executando cenario B: envio de e-mail de acerto (cache preservado)."
+        Write-Stage "Executando cenario C: envio de e-mail de acerto (cache preservado)."
         $exitOk = Invoke-Reenviar -ScriptPath $ReenviarScriptPath -KeepCache
         if ($exitOk -ne 0) {
             throw "Cenario de acerto retornou exit code $exitOk"
@@ -311,9 +409,9 @@ try {
 
     $deltaOk = Read-LogDelta -Path $LogPath -Offset $offsetOk
     Assert-Markers -Text $deltaOk -Markers @("Email OK | tentativa", "E-MAIL: Enviado com sucesso") -Scenario "Acerto"
-    Write-Stage "Cenario B validado com sucesso."
+    Write-Stage "Cenario C validado com sucesso."
 
-    Write-Stage "Simulacao E2E concluida: erro e acerto confirmados." "INFO"
+    Write-Stage "Simulacao E2E concluida: erro, alteracao e acerto confirmados." "INFO"
     exit 0
 }
 catch {
@@ -321,13 +419,23 @@ catch {
     exit 1
 }
 finally {
-    if ($needsRestore -and $rowIndex -gt 0 -and -not [string]::IsNullOrWhiteSpace($originalRef)) {
+    if ($needsRestoreSecondary -and $rowIndexSecondary -gt 0 -and -not [string]::IsNullOrWhiteSpace($originalRefSecondary)) {
         try {
-            [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndex -NewValue $originalRef -OriginalRef ([ref]$originalRef) -WorksheetName ([ref]$worksheetName))
-            Write-Stage "Valor original restaurado automaticamente no bloco de seguranca." "WARN"
+            [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexSecondary -NewValue $originalRefSecondary -OriginalRef ([ref]$originalRefSecondary) -WorksheetName ([ref]$worksheetName))
+            Write-Stage "Valor original da linha B restaurado automaticamente no bloco de seguranca." "WARN"
         }
         catch {
-            Write-Stage "Falha ao restaurar valor original automaticamente: $($_.Exception.Message)" "ERRO"
+            Write-Stage "Falha ao restaurar linha B automaticamente: $($_.Exception.Message)" "ERRO"
+        }
+    }
+
+    if ($needsRestorePrimary -and $rowIndexPrimary -gt 0 -and -not [string]::IsNullOrWhiteSpace($originalRefPrimary)) {
+        try {
+            [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexPrimary -NewValue $originalRefPrimary -OriginalRef ([ref]$originalRefPrimary) -WorksheetName ([ref]$worksheetName))
+            Write-Stage "Valor original da linha A restaurado automaticamente no bloco de seguranca." "WARN"
+        }
+        catch {
+            Write-Stage "Falha ao restaurar linha A automaticamente: $($_.Exception.Message)" "ERRO"
         }
     }
 }

@@ -7,7 +7,7 @@ Private m_strLastEmailKey As String
 ' ====================================================================================
 ' RETRY WRAPPERS
 ' ====================================================================================
-Public Sub EnviarEmailComErrosRetry(ByRef udtTel As Telemetria)
+Public Sub EnviarEmailComErrosRetry(ByRef udtTel As Telemetria, ByRef arrErros() As DadosErro, ByVal lngTotalErrosDetalhe As Long)
     Dim lngTentativa      As Long
     Dim lngDelaySegundos  As Long
     Dim strEmailKey       As String
@@ -15,14 +15,14 @@ Public Sub EnviarEmailComErrosRetry(ByRef udtTel As Telemetria)
     strEmailKey = MontarEmailKeyExecucao("ERRO", udtTel)
     If JaNotificacaoEnviada(strEmailKey) Then
         GravarLogEx "Email ERRO ignorado por idempotencia no mesmo run.", LOG_WARNING
-        Exit Sub
+     Exit Sub
     End If
 
     For lngTentativa = 1 To MAX_EMAIL_RETRIES
         GravarLogEx "Email ERRO | tentativa " & lngTentativa & "/" & MAX_EMAIL_RETRIES, LOG_INFO
-        If EnviarEmailComErros(udtTel) Then
+        If EnviarEmailComErros(udtTel, arrErros, lngTotalErrosDetalhe) Then
             RegistrarNotificacaoEnviada strEmailKey
-            Exit Sub
+         Exit Sub
         End If
 
         If lngTentativa < MAX_EMAIL_RETRIES Then
@@ -35,6 +35,34 @@ Public Sub EnviarEmailComErrosRetry(ByRef udtTel As Telemetria)
     GravarLogEx "FALHA DEFINITIVA: Email ERRO nao enviado.", LOG_ERROR
 End Sub
 
+Public Sub EnviarEmailAlteracaoRetry(ByRef udtTel As Telemetria, ByVal lngTotalNovos As Long, ByVal lngTotalCorrigidos As Long, ByVal lngTotalPermanentes As Long, ByVal strDeltaHtml As String)
+    Dim lngTentativa      As Long
+    Dim lngDelaySegundos  As Long
+    Dim strEmailKey       As String
+
+    strEmailKey = MontarEmailKeyExecucao("ALTERACAO", udtTel) & "|" & CStr(lngTotalNovos) & "|" & CStr(lngTotalCorrigidos) & "|" & CStr(lngTotalPermanentes)
+    If JaNotificacaoEnviada(strEmailKey) Then
+        GravarLogEx "Email ALTERACAO ignorado por idempotencia no mesmo run.", LOG_WARNING
+     Exit Sub
+    End If
+
+    For lngTentativa = 1 To MAX_EMAIL_RETRIES
+        GravarLogEx "Email ALTERACAO | tentativa " & lngTentativa & "/" & MAX_EMAIL_RETRIES, LOG_INFO
+        If EnviarEmailAlteracao(udtTel, lngTotalNovos, lngTotalCorrigidos, lngTotalPermanentes, strDeltaHtml) Then
+            RegistrarNotificacaoEnviada strEmailKey
+         Exit Sub
+        End If
+
+        If lngTentativa < MAX_EMAIL_RETRIES Then
+            lngDelaySegundos = RETRY_DELAY_BASE ^ lngTentativa
+            GravarLogEx "Email ALTERACAO falhou. Aguardando " & lngDelaySegundos & "s...", LOG_WARNING
+            Application.Wait Now + TimeSerial(0, 0, CInt(lngDelaySegundos))
+        End If
+    Next lngTentativa
+
+    GravarLogEx "FALHA DEFINITIVA: Email ALTERACAO nao enviado.", LOG_ERROR
+End Sub
+
 Public Sub EnviarEmailSucessoRetry(ByRef udtTel As Telemetria)
     Dim lngTentativa      As Long
     Dim lngDelaySegundos  As Long
@@ -43,14 +71,14 @@ Public Sub EnviarEmailSucessoRetry(ByRef udtTel As Telemetria)
     strEmailKey = MontarEmailKeyExecucao("SUCESSO", udtTel)
     If JaNotificacaoEnviada(strEmailKey) Then
         GravarLogEx "Email OK ignorado por idempotencia no mesmo run.", LOG_WARNING
-        Exit Sub
+     Exit Sub
     End If
 
     For lngTentativa = 1 To MAX_EMAIL_RETRIES
         GravarLogEx "Email OK | tentativa " & lngTentativa & "/" & MAX_EMAIL_RETRIES, LOG_INFO
         If EnviarEmailSucesso(udtTel) Then
             RegistrarNotificacaoEnviada strEmailKey
-            Exit Sub
+         Exit Sub
         End If
 
         If lngTentativa < MAX_EMAIL_RETRIES Then
@@ -73,11 +101,12 @@ End Sub
 ' ====================================================================================
 ' CONSTRUTORES DE EMAIL
 ' ====================================================================================
-Private Function EnviarEmailComErros(ByRef udtTel As Telemetria) As Boolean
+Private Function EnviarEmailComErros(ByRef udtTel As Telemetria, ByRef arrErros() As DadosErro, ByVal lngTotalErrosDetalhe As Long) As Boolean
     Dim strTo      As String, strCC As String
     Dim strHtml    As String, strAssunto As String
     Dim strIntro   As String
     Dim strLegenda As String
+    Dim strTabelaErrosHtml As String
 
     If Not ObterEValidarDestinatarios(strTo, strCC) Then
         EnviarEmailComErros = False: Exit Function
@@ -85,10 +114,30 @@ Private Function EnviarEmailComErros(ByRef udtTel As Telemetria) As Boolean
 
     strIntro = "Segue relat" & ChrW$(243) & "rio automatizado da valida" & ChrW$(231) & "" & ChrW$(227) & "o de notas fiscais."
     strLegenda = "<span style='color:#b91c1c;font-weight:bold;'>Aten&ccedil;&atilde;o: diverg&ecirc;ncias detectadas. Consulte a aba Erros NF para tratar os itens.</span>"
-    strHtml = MontarTemplateEmail(True, udtTel)
+    strTabelaErrosHtml = MontarTabelaCompletaErrosHtml(arrErros, lngTotalErrosDetalhe)
+    strHtml = MontarTemplateEmail(NOTIF_TIPO_ERRO, udtTel, strTabelaErrosHtml)
     strAssunto = "[ALERTA] Diverg" & ChrW$(234) & "ncias - Controle NF - " & FormatarDataBR(Now)
 
     EnviarEmailComErros = EnviarEmailCore(strAssunto, strHtml, strTo, strCC, "", strIntro, strLegenda)
+End Function
+
+Private Function EnviarEmailAlteracao(ByRef udtTel As Telemetria, ByVal lngTotalNovos As Long, ByVal lngTotalCorrigidos As Long, ByVal lngTotalPermanentes As Long, ByVal strDeltaHtml As String) As Boolean
+    Dim strTo      As String, strCC As String
+    Dim strHtml    As String, strAssunto As String
+    Dim strIntro   As String
+    Dim strLegenda As String
+
+    If Not ObterEValidarDestinatarios(strTo, strCC) Then
+        EnviarEmailAlteracao = False: Exit Function
+    End If
+
+    strIntro = "Segue relat" & ChrW$(243) & "rio automatizado da valida" & ChrW$(231) & "" & ChrW$(227) & "o de notas fiscais."
+    strLegenda = "<span style='color:#b45309;font-weight:bold;'>Alteracao detectada: " & _
+    CStr(lngTotalNovos) & " novos, " & CStr(lngTotalCorrigidos) & " corrigidos e " & CStr(lngTotalPermanentes) & " permanentes.</span>"
+    strHtml = MontarTemplateEmail(NOTIF_TIPO_ALTERACAO, udtTel, strDeltaHtml)
+    strAssunto = "[ALTERACAO] Divergencias - Controle NF - " & FormatarDataBR(Now)
+
+    EnviarEmailAlteracao = EnviarEmailCore(strAssunto, strHtml, strTo, strCC, "", strIntro, strLegenda)
 End Function
 
 Private Function EnviarEmailSucesso(ByRef udtTel As Telemetria) As Boolean
@@ -103,7 +152,7 @@ Private Function EnviarEmailSucesso(ByRef udtTel As Telemetria) As Boolean
 
     strIntro = "Segue relat" & ChrW$(243) & "rio automatizado da valida" & ChrW$(231) & "" & ChrW$(227) & "o de notas fiscais."
     strLegenda = vbNullString
-    strHtml = MontarTemplateEmail(False, udtTel)
+    strHtml = MontarTemplateEmail(NOTIF_TIPO_ACERTO, udtTel, vbNullString)
     strAssunto = "[OK] Valida" & ChrW$(231) & "" & ChrW$(227) & "o Aprovada - Controle NF - " & FormatarDataBR(Now)
 
     EnviarEmailSucesso = EnviarEmailCore(strAssunto, strHtml, strTo, strCC, "", strIntro, strLegenda)
@@ -113,25 +162,25 @@ End Function
 ' CORE DE ENVIO
 ' ====================================================================================
 Private Function EnviarEmailCore(ByVal strSubject As String, ByVal strBodyHtml As String, _
-                                   ByVal strTo As String, ByVal strCC As String, _
-                                   Optional ByVal strAttachmentPath As String = "", _
-                                   Optional ByVal strIntro As String = "", _
-                                   Optional ByVal strLegenda As String = "") As Boolean
+    ByVal strTo As String, ByVal strCC As String, _
+    Optional ByVal strAttachmentPath As String = "", _
+    Optional ByVal strIntro As String = "", _
+    Optional ByVal strLegenda As String = "") As Boolean
     Dim objAdapter As ClsOutlookAdapter
 
     On Error GoTo TratarErro
 
-    Set objAdapter = GetOutlookAdapter()
-    EnviarEmailCore = objAdapter.EnviarEmailHtml(strSubject, strBodyHtml, strTo, strCC, strAttachmentPath, strIntro, strLegenda)
+        Set objAdapter = GetOutlookAdapter()
+        EnviarEmailCore = objAdapter.EnviarEmailHtml(strSubject, strBodyHtml, strTo, strCC, strAttachmentPath, strIntro, strLegenda)
 
 Saida:
-    Set objAdapter = Nothing
-    Exit Function
+        Set objAdapter = Nothing
+     Exit Function
 
 TratarErro:
-    GravarLogEx "E-MAIL: FALHA: " & Err.Description, LOG_ERROR
-    EnviarEmailCore = False
-    Resume Saida
+        GravarLogEx "E-MAIL: FALHA: " & Err.Description, LOG_ERROR
+        EnviarEmailCore = False
+        Resume Saida
 End Function
 
 ' ====================================================================================
@@ -140,21 +189,33 @@ End Function
 ' ====================================================================================
 ' HELPERS
 ' ====================================================================================
-Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As Telemetria) As String
+Private Function MontarTemplateEmail(ByVal strTipoNotificacao As String, ByRef udtTel As Telemetria, Optional ByVal strDetalhesHtml As String = "") As String
     Dim strHtml As String
     Dim strCor  As String
     Dim strIcon As String
     Dim strMsg  As String
+    Dim strResultado As String
+    Dim strTipo As String
 
-    If blnErro Then
+    strTipo = UCase$(Trim$(strTipoNotificacao))
+
+    Select Case strTipo
+     Case NOTIF_TIPO_ERRO
         strCor = "#d32f2f"
         strIcon = HTML_ICON_WARNING
         strMsg = "Diverg&ecirc;ncias Detectadas"
-    Else
+        strResultado = CStr(udtTel.totalErros) & " erros"
+     Case NOTIF_TIPO_ALTERACAO
+        strCor = "#ef6c00"
+        strIcon = HTML_ICON_TARGET
+        strMsg = "Diverg&ecirc;ncias Alteradas"
+        strResultado = CStr(udtTel.totalErros) & " erros"
+     Case Else
         strCor = "#388e3c"
         strIcon = HTML_ICON_CHECK
         strMsg = "Valida&ccedil;&atilde;o Aprovada"
-    End If
+        strResultado = "100% OK"
+    End Select
 
     strHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body>"
     strHtml = strHtml & "<div style='font-family:Calibri,Arial,sans-serif;font-size:11pt;max-width:800px;margin:0 auto;'>"
@@ -162,17 +223,25 @@ Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As T
     strHtml = strHtml & "<h1 style='color:white;margin:0;font-size:24pt;'><span style='font-size:32pt;vertical-align:middle;'>" & strIcon & "</span> " & strMsg & "</h1></div>"
     strHtml = strHtml & "<div style='background:#fff;padding:25px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;'>"
 
-    If blnErro Then
+    Select Case strTipo
+     Case NOTIF_TIPO_ERRO
         strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas diverg&ecirc;ncias na valida&ccedil;&atilde;o.</b></p>"
         strHtml = strHtml & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Consulte a aba <b style='color:#d32f2f;'>Erros NF</b> no Excel.</p>"
-    Else
+     Case NOTIF_TIPO_ALTERACAO
+        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_CHART_UP & "</span> <b>Foi detectada alteracao no conjunto de diverg&ecirc;ncias.</b></p>"
+        strHtml = strHtml & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> A aba <b style='color:#ef6c00;'>Erros NF</b> foi atualizada com o estado atual.</p>"
+     Case Else
         strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma diverg&ecirc;ncia encontrada.</b></p>"
-    End If
+    End Select
 
     strHtml = strHtml & "<div style='background:#f9f9f9;border-left:4px solid " & strCor & ";padding:15px;margin:20px 0;border-radius:4px;'>"
     strHtml = strHtml & "<p><span style='font-size:14pt;'>" & HTML_ICON_CHART & "</span> <b>Total de linhas:</b> " & udtTel.totalLinhas & "</p>"
-    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & IIf(blnErro, HTML_ICON_CROSS, HTML_ICON_CHECK) & "</span> <b>Resultado:</b> " & IIf(blnErro, udtTel.totalErros & " erros", "100% OK") & "</p>"
+    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & IIf(strTipo = NOTIF_TIPO_ACERTO, HTML_ICON_CHECK, HTML_ICON_CROSS) & "</span> <b>Resultado:</b> " & strResultado & "</p>"
     strHtml = strHtml & "<p><span style='font-size:14pt;'>" & HTML_ICON_STOPWATCH & "</span> <b>Tempo de Processamento:</b> " & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</p></div>"
+
+    If Len(Trim$(strDetalhesHtml)) > 0 Then
+        strHtml = strHtml & "<div style='margin-top:18px;'>" & strDetalhesHtml & "</div>"
+    End If
 
     strHtml = strHtml & "<hr style='border:0;border-top:1px solid #ddd;margin:30px 0;'>"
     strHtml = strHtml & "<p style='font-size:9pt;color:#888;'><span style='font-size:12pt;'>" & HTML_ICON_ROBOT & "</span> <i>Rob" & ChrW$(244) & " Fiscal " & ROBO_VERSAO_DASH & "</i><br>"
@@ -180,6 +249,69 @@ Private Function MontarTemplateEmail(ByVal blnErro As Boolean, ByRef udtTel As T
     strHtml = strHtml & "</div></div></body></html>"
 
     MontarTemplateEmail = strHtml
+End Function
+
+Private Function MontarTabelaCompletaErrosHtml(ByRef arrErros() As DadosErro, ByVal lngTotal As Long) As String
+    Dim strHtml As String
+    Dim lngI As Long
+    Dim lngTotalValido As Long
+
+    On Error GoTo Falha
+
+        lngTotalValido = lngTotal
+        If lngTotalValido < 1 Then
+            MontarTabelaCompletaErrosHtml = "<p style='font-size:10pt;color:#555;'><i>Sem itens detalhados para exibir.</i></p>"
+         Exit Function
+        End If
+
+        strHtml = "<p style='font-size:11pt;margin:0 0 10px 0;'><b>Detalhamento completo da aba Erros NF:</b></p>"
+        strHtml = strHtml & "<div style='overflow-x:auto;'>"
+        strHtml = strHtml & "<table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt;width:100%;'>"
+        strHtml = strHtml & "<tr style='background-color:#fdecec;'>"
+        strHtml = strHtml & "<th>Sit OB</th><th>Progr</th><th>Faccao</th><th>Pcs Prog</th><th>Num OB</th><th>Kanban</th><th>Fase Atual</th><th>Status Fase</th><th>Ref Cliente</th><th>Qtd Pcs NF</th><th>Obs OB</th><th>Detalhe Erro</th><th>Alternativo</th><th>Timestamp</th>"
+        strHtml = strHtml & "</tr>"
+
+        For lngI = 1 To lngTotalValido
+            strHtml = strHtml & "<tr>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).SitOB) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).Progr) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).Faccao) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).pcsProg) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).NumOB) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).Kanban) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).FaseAtual) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).StatusFase) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).refCliente) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).qtpcnf) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).ObsOB) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).detalheErro) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).Alternativo) & "</td>"
+            strHtml = strHtml & "<td>" & SafeTextoHtml(FormatarDataBR(Now, True)) & "</td>"
+            strHtml = strHtml & "</tr>"
+        Next lngI
+
+        strHtml = strHtml & "</table></div>"
+        MontarTabelaCompletaErrosHtml = strHtml
+     Exit Function
+
+Falha:
+        MontarTabelaCompletaErrosHtml = "<p style='font-size:10pt;color:#b91c1c;'><b>Falha ao montar tabela completa de erros para o e-mail.</b></p>"
+End Function
+
+Private Function SafeTextoHtml(ByVal varValor As Variant) As String
+    Dim strOut As String
+
+    On Error Resume Next
+    strOut = CStr(varValor)
+    On Error GoTo 0
+
+        strOut = Replace(strOut, "&", "&amp;")
+        strOut = Replace(strOut, "<", "&lt;")
+        strOut = Replace(strOut, ">", "&gt;")
+        strOut = Replace(strOut, """", "&quot;")
+        strOut = Replace(strOut, "'", "&#39;")
+
+        SafeTextoHtml = strOut
 End Function
 
 Private Function MontarEmailKeyExecucao(ByVal strTipo As String, ByRef udtTel As Telemetria) As String
@@ -224,8 +356,8 @@ Public Function ObterEValidarDestinatarios(ByRef strTo As String, ByRef strCC As
     End If
     On Error GoTo 0
 
-    strTo = IIf(blnLeuConfig And Len(Trim$(strTempTo)) > 0, Replace(Trim$(strTempTo), " ", ""), TO_PADRAO)
-    strCC = IIf(blnLeuConfig And Len(Trim$(strTempCC)) > 0, Replace(Trim$(strTempCC), " ", ""), CC_PADRAO)
+        strTo = IIf(blnLeuConfig And Len(Trim$(strTempTo)) > 0, Replace(Trim$(strTempTo), " ", ""), TO_PADRAO)
+        strCC = IIf(blnLeuConfig And Len(Trim$(strTempCC)) > 0, Replace(Trim$(strTempCC), " ", ""), CC_PADRAO)
 
-    ObterEValidarDestinatarios = (InStr(1, strTo, "@") > 0)
+        ObterEValidarDestinatarios = (InStr(1, strTo, "@") > 0)
 End Function

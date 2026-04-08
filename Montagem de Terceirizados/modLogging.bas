@@ -21,7 +21,7 @@ End Sub
 
 Public Function GetRunId() As String
     If Len(m_strRunId) = 0 Then IniciarRunId
-    GetRunId = m_strRunId
+        GetRunId = m_strRunId
 End Function
 
 Public Sub DefinirRunId(ByVal strRunId As String)
@@ -43,7 +43,7 @@ Private Function NormalizeRunId(ByVal strValue As String) As String
     strIn = Trim$(strValue)
     If Len(strIn) = 0 Then
         NormalizeRunId = ""
-        Exit Function
+     Exit Function
     End If
 
     For lngI = 1 To Len(strIn)
@@ -51,10 +51,10 @@ Private Function NormalizeRunId(ByVal strValue As String) As String
         intCode = Asc(strCh)
 
         If (intCode >= 48 And intCode <= 57) _
-           Or (intCode >= 65 And intCode <= 90) _
-           Or (intCode >= 97 And intCode <= 122) _
-           Or strCh = "_" _
-           Or strCh = "-" Then
+            Or (intCode >= 65 And intCode <= 90) _
+            Or (intCode >= 97 And intCode <= 122) _
+            Or strCh = "_" _
+            Or strCh = "-" Then
             strOut = strOut & strCh
         Else
             strOut = strOut & "_"
@@ -62,7 +62,7 @@ Private Function NormalizeRunId(ByVal strValue As String) As String
     Next lngI
 
     If Len(strOut) > 64 Then strOut = Left$(strOut, 64)
-    NormalizeRunId = strOut
+        NormalizeRunId = strOut
 End Function
 
 ' ====================================================================================
@@ -90,46 +90,46 @@ Public Sub GravarLogEx(ByVal strMensagem As String, Optional ByVal lngNivel As L
     Dim intFileNum   As Integer
 
     If m_blnInLogWrite Then Exit Sub ' Evita recursao infinita em caso de erro no proprio log
-    m_blnInLogWrite = True
+        m_blnInLogWrite = True
 
-    On Error GoTo TratarErro
-    IniciarRunId
+        On Error GoTo TratarErro
+            IniciarRunId
 
-    ' 1. Formatar Mensagem
-    strLinha = "[" & Format$(Now, "yyyy-mm-dd hh:mm:ss") & "] [" & NivelToString(lngNivel) & "] [Run:" & m_strRunId & "] " & strMensagem
+            ' 1. Formatar Mensagem
+            strLinha = "[" & Format$(Now, "yyyy-mm-dd hh:mm:ss") & "] [" & NivelToString(lngNivel) & "] [Run:" & m_strRunId & "] " & strMensagem
 
-    ' 2. Caminho do Log
-    strArquivo = ThisWorkbook.Path & "\Logs\Montagem.log"
+            ' 2. Caminho Do Log
+            strArquivo = ThisWorkbook.Path & "\Logs\Montagem.log"
 
-    On Error Resume Next
-    If Dir$(ThisWorkbook.Path & "\Logs", vbDirectory) = "" Then MkDir ThisWorkbook.Path & "\Logs"
-    On Error GoTo TratarErro
+            On Error Resume Next
+            If Dir$(ThisWorkbook.Path & "\Logs", vbDirectory) = "" Then MkDir ThisWorkbook.Path & "\Logs"
+                On Error GoTo TratarErro
 
-    ' 3. Escrita (Append)
-    intFileNum = FreeFile
-    Open strArquivo For Append Shared As #intFileNum
-    Print #intFileNum, strLinha
-    Close #intFileNum
+                    ' 3. Escrita (Append)
+                    intFileNum = FreeFile
+                    Open strArquivo For Append Shared As #intFileNum
+                    Print #intFileNum, strLinha
+                    Close #intFileNum
 
-    Debug.Print strLinha
+                    Debug.Print strLinha
 
 Saida:
-    m_blnInLogWrite = False
-    Exit Sub
+                    m_blnInLogWrite = False
+                 Exit Sub
 
 TratarErro:
-    On Error Resume Next
-    Debug.Print "FALHA GRAVE LOG: " & strMensagem & " | " & Err.Description
-    Resume Saida
+                    On Error Resume Next
+                    Debug.Print "FALHA GRAVE LOG: " & strMensagem & " | " & Err.Description
+                    Resume Saida
 End Sub
 
 Private Function NivelToString(ByVal lngNivel As Long) As String
     Select Case lngNivel
-        Case LOG_DEBUG:   NivelToString = "DEBUG"
-        Case LOG_INFO:    NivelToString = "INFO "
-        Case LOG_WARNING: NivelToString = "WARN "
-        Case LOG_ERROR:   NivelToString = "ERROR"
-        Case Else:        NivelToString = "LOG  "
+     Case LOG_DEBUG:   NivelToString = "DEBUG"
+     Case LOG_INFO:    NivelToString = "INFO "
+     Case LOG_WARNING: NivelToString = "WARN "
+     Case LOG_ERROR:   NivelToString = "ERROR"
+     Case Else:        NivelToString = "LOG  "
     End Select
 End Function
 
@@ -147,7 +147,7 @@ Public Sub TestarLogger()
 
     LogStepStart "SMOKE"
     GravarLogEx "Linha 1 - mensagem simples", LOG_INFO
-    GravarLogEx "Linha 2 - chars especiais: & < > ; -- SELECT 1", LOG_INFO
+    GravarLogEx "Linha 2 - chars especiais: & < > ; -- Select 1", LOG_INFO
     GravarLogEx "Linha 3 - nivel WARN", LOG_WARNING
     GravarLogEx "Linha 4 - nivel ERROR", LOG_ERROR
     LogStepEnd "OK"
