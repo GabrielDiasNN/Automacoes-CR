@@ -1,4 +1,5 @@
 
+[CmdletBinding()]
 param(
     [string]$XlsmPath,
     [string]$ClassPath,
@@ -38,6 +39,9 @@ catch {
 
 $excel = $null
 $wb = $null
+$tempClassPath = $null
+$importedComponent = $null
+$importedType = -1
 
 try {
     $excel = New-Object -ComObject "Excel.Application"
@@ -66,8 +70,37 @@ try {
         Write-Log "WARN" "Classe '$ClassName' nao encontrada no projeto (sera importada como nova)"
     }
 
+    # Normaliza o arquivo .cls para CRLF em temporario.
+    # VBA pode importar .cls com LF-only como modulo padrao.
+    $tempClassPath = Join-Path $env:TEMP ("{0}_{1}.cls" -f $ClassName, [Guid]::NewGuid().ToString("N"))
+    $classBytes = [System.IO.File]::ReadAllBytes($ClassPath)
+    $normalized = New-Object System.Collections.Generic.List[byte]
+    for ($i = 0; $i -lt $classBytes.Length; $i++) {
+        $byte = $classBytes[$i]
+        if ($byte -eq 10) {
+            if ($i -eq 0 -or $classBytes[$i - 1] -ne 13) {
+                $normalized.Add(13)
+            }
+            $normalized.Add(10)
+        }
+        else {
+            $normalized.Add($byte)
+        }
+    }
+    [System.IO.File]::WriteAllBytes($tempClassPath, $normalized.ToArray())
+
     # Importa a classe usando Import() (mais simples e robusto que AddFromString)
-    $vbProj.VBComponents.Import($ClassPath) | Out-Null
+    $importedComponent = $vbProj.VBComponents.Import($tempClassPath)
+    if ($null -eq $importedComponent) {
+        throw "Import da classe retornou nulo para '$ClassName'."
+    }
+
+    $importedType = [int]$importedComponent.Type
+    if ($importedType -ne 2) {
+        try { $vbProj.VBComponents.Remove($importedComponent) } catch {}
+        throw "Classe '$ClassName' importada com tipo incorreto ($importedType). Esperado: 2 (ClassModule)."
+    }
+
     Write-Log "INFO" "Classe '$ClassName' importada com sucesso"
 
     $wb.Save()
@@ -81,6 +114,10 @@ finally {
     if ($null -ne $excel) {
         try { $excel.Quit() } catch {}
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+    }
+
+    if ($null -ne $tempClassPath -and (Test-Path -LiteralPath $tempClassPath)) {
+        try { Remove-Item -LiteralPath $tempClassPath -Force } catch {}
     }
 
     # Restaura valor anterior de VBOM

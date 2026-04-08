@@ -1,3 +1,4 @@
+[CmdletBinding()]
 param(
     [string]$XlsmPath = (Join-Path $PSScriptRoot "..\Receitas Emitidas\Controle de Receitas Emitidas.xlsm"),
     [string]$BasPath = (Join-Path $PSScriptRoot "..\Receitas Emitidas\modReceitasEmitidas.bas"),
@@ -17,6 +18,20 @@ $BasPath = [System.IO.Path]::GetFullPath($BasPath)
 
 if (-not (Test-Path $XlsmPath)) { Write-Log "ERROR" "Arquivo nao encontrado: $XlsmPath"; exit 1 }
 if (-not (Test-Path $BasPath)) { Write-Log "ERROR" "Arquivo .bas nao encontrado: $BasPath"; exit 1 }
+if ([System.IO.Path]::GetExtension($BasPath).ToLowerInvariant() -ne ".bas") {
+    Write-Log "ERROR" "Arquivo informado nao e .bas: $BasPath"
+    exit 1
+}
+if ($ModName -match "^(?i)cls") {
+    Write-Log "ERROR" "Nome '$ModName' indica classe. Use Tools\\ImportarClassesVba.ps1 para .cls."
+    exit 1
+}
+
+$headerProbe = (Get-Content -LiteralPath $BasPath -TotalCount 6 -ErrorAction Stop) -join "`n"
+if ($headerProbe -match "(?i)^\s*VERSION\s+1\.0\s+CLASS") {
+    Write-Log "ERROR" "Conteudo de classe detectado em '$BasPath'. Use Tools\\ImportarClassesVba.ps1."
+    exit 1
+}
 
 Write-Log "INFO" "Workbook : $XlsmPath"
 Write-Log "INFO" "Modulo   : $BasPath"
@@ -64,7 +79,17 @@ try {
     }
 
     # Importa o .bas atualizado
-    $vbProj.VBComponents.Import($BasPath) | Out-Null
+    $importedComponent = $vbProj.VBComponents.Import($BasPath)
+    if ($null -eq $importedComponent) {
+        throw "Import do modulo retornou nulo para '$ModName'."
+    }
+
+    $importedType = [int]$importedComponent.Type
+    if ($importedType -ne 1) {
+        try { $vbProj.VBComponents.Remove($importedComponent) } catch {}
+        throw "Modulo '$ModName' importado com tipo incorreto ($importedType). Esperado: 1 (StdModule)."
+    }
+
     Write-Log "INFO" "Modulo '$ModName' importado com sucesso"
 
     $wb.Save()

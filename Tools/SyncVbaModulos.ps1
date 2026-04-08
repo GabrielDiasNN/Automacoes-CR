@@ -61,6 +61,30 @@ function Get-VbaModulesFromFolder {
     return @(@($basFiles) + @($clsFiles))
 }
 
+function New-CrlfTempCopy {
+    param([string]$SourcePath)
+
+    $tempPath = Join-Path $env:TEMP ("{0}_{1}{2}" -f [System.IO.Path]::GetFileNameWithoutExtension($SourcePath), [Guid]::NewGuid().ToString("N"), [System.IO.Path]::GetExtension($SourcePath))
+    $bytes = [System.IO.File]::ReadAllBytes($SourcePath)
+    $normalized = New-Object System.Collections.Generic.List[byte]
+
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        $byte = $bytes[$i]
+        if ($byte -eq 10) {
+            if ($i -eq 0 -or $bytes[$i - 1] -ne 13) {
+                $normalized.Add(13)
+            }
+            $normalized.Add(10)
+        }
+        else {
+            $normalized.Add($byte)
+        }
+    }
+
+    [System.IO.File]::WriteAllBytes($tempPath, $normalized.ToArray())
+    return $tempPath
+}
+
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
 
 if ($WorkbookPaths.Count -eq 0) {
@@ -139,6 +163,9 @@ foreach ($workbookPath in $WorkbookPaths) {
 
         foreach ($moduleFile in $modules) {
             $moduleName = [System.IO.Path]::GetFileNameWithoutExtension($moduleFile.Name)
+            $expectedType = if ($moduleFile.Extension -ieq ".cls") { 2 } else { 1 }
+            $tempImportPath = $null
+            $importPath = $moduleFile.FullName
 
             if ($moduleName.Length -gt 31) {
                 Write-Log -Level "ERROR" -Message ("Skipping module with invalid VBA name length (>31): {0}" -f $moduleName)
@@ -162,9 +189,20 @@ foreach ($workbookPath in $WorkbookPaths) {
             }
 
             try {
-                $importedComponent = $vbComponents.Import($moduleFile.FullName)
+                if ($moduleFile.Extension -ieq ".cls") {
+                    $tempImportPath = New-CrlfTempCopy -SourcePath $moduleFile.FullName
+                    $importPath = $tempImportPath
+                }
+
+                $importedComponent = $vbComponents.Import($importPath)
                 if ($null -eq $importedComponent) {
                     Write-Log -Level "ERROR" -Message ("Import returned null for module: {0}" -f $moduleName)
+                    continue
+                }
+
+                if ([int]$importedComponent.Type -ne $expectedType) {
+                    try { $vbComponents.Remove($importedComponent) } catch {}
+                    Write-Log -Level "ERROR" -Message ("Imported module '{0}' with wrong type={1} (expected {2})." -f $moduleName, [int]$importedComponent.Type, $expectedType)
                     continue
                 }
 
@@ -187,6 +225,11 @@ foreach ($workbookPath in $WorkbookPaths) {
             }
             catch {
                 Write-Log -Level "ERROR" -Message ("Failed to import module {0}: {1}" -f $moduleName, $_)
+            }
+            finally {
+                if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
+                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch {}
+                }
             }
         }
 
