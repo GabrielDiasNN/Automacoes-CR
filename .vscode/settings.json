@@ -178,5 +178,6 @@
     "gitlens.views.commits.files.layout": "list",
     "gitlens.views.branches.files.layout": "list",
     "gitlens.views.fileHistory.avatars": false,
-    "snyk.advanced.autoSelectOrganization": true
+    "snyk.advanced.autoSelectOrganization": true,
+    "snyk.advanced.organization": "c106430a-69f5-4706-aeba-d8f52965b2fe"
 }
