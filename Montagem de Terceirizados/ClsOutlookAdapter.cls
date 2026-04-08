@@ -73,6 +73,34 @@ TratarErro:
     Resume Saida
 End Function
 
+' Compatibilidade com adapters compartilhados que chamam EnviarEmail
+' na assinatura canonica de 9 argumentos.
+Public Function EnviarEmail(ByVal strSubject As String, _
+                            ByVal strBodyHtml As String, _
+                            ByVal strPara As String, _
+                            Optional ByVal strCopia As String = "", _
+                            Optional ByVal strCco As String = "", _
+                            Optional ByVal strIntro As String = "", _
+                            Optional ByVal strLegenda As String = "", _
+                            Optional ByVal bPreviewOnly As Boolean = False, _
+                            Optional ByVal strAttachmentPath As String = "") As Boolean
+    On Error GoTo TratarErro
+
+    If bPreviewOnly Then
+        GravarLogEx "E-MAIL: PreviewOnly solicitado na assinatura canonica; envio real sera executado no fluxo atual.", LOG_WARNING
+    End If
+    If Len(Trim$(strCco)) > 0 Then
+        GravarLogEx "E-MAIL: Campo CCO informado na assinatura canonica; campo ignorado neste adapter local.", LOG_WARNING
+    End If
+
+    EnviarEmail = EnviarEmailHtml(strSubject, strBodyHtml, strPara, strCopia, strAttachmentPath, strIntro, strLegenda)
+    Exit Function
+
+TratarErro:
+    GravarLogEx "E-MAIL: FALHA (compat EnviarEmail): " & Err.Description, LOG_ERROR
+    EnviarEmail = False
+End Function
+
 Public Function GetOutlookAppSafe() As Object
     On Error Resume Next
 

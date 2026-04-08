@@ -104,6 +104,7 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
                 End If
 
                 lngIdxColVal = CLng(dicColunas(C_OUTPUT_VAL))
+                AplicarFormatoDataHoraPadrao objWs, objTblPrincipal, dicColunas
 
                 ' Limpeza previa (Protegido contra Nothing)
                 Dim rngLimpeza As Range
@@ -205,6 +206,30 @@ Private Sub HandleUserInterruption(ByVal lngAtual As Long, ByVal lngTotal As Lon
         Application.StatusBar = ">> [" & Format$(dblPercentual, "0") & "%] Processando linha " & lngAtual & " de " & lngTotal
         DoEvents
     End If
+End Sub
+
+Private Sub AplicarFormatoDataHoraPadrao(ByVal objWs As Worksheet, ByVal objTbl As ListObject, ByVal dicCol As Object)
+    Dim varColunas As Variant
+    Dim varNome As Variant
+    Dim lngColuna As Long
+    Dim rngColuna As Range
+
+    On Error GoTo SaidaLimpa
+
+        varColunas = Array(STAMP_COLUMN_HEADER, C_DT_ULT_CONF)
+
+        For Each varNome In varColunas
+            If dicCol.Exists(CStr(varNome)) Then
+                lngColuna = CLng(dicCol(CStr(varNome)))
+                Set rngColuna = Intersect(objTbl.DataBodyRange, objWs.Columns(lngColuna))
+                If Not rngColuna Is Nothing Then
+                    rngColuna.NumberFormat = "dd/mm/yyyy hh:mm:ss"
+                End If
+            End If
+        Next varNome
+
+SaidaLimpa:
+        Set rngColuna = Nothing
 End Sub
 
 Private Sub PreencherEstruturaErro(ByRef udtErro As DadosErro, ByVal varDados As Variant, ByVal lngI As Long, ByVal lngColStart As Long, ByVal dicCol As Object, ByVal strRef As String, ByVal strObs As String, ByVal strDet As String, ByVal varAlt As Variant, ByVal blnAlt As Boolean)

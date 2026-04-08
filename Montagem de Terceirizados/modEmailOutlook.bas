@@ -334,6 +334,84 @@ Private Function GetOutlookAdapter() As ClsOutlookAdapter
     Set GetOutlookAdapter = m_objOutlookAdapter
 End Function
 
+Private Function NormalizarNomeColuna(ByVal strValor As String) As String
+    Dim strOut As String
+
+    strOut = UCase$(Trim$(strValor))
+
+    strOut = Replace(strOut, ChrW$(192), "A")
+    strOut = Replace(strOut, ChrW$(193), "A")
+    strOut = Replace(strOut, ChrW$(194), "A")
+    strOut = Replace(strOut, ChrW$(195), "A")
+    strOut = Replace(strOut, ChrW$(196), "A")
+    strOut = Replace(strOut, ChrW$(224), "A")
+    strOut = Replace(strOut, ChrW$(225), "A")
+    strOut = Replace(strOut, ChrW$(226), "A")
+    strOut = Replace(strOut, ChrW$(227), "A")
+    strOut = Replace(strOut, ChrW$(228), "A")
+
+    strOut = Replace(strOut, ChrW$(200), "E")
+    strOut = Replace(strOut, ChrW$(201), "E")
+    strOut = Replace(strOut, ChrW$(202), "E")
+    strOut = Replace(strOut, ChrW$(203), "E")
+    strOut = Replace(strOut, ChrW$(232), "E")
+    strOut = Replace(strOut, ChrW$(233), "E")
+    strOut = Replace(strOut, ChrW$(234), "E")
+    strOut = Replace(strOut, ChrW$(235), "E")
+
+    strOut = Replace(strOut, ChrW$(204), "I")
+    strOut = Replace(strOut, ChrW$(205), "I")
+    strOut = Replace(strOut, ChrW$(206), "I")
+    strOut = Replace(strOut, ChrW$(207), "I")
+    strOut = Replace(strOut, ChrW$(236), "I")
+    strOut = Replace(strOut, ChrW$(237), "I")
+    strOut = Replace(strOut, ChrW$(238), "I")
+    strOut = Replace(strOut, ChrW$(239), "I")
+
+    strOut = Replace(strOut, ChrW$(210), "O")
+    strOut = Replace(strOut, ChrW$(211), "O")
+    strOut = Replace(strOut, ChrW$(212), "O")
+    strOut = Replace(strOut, ChrW$(213), "O")
+    strOut = Replace(strOut, ChrW$(214), "O")
+    strOut = Replace(strOut, ChrW$(242), "O")
+    strOut = Replace(strOut, ChrW$(243), "O")
+    strOut = Replace(strOut, ChrW$(244), "O")
+    strOut = Replace(strOut, ChrW$(245), "O")
+    strOut = Replace(strOut, ChrW$(246), "O")
+
+    strOut = Replace(strOut, ChrW$(217), "U")
+    strOut = Replace(strOut, ChrW$(218), "U")
+    strOut = Replace(strOut, ChrW$(219), "U")
+    strOut = Replace(strOut, ChrW$(220), "U")
+    strOut = Replace(strOut, ChrW$(249), "U")
+    strOut = Replace(strOut, ChrW$(250), "U")
+    strOut = Replace(strOut, ChrW$(251), "U")
+    strOut = Replace(strOut, ChrW$(252), "U")
+
+    strOut = Replace(strOut, ChrW$(199), "C")
+    strOut = Replace(strOut, ChrW$(231), "C")
+
+    NormalizarNomeColuna = strOut
+End Function
+
+Private Function ObterValorColunaTabela(ByRef objTbl As ListObject, ByVal strNomeColuna As String) As String
+    Dim objCol As ListColumn
+    Dim strAlvo As String
+
+    strAlvo = NormalizarNomeColuna(strNomeColuna)
+
+    For Each objCol In objTbl.ListColumns
+        If NormalizarNomeColuna(CStr(objCol.Name)) = strAlvo Then
+            If Not objCol.DataBodyRange Is Nothing Then
+                ObterValorColunaTabela = CStr(objCol.DataBodyRange.Cells(1, 1).Value)
+            End If
+         Exit Function
+        End If
+    Next objCol
+
+    ObterValorColunaTabela = ""
+End Function
+
 Public Function ObterEValidarDestinatarios(ByRef strTo As String, ByRef strCC As String) As Boolean
     Const TO_PADRAO As String = "email1@empresa.com.br;email2@empresa.com.br"
     Const CC_PADRAO As String = "email3@empresa.com.br;email4@empresa.com.br"
@@ -349,15 +427,34 @@ Public Function ObterEValidarDestinatarios(ByRef strTo As String, ByRef strCC As
     If Not objWs Is Nothing Then
         Set objTbl = objWs.ListObjects("EnderecosEmail")
         If Not objTbl Is Nothing Then
-            strTempTo = CStr(objTbl.ListColumns("Para").DataBodyRange.Cells(1, 1).Value)
-            strTempCC = CStr(objTbl.ListColumns("Copia").DataBodyRange.Cells(1, 1).Value)
-            blnLeuConfig = (Err.Number = 0)
+            strTempTo = ObterValorColunaTabela(objTbl, "Para")
+            strTempCC = ObterValorColunaTabela(objTbl, "Copia")
+
+            blnLeuConfig = (Len(Trim$(strTempTo)) > 0 Or Len(Trim$(strTempCC)) > 0)
         End If
-    End If
-    On Error GoTo 0
 
-        strTo = IIf(blnLeuConfig And Len(Trim$(strTempTo)) > 0, Replace(Trim$(strTempTo), " ", ""), TO_PADRAO)
-        strCC = IIf(blnLeuConfig And Len(Trim$(strTempCC)) > 0, Replace(Trim$(strTempCC), " ", ""), CC_PADRAO)
+        If Len(Trim$(strTempTo)) = 0 Then
+            strTempTo = CStr(objWs.Range("B2").Value)
+            If Err.Number = 0 Then blnLeuConfig = True
+            End If
 
-        ObterEValidarDestinatarios = (InStr(1, strTo, "@") > 0)
+            If Len(Trim$(strTempCC)) = 0 Then
+                strTempCC = CStr(objWs.Range("B3").Value)
+                If Err.Number = 0 Then blnLeuConfig = True
+                End If
+            End If
+            On Error GoTo 0
+
+                strTo = IIf(blnLeuConfig And Len(Trim$(strTempTo)) > 0, Replace(Trim$(strTempTo), " ", ""), TO_PADRAO)
+                strCC = IIf(blnLeuConfig And Len(Trim$(strTempCC)) > 0, Replace(Trim$(strTempCC), " ", ""), CC_PADRAO)
+
+                If strTo = TO_PADRAO Then
+                    GravarLogEx "E-MAIL: destinatarios PARA em fallback padrao (Config vazia/ausente).", LOG_WARNING
+                End If
+
+                If strCC = CC_PADRAO Then
+                    GravarLogEx "E-MAIL: destinatarios CC em fallback padrao (Config vazia/ausente).", LOG_WARNING
+                End If
+
+                ObterEValidarDestinatarios = (InStr(1, strTo, "@") > 0)
 End Function

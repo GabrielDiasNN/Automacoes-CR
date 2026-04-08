@@ -286,26 +286,52 @@ Private Sub SalvarItensEstadoCache(ByRef arrErros() As DadosErro, ByVal lngTotal
     Dim strPath As String
     Dim lngI As Long
     Dim strAssinatura As String
+    Dim blnArquivoExiste As Boolean
+    Dim blnJaVazio As Boolean
 
     On Error GoTo Falha
 
         strPath = ThisWorkbook.Path & "\" & CACHE_ITENS_FILE
-        intFileNum = FreeFile
 
-        Open strPath For Output As #intFileNum
-        For lngI = 1 To lngTotalErros
-            strAssinatura = GerarAssinaturaErro(arrErros(lngI))
-            Print #intFileNum, SerializarErroCacheLinha(strAssinatura, arrErros(lngI))
-        Next lngI
-        Close #intFileNum
+        blnArquivoExiste = (Dir$(strPath) <> vbNullString)
+        blnJaVazio = False
 
-        GravarLogEx "Cache de itens atualizado: " & strPath, LOG_DEBUG
-     Exit Sub
+        If blnArquivoExiste Then
+            On Error Resume Next
+            blnJaVazio = (FileLen(strPath) = 0)
+            On Error GoTo Falha
+            End If
+
+            If lngTotalErros <= 0 Then
+                If blnArquivoExiste And blnJaVazio Then
+                    GravarLogEx "Cache de itens mantido sem alteracao (sem erros).", LOG_DEBUG
+                 Exit Sub
+                End If
+
+                intFileNum = FreeFile
+                Open strPath For Output As #intFileNum
+                Close #intFileNum
+
+                GravarLogEx "Cache de itens limpo (sem erros): " & strPath, LOG_DEBUG
+             Exit Sub
+            End If
+
+            intFileNum = FreeFile
+
+            Open strPath For Output As #intFileNum
+            For lngI = 1 To lngTotalErros
+                strAssinatura = GerarAssinaturaErro(arrErros(lngI))
+                Print #intFileNum, SerializarErroCacheLinha(strAssinatura, arrErros(lngI))
+            Next lngI
+            Close #intFileNum
+
+            GravarLogEx "Cache de itens atualizado: " & strPath, LOG_DEBUG
+         Exit Sub
 
 Falha:
-        On Error Resume Next
-        If intFileNum > 0 Then Close #intFileNum
-            GravarLogEx "Erro ao salvar cache de itens: " & Err.Description, LOG_WARNING
+            On Error Resume Next
+            If intFileNum > 0 Then Close #intFileNum
+                GravarLogEx "Erro ao salvar cache de itens: " & Err.Description, LOG_WARNING
 End Sub
 
 Private Function SerializarErroCacheLinha(ByVal strAssinatura As String, ByRef udtErro As DadosErro) As String

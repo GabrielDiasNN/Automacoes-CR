@@ -96,7 +96,7 @@ Public Sub GravarLogEx(ByVal strMensagem As String, Optional ByVal lngNivel As L
             IniciarRunId
 
             ' 1. Formatar Mensagem
-            strLinha = "[" & Format$(Now, "yyyy-mm-dd hh:mm:ss") & "] [" & NivelToString(lngNivel) & "] [Run:" & m_strRunId & "] " & strMensagem
+            strLinha = "[" & Format$(Now, "dd/mm/yyyy hh:mm:ss") & "] [" & NivelToString(lngNivel) & "] [Run:" & m_strRunId & "] " & strMensagem
 
             ' 2. Caminho Do Log
             strArquivo = ThisWorkbook.Path & "\Logs\Montagem.log"

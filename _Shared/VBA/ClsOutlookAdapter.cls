@@ -98,6 +98,18 @@ TratarErro:
     Resume Saida
 End Function
 
+' Compatibilidade retroativa para fluxos antigos da Montagem que
+' ainda chamam EnviarEmailHtml com assinatura reduzida.
+Public Function EnviarEmailHtml(ByVal strSubject As String, _
+                                ByVal strBodyHtml As String, _
+                                ByVal strTo As String, _
+                                ByVal strCC As String, _
+                                Optional ByVal strAttachmentPath As String = "", _
+                                Optional ByVal strIntro As String = "", _
+                                Optional ByVal strLegenda As String = "") As Boolean
+    EnviarEmailHtml = EnviarEmail(strSubject, strBodyHtml, strTo, strCC, "", strIntro, strLegenda, False, strAttachmentPath)
+End Function
+
 Public Function GetOutlookAppSafe() As Object
     On Error Resume Next
 
