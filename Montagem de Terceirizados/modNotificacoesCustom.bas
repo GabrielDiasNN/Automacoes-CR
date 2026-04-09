@@ -120,23 +120,61 @@ End Function
 ' ====================================================================================
 Private Function GerarHashEstadoAtual(ByVal lngLinhas As Long, ByVal lngErros As Long, ByRef arr() As DadosErro) As String
     Dim lngI As Long
+    Dim lngTotalAssinaturas As Long
+    Dim arrAssinaturas() As String
+    Dim strAssinatura As String
     Dim strBase As String
     Dim strResult As String
 
-    ' Base estavel pelo contador - garante hash nao-vazio mesmo se array vazio
-    strBase = CStr(lngLinhas) & "E" & CStr(lngErros) & ":"
+    ' Hash deve representar o estado de divergencias (erros), e nao o volume total da base.
+    strBase = "E" & CStr(lngErros) & ":"
 
     On Error Resume Next
     For lngI = 1 To lngErros
-        strBase = strBase & GerarAssinaturaErro(arr(lngI)) & ";"
-        If Len(strBase) > 5000 Then Exit For
-        Next lngI
-        On Error GoTo 0
+        strAssinatura = GerarAssinaturaErro(arr(lngI))
+        If Len(strAssinatura) > 0 Then
+            lngTotalAssinaturas = lngTotalAssinaturas + 1
+            If lngTotalAssinaturas = 1 Then
+                ReDim arrAssinaturas(1 To 1)
+            Else
+                ReDim Preserve arrAssinaturas(1 To lngTotalAssinaturas)
+            End If
+            arrAssinaturas(lngTotalAssinaturas) = strAssinatura
+        End If
+    Next lngI
+    On Error GoTo 0
+
+        If lngTotalAssinaturas > 1 Then
+            OrdenarAssinaturas arrAssinaturas, lngTotalAssinaturas
+        End If
+
+        For lngI = 1 To lngTotalAssinaturas
+            strBase = strBase & arrAssinaturas(lngI) & ";"
+            If Len(strBase) > 5000 Then Exit For
+            Next lngI
 
             strResult = modUtil.GerarHashDJB2(strBase)
             If Len(strResult) = 0 Then strResult = CStr(lngErros) & "fallback"
                 GerarHashEstadoAtual = strResult
 End Function
+
+Private Sub OrdenarAssinaturas(ByRef arrAssinaturas() As String, ByVal lngTotal As Long)
+    Dim lngI As Long
+    Dim lngJ As Long
+    Dim strAtual As String
+
+    For lngI = 2 To lngTotal
+        strAtual = arrAssinaturas(lngI)
+        lngJ = lngI - 1
+
+        Do While lngJ >= 1 And StrComp(arrAssinaturas(lngJ), strAtual, vbTextCompare) > 0
+            arrAssinaturas(lngJ + 1) = arrAssinaturas(lngJ)
+            lngJ = lngJ - 1
+        Loop
+
+        arrAssinaturas(lngJ + 1) = strAtual
+    Next lngI
+End Sub
 
 Private Function CarregarEstadoAnterior() As EstadoSistemaDetalhado
     Dim udtEstado As EstadoSistemaDetalhado
@@ -222,20 +260,25 @@ Private Function CompararEstados(ByRef udtAtual As EstadoSistemaDetalhado, ByRef
     ElseIf udtAtual.lngTotalErros > 0 And udtAnterior.lngTotalErros = 0 Then
         udtMud.blnHouveMudanca = True
         udtMud.strTipoNotificacao = NOTIF_TIPO_ERRO
-    ElseIf udtAtual.lngTotalErros > 0 And (udtMud.lngTotalNovos > 0 Or udtMud.lngTotalCorrigidos > 0) Then
-        udtMud.blnHouveMudanca = True
-        udtMud.strTipoNotificacao = NOTIF_TIPO_ALTERACAO
-    ElseIf udtAtual.lngTotalErros <> udtAnterior.lngTotalErros Or udtAtual.strHashEstado <> udtAnterior.strHashEstado Then
-        If udtAtual.lngTotalErros > 0 Then
+    ElseIf udtAtual.lngTotalErros > 0 Then
+        If udtMud.lngTotalNovos > 0 Or udtMud.lngTotalCorrigidos > 0 Then
+            udtMud.blnHouveMudanca = True
+            udtMud.strTipoNotificacao = NOTIF_TIPO_ALTERACAO
+        ElseIf udtAtual.lngTotalErros <> udtAnterior.lngTotalErros Or udtAtual.strHashEstado <> udtAnterior.strHashEstado Then
             udtMud.blnHouveMudanca = True
             udtMud.strTipoNotificacao = NOTIF_TIPO_ALTERACAO
         Else
-            udtMud.blnHouveMudanca = True
-            udtMud.strTipoNotificacao = NOTIF_TIPO_ACERTO
+            udtMud.strTipoNotificacao = NOTIF_TIPO_NENHUMA
+            GravarLogEx "Estado inalterado: " & udtAtual.lngTotalErros & " erro(s). Sem notificacao.", LOG_DEBUG
         End If
     Else
         udtMud.strTipoNotificacao = NOTIF_TIPO_NENHUMA
-        GravarLogEx "Estado inalterado: " & udtAtual.lngTotalErros & " erro(s). Sem notificacao.", LOG_DEBUG
+        If udtAtual.lngTotalLinhas <> udtAnterior.lngTotalLinhas Then
+            GravarLogEx "Estado sem erros mantido (0->0). Variacao de linhas ignorada para notificacao: " & _
+            udtAnterior.lngTotalLinhas & " -> " & udtAtual.lngTotalLinhas & ".", LOG_DEBUG
+        Else
+            GravarLogEx "Estado inalterado: " & udtAtual.lngTotalErros & " erro(s). Sem notificacao.", LOG_DEBUG
+        End If
     End If
 
     If udtMud.blnHouveMudanca Then
