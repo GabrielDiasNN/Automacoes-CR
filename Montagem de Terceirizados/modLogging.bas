@@ -96,7 +96,7 @@ Public Sub GravarLogEx(ByVal strMensagem As String, Optional ByVal lngNivel As L
             IniciarRunId
 
             ' 1. Formatar Mensagem
-            strLinha = "[" & Format$(Now, "dd/mm/yyyy hh:mm:ss") & "] [" & NivelToString(lngNivel) & "] [Run:" & m_strRunId & "] " & strMensagem
+            strLinha = "[" & Format$(Now, "dd/mm/yyyy hh:mm:ss") & "] [VBA] [" & NivelToString(lngNivel) & "] [ExecId:" & m_strRunId & "] " & SanitizarMensagemLog(strMensagem)
 
             ' 2. Caminho Do Log
             strArquivo = ThisWorkbook.Path & "\Logs\Montagem.log"
@@ -123,13 +123,104 @@ TratarErro:
                     Resume Saida
 End Sub
 
+Private Function SanitizarMensagemLog(ByVal strMensagem As String) As String
+    Dim strTexto As String
+    Dim strOut As String
+    Dim strCh As String
+    Dim lngI As Long
+    Dim lngCode As Long
+
+    strTexto = Trim$(strMensagem)
+    strTexto = Replace(strTexto, vbCrLf, " ")
+    strTexto = Replace(strTexto, vbCr, " ")
+    strTexto = Replace(strTexto, vbLf, " ")
+    strTexto = RemoveDiacritics(strTexto)
+
+    For lngI = 1 To Len(strTexto)
+        strCh = Mid$(strTexto, lngI, 1)
+        lngCode = AscW(strCh)
+        If lngCode < 0 Then lngCode = lngCode + 65536
+
+            If lngCode = 9 Or (lngCode >= 32 And lngCode <= 126) Then
+                strOut = strOut & strCh
+            ElseIf lngCode = 160 Then
+                strOut = strOut & " "
+            Else
+                strOut = strOut & "_"
+            End If
+        Next lngI
+
+        Do While InStr(strOut, "  ") > 0
+            strOut = Replace(strOut, "  ", " ")
+        Loop
+
+        SanitizarMensagemLog = Trim$(strOut)
+End Function
+
+Private Function RemoveDiacritics(ByVal strTexto As String) As String
+    Dim strOut As String
+
+    strOut = strTexto
+    strOut = Replace(strOut, ChrW$(192), "A")
+    strOut = Replace(strOut, ChrW$(193), "A")
+    strOut = Replace(strOut, ChrW$(194), "A")
+    strOut = Replace(strOut, ChrW$(195), "A")
+    strOut = Replace(strOut, ChrW$(196), "A")
+    strOut = Replace(strOut, ChrW$(199), "C")
+    strOut = Replace(strOut, ChrW$(200), "E")
+    strOut = Replace(strOut, ChrW$(201), "E")
+    strOut = Replace(strOut, ChrW$(202), "E")
+    strOut = Replace(strOut, ChrW$(203), "E")
+    strOut = Replace(strOut, ChrW$(204), "I")
+    strOut = Replace(strOut, ChrW$(205), "I")
+    strOut = Replace(strOut, ChrW$(206), "I")
+    strOut = Replace(strOut, ChrW$(207), "I")
+    strOut = Replace(strOut, ChrW$(210), "O")
+    strOut = Replace(strOut, ChrW$(211), "O")
+    strOut = Replace(strOut, ChrW$(212), "O")
+    strOut = Replace(strOut, ChrW$(213), "O")
+    strOut = Replace(strOut, ChrW$(214), "O")
+    strOut = Replace(strOut, ChrW$(217), "U")
+    strOut = Replace(strOut, ChrW$(218), "U")
+    strOut = Replace(strOut, ChrW$(219), "U")
+    strOut = Replace(strOut, ChrW$(220), "U")
+    strOut = Replace(strOut, ChrW$(221), "Y")
+    strOut = Replace(strOut, ChrW$(224), "a")
+    strOut = Replace(strOut, ChrW$(225), "a")
+    strOut = Replace(strOut, ChrW$(226), "a")
+    strOut = Replace(strOut, ChrW$(227), "a")
+    strOut = Replace(strOut, ChrW$(228), "a")
+    strOut = Replace(strOut, ChrW$(231), "c")
+    strOut = Replace(strOut, ChrW$(232), "e")
+    strOut = Replace(strOut, ChrW$(233), "e")
+    strOut = Replace(strOut, ChrW$(234), "e")
+    strOut = Replace(strOut, ChrW$(235), "e")
+    strOut = Replace(strOut, ChrW$(236), "i")
+    strOut = Replace(strOut, ChrW$(237), "i")
+    strOut = Replace(strOut, ChrW$(238), "i")
+    strOut = Replace(strOut, ChrW$(239), "i")
+    strOut = Replace(strOut, ChrW$(242), "o")
+    strOut = Replace(strOut, ChrW$(243), "o")
+    strOut = Replace(strOut, ChrW$(244), "o")
+    strOut = Replace(strOut, ChrW$(245), "o")
+    strOut = Replace(strOut, ChrW$(246), "o")
+    strOut = Replace(strOut, ChrW$(249), "u")
+    strOut = Replace(strOut, ChrW$(250), "u")
+    strOut = Replace(strOut, ChrW$(251), "u")
+    strOut = Replace(strOut, ChrW$(252), "u")
+    strOut = Replace(strOut, ChrW$(253), "y")
+    strOut = Replace(strOut, ChrW$(255), "y")
+
+    RemoveDiacritics = strOut
+End Function
+
 Private Function NivelToString(ByVal lngNivel As Long) As String
     Select Case lngNivel
      Case LOG_DEBUG:   NivelToString = "DEBUG"
-     Case LOG_INFO:    NivelToString = "INFO "
-     Case LOG_WARNING: NivelToString = "WARN "
+     Case LOG_INFO:    NivelToString = "INFO"
+     Case LOG_WARNING: NivelToString = "WARN"
      Case LOG_ERROR:   NivelToString = "ERROR"
-     Case Else:        NivelToString = "LOG  "
+     Case Else:        NivelToString = "INFO"
     End Select
 End Function
 
