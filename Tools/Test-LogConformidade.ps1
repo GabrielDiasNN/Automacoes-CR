@@ -8,6 +8,7 @@
 # MODOS:
 #   -StagedOnly   Varre apenas arquivos staged no git (para pre-commit)
 #   -All          Varre todos os .ps1, .psm1, .bas do repositório
+#   -Paths        Varre apenas os arquivos informados explicitamente (para CI)
 #
 # EXIT CODES:
 #   0  — Conforme (nenhuma violação)
@@ -18,15 +19,18 @@
 param(
     [string]$RootPath = (Split-Path -Parent $PSScriptRoot),
     [switch]$StagedOnly,
-    [switch]$All
+    [switch]$All,
+    [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
 
 # Se nenhum modo especificado, assume -StagedOnly
-if (-not $StagedOnly -and -not $All) {
+if (-not $StagedOnly -and -not $All -and $Paths.Count -eq 0) {
     $StagedOnly = $true
 }
+
+$resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
 
 # ==============================================================================
 # Padrões proibidos
@@ -62,6 +66,37 @@ $allPatterns = @{
 # Coletar arquivos
 # ==============================================================================
 function Get-TargetFiles {
+    if ($Paths.Count -gt 0) {
+        $files = @()
+        foreach ($item in $Paths) {
+            if ([string]::IsNullOrWhiteSpace($item)) {
+                continue
+            }
+
+            $candidate = $item.Trim()
+            if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+                $candidate = Join-Path $resolvedRoot $candidate
+            }
+
+            if (-not (Test-Path -LiteralPath $candidate)) {
+                continue
+            }
+
+            $ext = [System.IO.Path]::GetExtension($candidate).ToLowerInvariant()
+            if (-not $allPatterns.ContainsKey($ext)) {
+                continue
+            }
+
+            if ($candidate -match '\\Audit\\|\\Tools\\') {
+                continue
+            }
+
+            $files += (Resolve-Path -LiteralPath $candidate).Path
+        }
+
+        return @($files | Sort-Object -Unique)
+    }
+
     if ($StagedOnly) {
         $stagedRaw = git diff --cached --name-only --diff-filter=ACMR 2>$null
         if (-not $stagedRaw) { return @() }
@@ -74,7 +109,7 @@ function Get-TargetFiles {
             if ($rel -match '^(Audit/|Tools/)') { continue }
             $ext = [System.IO.Path]::GetExtension($rel).ToLowerInvariant()
             if ($allPatterns.ContainsKey($ext)) {
-                $full = Join-Path $RootPath $rel
+                $full = Join-Path $resolvedRoot $rel
                 if (Test-Path $full) { $files += $full }
             }
         }
@@ -116,8 +151,8 @@ foreach ($filePath in $files) {
         foreach ($p in $patterns) {
             if ($line -match $p.Pattern) {
                 $relPath = $filePath
-                if ($filePath.StartsWith($RootPath)) {
-                    $relPath = $filePath.Substring($RootPath.Length).TrimStart('\', '/')
+                if ($filePath.StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $relPath = $filePath.Substring($resolvedRoot.Length).TrimStart('\', '/')
                 }
                 $violations += [PSCustomObject]@{
                     File    = $relPath

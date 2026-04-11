@@ -1,6 +1,6 @@
 ---
 name: vba-html-vba
-description: "Use when creating, reviewing, or refactoring HTML content generated inside VBA automation, especially for Outlook MailItem.HTMLBody, HTML fragments in worksheets, or rich notification templates."
+description: "Use when creating, reviewing, or refactoring HTML generated inside VBA automation, especially Outlook HTMLBody content and rich notification templates assembled from workbook data."
 ---
 
 > Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
@@ -9,70 +9,70 @@ description: "Use when creating, reviewing, or refactoring HTML content generate
 
 ## Purpose
 
-Use this skill for HTML markup authored or assembled from VBA. The standard focuses on deterministic rendering in Outlook and Office surfaces, safe variable interpolation, and consistent delivery in unattended automation.
+Use this skill for HTML authored or assembled from VBA. It governs template structure, escaping, deterministic rendering, and the boundary between workbook data and the final HTML body used in Outlook or other Office-hosted surfaces.
 
-> **Related skill:** Apply `vba-css-vba` together with this skill for all CSS and inline styling decisions in the generated HTML. This skill covers structure and content; `vba-css-vba` covers styling constraints and Outlook rendering safety.
+## When to Use
+
+- Building HTML for `MailItem.HTMLBody`.
+- Refactoring long string concatenation into template builders or section functions.
+- Reviewing whether dynamic data is escaped and rendered deterministically.
+
+## Do Not Use When
+
+- The main question is CSS behavior under Outlook; use `vba-css-vba`.
+- The HTML is generated outside VBA for modern dashboards or report pages; use `nodejs-html-css`.
+- The task is only about mail send semantics or attachments.
+
+## Related Skills
+
+- `vba-css-vba`: Outlook-safe CSS and inline styling.
+- `automacao-comms-email`: Outlook delivery ownership and send behavior.
+- `vba-enterprise-vbe-safe`: modular VBA architecture and ASCII-safe internal text.
 
 ## Non-Negotiable Rules
 
-1. Build HTML from validated data only; never concatenate unchecked user input into markup.
-2. Escape dynamic text for HTML entities before insertion into body content.
-3. Prefer table-based structure for email-compatible layouts.
-4. Keep generated HTML deterministic: same inputs must produce same output.
-5. Separate message data from template assembly so business logic does not live inside concatenated strings.
+1. Build HTML from validated data only.
+2. Escape dynamic text before interpolation.
+3. Keep templates deterministic for equal inputs.
+4. Separate data preparation from template assembly.
+5. Assume Outlook or Office-hosted rendering constraints when the target is email.
 
 ## Runtime Contract
 
-| Concern                    | Standard                                                                  |
-| -------------------------- | ------------------------------------------------------------------------- |
-| Input validation           | Validate null, empty, and format constraints before HTML assembly         |
-| Data escaping              | Encode &, <, >, ", and ' for dynamic text fields                          |
-| Template source            | Use explicit template blocks or functions, not scattered inline fragments |
-| Date and number formatting | Format explicitly with locale-safe rules before interpolation             |
-| Delivery target            | Assume Outlook/Word rendering constraints for email outputs               |
+| Concern | Standard |
+| --- | --- |
+| Input validation | Validate null, empty, and format constraints before assembly |
+| Data escaping | Encode `&`, `<`, `>`, `"`, and `'` for dynamic text |
+| Template source | Use explicit builders, blocks, or tokenized templates |
+| Formatting | Format dates and numbers before interpolation |
+| Ordering | Sort variable data when source order is not stable |
 
-## Enterprise Patterns
+## Repo-Specific Constraints
 
-| Pattern                | Guidance                                                                 |
-| ---------------------- | ------------------------------------------------------------------------ |
-| Tokenized templates    | Use placeholders like {{Cliente}} and replace from a validated map       |
-| Structural wrappers    | Keep a stable outer wrapper with width, typography, and spacing defaults |
-| Section builders       | Split header, summary, table, and footer into dedicated functions        |
-| Deterministic ordering | Sort rows before rendering when source order can vary                    |
-| Fallback text          | Provide clear plain language fallback for missing optional data          |
+- Keep HTML composition modular through builders or services such as `ClsEmailComposerService`; do not bury the whole body in adapter code.
+- Internal VBA identifiers and helper text remain ASCII-safe even when the final external HTML preserves PT-BR accents.
+- When HTML feeds Outlook email, pair this skill with `vba-css-vba` instead of borrowing rules from the modern Node.js HTML stack.
 
-## HTML Safety Baseline
+## Validation
 
-| Topic            | Rule                                                                             |
-| ---------------- | -------------------------------------------------------------------------------- |
-| Inline scripts   | Never use script tags in VBA-generated email HTML                                |
-| External assets  | Avoid remote CSS and remote JS dependencies                                      |
-| Embedded links   | Validate protocol and target domain before rendering anchors                     |
-| Attribute values | Quote all dynamic attribute values                                               |
-| Unicode and ANSI | Keep user-facing text readable, but preserve VBA/VBE internal safety constraints |
-
-## Suggested Assembly Flow
-
-1. Validate and normalize source data.
-2. Escape dynamic text values.
-3. Build deterministic sections (header, content table, footer).
-4. Compose final wrapper and inject into MailItem.HTMLBody.
-5. Log rendering metadata (template version, row count, execution id).
+1. Confirm required fields are validated before rendering.
+2. Confirm dynamic content is escaped.
+3. Render the same payload twice and confirm deterministic output.
+4. Validate links, attribute values, and any optional fallback text.
 
 ## Troubleshooting
 
-| Symptom                             | Root Cause                                                    | Action                                                                            |
-| ----------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Broken characters in generated body | Encoding mismatch between internal VBA text and output target | Normalize internal strings and preserve external user-facing text only where safe |
-| Layout shifts across recipients     | Non-email-safe markup assumptions                             | Rework structure to table-based email layout                                      |
-| Links are malformed                 | Dynamic URL not validated                                     | Validate URL schema and domain before interpolation                               |
-| Missing values in HTML              | Null or empty source fields                                   | Add required-field validation and explicit fallback text                          |
+| Symptom | Root Cause | Action |
+| --- | --- | --- |
+| Broken characters in generated body | Internal text not normalized for the target path | Normalize helper text and preserve accents only in safe external output |
+| Layout shifts across recipients | Non-email-safe structure | Rework to stable table-oriented markup |
+| Links are malformed | Dynamic URL not validated | Validate protocol and domain before interpolation |
+| Missing values in HTML | Source fields were null or empty | Add required-field validation and explicit fallback text |
 
 ## Pre-Delivery Checklist
 
 - [ ] Dynamic content is escaped before interpolation.
-- [ ] HTML layout is email-safe and table-oriented where needed.
-- [ ] Templates are modular and not scattered in ad hoc concatenations.
-- [ ] Required fields are validated before rendering starts.
-- [ ] Output generation is deterministic for the same input set.
-- [ ] CSS and inline styles follow the `vba-css-vba` Outlook compatibility constraints.
+- [ ] Templates are modular and deterministic.
+- [ ] Required fields are validated before render starts.
+- [ ] Output structure is compatible with the target Office surface.
+- [ ] CSS choices are delegated to `vba-css-vba`.

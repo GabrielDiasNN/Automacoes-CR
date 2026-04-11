@@ -16,6 +16,11 @@
     Quando informado, verifica drift somente para arquivos .bas/.cls staged no git.
     Sem esta flag, verifica todos os módulos rastreados pelos manifests.
 
+.PARAMETER Paths
+    Lista explicita de arquivos para verificar no lugar do modo staged. Aceita caminhos
+    relativos ao repositório ou absolutos. Em CI, use esta opção para espelhar o
+    comportamento do pre-commit sobre os arquivos alterados do PR/push.
+
 .OUTPUTS
     Exit 0 = nenhum drift detectado.
     Exit 1 = drift detectado (commit deve ser bloqueado).
@@ -25,7 +30,8 @@
 [CmdletBinding()]
 param(
     [string]$RootPath = (Join-Path $PSScriptRoot ".."),
-    [switch]$StagedOnly
+    [switch]$StagedOnly,
+    [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +42,22 @@ $auditPath = Join-Path $resolvedRoot "Audit\vba"
 function Write-HookLog {
     param([string]$Level, [string]$Message)
     Write-Host "[$Level] $Message"
+}
+
+function Convert-ToRepoRelativePath {
+    param(
+        [string]$Path,
+        [string]$RepositoryRoot
+    )
+
+    $rootNorm = [System.IO.Path]::GetFullPath($RepositoryRoot)
+    $pathNorm = [System.IO.Path]::GetFullPath($Path)
+
+    if ($pathNorm.StartsWith($rootNorm, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $pathNorm.Substring($rootNorm.Length).TrimStart('\', '/').Replace('\', '/')
+    }
+
+    return $Path.Replace('\', '/')
 }
 
 # Compara conteúdo ignorando diferenças de line ending (CRLF vs LF)
@@ -56,20 +78,51 @@ function Get-NormalizedHash {
 # ------------------------------------------------------------------
 # 1. Obter lista de arquivos staged (apenas se -StagedOnly)
 # ------------------------------------------------------------------
-$stagedFiles = @()
-if ($StagedOnly) {
+$targetFiles = @()
+if ($Paths.Count -gt 0) {
+    foreach ($item in $Paths) {
+        if ([string]::IsNullOrWhiteSpace($item)) {
+            continue
+        }
+
+        $candidate = $item.Trim()
+        if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+            $candidate = Join-Path $resolvedRoot $candidate
+        }
+
+        if (-not (Test-Path -LiteralPath $candidate)) {
+            continue
+        }
+
+        $ext = [System.IO.Path]::GetExtension($candidate).ToLowerInvariant()
+        if ($ext -notin @('.bas', '.cls')) {
+            continue
+        }
+
+        $targetFiles += (Convert-ToRepoRelativePath -Path $candidate -RepositoryRoot $resolvedRoot)
+    }
+
+    $targetFiles = @($targetFiles | Sort-Object -Unique)
+    if ($targetFiles.Count -eq 0) {
+        Write-HookLog "INFO" "Nenhum arquivo .bas/.cls selecionado em -Paths. Verificacao VBA ignorada."
+        exit 0
+    }
+
+    Write-HookLog "INFO" "$($targetFiles.Count) arquivo(s) VBA recebidos via -Paths: $($targetFiles -join ', ')"
+}
+elseif ($StagedOnly) {
     $gitOut = git diff --cached --name-only --diff-filter=ACM 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-HookLog "WARN" "Nao foi possivel obter staged files via git. Verificando todos."
         $StagedOnly = $false
     }
     else {
-        $stagedFiles = $gitOut | Where-Object { $_ -match '\.(bas|cls)$' }
-        if ($stagedFiles.Count -eq 0) {
+        $targetFiles = @($gitOut | Where-Object { $_ -match '\.(bas|cls)$' } | ForEach-Object { $_.Trim().Replace('\', '/') })
+        if ($targetFiles.Count -eq 0) {
             Write-HookLog "INFO" "Nenhum arquivo .bas/.cls staged. Verificacao VBA ignorada."
             exit 0
         }
-        Write-HookLog "INFO" "$($stagedFiles.Count) arquivo(s) VBA staged: $($stagedFiles -join ', ')"
+        Write-HookLog "INFO" "$($targetFiles.Count) arquivo(s) VBA staged: $($targetFiles -join ', ')"
     }
 }
 
@@ -111,10 +164,10 @@ foreach ($manifestFile in $manifests) {
         $auditFile = Join-Path $auditFolder $fileName
 
         # Quando -StagedOnly, ignorar arquivos não staged
-        if ($StagedOnly) {
+        if ($StagedOnly -or $Paths.Count -gt 0) {
             $relPath = $repoFile.Replace($resolvedRoot, "").TrimStart("\", "/").Replace("\", "/")
-            $isStaged = $stagedFiles | Where-Object { $_ -eq $relPath -or $_ -like "*$fileName" }
-            if (-not $isStaged) { continue }
+            $isSelected = $targetFiles | Where-Object { $_ -eq $relPath -or $_ -like "*$fileName" }
+            if (-not $isSelected) { continue }
         }
 
         if (-not (Test-Path -LiteralPath $repoFile)) {

@@ -4,6 +4,7 @@ set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 VERBS_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PowerShellApprovedVerbs.ps1"
 PTBR_SCRIPT_PATH="$REPO_ROOT/Tools/Test-VbaPtBrGovernance.ps1"
+SKILLS_SCRIPT_PATH="$REPO_ROOT/Tools/Test-SkillsGovernance.ps1"
 
 if command -v pwsh >/dev/null 2>&1; then
   PS_BIN="pwsh"
@@ -32,6 +33,16 @@ if [ -f "$PTBR_SCRIPT_PATH" ]; then
   fi
 else
   echo "[WARN] Script de validacao nao encontrado: $PTBR_SCRIPT_PATH"
+fi
+
+if [ -f "$SKILLS_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SKILLS_SCRIPT_PATH" -BasePath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    exit $rc
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $SKILLS_SCRIPT_PATH"
 fi
 
 DRIFT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-VbaDrift.ps1"

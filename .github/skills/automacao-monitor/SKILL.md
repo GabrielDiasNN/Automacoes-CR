@@ -1,6 +1,6 @@
 ---
 name: automacao-monitor
-description: "Use when changing the central PowerShell scheduler, its config.json contract, or the operational rules for unattended automation execution."
+description: "Use when changing the central PowerShell scheduler, its config.json contract, or the operational rules for unattended task dispatch in this repository."
 ---
 
 > Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
@@ -9,27 +9,45 @@ description: "Use when changing the central PowerShell scheduler, its config.jso
 
 ## Purpose
 
-Use this skill for the central scheduler and monitor layer that loads tasks from config.json, enforces singleton execution, and launches automations safely in unattended mode. The standard prioritizes configuration validation, operational observability, and predictable process control.
+Use this skill for the central monitor and scheduler layer implemented by `MonitorAutomacoes.ps1`. It defines how tasks are registered, validated, dispatched, correlated, and observed during unattended execution.
 
-## Architecture Overview
+## When to Use
 
-| Asset                     | Responsibility                                          |
-| ------------------------- | ------------------------------------------------------- |
-| MonitorAutomacoes.ps1     | Scheduler core, reload logic, task lifecycle management |
-| config.json               | Declarative task registry and schedule contract         |
-| Logs/YYYY-MM_Monitor.log  | Central operational log                                 |
-| Logs/Monitor_Metrics.json | Structured operational metrics snapshot                 |
-| Startup_Error.txt         | Early fatal startup diagnostics                         |
+- Changing monitor behavior, task dispatch rules, or `config.json` contract.
+- Reviewing overlap prevention, mutex, hot reload, heartbeat, or metrics behavior.
+- Adding or troubleshooting a scheduled automation.
+
+## Do Not Use When
+
+- The task is only about a standalone PowerShell script outside the monitor contract.
+- The work is limited to VBA architecture or workbook synchronization.
+- The question is only about log-line format; use `log-standardization`.
+
+## Related Skills
+
+- `powershell-automation`: PowerShell implementation patterns and PS 5.1 compatibility.
+- `automation-execution-contract`: `ExecId`, exit-code ownership, and downstream propagation.
+- `automation-runtime-safety`: startup diagnostics, cleanup, and dry-run discipline.
+- `automacao-standard`: manual-first rule before monitor registration.
 
 ## Non-Negotiable Rules
 
 1. The monitor must run as a singleton protected by a global mutex.
-2. config.json must be treated as a contract and validated before task execution begins.
-3. New tasks must be proven manually before they are scheduled.
-4. Paths in the scheduler must be absolute and operationally valid.
-5. Encoding must be explicit. Do not rely on default shell encoding behavior.
-6. DryRun mode must not launch external processes or modify state.
-7. Metrics must be persisted periodically to `Logs/Monitor_Metrics.json`.
+2. `config.json` is a contract and must be validated before task dispatch begins.
+3. New tasks must prove themselves manually before scheduler registration.
+4. Task paths must be absolute and operationally valid.
+5. Dry-run mode must not launch external processes or mutate persistent state.
+6. Metrics must be persisted periodically to `Logs/Monitor_Metrics.json`.
+
+## Architecture Overview
+
+| Asset | Responsibility |
+| --- | --- |
+| `MonitorAutomacoes.ps1` | Scheduler core, reload logic, task lifecycle management |
+| `config.json` | Declarative task registry and schedule contract |
+| `Logs/yyyy-MM_Monitor.log` | Central operational log |
+| `Logs/Monitor_Metrics.json` | Structured operational metrics snapshot |
+| `Startup_Error.txt` | Early fatal startup diagnostics |
 
 ## Task Registration Standard
 
@@ -50,93 +68,73 @@ Use this skill for the central scheduler and monitor layer that loads tasks from
 
 ## Configuration Contract
 
-| Field               | Meaning                                                  |
-| ------------------- | -------------------------------------------------------- |
-| enabled             | Disable safely without deleting the task                 |
-| preventOverlap      | Do not start a second instance while one is still active |
-| waitForExit         | Decide whether the monitor blocks on process completion  |
-| schedule.daysOfWeek | Day filter using the scheduler convention                |
-| schedule.hours      | Hour filter; empty array means no hour-based trigger     |
-| schedule.minutes    | Minute filter for execution windows                      |
+| Field | Meaning |
+| --- | --- |
+| `enabled` | Disable safely without deleting the task |
+| `preventOverlap` | Do not start a second instance while one is still active |
+| `waitForExit` | Decide whether the monitor blocks on process completion |
+| `schedule.daysOfWeek` | Day filter using monitor convention `0..6` only |
+| `schedule.hours` | Hour filter; empty array means no hour-based trigger |
+| `schedule.minutes` | Minute filter for execution windows |
+| `exitCodeMap` | Optional readable mapping for known task exit codes |
 
 ## Supported CLI Flags
 
-| Flag                 | Behavior                                                               |
-| -------------------- | ---------------------------------------------------------------------- |
-| `-RunOnce`           | Execute a single scheduling cycle and exit; used for on-demand testing |
-| `-DryRun`            | Log eligible task launches without actually starting any process       |
-| `-SkipTaskExecution` | Run the monitor loop but suppress all task launches                    |
-| `-MutexNameOverride` | Override the mutex name for isolated testing                           |
+| Flag | Behavior |
+| --- | --- |
+| `-RunOnce` | Execute a single scheduling cycle and exit |
+| `-DryRun` | Log eligible launches without actually starting them |
+| `-SkipTaskExecution` | Run validation and loop logic but suppress launches |
+| `-MutexNameOverride` | Override mutex name for isolated testing |
 
-`-DryRun` and `-RunOnce` can be combined for safe pre-flight validation.
+`-RunOnce -DryRun` is the preferred preflight path. When the main mutex is already in use, combine `-MutexNameOverride -RunOnce -SkipTaskExecution` for smoke testing.
 
 ## Enterprise Patterns
 
-| Pattern             | Standard                                                                        |
-| ------------------- | ------------------------------------------------------------------------------- |
-| Mutex               | Use a single named global mutex to prevent duplicate monitor instances          |
-| Hot reload          | Detect config changes via MD5 hash and reload without requiring process restart |
-| Structured logging  | Emit timestamped `[PS]` prefixed INFO, WARN, and ERRO records to a rotating log |
-| Startup diagnostics | Write a dedicated `Startup_Error.txt` for failures before full logging starts   |
-| Validation first    | Refuse to run invalid task definitions; log the specific field error            |
-| Heartbeat           | Emit periodic health log entries to prove the scheduler is still alive          |
-| Metrics snapshot    | Persist `Monitor_Metrics.json` with cumulative and rolling-window counters      |
+| Pattern | Standard |
+| --- | --- |
+| Mutex | Use a single named global mutex to prevent duplicate monitor instances |
+| Hot reload | Detect config changes via hash and reload without restart |
+| Structured logging | Emit `[PS]` prefixed records with monitor-specific context |
+| Startup diagnostics | Write `Startup_Error.txt` for failures before normal logging |
+| Validation first | Reject invalid task definitions before launch |
+| Metrics snapshot | Persist cumulative and rolling-window counters |
+| Correlation | Pass `ExecId` to child PowerShell scripts as the first positional argument |
+
+## Repo-Specific Constraints
+
+- `schedule.daysOfWeek` accepts only `0..6`. Using `7` invalidates the config and can trap the monitor in a reload-failure loop.
+- Exit codes `23` and `40` are operational WARN outcomes in this repository; they must not be counted as hard errors.
+- When validating the monitor while another instance is active, use `-MutexNameOverride` rather than disabling the real mutex.
+- The monitor is responsible for passing `ExecId` into child `.ps1` tasks positionally so downstream logs stay correlated.
 
 ## Metrics Contract
 
-`Logs/Monitor_Metrics.json` must be persisted periodically with the following shape:
+`Logs/Monitor_Metrics.json` is the only structured JSON metrics artifact in the logging stack. Keep it as an operational snapshot, not a log stream.
 
-```json
-{
-  "generatedAt": "2026-03-30T08:00:00-03:00",
-  "monitorVersion": "3.6",
-  "runningTasks": 0,
-  "cumulative": {
-    "TasksTriggered": 42,
-    "TasksCompleted": 40,
-    "TasksFinishedNonZero": 2,
-    "TasksSkippedOverlap": 1,
-    "ConfigReloadSuccess": 3,
-    "ConfigReloadFailure": 0
-  },
-  "window": {
-    "startedAt": "2026-03-30T07:00:00-03:00",
-    "endedAt": "2026-03-30T08:00:00-03:00",
-    "counters": {}
-  }
-}
-```
+## Validation
 
-## Operational Rules
-
-| Topic                   | Guidance                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| Manual validation first | Only register a task after Trigger_Automation.vbs succeeds manually                              |
-| Local time              | Scheduler uses Windows local time unless explicitly designed otherwise                           |
-| UTF-8                   | Save config in UTF-8 and avoid ambiguous encoding writers                                        |
-| Heartbeat               | Emit periodic health log entries at regular intervals (e.g., every 30 min)                       |
-| Exit code mapping       | Define an `exitCodeMap` in config.json to produce readable log descriptions for known exit codes |
-| DryRun testing          | Use `-RunOnce -DryRun` to validate schedule matching without launching any process               |
+1. Validate `config.json` before launching any task.
+2. Run `-RunOnce -DryRun` after schedule changes.
+3. Confirm that overlap prevention, mutex, and exit-code mapping still behave as expected.
+4. Verify that `ExecId` reaches child PowerShell scripts and appears in the owning logs.
+5. Confirm metrics and heartbeat still update in unattended mode.
 
 ## Troubleshooting
 
-| Symptom                                 | Root Cause                                                      | Action                                                                |
-| --------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Monitor does not start                  | Invalid JSON or startup failure before normal logging           | Inspect `Startup_Error.txt` first                                     |
-| Task never fires                        | Schedule mismatch or disabled task                              | Validate `enabled` flag and schedule arrays against system local time |
-| Overlap prevention suppresses execution | Prior process still active                                      | Confirm whether `preventOverlap` is intended and inspect task runtime |
-| Hot reload does not react               | File encoding or save semantics interfere with change detection | Re-save config in explicit UTF-8 and verify MD5 hash comparison       |
-| Metrics not updated                     | Save-MetricsSnapshot not called on schedule                     | Verify periodic flush call in the main loop                           |
-| DryRun launches real processes          | DryRun flag not checked inside task launch logic                | Validate DryRun guard before `Start-Process` or similar calls         |
+| Symptom | Root Cause | Action |
+| --- | --- | --- |
+| Monitor does not start | Invalid JSON or startup failure before logger initialization | Inspect `Startup_Error.txt` first |
+| Task never fires | Schedule mismatch, disabled task, or invalid `daysOfWeek` value | Validate task flags and the `0..6` day range |
+| Overlap prevention suppresses execution | Prior process still active | Confirm `preventOverlap` intent and inspect the task runtime |
+| DryRun launches real processes | Launch guard placed too late | Move the dry-run check ahead of `Start-Process` or equivalent |
+| Non-zero task counts as hard error but should not | Exit code policy not aligned | Treat `23` and `40` as WARN at the monitor boundary |
 
 ## Pre-Delivery Checklist
 
-- [ ] config.json changes are schema-valid and use absolute paths.
-- [ ] The target automation succeeds manually before scheduling.
-- [ ] Singleton behavior remains enforced by a mutex.
-- [ ] Logs carry `[PS]` prefix and follow the universal log format.
-- [ ] Encoding behavior is explicit and safe.
-- [ ] `-DryRun` flag is honored and prevents actual process launches.
-- [ ] `-RunOnce` flag causes the monitor to exit after a single cycle.
-- [ ] Metrics are persisted to `Logs/Monitor_Metrics.json` periodically.
-- [ ] `Startup_Error.txt` captures fatal failures before logging is ready.
+- [ ] `config.json` changes are valid and use absolute paths.
+- [ ] New tasks were proven manually before registration.
+- [ ] Singleton behavior remains enforced.
+- [ ] `-RunOnce`, `-DryRun`, and `-SkipTaskExecution` still honor their contracts.
+- [ ] `ExecId` is propagated to child PowerShell tasks.
+- [ ] Metrics and startup diagnostics are preserved.

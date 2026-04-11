@@ -136,7 +136,20 @@
             "problemMatcher": []
         },
         {
-            "label": "Validacao: Governanca PT-BR",
+            "label": "Validacao: Skills",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Test-SkillsGovernance.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca",
             "type": "shell",
             "command": "pwsh",
             "args": [
@@ -151,7 +164,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Validacao: Governanca PT-BR (Strict)",
+            "label": "Validacao: Governanca (Strict PT-BR)",
             "type": "shell",
             "command": "pwsh",
             "args": [

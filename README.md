@@ -220,14 +220,13 @@ Classes reutilizáveis entre automações: `ClsEmailComposerService.cls` e `ClsO
 
 ### Validação Pré-Commit
 
-O hook `.githooks/pre-commit` executa quatro validadores em sequência:
+O hook `.githooks/pre-commit` executa cinco validadores em sequência:
 
-| Validador                                | Propósito                                                                                                 |
-| :--------------------------------------- | :-------------------------------------------------------------------------------------------------------- |
-| `Tools/Test-PowerShellApprovedVerbs.ps1` | Bloqueia funções PS com verbo não aprovado pelo PowerShell ou fora do padrão `Verbo-Substantivo`          |
-| `Tools/Test-VbaPtBrGovernance.ps1`       | Detecta caracteres non-ASCII em `.bas/.cls/.frm` e termos PT-BR sem acentuação visível ao usuário         |
-| `Tools/Test-VbaDrift.ps1`                | Detecta arquivos VBA staged que divergem dos snapshots em `Audit/vba/` (edição sem reimportar no `.xlsm`) |
-| `Tools/Test-LogConformidade.ps1`         | Rejeita formatos de log proibidos (data ISO em vez de `dd/MM/yyyy`, nomes de arquivo com data diária)     |
+- `Tools/Test-PowerShellApprovedVerbs.ps1`: bloqueia funções PS com verbo não aprovado pelo PowerShell ou fora do padrão `Verbo-Substantivo`.
+- `Tools/Test-VbaPtBrGovernance.ps1`: detecta caracteres non-ASCII em `.bas/.cls/.frm` e termos PT-BR sem acentuação visível ao usuário.
+- `Tools/Test-SkillsGovernance.ps1`: valida localização canônica, frontmatter permitido, discovery por `description` e seções obrigatórias das skills.
+- `Tools/Test-VbaDrift.ps1`: detecta arquivos VBA staged que divergem dos snapshots em `Audit/vba/`.
+- `Tools/Test-LogConformidade.ps1`: rejeita formatos de log proibidos, como data ISO em vez de `dd/MM/yyyy` e nomes de arquivo com data diária.
 
 Ative os hooks localmente uma única vez:
 
@@ -250,6 +249,23 @@ Modo strict (também reprova termos de UI sem acentuação adequada):
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\ValidarAutomacoes.ps1 -OnlyGovernance -FailOnTermWarnings
 ```
+
+Esse fluxo agora também agrega a governança de skills em `.github/skills/`.
+
+### CI de Governança
+
+O workflow [.github/workflows/governanca.yml](.github/workflows/governanca.yml) revalida a governança em push e pull request para alterações relevantes de skills, PowerShell, VBA, hooks e documentação operacional. Ele executa:
+
+- `preparar-diff`: calcula os arquivos alterados do PR/push e distribui os alvos para os demais checks.
+- `governanca`: executa a governança agregada do repositório.
+- `drift-vba`: valida drift apenas quando houver `.bas` ou `.cls` alterado.
+- `conformidade-log`: valida formato de log apenas quando houver arquivos relevantes alterados.
+- `markdown`: executa o dry run de markdown separadamente para diagnóstico mais claro no PR.
+
+- `Tools/ValidarAutomacoes.ps1 -OnlyGovernance -SkipVbaComponentTypes`
+- `Tools/Test-VbaDrift.ps1` sobre os arquivos alterados do PR/push
+- `Tools/Test-LogConformidade.ps1` sobre os arquivos alterados do PR/push
+- `Tools/Fix-MarkdownStyle.ps1 -DryRun`
 
 Validador dedicado:
 

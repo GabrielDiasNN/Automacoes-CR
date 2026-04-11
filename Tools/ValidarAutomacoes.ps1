@@ -3,6 +3,7 @@
 param(
     [string]$BasePath = "C:\Automacoes",
     [switch]$SkipGovernance,
+    [switch]$SkipSkillsGovernance,
     [switch]$SkipVbaComponentTypes,
     [switch]$OnlyGovernance,
     [switch]$FailOnTermWarnings
@@ -43,6 +44,40 @@ function Invoke-GovernanceChecks {
 
     if ($exitCode -ne 0) {
         Write-Host ("[ERRO] Governanca reprovada. Exit=" + $exitCode)
+    }
+
+    Write-Host ""
+    return $exitCode
+}
+
+function Invoke-SkillsGovernanceChecks {
+    param(
+        [string]$RootPath
+    )
+
+    $checkerPath = Join-Path $RootPath "Tools\Test-SkillsGovernance.ps1"
+    if (-not (Test-Path $checkerPath)) {
+        Write-Host "[WARN] Validador de governanca de skills nao encontrado: $checkerPath"
+        return 0
+    }
+
+    Write-Host "=== Governanca de Skills ==="
+
+    $pwshArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $checkerPath,
+        "-BasePath",
+        $RootPath
+    )
+
+    & pwsh @pwshArgs
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -ne 0) {
+        Write-Host ("[ERRO] Governanca de skills reprovada. Exit=" + $exitCode)
     }
 
     Write-Host ""
@@ -292,6 +327,13 @@ if (-not $SkipGovernance) {
     $govExitCode = Invoke-GovernanceChecks -RootPath $BasePath -StrictTerms:$FailOnTermWarnings
     if ($govExitCode -ne 0) {
         exit $govExitCode
+    }
+}
+
+if (-not $SkipSkillsGovernance) {
+    $skillGovExitCode = Invoke-SkillsGovernanceChecks -RootPath $BasePath
+    if ($skillGovExitCode -ne 0) {
+        exit $skillGovExitCode
     }
 }
 

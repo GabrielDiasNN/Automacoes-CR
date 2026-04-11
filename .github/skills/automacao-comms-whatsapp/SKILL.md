@@ -1,6 +1,6 @@
 ---
 name: automacao-comms-whatsapp
-description: "Use when implementing, reviewing, or troubleshooting WhatsApp delivery bridges built with Node.js and whatsapp-web.js."
+description: "Use when implementing, reviewing, or troubleshooting WhatsApp delivery bridges built with VBS, BAT, Node.js, and whatsapp-web.js in unattended automation flows."
 ---
 
 > Language Directive: Always respond to the user in PT-BR, even though this skill is written in English.
@@ -9,85 +9,87 @@ description: "Use when implementing, reviewing, or troubleshooting WhatsApp deli
 
 ## Purpose
 
-Use this skill for automation flows that hand off outbound delivery to a WhatsApp bridge. The standard emphasizes authentication resilience, idempotent sends, structured exit codes, bootstrap logging, and controlled recovery from session failures.
+Use this skill for the repository WhatsApp delivery path that starts in the trigger layer, passes through a BAT bridge, and ends in a Node.js sender backed by `whatsapp-web.js`. The focus is stable authentication, idempotent delivery, explicit exit codes, and operational recovery.
 
-## Architecture Overview
+## When to Use
 
-| Layer               | File                     | Responsibility                                                   |
-| ------------------- | ------------------------ | ---------------------------------------------------------------- |
-| Trigger layer (VBS) | `Trigger_Automation.vbs` | Pass ExecId and launch the BAT bridge                            |
-| BAT orchestration   | `RunWhatsApp.bat`        | Validate Node.js, choose execution mode, pass `--exec-id`        |
-| Node.js bridge      | `sendWhatsApp.js`        | Load config, initialize client, manage retries, send messages    |
-| Configuration       | `whatsapp-config.json`   | Recipients, paths, retry policy, feature flags                   |
-| Session store       | `.wwebjs_auth/`          | Persisted authenticated client state (whatsapp-web.js LocalAuth) |
-| State store         | `whatsapp-state.json`    | ExecId-based idempotency and sent execution records              |
+- Building or reviewing `RunWhatsApp.bat`, `sendWhatsApp.js`, or related config/state files.
+- Troubleshooting authentication expiry, duplicate sends, or attachment handoff.
+- Defining how WhatsApp delivery participates in the broader automation flow.
+
+## Do Not Use When
+
+- The work is only about generic Node.js runtime patterns; use `nodejs-automation`.
+- The question is only about BAT quoting or path handling; use `bat-automation`.
+- The flow does not use the repository WhatsApp bridge stack.
+
+## Related Skills
+
+- `automacao-standard`: VBS to VBA to bridge orchestration.
+- `automation-execution-contract`: `ExecId`, idempotency boundaries, and exit-code semantics.
+- `bat-automation`: bridge launch, quoting, and downstream exit-code preservation.
+- `nodejs-automation`: bootstrap logging, typed errors, and deterministic shutdown.
 
 ## Non-Negotiable Rules
 
-1. The bridge must log before `require()` calls so bootstrap failures are diagnosable.
-2. Delivery must be idempotent. The same ExecId must not result in more than one message sent.
-3. Session assets (`.wwebjs_auth/`) must not be deleted casually. Re-authentication is an operational event, not a default recovery step.
-4. Exit codes must be explicit and documented so upstream VBS or BAT layers can react deterministically.
-5. Retry logic must stop immediately on authentication-expired scenarios and return exit code 21.
-6. `whatsapp-config.json` controls all runtime behavior. Recipient updates must change config, not code.
+1. Bootstrap diagnostics must exist before the Node.js runtime fully initializes.
+2. Delivery must be idempotent; repeated executions of the same business condition must not duplicate sends.
+3. `.wwebjs_auth/` is persistent operational state and must not be deleted casually.
+4. Authentication-expired paths must stop retries and return exit code `21`.
+5. `whatsapp-config.json` owns runtime behavior; recipient or mode changes belong in config, not code.
+6. The bridge must stay short-lived and leave no stray browser processes behind.
 
-## Execution Flow
+## Architecture Overview
 
-```text
-Trigger layer
-      -> BAT orchestrator (ExecId + mode)
-            -> Node.js bridge
-                  -> Load config
-                  -> Restore session
-                  -> Validate idempotency state
-                  -> Send message and optional attachment
-```
+| Layer | File | Responsibility |
+| --- | --- | --- |
+| Trigger | `Trigger_Automation.vbs` | Preserve `ExecId` and call the bridge |
+| BAT bridge | `RunWhatsApp.bat` | Validate runtime, route args, preserve exit code |
+| Node.js sender | `sendWhatsApp.js` | Load config, restore session, validate state, send message |
+| Config | `whatsapp-config.json` | Recipients, paths, retry policy, mode flags |
+| Session state | `.wwebjs_auth/` | LocalAuth persisted session |
+| Delivery state | `whatsapp-state.json` | Duplicate-prevention and execution records |
 
 ## Exit Codes
 
-| Code | Meaning                                      |
-| ---- | -------------------------------------------- |
-| 0    | Success or feature disabled by configuration |
-| 11   | Attachment missing                           |
-| 20   | Final failure after all attempts             |
-| 21   | Re-authentication required                   |
-| 22   | Invalid configuration                        |
-| 99   | Unexpected fatal failure                     |
+| Code | Meaning |
+| --- | --- |
+| `0` | Success or feature disabled |
+| `11` | Attachment missing |
+| `20` | Final failure after all attempts |
+| `21` | Re-authentication required |
+| `22` | Invalid configuration |
+| `99` | Unexpected fatal failure |
 
-## Enterprise Patterns
+## Repo-Specific Constraints
 
-| Pattern          | Standard                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------- |
-| Bootstrap log    | Write a minimal synchronous log before require or client initialization               |
-| Idempotency      | Compute an execKey from stable execution inputs and persist it in a state file        |
-| Retry            | Use bounded attempts with delay and stop immediately on auth-expired paths            |
-| Visibility mode  | Support silent and visible modes; visible mode is reserved for pairing or diagnostics |
-| Session recovery | Escalate to re-auth instead of masking session corruption silently                    |
+- Concurrency detection must be based on the absolute path of `sendWhatsApp.js`, not a generic `node.exe` process match.
+- `.wwebjs_auth/` is preserved by retention policy because it is critical session state.
+- The bridge must keep the same `ExecId` received from the caller.
+- Idempotency should rely on stable business inputs plus channel identity, not only on a timestamped `ExecId`.
 
-## Maintenance Rules
+## Validation
 
-| Topic                 | Guidance                                                                                   |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| Recipient updates     | Edit `whatsapp-config.json`, not `sendWhatsApp.js`                                         |
-| Package               | Uses `whatsapp-web.js` with `LocalAuth` session strategy                                   |
-| Dependency corruption | Reinstall via `npm install` only after confirming `node_modules` or lock file is broken    |
-| On-demand execution   | Keep the bridge process short-lived; do not leave background Chromium instances running    |
-| Rate limits           | Avoid tight repeated sends that resemble abuse patterns                                    |
-| Session location      | `.wwebjs_auth/` must be treated as persistent operational state and never committed to git |
+1. Test bootstrap logging and confirm diagnostics exist even when initialization fails early.
+2. Validate attachment existence before attempting send.
+3. Force an auth-expired scenario and confirm the bridge returns `21` without endless retries.
+4. Rerun the same business condition and confirm the state file prevents duplicates.
+5. Confirm the process exits cleanly without leaving background browser state active.
 
 ## Troubleshooting
 
-| Symptom                             | Root Cause                                   | Action                                                 |
-| ----------------------------------- | -------------------------------------------- | ------------------------------------------------------ |
-| Bridge fails before main log starts | Failure occurs before runtime initialization | Inspect bootstrap log first                            |
-| Exit code 21 repeats                | Session expired or corrupted                 | Re-enter pairing flow and regenerate session cleanly   |
-| Duplicate sends                     | Missing or unstable idempotency key          | Rework execKey inputs and persist send state correctly |
-| Attachment send fails               | File path invalid or file not ready          | Validate path, save completion, and access timing      |
+| Symptom | Root Cause | Action |
+| --- | --- | --- |
+| Bridge fails before normal log starts | Failure occurs before runtime initialization | Inspect bootstrap diagnostics first |
+| Exit code `21` repeats | Session expired or corrupted | Re-run pairing intentionally and rebuild session state cleanly |
+| Duplicate sends | Missing or unstable idempotency key | Rework the state key around stable business data |
+| Wrong Node process is considered concurrent | Detection keyed to generic process name | Match by the absolute path of `sendWhatsApp.js` |
 
 ## Pre-Delivery Checklist
 
-- [ ] Bootstrap logging happens before imports or client startup.
-- [ ] Exit codes are explicit and stable.
-- [ ] Re-authentication paths are handled separately from generic retries.
-- [ ] Idempotency state prevents duplicate messages.
-- [ ] Session storage is treated as persistent operational state.
+- [ ] Bootstrap diagnostics exist before full runtime initialization.
+- [ ] Exit codes are explicit and aligned with the shared contract.
+- [ ] `.wwebjs_auth/` is treated as persistent state.
+- [ ] `whatsapp-state.json` prevents duplicates.
+- [ ] `ExecId` is preserved from caller to sender.
+- [ ] The bridge exits cleanly after completion.
