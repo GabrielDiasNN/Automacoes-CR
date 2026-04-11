@@ -9,6 +9,7 @@
 #
 # USO:
 #   pwsh -File "C:\Automacoes\Montagem de Terceirizados\ReenviarAlertaErros.ps1"
+#   pwsh -File "C:\Automacoes\Montagem de Terceirizados\ReenviarAlertaErros.ps1" -EmailPreviewOnly -EmailToTest "homolog@empresa.com.br" -EmailCcTest "qa@empresa.com.br"
 #
 # QUANDO USAR:
 #   - A automacao rodou mas o e-mail de erro nao foi enviado
@@ -18,11 +19,17 @@
 # ARGUMENTOS:
 #   -KeepCache  Nao apaga Cache_Estado_Detalhado.txt (usa logica de delta normal)
 #               Por padrao, o cache e apagado para tratar erros atuais como novos.
+#   -EmailPreviewOnly  Abre o email no Outlook sem enviar (modo teste)
+#   -EmailToTest       Sobrescreve destinatario PARA em modo teste
+#   -EmailCcTest       Sobrescreve destinatario CC em modo teste
 # ==============================================================================
 
 [CmdletBinding()]
 param(
-    [switch]$KeepCache
+    [switch]$KeepCache,
+    [switch]$EmailPreviewOnly,
+    [string]$EmailToTest = "",
+    [string]$EmailCcTest = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +40,7 @@ $LogDir = Join-Path $BasePath "Logs"
 $LogFile = Join-Path $LogDir "Montagem.log"
 $CacheFile = Join-Path $BasePath "Cache_Estado_Detalhado.txt"
 $MacroName = "RevalidarENotificar"
+$MacroEmailConfig = "modEmailOutlook.ConfigurarModoNotificacaoTeste"
 
 $libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
 if (Test-Path $libPath) { Import-Module $libPath -Force }
@@ -50,6 +58,12 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out
 
 Write-Log "=== REENVIO FORCADO DE ALERTA ==="
 Write-Log "Workbook=$ExcelPath"
+
+if ($EmailPreviewOnly) {
+    Write-Log "Modo sem envio ativo: e-mails serao salvos em Rascunhos (headless)." "WARN"
+}
+
+Write-Log "Modo Email | PreviewOnly=$EmailPreviewOnly | ToTest=$EmailToTest | CcTest=$EmailCcTest"
 
 # --- 1. Validações iniciais ---
 if (-not (Test-Path $ExcelPath)) {
@@ -99,6 +113,22 @@ catch {
     try { $excel.Quit() } catch {}
     [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     exit 3
+}
+
+$temOverrideEmail = $EmailPreviewOnly -or -not [string]::IsNullOrWhiteSpace($EmailToTest) -or -not [string]::IsNullOrWhiteSpace($EmailCcTest)
+if ($temOverrideEmail) {
+    Write-Log "Configurando modo de notificacao TESTE no VBA..."
+    try {
+        $excel.Run($MacroEmailConfig, [bool]$EmailPreviewOnly, $EmailToTest, $EmailCcTest) | Out-Null
+        Write-Log "Modo de notificacao TESTE configurado no VBA."
+    }
+    catch {
+        Write-Log "Falha ao configurar modo de notificacao TESTE no VBA: $_" "ERROR"
+        try { $wb.Close($false) } catch {}
+        try { $excel.Quit() } catch {}
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
+        exit 4
+    }
 }
 
 # --- 4. Capturar offset do log antes da macro ---
@@ -151,7 +181,8 @@ if ($linhasNovas.Count -gt 0) {
 }
 
 # Categoriza o resultado
-$emailEnviado = $linhasNovas | Where-Object { $_ -match "E-MAIL: Enviado com sucesso" }
+$emailMarker = if ($EmailPreviewOnly) { "E-MAIL: rascunho salvo com sucesso" } else { "E-MAIL: Enviado com sucesso" }
+$emailEnviado = $linhasNovas | Where-Object { $_ -match [Regex]::Escape($emailMarker) }
 $emailFalhou = $linhasNovas | Where-Object { $_ -match "FALHA DEFINITIVA: Email" }
 $semMudanca = $linhasNovas | Where-Object { $_ -match "Estado inalterado" }
 $idempotencia = $linhasNovas | Where-Object { $_ -match "ignorado por idempotencia" }
@@ -165,7 +196,12 @@ try { $excel.Quit() } catch {}
 
 # --- 8. Resultado final ---
 if ($emailEnviado) {
-    Write-Log "E-MAIL ENVIADO COM SUCESSO."
+    if ($EmailPreviewOnly) {
+        Write-Log "RASCUNHO DE E-MAIL SALVO COM SUCESSO (NoSend)."
+    }
+    else {
+        Write-Log "E-MAIL ENVIADO COM SUCESSO."
+    }
     Write-Log "=== FIM ==="
     exit 0
 }

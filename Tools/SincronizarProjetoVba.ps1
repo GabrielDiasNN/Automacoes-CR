@@ -8,7 +8,10 @@ param(
     # Opcional: pasta com classes/modulos compartilhados (ex: _Shared\VBA).
     # Importados APOS os arquivos de SourceDir para garantir que a versao
     # canonica shared sempre sobrescreve eventuais copias locais.
-    [string]$SharedDir = ""
+    [string]$SharedDir = "",
+
+    # Permite pular validacao pre-importacao (nao recomendado).
+    [switch]$SkipPreImportValidation
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,18 +73,106 @@ function New-CrlfTempCopy {
     return $tempPath
 }
 
+function Get-VbaSourceFiles {
+    param([string]$FolderPath)
+
+    if ([string]::IsNullOrWhiteSpace($FolderPath)) { return @() }
+    if (-not (Test-Path -LiteralPath $FolderPath)) { return @() }
+
+    Get-ChildItem -LiteralPath $FolderPath -File | Where-Object {
+        $_.Extension -in ".bas", ".cls" -and
+        $_.BaseName -notmatch '^_tmp' -and
+        $_.Name -notmatch '^~\$'
+    } | Sort-Object Name
+}
+
+function Get-VbaComponentNameFromFile {
+    param([string]$FilePath)
+
+    $fallback = [System.IO.Path]::GetFileNameWithoutExtension($FilePath)
+    $probe = Get-Content -LiteralPath $FilePath -TotalCount 80 -Encoding UTF8 -ErrorAction SilentlyContinue
+    foreach ($line in $probe) {
+        if ($line -match 'Attribute\s+VB_Name\s*=\s*"([^"]+)"') {
+            return $Matches[1]
+        }
+    }
+
+    return $fallback
+}
+
+function Remove-OrphanVbaComponents {
+    param(
+        $VBProject,
+        [System.Collections.Generic.HashSet[string]]$AllowedNames
+    )
+
+    $toRemove = @()
+    foreach ($comp in $VBProject.VBComponents) {
+        if (($comp.Type -eq 1 -or $comp.Type -eq 2 -or $comp.Type -eq 3) -and (-not $AllowedNames.Contains($comp.Name))) {
+            $toRemove += $comp
+        }
+    }
+
+    foreach ($comp in $toRemove) {
+        $compName = $comp.Name
+        try {
+            $VBProject.VBComponents.Remove($comp)
+            Write-Log "INFO" "Removido componente orfao: $compName"
+        }
+        catch {
+            Write-Log "WARN" "Falha ao remover componente orfao '$compName': $($_.Exception.Message)"
+        }
+    }
+}
+
+function Invoke-VbaProjectCompile {
+    param(
+        $ExcelApp,
+        $Workbook
+    )
+
+    $Workbook.Activate() | Out-Null
+    $compileControl = $ExcelApp.VBE.CommandBars.FindControl(1, 578)
+
+    if ($null -eq $compileControl) {
+        throw "Comando de compilacao VBA nao encontrado no VBE (ID 578)."
+    }
+
+    $compileControl.Execute()
+}
+
 $XlsmPath = [System.IO.Path]::GetFullPath($XlsmPath)
 $SourceDir = [System.IO.Path]::GetFullPath($SourceDir)
 
 if (-not (Test-Path $XlsmPath)) { throw "Workbook nao encontrado: $XlsmPath" }
 if (-not (Test-Path $SourceDir)) { throw "Pasta de fontes nao encontrada: $SourceDir" }
 
-$moduleFiles = Get-ChildItem -Path $SourceDir -File | Where-Object {
-    $_.Extension -in ".bas", ".cls"
-} | Sort-Object Name
+$moduleFiles = @(Get-VbaSourceFiles -FolderPath $SourceDir)
 
 if ($moduleFiles.Count -eq 0) {
     throw "Nenhum arquivo .bas/.cls encontrado em: $SourceDir"
+}
+
+$sharedFiles = @()
+if ($SharedDir -ne "" -and (Test-Path -LiteralPath $SharedDir)) {
+    $SharedDir = [System.IO.Path]::GetFullPath($SharedDir)
+    $sharedFiles = @(Get-VbaSourceFiles -FolderPath $SharedDir)
+}
+
+if (-not $SkipPreImportValidation) {
+    $validatorScript = Join-Path $PSScriptRoot "ValidarVbaAntesImportar.ps1"
+    if (-not (Test-Path -LiteralPath $validatorScript)) {
+        throw "Validador pre-importacao nao encontrado: $validatorScript"
+    }
+
+    Write-Log "INFO" "Executando validacao pre-importacao de VBA..."
+    if ($SharedDir -ne "") {
+        & $validatorScript -SourceDir $SourceDir -SharedDir $SharedDir
+    }
+    else {
+        & $validatorScript -SourceDir $SourceDir
+    }
+    Write-Log "INFO" "Validacao pre-importacao concluida com sucesso"
 }
 
 $regPath = "HKCU:\Software\Microsoft\Office\16.0\Excel\Security"
@@ -101,10 +192,23 @@ try {
 
     Write-Log "INFO" "Abrindo workbook: $XlsmPath"
     $wb = $excel.Workbooks.Open($XlsmPath, 0, $false)
+    if ($wb.ReadOnly) {
+        throw "Workbook aberto em modo somente leitura. Feche o arquivo no Excel/VBE e tente novamente: $XlsmPath"
+    }
     $vbProj = $wb.VBProject
 
+    $allowedNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($file in $moduleFiles) {
-        $modName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+        [void]$allowedNames.Add((Get-VbaComponentNameFromFile -FilePath $file.FullName))
+    }
+    foreach ($file in $sharedFiles) {
+        [void]$allowedNames.Add((Get-VbaComponentNameFromFile -FilePath $file.FullName))
+    }
+
+    Remove-OrphanVbaComponents -VBProject $vbProj -AllowedNames $allowedNames
+
+    foreach ($file in $moduleFiles) {
+        $modName = Get-VbaComponentNameFromFile -FilePath $file.FullName
 
         $existing = $null
         foreach ($comp in $vbProj.VBComponents) {
@@ -151,20 +255,12 @@ try {
         }
     }
 
-    Invoke-ActivateDataSheet -Workbook $wb
-    $wb.Save()
-    Write-Log "INFO" "Workbook salvo com projeto VBA sincronizado"
-
     # -------------------------------------------------------------------------
     # Importar arquivos shared (sobrescreve componentes de mesmo nome, se houver)
     # -------------------------------------------------------------------------
-    if ($SharedDir -ne "" -and (Test-Path $SharedDir)) {
-        $sharedFiles = Get-ChildItem -Path $SharedDir -File | Where-Object {
-            $_.Extension -in ".bas", ".cls"
-        } | Sort-Object Name
-
+    if ($sharedFiles.Count -gt 0) {
         foreach ($file in $sharedFiles) {
-            $modName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+            $modName = Get-VbaComponentNameFromFile -FilePath $file.FullName
 
             $existing = $null
             foreach ($comp in $vbProj.VBComponents) {
@@ -209,11 +305,15 @@ try {
                 }
             }
         }
-
-        Invoke-ActivateDataSheet -Workbook $wb
-        $wb.Save()
-        Write-Log "INFO" "Workbook salvo apos importacao shared"
     }
+
+    Write-Log "INFO" "Compilando projeto VBA no workbook real antes de salvar..."
+    Invoke-VbaProjectCompile -ExcelApp $excel -Workbook $wb
+    Write-Log "INFO" "Compilacao no workbook real concluida com sucesso"
+
+    Invoke-ActivateDataSheet -Workbook $wb
+    $wb.Save()
+    Write-Log "INFO" "Workbook salvo com projeto VBA sincronizado e compilado"
 }
 finally {
     if ($null -ne $wb) {

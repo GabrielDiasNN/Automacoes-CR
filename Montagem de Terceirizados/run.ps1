@@ -6,7 +6,11 @@
 #            (modo robo + ExecId) e monitora o log VBA para detectar
 #            conclusao ou timeout.
 #
-# ARGS: [ExecId] - passado positionally pelo MonitorAutomacoes.ps1
+# ARGS:
+#   [ExecId]             - passado positionally pelo MonitorAutomacoes.ps1
+#   [-EmailPreviewOnly]  - abre o email no Outlook sem enviar (modo teste)
+#   [-EmailToTest]       - sobrescreve destinatario PARA em modo teste
+#   [-EmailCcTest]       - sobrescreve destinatario CC em modo teste
 #
 # EXIT CODES (compativeis com Trigger_Automation.vbs e MonitorAutomacoes):
 #   0  - Sucesso
@@ -17,11 +21,15 @@
 #   5  - Timeout aguardando conclusao VBA
 #   6  - VBA reportou falha ou erro fatal
 #   7  - Workbook bloqueado (somente leitura)
+#   8  - Falha de compilacao VBA (preflight)
 # ===============================================================================
 
 [CmdletBinding()]
 param(
-    [string]$ExecId = ""
+    [string]$ExecId = "",
+    [switch]$EmailPreviewOnly,
+    [string]$EmailToTest = "",
+    [string]$EmailCcTest = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +38,7 @@ $BasePath = "C:\Automacoes\Montagem de Terceirizados"
 $ExcelPath = Join-Path $BasePath "Validador_Notas_Montagem.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
 $MacroName = "AtualizarEValidar"
+$MacroEmailConfig = "modEmailOutlook.ConfigurarModoNotificacaoTeste"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
 
@@ -90,12 +99,42 @@ function Exit-WithCode {
     exit $Code
 }
 
+function Test-VbaProjectCompiles {
+    param(
+        [object]$ExcelApp,
+        [object]$Workbook
+    )
+
+    try {
+        $Workbook.Activate() | Out-Null
+        $compileControl = $ExcelApp.VBE.CommandBars.FindControl(1, 578)
+        if ($null -eq $compileControl) {
+            Write-Log "Preflight VBA: comando de compilacao nao encontrado; seguindo execucao." -Lvl "WARN"
+            return $true
+        }
+
+        $compileControl.Execute()
+        Write-Log "Preflight VBA: compilacao concluida com sucesso."
+        return $true
+    }
+    catch {
+        Write-Log "Preflight VBA: falha de compilacao detectada: $($_.Exception.Message)" -Lvl "ERRO"
+        return $false
+    }
+}
+
 if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
     Invoke-LogRotation -LogPath $LogFile -KeepDays 15
 }
 
 Write-Log "========================================================================================="
 Write-Log "INICIO - run.ps1 Montagem de Terceirizados. ExecId=$ExecId"
+
+if ($EmailPreviewOnly) {
+    Write-Log "Modo sem envio ativo: e-mails serao salvos em Rascunhos (headless)." -Lvl "WARN"
+}
+
+Write-Log "Modo Email | PreviewOnly=$EmailPreviewOnly | ToTest=$EmailToTest | CcTest=$EmailCcTest"
 
 if (-not (Test-Path $ExcelPath)) {
     Exit-WithCode 1 "Workbook nao encontrado: $ExcelPath"
@@ -133,6 +172,23 @@ try {
         Exit-WithCode 7 "Workbook aberto em modo somente leitura. Possivel bloqueio: $ExcelPath"
     }
 
+    Write-Log "Preflight VBA: validando compilacao antes de executar macro..."
+    if (-not (Test-VbaProjectCompiles -ExcelApp $excel -Workbook $wb)) {
+        Exit-WithCode 8 "Compilacao VBA invalida. Corrija os erros no VBE antes de executar."
+    }
+
+    $temOverrideEmail = $EmailPreviewOnly -or -not [string]::IsNullOrWhiteSpace($EmailToTest) -or -not [string]::IsNullOrWhiteSpace($EmailCcTest)
+    if ($temOverrideEmail) {
+        Write-Log "Configurando modo de notificacao TESTE no VBA..."
+        try {
+            $excel.Run($MacroEmailConfig, [bool]$EmailPreviewOnly, $EmailToTest, $EmailCcTest) | Out-Null
+            Write-Log "Modo de notificacao TESTE configurado no VBA."
+        }
+        catch {
+            Exit-WithCode 4 "Falha ao configurar modo de notificacao TESTE no VBA: $_"
+        }
+    }
+
     if (-not (Test-Path $VbaLogFile)) {
         if (-not (Test-Path $LogDir)) {
             New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -144,12 +200,21 @@ try {
     Write-Log "Monitoramento VBA ativo. LogVBA=$VbaLogFile | Inicial=$initialLogSize bytes"
 
     Write-Log "Executando macro: $MacroName [ModoRobo=True | ExecId=$ExecId]"
+    $macroRunInvocationFailed = $false
     try {
         $excel.Run($MacroName, $true, $ExecId) | Out-Null
     }
     catch {
         Write-Log "Falha na chamada COM da macro: $_" -Lvl "WARN"
-        # VBA pode ter registrado falha no log; seguimos com monitoramento.
+        $macroRunInvocationFailed = $true
+    }
+
+    if ($macroRunInvocationFailed) {
+        Start-Sleep -Milliseconds 700
+        $sizeAfterMacroCall = (Get-Item $VbaLogFile).Length
+        if ($sizeAfterMacroCall -le $initialLogSize) {
+            Exit-WithCode 8 "Macro nao iniciou no VBA (sem novas linhas de log). Provavel erro de compilacao/projeto."
+        }
     }
 
     Write-Log "Aguardando conclusao via log VBA (timeout: ${MaxTimeoutSec}s)..."

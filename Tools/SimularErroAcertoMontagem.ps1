@@ -16,7 +16,8 @@ param(
     [string]$WorkbookPath = "C:\Automacoes\Montagem de Terceirizados\Validador_Notas_Montagem.xlsm",
     [string]$ReenviarScriptPath = "C:\Automacoes\Montagem de Terceirizados\ReenviarAlertaErros.ps1",
     [string]$LogPath = "",
-    [switch]$SkipExecution
+    [switch]$SkipExecution,
+    [switch]$NoSend
 )
 
 $ErrorActionPreference = "Stop"
@@ -301,15 +302,78 @@ function Set-ReferenceValue {
     }
 }
 
+function Reset-SimulationMarkers {
+    param([string]$Path)
+
+    $excel = $null
+    $wb = $null
+
+    try {
+        $excel = New-Object -ComObject Excel.Application
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
+        $excel.ScreenUpdating = $false
+        $excel.EnableEvents = $false
+        $excel.AskToUpdateLinks = $false
+
+        $wb = $excel.Workbooks.Open($Path, 0, $false)
+
+        $target = Find-TargetTable -Workbook $wb
+        $lo = $target.Table
+        $refIndex = Get-ColumnIndex -Table $lo -ColumnName $script:ColRef
+        $data = $lo.DataBodyRange
+
+        if ($null -eq $data) {
+            return 0
+        }
+
+        $changed = 0
+        for ($r = 1; $r -le $data.Rows.Count; $r++) {
+            $rawValue = [string]$data.Cells.Item($r, $refIndex).Value2
+            if ([string]::IsNullOrWhiteSpace($rawValue)) {
+                continue
+            }
+
+            $cleanValue = ($rawValue -replace "(_SIM_ERRO_[AB])+", "")
+            if ($cleanValue -ne $rawValue) {
+                $data.Cells.Item($r, $refIndex).Value2 = $cleanValue
+                $changed++
+            }
+        }
+
+        if ($changed -gt 0) {
+            $wb.Save()
+        }
+
+        return $changed
+    }
+    finally {
+        if ($wb) {
+            try { $wb.Close($false) | Out-Null } catch {}
+            Remove-ComObject -Object $wb
+        }
+        if ($excel) {
+            try { $excel.Quit() } catch {}
+            Remove-ComObject -Object $excel
+        }
+        [System.GC]::Collect()
+        [System.GC]::WaitForPendingFinalizers()
+    }
+}
+
 function Invoke-Reenviar {
     param(
         [string]$ScriptPath,
-        [switch]$KeepCache
+        [switch]$KeepCache,
+        [switch]$PreviewOnly
     )
 
     $pwshArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath)
     if ($KeepCache) {
         $pwshArgs += "-KeepCache"
+    }
+    if ($PreviewOnly) {
+        $pwshArgs += "-EmailPreviewOnly"
     }
 
     $childOutput = & pwsh @pwshArgs 2>&1
@@ -343,8 +407,18 @@ $needsRestorePrimary = $false
 $needsRestoreSecondary = $false
 
 Write-Stage "Iniciando simulacao E2E de erro/alteracao/acerto na Montagem."
+if ($NoSend) {
+    Write-Stage "Modo NoSend ativo: notificacoes serao salvas em Rascunhos (sem envio real)." "WARN"
+}
+
+$markerSucessoEmail = if ($NoSend) { "E-MAIL: rascunho salvo com sucesso." } else { "E-MAIL: Enviado com sucesso" }
 
 try {
+    $cleanedCount = Reset-SimulationMarkers -Path $WorkbookPath
+    if ($cleanedCount -gt 0) {
+        Write-Stage "Limpeza preventiva aplicada: $cleanedCount referencia(s) com marcador residual foram normalizadas." "WARN"
+    }
+
     $scenarioRows = Get-SimulationRows -Path $WorkbookPath
     $rowIndexPrimary = [int]$scenarioRows.RowPrimary
     $rowIndexSecondary = [int]$scenarioRows.RowSecondary
@@ -361,15 +435,15 @@ try {
     $offsetErro = Get-LogOffset -Path $LogPath
 
     if (-not $SkipExecution) {
-        Write-Stage "Executando cenario A: envio de e-mail de erro (cache limpo)."
-        $exitErro = Invoke-Reenviar -ScriptPath $ReenviarScriptPath
+        Write-Stage "Executando cenario A: notificacao de erro (cache limpo)."
+        $exitErro = Invoke-Reenviar -ScriptPath $ReenviarScriptPath -PreviewOnly:$NoSend
         if ($exitErro -ne 0) {
             throw "Cenario de erro retornou exit code $exitErro"
         }
     }
 
     $deltaErro = Read-LogDelta -Path $LogPath -Offset $offsetErro
-    Assert-Markers -Text $deltaErro -Markers @("Email ERRO | tentativa", "E-MAIL: Enviado com sucesso") -Scenario "Erro"
+    Assert-Markers -Text $deltaErro -Markers @("Email ERRO | tentativa", $markerSucessoEmail) -Scenario "Erro"
     Write-Stage "Cenario A validado com sucesso."
 
     Write-Stage "Aplicando cenario B (ALTERACAO): restaurar linha A e forcar divergencia na linha B."
@@ -383,14 +457,14 @@ try {
 
     if (-not $SkipExecution) {
         Write-Stage "Executando cenario B: envio de e-mail de alteracao (cache preservado)."
-        $exitAlteracao = Invoke-Reenviar -ScriptPath $ReenviarScriptPath -KeepCache
+        $exitAlteracao = Invoke-Reenviar -ScriptPath $ReenviarScriptPath -KeepCache -PreviewOnly:$NoSend
         if ($exitAlteracao -ne 0) {
             throw "Cenario de alteracao retornou exit code $exitAlteracao"
         }
     }
 
     $deltaAlteracao = Read-LogDelta -Path $LogPath -Offset $offsetAlteracao
-    Assert-Markers -Text $deltaAlteracao -Markers @("Email ALTERACAO | tentativa", "Delta detalhado | Novos=", "E-MAIL: Enviado com sucesso") -Scenario "Alteracao"
+    Assert-Markers -Text $deltaAlteracao -Markers @("Email ALTERACAO | tentativa", "Delta detalhado | Novos=", $markerSucessoEmail) -Scenario "Alteracao"
     Write-Stage "Cenario B validado com sucesso."
 
     Write-Stage "Aplicando cenario C (ACERTO): restaurar linha B."
@@ -401,14 +475,14 @@ try {
 
     if (-not $SkipExecution) {
         Write-Stage "Executando cenario C: envio de e-mail de acerto (cache preservado)."
-        $exitOk = Invoke-Reenviar -ScriptPath $ReenviarScriptPath -KeepCache
+        $exitOk = Invoke-Reenviar -ScriptPath $ReenviarScriptPath -KeepCache -PreviewOnly:$NoSend
         if ($exitOk -ne 0) {
             throw "Cenario de acerto retornou exit code $exitOk"
         }
     }
 
     $deltaOk = Read-LogDelta -Path $LogPath -Offset $offsetOk
-    Assert-Markers -Text $deltaOk -Markers @("Email OK | tentativa", "E-MAIL: Enviado com sucesso") -Scenario "Acerto"
+    Assert-Markers -Text $deltaOk -Markers @("Email OK | tentativa", $markerSucessoEmail) -Scenario "Acerto"
     Write-Stage "Cenario C validado com sucesso."
 
     Write-Stage "Simulacao E2E concluida: erro, alteracao e acerto confirmados." "INFO"
