@@ -113,7 +113,7 @@ Private Function EnviarEmailComErros(ByRef udtTel As Telemetria, ByRef arrErros(
     End If
 
     strIntro = "Segue relat" & ChrW$(243) & "rio automatizado da valida" & ChrW$(231) & "" & ChrW$(227) & "o de notas fiscais."
-    strLegenda = "<span style='color:#b91c1c;font-weight:bold;'>Aten&ccedil;&atilde;o: diverg&ecirc;ncias detectadas. Consulte a aba Erros NF para tratar os itens.</span>"
+    strLegenda = "<span style='color:#b91c1c;font-weight:bold;'>Aten&ccedil;&atilde;o: diverg&ecirc;ncias detectadas. A lista completa est&aacute; detalhada neste e-mail.</span>"
     strTabelaErrosHtml = MontarTabelaCompletaErrosHtml(arrErros, lngTotalErrosDetalhe)
     strHtml = MontarTemplateEmail(NOTIF_TIPO_ERRO, udtTel, strTabelaErrosHtml)
     strAssunto = "[ALERTA] Diverg" & ChrW$(234) & "ncias - Controle NF - " & FormatarDataBR(Now)
@@ -132,10 +132,10 @@ Private Function EnviarEmailAlteracao(ByRef udtTel As Telemetria, ByVal lngTotal
     End If
 
     strIntro = "Segue relat" & ChrW$(243) & "rio automatizado da valida" & ChrW$(231) & "" & ChrW$(227) & "o de notas fiscais."
-    strLegenda = "<span style='color:#b45309;font-weight:bold;'>Alteracao detectada: " & _
+    strLegenda = "<span style='color:#b45309;font-weight:bold;'>Altera&ccedil;&atilde;o detectada: " & _
     CStr(lngTotalNovos) & " novos, " & CStr(lngTotalCorrigidos) & " corrigidos e " & CStr(lngTotalPermanentes) & " permanentes.</span>"
     strHtml = MontarTemplateEmail(NOTIF_TIPO_ALTERACAO, udtTel, strDeltaHtml)
-    strAssunto = "[ALTERACAO] Divergencias - Controle NF - " & FormatarDataBR(Now)
+    strAssunto = "[ALTERA" & ChrW$(199) & ChrW$(195) & "O] Diverg" & ChrW$(234) & "ncias - Controle NF - " & FormatarDataBR(Now)
 
     EnviarEmailAlteracao = EnviarEmailCore(strAssunto, strHtml, strTo, strCC, "", strIntro, strLegenda)
 End Function
@@ -217,34 +217,37 @@ Private Function MontarTemplateEmail(ByVal strTipoNotificacao As String, ByRef u
         strResultado = "100% OK"
     End Select
 
-    strHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body>"
-    strHtml = strHtml & "<div style='font-family:Calibri,Arial,sans-serif;font-size:11pt;max-width:800px;margin:0 auto;'>"
-    strHtml = strHtml & "<div style='background:linear-gradient(135deg," & strCor & " 0%,#222 100%);padding:20px;border-radius:8px 8px 0 0;'>"
-    strHtml = strHtml & "<h1 style='color:white;margin:0;font-size:24pt;'><span style='font-size:32pt;vertical-align:middle;'>" & strIcon & "</span> " & strMsg & "</h1></div>"
-    strHtml = strHtml & "<div style='background:#fff;padding:25px;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;'>"
+    strHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:16px;background:#f3f4f6;'>"
+    strHtml = strHtml & "<div style='font-family:Calibri,Arial,sans-serif;font-size:11pt;max-width:920px;margin:0 auto;color:#1f2937;'>"
+    strHtml = strHtml & "<div style='background:linear-gradient(135deg," & strCor & " 0%,#1f2937 100%);padding:20px 24px;border-radius:10px 10px 0 0;'>"
+    strHtml = strHtml & "<h1 style='color:#ffffff;margin:0;font-size:22pt;text-align:center;line-height:1.2;'><span style='font-size:30pt;vertical-align:middle;'>" & strIcon & "</span> " & strMsg & "</h1></div>"
+    strHtml = strHtml & "<div style='background:#ffffff;padding:22px;border:1px solid #d1d5db;border-top:none;border-radius:0 0 10px 10px;'>"
 
     Select Case strTipo
      Case NOTIF_TIPO_ERRO
-        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas diverg&ecirc;ncias na valida&ccedil;&atilde;o.</b></p>"
-        strHtml = strHtml & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Consulte a aba <b style='color:#d32f2f;'>Erros NF</b> no Excel.</p>"
+          strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 8px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas diverg&ecirc;ncias na valida&ccedil;&atilde;o.</b></p>"
+          strHtml = strHtml & "<p style='font-size:11pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> A rela&ccedil;&atilde;o completa dos itens est&aacute; no corpo deste e-mail.</p>"
      Case NOTIF_TIPO_ALTERACAO
-        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_CHART_UP & "</span> <b>Foi detectada alteracao no conjunto de diverg&ecirc;ncias.</b></p>"
-        strHtml = strHtml & "<p style='font-size:11pt;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> A aba <b style='color:#ef6c00;'>Erros NF</b> foi atualizada com o estado atual.</p>"
+          strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 8px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_CHART_UP & "</span> <b>Foi detectada altera&ccedil;&atilde;o no conjunto de diverg&ecirc;ncias.</b></p>"
+          strHtml = strHtml & "<p style='font-size:11pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Confira abaixo o detalhamento com novos, corrigidos e permanentes.</p>"
      Case Else
-        strHtml = strHtml & "<p style='font-size:12pt;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma diverg&ecirc;ncia encontrada.</b></p>"
+          strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma diverg&ecirc;ncia encontrada na valida&ccedil;&atilde;o.</b></p>"
     End Select
 
-    strHtml = strHtml & "<div style='background:#f9f9f9;border-left:4px solid " & strCor & ";padding:15px;margin:20px 0;border-radius:4px;'>"
-    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & HTML_ICON_CHART & "</span> <b>Total de linhas:</b> " & udtTel.totalLinhas & "</p>"
-    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & IIf(strTipo = NOTIF_TIPO_ACERTO, HTML_ICON_CHECK, HTML_ICON_CROSS) & "</span> <b>Resultado:</b> " & strResultado & "</p>"
-    strHtml = strHtml & "<p><span style='font-size:14pt;'>" & HTML_ICON_STOPWATCH & "</span> <b>Tempo de Processamento:</b> " & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</p></div>"
+     strHtml = strHtml & "<div style='background:#f9fafb;border:1px solid #e5e7eb;border-left:4px solid " & strCor & ";padding:12px;margin:18px 0;border-radius:6px;'>"
+     strHtml = strHtml & "<table role='presentation' border='0' cellspacing='0' cellpadding='6' width='100%' style='border-collapse:collapse;text-align:center;'>"
+     strHtml = strHtml & "<tr>"
+     strHtml = strHtml & "<td style='width:33%;font-size:10pt;color:#4b5563;'><span style='font-size:15pt;'>" & HTML_ICON_CHART & "</span><br><b>Total de linhas</b><br><span style='font-size:14pt;color:#111827;">" & udtTel.totalLinhas & "</span></td>"
+     strHtml = strHtml & "<td style='width:33%;font-size:10pt;color:#4b5563;'><span style='font-size:15pt;'>" & IIf(strTipo = NOTIF_TIPO_ACERTO, HTML_ICON_CHECK, HTML_ICON_CROSS) & "</span><br><b>Resultado</b><br><span style='font-size:14pt;color:#111827;">" & strResultado & "</span></td>"
+     strHtml = strHtml & "<td style='width:33%;font-size:10pt;color:#4b5563;'><span style='font-size:15pt;'>" & HTML_ICON_STOPWATCH & "</span><br><b>Tempo de processamento</b><br><span style='font-size:14pt;color:#111827;">" & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</span></td>"
+     strHtml = strHtml & "</tr></table></div>"
 
     If Len(Trim$(strDetalhesHtml)) > 0 Then
         strHtml = strHtml & "<div style='margin-top:18px;'>" & strDetalhesHtml & "</div>"
     End If
 
-    strHtml = strHtml & "<hr style='border:0;border-top:1px solid #ddd;margin:30px 0;'>"
-    strHtml = strHtml & "<p style='font-size:9pt;color:#888;'><span style='font-size:12pt;'>" & HTML_ICON_ROBOT & "</span> <i>Rob" & ChrW$(244) & " Fiscal " & ROBO_VERSAO_DASH & "</i><br>"
+    strHtml = strHtml & "<hr style='border:0;border-top:1px solid #ddd;margin:26px 0;'>"
+    strHtml = strHtml & "<p style='font-size:9pt;color:#6b7280;text-align:center;'><span style='font-size:12pt;'>" & HTML_ICON_ROBOT & "</span> <i>Rob" & ChrW$(244) & " Fiscal " & ROBO_VERSAO_DASH & "</i><br>"
     strHtml = strHtml & "<span style='font-size:12pt;'>" & HTML_ICON_CALENDAR & "</span> Data/Hora: <b>" & FormatarDataBR(Now, True) & "</b></p>"
     strHtml = strHtml & "</div></div></body></html>"
 
@@ -264,15 +267,15 @@ Private Function MontarTabelaCompletaErrosHtml(ByRef arrErros() As DadosErro, By
          Exit Function
         End If
 
-        strHtml = "<p style='font-size:11pt;margin:0 0 10px 0;'><b>Detalhamento completo da aba Erros NF:</b></p>"
+        strHtml = "<p style='font-size:11pt;margin:0 0 10px 0;text-align:center;'><b>Detalhamento completo das diverg&ecirc;ncias identificadas:</b></p>"
         strHtml = strHtml & "<div style='overflow-x:auto;'>"
-        strHtml = strHtml & "<table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt;width:100%;'>"
-        strHtml = strHtml & "<tr style='background-color:#fdecec;'>"
-        strHtml = strHtml & "<th>Sit OB</th><th>Progr</th><th>Faccao</th><th>Pcs Prog</th><th>Num OB</th><th>Kanban</th><th>Fase Atual</th><th>Status Fase</th><th>Ref Cliente</th><th>Qtd Pcs NF</th><th>Obs OB</th><th>Detalhe Erro</th><th>Alternativo</th><th>Timestamp</th>"
+        strHtml = strHtml & "<table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%;table-layout:fixed;'>"
+        strHtml = strHtml & "<tr style='background-color:#fdecec;text-align:center;'>"
+        strHtml = strHtml & "<th>Sit. OB</th><th>Prog.</th><th>Fac&ccedil;&atilde;o</th><th>Pe&ccedil;as Prog.</th><th>N&ordm; OB</th><th>Kanban</th><th>Fase Atual</th><th>Status Fase</th><th>Refer&ecirc;ncia Cliente</th><th>Qtd. Pe&ccedil;as NF</th><th>Observa&ccedil;&atilde;o OB</th><th>Detalhe do Erro</th><th>Alternativo</th><th>Data/Hora</th>"
         strHtml = strHtml & "</tr>"
 
         For lngI = 1 To lngTotalValido
-            strHtml = strHtml & "<tr>"
+            strHtml = strHtml & "<tr style='text-align:center;'>"
             strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).SitOB) & "</td>"
             strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).Progr) & "</td>"
             strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).Faccao) & "</td>"
@@ -283,8 +286,8 @@ Private Function MontarTabelaCompletaErrosHtml(ByRef arrErros() As DadosErro, By
             strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).StatusFase) & "</td>"
             strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).refCliente) & "</td>"
             strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).qtpcnf) & "</td>"
-            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).ObsOB) & "</td>"
-            strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).detalheErro) & "</td>"
+            strHtml = strHtml & "<td style='text-align:left;'>" & SafeTextoHtml(arrErros(lngI).ObsOB) & "</td>"
+            strHtml = strHtml & "<td style='text-align:left;'>" & SafeTextoHtml(arrErros(lngI).detalheErro) & "</td>"
             strHtml = strHtml & "<td>" & SafeTextoHtml(arrErros(lngI).Alternativo) & "</td>"
             strHtml = strHtml & "<td>" & SafeTextoHtml(FormatarDataBR(Now, True)) & "</td>"
             strHtml = strHtml & "</tr>"

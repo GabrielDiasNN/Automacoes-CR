@@ -70,7 +70,12 @@ End Sub
 Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd As Long)
     Dim objWsErro  As Worksheet
     Dim objLo      As ListObject
+    Dim objWsAnterior As Worksheet
     Dim lngI       As Long
+
+    On Error Resume Next
+    Set objWsAnterior = ActiveSheet
+    On Error GoTo 0
 
     On Error Resume Next
     Application.DisplayAlerts = False
@@ -123,4 +128,10 @@ Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd
 
         objWsErro.Columns.AutoFit
         GravarLogEx "Aba 'Erros NF' gerada com " & lngQtd & " registros.", LOG_DEBUG
+
+        If Not objWsAnterior Is Nothing Then
+            On Error Resume Next
+            objWsAnterior.Activate
+            On Error GoTo 0
+        End If
 End Sub

@@ -24,6 +24,7 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
         Dim strStampAntesK  As String
         Dim strStampDepoisK As String
         Dim dblTempoInicio  As Double
+        Dim objWsDados      As Worksheet
 
         ' 1. Inicializacao Do Contexto
         Set objContexto = New clsAppContext
@@ -61,8 +62,13 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
             Err.Raise vbObjectError + 701, "modMain", "Conexao '" & STAMP_TABLE_NAME & "' nao encontrada."
         End If
 
+        Set objWsDados = ResolverWorksheetDadosPrincipal()
+        If objWsDados Is Nothing Then
+            Err.Raise vbObjectError + 703, "modMain", "Nao foi possivel resolver a worksheet de dados principal."
+        End If
+
         ' Snapshot ANTES
-        strFpAntes = ObterFingerprintTabelaAtiva() ' TODO: Mudar para aceitar ws explicito
+        strFpAntes = ObterFingerprintTabelaAtiva(objWsDados)
         On Error Resume Next
         EnsureStampNamedRange
         blnStampOK = (Err.Number = 0)
@@ -100,9 +106,7 @@ Public Sub AtualizarEValidar(Optional ByVal blnModoRobo As Boolean = False, _
                     ' 4. Validacao de Dados
                     If Not blnModoRobo Then Application.StatusBar = ">> [50%] Validando dados..."
                         LogStepStart "VALIDAR"
-                        ' Passamos o contexto ou a sheet resolvida.
-                        ' Passamos o contexto ou a sheet resolvida.
-                        Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=blnModoRobo, blnGerenciarConfig:=False)
+                        Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=blnModoRobo, blnGerenciarConfig:=False, objWsAlvo:=objWsDados)
                         LogStepEnd "Validacao concluida"
 
                         ' 5. Dashboard e Finalizacao
@@ -142,6 +146,7 @@ Public Sub RevalidarENotificar()
     On Error GoTo TratarErro
 
         Dim objContexto As clsAppContext
+        Dim objWsDados As Worksheet
         Set objContexto = New clsAppContext
         With objContexto
             .ModoRobo = True
@@ -154,8 +159,13 @@ Public Sub RevalidarENotificar()
         LimparTelemetriaExecucao
         InicializarAplicacao objContexto
 
+        Set objWsDados = ResolverWorksheetDadosPrincipal()
+        If objWsDados Is Nothing Then
+            Err.Raise vbObjectError + 705, "RevalidarENotificar", "Nao foi possivel resolver a worksheet de dados principal."
+        End If
+
         GravarLogEx "REENVIO FORCADO: Revalidando dados sem refresh Oracle.", LOG_INFO
-        Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=True, blnGerenciarConfig:=False)
+        Call ValidarNotasFiscais(m_Telemetria, blnSilencioso:=True, blnGerenciarConfig:=False, objWsAlvo:=objWsDados)
         GravarLogEx "REENVIO FORCADO: Concluido.", LOG_INFO
 
 SaidaLimpaReenvio:
@@ -194,6 +204,15 @@ Private Sub LimparTelemetriaExecucao()
         .totalErros = 0
     End With
 End Sub
+
+Private Function ResolverWorksheetDadosPrincipal() As Worksheet
+    Dim objLo As ListObject
+
+    Set objLo = FindListObjectByName(STAMP_TABLE_NAME)
+    If Not objLo Is Nothing Then
+        Set ResolverWorksheetDadosPrincipal = objLo.Parent
+    End If
+End Function
 
 Private Sub ExecutarRefreshSincrono(ByVal objConexao As Object)
     On Error GoTo TratarErro

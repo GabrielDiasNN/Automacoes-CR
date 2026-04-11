@@ -15,12 +15,7 @@ Public Sub ValidarNotasFiscais(ByRef udtTel As Telemetria, _
 
     On Error GoTo TratarErro
 
-        ' 1. Resolucao da Worksheet (Elimina ActiveSheet)
-        If objWsAlvo Is Nothing Then
-            Set objWsTrabalho = ActiveSheet
-        Else
-            Set objWsTrabalho = objWsAlvo
-        End If
+        Set objWsTrabalho = ResolverWorksheetValidacao(objWsAlvo)
 
         If objWsTrabalho Is Nothing Then
             Err.Raise vbObjectError + 601, "modValidacaoNF", "Nenhuma Worksheet definida para validacao."
@@ -76,7 +71,11 @@ Private Function ExecutarValidacaoCompleta(ByVal objWs As Worksheet, ByRef udtTe
             Err.Raise vbObjectError + 602, "ExecutarValidacaoCompleta", "Nenhuma tabela encontrada na aba " & objWs.Name
         End If
 
-        Set objTblPrincipal = objWs.ListObjects(1)
+        Set objTblPrincipal = ResolverTabelaPrincipal(objWs)
+        If objTblPrincipal Is Nothing Then
+            Err.Raise vbObjectError + 602, "ExecutarValidacaoCompleta", "Tabela principal nao encontrada na aba " & objWs.Name
+        End If
+
         If objTblPrincipal.ListRows.count < 1 Or objTblPrincipal.DataBodyRange Is Nothing Then
             GravarLogEx "AVISO: Tabela vazia (" & objTblPrincipal.Name & ").", LOG_WARNING
             If Not blnSilencioso Then MsgBox "Tabela vazia.", vbExclamation
@@ -254,6 +253,53 @@ Private Sub PreencherEstruturaErro(ByRef udtErro As DadosErro, ByVal varDados As
                                             End If
                                         End With
 End Sub
+
+Private Function ResolverWorksheetValidacao(ByVal objWsAlvo As Worksheet) As Worksheet
+    Dim objWs As Worksheet
+    Dim objLo As ListObject
+
+    If Not objWsAlvo Is Nothing Then
+        Set ResolverWorksheetValidacao = objWsAlvo
+        Exit Function
+    End If
+
+    Set objLo = FindListObjectByName(STAMP_TABLE_NAME)
+    If Not objLo Is Nothing Then
+        Set ResolverWorksheetValidacao = objLo.Parent
+        Exit Function
+    End If
+
+    For Each objWs In ThisWorkbook.Worksheets
+        For Each objLo In objWs.ListObjects
+            If TabelaTemColunasObrigatorias(objLo) Then
+                Set ResolverWorksheetValidacao = objWs
+                Exit Function
+            End If
+        Next objLo
+    Next objWs
+End Function
+
+Private Function ResolverTabelaPrincipal(ByVal objWs As Worksheet) As ListObject
+    Dim objLo As ListObject
+
+    On Error Resume Next
+    Set objLo = objWs.ListObjects(STAMP_TABLE_NAME)
+    On Error GoTo 0
+
+    If objLo Is Nothing And objWs.ListObjects.count > 0 Then
+        Set objLo = objWs.ListObjects(1)
+        GravarLogEx "AVISO: tabela '" & STAMP_TABLE_NAME & "' nao encontrada na aba " & objWs.Name & ". Usando primeira tabela: " & objLo.Name, LOG_WARNING
+    End If
+
+    Set ResolverTabelaPrincipal = objLo
+End Function
+
+Private Function TabelaTemColunasObrigatorias(ByVal objLo As ListObject) As Boolean
+    TabelaTemColunasObrigatorias = ListObjectHasColumn(objLo, C_REF_CLIENTE) And _
+                                   ListObjectHasColumn(objLo, C_QT_PC_NF) And _
+                                   ListObjectHasColumn(objLo, C_OBS_OB) And _
+                                   ListObjectHasColumn(objLo, C_OUTPUT_VAL)
+End Function
 
 ' ====================================================================================
 ' REGEX / PARSING

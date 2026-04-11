@@ -431,7 +431,7 @@ End Sub
 Private Function GerarResumoAlteracaoHtml(ByRef udtMudancas As MudancasDetectadas) As String
     Dim strHtml As String
 
-    strHtml = "<p style='font-size:11pt;margin:0 0 10px 0;'><b>Resumo detalhado da alteracao:</b></p>"
+    strHtml = "<p style='font-size:11pt;margin:0 0 10px 0;'><b>Resumo detalhado da altera&ccedil;&atilde;o:</b></p>"
     strHtml = strHtml & "<table border='0' cellspacing='0' cellpadding='6' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt;margin-bottom:14px;'>"
     strHtml = strHtml & "<tr><td style='background:#fdecec;'><b>Novos:</b> " & CStr(udtMudancas.lngTotalNovos) & "</td><td style='background:#ecfdf3;'><b>Corrigidos:</b> " & CStr(udtMudancas.lngTotalCorrigidos) & "</td><td style='background:#fff7ed;'><b>Permanentes:</b> " & CStr(udtMudancas.lngTotalPermanentes) & "</td></tr>"
     strHtml = strHtml & "</table>"
@@ -455,7 +455,7 @@ Private Function GerarTabelaCategoriaHtml(ByVal strTitulo As String, ByRef arrEr
     End If
 
     strHtml = strHtml & "<table border='1' cellspacing='0' cellpadding='5' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9pt;width:100%;margin-bottom:10px;'>"
-    strHtml = strHtml & "<tr style='background:#f3f4f6;'><th>Num OB</th><th>Ref Cliente</th><th>Progr</th><th>Detalhe Erro</th></tr>"
+    strHtml = strHtml & "<tr style='background:#f3f4f6;'><th>N&ordm; OB</th><th>Refer&ecirc;ncia Cliente</th><th>Prog.</th><th>Detalhe do Erro</th></tr>"
 
     For lngI = 1 To lngTotal
         strHtml = strHtml & "<tr>"

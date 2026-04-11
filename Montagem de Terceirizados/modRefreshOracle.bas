@@ -165,15 +165,24 @@ Public Function ObterFingerprintTabelaAtiva(Optional ByVal objWsForcado As Works
     Dim strBase   As String
 
     If objWsForcado Is Nothing Then
-        Set objWs = ActiveSheet
+        Set objLo = FindListObjectByName(STAMP_TABLE_NAME)
+        If Not objLo Is Nothing Then Set objWs = objLo.Parent
     Else
         Set objWs = objWsForcado
     End If
-    
-    If objWs Is Nothing Then Exit Function
-    If objWs.ListObjects.count = 0 Then Exit Function
-    
-    Set objLo = objWs.ListObjects(1)
+
+    If objLo Is Nothing And Not objWs Is Nothing Then
+        On Error Resume Next
+        Set objLo = objWs.ListObjects(STAMP_TABLE_NAME)
+        On Error GoTo Falha
+
+        If objLo Is Nothing And objWs.ListObjects.count > 0 Then
+            Set objLo = objWs.ListObjects(1)
+        End If
+    End If
+
+    If objLo Is Nothing Then Exit Function
+    If objWs Is Nothing Then Set objWs = objLo.Parent
     If objLo.DataBodyRange Is Nothing Then Exit Function
 
     Set rngDados = objLo.DataBodyRange
