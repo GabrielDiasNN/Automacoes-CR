@@ -49,11 +49,13 @@
       "waitForExit": false,
       "schedule": {
         "daysOfWeek": [
+          0,
           1,
           2,
           3,
           4,
-          5
+          5,
+          6
         ],
         "hours": [],
         "minutes": [

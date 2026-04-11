@@ -16,10 +16,11 @@ macroName = "AtualizarEValidar"
 logPath   = "C:\Automacoes\Montagem de Terceirizados\Logs\Execution.log"
 
 ' [FEATURE FLAG] Monitoramento de Timeout via Log VBA (Estilo "Robo Fiscal")
-Dim USE_TIMEOUT_MONITOR, vbaLogPath, maxTimeoutSeconds, datedLogName
+Dim USE_TIMEOUT_MONITOR, vbaLogPath, vbaLogPathFallback, maxTimeoutSeconds, datedLogName
 USE_TIMEOUT_MONITOR = True
-datedLogName       = "log_" & Year(Now) & "-" & Right("0" & Month(Now), 2) & "-" & Right("0" & Day(Now), 2) & ".log"
-vbaLogPath          = "C:\Automacoes\Montagem de Terceirizados\Logs\" & datedLogName
+datedLogName        = "log_" & Year(Now) & "-" & Right("0" & Month(Now), 2) & "-" & Right("0" & Day(Now), 2) & ".log"
+vbaLogPath          = "C:\Automacoes\Montagem de Terceirizados\Logs\Montagem.log"
+vbaLogPathFallback  = "C:\Automacoes\Montagem de Terceirizados\Logs\" & datedLogName
 maxTimeoutSeconds   = 300
 
 ' [FEATURE FLAG] Script Pos-Execucao (Ex: WhatsApp Node.js Bridge)
@@ -139,13 +140,19 @@ tamanhoInicialLogVBA = 0
 If USE_TIMEOUT_MONITOR Then
     EnsureLogFolder vbaLogPath
     On Error Resume Next
+
+    ' Fallback para manter compatibilidade com formatos antigos de log diario.
+    If (Not fso.FileExists(vbaLogPath)) And fso.FileExists(vbaLogPathFallback) Then
+        vbaLogPath = vbaLogPathFallback
+    End If
+
     If Not fso.FileExists(vbaLogPath) Then
         Dim tempObj: Set tempObj = fso.CreateTextFile(vbaLogPath, True): tempObj.Close
     End If
     tamanhoInicialLogVBA = fso.GetFile(vbaLogPath).Size
     Err.Clear
     On Error GoTo 0
-    WriteLog "INFO", "Monitoramento de Timeout Ativado. LogVBAInicial=" & tamanhoInicialLogVBA & " bytes"
+    WriteLog "INFO", "Monitoramento de Timeout Ativado. LogVBA=" & vbaLogPath & " | LogVBAInicial=" & tamanhoInicialLogVBA & " bytes"
 End If
 
 On Error Resume Next
@@ -205,11 +212,11 @@ If USE_TIMEOUT_MONITOR Then
                 ver = ExtrairVersao(conteudoNovo)
                 If ver <> "" And ver <> roboVersao Then roboVersao = ver
 
-                If InStr(conteudoNovo, "FIM DO PROCESSO.") > 0 Then
+                If InStr(1, conteudoNovo, "FIM Do PROCESSO.", vbTextCompare) > 0 Then
                     encontrouFim = True
-                    sucessoVBA = (InStr(conteudoNovo, "Resultado=Sucesso") > 0)
+                    sucessoVBA = (InStr(1, conteudoNovo, "Resultado=Sucesso", vbTextCompare) > 0)
                     Exit Do
-                ElseIf InStr(conteudoNovo, "ERRO FATAL") > 0 Then
+                ElseIf InStr(1, conteudoNovo, "ERRO FATAL", vbTextCompare) > 0 Then
                     encontrouFim = True
                     sucessoVBA = False
                     Exit Do

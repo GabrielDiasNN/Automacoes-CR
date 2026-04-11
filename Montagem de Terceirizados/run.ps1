@@ -107,12 +107,55 @@ function Test-VbaProjectCompiles {
 
     try {
         $Workbook.Activate() | Out-Null
-        $compileControl = $ExcelApp.VBE.CommandBars.FindControl(1, 578)
-        if ($null -eq $compileControl) {
-            Write-Log "Preflight VBA: comando de compilacao nao encontrado; seguindo execucao." -Lvl "WARN"
-            return $true
-        }
+    }
+    catch {
+        Write-Log "Preflight VBA: nao foi possivel ativar workbook para compilacao preventiva. Seguindo execucao. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
 
+    $vbe = $null
+    try {
+        $vbe = $ExcelApp.VBE
+    }
+    catch {
+        Write-Log "Preflight VBA: VBE indisponivel (possivel bloqueio de acesso programatico). Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
+
+    if ($null -eq $vbe) {
+        Write-Log "Preflight VBA: VBE retornou nulo. Seguindo sem compilacao preventiva." -Lvl "INFO"
+        return $true
+    }
+
+    $commandBars = $null
+    try {
+        $commandBars = $vbe.CommandBars
+    }
+    catch {
+        Write-Log "Preflight VBA: CommandBars do VBE indisponivel. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
+
+    if ($null -eq $commandBars) {
+        Write-Log "Preflight VBA: CommandBars retornou nulo. Seguindo sem compilacao preventiva." -Lvl "WARN"
+        return $true
+    }
+
+    $compileControl = $null
+    try {
+        $compileControl = $commandBars.FindControl(1, 578)
+    }
+    catch {
+        Write-Log "Preflight VBA: comando de compilacao inacessivel no ambiente atual. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
+
+    if ($null -eq $compileControl) {
+        Write-Log "Preflight VBA: comando de compilacao nao encontrado; seguindo execucao." -Lvl "WARN"
+        return $true
+    }
+
+    try {
         $compileControl.Execute()
         Write-Log "Preflight VBA: compilacao concluida com sucesso."
         return $true
