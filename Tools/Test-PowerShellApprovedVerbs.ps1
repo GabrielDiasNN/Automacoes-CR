@@ -1,4 +1,5 @@
 # cSpell:words funcao funcoes padrao substantivo verbos aprovados verificados encontrados pscustomobject isnullorwhitespace trimstart startswith additionalapprovedverbs ACMR ERRO pelo devem seguir deve existir
+[CmdletBinding()]
 param(
     [string[]]$Paths = @(),
     [string[]]$AdditionalApprovedVerbs = @()

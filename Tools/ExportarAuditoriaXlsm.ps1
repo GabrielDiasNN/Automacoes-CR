@@ -1,3 +1,4 @@
+[CmdletBinding()]
 param(
     [string]$RootPath = (Join-Path $PSScriptRoot ".."),
     [string]$OutputPath = "",

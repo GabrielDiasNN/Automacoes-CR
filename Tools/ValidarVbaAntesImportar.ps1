@@ -194,7 +194,12 @@ if ($sharedDescriptors.Count -gt 0) {
     Test-DuplicateComponentNames -Descriptors $sharedDescriptors -Context "SharedDir"
 }
 
-$regPath = "HKCU:\Software\Microsoft\Office\16.0\Excel\Security"
+$officeVersion = (Get-ChildItem "HKCU:\Software\Microsoft\Office" -ErrorAction SilentlyContinue |
+    Where-Object { $_.PSChildName -match '^\d+\.\d+$' } |
+    Sort-Object { [version]$_.PSChildName } -Descending |
+    Select-Object -First 1).PSChildName
+if ([string]::IsNullOrWhiteSpace($officeVersion)) { $officeVersion = "16.0" }
+$regPath = "HKCU:\Software\Microsoft\Office\$officeVersion\Excel\Security"
 $prevVal = $null
 $excel = $null
 $tmpWb = $null

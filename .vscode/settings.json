@@ -134,9 +134,9 @@
     },
     "files.associations": {
         "*.bas": "vb",
-        "*.cls": "vba",
+        "*.cls": "vb",
         "*.frm": "vba",
-        "*.vbs": "vbscript"
+        "*.vbs": "vb"
     },
     "[json]": {
         "editor.defaultFormatter": "vscode.json-language-features"

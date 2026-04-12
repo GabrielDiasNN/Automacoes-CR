@@ -1,3 +1,4 @@
+[CmdletBinding()]
 param(
     [string]$RootPath = (Join-Path $PSScriptRoot ".."),
     [string[]]$Paths = @(),
@@ -140,7 +141,14 @@ $totalFilesChanged = 0
 $totalLineChanges = 0
 
 foreach ($filePath in $targetFiles) {
-    $lines = Get-Content -LiteralPath $filePath
+    try {
+        $lines = Get-Content -LiteralPath $filePath -ErrorAction Stop
+    }
+    catch {
+        Write-Host ("[SKIP] Nao foi possivel ler '$filePath': $_")
+        continue
+    }
+
     $result = ConvertTo-NormalizedMarkdownContent -Lines $lines
 
     if ($result.Changes -le 0) {
@@ -155,7 +163,13 @@ foreach ($filePath in $targetFiles) {
         continue
     }
 
-    Write-Utf8File -FilePath $filePath -Content $result.Content
+    try {
+        Write-Utf8File -FilePath $filePath -Content $result.Content
+    }
+    catch {
+        Write-Host ("[SKIP] Nao foi possivel gravar '$filePath': $_")
+        continue
+    }
     Write-Host ("[FIXED] {0} -> {1} ajuste(s)" -f $filePath, $result.Changes)
 }
 

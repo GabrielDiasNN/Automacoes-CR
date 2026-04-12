@@ -2,7 +2,8 @@
 param(
     [string]$XlsmPath = (Join-Path $PSScriptRoot "..\Receitas Emitidas\Controle de Receitas Emitidas.xlsm"),
     [string]$BasPath = (Join-Path $PSScriptRoot "..\Receitas Emitidas\modReceitasEmitidas.bas"),
-    [string]$ModName = "modReceitasEmitidas"
+    [string]$ModName = "modReceitasEmitidas",
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,8 +37,18 @@ if ($headerProbe -match "(?i)^\s*VERSION\s+1\.0\s+CLASS") {
 Write-Log "INFO" "Workbook : $XlsmPath"
 Write-Log "INFO" "Modulo   : $BasPath"
 
+if ($DryRun) {
+    Write-Log "INFO" "DRY-RUN: importaria '$BasPath' como modulo '$ModName' em '$XlsmPath'. Nenhuma alteracao realizada."
+    exit 0
+}
+
 # Habilita acesso programatico ao VBA Project via registro (necessario para VBOM)
-$regPath = "HKCU:\Software\Microsoft\Office\16.0\Excel\Security"
+$officeVersion = (Get-ChildItem "HKCU:\Software\Microsoft\Office" -ErrorAction SilentlyContinue |
+    Where-Object { $_.PSChildName -match '^\d+\.\d+$' } |
+    Sort-Object { [version]$_.PSChildName } -Descending |
+    Select-Object -First 1).PSChildName
+if ([string]::IsNullOrWhiteSpace($officeVersion)) { $officeVersion = "16.0" }
+$regPath = "HKCU:\Software\Microsoft\Office\$officeVersion\Excel\Security"
 $prevVal = $null
 try {
     $prevVal = (Get-ItemProperty -Path $regPath -Name "AccessVBOM" -ErrorAction SilentlyContinue).AccessVBOM

@@ -1,3 +1,4 @@
+[CmdletBinding()]
 param(
     [string]$ExecId = "",
     [string]$BasePath = "C:\Automacoes",

@@ -11,6 +11,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function New-BatchExecId {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Prefix
+    )
+
+    return ("{0}_{1}" -f $Prefix, (Get-Date -Format "yyyyMMdd_HHmmss"))
+}
+
 function Invoke-GovernanceChecks {
     param(
         [string]$RootPath,
@@ -217,14 +226,13 @@ function Start-Automacao {
     $dir = Split-Path -Parent $scriptPathResolved
     $scriptExt = [System.IO.Path]::GetExtension($scriptPathResolved).ToLowerInvariant()
 
-    Stop-Process -Name excel -Force -ErrorAction SilentlyContinue
-    Set-Location $dir
+    Write-Host ("[INFO] Iniciando automacao em: {0}" -f $dir)
 
     if ($scriptExt -eq ".vbs") {
-        $p = Start-Process -FilePath cscript.exe -ArgumentList '//nologo', $scriptPathResolved, $ExecId -PassThru -WindowStyle Hidden
+        $p = Start-Process -FilePath cscript.exe -ArgumentList '//nologo', $scriptPathResolved, $ExecId -PassThru -WindowStyle Hidden -WorkingDirectory $dir
     }
     elseif ($scriptExt -eq ".ps1") {
-        $p = Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPathResolved, $ExecId -PassThru -WindowStyle Hidden
+        $p = Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPathResolved, $ExecId -PassThru -WindowStyle Hidden -WorkingDirectory $dir
     }
     else {
         Write-Host ("[ERRO] Extensao de script nao suportada para '{0}': {1}" -f $Name, $scriptExt)
@@ -356,10 +364,14 @@ if (-not (Test-Path -LiteralPath $configPath)) {
 
 $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
+$execIdRe = New-BatchExecId -Prefix 'BATCH_FINAL_RE'
+$execIdRb = New-BatchExecId -Prefix 'BATCH_FINAL_RB'
+$execIdMt = New-BatchExecId -Prefix 'BATCH_FINAL_MT'
+
 $results = [ordered]@{}
-$results['RE'] = Start-Automacao -Name 'Receitas Emitidas' -ScriptPath (Get-TaskScriptPath -RootPath $BasePath -Config $config -TaskName 'Receitas Emitidas') -ExecId 'BATCH_FINAL_RE_20260329'
-$results['RB'] = Start-Automacao -Name 'Receitas Bloqueadas' -ScriptPath (Get-TaskScriptPath -RootPath $BasePath -Config $config -TaskName 'Receitas Bloqueadas') -ExecId 'BATCH_FINAL_RB_20260329' -TimeoutSec 420
-$results['MT'] = Start-Automacao -Name 'Montagem Terceirizados' -ScriptPath (Get-TaskScriptPath -RootPath $BasePath -Config $config -TaskName 'Montagem Terceirizados') -ExecId 'BATCH_FINAL_MT_20260329'
+$results['RE'] = Start-Automacao -Name 'Receitas Emitidas' -ScriptPath (Get-TaskScriptPath -RootPath $BasePath -Config $config -TaskName 'Receitas Emitidas') -ExecId $execIdRe
+$results['RB'] = Start-Automacao -Name 'Receitas Bloqueadas' -ScriptPath (Get-TaskScriptPath -RootPath $BasePath -Config $config -TaskName 'Receitas Bloqueadas') -ExecId $execIdRb -TimeoutSec 420
+$results['MT'] = Start-Automacao -Name 'Montagem Terceirizados' -ScriptPath (Get-TaskScriptPath -RootPath $BasePath -Config $config -TaskName 'Montagem Terceirizados') -ExecId $execIdMt
 
 Write-Host '=== RESUMO FINAL ==='
 foreach ($kv in $results.GetEnumerator()) {

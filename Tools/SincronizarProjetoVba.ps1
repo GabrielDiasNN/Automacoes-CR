@@ -1,3 +1,4 @@
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$XlsmPath,
@@ -11,7 +12,9 @@ param(
     [string]$SharedDir = "",
 
     # Permite pular validacao pre-importacao (nao recomendado).
-    [switch]$SkipPreImportValidation
+    [switch]$SkipPreImportValidation,
+
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -175,7 +178,17 @@ if (-not $SkipPreImportValidation) {
     Write-Log "INFO" "Validacao pre-importacao concluida com sucesso"
 }
 
-$regPath = "HKCU:\Software\Microsoft\Office\16.0\Excel\Security"
+if ($DryRun) {
+    Write-Log "INFO" "DRY-RUN: importaria $($moduleFiles.Count) modulo(s) de '$SourceDir' em '$XlsmPath'. Nenhuma alteracao realizada."
+    exit 0
+}
+
+$officeVersion = (Get-ChildItem "HKCU:\Software\Microsoft\Office" -ErrorAction SilentlyContinue |
+    Where-Object { $_.PSChildName -match '^\d+\.\d+$' } |
+    Sort-Object { [version]$_.PSChildName } -Descending |
+    Select-Object -First 1).PSChildName
+if ([string]::IsNullOrWhiteSpace($officeVersion)) { $officeVersion = "16.0" }
+$regPath = "HKCU:\Software\Microsoft\Office\$officeVersion\Excel\Security"
 $prevVal = $null
 
 $excel = $null

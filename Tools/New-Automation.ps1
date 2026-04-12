@@ -57,11 +57,23 @@ function Write-Step {
 }
 
 function Invoke-SafeWrite {
-    param([string]$FilePath, [string]$Content)
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [string]$FilePath,
+        [string]$Content,
+        [string]$Operation = "Gravar arquivo"
+    )
+
     if ($DryRun) {
         Write-Step "Criaria arquivo: $FilePath"
         return
     }
+
+    if (-not $PSCmdlet.ShouldProcess($FilePath, $Operation)) {
+        Write-Step "Operacao ignorada por ShouldProcess: $Operation em $FilePath" -Type "WARN"
+        return
+    }
+
     $dir = Split-Path -Parent $FilePath
     if ($dir -and -not (Test-Path $dir)) {
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -108,10 +120,21 @@ if (Test-Path $automDir) {
 # CRIAR DIRETÓRIOS
 # ============================================================
 if (-not $DryRun) {
-    New-Item -ItemType Directory -Force -Path $automDir | Out-Null
-    New-Item -ItemType Directory -Force -Path $logsDir  | Out-Null
-    Write-Step "Diretorio criado: $automDir"
-    Write-Step "Diretorio criado: $logsDir"
+    if ($PSCmdlet.ShouldProcess($automDir, "Criar diretorio da automacao")) {
+        New-Item -ItemType Directory -Force -Path $automDir | Out-Null
+        Write-Step "Diretorio criado: $automDir"
+    }
+    else {
+        Write-Step "Criacao ignorada por ShouldProcess: $automDir" -Type "WARN"
+    }
+
+    if ($PSCmdlet.ShouldProcess($logsDir, "Criar diretorio de logs")) {
+        New-Item -ItemType Directory -Force -Path $logsDir  | Out-Null
+        Write-Step "Diretorio criado: $logsDir"
+    }
+    else {
+        Write-Step "Criacao ignorada por ShouldProcess: $logsDir" -Type "WARN"
+    }
 }
 else {
     Write-Step "Criaria diretorio: $automDir"
@@ -173,14 +196,14 @@ else {
     Write-Step "Template VBS nao encontrado em: $templatePath. VBS gerado apenas com cabecalho." -Type "WARN"
 }
 
-Invoke-SafeWrite -FilePath $triggerPath -Content $vbsContent
+Invoke-SafeWrite -FilePath $triggerPath -Content $vbsContent -Operation "Gerar Trigger_Automation.vbs"
 
 # ============================================================
 # RUNWHATSAPP.BAT (se -WithWhatsApp)
 # ============================================================
 if ($WithWhatsApp) {
     $batContent = "@echo off`r`n:: Shim WhatsApp - delega para lib\Send-WhatsApp.ps1`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"$BasePath\lib\Send-WhatsApp.ps1`" -ExecId `"%~1`" -Mode `"%~2`" -BaseDir `"$automDir`"`r`nexit /b %ERRORLEVEL%`r`n"
-    Invoke-SafeWrite -FilePath (Join-Path $automDir "RunWhatsApp.bat") -Content $batContent
+    Invoke-SafeWrite -FilePath (Join-Path $automDir "RunWhatsApp.bat") -Content $batContent -Operation "Gerar RunWhatsApp.bat"
 }
 
 # ============================================================
@@ -220,12 +243,17 @@ else {
         $tasksList.Add(($newTask | ConvertTo-Json -Depth 5 | ConvertFrom-Json))
         $config.tasks = $tasksList.ToArray()
 
-        $updatedJson = $config | ConvertTo-Json -Depth 10
-        $sw = New-Object System.IO.StreamWriter($configPath, $false, $Utf8NoBom)
-        try { $sw.Write($updatedJson); $sw.Flush() }
-        finally { $sw.Close(); $sw.Dispose() }
+        if ($PSCmdlet.ShouldProcess($configPath, "Atualizar config.json com nova tarefa")) {
+            $updatedJson = $config | ConvertTo-Json -Depth 10
+            $sw = New-Object System.IO.StreamWriter($configPath, $false, $Utf8NoBom)
+            try { $sw.Write($updatedJson); $sw.Flush() }
+            finally { $sw.Close(); $sw.Dispose() }
 
-        Write-Step "Tarefa '$Name' adicionada ao config.json."
+            Write-Step "Tarefa '$Name' adicionada ao config.json."
+        }
+        else {
+            Write-Step "Atualizacao ignorada por ShouldProcess: $configPath" -Type "WARN"
+        }
     }
 }
 
