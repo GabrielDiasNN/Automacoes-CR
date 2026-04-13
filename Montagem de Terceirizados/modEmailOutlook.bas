@@ -196,6 +196,9 @@ Private Function MontarTemplateEmail(ByVal strTipoNotificacao As String, ByRef u
     Dim strMsg  As String
     Dim strResultado As String
     Dim strTipo As String
+    Dim strCard1 As String
+    Dim strCard2 As String
+    Dim strCard3 As String
 
     strTipo = UCase$(Trim$(strTipoNotificacao))
 
@@ -219,28 +222,39 @@ Private Function MontarTemplateEmail(ByVal strTipoNotificacao As String, ByRef u
 
     strHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:16px;background:#f3f4f6;'>"
     strHtml = strHtml & "<div style='font-family:Calibri,Arial,sans-serif;font-size:11pt;max-width:920px;margin:0 auto;color:#1f2937;'>"
-    strHtml = strHtml & "<div style='background:linear-gradient(135deg," & strCor & " 0%,#1f2937 100%);padding:20px 24px;border-radius:10px 10px 0 0;'>"
+    strHtml = strHtml & "<div style='background:" & strCor & ";padding:20px 24px;border-radius:10px 10px 0 0;'>"
     strHtml = strHtml & "<h1 style='color:#ffffff;margin:0;font-size:22pt;text-align:center;line-height:1.2;'><span style='font-size:30pt;vertical-align:middle;'>" & strIcon & "</span> " & strMsg & "</h1></div>"
     strHtml = strHtml & "<div style='background:#ffffff;padding:22px;border:1px solid #d1d5db;border-top:none;border-radius:0 0 10px 10px;'>"
 
     Select Case strTipo
      Case NOTIF_TIPO_ERRO
-          strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 8px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas diverg&ecirc;ncias na valida&ccedil;&atilde;o.</b></p>"
-          strHtml = strHtml & "<p style='font-size:11pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> A rela&ccedil;&atilde;o completa dos itens est&aacute; no corpo deste e-mail.</p>"
+        strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 8px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_MAGNIFY & "</span> <b>Foram detectadas diverg&ecirc;ncias na valida&ccedil;&atilde;o.</b></p>"
+        strHtml = strHtml & "<p style='font-size:11pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> A rela&ccedil;&atilde;o completa dos itens est&aacute; no corpo deste e-mail.</p>"
      Case NOTIF_TIPO_ALTERACAO
-          strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 8px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_CHART_UP & "</span> <b>Foi detectada altera&ccedil;&atilde;o no conjunto de diverg&ecirc;ncias.</b></p>"
-          strHtml = strHtml & "<p style='font-size:11pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Confira abaixo o detalhamento com novos, corrigidos e permanentes.</p>"
+        strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 8px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_CHART_UP & "</span> <b>Foi detectada altera&ccedil;&atilde;o no conjunto de diverg&ecirc;ncias.</b></p>"
+        strHtml = strHtml & "<p style='font-size:11pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_PACKAGE & "</span> Confira abaixo o detalhamento com novos, corrigidos e permanentes.</p>"
      Case Else
-          strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma diverg&ecirc;ncia encontrada na valida&ccedil;&atilde;o.</b></p>"
+        strHtml = strHtml & "<p style='font-size:12pt;margin:0 0 12px 0;text-align:center;'><span style='font-size:14pt;'>" & HTML_ICON_TROPHY & "</span> <b>Nenhuma diverg&ecirc;ncia encontrada na valida&ccedil;&atilde;o.</b></p>"
     End Select
 
-     strHtml = strHtml & "<div style='background:#f9fafb;border:1px solid #e5e7eb;border-left:4px solid " & strCor & ";padding:12px;margin:18px 0;border-radius:6px;'>"
-     strHtml = strHtml & "<table role='presentation' border='0' cellspacing='0' cellpadding='6' width='100%' style='border-collapse:collapse;text-align:center;'>"
-     strHtml = strHtml & "<tr>"
-     strHtml = strHtml & "<td style='width:33%;font-size:10pt;color:#4b5563;'><span style='font-size:15pt;'>" & HTML_ICON_CHART & "</span><br><b>Total de linhas</b><br><span style='font-size:14pt;color:#111827;">" & udtTel.totalLinhas & "</span></td>"
-     strHtml = strHtml & "<td style='width:33%;font-size:10pt;color:#4b5563;'><span style='font-size:15pt;'>" & IIf(strTipo = NOTIF_TIPO_ACERTO, HTML_ICON_CHECK, HTML_ICON_CROSS) & "</span><br><b>Resultado</b><br><span style='font-size:14pt;color:#111827;">" & strResultado & "</span></td>"
-     strHtml = strHtml & "<td style='width:33%;font-size:10pt;color:#4b5563;'><span style='font-size:15pt;'>" & HTML_ICON_STOPWATCH & "</span><br><b>Tempo de processamento</b><br><span style='font-size:14pt;color:#111827;">" & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</span></td>"
-     strHtml = strHtml & "</tr></table></div>"
+    strCard1 = "<td style='width:33%;font-size:10pt;color:#4b5563;'>"
+    strCard1 = strCard1 & "<span style='font-size:15pt;'>" & HTML_ICON_CHART & "</span><br>"
+    strCard1 = strCard1 & "<b>Total de linhas</b><br>"
+    strCard1 = strCard1 & "<span style='font-size:14pt;color:#111827;'>" & udtTel.totalLinhas & "</span></td>"
+
+    strCard2 = "<td style='width:33%;font-size:10pt;color:#4b5563;'>"
+    strCard2 = strCard2 & "<span style='font-size:15pt;'>" & IIf(strTipo = NOTIF_TIPO_ACERTO, HTML_ICON_CHECK, HTML_ICON_CROSS) & "</span><br>"
+    strCard2 = strCard2 & "<b>Resultado</b><br>"
+    strCard2 = strCard2 & "<span style='font-size:14pt;color:#111827;'>" & strResultado & "</span></td>"
+
+    strCard3 = "<td style='width:33%;font-size:10pt;color:#4b5563;'>"
+    strCard3 = strCard3 & "<span style='font-size:15pt;'>" & HTML_ICON_STOPWATCH & "</span><br>"
+    strCard3 = strCard3 & "<b>Tempo de processamento</b><br>"
+    strCard3 = strCard3 & "<span style='font-size:14pt;color:#111827;'>" & Format$(TimerElapsed(udtTel.InicioExecucao), "0.00") & "s</span></td>"
+
+    strHtml = strHtml & "<div style='background:#f9fafb;border:1px solid #e5e7eb;border-left:4px solid " & strCor & ";padding:12px;margin:18px 0;border-radius:6px;'>"
+    strHtml = strHtml & "<table role='presentation' border='0' cellspacing='0' cellpadding='6' width='100%' style='border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;text-align:center;'>"
+    strHtml = strHtml & "<tr>" & strCard1 & strCard2 & strCard3 & "</tr></table></div>"
 
     If Len(Trim$(strDetalhesHtml)) > 0 Then
         strHtml = strHtml & "<div style='margin-top:18px;'>" & strDetalhesHtml & "</div>"
@@ -269,9 +283,9 @@ Private Function MontarTabelaCompletaErrosHtml(ByRef arrErros() As DadosErro, By
 
         strHtml = "<p style='font-size:11pt;margin:0 0 10px 0;text-align:center;'><b>Detalhamento completo das diverg&ecirc;ncias identificadas:</b></p>"
         strHtml = strHtml & "<div style='overflow-x:auto;'>"
-        strHtml = strHtml & "<table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%;table-layout:fixed;'>"
+        strHtml = strHtml & "<table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%;table-layout:fixed;'>"
         strHtml = strHtml & "<tr style='background-color:#fdecec;text-align:center;'>"
-        strHtml = strHtml & "<th>Sit. OB</th><th>Prog.</th><th>Fac&ccedil;&atilde;o</th><th>Pe&ccedil;as Prog.</th><th>N&ordm; OB</th><th>Kanban</th><th>Fase Atual</th><th>Status Fase</th><th>Refer&ecirc;ncia Cliente</th><th>Qtd. Pe&ccedil;as NF</th><th>Observa&ccedil;&atilde;o OB</th><th>Detalhe do Erro</th><th>Alternativo</th><th>Data/Hora</th>"
+        strHtml = strHtml & "<th>Sit. OB</th><th>Prog.</th><th>Fac&ccedil;&atilde;o</th><th>Pe&ccedil;As Prog.</th><th>N&ordm; OB</th><th>Kanban</th><th>Fase Atual</th><th>Status Fase</th><th>Refer&ecirc;ncia Cliente</th><th>Qtd. Pe&ccedil;As NF</th><th>Observa&ccedil;&atilde;o OB</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th>"
         strHtml = strHtml & "</tr>"
 
         For lngI = 1 To lngTotalValido

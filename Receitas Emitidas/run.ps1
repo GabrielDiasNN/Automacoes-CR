@@ -16,6 +16,7 @@
 #   5  — Timeout aguardando conclusão VBA
 #   6  — VBA reportou falha ou erro fatal
 #   7  — Workbook bloqueado (somente leitura)
+#   8  — Falha de compilacao VBA (preflight)
 # ==============================================================================
 
 [CmdletBinding()]
@@ -81,6 +82,84 @@ function Exit-WithCode {
     exit $Code
 }
 
+function Test-VbaProjectCompiles {
+    param(
+        [object]$ExcelApp,
+        [object]$Workbook
+    )
+
+    try {
+        $Workbook.Activate() | Out-Null
+    }
+    catch {
+        Write-Log "Preflight VBA: nao foi possivel ativar workbook para compilacao preventiva. Seguindo execucao. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
+
+    $vbe = $null
+    try {
+        $vbe = $ExcelApp.VBE
+    }
+    catch {
+        Write-Log "Preflight VBA: VBE indisponivel (possivel bloqueio de acesso programatico). Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
+
+    if ($null -eq $vbe) {
+        Write-Log "Preflight VBA: VBE retornou nulo. Seguindo sem compilacao preventiva." -Lvl "INFO"
+        return $true
+    }
+
+    $commandBars = $null
+    try {
+        $commandBars = $vbe.CommandBars
+    }
+    catch {
+        Write-Log "Preflight VBA: CommandBars do VBE indisponivel. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
+
+    if ($null -eq $commandBars) {
+        Write-Log "Preflight VBA: CommandBars retornou nulo. Seguindo sem compilacao preventiva." -Lvl "WARN"
+        return $true
+    }
+
+    $compileControl = $null
+    try {
+        $compileControl = $commandBars.FindControl(1, 578)
+    }
+    catch {
+        Write-Log "Preflight VBA: comando de compilacao inacessivel no ambiente atual. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
+        return $true
+    }
+
+    if ($null -eq $compileControl) {
+        Write-Log "Preflight VBA: comando de compilacao nao encontrado; seguindo execucao." -Lvl "WARN"
+        return $true
+    }
+
+    try {
+        $compileControl.Execute()
+        Write-Log "Preflight VBA: compilacao concluida com sucesso."
+        return $true
+    }
+    catch {
+        $compileMessage = $_.Exception.Message
+        $isGenericVbeInteropFailure = (
+            $compileMessage -match "Unexpected HRESULT" -or
+            $compileMessage -match "call to a COM component"
+        )
+
+        if ($isGenericVbeInteropFailure) {
+            Write-Log "Preflight VBA: VBE retornou HRESULT generico ao compilar. Seguindo sem bloquear a execucao. Detalhe: $compileMessage" -Lvl "WARN"
+            return $true
+        }
+
+        Write-Log "Preflight VBA: falha de compilacao detectada: $compileMessage" -Lvl "ERRO"
+        return $false
+    }
+}
+
 # ============================================================
 if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
     Invoke-LogRotation -LogPath $LogFile -KeepDays 15
@@ -127,6 +206,11 @@ try {
         Exit-WithCode 7 "Workbook aberto em modo somente leitura. Possivel bloqueio: $ExcelPath"
     }
 
+    Write-Log "Preflight VBA: validando compilacao antes de executar macro..."
+    if (-not (Test-VbaProjectCompiles -ExcelApp $excel -Workbook $wb)) {
+        Exit-WithCode 8 "Compilacao VBA invalida. Corrija os erros no VBE antes de executar."
+    }
+
     # Capturar tamanho inicial do log VBA (baseline)
     $initialLogSize = 0
     if (Test-Path $VbaLogFile) {
@@ -134,14 +218,58 @@ try {
     }
     Write-Log "Monitoramento VBA ativo. LogVBAInicial=$initialLogSize bytes"
 
-    # Executar macro
+    # Executar macro com fallback de nome qualificado para reduzir falhas de resolucao no COM
     Write-Log "Executando macro: $MacroName [ExecId=$ExecId]"
-    try {
-        $excel.Run($MacroName, $ExecId) | Out-Null
+    $macroCandidates = @(
+        $MacroName,
+        "modReceitasEmitidas.$MacroName",
+        "'Controle de Receitas Emitidas.xlsm'!$MacroName",
+        "'Controle de Receitas Emitidas.xlsm'!modReceitasEmitidas.$MacroName"
+    )
+
+    $macroInvoked = $false
+    $macroLastError = ""
+
+    foreach ($macroCandidate in $macroCandidates) {
+        try {
+            $excel.Run($macroCandidate, $ExecId) | Out-Null
+            if ($macroCandidate -ne $MacroName) {
+                Write-Log "Macro executada via fallback qualificado: $macroCandidate" -Lvl "WARN"
+            }
+            $macroInvoked = $true
+            break
+        }
+        catch {
+            $macroLastError = $_.ToString()
+            Write-Log "Falha na chamada COM da macro '$macroCandidate': $macroLastError" -Lvl "WARN"
+        }
     }
-    catch {
-        Write-Log "Falha na execucao da macro (COM): $_" -Lvl "ERRO"
-        # A macro pode ter lançado erro mas o VBA pode ter gravado no log — prosseguir com timeout
+
+    if (-not $macroInvoked) {
+        # Verificar se VBA ja registrou conclusao no log antes de abortar
+        $jaTemFim = $false
+        if (Test-Path $VbaLogFile) {
+            try {
+                $logSnap = Get-Content $VbaLogFile -Raw -Encoding UTF8 -ErrorAction Stop
+                $novoConteudo = if ($logSnap.Length -gt $initialLogSize) { $logSnap.Substring([int]$initialLogSize) } else { "" }
+                $jaTemFim = $novoConteudo -match "FIM DO PROCESSO\."
+            }
+            catch {}
+        }
+
+        if (-not $jaTemFim) {
+            $isMacroUnavailable = (
+                $macroLastError -match "(?i)cannot run the macro|macro.*not available|macros?.*disabled|n.o .poss.vel executar a macro|n.o est. dispon.vel|macros?.*desabilitad"
+            )
+
+            if ($isMacroUnavailable) {
+                Exit-WithCode 4 "Macro inacessivel no Excel (possivel indisponibilidade/desabilitacao). Detalhe: $macroLastError"
+            }
+
+            Exit-WithCode 4 "Falha ao invocar macro em todas as variantes de nome. Detalhe: $macroLastError"
+        }
+
+        Write-Log "Falha COM na invocacao da macro, mas VBA ja registrou FIM DO PROCESSO no log. Continuando monitoramento." -Lvl "WARN"
     }
 
     # Monitorar VBA log por conclusão

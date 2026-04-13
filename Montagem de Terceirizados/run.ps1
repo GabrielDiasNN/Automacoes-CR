@@ -161,7 +161,18 @@ function Test-VbaProjectCompiles {
         return $true
     }
     catch {
-        Write-Log "Preflight VBA: falha de compilacao detectada: $($_.Exception.Message)" -Lvl "ERRO"
+        $compileMessage = $_.Exception.Message
+        $isGenericVbeInteropFailure = (
+            $compileMessage -match "Unexpected HRESULT" -or
+            $compileMessage -match "call to a COM component"
+        )
+
+        if ($isGenericVbeInteropFailure) {
+            Write-Log "Preflight VBA: VBE retornou HRESULT generico ao compilar. Seguindo sem bloquear a execucao. Detalhe: $compileMessage" -Lvl "WARN"
+            return $true
+        }
+
+        Write-Log "Preflight VBA: falha de compilacao detectada: $compileMessage" -Lvl "ERRO"
         return $false
     }
 }
@@ -244,12 +255,47 @@ try {
 
     Write-Log "Executando macro: $MacroName [ModoRobo=True | ExecId=$ExecId]"
     $macroRunInvocationFailed = $false
-    try {
-        $excel.Run($MacroName, $true, $ExecId) | Out-Null
+    $macroCandidates = @(
+        $MacroName,
+        "modMain.$MacroName",
+        "'Validador_Notas_Montagem.xlsm'!$MacroName",
+        "'Validador_Notas_Montagem.xlsm'!modMain.$MacroName"
+    )
+
+    $macroInvoked = $false
+    $macroLastError = ""
+
+    foreach ($macroCandidate in $macroCandidates) {
+        try {
+            $excel.Run($macroCandidate, $true, $ExecId) | Out-Null
+            if ($macroCandidate -ne $MacroName) {
+                Write-Log "Macro executada via fallback qualificado: $macroCandidate" -Lvl "WARN"
+            }
+            $macroInvoked = $true
+            break
+        }
+        catch {
+            $macroLastError = $_.ToString()
+            Write-Log "Falha na chamada COM da macro '$macroCandidate': $macroLastError" -Lvl "WARN"
+        }
     }
-    catch {
-        Write-Log "Falha na chamada COM da macro: $_" -Lvl "WARN"
-        $macroRunInvocationFailed = $true
+
+    if (-not $macroInvoked) {
+        Start-Sleep -Milliseconds 700
+        $sizeAfterMacroCall = (Get-Item $VbaLogFile).Length
+        if ($sizeAfterMacroCall -le $initialLogSize) {
+            $isMacroUnavailable = (
+                $macroLastError -match "(?i)cannot run the macro|macro.*not available|macros?.*disabled|n.o .poss.vel executar a macro|n.o est. dispon.vel|macros?.*desabilitad"
+            )
+
+            if ($isMacroUnavailable) {
+                Exit-WithCode 4 "Macro inacessivel no Excel (possivel indisponibilidade/desabilitacao). Detalhe: $macroLastError"
+            }
+
+            Exit-WithCode 8 "Macro nao iniciou no VBA (sem novas linhas de log). Detalhe COM: $macroLastError"
+        }
+
+        Write-Log "Falha COM na invocacao da macro, mas VBA ja registrou atividade no log. Continuando monitoramento." -Lvl "WARN"
     }
 
     if ($macroRunInvocationFailed) {
