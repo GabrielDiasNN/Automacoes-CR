@@ -1,0 +1,70 @@
+#!/usr/bin/env sh
+set -eu
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+VERBS_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PowerShellApprovedVerbs.ps1"
+PTBR_SCRIPT_PATH="$REPO_ROOT/Tools/Test-VbaPtBrGovernance.ps1"
+SKILLS_SCRIPT_PATH="$REPO_ROOT/Tools/Test-SkillsGovernance.ps1"
+
+if command -v pwsh >/dev/null 2>&1; then
+  PS_BIN="pwsh"
+elif command -v powershell >/dev/null 2>&1; then
+  PS_BIN="powershell"
+else
+  echo "[ERRO] PowerShell nao encontrado. Commit bloqueado."
+  exit 1
+fi
+
+if [ -f "$VERBS_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VERBS_SCRIPT_PATH"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    exit $rc
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $VERBS_SCRIPT_PATH"
+fi
+
+if [ -f "$PTBR_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PTBR_SCRIPT_PATH" -BasePath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    exit $rc
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $PTBR_SCRIPT_PATH"
+fi
+
+if [ -f "$SKILLS_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SKILLS_SCRIPT_PATH" -BasePath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    exit $rc
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $SKILLS_SCRIPT_PATH"
+fi
+
+DRIFT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-VbaDrift.ps1"
+if [ -f "$DRIFT_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$DRIFT_SCRIPT_PATH" -RootPath "$REPO_ROOT" -StagedOnly
+  rc=$?
+  if [ $rc -eq 1 ]; then
+    exit 1
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $DRIFT_SCRIPT_PATH"
+fi
+
+LOGCONF_SCRIPT_PATH="$REPO_ROOT/Tools/Test-LogConformidade.ps1"
+if [ -f "$LOGCONF_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$LOGCONF_SCRIPT_PATH" -RootPath "$REPO_ROOT" -StagedOnly
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    exit $rc
+  fi
+else
+  echo "[WARN] Script de validacao nao encontrado: $LOGCONF_SCRIPT_PATH"
+fi
+
+exit 0

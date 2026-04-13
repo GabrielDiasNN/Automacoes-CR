@@ -23,15 +23,23 @@ End Function
 ' HASH / IDENTIDADE
 ' ====================================================================================
 Public Function GerarHashDJB2(ByVal strTexto As String) As String
-    Dim lngI    As Long
-    Dim lngHash As Long
-    
-    lngHash = 5381
+    Dim lngI As Long
+    Dim lngCode As Long
+    Dim dblHash As Double
+    Dim dblModulo As Double
+
+    dblModulo = 2147483647#
+    dblHash = 5381#
     For lngI = 1 To Len(strTexto)
-        lngHash = ((lngHash * 33) + Asc(Mid$(strTexto, lngI, 1))) And &H7FFFFFFF
+        lngCode = AscW(Mid$(strTexto, lngI, 1))
+        If lngCode < 0 Then lngCode = lngCode + 65536
+
+        dblHash = (dblHash * 33#) + CDbl(lngCode)
+        dblHash = dblHash - (Fix(dblHash / dblModulo) * dblModulo)
+        If dblHash < 0# Then dblHash = dblHash + dblModulo
     Next lngI
-    
-    GerarHashDJB2 = Hex$(lngHash)
+
+    GerarHashDJB2 = Hex$(CLng(dblHash))
 End Function
 
 ' ====================================================================================
@@ -57,4 +65,4 @@ Public Function WorksheetExists(ByVal strName As String) As Boolean
     Set objWs = ThisWorkbook.Worksheets(strName)
     WorksheetExists = (Not objWs Is Nothing)
     On Error GoTo 0
-End Function
+End Function

@@ -1,0 +1,11 @@
+# Excel workbooks are binary artifacts and should not be normalized by line endings
+*.xlsm binary
+
+# Keep VBA source and scripts as text with LF-normalized diffs in git
+*.bas text eol=lf
+*.cls text eol=lf
+*.vbs text eol=lf
+*.ps1 text eol=lf
+*.bat text eol=lf
+*.json text eol=lf
+*.md text eol=lf

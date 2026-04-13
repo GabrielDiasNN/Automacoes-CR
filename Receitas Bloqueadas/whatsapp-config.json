@@ -39,7 +39,10 @@
     }
   },
   "idempotency": {
-    "enabled": true
+    "enabled": true,
+    "retryFailedAfterMs": 0,
+    "keepSuccessForMs": 604800000,
+    "keepFailureForMs": 604800000
   },
   "terminal": {
     "showQr": true

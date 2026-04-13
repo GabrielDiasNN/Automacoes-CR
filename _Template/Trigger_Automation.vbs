@@ -8,7 +8,7 @@ Option Explicit
 ' =============================================================================
 
 Dim excelApp, wb, fso, wsh
-Dim scriptStart, logPath
+Dim scriptStart, logPath, execId
 
 ' ========== CONFIGURACOES DO MODULO ==========
 ' Edite os caminhos abaixo conforme o modulo
@@ -38,9 +38,14 @@ Function AgoraBR()
               Right("0" & Hour(d), 2) & ":" & Right("0" & Minute(d), 2) & ":" & Right("0" & Second(d), 2)
 End Function
 
-Function ElapsedSeconds()
-    Dim diff: diff = Timer - scriptStart
+Function SecondsSince(ByVal startTimer)
+    Dim diff: diff = Timer - startTimer
     If diff < 0 Then diff = diff + 86400
+    SecondsSince = diff
+End Function
+
+Function ElapsedSeconds()
+    Dim diff: diff = SecondsSince(scriptStart)
     ElapsedSeconds = Replace(FormatNumber(diff, 2, -1, 0, 0), ",", ".")
 End Function
 
@@ -89,10 +94,10 @@ Sub LimparObjetosExcel()
 End Sub
 
 Sub EncerrarComErro(exitCode, msg)
-    WriteLog "ERRO", msg & " | elapsedSec=" & ElapsedSeconds()
+    WriteLog "ERROR", msg & " | elapsedSec=" & ElapsedSeconds()
     Call LimparObjetosExcel()
     WriteLog "INFO", "FIM - VBScript com erro. ExitCode=" & exitCode & " | elapsedSec=" & ElapsedSeconds()
-    WriteLog "INFO", "========================================================="
+    WriteLog "INFO", "================================================================================"
     WScript.Quit exitCode
 End Sub
 
@@ -116,8 +121,14 @@ End Function
 ' =============================================================================
 ' INICIO DA EXECUCAO
 ' =============================================================================
-WriteLog "INFO", "========================================================="
-WriteLog "INFO", "INICIO - Execucao via VBScript (Template Universal)"
+If WScript.Arguments.Count > 0 Then
+    execId = WScript.Arguments(0)
+Else
+    execId = "MANUAL_" & GerarExecId()
+End If
+
+WriteLog "INFO", "================================================================================"
+WriteLog "INFO", "INICIO - Execucao via VBScript (Template Universal) [ExecId=" & execId & "]"
 WriteLog "INFO", "Workbook=" & excelPath
 
 If Not fso.FileExists(excelPath) Then Call EncerrarComErro(1, "Arquivo Excel nao encontrado: " & excelPath)
@@ -164,36 +175,36 @@ On Error GoTo 0
 ' BLOCO: MONITORAMENTO DE TIMEOUT (OPCIONAL)
 ' ---------------------------------------------------------------------------
 Dim encontrouFim, sucessoVBA
-encontrouFim = True 
+encontrouFim = True
 sucessoVBA = True
 
 If USE_TIMEOUT_MONITOR Then
     encontrouFim = False
     sucessoVBA = False
     WriteLog "INFO", "Aguardando conclusao via leitura de Log (Max Timeout: " & maxTimeoutSeconds & "s)..."
-    
+
     Dim tempoRegInicio, ultimaChecagem, tamanhoAnterior, tamanhoAtual
     Dim streamArq, conteudoNovo, ver
-    
+
     tempoRegInicio = Timer
     ultimaChecagem = Timer
     tamanhoAnterior = tamanhoInicialLogVBA
-    
-    Do While Not encontrouFim And (Timer - tempoRegInicio) < maxTimeoutSeconds
+
+    Do While Not encontrouFim And SecondsSince(tempoRegInicio) < maxTimeoutSeconds
         On Error Resume Next
         tamanhoAtual = fso.GetFile(vbaLogPath).Size
-        
+
         If tamanhoAtual > tamanhoAnterior Then
             ultimaChecagem = Timer
             Set streamArq = fso.OpenTextFile(vbaLogPath, 1)
             Dim conteudoCompleto: conteudoCompleto = streamArq.ReadAll
             streamArq.Close
-            
+
             If Len(conteudoCompleto) > tamanhoInicialLogVBA Then
                 conteudoNovo = Mid(conteudoCompleto, tamanhoInicialLogVBA + 1)
                 ver = ExtrairVersao(conteudoNovo)
                 If ver <> "" And ver <> roboVersao Then roboVersao = ver
-                
+
                 If InStr(conteudoNovo, "FIM DO PROCESSO.") > 0 Then
                     encontrouFim = True
                     sucessoVBA = (InStr(conteudoNovo, "Resultado=Sucesso") > 0)
@@ -236,19 +247,18 @@ On Error Goto 0
 ' ---------------------------------------------------------------------------
 If POST_EXECUTION_BAT <> "" Then
     If fso.FileExists(POST_EXECUTION_BAT) Then
-        Dim wshTemp, cmdExe, execId, comandoBat, batExitCode
+        Dim wshTemp, cmdExe, comandoBat, batExitCode
         Set wshTemp = CreateObject("WScript.Shell")
         cmdExe = wshTemp.ExpandEnvironmentStrings("%ComSpec%")
         If cmdExe = "" Or cmdExe = "%ComSpec%" Then cmdExe = "cmd.exe"
-        
-        execId = GerarExecId()
+
         comandoBat = """" & cmdExe & """ /c """"" & POST_EXECUTION_BAT & """ """ & execId & """ AUTO"""
-        
+
         WriteLog "INFO", "Disparando BAT pos-execucao. ExecId=" & execId & " | Comando=" & comandoBat
-        
+
         wshTemp.CurrentDirectory = fso.GetParentFolderName(POST_EXECUTION_BAT)
         batExitCode = wshTemp.Run(comandoBat, 0, True)
-        
+
         If batExitCode <> 0 Then WriteLog "WARN", "Script pos-execucao retornou ExitCode " & batExitCode
         WriteLog "INFO", "Pos-execucao concluida."
         Set wshTemp = Nothing
@@ -258,5 +268,5 @@ If POST_EXECUTION_BAT <> "" Then
 End If
 
 WriteLog "INFO", "FIM - VBScript com sucesso. elapsedSec=" & ElapsedSeconds()
-WriteLog "INFO", "========================================================="
+WriteLog "INFO", "================================================================================"
 WScript.Quit 0

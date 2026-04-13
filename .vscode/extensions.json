@@ -1,0 +1,38 @@
+{
+    "recommendations": [
+        "github.copilot-chat",
+        "github.vscode-pull-request-github",
+        "eamodio.gitlens",
+        "sbroenne.excel-mcp",
+        "ms-vscode.powershell",
+        "sbroenne.excel-mcp",
+        "GrapeCity.gc-excelviewer",
+        "local-smart.excel-live-server",
+        "powerquery.vscode-powerquery",
+        "ms-vscode.powershell",
+        "davidanson.vscode-markdownlint"
+    ],
+    "unwantedRecommendations": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.autopep8",
+        "ms-python.isort",
+        "ms-python.vscode-python-envs",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "editorconfig.editorconfig",
+        "ms-vscode.cpptools",
+        "golang.go",
+        "docker.docker",
+        "ms-azuretools.vscode-containers",
+        "ms-azuretools.vscode-docker",
+        "formulahendry.code-runner",
+        "ritwickdey.liveserver",
+        "google.geminicodeassist",
+        "github.remotehub",
+        "grapecity.gc-excelviewer",
+        "ms-vscode.remote-explorer",
+        "ms-vscode.remote-repositories",
+        "ms-vscode-remote.remote-wsl"
+    ]
+}

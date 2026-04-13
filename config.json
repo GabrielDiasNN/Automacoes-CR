@@ -3,6 +3,13 @@
     "logDirectory": "C:\\Automacoes\\Logs",
     "basePath": "C:\\Automacoes",
     "checkIntervalSeconds": 20,
+    "dashboard": {
+      "enabled": true,
+      "mode": "modern",
+      "refreshSeconds": 60,
+      "historyLimitPerTask": 50,
+      "scheduleDelayToleranceMinutes": 5
+    },
     "exitCodeMap": {
       "0": "Sucesso",
       "1": "Workbook não encontrado",
@@ -10,44 +17,99 @@
       "3": "Falha ao abrir workbook",
       "4": "Falha na macro",
       "5": "Timeout VBA",
-      "6": "VBA reportou falha ou erro fatal"
+      "6": "VBA reportou falha ou erro fatal",
+      "7": "Workbook bloqueado (aberto em modo somente leitura)",
+      "8": "Falha ao preparar/ler log de monitoramento",
+      "23": "Bridge de WhatsApp em cooldown de retry (envio adiado)",
+      "40": "Execucao concorrente bloqueada no bridge de WhatsApp"
     }
   },
   "tasks": [
     {
       "name": "Receitas Bloqueadas",
-      "scriptPath": "C:\\Automacoes\\Receitas Bloqueadas\\Trigger_Automation.vbs",
+      "scriptPath": "C:\\Automacoes\\Receitas Bloqueadas\\run.ps1",
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
       "schedule": {
-        "daysOfWeek": [1, 2, 3, 4, 5],
-        "hours": [7, 15],
-        "minutes": [30]
+        "daysOfWeek": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours": [
+          7,
+          15
+        ],
+        "minutes": [
+          30
+        ]
       }
     },
     {
       "name": "Montagem Terceirizados",
-      "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\Trigger_Automation.vbs",
+      "scriptPath": "C:\\Automacoes\\Montagem de Terceirizados\\run.ps1",
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
       "schedule": {
-        "daysOfWeek": [1, 2, 3, 4, 5],
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
         "hours": [],
-        "minutes": [0]
+        "minutes": [
+          0
+        ]
       }
     },
     {
       "name": "Receitas Emitidas",
-      "scriptPath": "C:\\Automacoes\\Receitas Emitidas\\Trigger_Automation.vbs",
+      "scriptPath": "C:\\Automacoes\\Receitas Emitidas\\run.ps1",
       "enabled": true,
       "preventOverlap": true,
       "waitForExit": false,
       "schedule": {
-        "daysOfWeek": [5],
-        "hours": [7],
-        "minutes": [5]
+        "daysOfWeek": [
+          5
+        ],
+        "hours": [
+          7
+        ],
+        "minutes": [
+          5
+        ]
+      }
+    },
+    {
+      "name": "Retencao Arquivos",
+      "scriptPath": "C:\\Automacoes\\Tools\\AplicarPoliticaRetencao.ps1",
+      "enabled": true,
+      "preventOverlap": true,
+      "waitForExit": false,
+      "schedule": {
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "hours": [
+          2
+        ],
+        "minutes": [
+          20
+        ]
       }
     }
   ]

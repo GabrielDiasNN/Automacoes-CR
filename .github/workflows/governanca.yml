@@ -1,0 +1,165 @@
+name: Governanca
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/skills/**'
+      - '.githooks/pre-commit'
+      - 'Tools/**'
+      - 'README.md'
+      - '**/*.bas'
+      - '**/*.cls'
+      - '**/*.frm'
+      - '**/*.ps1'
+      - '**/*.psm1'
+      - '**/*.psd1'
+  push:
+    branches:
+      - main
+      - 'escalar/**'
+    paths:
+      - '.github/workflows/**'
+      - '.github/skills/**'
+      - '.githooks/pre-commit'
+      - 'Tools/**'
+      - 'README.md'
+      - '**/*.bas'
+      - '**/*.cls'
+      - '**/*.frm'
+      - '**/*.ps1'
+      - '**/*.psm1'
+      - '**/*.psd1'
+
+jobs:
+  preparar-diff:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    outputs:
+      changed_files_json: ${{ steps.changed-files.outputs.changed_files_json }}
+      has_vba_targets: ${{ steps.changed-files.outputs.has_vba_targets }}
+      has_log_targets: ${{ steps.changed-files.outputs.has_log_targets }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Coletar arquivos alterados
+        id: changed-files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $baseSha = ''
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            $baseSha = '${{ github.event.pull_request.base.sha }}'
+          }
+          else {
+            $baseSha = '${{ github.event.before }}'
+          }
+
+          if ([string]::IsNullOrWhiteSpace($baseSha) -or $baseSha -eq '0000000000000000000000000000000000000000') {
+            $changedFiles = @(git diff-tree --no-commit-id --name-only -r HEAD)
+          }
+          else {
+            $changedFiles = @(git diff --name-only --diff-filter=ACMR $baseSha HEAD)
+          }
+
+          $changedFiles = @($changedFiles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          $changedFilesJson = if ($changedFiles.Count -gt 0) {
+            ConvertTo-Json -InputObject @($changedFiles) -Compress
+          }
+          else {
+            '[]'
+          }
+
+          $hasVbaTargets = if ($changedFiles | Where-Object { $_ -match '\.(bas|cls)$' }) { 'true' } else { 'false' }
+          $hasLogTargets = if ($changedFiles | Where-Object { $_ -match '\.(ps1|psm1|bas|cls)$' -and $_ -notmatch '^(Audit/|Tools/)' }) { 'true' } else { 'false' }
+
+          "changed_files_json<<EOF" >> $env:GITHUB_OUTPUT
+          $changedFilesJson >> $env:GITHUB_OUTPUT
+          "EOF" >> $env:GITHUB_OUTPUT
+          "has_vba_targets=$hasVbaTargets" >> $env:GITHUB_OUTPUT
+          "has_log_targets=$hasLogTargets" >> $env:GITHUB_OUTPUT
+
+          Write-Host ("Arquivos alterados detectados: " + $changedFiles.Count)
+          foreach ($file in $changedFiles) {
+            Write-Host (" - " + $file)
+          }
+
+  governanca:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: preparar-diff
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar governanca agregada
+        shell: pwsh
+        run: |
+          ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}" -OnlyGovernance -SkipVbaComponentTypes
+
+  drift-vba:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: preparar-diff
+    if: needs.preparar-diff.outputs.has_vba_targets == 'true'
+    env:
+      CHANGED_FILES_JSON: ${{ needs.preparar-diff.outputs.changed_files_json }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar drift VBA nos arquivos alterados
+        shell: pwsh
+        run: |
+          $changedFiles = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:CHANGED_FILES_JSON) -and $env:CHANGED_FILES_JSON -ne '[]') {
+            $changedFiles = @($env:CHANGED_FILES_JSON | ConvertFrom-Json)
+          }
+
+          ./Tools/Test-VbaDrift.ps1 -RootPath "${{ github.workspace }}" -Paths $changedFiles
+
+  conformidade-log:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: preparar-diff
+    if: needs.preparar-diff.outputs.has_log_targets == 'true'
+    env:
+      CHANGED_FILES_JSON: ${{ needs.preparar-diff.outputs.changed_files_json }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar conformidade de log nos arquivos alterados
+        shell: pwsh
+        run: |
+          $changedFiles = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:CHANGED_FILES_JSON) -and $env:CHANGED_FILES_JSON -ne '[]') {
+            $changedFiles = @($env:CHANGED_FILES_JSON | ConvertFrom-Json)
+          }
+
+          ./Tools/Test-LogConformidade.ps1 -RootPath "${{ github.workspace }}" -Paths $changedFiles
+
+  markdown:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: preparar-diff
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar markdown em dry run
+        shell: pwsh
+        run: |
+          ./Tools/Fix-MarkdownStyle.ps1 -DryRun

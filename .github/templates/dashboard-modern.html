@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="__REFRESH_SECONDS__">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Monitor Automacoes</title>
+    <style>
+        :root {
+            --bg: #f6f8fb;
+            --panel: #ffffff;
+            --panel-alt: #f1f5f9;
+            --text: #0f172a;
+            --muted: #475569;
+            --line: #dbe3ee;
+            --brand: #0a66c2;
+            --brand-2: #0d4f8b;
+            --ok: #0f8a5f;
+            --warn: #ad6a00;
+            --err: #b42318;
+            --run: #0a66c2;
+            --off: #64748b;
+            --radius: 14px;
+            --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "Trebuchet MS", Tahoma, sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at top right, #dceeff 0%, #f6f8fb 34%, #eef3f8 100%);
+            padding: 16px;
+        }
+
+        .container {
+            max-width: 1520px;
+            margin: 0 auto;
+        }
+
+        .hero {
+            background: linear-gradient(120deg, #0a66c2 0%, #114f86 55%, #0b385f 100%);
+            color: #fff;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .hero h1 {
+            margin: 0 0 6px;
+            font-size: 1.6rem;
+        }
+
+        .hero .meta {
+            font-size: 0.88rem;
+            opacity: 0.95;
+        }
+
+        .ops-banner {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            padding: 8px 10px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1.15fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .card {
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            padding: 16px;
+            overflow: auto;
+        }
+
+        .card h2 {
+            margin: 0 0 12px;
+            font-size: 1rem;
+            color: #0b385f;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            min-width: 740px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid var(--line);
+            vertical-align: middle;
+        }
+
+        th {
+            font-size: 0.78rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--muted);
+            background: var(--panel-alt);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .r {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .mono {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 0.78rem;
+        }
+
+        .badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 0.74rem;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+
+        .badge.ok {
+            color: var(--ok);
+            border-color: #9ad9bf;
+            background: #ecfdf4;
+        }
+
+        .badge.warn {
+            color: var(--warn);
+            border-color: #ffd08a;
+            background: #fff8e6;
+        }
+
+        .badge.err {
+            color: var(--err);
+            border-color: #f2b8b5;
+            background: #fef3f2;
+        }
+
+        .badge.running {
+            color: var(--run);
+            border-color: #9bc5f5;
+            background: #ecf4ff;
+        }
+
+        .badge.off {
+            color: var(--off);
+            border-color: #ccd5e0;
+            background: #f3f6fa;
+        }
+
+        .ops-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .btn {
+            border: 1px solid #b8cbe0;
+            background: #fff;
+            color: #103a5e;
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.16s ease;
+            white-space: nowrap;
+        }
+
+        .btn:hover {
+            background: #e9f3ff;
+            border-color: #85b7eb;
+        }
+
+        .btn.primary {
+            background: var(--brand);
+            color: #fff;
+            border-color: var(--brand-2);
+        }
+
+        .btn.warn {
+            background: #fff7eb;
+            color: #8a4b00;
+            border-color: #f3c382;
+        }
+
+        .btn.danger {
+            background: #fef3f2;
+            color: #9b1c1c;
+            border-color: #efb2ac;
+        }
+
+        .btn[disabled] {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn:focus-visible {
+            outline: 3px solid #103a5e;
+            outline-offset: 2px;
+        }
+
+        .stack {
+            display: grid;
+            gap: 16px;
+        }
+
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .filter.active {
+            background: var(--brand);
+            color: #fff;
+            border-color: var(--brand);
+        }
+
+        .status-line {
+            margin-top: 10px;
+            min-height: 24px;
+            padding: 7px 10px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            background: #eef5ff;
+            border: 1px solid #c7ddf5;
+            color: #15426d;
+        }
+
+        .cfg-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .cfg-card {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px;
+            background: #fbfdff;
+        }
+
+        .cfg-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .cfg-row {
+            font-size: 0.82rem;
+            margin: 2px 0;
+            color: #1e293b;
+        }
+
+        .cfg-row span {
+            color: var(--muted);
+            margin-right: 6px;
+        }
+
+        @media (max-width: 1120px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 10px;
+            }
+
+            .hero h1 {
+                font-size: 1.35rem;
+            }
+
+            table {
+                min-width: 620px;
+            }
+
+            .cfg-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <script id="dashboard-data" type="application/json">__DASHBOARD_JSON__</script>
+    <div class="container">
+        <section class="hero">
+            <h1>Painel Operacional de Automacoes</h1>
+            <div class="meta" id="header-meta">Instanciando painel...</div>
+            <div class="ops-banner" id="ops-banner">Operacoes ainda nao inicializadas.</div>
+        </section>
+
+        <div class="grid-2">
+            <section class="card">
+                <h2>Saude e Metricas</h2>
+                <table>
+                    <tbody id="health-body"></tbody>
+                </table>
+                <h2 style="margin-top:16px;">Metricas (janela: <span id="metrics-window">-</span> min)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Contador</th>
+                            <th class="r">Acumulado</th>
+                            <th class="r">Janela</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metrics-body"></tbody>
+                </table>
+            </section>
+            <section class="card stack">
+                <div>
+                    <h2>Acoes Globais</h2>
+                    <div class="ops-wrap">
+                        <button class="btn primary" data-global-op="refresh-dashboard"
+                            aria-label="Atualizar painel operacional">Atualizar painel</button>
+                        <button class="btn" data-global-op="set-refresh"
+                            aria-label="Configurar intervalo de atualizacao do painel">Atualizar refresh</button>
+                        <button class="btn warn" data-global-op="dry-run-all"
+                            aria-label="Executar dry run global das automacoes">Dry Run geral</button>
+                    </div>
+                </div>
+                <div>
+                    <h2>Alertas Operacionais</h2>
+                    <table>
+                        <tbody id="alerts-body"></tbody>
+                    </table>
+                </div>
+                <div class="status-line" id="status-line">Pronto.</div>
+            </section>
+        </div>
+
+        <section class="card">
+            <h2>Automacoes</h2>
+            <div class="filters" id="filters">
+                <button class="btn filter active" data-filter="all" aria-label="Filtrar tarefas: todas">Todas</button>
+                <button class="btn filter" data-filter="running"
+                    aria-label="Filtrar tarefas: executando">Executando</button>
+                <button class="btn filter" data-filter="issues"
+                    aria-label="Filtrar tarefas: falhas e avisos">Falhas/Avisos</button>
+                <button class="btn filter" data-filter="ok" aria-label="Filtrar tarefas: sucesso">Sucesso</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Status</th>
+                        <th>Agendamento</th>
+                        <th class="r">Exit</th>
+                        <th>Ultima</th>
+                        <th>Proxima</th>
+                        <th class="r">Duracao</th>
+                        <th>Operacoes</th>
+                    </tr>
+                </thead>
+                <tbody id="tasks-body"></tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>Configuracoes das Automacoes</h2>
+            <div class="cfg-grid" id="config-grid"></div>
+        </section>
+
+        <section class="card">
+            <h2>Historico Recente</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tarefa</th>
+                        <th>Status</th>
+                        <th class="r">Exit</th>
+                        <th>Fim</th>
+                        <th class="r">Duracao</th>
+                    </tr>
+                </thead>
+                <tbody id="history-body"></tbody>
+            </table>
+        </section>
+    </div>
+
+    <script>
+        (function () {
+            const dataElement = document.getElementById('dashboard-data');
+            if (!dataElement) return;
+            let state = null;
+            try { state = JSON.parse((dataElement.textContent || '').trim()); }
+            catch (err) {
+                console.error('Falha no parse do dashboard', err);
+                return;
+            }
+
+            const statusLine = document.getElementById('status-line');
+            const API_BASE = (state.operations && state.operations.apiBaseUrl) ? state.operations.apiBaseUrl : 'http://localhost:8765';
+            const API_ENDPOINT = (state.operations && state.operations.endpoint) ? state.operations.endpoint : '/api/operations';
+            const API_TOKEN = (state.operations && state.operations.token) ? state.operations.token : '';
+
+            function setStatus(message, level) {
+                statusLine.textContent = message;
+                statusLine.style.borderColor = level === 'err' ? '#efb2ac' : (level === 'warn' ? '#f3c382' : '#c7ddf5');
+                statusLine.style.background = level === 'err' ? '#fef3f2' : (level === 'warn' ? '#fff7eb' : '#eef5ff');
+                statusLine.style.color = level === 'err' ? '#9b1c1c' : (level === 'warn' ? '#8a4b00' : '#15426d');
+            }
+
+            function formatDateTime(iso) {
+                if (!iso) return '-';
+                const d = new Date(iso);
+                if (isNaN(d)) return '-';
+                return d.toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                }).replace(',', '');
+            }
+
+            function formatShortDateTime(iso) {
+                if (!iso) return '-';
+                const d = new Date(iso);
+                if (isNaN(d)) return '-';
+                return d.toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit',
+                    hour: '2-digit', minute: '2-digit'
+                }).replace(',', '');
+            }
+
+            function escapeHtml(value) {
+                if (typeof value !== 'string') return value;
+                return value.replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/\"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            async function callOperation(action, payload) {
+                const requestBody = { action: action, payload: payload || {}, requestedAt: new Date().toISOString() };
+                try {
+                    const response = await fetch(API_BASE + API_ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Monitor-Token': API_TOKEN
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+                    if (!response.ok) {
+                        const bodyText = await response.text();
+                        throw new Error('HTTP ' + response.status + ': ' + bodyText);
+                    }
+                    const result = await response.json();
+                    setStatus('Operacao enviada: ' + action + '. Retorno: ' + (result.status || 'OK'), 'ok');
+                    return result;
+                }
+                catch (err) {
+                    setStatus('Falha ao acionar API local (' + action + '). ' + err.message, 'warn');
+                    return null;
+                }
+            }
+
+            function getTaskStatus(task) {
+                if (task.isRunning) return { category: 'running', text: 'Executando', badgeClass: 'running', exitText: '-' };
+                if (task.lastResult) {
+                    if (task.lastResult.exitCode === 0) return { category: 'ok', text: 'OK', badgeClass: 'ok', exitText: String(task.lastResult.exitCode) };
+                    if ([7, 23, 40].indexOf(task.lastResult.exitCode) >= 0) return { category: 'issues', text: 'Aviso', badgeClass: 'warn', exitText: String(task.lastResult.exitCode) };
+                    return { category: 'issues', text: 'Erro', badgeClass: 'err', exitText: String(task.lastResult.exitCode) };
+                }
+                if (!task.enabled) return { category: 'all', text: 'Desabilitado', badgeClass: 'off', exitText: '-' };
+                return { category: 'ok', text: 'Aguardando', badgeClass: 'off', exitText: '-' };
+            }
+
+            function renderTasks(filter) {
+                const rows = [];
+                (state.tasks || []).forEach(function (task) {
+                    const status = getTaskStatus(task);
+                    if (filter !== 'all' && status.category !== filter) return;
+                    const lastText = task.isRunning && task.runningSince ? ('desde ' + formatShortDateTime(task.runningSince)) : (task.lastResult ? formatShortDateTime(task.lastResult.finishedAt) : '-');
+                    const nextText = task.nextRun ? formatShortDateTime(task.nextRun) : '-';
+                    const toggleLabel = task.enabled ? 'Desabilitar' : 'Habilitar';
+                    const toggleClass = task.enabled ? 'danger' : 'primary';
+
+                    rows.push(
+                        '<tr>' +
+                        '<td>' + escapeHtml(task.name) + '</td>' +
+                        '<td><span class="badge ' + status.badgeClass + '">' + status.text + '</span></td>' +
+                        '<td class="mono">' + escapeHtml(task.scheduleText || '-') + '</td>' +
+                        '<td class="r">' + status.exitText + '</td>' +
+                        '<td>' + lastText + '</td>' +
+                        '<td>' + nextText + '</td>' +
+                        '<td class="r">' + (task.avgDurationSec || 0) + 's / ' + (task.p95DurationSec || 0) + 's</td>' +
+                        '<td><div class="ops-wrap">' +
+                        '<button class="btn primary task-op" data-action="run-now" data-task="' + escapeHtml(task.name) + '" aria-label="Executar agora a tarefa ' + escapeHtml(task.name) + '">Run Now</button>' +
+                        '<button class="btn warn task-op" data-action="dry-run" data-task="' + escapeHtml(task.name) + '" aria-label="Executar dry run da tarefa ' + escapeHtml(task.name) + '">Dry Run</button>' +
+                        '<button class="btn ' + toggleClass + ' task-op" data-action="toggle-enabled" data-task="' + escapeHtml(task.name) + '" aria-label="Alterar estado da tarefa ' + escapeHtml(task.name) + '">' + toggleLabel + '</button>' +
+                        '<button class="btn task-op" data-action="open-logs" data-task="' + escapeHtml(task.name) + '" aria-label="Abrir caminho de logs da tarefa ' + escapeHtml(task.name) + '">Logs</button>' +
+                        '<button class="btn task-op" data-action="set-schedule" data-task="' + escapeHtml(task.name) + '" aria-label="Editar agenda da tarefa ' + escapeHtml(task.name) + '">Agenda</button>' +
+                        '</div></td>' +
+                        '</tr>'
+                    );
+                });
+                document.getElementById('tasks-body').innerHTML = rows.join('');
+            }
+
+            function renderConfigs() {
+                const html = [];
+                (state.tasks || []).forEach(function (task) {
+                    const cfg = task.config || {};
+                    const schedule = cfg.schedule || { daysOfWeek: [], hours: [], minutes: [] };
+                    html.push(
+                        '<article class="cfg-card">' +
+                        '<div class="cfg-title">' + escapeHtml(task.name) + '</div>' +
+                        '<div class="cfg-row"><span>Script:</span><code class="mono">' + escapeHtml(cfg.scriptPath || '-') + '</code></div>' +
+                        '<div class="cfg-row"><span>Enabled:</span>' + String(task.enabled) + '</div>' +
+                        '<div class="cfg-row"><span>PreventOverlap:</span>' + String(cfg.preventOverlap) + '</div>' +
+                        '<div class="cfg-row"><span>WaitForExit:</span>' + String(cfg.waitForExit) + '</div>' +
+                        '<div class="cfg-row"><span>daysOfWeek:</span>' + escapeHtml(JSON.stringify(schedule.daysOfWeek || [])) + '</div>' +
+                        '<div class="cfg-row"><span>hours:</span>' + escapeHtml(JSON.stringify(schedule.hours || [])) + '</div>' +
+                        '<div class="cfg-row"><span>minutes:</span>' + escapeHtml(JSON.stringify(schedule.minutes || [])) + '</div>' +
+                        '<div class="ops-wrap" style="margin-top:8px;">' +
+                        '<button class="btn task-op" data-action="set-schedule" data-task="' + escapeHtml(task.name) + '" aria-label="Editar agenda da tarefa ' + escapeHtml(task.name) + '">Editar agenda</button>' +
+                        '<button class="btn task-op" data-action="set-refresh" data-task="' + escapeHtml(task.name) + '" aria-label="Atualizar refresh do dashboard a partir da tarefa ' + escapeHtml(task.name) + '">Refresh dashboard</button>' +
+                        '</div>' +
+                        '</article>'
+                    );
+                });
+                document.getElementById('config-grid').innerHTML = html.join('');
+            }
+
+            function renderMetrics() {
+                document.getElementById('metrics-window').textContent = String(state.windowMinutes || 0);
+                const labels = {
+                    TasksTriggered: 'Disparos',
+                    TasksCompleted: 'Concluidas',
+                    TasksFinishedNonZero: 'Exit Nao-Zero',
+                    TasksFinishedWarn: 'Avisos Operacionais',
+                    ExitCode7ReadOnly: 'Exit 7 (Bloqueado)',
+                    ExitCode23Cooldown: 'Exit 23 (Cooldown)',
+                    ExitCode40Concurrent: 'Exit 40 (Concorrente)',
+                    TasksSkippedOverlap: 'Skips Sobreposicao',
+                    ConfigReloadSuccess: 'Reloads Config OK',
+                    ConfigReloadFailure: 'Reloads Config Falha'
+                };
+                const rows = [];
+                Object.keys(labels).forEach(function (key) {
+                    const c = state.metrics && state.metrics.cumulative ? (state.metrics.cumulative[key] || 0) : 0;
+                    const w = state.metrics && state.metrics.window ? (state.metrics.window[key] || 0) : 0;
+                    rows.push('<tr><td>' + labels[key] + '</td><td class="r">' + c + '</td><td class="r">' + w + '</td></tr>');
+                });
+                document.getElementById('metrics-body').innerHTML = rows.join('');
+            }
+
+            function renderHealth() {
+                const health = state.health || {};
+                document.getElementById('health-body').innerHTML = [
+                    '<tr><th>Schema</th><td>' + escapeHtml(state.dashboardSchemaVersion || 'n/a') + '</td></tr>',
+                    '<tr><th>Monitor</th><td>v' + escapeHtml(state.monitorVersion || '-') + '</td></tr>',
+                    '<tr><th>Heartbeat</th><td>' + formatDateTime(health.lastHeartbeatAt) + '</td></tr>',
+                    '<tr><th>Ultimo reload</th><td>' + formatDateTime(health.lastConfigReloadAt) + '</td></tr>',
+                    '<tr><th>Status reload</th><td>' + escapeHtml(health.lastConfigReloadStatus || '-') + '</td></tr>',
+                    '<tr><th>Loop errors</th><td>' + String(health.mainLoopConsecutiveErr || 0) + '</td></tr>',
+                    '<tr><th>Intervalo check</th><td>' + String(health.checkIntervalSeconds || 20) + 's</td></tr>'
+                ].join('');
+            }
+
+            function renderAlerts() {
+                const alerts = state.alerts || [];
+                if (alerts.length === 0) {
+                    document.getElementById('alerts-body').innerHTML = '<tr><td><span class="badge ok">OK</span></td><td>Sem alertas operacionais ativos.</td></tr>';
+                    return;
+                }
+                document.getElementById('alerts-body').innerHTML = alerts.map(function (a) {
+                    const badge = a.severity === 'WARN' ? 'warn' : 'err';
+                    return '<tr><td style="width:90px;"><span class="badge ' + badge + '">' + escapeHtml(a.severity) + '</span></td><td>' + escapeHtml(a.message) + '</td></tr>';
+                }).join('');
+            }
+
+            function renderHistory() {
+                const history = state.history || [];
+                if (history.length === 0) {
+                    document.getElementById('history-body').innerHTML = '<tr><td colspan="5">Sem historico recente.</td></tr>';
+                    return;
+                }
+                document.getElementById('history-body').innerHTML = history.map(function (h) {
+                    const css = String(h.status || 'ERRO').toLowerCase();
+                    return '<tr>' +
+                        '<td>' + escapeHtml(h.taskName) + '</td>' +
+                        '<td><span class="badge ' + css + '">' + escapeHtml(h.status) + '</span></td>' +
+                        '<td class="r">' + String(h.exitCode) + '</td>' +
+                        '<td>' + formatShortDateTime(h.finishedAt) + '</td>' +
+                        '<td class="r">' + String(h.durationSeconds || 0) + 's</td>' +
+                        '</tr>';
+                }).join('');
+            }
+
+            function bindEvents() {
+                document.querySelectorAll('.filter').forEach(function (btn) {
+                    btn.addEventListener('click', function (ev) {
+                        document.querySelectorAll('.filter').forEach(function (node) { node.classList.remove('active'); });
+                        ev.currentTarget.classList.add('active');
+                        const filter = ev.currentTarget.getAttribute('data-filter') || 'all';
+                        renderTasks(filter);
+                    });
+                });
+
+                document.querySelectorAll('.task-op').forEach(function (btn) {
+                    btn.addEventListener('click', async function (ev) {
+                        const node = ev.currentTarget;
+                        const action = node.getAttribute('data-action');
+                        const taskName = node.getAttribute('data-task');
+                        const payload = { taskName: taskName };
+
+                        if (action === 'set-schedule') {
+                            const rawDays = window.prompt('daysOfWeek (CSV 0-6). Ex.: 1,2,3,4,5', '1,2,3,4,5');
+                            const rawHours = window.prompt('hours (CSV 0-23, vazio = sem filtro). Ex.: 7,15', '');
+                            const rawMinutes = window.prompt('minutes (CSV 0-59, obrigatorio). Ex.: 0 ou 30', '0');
+
+                            if (rawMinutes === null) {
+                                setStatus('Operacao cancelada pelo usuario.', 'warn');
+                                return;
+                            }
+
+                            function parseCsvToIntList(raw) {
+                                if (!raw || !raw.trim()) return [];
+                                return raw.split(',').map(function (item) { return Number(item.trim()); })
+                                    .filter(function (item) { return Number.isInteger(item); });
+                            }
+
+                            payload.daysOfWeek = parseCsvToIntList(rawDays || '');
+                            payload.hours = parseCsvToIntList(rawHours || '');
+                            payload.minutes = parseCsvToIntList(rawMinutes || '');
+                        }
+
+                        if (action === 'set-refresh') {
+                            const rawRefresh = window.prompt('Novo refreshSeconds (10-3600):', String((state.dashboard && state.dashboard.refreshSeconds) ? state.dashboard.refreshSeconds : 60));
+                            if (rawRefresh === null) {
+                                setStatus('Operacao cancelada pelo usuario.', 'warn');
+                                return;
+                            }
+                            payload.refreshSeconds = Number(rawRefresh);
+                        }
+
+                        node.disabled = true;
+                        setStatus('Enviando operacao ' + action + ' para ' + taskName + ' ...', 'ok');
+                        await callOperation(action, payload);
+                        node.disabled = false;
+                    });
+                });
+
+                document.querySelectorAll('[data-global-op]').forEach(function (btn) {
+                    btn.addEventListener('click', async function (ev) {
+                        const action = ev.currentTarget.getAttribute('data-global-op');
+                        const payload = {};
+
+                        if (action === 'set-refresh') {
+                            const rawRefresh = window.prompt('Novo refreshSeconds (10-3600):', String((state.dashboard && state.dashboard.refreshSeconds) ? state.dashboard.refreshSeconds : 60));
+                            if (rawRefresh === null) {
+                                setStatus('Operacao cancelada pelo usuario.', 'warn');
+                                return;
+                            }
+                            payload.refreshSeconds = Number(rawRefresh);
+                        }
+
+                        setStatus('Executando acao global: ' + action, 'ok');
+                        await callOperation(action, payload);
+                    });
+                });
+            }
+
+            document.getElementById('header-meta').innerHTML =
+                'Versao ' + escapeHtml(state.monitorVersion || '-') +
+                ' | Iniciado: ' + formatDateTime(state.startedAt) +
+                ' | Atualizado: ' + formatDateTime(state.generatedAt) +
+                ' | Tarefas: ' + String(state.taskCount || 0) +
+                ' | Em execucao: ' + String(state.runningTasks || 0);
+
+            const ops = state.operations || {};
+            document.getElementById('ops-banner').textContent =
+                'Operacoes: ' + (ops.apiMode || 'n/a') +
+                ' | Endpoint: ' + (ops.apiBaseUrl || 'http://localhost:8765') + (ops.endpoint || '/api/operations') +
+                ' | Estado: ' + (ops.statusMessage || 'Sem status');
+
+            renderHealth();
+            renderMetrics();
+            renderAlerts();
+            renderHistory();
+            renderTasks('all');
+            renderConfigs();
+            bindEvents();
+        })();
+    </script>
+</body>
+
+</html>

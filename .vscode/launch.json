@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Monitor (RunOnce + DryRun)",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}\\MonitorAutomacoes.ps1",
+            "args": [
+                "-RunOnce",
+                "-DryRun"
+            ],
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": true
+        },
+        {
+            "name": "Debug SetupMonitor",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}\\SetupMonitor.ps1",
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": true
+        }
+    ]
+}

@@ -17,16 +17,16 @@ const BOOTSTRAP_LOG_FILE = path.join(__dirname, 'sendWhatsApp-bootstrap.log');
 function _bootstrapTs() {
   const d = new Date();
   const p = (n, w) => String(n).padStart(w || 2, '0');
-  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 function _bootstrapLog(msg) {
-  const linha = `[${_bootstrapTs()}] [NODE] ${msg}\r\n`;
-  try { fs.appendFileSync(BOOTSTRAP_LOG_FILE, linha, 'utf8'); } catch (_) {}
+  const linha = `[${_bootstrapTs()}] [NODE] [INFO] ${msg}\r\n`;
+  try { fs.appendFileSync(BOOTSTRAP_LOG_FILE, linha, 'utf8'); } catch (_) { }
   try {
     const main = path.join(__dirname, 'ReceitasBloqueadas.txt');
     fs.appendFileSync(main, linha, 'utf8');
-  } catch (_) {}
+  } catch (_) { }
 }
 
 _bootstrapLog(`=== BOOTSTRAP NODE INICIADO ===`);
@@ -47,6 +47,7 @@ const EXIT_CODES = {
   FINAL_ERROR: 20,
   REAUTH_REQUIRED: 21,
   INVALID_CONFIG: 22,
+  COOLDOWN_ACTIVE: 23,
   FATAL: 99
 };
 
@@ -88,8 +89,10 @@ function appendLine(filePath, line) {
   fs.appendFileSync(filePath, line, { encoding: 'utf8' });
 }
 
-function escreverLog(origem, mensagem) {
-  const linha = `[${agoraBR()}] [${origem}] ${mensagem}\r\n`;
+function log(nivel, mensagem) {
+  let execId;
+  try { execId = EXEC_ID || 'sem-exec-id'; } catch (_) { execId = 'sem-exec-id'; }
+  const linha = `[${agoraBR()}] [NODE] [${nivel}] [ExecId:${execId}] ${mensagem}\r\n`;
 
   try {
     appendLine(getActiveLogFile(), linha);
@@ -98,16 +101,20 @@ function escreverLog(origem, mensagem) {
       appendLine(BOOTSTRAP_LOG_FILE, linha);
       appendLine(
         BOOTSTRAP_LOG_FILE,
-        `[${agoraBR()}] [NODE] AVISO: Falha ao gravar no log principal (${erroLogPrincipal.message}).\r\n`
+        `[${agoraBR()}] [NODE] [WARN] [ExecId:${execId}] AVISO: Falha ao gravar no log principal (${erroLogPrincipal.message}).\r\n`
       );
-    } catch (_) {}
+    } catch (_) { }
   }
 
   try {
     if (process.stdout && process.stdout.isTTY) {
       process.stdout.write(linha);
     }
-  } catch (_) {}
+  } catch (_) { }
+}
+
+function escreverLog(origem, mensagem) {
+  log('INFO', mensagem);
 }
 
 function formatarErro(erro) {
@@ -119,10 +126,10 @@ function formatarErro(erro) {
     const exitCode = erro.exitCode ? ` | exitCode=${erro.exitCode}` : '';
     const stack = erro.stack
       ? erro.stack
-          .split('\n')
-          .slice(1, 4)
-          .map(l => l.trim())
-          .join(' | ')
+        .split('\n')
+        .slice(1, 4)
+        .map(l => l.trim())
+        .join(' | ')
       : '';
 
     return `${name}: ${message}${exitCode}${stack ? ` | stack=${stack}` : ''}`;
@@ -270,7 +277,10 @@ function carregarConfig() {
       }
     },
     idempotency: {
-      enabled: userConfig?.idempotency?.enabled ?? true
+      enabled: userConfig?.idempotency?.enabled ?? true,
+      retryFailedAfterMs: userConfig?.idempotency?.retryFailedAfterMs ?? 0,
+      keepSuccessForMs: userConfig?.idempotency?.keepSuccessForMs ?? 30 * 24 * 60 * 60 * 1000,
+      keepFailureForMs: userConfig?.idempotency?.keepFailureForMs ?? 7 * 24 * 60 * 60 * 1000
     },
     terminal: {
       showQr: userConfig?.terminal?.showQr ?? true
@@ -296,6 +306,9 @@ function carregarConfig() {
   validarInteiroPositivo('retry.sendSettleMs', config.retry.sendSettleMs, 0);
   validarInteiroPositivo('retry.finalWaitMs', config.retry.finalWaitMs, 0);
   validarInteiroPositivo('retry.initTimeoutMs', config.retry.initTimeoutMs, 1000);
+  validarInteiroPositivo('idempotency.retryFailedAfterMs', config.idempotency.retryFailedAfterMs, 0);
+  validarInteiroPositivo('idempotency.keepSuccessForMs', config.idempotency.keepSuccessForMs, 0);
+  validarInteiroPositivo('idempotency.keepFailureForMs', config.idempotency.keepFailureForMs, 0);
 
   ensureDir(config.paths.authDir);
   ensureParentDir(config.paths.stateFile);
@@ -310,7 +323,7 @@ try {
   _bootstrapLog(`Config carregada com sucesso. logFile=${CONFIG.paths.logFile}`);
 } catch (erro) {
   _bootstrapLog(`ERRO FATAL AO CARREGAR CONFIG: ${String(erro?.message || erro)}`);
-  escreverLog('NODE', `ERRO FATAL AO CARREGAR CONFIG: ${formatarErro(erro)}`);
+  log('ERROR', `ERRO FATAL AO CARREGAR CONFIG: ${formatarErro(erro)}`);
   process.exit(erro.exitCode || EXIT_CODES.FATAL);
 }
 
@@ -318,7 +331,8 @@ const EXEC_ID = (process.argv[2] || '').trim();
 const RUNTIME_MODE = String(process.argv[3] || '').trim().toUpperCase();
 
 // Log imediato com contexto de execução (antes de qualquer operação de negócio)
-escreverLog('NODE', `=== INICIO EXECUCAO NODE ===`);
+log('INFO', '================================================================================');
+log('INFO', 'INICIO EXECUCAO NODE');
 escreverLog('NODE', `pid=${process.pid} | node=${process.version} | cwd=${process.cwd()}`);
 escreverLog('NODE', `argv=${JSON.stringify(process.argv)}`);
 escreverLog('NODE', `EXEC_ID=${EXEC_ID || 'sem-exec-id'} | RUNTIME_MODE=${RUNTIME_MODE || 'AUTO'}`);
@@ -331,12 +345,12 @@ function getSessionDir() {
   return path.join(CONFIG.paths.authDir, `session-${CONFIG.auth.clientId}`);
 }
 
-function countFilesRecursively(dirPath, limit = 2000) {
+function countFilesRecursively(dirPath, limit = 2000, maxDepth = 8) {
   let count = 0;
-  const queue = [dirPath];
+  const queue = [{ p: dirPath, depth: 0 }];
 
   while (queue.length > 0) {
-    const atual = queue.shift();
+    const { p: atual, depth } = queue.shift();
     let entries = [];
 
     try {
@@ -348,7 +362,7 @@ function countFilesRecursively(dirPath, limit = 2000) {
     for (const entry of entries) {
       const full = path.join(atual, entry.name);
       if (entry.isDirectory()) {
-        queue.push(full);
+        if (depth < maxDepth) queue.push({ p: full, depth: depth + 1 });
       } else {
         count += 1;
         if (count >= limit) return count;
@@ -405,23 +419,144 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function garantirEstruturaEstado(estado) {
+  if (!estado || typeof estado !== 'object') {
+    return {
+      sentExecutions: {},
+      failedDeliveries: {}
+    };
+  }
+
+  if (!estado.sentExecutions || typeof estado.sentExecutions !== 'object') {
+    estado.sentExecutions = {};
+  }
+
+  if (!estado.failedDeliveries || typeof estado.failedDeliveries !== 'object') {
+    estado.failedDeliveries = {};
+  }
+
+  return estado;
+}
+
+function limparEstadoExpirado(estado) {
+  let alterado = false;
+  const agoraMs = Date.now();
+
+  const keepSuccessForMs = CONFIG.idempotency.keepSuccessForMs;
+  const keepFailureForMs = CONFIG.idempotency.keepFailureForMs;
+
+  if (keepSuccessForMs > 0) {
+    for (const [key, info] of Object.entries(estado.sentExecutions)) {
+      const epoch = Number(info?.sentAtEpochMs || 0);
+      if (epoch > 0 && (agoraMs - epoch) > keepSuccessForMs) {
+        delete estado.sentExecutions[key];
+        alterado = true;
+      }
+    }
+  }
+
+  if (keepFailureForMs > 0) {
+    for (const [key, info] of Object.entries(estado.failedDeliveries)) {
+      const epoch = Number(info?.lastFailureEpochMs || 0);
+      if (epoch > 0 && (agoraMs - epoch) > keepFailureForMs) {
+        delete estado.failedDeliveries[key];
+        alterado = true;
+      }
+    }
+  }
+
+  return alterado;
+}
+
 function carregarEstado() {
   try {
-    if (!fs.existsSync(CONFIG.paths.stateFile)) return { sentExecutions: {} };
+    if (!fs.existsSync(CONFIG.paths.stateFile)) {
+      return {
+        sentExecutions: {},
+        failedDeliveries: {}
+      };
+    }
+
     const raw = fs.readFileSync(CONFIG.paths.stateFile, 'utf8');
     const parsed = safeJsonParse(raw, CONFIG.paths.stateFile);
-    if (!parsed.sentExecutions || typeof parsed.sentExecutions !== 'object') {
-      parsed.sentExecutions = {};
-    }
-    return parsed;
+    return garantirEstruturaEstado(parsed);
   } catch (erro) {
-    escreverLog('NODE', `AVISO: Falha ao carregar stateFile. Reiniciando estrutura. Detalhe=${formatarErro(erro)}`);
-    return { sentExecutions: {} };
+    log('WARN', `AVISO: Falha ao carregar stateFile. Reiniciando estrutura. Detalhe=${formatarErro(erro)}`);
+    return {
+      sentExecutions: {},
+      failedDeliveries: {}
+    };
   }
 }
 
 function salvarEstado(estado) {
-  fs.writeFileSync(CONFIG.paths.stateFile, JSON.stringify(estado, null, 2), 'utf8');
+  const payload = JSON.stringify(estado, null, 2);
+  const tempPath = `${CONFIG.paths.stateFile}.tmp`;
+
+  try {
+    fs.writeFileSync(tempPath, payload, 'utf8');
+    fs.renameSync(tempPath, CONFIG.paths.stateFile);
+  } catch (erro) {
+    try {
+      if (fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
+    } catch (_) { }
+    throw erro;
+  }
+}
+
+function carregarEstadoComHousekeeping() {
+  const estado = carregarEstado();
+  const alterado = limparEstadoExpirado(estado);
+  if (alterado) {
+    salvarEstado(estado);
+  }
+  return estado;
+}
+
+function obterFalhaAnterior(entregaKey) {
+  const estado = carregarEstadoComHousekeeping();
+  return estado.failedDeliveries[entregaKey] || null;
+}
+
+function registrarFalhaEntrega(execKey, entregaKey, erro, exitCode, tentativaAtual, maxTentativas) {
+  const estado = carregarEstadoComHousekeeping();
+  const agoraMs = Date.now();
+  const falhaAnterior = estado.failedDeliveries[entregaKey] || {};
+
+  const proximaTentativaMs = CONFIG.idempotency.retryFailedAfterMs > 0
+    ? (agoraMs + CONFIG.idempotency.retryFailedAfterMs)
+    : 0;
+
+  estado.failedDeliveries[entregaKey] = {
+    firstFailureEpochMs: Number(falhaAnterior.firstFailureEpochMs || agoraMs),
+    firstFailureAtBR: falhaAnterior.firstFailureAtBR || agoraBR(),
+    lastFailureEpochMs: agoraMs,
+    lastFailureAtBR: agoraBR(),
+    consecutiveFailures: Number(falhaAnterior.consecutiveFailures || 0) + 1,
+    lastExecId: EXEC_ID || null,
+    lastExecKey: execKey,
+    lastExitCode: exitCode || EXIT_CODES.FINAL_ERROR,
+    lastAttempt: tentativaAtual,
+    maxAttempts: maxTentativas,
+    targetType: CONFIG.target.type,
+    targetLabel: getTargetLabel(),
+    attachment: CONFIG.message.sendAttachment ? CONFIG.paths.attachmentPath : null,
+    lastError: formatarErro(erro),
+    nextRetryAtEpochMs: proximaTentativaMs,
+    nextRetryAtBR: proximaTentativaMs > 0 ? new Date(proximaTentativaMs).toLocaleString('pt-BR') : null
+  };
+
+  salvarEstado(estado);
+}
+
+function limparFalhaEntrega(entregaKey) {
+  const estado = carregarEstadoComHousekeeping();
+  if (estado.failedDeliveries[entregaKey]) {
+    delete estado.failedDeliveries[entregaKey];
+    salvarEstado(estado);
+  }
 }
 
 function obterAssinaturaArquivo(filePath) {
@@ -547,14 +682,36 @@ function montarExecKey() {
   return partes.join('|');
 }
 
+function montarEntregaKey() {
+  const partes = [
+    CONFIG.target.type,
+    getTargetLabel()
+  ];
+
+  if (CONFIG.message.sendAttachment) {
+    const sig = obterAssinaturaArquivo(CONFIG.paths.attachmentPath);
+    partes.push(String(sig.size), String(sig.mtimeMs));
+  } else {
+    partes.push('sem-anexo');
+  }
+
+  const mentions = getMentionPhones();
+  if (mentions.length > 0) {
+    partes.push(`mentions=${mentions.join(',')}`);
+  }
+
+  return partes.join('|');
+}
+
 function jaEnviado(execKey) {
-  const estado = carregarEstado();
+  const estado = carregarEstadoComHousekeeping();
   return !!estado.sentExecutions[execKey];
 }
 
 function marcarEnviado(execKey, messageId, destino) {
-  const estado = carregarEstado();
+  const estado = carregarEstadoComHousekeeping();
   estado.sentExecutions[execKey] = {
+    sentAtEpochMs: Date.now(),
     sentAtBR: agoraBR(),
     execId: EXEC_ID || null,
     targetType: CONFIG.target.type,
@@ -601,12 +758,12 @@ async function tentarResolverPorNumero(client, phone) {
         };
       }
 
-      escreverLog('NODE', `getNumberId retornou vazio para ${numero}.`);
+      log('WARN', `getNumberId retornou vazio para ${numero}.`);
     } catch (erro) {
-      escreverLog('NODE', `AVISO: getNumberId falhou para ${numero}: ${formatarErro(erro)}`);
+      log('WARN', `AVISO: getNumberId falhou para ${numero}: ${formatarErro(erro)}`);
     }
   } else {
-    escreverLog('NODE', 'AVISO: client.getNumberId não está disponível nesta versão.');
+    log('WARN', 'AVISO: client.getNumberId não está disponível nesta versão.');
   }
 
   try {
@@ -631,9 +788,9 @@ async function tentarResolverPorNumero(client, phone) {
       };
     }
 
-    escreverLog('NODE', `Contato ${numero} não encontrado em getChats.`);
+    log('WARN', `Contato ${numero} não encontrado em getChats.`);
   } catch (erro) {
-    escreverLog('NODE', `AVISO: getChats falhou ao procurar ${numero}: ${formatarErro(erro)}`);
+    log('WARN', `AVISO: getChats falhou ao procurar ${numero}: ${formatarErro(erro)}`);
   }
 
   return null;
@@ -645,7 +802,7 @@ async function validarDestinoContato(client, chatId, label, source, allowUnvalid
 
   try {
     if (typeof client.getChatById !== 'function') {
-      escreverLog('NODE', 'AVISO: client.getChatById não está disponível nesta versão.');
+      log('WARN', 'AVISO: client.getChatById não está disponível nesta versão.');
       return {
         chatId: serialized,
         targetLabel: label || extrairNumero(serialized),
@@ -663,10 +820,10 @@ async function validarDestinoContato(client, chatId, label, source, allowUnvalid
       source: `${source} + getChatById`
     };
   } catch (erro) {
-    escreverLog('NODE', `AVISO: getChatById falhou para ${serialized}: ${formatarErro(erro)}`);
+    log('WARN', `AVISO: getChatById falhou para ${serialized}: ${formatarErro(erro)}`);
 
     if (allowUnvalidated && validarChatId(serialized)) {
-      escreverLog('NODE', `Prosseguindo com chatId não validado: ${serialized}`);
+      log('WARN', `Prosseguindo com chatId não validado: ${serialized}`);
       return {
         chatId: serialized,
         targetLabel: label || extrairNumero(serialized),
@@ -827,7 +984,7 @@ async function destroyClientSilently(client) {
   try {
     await client.destroy();
   } catch (erro) {
-    escreverLog('NODE', `AVISO: Falha ao destruir client: ${formatarErro(erro)}`);
+    log('WARN', `AVISO: Falha ao destruir client: ${formatarErro(erro)}`);
   }
 }
 
@@ -863,10 +1020,7 @@ async function enviarUmaTentativa(tentativa) {
       if (qrAbortRequested || finalizado) return;
       qrAbortRequested = true;
 
-      escreverLog(
-        'NODE',
-        `REAUTH: QR recebido em modo silencioso (FORCE_VISIBLE=NAO). Sessao expirada/invalida. Abortando tentativa ${tentativa} imediatamente com ExitCode=${EXIT_CODES.REAUTH_REQUIRED}.`
-      );
+      log('WARN', `REAUTH: QR recebido em modo silencioso (FORCE_VISIBLE=NAO). Sessao expirada/invalida. Abortando tentativa ${tentativa} imediatamente com ExitCode=${EXIT_CODES.REAUTH_REQUIRED}.`);
 
       await falha(
         new ManagedError(
@@ -928,10 +1082,7 @@ async function enviarUmaTentativa(tentativa) {
         if (!FORCE_VISIBLE) {
           // Modo silencioso: QR = sessão inválida → abortar IMEDIATAMENTE
           // Não aguardar os 5 retries do qrMaxRetries (evita ~5 min de espera inútil)
-          escreverLog(
-            'NODE',
-            `REAUTH: Modo silencioso (headless) e QR recebido no count=${qrCount}. Abortando imediatamente.`
-          );
+          log('WARN', `REAUTH: Modo silencioso (headless) e QR recebido no count=${qrCount}. Abortando imediatamente.`);
           void abortarPorReautenticacao();
           return;
         }
@@ -942,7 +1093,7 @@ async function enviarUmaTentativa(tentativa) {
             qrcode.generate(qr, { small: true });
             escreverLog('NODE', `QR Code exibido no terminal. count=${qrCount}`);
           } catch (erro) {
-            escreverLog('NODE', `AVISO: Falha ao renderizar QR no terminal: ${formatarErro(erro)}`);
+            log('WARN', `AVISO: Falha ao renderizar QR no terminal: ${formatarErro(erro)}`);
           }
         } else {
           escreverLog('NODE', `QR nao exibido (terminal.showQr=false). count=${qrCount}`);
@@ -1017,7 +1168,7 @@ async function enviarUmaTentativa(tentativa) {
 
           escreverLog('NODE', `Aguardando ${CONFIG.retry.sendSettleMs / 1000}s para estabilização do envio (settle).`);
           await sleep(CONFIG.retry.sendSettleMs);
-          
+
           escreverLog('NODE', `Aguardando mais ${CONFIG.retry.finalWaitMs / 1000}s para sincronização multi-device antes de encerrar.`);
           await sleep(CONFIG.retry.finalWaitMs);
 
@@ -1048,7 +1199,7 @@ async function enviarUmaTentativa(tentativa) {
 async function shutdownWithLog(signal) {
   if (globalShutdownInProgress) return;
   globalShutdownInProgress = true;
-  escreverLog('NODE', `Sinal recebido: ${signal}. Encerrando processo.`);
+  log('WARN', `Sinal recebido: ${signal}. Encerrando processo.`);
   process.exit(EXIT_CODES.FATAL);
 }
 
@@ -1061,19 +1212,19 @@ process.on('SIGTERM', () => {
 });
 
 process.on('uncaughtException', erro => {
-  escreverLog('NODE', `UNCAUGHT_EXCEPTION: ${formatarErro(erro)}`);
+  log('ERROR', `UNCAUGHT_EXCEPTION: ${formatarErro(erro)}`);
   process.exit(erro?.exitCode || EXIT_CODES.FATAL);
 });
 
 process.on('unhandledRejection', motivo => {
-  escreverLog('NODE', `UNHANDLED_REJECTION: ${formatarErro(motivo)}`);
+  log('ERROR', `UNHANDLED_REJECTION: ${formatarErro(motivo)}`);
   process.exit(motivo?.exitCode || EXIT_CODES.FATAL);
 });
 
 (async () => {
   try {
     if (!CONFIG.app.enabled) {
-      escreverLog('NODE', 'AVISO: envio global desabilitado por configuração.');
+      log('WARN', 'AVISO: envio global desabilitado por configuração.');
       process.exit(EXIT_CODES.DISABLED);
     }
 
@@ -1092,7 +1243,7 @@ process.on('unhandledRejection', motivo => {
 
     if (CONFIG.message.sendAttachment) {
       if (!fs.existsSync(CONFIG.paths.attachmentPath)) {
-        escreverLog('NODE', `ERRO: Arquivo de anexo não encontrado: ${CONFIG.paths.attachmentPath}`);
+        log('ERROR', `ERRO: Arquivo de anexo não encontrado: ${CONFIG.paths.attachmentPath}`);
         process.exit(EXIT_CODES.MISSING_ATTACHMENT);
       }
 
@@ -1106,7 +1257,34 @@ process.on('unhandledRejection', motivo => {
     }
 
     const execKey = montarExecKey();
+    const entregaKey = montarEntregaKey();
     escreverLog('NODE', `Chave de idempotência: ${execKey}`);
+    escreverLog('NODE', `Chave de entrega: ${entregaKey}`);
+
+    if (CONFIG.idempotency.enabled) {
+      const falhaAnterior = obterFalhaAnterior(entregaKey);
+      if (falhaAnterior) {
+        escreverLog(
+          'NODE',
+          `Falha anterior registrada para a mesma entrega. lastFailureAt=${falhaAnterior.lastFailureAtBR || 'desconhecido'} | consecutiveFailures=${falhaAnterior.consecutiveFailures || 0} | nextRetryAt=${falhaAnterior.nextRetryAtBR || 'imediato'}`
+        );
+
+        const agoraMs = Date.now();
+        const nextRetryEpoch = Number(falhaAnterior.nextRetryAtEpochMs || 0);
+        if (nextRetryEpoch > agoraMs) {
+          const esperaMs = nextRetryEpoch - agoraMs;
+          escreverLog(
+            'NODE',
+            `Cooldown de retry ativo para esta entrega. Aguarde ${(esperaMs / 1000).toFixed(0)}s para nova tentativa.`
+          );
+          escreverLog(
+            'NODE',
+            `Encerrando sem novo envio para evitar duplicidade/race. ExitCode=${EXIT_CODES.COOLDOWN_ACTIVE}.`
+          );
+          process.exit(EXIT_CODES.COOLDOWN_ACTIVE);
+        }
+      }
+    }
 
     if (CONFIG.idempotency.enabled && jaEnviado(execKey)) {
       escreverLog('NODE', `Execução já enviada anteriormente. Ignorando reenvio. ExecKey=${execKey}`);
@@ -1122,6 +1300,7 @@ process.on('unhandledRejection', motivo => {
 
         if (CONFIG.idempotency.enabled) {
           marcarEnviado(execKey, messageId, destino);
+          limparFalhaEntrega(entregaKey);
         }
 
         escreverLog('NODE', 'Processo de envio finalizado com sucesso.');
@@ -1131,6 +1310,10 @@ process.on('unhandledRejection', motivo => {
         escreverLog('NODE', `Falha na tentativa ${tentativa}: ${formatarErro(erro)}`);
 
         if (erro?.exitCode === EXIT_CODES.REAUTH_REQUIRED) {
+          if (CONFIG.idempotency.enabled) {
+            registrarFalhaEntrega(execKey, entregaKey, erro, EXIT_CODES.REAUTH_REQUIRED, tentativa, maxAttempts);
+          }
+
           escreverLog(
             'NODE',
             'Reautenticação interativa necessária. Encerrando com código específico para o BAT relançar em modo visível.'
@@ -1157,6 +1340,11 @@ process.on('unhandledRejection', motivo => {
     }
 
     const finalCode = ultimoErro?.exitCode || EXIT_CODES.FINAL_ERROR;
+
+    if (CONFIG.idempotency.enabled) {
+      registrarFalhaEntrega(execKey, entregaKey, ultimoErro, finalCode, maxAttempts, maxAttempts);
+    }
+
     escreverLog(
       'NODE',
       `ERRO FINAL: envio não concluído após ${maxAttempts} tentativas. ExitCode=${finalCode}. Motivo: ${ultimoErro ? formatarErro(ultimoErro) : 'desconhecido'}`

@@ -1,0 +1,244 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Monitor: Dry Run",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\MonitorAutomacoes.ps1",
+                "-RunOnce",
+                "-DryRun"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Monitor: Run Once",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\MonitorAutomacoes.ps1",
+                "-RunOnce"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Monitor: Setup Startup Shortcut",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\SetupMonitor.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Audit: Export XLSM",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ExportarAuditoriaXlsm.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Receitas Bloqueadas: npm install",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "install"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}\\Receitas Bloqueadas"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Receitas Bloqueadas: enviar WhatsApp",
+            "type": "shell",
+            "command": "node",
+            "args": [
+                "sendWhatsApp.js"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}\\Receitas Bloqueadas"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Retencao: Dry Run",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\AplicarPoliticaRetencao.ps1",
+                "-DryRun"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Retencao: Executar",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\AplicarPoliticaRetencao.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Docs: Corrigir Markdown",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Fix-MarkdownStyle.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Docs: Corrigir Markdown (Dry Run)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Fix-MarkdownStyle.ps1",
+                "-DryRun"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Skills",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Test-SkillsGovernance.ps1"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca (Strict PT-BR)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance",
+                "-FailOnTermWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca (Strict HTML/CSS)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance",
+                "-FailOnHtmlCssWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca (Strict PT-BR + HTML/CSS)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance",
+                "-FailOnTermWarnings",
+                "-FailOnHtmlCssWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Dashboard Template (Strict)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Test-DashboardTemplate.ps1",
+                "-FailOnWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: VBA HTML Outlook (Strict)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Test-VbaHtmlConformidade.ps1",
+                "-FailOnWarnings"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}
