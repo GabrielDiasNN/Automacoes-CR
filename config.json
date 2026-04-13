@@ -3,6 +3,13 @@
     "logDirectory": "C:\\Automacoes\\Logs",
     "basePath": "C:\\Automacoes",
     "checkIntervalSeconds": 20,
+    "dashboard": {
+      "enabled": true,
+      "mode": "modern",
+      "refreshSeconds": 60,
+      "historyLimitPerTask": 50,
+      "scheduleDelayToleranceMinutes": 5
+    },
     "exitCodeMap": {
       "0": "Sucesso",
       "1": "Workbook não encontrado",

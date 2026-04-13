@@ -4,6 +4,7 @@
 *.txt
 *.xlsx
 *.xls
+Dashboard/
 
 # Ignorar arquivos temporários do Excel
 ~$*.xlsm

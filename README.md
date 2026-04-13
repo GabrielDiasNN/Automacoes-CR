@@ -65,6 +65,8 @@ graph TD
 - **Validação de Contrato**: O monitor valida caminhos absolutos, tipos booleanos e faixas numéricas de agenda (`daysOfWeek 0-6`, `hours 0-23`, `minutes 0-59`).
 - **Heartbeat Operacional**: O heartbeat consolida contadores acumulados e também métricas por janela de 1 hora (disparos, conclusões e não-zero).
 - **Snapshot de Métricas**: O monitor persiste `C:\Automacoes\Logs\Monitor_Metrics.json` com os blocos `cumulative` (acumulado) e `window` (janela operacional reiniciada a cada heartbeat), além de referência ao snapshot anterior para comparação entre reinícios.
+- **Estado Operacional do Dashboard**: O monitor também persiste `C:\Automacoes\Logs\dashboard-state.json` com saúde do monitor, status por tarefa, histórico curto, duração média/P95 e alertas operacionais.
+- **Dashboard HTML (oficial)**: o arquivo visual é publicado em `C:\Automacoes\Dashboard\dashboard.html` (não é mais gerado em `Logs`).
 - **Logs Consolidados**: Localizados em `C:\Automacoes\Logs\yyyy-MM_Monitor.log`.
 
 Modo seguro para validacao de startup/metricas (sem disparar tarefas):
@@ -84,6 +86,40 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\Automacoes\MonitorAutomac
 - `schedule.daysOfWeek`: filtro opcional de dias da semana (`0` a `6`).
 - `schedule.hours`: filtro opcional de horas (`0` a `23`). Quando vazio (`[]`), significa **sem filtro por hora**.
 - `schedule.minutes`: filtro obrigatório de minutos (`0` a `59`).
+
+### Dashboard Operacional (`settings.dashboard`)
+
+- `enabled`: habilita/desabilita a geração de `C:\Automacoes\Dashboard\dashboard.html` e `dashboard-state.json`.
+- `mode`: `modern` (visão expandida) ou `legacy` (visão clássica) para rollback rápido.
+- `refreshSeconds`: autoatualização do HTML (10 a 3600 segundos).
+- `historyLimitPerTask`: quantidade máxima de eventos mantidos por tarefa (1 a 500).
+- `scheduleDelayToleranceMinutes`: tolerância para alerta de atraso de disparo (1 a 120 minutos).
+
+Contrato de artefatos do dashboard:
+
+- Fonte canonica editavel: `.github/templates/dashboard-modern.html`.
+- Output derivado (nao editar manualmente): `C:\Automacoes\Dashboard\dashboard.html`.
+- Estado persistido: `C:\Automacoes\Logs\dashboard-state.json`.
+- Contingencia: se o template canonico estiver indisponivel, o monitor publica um fallback minimo de emergencia para preservar observabilidade.
+
+Exemplo:
+
+```json
+"settings": {
+  "dashboard": {
+    "enabled": true,
+    "mode": "modern",
+    "refreshSeconds": 60,
+    "historyLimitPerTask": 50,
+    "scheduleDelayToleranceMinutes": 5
+  }
+}
+```
+
+O modo `modern` exibe as seções adicionais de Saúde, Alertas e Histórico Recente, incluindo duas anomalias principais:
+
+- atraso de disparo em relação ao último horário previsto da agenda;
+- falhas consecutivas por tarefa (quando houver pelo menos 2 eventos `ERRO` seguidos).
 
 ### Auditoria de Arquivos XLSM
 
@@ -198,6 +234,34 @@ Padroniza formatação dos arquivos `.md` do repositório.
 ```powershell
 pwsh -File .\Tools\Fix-MarkdownStyle.ps1           # aplica correções
 pwsh -File .\Tools\Fix-MarkdownStyle.ps1 -DryRun   # lista sem alterar
+```
+
+### Validacao HTML/CSS (`Test-DashboardTemplate.ps1` e `Test-VbaHtmlConformidade.ps1`)
+
+Valida contratos de HTML/CSS para as duas superficies do projeto:
+
+- **Dashboard moderno** (`.github/templates/dashboard-modern.html`): placeholders obrigatorios, binding JSON, helper de escape e tokens CSS basicos.
+- **HTML de e-mail em VBA/Outlook**: padroes table-based, sinais de encode HTML, contrato adapter/composer e alertas de CSS potencialmente inseguro para Outlook.
+
+Execucao manual:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\Test-DashboardTemplate.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\Test-VbaHtmlConformidade.ps1
+```
+
+Ambos tambem sao executados pelo validador central:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\ValidarAutomacoes.ps1 -OnlyGovernance
+```
+
+Modo estrito opcional (alertas viram falha):
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\Test-DashboardTemplate.ps1 -FailOnWarnings
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\Test-VbaHtmlConformidade.ps1 -FailOnWarnings
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\Tools\ValidarAutomacoes.ps1 -OnlyGovernance -FailOnHtmlCssWarnings
 ```
 
 ### Biblioteca Compartilhada (`lib/`)

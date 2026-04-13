@@ -4,8 +4,12 @@ param(
     [string]$BasePath = "C:\Automacoes",
     [switch]$SkipGovernance,
     [switch]$SkipSkillsGovernance,
+    [switch]$SkipDashboardTemplateGovernance,
+    [switch]$SkipVbaHtmlGovernance,
     [switch]$SkipVbaComponentTypes,
+    [switch]$SkipSharedDependencies,
     [switch]$OnlyGovernance,
+    [switch]$FailOnHtmlCssWarnings,
     [switch]$FailOnTermWarnings
 )
 
@@ -87,6 +91,40 @@ function Invoke-SkillsGovernanceChecks {
 
     if ($exitCode -ne 0) {
         Write-Host ("[ERRO] Governanca de skills reprovada. Exit=" + $exitCode)
+    }
+
+    Write-Host ""
+    return $exitCode
+}
+
+function Invoke-SharedDependenciesChecks {
+    param(
+        [string]$RootPath
+    )
+
+    $checkerPath = Join-Path $RootPath "Tools\Test-VbaSharedDependencies.ps1"
+    if (-not (Test-Path $checkerPath)) {
+        Write-Host "[WARN] Validador de dependencias compartilhadas nao encontrado: $checkerPath"
+        return 0
+    }
+
+    Write-Host "=== Dependencias Compartilhadas VBA ==="
+
+    $pwshArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $checkerPath,
+        "-RootPath",
+        $RootPath
+    )
+
+    & pwsh @pwshArgs
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -ne 0) {
+        Write-Host ("[ERRO] Validacao de dependencias compartilhadas reprovada. Exit=" + $exitCode)
     }
 
     Write-Host ""
@@ -194,6 +232,84 @@ function Invoke-VbaComponentTypeChecks {
     }
 
     return 0
+}
+
+function Invoke-DashboardTemplateChecks {
+    param(
+        [string]$RootPath,
+        [switch]$StrictWarnings
+    )
+
+    $checkerPath = Join-Path $RootPath "Tools\Test-DashboardTemplate.ps1"
+    if (-not (Test-Path -LiteralPath $checkerPath)) {
+        Write-Host "[WARN] Validador de dashboard HTML/CSS nao encontrado: $checkerPath"
+        return 0
+    }
+
+    Write-Host "=== Dashboard HTML/CSS ==="
+
+    $pwshArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $checkerPath,
+        "-BasePath",
+        $RootPath
+    )
+
+    if ($StrictWarnings) {
+        $pwshArgs += "-FailOnWarnings"
+    }
+
+    & pwsh @pwshArgs
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -ne 0) {
+        Write-Host ("[ERRO] Validacao do dashboard reprovada. Exit=" + $exitCode)
+    }
+
+    Write-Host ""
+    return $exitCode
+}
+
+function Invoke-VbaHtmlChecks {
+    param(
+        [string]$RootPath,
+        [switch]$StrictWarnings
+    )
+
+    $checkerPath = Join-Path $RootPath "Tools\Test-VbaHtmlConformidade.ps1"
+    if (-not (Test-Path -LiteralPath $checkerPath)) {
+        Write-Host "[WARN] Validador de HTML/CSS VBA nao encontrado: $checkerPath"
+        return 0
+    }
+
+    Write-Host "=== HTML/CSS VBA Outlook ==="
+
+    $pwshArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $checkerPath,
+        "-BasePath",
+        $RootPath
+    )
+
+    if ($StrictWarnings) {
+        $pwshArgs += "-FailOnWarnings"
+    }
+
+    & pwsh @pwshArgs
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -ne 0) {
+        Write-Host ("[ERRO] Validacao de HTML/CSS VBA reprovada. Exit=" + $exitCode)
+    }
+
+    Write-Host ""
+    return $exitCode
 }
 
 function Start-Automacao {
@@ -349,6 +465,27 @@ if (-not $SkipVbaComponentTypes) {
     $typeExitCode = Invoke-VbaComponentTypeChecks -RootPath $BasePath
     if ($typeExitCode -ne 0) {
         exit $typeExitCode
+    }
+}
+
+if (-not $SkipSharedDependencies) {
+    $depsExitCode = Invoke-SharedDependenciesChecks -RootPath $BasePath
+    if ($depsExitCode -ne 0) {
+        exit $depsExitCode
+    }
+}
+
+if (-not $SkipDashboardTemplateGovernance) {
+    $dashboardExitCode = Invoke-DashboardTemplateChecks -RootPath $BasePath -StrictWarnings:$FailOnHtmlCssWarnings
+    if ($dashboardExitCode -ne 0) {
+        exit $dashboardExitCode
+    }
+}
+
+if (-not $SkipVbaHtmlGovernance) {
+    $vbaHtmlExitCode = Invoke-VbaHtmlChecks -RootPath $BasePath -StrictWarnings:$FailOnHtmlCssWarnings
+    if ($vbaHtmlExitCode -ne 0) {
+        exit $vbaHtmlExitCode
     }
 }
 

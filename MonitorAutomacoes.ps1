@@ -138,7 +138,33 @@ $script:MetricsWindow = @{
 }
 $script:MetricsWindowStartedAt = Get-Date
 $script:TaskLastResult = @{}
+$script:TaskHistory = @{}
+$script:TaskHistoryLimit = 50
 $script:MonitorStartedAt = Get-Date
+$script:LastConfigReloadAt = $null
+$script:LastConfigReloadStatus = "N/A"
+$script:LastHeartbeatAt = $script:MonitorStartedAt
+$script:OperationsApiEnabled = $true
+$script:OperationsApiPort = 8765
+$script:OperationsApiPrefix = "http://localhost:8765/"
+$script:OperationsApiStatus = "Nao iniciado"
+$script:OperationsApiLastError = ""
+$script:OperationsApiToken = [guid]::NewGuid().ToString("N")
+$script:HttpListener = $null
+$script:OperationsApiAsyncResult = $null
+$script:DashboardTemplatePath = Join-Path $ScriptPath ".github\templates\dashboard-modern.html"
+$script:DashboardOutputPath = Join-Path $ScriptPath "Dashboard\dashboard.html"
+$script:DashboardTemplateHash = ""
+$script:DashboardTemplateContent = $null
+$script:DashboardTemplateSource = "fallback"
+$script:DashboardTemplateStatus = "Template fallback embutido em uso."
+$script:DashboardSettings = [ordered]@{
+    enabled                       = $true
+    mode                          = "modern"
+    refreshSeconds                = 60
+    historyLimitPerTask           = 50
+    scheduleDelayToleranceMinutes = 5
+}
 
 function Add-MetricCounter {
     param(
@@ -220,6 +246,381 @@ function Save-MetricsSnapshot {
     }
 }
 
+function Add-TaskHistoryEntry {
+    param(
+        [string]$TaskName,
+        [int]$ExitCode,
+        [datetime]$FinishedAt,
+        [Nullable[datetime]]$StartedAt = $null,
+        [int]$DurationSeconds = 0,
+        [int]$ProcessId = 0
+    )
+
+    if ([string]::IsNullOrWhiteSpace($TaskName)) { return }
+
+    if (-not $script:TaskHistory.ContainsKey($TaskName)) {
+        $script:TaskHistory[$TaskName] = @()
+    }
+
+    $status = if ($ExitCode -eq 0) {
+        "OK"
+    }
+    elseif ($ExitCode -in @(7, 23, 40)) {
+        "WARN"
+    }
+    else {
+        "ERRO"
+    }
+
+    $entry = [ordered]@{
+        finishedAt      = $FinishedAt.ToString("yyyy-MM-ddTHH:mm:ssK")
+        startedAt       = if ($StartedAt) { $StartedAt.Value.ToString("yyyy-MM-ddTHH:mm:ssK") } else { $null }
+        exitCode        = [int]$ExitCode
+        status          = $status
+        durationSeconds = [int]$DurationSeconds
+        processId       = [int]$ProcessId
+    }
+
+    $existing = @($script:TaskHistory[$TaskName])
+    $updated = @($entry) + $existing
+    if ($updated.Count -gt $script:TaskHistoryLimit) {
+        $updated = $updated[0..($script:TaskHistoryLimit - 1)]
+    }
+
+    $script:TaskHistory[$TaskName] = $updated
+}
+
+function Get-TaskDurationSummary {
+    param([array]$Entries)
+
+    $samples = @($Entries | ForEach-Object { [int]$_.durationSeconds } | Where-Object { $_ -gt 0 })
+    if ($samples.Count -eq 0) {
+        return [ordered]@{ avgSeconds = 0; p95Seconds = 0 }
+    }
+
+    $avg = [math]::Round((($samples | Measure-Object -Sum).Sum / $samples.Count), 0)
+    $sorted = @($samples | Sort-Object)
+    $idx = [math]::Ceiling($sorted.Count * 0.95) - 1
+    if ($idx -lt 0) { $idx = 0 }
+    if ($idx -ge $sorted.Count) { $idx = $sorted.Count - 1 }
+
+    return [ordered]@{
+        avgSeconds = [int]$avg
+        p95Seconds = [int]$sorted[$idx]
+    }
+}
+
+function Get-DashboardSettings {
+    $defaults = [ordered]@{
+        enabled                       = $true
+        mode                          = "modern"
+        refreshSeconds                = 60
+        historyLimitPerTask           = 50
+        scheduleDelayToleranceMinutes = 5
+    }
+
+    if (-not ($script:Config -and $script:Config.settings -and $script:Config.settings.dashboard)) {
+        return $defaults
+    }
+
+    $dashboard = $script:Config.settings.dashboard
+
+    if ($null -ne $dashboard.enabled) {
+        $defaults.enabled = [bool]$dashboard.enabled
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$dashboard.mode)) {
+        $defaults.mode = [string]$dashboard.mode
+    }
+
+    if ($dashboard.refreshSeconds) {
+        $defaults.refreshSeconds = [int]$dashboard.refreshSeconds
+    }
+
+    if ($dashboard.historyLimitPerTask) {
+        $defaults.historyLimitPerTask = [int]$dashboard.historyLimitPerTask
+    }
+
+    if ($dashboard.scheduleDelayToleranceMinutes) {
+        $defaults.scheduleDelayToleranceMinutes = [int]$dashboard.scheduleDelayToleranceMinutes
+    }
+
+    return $defaults
+}
+
+function Get-PreviousScheduledRun {
+    param(
+        $Schedule,
+        [datetime]$ReferenceTime = (Get-Date)
+    )
+
+    if (-not $Schedule) { return $null }
+
+    $candidate = $ReferenceTime.AddMinutes(-1)
+    $candidate = [datetime]::new($candidate.Year, $candidate.Month, $candidate.Day, $candidate.Hour, $candidate.Minute, 0)
+
+    for ($i = 0; $i -lt 10080; $i++) {
+        $dow = [int]$candidate.DayOfWeek
+        $h = $candidate.Hour
+        $m = $candidate.Minute
+
+        $dowOk = $Schedule.daysOfWeek -contains $dow
+        $hourOk = ($Schedule.hours.Count -eq 0) -or ($Schedule.hours -contains $h)
+        $minOk = $Schedule.minutes -contains $m
+
+        if ($dowOk -and $hourOk -and $minOk) { return $candidate }
+
+        $candidate = $candidate.AddMinutes(-1)
+    }
+
+    return $null
+}
+
+function Get-ConsecutiveErrorCount {
+    param([array]$Entries)
+
+    $count = 0
+    foreach ($entry in @($Entries)) {
+        if ([string]$entry.status -eq "ERRO") {
+            $count++
+            continue
+        }
+        break
+    }
+
+    return $count
+}
+
+function Get-DashboardStateSnapshot {
+    param([datetime]$Now = (Get-Date))
+
+    $dayNames = @("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab")
+    $tasks = @()
+
+    foreach ($task in $script:Config.tasks) {
+        $taskName = [string]$task.name
+        $enabled = [bool]$task.enabled
+        $isRunning = $script:RunningTasks.ContainsKey($taskName)
+        $nextRun = $null
+        $previousRun = $null
+        if ($enabled -and $task.schedule) {
+            $nextRunCandidate = Get-NextScheduledRun -Schedule $task.schedule
+            if ($nextRunCandidate) {
+                $nextRun = $nextRunCandidate.ToString("yyyy-MM-ddTHH:mm:ssK")
+            }
+
+            $previousRunCandidate = Get-PreviousScheduledRun -Schedule $task.schedule -ReferenceTime $Now
+            if ($previousRunCandidate) {
+                $previousRun = $previousRunCandidate.ToString("yyyy-MM-ddTHH:mm:ssK")
+            }
+        }
+
+        $scheduleText = ""
+        if ($task.schedule) {
+            $dowStr = ($task.schedule.daysOfWeek | ForEach-Object { $dayNames[[int]$_] }) -join ","
+            $hhStr = if ($task.schedule.hours.Count -gt 0) {
+                ($task.schedule.hours | ForEach-Object { $_.ToString("00") }) -join "/"
+            }
+            else { "cada" }
+            $mmStr = ($task.schedule.minutes | ForEach-Object { $_.ToString("00") }) -join ","
+            $scheduleText = "$dowStr $hhStr`:$mmStr"
+        }
+
+        $runningSince = $null
+        $runningSeconds = 0
+        if ($isRunning) {
+            $record = $script:RunningTasks[$taskName]
+            if ($record -is [hashtable] -and $record.StartedAt) {
+                $runningSince = $record.StartedAt.ToString("yyyy-MM-ddTHH:mm:ssK")
+                $runningSeconds = [int][math]::Round((New-TimeSpan -Start $record.StartedAt -End $Now).TotalSeconds, 0)
+            }
+        }
+
+        $lastResult = $null
+        if ($script:TaskLastResult.ContainsKey($taskName)) {
+            $last = $script:TaskLastResult[$taskName]
+            $lastResult = [ordered]@{
+                exitCode        = [int]$last.ExitCode
+                finishedAt      = $last.FinishedAt.ToString("yyyy-MM-ddTHH:mm:ssK")
+                durationSeconds = if ($last.DurationSeconds) { [int]$last.DurationSeconds } else { 0 }
+            }
+        }
+
+        $entries = if ($script:TaskHistory.ContainsKey($taskName)) { @($script:TaskHistory[$taskName]) } else { @() }
+        $durationSummary = Get-TaskDurationSummary -Entries $entries
+
+        $tasks += [ordered]@{
+            name           = $taskName
+            enabled        = $enabled
+            scheduleText   = $scheduleText
+            nextRun        = $nextRun
+            previousRun    = $previousRun
+            isRunning      = $isRunning
+            runningSince   = $runningSince
+            runningSeconds = $runningSeconds
+            lastResult     = $lastResult
+            avgDurationSec = [int]$durationSummary.avgSeconds
+            p95DurationSec = [int]$durationSummary.p95Seconds
+            historyCount   = $entries.Count
+            config         = [ordered]@{
+                scriptPath     = [string]$task.scriptPath
+                preventOverlap = [bool]$task.preventOverlap
+                waitForExit    = [bool]$task.waitForExit
+                schedule       = [ordered]@{
+                    daysOfWeek = if ($task.schedule) { @($task.schedule.daysOfWeek | ForEach-Object { [int]$_ }) } else { @() }
+                    hours      = if ($task.schedule) { @($task.schedule.hours | ForEach-Object { [int]$_ }) } else { @() }
+                    minutes    = if ($task.schedule) { @($task.schedule.minutes | ForEach-Object { [int]$_ }) } else { @() }
+                }
+            }
+        }
+    }
+
+    $alerts = @()
+    if ([int]$script:MetricsWindow.TasksFinishedNonZero -gt 0) {
+        $alerts += [ordered]@{ severity = "WARN"; message = "Ha execucoes com Exit nao-zero na janela atual." }
+    }
+
+    if ([int]$script:Metrics.ConfigReloadFailure -gt [int]$script:Metrics.ConfigReloadSuccess) {
+        $alerts += [ordered]@{ severity = "WARN"; message = "Falhas de reload de config superaram sucessos no acumulado." }
+    }
+
+    foreach ($taskName in $script:RunningTasks.Keys) {
+        $record = $script:RunningTasks[$taskName]
+        if ($record -is [hashtable] -and $record.StartedAt -and $record.MaxRuntimeMinutes -gt 0) {
+            $elapsedMinutes = (New-TimeSpan -Start $record.StartedAt -End $Now).TotalMinutes
+            if ($elapsedMinutes -ge ($record.MaxRuntimeMinutes * 0.9)) {
+                $alerts += [ordered]@{ severity = "WARN"; message = "Tarefa '$taskName' proxima do timeout. Decorrido=$([math]::Round($elapsedMinutes,1)) min" }
+            }
+        }
+    }
+
+    $delayTolerance = [int]$script:DashboardSettings.scheduleDelayToleranceMinutes
+    foreach ($taskState in $tasks) {
+        if (-not $taskState.enabled -or $taskState.isRunning -or -not $taskState.previousRun) { continue }
+
+        $prevRunAt = [datetime]::Parse([string]$taskState.previousRun)
+        $delayMinutes = (New-TimeSpan -Start $prevRunAt -End $Now).TotalMinutes
+        if ($delayMinutes -lt $delayTolerance) { continue }
+
+        $lastFinishedAt = $null
+        if ($taskState.lastResult -and $taskState.lastResult.finishedAt) {
+            $lastFinishedAt = [datetime]::Parse([string]$taskState.lastResult.finishedAt)
+        }
+
+        if (-not $lastFinishedAt -or $lastFinishedAt -lt $prevRunAt) {
+            $alerts += [ordered]@{ severity = "WARN"; message = "Tarefa '$($taskState.name)' aparenta atraso de disparo. Previsto em $($prevRunAt.ToString("dd/MM HH:mm"))" }
+        }
+
+        $entries = if ($script:TaskHistory.ContainsKey($taskState.name)) { @($script:TaskHistory[$taskState.name]) } else { @() }
+        $consecutiveErrors = Get-ConsecutiveErrorCount -Entries $entries
+        if ($consecutiveErrors -ge 2) {
+            $alerts += [ordered]@{ severity = "WARN"; message = "Tarefa '$($taskState.name)' com $consecutiveErrors falhas consecutivas." }
+        }
+    }
+
+    $windowMinutes = 0
+    if ($script:MetricsWindowStartedAt) {
+        $windowMinutes = [math]::Round((New-TimeSpan -Start $script:MetricsWindowStartedAt -End $Now).TotalMinutes, 0)
+    }
+
+    return [ordered]@{
+        dashboardSchemaVersion = "1.0.0"
+        generatedAt            = $Now.ToString("yyyy-MM-ddTHH:mm:ssK")
+        monitorVersion         = "3.6"
+        startedAt              = $script:MonitorStartedAt.ToString("yyyy-MM-ddTHH:mm:ssK")
+        runningTasks           = [int]$script:RunningTasks.Count
+        taskCount              = [int]$script:Config.tasks.Count
+        windowMinutes          = [int]$windowMinutes
+        health                 = [ordered]@{
+            lastHeartbeatAt        = $script:LastHeartbeatAt.ToString("yyyy-MM-ddTHH:mm:ssK")
+            lastConfigReloadAt     = if ($script:LastConfigReloadAt) { $script:LastConfigReloadAt.ToString("yyyy-MM-ddTHH:mm:ssK") } else { $null }
+            lastConfigReloadStatus = [string]$script:LastConfigReloadStatus
+            mainLoopConsecutiveErr = [int]$script:MainLoopConsecutiveErrors
+            mutexName              = [string]$MutexName
+            checkIntervalSeconds   = if ($script:Config.settings.checkIntervalSeconds) { [int]$script:Config.settings.checkIntervalSeconds } else { 20 }
+        }
+        dashboard              = [ordered]@{
+            enabled                       = [bool]$script:DashboardSettings.enabled
+            mode                          = [string]$script:DashboardSettings.mode
+            refreshSeconds                = [int]$script:DashboardSettings.refreshSeconds
+            historyLimitPerTask           = [int]$script:DashboardSettings.historyLimitPerTask
+            scheduleDelayToleranceMinutes = [int]$script:DashboardSettings.scheduleDelayToleranceMinutes
+        }
+        operations             = [ordered]@{
+            apiMode        = "http-local"
+            apiBaseUrl     = "http://localhost:$($script:OperationsApiPort)"
+            endpoint       = "/api/operations"
+            supported      = @("run-now", "dry-run", "toggle-enabled", "open-logs", "set-refresh", "set-schedule")
+            implemented    = [bool]($script:HttpListener -and $script:HttpListener.IsListening)
+            statusMessage  = [string]$script:OperationsApiStatus
+            token          = [string]$script:OperationsApiToken
+            tokenHint      = "Envie header X-Monitor-Token para operacoes autenticadas."
+            templateSource = [string]$script:DashboardTemplateSource
+            templateStatus = [string]$script:DashboardTemplateStatus
+            templatePath   = [string]$script:DashboardTemplatePath
+        }
+        metrics                = [ordered]@{
+            cumulative = Get-MetricsCountersSnapshot -Source $script:Metrics
+            window     = Get-MetricsCountersSnapshot -Source $script:MetricsWindow
+        }
+        alerts                 = $alerts
+        tasks                  = $tasks
+        taskHistory            = $script:TaskHistory
+    }
+}
+
+function Save-DashboardState {
+    param([datetime]$Now = (Get-Date))
+
+    try {
+        if (-not $script:DashboardSettings.enabled) { return }
+        $state = Get-DashboardStateSnapshot -Now $Now
+        $statePath = Join-Path (Get-LogDirectory) "dashboard-state.json"
+        Set-Utf8Content -FilePath $statePath -Content ($state | ConvertTo-Json -Depth 8)
+    }
+    catch {
+        Write-Log "Falha ao persistir dashboard-state.json: $_" -Type "WARN"
+    }
+}
+
+function Import-PreviousDashboardState {
+    try {
+        $statePath = Join-Path (Get-LogDirectory) "dashboard-state.json"
+        if (-not (Test-Path -Path $statePath)) { return }
+
+        $raw = Get-Content -Path $statePath -Raw -Encoding UTF8
+        if ([string]::IsNullOrWhiteSpace($raw)) { return }
+
+        $state = $raw | ConvertFrom-Json
+        if ($state -and $state.taskHistory) {
+            $historyTable = @{}
+            foreach ($property in $state.taskHistory.PSObject.Properties) {
+                $historyTable[[string]$property.Name] = @($property.Value)
+            }
+            $script:TaskHistory = $historyTable
+        }
+
+        if ($state -and $state.tasks) {
+            foreach ($taskState in @($state.tasks)) {
+                if ($taskState.lastResult) {
+                    $finishedAt = $null
+                    [datetime]::TryParse([string]$taskState.lastResult.finishedAt, [ref]$finishedAt) | Out-Null
+                    if ($finishedAt) {
+                        $script:TaskLastResult[[string]$taskState.name] = @{
+                            ExitCode        = [int]$taskState.lastResult.exitCode
+                            FinishedAt      = $finishedAt
+                            DurationSeconds = if ($taskState.lastResult.durationSeconds) { [int]$taskState.lastResult.durationSeconds } else { 0 }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        Write-Log "Falha ao carregar dashboard-state anterior: $_" -Type "WARN"
+    }
+}
+
 function Import-PreviousMetricsSnapshot {
     try {
         $snapshotPath = Join-Path (Get-LogDirectory) "Monitor_Metrics.json"
@@ -265,135 +666,182 @@ function Get-NextScheduledRun {
     return $null
 }
 
-function Save-DashboardHtml {
+function Get-DashboardHtmlFallbackDocument {
+    # Alias de compatibilidade para evitar referencias legadas.
+    return Get-DashboardHtmlEmergencyFallbackDocument
+}
+
+function Get-DashboardTemplateContent {
+    if ([string]::IsNullOrWhiteSpace($script:DashboardTemplatePath)) {
+        return $null
+    }
+
+    if (-not (Test-Path -Path $script:DashboardTemplatePath)) {
+        return $null
+    }
+
     try {
-        $logDir = Get-LogDirectory
-        $now = Get-Date
-        $htmlPath = Join-Path $logDir "dashboard.html"
+        $hash = Get-ConfigHash -Path $script:DashboardTemplatePath
+        if (-not $hash) {
+            return $null
+        }
 
-        $dayNames = @("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab")
-        $taskRows = ""
+        if ($script:DashboardTemplateContent -and $script:DashboardTemplateHash -eq $hash) {
+            return $script:DashboardTemplateContent
+        }
 
-        foreach ($task in $script:Config.tasks) {
-            $tName = [string]$task.name
-            $enabled = [bool]$task.enabled
+        $template = Get-Content -Path $script:DashboardTemplatePath -Raw -Encoding UTF8
+        if ([string]::IsNullOrWhiteSpace($template)) {
+            return $null
+        }
 
-            # Agendamento legível
-            $schedText = ""
-            if ($task.schedule) {
-                $dowStr = ($task.schedule.daysOfWeek | ForEach-Object { $dayNames[[int]$_] }) -join ","
-                $hhStr = if ($task.schedule.hours.Count -gt 0) {
-                    ($task.schedule.hours | ForEach-Object { $_.ToString("00") }) -join "/"
+        $script:DashboardTemplateHash = $hash
+        $script:DashboardTemplateContent = $template
+        $script:DashboardTemplateSource = "external"
+        $script:DashboardTemplateStatus = "Template externo carregado com sucesso."
+        return $template
+    }
+    catch {
+        Write-Log "Falha ao carregar template externo de dashboard: $_" -Type "WARN"
+        return $null
+    }
+}
+
+function Get-DashboardHtmlEmergencyFallbackDocument {
+    # Fallback minimo para contingencia. Evita drift com o template canonico.
+    return @'
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="__REFRESH_SECONDS__">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Monitor Automacoes - Fallback</title>
+    <style>
+        :root { color-scheme: light; }
+        body {
+            margin: 0;
+            padding: 18px;
+            background: #f4f7fb;
+            color: #0f172a;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+        }
+        .panel {
+            max-width: 1080px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #dbe3ee;
+            border-radius: 12px;
+            padding: 16px;
+        }
+        h1 {
+            margin: 0 0 10px;
+            font-size: 1.2rem;
+            color: #0b385f;
+        }
+        p {
+            margin: 0 0 12px;
+            line-height: 1.4;
+            font-size: 0.92rem;
+        }
+        pre {
+            margin: 0;
+            max-height: 70vh;
+            overflow: auto;
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid #dbe3ee;
+            background: #f8fafc;
+            color: #1e293b;
+            font-size: 0.78rem;
+            font-family: Consolas, "Courier New", monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <main class="panel">
+        <h1>Monitor de Automacoes - modo contingencia</h1>
+        <p>O template canonico do dashboard nao foi carregado. Exibindo estado bruto para manter observabilidade operacional.</p>
+        <pre id="raw-state">Carregando estado...</pre>
+    </main>
+    <script id="dashboard-data" type="application/json">__DASHBOARD_JSON__</script>
+    <script>
+        (function () {
+            var pre = document.getElementById('raw-state');
+            var dataNode = document.getElementById('dashboard-data');
+            if (!pre || !dataNode) {
+                return;
+            }
+
+            try {
+                var payload = JSON.parse((dataNode.textContent || '').trim());
+                pre.textContent = JSON.stringify(payload, null, 2);
+            }
+            catch (err) {
+                pre.textContent = 'Falha ao interpretar estado do dashboard: ' + err.message;
+            }
+        })();
+    </script>
+</body>
+</html>
+'@
+}
+
+function Get-DashboardHtmlDocument {
+    $template = Get-DashboardTemplateContent
+    if ($template) {
+        return $template
+    }
+
+    $script:DashboardTemplateSource = "fallback"
+    $script:DashboardTemplateStatus = "Template canonico indisponivel; usando fallback de emergencia minimizado."
+    return Get-DashboardHtmlEmergencyFallbackDocument
+}
+
+function Save-DashboardHtml {
+    param([datetime]$Now = (Get-Date))
+
+    try {
+        if (-not $script:DashboardSettings.enabled) { return }
+
+        $state = Get-DashboardStateSnapshot -Now $Now
+        $htmlPath = $script:DashboardOutputPath
+        $legacyHtmlPath = Join-Path (Get-LogDirectory) "dashboard.html"
+        $refreshSeconds = [int]$script:DashboardSettings.refreshSeconds
+
+        $historyExport = @()
+        foreach ($taskName in @($script:TaskHistory.Keys | Sort-Object)) {
+            $entries = @($script:TaskHistory[$taskName] | Select-Object -First 3)
+            foreach ($entry in $entries) {
+                $historyExport += [ordered]@{
+                    taskName        = $taskName
+                    status          = $entry.status
+                    exitCode        = [int]$entry.exitCode
+                    finishedAt      = $entry.finishedAt
+                    durationSeconds = [int]$entry.durationSeconds
                 }
-                else { "cada" }
-                $mmStr = ($task.schedule.minutes | ForEach-Object { $_.ToString("00") }) -join ","
-                $schedText = "$dowStr $hhStr`:$mmStr"
             }
-
-            # Próxima execução
-            $nextRunText = "-"
-            if ($enabled -and $task.schedule) {
-                $nr = Get-NextScheduledRun -Schedule $task.schedule
-                if ($nr) { $nextRunText = $nr.ToString("dd/MM HH:mm") }
-            }
-
-            # Último resultado
-            $exitCodeCell = "-"
-            $lastFinishCell = "-"
-            $badgeClass = "off"
-            $badgeText = "N/A"
-
-            $isRunning = $script:RunningTasks.ContainsKey($tName)
-            if ($isRunning) {
-                $badgeClass = "running"; $badgeText = "Executando"
-                $rec = $script:RunningTasks[$tName]
-                if ($rec -is [hashtable] -and $rec.StartedAt) {
-                    $lastFinishCell = "desde " + $rec.StartedAt.ToString("HH:mm")
-                }
-            }
-            elseif ($script:TaskLastResult.ContainsKey($tName)) {
-                $lr = $script:TaskLastResult[$tName]
-                $exitCodeCell = "$($lr.ExitCode)"
-                $lastFinishCell = $lr.FinishedAt.ToString("dd/MM HH:mm")
-                if ($lr.ExitCode -eq 0) { $badgeClass = "ok"; $badgeText = "OK" }
-                elseif ($lr.ExitCode -in @(7, 23, 40)) { $badgeClass = "warn"; $badgeText = "Aviso" }
-                else { $badgeClass = "err"; $badgeText = "Erro" }
-            }
-            elseif (-not $enabled) {
-                $badgeClass = "off"; $badgeText = "Desabilitado"
-            }
-
-            $taskRows += "<tr>"
-            $taskRows += "<td>$tName</td>"
-            $taskRows += "<td class='mono'>$schedText</td>"
-            $taskRows += "<td><span class='badge $badgeClass'>$badgeText</span></td>"
-            $taskRows += "<td class='r'>$exitCodeCell</td>"
-            $taskRows += "<td>$lastFinishCell</td>"
-            $taskRows += "<td>$nextRunText</td>"
-            $taskRows += "</tr>`n"
         }
 
-        # Métricas
-        $mRows = ""
-        $metricLabels = [ordered]@{
-            TasksTriggered       = "Disparos"
-            TasksCompleted       = "Concluidas"
-            TasksFinishedNonZero = "Exit Nao-Zero"
-            TasksFinishedWarn    = "Avisos Operacionais"
-            ExitCode7ReadOnly    = "Exit 7 (Bloqueado)"
-            ExitCode23Cooldown   = "Exit 23 (Cooldown)"
-            ExitCode40Concurrent = "Exit 40 (Concorrente)"
-            TasksSkippedOverlap  = "Skips Sobreposicao"
-            ConfigReloadSuccess  = "Reloads Config OK"
-            ConfigReloadFailure  = "Reloads Config Falha"
-        }
-        foreach ($key in $metricLabels.Keys) {
-            $label = $metricLabels[$key]
-            $cum = [int]$script:Metrics[$key]
-            $win = [int]$script:MetricsWindow[$key]
-            $mRows += "<tr><td>$label</td><td class='r'>$cum</td><td class='r'>$win</td></tr>`n"
-        }
+        $state.Add("history", $historyExport)
+        $jsonPayload = $state | ConvertTo-Json -Depth 6 -Compress
 
-        $startedStr = $script:MonitorStartedAt.ToString("dd/MM/yyyy HH:mm:ss")
-        $refreshStr = $now.ToString("dd/MM/yyyy HH:mm:ss")
-        $taskCount = $script:Config.tasks.Count
-        $runningCount = $script:RunningTasks.Count
-        $windowMinStr = ""
-        if ($script:MetricsWindowStartedAt) {
-            $wm = [math]::Round((New-TimeSpan -Start $script:MetricsWindowStartedAt -End $now).TotalMinutes, 0)
-            $windowMinStr = " (ultimos $wm min)"
-        }
-
-        $html = "<!DOCTYPE html><html lang=`"pt-BR`"><head><meta charset=`"UTF-8`">" +
-        "<meta http-equiv=`"refresh`" content=`"300`"><title>Monitor Automacoes</title>" +
-        "<style>" +
-        "body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;margin:0;padding:24px;color:#333}" +
-        "h1{color:#1a1a2e;margin:0 0 4px}" +
-        ".meta{color:#666;font-size:12px;margin-bottom:20px}" +
-        ".card{background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.1);padding:16px 20px;margin-bottom:20px}" +
-        "h2{margin:0 0 12px;font-size:14px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:8px}" +
-        "table{border-collapse:collapse;width:100%;font-size:13px}" +
-        "th{background:#f8f9fa;text-align:left;padding:7px 10px;border-bottom:2px solid #dee2e6;color:#555;font-weight:600}" +
-        "td{padding:7px 10px;border-bottom:1px solid #f5f5f5}" +
-        "tr:last-child td{border-bottom:none}" +
-        ".badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600}" +
-        ".ok{background:#d4edda;color:#155724}.warn{background:#fff3cd;color:#856404}" +
-        ".err{background:#f8d7da;color:#721c24}.off{background:#e9ecef;color:#6c757d}" +
-        ".running{background:#cce5ff;color:#004085}" +
-        ".r{text-align:right;font-variant-numeric:tabular-nums}" +
-        ".mono{font-family:Consolas,monospace;font-size:12px}" +
-        "</style></head><body>" +
-        "<h1>Monitor de Automacoes</h1>" +
-        "<div class='meta'>Versao 3.6 &nbsp;|&nbsp; Iniciado: $startedStr &nbsp;|&nbsp; Atualizado: $refreshStr &nbsp;|&nbsp; Tarefas: $taskCount &nbsp;|&nbsp; Em execucao: $runningCount</div>" +
-        "<div class='card'><h2>Tarefas</h2><table>" +
-        "<tr><th>Nome</th><th>Agendamento</th><th>Status</th><th class='r'>Exit</th><th>Ultima Execucao</th><th>Proxima Execucao</th></tr>" +
-        "$taskRows</table></div>" +
-        "<div class='card'><h2>Metricas$windowMinStr</h2><table>" +
-        "<tr><th>Contador</th><th class='r'>Acumulado</th><th class='r'>Janela</th></tr>" +
-        "$mRows</table></div>" +
-        "</body></html>"
+        $html = Get-DashboardHtmlDocument
+        $html = $html.Replace("__REFRESH_SECONDS__", $refreshSeconds.ToString())
+        $html = $html.Replace("__DASHBOARD_JSON__", $jsonPayload)
 
         Set-Utf8Content -FilePath $htmlPath -Content $html
+
+        if ((Test-Path -Path $legacyHtmlPath) -and ($legacyHtmlPath -ne $htmlPath)) {
+            try {
+                Remove-Item -Path $legacyHtmlPath -Force -ErrorAction Stop
+            }
+            catch {
+                Write-Log "Falha ao remover dashboard legado em Logs: $_" -Type "WARN"
+            }
+        }
     }
     catch {
         Write-Log "Falha ao gerar dashboard HTML: $_" -Type "WARN"
@@ -445,7 +893,10 @@ function Write-TaskCompletionLog {
         [string]$TaskName,
         [int]$ExitCode,
         [int]$ProcessId,
-        [string]$LogDir
+        [string]$LogDir,
+        [Nullable[datetime]]$StartedAt = $null,
+        [datetime]$FinishedAt = (Get-Date),
+        [int]$DurationSeconds = 0
     )
 
     $desc = ""
@@ -455,7 +906,8 @@ function Write-TaskCompletionLog {
 
     Register-TaskCompletionMetrics -ExitCode $ExitCode
     $logType = Get-ExitCodeLogType -ExitCode $ExitCode
-    $script:TaskLastResult[$TaskName] = @{ ExitCode = $ExitCode; FinishedAt = (Get-Date) }
+    $script:TaskLastResult[$TaskName] = @{ ExitCode = $ExitCode; FinishedAt = $FinishedAt; DurationSeconds = $DurationSeconds }
+    Add-TaskHistoryEntry -TaskName $TaskName -ExitCode $ExitCode -FinishedAt $FinishedAt -StartedAt $StartedAt -DurationSeconds $DurationSeconds -ProcessId $ProcessId
 
     if ($ExitCode -eq 0) {
         Write-Log "Tarefa '$TaskName' finalizada. ExitCode=$ExitCode$desc PID=$ProcessId" -LogDir $LogDir
@@ -660,6 +1112,42 @@ function Test-Configuration {
         }
     }
 
+    if ($Config.settings.dashboard) {
+        $dashboard = $Config.settings.dashboard
+
+        if ($null -ne $dashboard.enabled -and $dashboard.enabled -isnot [bool]) {
+            throw "Campo 'settings.dashboard.enabled' deve ser booleano."
+        }
+
+        if ($dashboard.mode) {
+            $mode = ([string]$dashboard.mode).ToLower()
+            if ($mode -notin @("legacy", "modern")) {
+                throw "Campo 'settings.dashboard.mode' deve ser 'legacy' ou 'modern'."
+            }
+        }
+
+        if ($null -ne $dashboard.refreshSeconds) {
+            $refreshSeconds = 0
+            if (-not [int]::TryParse([string]$dashboard.refreshSeconds, [ref]$refreshSeconds) -or $refreshSeconds -lt 10 -or $refreshSeconds -gt 3600) {
+                throw "Campo 'settings.dashboard.refreshSeconds' deve ser inteiro entre 10 e 3600."
+            }
+        }
+
+        if ($null -ne $dashboard.historyLimitPerTask) {
+            $historyLimit = 0
+            if (-not [int]::TryParse([string]$dashboard.historyLimitPerTask, [ref]$historyLimit) -or $historyLimit -lt 1 -or $historyLimit -gt 500) {
+                throw "Campo 'settings.dashboard.historyLimitPerTask' deve ser inteiro entre 1 e 500."
+            }
+        }
+
+        if ($null -ne $dashboard.scheduleDelayToleranceMinutes) {
+            $delayTolerance = 0
+            if (-not [int]::TryParse([string]$dashboard.scheduleDelayToleranceMinutes, [ref]$delayTolerance) -or $delayTolerance -lt 1 -or $delayTolerance -gt 120) {
+                throw "Campo 'settings.dashboard.scheduleDelayToleranceMinutes' deve ser inteiro entre 1 e 120."
+            }
+        }
+    }
+
     $taskList = @($Config.tasks)
     if ($taskList.Count -eq 0) {
         throw "Bloco 'tasks' não pode ser vazio."
@@ -718,6 +1206,7 @@ function Update-Configuration {
 
     if (-not (Test-Path $ConfigFilePath)) {
         Write-Log "Arquivo config.json não encontrado em $ConfigFilePath" -Type "ERRO"
+        $script:LastConfigReloadStatus = "ERRO"
         Add-MetricCounter -MetricName "ConfigReloadFailure"
         return $false
     }
@@ -727,6 +1216,7 @@ function Update-Configuration {
 
     if (-not $currentHash) {
         Write-Log "Falha ao calcular hash de config.json em $ConfigFilePath" -Type "ERRO"
+        $script:LastConfigReloadStatus = "ERRO"
         Add-MetricCounter -MetricName "ConfigReloadFailure"
         return $false
     }
@@ -749,6 +1239,7 @@ function Update-Configuration {
 
         if (-not $newConfig) {
             Write-Log "Falha ao carregar config.json após $maxAttempts tentativas. Mantendo configuração atual." -Type "ERRO"
+            $script:LastConfigReloadStatus = "ERRO"
             Add-MetricCounter -MetricName "ConfigReloadFailure"
             return $false
         }
@@ -761,6 +1252,8 @@ function Update-Configuration {
         $script:Config = $newConfig
         $script:ConfigLastWrite = $currentWrite
         $script:ConfigHash = $currentHash
+        $script:DashboardSettings = Get-DashboardSettings
+        $script:TaskHistoryLimit = [int]$script:DashboardSettings.historyLimitPerTask
 
         # Purgar entradas obsoletas do StateControl após hot-reload
         $validTaskNames = @($script:Config.tasks | ForEach-Object { [string]$_.name })
@@ -772,6 +1265,8 @@ function Update-Configuration {
         }
 
         Write-Log "Configuração recarregada com sucesso. Tarefas: $($script:Config.tasks.Count) (antes: $previousCount) | Hash=$($currentHash.Substring(0,8))"
+        $script:LastConfigReloadAt = Get-Date
+        $script:LastConfigReloadStatus = "OK"
         Add-MetricCounter -MetricName "ConfigReloadSuccess"
         return $true
     }
@@ -794,17 +1289,25 @@ function Remove-FinishedTasks {
 
         try {
             if ($proc.HasExited) {
+                $finishedAt = Get-Date
+                $startedAt = $null
+                $durationSec = 0
+                if ($record -is [hashtable] -and $record.StartedAt) {
+                    $startedAt = [datetime]$record.StartedAt
+                    $durationSec = [int][math]::Round((New-TimeSpan -Start $record.StartedAt -End $finishedAt).TotalSeconds, 0)
+                }
                 $exitCode = $proc.ExitCode
-                Write-TaskCompletionLog -TaskName $taskName -ExitCode $exitCode -ProcessId $proc.Id -LogDir $logDir
+                Write-TaskCompletionLog -TaskName $taskName -ExitCode $exitCode -ProcessId $proc.Id -LogDir $logDir -StartedAt $startedAt -FinishedAt $finishedAt -DurationSeconds $durationSec
                 $toRemove += $taskName
             }
             elseif ($record -is [hashtable] -and $record.MaxRuntimeMinutes -gt 0) {
                 $elapsed = (New-TimeSpan -Start $record.StartedAt -End (Get-Date)).TotalMinutes
                 if ($elapsed -ge $record.MaxRuntimeMinutes) {
                     Write-Log "Tarefa '$taskName' excedeu limite de $($record.MaxRuntimeMinutes) min (decorrido=$([math]::Round($elapsed,1)) min). Encerrando PID=$($proc.Id)." -Type "WARN" -LogDir $logDir
+                    $finishedAt = Get-Date
+                    $durationSec = [int][math]::Round((New-TimeSpan -Start $record.StartedAt -End $finishedAt).TotalSeconds, 0)
                     try { $proc.Kill() } catch {}
-                    Add-MetricCounter -MetricName "TasksCompleted"
-                    Add-MetricCounter -MetricName "TasksFinishedNonZero"
+                    Write-TaskCompletionLog -TaskName $taskName -ExitCode 124 -ProcessId $proc.Id -LogDir $logDir -StartedAt ([datetime]$record.StartedAt) -FinishedAt $finishedAt -DurationSeconds $durationSec
                     $toRemove += $taskName
                 }
             }
@@ -938,6 +1441,351 @@ function Invoke-ScheduledTask {
     }
 }
 
+function Save-ConfigurationAtomic {
+    param($ConfigObject)
+
+    $json = $ConfigObject | ConvertTo-Json -Depth 12
+    $tempPath = "$ConfigFilePath.tmp"
+    $backupPath = "$ConfigFilePath.bak"
+
+    Set-Utf8Content -FilePath $tempPath -Content $json
+
+    if (Test-Path -Path $ConfigFilePath) {
+        Copy-Item -Path $ConfigFilePath -Destination $backupPath -Force
+    }
+
+    Move-Item -Path $tempPath -Destination $ConfigFilePath -Force
+}
+
+function Get-TaskByName {
+    param(
+        [string]$TaskName,
+        [switch]$ThrowIfMissing
+    )
+
+    foreach ($task in @($script:Config.tasks)) {
+        if ([string]$task.name -eq $TaskName) {
+            return $task
+        }
+    }
+
+    if ($ThrowIfMissing) {
+        throw "Tarefa '$TaskName' nao encontrada."
+    }
+
+    return $null
+}
+
+function Invoke-ManualTaskRun {
+    param(
+        [string]$TaskName,
+        [switch]$DryRun
+    )
+
+    $task = Get-TaskByName -TaskName $TaskName -ThrowIfMissing
+    $logDir = Get-LogDirectory
+
+    if (-not $task.enabled -and -not $DryRun) {
+        throw "Tarefa '$TaskName' esta desabilitada."
+    }
+
+    if ($DryRun) {
+        Write-Log "API: DRY-RUN manual solicitado para '$TaskName'." -Type "WARN" -LogDir $logDir
+        Add-MetricCounter -MetricName "TasksDryRunEligible"
+        return [ordered]@{ status = "DRY_RUN"; message = "Dry run registrado para '$TaskName'." }
+    }
+
+    $preventOverlap = $true
+    if ($null -ne $task.preventOverlap) { $preventOverlap = [bool]$task.preventOverlap }
+    if ($preventOverlap -and $script:RunningTasks.ContainsKey($TaskName)) {
+        throw "Tarefa '$TaskName' ja esta em execucao e preventOverlap=true."
+    }
+
+    $waitForExit = $false
+    if ($null -ne $task.waitForExit) { $waitForExit = [bool]$task.waitForExit }
+    $maxRuntimeMinutes = 0
+    if ($task.maxRuntimeMinutes) { [int]::TryParse([string]$task.maxRuntimeMinutes, [ref]$maxRuntimeMinutes) | Out-Null }
+
+    $started = Start-TaskProcess -Path ([string]$task.scriptPath) -Name ([string]$task.name) -LogDir $logDir -WaitForExit $waitForExit -MaxRuntimeMinutes $maxRuntimeMinutes
+    if (-not $started) {
+        throw "Falha ao iniciar a tarefa '$TaskName'."
+    }
+
+    Add-MetricCounter -MetricName "TasksTriggered"
+    $script:StateControl[[string]$task.name] = (Get-Date).ToString("yyyy-MM-dd HH:mm")
+
+    return [ordered]@{ status = "STARTED"; message = "Tarefa '$TaskName' iniciada manualmente." }
+}
+
+function Update-TaskEnabledFlag {
+    param(
+        [string]$TaskName,
+        [bool]$Enabled
+    )
+
+    $cfg = Import-Configuration
+    if (-not $cfg) { throw "Falha ao carregar config atual." }
+
+    $target = $null
+    foreach ($task in @($cfg.tasks)) {
+        if ([string]$task.name -eq $TaskName) {
+            $target = $task
+            break
+        }
+    }
+
+    if (-not $target) { throw "Tarefa '$TaskName' nao encontrada no config." }
+
+    $target.enabled = [bool]$Enabled
+    Test-Configuration -Config $cfg
+    Save-ConfigurationAtomic -ConfigObject $cfg
+    Update-Configuration -Force | Out-Null
+}
+
+function Update-DashboardRefreshSetting {
+    param([int]$RefreshSeconds)
+
+    if ($RefreshSeconds -lt 10 -or $RefreshSeconds -gt 3600) {
+        throw "refreshSeconds deve estar entre 10 e 3600."
+    }
+
+    $cfg = Import-Configuration
+    if (-not $cfg) { throw "Falha ao carregar config atual." }
+
+    if (-not $cfg.settings.dashboard) {
+        $cfg.settings | Add-Member -MemberType NoteProperty -Name dashboard -Value ([ordered]@{})
+    }
+
+    $cfg.settings.dashboard.refreshSeconds = [int]$RefreshSeconds
+    Test-Configuration -Config $cfg
+    Save-ConfigurationAtomic -ConfigObject $cfg
+    Update-Configuration -Force | Out-Null
+}
+
+function Update-TaskSchedule {
+    param(
+        [string]$TaskName,
+        [int[]]$DaysOfWeek,
+        [int[]]$Hours,
+        [int[]]$Minutes
+    )
+
+    $cfg = Import-Configuration
+    if (-not $cfg) { throw "Falha ao carregar config atual." }
+
+    $target = $null
+    foreach ($task in @($cfg.tasks)) {
+        if ([string]$task.name -eq $TaskName) {
+            $target = $task
+            break
+        }
+    }
+
+    if (-not $target) { throw "Tarefa '$TaskName' nao encontrada no config." }
+
+    if (-not $target.schedule) {
+        $target | Add-Member -MemberType NoteProperty -Name schedule -Value ([ordered]@{})
+    }
+
+    $target.schedule.daysOfWeek = @($DaysOfWeek | ForEach-Object { [int]$_ })
+    $target.schedule.hours = @($Hours | ForEach-Object { [int]$_ })
+    $target.schedule.minutes = @($Minutes | ForEach-Object { [int]$_ })
+
+    Test-Configuration -Config $cfg
+    Save-ConfigurationAtomic -ConfigObject $cfg
+    Update-Configuration -Force | Out-Null
+}
+
+function Write-ApiJsonResponse {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [int]$StatusCode,
+        [hashtable]$Payload
+    )
+
+    $json = $Payload | ConvertTo-Json -Depth 8 -Compress
+    $bytes = $Utf8Encoding.GetBytes($json)
+
+    $Response.StatusCode = $StatusCode
+    $Response.ContentType = "application/json; charset=utf-8"
+    $Response.Headers.Add("Access-Control-Allow-Origin", "*")
+    $Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, X-Monitor-Token")
+    $Response.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS")
+    $Response.OutputStream.Write($bytes, 0, $bytes.Length)
+    $Response.OutputStream.Flush()
+    $Response.Close()
+}
+
+function Invoke-ApiOperationRequest {
+    param([System.Net.HttpListenerContext]$Context)
+
+    $request = $Context.Request
+    $response = $Context.Response
+
+    if ($request.HttpMethod -eq "OPTIONS") {
+        Write-ApiJsonResponse -Response $response -StatusCode 200 -Payload @{ ok = $true; status = "PRELIGHT" }
+        return
+    }
+
+    if ($request.HttpMethod -ne "POST") {
+        Write-ApiJsonResponse -Response $response -StatusCode 405 -Payload @{ ok = $false; status = "METHOD_NOT_ALLOWED" }
+        return
+    }
+
+    if ($request.Url.AbsolutePath -ne "/api/operations") {
+        Write-ApiJsonResponse -Response $response -StatusCode 404 -Payload @{ ok = $false; status = "NOT_FOUND" }
+        return
+    }
+
+    $token = [string]$request.Headers["X-Monitor-Token"]
+    if ([string]::IsNullOrWhiteSpace($token) -or $token -ne $script:OperationsApiToken) {
+        Write-ApiJsonResponse -Response $response -StatusCode 401 -Payload @{ ok = $false; status = "UNAUTHORIZED"; message = "Token invalido." }
+        return
+    }
+
+    $body = ""
+    $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
+    try {
+        $body = $reader.ReadToEnd()
+    }
+    finally {
+        $reader.Close()
+        $reader.Dispose()
+    }
+
+    $payload = $null
+    try {
+        $payload = $body | ConvertFrom-Json
+    }
+    catch {
+        Write-ApiJsonResponse -Response $response -StatusCode 400 -Payload @{ ok = $false; status = "BAD_REQUEST"; message = "JSON invalido." }
+        return
+    }
+
+    $action = [string]$payload.action
+    $opPayload = $payload.payload
+    $taskName = if ($opPayload) { [string]$opPayload.taskName } else { "" }
+
+    try {
+        $result = $null
+        switch ($action) {
+            "run-now" {
+                $result = Invoke-ManualTaskRun -TaskName $taskName
+                break
+            }
+            "dry-run" {
+                $result = Invoke-ManualTaskRun -TaskName $taskName -DryRun
+                break
+            }
+            "toggle-enabled" {
+                $task = Get-TaskByName -TaskName $taskName -ThrowIfMissing
+                $newState = -not [bool]$task.enabled
+                Update-TaskEnabledFlag -TaskName $taskName -Enabled $newState
+                $result = [ordered]@{ status = "UPDATED"; message = "enabled=$newState" }
+                break
+            }
+            "open-logs" {
+                $task = Get-TaskByName -TaskName $taskName -ThrowIfMissing
+                $scriptDir = Split-Path -Parent ([string]$task.scriptPath)
+                $logPath = Join-Path $scriptDir "Logs"
+                $result = [ordered]@{ status = "OK"; logPath = $logPath; message = "Caminho de log retornado." }
+                break
+            }
+            "set-refresh" {
+                $refreshSeconds = 0
+                if (-not ($opPayload -and [int]::TryParse([string]$opPayload.refreshSeconds, [ref]$refreshSeconds))) {
+                    throw "Informe payload.refreshSeconds inteiro."
+                }
+                Update-DashboardRefreshSetting -RefreshSeconds $refreshSeconds
+                $result = [ordered]@{ status = "UPDATED"; message = "refreshSeconds=$refreshSeconds" }
+                break
+            }
+            "set-schedule" {
+                if (-not $opPayload) { throw "Payload ausente para set-schedule." }
+                $days = @()
+                $hours = @()
+                $minutes = @()
+                if ($opPayload.daysOfWeek) { $days = @($opPayload.daysOfWeek | ForEach-Object { [int]$_ }) }
+                if ($opPayload.hours) { $hours = @($opPayload.hours | ForEach-Object { [int]$_ }) }
+                if ($opPayload.minutes) { $minutes = @($opPayload.minutes | ForEach-Object { [int]$_ }) }
+                if ($minutes.Count -eq 0) { throw "minutes nao pode ser vazio." }
+                Update-TaskSchedule -TaskName $taskName -DaysOfWeek $days -Hours $hours -Minutes $minutes
+                $result = [ordered]@{ status = "UPDATED"; message = "Agenda atualizada para '$taskName'." }
+                break
+            }
+            "refresh-dashboard" {
+                Save-DashboardState -Now (Get-Date)
+                Save-DashboardHtml -Now (Get-Date)
+                $result = [ordered]@{ status = "OK"; message = "Dashboard atualizado." }
+                break
+            }
+            "dry-run-all" {
+                Add-MetricCounter -MetricName "TasksDryRunEligible" -Delta ([int]$script:Config.tasks.Count)
+                $result = [ordered]@{ status = "DRY_RUN"; message = "Dry run global registrado para $($script:Config.tasks.Count) tarefas." }
+                break
+            }
+            default {
+                throw "Acao nao suportada: $action"
+            }
+        }
+
+        Write-Log "API operacao '$action' concluida. Task='$taskName'" -Type "INFO"
+        Write-ApiJsonResponse -Response $response -StatusCode 200 -Payload @{ ok = $true; action = $action; result = $result }
+    }
+    catch {
+        Write-Log "API falhou em '$action': $_" -Type "WARN"
+        Write-ApiJsonResponse -Response $response -StatusCode 400 -Payload @{ ok = $false; action = $action; status = "ERROR"; message = "$_" }
+    }
+}
+
+function Start-OperationsApi {
+    if (-not $script:OperationsApiEnabled) {
+        $script:OperationsApiStatus = "Desabilitada por configuracao."
+        return
+    }
+
+    try {
+        $listener = New-Object System.Net.HttpListener
+        $listener.Prefixes.Add($script:OperationsApiPrefix)
+        $listener.Start()
+        $script:HttpListener = $listener
+        $script:OperationsApiAsyncResult = $script:HttpListener.BeginGetContext($null, $null)
+        $script:OperationsApiStatus = "Ativa em $($script:OperationsApiPrefix) (token: $($script:OperationsApiToken.Substring(0,8))...)."
+        Write-Log "API local iniciada em $($script:OperationsApiPrefix)."
+    }
+    catch {
+        $script:OperationsApiLastError = "$_"
+        $script:OperationsApiStatus = "Falha ao iniciar API local."
+        Write-Log "Falha ao iniciar API local: $_" -Type "WARN"
+    }
+}
+
+function Stop-OperationsApi {
+    try {
+        if ($script:HttpListener) {
+            if ($script:HttpListener.IsListening) {
+                $script:HttpListener.Stop()
+            }
+            $script:HttpListener.Close()
+        }
+    }
+    catch {}
+    finally {
+        $script:OperationsApiAsyncResult = $null
+        $script:HttpListener = $null
+    }
+}
+
+function Invoke-PendingApiRequests {
+    if (-not ($script:HttpListener -and $script:HttpListener.IsListening)) { return }
+
+    while ($script:HttpListener.IsListening -and $script:OperationsApiAsyncResult -and $script:OperationsApiAsyncResult.IsCompleted) {
+        $context = $script:HttpListener.EndGetContext($script:OperationsApiAsyncResult)
+        $script:OperationsApiAsyncResult = $script:HttpListener.BeginGetContext($null, $null)
+        Invoke-ApiOperationRequest -Context $context
+    }
+}
+
 if (-not (Update-Configuration -Force)) {
     $script:MonitorExitCode = 1
     Exit $script:MonitorExitCode
@@ -953,6 +1801,8 @@ if ($script:PreviousMetricsSnapshot) {
 else {
     Write-Log "Nenhum snapshot anterior de metricas encontrado. Iniciando baseline local."
 }
+
+Import-PreviousDashboardState
 
 # Registra shutdown gracioso (encerra com log)
 try {
@@ -972,13 +1822,16 @@ Write-Log "Monitor iniciado v3.6 (hot reload ativo). Tarefas carregadas: $($scri
 if ($SkipTaskExecution -and $DryRun) {
     Write-Log "SkipTaskExecution e DryRun ativos simultaneamente. SkipTaskExecution tera precedencia." -Type "WARN"
 }
+Start-OperationsApi
 Save-MetricsSnapshot -WindowEnd (Get-Date)
-Save-DashboardHtml
+Save-DashboardState -Now (Get-Date)
+Save-DashboardHtml -Now (Get-Date)
 
 $lastHeartbeat = Get-Date
 
 while ($true) {
     try {
+        Invoke-PendingApiRequests
         Remove-FinishedTasks
         Update-Configuration | Out-Null
 
@@ -990,7 +1843,7 @@ while ($true) {
             $windowMinutes = [math]::Round((New-TimeSpan -Start $script:MetricsWindowStartedAt -End $agora).TotalMinutes, 1)
             Write-Log "Heartbeat: Monitor ativo. EmExecucao=$($script:RunningTasks.Count) | Disparos=$($script:Metrics.TasksTriggered) | DryRunElegiveis=$($script:Metrics.TasksDryRunEligible) | Concluidas=$($script:Metrics.TasksCompleted) | NaoZero=$($script:Metrics.TasksFinishedNonZero) | WarnOperacional=$($script:Metrics.TasksFinishedWarn) | E7=$($script:Metrics.ExitCode7ReadOnly) | E23=$($script:Metrics.ExitCode23Cooldown) | E40=$($script:Metrics.ExitCode40Concurrent) | SkipsOverlap=$($script:Metrics.TasksSkippedOverlap) | ReloadOk=$($script:Metrics.ConfigReloadSuccess) | ReloadFail=$($script:Metrics.ConfigReloadFailure) | JanelaMin=$windowMinutes | WDisparos=$($script:MetricsWindow.TasksTriggered) | WDryRunElegiveis=$($script:MetricsWindow.TasksDryRunEligible) | WConcluidas=$($script:MetricsWindow.TasksCompleted) | WNaoZero=$($script:MetricsWindow.TasksFinishedNonZero) | WWarn=$($script:MetricsWindow.TasksFinishedWarn)"
             Save-MetricsSnapshot -WindowEnd $agora -ResetWindow
-            Save-DashboardHtml
+            $script:LastHeartbeatAt = $agora
             $lastHeartbeat = $agora
         }
 
@@ -1023,6 +1876,9 @@ while ($true) {
             [System.GC]::Collect()
         }
 
+        Save-DashboardState -Now $agora
+        Save-DashboardHtml -Now $agora
+
         if ($RunOnce) {
             Write-Log "RunOnce ativo. Encerrando monitor apos ciclo unico." -Type "WARN"
             break
@@ -1053,6 +1909,9 @@ while ($true) {
 }
 
 Save-MetricsSnapshot -WindowEnd (Get-Date)
+Save-DashboardState -Now (Get-Date)
+Save-DashboardHtml -Now (Get-Date)
+Stop-OperationsApi
 
 try {
     if ($script:MonitorMutex) {
@@ -1066,3 +1925,4 @@ try {
 catch {}
 
 Exit $script:MonitorExitCode
+
