@@ -14,7 +14,10 @@
                 "-RunOnce",
                 "-DryRun"
             ],
-            "group": "build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
             "problemMatcher": []
         },
         {
@@ -175,6 +178,65 @@
                 "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
                 "-OnlyGovernance",
                 "-FailOnTermWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca (Strict HTML/CSS)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance",
+                "-FailOnHtmlCssWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Governanca (Strict PT-BR + HTML/CSS)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\ValidarAutomacoes.ps1",
+                "-OnlyGovernance",
+                "-FailOnTermWarnings",
+                "-FailOnHtmlCssWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: Dashboard Template (Strict)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Test-DashboardTemplate.ps1",
+                "-FailOnWarnings"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Validacao: VBA HTML Outlook (Strict)",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\Tools\\Test-VbaHtmlConformidade.ps1",
+                "-FailOnWarnings"
             ],
             "problemMatcher": []
         }
