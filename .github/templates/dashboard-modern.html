@@ -5,167 +5,92 @@
     <meta charset="UTF-8">
     <meta http-equiv="refresh" content="__REFRESH_SECONDS__">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Monitor Automacoes</title>
+    <title>Monitor de Automações</title>
     <style>
+        /* === TOKENS === */
         :root {
             --bg: #f6f8fb;
             --panel: #ffffff;
             --panel-alt: #f1f5f9;
             --text: #0f172a;
-            --muted: #475569;
+            --text-secondary: #1e293b;
+            --muted: #3f4f63;
             --line: #dbe3ee;
             --brand: #0a66c2;
+            --brand-hover: #084e96;
             --brand-2: #0d4f8b;
-            --ok: #0f8a5f;
-            --warn: #ad6a00;
-            --err: #b42318;
+            --ok: #0b7a4f;
+            --ok-bg: #ecfdf4;
+            --ok-border: #86d4a8;
+            --warn: #92560a;
+            --warn-bg: #fff8e6;
+            --warn-border: #f0c56d;
+            --err: #991b1b;
+            --err-bg: #fef3f2;
+            --err-border: #f2b8b5;
             --run: #0a66c2;
-            --off: #64748b;
+            --run-bg: #ecf4ff;
+            --run-border: #9bc5f5;
+            --off: #556677;
+            --off-bg: #f3f6fa;
+            --off-border: #ccd5e0;
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --font-base: "Segoe UI", "Trebuchet MS", Tahoma, sans-serif;
+            --font-mono: Consolas, "Courier New", monospace;
+            --fs-xs: 0.75rem;
+            --fs-sm: 0.8125rem;
+            --fs-base: 0.9rem;
+            --fs-md: 1rem;
+            --fs-lg: 1.25rem;
+            --fs-xl: 1.6rem;
             --radius: 14px;
+            --radius-sm: 10px;
+            --radius-pill: 999px;
             --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
         }
 
-        * {
+        /* === BASE === */
+        *,
+        *::before,
+        *::after {
             box-sizing: border-box;
         }
 
         body {
             margin: 0;
-            font-family: "Segoe UI", "Trebuchet MS", Tahoma, sans-serif;
+            font-family: var(--font-base);
+            font-size: var(--fs-base);
+            line-height: 1.5;
             color: var(--text);
             background: radial-gradient(circle at top right, #dceeff 0%, #f6f8fb 34%, #eef3f8 100%);
-            padding: 16px;
+            padding: var(--space-md);
         }
 
+        h1,
+        h2,
+        h3 {
+            line-height: 1.3;
+        }
+
+        /* === OBJECTS === */
         .container {
             max-width: 1520px;
             margin: 0 auto;
         }
 
-        .hero {
-            background: linear-gradient(120deg, #0a66c2 0%, #114f86 55%, #0b385f 100%);
-            color: #fff;
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-
-        .hero h1 {
-            margin: 0 0 6px;
-            font-size: 1.6rem;
-        }
-
-        .hero .meta {
-            font-size: 0.88rem;
-            opacity: 0.95;
-        }
-
-        .ops-banner {
-            margin-top: 10px;
-            font-size: 0.85rem;
-            padding: 8px 10px;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.16);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-        }
-
         .grid-2 {
             display: grid;
             grid-template-columns: 1.15fr 1fr;
-            gap: 16px;
-            margin-bottom: 16px;
+            gap: var(--space-md);
+            margin-bottom: var(--space-md);
         }
 
-        .card {
-            background: var(--panel);
-            border-radius: var(--radius);
-            border: 1px solid var(--line);
-            box-shadow: var(--shadow);
-            padding: 16px;
-            overflow: auto;
-        }
-
-        .card h2 {
-            margin: 0 0 12px;
-            font-size: 1rem;
-            color: #0b385f;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.9rem;
-            min-width: 740px;
-        }
-
-        th,
-        td {
-            text-align: left;
-            padding: 10px;
-            border-bottom: 1px solid var(--line);
-            vertical-align: middle;
-        }
-
-        th {
-            font-size: 0.78rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: var(--muted);
-            background: var(--panel-alt);
-        }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        .r {
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .mono {
-            font-family: Consolas, "Courier New", monospace;
-            font-size: 0.78rem;
-        }
-
-        .badge {
-            display: inline-block;
-            border-radius: 999px;
-            padding: 4px 10px;
-            font-size: 0.74rem;
-            font-weight: 700;
-            border: 1px solid transparent;
-        }
-
-        .badge.ok {
-            color: var(--ok);
-            border-color: #9ad9bf;
-            background: #ecfdf4;
-        }
-
-        .badge.warn {
-            color: var(--warn);
-            border-color: #ffd08a;
-            background: #fff8e6;
-        }
-
-        .badge.err {
-            color: var(--err);
-            border-color: #f2b8b5;
-            background: #fef3f2;
-        }
-
-        .badge.running {
-            color: var(--run);
-            border-color: #9bc5f5;
-            background: #ecf4ff;
-        }
-
-        .badge.off {
-            color: var(--off);
-            border-color: #ccd5e0;
-            background: #f3f6fa;
+        .stack {
+            display: grid;
+            gap: var(--space-md);
         }
 
         .ops-wrap {
@@ -174,17 +99,145 @@
             gap: 6px;
         }
 
+        .table-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* === COMPONENTS === */
+
+        /* -- Hero -- */
+        .hero {
+            background: linear-gradient(120deg, #0a66c2 0%, #114f86 55%, #0b385f 100%);
+            color: #fff;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: var(--space-md);
+        }
+
+        .hero h1 {
+            margin: 0 0 6px;
+            font-size: var(--fs-xl);
+        }
+
+        .hero .meta {
+            font-size: var(--fs-sm);
+            opacity: 0.95;
+        }
+
+        .ops-banner {
+            margin-top: 10px;
+            font-size: var(--fs-sm);
+            padding: var(--space-sm) 10px;
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+
+        /* -- Card -- */
+        .card {
+            background: var(--panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            padding: var(--space-md);
+        }
+
+        .card h2 {
+            margin: 0 0 12px;
+            font-size: var(--fs-md);
+            color: #0b385f;
+        }
+
+        /* -- Table -- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: var(--fs-base);
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--line);
+            vertical-align: middle;
+        }
+
+        th {
+            font-size: var(--fs-xs);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--muted);
+            background: var(--panel-alt);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: #f8fafd;
+        }
+
+        /* -- Badge -- */
+        .badge {
+            display: inline-block;
+            border-radius: var(--radius-pill);
+            padding: 4px 10px;
+            font-size: var(--fs-xs);
+            font-weight: 700;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .badge.ok {
+            color: var(--ok);
+            border-color: var(--ok-border);
+            background: var(--ok-bg);
+        }
+
+        .badge.warn {
+            color: var(--warn);
+            border-color: var(--warn-border);
+            background: var(--warn-bg);
+        }
+
+        .badge.err {
+            color: var(--err);
+            border-color: var(--err-border);
+            background: var(--err-bg);
+        }
+
+        .badge.running {
+            color: var(--run);
+            border-color: var(--run-border);
+            background: var(--run-bg);
+        }
+
+        .badge.off {
+            color: var(--off);
+            border-color: var(--off-border);
+            background: var(--off-bg);
+        }
+
+        /* -- Button -- */
         .btn {
             border: 1px solid #b8cbe0;
             background: #fff;
             color: #103a5e;
-            border-radius: 10px;
-            padding: 6px 10px;
-            font-size: 0.76rem;
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            font-size: var(--fs-xs);
             font-weight: 700;
             cursor: pointer;
-            transition: all 0.16s ease;
+            transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
             white-space: nowrap;
+            position: relative;
         }
 
         .btn:hover {
@@ -198,21 +251,63 @@
             border-color: var(--brand-2);
         }
 
+        .btn.primary:hover {
+            background: var(--brand-hover);
+        }
+
         .btn.warn {
-            background: #fff7eb;
-            color: #8a4b00;
-            border-color: #f3c382;
+            background: var(--warn-bg);
+            color: var(--warn);
+            border-color: var(--warn-border);
+        }
+
+        .btn.warn:hover {
+            background: #fff0cc;
         }
 
         .btn.danger {
-            background: #fef3f2;
-            color: #9b1c1c;
-            border-color: #efb2ac;
+            background: var(--err-bg);
+            color: var(--err);
+            border-color: var(--err-border);
+        }
+
+        .btn.danger:hover {
+            background: #fde8e6;
         }
 
         .btn[disabled] {
-            opacity: 0.6;
+            opacity: 0.55;
             cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .btn.is-loading {
+            color: transparent;
+            pointer-events: none;
+        }
+
+        .btn.is-loading::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            margin: auto;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #103a5e;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: btn-spin 0.6s linear infinite;
+        }
+
+        .btn.primary.is-loading::after {
+            border-color: #fff;
+            border-right-color: transparent;
+        }
+
+        @keyframes btn-spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .btn:focus-visible {
@@ -220,15 +315,11 @@
             outline-offset: 2px;
         }
 
-        .stack {
-            display: grid;
-            gap: 16px;
-        }
-
+        /* -- Filters -- */
         .filters {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: var(--space-sm);
             margin-bottom: 12px;
         }
 
@@ -238,40 +329,55 @@
             border-color: var(--brand);
         }
 
+        /* -- Status line -- */
         .status-line {
             margin-top: 10px;
             min-height: 24px;
-            padding: 7px 10px;
-            border-radius: 10px;
-            font-size: 0.82rem;
+            padding: 7px 12px;
+            border-radius: var(--radius-sm);
+            font-size: var(--fs-sm);
             background: #eef5ff;
             border: 1px solid #c7ddf5;
             color: #15426d;
         }
 
+        .status-line[data-level="warn"] {
+            background: var(--warn-bg);
+            border-color: var(--warn-border);
+            color: var(--warn);
+        }
+
+        .status-line[data-level="err"] {
+            background: var(--err-bg);
+            border-color: var(--err-border);
+            color: var(--err);
+        }
+
+        /* -- Config grid -- */
         .cfg-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            grid-template-columns: repeat(2, minmax(240px, 1fr));
             gap: 10px;
             margin-top: 12px;
         }
 
         .cfg-card {
             border: 1px solid var(--line);
-            border-radius: 10px;
-            padding: 10px;
+            border-radius: var(--radius-sm);
+            padding: 12px;
             background: #fbfdff;
         }
 
         .cfg-title {
             font-weight: 700;
-            margin-bottom: 8px;
+            margin-bottom: var(--space-sm);
+            color: var(--text);
         }
 
         .cfg-row {
-            font-size: 0.82rem;
-            margin: 2px 0;
-            color: #1e293b;
+            font-size: var(--fs-sm);
+            margin: 3px 0;
+            color: var(--text-secondary);
         }
 
         .cfg-row span {
@@ -279,6 +385,115 @@
             margin-right: 6px;
         }
 
+        /* -- Modal -- */
+        .modal {
+            border: none;
+            border-radius: var(--radius);
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+            padding: 0;
+            max-width: 460px;
+            width: 90vw;
+        }
+
+        .modal::backdrop {
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        .modal-content {
+            padding: var(--space-lg);
+        }
+
+        .modal-title {
+            margin: 0 0 var(--space-md);
+            font-size: var(--fs-lg);
+            color: var(--text);
+        }
+
+        .modal-body {
+            margin-bottom: var(--space-lg);
+        }
+
+        .modal-field {
+            margin-bottom: var(--space-md);
+        }
+
+        .modal-field label {
+            display: block;
+            font-size: var(--fs-sm);
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: var(--space-xs);
+        }
+
+        .modal-field input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+            font-size: var(--fs-base);
+            font-family: var(--font-base);
+            color: var(--text);
+            transition: border-color 0.16s ease;
+        }
+
+        .modal-field input:focus {
+            outline: none;
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.15);
+        }
+
+        .modal-field .field-hint {
+            font-size: var(--fs-xs);
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .modal-field .field-error {
+            font-size: var(--fs-xs);
+            color: var(--err);
+            margin-top: 2px;
+            display: none;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--space-sm);
+            padding-top: var(--space-md);
+            border-top: 1px solid var(--line);
+        }
+
+        /* === UTILITIES === */
+        .r {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .mono {
+            font-family: var(--font-mono);
+            font-size: var(--fs-sm);
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: var(--space-lg) var(--space-md);
+            color: var(--muted);
+            font-size: var(--fs-sm);
+        }
+
+        /* === RESPONSIVE === */
         @media (max-width: 1120px) {
             .grid-2 {
                 grid-template-columns: 1fr;
@@ -294,12 +509,14 @@
                 font-size: 1.35rem;
             }
 
-            table {
-                min-width: 620px;
-            }
-
             .cfg-grid {
                 grid-template-columns: 1fr;
+            }
+
+            th,
+            td {
+                padding: 8px 6px;
+                font-size: var(--fs-sm);
             }
         }
     </style>
@@ -308,55 +525,62 @@
 <body>
     <script id="dashboard-data" type="application/json">__DASHBOARD_JSON__</script>
     <div class="container">
-        <section class="hero">
-            <h1>Painel Operacional de Automacoes</h1>
+        <header class="hero">
+            <h1>Painel Operacional de Automações</h1>
             <div class="meta" id="header-meta">Instanciando painel...</div>
-            <div class="ops-banner" id="ops-banner">Operacoes ainda nao inicializadas.</div>
-        </section>
+            <div class="ops-banner" id="ops-banner">Operações ainda não inicializadas.</div>
+        </header>
 
         <div class="grid-2">
-            <section class="card">
-                <h2>Saude e Metricas</h2>
-                <table>
-                    <tbody id="health-body"></tbody>
-                </table>
-                <h2 style="margin-top:16px;">Metricas (janela: <span id="metrics-window">-</span> min)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Contador</th>
-                            <th class="r">Acumulado</th>
-                            <th class="r">Janela</th>
-                        </tr>
-                    </thead>
-                    <tbody id="metrics-body"></tbody>
-                </table>
+            <section class="card" aria-labelledby="health-title">
+                <h2 id="health-title">Saúde e Métricas</h2>
+                <div class="table-wrap">
+                    <table>
+                        <tbody id="health-body"></tbody>
+                    </table>
+                </div>
+                <h2 id="metrics-title" style="margin-top:16px;">Métricas (janela: <span id="metrics-window">-</span>
+                    min)</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Contador</th>
+                                <th class="r">Acumulado</th>
+                                <th class="r">Janela</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-body"></tbody>
+                    </table>
+                </div>
             </section>
-            <section class="card stack">
+            <section class="card stack" aria-labelledby="actions-title">
                 <div>
-                    <h2>Acoes Globais</h2>
+                    <h2 id="actions-title">Ações Globais</h2>
                     <div class="ops-wrap">
                         <button class="btn primary" data-global-op="refresh-dashboard"
                             aria-label="Atualizar painel operacional">Atualizar painel</button>
                         <button class="btn" data-global-op="set-refresh"
-                            aria-label="Configurar intervalo de atualizacao do painel">Atualizar refresh</button>
+                            aria-label="Configurar intervalo de atualização do painel">Alterar refresh</button>
                         <button class="btn warn" data-global-op="dry-run-all"
-                            aria-label="Executar dry run global das automacoes">Dry Run geral</button>
+                            aria-label="Executar dry run global das automações">Dry Run geral</button>
                     </div>
                 </div>
                 <div>
-                    <h2>Alertas Operacionais</h2>
-                    <table>
-                        <tbody id="alerts-body"></tbody>
-                    </table>
+                    <h2 id="alerts-title">Alertas Operacionais</h2>
+                    <div class="table-wrap" aria-live="polite" aria-atomic="true">
+                        <table>
+                            <tbody id="alerts-body"></tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="status-line" id="status-line">Pronto.</div>
+                <div class="status-line" id="status-line" role="status" aria-live="polite">Pronto.</div>
             </section>
         </div>
 
-        <section class="card">
-            <h2>Automacoes</h2>
-            <div class="filters" id="filters">
+        <section class="card" aria-labelledby="tasks-title">
+            <h2 id="tasks-title">Automações</h2>
+            <div class="filters" id="filters" role="group" aria-label="Filtros de tarefas">
                 <button class="btn filter active" data-filter="all" aria-label="Filtrar tarefas: todas">Todas</button>
                 <button class="btn filter" data-filter="running"
                     aria-label="Filtrar tarefas: executando">Executando</button>
@@ -364,72 +588,112 @@
                     aria-label="Filtrar tarefas: falhas e avisos">Falhas/Avisos</button>
                 <button class="btn filter" data-filter="ok" aria-label="Filtrar tarefas: sucesso">Sucesso</button>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Nome</th>
-                        <th>Status</th>
-                        <th>Agendamento</th>
-                        <th class="r">Exit</th>
-                        <th>Ultima</th>
-                        <th>Proxima</th>
-                        <th class="r">Duracao</th>
-                        <th>Operacoes</th>
-                    </tr>
-                </thead>
-                <tbody id="tasks-body"></tbody>
-            </table>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Status</th>
+                            <th>Agendamento</th>
+                            <th class="r">Exit</th>
+                            <th>Última</th>
+                            <th>Próxima</th>
+                            <th class="r">Duração</th>
+                            <th>Operações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tasks-body"></tbody>
+                </table>
+            </div>
         </section>
 
-        <section class="card">
-            <h2>Configuracoes das Automacoes</h2>
+        <section class="card" aria-labelledby="config-title">
+            <h2 id="config-title">Configurações das Automações</h2>
             <div class="cfg-grid" id="config-grid"></div>
         </section>
 
-        <section class="card">
-            <h2>Historico Recente</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Tarefa</th>
-                        <th>Status</th>
-                        <th class="r">Exit</th>
-                        <th>Fim</th>
-                        <th class="r">Duracao</th>
-                    </tr>
-                </thead>
-                <tbody id="history-body"></tbody>
-            </table>
+        <section class="card" aria-labelledby="history-title">
+            <h2 id="history-title">Histórico Recente</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tarefa</th>
+                            <th>Status</th>
+                            <th class="r">Exit</th>
+                            <th>Fim</th>
+                            <th class="r">Duração</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+            </div>
         </section>
     </div>
 
+    <dialog id="modal-dialog" class="modal">
+        <form method="dialog" class="modal-content" id="modal-form" novalidate>
+            <h3 id="modal-title" class="modal-title"></h3>
+            <div id="modal-body" class="modal-body"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn" id="modal-cancel">Cancelar</button>
+                <button type="submit" class="btn primary" id="modal-confirm">Confirmar</button>
+            </div>
+        </form>
+    </dialog>
+
     <script>
         (function () {
-            const dataElement = document.getElementById('dashboard-data');
+            /* --- Helpers (definidos antes do parse para uso no error boundary) --- */
+            function escapeHtml(value) {
+                if (typeof value !== 'string') return String(value == null ? '' : value);
+                return value.replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            /* --- State bootstrap --- */
+            var dataElement = document.getElementById('dashboard-data');
             if (!dataElement) return;
-            let state = null;
-            try { state = JSON.parse((dataElement.textContent || '').trim()); }
-            catch (err) {
-                console.error('Falha no parse do dashboard', err);
+
+            var state = null;
+            try {
+                state = JSON.parse((dataElement.textContent || '').trim());
+            } catch (err) {
+                var c = document.querySelector('.container');
+                if (c) {
+                    c.innerHTML =
+                        '<div class="card" style="margin-top:20px;">' +
+                        '<h2 style="color:var(--err);">Erro ao carregar painel</h2>' +
+                        '<p>Não foi possível interpretar o estado do dashboard.</p>' +
+                        '<pre class="mono" style="white-space:pre-wrap;color:var(--err);">' +
+                        escapeHtml(String(err)) + '</pre></div>';
+                }
                 return;
             }
 
-            const statusLine = document.getElementById('status-line');
-            const API_BASE = (state.operations && state.operations.apiBaseUrl) ? state.operations.apiBaseUrl : 'http://localhost:8765';
-            const API_ENDPOINT = (state.operations && state.operations.endpoint) ? state.operations.endpoint : '/api/operations';
-            const API_TOKEN = (state.operations && state.operations.token) ? state.operations.token : '';
+            var statusLine = document.getElementById('status-line');
+            var containerEl = document.querySelector('.container');
+            var modal = document.getElementById('modal-dialog');
+            var modalForm = document.getElementById('modal-form');
+            var modalTitle = document.getElementById('modal-title');
+            var modalBody = document.getElementById('modal-body');
+
+            var API_BASE = (state.operations && state.operations.apiBaseUrl) || 'http://localhost:8765';
+            var API_ENDPOINT = (state.operations && state.operations.endpoint) || '/api/operations';
+            var API_TOKEN = (state.operations && state.operations.token) || '';
 
             function setStatus(message, level) {
                 statusLine.textContent = message;
-                statusLine.style.borderColor = level === 'err' ? '#efb2ac' : (level === 'warn' ? '#f3c382' : '#c7ddf5');
-                statusLine.style.background = level === 'err' ? '#fef3f2' : (level === 'warn' ? '#fff7eb' : '#eef5ff');
-                statusLine.style.color = level === 'err' ? '#9b1c1c' : (level === 'warn' ? '#8a4b00' : '#15426d');
+                statusLine.setAttribute('data-level', level || 'ok');
             }
 
             function formatDateTime(iso) {
-                if (!iso) return '-';
-                const d = new Date(iso);
-                if (isNaN(d)) return '-';
+                if (!iso) return '\u2013';
+                var d = new Date(iso);
+                if (isNaN(d)) return '\u2013';
                 return d.toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit', year: 'numeric',
                     hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -437,110 +701,213 @@
             }
 
             function formatShortDateTime(iso) {
-                if (!iso) return '-';
-                const d = new Date(iso);
-                if (isNaN(d)) return '-';
+                if (!iso) return '\u2013';
+                var d = new Date(iso);
+                if (isNaN(d)) return '\u2013';
                 return d.toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit',
                     hour: '2-digit', minute: '2-digit'
                 }).replace(',', '');
             }
 
-            function escapeHtml(value) {
-                if (typeof value !== 'string') return value;
-                return value.replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/\"/g, '&quot;')
-                    .replace(/'/g, '&#039;');
+            function parseCsvToIntList(raw) {
+                if (!raw || !raw.trim()) return [];
+                return raw.split(',')
+                    .map(function (s) { return Number(s.trim()); })
+                    .filter(function (n) { return Number.isInteger(n) && n >= 0; });
             }
 
-            async function callOperation(action, payload) {
-                const requestBody = { action: action, payload: payload || {}, requestedAt: new Date().toISOString() };
-                try {
-                    const response = await fetch(API_BASE + API_ENDPOINT, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Monitor-Token': API_TOKEN
-                        },
-                        body: JSON.stringify(requestBody)
-                    });
+            /* --- API --- */
+            function callOperation(action, payload) {
+                var body = {
+                    action: action,
+                    payload: payload || {},
+                    requestedAt: new Date().toISOString()
+                };
+                return fetch(API_BASE + API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Monitor-Token': API_TOKEN
+                    },
+                    body: JSON.stringify(body)
+                }).then(function (response) {
                     if (!response.ok) {
-                        const bodyText = await response.text();
-                        throw new Error('HTTP ' + response.status + ': ' + bodyText);
+                        return response.text().then(function (text) {
+                            throw new Error('HTTP ' + response.status + ': ' + text);
+                        });
                     }
-                    const result = await response.json();
-                    setStatus('Operacao enviada: ' + action + '. Retorno: ' + (result.status || 'OK'), 'ok');
+                    return response.json();
+                }).then(function (result) {
+                    setStatus('Operação enviada: ' + action + '. Retorno: ' + (result.status || 'OK'), 'ok');
                     return result;
-                }
-                catch (err) {
-                    setStatus('Falha ao acionar API local (' + action + '). ' + err.message, 'warn');
+                }).catch(function (err) {
+                    setStatus('Falha ao acionar API (' + action + '). ' + err.message, 'err');
                     return null;
-                }
+                });
             }
 
+            /* --- Modal --- */
+            var _modalResolve = null;
+
+            function openModal(title, fieldsHtml) {
+                modalTitle.textContent = title;
+                modalBody.innerHTML = fieldsHtml;
+                modal.showModal();
+                var firstInput = modalBody.querySelector('input');
+                if (firstInput) firstInput.focus();
+                return new Promise(function (resolve) { _modalResolve = resolve; });
+            }
+
+            function closeModal(result) {
+                modal.close();
+                if (_modalResolve) { _modalResolve(result); _modalResolve = null; }
+            }
+
+            document.getElementById('modal-cancel').addEventListener('click', function () { closeModal(null); });
+            modal.addEventListener('close', function () { if (_modalResolve) { _modalResolve(null); _modalResolve = null; } });
+
+            modalForm.addEventListener('submit', function (ev) {
+                ev.preventDefault();
+                var data = {};
+                modalBody.querySelectorAll('input[name]').forEach(function (input) {
+                    data[input.name] = input.value;
+                });
+                closeModal(data);
+            });
+
+            function promptSchedule(taskName) {
+                var html =
+                    '<div class="modal-field">' +
+                    '<label for="sched-days">Dias da semana (0=Dom, 6=S\u00e1b)</label>' +
+                    '<input id="sched-days" name="daysOfWeek" type="text" value="1,2,3,4,5" placeholder="1,2,3,4,5">' +
+                    '<div class="field-hint">Separe por v\u00edrgula. Ex.: 1,2,3,4,5</div>' +
+                    '</div>' +
+                    '<div class="modal-field">' +
+                    '<label for="sched-hours">Horas (vazio = todas)</label>' +
+                    '<input id="sched-hours" name="hours" type="text" value="" placeholder="7,15">' +
+                    '<div class="field-hint">Vazio significa sem filtro de hora.</div>' +
+                    '</div>' +
+                    '<div class="modal-field">' +
+                    '<label for="sched-min">Minutos (obrigat\u00f3rio)</label>' +
+                    '<input id="sched-min" name="minutes" type="text" value="0" placeholder="0,30">' +
+                    '<div class="field-hint">Ex.: 0 ou 0,30</div>' +
+                    '</div>';
+
+                return openModal('Editar agenda \u2014 ' + taskName, html).then(function (result) {
+                    if (!result) return null;
+                    var minutes = parseCsvToIntList(result.minutes);
+                    if (minutes.length === 0 || minutes.some(function (m) { return m < 0 || m > 59; })) {
+                        setStatus('Agenda cancelada: minutos inv\u00e1lidos.', 'warn');
+                        return null;
+                    }
+                    return {
+                        daysOfWeek: parseCsvToIntList(result.daysOfWeek),
+                        hours: parseCsvToIntList(result.hours),
+                        minutes: minutes
+                    };
+                });
+            }
+
+            function promptRefresh() {
+                var current = (state.dashboard && state.dashboard.refreshSeconds) ? state.dashboard.refreshSeconds : 60;
+                var html =
+                    '<div class="modal-field">' +
+                    '<label for="refresh-val">Intervalo de atualiza\u00e7\u00e3o (segundos)</label>' +
+                    '<input id="refresh-val" name="refreshSeconds" type="number" min="10" max="3600" value="' + current + '">' +
+                    '<div class="field-hint">Valor entre 10 e 3600 segundos.</div>' +
+                    '</div>';
+
+                return openModal('Alterar intervalo de atualiza\u00e7\u00e3o', html).then(function (result) {
+                    if (!result) return null;
+                    var val = Number(result.refreshSeconds);
+                    if (!Number.isInteger(val) || val < 10 || val > 3600) {
+                        setStatus('Refresh cancelado: valor fora do intervalo (10\u20133600).', 'warn');
+                        return null;
+                    }
+                    return val;
+                });
+            }
+
+            /* --- Renderers --- */
             function getTaskStatus(task) {
-                if (task.isRunning) return { category: 'running', text: 'Executando', badgeClass: 'running', exitText: '-' };
+                if (task.isRunning) return { category: 'running', text: 'Executando', badgeClass: 'running', exitText: '\u2013' };
                 if (task.lastResult) {
-                    if (task.lastResult.exitCode === 0) return { category: 'ok', text: 'OK', badgeClass: 'ok', exitText: String(task.lastResult.exitCode) };
+                    if (task.lastResult.exitCode === 0) return { category: 'ok', text: 'OK', badgeClass: 'ok', exitText: '0' };
                     if ([7, 23, 40].indexOf(task.lastResult.exitCode) >= 0) return { category: 'issues', text: 'Aviso', badgeClass: 'warn', exitText: String(task.lastResult.exitCode) };
                     return { category: 'issues', text: 'Erro', badgeClass: 'err', exitText: String(task.lastResult.exitCode) };
                 }
-                if (!task.enabled) return { category: 'all', text: 'Desabilitado', badgeClass: 'off', exitText: '-' };
-                return { category: 'ok', text: 'Aguardando', badgeClass: 'off', exitText: '-' };
+                if (!task.enabled) return { category: 'all', text: 'Desabilitado', badgeClass: 'off', exitText: '\u2013' };
+                return { category: 'ok', text: 'Aguardando', badgeClass: 'off', exitText: '\u2013' };
             }
 
             function renderTasks(filter) {
-                const rows = [];
-                (state.tasks || []).forEach(function (task) {
-                    const status = getTaskStatus(task);
-                    if (filter !== 'all' && status.category !== filter) return;
-                    const lastText = task.isRunning && task.runningSince ? ('desde ' + formatShortDateTime(task.runningSince)) : (task.lastResult ? formatShortDateTime(task.lastResult.finishedAt) : '-');
-                    const nextText = task.nextRun ? formatShortDateTime(task.nextRun) : '-';
-                    const toggleLabel = task.enabled ? 'Desabilitar' : 'Habilitar';
-                    const toggleClass = task.enabled ? 'danger' : 'primary';
+                var tasks = state.tasks || [];
+                if (tasks.length === 0) {
+                    document.getElementById('tasks-body').innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o configurada.</td></tr>';
+                    return;
+                }
+                var rows = [];
+                tasks.forEach(function (task) {
+                    var st = getTaskStatus(task);
+                    if (filter !== 'all' && st.category !== filter) return;
+                    var lastText = task.isRunning && task.runningSince
+                        ? ('desde ' + formatShortDateTime(task.runningSince))
+                        : (task.lastResult ? formatShortDateTime(task.lastResult.finishedAt) : '\u2013');
+                    var nextText = task.nextRun ? formatShortDateTime(task.nextRun) : '\u2013';
+                    var toggleLabel = task.enabled ? 'Desabilitar' : 'Habilitar';
+                    var toggleClass = task.enabled ? 'danger' : 'primary';
+                    var tn = escapeHtml(task.name);
 
                     rows.push(
                         '<tr>' +
-                        '<td>' + escapeHtml(task.name) + '</td>' +
-                        '<td><span class="badge ' + status.badgeClass + '">' + status.text + '</span></td>' +
-                        '<td class="mono">' + escapeHtml(task.scheduleText || '-') + '</td>' +
-                        '<td class="r">' + status.exitText + '</td>' +
+                        '<td>' + tn + '</td>' +
+                        '<td><span class="badge ' + st.badgeClass + '">' + st.text + '</span></td>' +
+                        '<td class="mono">' + escapeHtml(task.scheduleText || '\u2013') + '</td>' +
+                        '<td class="r">' + st.exitText + '</td>' +
                         '<td>' + lastText + '</td>' +
                         '<td>' + nextText + '</td>' +
                         '<td class="r">' + (task.avgDurationSec || 0) + 's / ' + (task.p95DurationSec || 0) + 's</td>' +
                         '<td><div class="ops-wrap">' +
-                        '<button class="btn primary task-op" data-action="run-now" data-task="' + escapeHtml(task.name) + '" aria-label="Executar agora a tarefa ' + escapeHtml(task.name) + '">Run Now</button>' +
-                        '<button class="btn warn task-op" data-action="dry-run" data-task="' + escapeHtml(task.name) + '" aria-label="Executar dry run da tarefa ' + escapeHtml(task.name) + '">Dry Run</button>' +
-                        '<button class="btn ' + toggleClass + ' task-op" data-action="toggle-enabled" data-task="' + escapeHtml(task.name) + '" aria-label="Alterar estado da tarefa ' + escapeHtml(task.name) + '">' + toggleLabel + '</button>' +
-                        '<button class="btn task-op" data-action="open-logs" data-task="' + escapeHtml(task.name) + '" aria-label="Abrir caminho de logs da tarefa ' + escapeHtml(task.name) + '">Logs</button>' +
-                        '<button class="btn task-op" data-action="set-schedule" data-task="' + escapeHtml(task.name) + '" aria-label="Editar agenda da tarefa ' + escapeHtml(task.name) + '">Agenda</button>' +
+                        '<button class="btn primary task-op" data-action="run-now" data-task="' + tn + '" aria-label="Executar agora ' + tn + '">Executar</button>' +
+                        '<button class="btn warn task-op" data-action="dry-run" data-task="' + tn + '" aria-label="Dry run de ' + tn + '">Dry Run</button>' +
+                        '<button class="btn ' + toggleClass + ' task-op" data-action="toggle-enabled" data-task="' + tn + '" aria-label="Alterar estado de ' + tn + '">' + toggleLabel + '</button>' +
+                        '<button class="btn task-op" data-action="open-logs" data-task="' + tn + '" aria-label="Abrir logs de ' + tn + '">Logs</button>' +
+                        '<button class="btn task-op" data-action="set-schedule" data-task="' + tn + '" aria-label="Editar agenda de ' + tn + '">Agenda</button>' +
                         '</div></td>' +
                         '</tr>'
                     );
                 });
+                if (rows.length === 0) {
+                    document.getElementById('tasks-body').innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o corresponde ao filtro.</td></tr>';
+                    return;
+                }
                 document.getElementById('tasks-body').innerHTML = rows.join('');
             }
 
             function renderConfigs() {
-                const html = [];
-                (state.tasks || []).forEach(function (task) {
-                    const cfg = task.config || {};
-                    const schedule = cfg.schedule || { daysOfWeek: [], hours: [], minutes: [] };
+                var tasks = state.tasks || [];
+                if (tasks.length === 0) {
+                    document.getElementById('config-grid').innerHTML = '<p class="empty-state">Nenhuma configura\u00e7\u00e3o dispon\u00edvel.</p>';
+                    return;
+                }
+                var html = [];
+                tasks.forEach(function (task) {
+                    var cfg = task.config || {};
+                    var schedule = cfg.schedule || { daysOfWeek: [], hours: [], minutes: [] };
+                    var tn = escapeHtml(task.name);
                     html.push(
                         '<article class="cfg-card">' +
-                        '<div class="cfg-title">' + escapeHtml(task.name) + '</div>' +
-                        '<div class="cfg-row"><span>Script:</span><code class="mono">' + escapeHtml(cfg.scriptPath || '-') + '</code></div>' +
-                        '<div class="cfg-row"><span>Enabled:</span>' + String(task.enabled) + '</div>' +
-                        '<div class="cfg-row"><span>PreventOverlap:</span>' + String(cfg.preventOverlap) + '</div>' +
-                        '<div class="cfg-row"><span>WaitForExit:</span>' + String(cfg.waitForExit) + '</div>' +
-                        '<div class="cfg-row"><span>daysOfWeek:</span>' + escapeHtml(JSON.stringify(schedule.daysOfWeek || [])) + '</div>' +
-                        '<div class="cfg-row"><span>hours:</span>' + escapeHtml(JSON.stringify(schedule.hours || [])) + '</div>' +
-                        '<div class="cfg-row"><span>minutes:</span>' + escapeHtml(JSON.stringify(schedule.minutes || [])) + '</div>' +
+                        '<div class="cfg-title">' + tn + '</div>' +
+                        '<div class="cfg-row"><span>Script:</span><code class="mono">' + escapeHtml(cfg.scriptPath || '\u2013') + '</code></div>' +
+                        '<div class="cfg-row"><span>Habilitado:</span>' + (task.enabled ? 'Sim' : 'N\u00e3o') + '</div>' +
+                        '<div class="cfg-row"><span>Evitar sobreposi\u00e7\u00e3o:</span>' + (cfg.preventOverlap ? 'Sim' : 'N\u00e3o') + '</div>' +
+                        '<div class="cfg-row"><span>Aguardar t\u00e9rmino:</span>' + (cfg.waitForExit ? 'Sim' : 'N\u00e3o') + '</div>' +
+                        '<div class="cfg-row"><span>Dias:</span>' + escapeHtml(JSON.stringify(schedule.daysOfWeek || [])) + '</div>' +
+                        '<div class="cfg-row"><span>Horas:</span>' + escapeHtml(JSON.stringify(schedule.hours || [])) + '</div>' +
+                        '<div class="cfg-row"><span>Minutos:</span>' + escapeHtml(JSON.stringify(schedule.minutes || [])) + '</div>' +
                         '<div class="ops-wrap" style="margin-top:8px;">' +
-                        '<button class="btn task-op" data-action="set-schedule" data-task="' + escapeHtml(task.name) + '" aria-label="Editar agenda da tarefa ' + escapeHtml(task.name) + '">Editar agenda</button>' +
-                        '<button class="btn task-op" data-action="set-refresh" data-task="' + escapeHtml(task.name) + '" aria-label="Atualizar refresh do dashboard a partir da tarefa ' + escapeHtml(task.name) + '">Refresh dashboard</button>' +
+                        '<button class="btn task-op" data-action="set-schedule" data-task="' + tn + '" aria-label="Editar agenda de ' + tn + '">Editar agenda</button>' +
                         '</div>' +
                         '</article>'
                     );
@@ -550,60 +917,61 @@
 
             function renderMetrics() {
                 document.getElementById('metrics-window').textContent = String(state.windowMinutes || 0);
-                const labels = {
+                var labels = {
                     TasksTriggered: 'Disparos',
-                    TasksCompleted: 'Concluidas',
-                    TasksFinishedNonZero: 'Exit Nao-Zero',
+                    TasksCompleted: 'Conclu\u00eddas',
+                    TasksFinishedNonZero: 'Exit N\u00e3o-Zero',
                     TasksFinishedWarn: 'Avisos Operacionais',
                     ExitCode7ReadOnly: 'Exit 7 (Bloqueado)',
                     ExitCode23Cooldown: 'Exit 23 (Cooldown)',
                     ExitCode40Concurrent: 'Exit 40 (Concorrente)',
-                    TasksSkippedOverlap: 'Skips Sobreposicao',
+                    TasksSkippedOverlap: 'Skips Sobreposi\u00e7\u00e3o',
                     ConfigReloadSuccess: 'Reloads Config OK',
                     ConfigReloadFailure: 'Reloads Config Falha'
                 };
-                const rows = [];
+                var rows = [];
                 Object.keys(labels).forEach(function (key) {
-                    const c = state.metrics && state.metrics.cumulative ? (state.metrics.cumulative[key] || 0) : 0;
-                    const w = state.metrics && state.metrics.window ? (state.metrics.window[key] || 0) : 0;
+                    var c = state.metrics && state.metrics.cumulative ? (state.metrics.cumulative[key] || 0) : 0;
+                    var w = state.metrics && state.metrics.window ? (state.metrics.window[key] || 0) : 0;
                     rows.push('<tr><td>' + labels[key] + '</td><td class="r">' + c + '</td><td class="r">' + w + '</td></tr>');
                 });
                 document.getElementById('metrics-body').innerHTML = rows.join('');
             }
 
             function renderHealth() {
-                const health = state.health || {};
+                var health = state.health || {};
                 document.getElementById('health-body').innerHTML = [
-                    '<tr><th>Schema</th><td>' + escapeHtml(state.dashboardSchemaVersion || 'n/a') + '</td></tr>',
-                    '<tr><th>Monitor</th><td>v' + escapeHtml(state.monitorVersion || '-') + '</td></tr>',
-                    '<tr><th>Heartbeat</th><td>' + formatDateTime(health.lastHeartbeatAt) + '</td></tr>',
-                    '<tr><th>Ultimo reload</th><td>' + formatDateTime(health.lastConfigReloadAt) + '</td></tr>',
-                    '<tr><th>Status reload</th><td>' + escapeHtml(health.lastConfigReloadStatus || '-') + '</td></tr>',
-                    '<tr><th>Loop errors</th><td>' + String(health.mainLoopConsecutiveErr || 0) + '</td></tr>',
-                    '<tr><th>Intervalo check</th><td>' + String(health.checkIntervalSeconds || 20) + 's</td></tr>'
+                    '<tr><th scope="row">Schema</th><td>' + escapeHtml(state.dashboardSchemaVersion || 'n/a') + '</td></tr>',
+                    '<tr><th scope="row">Monitor</th><td>v' + escapeHtml(state.monitorVersion || '\u2013') + '</td></tr>',
+                    '<tr><th scope="row">Heartbeat</th><td>' + formatDateTime(health.lastHeartbeatAt) + '</td></tr>',
+                    '<tr><th scope="row">\u00daltimo reload</th><td>' + formatDateTime(health.lastConfigReloadAt) + '</td></tr>',
+                    '<tr><th scope="row">Status reload</th><td>' + escapeHtml(health.lastConfigReloadStatus || '\u2013') + '</td></tr>',
+                    '<tr><th scope="row">Erros consecutivos</th><td>' + String(health.mainLoopConsecutiveErr || 0) + '</td></tr>',
+                    '<tr><th scope="row">Intervalo check</th><td>' + String(health.checkIntervalSeconds || 20) + 's</td></tr>'
                 ].join('');
             }
 
             function renderAlerts() {
-                const alerts = state.alerts || [];
+                var alerts = state.alerts || [];
                 if (alerts.length === 0) {
                     document.getElementById('alerts-body').innerHTML = '<tr><td><span class="badge ok">OK</span></td><td>Sem alertas operacionais ativos.</td></tr>';
                     return;
                 }
                 document.getElementById('alerts-body').innerHTML = alerts.map(function (a) {
-                    const badge = a.severity === 'WARN' ? 'warn' : 'err';
+                    var badge = a.severity === 'WARN' ? 'warn' : 'err';
                     return '<tr><td style="width:90px;"><span class="badge ' + badge + '">' + escapeHtml(a.severity) + '</span></td><td>' + escapeHtml(a.message) + '</td></tr>';
                 }).join('');
             }
 
             function renderHistory() {
-                const history = state.history || [];
+                var history = state.history || [];
                 if (history.length === 0) {
-                    document.getElementById('history-body').innerHTML = '<tr><td colspan="5">Sem historico recente.</td></tr>';
+                    document.getElementById('history-body').innerHTML = '<tr><td colspan="5" class="empty-state">Sem hist\u00f3rico recente.</td></tr>';
                     return;
                 }
+                var badgeMap = { 'OK': 'ok', 'WARN': 'warn', 'AVISO': 'warn', 'ERRO': 'err' };
                 document.getElementById('history-body').innerHTML = history.map(function (h) {
-                    const css = String(h.status || 'ERRO').toLowerCase();
+                    var css = badgeMap[String(h.status).toUpperCase()] || 'off';
                     return '<tr>' +
                         '<td>' + escapeHtml(h.taskName) + '</td>' +
                         '<td><span class="badge ' + css + '">' + escapeHtml(h.status) + '</span></td>' +
@@ -614,90 +982,102 @@
                 }).join('');
             }
 
-            function bindEvents() {
-                document.querySelectorAll('.filter').forEach(function (btn) {
-                    btn.addEventListener('click', function (ev) {
-                        document.querySelectorAll('.filter').forEach(function (node) { node.classList.remove('active'); });
-                        ev.currentTarget.classList.add('active');
-                        const filter = ev.currentTarget.getAttribute('data-filter') || 'all';
-                        renderTasks(filter);
-                    });
-                });
-
-                document.querySelectorAll('.task-op').forEach(function (btn) {
-                    btn.addEventListener('click', async function (ev) {
-                        const node = ev.currentTarget;
-                        const action = node.getAttribute('data-action');
-                        const taskName = node.getAttribute('data-task');
-                        const payload = { taskName: taskName };
-
-                        if (action === 'set-schedule') {
-                            const rawDays = window.prompt('daysOfWeek (CSV 0-6). Ex.: 1,2,3,4,5', '1,2,3,4,5');
-                            const rawHours = window.prompt('hours (CSV 0-23, vazio = sem filtro). Ex.: 7,15', '');
-                            const rawMinutes = window.prompt('minutes (CSV 0-59, obrigatorio). Ex.: 0 ou 30', '0');
-
-                            if (rawMinutes === null) {
-                                setStatus('Operacao cancelada pelo usuario.', 'warn');
-                                return;
-                            }
-
-                            function parseCsvToIntList(raw) {
-                                if (!raw || !raw.trim()) return [];
-                                return raw.split(',').map(function (item) { return Number(item.trim()); })
-                                    .filter(function (item) { return Number.isInteger(item); });
-                            }
-
-                            payload.daysOfWeek = parseCsvToIntList(rawDays || '');
-                            payload.hours = parseCsvToIntList(rawHours || '');
-                            payload.minutes = parseCsvToIntList(rawMinutes || '');
-                        }
-
-                        if (action === 'set-refresh') {
-                            const rawRefresh = window.prompt('Novo refreshSeconds (10-3600):', String((state.dashboard && state.dashboard.refreshSeconds) ? state.dashboard.refreshSeconds : 60));
-                            if (rawRefresh === null) {
-                                setStatus('Operacao cancelada pelo usuario.', 'warn');
-                                return;
-                            }
-                            payload.refreshSeconds = Number(rawRefresh);
-                        }
-
-                        node.disabled = true;
-                        setStatus('Enviando operacao ' + action + ' para ' + taskName + ' ...', 'ok');
-                        await callOperation(action, payload);
-                        node.disabled = false;
-                    });
-                });
-
-                document.querySelectorAll('[data-global-op]').forEach(function (btn) {
-                    btn.addEventListener('click', async function (ev) {
-                        const action = ev.currentTarget.getAttribute('data-global-op');
-                        const payload = {};
-
-                        if (action === 'set-refresh') {
-                            const rawRefresh = window.prompt('Novo refreshSeconds (10-3600):', String((state.dashboard && state.dashboard.refreshSeconds) ? state.dashboard.refreshSeconds : 60));
-                            if (rawRefresh === null) {
-                                setStatus('Operacao cancelada pelo usuario.', 'warn');
-                                return;
-                            }
-                            payload.refreshSeconds = Number(rawRefresh);
-                        }
-
-                        setStatus('Executando acao global: ' + action, 'ok');
-                        await callOperation(action, payload);
-                    });
-                });
+            /* --- Event delegation --- */
+            function setButtonLoading(btn, loading) {
+                if (loading) {
+                    btn.classList.add('is-loading');
+                    btn.setAttribute('disabled', '');
+                } else {
+                    btn.classList.remove('is-loading');
+                    btn.removeAttribute('disabled');
+                }
             }
 
-            document.getElementById('header-meta').innerHTML =
-                'Versao ' + escapeHtml(state.monitorVersion || '-') +
-                ' | Iniciado: ' + formatDateTime(state.startedAt) +
-                ' | Atualizado: ' + formatDateTime(state.generatedAt) +
-                ' | Tarefas: ' + String(state.taskCount || 0) +
-                ' | Em execucao: ' + String(state.runningTasks || 0);
+            containerEl.addEventListener('click', function (ev) {
+                var filterBtn = ev.target.closest('.filter[data-filter]');
+                if (filterBtn) {
+                    document.querySelectorAll('.filter').forEach(function (n) { n.classList.remove('active'); });
+                    filterBtn.classList.add('active');
+                    renderTasks(filterBtn.getAttribute('data-filter') || 'all');
+                    return;
+                }
 
-            const ops = state.operations || {};
+                var taskBtn = ev.target.closest('.task-op[data-action]');
+                if (taskBtn) {
+                    var action = taskBtn.getAttribute('data-action');
+                    var taskName = taskBtn.getAttribute('data-task');
+                    var payload = { taskName: taskName };
+
+                    function doSend() {
+                        setButtonLoading(taskBtn, true);
+                        setStatus('Enviando ' + action + ' para ' + taskName + '...', 'ok');
+                        callOperation(action, payload).then(function () {
+                            setButtonLoading(taskBtn, false);
+                        });
+                    }
+
+                    if (action === 'set-schedule') {
+                        promptSchedule(taskName).then(function (sched) {
+                            if (!sched) return;
+                            payload.daysOfWeek = sched.daysOfWeek;
+                            payload.hours = sched.hours;
+                            payload.minutes = sched.minutes;
+                            doSend();
+                        });
+                        return;
+                    }
+
+                    if (action === 'set-refresh') {
+                        promptRefresh().then(function (val) {
+                            if (val === null) return;
+                            payload.refreshSeconds = val;
+                            doSend();
+                        });
+                        return;
+                    }
+
+                    doSend();
+                    return;
+                }
+
+                var globalBtn = ev.target.closest('[data-global-op]');
+                if (globalBtn) {
+                    var gAction = globalBtn.getAttribute('data-global-op');
+                    var gPayload = {};
+
+                    if (gAction === 'set-refresh') {
+                        promptRefresh().then(function (val) {
+                            if (val === null) return;
+                            gPayload.refreshSeconds = val;
+                            setButtonLoading(globalBtn, true);
+                            setStatus('Executando a\u00e7\u00e3o global: ' + gAction, 'ok');
+                            callOperation(gAction, gPayload).then(function () {
+                                setButtonLoading(globalBtn, false);
+                            });
+                        });
+                        return;
+                    }
+
+                    setButtonLoading(globalBtn, true);
+                    setStatus('Executando a\u00e7\u00e3o global: ' + gAction, 'ok');
+                    callOperation(gAction, gPayload).then(function () {
+                        setButtonLoading(globalBtn, false);
+                    });
+                    return;
+                }
+            });
+
+            /* --- Initial render --- */
+            document.getElementById('header-meta').innerHTML =
+                'Vers\u00e3o ' + escapeHtml(state.monitorVersion || '\u2013') +
+                ' &middot; Iniciado: ' + formatDateTime(state.startedAt) +
+                ' &middot; Atualizado: ' + formatDateTime(state.generatedAt) +
+                ' &middot; Tarefas: ' + String(state.taskCount || 0) +
+                ' &middot; Em execu\u00e7\u00e3o: ' + String(state.runningTasks || 0);
+
+            var ops = state.operations || {};
             document.getElementById('ops-banner').textContent =
-                'Operacoes: ' + (ops.apiMode || 'n/a') +
+                'Opera\u00e7\u00f5es: ' + (ops.apiMode || 'n/a') +
                 ' | Endpoint: ' + (ops.apiBaseUrl || 'http://localhost:8765') + (ops.endpoint || '/api/operations') +
                 ' | Estado: ' + (ops.statusMessage || 'Sem status');
 
@@ -707,7 +1087,6 @@
             renderHistory();
             renderTasks('all');
             renderConfigs();
-            bindEvents();
         })();
     </script>
 </body>

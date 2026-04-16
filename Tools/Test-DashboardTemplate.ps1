@@ -121,6 +121,62 @@ if (-not (Test-ContainsPattern -Content $templateText -Pattern '@media')) {
     $findings.Add((New-Finding -File $relTemplate -Rule "RESPONSIVE_MEDIA_QUERY_MISSING" -Severity "ERRO" -Detail "Nenhuma media query encontrada para responsividade." -IsBlocking $true))
 }
 
+# Funcoes JS obrigatorias de renderizacao e interacao.
+$requiredFunctions = @(
+    @{ Name = 'renderTasks'; Rule = 'RENDER_TASKS_MISSING' },
+    @{ Name = 'renderHealth'; Rule = 'RENDER_HEALTH_MISSING' },
+    @{ Name = 'renderMetrics'; Rule = 'RENDER_METRICS_MISSING' },
+    @{ Name = 'renderAlerts'; Rule = 'RENDER_ALERTS_MISSING' },
+    @{ Name = 'renderHistory'; Rule = 'RENDER_HISTORY_MISSING' },
+    @{ Name = 'renderConfigs'; Rule = 'RENDER_CONFIGS_MISSING' },
+    @{ Name = 'callOperation'; Rule = 'CALL_OPERATION_MISSING' },
+    @{ Name = 'setStatus'; Rule = 'SET_STATUS_MISSING' },
+    @{ Name = 'formatDateTime'; Rule = 'FORMAT_DATETIME_MISSING' },
+    @{ Name = 'getTaskStatus'; Rule = 'GET_TASK_STATUS_MISSING' }
+)
+
+foreach ($fn in $requiredFunctions) {
+    $pattern = 'function\s+' + [regex]::Escape($fn.Name) + '\s*\('
+    if (-not (Test-ContainsPattern -Content $templateText -Pattern $pattern)) {
+        $findings.Add((New-Finding -File $relTemplate -Rule $fn.Rule -Severity "ERRO" -Detail ("Funcao JS obrigatoria ausente: {0}" -f $fn.Name) -IsBlocking $true))
+    }
+}
+
+# Modal dialog (substituto de window.prompt).
+if (-not (Test-ContainsPattern -Content $templateText -Pattern '<dialog\s')) {
+    $findings.Add((New-Finding -File $relTemplate -Rule "MODAL_DIALOG_MISSING" -Severity "WARN" -Detail "Elemento <dialog> nao encontrado. Formularios interativos devem usar modal em vez de window.prompt."))
+}
+
+if (Test-ContainsPattern -Content $templateText -Pattern 'window\.prompt\s*\(') {
+    $findings.Add((New-Finding -File $relTemplate -Rule "WINDOW_PROMPT_DETECTED" -Severity "WARN" -Detail "Uso de window.prompt() detectado. Substituir por interface modal estruturada."))
+}
+
+# Acessibilidade avancada.
+if (-not (Test-ContainsPattern -Content $templateText -Pattern 'role="status"')) {
+    $findings.Add((New-Finding -File $relTemplate -Rule "STATUS_ROLE_MISSING" -Severity "WARN" -Detail "Linha de status sem role=status para leitores de tela."))
+}
+
+if (-not (Test-ContainsPattern -Content $templateText -Pattern 'aria-live')) {
+    $findings.Add((New-Finding -File $relTemplate -Rule "ARIA_LIVE_MISSING" -Severity "WARN" -Detail "Nenhuma regiao aria-live encontrada para atualizacoes dinamicas."))
+}
+
+if (-not (Test-ContainsPattern -Content $templateText -Pattern 'scope="row"')) {
+    $findings.Add((New-Finding -File $relTemplate -Rule "TH_SCOPE_MISSING" -Severity "WARN" -Detail "Tabelas de saude sem scope=row nos cabecalhos de linha."))
+}
+
+# Tokens de espacamento e tipografia.
+$extendedTokens = @('--space-sm', '--space-md', '--fs-base', '--fs-sm', '--radius-sm')
+foreach ($token in $extendedTokens) {
+    if ($templateText -notmatch [regex]::Escape($token)) {
+        $findings.Add((New-Finding -File $relTemplate -Rule "EXTENDED_TOKEN_MISSING" -Severity "WARN" -Detail ("Token estendido ausente: {0}" -f $token)))
+    }
+}
+
+# Tabelas responsivas (wrapper de overflow).
+if (-not (Test-ContainsPattern -Content $templateText -Pattern 'table-wrap|overflow-x:\s*auto')) {
+    $findings.Add((New-Finding -File $relTemplate -Rule "TABLE_RESPONSIVE_MISSING" -Severity "WARN" -Detail "Tabelas sem wrapper de overflow para responsividade mobile."))
+}
+
 # Output esperado opcional: warn quando nao existir.
 $outputPath = Join-Path $BasePath "Dashboard\dashboard.html"
 if (-not (Test-Path -LiteralPath $outputPath)) {
