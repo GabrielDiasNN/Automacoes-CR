@@ -52,6 +52,66 @@
             --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
         }
 
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0f172a;
+                --panel: #1e293b;
+                --panel-alt: #334155;
+                --text: #f1f5f9;
+                --text-secondary: #cbd5e1;
+                --muted: #94a3b8;
+                --line: #334155;
+                --brand: #38bdf8;
+                --brand-hover: #7dd3fc;
+                --brand-2: #0ea5e9;
+                --ok: #4ade80;
+                --ok-bg: rgba(74, 222, 128, 0.1);
+                --ok-border: #166534;
+                --warn: #fbbf24;
+                --warn-bg: rgba(251, 191, 36, 0.1);
+                --warn-border: #92400e;
+                --err: #f87171;
+                --err-bg: rgba(248, 113, 113, 0.1);
+                --err-border: #991b1b;
+                --run: #38bdf8;
+                --run-bg: rgba(56, 189, 248, 0.1);
+                --run-border: #075985;
+                --off: #94a3b8;
+                --off-bg: rgba(148, 163, 184, 0.1);
+                --off-border: #475569;
+                --shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+            }
+
+            body {
+                background: radial-gradient(circle at top right, #0c4a6e 0%, #0f172a 34%, #1e293b 100%);
+            }
+
+            .hero {
+                background: linear-gradient(120deg, #075985 0%, #0c4a6e 55%, #082f49 100%);
+            }
+
+            .btn {
+                background: #334155;
+                border-color: #475569;
+                color: #f1f5f9;
+            }
+
+            .btn:hover {
+                background: #475569;
+                border-color: #64748b;
+            }
+
+            tbody tr:hover {
+                background: #1e293b;
+            }
+
+            .status-line {
+                background: #1e293b;
+                border-color: #334155;
+                color: #38bdf8;
+            }
+        }
+
         /* === BASE === */
         *,
         *::before,
@@ -329,28 +389,94 @@
             border-color: var(--brand);
         }
 
-        /* -- Status line -- */
+        /* -- Status line (legacy, keeping for structure but moving to Toast logic) -- */
         .status-line {
-            margin-top: 10px;
-            min-height: 24px;
-            padding: 7px 12px;
+            display: none;
+        }
+
+        /* -- Toasts -- */
+        #toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 380px;
+            width: calc(100vw - 48px);
+        }
+
+        .toast {
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--line);
             border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 12px;
             font-size: var(--fs-sm);
-            background: #eef5ff;
-            border: 1px solid #c7ddf5;
-            color: #15426d;
+            animation: toast-in 0.3s ease-out forwards;
+            position: relative;
+            overflow: hidden;
         }
 
-        .status-line[data-level="warn"] {
-            background: var(--warn-bg);
-            border-color: var(--warn-border);
-            color: var(--warn);
+        .toast::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--brand);
         }
 
-        .status-line[data-level="err"] {
-            background: var(--err-bg);
-            border-color: var(--err-border);
-            color: var(--err);
+        .toast.ok::before { background: var(--ok); }
+        .toast.warn::before { background: var(--warn); }
+        .toast.err::before { background: var(--err); }
+
+        .toast.fade-out {
+            animation: toast-out 0.3s ease-in forwards;
+        }
+
+        @keyframes toast-in {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes toast-out {
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
+        /* -- Progress Bar -- */
+        .progress-wrap {
+            margin-top: 4px;
+            width: 100%;
+            height: 6px;
+            background: var(--panel-alt);
+            border-radius: var(--radius-pill);
+            overflow: hidden;
+            border: 1px solid var(--line);
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--brand);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-bar.overtime {
+            background: var(--warn);
+            animation: pulse-warn 2s infinite;
+        }
+
+        @keyframes pulse-warn {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
         }
 
         /* -- Config grid -- */
@@ -391,13 +517,42 @@
             border-radius: var(--radius);
             box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
             padding: 0;
-            max-width: 460px;
+            max-width: 600px;
             width: 90vw;
+            background: var(--panel);
+        }
+
+        .modal.large {
+            max-width: 900px;
         }
 
         .modal::backdrop {
             background: rgba(15, 23, 42, 0.4);
         }
+
+        .log-viewer {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-mono);
+            font-size: var(--fs-xs);
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            border: 1px solid #334155;
+            line-height: 1.4;
+        }
+
+        .log-line {
+            display: block;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding: 2px 0;
+        }
+
+        .log-line.err { color: #f87171; }
+        .log-line.warn { color: #fbbf24; }
+        .log-line.info { color: #38bdf8; }
 
         .modal-content {
             padding: var(--space-lg);
@@ -567,7 +722,10 @@
                     </div>
                 </div>
                 <div>
-                    <h2 id="alerts-title">Alertas Operacionais</h2>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <h2 id="alerts-title" style="margin:0;">Alertas Operacionais</h2>
+                        <button class="btn" data-global-op="clear-alerts" aria-label="Limpar alertas operacionais">Limpar Alertas</button>
+                    </div>
                     <div class="table-wrap" aria-live="polite" aria-atomic="true">
                         <table>
                             <tbody id="alerts-body"></tbody>
@@ -580,13 +738,20 @@
 
         <section class="card" aria-labelledby="tasks-title">
             <h2 id="tasks-title">Automações</h2>
-            <div class="filters" id="filters" role="group" aria-label="Filtros de tarefas">
-                <button class="btn filter active" data-filter="all" aria-label="Filtrar tarefas: todas">Todas</button>
-                <button class="btn filter" data-filter="running"
-                    aria-label="Filtrar tarefas: executando">Executando</button>
-                <button class="btn filter" data-filter="issues"
-                    aria-label="Filtrar tarefas: falhas e avisos">Falhas/Avisos</button>
-                <button class="btn filter" data-filter="ok" aria-label="Filtrar tarefas: sucesso">Sucesso</button>
+            <div class="filters-row" style="display:flex; flex-wrap:wrap; gap:var(--space-md); align-items:flex-end; margin-bottom:12px;">
+                <div style="flex:1; min-width:240px;">
+                    <label for="task-search" class="sr-only">Buscar automação</label>
+                    <input type="text" id="task-search" placeholder="Buscar por nome..." 
+                        style="width:100%; padding:8px 12px; border:1px solid var(--line); border-radius:var(--radius-sm); font-size:var(--fs-base); background:var(--panel); color:var(--text);">
+                </div>
+                <div class="filters" id="filters" role="group" aria-label="Filtros de tarefas" style="margin-bottom:0;">
+                    <button class="btn filter active" data-filter="all" aria-label="Filtrar tarefas: todas">Todas</button>
+                    <button class="btn filter" data-filter="running"
+                        aria-label="Filtrar tarefas: executando">Executando</button>
+                    <button class="btn filter" data-filter="issues"
+                        aria-label="Filtrar tarefas: falhas e avisos">Falhas/Avisos</button>
+                    <button class="btn filter" data-filter="ok" aria-label="Filtrar tarefas: sucesso">Sucesso</button>
+                </div>
             </div>
             <div class="table-wrap">
                 <table>
@@ -631,6 +796,8 @@
         </section>
     </div>
 
+    <div id="toast-container" aria-live="polite"></div>
+
     <dialog id="modal-dialog" class="modal">
         <form method="dialog" class="modal-content" id="modal-form" novalidate>
             <h3 id="modal-title" class="modal-title"></h3>
@@ -674,7 +841,7 @@
                 return;
             }
 
-            var statusLine = document.getElementById('status-line');
+            var toastContainer = document.getElementById('toast-container');
             var containerEl = document.querySelector('.container');
             var modal = document.getElementById('modal-dialog');
             var modalForm = document.getElementById('modal-form');
@@ -686,8 +853,14 @@
             var API_TOKEN = (state.operations && state.operations.token) || '';
 
             function setStatus(message, level) {
-                statusLine.textContent = message;
-                statusLine.setAttribute('data-level', level || 'ok');
+                var toast = document.createElement('div');
+                toast.className = 'toast ' + (level || 'ok');
+                toast.textContent = message;
+                toastContainer.appendChild(toast);
+                setTimeout(function() {
+                    toast.classList.add('fade-out');
+                    setTimeout(function() { toast.remove(); }, 300);
+                }, 5000);
             }
 
             function formatDateTime(iso) {
@@ -739,7 +912,9 @@
                     }
                     return response.json();
                 }).then(function (result) {
-                    setStatus('Operação enviada: ' + action + '. Retorno: ' + (result.status || 'OK'), 'ok');
+                    if (action !== 'open-logs') {
+                        setStatus('Operação enviada: ' + action + '. Retorno: ' + (result.status || 'OK'), 'ok');
+                    }
                     return result;
                 }).catch(function (err) {
                     setStatus('Falha ao acionar API (' + action + '). ' + err.message, 'err');
@@ -750,13 +925,32 @@
             /* --- Modal --- */
             var _modalResolve = null;
 
-            function openModal(title, fieldsHtml) {
+            function openModal(title, contentHtml, isLarge) {
                 modalTitle.textContent = title;
-                modalBody.innerHTML = fieldsHtml;
+                modalBody.innerHTML = contentHtml;
+                if (isLarge) modal.classList.add('large');
+                else modal.classList.remove('large');
                 modal.showModal();
                 var firstInput = modalBody.querySelector('input');
                 if (firstInput) firstInput.focus();
                 return new Promise(function (resolve) { _modalResolve = resolve; });
+            }
+
+            function openLogModal(taskName, logLines) {
+                var html = '<div class="log-viewer">';
+                if (!logLines || logLines.length === 0) {
+                    html += '<div class="log-line">Nenhum log encontrado para esta automa\u00e7\u00e3o.</div>';
+                } else {
+                    html += logLines.map(function(line) {
+                        var css = '';
+                        if (line.indexOf('[ERRO]') >= 0 || line.indexOf('ERROR') >= 0) css = 'err';
+                        else if (line.indexOf('[WARN]') >= 0 || line.indexOf('WARNING') >= 0) css = 'warn';
+                        else if (line.indexOf('[INFO]') >= 0) css = 'info';
+                        return '<span class="log-line ' + css + '">' + escapeHtml(line) + '</span>';
+                    }).join('');
+                }
+                html += '</div>';
+                return openModal('Logs recentes \u2014 ' + taskName, html, true);
             }
 
             function closeModal(result) {
@@ -841,16 +1035,32 @@
                 return { category: 'ok', text: 'Aguardando', badgeClass: 'off', exitText: '\u2013' };
             }
 
-            function renderTasks(filter) {
+            var currentFilter = 'all';
+            var currentSearch = '';
+
+            function renderTasks() {
                 var tasks = state.tasks || [];
+                var tbody = document.getElementById('tasks-body');
+                
                 if (tasks.length === 0) {
-                    document.getElementById('tasks-body').innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o configurada.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o configurada.</td></tr>';
                     return;
                 }
-                var rows = [];
-                tasks.forEach(function (task) {
+
+                var filtered = tasks.filter(function(task) {
                     var st = getTaskStatus(task);
-                    if (filter !== 'all' && st.category !== filter) return;
+                    var matchesFilter = (currentFilter === 'all' || st.category === currentFilter);
+                    var matchesSearch = !currentSearch || task.name.toLowerCase().indexOf(currentSearch.toLowerCase()) >= 0;
+                    return matchesFilter && matchesSearch;
+                });
+
+                if (filtered.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o corresponde aos filtros.</td></tr>';
+                    return;
+                }
+
+                var rows = filtered.map(function (task) {
+                    var st = getTaskStatus(task);
                     var lastText = task.isRunning && task.runningSince
                         ? ('desde ' + formatShortDateTime(task.runningSince))
                         : (task.lastResult ? formatShortDateTime(task.lastResult.finishedAt) : '\u2013');
@@ -859,9 +1069,21 @@
                     var toggleClass = task.enabled ? 'danger' : 'primary';
                     var tn = escapeHtml(task.name);
 
-                    rows.push(
-                        '<tr>' +
-                        '<td>' + tn + '</td>' +
+                    var progressHtml = '';
+                    if (task.isRunning && task.runningSince && task.avgDurationSec > 0) {
+                        var start = new Date(task.runningSince).getTime();
+                        var now = new Date().getTime();
+                        var elapsed = Math.floor((now - start) / 1000);
+                        var pct = Math.min(100, Math.floor((elapsed / task.avgDurationSec) * 100));
+                        var isOvertime = elapsed > task.avgDurationSec;
+                        progressHtml = 
+                            '<div class="progress-wrap" title="Duração atual: ' + elapsed + 's / Média: ' + task.avgDurationSec + 's">' +
+                            '<div class="progress-bar ' + (isOvertime ? 'overtime' : '') + '" style="width:' + pct + '%"></div>' +
+                            '</div>';
+                    }
+
+                    return '<tr>' +
+                        '<td>' + tn + progressHtml + '</td>' +
                         '<td><span class="badge ' + st.badgeClass + '">' + st.text + '</span></td>' +
                         '<td class="mono">' + escapeHtml(task.scheduleText || '\u2013') + '</td>' +
                         '<td class="r">' + st.exitText + '</td>' +
@@ -875,14 +1097,10 @@
                         '<button class="btn task-op" data-action="open-logs" data-task="' + tn + '" aria-label="Abrir logs de ' + tn + '">Logs</button>' +
                         '<button class="btn task-op" data-action="set-schedule" data-task="' + tn + '" aria-label="Editar agenda de ' + tn + '">Agenda</button>' +
                         '</div></td>' +
-                        '</tr>'
-                    );
+                        '</tr>';
                 });
-                if (rows.length === 0) {
-                    document.getElementById('tasks-body').innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o corresponde ao filtro.</td></tr>';
-                    return;
-                }
-                document.getElementById('tasks-body').innerHTML = rows.join('');
+
+                tbody.innerHTML = rows.join('');
             }
 
             function renderConfigs() {
@@ -993,12 +1211,18 @@
                 }
             }
 
+            document.getElementById('task-search').addEventListener('input', function(ev) {
+                currentSearch = ev.target.value;
+                renderTasks();
+            });
+
             containerEl.addEventListener('click', function (ev) {
                 var filterBtn = ev.target.closest('.filter[data-filter]');
                 if (filterBtn) {
                     document.querySelectorAll('.filter').forEach(function (n) { n.classList.remove('active'); });
                     filterBtn.classList.add('active');
-                    renderTasks(filterBtn.getAttribute('data-filter') || 'all');
+                    currentFilter = filterBtn.getAttribute('data-filter') || 'all';
+                    renderTasks();
                     return;
                 }
 
@@ -1010,9 +1234,14 @@
 
                     function doSend() {
                         setButtonLoading(taskBtn, true);
-                        setStatus('Enviando ' + action + ' para ' + taskName + '...', 'ok');
-                        callOperation(action, payload).then(function () {
+                        if (action !== 'open-logs') {
+                            setStatus('Enviando ' + action + ' para ' + taskName + '...', 'ok');
+                        }
+                        callOperation(action, payload).then(function (result) {
                             setButtonLoading(taskBtn, false);
+                            if (action === 'open-logs' && result && result.logs) {
+                                openLogModal(taskName, result.logs);
+                            }
                         });
                     }
 
@@ -1022,15 +1251,6 @@
                             payload.daysOfWeek = sched.daysOfWeek;
                             payload.hours = sched.hours;
                             payload.minutes = sched.minutes;
-                            doSend();
-                        });
-                        return;
-                    }
-
-                    if (action === 'set-refresh') {
-                        promptRefresh().then(function (val) {
-                            if (val === null) return;
-                            payload.refreshSeconds = val;
                             doSend();
                         });
                         return;
@@ -1055,6 +1275,11 @@
                                 setButtonLoading(globalBtn, false);
                             });
                         });
+                        return;
+                    }
+
+                    if (gAction === 'refresh-dashboard') {
+                        window.location.reload();
                         return;
                     }
 
