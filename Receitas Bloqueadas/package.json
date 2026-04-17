@@ -1,13 +1,18 @@
 {
   "name": "receitas-bloqueadas",
   "version": "1.0.0",
-  "description": "",
+  "description": "Projeto para automação de receitas bloqueadas e envio de notificações via WhatsApp.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Nenhum teste especificado para este projeto. Considere adicionar testes unitários ou de integração.\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "whatsapp",
+    "automação",
+    "receitas",
+    "notificações"
+  ],
+  "author": "Sua Organização/Nome",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

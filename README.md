@@ -7,10 +7,8 @@ Este repositório é o núcleo técnico para orquestração de automações fisc
 ```mermaid
 graph TD
     A[MonitorAutomacoes.ps1] -->|Agenda/Hot-Reload| B(config.json)
-    A -->|Montagem| C{Trigger_Automation.vbs}
-    A -->|RB / RE| P[run.ps1]
-    C -->|Instancia| D[Excel VBA / Power Query]
-    P -->|COM| D
+    A -->|Inicia| P[run.ps1]
+    P -->|Excel COM| D[Excel VBA / Power Query]
     D -->|SQL/PQ| E[(Oracle DB)]
     D -->|Saídas| F[Email / Dashboard]
     D -->|Opcional| G[lib/Send-WhatsApp.ps1]
@@ -336,6 +334,11 @@ Validador dedicado:
 - `Tools/Test-VbaPtBrGovernance.ps1`
 - Reprova quando encontrar non-ASCII em `.bas/.cls/.frm`
 - Emite warning para termos PT-BR sem acentuação em contexto visível ao usuário
+
+---
+
+Mantido pela equipe de Automações & Antigravity AI
+ em contexto visível ao usuário
 
 ---
 
