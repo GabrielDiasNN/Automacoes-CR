@@ -111,6 +111,39 @@ function Get-AutomacaoLogPath {
 }
 
 # ------------------------------------------------------------------------------
+# Test-AutomationEnvironment
+# Valida se os requisitos mínimos de ambiente estão presentes.
+# Retorna um objeto com [bool]$Success e [string]$Message.
+# ------------------------------------------------------------------------------
+function Test-AutomationEnvironment {
+    [CmdletBinding()]
+    param(
+        [string]$ConfigPath,
+        [string[]]$RequiredPaths = @()
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ConfigPath)) {
+        if (-not (Test-Path $ConfigPath)) {
+            return [PSCustomObject]@{ Success = $false; Message = "Arquivo de configuracao nao encontrado: $ConfigPath" }
+        }
+        try {
+            $null = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+        }
+        catch {
+            return [PSCustomObject]@{ Success = $false; Message = "Erro de sintaxe no JSON de configuracao: $($_.Exception.Message)" }
+        }
+    }
+
+    foreach ($path in $RequiredPaths) {
+        if (-not (Test-Path $path)) {
+            return [PSCustomObject]@{ Success = $false; Message = "Caminho obrigatorio inacessivel: $path" }
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $true; Message = "Ambiente validado com sucesso" }
+}
+
+# ------------------------------------------------------------------------------
 # Invoke-LogRotation
 # Rotação por conteúdo: mantém apenas linhas com data >= (hoje - KeepDays).
 # Linhas sem prefixo de data reconhecível são preservadas (safe default).
@@ -158,4 +191,4 @@ function Invoke-LogRotation {
     Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
 }
 
-Export-ModuleMember -Function New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation
+Export-ModuleMember -Function New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment

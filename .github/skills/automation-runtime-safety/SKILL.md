@@ -46,6 +46,7 @@ Use this skill for cross-layer runtime hardening. It captures the repository sta
 | Concern | Standard |
 | --- | --- |
 | Bootstrap logging | Write a minimal line before full logger initialization |
+| Environment Validation | Use `Test-AutomationEnvironment` to verify config and paths before main execution |
 | Config validation | Refuse invalid config before entering the main loop or side effects |
 | Cleanup | Centralize release of COM objects, file handles, and child processes |
 | Retry | Use bounded attempts and clear stop conditions |

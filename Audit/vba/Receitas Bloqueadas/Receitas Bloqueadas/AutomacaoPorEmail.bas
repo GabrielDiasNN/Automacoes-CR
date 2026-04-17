@@ -1,11 +1,10 @@
-Attribute VB_Name = "modReceitasBloqueadas"
+Attribute VB_Name = "AutomacaoPorEmail"
 Option Explicit
 
 Private m_execId As String
 Private m_blnInLogWrite As Boolean
-Private m_outlookAdapter As ClsOutlookAdapter
 
-Private Const LOG_BASE_FOLDER As String = "C:\Automacoes\Receitas Bloqueadas\Logs"
+Private Const CAMINHO_LOG As String = "C:\Automacoes\Receitas Bloqueadas\Logs\VBA_Internal.log"
 Private Const NOME_TABELA_DADOS As String = "ReceitasBloqueadas"
 Private Const NOME_TABELA_EMAIL As String = "EnderecosEmailDestinatarios"
 Private Const ABA_CONFIG As String = "Config"
@@ -16,10 +15,6 @@ Private Const NOME_CONEXAO_OBS As String = "Consulta - OBsReceitasBloqueadas"
 
 Private Const OL_MAIL_ITEM As Long = 0
 Private Const VB_MINIMIZED_FOCUS As Long = 2
-
-Private Function ObterCaminhoLog() As String
-    ObterCaminhoLog = LOG_BASE_FOLDER & "\ReceitasBloqueadas.log"
-End Function
 
 Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")
     Dim corpoHTML As String
@@ -44,7 +39,7 @@ Public Sub ExecutarProcessoCompleto(Optional ByVal execId As String = "")
     corpoHTML = GerarHTMLDinamico()
 
     If Len(corpoHTML) = 0 Then
-        RegistrarLog "AVISO: Tabela vazia ou n" & ChrW$(227) & "o encontrada. E-mail cancelado"
+        RegistrarLog "AVISO: Tabela vazia ou nao encontrada. E-mail cancelado"
         RegistrarLog "FIM DO PROCESSO. Resultado=Sem envio"
         Exit Sub
     End If
@@ -60,44 +55,8 @@ TratarErro:
     RegistrarLog "FIM DO PROCESSO. Resultado=Erro"
 End Sub
 
-Public Sub PreVisualizarEmail()
-    Dim corpoHTML As String
-
-    m_execId = NormalizeExecId("PREVIEW_" & Format$(Now, "yyyymmdd_hhnnss"))
-
-    On Error GoTo TratarErro
-
-    RegistrarLog "INICIO - Pre-visualizacao do email iniciada"
-    RegistrarLog "Atualizando conexoes"
-
-    AtualizarConexaoComGarantia NOME_CONEXAO_DADOS
-    AtualizarConexaoComGarantia NOME_CONEXAO_OBS
-
-    Application.Wait Now + TimeValue("0:00:02")
-
-    AjustarFormatoDatasReceitasBloqueadas
-
-    ThisWorkbook.Save
-    RegistrarLog "Workbook salvo"
-
-    corpoHTML = GerarHTMLDinamico()
-
-    If Len(corpoHTML) = 0 Then
-        RegistrarLog "AVISO: Tabela vazia ou n" & ChrW$(227) & "o encontrada. Pr" & ChrW$(233) & "-visualiza" & ChrW$(231) & ChrW$(227) & "o cancelada"
-        Exit Sub
-    End If
-
-    RegistrarLog "Abrindo pre-visualizacao do email"
-    EnviarEmailOutlook corpoHTML, True
-    RegistrarLog "Pre-visualizacao exibida com sucesso"
-    Exit Sub
-
-TratarErro:
-    RegistrarLog "ERRO FATAL na pre-visualizacao: " & Err.Description & " (" & CStr(Err.Number) & ")"
-End Sub
-
 Private Sub AtualizarConexaoComGarantia(ByVal nomeConexao As String)
-    Dim conn As workbookConnection
+    Dim conn As WorkbookConnection
 
     On Error GoTo TratarErro
 
@@ -108,7 +67,7 @@ Private Sub AtualizarConexaoComGarantia(ByVal nomeConexao As String)
     On Error GoTo TratarErro
 
     If conn Is Nothing Then
-        RegistrarLog "ERRO: Conex" & ChrW$(227) & "o '" & nomeConexao & "' n" & ChrW$(227) & "o encontrada"
+        RegistrarLog "ERRO: Conexao '" & nomeConexao & "' nao encontrada"
         Exit Sub
     End If
 
@@ -137,7 +96,7 @@ Private Sub AjustarFormatoDatasReceitasBloqueadas()
     Set lo = ObterTabela(ws, NOME_TABELA_DADOS)
 
     If lo Is Nothing Then
-        RegistrarLog "AVISO: Tabela '" & NOME_TABELA_DADOS & "' n" & ChrW$(227) & "o encontrada para formata" & ChrW$(231) & ChrW$(227) & "o"
+        RegistrarLog "AVISO: Tabela '" & NOME_TABELA_DADOS & "' nao encontrada para formatacao"
         Exit Sub
     End If
 
@@ -164,7 +123,7 @@ Private Sub AplicarFormatoColunaData(ByVal lo As ListObject, ByVal nomeColuna As
     Set lc = ObterListColumn(lo, nomeColuna)
 
     If lc Is Nothing Then
-        RegistrarLog "AVISO: Coluna '" & nomeColuna & "' n" & ChrW$(227) & "o encontrada"
+        RegistrarLog "AVISO: Coluna '" & nomeColuna & "' nao encontrada"
         Exit Sub
     End If
 
@@ -209,17 +168,17 @@ Private Function GerarHTMLDinamico() As String
     html = html & "<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='width:100%;max-width:1100px;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
 
     html = html & "<tr>"
-        html = html & "<td align='center' style='background:#0f4c81;color:#ffffff;padding:18px 22px 14px 22px;text-align:center;'>"
+    html = html & "<td align='center' style='background:#0f4c81;color:#ffffff;padding:16px 20px;text-align:center;'>"
 
     html = html & "<table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
     html = html & "<tr>"
-        html = html & "<td align='center' style='text-align:center;font-size:17pt;font-weight:bold;line-height:1.25;padding:0 0 8px 0;color:#ffffff;'>"
+    html = html & "<td align='center' style='text-align:center;font-size:16pt;font-weight:bold;line-height:1.3;padding:0 0 6px 0;'>"
     html = html & HtmlEncode(TextoEmailTitulo())
     html = html & "</td>"
     html = html & "</tr>"
 
     html = html & "<tr>"
-        html = html & "<td align='center' style='text-align:center;font-size:10.5pt;line-height:1.5;padding:0;color:#e8f1ff;'>"
+    html = html & "<td align='center' style='text-align:center;font-size:11pt;line-height:1.4;padding:0;'>"
     html = html & HtmlEncode(TextoEmailIntro()) & Format$(Now, "dd/MM/yyyy HH:mm")
     html = html & "</td>"
     html = html & "</tr>"
@@ -268,6 +227,12 @@ Private Function GerarHTMLDinamico() As String
     html = html & "<tr>"
     html = html & "<td style='padding-top:14px;color:#b91c1c;font-weight:bold;'>"
     html = html & HtmlEncode(TextoEmailRodape())
+    html = html & "</td>"
+    html = html & "</tr>"
+
+    html = html & "<tr>"
+    html = html & "<td style='padding-top:18px;color:#6b7280;font-size:9pt;border-top:1px solid #e5e7eb;padding-bottom:0;'>"
+    html = html & HtmlEncode(TextoEmailAssinatura())
     html = html & "</td>"
     html = html & "</tr>"
     html = html & "</table>"
@@ -345,54 +310,68 @@ Private Function HtmlEncode(ByVal texto As String) As String
     HtmlEncode = texto
 End Function
 
-Private Sub EnviarEmailOutlook(ByVal htmlBody As String, Optional ByVal previewOnly As Boolean = False)
+Private Sub EnviarEmailOutlook(ByVal htmlBody As String)
+    Dim appOutlook As Object
+    Dim email As Object
+    Dim ins As Object
     Dim sPara As String
     Dim sCopia As String
     Dim sCco As String
-    Dim strIntro As String
-    Dim strLegenda As String
-    Dim outlookAdapter As ClsOutlookAdapter
 
     On Error GoTo TratarErro
 
     ObterDestinatariosEmail sPara, sCopia, sCco
 
     If Len(sPara) = 0 Then
-        RegistrarLog "ERRO: Destinat" & ChrW$(225) & "rio principal n" & ChrW$(227) & "o informado"
+        RegistrarLog "ERRO: Destinatario principal nao informado"
         Exit Sub
     End If
 
-    strIntro = "Segue relat" & ChrW$(243) & "rio atualizado de receitas bloqueadas."
-    strLegenda = HtmlEncode(TextoEmailAssinatura())
+    Set appOutlook = PrepararOutlookComForcaBruta()
 
-    Set outlookAdapter = GetOutlookAdapter()
-    RegistrarLog "Definindo assunto e destinatarios"
-
-    If Not outlookAdapter.EnviarEmail(TextoEmailAssuntoPrefixo() & Format$(Date, "dd/MM/yyyy"), htmlBody, sPara, sCopia, sCco, strIntro, strLegenda, previewOnly) Then
-        Err.Raise vbObjectError + 5101, "EnviarEmailOutlook", outlookAdapter.LastError
+    If appOutlook Is Nothing Then
+        RegistrarLog "ERRO FATAL: Outlook inacessivel apos tentativas de inicializacao"
+        Exit Sub
     End If
 
-    If previewOnly Then
-        RegistrarLog "E-mail exibido em pre-visualizacao"
-    Else
-        RegistrarLog "E-mail enviado com sucesso"
+    Set email = appOutlook.CreateItem(OL_MAIL_ITEM)
+
+    If email Is Nothing Then
+        RegistrarLog "ERRO: Falha ao criar MailItem"
+        Set appOutlook = Nothing
+        Exit Sub
     End If
-Saida:
-    Set outlookAdapter = Nothing
+
+    ' GetInspector dispara o carregamento da assinatura padrao do Outlook
+    ' sem abrir janela visivel (ao contrario de .Display)
+    Set ins = email.GetInspector
+    Dim signatureHtml As String
+    signatureHtml = email.htmlBody
+    Set ins = Nothing
+
+    With email
+        .To = sPara
+        If Len(sCopia) > 0 Then .CC = sCopia
+        If Len(sCco) > 0 Then .BCC = sCco
+        .Subject = TextoEmailAssuntoPrefixo() & Format$(Date, "dd/MM/yyyy")
+        .htmlBody = htmlBody & signatureHtml
+        .Send
+    End With
+
+    RegistrarLog "E-mail enviado com sucesso"
+    On Error Resume Next
+    Set email = Nothing
+    Set appOutlook = Nothing
+    On Error GoTo 0
     Exit Sub
 
 TratarErro:
     RegistrarLog "ERRO no envio do e-mail: " & Err.Description & " (" & CStr(Err.Number) & ")"
-    Resume Saida
+    On Error Resume Next
+    Set email = Nothing
+    Set appOutlook = Nothing
+    On Error GoTo 0
 End Sub
-
-Private Function GetOutlookAdapter() As ClsOutlookAdapter
-    If m_outlookAdapter Is Nothing Then
-        Set m_outlookAdapter = New ClsOutlookAdapter
-    End If
-
-    Set GetOutlookAdapter = m_outlookAdapter
-End Function
 
 Private Sub ObterDestinatariosEmail(ByRef sPara As String, ByRef sCopia As String, ByRef sCco As String)
     Dim wsC As Worksheet
@@ -411,7 +390,7 @@ Private Sub ObterDestinatariosEmail(ByRef sPara As String, ByRef sCopia As Strin
     Set tblE = ObterTabela(wsC, NOME_TABELA_EMAIL)
 
     If tblE Is Nothing Then
-        RegistrarLog "ERRO: Tabela de destinat" & ChrW$(225) & "rios '" & NOME_TABELA_EMAIL & "' n" & ChrW$(227) & "o encontrada"
+        RegistrarLog "ERRO: Tabela de destinatarios '" & NOME_TABELA_EMAIL & "' nao encontrada"
         Exit Sub
     End If
 
@@ -480,6 +459,57 @@ Private Function ColetarEmailsColuna(ByVal lo As ListObject, ByVal indiceColuna 
     ColetarEmailsColuna = resultado
 End Function
 
+Private Function PrepararOutlookComForcaBruta() As Object
+    Dim oApp As Object
+
+    On Error Resume Next
+
+    Set oApp = GetObject(, "Outlook.Application")
+    If Not oApp Is Nothing Then
+        RegistrarLog "Outlook conectado por instancia existente"
+        Set PrepararOutlookComForcaBruta = oApp
+        Exit Function
+    End If
+
+    Err.Clear
+    Set oApp = CreateObject("Outlook.Application")
+    If Not oApp Is Nothing Then
+        RegistrarLog "Outlook iniciado por nova instancia"
+        Set PrepararOutlookComForcaBruta = oApp
+        Exit Function
+    End If
+
+    RegistrarLog "AVISO: Outlook nao respondeu. Tentando iniciar processo"
+
+    Err.Clear
+    Shell "outlook.exe", VB_MINIMIZED_FOCUS
+    Application.Wait Now + TimeValue("0:00:08")
+    Set oApp = GetObject(, "Outlook.Application")
+
+    If Not oApp Is Nothing Then
+        RegistrarLog "Outlook iniciado via shell"
+        Set PrepararOutlookComForcaBruta = oApp
+        Exit Function
+    End If
+
+    RegistrarLog "AVISO: Falha ao iniciar Outlook. Terceira tentativa via shell"
+
+    Err.Clear
+    Shell "outlook.exe", VB_MINIMIZED_FOCUS
+    Application.Wait Now + TimeValue("0:00:08")
+    Set oApp = GetObject(, "Outlook.Application")
+
+    If Not oApp Is Nothing Then
+        RegistrarLog "Outlook iniciado via shell"
+        Set PrepararOutlookComForcaBruta = oApp
+        Exit Function
+    End If
+
+    RegistrarLog "FALHA FINAL: Nao foi possivel iniciar o Outlook"
+
+    On Error GoTo 0
+End Function
+
 Private Sub RegistrarLog(ByVal msg As String)
     Dim linha As String
     Dim prefixoId As String
@@ -490,18 +520,18 @@ Private Sub RegistrarLog(ByVal msg As String)
     m_blnInLogWrite = True
 
     If Len(m_execId) > 0 Then
-        prefixoId = "[ExecId:" & m_execId & "] "
+        prefixoId = "[ExecId=" & m_execId & "] "
     Else
         prefixoId = vbNullString
     End If
 
     On Error Resume Next
 
-    GarantirPastaDoLog ObterCaminhoLog()
+    GarantirPastaDoLog CAMINHO_LOG
 
     Set fsoLog = CreateObject("Scripting.FileSystemObject")
-    linha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] [INFO] " & prefixoId & SanitizarTextoLog(msg)
-    Set txtStream = fsoLog.OpenTextFile(ObterCaminhoLog(), 8, True)
+    linha = "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] " & prefixoId & SanitizarTextoLog(msg)
+    Set txtStream = fsoLog.OpenTextFile(CAMINHO_LOG, 8, True)
     If Err.Number = 0 Then
         txtStream.WriteLine linha
         txtStream.Close
@@ -801,7 +831,7 @@ Private Function TextoEmailTitulo() As String
 End Function
 
 Private Function TextoEmailIntro() As String
-    TextoEmailIntro = "Atualizado em "
+    TextoEmailIntro = "Seguem as receitas bloqueadas atualizadas em "
 End Function
 
 Private Function TextoEmailRodape() As String
@@ -822,10 +852,10 @@ Public Sub TestarLogger()
     idEntrada = "Teste ExecId #01 com espaco & acento!"
     idSaida = NormalizeExecId(idEntrada)
 
-    Debug.Print "=== TestarLogger: modReceitasBloqueadas ==="
+    Debug.Print "=== TestarLogger: AutomacaoPorEmail ==="
     Debug.Print "Input  : [" & idEntrada & "]"
     Debug.Print "ExecId : [" & idSaida & "]"
-    Debug.Print "Log    : " & ObterCaminhoLog()
+    Debug.Print "Log    : " & CAMINHO_LOG
 
     m_execId = idSaida
 
@@ -836,7 +866,6 @@ Public Sub TestarLogger()
 
     m_execId = vbNullString
 
-    Debug.Print "Concluido. Verifique: " & ObterCaminhoLog()
+    Debug.Print "Concluido. Verifique: " & CAMINHO_LOG
 End Sub
-
 

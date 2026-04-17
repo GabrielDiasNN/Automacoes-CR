@@ -7,6 +7,7 @@ param(
     [switch]$SkipDashboardTemplateGovernance,
     [switch]$SkipVbaHtmlGovernance,
     [switch]$SkipVbaComponentTypes,
+    [switch]$SkipVbaReferences,
     [switch]$SkipSharedDependencies,
     [switch]$OnlyGovernance,
     [switch]$FailOnHtmlCssWarnings,
@@ -52,7 +53,7 @@ function Invoke-GovernanceChecks {
         $pwshArgs += "-FailOnTermWarnings"
     }
 
-    & pwsh @pwshArgs
+    & powershell @pwshArgs
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -ne 0) {
@@ -86,7 +87,7 @@ function Invoke-SkillsGovernanceChecks {
         $RootPath
     )
 
-    & pwsh @pwshArgs
+    & powershell @pwshArgs
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -ne 0) {
@@ -120,7 +121,7 @@ function Invoke-SharedDependenciesChecks {
         $RootPath
     )
 
-    & pwsh @pwshArgs
+    & powershell @pwshArgs
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -ne 0) {
@@ -217,7 +218,7 @@ function Invoke-VbaComponentTypeChecks {
             $target.SourceFolder
         )
 
-        & pwsh @pwshArgs
+        & powershell @pwshArgs
         $exitCode = $LASTEXITCODE
         if ($exitCode -ne 0) {
             $hasFailure = $true
@@ -232,6 +233,68 @@ function Invoke-VbaComponentTypeChecks {
     }
 
     return 0
+}
+
+function Invoke-VbaReferenceChecks {
+    param(
+        [string]$RootPath
+    )
+
+    $checkerPath = Join-Path $RootPath "Tools\Test-VbaReferences.ps1"
+    if (-not (Test-Path $checkerPath)) {
+        Write-Host "[WARN] Validador de referencias VBA nao encontrado: $checkerPath"
+        return 0
+    }
+
+    $configPath = Join-Path $RootPath "config.json"
+    if (-not (Test-Path $configPath)) {
+        Write-Host "[WARN] config.json nao encontrado para descoberta de automacoes: $configPath"
+        return 0
+    }
+
+    $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $seen = @{}
+
+    Write-Host "=== Referencias VBA (Todas as Automacoes) ==="
+
+    $hasFailure = $false
+    foreach ($task in @($config.tasks)) {
+        $scriptPathRaw = [string]$task.scriptPath
+        if ([string]::IsNullOrWhiteSpace($scriptPathRaw)) { continue }
+        if ($scriptPathRaw -notmatch "(?i)(Trigger_Automation\.vbs|run\.ps1)$") { continue }
+
+        $scriptPathResolved = if ([System.IO.Path]::IsPathRooted($scriptPathRaw)) { $scriptPathRaw } else { Join-Path $RootPath $scriptPathRaw }
+        if (-not (Test-Path -LiteralPath $scriptPathResolved)) { continue }
+
+        $sourceFolder = Split-Path -Parent $scriptPathResolved
+        $workbooks = Get-ChildItem -LiteralPath $sourceFolder -File -Filter "*.xlsm" -ErrorAction SilentlyContinue
+
+        foreach ($wb in $workbooks) {
+            if ($seen.ContainsKey($wb.FullName)) { continue }
+            $seen[$wb.FullName] = $true
+
+            Write-Host ("--- {0} | {1} ---" -f [string]$task.name, $wb.FullName)
+
+            $pwshArgs = @(
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                $checkerPath,
+                "-WorkbookPath",
+                $wb.FullName
+            )
+
+            & powershell @pwshArgs
+            if ($LASTEXITCODE -ne 0) {
+                $hasFailure = $true
+                Write-Host ("[ERRO] Referencias VBA reprovadas para '{0}'." -f [string]$task.name)
+            }
+            Write-Host ""
+        }
+    }
+
+    return if ($hasFailure) { 1 } else { 0 }
 }
 
 function Invoke-DashboardTemplateChecks {
@@ -262,7 +325,7 @@ function Invoke-DashboardTemplateChecks {
         $pwshArgs += "-FailOnWarnings"
     }
 
-    & pwsh @pwshArgs
+    & powershell @pwshArgs
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -ne 0) {
@@ -301,7 +364,7 @@ function Invoke-VbaHtmlChecks {
         $pwshArgs += "-FailOnWarnings"
     }
 
-    & pwsh @pwshArgs
+    & powershell @pwshArgs
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -ne 0) {
@@ -465,6 +528,13 @@ if (-not $SkipVbaComponentTypes) {
     $typeExitCode = Invoke-VbaComponentTypeChecks -RootPath $BasePath
     if ($typeExitCode -ne 0) {
         exit $typeExitCode
+    }
+}
+
+if (-not $SkipVbaReferences) {
+    $refExitCode = Invoke-VbaReferenceChecks -RootPath $BasePath
+    if ($refExitCode -ne 0) {
+        exit $refExitCode
     }
 }
 

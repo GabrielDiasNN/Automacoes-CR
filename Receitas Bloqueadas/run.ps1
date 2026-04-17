@@ -85,6 +85,18 @@ function Exit-WithCode {
     exit $Code
 }
 
+# ==============================================================================
+# VALIDACAO DE AMBIENTE (RUNTIME SAFETY)
+# ==============================================================================
+if (Get-Command Test-AutomationEnvironment -ErrorAction SilentlyContinue) {
+    Write-Log "Validando requisitos de ambiente..."
+    $envTest = Test-AutomationEnvironment -ConfigPath (Join-Path $BasePath "whatsapp-config.json") -RequiredPaths @($ExcelPath, $SendWhatsAppScript)
+    if (-not $envTest.Success) {
+        Exit-WithCode 9 "FALHA DE AMBIENTE: $($envTest.Message)"
+    }
+    Write-Log "Ambiente validado: $($envTest.Message)"
+}
+
 function Test-VbaProjectCompiles {
     param(
         [object]$ExcelApp,

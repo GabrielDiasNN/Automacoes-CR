@@ -13,84 +13,84 @@ Private Const ITEM_SEPARATOR_CODE As Long = 30
 Private Const FIELD_SEPARATOR_CODE As Long = 31
 
 Private mExecId As String
-Private mOutlookAdapter As ClsOutlookAdapter
+Private mOutlookAdapter As ClsREOutlookAdapter
 
 Private Type ReportStats
-MachineCount As Long
-RecipeCount As Long
-TotalWeight As Long
-MaxMachineWeight As Long
+    MachineCount As Long
+    RecipeCount As Long
+    TotalWeight As Long
+    MaxMachineWeight As Long
 End Type
 
 Private Type LayoutProfile
-ContainerWidth As Long
-ColumnCount As Long
-ColumnGap As Long
-ColumnWidth As Long
-ObWidth As Long
-InicioWidth As Long
-OuterPad As Long
-TitleFontPt As Double
-MetaFontPt As Double
-SectionFontPt As Double
-HeaderFontPt As Double
-BodyFontPt As Double
-TitleLinePx As Long
-MetaLinePx As Long
-SectionLinePx As Long
-HeaderLinePx As Long
-BodyLinePx As Long
-RowPadY As Long
-RowPadX As Long
-BlockPadY As Long
-SpacerHeight As Long
+    ContainerWidth As Long
+    ColumnCount As Long
+    ColumnGap As Long
+    ColumnWidth As Long
+    ObWidth As Long
+    InicioWidth As Long
+    OuterPad As Long
+    TitleFontPt As Double
+    MetaFontPt As Double
+    SectionFontPt As Double
+    HeaderFontPt As Double
+    BodyFontPt As Double
+    TitleLinePx As Long
+    MetaLinePx As Long
+    SectionLinePx As Long
+    HeaderLinePx As Long
+    BodyLinePx As Long
+    RowPadY As Long
+    RowPadX As Long
+    BlockPadY As Long
+    SpacerHeight As Long
 End Type
 
 Public Sub AtualizarEEnviarOutlook(Optional ByVal execId As String = "", Optional ByVal previewOnly As Boolean = False)
     On Error GoTo TratarErro
 
-        Dim pivotTable As pivotTable
-        Dim sourceRange As Range
+    Dim pivotTable As pivotTable
+    Dim sourceRange As Range
 
-        mExecId = NormalizeExecId(execId)
-        InitLog
+    mExecId = NormalizeExecId(execId)
+    InitLog
 
-        WriteLog "INFO", "MACRO", "Rotina iniciada"
+    WriteLog "INFO", "MACRO", "Rotina iniciada"
 
-        Set pivotTable = ObterPivotControleReceitas()
-        If pivotTable Is Nothing Then
-            Err.Raise vbObjectError + 5002, , "Nenhuma Tabela Din" & ChrW$(226) & "mica foi encontrada na pasta de trabalho"
-        End If
+    Set pivotTable = ObterPivotControleReceitas()
+    If pivotTable Is Nothing Then
+        Err.Raise vbObjectError + 5002, , "Nenhuma Tabela Din" & ChrW$(226) & "mica foi encontrada na pasta de trabalho"
+    End If
 
-        WriteLog "INFO", "PIVOT", "Tabela Dinamica localizada: " & pivotTable.Name & " | Aba: " & pivotTable.Parent.Name
+    WriteLog "INFO", "PIVOT", "Tabela Dinamica localizada: " & pivotTable.Name & " | Aba: " & pivotTable.Parent.Name
 
-        AtualizarConsultaControleReceitas
+    AtualizarConsultaControleReceitas
 
-        WriteLog "INFO", "PIVOT", "Iniciando atualizacao da Tabela Dinamica"
-        pivotTable.RefreshTable
-        WriteLog "INFO", "PIVOT", "Tabela Dinamica atualizada com sucesso"
+    WriteLog "INFO", "PIVOT", "Iniciando atualizacao da Tabela Dinamica"
+    pivotTable.RefreshTable
+    WriteLog "INFO", "PIVOT", "Tabela Dinamica atualizada com sucesso"
 
-        Set sourceRange = pivotTable.TableRange1
-        If sourceRange Is Nothing Then
-            Err.Raise vbObjectError + 5003, , "N" & ChrW$(227) & "o foi poss" & ChrW$(237) & "vel obter o intervalo da Tabela Din" & ChrW$(226) & "mica"
-        End If
+    Set sourceRange = pivotTable.TableRange1
+    If sourceRange Is Nothing Then
+        Err.Raise vbObjectError + 5003, , "N" & ChrW$(227) & "o foi poss" & ChrW$(237) & "vel obter o intervalo da Tabela Din" & ChrW$(226) & "mica"
+    End If
 
-        WriteLog "INFO", "PIVOT", "Intervalo capturado: " & sourceRange.Address(False, False)
+    WriteLog "INFO", "PIVOT", "Intervalo capturado: " & sourceRange.Address(False, False)
 
-        EnviarEmailOutlookAdaptativo sourceRange, previewOnly
+    EnviarEmailOutlookAdaptativo sourceRange, previewOnly
 
-        WriteLog "INFO", "MACRO", "Rotina finalizada com sucesso"
-        FinalizeLog True
-     Exit Sub
+    WriteLog "INFO", "MACRO", "Rotina finalizada com sucesso"
+    FinalizeLog True
+    Exit Sub
 
 TratarErro:
-        Dim errNum As Long, errSrc As String, errDesc As String
-        errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
-        If gLogReady Then
-            WriteLog "ERROR", "MACRO", "Erro " & errNum & " - " & errDesc
-            FinalizeLog False
-        End If
-        If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    If gLogReady Then
+        WriteLog "ERROR", "MACRO", "Erro " & errNum & " - " & errDesc
+        FinalizeLog False
+    End If
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Sub
 
 Public Sub PreVisualizarOutlook()
@@ -104,61 +104,61 @@ End Sub
 Private Sub EnviarEmailOutlookAdaptativo(ByVal sourceRange As Range, Optional ByVal previewOnly As Boolean = False)
     On Error GoTo TratarErro
 
-        Dim outlookAdapter As ClsOutlookAdapter
-        Dim htmlBody As String
-        Dim introText As String
-        Dim legendaHtml As String
-        Dim recipientTo As String
-        Dim errNum As Long
-        Dim errSrc As String
-        Dim errDesc As String
+    Dim outlookAdapter As ClsREOutlookAdapter
+    Dim htmlBody As String
+    Dim introText As String
+    Dim legendaHtml As String
+    Dim recipientTo As String
+    Dim errNum As Long
+    Dim errSrc As String
+    Dim errDesc As String
 
-        htmlBody = MontarHtmlAdaptativo(sourceRange)
-        introText = "Segue relat" & ChrW$(243) & "rio atualizado para confer" & ChrW$(234) & "ncia operacional."
-        legendaHtml = vbNullString
+    htmlBody = MontarHtmlAdaptativo(sourceRange)
+    introText = "Segue relat" & ChrW$(243) & "rio atualizado para confer" & ChrW$(234) & "ncia operacional."
+    legendaHtml = vbNullString
 
-        recipientTo = GetRecipientTo()
-        WriteLog "INFO", "EMAIL", "To=" & recipientTo
-        If Len(recipientTo) = 0 Or InStr(1, recipientTo, "@") = 0 Then
-            Err.Raise vbObjectError + 5006, , "Destinat" & ChrW$(225) & "rio de email n" & ChrW$(227) & "o informado ou inv" & ChrW$(225) & "lido"
-        End If
+    recipientTo = GetRecipientTo()
+    WriteLog "INFO", "EMAIL", "TO=" & recipientTo
+    If Len(recipientTo) = 0 Or InStr(1, recipientTo, "@") = 0 Then
+        Err.Raise vbObjectError + 5006, , "Destinat" & ChrW$(225) & "rio de email n" & ChrW$(227) & "o informado ou inv" & ChrW$(225) & "lido"
+    End If
 
-        On Error Resume Next
-        ThisWorkbook.Save
-        If Err.Number <> 0 Then
-            WriteLog "ERROR", "EMAIL", "Falha ao salvar workbook antes Do envio: " & Err.Description
-            Err.Clear
-        Else
-            WriteLog "INFO", "EMAIL", "Workbook salvo com sucesso antes Do envio"
-        End If
-        On Error GoTo TratarErro
+    On Error Resume Next
+    ThisWorkbook.Save
+    If Err.Number <> 0 Then
+        WriteLog "ERROR", "EMAIL", "Falha ao salvar workbook antes do envio: " & Err.Description
+        Err.Clear
+    Else
+        WriteLog "INFO", "EMAIL", "Workbook salvo com sucesso antes do envio"
+    End If
+    On Error GoTo TratarErro
 
-            Set outlookAdapter = GetOutlookAdapter()
-            WriteLog "INFO", "EMAIL", "Preparando envio via adapter"
+    Set outlookAdapter = GetOutlookAdapter()
+    WriteLog "INFO", "EMAIL", "Preparando envio via adapter"
 
-            If Not outlookAdapter.EnviarEmail(GetEmailSubject(), htmlBody, recipientTo, "", "", introText, legendaHtml, previewOnly, ThisWorkbook.FullName) Then
-                Err.Raise vbObjectError + 5007, , "Falha no envio Outlook: " & outlookAdapter.LastError
-            End If
+    If Not outlookAdapter.EnviarEmail(GetEmailSubject(), recipientTo, htmlBody, introText, legendaHtml, previewOnly, ThisWorkbook.FullName) Then
+        Err.Raise vbObjectError + 5007, , "Falha no envio Outlook: " & outlookAdapter.LastError
+    End If
 
-            If previewOnly Then
-                WriteLog "INFO", "EMAIL", "Email exibido em modo de pre-visualizacao"
-            Else
-                WriteLog "INFO", "EMAIL", "E-mail enviado com sucesso"
-            End If
+    If previewOnly Then
+        WriteLog "INFO", "EMAIL", "Email exibido em modo de pre-visualizacao"
+    Else
+        WriteLog "INFO", "EMAIL", "E-mail enviado com sucesso"
+    End If
 
 Saida:
-            Set outlookAdapter = Nothing
-         Exit Sub
+    Set outlookAdapter = Nothing
+    Exit Sub
 
 TratarErro:
-            errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
-            WriteLog "ERROR", "EMAIL", "Erro " & errNum & " - " & errDesc
-            Resume Saida
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    WriteLog "ERROR", "EMAIL", "Erro " & errNum & " - " & errDesc
+    Resume Saida
 End Sub
 
-Private Function GetOutlookAdapter() As ClsOutlookAdapter
+Private Function GetOutlookAdapter() As ClsREOutlookAdapter
     If mOutlookAdapter Is Nothing Then
-        Set mOutlookAdapter = New ClsOutlookAdapter
+        Set mOutlookAdapter = New ClsREOutlookAdapter
     End If
 
     Set GetOutlookAdapter = mOutlookAdapter
@@ -167,41 +167,41 @@ End Function
 Private Function MontarHtmlAdaptativo(ByVal sourceRange As Range) As String
     On Error GoTo TratarErro
 
-        Dim machineOrder As Collection
-        Dim dictMachineGroups As Object
-        Dim dictGroupDetails As Object
-        Dim dictMachineWeight As Object
-        Dim dictMachineRecipeCount As Object
+    Dim machineOrder As Collection
+    Dim dictMachineGroups As Object
+    Dim dictGroupDetails As Object
+    Dim dictMachineWeight As Object
+    Dim dictMachineRecipeCount As Object
 
-        Dim stats As ReportStats
-        Dim profile As LayoutProfile
+    Dim stats As ReportStats
+    Dim profile As LayoutProfile
 
-        Dim columnHtml() As String
-        Dim columnWeight() As Long
-        Dim machineItem As Variant
-        Dim columnIndex As Long
+    Dim columnHtml() As String
+    Dim columnWeight() As Long
+    Dim machineItem As Variant
+    Dim columnIndex As Long
 
-        Set machineOrder = New Collection
-        Set dictMachineGroups = CreateObject("Scripting.Dictionary")
-        Set dictGroupDetails = CreateObject("Scripting.Dictionary")
-        Set dictMachineWeight = CreateObject("Scripting.Dictionary")
-        Set dictMachineRecipeCount = CreateObject("Scripting.Dictionary")
+    Set machineOrder = New Collection
+    Set dictMachineGroups = CreateObject("Scripting.Dictionary")
+    Set dictGroupDetails = CreateObject("Scripting.Dictionary")
+    Set dictMachineWeight = CreateObject("Scripting.Dictionary")
+    Set dictMachineRecipeCount = CreateObject("Scripting.Dictionary")
 
-        ParsePivotRange sourceRange, _
-        machineOrder, _
-        dictMachineGroups, _
-        dictGroupDetails, _
-        dictMachineWeight, _
-        dictMachineRecipeCount, _
-        stats
+    ParsePivotRange sourceRange, _
+                    machineOrder, _
+                    dictMachineGroups, _
+                    dictGroupDetails, _
+                    dictMachineWeight, _
+                    dictMachineRecipeCount, _
+                    stats
 
-        If machineOrder.Count = 0 Then
-            Err.Raise vbObjectError + 5010, , "Nenhum dado v" & ChrW$(225) & "lido foi encontrado para montar o email"
-        End If
+    If machineOrder.count = 0 Then
+        Err.Raise vbObjectError + 5010, , "Nenhum dado v" & ChrW$(225) & "lido foi encontrado para montar o email"
+    End If
 
-        BuildLayoutProfile stats, profile
+    BuildLayoutProfile stats, profile
 
-        WriteLog "INFO", "HTML", _
+    WriteLog "INFO", "HTML", _
         "Perfil calculado | Colunas=" & profile.ColumnCount & _
         " | Width=" & profile.ContainerWidth & _
         " | BodyFontPt=" & FormatNumberInvariant(profile.BodyFontPt, "0.0") & _
@@ -209,28 +209,28 @@ Private Function MontarHtmlAdaptativo(ByVal sourceRange As Range) As String
         " | Maquinas=" & stats.MachineCount & _
         " | Receitas=" & stats.RecipeCount
 
-        ReDim columnHtml(1 To profile.ColumnCount)
-        ReDim columnWeight(1 To profile.ColumnCount)
+    ReDim columnHtml(1 To profile.ColumnCount)
+    ReDim columnWeight(1 To profile.ColumnCount)
 
-        For Each machineItem In machineOrder
-            columnIndex = GetLightestColumnIndex(columnWeight)
-            columnHtml(columnIndex) = columnHtml(columnIndex) & _
-            BuildMachineBlock(CStr(machineItem), _
-            dictMachineGroups, _
-            dictGroupDetails, _
-            dictMachineRecipeCount, _
-            profile)
-            columnWeight(columnIndex) = columnWeight(columnIndex) + CLng(dictMachineWeight(CStr(machineItem)))
-        Next machineItem
+    For Each machineItem In machineOrder
+        columnIndex = GetLightestColumnIndex(columnWeight)
+        columnHtml(columnIndex) = columnHtml(columnIndex) & _
+                                  BuildMachineBlock(CStr(machineItem), _
+                                                    dictMachineGroups, _
+                                                    dictGroupDetails, _
+                                                    dictMachineRecipeCount, _
+                                                    profile)
+        columnWeight(columnIndex) = columnWeight(columnIndex) + CLng(dictMachineWeight(CStr(machineItem)))
+    Next machineItem
 
-        MontarHtmlAdaptativo = BuildDocumentHtml(columnHtml, stats, profile)
-     Exit Function
+    MontarHtmlAdaptativo = BuildDocumentHtml(columnHtml, stats, profile)
+    Exit Function
 
 TratarErro:
-        Dim errNum As Long, errSrc As String, errDesc As String
-        errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
-        WriteLog "ERROR", "HTML", "Erro " & errNum & " - " & errDesc
-        If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    WriteLog "ERROR", "HTML", "Erro " & errNum & " - " & errDesc
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Function
 
 Private Sub ParsePivotRange( _
@@ -244,55 +244,55 @@ Private Sub ParsePivotRange( _
 
     On Error GoTo TratarErro
 
-        Dim dataMatrix As Variant
-        Dim rowIndex As Long
-        Dim rowCount As Long
-        Dim valueA As String
-        Dim valueB As String
-        Dim currentMachine As String
-        Dim currentGroup As String
+    Dim dataMatrix As Variant
+    Dim rowIndex As Long
+    Dim rowCount As Long
+    Dim valueA As String
+    Dim valueB As String
+    Dim currentMachine As String
+    Dim currentGroup As String
 
-        If sourceRange Is Nothing Then
-            Err.Raise vbObjectError + 5011, , "Intervalo de origem n" & ChrW$(227) & "o informado"
-        End If
+    If sourceRange Is Nothing Then
+        Err.Raise vbObjectError + 5011, , "Intervalo de origem n" & ChrW$(227) & "o informado"
+    End If
 
-        If sourceRange.Columns.Count < 2 Then
-            Err.Raise vbObjectError + 5012, , "A Tabela Dinamica precisa ter pelo menos 2 colunas"
-        End If
+    If sourceRange.Columns.count < 2 Then
+        Err.Raise vbObjectError + 5012, , "A Tabela Dinamica precisa ter pelo menos 2 colunas"
+    End If
 
-        dataMatrix = sourceRange.Resize(sourceRange.Rows.Count, 2).Value2
-        rowCount = sourceRange.Rows.Count
+    dataMatrix = sourceRange.Resize(sourceRange.Rows.count, 2).Value2
+    rowCount = sourceRange.Rows.count
 
-        currentMachine = vbNullString
-        currentGroup = "0"
+    currentMachine = vbNullString
+    currentGroup = "0"
 
-        For rowIndex = 1 To rowCount
-            valueA = GetMatrixText(dataMatrix, rowIndex, 1, False)
-            valueB = GetMatrixText(dataMatrix, rowIndex, 2, True)
+    For rowIndex = 1 To rowCount
+        valueA = GetMatrixText(dataMatrix, rowIndex, 1, False)
+        valueB = GetMatrixText(dataMatrix, rowIndex, 2, True)
 
-            If Not IsCabecalhoPivot(valueA, valueB) Then
-                If IsLinhaMaquina(valueA) Then
-                    currentMachine = valueA
-                    currentGroup = "0"
-                    RegisterMachine currentMachine, machineOrder, dictMachineGroups, dictMachineWeight, dictMachineRecipeCount
+        If Not IsCabecalhoPivot(valueA, valueB) Then
+            If IsLinhaMaquina(valueA) Then
+                currentMachine = valueA
+                currentGroup = "0"
+                RegisterMachine currentMachine, machineOrder, dictMachineGroups, dictMachineWeight, dictMachineRecipeCount
 
-                ElseIf Len(currentMachine) > 0 And IsGrupoLinha(valueA, valueB) Then
-                    currentGroup = valueA
-                    RegisterGroup currentMachine, currentGroup, machineOrder, dictMachineGroups, dictGroupDetails, dictMachineWeight, dictMachineRecipeCount
+            ElseIf Len(currentMachine) > 0 And IsGrupoLinha(valueA, valueB) Then
+                currentGroup = valueA
+                RegisterGroup currentMachine, currentGroup, machineOrder, dictMachineGroups, dictGroupDetails, dictMachineWeight, dictMachineRecipeCount
 
-                ElseIf Len(currentMachine) > 0 And IsReceitaValida(valueA) And Len(valueB) > 0 Then
-                    AddDetail currentMachine, currentGroup, valueA, valueB, machineOrder, dictMachineGroups, dictGroupDetails, dictMachineWeight, dictMachineRecipeCount
-                End If
+            ElseIf Len(currentMachine) > 0 And IsReceitaValida(valueA) And Len(valueB) > 0 Then
+                AddDetail currentMachine, currentGroup, valueA, valueB, machineOrder, dictMachineGroups, dictGroupDetails, dictMachineWeight, dictMachineRecipeCount
             End If
-        Next rowIndex
+        End If
+    Next rowIndex
 
-        ComputeReportStats machineOrder, dictMachineWeight, dictMachineRecipeCount, stats
-     Exit Sub
+    ComputeReportStats machineOrder, dictMachineWeight, dictMachineRecipeCount, stats
+    Exit Sub
 
 TratarErro:
-        Dim errNum As Long, errSrc As String, errDesc As String
-        errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
-        If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Sub
 
 Private Sub ComputeReportStats( _
@@ -393,23 +393,23 @@ Private Function BuildDocumentHtml( _
         End If
 
         headerRowHtml = headerRowHtml & _
-        "<td width='" & profile.ColumnWidth & "' align='center' valign='middle' " & _
-        "style='width:" & profile.ColumnWidth & "px;padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;" & _
-        "border:1px solid #000000;background-color:#D9E2F3;font-family:Calibri,Arial,sans-serif;" & _
-        "font-size:" & FormatPt(profile.HeaderFontPt) & ";font-weight:bold;line-height:" & profile.HeaderLinePx & "px;" & _
-        "text-align:center;'>M&aacute;quina / Grupo / OB / In&iacute;cio</td>"
+            "<td width='" & profile.ColumnWidth & "' align='center' valign='middle' " & _
+            "style='width:" & profile.ColumnWidth & "px;padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;" & _
+            "border:1px solid #000000;background-color:#D9E2F3;font-family:inherit;" & _
+            "font-size:" & FormatPt(profile.HeaderFontPt) & ";font-weight:bold;line-height:" & profile.HeaderLinePx & "px;" & _
+            "text-align:center;'>M&aacute;quina / Grupo / OB / In&iacute;cio</td>"
 
         contentRowHtml = contentRowHtml & _
-        "<td width='" & profile.ColumnWidth & "' valign='top' " & _
-        "style='width:" & profile.ColumnWidth & "px;padding-top:" & profile.BlockPadY & "px;vertical-align:top;'>" & _
-        columnHtml(index) & "</td>"
+            "<td width='" & profile.ColumnWidth & "' valign='top' " & _
+            "style='width:" & profile.ColumnWidth & "px;padding-top:" & profile.BlockPadY & "px;vertical-align:top;'>" & _
+            columnHtml(index) & "</td>"
 
         If index < UBound(columnHtml) Then
             headerRowHtml = headerRowHtml & _
-            "<td width='" & profile.ColumnGap & "' style='width:" & profile.ColumnGap & "px;font-size:0;line-height:0;'>&nbsp;</td>"
+                "<td width='" & profile.ColumnGap & "' style='width:" & profile.ColumnGap & "px;font-size:0;line-height:0;'>&nbsp;</td>"
 
             contentRowHtml = contentRowHtml & _
-            "<td width='" & profile.ColumnGap & "' style='width:" & profile.ColumnGap & "px;font-size:0;line-height:0;'>&nbsp;</td>"
+                "<td width='" & profile.ColumnGap & "' style='width:" & profile.ColumnGap & "px;font-size:0;line-height:0;'>&nbsp;</td>"
         End If
     Next index
 
@@ -417,26 +417,32 @@ Private Function BuildDocumentHtml( _
     html = html & "<html><head>"
     html = html & "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>"
     html = html & "<meta name='x-apple-disable-message-reformatting'>"
+    html = html & "<style>"
+    html = html & "@page WordSection1 { size:595.3pt 841.9pt; margin:14pt 14pt 14pt 14pt; }"
+    html = html & "div.WordSection1 { page:WordSection1; }"
+    html = html & "table { border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt; }"
+    html = html & "td { mso-line-height-rule:exactly; }"
+    html = html & "</style>"
     html = html & "</head>"
 
     html = html & "<body style='margin:0;padding:0;background-color:#FFFFFF;'>"
     html = html & "<div class='WordSection1'>"
-    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;background-color:#FFFFFF;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
+    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;background-color:#FFFFFF;'>"
     html = html & "<tr><td align='center' style='padding:" & profile.OuterPad & "px;'>"
 
-    html = html & "<!--[If mso]><table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ContainerWidth & "'><tr><td><![endif]-->"
-    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ContainerWidth & "' style='width:" & profile.ContainerWidth & "px;background-color:#FFFFFF;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
+    html = html & "<!--[if mso]><table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ContainerWidth & "'><tr><td><![endif]-->"
+    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ContainerWidth & "' style='width:" & profile.ContainerWidth & "px;background-color:#FFFFFF;'>"
 
     html = html & "<tr>"
     html = html & "<td style='padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;border:1px solid #D9E2F3;background-color:#FFFFFF;'>"
 
-    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
-    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:Calibri,Arial,sans-serif;font-size:" & FormatPt(profile.TitleFontPt) & ";font-weight:bold;line-height:" & profile.TitleLinePx & "px;color:#000000;text-align:center;'>Controle de Receitas Emitidas</td></tr>"
-    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:Calibri,Arial,sans-serif;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Confer&ecirc;ncia f&iacute;sica - cozinha de qu&iacute;micos</td></tr>"
-    html = html & "<tr><td align='center' style='padding:0 0 " & profile.BlockPadY & "px 0;font-family:Calibri,Arial,sans-serif;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Emitido em " & Format(Now, "dd/mm/yyyy HH:nn") & " | M&aacute;quinas listadas: " & stats.MachineCount & " | Receitas: " & stats.RecipeCount & "</td></tr>"
+    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;'>"
+    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:inherit;font-size:" & FormatPt(profile.TitleFontPt) & ";font-weight:bold;line-height:" & profile.TitleLinePx & "px;color:#000000;text-align:center;'>Controle de Receitas Emitidas</td></tr>"
+    html = html & "<tr><td align='center' style='padding:0 0 2px 0;font-family:inherit;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Confer&ecirc;ncia f&iacute;sica - cozinha de qu&iacute;micos</td></tr>"
+    html = html & "<tr><td align='center' style='padding:0 0 " & profile.BlockPadY & "px 0;font-family:inherit;font-size:" & FormatPt(profile.MetaFontPt) & ";line-height:" & profile.MetaLinePx & "px;color:#333333;text-align:center;'>Emitido em " & Format(Now, "dd/mm/yyyy HH:nn") & " | M&aacute;quinas listadas: " & stats.MachineCount & " | Receitas: " & stats.RecipeCount & "</td></tr>"
     html = html & "</table>"
 
-    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;'>"
+    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;'>"
     html = html & "<tr>" & headerRowHtml & "</tr>"
     html = html & "<tr>" & contentRowHtml & "</tr>"
     html = html & "</table>"
@@ -445,7 +451,7 @@ Private Function BuildDocumentHtml( _
     html = html & "</tr>"
 
     html = html & "</table>"
-    html = html & "<!--[If mso]></td></tr></table><![endif]-->"
+    html = html & "<!--[if mso]></td></tr></table><![endif]-->"
 
     html = html & "</td></tr>"
     html = html & "</table>"
@@ -478,37 +484,37 @@ Private Function BuildMachineBlock( _
     html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ColumnWidth & "' style='width:" & profile.ColumnWidth & "px;margin:0;page-break-inside:avoid;'>"
 
     html = html & "<tr>"
-    html = html & "<td colspan='2' align='center' style='padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;border:1px solid #000000;background-color:#E9EEF7;font-family:Calibri,Arial,sans-serif;font-size:" & FormatPt(profile.SectionFontPt) & ";font-weight:bold;line-height:" & profile.SectionLinePx & "px;text-align:center;'>"
+    html = html & "<td colspan='2' align='center' style='padding:" & profile.BlockPadY & "px " & profile.RowPadX & "px;border:1px solid #000000;background-color:#E9EEF7;font-family:inherit;font-size:" & FormatPt(profile.SectionFontPt) & ";font-weight:bold;line-height:" & profile.SectionLinePx & "px;text-align:center;'>"
     html = html & HtmlEncode(machineName) & " | " & RecipeCount & " receita"
     If RecipeCount <> 1 Then html = html & "s"
-        html = html & "</td>"
-        html = html & "</tr>"
+    html = html & "</td>"
+    html = html & "</tr>"
 
-        For groupIndex = LBound(groupsArray) To UBound(groupsArray)
-            groupName = Trim$(groupsArray(groupIndex))
+    For groupIndex = LBound(groupsArray) To UBound(groupsArray)
+        groupName = Trim$(groupsArray(groupIndex))
 
-            If Len(groupName) > 0 Then
-                groupKey = machineName & "||" & groupName
+        If Len(groupName) > 0 Then
+            groupKey = machineName & "||" & groupName
 
-                If groupName <> "0" Then
-                    html = html & "<tr>"
-                    html = html & "<td colspan='2' align='center' style='padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;background-color:#F2F2F2;font-family:Calibri,Arial,sans-serif;font-size:" & FormatPt(profile.HeaderFontPt) & ";font-weight:bold;line-height:" & profile.HeaderLinePx & "px;text-align:center;'>"
-                    html = html & "Grupo " & HtmlEncode(groupName)
-                    html = html & "</td>"
-                    html = html & "</tr>"
-                End If
-
-                If dictGroupDetails.Exists(groupKey) Then
-                    html = html & BuildDetailRows(CStr(dictGroupDetails(groupKey)), profile)
-                End If
+            If groupName <> "0" Then
+                html = html & "<tr>"
+                html = html & "<td colspan='2' align='center' style='padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;background-color:#F2F2F2;font-family:inherit;font-size:" & FormatPt(profile.HeaderFontPt) & ";font-weight:bold;line-height:" & profile.HeaderLinePx & "px;text-align:center;'>"
+                html = html & "Grupo " & HtmlEncode(groupName)
+                html = html & "</td>"
+                html = html & "</tr>"
             End If
-        Next groupIndex
 
-        html = html & "<tr><td colspan='2' style='height:" & profile.SpacerHeight & "px;font-size:0;line-height:0;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #000000;'>&nbsp;</td></tr>"
-        html = html & "</table>"
-        html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ColumnWidth & "' style='width:" & profile.ColumnWidth & "px;'><tr><td height='" & profile.SpacerHeight & "' style='height:" & profile.SpacerHeight & "px;font-size:0;line-height:0;'>&nbsp;</td></tr></table>"
+            If dictGroupDetails.Exists(groupKey) Then
+                html = html & BuildDetailRows(CStr(dictGroupDetails(groupKey)), profile)
+            End If
+        End If
+    Next groupIndex
 
-        BuildMachineBlock = html
+    html = html & "<tr><td colspan='2' style='height:" & profile.SpacerHeight & "px;font-size:0;line-height:0;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #000000;'>&nbsp;</td></tr>"
+    html = html & "</table>"
+    html = html & "<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='" & profile.ColumnWidth & "' style='width:" & profile.ColumnWidth & "px;'><tr><td height='" & profile.SpacerHeight & "' style='height:" & profile.SpacerHeight & "px;font-size:0;line-height:0;'>&nbsp;</td></tr></table>"
+
+    BuildMachineBlock = html
 End Function
 
 Private Function BuildDetailRows(ByVal encodedRows As String, ByRef profile As LayoutProfile) As String
@@ -523,30 +529,30 @@ Private Function BuildDetailRows(ByVal encodedRows As String, ByRef profile As L
 
     If Len(encodedRows) = 0 Then Exit Function
 
-        itemSeparator = Chr$(ITEM_SEPARATOR_CODE)
-        fieldSeparator = Chr$(FIELD_SEPARATOR_CODE)
+    itemSeparator = Chr$(ITEM_SEPARATOR_CODE)
+    fieldSeparator = Chr$(FIELD_SEPARATOR_CODE)
 
-        items = Split(encodedRows, itemSeparator)
+    items = Split(encodedRows, itemSeparator)
 
-        For itemIndex = LBound(items) To UBound(items)
-            If Len(items(itemIndex)) > 0 Then
-                fields = Split(items(itemIndex), fieldSeparator)
+    For itemIndex = LBound(items) To UBound(items)
+        If Len(items(itemIndex)) > 0 Then
+            fields = Split(items(itemIndex), fieldSeparator)
 
-                obText = fields(0)
-                If UBound(fields) >= 1 Then
-                    inicioText = fields(1)
-                Else
-                    inicioText = vbNullString
-                End If
-
-                html = html & "<tr>"
-                html = html & "<td width='" & profile.ObWidth & "' style='width:" & profile.ObWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:Calibri,Arial,sans-serif;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;'>" & HtmlEncode(obText) & "</td>"
-                html = html & "<td width='" & profile.InicioWidth & "' align='center' style='width:" & profile.InicioWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:Calibri,Arial,sans-serif;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;text-align:center;'>" & HtmlEncode(inicioText) & "</td>"
-                html = html & "</tr>"
+            obText = fields(0)
+            If UBound(fields) >= 1 Then
+                inicioText = fields(1)
+            Else
+                inicioText = vbNullString
             End If
-        Next itemIndex
 
-        BuildDetailRows = html
+            html = html & "<tr>"
+            html = html & "<td width='" & profile.ObWidth & "' style='width:" & profile.ObWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-left:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:inherit;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;'>" & HtmlEncode(obText) & "</td>"
+            html = html & "<td width='" & profile.InicioWidth & "' align='center' style='width:" & profile.InicioWidth & "px;padding:" & profile.RowPadY & "px " & profile.RowPadX & "px;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;font-family:inherit;font-size:" & FormatPt(profile.BodyFontPt) & ";line-height:" & profile.BodyLinePx & "px;color:#000000;white-space:nowrap;text-align:center;'>" & HtmlEncode(inicioText) & "</td>"
+            html = html & "</tr>"
+        End If
+    Next itemIndex
+
+    BuildDetailRows = html
 End Function
 
 Private Function BuildEmptyColumn(ByRef profile As LayoutProfile) As String
@@ -672,39 +678,39 @@ Private Function GetMatrixText(ByRef dataMatrix As Variant, ByVal rowIndex As Lo
     cellValue = dataMatrix(rowIndex, colIndex)
 
     If IsError(cellValue) Then Exit Function
-        If IsEmpty(cellValue) Then Exit Function
+    If IsEmpty(cellValue) Then Exit Function
 
-            Select Case VarType(cellValue)
-             Case vbString
+    Select Case VarType(cellValue)
+        Case vbString
+            GetMatrixText = Trim$(CStr(cellValue))
+
+        Case vbDate
+            If treatAsDate Then
+                GetMatrixText = Format$(CDate(cellValue), "dd/mm/yyyy hh:nn")
+            Else
                 GetMatrixText = Trim$(CStr(cellValue))
+            End If
 
-             Case vbDate
-                If treatAsDate Then
-                    GetMatrixText = Format$(CDate(cellValue), "dd/mm/yyyy hh:nn")
-                Else
-                    GetMatrixText = Trim$(CStr(cellValue))
-                End If
+        Case vbDouble, vbSingle, vbCurrency, vbLong, vbInteger, vbByte
+            numericValue = CDbl(cellValue)
 
-             Case vbDouble, vbSingle, vbCurrency, vbLong, vbInteger, vbByte
-                numericValue = CDbl(cellValue)
+            If treatAsDate And numericValue > 25000 And numericValue < 80000 Then
+                GetMatrixText = Format$(CDate(numericValue), "dd/mm/yyyy hh:nn")
+            ElseIf numericValue = Fix(numericValue) Then
+                GetMatrixText = CStr(CLng(numericValue))
+            Else
+                GetMatrixText = FormatNumberInvariant(numericValue, "0.############")
+            End If
 
-                If treatAsDate And numericValue > 25000 And numericValue < 80000 Then
-                    GetMatrixText = Format$(CDate(numericValue), "dd/mm/yyyy hh:nn")
-                ElseIf numericValue = Fix(numericValue) Then
-                    GetMatrixText = CStr(CLng(numericValue))
-                Else
-                    GetMatrixText = FormatNumberInvariant(numericValue, "0.############")
-                End If
+        Case Else
+            If treatAsDate And IsDate(cellValue) Then
+                GetMatrixText = Format$(CDate(cellValue), "dd/mm/yyyy hh:nn")
+            Else
+                GetMatrixText = Trim$(CStr(cellValue))
+            End If
+    End Select
 
-             Case Else
-                If treatAsDate And IsDate(cellValue) Then
-                    GetMatrixText = Format$(CDate(cellValue), "dd/mm/yyyy hh:nn")
-                Else
-                    GetMatrixText = Trim$(CStr(cellValue))
-                End If
-            End Select
-
-            GetMatrixText = Trim$(GetMatrixText)
+    GetMatrixText = Trim$(GetMatrixText)
 End Function
 
 Private Function HtmlEncode(ByVal textValue As String) As String
@@ -800,12 +806,12 @@ Private Function IsCabecalhoPivot(ByVal valueA As String, ByVal valueB As String
 
     If InStr(1, normalizedA, "maq", vbTextCompare) > 0 Then
         IsCabecalhoPivot = True
-     Exit Function
+        Exit Function
     End If
 
     If InStr(1, normalizedB, "inicio", vbTextCompare) > 0 Then
         IsCabecalhoPivot = True
-     Exit Function
+        Exit Function
     End If
 
     If normalizedA = "ob" And normalizedB = "inicio" Then
@@ -819,11 +825,11 @@ Private Function IsReceitaValida(ByVal textValue As String) As Boolean
     normalizedText = Trim$(textValue)
 
     If Len(normalizedText) = 0 Then Exit Function
-        If IsLinhaMaquina(normalizedText) Then Exit Function
-            If Not IsNumeric(normalizedText) Then Exit Function
-                If Len(normalizedText) < 5 Then Exit Function
+    If IsLinhaMaquina(normalizedText) Then Exit Function
+    If Not IsNumeric(normalizedText) Then Exit Function
+    If Len(normalizedText) < 5 Then Exit Function
 
-                    IsReceitaValida = True
+    IsReceitaValida = True
 End Function
 
 Private Function IsGrupoLinha(ByVal valueA As String, ByVal valueB As String) As Boolean
@@ -832,11 +838,11 @@ Private Function IsGrupoLinha(ByVal valueA As String, ByVal valueB As String) As
     normalizedText = Trim$(valueA)
 
     If Len(normalizedText) = 0 Then Exit Function
-        If IsLinhaMaquina(normalizedText) Then Exit Function
-            If Len(Trim$(valueB)) > 0 Then Exit Function
-                If Not IsNumeric(normalizedText) Then Exit Function
+    If IsLinhaMaquina(normalizedText) Then Exit Function
+    If Len(Trim$(valueB)) > 0 Then Exit Function
+    If Not IsNumeric(normalizedText) Then Exit Function
 
-                    IsGrupoLinha = True
+    IsGrupoLinha = True
 End Function
 
 Private Function ObterPivotControleReceitas() As pivotTable
@@ -847,29 +853,29 @@ Private Function ObterPivotControleReceitas() As pivotTable
     Set worksheetItem = ThisWorkbook.Worksheets("ControleReceitasEmitidas")
     On Error GoTo 0
 
-        If Not worksheetItem Is Nothing Then
-            On Error Resume Next
-            Set pivotTable = worksheetItem.PivotTables("AnalisePorMaquina")
-            On Error GoTo 0
+    If Not worksheetItem Is Nothing Then
+        On Error Resume Next
+        Set pivotTable = worksheetItem.PivotTables("AnalisePorMaquina")
+        On Error GoTo 0
 
-                If pivotTable Is Nothing Then
-                    If worksheetItem.PivotTables.Count > 0 Then
-                        Set pivotTable = worksheetItem.PivotTables(1)
-                    End If
-                End If
-
-                If Not pivotTable Is Nothing Then
-                    Set ObterPivotControleReceitas = pivotTable
-                 Exit Function
-                End If
+        If pivotTable Is Nothing Then
+            If worksheetItem.PivotTables.count > 0 Then
+                Set pivotTable = worksheetItem.PivotTables(1)
             End If
+        End If
 
-            For Each worksheetItem In ThisWorkbook.Worksheets
-                If worksheetItem.PivotTables.Count > 0 Then
-                    Set ObterPivotControleReceitas = worksheetItem.PivotTables(1)
-                 Exit Function
-                End If
-            Next worksheetItem
+        If Not pivotTable Is Nothing Then
+            Set ObterPivotControleReceitas = pivotTable
+            Exit Function
+        End If
+    End If
+
+    For Each worksheetItem In ThisWorkbook.Worksheets
+        If worksheetItem.PivotTables.count > 0 Then
+            Set ObterPivotControleReceitas = worksheetItem.PivotTables(1)
+            Exit Function
+        End If
+    Next worksheetItem
 End Function
 
 Private Function ObterConexaoControleReceitas() As workbookConnection
@@ -878,14 +884,14 @@ Private Function ObterConexaoControleReceitas() As workbookConnection
     For Each workbookConnection In ThisWorkbook.Connections
         If StrComp(workbookConnection.Name, "ControleReceitasEmitidas", vbTextCompare) = 0 Then
             Set ObterConexaoControleReceitas = workbookConnection
-         Exit Function
+            Exit Function
         End If
     Next workbookConnection
 
     For Each workbookConnection In ThisWorkbook.Connections
         If InStr(1, workbookConnection.Name, "ControleReceitasEmitidas", vbTextCompare) > 0 Then
             Set ObterConexaoControleReceitas = workbookConnection
-         Exit Function
+            Exit Function
         End If
     Next workbookConnection
 End Function
@@ -893,48 +899,48 @@ End Function
 Private Sub AtualizarConsultaControleReceitas()
     On Error GoTo TratarErro
 
-        Dim workbookConnection As workbookConnection
-        Set workbookConnection = ObterConexaoControleReceitas()
+    Dim workbookConnection As workbookConnection
+    Set workbookConnection = ObterConexaoControleReceitas()
 
-        If workbookConnection Is Nothing Then
-            WriteLog "ERROR", "POWER QUERY", "Conex" & ChrW$(227) & "o da consulta 'ControleReceitasEmitidas' n" & ChrW$(227) & "o encontrada"
-            LogarConexoesDisponiveis
-            Err.Raise vbObjectError + 5001, , "Conex" & ChrW$(227) & "o da consulta 'ControleReceitasEmitidas' n" & ChrW$(227) & "o encontrada"
-        End If
+    If workbookConnection Is Nothing Then
+        WriteLog "ERROR", "POWER QUERY", "Conex" & ChrW$(227) & "o da consulta 'ControleReceitasEmitidas' n" & ChrW$(227) & "o encontrada"
+        LogarConexoesDisponiveis
+        Err.Raise vbObjectError + 5001, , "Conex" & ChrW$(227) & "o da consulta 'ControleReceitasEmitidas' n" & ChrW$(227) & "o encontrada"
+    End If
 
-        WriteLog "INFO", "POWER QUERY", "Conexao localizada: " & workbookConnection.Name & " | Tipo=" & workbookConnection.Type
+    WriteLog "INFO", "POWER QUERY", "Conexao localizada: " & workbookConnection.Name & " | Tipo=" & workbookConnection.Type
 
-        On Error Resume Next
-        Select Case workbookConnection.Type
-         Case xlConnectionTypeOLEDB
+    On Error Resume Next
+    Select Case workbookConnection.Type
+        Case xlConnectionTypeOLEDB
             workbookConnection.OLEDBConnection.BackgroundQuery = False
             WriteLog "INFO", "POWER QUERY", "BackgroundQuery=False em OLEDBConnection"
 
-         Case xlConnectionTypeODBC
+        Case xlConnectionTypeODBC
             workbookConnection.ODBCConnection.BackgroundQuery = False
             WriteLog "INFO", "POWER QUERY", "BackgroundQuery=False em ODBCConnection"
 
-         Case Else
+        Case Else
             WriteLog "WARN", "POWER QUERY", "Tipo de conexao sem ajuste explicito de BackgroundQuery"
-        End Select
-        On Error GoTo TratarErro
+    End Select
+    On Error GoTo TratarErro
 
-            WriteLog "INFO", "POWER QUERY", "Iniciando atualizacao da consulta"
-            workbookConnection.Refresh
-            DoEvents
+    WriteLog "INFO", "POWER QUERY", "Iniciando atualizacao da consulta"
+    workbookConnection.Refresh
+    DoEvents
 
-            On Error Resume Next
-            Application.CalculateUntilAsyncQueriesDone
-            On Error GoTo TratarErro
+    On Error Resume Next
+    Application.CalculateUntilAsyncQueriesDone
+    On Error GoTo TratarErro
 
-                WriteLog "INFO", "POWER QUERY", "Consulta atualizada com sucesso"
-             Exit Sub
+    WriteLog "INFO", "POWER QUERY", "Consulta atualizada com sucesso"
+    Exit Sub
 
 TratarErro:
-                Dim errNum As Long, errSrc As String, errDesc As String
-                errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
-                WriteLog "ERROR", "POWER QUERY", "Erro " & errNum & " - " & errDesc
-                If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    WriteLog "ERROR", "POWER QUERY", "Erro " & errNum & " - " & errDesc
+    If errNum <> 0 Then Err.Raise errNum, errSrc, errDesc
 End Sub
 
 Private Function GetEmailSubject() As String
@@ -947,7 +953,7 @@ Private Function GetRecipientTo() As String
     configValue = TryGetRecipientFromConfig()
     If Len(configValue) > 0 Then
         GetRecipientTo = configValue
-     Exit Function
+        Exit Function
     End If
 
     If Len(DEFAULT_RECIPIENT_TO) > 0 Then
@@ -968,42 +974,42 @@ Private Function TryGetRecipientFromConfig() As String
 
     On Error GoTo TratarErro
 
-        Set ws = ThisWorkbook.Worksheets(CONFIG_SHEET_NAME)
-        If ws Is Nothing Then Exit Function
+    Set ws = ThisWorkbook.Worksheets(CONFIG_SHEET_NAME)
+    If ws Is Nothing Then Exit Function
 
-            Dim tableNames As Variant
-            tableNames = Array(CONFIG_TABLE_NAME, "EnderecosEmail")
+    Dim tableNames As Variant
+    tableNames = Array(CONFIG_TABLE_NAME, "EnderecosEmail")
 
-            For i = LBound(tableNames) To UBound(tableNames)
-                On Error Resume Next
-                Set lo = ws.ListObjects(tableNames(i))
-                On Error GoTo TratarErro
+    For i = LBound(tableNames) To UBound(tableNames)
+        On Error Resume Next
+        Set lo = ws.ListObjects(tableNames(i))
+        On Error GoTo TratarErro
 
-                    If Not lo Is Nothing Then
-                        WriteLog "INFO", "EMAIL", "Tabela de destinatarios encontrada: " & tableNames(i)
-                     Exit For
-                    End If
-                Next i
+        If Not lo Is Nothing Then
+            WriteLog "INFO", "EMAIL", "Tabela de destinatarios encontrada: " & tableNames(i)
+            Exit For
+        End If
+    Next i
 
-                If lo Is Nothing Then
-                    WriteLog "WARN", "EMAIL", "Tabela de destinatarios nao encontrada: " & Join(tableNames, ", ")
-                 Exit Function
-                End If
+    If lo Is Nothing Then
+        WriteLog "WARN", "EMAIL", "Tabela de destinatarios nao encontrada: " & Join(tableNames, ", ")
+        Exit Function
+    End If
 
-                If lo.DataBodyRange Is Nothing Then Exit Function
+    If lo.DataBodyRange Is Nothing Then Exit Function
 
-                    idx = ObterIndiceColunaPorSinonimos(lo, Array("PARA", "To", "DESTINATARIO", "DESTINATARIO PRINCIPAL", "EMAIL"))
-                    If idx = 0 Then Exit Function
+    idx = ObterIndiceColunaPorSinonimos(lo, Array("PARA", "TO", "DESTINATARIO", "DESTINATARIO PRINCIPAL", "EMAIL"))
+    If idx = 0 Then Exit Function
 
-                        rawValue = CStr(lo.DataBodyRange.Cells(1, idx).Value)
-                        rawValue = LimparEmails(rawValue)
-                        If Len(rawValue) > 0 Then
-                            TryGetRecipientFromConfig = rawValue
-                        End If
-                     Exit Function
+    rawValue = CStr(lo.DataBodyRange.Cells(1, idx).Value)
+    rawValue = LimparEmails(rawValue)
+    If Len(rawValue) > 0 Then
+        TryGetRecipientFromConfig = rawValue
+    End If
+    Exit Function
 
 TratarErro:
-                        TryGetRecipientFromConfig = vbNullString
+    TryGetRecipientFromConfig = vbNullString
 End Function
 
 Private Function ObterIndiceColunaPorSinonimos(ByVal lo As ListObject, ByVal sinonimos As Variant) As Long
@@ -1012,14 +1018,14 @@ Private Function ObterIndiceColunaPorSinonimos(ByVal lo As ListObject, ByVal sin
     Dim nomeColuna As String
     Dim nomeSinonimo As String
 
-    For i = 1 To lo.ListColumns.Count
+    For i = 1 To lo.ListColumns.count
         nomeColuna = NormalizarCabecalhoEmail(CStr(lo.ListColumns(i).Name))
 
         For j = LBound(sinonimos) To UBound(sinonimos)
             nomeSinonimo = NormalizarCabecalhoEmail(CStr(sinonimos(j)))
             If nomeColuna = nomeSinonimo Then
                 ObterIndiceColunaPorSinonimos = i
-             Exit Function
+                Exit Function
             End If
         Next j
     Next i
@@ -1046,7 +1052,7 @@ Private Function LimparEmails(ByVal textValue As String) As String
     cleaned = Trim$(textValue)
     If Len(cleaned) = 0 Then
         LimparEmails = vbNullString
-     Exit Function
+        Exit Function
     End If
 
     cleaned = Replace(cleaned, " ", "")
@@ -1062,7 +1068,7 @@ Private Sub InitLog()
     baseFolder = LOG_FOLDER
     EnsureFolderExists baseFolder
 
-    gLogFile = baseFolder & "\ReceitasEmitidas.log"
+    gLogFile = baseFolder & "\VBA_Internal.log"
     RotateLogFile gLogFile, LOG_MAX_LINES
 
     gLogReady = True
@@ -1074,113 +1080,116 @@ End Sub
 Private Sub EnsureFolderExists(ByVal folderPath As String)
     On Error GoTo TratarErro
 
-        Dim parentPath As String
+    Dim parentPath As String
 
-        If Len(folderPath) = 0 Then Exit Sub
-            If Dir$(folderPath, vbDirectory) <> vbNullString Then Exit Sub
+    If Len(folderPath) = 0 Then Exit Sub
+    If Dir$(folderPath, vbDirectory) <> vbNullString Then Exit Sub
 
-                If InStrRev(folderPath, "\") > 0 Then
-                    parentPath = Left$(folderPath, InStrRev(folderPath, "\") - 1)
+    If InStrRev(folderPath, "\") > 0 Then
+        parentPath = Left$(folderPath, InStrRev(folderPath, "\") - 1)
 
-                    If Len(parentPath) > 0 Then
-                        If Dir$(parentPath, vbDirectory) = vbNullString Then
-                            EnsureFolderExists parentPath
-                        End If
-                    End If
-                End If
+        If Len(parentPath) > 0 Then
+            If Dir$(parentPath, vbDirectory) = vbNullString Then
+                EnsureFolderExists parentPath
+            End If
+        End If
+    End If
 
-                MkDir folderPath
-             Exit Sub
+    MkDir folderPath
+    Exit Sub
 
 TratarErro:
-                Dim errNum As Long, errSrc As String, errDesc As String
-                errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
-                If errNum <> 75 And errNum <> 76 Then
-                    Err.Raise errNum, errSrc, errDesc
-                End If
+    Dim errNum As Long, errSrc As String, errDesc As String
+    errNum = Err.Number: errSrc = Err.Source: errDesc = Err.Description
+    If errNum <> 75 And errNum <> 76 Then
+        Err.Raise errNum, errSrc, errDesc
+    End If
 End Sub
 
 Private Sub RotateLogFile(ByVal filePath As String, ByVal maxLines As Long)
     On Error GoTo Finalizar
 
-        Dim fileSystem As Object
-        Dim textStream As Object
-        Dim fileContent As String
-        Dim linesArray() As String
-        Dim lineIndex As Long
-        Dim startLine As Long
-        Dim newContent As String
-        Dim totalLines As Long
+    Dim fileSystem As Object
+    Dim textStream As Object
+    Dim fileContent As String
+    Dim linesArray() As String
+    Dim lineIndex As Long
+    Dim startLine As Long
+    Dim newContent As String
+    Dim totalLines As Long
 
-        If maxLines <= 0 Then Exit Sub
+    If maxLines <= 0 Then Exit Sub
 
-            Set fileSystem = CreateObject("Scripting.FileSystemObject")
+    Set fileSystem = CreateObject("Scripting.FileSystemObject")
 
-            If Not fileSystem.FileExists(filePath) Then Exit Sub
+    If Not fileSystem.FileExists(filePath) Then Exit Sub
 
-                Set textStream = fileSystem.OpenTextFile(filePath, 1, False, 0)
-                fileContent = textStream.ReadAll
-                textStream.Close
-                Set textStream = Nothing
+    Set textStream = fileSystem.OpenTextFile(filePath, 1, False, 0)
+    fileContent = textStream.ReadAll
+    textStream.Close
+    Set textStream = Nothing
 
-                If Len(fileContent) = 0 Then Exit Sub
+    If Len(fileContent) = 0 Then Exit Sub
 
-                    linesArray = Split(fileContent, vbCrLf)
-                    totalLines = UBound(linesArray) - LBound(linesArray) + 1
+    linesArray = Split(fileContent, vbCrLf)
+    totalLines = UBound(linesArray) - LBound(linesArray) + 1
 
-                    If totalLines <= maxLines Then Exit Sub
+    If totalLines <= maxLines Then Exit Sub
 
-                        startLine = totalLines - maxLines
-                        newContent = vbNullString
+    startLine = totalLines - maxLines
+    newContent = vbNullString
 
-                        For lineIndex = startLine To UBound(linesArray)
-                            If Len(linesArray(lineIndex)) > 0 Then
-                                If Len(newContent) > 0 Then
-                                    newContent = newContent & vbCrLf
-                                End If
-                                newContent = newContent & linesArray(lineIndex)
-                            End If
-                        Next lineIndex
+    For lineIndex = startLine To UBound(linesArray)
+        If Len(linesArray(lineIndex)) > 0 Then
+            If Len(newContent) > 0 Then
+                newContent = newContent & vbCrLf
+            End If
+            newContent = newContent & linesArray(lineIndex)
+        End If
+    Next lineIndex
 
-                        Set textStream = fileSystem.OpenTextFile(filePath, 2, True, 0)
-                        textStream.Write newContent
-                        textStream.Close
+    Set textStream = fileSystem.OpenTextFile(filePath, 2, True, 0)
+    textStream.Write newContent
+    textStream.Close
 
 Finalizar:
-                        On Error Resume Next
-                        Set textStream = Nothing
-                        Set fileSystem = Nothing
+    On Error Resume Next
+    Set textStream = Nothing
+    Set fileSystem = Nothing
 End Sub
 
 Private Sub WriteLog(ByVal logLevel As String, ByVal stepName As String, ByVal messageText As String)
     On Error GoTo Falha
 
-        Dim fileNumber As Integer
-        Dim execPrefix As String
+    Dim fileNumber As Integer
+    Dim execPrefix As String
 
-        If Not gLogReady Then Exit Sub
-            If gInLogWrite Then Exit Sub
+    If Not gLogReady Then Exit Sub
+    If gInLogWrite Then Exit Sub
 
-                gInLogWrite = True
+    gInLogWrite = True
 
-                If Len(mExecId) > 0 Then
-                    execPrefix = "[ExecId:" & mExecId & "] "
-                Else
-                    execPrefix = vbNullString
-                End If
+    If Len(mExecId) > 0 Then
+        execPrefix = "[ExecId=" & mExecId & "] "
+    Else
+        execPrefix = vbNullString
+    End If
 
-                fileNumber = FreeFile
+    fileNumber = FreeFile
 
-                Open gLogFile For Append As #fileNumber
-                Print #fileNumber, "[" & Format$(Now, "dd/MM/yyyy HH:mm:ss") & "] [VBA] [" & SanitizarTextoLog(logLevel) & "] [" & SanitizarTextoLog(stepName) & "] " & execPrefix & SanitizarTextoLog(messageText)
-                Close #fileNumber
-                gInLogWrite = False
-             Exit Sub
+    Open gLogFile For Append As #fileNumber
+    Print #fileNumber, Format$(Now, "dd/mm/yyyy hh:nn:ss") & _
+                       " | VBA | " & SanitizarTextoLog(logLevel) & _
+                       " | " & SanitizarTextoLog(stepName) & _
+                       " | " & execPrefix & SanitizarTextoLog(messageText)
+    Close #fileNumber
+    gInLogWrite = False
+    Exit Sub
 
 Falha:
-                On Error Resume Next
-                If fileNumber <> 0 Then Close #fileNumber
-                    gInLogWrite = False
+    On Error Resume Next
+    If fileNumber <> 0 Then Close #fileNumber
+    gInLogWrite = False
 End Sub
 
 Private Function SanitizarTextoLog(ByVal texto As String) As String
@@ -1206,7 +1215,7 @@ Private Function NormalizeExecId(ByVal texto As String) As String
     texto = Trim$(texto)
     If Len(texto) = 0 Then
         NormalizeExecId = vbNullString
-     Exit Function
+        Exit Function
     End If
 
     texto = RemoverAcentos(texto)
@@ -1217,19 +1226,19 @@ Private Function NormalizeExecId(ByVal texto As String) As String
 
         If codigo < 0 Then codigo = codigo + 65536
 
-            If (codigo >= 48 And codigo <= 57) _
-                Or (codigo >= 65 And codigo <= 90) _
-                Or (codigo >= 97 And codigo <= 122) _
-                Or ch = "_" _
-                Or ch = "-" Then
-                resultado = resultado & ch
-            Else
-                resultado = resultado & "_"
-            End If
-        Next i
+        If (codigo >= 48 And codigo <= 57) _
+           Or (codigo >= 65 And codigo <= 90) _
+           Or (codigo >= 97 And codigo <= 122) _
+           Or ch = "_" _
+           Or ch = "-" Then
+            resultado = resultado & ch
+        Else
+            resultado = resultado & "_"
+        End If
+    Next i
 
-        If Len(resultado) > 64 Then resultado = Left$(resultado, 64)
-            NormalizeExecId = resultado
+    If Len(resultado) > 64 Then resultado = Left$(resultado, 64)
+    NormalizeExecId = resultado
 End Function
 
 Private Function RemoverAcentos(ByVal texto As String) As String
@@ -1302,28 +1311,28 @@ Private Function SomenteAsciiSeguro(ByVal texto As String) As String
 
         If codigo < 0 Then codigo = codigo + 65536
 
-            If codigo >= 32 And codigo <= 126 Then
-                resultado = resultado & ch
-            Else
-                resultado = resultado & " "
-            End If
-        Next i
+        If codigo >= 32 And codigo <= 126 Then
+            resultado = resultado & ch
+        Else
+            resultado = resultado & " "
+        End If
+    Next i
 
-        SomenteAsciiSeguro = resultado
+    SomenteAsciiSeguro = resultado
 End Function
 
 Private Sub FinalizeLog(Optional ByVal blnSucesso As Boolean = True)
     On Error GoTo TratarErro
 
-        WriteLog "INFO", "LOGGER", "Fim da execucao VBA"
-        WriteLog "INFO", "LOGGER", "FIM Do PROCESSO. Resultado=" & IIf(blnSucesso, "Sucesso", "Erro")
-     Exit Sub
+    WriteLog "INFO", "LOGGER", "Fim da execucao VBA"
+    WriteLog "INFO", "LOGGER", "FIM DO PROCESSO. Resultado=" & IIf(blnSucesso, "Sucesso", "Erro")
+    Exit Sub
 
 TratarErro:
-        On Error Resume Next
-        WriteLog "ERROR", "LOGGER", "FinalizeLog falhou. Err=" & Err.Number & " - " & Err.Description
-        WriteLog "INFO", "LOGGER", "FIM Do PROCESSO. Resultado=Erro"
-        On Error GoTo 0
+    On Error Resume Next
+    WriteLog "ERROR", "LOGGER", "FinalizeLog falhou. Err=" & Err.Number & " - " & Err.Description
+    WriteLog "INFO", "LOGGER", "FIM DO PROCESSO. Resultado=Erro"
+    On Error GoTo 0
 End Sub
 
 Private Sub LogarConexoesDisponiveis()
@@ -1358,7 +1367,7 @@ Public Sub TestarLogger()
     Debug.Print "Log    : " & gLogFile
 
     WriteLog "INFO", "SMOKE", "Linha 1 - mensagem simples"
-    WriteLog "INFO", "SMOKE", "Linha 2 - chars especiais: & < > ; -- Select 1"
+    WriteLog "INFO", "SMOKE", "Linha 2 - chars especiais: & < > ; -- SELECT 1"
     WriteLog "WARN", "SMOKE", "Linha 3 - nivel WARN"
     WriteLog "ERROR", "SMOKE", "Linha 4 - nivel ERROR"
 

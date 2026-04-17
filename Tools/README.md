@@ -11,6 +11,9 @@ Estes scripts são invocados automaticamente pelos hooks de pre-commit ou pelo v
 - **`Test-SkillsGovernance.ps1`**: Valida a conformidade técnica dos arquivos de Skill do Gemini CLI.
 - **`Test-LogConformidade.ps1`**: Rejeita formatos de log obsoletos (Data ISO, Logs diários).
 - **`Test-DashboardTemplate.ps1`**: Valida o contrato técnico do template HTML do dashboard.
+- **`Test-VbaComponentTypes.ps1`**: Valida se componentes VBA foram importados com o tipo correto (Classe vs Módulo).
+- **`Test-VbaReferences.ps1`**: Verifica se existem referências quebradas (Missing References) nos projetos VBA.
+- **`Invoke-VbaCompilationCheck.ps1`**: Tenta compilar os projetos VBA para detectar erros de sintaxe ou referências.
 - **`ValidarAutomacoes.ps1`**: Orquestrador que executa todos os testes de governança acima em sequência.
 
 ---

@@ -39,6 +39,7 @@ Use this skill for the operational side of VBA maintenance: import/export workfl
 4. Read `Attribute VB_Name` from source files instead of trusting the file name.
 5. `.cls` imports must preserve CRLF line endings and use `VBComponents.Import()` for reliability.
 6. Never import multiple components into the same workbook in parallel.
+7. Avoid creating prefixed wrappers (e.g., `ClsRB*`, `ClsRE*`) for shared components; use the canonical versions from `_Shared\VBA\` directly.
 
 ## Canonical Naming and Type Rules
 
@@ -106,6 +107,7 @@ Do not invent alternative parameter names in documentation or automation scripts
 - [ ] `Attribute VB_Name` was honored.
 - [ ] Component names stay within the VBE limit.
 - [ ] `.cls` line endings are CRLF and imports use the correct method.
+- [ ] **Type integrity validated**: Classes must remain `Type=2` (use `Tools/Test-VbaComponentTypes.ps1`).
 - [ ] Compile passed before save.
 - [ ] `Audit/vba` was refreshed when needed.
 - [ ] PT-BR governance was considered after VBA edits.

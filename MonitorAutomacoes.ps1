@@ -604,7 +604,10 @@ function Import-PreviousDashboardState {
             foreach ($taskState in @($state.tasks)) {
                 if ($taskState.lastResult) {
                     $finishedAt = $null
-                    [datetime]::TryParse([string]$taskState.lastResult.finishedAt, [ref]$finishedAt) | Out-Null
+                    try {
+                        $finishedAt = [datetime]::Parse([string]$taskState.lastResult.finishedAt)
+                    } catch { }
+
                     if ($finishedAt) {
                         $script:TaskLastResult[[string]$taskState.name] = @{
                             ExitCode        = [int]$taskState.lastResult.exitCode
@@ -1088,9 +1091,16 @@ function Get-ConfigHash {
     param([string]$Path)
 
     try {
-        return (Get-FileHash -Path $Path -Algorithm SHA256 -ErrorAction Stop).Hash
+        if (-not (Test-Path $Path)) { return $null }
+        $stream = [System.IO.File]::OpenRead($Path)
+        $sha256 = New-Object System.Security.Cryptography.SHA256Managed
+        $hash = [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace("-", "")
+        $stream.Close()
+        $stream.Dispose()
+        return $hash
     }
     catch {
+        if ($stream) { $stream.Close(); $stream.Dispose() }
         return $null
     }
 }
