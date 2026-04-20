@@ -1,7 +1,7 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Lib-Logging.psm1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Biblioteca de logging para scripts de automação PowerShell.
+# VERSÃƒO: 1.0
+# DESCRIÃ‡ÃƒO: Biblioteca de logging para scripts de automaÃ§Ã£o PowerShell.
 #            Garante o mesmo formato de linha de log usado em toda a stack
 #            (VBScript, VBA, PowerShell): [dd/MM/yyyy HH:mm:ss] [PS] [LEVEL] mensagem
 # ==============================================================================
@@ -12,8 +12,8 @@ $script:Lib_Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 # ------------------------------------------------------------------------------
 # New-ExecId
-# Gera um identificador de execução único no formato yyyyMMdd_HHmmss_xxxx.
-# Compatível com o formato gerado pelo VBScript (GerarExecId) e pelo monitor.
+# Gera um identificador de execuÃ§Ã£o Ãºnico no formato yyyyMMdd_HHmmss_xxxx.
+# CompatÃ­vel com o formato gerado pelo VBScript (GerarExecId) e pelo monitor.
 # ------------------------------------------------------------------------------
 function New-ExecId {
     [CmdletBinding()]
@@ -28,11 +28,11 @@ function New-ExecId {
 # Grava uma linha de log em arquivo e no console.
 # Formato: [dd/MM/yyyy HH:mm:ss] [PS] [LEVEL] [ExecId?] mensagem
 #
-# Parâmetros:
-#   -Message   Texto da mensagem (obrigatório)
-#   -Level     INFO | WARN | ERRO       (padrão: INFO)
-#   -ExecId    ID de execução (opcional; incluído no prefixo se fornecido)
-#   -LogPath   Caminho absoluto do arquivo .log (obrigatório)
+# ParÃ¢metros:
+#   -Message   Texto da mensagem (obrigatÃ³rio)
+#   -Level     INFO | WARN | ERRO       (padrÃ£o: INFO)
+#   -ExecId    ID de execuÃ§Ã£o (opcional; incluÃ­do no prefixo se fornecido)
+#   -LogPath   Caminho absoluto do arquivo .log (obrigatÃ³rio)
 # ------------------------------------------------------------------------------
 function Write-AutomacaoLog {
     [CmdletBinding()]
@@ -50,7 +50,7 @@ function Write-AutomacaoLog {
     )
 
     $timestamp = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
-    $execPrefix = if ([string]::IsNullOrWhiteSpace($ExecId)) { "" } else { " [$ExecId]" }
+    $execPrefix = if ([string]::IsNullOrWhiteSpace($ExecId)) { "" } else { " [ExecId:$ExecId]" }
     $line = "[$timestamp] [PS] [$Level]$execPrefix $Message"
 
     # -- Gravar em arquivo (UTF-8 sem BOM, append) --
@@ -71,10 +71,10 @@ function Write-AutomacaoLog {
         }
     }
     catch {
-        # Falha silenciosa: não deve impedir a automação principal
+        # Falha silenciosa: nÃ£o deve impedir a automaÃ§Ã£o principal
     }
 
-    # -- Saída no console com cor por nível --
+    # -- SaÃ­da no console com cor por nÃ­vel --
     $color = switch ($Level) {
         "ERRO" { "Red" }
         "WARN" { "Yellow" }
@@ -85,12 +85,12 @@ function Write-AutomacaoLog {
 
 # ------------------------------------------------------------------------------
 # Get-AutomacaoLogPath
-# Retorna o caminho canônico do log unificado para uma automação.
-# Formato: <LogDir>\<Slug>.log  (arquivo único, sem data no nome)
+# Retorna o caminho canÃ´nico do log unificado para uma automaÃ§Ã£o.
+# Formato: <LogDir>\<Slug>.log  (arquivo Ãºnico, sem data no nome)
 #
-# Parâmetros:
-#   -Slug     Nome curto da automação (ex: "ReceitasBloqueadas", "Montagem")
-#   -LogDir   Diretório base dos logs (obrigatório)
+# ParÃ¢metros:
+#   -Slug     Nome curto da automaÃ§Ã£o (ex: "ReceitasBloqueadas", "Montagem")
+#   -LogDir   DiretÃ³rio base dos logs (obrigatÃ³rio)
 # ------------------------------------------------------------------------------
 function Get-AutomacaoLogPath {
     [CmdletBinding()]
@@ -112,7 +112,7 @@ function Get-AutomacaoLogPath {
 
 # ------------------------------------------------------------------------------
 # Test-AutomationEnvironment
-# Valida se os requisitos mínimos de ambiente estão presentes.
+# Valida se os requisitos mÃ­nimos de ambiente estÃ£o presentes.
 # Retorna um objeto com [bool]$Success e [string]$Message.
 # ------------------------------------------------------------------------------
 function Test-AutomationEnvironment {
@@ -145,13 +145,13 @@ function Test-AutomationEnvironment {
 
 # ------------------------------------------------------------------------------
 # Invoke-LogRotation
-# Rotação por conteúdo: mantém apenas linhas com data >= (hoje - KeepDays).
-# Linhas sem prefixo de data reconhecível são preservadas (safe default).
-# Escrita atômica: grava em .tmp → Move-Item -Force sobre o original.
+# RotaÃ§Ã£o por conteÃºdo: mantÃ©m apenas linhas com data >= (hoje - KeepDays).
+# Linhas sem prefixo de data reconhecÃ­vel sÃ£o preservadas (safe default).
+# Escrita atÃ´mica: grava em .tmp â†’ Move-Item -Force sobre o original.
 #
-# Parâmetros:
+# ParÃ¢metros:
 #   -LogPath    Caminho absoluto do arquivo de log
-#   -KeepDays   Quantidade de dias a reter (padrão: 15)
+#   -KeepDays   Quantidade de dias a reter (padrÃ£o: 15)
 # ------------------------------------------------------------------------------
 function Invoke-LogRotation {
     [CmdletBinding()]
@@ -170,17 +170,17 @@ function Invoke-LogRotation {
     $kept = [System.Collections.Generic.List[string]]::new($lines.Length)
 
     foreach ($line in $lines) {
-        # Extrai data no formato [dd/MM/yyyy ...] no início da linha
+        # Extrai data no formato [dd/MM/yyyy ...] no inÃ­cio da linha
         if ($line -match '^\[(\d{2}/\d{2}/\d{4})') {
             $dateStr = $Matches[1]
             $parsed = [datetime]::MinValue
             if ([datetime]::TryParseExact($dateStr, 'dd/MM/yyyy', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
                 if ($parsed -lt $cutoff) {
-                    continue  # linha expirada — descartar
+                    continue  # linha expirada â€” descartar
                 }
             }
         }
-        # Linha sem data ou com data >= cutoff → preservar
+        # Linha sem data ou com data >= cutoff â†’ preservar
         $kept.Add($line)
     }
 

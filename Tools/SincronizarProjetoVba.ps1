@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$XlsmPath,
@@ -255,7 +255,7 @@ try {
             }
 
             if ([int]$importedComponent.Type -ne $expectedType) {
-                try { $vbProj.VBComponents.Remove($importedComponent) } catch {}
+                try { $vbProj.VBComponents.Remove($importedComponent) } catch { } # Ignorado
                 throw "Componente '$($file.Name)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $expectedType."
             }
 
@@ -263,7 +263,7 @@ try {
         }
         finally {
             if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-                try { Remove-Item -LiteralPath $tempImportPath -Force } catch {}
+                try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
             }
         }
     }
@@ -306,7 +306,7 @@ try {
                 }
 
                 if ([int]$importedComponent.Type -ne $expectedType) {
-                    try { $vbProj.VBComponents.Remove($importedComponent) } catch {}
+                    try { $vbProj.VBComponents.Remove($importedComponent) } catch { } # Ignorado
                     throw "Componente shared '$($file.Name)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $expectedType."
                 }
 
@@ -314,7 +314,7 @@ try {
             }
             finally {
                 if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch {}
+                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
                 }
             }
         }
@@ -330,15 +330,15 @@ try {
 }
 finally {
     if ($null -ne $wb) {
-        try { $wb.Close($false) } catch {}
+        try { $wb.Close($false) } catch { } # Ignorado
     }
     if ($null -ne $excel) {
-        try { $excel.Quit() } catch {}
+        try { $excel.Quit() } catch { } # Ignorado
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     }
 
     if ($null -ne $prevVal) {
-        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch {}
+        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch { } # Ignorado
     }
 }
 

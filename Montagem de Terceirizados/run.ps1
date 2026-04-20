@@ -75,7 +75,7 @@ function Write-Log {
     }
     else {
         $ts = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
-        $line = "[$ts] [PS] [$Lvl] [$ExecId] $Msg"
+        $line = "[$ts] [PS] [$Lvl] [ExecId:$ExecId] $Msg"
         Write-Host $line
         try {
             if (-not (Test-Path $LogDir)) {

@@ -1,4 +1,4 @@
-
+﻿
 [CmdletBinding()]
 param(
     [string]$XlsmPath,
@@ -108,7 +108,7 @@ try {
 
     $importedType = [int]$importedComponent.Type
     if ($importedType -ne 2) {
-        try { $vbProj.VBComponents.Remove($importedComponent) } catch {}
+        try { $vbProj.VBComponents.Remove($importedComponent) } catch { } # Ignorado
         throw "Classe '$ClassName' importada com tipo incorreto ($importedType). Esperado: 2 (ClassModule)."
     }
 
@@ -120,15 +120,15 @@ try {
 }
 finally {
     if ($null -ne $wb) {
-        try { $wb.Close($false) } catch {}
+        try { $wb.Close($false) } catch { } # Ignorado
     }
     if ($null -ne $excel) {
-        try { $excel.Quit() } catch {}
+        try { $excel.Quit() } catch { } # Ignorado
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     }
 
     if ($null -ne $tempClassPath -and (Test-Path -LiteralPath $tempClassPath)) {
-        try { Remove-Item -LiteralPath $tempClassPath -Force } catch {}
+        try { Remove-Item -LiteralPath $tempClassPath -Force } catch { } # Ignorado
     }
 
     # Restaura valor anterior de VBOM
@@ -137,14 +137,14 @@ finally {
             Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal
             Write-Log "INFO" "VBOM: valor restaurado para $prevVal"
         }
-        catch {}
+        catch { } # Ignorado
     }
     else {
         try {
             Remove-ItemProperty -Path $regPath -Name "AccessVBOM" -ErrorAction SilentlyContinue
             Write-Log "INFO" "VBOM: propriedade removida (estado anterior)"
         }
-        catch {}
+        catch { } # Ignorado
     }
 }
 

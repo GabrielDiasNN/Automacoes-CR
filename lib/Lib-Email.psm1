@@ -1,10 +1,10 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Lib-Email.psm1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Biblioteca de envio de e-mail via Outlook COM para scripts PS.
-#            Wrapper fino sobre o objeto Outlook.Application — projetado para
-#            notificações originadas em scripts PowerShell (não-VBA).
-# DEPENDÊNCIA: Lib-Logging.psm1 (deve ser importado antes no script chamador)
+# VERSÃƒO: 1.0
+# DESCRIÃ‡ÃƒO: Biblioteca de envio de e-mail via Outlook COM para scripts PS.
+#            Wrapper fino sobre o objeto Outlook.Application â€” projetado para
+#            notificaÃ§Ãµes originadas em scripts PowerShell (nÃ£o-VBA).
+# DEPENDÃŠNCIA: Lib-Logging.psm1 (deve ser importado antes no script chamador)
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -14,16 +14,16 @@ $ErrorActionPreference = "Stop"
 # Cria e envia um e-mail HTML via Outlook COM (MAPI).
 # Requer Outlook instalado e configurado com perfil ativo.
 #
-# Parâmetros obrigatórios:
-#   -To       Endereço(s) destinatário(s); use ";" para múltiplos
+# ParÃ¢metros obrigatÃ³rios:
+#   -To       EndereÃ§o(s) destinatÃ¡rio(s); use ";" para mÃºltiplos
 #   -Subject  Assunto do e-mail
 #   -HtmlBody Corpo HTML completo
 #
-# Parâmetros opcionais:
-#   -CC       Endereço(s) CC
-#   -BCC      Endereço(s) CCO
-#   -ExecId   ID de execução para rastreio nos logs
-#   -LogPath  Caminho do arquivo de log (usa Write-AutomacaoLog se disponível)
+# ParÃ¢metros opcionais:
+#   -CC       EndereÃ§o(s) CC
+#   -BCC      EndereÃ§o(s) CCO
+#   -ExecId   ID de execuÃ§Ã£o para rastreio nos logs
+#   -LogPath  Caminho do arquivo de log (usa Write-AutomacaoLog se disponÃ­vel)
 #
 # Retorno: $true se enviado; $false se falhou (erro gravado em LogPath/console)
 # ------------------------------------------------------------------------------
@@ -51,7 +51,7 @@ function Send-OutlookEmail {
     function Write-Log {
         param([string]$Msg, [string]$Lvl = "INFO")
         if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
-            # Write-AutomacaoLog disponível se o chamador importou Lib-Logging
+            # Write-AutomacaoLog disponÃ­vel se o chamador importou Lib-Logging
             if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
                 Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogPath
                 return
@@ -67,13 +67,13 @@ function Send-OutlookEmail {
         if ($PSCmdlet.ShouldProcess($To, "Enviar e-mail: $Subject")) {
             $outlook = New-Object -ComObject Outlook.Application
 
-            # Verificar sessão MAPI ativa
+            # Verificar sessÃ£o MAPI ativa
             try {
                 $ns = $outlook.GetNamespace("MAPI")
                 $ns.Logon($null, $null, $false, $false) | Out-Null
             }
             catch {
-                # Sessão pode já estar ativa — falha aqui não é fatal
+                # SessÃ£o pode jÃ¡ estar ativa â€” falha aqui nÃ£o Ã© fatal
             }
 
             $mailItem = $outlook.CreateItem(0) # olMailItem = 0
@@ -100,8 +100,8 @@ function Send-OutlookEmail {
         return $false
     }
     finally {
-        if ($mailItem) { try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch {} }
-        if ($outlook) { try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook)  | Out-Null } catch {} }
+        if ($mailItem) { try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch { } } # Ignorado
+        if ($outlook) { try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook)  | Out-Null } catch { } } # Ignorado
     }
 }
 

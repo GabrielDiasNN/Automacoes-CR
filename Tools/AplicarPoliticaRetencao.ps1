@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ExecId = "",
     [string]$BasePath = "C:\Automacoes",
@@ -11,19 +11,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Utf8Encoding = New-Object System.Text.UTF8Encoding($false)
-$RunId = if ([string]::IsNullOrWhiteSpace($ExecId)) {
-    "RET_{0}_{1}" -f (Get-Date -Format "yyyyMMdd_HHmmss"), (Get-Random -Minimum 1000 -Maximum 9999)
-}
-else {
-    $ExecId
+# Importar biblioteca de logging padrÃ£o
+$libPath = Join-Path $BasePath "lib\Lib-Logging.psm1"
+if (Test-Path $libPath) {
+    Import-Module $libPath -Force
 }
 
 $LogDir = Join-Path $BasePath "Logs"
-if (-not (Test-Path -LiteralPath $LogDir)) {
-    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
-}
 $RunLogFile = Join-Path $LogDir ("Retention_{0}.log" -f (Get-Date -Format "yyyy-MM"))
+
+if ([string]::IsNullOrWhiteSpace($ExecId)) {
+    if (Get-Command New-ExecId -ErrorAction SilentlyContinue) {
+        $ExecId = New-ExecId
+    }
+    else {
+        $ExecId = "RET_{0}_{1}" -f (Get-Date -Format "yyyyMMdd_HHmmss"), (Get-Random -Minimum 1000 -Maximum 9999)
+    }
+}
 
 $script:Stats = [ordered]@{
     FilesRemoved = 0
@@ -32,39 +36,33 @@ $script:Stats = [ordered]@{
     Errors       = 0
 }
 
-function Write-Utf8Line {
-    param(
-        [string]$FilePath,
-        [string]$Line
-    )
-
-    $dir = Split-Path -Path $FilePath -Parent
-    if (-not (Test-Path -LiteralPath $dir)) {
-        New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    }
-
-    $sw = New-Object System.IO.StreamWriter($FilePath, $true, $Utf8Encoding)
-    try {
-        $sw.WriteLine($Line)
-        $sw.Flush()
-    }
-    finally {
-        $sw.Close()
-        $sw.Dispose()
-    }
-}
-
 function Write-RunLog {
     param(
         [string]$Level,
         [string]$Message
     )
 
-    $ts = Get-Date -Format "dd-MM-yyyy HH:mm:ss"
-    $line = "[{0}] [{1}] [RunId={2}] {3}" -f $ts, $Level, $RunId, $Message
-
-    Write-Host $line
-    Write-Utf8Line -FilePath $RunLogFile -Line $line
+    if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
+        # Traduzir nÃ­veis para os suportados pela Lib-Logging
+        $mappedLevel = switch ($Level) {
+            "ERROR" { "ERRO" }
+            "FATAL" { "ERRO" }
+            "WARN"  { "WARN" }
+            default { "INFO" }
+        }
+        Write-AutomacaoLog -Message $Message -Level $mappedLevel -ExecId $ExecId -LogPath $RunLogFile
+    }
+    else {
+        # Fallback caso a biblioteca falhe
+        $ts = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
+        $line = "[$ts] [PS] [$Level] [ExecId:$ExecId] $Message"
+        Write-Host $line
+        try {
+            if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+            Add-Content -Path $RunLogFile -Value $line -Encoding UTF8
+        }
+        catch { } # Ignorado
+    }
 }
 
 function Remove-FileSafe {
@@ -108,18 +106,18 @@ function Remove-DirectorySafe {
         if (-not $bytes) { $bytes = 0 }
 
         if ($DryRun) {
-            Write-RunLog -Level "INFO" -Message ("[DRY-RUN] Remover diretório ({0}): {1} | arquivos={2}" -f $Reason, $DirectoryPath, $files.Count)
+            Write-RunLog -Level "INFO" -Message ("[DRY-RUN] Remover diretÃ³rio ({0}): {1} | arquivos={2}" -f $Reason, $DirectoryPath, $files.Count)
             return
         }
 
         Remove-Item -LiteralPath $dirItem.FullName -Recurse -Force -ErrorAction Stop
         $script:Stats.DirsRemoved++
         $script:Stats.BytesFreed += [int64]$bytes
-        Write-RunLog -Level "INFO" -Message ("Diretório removido ({0}): {1}" -f $Reason, $DirectoryPath)
+        Write-RunLog -Level "INFO" -Message ("DiretÃ³rio removido ({0}): {1}" -f $Reason, $DirectoryPath)
     }
     catch {
         $script:Stats.Errors++
-        Write-RunLog -Level "WARN" -Message ("Falha ao remover diretório ({0}): {1} | Erro: {2}" -f $Reason, $DirectoryPath, $_)
+        Write-RunLog -Level "WARN" -Message ("Falha ao remover diretÃ³rio ({0}): {1} | Erro: {2}" -f $Reason, $DirectoryPath, $_)
     }
 }
 
@@ -132,7 +130,7 @@ function Remove-OldLogFiles {
     )
 
     if (-not (Test-Path -LiteralPath $DirectoryPath)) {
-        Write-RunLog -Level "INFO" -Message ("Diretório inexistente ({0}): {1}" -f $Reason, $DirectoryPath)
+        Write-RunLog -Level "INFO" -Message ("DiretÃ³rio inexistente ({0}): {1}" -f $Reason, $DirectoryPath)
         return
     }
 
@@ -160,7 +158,7 @@ try {
         (Join-Path $BasePath "Audit\vba")
     )
 
-    # Limpar logs diários legados (log_DD-MM-YYYY.log, Execution.log, VBA_Internal.log)
+    # Limpar logs diÃ¡rios legados (log_DD-MM-YYYY.log, Execution.log, VBA_Internal.log)
     $legacyFilters = @("log_*.log", "Execution.log", "VBA_Internal.log")
     foreach ($folder in $logFolders) {
         foreach ($filter in $legacyFilters) {
@@ -169,7 +167,7 @@ try {
     }
 
     # Logs unificados (ReceitasBloqueadas.log, ReceitasEmitidas.log, Montagem.log)
-    # Safety net: remover apenas se nao modificados ha 15+ dias (rotação de conteúdo é feita pelo run.ps1)
+    # Safety net: remover apenas se nao modificados ha 15+ dias (rotaÃ§Ã£o de conteÃºdo Ã© feita pelo run.ps1)
     $unifiedCutoff = (Get-Date).AddDays(-15)
     $unifiedLogs = @(
         (Join-Path $BasePath "Montagem de Terceirizados\Logs\Montagem.log"),
@@ -185,7 +183,7 @@ try {
         }
     }
 
-    # Arquivo legado ReceitasBloqueadas.txt na raiz do módulo
+    # Arquivo legado ReceitasBloqueadas.txt na raiz do mÃ³dulo
     $legacyRbTxt = Join-Path $BasePath "Receitas Bloqueadas\ReceitasBloqueadas.txt"
     if (Test-Path -LiteralPath $legacyRbTxt) {
         $rbTxtItem = Get-Item -LiteralPath $legacyRbTxt
@@ -194,11 +192,11 @@ try {
         }
     }
 
-    # Monitor logs — política padrão (KeepLogsDays)
+    # Monitor logs â€” polÃ­tica padrÃ£o (KeepLogsDays)
     Remove-OldLogFiles -DirectoryPath (Join-Path $BasePath "Logs") `
         -Cutoff $logsCutoff -Reason "retencao-monitor-log" -Filter "Monitor_*.log"
 
-    # Logs de retenção próprios — política de auditoria (KeepAuditDays)
+    # Logs de retenÃ§Ã£o prÃ³prios â€” polÃ­tica de auditoria (KeepAuditDays)
     Remove-OldLogFiles -DirectoryPath (Join-Path $BasePath "Logs") `
         -Cutoff $auditCutoff -Reason "retencao-logs-retencao" -Filter "Retention_*.log"
 
@@ -226,18 +224,18 @@ try {
                 $hasFiles = @(Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction SilentlyContinue).Count -gt 0
                 if (-not $hasFiles) {
                     if ($DryRun) {
-                        Write-RunLog -Level "INFO" -Message ("[DRY-RUN] Remover diretório vazio (retencao-audit): {0}" -f $dir.FullName)
+                        Write-RunLog -Level "INFO" -Message ("[DRY-RUN] Remover diretÃ³rio vazio (retencao-audit): {0}" -f $dir.FullName)
                     }
                     else {
                         Remove-Item -LiteralPath $dir.FullName -Force -ErrorAction Stop
                         $script:Stats.DirsRemoved++
-                        Write-RunLog -Level "INFO" -Message ("Diretório vazio removido (retencao-audit): {0}" -f $dir.FullName)
+                        Write-RunLog -Level "INFO" -Message ("DiretÃ³rio vazio removido (retencao-audit): {0}" -f $dir.FullName)
                     }
                 }
             }
             catch {
                 $script:Stats.Errors++
-                Write-RunLog -Level "WARN" -Message ("Falha ao remover diretório vazio no Audit: {0} | Erro: {1}" -f $dir.FullName, $_)
+                Write-RunLog -Level "WARN" -Message ("Falha ao remover diretÃ³rio vazio no Audit: {0} | Erro: {1}" -f $dir.FullName, $_)
             }
         }
     }

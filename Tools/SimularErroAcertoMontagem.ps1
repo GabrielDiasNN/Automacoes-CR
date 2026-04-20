@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: SimularErroAcertoMontagem.ps1
 # VERSAO: 1.1
 # DESCRICAO: Executa validacao E2E da Montagem com tres cenarios controlados:
@@ -110,6 +110,7 @@ function Remove-ComObject {
         [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($Object)
     }
     catch {
+        # Ignorado
     }
 }
 
@@ -223,11 +224,11 @@ function Get-SimulationRows {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch {}
+            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
             Remove-ComObject -Object $wb
         }
         if ($excel) {
-            try { $excel.Quit() } catch {}
+            try { $excel.Quit() } catch { } # Ignorado
             Remove-ComObject -Object $excel
         }
         [System.GC]::Collect()
@@ -290,11 +291,11 @@ function Set-ReferenceValue {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch {}
+            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
             Remove-ComObject -Object $wb
         }
         if ($excel) {
-            try { $excel.Quit() } catch {}
+            try { $excel.Quit() } catch { } # Ignorado
             Remove-ComObject -Object $excel
         }
         [System.GC]::Collect()
@@ -349,11 +350,11 @@ function Reset-SimulationMarkers {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch {}
+            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
             Remove-ComObject -Object $wb
         }
         if ($excel) {
-            try { $excel.Quit() } catch {}
+            try { $excel.Quit() } catch { } # Ignorado
             Remove-ComObject -Object $excel
         }
         [System.GC]::Collect()

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$RootPath = (Join-Path $PSScriptRoot ".."),
     [string]$OutputPath = ""
@@ -97,7 +97,7 @@ function Remove-ComObjectReference {
     try {
         [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($Obj)
     }
-    catch {}
+    catch { } # Ignorado
 }
 
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
@@ -197,7 +197,7 @@ foreach ($xlsm in $xlsmFiles) {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch {}
+            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
             Remove-ComObjectReference -Obj $wb
         }
     }
@@ -228,7 +228,7 @@ try {
         $excel.Quit()
     }
 }
-catch {}
+catch { } # Ignorado
 finally {
     Remove-ComObjectReference -Obj $excel
     [System.GC]::Collect()

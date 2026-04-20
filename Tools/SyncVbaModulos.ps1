@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$RootPath = (Join-Path $PSScriptRoot ".."),
     [string[]]$WorkbookPaths = @()
@@ -51,7 +51,7 @@ function Remove-ComObjectReference {
     try {
         [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($Obj)
     }
-    catch {}
+    catch { } # Ignorado
 }
 
 function Get-VbaModulesFromFolder {
@@ -202,7 +202,7 @@ foreach ($workbookPath in $WorkbookPaths) {
                 }
 
                 if ([int]$importedComponent.Type -ne $expectedType) {
-                    try { $vbComponents.Remove($importedComponent) } catch {}
+                    try { $vbComponents.Remove($importedComponent) } catch { } # Ignorado
                     Write-Log -Level "ERROR" -Message ("Imported module '{0}' with wrong type={1} (expected {2})." -f $moduleName, [int]$importedComponent.Type, $expectedType)
                     continue
                 }
@@ -229,7 +229,7 @@ foreach ($workbookPath in $WorkbookPaths) {
             }
             finally {
                 if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch {}
+                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
                 }
             }
         }
@@ -242,7 +242,7 @@ foreach ($workbookPath in $WorkbookPaths) {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch {}
+            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
             Remove-ComObjectReference -Obj $wb
         }
     }
@@ -253,7 +253,7 @@ try {
         $excel.Quit()
     }
 }
-catch {}
+catch { } # Ignorado
 finally {
     Remove-ComObjectReference -Obj $excel
     [System.GC]::Collect()
