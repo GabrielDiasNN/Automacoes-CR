@@ -93,6 +93,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\Automacoes\MonitorAutomac
 - `historyLimitPerTask`: quantidade máxima de eventos mantidos por tarefa (1 a 500).
 - `scheduleDelayToleranceMinutes`: tolerância para alerta de atraso de disparo (1 a 120 minutos).
 
+**Segurança (XSS)**: O modo `modern` implementa sanitização rigorosa via `textContent` e `escapeHtml` para todos os dados dinâmicos (versões, nomes de tarefas e logs), mitigando riscos de execução de scripts maliciosos.
+
 Contrato de artefatos do dashboard:
 
 - Fonte canonica editavel: `.github/templates/dashboard-modern.html`.

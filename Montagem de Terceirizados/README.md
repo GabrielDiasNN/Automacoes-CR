@@ -2,50 +2,54 @@
 
 ## Visão Geral
 
-Este projeto automatiza a validação fiscal determinística de ordens de montagem externa. O foco é garantir o cruzamento preciso entre Notas Fiscais (NF) e Ordens de Fabricação (OBs) de terceirizados, notificando divergências à equipe fiscal.
+Este projeto automatiza a validação fiscal determinística de ordens de montagem externa. O foco é garantir o cruzamento preciso entre Notas Fiscais (NF) e Ordens de Fabricação (OBs) de terceirizados, notificando divergências à equipe fiscal de forma proativa.
 
-## Fluxo do Processo
+## Fluxo de Execução
 
-`MonitorAutomacoes.ps1` (Orquestrador) -> `run.ps1` (Runner PS) -> `Excel COM` (VBA) -> `Oracle DB` -> `Email Outlook`
+`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (Runner PS) -> `Excel COM` (VBA) -> `Oracle DB` -> `Email Outlook`
 
 ---
 
-## Componentes do Projeto
+## Arquitetura de Componentes
 
-### 1. Orquestrador PowerShell (`run.ps1`)
-Gerencia a execução da automação:
-- Inicia Excel em modo oculto.
-- **Preflight VBA**: Valida se o projeto VBA está compilável antes de iniciar.
-- **Monitoramento via Log**: Captura o baseline do arquivo de log e aguarda a mensagem `FIM DO PROCESSO.` com o status de sucesso.
-- **Tratamento de Erros**: Converte falhas de COM, VBA ou Timeout em exit codes operacionais padronizados.
+### 1. Runner PowerShell (`run.ps1`)
+Orquestrador de runtime que gerencia o ciclo de vida da automação:
+- Inicia a instância do Excel em modo invisível.
+- **Preflight VBA**: Invoca `Invoke-VbaCompilationCheck` para garantir que o projeto está íntegro antes da execução.
+- **Monitoramento de Fluxo**: Captura o baseline dos logs e aguarda o token de conclusão (`FIM DO PROCESSO.`).
+- **Gestão de Estados**: Traduz falhas de infraestrutura (COM, Timeout) ou lógica de negócio em exit codes padronizados.
 
 ### 2. Workbook Fiscal (`Validador_Notas_Montagem.xlsm`)
-Inteligência central do robô:
-- **Refresh Deterministico**: Verifica a coluna `VALIDA_ATUALIZACAO` no Oracle para confirmar que os dados foram renovados antes do processamento.
-- **Validação NF/OB**: Lógica complexa em VBA que cruza saldos e quantidades.
-- **Notificação**: Gera e envia e-mails HTML dinâmicos via Outlook.
+Núcleo da inteligência fiscal:
+- **Refresh Deterministico**: Implementa a validação da coluna `VALIDA_ATUALIZACAO` no Oracle, assegurando que o processamento utilize apenas dados renovados.
+- **Validação NF/OB**: Cruzamento complexo de saldos e quantidades entre camadas fiscais e operacionais.
+- **Output de Notificação**: Geração de e-mails em HTML dinâmico com o resumo das divergências.
 
 ### 3. Utilitário de Reenvio (`ReenviarAlertaErros.ps1`)
-Script para situações excepcionais:
-- Permite reenviar os alertas de erro detectados na última execução sem processar novamente o Oracle.
-- **Uso**: `pwsh -File ReenviarAlertaErros.ps1` (limpa cache) ou `-KeepCache` (mantém delta).
+Ferramenta operacional para reprocessamento de notificações:
+- Permite o disparo de alertas de erro da última execução sem a necessidade de um novo ciclo de leitura no Oracle.
+- **Parâmetros**:
+  - `Default`: Limpa o cache de estado para forçar o reenvio de todos os erros.
+  - `-KeepCache`: Mantém a lógica de delta (notifica apenas novos erros detectados).
 
 ---
 
-## Operação e Manutenção
+## Operação e Diagnóstico
 
-### Logs e Diagnóstico
-- **Log Unificado**: `Logs/Montagem.log`.
-  - Prefixos: `[PS]` (PowerShell) e `[VBA]` (Excel).
+### Logs
+- **Localização**: `Logs/Montagem.log`.
+- **Camadas**: Identificadas pelos prefixos `[PS]` (PowerShell) e `[VBA]` (Excel).
 
-### Códigos de Saída (Exit Codes)
-- `0`: Sucesso.
-- `4`: Falha ao invocar macro.
-- `5`: Timeout (VBA não respondeu em 300s).
-- `6`: VBA reportou erro fatal ou falha de negócio.
-- `7`: Workbook bloqueado (somente leitura).
-- `8`: Falha de compilação VBA.
+### Matriz de Exit Codes
+| Código | Significado |
+| :--- | :--- |
+| **0** | Sucesso absoluto |
+| **4** | Falha técnica ao invocar a macro |
+| **5** | Timeout: Processamento excedeu 300 segundos |
+| **6** | Erro Fatal reportado pela lógica de negócio VBA |
+| **7** | Workbook bloqueado para escrita (Read-Only) |
+| **8** | Falha de compilação detectada no Preflight |
 
-### Regras de Negócio Críticas
-1. **Idempotência de Notificação**: O robô utiliza um cache (`Cache_Estado_Detalhado.txt`) para evitar notificar o mesmo erro repetidamente, disparando e-mail apenas se houver novos erros ou mudanças no estado.
-2. **Segurança Fiscal**: Em caso de falha no Refresh do Oracle, a automação aborta para evitar falsos positivos com dados obsoletos.
+### Regras Críticas
+1. **Idempotência**: O arquivo `Cache_Estado_Detalhado.txt` previne o spam de notificações, enviando alertas apenas quando mudanças significativas no estado de erro forem detectadas.
+2. **Consistência de Dados**: O robô aborta imediatamente se o Refresh do Oracle falhar, protegendo a integridade da análise fiscal.
