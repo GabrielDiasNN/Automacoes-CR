@@ -1,0 +1,39 @@
+# Política de Autonomia Seletiva para o Projeto Automacoes
+# Comandos Shell, Web e Subagentes são automáticos.
+# Escrita e Modificação de arquivos CONTINUAM exigindo aprovação.
+
+[[rule]]
+toolName = "run_shell_command"
+decision = "allow"
+priority = 900
+allowRedirection = true
+
+[[rule]]
+toolName = "web_fetch"
+decision = "allow"
+priority = 900
+
+[[rule]]
+toolName = "google_web_search"
+decision = "allow"
+priority = 900
+
+[[rule]]
+toolName = "save_memory"
+decision = "allow"
+priority = 900
+
+[[rule]]
+toolName = "generalist"
+decision = "allow"
+priority = 900
+
+[[rule]]
+toolName = "codebase_investigator"
+decision = "allow"
+priority = 900
+
+[[rule]]
+toolName = "cli_help"
+decision = "allow"
+priority = 900
