@@ -1,33 +1,4 @@
-<#
-.SYNOPSIS
-    Detecta drift entre os arquivos .bas/.cls no repositório e as capturas em Audit/vba/.
-
-.DESCRIPTION
-    Verifica se os arquivos VBA (.bas/.cls) que estão staged para commit diferem dos
-    snapshots exportados em Audit/vba/. Um "diff" indica que houve edição na fonte
-    sem o workflow completo: importar no xlsm → exportar auditoria.
-
-    Usa o compare-report.json gerado por CompararVbaModulos.ps1 como base de comparação.
-
-.PARAMETER RootPath
-    Caminho raiz do repositório. Padrão: pasta-pai do script.
-
-.PARAMETER StagedOnly
-    Quando informado, verifica drift somente para arquivos .bas/.cls staged no git.
-    Sem esta flag, verifica todos os módulos rastreados pelos manifests.
-
-.PARAMETER Paths
-    Lista explicita de arquivos para verificar no lugar do modo staged. Aceita caminhos
-    relativos ao repositório ou absolutos. Em CI, use esta opção para espelhar o
-    comportamento do pre-commit sobre os arquivos alterados do PR/push.
-
-.OUTPUTS
-    Exit 0 = nenhum drift detectado.
-    Exit 1 = drift detectado (commit deve ser bloqueado).
-    Exit 2 = pré-condição falhou (ex.: sem manifests).
-#>
-
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$RootPath = (Join-Path $PSScriptRoot ".."),
     [switch]$StagedOnly,
@@ -60,13 +31,13 @@ function Convert-ToRepoRelativePath {
     return $Path.Replace('\', '/')
 }
 
-# Compara conteúdo ignorando diferenças de line ending (CRLF vs LF)
+# Compara conteudo ignorando diferencas de line ending (CRLF vs LF)
 function Get-NormalizedHash {
     param([string]$FilePath)
     if (-not (Test-Path -LiteralPath $FilePath)) { return $null }
     try {
         $raw = [System.IO.File]::ReadAllBytes($FilePath)
-        # Remove todos os CR (0x0D) — normaliza CRLF/CR para LF
+        # Remove todos os CR (0x0D) - normaliza CRLF/CR para LF
         $cleaned = [byte[]]($raw | Where-Object { $_ -ne 13 })
         $sha = [System.Security.Cryptography.SHA256]::Create()
         $hash = $sha.ComputeHash($cleaned)
@@ -141,7 +112,7 @@ if (-not $manifests -or $manifests.Count -eq 0) {
 }
 
 # ------------------------------------------------------------------
-# 3. Comparar módulos por hash SHA-256
+# 3. Comparar modulos por hash SHA-256
 # ------------------------------------------------------------------
 $driftItems = @()
 
@@ -152,8 +123,8 @@ foreach ($manifestFile in $manifests) {
     $repoFolder = if ([string]::IsNullOrWhiteSpace($sourceDir)) { $resolvedRoot } else { Join-Path $resolvedRoot $sourceDir }
     $auditFolder = Split-Path -Parent $manifestFile.FullName
 
-    # Classes canônicas compartilhadas via _Shared/VBA/ — presentes nos xlsm
-    # mas sem cópia local nos projetos RB/RE (Montagem mantém cópia direta).
+    # Classes canonicas compartilhadas via _Shared/VBA/ - presentes nos xlsm
+    # mas sem copia local nos projetos RB/RE (Montagem mantem copia direta).
     $sharedVbaDir = Join-Path $resolvedRoot "_Shared\VBA"
 
     foreach ($component in $manifest.components) {
@@ -163,7 +134,7 @@ foreach ($manifestFile in $manifests) {
         $repoFile = Join-Path $repoFolder $fileName
         $auditFile = Join-Path $auditFolder $fileName
 
-        # Quando -StagedOnly, ignorar arquivos não staged
+        # Quando -StagedOnly, ignorar arquivos nao staged
         if ($StagedOnly -or $Paths.Count -gt 0) {
             $relPath = $repoFile.Replace($resolvedRoot, "").TrimStart("\", "/").Replace("\", "/")
             $isSelected = $targetFiles | Where-Object { $_ -eq $relPath -or $_ -like "*$fileName" }
@@ -171,7 +142,7 @@ foreach ($manifestFile in $manifests) {
         }
 
         if (-not (Test-Path -LiteralPath $repoFile)) {
-            # Ignorar classe canônica que existe em _Shared/VBA/
+            # Ignorar classe canonica que existe em _Shared/VBA/
             $sharedFile = Join-Path $sharedVbaDir $fileName
             if (Test-Path -LiteralPath $sharedFile) { continue }
             $driftItems += [PSCustomObject]@{ Status = "MissingInRepo"; Module = $fileName; Source = $sourceRel }
@@ -199,16 +170,54 @@ if ($driftItems.Count -eq 0) {
     exit 0
 }
 
-Write-HookLog "ERRO" "Drift VBA detectado — arquivos .bas/.cls nao sincronizados com o XLSM:"
+Write-HookLog "ERRO" "Drift VBA detectado - arquivos .bas/.cls nao sincronizados com o XLSM:"
 foreach ($item in $driftItems) {
     Write-HookLog "ERRO" "  [$($item.Status)] $($item.Source) :: $($item.Module)"
 }
 
 Write-Host ""
 Write-Host "Para corrigir, execute o workflow de sincronizacao:"
-Write-Host "  1. Importe no XLSM:  pwsh -File Tools\SincronizarProjetoVba.ps1 -WorkbookPath <caminho.xlsm>"
+Write-Host "  1. Importe no XLSM:  pwsh -File Tools\SincronizarProjetoVba.ps1 -WorkbookPath 'arquivo.xlsm'"
 Write-Host "  2. Exporte Auditoria: pwsh -File Tools\ExportarAuditoriaXlsm.ps1"
 Write-Host "  3. Stage os arqs:    git add Audit/vba/"
 Write-Host ""
-
 exit 1
+
+<#
+.SYNOPSIS
+    Detecta drift entre os arquivos .bas/.cls no repositorio e as capturas em Audit/vba/.
+
+.DESCRIPTION
+    Verifica se os arquivos VBA (.bas/.cls) que estao staged para commit diferem dos
+    snapshots exportados em Audit/vba/. Um "diff" indica que houve edicao na fonte
+    sem o workflow completo: importar no xlsm -> exportar auditoria.
+
+    Usa o compare-report.json gerado por CompararVbaModulos.ps1 como base de comparacao.
+
+.PARAMETER RootPath
+    Caminho raiz do repositorio. Padrao: pasta-pai do script.
+
+.PARAMETER StagedOnly
+    Quando informado, verifica drift somente para arquivos .bas/.cls staged no git.
+    Sem esta flag, verifica todos os modulos rastreados pelos manifests.
+
+.PARAMETER Paths
+    Lista explicita de arquivos para verificar no lugar do modo staged. Aceita caminhos
+    relativos ao repositorio ou absolutos. Em CI, use esta opcao para espelhar o
+    comportamento do pre-commit sobre os arquivos alterados do PR/push.
+
+.OUTPUTS
+    Exit 0 = nenhum drift detectado.
+    Exit 1 = drift detectado (commit deve ser bloqueado).
+    Exit 2 = pre-condicao falhou (ex.: sem manifests).
+
+.EXAMPLE
+    pwsh -File Tools\Test-VbaDrift.ps1 -StagedOnly
+
+.EXAMPLE
+    pwsh -File Tools\Test-VbaDrift.ps1 -Paths "Montagem de Terceirizados/modMain.bas"
+
+.NOTES
+    A ferramenta valida a integridade do codigo VBA antes do commit.
+    Certifique-se de usar caminhos relativos ao repositorio.
+#>

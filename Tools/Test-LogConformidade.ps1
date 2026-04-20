@@ -17,13 +17,17 @@
 
 [CmdletBinding()]
 param(
-    [string]$RootPath = (Split-Path -Parent $PSScriptRoot),
+    [string]$RootPath,
     [switch]$StagedOnly,
     [switch]$All,
     [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { Get-Location }
+}
 
 # Se nenhum modo especificado, assume -StagedOnly
 if (-not $StagedOnly -and -not $All -and $Paths.Count -eq 0) {

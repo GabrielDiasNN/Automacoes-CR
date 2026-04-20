@@ -1,6 +1,6 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: MonitorAutomacoes.ps1
-# VERSÃO: 3.6
+# VERSÃƒO: 3.6
 # ==============================================================================
 
 param(
@@ -40,7 +40,9 @@ function Write-StartupDiagnostic {
             $sw.Dispose()
         }
     }
-    catch {}
+    catch {
+        # Ignorado
+    }
 }
 
 $Utf8Encoding = New-Object System.Text.UTF8Encoding($false)
@@ -49,7 +51,9 @@ try {
     [Console]::OutputEncoding = $Utf8Encoding
     $OutputEncoding = $Utf8Encoding
 }
-catch {}
+catch {
+    # Ignorado
+}
 
 $MutexName = if ([string]::IsNullOrWhiteSpace($MutexNameOverride)) {
     "Global\MonitorAutomacoesMutex"
@@ -61,12 +65,12 @@ $MutexWaitSeconds = 5
 $script:MutexAcquired = $false
 
 try {
-    # Mantemos o objeto Mutex no escopo do script para garantir que ele não seja coletado
+    # Mantemos o objeto Mutex no escopo do script para garantir que ele nÃ£o seja coletado
     # pelo Garbage Collector enquanto o monitor estiver rodando.
     $script:MonitorMutex = New-Object System.Threading.Mutex($false, $MutexName)
 }
 catch {
-    $msg = "Falha crítica ao inicializar Mutex: $_"
+    $msg = "Falha crÃ­tica ao inicializar Mutex: $_"
     Write-Host "ERRO: $msg" -ForegroundColor Red
     Write-StartupDiagnostic -Message $msg -Type "ERRO"
     Exit 1
@@ -77,7 +81,7 @@ try {
 }
 catch [System.Threading.AbandonedMutexException] {
     $script:MutexAcquired = $true
-    $msg = "Mutex abandonado detectado. Assumindo controle desta instância."
+    $msg = "Mutex abandonado detectado. Assumindo controle desta instÃ¢ncia."
     Write-Host "AVISO: $msg" -ForegroundColor Yellow
     Write-StartupDiagnostic -Message $msg -Type "WARN"
 }
@@ -89,7 +93,7 @@ catch {
 }
 
 if (-not $script:MutexAcquired) {
-    $msg = "Não foi possível adquirir o mutex '$MutexName' em $MutexWaitSeconds s. Outra instância provavelmente está ativa."
+    $msg = "NÃ£o foi possÃ­vel adquirir o mutex '$MutexName' em $MutexWaitSeconds s. Outra instÃ¢ncia provavelmente estÃ¡ ativa."
     Write-Host "AVISO: $msg" -ForegroundColor Yellow
     Write-StartupDiagnostic -Message $msg -Type "WARN"
     Exit 0
@@ -199,7 +203,7 @@ function Get-MetricsCountersSnapshot {
     }
 }
 
-function Reset-WindowMetrics {
+function Reset-WindowMetric {
     param([datetime]$WindowStart = (Get-Date))
 
     foreach ($metricKey in @($script:MetricsWindow.Keys)) {
@@ -241,7 +245,7 @@ function Save-MetricsSnapshot {
     }
     finally {
         if ($ResetWindow) {
-            Reset-WindowMetrics -WindowStart $WindowEnd
+            Reset-WindowMetric -WindowStart $WindowEnd
         }
     }
 }
@@ -310,7 +314,7 @@ function Get-TaskDurationSummary {
     }
 }
 
-function Get-DashboardSettings {
+function Get-DashboardSetting {
     $defaults = [ordered]@{
         enabled                       = $true
         mode                          = "modern"
@@ -496,7 +500,15 @@ function Get-DashboardStateSnapshot {
 
     $delayTolerance = [int]$script:DashboardSettings.scheduleDelayToleranceMinutes
     foreach ($taskState in $tasks) {
-        if (-not $taskState.enabled -or $taskState.isRunning -or -not $taskState.previousRun) { continue }
+        if (-not $taskState.enabled -or $taskState.isRunning -or -not $taskState.lastResult) { continue }
+
+        # Alerta se a ultima execucao demorou muito acima do p95 histÃ³rico (+10 min)
+        if ($taskState.p95DurationSec -gt 0 -and $taskState.lastResult.durationSeconds -gt ($taskState.p95DurationSec + 600)) {
+            $diffMin = [math]::Round(($taskState.lastResult.durationSeconds - $taskState.p95DurationSec) / 60, 1)
+            $alerts += [ordered]@{ severity = "WARN"; message = "Tarefa '$($taskState.name)' demorou muito acima da media ($diffMin min extras)." }
+        }
+
+        if (-not $taskState.previousRun) { continue }
 
         $prevRunAt = [datetime]::Parse([string]$taskState.previousRun)
         $delayMinutes = (New-TimeSpan -Start $prevRunAt -End $Now).TotalMinutes
@@ -606,7 +618,7 @@ function Import-PreviousDashboardState {
                     $finishedAt = $null
                     try {
                         $finishedAt = [datetime]::Parse([string]$taskState.lastResult.finishedAt)
-                    } catch { }
+                    } catch { } # Ignorado
 
                     if ($finishedAt) {
                         $script:TaskLastResult[[string]$taskState.name] = @{
@@ -791,7 +803,6 @@ function Get-DashboardHtmlEmergencyFallbackDocument {
 </html>
 '@
 }
-
 function Get-DashboardHtmlDocument {
     $template = Get-DashboardTemplateContent
     if ($template) {
@@ -863,7 +874,7 @@ function Get-ExitCodeLogType {
     }
 }
 
-function Register-TaskCompletionMetrics {
+function Register-TaskCompletionMetric {
     param([int]$ExitCode)
 
     Add-MetricCounter -MetricName "TasksCompleted"
@@ -907,7 +918,7 @@ function Write-TaskCompletionLog {
         $desc = " - $($script:Config.settings.exitCodeMap."$ExitCode")"
     }
 
-    Register-TaskCompletionMetrics -ExitCode $ExitCode
+    Register-TaskCompletionMetric -ExitCode $ExitCode
     $logType = Get-ExitCodeLogType -ExitCode $ExitCode
     $script:TaskLastResult[$TaskName] = @{ ExitCode = $ExitCode; FinishedAt = $FinishedAt; DurationSeconds = $DurationSeconds }
     Add-TaskHistoryEntry -TaskName $TaskName -ExitCode $ExitCode -FinishedAt $FinishedAt -StartedAt $StartedAt -DurationSeconds $DurationSeconds -ProcessId $ProcessId
@@ -990,7 +1001,7 @@ function Write-Log {
     $timestamp = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
     $line = "[$timestamp] [PS] [$type] $msg"
 
-    try { Add-Utf8Line -FilePath $logPath -Line $line } catch {}
+    try { Add-Utf8Line -FilePath $logPath -Line $line } catch { } # Ignorado
 
     $color = "Cyan"
     if ($type -eq "ERRO") { $color = "Red" }
@@ -1067,18 +1078,18 @@ function Test-IntegerArrayRange {
     }
 
     if (($Values -is [string]) -or ($Values -isnot [System.Collections.IEnumerable])) {
-        throw "Campo '$FieldName' em '$TaskName' deve ser array numérico."
+        throw "Campo '$FieldName' em '$TaskName' deve ser array numÃ©rico."
     }
 
     $arrayValues = @($Values)
     if ($arrayValues.Count -eq 0 -and -not $AllowEmpty) {
-        throw "Campo '$FieldName' em '$TaskName' não pode ser vazio."
+        throw "Campo '$FieldName' em '$TaskName' nÃ£o pode ser vazio."
     }
 
     foreach ($value in $arrayValues) {
         $parsedValue = 0
         if (-not [int]::TryParse([string]$value, [ref]$parsedValue)) {
-            throw "Campo '$FieldName' em '$TaskName' contém valor não numérico: $value"
+            throw "Campo '$FieldName' em '$TaskName' contÃ©m valor nÃ£o numÃ©rico: $value"
         }
 
         if ($parsedValue -lt $Min -or $parsedValue -gt $Max) {
@@ -1108,7 +1119,7 @@ function Get-ConfigHash {
 function Test-Configuration {
     param($Config)
 
-    if (-not $Config) { throw "Configuração vazia." }
+    if (-not $Config) { throw "ConfiguraÃ§Ã£o vazia." }
     if (-not $Config.settings) { throw "Bloco 'settings' ausente." }
     if (-not $Config.tasks) { throw "Bloco 'tasks' ausente." }
 
@@ -1160,7 +1171,7 @@ function Test-Configuration {
 
     $taskList = @($Config.tasks)
     if ($taskList.Count -eq 0) {
-        throw "Bloco 'tasks' não pode ser vazio."
+        throw "Bloco 'tasks' nÃ£o pode ser vazio."
     }
 
     $names = @{}
@@ -1184,16 +1195,16 @@ function Test-Configuration {
         }
         $names[$taskName] = $true
 
-        # Validação de caminho para tarefas habilitadas
+        # ValidaÃ§Ã£o de caminho para tarefas habilitadas
         if ($task.enabled -and -not (Test-Path $task.scriptPath)) {
-            Write-Log "AVISO: scriptPath não encontrado para '$taskName': $($task.scriptPath)" -Type "WARN"
+            Write-Log "AVISO: scriptPath nÃ£o encontrado para '$taskName': $($task.scriptPath)" -Type "WARN"
         }
     }
 }
 
 function Import-Configuration {
     if (-not (Test-Path $ConfigFilePath)) {
-        $err = "ERRO CRÍTICO: Arquivo config.json não encontrado."
+        $err = "ERRO CRÃTICO: Arquivo config.json nÃ£o encontrado."
         Set-Utf8Content -FilePath $EmergencyLog -Content $err
         return $null
     }
@@ -1205,7 +1216,7 @@ function Import-Configuration {
         return $config
     }
     catch {
-        $err = "ERRO CRÍTICO: Falha ao carregar config.json. Detalhes: $_"
+        $err = "ERRO CRÃTICO: Falha ao carregar config.json. Detalhes: $_"
         Set-Utf8Content -FilePath $EmergencyLog -Content $err
         return $null
     }
@@ -1215,7 +1226,7 @@ function Update-Configuration {
     param([switch]$Force)
 
     if (-not (Test-Path $ConfigFilePath)) {
-        Write-Log "Arquivo config.json não encontrado em $ConfigFilePath" -Type "ERRO"
+        Write-Log "Arquivo config.json nÃ£o encontrado em $ConfigFilePath" -Type "ERRO"
         $script:LastConfigReloadStatus = "ERRO"
         Add-MetricCounter -MetricName "ConfigReloadFailure"
         return $false
@@ -1248,7 +1259,7 @@ function Update-Configuration {
         }
 
         if (-not $newConfig) {
-            Write-Log "Falha ao carregar config.json após $maxAttempts tentativas. Mantendo configuração atual." -Type "ERRO"
+            Write-Log "Falha ao carregar config.json apÃ³s $maxAttempts tentativas. Mantendo configuraÃ§Ã£o atual." -Type "ERRO"
             $script:LastConfigReloadStatus = "ERRO"
             Add-MetricCounter -MetricName "ConfigReloadFailure"
             return $false
@@ -1262,10 +1273,10 @@ function Update-Configuration {
         $script:Config = $newConfig
         $script:ConfigLastWrite = $currentWrite
         $script:ConfigHash = $currentHash
-        $script:DashboardSettings = Get-DashboardSettings
-        $script:TaskHistoryLimit = [int]$script:DashboardSettings.historyLimitPerTask
+        $script:DashboardSetting = Get-DashboardSetting
+        $script:TaskHistoryLimit = [int]$script:DashboardSetting.historyLimitPerTask
 
-        # Purgar entradas obsoletas do StateControl após hot-reload
+        # Purgar entradas obsoletas do StateControl apÃ³s hot-reload
         $validTaskNames = @($script:Config.tasks | ForEach-Object { [string]$_.name })
         $staleKeys = @($script:StateControl.Keys | Where-Object { $_ -notin $validTaskNames })
         foreach ($key in $staleKeys) { $script:StateControl.Remove($key) | Out-Null }
@@ -1274,7 +1285,7 @@ function Update-Configuration {
             Remove-Item $EmergencyLog -ErrorAction SilentlyContinue
         }
 
-        Write-Log "Configuração recarregada com sucesso. Tarefas: $($script:Config.tasks.Count) (antes: $previousCount) | Hash=$($currentHash.Substring(0,8))"
+        Write-Log "ConfiguraÃ§Ã£o recarregada com sucesso. Tarefas: $($script:Config.tasks.Count) (antes: $previousCount) | Hash=$($currentHash.Substring(0,8))"
         $script:LastConfigReloadAt = Get-Date
         $script:LastConfigReloadStatus = "OK"
         Add-MetricCounter -MetricName "ConfigReloadSuccess"
@@ -1284,7 +1295,7 @@ function Update-Configuration {
     return $true
 }
 
-function Remove-FinishedTasks {
+function Remove-FinishedTask {
     $toRemove = @()
     $logDir = Get-LogDirectory
 
@@ -1316,7 +1327,7 @@ function Remove-FinishedTasks {
                     Write-Log "Tarefa '$taskName' excedeu limite de $($record.MaxRuntimeMinutes) min (decorrido=$([math]::Round($elapsed,1)) min). Encerrando PID=$($proc.Id)." -Type "WARN" -LogDir $logDir
                     $finishedAt = Get-Date
                     $durationSec = [int][math]::Round((New-TimeSpan -Start $record.StartedAt -End $finishedAt).TotalSeconds, 0)
-                    try { $proc.Kill() } catch {}
+                    try { $proc.Kill() } catch { } # Ignorado
                     Write-TaskCompletionLog -TaskName $taskName -ExitCode 124 -ProcessId $proc.Id -LogDir $logDir -StartedAt ([datetime]$record.StartedAt) -FinishedAt $finishedAt -DurationSeconds $durationSec
                     $toRemove += $taskName
                 }
@@ -1342,7 +1353,7 @@ function Start-TaskProcess {
     )
 
     if (-not (Test-Path $Path)) {
-        Write-Log "ERRO: Arquivo .vbs não encontrado para '$Name': $Path" -Type "ERRO" -LogDir $LogDir
+        Write-Log "ERRO: Arquivo .vbs nÃ£o encontrado para '$Name': $Path" -Type "ERRO" -LogDir $LogDir
         return $false
     }
 
@@ -1358,7 +1369,7 @@ function Start-TaskProcess {
             $proc = Start-Process "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$Path`" `"$execId`"" -WindowStyle Hidden -PassThru -ErrorAction Stop
         }
         else {
-            throw "Extensão '$ext' não suportada."
+            throw "ExtensÃ£o '$ext' nÃ£o suportada."
         }
 
         Write-Log "Tarefa '$Name' iniciada. [ExecId=$execId] PID=$($proc.Id) | Script=$Path" -LogDir $LogDir
@@ -1366,7 +1377,7 @@ function Start-TaskProcess {
         if ($WaitForExit) {
             $proc.WaitForExit()
             Write-TaskCompletionLog -TaskName $Name -ExitCode $proc.ExitCode -ProcessId $proc.Id -LogDir $LogDir
-            Write-Log "Tarefa '$Name' finalizada em modo síncrono. [ExecId=$execId]" -LogDir $LogDir
+            Write-Log "Tarefa '$Name' finalizada em modo sÃ­ncrono. [ExecId=$execId]" -LogDir $LogDir
         }
         else {
             $script:RunningTasks[$Name] = @{
@@ -1429,13 +1440,13 @@ function Invoke-ScheduledTask {
             $record = $script:RunningTasks[$taskName]
             $runningProc = if ($record -is [hashtable]) { $record.Proc } else { $record }
             if ($runningProc -and -not $runningProc.HasExited) {
-                Write-Log "Tarefa '$taskName' ignorada por sobreposição. PID em execução=$($runningProc.Id)" -Type "WARN" -LogDir $logDir
+                Write-Log "Tarefa '$taskName' ignorada por sobreposiÃ§Ã£o. PID em execuÃ§Ã£o=$($runningProc.Id)" -Type "WARN" -LogDir $logDir
                 Add-MetricCounter -MetricName "TasksSkippedOverlap"
                 return
             }
         }
         catch {
-            Write-Log "Falha ao validar sobreposição de '$taskName'. Estado local será limpo. Erro: $_" -Type "WARN" -LogDir $logDir
+            Write-Log "Falha ao validar sobreposiÃ§Ã£o de '$taskName'. Estado local serÃ¡ limpo. Erro: $_" -Type "WARN" -LogDir $logDir
             $script:RunningTasks.Remove($taskName) | Out-Null
         }
     }
@@ -1779,14 +1790,16 @@ function Stop-OperationsApi {
             $script:HttpListener.Close()
         }
     }
-    catch {}
+    catch {
+        # Ignorado
+    }
     finally {
         $script:OperationsApiAsyncResult = $null
         $script:HttpListener = $null
     }
 }
 
-function Invoke-PendingApiRequests {
+function Invoke-PendingApiRequest {
     if (-not ($script:HttpListener -and $script:HttpListener.IsListening)) { return }
 
     while ($script:HttpListener.IsListening -and $script:OperationsApiAsyncResult -and $script:OperationsApiAsyncResult.IsCompleted) {
@@ -1817,10 +1830,10 @@ Import-PreviousDashboardState
 # Registra shutdown gracioso (encerra com log)
 try {
     Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-        Write-Log "Monitor encerrando (sinal de saída recebido)." -Type "WARN"
+        Write-Log "Monitor encerrando (sinal de saÃ­da recebido)." -Type "WARN"
     } | Out-Null
 }
-catch {}
+catch { } # Ignorado
 
 $executionMode = @()
 if ($RunOnce) { $executionMode += "RunOnce" }
@@ -1841,8 +1854,8 @@ $lastHeartbeat = Get-Date
 
 while ($true) {
     try {
-        Invoke-PendingApiRequests
-        Remove-FinishedTasks
+        Invoke-PendingApiRequest
+        Remove-FinishedTask
         Update-Configuration | Out-Null
 
         $agora = Get-Date
@@ -1906,7 +1919,7 @@ while ($true) {
     }
     catch {
         $script:MainLoopConsecutiveErrors++
-        Write-Log "ERRO CRÍTICO no Loop Principal: $_ | Falhas consecutivas=$($script:MainLoopConsecutiveErrors)/$($script:MainLoopMaxConsecutiveErrors)" -Type "ERRO"
+        Write-Log "ERRO CRÃTICO no Loop Principal: $_ | Falhas consecutivas=$($script:MainLoopConsecutiveErrors)/$($script:MainLoopMaxConsecutiveErrors)" -Type "ERRO"
 
         if ($script:MainLoopConsecutiveErrors -ge $script:MainLoopMaxConsecutiveErrors) {
             Write-Log "Limite de falhas consecutivas atingido. Encerrando monitor para evitar estado inconsistente." -Type "ERRO"
@@ -1932,7 +1945,7 @@ try {
         $script:MonitorMutex.Dispose()
     }
 }
-catch {}
+catch { } # Ignorado
 
 Exit $script:MonitorExitCode
 

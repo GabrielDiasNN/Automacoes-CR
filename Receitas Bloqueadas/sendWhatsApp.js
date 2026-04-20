@@ -599,7 +599,7 @@ function getTargetLabel() {
 }
 
 function validarChatId(chatId) {
-  return /@(c|g)\.us$/.test(String(chatId || '').trim());
+  return /@c\.us$|@g\.us$|@lid$/.test(String(chatId || '').trim());
 }
 
 function validarConfig() {
@@ -812,6 +812,17 @@ async function validarDestinoContato(client, chatId, label, source, allowUnvalid
 
     const chat = await client.getChatById(serialized);
     const finalId = serializarId(chat?.id) || serialized;
+
+    // Blindagem: Se o ID original for @lid e o novo for @c.us (possível normalização incompleta de legado),
+    // preservamos o @lid que é mais garantido para entrega multi-device.
+    if (serialized.endsWith('@lid') && finalId.endsWith('@c.us')) {
+      escreverLog('NODE', `AVISO: getChatById tentou normalizar @lid para @c.us (${serialized} -> ${finalId}). Preservando @lid por segurança.`);
+      return {
+        chatId: serialized,
+        targetLabel: label || extrairNumero(serialized),
+        source: `${source} + getChatById (preservado @lid)`
+      };
+    }
 
     escreverLog('NODE', `Contato validado por getChatById: ${serialized} -> ${finalId}`);
     return {

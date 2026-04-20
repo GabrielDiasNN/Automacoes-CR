@@ -831,12 +831,30 @@
             } catch (err) {
                 var c = document.querySelector('.container');
                 if (c) {
-                    c.innerHTML =
-                        '<div class="card" style="margin-top:20px;">' +
-                        '<h2 style="color:var(--err);">Erro ao carregar painel</h2>' +
-                        '<p>Não foi possível interpretar o estado do dashboard.</p>' +
-                        '<pre class="mono" style="white-space:pre-wrap;color:var(--err);">' +
-                        escapeHtml(String(err)) + '</pre></div>';
+                    // Limpeza para evitar qualquer conteúdo anterior
+                    while (c.firstChild) c.removeChild(c.firstChild);
+                    
+                    var errorCard = document.createElement('div');
+                    errorCard.className = 'card';
+                    errorCard.style.marginTop = '20px';
+                    
+                    var errorTitle = document.createElement('h2');
+                    errorTitle.style.color = 'var(--err)';
+                    errorTitle.textContent = 'Erro ao carregar painel';
+                    
+                    var errorMsg = document.createElement('p');
+                    errorMsg.textContent = 'Não foi possível interpretar o estado do dashboard.';
+                    
+                    var errorPre = document.createElement('pre');
+                    errorPre.className = 'mono';
+                    errorPre.style.whiteSpace = 'pre-wrap';
+                    errorPre.style.color = 'var(--err)';
+                    errorPre.textContent = String(err);
+                    
+                    errorCard.appendChild(errorTitle);
+                    errorCard.appendChild(errorMsg);
+                    errorCard.appendChild(errorPre);
+                    c.appendChild(errorCard);
                 }
                 return;
             }
@@ -927,7 +945,16 @@
 
             function openModal(title, contentHtml, isLarge) {
                 modalTitle.textContent = title;
-                modalBody.innerHTML = contentHtml;
+                // Limpeza segura antes de nova inserção
+                while (modalBody.firstChild) modalBody.removeChild(modalBody.firstChild);
+                
+                if (typeof contentHtml === 'string') {
+                    // Nota: O conteúdo deve vir previamente sanitizado/escapado
+                    modalBody.innerHTML = contentHtml;
+                } else if (contentHtml instanceof Node) {
+                    modalBody.appendChild(contentHtml);
+                }
+
                 if (isLarge) modal.classList.add('large');
                 else modal.classList.remove('large');
                 modal.showModal();
@@ -1293,12 +1320,12 @@
             });
 
             /* --- Initial render --- */
-            document.getElementById('header-meta').innerHTML =
-                'Vers\u00e3o ' + escapeHtml(state.monitorVersion || '\u2013') +
-                ' &middot; Iniciado: ' + formatDateTime(state.startedAt) +
-                ' &middot; Atualizado: ' + formatDateTime(state.generatedAt) +
-                ' &middot; Tarefas: ' + String(state.taskCount || 0) +
-                ' &middot; Em execu\u00e7\u00e3o: ' + String(state.runningTasks || 0);
+            document.getElementById('header-meta').textContent =
+                'Vers\u00e3o ' + (state.monitorVersion || '\u2013') +
+                ' \u00b7 Iniciado: ' + formatDateTime(state.startedAt) +
+                ' \u00b7 Atualizado: ' + formatDateTime(state.generatedAt) +
+                ' \u00b7 Tarefas: ' + String(state.taskCount || 0) +
+                ' \u00b7 Em execu\u00e7\u00e3o: ' + String(state.runningTasks || 0);
 
             var ops = state.operations || {};
             document.getElementById('ops-banner').textContent =
