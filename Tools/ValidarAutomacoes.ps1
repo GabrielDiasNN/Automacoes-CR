@@ -1,4 +1,4 @@
-# cSpell:words cscript nologo RESUMO
+﻿# cSpell:words cscript nologo RESUMO
 [CmdletBinding()]
 param(
     [string]$BasePath = "C:\Automacoes",
@@ -25,7 +25,7 @@ function New-BatchExecId {
     return ("{0}_{1}" -f $Prefix, (Get-Date -Format "yyyyMMdd_HHmmss"))
 }
 
-function Invoke-GovernanceChecks {
+function Invoke-GovernanceCheck {
     param(
         [string]$RootPath,
         [switch]$StrictTerms
@@ -64,7 +64,7 @@ function Invoke-GovernanceChecks {
     return $exitCode
 }
 
-function Invoke-SkillsGovernanceChecks {
+function Invoke-SkillsGovernanceCheck {
     param(
         [string]$RootPath
     )
@@ -98,7 +98,7 @@ function Invoke-SkillsGovernanceChecks {
     return $exitCode
 }
 
-function Invoke-SharedDependenciesChecks {
+function Invoke-SharedDependenciesCheck {
     param(
         [string]$RootPath
     )
@@ -132,7 +132,7 @@ function Invoke-SharedDependenciesChecks {
     return $exitCode
 }
 
-function Invoke-VbaComponentTypeChecks {
+function Invoke-VbaComponentTypeCheck {
     param(
         [string]$RootPath
     )
@@ -235,7 +235,7 @@ function Invoke-VbaComponentTypeChecks {
     return 0
 }
 
-function Invoke-VbaReferenceChecks {
+function Invoke-VbaReferenceCheck {
     param(
         [string]$RootPath
     )
@@ -297,7 +297,7 @@ function Invoke-VbaReferenceChecks {
     return if ($hasFailure) { 1 } else { 0 }
 }
 
-function Invoke-DashboardTemplateChecks {
+function Invoke-DashboardTemplateCheck {
     param(
         [string]$RootPath,
         [switch]$StrictWarnings
@@ -336,7 +336,7 @@ function Invoke-DashboardTemplateChecks {
     return $exitCode
 }
 
-function Invoke-VbaHtmlChecks {
+function Invoke-VbaHtmlCheck {
     param(
         [string]$RootPath,
         [switch]$StrictWarnings
@@ -511,49 +511,49 @@ function Get-TaskScriptPath {
 }
 
 if (-not $SkipGovernance) {
-    $govExitCode = Invoke-GovernanceChecks -RootPath $BasePath -StrictTerms:$FailOnTermWarnings
+    $govExitCode = Invoke-GovernanceCheck -RootPath $BasePath -StrictTerms:$FailOnTermWarnings
     if ($govExitCode -ne 0) {
         exit $govExitCode
     }
 }
 
 if (-not $SkipSkillsGovernance) {
-    $skillGovExitCode = Invoke-SkillsGovernanceChecks -RootPath $BasePath
+    $skillGovExitCode = Invoke-SkillsGovernanceCheck -RootPath $BasePath
     if ($skillGovExitCode -ne 0) {
         exit $skillGovExitCode
     }
 }
 
 if (-not $SkipVbaComponentTypes) {
-    $typeExitCode = Invoke-VbaComponentTypeChecks -RootPath $BasePath
+    $typeExitCode = Invoke-VbaComponentTypeCheck -RootPath $BasePath
     if ($typeExitCode -ne 0) {
         exit $typeExitCode
     }
 }
 
 if (-not $SkipVbaReferences) {
-    $refExitCode = Invoke-VbaReferenceChecks -RootPath $BasePath
+    $refExitCode = Invoke-VbaReferenceCheck -RootPath $BasePath
     if ($refExitCode -ne 0) {
         exit $refExitCode
     }
 }
 
 if (-not $SkipSharedDependencies) {
-    $depsExitCode = Invoke-SharedDependenciesChecks -RootPath $BasePath
+    $depsExitCode = Invoke-SharedDependenciesCheck -RootPath $BasePath
     if ($depsExitCode -ne 0) {
         exit $depsExitCode
     }
 }
 
 if (-not $SkipDashboardTemplateGovernance) {
-    $dashboardExitCode = Invoke-DashboardTemplateChecks -RootPath $BasePath -StrictWarnings:$FailOnHtmlCssWarnings
+    $dashboardExitCode = Invoke-DashboardTemplateCheck -RootPath $BasePath -StrictWarnings:$FailOnHtmlCssWarnings
     if ($dashboardExitCode -ne 0) {
         exit $dashboardExitCode
     }
 }
 
 if (-not $SkipVbaHtmlGovernance) {
-    $vbaHtmlExitCode = Invoke-VbaHtmlChecks -RootPath $BasePath -StrictWarnings:$FailOnHtmlCssWarnings
+    $vbaHtmlExitCode = Invoke-VbaHtmlCheck -RootPath $BasePath -StrictWarnings:$FailOnHtmlCssWarnings
     if ($vbaHtmlExitCode -ne 0) {
         exit $vbaHtmlExitCode
     }

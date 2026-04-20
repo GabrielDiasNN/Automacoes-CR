@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$SourceDir,
@@ -38,7 +38,7 @@ function New-CrlfTempCopy {
     return $tempPath
 }
 
-function Get-VbaSourceFiles {
+function Get-VbaSourceFile {
     param([string]$FolderPath)
 
     if ([string]::IsNullOrWhiteSpace($FolderPath)) { return @() }
@@ -84,7 +84,7 @@ function New-VbaDescriptor {
     }
 }
 
-function Test-DuplicateComponentNames {
+function Test-DuplicateComponentName {
     param(
         [array]$Descriptors,
         [string]$Context
@@ -136,12 +136,12 @@ function Import-VbaDescriptor {
         }
 
         if ([int]$importedComponent.Type -ne $Descriptor.ExpectedType) {
-            try { $VBProject.VBComponents.Remove($importedComponent) } catch {}
+            try { $VBProject.VBComponents.Remove($importedComponent) } catch { } # Ignorado
             throw "$LogPrefix componente '$($Descriptor.FileName)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $($Descriptor.ExpectedType)."
         }
 
         if ($importedComponent.Name -ne $Descriptor.ComponentName) {
-            try { $VBProject.VBComponents.Remove($importedComponent) } catch {}
+            try { $VBProject.VBComponents.Remove($importedComponent) } catch { } # Ignorado
             throw "$LogPrefix componente '$($Descriptor.FileName)' importado com nome '$($importedComponent.Name)' em vez de '$($Descriptor.ComponentName)'."
         }
 
@@ -149,7 +149,7 @@ function Import-VbaDescriptor {
     }
     finally {
         if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-            try { Remove-Item -LiteralPath $tempImportPath -Force } catch {}
+            try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
         }
     }
 }
@@ -175,7 +175,7 @@ if (-not (Test-Path -LiteralPath $SourceDir)) {
     throw "Pasta de fontes nao encontrada: $SourceDir"
 }
 
-$localFiles = @(Get-VbaSourceFiles -FolderPath $SourceDir)
+$localFiles = @(Get-VbaSourceFile -FolderPath $SourceDir)
 if ($localFiles.Count -eq 0) {
     throw "Nenhum arquivo .bas/.cls valido encontrado em: $SourceDir"
 }
@@ -183,15 +183,15 @@ if ($localFiles.Count -eq 0) {
 $sharedFiles = @()
 if (-not [string]::IsNullOrWhiteSpace($SharedDir) -and (Test-Path -LiteralPath $SharedDir)) {
     $SharedDir = [System.IO.Path]::GetFullPath($SharedDir)
-    $sharedFiles = @(Get-VbaSourceFiles -FolderPath $SharedDir)
+    $sharedFiles = @(Get-VbaSourceFile -FolderPath $SharedDir)
 }
 
 $localDescriptors = @($localFiles | ForEach-Object { New-VbaDescriptor -File $_ -Origin "Local" })
 $sharedDescriptors = @($sharedFiles | ForEach-Object { New-VbaDescriptor -File $_ -Origin "Shared" })
 
-Test-DuplicateComponentNames -Descriptors $localDescriptors -Context "SourceDir"
+Test-DuplicateComponentName -Descriptors $localDescriptors -Context "SourceDir"
 if ($sharedDescriptors.Count -gt 0) {
-    Test-DuplicateComponentNames -Descriptors $sharedDescriptors -Context "SharedDir"
+    Test-DuplicateComponentName -Descriptors $sharedDescriptors -Context "SharedDir"
 }
 
 $officeVersion = (Get-ChildItem "HKCU:\Software\Microsoft\Office" -ErrorAction SilentlyContinue |
@@ -235,15 +235,15 @@ catch {
 }
 finally {
     if ($null -ne $tmpWb) {
-        try { $tmpWb.Close($false) } catch {}
+        try { $tmpWb.Close($false) } catch { } # Ignorado
     }
     if ($null -ne $excel) {
-        try { $excel.Quit() } catch {}
+        try { $excel.Quit() } catch { } # Ignorado
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     }
 
     if ($null -ne $prevVal) {
-        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch {}
+        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch { } # Ignorado
     }
 }
 
