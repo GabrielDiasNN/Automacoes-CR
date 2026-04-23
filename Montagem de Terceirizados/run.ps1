@@ -34,7 +34,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$BasePath = "C:\Automacoes\Montagem de Terceirizados"
+$ScriptDir = $PSScriptRoot
+if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+
+$BasePath = $ScriptDir
 $ExcelPath = Join-Path $BasePath "Validador_Notas_Montagem.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
 $MacroName = "AtualizarEValidar"
@@ -42,7 +45,8 @@ $MacroEmailConfig = "modEmailOutlook.ConfigurarModoNotificacaoTeste"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
 
-$libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
+# Tenta carregar biblioteca de logging de forma relativa
+$libPath = Join-Path (Split-Path -Parent $BasePath) "lib\Lib-Logging.psm1"
 if (Test-Path $libPath) {
     Import-Module $libPath -Force
 }

@@ -1,9 +1,10 @@
-﻿# ==============================================================================
+# ==============================================================================
 # ARQUIVO: Lib-Logging.psm1
-# VERSÃƒO: 1.0
-# DESCRIÃ‡ÃƒO: Biblioteca de logging para scripts de automaÃ§Ã£o PowerShell.
+# VERSÃO: 1.1
+# DESCRIÇÃO: Biblioteca de logging para scripts de automação PowerShell.
 #            Garante o mesmo formato de linha de log usado em toda a stack
 #            (VBScript, VBA, PowerShell): [dd/MM/yyyy HH:mm:ss] [PS] [LEVEL] mensagem
+#            Suporte a detecção dinâmica de ambiente.
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -11,9 +12,31 @@ $ErrorActionPreference = "Stop"
 $script:Lib_Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 # ------------------------------------------------------------------------------
+# Get-AutomacaoProjectRoot
+# Retorna a raiz do projeto baseada no local desta biblioteca.
+# ------------------------------------------------------------------------------
+function Get-AutomacaoProjectRoot {
+    [CmdletBinding()]
+    param()
+
+    # Tenta descobrir baseado no local físico deste arquivo psm1
+    $libDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    if ([string]::IsNullOrWhiteSpace($libDir)) {
+        # Fallback para PSScriptRoot se invocado de forma que MyInvocation falhe
+        $libDir = $PSScriptRoot
+    }
+    
+    # Se estamos em C:\Automacoes\lib\, o pai é a raiz.
+    if ([string]::IsNullOrWhiteSpace($libDir)) {
+        return "C:\Automacoes" # Hard-fallback seguro
+    }
+    
+    return Split-Path -Parent $libDir
+}
+
+# ------------------------------------------------------------------------------
 # New-ExecId
-# Gera um identificador de execuÃ§Ã£o Ãºnico no formato yyyyMMdd_HHmmss_xxxx.
-# CompatÃ­vel com o formato gerado pelo VBScript (GerarExecId) e pelo monitor.
+# Gera um identificador de execução único no formato yyyyMMdd_HHmmss_xxxx.
 # ------------------------------------------------------------------------------
 function New-ExecId {
     [CmdletBinding()]
@@ -26,13 +49,6 @@ function New-ExecId {
 # ------------------------------------------------------------------------------
 # Write-AutomacaoLog
 # Grava uma linha de log em arquivo e no console.
-# Formato: [dd/MM/yyyy HH:mm:ss] [PS] [LEVEL] [ExecId?] mensagem
-#
-# ParÃ¢metros:
-#   -Message   Texto da mensagem (obrigatÃ³rio)
-#   -Level     INFO | WARN | ERRO       (padrÃ£o: INFO)
-#   -ExecId    ID de execuÃ§Ã£o (opcional; incluÃ­do no prefixo se fornecido)
-#   -LogPath   Caminho absoluto do arquivo .log (obrigatÃ³rio)
 # ------------------------------------------------------------------------------
 function Write-AutomacaoLog {
     [CmdletBinding()]
@@ -53,7 +69,6 @@ function Write-AutomacaoLog {
     $execPrefix = if ([string]::IsNullOrWhiteSpace($ExecId)) { "" } else { " [ExecId:$ExecId]" }
     $line = "[$timestamp] [PS] [$Level]$execPrefix $Message"
 
-    # -- Gravar em arquivo (UTF-8 sem BOM, append) --
     try {
         $logDir = Split-Path -Parent $LogPath
         if ($logDir -and -not (Test-Path $logDir)) {
@@ -70,11 +85,8 @@ function Write-AutomacaoLog {
             $sw.Dispose()
         }
     }
-    catch {
-        # Falha silenciosa: nÃ£o deve impedir a automaÃ§Ã£o principal
-    }
+    catch {}
 
-    # -- SaÃ­da no console com cor por nÃ­vel --
     $color = switch ($Level) {
         "ERRO" { "Red" }
         "WARN" { "Yellow" }
@@ -85,12 +97,7 @@ function Write-AutomacaoLog {
 
 # ------------------------------------------------------------------------------
 # Get-AutomacaoLogPath
-# Retorna o caminho canÃ´nico do log unificado para uma automaÃ§Ã£o.
-# Formato: <LogDir>\<Slug>.log  (arquivo Ãºnico, sem data no nome)
-#
-# ParÃ¢metros:
-#   -Slug     Nome curto da automaÃ§Ã£o (ex: "ReceitasBloqueadas", "Montagem")
-#   -LogDir   DiretÃ³rio base dos logs (obrigatÃ³rio)
+# Retorna o caminho canônico do log unificado para uma automação.
 # ------------------------------------------------------------------------------
 function Get-AutomacaoLogPath {
     [CmdletBinding()]
@@ -99,9 +106,17 @@ function Get-AutomacaoLogPath {
         [Parameter(Mandatory = $true)]
         [string]$Slug,
 
-        [Parameter(Mandatory = $true)]
-        [string]$LogDir
+        [string]$LogDir = ""
     )
+
+    if ([string]::IsNullOrWhiteSpace($LogDir)) {
+        $root = Get-AutomacaoProjectRoot
+        $LogDir = Join-Path $root "Logs"
+    }
+    elseif (-not [System.IO.Path]::IsPathRooted($LogDir)) {
+        $root = Get-AutomacaoProjectRoot
+        $LogDir = Join-Path $root $LogDir
+    }
 
     if (-not (Test-Path $LogDir)) {
         New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -112,8 +127,7 @@ function Get-AutomacaoLogPath {
 
 # ------------------------------------------------------------------------------
 # Test-AutomationEnvironment
-# Valida se os requisitos mÃ­nimos de ambiente estÃ£o presentes.
-# Retorna um objeto com [bool]$Success e [string]$Message.
+# Valida se os requisitos mínimos de ambiente estão presentes.
 # ------------------------------------------------------------------------------
 function Test-AutomationEnvironment {
     [CmdletBinding()]
@@ -145,13 +159,7 @@ function Test-AutomationEnvironment {
 
 # ------------------------------------------------------------------------------
 # Invoke-LogRotation
-# RotaÃ§Ã£o por conteÃºdo: mantÃ©m apenas linhas com data >= (hoje - KeepDays).
-# Linhas sem prefixo de data reconhecÃ­vel sÃ£o preservadas (safe default).
-# Escrita atÃ´mica: grava em .tmp â†’ Move-Item -Force sobre o original.
-#
-# ParÃ¢metros:
-#   -LogPath    Caminho absoluto do arquivo de log
-#   -KeepDays   Quantidade de dias a reter (padrÃ£o: 15)
+# Rotação por conteúdo para manter o tamanho dos logs sob controle.
 # ------------------------------------------------------------------------------
 function Invoke-LogRotation {
     [CmdletBinding()]
@@ -165,30 +173,28 @@ function Invoke-LogRotation {
     if (-not (Test-Path $LogPath)) { return }
 
     $cutoff = (Get-Date).Date.AddDays(-1 * [Math]::Abs($KeepDays))
-    $lines = [System.IO.File]::ReadAllLines($LogPath, $script:Lib_Utf8NoBom)
+    try {
+        $lines = [System.IO.File]::ReadAllLines($LogPath, $script:Lib_Utf8NoBom)
+        $kept = [System.Collections.Generic.List[string]]::new($lines.Length)
 
-    $kept = [System.Collections.Generic.List[string]]::new($lines.Length)
-
-    foreach ($line in $lines) {
-        # Extrai data no formato [dd/MM/yyyy ...] no inÃ­cio da linha
-        if ($line -match '^\[(\d{2}/\d{2}/\d{4})') {
-            $dateStr = $Matches[1]
-            $parsed = [datetime]::MinValue
-            if ([datetime]::TryParseExact($dateStr, 'dd/MM/yyyy', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
-                if ($parsed -lt $cutoff) {
-                    continue  # linha expirada â€” descartar
+        foreach ($line in $lines) {
+            if ($line -match '^\[(\d{2}/\d{2}/\d{4})') {
+                $dateStr = $Matches[1]
+                $parsed = [datetime]::MinValue
+                if ([datetime]::TryParseExact($dateStr, 'dd/MM/yyyy', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+                    if ($parsed -lt $cutoff) { continue }
                 }
             }
+            $kept.Add($line)
         }
-        # Linha sem data ou com data >= cutoff â†’ preservar
-        $kept.Add($line)
+
+        if ($kept.Count -lt $lines.Length) {
+            $tmpPath = "$LogPath.tmp"
+            [System.IO.File]::WriteAllLines($tmpPath, $kept.ToArray(), $script:Lib_Utf8NoBom)
+            Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
+        }
     }
-
-    if ($kept.Count -eq $lines.Length) { return }  # nada para rotacionar
-
-    $tmpPath = "$LogPath.tmp"
-    [System.IO.File]::WriteAllLines($tmpPath, $kept.ToArray(), $script:Lib_Utf8NoBom)
-    Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
+    catch {}
 }
 
-Export-ModuleMember -Function New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment

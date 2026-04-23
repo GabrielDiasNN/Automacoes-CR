@@ -13,7 +13,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ScriptPath = $PSScriptRoot
-if (-not $ScriptPath) { $ScriptPath = "C:\Automacoes" }
+if (-not $ScriptPath) { $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $ScriptPath) { $ScriptPath = "C:\Automacoes" } # Fallback final
 
 $EmergencyLog = Join-Path $ScriptPath "Startup_Error.txt"
 
@@ -1023,6 +1024,13 @@ function Test-TaskStructure {
     return $null
 }
 
+function Get-ResolvedPath {
+    param([string]$PathValue)
+    if ([string]::IsNullOrWhiteSpace($PathValue)) { return $null }
+    if ([System.IO.Path]::IsPathRooted($PathValue)) { return $PathValue }
+    return [System.IO.Path]::GetFullPath((Join-Path $ScriptPath $PathValue))
+}
+
 function Test-AbsolutePathValue {
     param(
         [string]$PathValue,
@@ -1040,8 +1048,12 @@ function Test-AbsolutePathValue {
         return
     }
 
-    if (-not [System.IO.Path]::IsPathRooted($PathValue)) {
-        throw ("Campo '{0}' deve ser caminho absoluto{1}. Valor informado: {2}" -f $FieldName, $taskContext, $PathValue)
+    # Agora permitimos caminhos relativos, validando se podem ser resolvidos
+    try {
+        $null = Get-ResolvedPath -PathValue $PathValue
+    }
+    catch {
+        throw ("Campo '{0}' contem caminho invalido{1}. Valor informado: {2}" -f $FieldName, $taskContext, $PathValue)
     }
 }
 

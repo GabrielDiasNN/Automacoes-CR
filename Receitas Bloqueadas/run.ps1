@@ -28,19 +28,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$BasePath = "C:\Automacoes\Receitas Bloqueadas"
+$ScriptDir = $PSScriptRoot
+if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+
+$BasePath = $ScriptDir
 $ExcelPath = Join-Path $BasePath "Receitas Bloqueadas.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
 $MacroName = "ExecutarProcessoCompleto"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
-$SendWhatsAppScript = "C:\Automacoes\lib\Send-WhatsApp.ps1"
 
-# Importar Lib-Logging ANTES de derivar o caminho do log
-$libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
+# Tenta carregar biblioteca de logging de forma relativa
+$libPath = Join-Path (Split-Path -Parent $BasePath) "lib\Lib-Logging.psm1"
 if (Test-Path $libPath) {
     Import-Module $libPath -Force
 }
+
+$SendWhatsAppScript = Join-Path (Split-Path -Parent $BasePath) "lib\Send-WhatsApp.ps1"
 
 if (Get-Command Get-AutomacaoLogPath -ErrorAction SilentlyContinue) {
     $LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir

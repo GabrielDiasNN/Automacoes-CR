@@ -26,15 +26,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$BasePath = "C:\Automacoes\Receitas Emitidas"
+$ScriptDir = $PSScriptRoot
+if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+
+$BasePath = $ScriptDir
 $ExcelPath = Join-Path $BasePath "Controle de Receitas Emitidas.xlsm"
 $LogDir = Join-Path $BasePath "Logs"
 $MacroName = "AtualizarEEnviarOutlook"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
 
-# Importar Lib-Logging ANTES de derivar o caminho do log
-$libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
+# Tenta carregar biblioteca de logging de forma relativa
+$libPath = Join-Path (Split-Path -Parent $BasePath) "lib\Lib-Logging.psm1"
 if (Test-Path $libPath) {
     Import-Module $libPath -Force
 }

@@ -25,11 +25,21 @@
 param(
     [string]$ExecId = "",
     [string]$Mode = "AUTO",
-    [string]$BaseDir = "C:\Automacoes\Receitas Bloqueadas",
+    [string]$BaseDir = "",
     [string]$NodeExe = "C:\Program Files\nodejs\node.exe"
 )
 
 $ErrorActionPreference = "Stop"
+
+# --- Detectar BaseDir dinamicamente se não fornecido ---
+if ([string]::IsNullOrWhiteSpace($BaseDir)) {
+    $scriptDir = $PSScriptRoot
+    if (-not $scriptDir) { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+    
+    # Assume que se está em \lib\, a pasta base das receitas bloqueadas é ..\Receitas Bloqueadas
+    $root = Split-Path -Parent $scriptDir
+    $BaseDir = Join-Path $root "Receitas Bloqueadas"
+}
 
 # --- Caminhos derivados ---
 $NodeScript = Join-Path $BaseDir "sendWhatsApp.js"
