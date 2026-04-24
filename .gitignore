@@ -26,3 +26,6 @@ Audit/
 !Montagem de Terceirizados/Validador_Notas_Montagem.xlsm
 !Receitas Emitidas/Controle de Receitas Emitidas.xlsm
 !Receitas Bloqueadas/Receitas Bloqueadas.xlsm
+
+# Credenciais sensiveis
+.env

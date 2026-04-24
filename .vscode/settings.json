@@ -9,19 +9,23 @@
         "**/Logs/**": true,
         "**/*.log": true,
         "**/node_modules": true,
-        "**/.wwebjs_auth": true
+        "**/.wwebjs_auth": true,
+        "**/__pycache__": true,
+        "**/.pytest_cache": true
     },
     "search.exclude": {
         "**/Logs/**": true,
         "**/*.log": true,
         "**/node_modules": true,
-        "**/.wwebjs_auth": true
+        "**/.wwebjs_auth": true,
+        "**/__pycache__": true
     },
     "files.watcherExclude": {
         "**/Logs/**": true,
         "**/*.log": true,
         "**/node_modules/**": true,
-        "**/.wwebjs_auth/**": true
+        "**/.wwebjs_auth/**": true,
+        "**/__pycache__/**": true
     },
     "powershell.scriptAnalysis.enable": true,
     "powershell.powerShellExePath": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
@@ -118,7 +122,10 @@
         "Declaracoes",
         "OBs",
         "xlsm",
-        "vbaproject"
+        "vbaproject",
+        "oracledb",
+        "pylance",
+        "black"
     ],
     "vbaLanguageServer.trace.server": "off",
     "vbaLanguageServer.environment.os": "Win64",
@@ -146,6 +153,16 @@
     },
     "[powershell]": {
         "editor.defaultFormatter": "ms-vscode.powershell"
+    },
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
     },
     "git.autofetch": true,
     "git.confirmSync": false,

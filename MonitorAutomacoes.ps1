@@ -485,6 +485,17 @@ function Get-DashboardStateSnapshot {
         $alerts += [ordered]@{ severity = "WARN"; message = "Ha execucoes com Exit nao-zero na janela atual." }
     }
 
+    # Melhoria: Observabilidade de WhatsApp (Pilar 5)
+    try {
+        $waLogPath = Join-Path $ScriptPath "Receitas Bloqueadas\ReceitasBloqueadas.txt"
+        if (Test-Path $waLogPath) {
+            $waRecent = Get-Content $waLogPath -Tail 20
+            if ($waRecent -match "ERRO" -or $waRecent -match "Falha") {
+                $alerts += [ordered]@{ severity = "ERRO"; message = "WhatsApp Bridge reportou erros nas ultimas atividades (verificar log)." }
+            }
+        }
+    } catch {}
+
     if ([int]$script:Metrics.ConfigReloadFailure -gt [int]$script:Metrics.ConfigReloadSuccess) {
         $alerts += [ordered]@{ severity = "WARN"; message = "Falhas de reload de config superaram sucessos no acumulado." }
     }

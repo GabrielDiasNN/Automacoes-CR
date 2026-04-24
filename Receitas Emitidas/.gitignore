@@ -1,0 +1,5 @@
+# Migração Python + Oracle (Nativo)
+# Arquivos temporários de execução
+email_body_shadow_*.html
+ReceitasEmitidas_shadow_*.json
+extract_oracle.log

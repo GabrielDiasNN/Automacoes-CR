@@ -2,6 +2,28 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Python: Instalar Dependencias (requirements.txt)",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv\\Scripts\\pip.exe",
+            "args": [
+                "install",
+                "-r",
+                "${workspaceFolder}\\requirements.txt"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Python: Limpar Cache (__pycache__)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "Get-ChildItem -Path . -Include __pycache__ -Recurse | Remove-Item -Force -Recurse"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Monitor: Dry Run",
             "type": "shell",
             "command": "pwsh",

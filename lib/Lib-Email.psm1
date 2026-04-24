@@ -78,9 +78,14 @@ function Send-OutlookEmail {
 
             $mailItem = $outlook.CreateItem(0) # olMailItem = 0
 
+            # O Display() é essencial para carregar a assinatura e VINCULAR as imagens (CIDs)
+            $mailItem.Display() 
+            
+            # Em vez de criar um novo, injetamos nosso HTML no início do corpo existente
+            # Isso mantém as referências de imagens da assinatura intactas
             $mailItem.To = $To
             $mailItem.Subject = $Subject
-            $mailItem.HTMLBody = $HtmlBody
+            $mailItem.HTMLBody = $HtmlBody + $mailItem.HTMLBody
 
             if (-not [string]::IsNullOrWhiteSpace($CC)) { $mailItem.CC = $CC }
             if (-not [string]::IsNullOrWhiteSpace($BCC)) { $mailItem.BCC = $BCC }

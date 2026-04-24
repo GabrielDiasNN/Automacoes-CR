@@ -5,18 +5,16 @@
         "eamodio.gitlens",
         "sbroenne.excel-mcp",
         "ms-vscode.powershell",
-        "sbroenne.excel-mcp",
         "GrapeCity.gc-excelviewer",
         "local-smart.excel-live-server",
         "powerquery.vscode-powerquery",
-        "ms-vscode.powershell",
-        "davidanson.vscode-markdownlint"
-    ],
-    "unwantedRecommendations": [
+        "davidanson.vscode-markdownlint",
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-python.autopep8",
-        "ms-python.isort",
+        "ms-python.black-formatter",
+        "ms-python.isort"
+    ],
+    "unwantedRecommendations": [
         "ms-python.vscode-python-envs",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
@@ -30,7 +28,6 @@
         "ritwickdey.liveserver",
         "google.geminicodeassist",
         "github.remotehub",
-        "grapecity.gc-excelviewer",
         "ms-vscode.remote-explorer",
         "ms-vscode.remote-repositories",
         "ms-vscode-remote.remote-wsl"

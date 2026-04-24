@@ -7,10 +7,17 @@
 
 [CmdletBinding()]
 param(
-    [string]$RootPath = (Join-Path $PSScriptRoot "..")
+    [string]$RootPath = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = $PSScriptRoot
+    if (-not $RootPath) { $RootPath = Split-Path -Parent $MyInvocation.MyCommand.Path }
+    # Se ainda vazio ou em Tools, sobe um nivel
+    if ($RootPath -match "Tools$") { $RootPath = Split-Path -Parent $RootPath }
+}
 
 function Write-Log {
     param(
