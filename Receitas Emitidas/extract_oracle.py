@@ -4,28 +4,33 @@ import json
 import oracledb
 from datetime import datetime
 
+def log(message, level="INFO", exec_id="manual"):
+    """Envia logs para o stderr para não poluir o stdout (reservado para dados JSON)."""
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+    sys.stderr.write(f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}\n")
+    sys.stderr.flush()
+
 def extract():
-    # 1. Obter credenciais de forma segura via variáveis de ambiente
-    # Injetadas pelo run.ps1 a partir do arquivo .env
+    exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
+    
+    # 1. Obter credenciais via variáveis de ambiente (Processo herdado)
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = os.environ.get("ORACLE_CONNECT_STRING")
     client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR")
-    exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
 
     if not all([user, password, dsn]):
-        print(f"[{datetime.now()}] [PY] [ERRO] Credenciais (ORACLE_*) ausentes no ambiente.")
+        log("Credenciais (ORACLE_*) ausentes no ambiente.", "ERROR", exec_id)
         sys.exit(1)
 
-    # Opcional: Iniciar modo Thick se houver diretório de biblioteca
+    # Iniciar modo Thick se houver diretório de biblioteca
     if client_lib and os.path.exists(client_lib):
         try:
             oracledb.init_oracle_client(lib_dir=client_lib)
-            print(f"[{datetime.now()}] [PY] [INFO] Modo Thick ativado (lib_dir={client_lib})")
+            log(f"Modo Thick ativado (lib_dir={client_lib})", "INFO", exec_id)
         except Exception as e:
-            print(f"[{datetime.now()}] [PY] [WARN] Falha ao iniciar modo Thick, tentando modo Thin: {e}")
+            log(f"Falha ao iniciar modo Thick, tentando modo Thin: {e}", "WARN", exec_id)
 
-    # 2. Query SQL (replicada do PowerQuery)
     sql = """
 WITH
     TINGIMENTO_TEMPOS AS (
@@ -94,40 +99,34 @@ ORDER BY INICIO_TING NULLS LAST
 
     connection = None
     try:
-        # 3. Conectar via oracledb Thin Mode
-        # Se DSN for no formato "host:port/service_name", o Thin mode funciona sem config local
-        # Se for apenas um nome (TNS), ele procuraria arquivos de config (erro DPY-4027)
-        
+        log("Conectando ao Oracle...", "INFO", exec_id)
         connection = oracledb.connect(user=user, password=password, dsn=dsn)
         cursor = connection.cursor()
         
-        print(f"[{datetime.now()}] [PY] [INFO] [ExecId:{exec_id}] Conectado ao Oracle. Iniciando extração...")
         cursor.execute(sql)
-        
-        # Obter colunas
         columns = [col[0] for col in cursor.description]
-        
-        # 4. Fetch e conversão para JSON
         rows = cursor.fetchall()
+        
         data = []
         for row in rows:
             record = dict(zip(columns, row))
-            # Serializar objetos datetime para string ISO
             for key, value in record.items():
                 if isinstance(value, datetime):
                     record[key] = value.isoformat()
             data.append(record)
             
-        # 5. Salvar arquivo de Shadow (ignorado no git)
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        output_file = os.path.join(script_dir, f"ReceitasEmitidas_shadow_{exec_id}.json")
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-            
-        print(f"[{datetime.now()}] [PY] [INFO] [ExecId:{exec_id}] Extração concluída. Total de linhas: {len(data)}")
+        # Saída estruturada via STDOUT para IPC
+        sys.stdout.write(json.dumps(data, ensure_ascii=False))
+        sys.stdout.flush()
         
+        log(f"Extração concluída. {len(data)} registros enviados para stdout.", "INFO", exec_id)
+        
+    except oracledb.DatabaseError as e:
+        error_obj, = e.args
+        log(f"Erro de Banco de Dados Oracle: {error_obj.message}", "ERROR", exec_id)
+        sys.exit(1)
     except Exception as e:
-        print(f"[{datetime.now()}] [PY] [ERRO] [ExecId:{exec_id}] Erro na extração: {e}")
+        log(f"Erro inesperado na extração: {e}", "ERROR", exec_id)
         sys.exit(1)
     finally:
         if connection:

@@ -4,6 +4,12 @@ import sys
 import math
 from datetime import datetime
 
+def log(message, level="INFO", exec_id="manual"):
+    """Envia logs para o stderr para não poluir o stdout (reservado para o HTML)."""
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+    sys.stderr.write(f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}\n")
+    sys.stderr.flush()
+
 def html_escape(text):
     if not text: return "&nbsp;"
     return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;') \
@@ -13,30 +19,39 @@ def html_escape(text):
                    .replace('ã', '&atilde;').replace('Ã', '&Atilde;').replace('õ', '&otilde;').replace('Õ', '&Otilde;') \
                    .replace('ê', '&ecirc;').replace('Ê', '&Ecirc;').replace('â', '&acirc;').replace('Â', '&Acirc;')
 
-def generate_html(exec_id):
+def generate_html():
+    exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    json_path = os.path.join(script_dir, f"ReceitasEmitidas_shadow_{exec_id}.json")
     config_path = os.path.join(script_dir, "receitas_config.json")
-    output_html = os.path.join(script_dir, f"email_body_shadow_{exec_id}.html")
 
-    if not os.path.exists(json_path):
-        print(f"[{datetime.now()}] [PY-HTML] [ERRO] JSON de dados não encontrado: {json_path}")
-        return False
-
-    # 1. Carregar Dados e Config
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    # 1. Carregar Dados via STDIN (IPC)
+    try:
+        log("Lendo dados do stdin...", "INFO", exec_id)
+        input_data = sys.stdin.read()
+        if not input_data:
+            log("Nenhum dado recebido via stdin.", "ERROR", exec_id)
+            sys.exit(1)
+        data = json.loads(input_data)
+    except Exception as e:
+        log(f"Falha ao decodificar JSON do stdin: {e}", "ERROR", exec_id)
+        sys.exit(1)
     
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = json.load(f)
+    # 2. Carregar Config
+    try:
+        if not os.path.exists(config_path):
+            log(f"Configuracao não encontrada: {config_path}", "ERROR", exec_id)
+            sys.exit(1)
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except Exception as e:
+        log(f"Erro ao carregar configuracoes: {e}", "ERROR", exec_id)
+        sys.exit(1)
 
     if not data:
-        print(f"[{datetime.now()}] [PY-HTML] [WARN] Nenhum dado para gerar relatório.")
-        return False
+        log("Conjunto de dados vazio.", "WARN", exec_id)
+        return ""
 
-    # 2. Agrupar Dados (Máquina -> Grupo -> OBs)
-    # Ordenar dados brutos antes do agrupamento para garantir consistência
-    # Ordem: INICIO_TING (asc), GRUPO (asc), NUMERO_OB (asc)
+    # 3. Agrupar e Ordenar Dados
     data_sorted = sorted(data, key=lambda x: (
         x.get('INICIO_TING') or '9999-12-31', 
         str(x.get('GRUPO') or '0'), 
@@ -66,17 +81,14 @@ def generate_html(exec_id):
         if grupo not in machines[mq]["groups"]:
             machines[mq]["groups"][grupo] = []
             if grupo != '0':
-                machines[mq]["weight"] += 1 # Peso visual do cabeçalho do grupo
-                machines[mq]["recipes"] += 1 # O grupo (lote) conta como 1 receita
+                machines[mq]["weight"] += 1
+                machines[mq]["recipes"] += 1
 
         machines[mq]["groups"][grupo].append({"ob": ob, "inicio": inicio})
-        machines[mq]["weight"] += 1 # Cada linha de OB adiciona peso visual
-        
-        # Se for avulsa (Grupo 0), cada OB é uma receita (lote) individual
+        machines[mq]["weight"] += 1
         if grupo == '0':
             machines[mq]["recipes"] += 1
 
-    # Estatísticas para o Layout (Replicação BuildLayoutProfile do VBA)
     machine_count = len(machines)
     for mq in machines:
         total_weight += machines[mq]["weight"]
@@ -84,27 +96,20 @@ def generate_html(exec_id):
         if machines[mq]["weight"] > max_machine_weight:
             max_machine_weight = machines[mq]["weight"]
 
-    # 3. Lógica de Layout Adaptativo (Portabilidade do VBA)
+    # 4. Lógica de Layout Adaptativo
     volume_score = total_weight + (machine_count * 2.2) + max_machine_weight + (recipe_count / 3)
-    
-    compress_factor = 0
-    if volume_score > 54:
-        compress_factor = min(1.0, (volume_score - 54) / 72)
-
+    compress_factor = min(1.0, (volume_score - 54) / 72) if volume_score > 54 else 0
     column_count = 3 if (volume_score >= 72 or max_machine_weight >= 16 or machine_count >= 11) else 2
-    
     container_width = 696 if column_count == 3 else 680
     column_gap = max(6, int(14 - (compress_factor * 8)))
     outer_pad = max(4, int(12 - (compress_factor * 6)))
 
-    # Fontes (pt)
     title_font = max(10.5, 13.5 - (compress_factor * 2.7))
     meta_font = max(6.3, 8.4 - (compress_factor * 1.8))
     section_font = max(6.1, 8.4 - (compress_factor * 2.0))
     header_font = max(5.9, 7.9 - (compress_factor * 1.8))
     body_font = max(5.6, 7.8 - (compress_factor * 2.2))
 
-    # Alturas de linha (px)
     title_line = max(13, int(title_font * 1.35))
     meta_line = max(9, int(meta_font * 1.35))
     section_line = max(9, int(section_font * 1.35))
@@ -116,25 +121,19 @@ def generate_html(exec_id):
     block_pad_y = max(3, int(6 - (compress_factor * 3)))
     spacer_height = max(2, int(6 - (compress_factor * 4)))
 
-    usable_width = container_width - ((column_count - 1) * column_gap)
-    column_width = usable_width // column_count
+    column_width = (container_width - ((column_count - 1) * column_gap)) // column_count
     ob_width = int(column_width * 0.47)
     inicio_width = column_width - ob_width
 
-    # 4. Distribuição das Máquinas em Colunas (Equilíbrio de Carga)
+    # 5. Distribuição das Máquinas
     columns_html = ["" for _ in range(column_count)]
     columns_current_weight = [0 for _ in range(column_count)]
-
-    # Ordenar máquinas para manter consistência (alfabética como no VBA Collection?)
     sorted_machines = sorted(machines.keys())
 
     for mq_name in sorted_machines:
         mq_data = machines[mq_name]
-        
-        # Encontrar a coluna mais vazia
         best_col = columns_current_weight.index(min(columns_current_weight))
         
-        # Construir Bloco da Máquina
         html = f"""
         <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='{column_width}' style='width:{column_width}px;margin:0;page-break-inside:avoid;'>
             <tr>
@@ -144,24 +143,12 @@ def generate_html(exec_id):
             </tr>
         """
         
-        sorted_groups = sorted(mq_data["groups"].keys())
-        for g_name in sorted_groups:
+        for g_name in sorted(mq_data["groups"].keys()):
             if g_name != '0':
-                html += f"""
-                <tr>
-                    <td colspan='2' align='center' style='padding:{row_pad_y}px {row_pad_x}px;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;background-color:#F2F2F2;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>
-                        Grupo {html_escape(g_name)}
-                    </td>
-                </tr>
-                """
+                html += f"<tr><td colspan='2' align='center' style='padding:{row_pad_y}px {row_pad_x}px;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;background-color:#F2F2F2;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>Grupo {html_escape(g_name)}</td></tr>"
             
             for item in mq_data["groups"][g_name]:
-                html += f"""
-                <tr>
-                    <td width='{ob_width}' style='width:{ob_width}px;padding:{row_pad_y}px {row_pad_x}px;border-left:1px solid #000000;border-bottom:1px solid #D9D9D9;font-size:{body_font:.1f}pt;line-height:{body_line}px;color:#000000;white-space:nowrap;'>{html_escape(item['ob'])}</td>
-                    <td width='{inicio_width}' align='center' style='width:{inicio_width}px;padding:{row_pad_y}px {row_pad_x}px;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;font-size:{body_font:.1f}pt;line-height:{body_line}px;color:#000000;white-space:nowrap;text-align:center;'>{html_escape(item['inicio'])}</td>
-                </tr>
-                """
+                html += f"<tr><td width='{ob_width}' style='width:{ob_width}px;padding:{row_pad_y}px {row_pad_x}px;border-left:1px solid #000000;border-bottom:1px solid #D9D9D9;font-size:{body_font:.1f}pt;line-height:{body_line}px;color:#000000;white-space:nowrap;'>{html_escape(item['ob'])}</td><td width='{inicio_width}' align='center' style='width:{inicio_width}px;padding:{row_pad_y}px {row_pad_x}px;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;font-size:{body_font:.1f}pt;line-height:{body_line}px;color:#000000;white-space:nowrap;text-align:center;'>{html_escape(item['inicio'])}</td></tr>"
 
         html += f"<tr><td colspan='2' style='height:{spacer_height}px;font-size:0;line-height:0;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #000000;'>&nbsp;</td></tr></table>"
         html += f"<table role='presentation' border='0' cellspacing='0' cellpadding='0' width='{column_width}' style='width:{column_width}px;'><tr><td height='{spacer_height}' style='height:{spacer_height}px;font-size:0;line-height:0;'>&nbsp;</td></tr></table>"
@@ -169,18 +156,17 @@ def generate_html(exec_id):
         columns_html[best_col] += html
         columns_current_weight[best_col] += mq_data["weight"]
 
-    # 5. Montar Documento Final
+    # 6. Montar HTML
     header_row = ""
     content_row = ""
     for i in range(column_count):
-        header_row += f"""<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>M&aacute;quina / Grupo / OB / In&iacute;cio</td>"""
-        content_row += f"""<td width='{column_width}' valign='top' style='width:{column_width}px;padding-top:{block_pad_y}px;vertical-align:top;'>{columns_html[i] or "&nbsp;"}</td>"""
+        header_row += f"<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>M&aacute;quina / Grupo / OB / In&iacute;cio</td>"
+        content_row += f"<td width='{column_width}' valign='top' style='width:{column_width}px;padding-top:{block_pad_y}px;vertical-align:top;'>{columns_html[i] or '&nbsp;'}</td>"
         if i < column_count - 1:
             header_row += f"<td width='{column_gap}' style='width:{column_gap}px;font-size:0;line-height:0;'>&nbsp;</td>"
             content_row += f"<td width='{column_gap}' style='width:{column_gap}px;font-size:0;line-height:0;'>&nbsp;</td>"
 
-    full_html = f"""<html><head><meta http-equiv='Content-Type' content='text/html; charset=utf-8'></head>
-    <body style='margin:0;padding:0;background-color:#FFFFFF;'><div class='WordSection1'>
+    full_html = f"""<html><body style='margin:0;padding:0;background-color:#FFFFFF;'><div class='WordSection1'>
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;background-color:#FFFFFF;border-collapse:collapse;'>
     <tr><td align='center' style='padding:{outer_pad}px;'>
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='{container_width}' style='width:{container_width}px;background-color:#FFFFFF;border-collapse:collapse;'>
@@ -194,12 +180,10 @@ def generate_html(exec_id):
     <tr>{header_row}</tr><tr>{content_row}</tr>
     </table></td></tr></table></td></tr></table></div></body></html>"""
 
-    with open(output_html, 'w', encoding='utf-8') as f:
-        f.write(full_html)
-
-    print(f"[{datetime.now()}] [PY-HTML] [INFO] HTML gerado com sucesso: {output_html}")
-    return True
+    # Envia o HTML final para STDOUT (IPC)
+    sys.stdout.write(full_html)
+    sys.stdout.flush()
+    log("Relatório HTML gerado com sucesso para stdout.", "INFO", exec_id)
 
 if __name__ == "__main__":
-    eid = sys.argv[1] if len(sys.argv) > 1 else "manual"
-    generate_html(eid)
+    generate_html()
