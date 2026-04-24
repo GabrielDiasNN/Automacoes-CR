@@ -20,6 +20,18 @@ Scripts automatizados (invocados pelo `ValidarAutomacoes.ps1` ou hooks de Git) q
 
 ---
 
+## 🐍 Qualidade de Código Python
+
+Com a migração para a arquitetura nativa, o repositório utiliza ferramentas profissionais para garantir a qualidade do código Python:
+
+- **Black Formatter**: Utilizado como formatador de código padrão (PEP8).
+- **isort**: Automatiza a organização de imports.
+- **Pylance**: Fornece análise estática e type-checking no VS Code.
+
+As tarefas para automação dessas ferramentas estão disponíveis no VS Code (`Tasks: Run Task` -> `Python: ...`).
+
+---
+
 ## 🏗️ Sincronização e Versionamento VBA
 
 Mecânicas para tradução de código entre os formatos binário (`.xlsm`) e texto (`.bas/.cls`):

@@ -55,3 +55,8 @@ Camada de integração via `whatsapp-web.js`:
 | **21** | Sessão WhatsApp expirada: requer re-pareamento manual |
 | **23** | Bridge em Cooldown de retentativas |
 | **40** | Erro de concorrência: lock ativo em outra instância |
+
+---
+
+## 🗺️ Roadmap Futuro
+O núcleo de extração (Excel/VBA/PowerQuery) deste projeto está planejado para migração para a **Arquitetura Nativa (Python + Oracle)**, mantendo a entrega multicanal (Email + WhatsApp) via PowerShell e Node.js.

@@ -19,35 +19,28 @@ Módulo de logging centralizado. Garante que todas as automações gerem logs em
 
 Wrapper PowerShell para o bridge Node.js (`sendWhatsApp.js`). Fornece uma interface PowerShell limpa para envio de mensagens via WhatsApp Business.
 
-### Modos de Execução:
-- **`AUTO`**: Execução em segundo plano. Requer sessão autenticada. Se a sessão estiver corrompida, relança automaticamente em modo `PAIRING`.
-- **`PAIRING`**: Abre uma janela CMD visível para o pareamento manual (escaneamento de QR Code).
-
-### Parâmetros:
-- `-ExecId`: ID da execução atual para rastreabilidade de log.
-- `-Mode`: `AUTO` ou `PAIRING`.
-- `-BaseDir`: Pasta da automação onde estão os arquivos `whatsapp-config.json` e `sendWhatsApp.js`.
-
 ---
 
 ## 📧 `Lib-Email.psm1`
 
 Utilitários para gerenciamento e disparo de e-mails via Outlook COM.
 
-### Principais Recursos:
+### Diferenciais Técnicos:
+- **Identidade Visual**: Suporta a captura automática da **assinatura local** (com imagens/CIDs) e herança de **fontes da sessão** do usuário através do método `.Display()` preventivo.
+- **Injeção de Conteúdo**: Permite inserir HTML dinâmico preservando o corpo original da mensagem (assinatura).
 - **Encapsulamento de Anexos**: Tratamento robusto de arquivos travados por outros processos.
-- **Formatação HTML**: Helpers para construção de corpos de e-mail dinâmicos.
 
 ---
 
 ## 🚀 Como Utilizar em um Novo Projeto
 
-Para garantir a integração com o Monitor, sempre importe a biblioteca de logging no início do seu script `run.ps1`:
+Siga o padrão da arquitetura nativa:
 
 ```powershell
-$libPath = "C:\Automacoes\lib\Lib-Logging.psm1"
-Import-Module $libPath -Force
+# Importação
+Import-Module "C:\Automacoes\lib\Lib-Logging.psm1" -Force
+Import-Module "C:\Automacoes\lib\Lib-Email.psm1" -Force
 
-# Usando o logging padronizado
-Write-AutomacaoLog -Message "Iniciando processamento" -Level "INFO" -ExecId $ExecId -LogPath $LogFile
+# Envio Nativo (Com Assinatura e Fonte do Outlook)
+Send-OutlookEmail -To "alguem@empresa.com" -Subject "Assunto" -HtmlBody "<h1>Relatório</h1>"
 ```

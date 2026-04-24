@@ -53,3 +53,8 @@ Ferramenta operacional para reprocessamento de notificações:
 ### Regras Críticas
 1. **Idempotência**: O arquivo `Cache_Estado_Detalhado.txt` previne o spam de notificações, enviando alertas apenas quando mudanças significativas no estado de erro forem detectadas.
 2. **Consistência de Dados**: O robô aborta imediatamente se o Refresh do Oracle falhar, protegendo a integridade da análise fiscal.
+
+---
+
+## 🗺️ Roadmap Futuro
+Este projeto é o próximo candidato à migração para a **Arquitetura Nativa (Python + PowerShell)**, visando eliminar a dependência do Excel e PowerQuery, seguindo o modelo de sucesso implementado em *Receitas Emitidas*.
