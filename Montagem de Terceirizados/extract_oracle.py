@@ -52,7 +52,7 @@ def extract():
 
     sql_file = os.path.join(script_dir, "SQL-MontagemTerceirizados.sql")
     if not os.path.exists(sql_file):
-        log(f"Arquivo SQL não encontrado: {sql_file}", "ERROR", exec_id)
+        log(f"Arquivo SQL nao encontrado: {sql_file}", "ERROR", exec_id)
         sys.exit(1)
         
     with open(sql_file, 'r', encoding='utf-8') as f:
