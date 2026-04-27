@@ -3,7 +3,7 @@
 #   "version": "1.0.0-TEST",
 #   "skill": "python-oracle-migration",
 #   "contract": "ipc-stdio",
-#   "description": "Script de teste de conexão Oracle e fluxo JSON",
+#   "description": "Script de teste de conexao Oracle e fluxo JSON",
 #   "reliability": "Base64-Bridge-Logs"
 # }
 import os
@@ -13,7 +13,7 @@ import oracledb
 from datetime import datetime
 import base64
 
-# Configuração de encoding para garantir interoperabilidade no Windows
+# Configuracao de encoding para garantir interoperabilidade no Windows
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 if sys.stderr.encoding != 'utf-8':
@@ -40,7 +40,7 @@ def normalize_record(record):
     return new_record
 
 def init_oracle(exec_id):
-    """Configura o ambiente e modo de operação do driver."""
+    """Configura o ambiente e modo de operacao do driver."""
     client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR")
     tns_admin = os.environ.get("TNS_ADMIN")
 
@@ -58,7 +58,7 @@ def init_oracle(exec_id):
         log("Iniciando em modo Thin (nativo Python)", "INFO", exec_id)
 
 def extract_test():
-    """Valida conexão e retorna JSON no stdout."""
+    """Valida conexao e retorna JSON no stdout."""
     exec_id = "TEST-CONN"
     
     user = os.environ.get("ORACLE_READONLY_USER")
@@ -66,12 +66,12 @@ def extract_test():
     dsn = os.environ.get("ORACLE_CONNECT_STRING")
 
     if not all([user, password, dsn]):
-        log("Variáveis de ambiente ORACLE_READONLY_USER, PASSWORD ou CONNECT_STRING ausentes.", "ERROR", exec_id)
+        log("Variaveis de ambiente ORACLE_READONLY_USER, PASSWORD ou CONNECT_STRING ausentes.", "ERROR", exec_id)
         sys.exit(1)
 
     init_oracle(exec_id)
     
-    # Query mínima para validação de fumaça (Smoke Test)
+    # Query minima para validacao de fumaa (Smoke Test)
     sql = "SELECT SYSDATE AS AGORA, 'CONEXAO_OK' AS STATUS FROM DUAL"
     
     connection = None
@@ -88,19 +88,19 @@ def extract_test():
         
         data = [normalize_record(dict(zip(columns, row))) for row in rows]
             
-        # Saída JSON pura no stdout
+        # Saida JSON pura no stdout
         sys.stdout.write(json.dumps(data, ensure_ascii=False))
         sys.stdout.flush()
         
         log(f"Sucesso! Registros retornados: {len(data)}", "INFO", exec_id)
         
     except Exception as e:
-        log(f"Erro na conexão ou query: {str(e)}", "ERROR", exec_id)
+        log(f"Erro na conexao ou query: {str(e)}", "ERROR", exec_id)
         sys.exit(1)
     finally:
         if connection:
             connection.close()
-            log("Conexão encerrada.", "INFO", exec_id)
+            log("Conexo encerrada.", "INFO", exec_id)
 
 if __name__ == "__main__":
     extract_test()
