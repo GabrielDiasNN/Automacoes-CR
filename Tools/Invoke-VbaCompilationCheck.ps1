@@ -1,7 +1,7 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Invoke-VbaCompilationCheck.ps1
 # OBJETIVO: Tentar compilar o projeto VBA para detectar erros de sintaxe
-#           ou referências ausentes de forma programática.
+#           ou referencias ausentes de forma programatica.
 # ==============================================================================
 $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
@@ -18,14 +18,14 @@ try {
     
     Write-Host "Projeto: $($proj.Name)"
     
-    # Tentar disparar a compilação via CommandBar do VBE (ID 578 é o padrão para Compile)
+    # Tentar disparar a compilacao via CommandBar do VBE (ID 578 e o padrao para Compile)
     $compileControl = $vbe.CommandBars.FindControl(1, 578)
     if ($null -ne $compileControl) {
-        Write-Host "Executando comando de compilação..."
+        Write-Host "Executando comando de compilacao..."
         $compileControl.Execute()
-        Write-Host "Compilação disparada."
+        Write-Host "Compilacao disparada."
     } else {
-        Write-Host "Comando de compilação não encontrado. Tentando salvar para forçar verificação..."
+        Write-Host "Comando de compilacao nao encontrado. Tentando salvar para forcar verificacao..."
     }
 
     $wb.Save()

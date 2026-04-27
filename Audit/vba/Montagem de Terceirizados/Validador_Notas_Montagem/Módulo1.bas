@@ -1,4 +1,4 @@
-Attribute VB_Name = "Módulo1"
+Attribute VB_Name = "Modulo1"
 Option Explicit
 
 ' ====================================================================================

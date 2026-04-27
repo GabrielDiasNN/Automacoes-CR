@@ -1,7 +1,7 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: New-Automation.ps1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Scaffolding para novas automações. Cria a estrutura de diretórios,
+# VERSAO: 1.0
+# DESCRICAO: Scaffolding para novas automacoes. Cria a estrutura de diretorios,
 #            Trigger_Automation.vbs configurado e registra a tarefa em config.json.
 #
 # USO:
@@ -12,7 +12,7 @@
 
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    # Nome da automação (será o nome do diretório e da entrada em config.json)
+    # Nome da automacao (sera o nome do diretorio e da entrada em config.json)
     [Parameter(Mandatory = $true)]
     [string]$Name,
 
@@ -20,7 +20,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$MacroName,
 
-    # Nome do arquivo .xlsm (sem caminho — ficará dentro do diretório criado)
+    # Nome do arquivo .xlsm (sem caminho - ficara dentro do diretorio criado)
     [Parameter(Mandatory = $true)]
     [string]$XlsmName,
 
@@ -38,10 +38,10 @@ param(
     # Adicionar suporte a WhatsApp (cria flag POST_EXECUTION_BAT no Trigger)
     [switch]$WithWhatsApp,
 
-    # Simular criação sem gravar arquivos
+    # Simular criacao sem gravar arquivos
     [switch]$DryRun,
 
-    # Caminho raiz das automações
+    # Caminho raiz das automacoes
     [string]$BasePath = "C:\Automacoes"
 )
 
@@ -85,7 +85,7 @@ function Invoke-SafeWrite {
 }
 
 # ============================================================
-# VALIDAÇÕES
+# VALIDACOES
 # ============================================================
 Write-Step "Iniciando scaffold para automacao: '$Name'"
 
@@ -100,9 +100,9 @@ if (-not (Test-Path $configPath)) {
     exit 1
 }
 
-# Validação já garantida pelos parâmetros obrigatórios
+# Validacao ja garantida pelos parametros obrigatorios
 
-# Diretório destino
+# Diretorio destino
 $automDir = Join-Path $BasePath $Name
 $logsDir = Join-Path $automDir "Logs"
 $triggerPath = Join-Path $automDir "Trigger_Automation.vbs"
@@ -117,7 +117,7 @@ if (Test-Path $automDir) {
 }
 
 # ============================================================
-# CRIAR DIRETÓRIOS
+# CRIAR DIRETORIOS
 # ============================================================
 if (-not $DryRun) {
     if ($PSCmdlet.ShouldProcess($automDir, "Criar diretorio da automacao")) {
@@ -177,11 +177,11 @@ $postBatLine
 
 "@
 
-# Copiar o restante do template VBS (lógica universal)
+# Copiar o restante do template VBS (logica universal)
 $templatePath = Join-Path $BasePath "_Template\Trigger_Automation.vbs"
 if (Test-Path $templatePath) {
     $template = Get-Content $templatePath -Raw -Encoding UTF8
-    # Localizar onde terminam as configurações no template (após a linha ' ===...===)
+    # Localizar onde terminam as configuracoes no template (apos a linha ' ===...===)
     $configEndMarker = "' ============================================="
     $markerIdx = $template.IndexOf($configEndMarker)
     if ($markerIdx -ge 0) {
@@ -232,13 +232,13 @@ else {
     $configRaw = Get-Content $configPath -Raw -Encoding UTF8
     $config = $configRaw | ConvertFrom-Json
 
-    # Verificar se já existe tarefa com mesmo nome
+    # Verificar se ja existe tarefa com mesmo nome
     $exists = @($config.tasks | Where-Object { $_.name -eq $Name })
     if ($exists.Count -gt 0) {
         Write-Step "Tarefa '$Name' ja existe em config.json. Nenhuma alteracao feita no config." -Type "WARN"
     }
     else {
-        # ConvertFrom-Json retorna array fixo — convertemos para lista mutável
+        # ConvertFrom-Json retorna array fixo - convertemos para lista mutavel
         $tasksList = [System.Collections.Generic.List[object]]($config.tasks)
         $tasksList.Add(($newTask | ConvertTo-Json -Depth 5 | ConvertFrom-Json))
         $config.tasks = $tasksList.ToArray()

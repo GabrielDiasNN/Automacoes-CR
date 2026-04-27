@@ -1,3 +1,10 @@
+// {
+//   "version": "1.0.1",
+//   "skill": "ai-native-development-standard",
+//   "contract": "whatsapp-bridge-protocol",
+//   "description": "Notificador via WhatsApp Web (headless)",
+//   "reliability": "Bootstrap-Logs, Idempotency-State"
+// }
 // =============================================================================
 // sendWhatsApp.js — Versão corrigida
 // Correções:

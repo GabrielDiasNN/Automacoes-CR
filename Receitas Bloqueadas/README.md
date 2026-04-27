@@ -1,62 +1,62 @@
-# Automação - Receitas Bloqueadas
+# Automacao - Receitas Bloqueadas (v1.2.1 - VBA Legado + WhatsApp)
 
-## Visão Geral
+## Visao Geral
 
-Este projeto automatiza o processamento, a consolidação e a distribuição da planilha de **Receitas Bloqueadas**. O sistema integra fluxos de atualização via Excel/VBA com entregas multicanal (Email e WhatsApp Business).
+Este projeto automatiza o processamento, a consolidacao e a distribuicao da planilha de **Receitas Bloqueadas**. O sistema integra fluxos de atualizacao via Excel/VBA com entregas multicanal (Email e WhatsApp Business), garantindo que o planejamento da fabrica nunca pare.
 
-## Arquitetura de Fluxo
+## Arquitetura de Fluxo (Outlook-Safe)
 
-A execução segue o pipeline:
+A execucao segue o pipeline resiliente:
 
-`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (Runner PS) -> `Excel COM` (VBA) -> `Send-WhatsApp.ps1` (Bridge) -> `sendWhatsApp.js` (Node.js) -> **WhatsApp**
+`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (Orquestrador)
+  -> **Fase 1**: `Excel COM` (VBA) atualiza dados e envia e-mail legado.
+  -> **Fase 2**: PowerShell aguarda 5s para esvaziamento da *Outbox* do Outlook.
+  -> **Fase 3**: `Send-WhatsApp.ps1` (Bridge) -> `sendWhatsApp.js` (Node.js) -> **WhatsApp**.
 
 ---
 
 ## Arquitetura de Componentes
 
-### 1. Runner PowerShell (`run.ps1`)
-Orquestrador de runtime que substitui o orquestrador VBScript legado:
-- Executa a instância do Excel de forma invisível via COM.
-- **Preflight VBA**: Verificação prévia de integridade via `Invoke-VbaCompilationCheck`.
-- **Monitoramento de Fluxo**: Leitura em tempo real do log da macro `ExecutarProcessoCompleto`.
-- **Orquestração Síncrona**: Dispara o bridge de WhatsApp (`Send-WhatsApp.ps1`) imediatamente após a conclusão bem-sucedida do processo Excel.
+### 1. Orquestrador PowerShell (`run.ps1`)
+Gerente de runtime e sincronizacao:
+- Executa a macro `modReceitasBloqueadas.ExecutarProcessoCompleto`.
+- **Outlook-Safe Protocol**: Implementa um *Buffer de Estabilidade* de 5 segundos apos a macro, garantindo que o Outlook COM conclua o envio da mensagem antes do fechamento do processo.
+- **Base64 Bridge**: Mantem a integridade dos logs entre camadas PS e VBA.
 
-### 2. Workbook de Negócio (`Receitas Bloqueadas.xlsm`)
-Contém o núcleo de inteligência em VBA e Power Query:
-- Atualização determinística das conexões de dados externos.
-- Normalização de campos e formatação para o padrão PT-BR.
-- Geração de corpo de e-mail dinâmico em HTML.
-- Persistência do snapshot final para transmissão via WhatsApp.
+### 2. Workbook de Negocio (`Receitas Bloqueadas.xlsm`)
+Nucleo de inteligencia em VBA e Power Query:
+- Atualizacao deterministica das conexoes do Oracle.
+- Geracao de alertas fiscais com formatacao PT-BR absoluta.
+- Ponto de origem do arquivo binario consumido pelo WhatsApp.
 
 ### 3. Bridge WhatsApp (`lib/Send-WhatsApp.ps1`)
-Abstração PowerShell para o ecossistema Node.js:
-- Verificação de pré-requisitos de ambiente (Runtime Node.js e dependências).
-- **Gestão de Sessão**: Relançamento automático em modo `PAIRING` caso a sessão esteja expirada.
-- **Controle de Concorrência**: Utilização de trava de arquivo (`.sendwhatsapp.lock`) para evitar múltiplas execuções simultâneas.
+Interface para o ecossistema Node.js:
+- **Gestao de Sessao**: Relancamento automatico em modo `PAIRING` se necessario.
+- **Lock Concorrente**: Bloqueia execucoes paralelas via arquivo `.sendwhatsapp.lock` para evitar banimento no WhatsApp.
 
 ### 4. Distribuidor Node.js (`sendWhatsApp.js`)
-Camada de integração via `whatsapp-web.js`:
-- **Idempotência**: Garantida pela verificação do estado persistido em `whatsapp-state.json`.
-- **Mecânica de Retry**: Sistema resiliente para lidar com instabilidades de conexão ou picos de carga.
+Integracao via `whatsapp-web.js`:
+- **Idempotencia**: Verifica o estado persistido para evitar notificacoes repetitivas.
+- **Mecanica de Retry**: Resiliencia contra quedas momentaneas de conexao.
 
 ---
 
-## Operação e Diagnóstico
+## Operacao e Diagnostico
 
-### Logs e Auditoria
-- **Log de Processo**: `Logs/ReceitasBloqueadas.log` (Prefixos `[PS]` e `[VBA]`).
-- **Log de Infraestrutura**: `sendWhatsApp-bootstrap.log`.
+### Logs e Engenharia
+- **Localizacao**: `Logs/ReceitasBloqueadas.log` (Prefixos `[PS]` e `[VBA]`).
+- **ASCII-Safe Source**: Mensagens de log em codigo-fonte sao mantidas em ASCII puro, garantindo independencia de terminal.
 
 ### Matriz de Exit Codes
-| Código | Significado |
+| Codigo | Significado |
 | :--- | :--- |
 | **0** | Sucesso em todas as camadas |
-| **7** | Workbook bloqueado para escrita (Read-Only) |
-| **21** | Sessão WhatsApp expirada: requer re-pareamento manual |
+| **7** | Workbook bloqueado (Read-Only) |
+| **21** | Sessao WhatsApp expirada: requer pareamento |
 | **23** | Bridge em Cooldown de retentativas |
-| **40** | Erro de concorrência: lock ativo em outra instância |
+| **40** | Erro de concorrencia: lock ativo |
 
 ---
 
-## 🗺️ Roadmap Futuro
-O núcleo de extração (Excel/VBA/PowerQuery) deste projeto está planejado para migração para a **Arquitetura Nativa (Python + Oracle)**, mantendo a entrega multicanal (Email + WhatsApp) via PowerShell e Node.js.
+## 🗺️ Roadmap
+O nucleo de extracao esta planejado para migracao para a **Arquitetura Nativa (Pure-Python)** futuramente, eliminando a dependencia do Excel.

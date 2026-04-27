@@ -1,7 +1,7 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Test-VbaReferences.ps1
-# OBJETIVO: Verificar se existem referências quebradas (Missing References)
-#           nos projetos VBA das automações.
+# OBJETIVO: Verificar se existem referencias quebradas (Missing References)
+#           nos projetos VBA das automacoes.
 # ==============================================================================
 param(
     [string]$WorkbookPath
@@ -11,7 +11,7 @@ $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
 $excel.DisplayAlerts = $false
 
-# Se um caminho específico foi passado, valida apenas ele. Caso contrário, valida os padrões.
+# Se um caminho especifico foi passado, valida apenas ele. Caso contrario, valida os padroes.
 $projects = if ($WorkbookPath) { @($WorkbookPath) } else {
     @(
         "C:\Automacoes\Receitas Bloqueadas\Receitas Bloqueadas.xlsm",

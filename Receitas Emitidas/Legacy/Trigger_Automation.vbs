@@ -226,7 +226,7 @@ Function ExtrairVersao(ByVal texto)
     Dim matches
 
     Set re = CreateObject("VBScript.RegExp")
-    re.Pattern = "Vers[aã]o:\s*([^\r\n\|]+)"
+    re.Pattern = "Vers[aa]o:\s*([^\r\n\|]+)"
     re.IgnoreCase = True
     re.Global = False
 

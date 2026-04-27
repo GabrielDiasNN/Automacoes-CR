@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Test-VbaPtBrGovernance.ps1
 # VERSAO : 1.0
 # DESCRICAO: Valida governanca de texto PT-BR em codigo VBA:

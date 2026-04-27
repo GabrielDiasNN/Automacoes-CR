@@ -1,21 +1,21 @@
-<#
+﻿<#
 .SYNOPSIS
     Localiza e abre o arquivo de log mais recente do projeto Automacoes.
 
 .DESCRIPTION
     Busca recursivamente por arquivos .log em todas as pastas 'Logs' do projeto.
-    Ordena por data de modificação e abre o arquivo mais recente usando o editor padrão.
+    Ordena por data de modificacao e abre o arquivo mais recente usando o editor padrao.
 
 .PARAMETER Slug
-    Filtro opcional para buscar por uma automação específica (ex: "Montagem", "Bloqueadas").
+    Filtro opcional para buscar por uma automacao especifica (ex: "Montagem", "Bloqueadas").
 
 .EXAMPLE
     pwsh -File Tools/Open-LatestLog.ps1
-    Abre o último log modificado em todo o projeto.
+    Abre o ultimo log modificado em todo o projeto.
 
 .EXAMPLE
     pwsh -File Tools/Open-LatestLog.ps1 -Slug "Montagem"
-    Abre o último log que contenha "Montagem" no nome.
+    Abre o ultimo log que contenha "Montagem" no nome.
 #>
 
 [CmdletBinding()]
@@ -58,7 +58,7 @@ if ($AllLogs.Count -eq 0) {
     exit 0
 }
 
-# -- Ordenar por data de modificação descendente --
+# -- Ordenar por data de modificacao descendente --
 $LatestLog = $AllLogs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 $RelativePath = $LatestLog.FullName.Replace($RootPath, "")

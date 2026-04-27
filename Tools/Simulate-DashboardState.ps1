@@ -1,6 +1,6 @@
-$Tasks = @(
+﻿$Tasks = @(
     @{
-        name = "Automação Crítica - Fiscal"
+        name = "Automacao Critica - Fiscal"
         enabled = $true
         isRunning = $true
         runningSince = (Get-Date).AddSeconds(-45).ToString("o")
@@ -9,7 +9,7 @@ $Tasks = @(
         lastResult = @{ exitCode = 0; finishedAt = (Get-Date).AddMinutes(-30).ToString("o") }
     },
     @{
-        name = "Automação Lenta - Overtime"
+        name = "Automacao Lenta - Overtime"
         enabled = $true
         isRunning = $true
         runningSince = (Get-Date).AddSeconds(-120).ToString("o")
@@ -17,14 +17,14 @@ $Tasks = @(
         scheduleText = "0 * * * *"
     },
     @{
-        name = "Automação com Erro"
+        name = "Automacao com Erro"
         enabled = $true
         isRunning = $false
         lastResult = @{ exitCode = 99; finishedAt = (Get-Date).AddMinutes(-5).ToString("o") }
         scheduleText = "Minutos: 0,30"
     },
     @{
-        name = "Automação com Aviso (Exit 7)"
+        name = "Automacao com Aviso (Exit 7)"
         enabled = $true
         isRunning = $false
         lastResult = @{ exitCode = 7; finishedAt = (Get-Date).AddMinutes(-15).ToString("o") }
@@ -66,8 +66,8 @@ $SimulatedState = @{
     }
     
     alerts = @(
-        @{ severity = "ERR"; message = "Falha crítica na conexão com Banco de Dados (Simulado)" }
-        @{ severity = "WARN"; message = "Alta latência detectada no gateway de WhatsApp" }
+        @{ severity = "ERR"; message = "Falha critica na conexao com Banco de Dados (Simulado)" }
+        @{ severity = "WARN"; message = "Alta latencia detectada no gateway de WhatsApp" }
     )
     
     tasks = $Tasks
@@ -76,7 +76,7 @@ $SimulatedState = @{
         apiMode = "HTTPS-REST"
         apiBaseUrl = "http://localhost:8765"
         endpoint = "/api/operations"
-        statusMessage = "Monitor operando em modo simulação de testes"
+        statusMessage = "Monitor operando em modo simulacao de testes"
     }
 }
 

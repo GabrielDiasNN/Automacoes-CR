@@ -4,6 +4,8 @@
 *.vbs text eol=crlf
 
 # Padrao para outros scripts
-*.ps1 text eol=crlf
-*.js text eol=lf
-*.json text
+*.ps1 text eol=crlf working-tree-encoding=UTF-8
+*.js text eol=lf working-tree-encoding=UTF-8
+*.py text eol=lf working-tree-encoding=UTF-8
+*.json text working-tree-encoding=UTF-8
+*.md text working-tree-encoding=UTF-8

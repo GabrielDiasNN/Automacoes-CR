@@ -57,6 +57,13 @@ All normal operational log lines must follow this structure:
 
 Bootstrap lines may omit `ExecId` only before the execution identity exists.
 
+## Base64 Bridge Protocol (Mandatory for PT-BR)
+
+Due to encoding inconsistencies in PowerShell 5.1 (UTF-8 vs ANSI):
+1. **Python / Node.js:** All log messages sent to stderr MUST be Base64 encoded and prefixed with `B64:`. Example: `B64:WzI...`.
+2. **PowerShell (`Lib-Logging`):** Automatically decodes any message matching `B64:(.*)` to guarantee 100% PT-BR fidelity (accents like á, ç, ã).
+3. **Pure String Payload:** JSON string payloads exchanged via files or stdio must also base64-encode sensitive characters if necessary, but the `Base64 Bridge Protocol` primarily applies to the **stderr log stream**.
+
 ## Severity Model
 
 | Level | When to use |

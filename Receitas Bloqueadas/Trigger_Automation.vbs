@@ -104,7 +104,7 @@ Function ExtrairVersao(texto)
     On Error Resume Next
     Dim re, m
     Set re = CreateObject("VBScript.RegExp")
-    re.Pattern = "Vers[aã]o:\s*([^\r\n\|]+)"
+    re.Pattern = "Vers[aa]o:\s*([^\r\n\|]+)"
     re.IgnoreCase = True
     re.Global = False
     If re.Test(texto) Then

@@ -1,60 +1,50 @@
-# Automação - Montagem de Terceirizados (Robô Fiscal v8.8.0)
+# Automacao - Montagem de Terceirizados (v2.0 - Pure-Native)
 
-## Visão Geral
+## Visao Geral
 
-Este projeto automatiza a validação fiscal determinística de ordens de montagem externa. O foco é garantir o cruzamento preciso entre Notas Fiscais (NF) e Ordens de Fabricação (OBs) de terceirizados, notificando divergências à equipe fiscal de forma proativa.
+Este projeto automatiza a validacao fiscal deterministica de ordens de montagem externa. O foco e garantir o cruzamento preciso entre Notas Fiscais (NF) e Ordens de Fabricacao (OBs) de terceirizados, notificando divergencias a equipe fiscal de forma proativa atraves de uma interface moderna e inteligente.
 
-## Fluxo de Execução
+A versao 2.0 marca a migracao definitiva para a **Arquitetura Pure-Native**, eliminando totalmente as dependencias de Excel/VBA e utilizando queries SQL de alta performance otimizadas via CTEs.
 
-`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (Runner PS) -> `Excel COM` (VBA) -> `Oracle DB` -> `Email Outlook`
+## Fluxo de Execucao (Modo Nativo)
+
+`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (Orquestrador)
+  -> **Fase 1 (Extracao)**: Executa a extracao 100% Python direta do Oracle (`extract_oracle.py`) consumindo o payload `SQL-MontagemTerceirizados.sql`.
+  -> **Fase 2 (Inteligencia)**: Python valida os dados, aplica regras de negocio e gera o relatorio HTML (`validate_and_generate_html.py`).
+  -> **Fase 3 (Entrega)**: PowerShell dispara o e-mail oficial via Outlook COM (Outlook-Safe).
 
 ---
 
 ## Arquitetura de Componentes
 
-### 1. Runner PowerShell (`run.ps1`)
-Orquestrador de runtime que gerencia o ciclo de vida da automação:
-- Inicia a instância do Excel em modo invisível.
-- **Preflight VBA**: Invoca `Invoke-VbaCompilationCheck` para garantir que o projeto está íntegro antes da execução.
-- **Monitoramento de Fluxo**: Captura o baseline dos logs e aguarda o token de conclusão (`FIM DO PROCESSO.`).
-- **Gestão de Estados**: Traduz falhas de infraestrutura (COM, Timeout) ou lógica de negócio em exit codes padronizados.
+### 1. Orquestrador PowerShell (`run.ps1`)
+O motor de execucao nativa:
+- Gerencia o ciclo de vida sem overhead de interface grafica (Excel).
+- Utiliza o **Secure File-Payload Protocol** para garantir que dados pesados nao corrompam na memoria.
+- Implementa o **Base64 Bridge Protocol** para logs e e-mails PT-BR perfeitos.
 
-### 2. Workbook Fiscal (`Validador_Notas_Montagem.xlsm`)
-Núcleo da inteligência fiscal:
-- **Refresh Deterministico**: Implementa a validação da coluna `VALIDA_ATUALIZACAO` no Oracle, assegurando que o processamento utilize apenas dados renovados.
-- **Validação NF/OB**: Cruzamento complexo de saldos e quantidades entre camadas fiscais e operacionais.
-- **Output de Notificação**: Geração de e-mails em HTML dinâmico com o resumo das divergências.
+### 2. Camada de Dados e Inteligencia
+- **`SQL-MontagemTerceirizados.sql`**: Query ultra-otimizada utilizando CTEs (Common Table Expressions) e agregados de I/O reduzido. Substitui a dependencia da View lenta do Oracle.
+- **`extract_oracle.py`**: Extrator nativo que carrega dinamicamente o SQL externo.
+- **`validate_and_generate_html.py`**: Nucleo de validacao. Implementa idempotencia (cache `.cache_erros.json`) e gera o dashboard visual com cards e destaques de erro.
 
-### 3. Utilitário de Reenvio (`ReenviarAlertaErros.ps1`)
-Ferramenta operacional para reprocessamento de notificações:
-- Permite o disparo de alertas de erro da última execução sem a necessidade de um novo ciclo de leitura no Oracle.
-- **Parâmetros**:
-  - `Default`: Limpa o cache de estado para forçar o reenvio de todos os erros.
-  - `-KeepCache`: Mantém a lógica de delta (notifica apenas novos erros detectados).
+### 3. Pasta Legado (`Legacy/`)
+Contem o workbook e scripts da arquitetura antiga (v1.1 e anteriores). Mantidos apenas para historico de auditoria. **Nao sao mais utilizados no fluxo de producao.**
 
 ---
 
-## Operação e Diagnóstico
+## Operacao e Diagnostico
 
-### Logs
-- **Localização**: `Logs/Montagem.log`.
-- **Camadas**: Identificadas pelos prefixos `[PS]` (PowerShell) e `[VBA]` (Excel).
+### Logs e Auditoria
+- **Localizacao**: `Logs/Montagem_Terceirizados_...log`.
+- **Rastreabilidade**: Todas as fases sao correlacionadas pelo `ExecId` unico.
+- **PT-BR Blindado**: Mensagens de log em codigo-fonte sao ASCII-Safe, convertidas em tempo de execucao via Base64.
 
-### Matriz de Exit Codes
-| Código | Significado |
-| :--- | :--- |
-| **0** | Sucesso absoluto |
-| **4** | Falha técnica ao invocar a macro |
-| **5** | Timeout: Processamento excedeu 300 segundos |
-| **6** | Erro Fatal reportado pela lógica de negócio VBA |
-| **7** | Workbook bloqueado para escrita (Read-Only) |
-| **8** | Falha de compilação detectada no Preflight |
-
-### Regras Críticas
-1. **Idempotência**: O arquivo `Cache_Estado_Detalhado.txt` previne o spam de notificações, enviando alertas apenas quando mudanças significativas no estado de erro forem detectadas.
-2. **Consistência de Dados**: O robô aborta imediatamente se o Refresh do Oracle falhar, protegendo a integridade da análise fiscal.
+### Performance
+A migracao para o modo nativo reduziu o tempo de execucao de minutos (via Excel COM) para **segundos** (via Python/cx_Oracle), eliminando falhas de interface e deadlocks de processos do Office.
 
 ---
 
-## 🗺️ Roadmap Futuro
-Este projeto é o próximo candidato à migração para a **Arquitetura Nativa (Python + PowerShell)**, visando eliminar a dependência do Excel e PowerQuery, seguindo o modelo de sucesso implementado em *Receitas Emitidas*.
+## Regras de Negocio Criticas
+1. **Idempotencia**: O sistema utiliza cache de estado para enviar alertas apenas quando surgem novos erros ou mudancas significativas.
+2. **Filtros de Producao**: A automacao foca exclusivamente em OBs Montadas (Setor 5), com Destino Receita 1 e Programacao do tipo `%T`.

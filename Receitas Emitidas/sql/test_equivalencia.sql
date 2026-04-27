@@ -1,0 +1,54 @@
+/*
+================================================================================
+TESTE DE INTEGRIDADE: Totais de Controle (Versão Plana - Atualizado)
+OBJETIVO: Validar Linhas, KG e Peças com suporte a LEFT JOIN.
+================================================================================
+*/
+
+WITH 
+-- 1. Agregação de Peças Destino (Comum às lógicas)
+CTE_DADOS_PECAS AS (
+    SELECT 
+        O1.NUMERO_OB, 
+        SUM(O2.QTLIQUIDA) as QT_ACA_OB, 
+        COUNT(O2.IDPECASPRODUTO) as QT_PC_ACA_OB,
+        MAX(CASE WHEN O2.CODIGO_DEPOSITO = 100 THEN 1 ELSE 0 END) as EH_REPROC
+    FROM SGTPRD.GERAPECADESTINOOB O1
+    JOIN SGTPRD.GERAPECASPRODUTO O2 ON O2.IDPECASPRODUTO = O1.IDPECASPRODUTO
+    GROUP BY O1.NUMERO_OB
+),
+
+-- 2. Consolidação da Versão Otimizada (Agora com LEFT JOIN)
+CTE_OTIMIZADA_BASE AS (
+    SELECT 
+        NVL(QTD.QT_ACA_OB, 0) as QT_ACA_OB, 
+        NVL(QTD.QT_PC_ACA_OB, 0) as QT_PC_ACA_OB
+    FROM SGTPRD.OB OBE
+    LEFT JOIN CTE_DADOS_PECAS QTD ON QTD.NUMERO_OB = OBE.NUMERO_OB
+    WHERE NVL(QTD.EH_REPROC, 0) = 0
+),
+
+-- 3. Consolidação da Versão Original (Join Left)
+CTE_ORIGINAL_BASE AS (
+    SELECT 
+        NVL(QTD.QT_ACA_OB, 0) as QT_ACA_OB, 
+        NVL(QTD.QT_PC_ACA_OB, 0) as QT_PC_ACA_OB
+    FROM SGTPRD.OB OBE
+    LEFT JOIN CTE_DADOS_PECAS QTD ON QTD.NUMERO_OB = OBE.NUMERO_OB
+    WHERE NVL(QTD.EH_REPROC, 0) = 0
+),
+
+-- 4. Totais Finais
+CTE_TOTAL_OTIMIZADO AS (
+    SELECT 'OTIMIZADA' as VERSAO, COUNT(*) as LINHAS, SUM(QT_ACA_OB) as KG, SUM(QT_PC_ACA_OB) as PECAS 
+    FROM CTE_OTIMIZADA_BASE
+),
+CTE_TOTAL_ORIGINAL AS (
+    SELECT 'ORIGINAL' as VERSAO, COUNT(*) as LINHAS, SUM(QT_ACA_OB) as KG, SUM(QT_PC_ACA_OB) as PECAS 
+    FROM CTE_ORIGINAL_BASE
+)
+
+-- RESULTADO COMPARATIVO
+SELECT * FROM CTE_TOTAL_ORIGINAL
+UNION ALL
+SELECT * FROM CTE_TOTAL_OTIMIZADO;

@@ -19,17 +19,21 @@ Use when:
 - O custo de migração supera significativamente os ganhos operacionais.
 
 ## Non-Negotiable Rules
-- É PROIBIDO hardcodar credenciais ou usar arquivos .env em texto plano no repositório.
-- Toda saída HTML deve ser sanitizada via html_escape para compatibilidade com Outlook.
-- A contagem de lotes (receitas) deve respeitar a regra: Grupo 0 = individual, Grupo > 0 = 1 lote.
-
-## Repo-Specific Constraints
-- Utilizar obrigatoriamente a biblioteca `oracledb`.
-- O envio de e-mail deve ser delegado à `lib\Lib-Email.psm1`.
+- **Native-First Architecture**: Always try direct extraction via Python first.
+- **Hybrid-Fallback Strategy**: Implement a silent fallback to Excel COM if the Oracle connection is killed (`ORA-00028`), ensuring the automation never stops.
+- **Secure File-Payload**: Use temporary `.data_ExecId.json` files for IPC between extraction and validation to prevent PowerShell buffer corruption.
+- **ASCII-Safe Core**: Use only ASCII or Unicode escapes in Python source for logs/UI strings to prevent encoding regressions.
+- **SQL CTE Optimization**: Use `WITH` clauses and `FIRST_ROWS` hints to ensure query speed and stability.
+- Proibido hardcodar credenciais; use `.env` carregado no runtime do processo.
 
 ## Related Skills
-- automation-execution-contract
-- log-standardization
+- `automation-execution-contract`: Execution IDs and exit codes.
+- `log-standardization`: Logging patterns.
+- `ai-native-development-standard`: General repository standards.
+
+## Repo-Specific Constraints
+- Utilizar a biblioteca `oracledb` com modo Thick se disponível.
+- Delegar o envio de e-mail ao `Send-OutlookEmail` (PowerShell) para garantir o **Outlook-Safe Protocol**.
 
 ## Troubleshooting
 - **Caracteres corrompidos no Outlook**: Verifique se a função `html_escape` foi aplicada.
@@ -37,11 +41,12 @@ Use when:
 - **Falha de conexão Oracle**: Confirme se o modo Thick foi iniciado com o diretório correto do Client.
 
 ## Validation
-A validação de paridade de dados deve ser feita comparando o JSON extraído pelo Python com um export CSV da aba de dados brutos do Excel original.
+- Compare o volume de dados extraídos com o Excel legado.
+- Valide se o arquivo `.data_ExecId.json` é gerado corretamente no disco antes de ser consumido.
 
 ## Pre-Delivery Checklist
-- [ ] Credenciais protegidas via .env e .gitignore?
-- [ ] HTML sanitizado para o Outlook?
-- [ ] Assinatura oficial preservada?
-- [ ] Contagem de lotes validada?
-- [ ] Arquivos temporários excluídos no final?
+- [ ] Fallback Híbrido implementado no orquestrador?
+- [ ] IPC utiliza Secure File-Payload para dados extensos?
+- [ ] Código-fonte é ASCII-Safe (sem acentos crus)?
+- [ ] SQL utiliza CTEs e hints de performance?
+- [ ] Arquivos temporários são excluídos no `finally`?

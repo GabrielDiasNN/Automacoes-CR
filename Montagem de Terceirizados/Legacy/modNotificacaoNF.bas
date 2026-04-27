@@ -135,3 +135,42 @@ Private Sub GerarAbaErrosParaAnalise(ByRef arrErros() As DadosErro, ByVal lngQtd
             On Error GoTo 0
         End If
 End Sub
+
+' ====================================================================================
+' TESTES E2E (SUPORTE)
+' ====================================================================================
+Public Sub TestarEnvioSucesso()
+    Dim udtTel As Telemetria
+    udtTel.totalLinhas = 100
+    udtTel.totalErros = 0
+    udtTel.InicioExecucao = Timer
+    
+    EnviarEmailSucessoRetry udtTel
+End Sub
+
+Public Sub TestarEnvioErro()
+    Dim udtTel As Telemetria
+    Dim arrErros(1 To 1) As DadosErro
+    
+    udtTel.totalLinhas = 100
+    udtTel.totalErros = 1
+    udtTel.InicioExecucao = Timer
+    
+    arrErros(1).NumOB = "12345"
+    arrErros(1).detalheErro = "Teste E2E - Divergencia de Quantidade"
+    arrErros(1).Faccao = "FACCAO TESTE"
+    
+    EnviarEmailComErrosRetry udtTel, arrErros, 1
+End Sub
+
+Public Sub TestarEnvioAlteracao()
+    Dim udtTel As Telemetria
+    udtTel.totalLinhas = 100
+    udtTel.totalErros = 5
+    udtTel.InicioExecucao = Timer
+    
+    Dim strDelta As String
+    strDelta = "<p>Teste E2E - Resumo de Alteracoes Simuladas</p>"
+    
+    EnviarEmailAlteracaoRetry udtTel, 2, 2, 1, strDelta
+End Sub

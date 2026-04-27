@@ -1,24 +1,24 @@
 # ==============================================================================
 # ARQUIVO: Send-WhatsApp.ps1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Wrapper PS-nativo para envio de WhatsApp via Node.js (sendWhatsApp.js).
-#            Substitui a lógica de RunWhatsApp.bat, expondo uma interface PS limpa.
+# VERSAO : 1.1
+# DESCRICAO: Wrapper PS-nativo para envio de WhatsApp via Node.js (sendWhatsApp.js).
+#            Substitui a logica de RunWhatsApp.bat, expondo uma interface PS limpa.
 #            RunWhatsApp.bat se torna um shim de 5 linhas que chama este script.
 #
 # MODOS:
-#   AUTO    — Executa Node em modo silencioso (requer sessão LocalAuth ativa).
-#             Se sessão ausente, redireciona automaticamente para PAIRING.
-#   PAIRING — Abre janela CMD visível para pareamento manual do dispositivo.
+#   AUTO    - Executa Node em modo silencioso (requer sessao LocalAuth ativa).
+#             Se sessao ausente, redireciona automaticamente para PAIRING.
+#   PAIRING - Abre janela CMD visivel para pareamento manual do dispositivo.
 #
 # EXIT CODES (espelhados do Node/BAT):
-#   0  — Sucesso ou desabilitado por config
-#   11 — Anexo ausente
-#   20 — Erro fatal Node
-#   21 — Reautenticação exigida (sessão expirada)
-#   22 — Config inválida
-#   23 — Cooldown de retry ativo
-#   30 — Falha ao abrir janela interativa
-#   40 — Execução concorrente bloqueada (lock ativo)
+#   0  - Sucesso ou desabilitado por config
+#   11 - Anexo ausente
+#   20 - Erro fatal Node
+#   21 - Reautenticacao exigida (sessao expirada)
+#   22 - Config invalida
+#   23 - Cooldown de retry ativo
+#   30 - Falha ao abrir janela interativa
+#   40 - Execucao concorrente bloqueada (lock ativo)
 # ==============================================================================
 
 [CmdletBinding()]
@@ -31,12 +31,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# --- Detectar BaseDir dinamicamente se não fornecido ---
+# --- Detectar BaseDir dinamicamente se nao fornecido ---
 if ([string]::IsNullOrWhiteSpace($BaseDir)) {
     $scriptDir = $PSScriptRoot
     if (-not $scriptDir) { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
     
-    # Assume que se está em \lib\, a pasta base das receitas bloqueadas é ..\Receitas Bloqueadas
+    # Assume que se esta em \lib\, a pasta base das receitas bloqueadas e ..\Receitas Bloqueadas
     $root = Split-Path -Parent $scriptDir
     $BaseDir = Join-Path $root "Receitas Bloqueadas"
 }
@@ -63,7 +63,14 @@ if ([string]::IsNullOrWhiteSpace($ExecId)) { $ExecId = New-ExecId }
 
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO")
-    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    # Base64 Bridge para garantir PT-BR
+    if ($Msg -match '[\u00C0-\u00FF]') {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
+        $b64 = [System.Convert]::ToBase64String($bytes)
+        Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    } else {
+        Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    }
 }
 
 function Test-BridgeRunning {
@@ -76,7 +83,7 @@ function Test-BridgeRunning {
 }
 
 function Invoke-AcquireLock {
-    # Se lock existe, verificar se processo ainda está vivo
+    # Se lock existe, verificar se processo ainda esta vivo
     if (Test-Path $LockDir) {
         if (-not (Test-BridgeRunning)) {
             Write-Log "LOCK: lock obsoleto detectado. Tentando limpar: $LockDir"
@@ -120,13 +127,13 @@ function Invoke-ReleaseLock {
 }
 
 # ============================================================
-# INÍCIO — log de bootstrap e validação de prerrequisitos
+# INICIO - log de bootstrap e validacao de prerrequisitos
 # ============================================================
 Write-Log "=================================================================================="
 Write-Log "INICIO - Send-WhatsApp.ps1 iniciado. ExecId=$ExecId Mode=$Mode"
 Write-Log "BaseDir=$BaseDir | NodeExe=$NodeExe | NodeScript=$NodeScript"
 
-# Validar pré-requisitos
+# Validar pre-requisitos
 $preErro = $null
 if (-not (Test-Path $BaseDir)) { $preErro = "Pasta base nao encontrada: $BaseDir" }
 elseif (-not (Test-Path $NodeExe)) { $preErro = "node.exe nao encontrado: $NodeExe" }
@@ -148,12 +155,12 @@ if ($Mode -ne "AUTO" -and $Mode -ne "PAIRING") {
     $Mode = "AUTO"
 }
 
-# Verificar sessão LocalAuth
+# Verificar sessao LocalAuth
 $sessionExists = Test-Path $SessionDir
 if ($sessionExists) { Write-Log "Sessao LocalAuth: ENCONTRADA em $SessionDir" }
 else { Write-Log "Sessao LocalAuth: NAO encontrada em $SessionDir" }
 
-# Roteamento por Mode e sessão
+# Roteamento por Mode e sessao
 if ($Mode -eq "PAIRING") {
     Write-Log "MODE=PAIRING solicitado. Lancando modo visivel interativo."
     $launchArg = "`"$NodeExe`" `"$NodeScript`" `"$ExecId`" `"PAIRING`""
@@ -172,7 +179,7 @@ if ($Mode -eq "PAIRING") {
     }
 }
 
-# AUTO: sem sessão → redirecionar para PAIRING
+# AUTO: sem sessao -> redirecionar para PAIRING
 if (-not $sessionExists) {
     Write-Log "AUTO: Sessao ausente. Redirecionando para modo PAIRING." -Lvl "WARN"
     $launchArg = "`"$NodeExe`" `"$NodeScript`" `"$ExecId`" `"PAIRING`""
@@ -191,7 +198,7 @@ if (-not $sessionExists) {
     }
 }
 
-# AUTO + sessão presente → modo silencioso
+# AUTO + sessao presente -> modo silencioso
 Write-Log "AUTO: Sessao presente. Executando Node em modo silencioso."
 
 # Adquirir lock
@@ -253,7 +260,7 @@ if ($nodeExit -eq $EXIT_REAUTH) {
     exit $EXIT_REAUTH
 }
 
-# Cooldown (exit 23) — apenas log, pass-through
+# Cooldown (exit 23) - apenas log, pass-through
 if ($nodeExit -eq $EXIT_COOLDOWN) {
     Write-Log "NODE informou cooldown de retry ativo - ExitCode=$EXIT_COOLDOWN. Nenhum envio realizado." -Lvl "WARN"
 }

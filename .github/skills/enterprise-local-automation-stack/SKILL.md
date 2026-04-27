@@ -22,7 +22,7 @@ Use when:
 ## Non-Negotiable Rules
 - Python and PowerShell scripts interacting with Outlook MUST connect to an existing Outlook instance if available.
 - Explicit cleanup logic to release COM objects is mandatory.
-- Inter-process communication between Node.js, Python, and PowerShell must use structured JSON via stdio.
+- Inter-process communication between Python and PowerShell MUST use the **Secure File-Payload Protocol** (e.g., writing to `.payload_ExecId.json` or `.data_ExecId.json`) instead of pure `stdio`. This bypasses PowerShell 5.1 buffer corruption on large JSON payloads.
 - Responses must always be in PT-BR.
 
 ## Repo-Specific Constraints
@@ -35,13 +35,14 @@ Use when:
 
 ## Troubleshooting
 - **OUTLOOK.EXE zombie processes**: Ensure Marshal.ReleaseComObject is called in the finally block.
-- **IPC Failures**: Verify if JSON is being correctly printed to stdout and logs to stderr.
+- **IPC Failures**: If using `stdio`, check for `Unexpected UTF-8 BOM` or `Expecting value` errors. If these occur, migrate to the **Secure File-Payload Protocol**.
 
 ## Validation
-Review the IPC implementation to ensure no temporary files are used for data exchange between runtimes.
+Review the IPC implementation to ensure temporary files (`.data_*.json`, `.payload_*.json`) are used for large data exchange between runtimes, and that they are securely deleted in the `finally` block or after successful processing.
 
 ## Pre-Delivery Checklist
 - [ ] COM objects explicitly released?
-- [ ] IPC using structured JSON?
+- [ ] IPC using Secure File-Payload for large JSON?
+- [ ] Temporary IPC files are cleaned up reliably?
 - [ ] No hardcoded credentials?
 - [ ] All explanations in PT-BR?

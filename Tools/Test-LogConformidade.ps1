@@ -1,18 +1,18 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Test-LogConformidade.ps1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Guardrail de formato de log. Detecta padrões proibidos em arquivos
-#            staged (ou todos) que regredem a convenção de data BR dd/MM/yyyy
-#            ou reintroduzem nomes de arquivo diários com data.
+# VERSAO: 1.0
+# DESCRICAO: Guardrail de formato de log. Detecta padroes proibidos em arquivos
+#            staged (ou todos) que regredem a convencao de data BR dd/MM/yyyy
+#            ou reintroduzem nomes de arquivo diarios com data.
 #
 # MODOS:
 #   -StagedOnly   Varre apenas arquivos staged no git (para pre-commit)
-#   -All          Varre todos os .ps1, .psm1, .bas do repositório
+#   -All          Varre todos os .ps1, .psm1, .bas do repositorio
 #   -Paths        Varre apenas os arquivos informados explicitamente (para CI)
 #
 # EXIT CODES:
-#   0  — Conforme (nenhuma violação)
-#   1  — Violações encontradas
+#   0  - Conforme (nenhuma violacao)
+#   1  - Violacoes encontradas
 # ==============================================================================
 
 [CmdletBinding()]
@@ -37,7 +37,7 @@ if (-not $StagedOnly -and -not $All -and $Paths.Count -eq 0) {
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
 
 # ==============================================================================
-# Padrões proibidos
+# Padroes proibidos
 # ==============================================================================
 
 # PS: formato ISO em chamadas de log
@@ -47,13 +47,13 @@ $psPatterns = @(
     @{ Pattern = "yyyy-MM-dd[^']*(\.log|\.txt)"; Desc = "Nome de arquivo com data ISO + extensao de log" }
 )
 
-# VBA: montagem de nome de arquivo diário
+# VBA: montagem de nome de arquivo diario
 $vbaPatterns = @(
     @{ Pattern = 'log_["'']?\s*&\s*(Right|Day|Month|Format)'; Desc = "Nome de arquivo diario montado com data (log_ & dd-mm)" },
     @{ Pattern = 'log_["'']?\s*&\s*Format\$?\(Now'; Desc = 'Nome de arquivo diario com Format$(Now)' }
 )
 
-# PS: nome de arquivo diário com data
+# PS: nome de arquivo diario com data
 $psDailyPatterns = @(
     @{ Pattern = "log_.*Get-Date\s+-Format\s+['""]dd-MM"; Desc = "Nome de arquivo diario PS (log_ + dd-MM-yyyy)" },
     @{ Pattern = '"\$\(\s*Get-Date\s+-Format\s+[''"]dd-MM-yyyy[''"]'; Desc = "Interpolacao de data diaria em nome de log" }
@@ -109,7 +109,7 @@ function Get-TargetFiles {
         foreach ($rel in ($stagedRaw -split "`n")) {
             $rel = $rel.Trim()
             if (-not $rel) { continue }
-            # Excluir diretórios Audit/ e Tools/ do escopo de validação
+            # Excluir diretorios Audit/ e Tools/ do escopo de validacao
             if ($rel -match '^(Audit/|Tools/)') { continue }
             $ext = [System.IO.Path]::GetExtension($rel).ToLowerInvariant()
             if ($allPatterns.ContainsKey($ext)) {

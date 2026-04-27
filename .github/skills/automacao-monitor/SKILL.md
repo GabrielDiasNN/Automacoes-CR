@@ -35,7 +35,7 @@ Use this skill for the central monitor and scheduler layer implemented by `Monit
 1. The monitor must run as a singleton protected by a global mutex.
 2. `config.json` is a contract and must be validated before task dispatch begins.
 3. New tasks must prove themselves manually before scheduler registration.
-4. Task paths must be absolute and operationally valid.
+4. Task paths should be relative (e.g., `.\\Module\\run.ps1`) for repository portability, as the monitor resolves them dynamically relative to its own location.
 5. Dry-run mode must not launch external processes or mutate persistent state.
 6. Metrics must be persisted periodically to `Logs/Monitor_Metrics.json`.
 
@@ -43,7 +43,7 @@ Use this skill for the central monitor and scheduler layer implemented by `Monit
 
 | Asset | Responsibility |
 | --- | --- |
-| `MonitorAutomacoes.ps1` | Scheduler core, reload logic, task lifecycle management |
+| `MonitorAutomacoes.ps1` | Scheduler core, dynamic path resolution, task lifecycle management |
 | `config.json` | Declarative task registry and schedule contract |
 | `Logs/yyyy-MM_Monitor.log` | Central operational log |
 | `Logs/Monitor_Metrics.json` | Structured operational metrics snapshot |
@@ -54,7 +54,7 @@ Use this skill for the central monitor and scheduler layer implemented by `Monit
 ```json
 {
   "name": "Friendly Task Name",
-  "scriptPath": "C:\\Automacoes\\Module\\Trigger_Automation.vbs",
+  "scriptPath": ".\\Module\\run.ps1",
   "enabled": true,
   "preventOverlap": true,
   "waitForExit": false,
@@ -132,7 +132,7 @@ Use this skill for the central monitor and scheduler layer implemented by `Monit
 
 ## Pre-Delivery Checklist
 
-- [ ] `config.json` changes are valid and use absolute paths.
+- [ ] `config.json` changes are valid and use relative paths for portability.
 - [ ] New tasks were proven manually before registration.
 - [ ] Singleton behavior remains enforced.
 - [ ] `-RunOnce`, `-DryRun`, and `-SkipTaskExecution` still honor their contracts.

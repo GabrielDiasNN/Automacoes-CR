@@ -9,6 +9,13 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
 
+' {
+'   "version": "1.2.0",
+'   "skill": "ai-native-development-standard, automacao-comms-email",
+'   "description": "COM Adapter for robust Outlook email dispatch with test redirection support.",
+'   "context": "Shared Infrastructure"
+' }
+
 ' ==============================================================================
 ' ClsOutlookAdapter  (FONTE CANONICA: _Shared/VBA/)
 ' Responsabilidade: interface com Outlook para envio de emails HTML.
@@ -16,8 +23,9 @@ Option Explicit
 ' O caller e responsavel por logar LastError apos cada chamada.
 ' ==============================================================================
 
-Private m_oApp      As Object
-Private m_lastError As String
+Private m_oApp              As Object
+Private m_lastError         As String
+Private m_bWeStartedOutlook As Boolean
 
 Public Property Get LastError() As String
     LastError = m_lastError
@@ -66,6 +74,21 @@ Public Function EnviarEmail(ByVal strSubject As String, _
 
     Set composer = New ClsEmailComposerService
 
+    ' Redirecionamento para testes (Se AUTOMACAO_TEST_EMAIL estiver definida no ambiente)
+    Dim strTestEmail As String
+    strTestEmail = Environ$("AUTOMACAO_TEST_EMAIL")
+    If Len(strTestEmail) > 0 Then
+        ' modLogging.bas deve estar disponivel no projeto para registrar o redirecionamento
+        On Error Resume Next
+        LogMensagem "MODO TESTE ATIVO: Redirecionando e-mail de " & strPara & " para " & strTestEmail, "WARN"
+        On Error GoTo TratarErro
+        
+        strPara = strTestEmail
+        strCopia = ""
+        strCco = ""
+        strSubject = "[TESTE] " & strSubject
+    End If
+
     With oItem
         .Subject = strSubject
         .To = strPara
@@ -90,6 +113,11 @@ Public Function EnviarEmail(ByVal strSubject As String, _
 Saida:
     Set composer = Nothing
     Set oItem = Nothing
+    
+    ' Estrategia de Liberacao: Apenas limpa a variavel de memoria, NAO executa .Quit()
+    ' para garantir que os e-mails tenham tempo de sair da Caixa de Saida (Outbox).
+    Set m_oApp = Nothing
+    
     Exit Function
 
 TratarErro:
@@ -115,11 +143,13 @@ Public Function GetOutlookAppSafe() As Object
 
     If m_oApp Is Nothing Then
         Set m_oApp = GetObject(, "Outlook.Application")
+        m_bWeStartedOutlook = False
     End If
 
     If m_oApp Is Nothing Then
         Err.Clear
         Set m_oApp = CreateObject("Outlook.Application")
+        m_bWeStartedOutlook = True
     End If
 
     If Not m_oApp Is Nothing Then

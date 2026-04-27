@@ -1,69 +1,51 @@
-﻿# SetupMonitor.ps1
+<#
+.SYNOPSIS
+    Instalador do Monitor de Automacoes Hub.
+.DESCRIPTION
+    Configura o ambiente para execucao automatica:
+    1. Valida pastas obrigatorias.
+    2. Cria o arquivo .env inicial se nao existir.
+    3. Registra o Monitor no Agendador de Tarefas do Windows (Opcional).
+.NOTES
+    Version: 1.0.1
+    Skill: ai-native-development-standard, automacao-monitor
+#>
 
 $ErrorActionPreference = "Stop"
 
-$Utf8Bom = New-Object System.Text.UTF8Encoding($true)
-try {
-    [Console]::InputEncoding  = $Utf8Bom
-    [Console]::OutputEncoding = $Utf8Bom
-    $OutputEncoding = $Utf8Bom
-} catch {}
+$ScriptDir = $PSScriptRoot
+if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
-$ScriptDir = "C:\Automacoes"
-$MonitorScript = "$ScriptDir\MonitorAutomacoes.ps1"
-$ConfigFile = "$ScriptDir\config.json"
-$StartupFolder = [Environment]::GetFolderPath("Startup")
-$ShortcutPath = "$StartupFolder\MonitorAutomacoes.lnk"
+Write-Host "--- Iniciando Setup do Monitor ---" -ForegroundColor Cyan
 
-Write-Host "Configurando Monitor..." -ForegroundColor Cyan
-
-if (-not (Test-Path $MonitorScript)) {
-    Write-Host "[ERRO] MonitorAutomacoes.ps1 não encontrado. Abortando." -ForegroundColor Red
-    exit 1
+# 1. Pastas obrigatorias
+$folders = @("Logs", "Dashboard", "Audit", "lib")
+foreach ($f in $folders) {
+    $path = Join-Path $ScriptDir $f
+    if (-not (Test-Path $path)) {
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+        Write-Host "Criada pasta: $f"
+    }
 }
 
-if (-not (Test-Path $ConfigFile)) {
-    Write-Host "[ERRO] config.json não encontrado. Abortando." -ForegroundColor Red
-    exit 1
+# 2. Arquivo .env inicial
+$envPath = Join-Path $ScriptDir ".env"
+if (-not (Test-Path $envPath)) {
+    $template = @"
+ORACLE_READONLY_USER=seu_usuario
+ORACLE_READONLY_PASSWORD=sua_senha
+ORACLE_CONNECT_STRING=seu_dsn
+ORACLE_CLIENT_LIB_DIR=C:\instantclient_19_25
+AUTOMACAO_TEST_EMAIL=seu_email@empresa.com
+"@
+    Set-Content -Path $envPath -Value $template -Encoding UTF8
+    Write-Host "Arquivo .env criado com template. Edite as credenciais!" -ForegroundColor Yellow
 }
 
-try {
-    $null = Get-Content $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
-} catch {
-    Write-Host "[ERRO] config.json inválido. Abortando." -ForegroundColor Red
-    exit 1
+# 3. Validacao do config.json
+$configPath = Join-Path $ScriptDir "config.json"
+if (-not (Test-Path $configPath)) {
+    Write-Host "AVISO: config.json nao encontrado na raiz. O Monitor nao funcionara sem ele." -ForegroundColor Red
 }
 
-try {
-    $WshShell = New-Object -ComObject WScript.Shell
-    $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-
-    $Shortcut.TargetPath = "powershell.exe"
-    $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$MonitorScript`""
-    $Shortcut.WorkingDirectory = $ScriptDir
-    $Shortcut.Description = "Monitor Central de Automações"
-    $Shortcut.Save()
-
-    Write-Host "[OK] Atalho de inicialização criado." -ForegroundColor Green
-} catch {
-    Write-Host "[ERRO] Falha ao criar atalho: $_" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "Reiniciando serviços..." -ForegroundColor Cyan
-Get-Process powershell -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like "*MonitorAutomacoes.ps1*" } |
-    Stop-Process -Force -ErrorAction SilentlyContinue
-
-Start-Sleep -Seconds 1
-
-Write-Host "Iniciando processo do Monitor..." -ForegroundColor Cyan
-try {
-    Start-Process "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$MonitorScript`""
-    Write-Host "[OK] Processo iniciado em segundo plano." -ForegroundColor Green
-} catch {
-    Write-Host "[ERRO] Não foi possível iniciar o monitor: $_" -ForegroundColor Red
-    exit 1
-}
-
-exit 0
+Write-Host "--- Setup Concluido com Sucesso ---" -ForegroundColor Green

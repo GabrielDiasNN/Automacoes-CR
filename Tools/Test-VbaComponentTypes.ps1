@@ -1,7 +1,7 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Test-VbaComponentTypes.ps1
 # OBJETIVO: Validar se as classes compartilhadas foram importadas corretamente 
-#           como Módulos de Classe (Type 2) e não como Módulos Padrão (Type 1).
+#           como Modulos de Classe (Type 2) e nao como Modulos Padrao (Type 1).
 # ==============================================================================
 param(
     [string]$WorkbookPath,
@@ -15,7 +15,7 @@ $excel.DisplayAlerts = $false
 $criticalClasses = @("ClsEmailComposerService", "ClsOutlookAdapter")
 $errors = 0
 
-# Se um caminho específico foi passado, valida apenas ele. Caso contrário, valida os padrões.
+# Se um caminho especifico foi passado, valida apenas ele. Caso contrario, valida os padroes.
 $projects = if ($WorkbookPath) { @($WorkbookPath) } else {
     @(
         "C:\Automacoes\Receitas Bloqueadas\Receitas Bloqueadas.xlsm",

@@ -33,7 +33,7 @@
       },
       "execId": {
         "enabled": false,
-        "label": "Execução:",
+        "label": "Execucao:",
         "fallback": "sem-exec-id"
       }
     }

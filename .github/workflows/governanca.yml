@@ -101,10 +101,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validar governanca de SKILLs
+        shell: pwsh
+        run: |
+          ./Tools/Test-SkillsGovernance.ps1 -BasePath "${{ github.workspace }}"
+
       - name: Validar governanca agregada
         shell: pwsh
         run: |
-          ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}" -OnlyGovernance -SkipVbaComponentTypes
+          ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}" -FullAudit
 
   drift-vba:
     runs-on: windows-latest

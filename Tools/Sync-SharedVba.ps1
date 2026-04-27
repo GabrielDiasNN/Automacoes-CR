@@ -1,8 +1,8 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Sync-SharedVba.ps1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Sincroniza módulos VBA compartilhados da pasta _Shared\VBA para
-#            cada automação individual, garantindo unicidade de código.
+# VERSAO: 1.0
+# DESCRICAO: Sincroniza modulos VBA compartilhados da pasta _Shared\VBA para
+#            cada automacao individual, garantindo unicidade de codigo.
 # ==============================================================================
 
 [CmdletBinding()]
@@ -32,7 +32,7 @@ if ($SharedFiles.Count -eq 0) {
 
 Write-Host "--- Sincronizando VBA Shared (Raiz: $RootPath) ---" -ForegroundColor Cyan
 
-# Identifica automações (pastas que contêm run.ps1)
+# Identifica automacoes (pastas que contem run.ps1)
 $Automacoes = Get-ChildItem -Path $RootPath -Directory | Where-Object { 
     (Test-Path (Join-Path $_.FullName "run.ps1")) -and ($_.Name -ne "Tools") -and ($_.Name -ne "_Shared") -and ($_.Name -ne "Audit")
 }
@@ -43,7 +43,7 @@ foreach ($automacao in $Automacoes) {
     foreach ($sharedFile in $SharedFiles) {
         $destPath = Join-Path $automacao.FullName $sharedFile.Name
         
-        # Se o arquivo já existe na automação, sincroniza
+        # Se o arquivo ja existe na automacao, sincroniza
         if (Test-Path $destPath) {
             $sharedHash = (Get-FileHash $sharedFile.FullName).Hash
             $localHash = (Get-FileHash $destPath).Hash

@@ -86,19 +86,11 @@ Esses entrypoints iniciam a execução do Excel, acionam a macro principal, acom
 
 ### 3. Runtime de negócio
 
-A lógica de negócio ainda está concentrada em:
+A lógica de negócio está em transição para um modelo **Híbrido de Alta Fidelidade**:
 
-- workbooks `.xlsm`
-- módulos VBA
-- consultas Power Query
-- integração com Oracle
-
-Esse runtime é responsável por:
-
-- atualizar dados
-- validar consistência operacional
-- gerar relatórios/planilhas
-- produzir saídas consumidas por e-mail e WhatsApp
+-   **Extração (Fetch):** Workbooks `.xlsm` e Power Query (conduzidos via VBA) são usados como túneis de dados seguros para o Oracle, contornando restrições de infraestrutura.
+-   **Processamento (Logic):** Scripts Python (`pandas`/`openpyxl`) assumem a validação determinística, tratamento de strings e lógica de idempotência.
+-   **Notificação (Output):** PowerShell orquestra a entrega via Outlook, utilizando o **Base64 Bridge Protocol** para garantir integridade de caracteres PT-BR entre camadas.
 
 ---
 

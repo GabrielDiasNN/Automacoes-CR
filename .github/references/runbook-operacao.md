@@ -1,165 +1,67 @@
-# Runbook de Operação — Automacoes Hub
+# Runbook de Operação — Automacoes Hub (v2.0)
+
+:: { "version": "2.0.0", "skill": "ai-native-development-standard", "description": "Guia Enterprise para Diagnóstico e Resolução de Incidentes." }
 
 ## Objetivo
-
-Guia rápido para diagnóstico e resposta inicial a incidentes operacionais do hub.
-
----
-
-## 1. Monitor sem heartbeat
-
-### Sintomas
-
-- `Monitor_Metrics.json` sem atualização recente.
-- `dashboard-state.json` sem atualização recente.
-- Dashboard parado.
-- Ausência de novas linhas no log mensal do monitor.
-
-### Verificações
-
-1. Confirmar se `MonitorAutomacoes.ps1` está em execução.
-2. Verificar timestamp dos artefatos de métricas e estado.
-3. Ler o log consolidado do monitor.
-4. Executar validação segura sem disparar tarefas:
-   - `-RunOnce -SkipTaskExecution`
-   - `-RunOnce -DryRun`
-
-### Ação inicial
-
-- Se o monitor estiver parado, reiniciar de forma controlada.
-- Se houver erro de startup, inspecionar arquivo de erro e configuração.
-- Se houver problema transitório de config, validar `config.json`.
-
-### Rollback
-
-- Reverter a última alteração em scripts/config.
-- Restaurar versão anterior validada do monitor.
+Manual técnico para resposta a incidentes, focado em resiliência, segurança e sustentabilidade por IA.
 
 ---
 
-## 2. Excel travado ou workbook bloqueado
+## 🚨 Dicionário de Exit Codes (Contrato de Execução)
 
-### Sintomas
-
-- Execução excede o tempo esperado.
-- Workbook abre em somente leitura.
-- Processo `Excel.exe` fica preso após falha.
-- Log retorna timeout de processamento ou workbook bloqueado.
-
-### Verificações
-
-1. Identificar qual automação disparou o problema.
-2. Correlacionar pelo `ExecId`.
-3. Verificar se existe processo órfão de Excel.
-4. Verificar lock de arquivo e permissões.
-5. Revisar log localizado da automação.
-
-### Ação inicial
-
-- Encerrar com segurança o processo órfão relacionado.
-- Validar se o arquivo XLSM está acessível.
-- Rodar novo teste controlado antes de reabrir agenda normal.
-
-### Rollback
-
-- Reverter mudança recente no runner.
-- Restaurar fluxo anterior caso timeout/cleanup tenha introduzido regressão.
+| Código | Categoria | Significado | Ação Sugerida |
+| --- | --- | --- | --- |
+| **0** | Sucesso | Execução concluída sem alertas. | Nenhuma. |
+| **1** | Fatal | Erro inesperado no código ou crash. | Verificar log via `ExecId`. |
+| **4** | VBA/Macro | Falha ao chamar ou executar macro Excel. | Abrir XLSM e compilar (VBE). |
+| **6** | Business | Conclusão anormal (Regra de negócio violada). | Revisar dados de entrada. |
+| **7** | Lock | Workbook em somente leitura ou travado. | Limpar processos Excel órfãos. |
+| **9** | **Pre-Flight** | **Ambiente instável (Disco, Rede ou Paths).** | **Verificar saúde da infraestrutura.** |
+| **21** | Auth | Sessão WhatsApp expirada. | Executar modo PAIRING. |
+| **23** | Cooldown | WhatsApp em período de descanso. | Aguardar e não forçar execução. |
+| **40** | Concorrência | Outra instância da tarefa está ativa. | Aguardar término da anterior. |
 
 ---
 
-## 3. WhatsApp exige reautenticação
+## 🔍 Protocolo de Diagnóstico AI-Native
 
-### Sintomas
+### 1. Falha no Pre-Flight (Exit Code 9)
+**Sintoma:** O robô nem inicia a lógica de negócio.
+1.  Localize a linha `[PS] [ERRO] [ExecId:...] Pre-Flight:...`
+2.  Verifique se o servidor Oracle `SRVDB02` responde ao ping.
+3.  Verifique se há menos de 1GB de espaço no disco `C:`.
+4.  Confirme se a pasta `Legacy/` ou o `.venv` foram movidos acidentalmente.
 
-- Exit code 21.
-- Janela de PAIRING necessária.
-- Sessão expirada.
-- Falha de envio após bootstrap do Node.
+### 2. Mojibake ou Caracteres Quebrados
+**Sintoma:** Logs ilegíveis no console ou arquivo.
+1.  Confirme se o script está usando o **Base64 Bridge Protocol**.
+2.  Logs prefixados com `B64:` devem ser lidos preferencialmente via VS Code (que decodifica via extensões) ou através da ferramenta `Tools\Open-LatestLog.ps1`.
 
-### Verificações
+### 3. Dados Mascarados ([REDACTED])
+**Sintoma:** Log exibe `g***@domain.com` ou `[REDACTED]`.
+1.  Isso é o **Auto-Masking** da `Lib-Logging` em ação.
+2.  Se precisar do dado real para depuração, consulte a base de dados original (Oracle) ou a variável de ambiente, **nunca tente desabilitar o masking em produção**.
 
-1. Confirmar erro 21 no log.
-2. Verificar presença e estado da sessão em `.wwebjs_auth`.
-3. Validar `whatsapp-config.json`.
-4. Confirmar se o bridge está em AUTO ou PAIRING.
-5. Verificar se há lock `.sendwhatsapp.lock`.
-
-### Ação inicial
-
-- Abrir fluxo PAIRING.
-- Realizar pareamento do QR Code.
-- Reexecutar teste simples controlado.
-- Confirmar que o lock foi liberado.
-- Confirmar que a mensagem não caiu em cooldown ou bloqueio concorrente.
-
-### Rollback
-
-- Voltar à versão anterior do bridge se a regressão for recente.
-- Manter envio por e-mail operacional enquanto o WhatsApp é estabilizado.
+### 4. Falha na Ponte Híbrida (Excel -> Python)
+**Sintoma:** O Excel faz o refresh, mas o Python não lê os dados.
+1.  Verifique se o processo `Excel.exe` foi encerrado corretamente.
+2.  Confirme se a tabela no Excel não mudou de nome (`VW_EXC_OB_PED_ROM_Faccao`).
+3.  Verifique se a biblioteca `openpyxl` está instalada no `.venv`.
 
 ---
 
-## 4. Falha por configuração inválida do WhatsApp
-
-### Sintomas
-
-- Exit code 22.
-- Falha imediata antes do envio.
-- Erro de validação de `whatsapp-config.json`.
-
-### Verificações
-
-1. Validar campos `target`, `message`, `runtime`, `retry`, `paths`, `idempotency`.
-2. Confirmar existência dos caminhos configurados.
-3. Confirmar anexo quando aplicável.
-
-### Ação inicial
-
-- Corrigir configuração.
-- Executar novo teste controlado.
-- Confirmar retorno 0.
+## 🛠️ Ordem Padrão de Resposta
+1.  **Isolamento:** Identifique o `ExecId` único da falha.
+2.  **Contexto:** Leia o arquivo `CONTEXT.md` da automação afetada.
+3.  **Saúde:** Execute `Tools\ValidarAutomacoes.ps1` para descartar erros de governança.
+4.  **Simulação:** Execute o script com a flag `-EmailPreviewOnly` ou em modo manual para ver o erro em tempo real.
+5.  **Rollback:** Se a alteração for recente, reverta para o commit anterior estável.
 
 ---
 
-## 5. Cooldown ou concorrência no bridge
-
-### Sintomas
-
-- Exit code 23 ou 40.
-- Envio adiado ou ignorado.
-- Lock ativo no bridge.
-
-### Verificações
-
-1. Confirmar `ExecId`.
-2. Revisar estado de idempotência.
-3. Revisar lock local.
-4. Confirmar se outra execução silenciosa está ativa.
-
-### Ação inicial
-
-- Não forçar múltiplas execuções paralelas.
-- Aguardar cooldown quando aplicável.
-- Reexecutar apenas após liberação segura.
-
----
-
-## 6. Ordem padrão de diagnóstico
-
-1. Ler log consolidado.
-2. Correlacionar `ExecId`.
-3. Verificar artefatos de estado.
-4. Verificar exit code.
-5. Rodar validação segura.
-6. Só então executar correção ou retry.
-
----
-
-## 7. Checklist antes de fechar incidente
-
-- causa provável identificada
-- impacto operacional registrado
-- evidência salva em log
-- rollback conhecido
-- teste controlado executado
-- operação normal restabelecida
+## 📝 Registro de Incidente para a IA
+Ao pedir ajuda a uma IA para resolver um problema, forneça:
+1.  O `ExecId` da falha.
+2.  O trecho do log contendo o erro.
+3.  O `CONTEXT.md` da pasta.
+4.  O resultado do Pre-Flight Check.

@@ -1,32 +1,24 @@
-# ==============================================================================
-# ARQUIVO: run.ps1
-# VERSÃO: 1.0
-# DESCRIÇÃO: Orchestrador PS-nativo para Receitas Bloqueadas.
-#            Abre Excel COM, executa a macro ExecutarProcessoCompleto,
-#            monitora log VBA e, em caso de sucesso, dispara Send-WhatsApp.ps1.
-#
-# ARGS: [ExecId] - passado positionally pelo MonitorAutomacoes.ps1
-#
-# EXIT CODES (compatíveis com VBS trigger e MonitorAutomacoes):
-#   0  — Sucesso
-#   1  — Workbook não encontrado
-#   2  — Falha ao iniciar Excel
-#   3  — Falha ao abrir workbook
-#   4  — Falha ao executar macro
-#   5  — Timeout aguardando conclusão VBA
-#   6  — VBA reportou falha ou erro fatal
-#   7  — Workbook bloqueado (somente leitura)
-#   8  — Falha de compilacao VBA (preflight)
-#  23  — WhatsApp em cooldown (pass-through do bridge)
-#  40  — WhatsApp bloqueado por concorrência (pass-through do bridge)
-# ==============================================================================
-
+<#
+.SYNOPSIS
+    Orquestrador PS-Nativo para Receitas Bloqueadas.
+.DESCRIPTION
+    Este script coordena o processamento de receitas retidas e sua distribuicao multicanal:
+    1. Pre-Flight: Diagnostico de saude (Excel, WhatsApp Config, Espaco em Disco).
+    2. Excel/VBA: Processa a logica de negocio e gera artefatos de saida (E-mail legado).
+    3. WhatsApp Bridge: Dispara notificacoes via Node.js utilizando idempotencia.
+.NOTES
+    Version: 1.2.1
+    Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract
+    Contract: legacy-vba-logic, base64-bridge-logs, preflight-v1
+#>
 [CmdletBinding()]
-param(
-    [string]$ExecId = ""  # Argumento posicional passado pelo monitor
-)
+param([string]$ExecId = "")
 
 $ErrorActionPreference = "Stop"
+
+# Configuracao Global de Encoding
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -38,46 +30,30 @@ $MacroName = "ExecutarProcessoCompleto"
 $MaxTimeoutSec = 300
 $PollIntervalMs = 3000
 
-# Tenta carregar biblioteca de logging de forma relativa
-$libPath = Join-Path (Split-Path -Parent $BasePath) "lib\Lib-Logging.psm1"
-if (Test-Path $libPath) {
-    Import-Module $libPath -Force
-}
+# Bibliotecas e Caminhos
+$projectRoot = Split-Path -Parent $ScriptDir
+$libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
+$libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
+$SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
+$WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
 
-$SendWhatsAppScript = Join-Path (Split-Path -Parent $BasePath) "lib\Send-WhatsApp.ps1"
-
-if (Get-Command Get-AutomacaoLogPath -ErrorAction SilentlyContinue) {
-    $LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
-}
-else {
-    if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
-    $LogFile = Join-Path $LogDir "ReceitasBloqueadas.log"
-}
-$vbaLogFile = $LogFile
+Import-Module $libLogging -Force
+Import-Module $libEmail   -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
-    if (Get-Command New-ExecId -ErrorAction SilentlyContinue) {
-        $ExecId = New-ExecId
-    }
-    else {
-        $ExecId = (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -Maximum 9999)
-    }
+    $ExecId = if (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 }
+$LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
 
+# Helper para Log com suporte a Base64 Interno (Skill log-standardization)
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO")
-    if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
+    if ($Msg -match '[\u00C0-\u00FF]') {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
+        $b64 = [System.Convert]::ToBase64String($bytes)
+        Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    } else {
         Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
-    }
-    else {
-        $ts = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
-        $line = "[$ts] [PS] [$Lvl] [ExecId:$ExecId] $Msg"
-        Write-Host $line
-        try {
-            if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
-            Add-Content -Path $LogFile -Value $line -Encoding UTF8
-        }
-        catch {}
     }
 }
 
@@ -89,151 +65,46 @@ function Exit-WithCode {
     exit $Code
 }
 
-# ==============================================================================
-# VALIDACAO DE AMBIENTE (RUNTIME SAFETY)
-# ==============================================================================
-if (Get-Command Test-AutomationEnvironment -ErrorAction SilentlyContinue) {
-    Write-Log "Validando requisitos de ambiente..."
-    $envTest = Test-AutomationEnvironment -ConfigPath (Join-Path $BasePath "whatsapp-config.json") -RequiredPaths @($ExcelPath, $SendWhatsAppScript)
-    if (-not $envTest.Success) {
-        Exit-WithCode 9 "FALHA DE AMBIENTE: $($envTest.Message)"
-    }
-    Write-Log "Ambiente validado: $($envTest.Message)"
+# --- BOOTSTRAP / PRE-FLIGHT ---
+$preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($ExcelPath, $SendWhatsAppScript, $WhatsAppConfig)
+if (-not $preFlight) {
+    Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
 }
 
-function Test-VbaProjectCompiles {
-    param(
-        [object]$ExcelApp,
-        [object]$Workbook
-    )
-
-    try {
-        $Workbook.Activate() | Out-Null
-    }
-    catch {
-        Write-Log "Preflight VBA: nao foi possivel ativar workbook para compilacao preventiva. Seguindo execucao. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
-        return $true
-    }
-
-    $vbe = $null
-    try {
-        $vbe = $ExcelApp.VBE
-    }
-    catch {
-        Write-Log "Preflight VBA: VBE indisponivel (possivel bloqueio de acesso programatico). Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
-        return $true
-    }
-
-    if ($null -eq $vbe) {
-        Write-Log "Preflight VBA: VBE retornou nulo. Seguindo sem compilacao preventiva." -Lvl "INFO"
-        return $true
-    }
-
-    $commandBars = $null
-    try {
-        $commandBars = $vbe.CommandBars
-    }
-    catch {
-        Write-Log "Preflight VBA: CommandBars do VBE indisponivel. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
-        return $true
-    }
-
-    if ($null -eq $commandBars) {
-        Write-Log "Preflight VBA: CommandBars retornou nulo. Seguindo sem compilacao preventiva." -Lvl "WARN"
-        return $true
-    }
-
-    $compileControl = $null
-    try {
-        $compileControl = $commandBars.FindControl(1, 578)
-    }
-    catch {
-        Write-Log "Preflight VBA: comando de compilacao inacessivel no ambiente atual. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
-        return $true
-    }
-
-    if ($null -eq $compileControl) {
-        Write-Log "Preflight VBA: comando de compilacao nao encontrado; seguindo execucao." -Lvl "WARN"
-        return $true
-    }
-
-    try {
-        $compileControl.Execute()
-        Write-Log "Preflight VBA: compilacao concluida com sucesso."
-        return $true
-    }
-    catch {
-        $compileMessage = $_.Exception.Message
-        $isGenericVbeInteropFailure = (
-            $compileMessage -match "Unexpected HRESULT" -or
-            $compileMessage -match "call to a COM component"
-        )
-
-        if ($isGenericVbeInteropFailure) {
-            Write-Log "Preflight VBA: VBE retornou HRESULT generico ao compilar. Seguindo sem bloquear a execucao. Detalhe: $compileMessage" -Lvl "WARN"
-            return $true
-        }
-
-        Write-Log "Preflight VBA: falha de compilacao detectada: $compileMessage" -Lvl "ERRO"
-        return $false
-    }
-}
-
-# ============================================================
 if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
     Invoke-LogRotation -LogPath $LogFile -KeepDays 15
 }
 
 Write-Log "========================================================================================="
-Write-Log "INICIO - run.ps1 Receitas Bloqueadas. ExecId=$ExecId"
-
-# Validar workbook
-if (-not (Test-Path $ExcelPath)) {
-    Exit-WithCode 1 "Workbook nao encontrado: $ExcelPath"
-}
-
-# VBA log unificado (mesmo arquivo que PS)
-$vbaLogFile = $LogFile
+Write-Log "INICIO - run.ps1 Receitas Bloqueadas (VBA + Node.js). ExecId=$ExecId"
 
 $excel = $null
 $wb = $null
 $success = $false
+$vbaLogFile = $LogFile
 
 try {
-    # Abrir Excel COM
+    # 0. Limpeza de Excel
+    Get-Process excel -ErrorAction SilentlyContinue | Stop-Process -Force
+
+    # 1. Abrir Excel COM
     Write-Log "Abrindo Excel COM..."
-    try {
-        $excel = New-Object -ComObject Excel.Application
-    }
-    catch {
-        Exit-WithCode 2 "Falha ao iniciar Excel COM: $_"
+    $testEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
+    if (-not [string]::IsNullOrWhiteSpace($testEmail)) {
+        Write-Log "TRAVA DE SEGURANCA: Modo de teste detectado ($testEmail)." -Lvl "WARN"
     }
 
+    try { $excel = New-Object -ComObject Excel.Application } catch { Exit-WithCode 2 "Falha Excel COM." }
     $excel.Visible = $false
     $excel.DisplayAlerts = $false
     $excel.ScreenUpdating = $false
     $excel.EnableEvents = $false
     $excel.AskToUpdateLinks = $false
 
-    # Abrir workbook
     Write-Log "Abrindo workbook: $ExcelPath"
-    try {
-        $wb = $excel.Workbooks.Open($ExcelPath)
-    }
-    catch {
-        Exit-WithCode 3 "Falha ao abrir workbook: $_"
-    }
+    try { $wb = $excel.Workbooks.Open($ExcelPath) } catch { Exit-WithCode 3 "Falha ao abrir workbook." }
+    if ($wb.ReadOnly) { Exit-WithCode 7 "Workbook em modo somente leitura." }
 
-    if ($wb.ReadOnly) {
-        Exit-WithCode 7 "Workbook aberto em modo somente leitura. Possivel bloqueio: $ExcelPath"
-    }
-
-    Write-Log "Preflight VBA: validando compilacao antes de executar macro..."
-    if (-not (Test-VbaProjectCompiles -ExcelApp $excel -Workbook $wb)) {
-        Exit-WithCode 8 "Compilacao VBA invalida. Corrija os erros no VBE antes de executar."
-    }
-
-    # Garantir que o arquivo de log VBA existe antes de capturar o baseline
     if (-not (Test-Path $vbaLogFile)) {
         if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
         New-Item -ItemType File -Path $vbaLogFile -Force | Out-Null
@@ -241,67 +112,29 @@ try {
     $initialLogSize = (Get-Item $vbaLogFile).Length
     Write-Log "Monitoramento VBA ativo. LogVBA=$vbaLogFile | Inicial=$initialLogSize bytes"
 
-    # Executar macro com fallback de nome qualificado para reduzir falhas de resolucao no COM
-    Write-Log "Executando macro: $MacroName [ExecId=$ExecId]"
-    $macroCandidates = @(
-        $MacroName,
-        "modReceitasBloqueadas.$MacroName",
-        "'Receitas Bloqueadas.xlsm'!$MacroName",
-        "'Receitas Bloqueadas.xlsm'!modReceitasBloqueadas.$MacroName"
-    )
-
-    $macroInvoked = $false
-    $macroLastError = ""
-
-    foreach ($macroCandidate in $macroCandidates) {
-        try {
-            $excel.Run($macroCandidate, $ExecId) | Out-Null
-            if ($macroCandidate -ne $MacroName) {
-                Write-Log "Macro executada via fallback qualificado: $macroCandidate" -Lvl "WARN"
-            }
-            $macroInvoked = $true
-            break
-        }
-        catch {
-            $macroLastError = $_.ToString()
-            Write-Log "Falha na chamada COM da macro '$macroCandidate': $macroLastError" -Lvl "WARN"
-        }
+    # Executar macro com fallback
+    $fullMacroName = "modReceitasBloqueadas.$MacroName"
+    Write-Log "Executando macro VBA: $fullMacroName com ExecId=$ExecId"
+    
+    try {
+        $excel.Run($fullMacroName, $ExecId) | Out-Null
+        $successVba = $true
+    } catch {
+        Write-Log "Falha na chamada da macro: $_" -Lvl "ERRO"
+        $successVba = $false
     }
 
-    if (-not $macroInvoked) {
-        # Verificar se VBA ja registrou conclusao no log antes de abortar
-        $jaTemFim = $false
-        if (Test-Path $vbaLogFile) {
-            try {
-                $logSnap = Get-Content $vbaLogFile -Raw -Encoding UTF8 -ErrorAction Stop
-                $novoConteudo = if ($logSnap.Length -gt $initialLogSize) { $logSnap.Substring([int]$initialLogSize) } else { "" }
-                $jaTemFim = $novoConteudo -match "FIM DO PROCESSO\."
-            }
-            catch {}
-        }
-
-        if (-not $jaTemFim) {
-            $isMacroUnavailable = (
-                $macroLastError -match "(?i)cannot run the macro|macro.*not available|macros?.*disabled|n.o .poss.vel executar a macro|n.o est. dispon.vel|macros?.*desabilitad"
-            )
-
-            if ($isMacroUnavailable) {
-                Exit-WithCode 4 "Macro inacessivel no Excel (possivel indisponibilidade/desabilitacao). Detalhe: $macroLastError"
-            }
-
-            Exit-WithCode 4 "Falha ao invocar macro em todas as variantes de nome. Detalhe: $macroLastError"
-        }
-
-        Write-Log "Falha COM na invocacao da macro, mas VBA ja registrou FIM DO PROCESSO no log. Continuando monitoramento." -Lvl "WARN"
+    if (-not $successVba) {
+        Exit-WithCode 4 "Falha ao invocar macro VBA."
     }
 
-    # Monitorar VBA log por conclusão
+    # Monitorar VBA log por conclusao
     Write-Log "Aguardando conclusao via log VBA (timeout: ${MaxTimeoutSec}s)..."
 
     $watchStart = Get-Date
     $previousSize = $initialLogSize
     $foundEnd = $false
-    $successVba = $false
+    $successResult = $false
 
     while (-not $foundEnd) {
         $elapsed = (New-TimeSpan -Start $watchStart -End (Get-Date)).TotalSeconds
@@ -314,101 +147,54 @@ try {
         if (-not (Test-Path $vbaLogFile)) { continue }
 
         $currentSize = (Get-Item $vbaLogFile).Length
-
         if ($currentSize -lt $previousSize) {
-            Write-Log "Log VBA truncado. Reiniciando baseline." -Lvl "WARN"
-            $initialLogSize = $currentSize
-            $previousSize = $currentSize
-            continue
+            $initialLogSize = $currentSize; $previousSize = $currentSize; continue
         }
 
         if ($currentSize -gt $previousSize) {
-            try {
-                $allContent = Get-Content $vbaLogFile -Raw -Encoding UTF8 -ErrorAction Stop
-            }
-            catch {
-                Write-Log "Falha ao ler log VBA." -Lvl "WARN"
-                $previousSize = $currentSize
-                continue
-            }
-
-            $newContent = if ($allContent.Length -gt $initialLogSize) {
-                $allContent.Substring([int]$initialLogSize)
-            }
-            else { "" }
+            try { $allContent = Get-Content $vbaLogFile -Raw -Encoding UTF8 -ErrorAction Stop } catch { continue }
+            $newContent = if ($allContent.Length -gt $initialLogSize) { $allContent.Substring([int]$initialLogSize) } else { "" }
 
             if ($newContent -match "ERRO FATAL") {
-                $successVba = $false
+                $successResult = $false; $foundEnd = $true
+            } elseif ($newContent -match "FIM DO PROCESSO\.") {
+                $successResult = ($newContent -match "Resultado=Sucesso")
                 $foundEnd = $true
             }
-            elseif ($newContent -match "FIM DO PROCESSO\.") {
-                $successVba = ($newContent -match "Resultado=Sucesso")
-                $foundEnd = $true
-
-                if ($newContent -match "Resultado=Sem envio") {
-                    Write-Log "VBA reportou tabela vazia (Sem envio). Nenhum e-mail ou WhatsApp enviado." -Lvl "WARN"
-                }
-            }
-
             $previousSize = $currentSize
         }
     }
 
-    if (-not $successVba) {
-        Exit-WithCode 6 "VBA reportou falha ou erro fatal nos logs"
-    }
-
+    if (-not $successResult) { Exit-WithCode 6 "VBA reportou falha ou erro fatal nos logs" }
+    
+    # BUFFER PARA OUTLOOK
+    Write-Log "VBA finalizado com sucesso. Aguardando 5 segundos para flush do Outlook Outbox..."
+    Start-Sleep -Seconds 5
     $success = $true
-}
-finally {
-    if ($wb) {
-        try { $wb.Close($false) } catch {}
-        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wb) | Out-Null } catch {}
-    }
-    if ($excel) {
-        try { $excel.Quit() } catch {}
-        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {}
-    }
+
+} finally {
+    if ($wb) { try { $wb.Close($false) } catch {} }
+    if ($excel) { try { $excel.Quit() } catch {} }
+    [System.GC]::Collect()
 }
 
-if (-not $success) {
-    Exit-WithCode 6 "Conclusao anormal."
-}
+if (-not $success) { Exit-WithCode 6 "Conclusao anormal do Excel/VBA." }
 
-# ============================================================
-# PÓS-EXECUÇÃO: Envio WhatsApp
-# ============================================================
-if (-not (Test-Path $SendWhatsAppScript)) {
-    Write-Log "AVISO: Send-WhatsApp.ps1 nao encontrado em: $SendWhatsAppScript. Etapa WhatsApp ignorada." -Lvl "WARN"
-    Exit-WithCode 0 "Macro concluida. WhatsApp ignorado (script ausente)."
-}
-
+# 2. WhatsApp Post-Execution
 Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
 try {
     $whatsAppProc = Start-Process "powershell.exe" `
         -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO" `
-        -WindowStyle Hidden `
-        -Wait `
-        -PassThru `
-        -ErrorAction Stop
+        -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
 
     $whatsAppExit = $whatsAppProc.ExitCode
     Write-Log "Send-WhatsApp.ps1 finalizado. ExitCode=$whatsAppExit"
 
-    if ($whatsAppExit -eq 40) {
-        Write-Log "WhatsApp ignorado por lock ativo (ExitCode 40)." -Lvl "WARN"
-        Exit-WithCode 40 ""
-    }
-    elseif ($whatsAppExit -eq 23) {
-        Write-Log "WhatsApp em cooldown de retry (ExitCode 23)." -Lvl "WARN"
-        Exit-WithCode 23 ""
-    }
-    elseif ($whatsAppExit -ne 0) {
-        Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit." -Lvl "WARN"
-    }
-}
-catch {
-    Write-Log "Falha ao iniciar Send-WhatsApp.ps1: $_" -Lvl "WARN"
+    if ($whatsAppExit -eq 40) { Exit-WithCode 40 "WhatsApp ignorado por lock ativo." }
+    elseif ($whatsAppExit -eq 23) { Exit-WithCode 23 "WhatsApp em cooldown." }
+    elseif ($whatsAppExit -ne 0) { Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit." -Lvl "WARN" }
+} catch {
+    Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
 }
 
 Exit-WithCode 0 "Processo concluido com sucesso."

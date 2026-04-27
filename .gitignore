@@ -1,31 +1,40 @@
-# Ignorar logs e arquivos de texto temporarios
+# { "version": "2.0.0", "skill": "ai-native-development-standard", "description": "Global Repository Hygiene" }
+
+# Logs e Artefatos Temporários
 **/Logs/
 *.log
-*.txt
-*.xlsx
-*.xls
+Startup_Error.txt
 Dashboard/
 
-# Ignorar arquivos temporários do Excel
+# Caches de Inteligência e Estado
+.cache_erros.json
+**/__pycache__/
+.pytest_cache/
+.gemini/
+
+# Excel Temporários e Lock
 ~$*.xlsm
 ~$*.xlsx
-~$*.xls
+**/.sendwhatsapp.lock/
 
-# Ignorar pastas de sessão do WhatsApp
+# WhatsApp Session
 .wwebjs_auth/
 .wwebjs_cache/
 
-# Artefatos de auditoria e locks operacionais
+# Auditoria
 Audit/
-**/.sendwhatsapp.lock/
 
-# Manter .xlsm ignorados por padrão (evita rastrear arquivos de auditoria)
+# Regras de Binários XLSM
 *.xlsm
+*.xlsx
 
-# Exceções: apenas os arquivos oficiais de produção abaixo devem ser rastreados
-!Montagem de Terceirizados/Validador_Notas_Montagem.xlsm
-!Receitas Emitidas/Controle de Receitas Emitidas.xlsm
+# Exceções: Apenas arquivos oficiais de produção/extração híbrida
+!Montagem de Terceirizados/Legacy/Validador_Notas_Montagem.xlsm
 !Receitas Bloqueadas/Receitas Bloqueadas.xlsm
+!Receitas Emitidas/Controle de Receitas Emitidas.xlsm
 
-# Credenciais sensiveis
+# Segredos (CRÍTICO)
 .env
+*.pem
+*.key
+.aider*

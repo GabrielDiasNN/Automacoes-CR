@@ -1,0 +1,8 @@
+# Core Libraries
+oracledb>=3.4.2
+
+# Development Tools
+black
+isort
+pylint
+mypy

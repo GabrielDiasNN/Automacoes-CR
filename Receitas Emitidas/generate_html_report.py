@@ -1,23 +1,43 @@
+# -*- coding: utf-8 -*-
 import json
 import os
 import sys
 import math
 from datetime import datetime
+import base64
+
+# Forca UTF-8 para garantir interoperabilidade
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
+
+# Configura o stdin para ler UTF-8-SIG do PowerShell (limpando o BOM automaticamente)
+if sys.stdin.encoding != 'utf-8-sig':
+    sys.stdin.reconfigure(encoding='utf-8-sig')
 
 def log(message, level="INFO", exec_id="manual"):
-    """Envia logs para o stderr para não poluir o stdout (reservado para o HTML)."""
+    """Envia logs em Base64 para o stderr (Isolamento total)."""
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-    sys.stderr.write(f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}\n")
+    raw_msg = f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}"
+    b64_msg = base64.b64encode(raw_msg.encode('utf-8')).decode('ascii')
+    sys.stderr.write(f"B64:{b64_msg}\n")
     sys.stderr.flush()
 
 def html_escape(text):
     if not text: return "&nbsp;"
-    return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;') \
-                   .replace('á', '&aacute;').replace('Á', '&Aacute;').replace('é', '&eacute;').replace('É', '&Eacute;') \
-                   .replace('í', '&iacute;').replace('Í', '&Iacute;').replace('ó', '&oacute;').replace('Ó', '&Oacute;') \
-                   .replace('ú', '&uacute;').replace('Ú', '&Uacute;').replace('ç', '&ccedil;').replace('Ç', '&Ccedil;') \
-                   .replace('ã', '&atilde;').replace('Ã', '&Atilde;').replace('õ', '&otilde;').replace('Õ', '&Otilde;') \
-                   .replace('ê', '&ecirc;').replace('Ê', '&Ecirc;').replace('â', '&acirc;').replace('Â', '&Acirc;')
+    s = str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
+    char_map = {
+        '\u00e7': '&ccedil;', '\u00c7': '&Ccedil;', '\u00e3': '&atilde;', '\u00c3': '&Atilde;',
+        '\u00f5': '&otilde;', '\u00d5': '&Otilde;', '\u00e1': '&aacute;', '\u00c1': '&Aacute;',
+        '\u00e9': '&eacute;', '\u00c9': '&Eacute;', '\u00ed': '&iacute;', '\u00cd': '&Iacute;',
+        '\u00f3': '&oacute;', '\u00d3': '&Oacute;', '\u00fa': '&uacute;', '\u00da': '&Uacute;',
+        '\u00e2': '&acirc;', '\u00c2': '&Acirc;', '\u00ea': '&ecirc;', '\u00ca': '&Ecirc;',
+        '\u00f4': '&ocirc;', '\u00d4': '&Ocirc;', '\u00e0': '&agrave;', '\u00c0': '&Agrave;',
+    }
+    for char, entity in char_map.items():
+        s = s.replace(char, entity)
+    return s
 
 def generate_html():
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
@@ -39,7 +59,7 @@ def generate_html():
     # 2. Carregar Config
     try:
         if not os.path.exists(config_path):
-            log(f"Configuracao não encontrada: {config_path}", "ERROR", exec_id)
+            log(f"Configuracao nao encontrada: {config_path}", "ERROR", exec_id)
             sys.exit(1)
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
@@ -96,7 +116,7 @@ def generate_html():
         if machines[mq]["weight"] > max_machine_weight:
             max_machine_weight = machines[mq]["weight"]
 
-    # 4. Lógica de Layout Adaptativo
+    # 4. Logica de Layout Adaptativo
     volume_score = total_weight + (machine_count * 2.2) + max_machine_weight + (recipe_count / 3)
     compress_factor = min(1.0, (volume_score - 54) / 72) if volume_score > 54 else 0
     column_count = 3 if (volume_score >= 72 or max_machine_weight >= 16 or machine_count >= 11) else 2
@@ -125,7 +145,7 @@ def generate_html():
     ob_width = int(column_width * 0.47)
     inicio_width = column_width - ob_width
 
-    # 5. Distribuição das Máquinas
+    # 5. Distribuicao das Maquinas
     columns_html = ["" for _ in range(column_count)]
     columns_current_weight = [0 for _ in range(column_count)]
     sorted_machines = sorted(machines.keys())
@@ -160,7 +180,7 @@ def generate_html():
     header_row = ""
     content_row = ""
     for i in range(column_count):
-        header_row += f"<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>M&aacute;quina / Grupo / OB / In&iacute;cio</td>"
+        header_row += f"<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>Maquina / Grupo / OB / Inicio</td>"
         content_row += f"<td width='{column_width}' valign='top' style='width:{column_width}px;padding-top:{block_pad_y}px;vertical-align:top;'>{columns_html[i] or '&nbsp;'}</td>"
         if i < column_count - 1:
             header_row += f"<td width='{column_gap}' style='width:{column_gap}px;font-size:0;line-height:0;'>&nbsp;</td>"
@@ -174,7 +194,7 @@ def generate_html():
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{title_font:.1f}pt;font-weight:bold;line-height:{title_line}px;color:#000000;text-align:center;'>{html_escape(config['layout']['title'])}</td></tr>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>{html_escape(config['layout']['subtitle'])}</td></tr>
-    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M')} | M&aacute;quinas: {machine_count} | Receitas: {recipe_count}</td></tr>
+    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M')} | Maquinas: {machine_count} | Receitas: {recipe_count}</td></tr>
     </table>
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr>{header_row}</tr><tr>{content_row}</tr>
@@ -183,7 +203,7 @@ def generate_html():
     # Envia o HTML final para STDOUT (IPC)
     sys.stdout.write(full_html)
     sys.stdout.flush()
-    log("Relatório HTML gerado com sucesso para stdout.", "INFO", exec_id)
+    log("Relatorio HTML gerado com sucesso para stdout.", "INFO", exec_id)
 
 if __name__ == "__main__":
     generate_html()
