@@ -20,8 +20,16 @@ O hub opera sob o modelo **Monitor-Trigger-Action**:
 - **Auto-Masking:** Protecao proativa de dados sensiveis em logs via `Lib-Logging.psm1`.
 - **Zombie Prevention:** Gestao rigorosa de instancias COM (Outlook/Excel) com liberacao explicita de memoria.
 
-## Knowledge Graph (Skills)
-Consulte `.github/skills/` para as diretrizes canonicas:
-- `log-standardization`: Regras de escrita e transporte de logs.
-- `automation-execution-contract`: Contratos de ID e Exit Codes.
-- `enterprise-local-automation-stack`: Padroes da stack local Windows.
+## Knowledge Graph (8 SKILLs Consolidadas)
+Consulte `.github/skills/` para as diretrizes canônicas, que agora governam rigidamente a base:
+- `enterprise-orchestration-contract`: Fluxo ponta-a-ponta e ExecId.
+- `automation-runtime-safety`: Zero Trust, Diagnósticos e Logs limpos.
+- `python-oracle-migration`: Uso de vetorização O(n), Type Hints e restrição total ao `SELECT *`.
+- `powershell-automation-monitor`: Tipagem PowerShell estrita e restrição de Try/Catch genérico.
+- `nodejs-communications`: Automação do WhatsApp e bridges `.bat`.
+- `vba-enterprise-core`: Segurança no VBE, Exportação PT-BR e COM do Outlook.
+- `html-css-enterprise-standard`: Contratos de layout e dashboard.
+- `ai-native-development-standard`: Regras de frontmatter JSON em todos os scripts.
+
+## Absolute Rules (Anti-Regression)
+- **Portability First:** É expressamente proibido comitar arquivos com caminhos absolutos (ex: `C:\...`). O projeto foi desenhado para operar puramente em variáveis e caminhos relativos (`.\` ou `$PSScriptRoot`). Existe um Linter de pre-commit blindando o repositório contra isso.

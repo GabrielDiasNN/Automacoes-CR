@@ -11,15 +11,14 @@ Você está trabalhando em um repositório de automações operacionais crítica
 - Outlook COM é usado para e-mail.
 - Node.js é usado no bridge de WhatsApp.
 
-## Regras obrigatórias
-- Preserve compatibilidade com o fluxo atual.
-- Nunca faça rewrite total.
-- Prefira diffs pequenos e reversíveis.
-- Preserve `ExecId` ponta a ponta.
-- Preserve logs humanos existentes.
-- Se criar log estruturado, faça em paralelo.
-- Não altere sem necessidade exit codes, retry, lock, idempotência ou modo PAIRING/AUTO.
-- Não remova entrypoints legados sem camada de compatibilidade.
+## Regras obrigatórias e Governança AI-Native
+- **NUNCA use caminhos absolutos** (`C:\Automacoes\...`). O repositório é 100% dinâmico e portável. Sempre use `.\` ou `$PSScriptRoot`.
+- **Zero Trust:** Nenhuma credencial, token ou senha hardcoded é permitida (use `.env`).
+- **Python & SQL:** Exija performance O(n), vetorização (Pandas/NumPy) e nunca faça `SELECT *` no Oracle.
+- **PowerShell:** Tipagem estrita (`[string]`, `[int]`) e blocos `try/catch` específicos são mandatórios.
+- As automações obedecem às 8 SKILLs canônicas presentes em `.github/skills/`.
+- Preserve compatibilidade com o fluxo atual e nunca faça rewrite total.
+- Preserve logs humanos existentes e proteja dados sensíveis (Auto-Masking).
 
 ## Prioridades técnicas
 1. Timeout e proteção contra travamento.

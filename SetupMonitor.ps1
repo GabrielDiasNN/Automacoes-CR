@@ -8,7 +8,7 @@
     3. Registra o Monitor no Agendador de Tarefas do Windows (Opcional).
 .NOTES
     Version: 1.0.1
-    Skill: ai-native-development-standard, automacao-monitor
+    Skill: ai-native-development-standard, powershell-automation-monitor
 #>
 
 $ErrorActionPreference = "Stop"

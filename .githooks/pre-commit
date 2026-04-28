@@ -90,4 +90,39 @@ else
   echo "[WARN] Script de validacao nao encontrado: $ENC_SCRIPT_PATH"
 fi
 
+ZT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-ZeroTrust.ps1"
+if [ -f "$ZT_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$ZT_SCRIPT_PATH" -RootPath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then exit $rc; fi
+fi
+
+PY_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PythonGovernance.ps1"
+if [ -f "$PY_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PY_SCRIPT_PATH" -RootPath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then exit $rc; fi
+fi
+
+SQL_SCRIPT_PATH="$REPO_ROOT/Tools/Test-SqlPerformance.ps1"
+if [ -f "$SQL_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SQL_SCRIPT_PATH" -RootPath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then exit $rc; fi
+fi
+
+PS_GOV_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PowerShellGovernance.ps1"
+if [ -f "$PS_GOV_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PS_GOV_SCRIPT_PATH" -RootPath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then exit $rc; fi
+fi
+
+PORT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PortablePaths.ps1"
+if [ -f "$PORT_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PORT_SCRIPT_PATH" -RootPath "$REPO_ROOT"
+  rc=$?
+  if [ $rc -ne 0 ]; then exit $rc; fi
+fi
+
 exit 0

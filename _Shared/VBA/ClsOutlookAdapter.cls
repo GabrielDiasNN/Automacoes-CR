@@ -11,7 +11,7 @@ Option Explicit
 
 ' {
 '   "version": "1.2.0",
-'   "skill": "ai-native-development-standard, automacao-comms-email",
+'   "skill": "ai-native-development-standard, vba-enterprise-core",
 '   "description": "COM Adapter for robust Outlook email dispatch with test redirection support.",
 '   "context": "Shared Infrastructure"
 ' }

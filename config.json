@@ -1,5 +1,5 @@
 {
-    "//": { "version": "3.7.2", "skill": "automacao-monitor", "description": "Dynamic Task Configuration Contract" },
+    "//": { "version": "3.7.2", "skill": "powershell-automation-monitor", "description": "Dynamic Task Configuration Contract" },
     "settings": {
         "logDirectory": ".\\Logs",
         "basePath": ".",

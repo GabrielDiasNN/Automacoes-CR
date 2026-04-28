@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # ARQUIVO: Test-VbaSharedDependencies.ps1
 # VERSAO: 1.0
 # DESCRICAO: Valida dependencias VBA compartilhadas (shared) no fonte local e

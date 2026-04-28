@@ -17,6 +17,8 @@ on:
       - '**/*.ps1'
       - '**/*.psm1'
       - '**/*.psd1'
+      - '**/*.py'
+      - '**/*.sql'
   push:
     branches:
       - main
@@ -33,6 +35,8 @@ on:
       - '**/*.ps1'
       - '**/*.psm1'
       - '**/*.psd1'
+      - '**/*.py'
+      - '**/*.sql'
 
 jobs:
   preparar-diff:
@@ -110,6 +114,31 @@ jobs:
         shell: pwsh
         run: |
           ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}" -FullAudit
+
+      - name: Validar Seguranca Zero Trust
+        shell: pwsh
+        run: |
+          ./Tools/Test-ZeroTrust.ps1 -RootPath "${{ github.workspace }}"
+
+      - name: Validar Python (Mypy & Pylint)
+        shell: pwsh
+        run: |
+          ./Tools/Test-PythonGovernance.ps1 -RootPath "${{ github.workspace }}"
+
+      - name: Validar Performance SQL (Oracle)
+        shell: pwsh
+        run: |
+          ./Tools/Test-SqlPerformance.ps1 -RootPath "${{ github.workspace }}"
+
+      - name: Validar PowerShell (Analyzer & Try/Catch)
+        shell: pwsh
+        run: |
+          ./Tools/Test-PowerShellGovernance.ps1 -RootPath "${{ github.workspace }}"
+
+      - name: Validar Portabilidade (Sem Caminhos Absolutos)
+        shell: pwsh
+        run: |
+          ./Tools/Test-PortablePaths.ps1 -RootPath "${{ github.workspace }}"
 
   drift-vba:
     runs-on: windows-latest

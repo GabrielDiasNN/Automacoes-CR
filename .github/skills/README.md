@@ -11,12 +11,21 @@ Este diretorio e a fonte canonica de skills do workspace.
 
 ## Taxonomia do Workspace
 
-O conjunto atual de skills esta organizado em quatro grupos:
+O conjunto de 8 SKILLs hiper-densas está organizado nas seguintes fronteiras de responsabilidade:
 
-- Fundacao compartilhada: contratos transversais usados por varias automacoes.
-- Orquestracao: define como as camadas VBS, Excel/VBA, monitor e canais se encaixam.
-- Runtime e canais: especializa PowerShell, BAT, Node.js, Outlook e WhatsApp.
-- Governanca e apresentacao: disciplina de VBA, HTML e CSS para VBE e saidas geradas.
+1. **Fundação e Governança Universal**:
+   - `ai-native-development-standard`: Metadados e estruturação para IA.
+   - `enterprise-orchestration-contract`: Idempotência e fluxo ponta a ponta (ExecId).
+   - `automation-runtime-safety`: Segurança Zero Trust, logs e tolerância a falhas.
+
+2. **Runtimes e Integrações Otimizadas**:
+   - `python-oracle-migration`: Vetorização (Pandas), SQL escalável (sem `SELECT *`) e tipagem estrita Python.
+   - `powershell-automation-monitor`: Monitor central, tratamento nominal de exceções (try/catch) e tipagem PS.
+   - `vba-enterprise-core`: Governança VBE, exportação PT-BR e Outlook COM.
+   - `nodejs-communications`: Serviços de ponte (BAT/Node.js) e automação do WhatsApp.
+
+3. **Apresentação**:
+   - `html-css-enterprise-standard`: Contratos de layout responsivo para Web (Dashboards) e Outlook.
 
 ## Estrutura Esperada
 

@@ -86,11 +86,17 @@ Esses entrypoints iniciam a execução do Excel, acionam a macro principal, acom
 
 ### 3. Runtime de negócio
 
-A lógica de negócio está em transição para um modelo **Híbrido de Alta Fidelidade**:
+A lógica de negócio está em transição agressiva para um modelo **Nativo Python + Oracle**, seguindo a SKILL `python-oracle-migration`:
 
--   **Extração (Fetch):** Workbooks `.xlsm` e Power Query (conduzidos via VBA) são usados como túneis de dados seguros para o Oracle, contornando restrições de infraestrutura.
--   **Processamento (Logic):** Scripts Python (`pandas`/`openpyxl`) assumem a validação determinística, tratamento de strings e lógica de idempotência.
--   **Notificação (Output):** PowerShell orquestra a entrega via Outlook, utilizando o **Base64 Bridge Protocol** para garantir integridade de caracteres PT-BR entre camadas.
+-   **Extração (Fetch):** Scripts nativos Python conectados diretamente ao banco Oracle utilizando queries otimizadas com bind variables (o uso de `SELECT *` é ativamente bloqueado pelo linter de performance).
+-   **Processamento (Logic):** Python com `pandas`/`numpy` assume o protagonismo exigindo complexidade algorítmica O(n) e vetorização. Loops manuais são evitados. *Type Hints* rigorosos são aplicados e validados pelo `mypy`.
+-   **Fallback e Interação:** Caso a automação dependa fortemente de interface visual legada, ela adota o **Híbrido de Alta Fidelidade** (usando Excel COM temporariamente para lidar com strings e lógicas limitadas).
+-   **Notificação (Output):** PowerShell orquestra a entrega via Outlook, utilizando o **Base64 Bridge Protocol** para garantir integridade de caracteres PT-BR.
+
+### 3.1 Governança e Segurança Zero Trust
+A arquitetura é blindada pelas 8 SKILLs consolidadas do repositório, garantindo:
+- **Zero Trust:** Nenhuma credencial hardcoded é permitida (bloqueada via CI por `Tools/Test-ZeroTrust.ps1`). Todos os secrets residem em variáveis de ambiente `.env`.
+- **Contrato Universal:** Idempotência e ExecId roteados uniformente entre todas as tecnologias.
 
 ---
 

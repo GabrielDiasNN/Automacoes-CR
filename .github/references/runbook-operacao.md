@@ -53,7 +53,7 @@ Manual técnico para resposta a incidentes, focado em resiliência, segurança e
 ## 🛠️ Ordem Padrão de Resposta
 1.  **Isolamento:** Identifique o `ExecId` único da falha.
 2.  **Contexto:** Leia o arquivo `CONTEXT.md` da automação afetada.
-3.  **Saúde:** Execute `Tools\ValidarAutomacoes.ps1` para descartar erros de governança.
+3.  **Saúde e Governança:** Execute `Tools\ValidarAutomacoes.ps1` e os novos scanners de governança (`Test-PythonGovernance.ps1`, `Test-ZeroTrust.ps1`, `Test-PowerShellGovernance.ps1`) para descartar falhas de estrutura, tipagem ou senhas vazadas que bloquearam a CI.
 4.  **Simulação:** Execute o script com a flag `-EmailPreviewOnly` ou em modo manual para ver o erro em tempo real.
 5.  **Rollback:** Se a alteração for recente, reverta para o commit anterior estável.
 
