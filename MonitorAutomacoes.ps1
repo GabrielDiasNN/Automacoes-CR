@@ -152,12 +152,36 @@ function Update-Configuration {
 
 function Remove-FinishedTask {
     $toRemove = @()
+    $agora = Get-Date
     foreach ($taskName in $script:RunningTasks.Keys) {
         $record = $script:RunningTasks[$taskName]
         $proc = if ($record -is [hashtable]) { $record.Proc } else { $record }
         if ($proc.HasExited) {
             $exitCode = $proc.ExitCode
-            Write-Log "Tarefa '$taskName' finalizada. ExitCode=$exitCode PID=$($proc.Id)"
+            $startedAt = if ($record -is [hashtable]) { $record.StartedAt } else { $agora }
+            $duration = [math]::Round(($agora - $startedAt).TotalSeconds, 1)
+            
+            Write-Log "Tarefa '$taskName' finalizada. ExitCode=$exitCode PID=$($proc.Id) Duracao=$($duration)s"
+            
+            # Atualiza Metricas
+            $script:Metrics.TasksCompleted++
+            $script:MetricsWindow.TasksCompleted++
+            if ($exitCode -ne 0) {
+                $script:Metrics.TasksFinishedNonZero++
+                $script:MetricsWindow.TasksFinishedNonZero++
+            }
+            
+            # Atualiza Historico
+            if (-not $script:TaskHistory.ContainsKey($taskName)) { $script:TaskHistory[$taskName] = New-Object System.Collections.Generic.List[PSObject] }
+            $historyEntry = [PSCustomObject]@{
+                exitCode = $exitCode
+                finishedAt = $agora.ToString("yyyy-MM-dd HH:mm:ss")
+                durationSeconds = $duration
+            }
+            $script:TaskHistory[$taskName].Insert(0, $historyEntry)
+            if ($script:TaskHistory[$taskName].Count -gt $script:TaskHistoryLimit) { $script:TaskHistory[$taskName].RemoveAt($script:TaskHistoryLimit) }
+            
+            $script:TaskLastResult[$taskName] = $historyEntry
             $toRemove += $taskName
         }
     }
@@ -173,12 +197,14 @@ function Invoke-ScheduledTask {
     $rawPath = [string]$Task.scriptPath
     $absPath = if ([System.IO.Path]::IsPathRooted($rawPath)) { $rawPath } else { Join-Path $ScriptPath $rawPath }
 
-    Write-Log "DISPARANDO: $taskName ($absPath)"
     $execId = New-ExecId
+    Write-Log "DISPARANDO: $taskName ($absPath) [ExecId:$execId]"
     try {
         $proc = Start-Process "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$absPath`" `"$execId`"" -WindowStyle Hidden -PassThru
         $script:RunningTasks[$taskName] = @{ Proc = $proc; StartedAt = $Now }
         $script:StateControl[$taskName] = $Now.ToString("yyyy-MM-dd HH:mm")
+        $script:Metrics.TasksTriggered++
+        $script:MetricsWindow.TasksTriggered++
     } catch {
         Write-Log "Falha ao iniciar '$taskName': $_" -Type "ERRO"
     }
@@ -190,6 +216,64 @@ function Test-TaskExecution {
     if ($Task.schedule.minutes -notcontains $Now.Minute) { return $false }
     if ($script:StateControl[[string]$Task.name] -eq $TimeKey) { return $false }
     return $true
+}
+
+function Update-Dashboard {
+    $agora = Get-Date
+    $script:LastHeartbeatAt = $agora
+    
+    $tasksState = @()
+    foreach ($task in $script:Config.tasks) {
+        $taskName = [string]$task.name
+        $isRunning = $script:RunningTasks.ContainsKey($taskName)
+        $runningSince = if ($isRunning) { $script:RunningTasks[$taskName].StartedAt.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
+        
+        $tasksState += [ordered]@{
+            name = $taskName
+            enabled = $task.enabled
+            isRunning = $isRunning
+            runningSince = $runningSince
+            lastResult = $script:TaskLastResult[$taskName]
+            history = $script:TaskHistory[$taskName]
+            config = $task
+        }
+    }
+
+    $state = [ordered]@{
+        monitorVersion = "3.7.0"
+        generatedAt = $agora.ToString("yyyy-MM-dd HH:mm:ss")
+        startedAt = $script:MonitorStartedAt.ToString("yyyy-MM-dd HH:mm:ss")
+        taskCount = $script:Config.tasks.Count
+        runningTasks = $script:RunningTasks.Count
+        health = @{
+            lastHeartbeatAt = $script:LastHeartbeatAt.ToString("yyyy-MM-dd HH:mm:ss")
+            lastConfigReloadAt = if ($script:LastConfigReloadAt) { $script:LastConfigReloadAt.ToString("yyyy-MM-dd HH:mm:ss") } else { "N/A" }
+            lastConfigReloadStatus = $script:LastConfigReloadStatus
+            mainLoopConsecutiveErr = $script:MainLoopConsecutiveErrors
+        }
+        metrics = @{
+            cumulative = $script:Metrics
+            window = $script:MetricsWindow
+        }
+        tasks = $tasksState
+    }
+
+    $json = $state | ConvertTo-Json -Depth 10 -Compress
+    $logDir = Get-LogDirectory
+    $statePath = Join-Path $logDir "dashboard-state.json"
+    $json | Out-File $statePath -Encoding utf8
+
+    # Gera o HTML se o template existir
+    $templatePath = Join-Path $ScriptPath ".github\templates\dashboard-modern.html"
+    if (Test-Path $templatePath) {
+        try {
+            $template = Get-Content $templatePath -Raw
+            $html = $template.Replace("__DASHBOARD_JSON__", $json).Replace("__REFRESH_SECONDS__", $script:DashboardSettings.refreshSeconds.ToString())
+            $html | Out-File $script:DashboardOutputPath -Encoding utf8
+        } catch {
+            Write-Log "Falha ao gerar HTML do Dashboard: $_" -Type "WARN"
+        }
+    }
 }
 
 # --- LOOP PRINCIPAL ---
@@ -208,6 +292,8 @@ while ($true) {
                 Invoke-ScheduledTask -Task $task -Now $agora
             }
         }
+        
+        Update-Dashboard
 
         if ($RunOnce) { break }
         Start-Sleep -Seconds 20

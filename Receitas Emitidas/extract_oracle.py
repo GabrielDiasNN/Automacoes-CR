@@ -113,36 +113,50 @@ def extract():
     ORDER BY INICIO_TING NULLS LAST
     """
 
-    connection = None
-    try:
-        log("Conectando ao Oracle para extracao Nativa (Pure-Python)...", "INFO", exec_id)
-        connection = oracledb.connect(user=user, password=password, dsn=dsn)
-        cursor = connection.cursor()
-        
-        log("Executando extracao oficial otimizada...", "INFO", exec_id)
-        cursor.execute(sql)
-        
-        columns = [col[0] for col in cursor.description]
-        rows = cursor.fetchall()
-        
-        data = []
-        for row in rows:
-            record = dict(zip(columns, row))
-            for key, value in record.items():
-                if isinstance(value, datetime): record[key] = value.isoformat()
-                elif isinstance(value, str) and value: record[key] = value.strip()
-            data.append(record)
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        connection = None
+        try:
+            if retry_count > 0:
+                log(f"Tentativa {retry_count + 1} de {max_retries}...", "WARN", exec_id)
             
-        # O Payload sai pelo Stdout limpo para o Orquestrador ler
-        sys.stdout.write(json.dumps(data, ensure_ascii=False))
-        sys.stdout.flush()
-        log(f"Extracao concluida: {len(data)} registros.", "INFO", exec_id)
-        
-    except Exception as e:
-        log(f"Erro fatal na execucao: {e}", "ERROR", exec_id)
-        sys.exit(1)
-    finally:
-        if connection: connection.close()
+            log("Conectando ao Oracle para extracao Nativa (Pure-Python)...", "INFO", exec_id)
+            connection = oracledb.connect(user=user, password=password, dsn=dsn)
+            cursor = connection.cursor()
+            
+            log("Executando extracao oficial otimizada...", "INFO", exec_id)
+            cursor.execute(sql)
+            
+            columns = [col[0] for col in cursor.description]
+            rows = cursor.fetchall()
+            
+            data = []
+            for row in rows:
+                record = dict(zip(columns, row))
+                for key, value in record.items():
+                    if isinstance(value, datetime): record[key] = value.isoformat()
+                    elif isinstance(value, str) and value: record[key] = value.strip()
+                data.append(record)
+                
+            # O Payload sai pelo Stdout limpo para o Orquestrador ler
+            sys.stdout.write(json.dumps(data, ensure_ascii=False))
+            sys.stdout.flush()
+            log(f"Extracao concluida: {len(data)} registros.", "INFO", exec_id)
+            return # Sucesso total
+            
+        except Exception as e:
+            retry_count += 1
+            log(f"Erro na extracao (Tentativa {retry_count}/{max_retries}): {e}", "ERROR", exec_id)
+            if retry_count >= max_retries:
+                sys.exit(1)
+            import time
+            time.sleep(5)
+        finally:
+            if connection:
+                try: connection.close()
+                except: pass
 
 if __name__ == "__main__":
     extract()
