@@ -213,8 +213,26 @@ function Invoke-ScheduledTask {
 function Test-TaskExecution {
     param($Task, [datetime]$Now, [string]$TimeKey)
     if (-not $Task.enabled) { return $false }
-    if ($Task.schedule.minutes -notcontains $Now.Minute) { return $false }
+    
+    # Valida Dia da Semana (0=Domingo, 6=Sabado)
+    $currentDay = [int]$Now.DayOfWeek
+    if ($Task.schedule.daysOfWeek -ne $null -and $Task.schedule.daysOfWeek.Count -gt 0) {
+        if ($Task.schedule.daysOfWeek -notcontains $currentDay) { return $false }
+    }
+
+    # Valida Hora (Se vazio, assume todas as horas - "cada hora")
+    if ($Task.schedule.hours -ne $null -and $Task.schedule.hours.Count -gt 0) {
+        if ($Task.schedule.hours -notcontains $Now.Hour) { return $false }
+    }
+
+    # Valida Minutos
+    if ($Task.schedule.minutes -ne $null -and $Task.schedule.minutes.Count -gt 0) {
+        if ($Task.schedule.minutes -notcontains $Now.Minute) { return $false }
+    }
+
+    # Previne duplicidade no mesmo minuto
     if ($script:StateControl[[string]$Task.name] -eq $TimeKey) { return $false }
+    
     return $true
 }
 
