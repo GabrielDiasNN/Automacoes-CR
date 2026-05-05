@@ -13,19 +13,19 @@ Dim scriptStart, logPath, execId
 ' ========== CONFIGURACOES DO MODULO ==========
 ' Edite os caminhos abaixo conforme o modulo
 Dim excelPath, macroName
-excelPath = "C:\Automacoes\_Template\NOME_DA_SUA_PLANILHA.xlsm"
+excelPath = ".\_Template\NOME_DA_SUA_PLANILHA.xlsm"
 macroName = "ExecutarProcesso"
-logPath   = "C:\Automacoes\_Template\Logs\Execution.log"
+logPath   = ".\_Template\Logs\Execution.log"
 
 ' [FEATURE FLAG] Monitoramento de Timeout via Log VBA (Estilo "Robo Fiscal")
 Dim USE_TIMEOUT_MONITOR, vbaLogPath, maxTimeoutSeconds
 USE_TIMEOUT_MONITOR = False
-vbaLogPath          = "C:\Automacoes\_Template\Logs\VBA_Internal.log"
+vbaLogPath          = ".\_Template\Logs\VBA_Internal.log"
 maxTimeoutSeconds   = 300
 
 ' [FEATURE FLAG] Script Pos-Execucao (Ex: WhatsApp Node.js Bridge)
 Dim POST_EXECUTION_BAT
-POST_EXECUTION_BAT  = "" ' Ex: "C:\Automacoes\_Template\RunWhatsApp.bat"
+POST_EXECUTION_BAT  = "" ' Ex: ".\_Template\RunWhatsApp.bat"
 ' =============================================
 
 scriptStart = Timer
@@ -270,3 +270,4 @@ End If
 WriteLog "INFO", "FIM - VBScript com sucesso. elapsedSec=" & ElapsedSeconds()
 WriteLog "INFO", "================================================================================"
 WScript.Quit 0
+

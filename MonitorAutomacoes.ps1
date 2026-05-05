@@ -23,7 +23,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptPath = $PSScriptRoot
 if (-not $ScriptPath) { $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path }
-if (-not $ScriptPath) { $ScriptPath = "C:\Automacoes" }
+if (-not $ScriptPath) { $ScriptPath = "." }
 
 # Bibliotecas e Dependencias Criticas
 $libLogging = Join-Path $ScriptPath "lib\Lib-Logging.psm1"
@@ -48,7 +48,7 @@ if (Test-Path $libLogging) {
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 # Forca o console host para UTF-8 (Blindagem visual no console/log)
-try { if ($host.Name -eq "ConsoleHost") { chcp 65001 | Out-Null } } catch {}
+try { if ($host.Name -eq "ConsoleHost") { chcp 65001 | Out-Null } } catch [System.Exception] {}
 
 $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
@@ -85,7 +85,7 @@ catch [System.Threading.AbandonedMutexException] {
     $script:MutexAcquired = $true
     Write-Log "Mutex abandonado detectado. Assumindo controle desta instancia." -Type "WARN"
 }
-catch {
+catch [System.Exception] {
     Write-Log "Falha ao adquirir Mutex: $_" -Type "ERRO"
     Exit 1
 }
@@ -133,7 +133,7 @@ function Update-Configuration {
         $sha = New-Object System.Security.Cryptography.SHA256Managed
         $currentHash = [System.BitConverter]::ToString($sha.ComputeHash($stream)).Replace("-", "")
         $stream.Close(); $stream.Dispose()
-    } catch { return $false }
+    } catch [System.Exception] { return $false }
 
     if ($Force -or $currentHash -ne $script:ConfigHash) {
         try {
@@ -142,7 +142,7 @@ function Update-Configuration {
             $script:ConfigHash = $currentHash
             Write-Log "Configuracao carregada. Tarefas: $($script:Config.tasks.Count) | Hash=$($currentHash.Substring(0,8))"
             return $true
-        } catch {
+        } catch [System.Exception] {
             Write-Log "Falha ao carregar config.json: $_" -Type "ERRO"
             return $false
         }
@@ -205,7 +205,7 @@ function Invoke-ScheduledTask {
         $script:StateControl[$taskName] = $Now.ToString("yyyy-MM-dd HH:mm")
         $script:Metrics.TasksTriggered++
         $script:MetricsWindow.TasksTriggered++
-    } catch {
+    } catch [System.Exception] {
         Write-Log "Falha ao iniciar '$taskName': $_" -Type "ERRO"
     }
 }
@@ -288,7 +288,7 @@ function Update-Dashboard {
             $template = Get-Content $templatePath -Raw
             $html = $template.Replace("__DASHBOARD_JSON__", $json).Replace("__REFRESH_SECONDS__", $script:DashboardSettings.refreshSeconds.ToString())
             $html | Out-File $script:DashboardOutputPath -Encoding utf8
-        } catch {
+        } catch [System.Exception] {
             Write-Log "Falha ao gerar HTML do Dashboard: $_" -Type "WARN"
         }
     }
@@ -316,7 +316,7 @@ while ($true) {
         if ($RunOnce) { break }
         Start-Sleep -Seconds 20
     }
-    catch {
+    catch [System.Exception] {
         Write-Log "ERRO NO LOOP: $_" -Type "ERRO"
         Start-Sleep -Seconds 30
     }

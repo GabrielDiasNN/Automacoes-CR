@@ -12,7 +12,7 @@ function Get-RepositoryRoot {
     try {
         $gitRoot = (git rev-parse --show-toplevel 2>$null)
     }
-    catch {
+    catch [System.Exception] {
         $gitRoot = ""
     }
 
@@ -205,3 +205,4 @@ if ($allVerbViolations.Count -gt 0) {
 
 Write-Host "Dica: nomes de funcao devem seguir Verbo-Substantivo e o verbo deve existir em Get-Verb."
 exit 1
+

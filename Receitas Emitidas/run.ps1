@@ -133,8 +133,9 @@ try {
     Write-Log "FIM - Processo concluido com sucesso."
     Write-Log "========================================================================================="
     
-} catch {
+} catch [System.Exception] {
     Write-Log "ERRO FATAL: $_" -Lvl "ERRO"; exit 1
 } finally {
     [System.GC]::Collect()
 }
+

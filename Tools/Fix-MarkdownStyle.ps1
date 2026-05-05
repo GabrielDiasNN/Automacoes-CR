@@ -144,7 +144,7 @@ foreach ($filePath in $targetFiles) {
     try {
         $lines = Get-Content -LiteralPath $filePath -ErrorAction Stop
     }
-    catch {
+    catch [System.Exception] {
         Write-Host ("[SKIP] Nao foi possivel ler '$filePath': $_")
         continue
     }
@@ -166,7 +166,7 @@ foreach ($filePath in $targetFiles) {
     try {
         Write-Utf8File -FilePath $filePath -Content $result.Content
     }
-    catch {
+    catch [System.Exception] {
         Write-Host ("[SKIP] Nao foi possivel gravar '$filePath': $_")
         continue
     }

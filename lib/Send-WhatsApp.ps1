@@ -79,7 +79,7 @@ function Test-BridgeRunning {
         Where-Object { $_.CommandLine -match [regex]::Escape($NodeScript) }
         return ($null -ne $match)
     }
-    catch { return $false }
+    catch [System.Exception] { return $false }
 }
 
 function Invoke-AcquireLock {
@@ -88,7 +88,7 @@ function Invoke-AcquireLock {
         if (-not (Test-BridgeRunning)) {
             Write-Log "LOCK: lock obsoleto detectado. Tentando limpar: $LockDir"
             try { Remove-Item $LockDir -Recurse -Force -ErrorAction Stop }
-            catch {
+            catch [System.Exception] {
                 Write-Log "LOCK: nao foi possivel limpar lock obsoleto. Abortando." -Lvl "WARN"
                 return $false
             }
@@ -108,7 +108,7 @@ function Invoke-AcquireLock {
         Write-Log "LOCK: lock adquirido em: $LockDir"
         return $true
     }
-    catch {
+    catch [System.Exception] {
         Write-Log "LOCK: falha ao adquirir lock: $_" -Lvl "WARN"
         return $false
     }
@@ -120,7 +120,7 @@ function Invoke-ReleaseLock {
             Remove-Item $LockDir -Recurse -Force -ErrorAction Stop
             Write-Log "LOCK: lock liberado."
         }
-        catch {
+        catch [System.Exception] {
             Write-Log "LOCK: nao foi possivel liberar lock em $LockDir" -Lvl "WARN"
         }
     }
@@ -171,7 +171,7 @@ if ($Mode -eq "PAIRING") {
         Write-Log "=================================================================================="
         exit 0
     }
-    catch {
+    catch [System.Exception] {
         Write-Log "ERRO: Falha ao abrir janela interativa: $_" -Lvl "ERRO"
         Write-Log "FIM - Finalizado. ExitCode=$EXIT_LAUNCH_FAIL"
         Write-Log "=================================================================================="
@@ -190,7 +190,7 @@ if (-not $sessionExists) {
         Write-Log "=================================================================================="
         exit 0
     }
-    catch {
+    catch [System.Exception] {
         Write-Log "ERRO: Falha ao abrir janela de pairing: $_" -Lvl "ERRO"
         Write-Log "FIM - Finalizado. ExitCode=$EXIT_LAUNCH_FAIL"
         Write-Log "=================================================================================="
@@ -222,7 +222,7 @@ try {
         -ErrorAction Stop
     $nodeExit = $proc.ExitCode
 }
-catch {
+catch [System.Exception] {
     Write-Log "ERRO: Falha ao iniciar processo Node: $_" -Lvl "ERRO"
     Invoke-ReleaseLock
     Write-Log "FIM - Finalizado com erro de processo. ExitCode=20"
@@ -242,7 +242,7 @@ if ($nodeExit -eq $EXIT_REAUTH) {
             Remove-Item $SessionDir -Recurse -Force -ErrorAction Stop
             Write-Log "REAUTH: Sessao deletada com sucesso."
         }
-        catch {
+        catch [System.Exception] {
             Write-Log "REAUTH: Nao foi possivel deletar sessao: $_" -Lvl "WARN"
         }
     }
@@ -252,7 +252,7 @@ if ($nodeExit -eq $EXIT_REAUTH) {
         Start-Process "cmd" -ArgumentList "/k `"echo Iniciando WhatsApp Re-Pairing... && $launchArg`"" -WindowStyle Normal -ErrorAction Stop
         Write-Log "Janela de re-pairing aberta com sucesso."
     }
-    catch {
+    catch [System.Exception] {
         Write-Log "ERRO: Falha ao abrir janela de re-pairing: $_" -Lvl "ERRO"
     }
     Write-Log "FIM - Finalizado. ExitCode=$EXIT_REAUTH"
@@ -268,3 +268,4 @@ if ($nodeExit -eq $EXIT_COOLDOWN) {
 Write-Log "FIM - Finalizado. ExitCode=$nodeExit"
 Write-Log "=================================================================================="
 exit $nodeExit
+

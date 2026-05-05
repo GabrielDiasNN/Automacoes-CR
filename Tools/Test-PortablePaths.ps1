@@ -20,7 +20,7 @@ if ($targetFiles.Count -eq 0) {
 }
 
 $hasErrors = $false
-# Regex detectando caminhos absolutos hardcoded, ex: C:\Automacoes, D:\Projetos, C:/Users
+# Regex detectando caminhos absolutos hardcoded, ex: ., D:\Projetos, C:/Users
 $absolutePathRegex = '(?i)[a-z]:[\\/](?!instantclient)[a-z0-9_ -]+'
 
 foreach ($file in $targetFiles) {

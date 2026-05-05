@@ -97,7 +97,7 @@ function Remove-ComObjectReference {
     try {
         [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($Obj)
     }
-    catch { } # Ignorado
+    catch [System.Exception] { } # Ignorado
 }
 
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
@@ -127,7 +127,7 @@ try {
     $excel.EnableEvents = $false
     $excel.AskToUpdateLinks = $false
 }
-catch {
+catch [System.Exception] {
     Write-Log -Level "ERROR" -Message "Failed to start Excel.Application: $_"
     exit 1
 }
@@ -191,13 +191,13 @@ foreach ($xlsm in $xlsmFiles) {
             }
         }
     }
-    catch {
+    catch [System.Exception] {
         $errorMessage = [string]$_
         Write-Log -Level "ERROR" -Message ("Failed to export {0}: {1}" -f $relativeSource, $errorMessage)
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
+            try { $wb.Close($false) | Out-Null } catch [System.Exception] { } # Ignorado
             Remove-ComObjectReference -Obj $wb
         }
     }
@@ -228,7 +228,7 @@ try {
         $excel.Quit()
     }
 }
-catch { } # Ignorado
+catch [System.Exception] { } # Ignorado
 finally {
     Remove-ComObjectReference -Obj $excel
     [System.GC]::Collect()

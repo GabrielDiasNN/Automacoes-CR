@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # ARQUIVO: SimularErroAcertoMontagem.ps1
 # VERSAO: 1.1
 # DESCRICAO: Executa validacao E2E da Montagem com tres cenarios controlados:
@@ -13,8 +13,8 @@
 
 [CmdletBinding()]
 param(
-    [string]$WorkbookPath = "C:\Automacoes\Montagem de Terceirizados\Validador_Notas_Montagem.xlsm",
-    [string]$ReenviarScriptPath = "C:\Automacoes\Montagem de Terceirizados\ReenviarAlertaErros.ps1",
+    [string]$WorkbookPath = ".\Montagem de Terceirizados\Validador_Notas_Montagem.xlsm",
+    [string]$ReenviarScriptPath = ".\Montagem de Terceirizados\ReenviarAlertaErros.ps1",
     [string]$LogPath = "",
     [switch]$SkipExecution,
     [switch]$NoSend
@@ -109,7 +109,7 @@ function Remove-ComObject {
     try {
         [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($Object)
     }
-    catch {
+    catch [System.Exception] {
         # Ignorado
     }
 }
@@ -224,11 +224,11 @@ function Get-SimulationRows {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
+            try { $wb.Close($false) | Out-Null } catch [System.Exception] { } # Ignorado
             Remove-ComObject -Object $wb
         }
         if ($excel) {
-            try { $excel.Quit() } catch { } # Ignorado
+            try { $excel.Quit() } catch [System.Exception] { } # Ignorado
             Remove-ComObject -Object $excel
         }
         [System.GC]::Collect()
@@ -291,11 +291,11 @@ function Set-ReferenceValue {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
+            try { $wb.Close($false) | Out-Null } catch [System.Exception] { } # Ignorado
             Remove-ComObject -Object $wb
         }
         if ($excel) {
-            try { $excel.Quit() } catch { } # Ignorado
+            try { $excel.Quit() } catch [System.Exception] { } # Ignorado
             Remove-ComObject -Object $excel
         }
         [System.GC]::Collect()
@@ -350,11 +350,11 @@ function Reset-SimulationMarkers {
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
+            try { $wb.Close($false) | Out-Null } catch [System.Exception] { } # Ignorado
             Remove-ComObject -Object $wb
         }
         if ($excel) {
-            try { $excel.Quit() } catch { } # Ignorado
+            try { $excel.Quit() } catch [System.Exception] { } # Ignorado
             Remove-ComObject -Object $excel
         }
         [System.GC]::Collect()
@@ -489,7 +489,7 @@ try {
     Write-Stage "Simulacao E2E concluida: erro, alteracao e acerto confirmados." "INFO"
     exit 0
 }
-catch {
+catch [System.Exception] {
     Write-Stage "Falha na simulacao: $($_.Exception.Message)" "ERRO"
     exit 1
 }
@@ -499,7 +499,7 @@ finally {
             [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexSecondary -NewValue $originalRefSecondary -OriginalRef ([ref]$originalRefSecondary) -WorksheetName ([ref]$worksheetName))
             Write-Stage "Valor original da linha B restaurado automaticamente no bloco de seguranca." "WARN"
         }
-        catch {
+        catch [System.Exception] {
             Write-Stage "Falha ao restaurar linha B automaticamente: $($_.Exception.Message)" "ERRO"
         }
     }
@@ -509,8 +509,9 @@ finally {
             [void](Set-ReferenceValue -Path $WorkbookPath -RowIndex $rowIndexPrimary -NewValue $originalRefPrimary -OriginalRef ([ref]$originalRefPrimary) -WorksheetName ([ref]$worksheetName))
             Write-Stage "Valor original da linha A restaurado automaticamente no bloco de seguranca." "WARN"
         }
-        catch {
+        catch [System.Exception] {
             Write-Stage "Falha ao restaurar linha A automaticamente: $($_.Exception.Message)" "ERRO"
         }
     }
 }
+

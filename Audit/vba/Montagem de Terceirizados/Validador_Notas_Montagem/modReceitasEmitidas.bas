@@ -5,7 +5,7 @@ Private gLogFile As String
 Private gLogReady As Boolean
 Private gInLogWrite As Boolean
 Private Const LOG_MAX_LINES As Long = 5000
-Private Const LOG_FOLDER As String = "C:\Automacoes\Receitas Emitidas\Logs"
+Private Const LOG_FOLDER As String = ".\Receitas Emitidas\Logs"
 Private Const DEFAULT_RECIPIENT_TO As String = "acacio.klann@costaricamalhas.ind.br"
 Private Const CONFIG_SHEET_NAME As String = "Config"
 Private Const CONFIG_TABLE_NAME As String = "EnderecosEmailDestinatarios"
@@ -1375,3 +1375,4 @@ Public Sub TestarLogger()
 
     Debug.Print "Concluido. Verifique: " & gLogFile
 End Sub
+

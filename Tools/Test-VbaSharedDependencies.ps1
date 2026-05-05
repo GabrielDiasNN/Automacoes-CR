@@ -101,11 +101,11 @@ function Test-WorkbookSharedComponents {
     }
     finally {
         if ($null -ne $wb) {
-            try { $wb.Close($false) | Out-Null } catch {}
+            try { $wb.Close($false) | Out-Null } catch [System.Exception] {}
         }
         if ($null -ne $excel) {
-            try { $excel.Quit() } catch {}
-            try { [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($excel) } catch {}
+            try { $excel.Quit() } catch [System.Exception] {}
+            try { [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($excel) } catch [System.Exception] {}
         }
         [System.GC]::Collect()
         [System.GC]::WaitForPendingFinalizers()
@@ -200,3 +200,4 @@ if ($allIssues.Count -gt 0) {
 
 Write-Log "INFO" "Dependencias shared VBA validadas com sucesso."
 exit 0
+

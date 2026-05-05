@@ -55,7 +55,7 @@ try {
     Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value 1
     Write-Log "INFO" "VBOM: acesso habilitado (valor anterior: $prevVal)"
 }
-catch {
+catch [System.Exception] {
     Write-Log "WARN" "Nao foi possivel ajustar o registro VBOM: $_"
 }
 
@@ -97,7 +97,7 @@ try {
 
     $importedType = [int]$importedComponent.Type
     if ($importedType -ne 1) {
-        try { $vbProj.VBComponents.Remove($importedComponent) } catch { } # Ignorado
+        try { $vbProj.VBComponents.Remove($importedComponent) } catch [System.Exception] { } # Ignorado
         throw "Modulo '$ModName' importado com tipo incorreto ($importedType). Esperado: 1 (StdModule)."
     }
 
@@ -109,10 +109,10 @@ try {
 }
 finally {
     if ($null -ne $wb) {
-        try { $wb.Close($false) } catch { } # Ignorado
+        try { $wb.Close($false) } catch [System.Exception] { } # Ignorado
     }
     if ($null -ne $excel) {
-        try { $excel.Quit() } catch { } # Ignorado
+        try { $excel.Quit() } catch [System.Exception] { } # Ignorado
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     }
 
@@ -122,14 +122,14 @@ finally {
             Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal
             Write-Log "INFO" "VBOM: valor restaurado para $prevVal"
         }
-        catch { } # Ignorado
+        catch [System.Exception] { } # Ignorado
     }
     else {
         try {
             Remove-ItemProperty -Path $regPath -Name "AccessVBOM" -ErrorAction SilentlyContinue
             Write-Log "INFO" "VBOM: propriedade removida (estado anterior)"
         }
-        catch { } # Ignorado
+        catch [System.Exception] { } # Ignorado
     }
 }
 

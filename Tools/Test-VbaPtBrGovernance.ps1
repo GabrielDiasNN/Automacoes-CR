@@ -8,7 +8,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$BasePath = "C:\Automacoes",
+    [string]$BasePath = ".",
     [switch]$FailOnTermWarnings
 )
 
@@ -273,3 +273,4 @@ if ($FailOnTermWarnings -and $termFindings.Count -gt 0) {
 }
 
 exit 0
+

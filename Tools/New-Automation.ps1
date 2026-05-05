@@ -42,12 +42,18 @@ param(
     [switch]$DryRun,
 
     # Caminho raiz das automacoes
-    [string]$BasePath = "C:\Automacoes"
-)
+    [string]$BasePath = ""
+    )
 
-$ErrorActionPreference = "Stop"
+    $ErrorActionPreference = "Stop"
 
-$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    if ([string]::IsNullOrWhiteSpace($BasePath)) {
+    $BasePath = Split-Path -Parent $PSScriptRoot
+    if (-not $BasePath) { $BasePath = "." }
+    }
+
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 
 function Write-Step {
     param([string]$Msg, [string]$Type = "INFO")

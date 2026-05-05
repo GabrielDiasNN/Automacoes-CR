@@ -11,17 +11,17 @@ ECHO ========================================================
 ECHO.
 ECHO Passo 1: Verificando arquivos necessarios...
 
-IF NOT EXIST "C:\Automacoes\MonitorAutomacoes.ps1" (
+IF NOT EXIST "%~dp0MonitorAutomacoes.ps1" (
 ECHO [FALTA] MonitorAutomacoes.ps1 nao encontrado.
 GOTO :ARQUIVO_FALTANDO
 )
 
-IF NOT EXIST "C:\Automacoes\SetupMonitor.ps1" (
+IF NOT EXIST "%~dp0SetupMonitor.ps1" (
 ECHO [FALTA] SetupMonitor.ps1 nao encontrado.
 GOTO :ARQUIVO_FALTANDO
 )
 
-IF NOT EXIST "C:\Automacoes\config.json" (
+IF NOT EXIST "%~dp0config.json" (
 ECHO [FALTA] config.json nao encontrado.
 GOTO :ARQUIVO_FALTANDO
 )
@@ -29,7 +29,7 @@ GOTO :ARQUIVO_FALTANDO
 ECHO [OK] Todos os arquivos encontrados.
 ECHO.
 ECHO Passo 2: Configurando inicializacao automatica...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Automacoes\SetupMonitor.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0SetupMonitor.ps1"
 
 IF %ERRORLEVEL% EQU 0 (
 COLOR 2F
@@ -41,7 +41,7 @@ ECHO.
 ECHO 1. O Monitor foi configurado para iniciar com o Windows.
 ECHO 2. Uma instancia de teste ja foi iniciada.
 ECHO.
-ECHO Verifique a pasta C:\Automacoes\Logs para confirmar.
+ECHO Verifique a pasta %~dp0Logs para confirmar.
 ECHO.
 PAUSE
 EXIT
@@ -58,6 +58,6 @@ EXIT
 :ARQUIVO_FALTANDO
 COLOR 4F
 ECHO.
-ECHO [ERRO CRITICO] Arquivos obrigatorios nao encontrados em C:\Automacoes\
+ECHO [ERRO CRITICO] Arquivos obrigatorios nao encontrados em %~dp0
 ECHO.
 PAUSE

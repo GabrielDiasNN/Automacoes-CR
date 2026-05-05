@@ -19,10 +19,10 @@ Dim fso
 Dim scriptStart
 Dim execId
 
-Const EXCEL_PATH = "C:\Automacoes\Receitas Emitidas\Controle de Receitas Emitidas.xlsm"
+Const EXCEL_PATH = ".\Receitas Emitidas\Controle de Receitas Emitidas.xlsm"
 Const MACRO_NAME = "AtualizarEEnviarOutlook"
-Const LOG_PATH_MASTER = "C:\Automacoes\Receitas Emitidas\Logs\ReceitasEmitidas.log"
-Const LOG_PATH_VBA = "C:\Automacoes\Receitas Emitidas\Logs\ReceitasEmitidas.log"
+Const LOG_PATH_MASTER = ".\Receitas Emitidas\Logs\ReceitasEmitidas.log"
+Const LOG_PATH_VBA = ".\Receitas Emitidas\Logs\ReceitasEmitidas.log"
 
 Const USE_TIMEOUT_MONITOR = True
 Const MAX_TIMEOUT_SECONDS = 300
@@ -449,3 +449,4 @@ RunPostExecutionBat POST_EXECUTION_BAT, execId
 WriteLog "INFO", "FIM - VBScript com sucesso. elapsedSec=" & ElapsedSeconds()
 WriteLog "INFO", "================================================================================"
 WScript.Quit 0
+

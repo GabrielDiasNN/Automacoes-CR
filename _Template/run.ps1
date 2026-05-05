@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     TEMPLATE: Orquestrador PowerShell (AI-Native).
 .DESCRIPTION
@@ -64,9 +64,10 @@ try {
     # 1. LOGICA DE NEGOCIO AQUI
     Write-Log "Executando tarefas..."
     
-} catch {
+} catch [System.Exception] {
     Write-Log "ERRO FATAL: $_" -Lvl "ERRO"; exit 1
 } finally {
     Write-Log "FIM - Processo finalizado."
 }
 
+

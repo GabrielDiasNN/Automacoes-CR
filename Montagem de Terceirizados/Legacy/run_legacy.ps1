@@ -1,4 +1,4 @@
-﻿# ===============================================================================
+# ===============================================================================
 
 
 # ARQUIVO: run.ps1
@@ -265,7 +265,7 @@ function Write-Log {
         }
 
 
-        catch {}
+        catch [System.Exception] {}
 
 
     }
@@ -340,7 +340,7 @@ function Test-VbaProjectCompiles {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         Write-Log "Preflight VBA: nao foi possivel ativar workbook para compilacao preventiva. Seguindo execucao. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
@@ -367,7 +367,7 @@ function Test-VbaProjectCompiles {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         Write-Log "Preflight VBA: VBE indisponivel (possivel bloqueio de acesso programatico). Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
@@ -409,7 +409,7 @@ function Test-VbaProjectCompiles {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         Write-Log "Preflight VBA: CommandBars do VBE indisponivel. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
@@ -451,7 +451,7 @@ function Test-VbaProjectCompiles {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         Write-Log "Preflight VBA: comando de compilacao inacessivel no ambiente atual. Seguindo sem compilacao preventiva. Detalhe: $($_.Exception.Message)" -Lvl "WARN"
@@ -496,7 +496,7 @@ function Test-VbaProjectCompiles {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         $compileMessage = $_.Exception.Message
@@ -655,7 +655,7 @@ try {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         Exit-WithCode 2 "Falha ao iniciar Excel COM: $_"
@@ -697,7 +697,7 @@ try {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         Exit-WithCode 3 "Falha ao abrir workbook: $_"
@@ -853,7 +853,7 @@ try {
         }
 
 
-        catch {
+        catch [System.Exception] {
 
 
             $macroLastError = $_.ToString()
@@ -1048,7 +1048,7 @@ try {
             }
 
 
-            catch {
+            catch [System.Exception] {
 
 
                 Write-Log "Falha ao ler log VBA durante monitoramento." -Lvl "WARN"
@@ -1165,7 +1165,7 @@ finally {
             }
 
 
-            catch {
+            catch [System.Exception] {
 
 
                 $saveFailed = $true
@@ -1180,10 +1180,10 @@ finally {
         }
 
 
-        try { $wb.Close($false) } catch {}
+        try { $wb.Close($false) } catch [System.Exception] {}
 
 
-        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wb) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wb) | Out-Null } catch [System.Exception] {}
 
 
     }
@@ -1192,10 +1192,10 @@ finally {
     if ($excel) {
 
 
-        try { $excel.Quit() } catch {}
+        try { $excel.Quit() } catch [System.Exception] {}
 
 
-        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null } catch [System.Exception] {}
 
 
     }
@@ -1235,6 +1235,7 @@ else {
 
 
 }
+
 
 
 

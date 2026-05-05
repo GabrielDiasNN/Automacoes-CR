@@ -5,7 +5,7 @@ Private m_execId As String
 Private m_blnInLogWrite As Boolean
 Private m_outlookAdapter As ClsOutlookAdapter
 
-Private Const LOG_BASE_FOLDER As String = "C:\Automacoes\Receitas Bloqueadas\Logs"
+Private Const LOG_BASE_FOLDER As String = ".\Receitas Bloqueadas\Logs"
 Private Const NOME_TABELA_DADOS As String = "ReceitasBloqueadas"
 Private Const NOME_TABELA_EMAIL As String = "EnderecosEmailDestinatarios"
 Private Const ABA_CONFIG As String = "Config"
@@ -838,5 +838,6 @@ Public Sub TestarLogger()
 
     Debug.Print "Concluido. Verifique: " & ObterCaminhoLog()
 End Sub
+
 
 

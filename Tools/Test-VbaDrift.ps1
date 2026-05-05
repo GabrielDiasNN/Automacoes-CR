@@ -43,7 +43,7 @@ function Get-NormalizedHash {
         $hash = $sha.ComputeHash($cleaned)
         return ([BitConverter]::ToString($hash)) -replace '-', ''
     }
-    catch { return $null }
+    catch [System.Exception] { return $null }
 }
 
 # ------------------------------------------------------------------
@@ -221,3 +221,4 @@ exit 1
     A ferramenta valida a integridade do codigo VBA antes do commit.
     Certifique-se de usar caminhos relativos ao repositorio.
 #>
+

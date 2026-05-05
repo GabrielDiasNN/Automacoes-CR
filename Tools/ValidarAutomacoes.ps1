@@ -1,7 +1,7 @@
-﻿# cSpell:words cscript nologo RESUMO
+# cSpell:words cscript nologo RESUMO
 [CmdletBinding()]
 param(
-    [string]$BasePath = "C:\Automacoes",
+    [string]$BasePath = ".",
     [switch]$SkipGovernance,
     [switch]$SkipSkillsGovernance,
     [switch]$SkipDashboardTemplateGovernance,
@@ -424,7 +424,7 @@ function Start-Automacao {
     try {
         Wait-Process -Id $p.Id -Timeout $TimeoutSec -ErrorAction Stop
     }
-    catch {
+    catch [System.Exception] {
         $timedOut = $true
     }
 
@@ -584,3 +584,5 @@ Write-Host '=== RESUMO FINAL ==='
 foreach ($kv in $results.GetEnumerator()) {
     Write-Host ($kv.Key + '=' + $kv.Value)
 }
+
+

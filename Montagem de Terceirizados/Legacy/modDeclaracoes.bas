@@ -129,4 +129,5 @@ Public Declare Function GetAsyncKeyState Lib "user32" (ByVal vKey As Long) As In
     Public Const LOG_MAX_BACKUPS       As Long = 5
     Public Const LOG_SEPARADOR_DUPLO   As String = "================================================================================"
     Public Const LOG_SEPARADOR_SIMPLES As String = "--------------------------------------------------------------------------------"
-    Public Const LOG_PATH_PADRAO       As String = "C:\Automacoes\Montagem de Terceirizados\Logs\VBA_Internal.log"
+    Public Const LOG_PATH_PADRAO       As String = ".\Montagem de Terceirizados\Logs\VBA_Internal.log"
+

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$BasePath = "C:\Automacoes"
+    [string]$BasePath = "."
 )
 
 $ErrorActionPreference = "Stop"
@@ -296,3 +296,4 @@ Format-Table -Wrap -AutoSize |
 Out-Host
 
 exit 2
+

@@ -14,7 +14,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "EXEC_ID=%~1"
 set "MODE=%~2"
 
-set "BASE_DIR=C:\Automacoes\Receitas Bloqueadas"
+set "BASE_DIR=.\Receitas Bloqueadas"
 set "LOG_FILE=%BASE_DIR%\ReceitasBloqueadas.txt"
 set "NODE_EXE=C:\Program Files\nodejs\node.exe"
 set "NODE_SCRIPT=%BASE_DIR%\sendWhatsApp.js"
@@ -150,7 +150,7 @@ exit /b 0
 :run_node_silent
 :: ---------------------------------------------------------------------------
 :: CORRECAO: agora passa "%MODE%" como argv[3] ao Node.
-:: Sem isso, process.argv[3] chegava undefined → Node nao sabia o modo.
+:: Sem isso, process.argv[3] chegava undefined ??? Node nao sabia o modo.
 call :log Disparando NODE em modo silencioso. ExecId=%EXEC_ID% Mode=%MODE%
 "%NODE_EXE%" "%NODE_SCRIPT%" "%EXEC_ID%" "%MODE%"
 set "INNER_EXIT=!ERRORLEVEL!"

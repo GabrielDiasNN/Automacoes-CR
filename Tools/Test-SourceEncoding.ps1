@@ -20,11 +20,25 @@
 
 param(
 
-    [string]$RootPath = "C:\Automacoes",
+    [string]$RootPath = "",
 
     [switch]$StagedOnly
 
 )
+
+
+
+$ErrorActionPreference = "Stop"
+
+
+
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+
+    $RootPath = Split-Path -Parent $PSScriptRoot
+
+    if (-not $RootPath) { $RootPath = "." }
+
+}
 
 
 

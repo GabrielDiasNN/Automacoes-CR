@@ -51,7 +51,7 @@ function Remove-ComObjectReference {
     try {
         [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($Obj)
     }
-    catch { } # Ignorado
+    catch [System.Exception] { } # Ignorado
 }
 
 function Get-VbaModulesFromFolder {
@@ -106,7 +106,7 @@ try {
     $excel.EnableEvents = $false
     $excel.AskToUpdateLinks = $false
 }
-catch {
+catch [System.Exception] {
     Write-Log -Level "ERROR" -Message "Failed to start Excel.Application: $_"
     exit 1
 }
@@ -157,7 +157,7 @@ foreach ($workbookPath in $WorkbookPaths) {
                 $vbComponents.Remove($component)
                 Write-Log -Level "INFO" -Message ("Removed orphan module: {0}" -f $component.Name)
             }
-            catch {
+            catch [System.Exception] {
                 Write-Log -Level "WARN" -Message ("Failed to remove orphan module {0}: {1}" -f $component.Name, $_)
             }
         }
@@ -184,7 +184,7 @@ foreach ($workbookPath in $WorkbookPaths) {
                     $vbComponents.Remove($existingComponent)
                     Write-Log -Level "INFO" -Message "Removed existing module: $moduleName"
                 }
-                catch {
+                catch [System.Exception] {
                     Write-Log -Level "WARN" -Message ("Failed to remove module {0}: {1}" -f $moduleName, $_)
                 }
             }
@@ -202,7 +202,7 @@ foreach ($workbookPath in $WorkbookPaths) {
                 }
 
                 if ([int]$importedComponent.Type -ne $expectedType) {
-                    try { $vbComponents.Remove($importedComponent) } catch { } # Ignorado
+                    try { $vbComponents.Remove($importedComponent) } catch [System.Exception] { } # Ignorado
                     Write-Log -Level "ERROR" -Message ("Imported module '{0}' with wrong type={1} (expected {2})." -f $moduleName, [int]$importedComponent.Type, $expectedType)
                     continue
                 }
@@ -212,7 +212,7 @@ foreach ($workbookPath in $WorkbookPaths) {
                         $importedComponent.Name = $moduleName
                         Write-Log -Level "WARN" -Message ("Imported module name adjusted: {0} -> {1}" -f $importedComponent.Name, $moduleName)
                     }
-                    catch {
+                    catch [System.Exception] {
                         Write-Log -Level "WARN" -Message ("Imported module name mismatch: expected {0}, actual {1}" -f $moduleName, $importedComponent.Name)
                     }
                 }
@@ -224,12 +224,12 @@ foreach ($workbookPath in $WorkbookPaths) {
                     Write-Log -Level "INFO" -Message "Imported module: $moduleName"
                 }
             }
-            catch {
+            catch [System.Exception] {
                 Write-Log -Level "ERROR" -Message ("Failed to import module {0}: {1}" -f $moduleName, $_)
             }
             finally {
                 if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
+                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch [System.Exception] { } # Ignorado
                 }
             }
         }
@@ -237,12 +237,12 @@ foreach ($workbookPath in $WorkbookPaths) {
         $wb.Save()
         Write-Log -Level "INFO" -Message "Workbook saved: $workbookPath"
     }
-    catch {
+    catch [System.Exception] {
         Write-Log -Level "ERROR" -Message ("Failed to sync {0}: {1}" -f $workbookPath, $_)
     }
     finally {
         if ($wb) {
-            try { $wb.Close($false) | Out-Null } catch { } # Ignorado
+            try { $wb.Close($false) | Out-Null } catch [System.Exception] { } # Ignorado
             Remove-ComObjectReference -Obj $wb
         }
     }
@@ -253,7 +253,7 @@ try {
         $excel.Quit()
     }
 }
-catch { } # Ignorado
+catch [System.Exception] { } # Ignorado
 finally {
     Remove-ComObjectReference -Obj $excel
     [System.GC]::Collect()

@@ -75,7 +75,7 @@ function Get-FileHashSafe {
     try {
         return (Get-FileHash -LiteralPath $FilePath -Algorithm SHA256 -ErrorAction Stop).Hash
     }
-    catch {
+    catch [System.Exception] {
         return $null
     }
 }

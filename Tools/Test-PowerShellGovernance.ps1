@@ -39,7 +39,7 @@ foreach ($file in $targetFiles) {
         Write-Host "[AVISO] Modulo PSScriptAnalyzer nao esta instalado. Instalacao recomendada para validacao de tipagem." -ForegroundColor Yellow
     }
 
-    # Verifica captura generica de excecoes (catch { ... } ao inves de catch [System.Exception] { ... })
+    # Verifica captura generica de excecoes (catch [System.Exception] { ... } ao inves de catch [System.Exception] { ... })
     $content = Get-Content $fullPath -Raw
     if ($content -match 'catch\s*\{') {
         Write-Host "[ERRO] Bloco 'catch' generico detectado em '$file'." -ForegroundColor Red

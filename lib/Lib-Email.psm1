@@ -71,7 +71,7 @@ function Send-OutlookEmail {
             # Estrategia Anti-Zumbi: Tenta pegar um Outlook ja aberto pelo usuario
             try {
                 $outlook = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Outlook.Application")
-            } catch {
+            } catch [System.Exception] {
                 # Se nao estiver aberto, nos iniciamos o background COM
                 $outlook = New-Object -ComObject Outlook.Application
                 $weStartedOutlook = $true
@@ -112,20 +112,20 @@ function Send-OutlookEmail {
             return $true
         }
     }
-    catch {
+    catch [System.Exception] {
         Write-LocalLog "ERRO ao enviar e-mail: $_" -l "ERRO"
         return $false
     }
     finally {
         # Liberacao de Objetos COM (NAO FECHAR O OUTLOOK!)
         if ($mailItem) { 
-            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch {} 
+            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch [System.Exception] {} 
         }
         
         if ($outlook) { 
             # Apenas libera o objeto da memoria do script, NUNCA executa .Quit() para nao matar o Outlook do usuario
             # ou impedir o envio de e-mails que estao na Outbox.
-            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) | Out-Null } catch {} 
+            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) | Out-Null } catch [System.Exception] {} 
         }
         
         # Garante a morte do ponteiro RPC no Windows, mas mantem a aplicacao Outlook.exe viva
@@ -135,3 +135,4 @@ function Send-OutlookEmail {
 }
 
 Export-ModuleMember -Function Send-OutlookEmail
+

@@ -4,7 +4,7 @@ Option Explicit
 Private m_execId As String
 Private m_blnInLogWrite As Boolean
 
-Private Const CAMINHO_LOG As String = "C:\Automacoes\Receitas Bloqueadas\Logs\VBA_Internal.log"
+Private Const CAMINHO_LOG As String = ".\Receitas Bloqueadas\Logs\VBA_Internal.log"
 Private Const NOME_TABELA_DADOS As String = "ReceitasBloqueadas"
 Private Const NOME_TABELA_EMAIL As String = "EnderecosEmailDestinatarios"
 Private Const ABA_CONFIG As String = "Config"
@@ -868,4 +868,5 @@ Public Sub TestarLogger()
 
     Debug.Print "Concluido. Verifique: " & CAMINHO_LOG
 End Sub
+
 

@@ -18,8 +18,8 @@ $script:Lib_Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # Identifica a raiz do repositorio no momento da importacao
 try {
     $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-} catch {
-    $script:ProjectRoot = "C:\Automacoes" # Fallback final
+} catch [System.Exception] {
+    $script:ProjectRoot = "." # Fallback final
 }
 
 # ------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ function Get-FromBase64 {
     try {
         $bytes = [System.Convert]::FromBase64String($B64)
         return [System.Text.Encoding]::UTF8.GetString($bytes)
-    } catch { return $B64 }
+    } catch [System.Exception] { return $B64 }
 }
 
 # ------------------------------------------------------------------------------
@@ -112,7 +112,7 @@ function Write-AutomacaoLog {
         if ($logDir -and -not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
         $sw = New-Object System.IO.StreamWriter($LogPath, $true, $script:Lib_Utf8NoBom)
         try { $sw.WriteLine($line); $sw.Flush() } finally { $sw.Close(); $sw.Dispose() }
-    } catch {}
+    } catch [System.Exception] {}
     $color = switch ($Level) { "ERRO" { "Red" }; "WARN" { "Yellow" }; "DEBUG" { "Gray" }; default { "Cyan" } }
     Write-Host $line -ForegroundColor $color
 }
@@ -165,7 +165,8 @@ function Invoke-LogRotation {
             $tmpPath = "$LogPath.tmp"; [System.IO.File]::WriteAllLines($tmpPath, $kept.ToArray(), $script:Lib_Utf8NoBom)
             Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
         }
-    } catch {}
+    } catch [System.Exception] {}
 }
 
 Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight
+

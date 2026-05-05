@@ -26,10 +26,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# -- Definir raiz do projeto (C:\Automacoes) --
-$RootPath = "C:\Automacoes"
+# -- Definir raiz do projeto --
+$RootPath = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path $RootPath)) {
-    $RootPath = Split-Path -Parent $PSScriptRoot
+    $RootPath = "."
 }
 
 Write-Host "Buscando logs em $RootPath..." -ForegroundColor Cyan

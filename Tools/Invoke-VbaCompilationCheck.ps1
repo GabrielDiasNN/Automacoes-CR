@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # Invoke-VbaCompilationCheck.ps1
 # OBJETIVO: Tentar compilar o projeto VBA para detectar erros de sintaxe
 #           ou referencias ausentes de forma programatica.
@@ -7,7 +7,7 @@ $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false
 $excel.DisplayAlerts = $false
 
-$xlsmPath = "C:\Automacoes\Receitas Bloqueadas\Receitas Bloqueadas.xlsm"
+$xlsmPath = ".\Receitas Bloqueadas\Receitas Bloqueadas.xlsm"
 
 try {
     Write-Host "Abrindo: $xlsmPath"
@@ -31,9 +31,10 @@ try {
     $wb.Save()
     Write-Host "Workbook salvo."
     $wb.Close($false)
-} catch {
+} catch [System.Exception] {
     Write-Host "ERRO DETECTADO: $($_.Exception.Message)"
 } finally {
     $excel.Quit()
     [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
 }
+

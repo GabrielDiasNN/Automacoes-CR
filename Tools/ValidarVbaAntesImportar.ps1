@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$SourceDir,
@@ -136,12 +136,12 @@ function Import-VbaDescriptor {
         }
 
         if ([int]$importedComponent.Type -ne $Descriptor.ExpectedType) {
-            try { $VBProject.VBComponents.Remove($importedComponent) } catch { } # Ignorado
+            try { $VBProject.VBComponents.Remove($importedComponent) } catch [System.Exception] { } # Ignorado
             throw "$LogPrefix componente '$($Descriptor.FileName)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $($Descriptor.ExpectedType)."
         }
 
         if ($importedComponent.Name -ne $Descriptor.ComponentName) {
-            try { $VBProject.VBComponents.Remove($importedComponent) } catch { } # Ignorado
+            try { $VBProject.VBComponents.Remove($importedComponent) } catch [System.Exception] { } # Ignorado
             throw "$LogPrefix componente '$($Descriptor.FileName)' importado com nome '$($importedComponent.Name)' em vez de '$($Descriptor.ComponentName)'."
         }
 
@@ -149,7 +149,7 @@ function Import-VbaDescriptor {
     }
     finally {
         if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-            try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
+            try { Remove-Item -LiteralPath $tempImportPath -Force } catch [System.Exception] { } # Ignorado
         }
     }
 }
@@ -229,22 +229,23 @@ try {
     Invoke-VbaProjectCompile -ExcelApp $excel -Workbook $tmpWb
     Write-Log "INFO" "Preflight VBA: compilacao concluida com sucesso"
 }
-catch {
+catch [System.Exception] {
     Write-Log "ERROR" "Preflight VBA falhou: $($_.Exception.Message)"
     throw
 }
 finally {
     if ($null -ne $tmpWb) {
-        try { $tmpWb.Close($false) } catch { } # Ignorado
+        try { $tmpWb.Close($false) } catch [System.Exception] { } # Ignorado
     }
     if ($null -ne $excel) {
-        try { $excel.Quit() } catch { } # Ignorado
+        try { $excel.Quit() } catch [System.Exception] { } # Ignorado
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     }
 
     if ($null -ne $prevVal) {
-        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch { } # Ignorado
+        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch [System.Exception] { } # Ignorado
     }
 }
 
 Write-Log "INFO" "Preflight VBA finalizado sem erros"
+

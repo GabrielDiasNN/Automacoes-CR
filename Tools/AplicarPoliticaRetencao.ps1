@@ -7,7 +7,7 @@ param(
     [string]$ExecId = "",
 
 
-    [string]$BasePath = "C:\Automacoes",
+    [string]$BasePath = "",
 
 
     [int]$KeepLogsDays = 7,
@@ -34,7 +34,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 
-
+if ([string]::IsNullOrWhiteSpace($BasePath)) {
+    $BasePath = Split-Path -Parent $PSScriptRoot
+    if (-not $BasePath) { $BasePath = "." }
+}
 
 
 # Importar biblioteca de logging padrao
@@ -187,7 +190,7 @@ function Write-RunLog {
         }
 
 
-        catch { } # Ignorado
+        catch [System.Exception] { } # Ignorado
 
 
     }
@@ -259,7 +262,7 @@ function Remove-FileSafe {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         $script:Stats.Errors++
@@ -349,7 +352,7 @@ function Remove-DirectorySafe {
     }
 
 
-    catch {
+    catch [System.Exception] {
 
 
         $script:Stats.Errors++
@@ -689,7 +692,7 @@ try {
             }
 
 
-            catch {
+            catch [System.Exception] {
 
 
                 $script:Stats.Errors++
@@ -860,7 +863,7 @@ try {
 }
 
 
-catch {
+catch [System.Exception] {
 
 
     Write-RunLog -Level "ERRO" -Message ("Falha fatal na politica de retencao: {0}" -f $_)

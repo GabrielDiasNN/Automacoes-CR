@@ -122,7 +122,7 @@ function Remove-OrphanVbaComponents {
             $VBProject.VBComponents.Remove($comp)
             Write-Log "INFO" "Removido componente orfao: $compName"
         }
-        catch {
+        catch [System.Exception] {
             Write-Log "WARN" "Falha ao remover componente orfao '$compName': $($_.Exception.Message)"
         }
     }
@@ -255,7 +255,7 @@ try {
             }
 
             if ([int]$importedComponent.Type -ne $expectedType) {
-                try { $vbProj.VBComponents.Remove($importedComponent) } catch { } # Ignorado
+                try { $vbProj.VBComponents.Remove($importedComponent) } catch [System.Exception] { } # Ignorado
                 throw "Componente '$($file.Name)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $expectedType."
             }
 
@@ -263,7 +263,7 @@ try {
         }
         finally {
             if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-                try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
+                try { Remove-Item -LiteralPath $tempImportPath -Force } catch [System.Exception] { } # Ignorado
             }
         }
     }
@@ -306,7 +306,7 @@ try {
                 }
 
                 if ([int]$importedComponent.Type -ne $expectedType) {
-                    try { $vbProj.VBComponents.Remove($importedComponent) } catch { } # Ignorado
+                    try { $vbProj.VBComponents.Remove($importedComponent) } catch [System.Exception] { } # Ignorado
                     throw "Componente shared '$($file.Name)' importado com tipo incorreto ($([int]$importedComponent.Type)). Esperado: $expectedType."
                 }
 
@@ -314,7 +314,7 @@ try {
             }
             finally {
                 if ($null -ne $tempImportPath -and (Test-Path -LiteralPath $tempImportPath)) {
-                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch { } # Ignorado
+                    try { Remove-Item -LiteralPath $tempImportPath -Force } catch [System.Exception] { } # Ignorado
                 }
             }
         }
@@ -330,15 +330,15 @@ try {
 }
 finally {
     if ($null -ne $wb) {
-        try { $wb.Close($false) } catch { } # Ignorado
+        try { $wb.Close($false) } catch [System.Exception] { } # Ignorado
     }
     if ($null -ne $excel) {
-        try { $excel.Quit() } catch { } # Ignorado
+        try { $excel.Quit() } catch [System.Exception] { } # Ignorado
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
     }
 
     if ($null -ne $prevVal) {
-        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch { } # Ignorado
+        try { Set-ItemProperty -Path $regPath -Name "AccessVBOM" -Value $prevVal } catch [System.Exception] { } # Ignorado
     }
 }
 

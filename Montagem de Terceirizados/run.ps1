@@ -158,8 +158,17 @@ try {
         Write-Log "Nenhuma divergencia ou mudanca de estado. Nenhuma notificacao enviada."
     }
 
-} catch {
+} catch [System.Exception] {
     Write-Log "ERRO FATAL NA EXECUCAO NATIVA: $_" -Lvl "ERRO"; exit 1
 } finally {
+    # Limpeza rigorosa de arquivos temporarios de intercambio
+    if ($ExecId) {
+        $tempPatterns = ".data_$ExecId.json", ".payload_$ExecId.json"
+        foreach ($p in $tempPatterns) {
+            $f = Join-Path $ScriptDir $p
+            if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue }
+        }
+    }
     Write-Log "FIM - Processo finalizado."
 }
+

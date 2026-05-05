@@ -30,11 +30,11 @@ $projects = if ($WorkbookPath) { @($WorkbookPath) } else {
 
     @(
 
-        "C:\Automacoes\Receitas Bloqueadas\Receitas Bloqueadas.xlsm",
+        ".\Receitas Bloqueadas\Receitas Bloqueadas.xlsm",
 
-        "C:\Automacoes\Receitas Emitidas\Controle de Receitas Emitidas.xlsm",
+        ".\Receitas Emitidas\Controle de Receitas Emitidas.xlsm",
 
-        "C:\Automacoes\Montagem de Terceirizados\Validador_Notas_Montagem.xlsm"
+        ".\Montagem de Terceirizados\Validador_Notas_Montagem.xlsm"
 
     )
 
@@ -86,7 +86,7 @@ foreach ($xlsm in $projects) {
 
         $wb.Close($false)
 
-    } catch {
+    } catch [System.Exception] {
 
         Write-Host "ERRO ao abrir $($xlsm): $($_.Exception.Message)" -ForegroundColor Red
 
@@ -113,4 +113,6 @@ if ($errors -gt 0) {
     exit 0
 
 }
+
+
 

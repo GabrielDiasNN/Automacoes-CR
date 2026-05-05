@@ -10,17 +10,22 @@ Dim excelApp, wb, fso, wsh
 Dim scriptStart, logPath, execId
 
 ' ========== CONFIGURACOES Do MODULO ==========
+Dim scriptDir, moduleDir
+Set fso = CreateObject("Scripting.FileSystemObject")
+scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
+moduleDir = fso.GetAbsolutePathName(scriptDir & "\..")
+
 Dim excelPath, macroName
-excelPath = "C:\Automacoes\Montagem de Terceirizados\Validador_Notas_Montagem.xlsm"
+excelPath = moduleDir & "\Validador_Notas_Montagem.xlsm"
 macroName = "AtualizarEValidar"
-logPath   = "C:\Automacoes\Montagem de Terceirizados\Logs\Execution.log"
+logPath   = moduleDir & "\Logs\Execution.log"
 
 ' [FEATURE FLAG] Monitoramento de Timeout via Log VBA (Estilo "Robo Fiscal")
 Dim USE_TIMEOUT_MONITOR, vbaLogPath, vbaLogPathFallback, maxTimeoutSeconds, datedLogName
 USE_TIMEOUT_MONITOR = True
 datedLogName        = "log_" & Year(Now) & "-" & Right("0" & Month(Now), 2) & "-" & Right("0" & Day(Now), 2) & ".log"
-vbaLogPath          = "C:\Automacoes\Montagem de Terceirizados\Logs\Montagem.log"
-vbaLogPathFallback  = "C:\Automacoes\Montagem de Terceirizados\Logs\" & datedLogName
+vbaLogPath          = moduleDir & "\Logs\Montagem.log"
+vbaLogPathFallback  = moduleDir & "\Logs\" & datedLogName
 maxTimeoutSeconds   = 300
 
 ' [FEATURE FLAG] Script Pos-Execucao (Ex: WhatsApp Node.js Bridge)

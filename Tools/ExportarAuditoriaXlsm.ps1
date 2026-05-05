@@ -211,7 +211,7 @@ foreach ($xlsm in $xlsmFiles) {
             copiedFileCount = $copiedFiles.Count
             manifestPath = Get-RelativePath -BasePath $resolvedRoot -TargetPath $manifestPath
         }
-    } catch {
+    } catch [System.Exception] {
         Write-Log -Level "ERROR" -Message "Failed to extract ${relativeSource}: $_"
 
         $indexItems += [ordered]@{

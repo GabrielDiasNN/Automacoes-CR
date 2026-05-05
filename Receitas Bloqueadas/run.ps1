@@ -84,8 +84,8 @@ $success = $false
 $vbaLogFile = $LogFile
 
 try {
-    # 0. Limpeza de Excel
-    Get-Process excel -ErrorAction SilentlyContinue | Stop-Process -Force
+    # 0. Limpeza de Excel (Removido para evitar fechar a instancia do usuario)
+    # Get-Process excel -ErrorAction SilentlyContinue | Stop-Process -Force
 
     # 1. Abrir Excel COM
     Write-Log "Abrindo Excel COM..."
@@ -94,7 +94,7 @@ try {
         Write-Log "TRAVA DE SEGURANCA: Modo de teste detectado ($testEmail)." -Lvl "WARN"
     }
 
-    try { $excel = New-Object -ComObject Excel.Application } catch { Exit-WithCode 2 "Falha Excel COM." }
+    try { $excel = New-Object -ComObject Excel.Application } catch [System.Exception] { Exit-WithCode 2 "Falha Excel COM." }
     $excel.Visible = $false
     $excel.DisplayAlerts = $false
     $excel.ScreenUpdating = $false
@@ -102,7 +102,7 @@ try {
     $excel.AskToUpdateLinks = $false
 
     Write-Log "Abrindo workbook: $ExcelPath"
-    try { $wb = $excel.Workbooks.Open($ExcelPath) } catch { Exit-WithCode 3 "Falha ao abrir workbook." }
+    try { $wb = $excel.Workbooks.Open($ExcelPath) } catch [System.Exception] { Exit-WithCode 3 "Falha ao abrir workbook." }
     if ($wb.ReadOnly) { Exit-WithCode 7 "Workbook em modo somente leitura." }
 
     if (-not (Test-Path $vbaLogFile)) {
@@ -119,7 +119,7 @@ try {
     try {
         $excel.Run($fullMacroName, $ExecId) | Out-Null
         $successVba = $true
-    } catch {
+    } catch [System.Exception] {
         Write-Log "Falha na chamada da macro: $_" -Lvl "ERRO"
         $successVba = $false
     }
@@ -152,7 +152,7 @@ try {
         }
 
         if ($currentSize -gt $previousSize) {
-            try { $allContent = Get-Content $vbaLogFile -Raw -Encoding UTF8 -ErrorAction Stop } catch { continue }
+            try { $allContent = Get-Content $vbaLogFile -Raw -Encoding UTF8 -ErrorAction Stop } catch [System.Exception] { continue }
             $newContent = if ($allContent.Length -gt $initialLogSize) { $allContent.Substring([int]$initialLogSize) } else { "" }
 
             if ($newContent -match "ERRO FATAL") {
@@ -173,8 +173,8 @@ try {
     $success = $true
 
 } finally {
-    if ($wb) { try { $wb.Close($false) } catch {} }
-    if ($excel) { try { $excel.Quit() } catch {} }
+    if ($wb) { try { $wb.Close($false) } catch [System.Exception] {} }
+    if ($excel) { try { $excel.Quit() } catch [System.Exception] {} }
     [System.GC]::Collect()
 }
 
@@ -193,8 +193,9 @@ try {
     if ($whatsAppExit -eq 40) { Exit-WithCode 40 "WhatsApp ignorado por lock ativo." }
     elseif ($whatsAppExit -eq 23) { Exit-WithCode 23 "WhatsApp em cooldown." }
     elseif ($whatsAppExit -ne 0) { Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit." -Lvl "WARN" }
-} catch {
+} catch [System.Exception] {
     Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
 }
 
 Exit-WithCode 0 "Processo concluido com sucesso."
+
