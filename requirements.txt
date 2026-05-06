@@ -1,8 +1,13 @@
 # Core Libraries
 oracledb>=3.4.2
+pandas
+openpyxl
+python-dotenv
 
-# Development Tools
-black
-isort
+# Development Tools & Static Analysis
 pylint
 mypy
+pandas-stubs
+types-openpyxl
+black
+isort

@@ -8,7 +8,7 @@
     3. E-mail: Envia o HTML gerado para os destinatarios configurados.
     4. WhatsApp Bridge: Dispara notificacoes via Node.js utilizando idempotencia.
 .NOTES
-    Version: 2.0.0
+    Version: 2.0.1
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract
 #>
 [CmdletBinding()]
@@ -94,14 +94,16 @@ try {
             }
         }
     }
-} catch {
-    Write-Log "Falha ao carregar .env: $_" -Lvl "WARN"
+} catch [System.IO.IOException] {
+    Write-Log "Falha de IO ao carregar .env: $_" -Lvl "WARN"
+} catch [System.Exception] {
+    Write-Log "Falha generica ao carregar .env: $_" -Lvl "WARN"
 }
 
 # 1. Executar Python Script
 Write-Log "Acionando script Python..."
 if (-not (Test-Path $venvActivate)) {
-    Exit-WithCode 2 "Virtual environment não encontrado em $venvActivate."
+    Exit-WithCode 2 "Virtual environment nao encontrado em $venvActivate."
 }
 
 try {
@@ -122,7 +124,7 @@ try {
                     $bytes = [System.Convert]::FromBase64String($b64Str)
                     $decoded = [System.Text.Encoding]::UTF8.GetString($bytes)
                     Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $ExecId -LogPath $LogFile
-                } catch {
+                } catch [System.Exception] {
                     Write-AutomacaoLog -Message "Falha ao decodificar B64: $l" -Level "WARN" -ExecId $ExecId -LogPath $LogFile
                 }
             } else {
@@ -136,6 +138,8 @@ try {
         Exit-WithCode 3 "Script Python retornou ExitCode $($proc.ExitCode)."
     }
 
+} catch [System.ComponentModel.Win32Exception] {
+    Exit-WithCode 4 "Falha de processo ao invocar script Python: $_"
 } catch [System.Exception] {
     Exit-WithCode 4 "Falha ao invocar script Python: $_"
 }
@@ -154,17 +158,19 @@ if (Test-Path $HtmlPath) {
         $subject = "Alerta: Receitas Bloqueadas - $(Get-Date -Format 'dd/MM/yyyy')"
         
         if ([string]::IsNullOrWhiteSpace($to)) {
-            Write-Log "Destinatarios 'to' não configurados. Pulando e-mail." -Lvl "WARN"
+            Write-Log "Destinatarios 'to' nao configurados. Pulando e-mail." -Lvl "WARN"
         } else {
             Write-Log "Enviando e-mail para $to..."
             Send-OutlookEmail -To $to -Cc $cc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
             Write-Log "E-mail enviado com sucesso."
         }
-    } catch {
+    } catch [System.Management.Automation.RuntimeException] {
+        Write-Log "Falha de runtime ao enviar e-mail: $_" -Lvl "ERRO"
+    } catch [System.Exception] {
         Write-Log "Falha ao enviar e-mail: $_" -Lvl "ERRO"
     }
 } else {
-    Write-Log "Arquivo $HtmlPath não gerado. Nenhuma receita para notificar ou erro no processo." -Lvl "WARN"
+    Write-Log "Arquivo $HtmlPath nao gerado. Nenhuma receita para notificar ou erro no processo." -Lvl "WARN"
     Exit-WithCode 0 "Processo concluido sem dados."
 }
 

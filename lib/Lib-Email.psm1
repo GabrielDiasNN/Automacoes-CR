@@ -111,7 +111,7 @@ function Send-OutlookEmail {
                         $mailItem.Attachments.Add($file) | Out-Null
                         Write-LocalLog "Anexo adicionado: $file"
                     } else {
-                        Write-LocalLog "Aviso: Arquivo de anexo não encontrado: $file" -l "WARN"
+                        Write-LocalLog "Aviso: Arquivo de anexo nao encontrado: $file" -l "WARN"
                     }
                 }
             }

@@ -34,18 +34,20 @@ def extract():
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = "dbprd" 
-    client_lib = r"C:\ORACLE\product\12.2.0\client_2"
-    tns_admin = r"C:\ORACLE\product\12.2.0\client_1\network\admin"
+    
+    # Portabilidade: Utilizar caminhos dinamicos ou de ambiente
+    client_lib = os.environ.get("ORACLE_CLIENT_PATH")
+    tns_admin = os.environ.get("TNS_ADMIN")
 
-    if not all([user, password]):
-        log("Credenciais (ORACLE_*) ausentes no ambiente.", "ERROR", exec_id)
+    if not all([user, password, client_lib, tns_admin]):
+        log("Dependencias de ambiente (ORACLE_*, TNS_ADMIN) ausentes.", "ERROR", exec_id)
         sys.exit(1)
 
     os.environ["TNS_ADMIN"] = tns_admin
     
     if os.path.exists(client_lib):
         try:
-            oracledb.init_oracle_client(lib_dir=client_lib)
+            oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
             log("Modo Thick ativado", "INFO", exec_id)
         except Exception as e:
             log("Aviso ao iniciar modo Thick: " + str(e), "WARN", exec_id)

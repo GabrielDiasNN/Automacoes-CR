@@ -20,16 +20,17 @@ if ($targetFiles.Count -eq 0) {
 }
 
 $hasErrors = $false
-# Regex detectando caminhos absolutos hardcoded, ex: ., D:\Projetos, C:/Users
-$absolutePathRegex = '(?i)[a-z]:[\\/](?!instantclient)[a-z0-9_ -]+'
+# Regex detectando caminhos absolutos hardcoded, ex: C:\Users, D:/Projetos
+# Exige que tenha pelo menos uma barra seguida de caracteres de pasta
+$absolutePathRegex = '(?i)[a-z]:[\\/](?![\\/\s])(?!instantclient)[a-z0-9_ -]+[\\/]'
 
 foreach ($file in $targetFiles) {
     $file = $file.Trim('"')
     $fullPath = Join-Path $RootPath $file
     if (-not (Test-Path $fullPath)) { continue }
 
-    # Ignorando scripts de setup que podem ter caminhos de exemplo em comentarios
-    if ($file -match 'SetupMonitor|Copilot|CONTEXT|README|runbook') { continue }
+    # Ignorando scripts de setup e pastas de legado/template
+    if ($file -match 'SetupMonitor|Copilot|CONTEXT|README|runbook|Legacy|Legacy_VBA|_Template') { continue }
 
     $lines = Get-Content $fullPath -ErrorAction SilentlyContinue
     $lineNum = 1

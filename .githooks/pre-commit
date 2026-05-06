@@ -1,11 +1,22 @@
 #!/usr/bin/env sh
+# {
+#   "version": "3.1.0",
+#   "skill": "automation-runtime-safety",
+#   "description": "Pre-commit hook focado em stack 100% Nativa (Soberana) com validacao JSON"
+# }
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 VERBS_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PowerShellApprovedVerbs.ps1"
-PTBR_SCRIPT_PATH="$REPO_ROOT/Tools/Test-VbaPtBrGovernance.ps1"
 SKILLS_SCRIPT_PATH="$REPO_ROOT/Tools/Test-SkillsGovernance.ps1"
 VALIDAR_AUTO_PATH="$REPO_ROOT/Tools/ValidarAutomacoes.ps1"
+ZT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-ZeroTrust.ps1"
+PY_GOV_PATH="$REPO_ROOT/Tools/Test-PythonGovernance.ps1"
+SQL_GOV_PATH="$REPO_ROOT/Tools/Test-SqlPerformance.ps1"
+PS_GOV_PATH="$REPO_ROOT/Tools/Test-PowerShellGovernance.ps1"
+PORT_GOV_PATH="$REPO_ROOT/Tools/Test-PortablePaths.ps1"
+ENC_GOV_PATH="$REPO_ROOT/Tools/Test-SourceEncoding.ps1"
+JSON_GOV_PATH="$REPO_ROOT/Tools/Test-JsonConfig.ps1"
 
 if command -v pwsh >/dev/null 2>&1; then
   PS_BIN="pwsh"
@@ -16,113 +27,60 @@ else
   exit 1
 fi
 
-if [ -f "$VERBS_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VERBS_SCRIPT_PATH"
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    exit $rc
-  fi
-else
-  echo "[WARN] Script de validacao nao encontrado: $VERBS_SCRIPT_PATH"
-fi
+echo "=== INICIANDO GOVERNANCA NATIVA (PRE-COMMIT) ==="
 
-if [ -f "$PTBR_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PTBR_SCRIPT_PATH" -BasePath "$REPO_ROOT"
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    exit $rc
-  fi
-else
-  echo "[WARN] Script de validacao nao encontrado: $PTBR_SCRIPT_PATH"
-fi
-
-if [ -f "$SKILLS_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SKILLS_SCRIPT_PATH" -BasePath "$REPO_ROOT"
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    exit $rc
-  fi
-else
-  echo "[WARN] Script de validacao nao encontrado: $SKILLS_SCRIPT_PATH"
-fi
-
-if [ -f "$VALIDAR_AUTO_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VALIDAR_AUTO_PATH"
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    echo "[ERRO] ValidarAutomacoes.ps1 falhou. Metadados AI-Native ausentes."
-    exit $rc
-  fi
-else
-  echo "[WARN] Script de validacao nao encontrado: $VALIDAR_AUTO_PATH"
-fi
-
-DRIFT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-VbaDrift.ps1"
-if [ -f "$DRIFT_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$DRIFT_SCRIPT_PATH" -RootPath "$REPO_ROOT" -StagedOnly
-  rc=$?
-  if [ $rc -eq 1 ]; then
-    exit 1
-  fi
-else
-  echo "[WARN] Script de validacao nao encontrado: $DRIFT_SCRIPT_PATH"
-fi
-
-LOGCONF_SCRIPT_PATH="$REPO_ROOT/Tools/Test-LogConformidade.ps1"
-if [ -f "$LOGCONF_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$LOGCONF_SCRIPT_PATH" -RootPath "$REPO_ROOT" -StagedOnly
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    exit $rc
-  fi
-else
-  echo "[WARN] Script de validacao nao encontrado: $LOGCONF_SCRIPT_PATH"
-fi
-
-ENC_SCRIPT_PATH="$REPO_ROOT/Tools/Test-SourceEncoding.ps1"
-if [ -f "$ENC_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$ENC_SCRIPT_PATH" -RootPath "$REPO_ROOT" -StagedOnly
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    exit $rc
-  fi
-else
-  echo "[WARN] Script de validacao nao encontrado: $ENC_SCRIPT_PATH"
-fi
-
-ZT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-ZeroTrust.ps1"
+# 1. Seguranca Zero Trust
 if [ -f "$ZT_SCRIPT_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$ZT_SCRIPT_PATH" -RootPath "$REPO_ROOT"
-  rc=$?
-  if [ $rc -ne 0 ]; then exit $rc; fi
+  if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-PY_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PythonGovernance.ps1"
-if [ -f "$PY_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PY_SCRIPT_PATH" -RootPath "$REPO_ROOT"
-  rc=$?
-  if [ $rc -ne 0 ]; then exit $rc; fi
+# 2. Portabilidade
+if [ -f "$PORT_GOV_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PORT_GOV_PATH" -RootPath "$REPO_ROOT"
+  if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-SQL_SCRIPT_PATH="$REPO_ROOT/Tools/Test-SqlPerformance.ps1"
-if [ -f "$SQL_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SQL_SCRIPT_PATH" -RootPath "$REPO_ROOT"
-  rc=$?
-  if [ $rc -ne 0 ]; then exit $rc; fi
+# 3. Encoding ASCII-Safe
+if [ -f "$ENC_GOV_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$ENC_GOV_PATH" -RootPath "$REPO_ROOT" -StagedOnly
+  if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-PS_GOV_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PowerShellGovernance.ps1"
-if [ -f "$PS_GOV_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PS_GOV_SCRIPT_PATH" -RootPath "$REPO_ROOT"
-  rc=$?
-  if [ $rc -ne 0 ]; then exit $rc; fi
+# 4. Sintaxe JSON (Novo)
+if [ -f "$JSON_GOV_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$JSON_GOV_PATH" -RootPath "$REPO_ROOT"
+  if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-PORT_SCRIPT_PATH="$REPO_ROOT/Tools/Test-PortablePaths.ps1"
-if [ -f "$PORT_SCRIPT_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PORT_SCRIPT_PATH" -RootPath "$REPO_ROOT"
-  rc=$?
-  if [ $rc -ne 0 ]; then exit $rc; fi
+# 5. Performance SQL
+if [ -f "$SQL_GOV_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SQL_GOV_PATH" -RootPath "$REPO_ROOT"
+  if [ $? -ne 0 ]; then exit 1; fi
 fi
 
+# 6. Governanca Python
+if [ -f "$PY_GOV_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PY_GOV_PATH" -RootPath "$REPO_ROOT"
+  if [ $? -ne 0 ]; then exit 1; fi
+fi
+
+# 7. Governanca PowerShell
+if [ -f "$PS_GOV_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PS_GOV_PATH" -RootPath "$REPO_ROOT"
+  if [ $? -ne 0 ]; then exit 1; fi
+fi
+
+# 8. Metadados e Verbos
+if [ -f "$SKILLS_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SKILLS_SCRIPT_PATH" -BasePath "$REPO_ROOT"
+  if [ $? -ne 0 ]; then exit 1; fi
+fi
+
+if [ -f "$VERBS_SCRIPT_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VERBS_SCRIPT_PATH"
+  if [ $? -ne 0 ]; then exit 1; fi
+fi
+
+echo "[OK] Governanca aprovada."
 exit 0

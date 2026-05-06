@@ -100,7 +100,7 @@ def get_sql() -> str:
     """
 
 def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: dict) -> str:
-    # Cores Clássicas
+    # Cores Classicas
     cor_header = "#0f4c81"
     cor_header_text = "#ffffff"
     cor_sub_header = "#e8f1ff"
@@ -111,6 +111,18 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
     cor_mod_bg = "#fef9c3"   # Amarelo suave para alteradas
     cor_del_bg = "#f1f5f9"   # Cinza muito claro para liberadas
     
+    # Textos com sequencias de escape para ASCII-Safe
+    rel_title = "Relat\u00f3rio de Receitas Bloqueadas"
+    ciclo_resumo = "Resumo do Ciclo:"
+    col_cor = "Cor Rec."
+    col_ult_prod = "Data \u00daltima Prod."
+    col_bloqueio = "Data Bloqueio"
+    col_status = "Status / Mudan\u00e7a"
+    txt_intro = "Abaixo, as altera\u00e7\u00f5es detectadas desde o \u00faltimo processamento:"
+    txt_footer_ob = "Favor consultar a planilha em anexo para o detalhamento t\u00e9cnico completo por Ordem de Beneficiamento (OB)."
+    txt_footer_auto = "Mensagem autom\u00e1tica."
+    txt_warning = "Por favor, atualizar os status com as previs\u00f5es de liberar cada receita."
+
     html = f"""
     <div style="font-family:'Segoe UI', Calibri, Arial, sans-serif; font-size:11pt; color:#1f2937; line-height:1.5;">
         
@@ -118,7 +130,7 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
             <thead>
                 <tr>
                     <th colspan="6" style="background-color:{cor_header}; color:{cor_header_text}; padding:18px; text-align:center;">
-                        <div style="font-size:17pt; font-weight:bold; margin-bottom:5px;">Relatório de Receitas Bloqueadas</div>
+                        <div style="font-size:17pt; font-weight:bold; margin-bottom:5px;">{rel_title}</div>
                         <div style="font-size:10.5pt; font-weight:normal; color:{cor_sub_header};">
                             Atualizado em {datetime.now().strftime('%d/%m/%Y %H:%M')}
                         </div>
@@ -129,9 +141,9 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
                 <tr>
                     <td style="padding:16px;">
                         
-                        <!-- Seção Resumo do Ciclo -->
+                        <!-- Secao Resumo do Ciclo -->
                         <div style="margin-bottom:20px; padding:12px; background-color:#f8fafc; border-left:4px solid {cor_header}; border-radius:4px;">
-                            <b style="color:{cor_header}; font-size:12pt;">Resumo do Ciclo:</b><br>
+                            <b style="color:{cor_header}; font-size:12pt;">{ciclo_resumo}</b><br>
                             <table cellspacing="5" cellpadding="0" style="margin-top:5px; font-size:10.5pt;">
                                 <tr>
                                     <td><span style="display:inline-block; width:12px; height:12px; background-color:#ffffff; border:1px solid {cor_table_border};"></span> Novas: <b>{stats['new']}</b></td>
@@ -141,24 +153,24 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
                             </table>
                         </div>
 
-                        <p style="margin-bottom:10px;">Abaixo, as alterações detectadas desde o último processamento:</p>
+                        <p style="margin-bottom:10px;">{txt_intro}</p>
 
                         <!-- Tabela de Dados -->
                         <table cellspacing="0" cellpadding="6" border="1" width="100%" style="border-collapse:collapse; border:1px solid {cor_table_border}; font-size:10pt;">
                             <thead>
                                 <tr style="background-color:{cor_table_header};">
-                                    <th style="border:1px solid {cor_table_border};">Cor Rec.</th>
+                                    <th style="border:1px solid {cor_table_border};">{col_cor}</th>
                                     <th style="border:1px solid {cor_table_border};">EP Rec.</th>
                                     <th style="border:1px solid {cor_table_border};">PE Rec</th>
-                                    <th style="border:1px solid {cor_table_border};">Última Prod.</th>
-                                    <th style="border:1px solid {cor_table_border};">Data Bloqueio</th>
-                                    <th style="border:1px solid {cor_table_border};">Status / Mudança</th>
+                                    <th style="border:1px solid {cor_table_border};">{col_ult_prod}</th>
+                                    <th style="border:1px solid {cor_table_border};">{col_bloqueio}</th>
+                                    <th style="border:1px solid {cor_table_border};">{col_status}</th>
                                 </tr>
                             </thead>
                             <tbody>
     """
     
-    # Renderizar linhas de alteração
+    # Renderizar linhas de alteracao
     for _, row in df_diff.iterrows():
         change_type = row['_change_type']
         bg = "#ffffff"
@@ -166,13 +178,13 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
         font_style = "normal"
         
         if change_type == 'NEW':
-            status_text = "✨ NOVO BLOQUEIO"
+            status_text = "\u2728 NOVO BLOQUEIO" # Sparkles
         elif change_type == 'MODIFIED':
             bg = cor_mod_bg
-            status_text = "⚠️ DATA ALTERADA"
+            status_text = "\u26a0 DATA ALTERADA" # Warning
         elif change_type == 'DELETED':
             bg = cor_del_bg
-            status_text = "<b style='color:#059669;'>✅ LIBERADA</b>"
+            status_text = "<b style='color:#059669;'>\u2705 LIBERADA</b>" # Check
             font_style = "italic"
             
         html += f"""
@@ -180,7 +192,7 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
                                     <td style="border:1px solid {cor_table_border}; text-align:center; font-weight:bold;">{row['Cor Rec.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['EP Rec.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['PE Rec']}</td>
-                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data Última Prod.']}</td>
+                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data \u00daltima Prod.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data Bloqueio']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center; font-size:9pt; font-weight:bold;">{status_text}</td>
                                 </tr>
@@ -191,7 +203,7 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
                         </table>
 
                         <p style="margin-top:15px; color:#b91c1c; font-weight:bold;">
-                            Por favor, atualizar os status com as previsões de liberar cada receita.
+                            {txt_warning}
                         </p>
                     </td>
                 </tr>
@@ -199,8 +211,8 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
         </table>
         
         <p style="margin-top:20px; font-size:10pt; color:#64748b;">
-            Favor consultar a planilha em anexo para o detalhamento técnico completo por Ordem de Beneficiamento (OB).<br>
-            <span style="font-size:8.5pt; color:#cbd5e1;">Mensagem automática.</span>
+            {txt_footer_ob}<br>
+            <span style="font-size:8.5pt; color:#cbd5e1;">{txt_footer_auto}</span>
         </p>
     </div>
     """
@@ -238,13 +250,12 @@ def formatar_excel(file_path: str) -> None:
                 if isinstance(cell.value, datetime):
                     cell.number_format = 'DD/MM/YYYY HH:MM:SS'
                 elif sheet_name == 'OBsReceitasBloqueadas':
-                    # Colunas de Data específicas (K, L, O, R, S, T)
-                    # K=11, L=12, O=15, R=18, S=19, T=20
+                    # Colunas de Data especificas (K, L, O, R, S, T)
                     if cell.column in [11, 12, 15, 18, 19, 20]:
                         cell.number_format = 'DD/MM/YYYY'
                 
                 if sheet_name == 'OBsReceitasBloqueadas':
-                    # STATUS_PE é a última coluna (V / 22)
+                    # STATUS_PE e a ultima coluna (V / 22)
                     if ws.cell(row=cell.row, column=22).value == "Divergente":
                         ws.cell(row=cell.row, column=22).fill = status_err_fill
                     ws.cell(row=cell.row, column=2).font = Font(bold=True)
@@ -270,32 +281,30 @@ def process() -> None:
     dsn = "dbprd" 
     
     # Portabilidade: Utilizar caminhos do ambiente ou variaveis ja carregadas
-    client_lib = os.environ.get("ORACLE_CLIENT_PATH", r"C:\ORACLE\product\12.2.0\client_2")
-    tns_admin = os.environ.get("TNS_ADMIN", r"C:\ORACLE\product\12.2.0\client_1\network\admin")
+    client_lib = os.environ.get("ORACLE_CLIENT_PATH")
+    tns_admin = os.environ.get("TNS_ADMIN")
 
-    if os.path.exists(client_lib):
-        try:
-            oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
-        except Exception as e:
-            log(f"Aviso Thick client: {e}", "WARN", exec_id)
+    if not client_lib or not tns_admin:
+        log("Caminhos Oracle (ORACLE_CLIENT_PATH / TNS_ADMIN) nao configurados no ambiente.", "ERROR", exec_id)
+        sys.exit(1)
 
     connection = None
     try:
         connection = oracledb.connect(user=user, password=password, dsn=dsn)
         
-        # Governanca: Colunas explicitas (evita SELECT *)
+        # Governanca: Colunas explicitas
         sql_query = f"SELECT GRUPO, NR_OB, COR_OB, COR_REC, EP_OB, EP_REC, PE_OB, PE_REC, MQ_TING, INICIO_TING, FINAL_TING, GRAFICO, DATA_ULT_PROD, CD_CLASSIF, CLASSIF_COR, CODIGO_REDUZIDO_RECE, USUARIO_BLOQUEIO, DATA_BLOQUEIO, DATA_ALTERACAO, USUARIO_ALTEROU, NOME_USUARIO_ALTEROU, STATUS_PE FROM ({get_sql()})"
         df_raw = pd.read_sql(sql_query, con=connection)
         
         df_raw = df_raw.rename(columns={
             "COR_REC": "Cor Rec.", "EP_REC": "EP Rec.", "PE_REC": "PE Rec",
-            "DATA_ULT_PROD": "Data Última Prod.", "DATA_BLOQUEIO": "Data Bloqueio"
+            "DATA_ULT_PROD": "Data \u00daltima Prod.", "DATA_BLOQUEIO": "Data Bloqueio"
         })
         
-        for col in ["Data Última Prod.", "Data Bloqueio"]:
+        for col in ["Data \u00daltima Prod.", "Data Bloqueio"]:
             df_raw[col] = pd.to_datetime(df_raw[col], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
 
-        cols_agreg = ["Cor Rec.", "EP Rec.", "PE Rec", "Data Última Prod.", "Data Bloqueio"]
+        cols_agreg = ["Cor Rec.", "EP Rec.", "PE Rec", "Data \u00daltima Prod.", "Data Bloqueio"]
         df_agreg = df_raw[cols_agreg].drop_duplicates().sort_values(by=["Cor Rec.", "EP Rec."])
         
         # Coluna tecnica para controle de estado
@@ -328,7 +337,7 @@ def process() -> None:
                 diff_rows.append(row_diff)
                 stats['new'] += 1
             else:
-                if (match.iloc[0]['Data Última Prod.'] != row['Data Última Prod.'] or 
+                if (match.iloc[0]['Data \u00daltima Prod.'] != row['Data \u00daltima Prod.'] or 
                     match.iloc[0]['Data Bloqueio'] != row['Data Bloqueio']):
                     row_diff = row.copy()
                     row_diff['_change_type'] = 'MODIFIED'
@@ -351,7 +360,7 @@ def process() -> None:
         log(f"Alteracoes detectadas: {len(diff_rows)}. Gerando artefatos...", "INFO", exec_id)
         df_agreg.to_json(state_path, orient='records', force_ascii=False)
         
-        # Limpar coluna Key antes de gerar Excel para o usuario
+        # Limpar coluna Key antes de gerar Excel
         df_agreg_final = df_agreg.drop(columns=['Key'], errors='ignore')
         
         excel_path = os.path.join(os.path.dirname(__file__), "Receitas Bloqueadas.xlsx")
