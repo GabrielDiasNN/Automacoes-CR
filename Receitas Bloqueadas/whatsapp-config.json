@@ -56,9 +56,9 @@
   "retry": {
     "enabled": true,
     "maxAttempts": 2,
-    "attemptDelayMs": 5000,
-    "sendSettleMs": 3000,
-    "finalWaitMs": 1000,
-    "initTimeoutMs": 120000
+    "attemptDelayMs": 2000,
+    "sendSettleMs": 5000,
+    "finalWaitMs": 2000,
+    "initTimeoutMs": 60000
   }
 }

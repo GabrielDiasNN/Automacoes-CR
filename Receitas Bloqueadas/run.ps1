@@ -8,7 +8,7 @@
     3. E-mail: Envia o HTML gerado para os destinatarios configurados.
     4. WhatsApp Bridge: Dispara notificacoes via Node.js utilizando idempotencia.
 .NOTES
-    Version: 2.0.1
+    Version: 2.1.0
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract
 #>
 [CmdletBinding()]
@@ -28,7 +28,9 @@ $PythonScript = Join-Path $BasePath "processar_receitas.py"
 $ExcelPath = Join-Path $BasePath "Receitas Bloqueadas.xlsx"
 $HtmlPath = Join-Path $BasePath "email_body.html"
 $EmailConfigPath = Join-Path $BasePath "receitas_config.json"
-$LogDir = Join-Path $BasePath "Logs"
+$LogDir     = Join-Path $BasePath "Logs"
+$PythonStatePath = Join-Path $BasePath "receitas_state.json"
+$EmailStatePath = Join-Path $BasePath "email_state.json"
 $MaxTimeoutSec = 300
 
 # Bibliotecas e Caminhos
@@ -159,30 +161,46 @@ try {
     Exit-WithCode 4 "Falha ao invocar script Python: $_"
 }
 
-# 2. Enviar E-mail
+# 2. Enviar E-mail (Com Idempotencia Estrita)
 Write-Log "Preparando envio de e-mail..."
 if (Test-Path $HtmlPath) {
     try {
-        $htmlBody = Get-Content $HtmlPath -Raw -Encoding UTF8
-        $emailConfig = Get-Content $EmailConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        
-        $to = $emailConfig.email.to -join ";"
-        $cc = if ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
-        $bcc = if ($emailConfig.email.bcc) { $emailConfig.email.bcc -join ";" } else { $null }
-        
-        $subject = "Alerta: Receitas Bloqueadas - $(Get-Date -Format 'dd/MM/yyyy')"
-        
-        if ([string]::IsNullOrWhiteSpace($to)) {
-            Write-Log "Destinatarios 'to' nao configurados. Pulando e-mail." -Lvl "WARN"
-        } else {
-            Write-Log "Enviando e-mail para $to..."
-            Send-OutlookEmail -To $to -Cc $cc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
-            Write-Log "E-mail enviado com sucesso."
+        $lastEmailHash = ""
+        if (Test-Path $EmailStatePath) {
+            $lastEmailHash = (Get-Content $EmailStatePath -Raw | ConvertFrom-Json).last_sent_hash
         }
-    } catch [System.Management.Automation.RuntimeException] {
-        Write-Log "Falha de runtime ao enviar e-mail: $_" -Lvl "ERRO"
+
+        $currentHash = ""
+        if (Test-Path $PythonStatePath) {
+            $currentHash = (Get-Content $PythonStatePath -Raw -Encoding UTF8 | ConvertFrom-Json).last_hash
+        }
+
+        if ($currentHash -and $currentHash -eq $lastEmailHash) {
+            Write-Log "Conteudo identico ao ultimo envio. Idempotencia de e-mail ativa."
+        } else {
+            $htmlBody = Get-Content $HtmlPath -Raw -Encoding UTF8
+            $emailConfig = Get-Content $EmailConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            
+            $to = $emailConfig.email.to -join ";"
+            $cc = if ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
+            $bcc = if ($emailConfig.email.bcc) { $emailConfig.email.bcc -join ";" } else { $null }
+            
+            $subject = "Alerta: Receitas Bloqueadas - $(Get-Date -Format 'dd/MM/yyyy')"
+            
+            if ([string]::IsNullOrWhiteSpace($to)) {
+                Write-Log "Destinatarios 'to' nao configurados. Pulando e-mail." -Lvl "WARN"
+            } else {
+                Write-Log "Enviando e-mail para $to..."
+                $sent = Send-OutlookEmail -To $to -Cc $cc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
+                if ($sent) {
+                    $newState = @{ last_sent_hash = $currentHash; sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
+                    $newState | ConvertTo-Json | Out-File $EmailStatePath -Encoding UTF8
+                    Write-Log "E-mail enviado e estado de idempotencia atualizado."
+                }
+            }
+        }
     } catch [System.Exception] {
-        Write-Log "Falha ao enviar e-mail: $_" -Lvl "ERRO"
+        Write-Log "Falha na rotina de e-mail/idempotencia: $_" -Lvl "ERRO"
     }
 } else {
     Write-Log "Arquivo $HtmlPath nao gerado. Nenhuma receita para notificar ou erro no processo." -Lvl "WARN"

@@ -15,9 +15,18 @@ param(
 $ErrorActionPreference = "Stop"
 
 # --- Detectar Node.js dinamicamente se nao estiver no PATH ---
-if (-not (Get-Command $NodeExe -ErrorAction SilentlyContinue)) {
+$ResolvedNodeExe = $NodeExe
+if (-not (Get-Command $ResolvedNodeExe -ErrorAction SilentlyContinue)) {
     $progFiles = [Environment]::GetFolderPath("ProgramFiles")
-    $NodeExe = Join-Path $progFiles "nodejs\node.exe"
+    $defaultPath = Join-Path $progFiles "nodejs\node.exe"
+    if (Test-Path $defaultPath) {
+        $ResolvedNodeExe = $defaultPath
+    } else {
+        Write-Log "Node.js nao encontrado no PATH nem em $defaultPath." -Lvl "ERRO"
+        exit 1
+    }
+} else {
+    $ResolvedNodeExe = (Get-Command $ResolvedNodeExe).Source
 }
 
 # --- Detectar BaseDir dinamicamente se nao fornecido ---
@@ -91,11 +100,12 @@ function Invoke-ReleaseLock {
 
 # --- VALIDACAO DE REQUISITOS ---
 if (-not (Test-Path $BaseDir)) { Write-Log "BaseDir ausente." -Lvl "ERRO"; exit 1 }
-if (-not (Test-Path $NodeExe)) { Write-Log "Node.exe ausente em $NodeExe." -Lvl "ERRO"; exit 1 }
+# A validacao abaixo usa o caminho ja resolvido
+if (-not (Test-Path $ResolvedNodeExe)) { Write-Log "Node.exe ausente em $ResolvedNodeExe." -Lvl "ERRO"; exit 1 }
 
 # --- ROTEAMENTO ---
 if ($Mode -eq "PAIRING" -or -not (Test-Path $SessionDir)) {
-    $launchArg = "`"$NodeExe`" `"$NodeScript`" `"$ExecId`" `"PAIRING`""
+    $launchArg = "`"$ResolvedNodeExe`" `"$NodeScript`" `"$ExecId`" `"PAIRING`""
     Start-Process "cmd" -ArgumentList "/k `"echo Iniciando WhatsApp Pairing... && $launchArg`"" -WindowStyle Normal
     exit 0
 }
@@ -103,7 +113,7 @@ if ($Mode -eq "PAIRING" -or -not (Test-Path $SessionDir)) {
 # --- EXECUCAO SILENCIOSA ---
 if (Invoke-AcquireLock) {
     try {
-        $proc = Start-Process -FilePath $NodeExe -ArgumentList "`"$NodeScript`" `"$ExecId`" `"$Mode`"" -WorkingDirectory $BaseDir -WindowStyle Hidden -Wait -PassThru
+        $proc = Start-Process -FilePath $ResolvedNodeExe -ArgumentList "`"$NodeScript`" `"$ExecId`" `"$Mode`"" -WorkingDirectory $BaseDir -WindowStyle Hidden -Wait -PassThru
         $nodeExit = $proc.ExitCode
     } finally {
         Invoke-ReleaseLock

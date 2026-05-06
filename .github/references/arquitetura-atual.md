@@ -3,7 +3,7 @@
 ## Visão geral
 
 O projeto é um hub de automações fiscais e operacionais consolidado na stack **Python/PowerShell/Node.js**. 
-Abandonou-se a dependência de runtime Excel/VBA, utilizando-o apenas como formato de saída analítica (anexos) gerados programaticamente.
+A arquitetura atingiu o estado **Soberano**, onde cada camada possui autonomia de contexto e resiliência a falhas de protocolo.
 
 ---
 
@@ -14,59 +14,46 @@ Abandonou-se a dependência de runtime Excel/VBA, utilizando-o apenas como forma
 - **Monitor Central:** `MonitorAutomacoes.ps1` (Gestão de ciclo de vida e Mutex).
 - **Entrypoints:** Scripts `run.ps1` (Ponto único de entrada por automação).
 
-### Inteligência de Negócio
+### Inteligência de Negócio e Dados
 - **Linguagem:** Python 3.12+.
+- **Soberania de Ambiente:** Uso nativo de `python-dotenv`. Os scripts Python carregam seu próprio contexto do `.env`, eliminando dependência da injeção de variáveis pelo orquestrador.
 - **Data Engine:** Pandas / NumPy (Vetorização O(n)).
-- **Formatação:** OpenPyXL (Geração de Excel Profissional).
-- **Comunicação IPC:** Stdio Pipes ou JSON State Files (Idempotência).
+- **Formatação:** OpenPyXL (Geração de Excel Analítico com máscaras PT-BR).
+- **Comunicação IPC:** Stdio Pipes ou Hashes de Estado (MD5).
 
-### Camada de Dados
-- **Banco:** Oracle SQL.
-- **Driver:** `oracledb` (Thin/Thick mode).
+### Camada de Dados (Oracle)
+- **Driver:** `oracledb` em modo **Thick Client** (Obrigatório para suporte a protocolos de segurança e senhas legadas).
+- **Resiliência:** Tratamento específico para quedas de sessão (`ORA-00028`, `ORA-03113`) com recuperação automática no próximo ciclo.
 - **Regra de Ouro:** Colunas explícitas em todas as queries. BAN total em `SELECT *`.
 
-### Saídas e Notificações
-- **E-mail:** PowerShell + Outlook COM (Preservação de assinatura oficial).
-- **WhatsApp:** Node.js (Puppeteer/WhatsApp-Web.js) em modo Headless.
-- **Dashboard:** HTML5/CSS3 moderno com refrescamento via JSON.
+### Saídas e Notificações (Soberanas)
+- **E-mail:** PowerShell + Outlook COM (Preservação de assinatura e anexos dinâmicos).
+- **WhatsApp (Motor Soberano v1.3):** Node.js Headless com protocolo de **Persistência de Ack**. O motor aguarda a confirmação física do servidor do WhatsApp antes de encerrar o navegador, eliminando falsos-positivos.
+- **Dashboard:** HTML5/CSS3 moderno com refresh via JSON.
 
 ---
 
-## Modelo Operacional: Monitor-Trigger-Action
+## Paradigma de Inteligência: Idempotência Estrita
 
-1.  **Monitor:** Verifica o `config.json` a cada 20s. Valida se a automação deve rodar e se o ambiente está saudável (Pre-Flight).
-2.  **Trigger:** Dispara o `run.ps1` da automação específica.
-3.  **Action (Python):** Conecta ao Oracle, extrai dados, compara com o "Estado Anterior" (Idempotência), gera o HTML do e-mail e a planilha Excel formatada.
-4.  **Delivery:** O PowerShell retoma o controle, anexa os arquivos e dispara para e-mail/WhatsApp.
+O hub implementa um controle de estado cruzado para evitar notificações redundantes (Spam):
+1.  **Cálculo de Hash:** O Python gera um hash MD5 do conteúdo consolidado.
+2.  **Trava Cross-Channel:** Tanto o orquestrador de e-mail quanto o motor de WhatsApp consultam arquivos de estado (`*_state.json`) e suprimem o disparo se a informação já tiver sido entregue com sucesso.
 
 ---
 
-## Governança e Segurança
+## Governança e Segurança (Padrão Ouro)
 
 ### Zero Trust Security
-O repositório é blindado contra vazamento de credenciais. O arquivo `.env` (não versionado) é a única fonte de verdade para secrets. O script `Tools/Test-ZeroTrust.ps1` valida isso no pre-commit.
+O repositório é blindado. Credenciais residem apenas no `.env`. O linter de portabilidade impede o uso de caminhos absolutos (`C:\...`), garantindo que o projeto funcione em qualquer diretório.
 
-### Base64 Bridge Protocol
-Para evitar corrupção de caracteres especiais (acentuação PT-BR) entre as camadas (PS -> PY -> NODE), todas as strings críticas viajam codificadas em Base64.
-
-### Gerenciamento de Memória
-A arquitetura é proativa na liberação de recursos. Objetos COM do Outlook são liberados via `[System.GC]::Collect()` para evitar processos zumbis que degradam a performance do servidor.
-
----
-
-## Componentes de Legado (Arquivados)
-
-As pastas `Legacy/` em cada módulo contêm os artefatos antigos (`.xlsm`, `.bas`, `.pq`). Estes arquivos:
-- **NÃO** devem sofrer manutenção.
-- Servem apenas como referência histórica.
-- Devem ser ignorados pelo monitoramento ativo.
+### Base64 Bridge Protocol & ASCII-Safe
+Para garantir integridade PT-BR entre camadas (PS -> PY -> NODE), todas as mensagens viajam em Base64. O código-fonte é rigorosamente auditado para ser **ASCII-Safe**, prevenindo corrupção de encoding.
 
 ---
 
 ## Regra de Mudança (AI-Native)
 
-Qualquer alteração futura deve:
-1.  Atualizar o cabeçalho JSON do arquivo fonte.
-2.  Preservar o `ExecId` para rastreabilidade.
-3.  Manter a portabilidade (caminhos relativos).
-4.  Seguir o padrão de cores corporativo (#0f4c81).
+1.  Preservar o `ExecId` para rastreabilidade universal.
+2.  Manter a portabilidade absoluta (Caminhos relativos).
+3.  Seguir o padrão de cores corporativo (#0f4c81).
+4.  Garantir blocos `catch` com exceções específicas.

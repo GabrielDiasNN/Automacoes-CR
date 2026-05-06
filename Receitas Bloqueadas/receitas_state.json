@@ -1,1 +1,46 @@
-[{"Cor Rec.":"00020","EP Rec.":10,"PE Rec":2,"Data Última Prod.":"15\/03\/2025","Data Bloqueio":"08\/05\/2025","Key":"00020_10_2"},{"Cor Rec.":"00021","EP Rec.":60,"PE Rec":1,"Data Última Prod.":"19\/11\/2025","Data Bloqueio":"16\/02\/2022","Key":"00021_60_1"},{"Cor Rec.":"00051","EP Rec.":56,"PE Rec":1,"Data Última Prod.":"15\/03\/2025","Data Bloqueio":"14\/03\/2025","Key":"00051_56_1"},{"Cor Rec.":"00055","EP Rec.":2,"PE Rec":1,"Data Última Prod.":"24\/06\/2025","Data Bloqueio":"17\/07\/2025","Key":"00055_2_1"},{"Cor Rec.":"00067","EP Rec.":31,"PE Rec":8,"Data Última Prod.":"05\/11\/2025","Data Bloqueio":"25\/03\/2026","Key":"00067_31_8"},{"Cor Rec.":"00072","EP Rec.":6,"PE Rec":3,"Data Última Prod.":"10\/02\/2026","Data Bloqueio":"21\/03\/2026","Key":"00072_6_3"}]
+{
+    "last_hash": "18369327885691510122",
+    "updated_at": "2026-05-06T10:27:23.566935",
+    "records": [
+        {
+            "Cor Rec.": "00020",
+            "EP Rec.": 10,
+            "PE Rec": 2,
+            "Data Última Prod.": "15/03/2025",
+            "Data Bloqueio": "08/05/2025",
+            "Key": "00020_10_2"
+        },
+        {
+            "Cor Rec.": "00021",
+            "EP Rec.": 60,
+            "PE Rec": 1,
+            "Data Última Prod.": "19/11/2025",
+            "Data Bloqueio": "16/02/2022",
+            "Key": "00021_60_1"
+        },
+        {
+            "Cor Rec.": "00051",
+            "EP Rec.": 56,
+            "PE Rec": 1,
+            "Data Última Prod.": "15/03/2025",
+            "Data Bloqueio": "14/03/2025",
+            "Key": "00051_56_1"
+        },
+        {
+            "Cor Rec.": "00055",
+            "EP Rec.": 2,
+            "PE Rec": 1,
+            "Data Última Prod.": "24/06/2025",
+            "Data Bloqueio": "17/07/2025",
+            "Key": "00055_2_1"
+        },
+        {
+            "Cor Rec.": "00072",
+            "EP Rec.": 6,
+            "PE Rec": 3,
+            "Data Última Prod.": "10/02/2026",
+            "Data Bloqueio": "21/03/2026",
+            "Key": "00072_6_3"
+        }
+    ]
+}
