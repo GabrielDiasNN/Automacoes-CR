@@ -89,6 +89,14 @@ try {
     $nativeExtractInfo.CreateNoWindow = $true
     $nativeExtractInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
     
+    # Injetar variaveis do .env no processo filho
+    $envVars = [System.Environment]::GetEnvironmentVariables("Process")
+    foreach ($key in $envVars.Keys) {
+        if (-not $nativeExtractInfo.Environment.ContainsKey($key)) {
+            $nativeExtractInfo.Environment.Add($key, $envVars[$key])
+        }
+    }
+    
     $nativeProc = [System.Diagnostics.Process]::Start($nativeExtractInfo)
     $null = $nativeProc.StandardOutput.ReadToEnd() 
     $nativeErrors = $nativeProc.StandardError.ReadToEnd()

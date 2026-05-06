@@ -13,6 +13,10 @@ import json
 from datetime import datetime
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from dotenv import load_dotenv
+
+# Carregar ambiente (.env) do projeto raiz
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -287,6 +291,13 @@ def process() -> None:
     if not client_lib or not tns_admin:
         log("Caminhos Oracle (ORACLE_CLIENT_PATH / TNS_ADMIN) nao configurados no ambiente.", "ERROR", exec_id)
         sys.exit(1)
+
+    # Forcar modo Thick para suportar senhas legadas (DPY-3015)
+    try:
+        oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
+        log("Oracle Thick Mode ativado com sucesso.", "INFO", exec_id)
+    except Exception as e:
+        log(f"Aviso Thick client: {e}", "WARN", exec_id)
 
     connection = None
     try:

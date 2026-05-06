@@ -12,6 +12,11 @@ import oracledb
 import time
 from datetime import datetime
 import base64
+from dotenv import load_dotenv
+
+# Carregar ambiente (.env) do projeto raiz
+# O arquivo .env esta 1 nivel acima da pasta da automacao
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # Forca UTF-8 para stdout e stderr para garantir interoperabilidade
 if sys.stdout.encoding != 'utf-8':

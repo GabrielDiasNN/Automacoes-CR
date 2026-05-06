@@ -110,17 +110,33 @@ try {
     # Carrega VENV
     . $venvActivate
     
-    # Chama o script python capturando StdErr (os logs em base64)
-    $proc = Start-Process -FilePath "python" -ArgumentList "`"$PythonScript`" `"$ExecId`"" -NoNewWindow -Wait -PassThru -RedirectStandardError "$LogDir\python_stderr.log"
+    $pyInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $pyInfo.FileName = "python.exe"
+    $pyInfo.Arguments = "`"$PythonScript`" `"$ExecId`""
+    $pyInfo.RedirectStandardError = $true
+    $pyInfo.UseShellExecute = $false
+    $pyInfo.CreateNoWindow = $true
+    
+    # Injetar variaveis do .env no processo filho
+    $envVars = [System.Environment]::GetEnvironmentVariables("Process")
+    foreach ($key in $envVars.Keys) {
+        if (-not $pyInfo.Environment.ContainsKey($key)) {
+            $pyInfo.Environment.Add($key, $envVars[$key])
+        }
+    }
+
+    $proc = [System.Diagnostics.Process]::Start($pyInfo)
+    $nativeErrors = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
     
     # Processa os logs retornados do python (skill ipc-stdio)
-    if (Test-Path "$LogDir\python_stderr.log") {
-        $pyLogs = Get-Content "$LogDir\python_stderr.log" -Encoding UTF8
+    if ($nativeErrors) {
+        $pyLogs = $nativeErrors -split "`n"
         foreach ($l in $pyLogs) {
             if ([string]::IsNullOrWhiteSpace($l)) { continue }
             if ($l.StartsWith("B64:")) {
                 try {
-                    $b64Str = $l.Substring(4)
+                    $b64Str = $l.Substring(4).Trim()
                     $bytes = [System.Convert]::FromBase64String($b64Str)
                     $decoded = [System.Text.Encoding]::UTF8.GetString($bytes)
                     Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $ExecId -LogPath $LogFile
@@ -128,10 +144,9 @@ try {
                     Write-AutomacaoLog -Message "Falha ao decodificar B64: $l" -Level "WARN" -ExecId $ExecId -LogPath $LogFile
                 }
             } else {
-                Write-AutomacaoLog -Message $l -Level "INFO" -ExecId $ExecId -LogPath $LogFile
+                Write-AutomacaoLog -Message $l.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile
             }
         }
-        Remove-Item "$LogDir\python_stderr.log" -Force -ErrorAction SilentlyContinue
     }
     
     if ($proc.ExitCode -ne 0) {
