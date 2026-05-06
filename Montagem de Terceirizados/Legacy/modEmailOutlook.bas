@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "modEmailOutlook"
+Attribute VB_Name = "modEmailOutlook"
 
 Option Explicit
 

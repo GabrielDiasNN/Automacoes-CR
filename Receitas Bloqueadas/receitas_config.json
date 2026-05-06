@@ -1,0 +1,12 @@
+{
+  "email": {
+    "to": [
+      "janilson.pacheco@costaricamalhas.ind.br"
+    ],
+    "cc": [
+      "alexandre.faria@costaricamalhas.ind.br",
+      "acacio.klann@costaricamalhas.ind.br"
+    ],
+    "bcc": []
+  }
+}

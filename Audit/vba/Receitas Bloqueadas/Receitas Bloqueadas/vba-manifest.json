@@ -1,8 +1,8 @@
 {
     "sourcePath":  "Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
-    "sourceFileSizeBytes":  162569,
-    "exportedAt":  "2026-04-17T17:47:04-03:00",
-    "componentCount":  7,
+    "sourceFileSizeBytes":  144960,
+    "exportedAt":  "2026-05-05T19:47:47-03:00",
+    "componentCount":  5,
     "components":  [
                        {
                            "name":  "EstaPastaDeTrabalho",
@@ -34,22 +34,6 @@
                            "extension":  ".cls",
                            "exportedFiles":  [
                                                  "Audit\\vba\\Receitas Bloqueadas\\Receitas Bloqueadas\\Planilha3.cls"
-                                             ]
-                       },
-                       {
-                           "name":  "ClsEmailComposerService",
-                           "type":  "ClassModule",
-                           "extension":  ".cls",
-                           "exportedFiles":  [
-                                                 "Audit\\vba\\Receitas Bloqueadas\\Receitas Bloqueadas\\ClsEmailComposerService.cls"
-                                             ]
-                       },
-                       {
-                           "name":  "ClsOutlookAdapter",
-                           "type":  "ClassModule",
-                           "extension":  ".cls",
-                           "exportedFiles":  [
-                                                 "Audit\\vba\\Receitas Bloqueadas\\Receitas Bloqueadas\\ClsOutlookAdapter.cls"
                                              ]
                        },
                        {

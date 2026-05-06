@@ -2,188 +2,71 @@
 
 ## Visão geral
 
-O projeto é um hub de automações fiscais e operacionais baseado no modelo **Monitor-Trigger-Action**.
-O objetivo principal é orquestrar execuções agendadas com resiliência, rastreabilidade e observabilidade, preservando a compatibilidade com fluxos legados.
+O projeto é um hub de automações fiscais e operacionais consolidado na stack **Python/PowerShell/Node.js**. 
+Abandonou-se a dependência de runtime Excel/VBA, utilizando-o apenas como formato de saída analítica (anexos) gerados programaticamente.
 
 ---
 
-## Stack atual
+## Stack Moderna (100% Ativa)
 
-### Orquestração
+### Orquestração e Controle
+- **Linguagem:** PowerShell Core.
+- **Monitor Central:** `MonitorAutomacoes.ps1` (Gestão de ciclo de vida e Mutex).
+- **Entrypoints:** Scripts `run.ps1` (Ponto único de entrada por automação).
 
-- PowerShell
-- Monitor central: `MonitorAutomacoes.ps1`
+### Inteligência de Negócio
+- **Linguagem:** Python 3.12+.
+- **Data Engine:** Pandas / NumPy (Vetorização O(n)).
+- **Formatação:** OpenPyXL (Geração de Excel Profissional).
+- **Comunicação IPC:** Stdio Pipes ou JSON State Files (Idempotência).
 
-### Entradas de automação
+### Camada de Dados
+- **Banco:** Oracle SQL.
+- **Driver:** `oracledb` (Thin/Thick mode).
+- **Regra de Ouro:** Colunas explícitas em todas as queries. BAN total em `SELECT *`.
 
-- `TriggerAutomation.vbs` para fluxos legados
-- `run.ps1` para fluxos PowerShell nativos
-
-### Processamento de negócio
-
-- Excel
-- VBA
-- Power Query
-
-### Dados
-
-- Oracle SQL
-
-### Saídas
-
-- Outlook COM para e-mail
-- Node.js para bridge WhatsApp
+### Saídas e Notificações
+- **E-mail:** PowerShell + Outlook COM (Preservação de assinatura oficial).
+- **WhatsApp:** Node.js (Puppeteer/WhatsApp-Web.js) em modo Headless.
+- **Dashboard:** HTML5/CSS3 moderno com refrescamento via JSON.
 
 ---
 
-## Modelo operacional
+## Modelo Operacional: Monitor-Trigger-Action
 
-A arquitetura segue este padrão:
-
-`MonitorAutomacoes.ps1`
-→ agenda e valida configuração
-→ dispara automação
-→ automação entra por `TriggerAutomation.vbs` ou `run.ps1`
-→ Excel/VBA/Power Query processa dados do Oracle
-→ gera saída operacional
-→ e-mail e/ou WhatsApp são enviados
+1.  **Monitor:** Verifica o `config.json` a cada 20s. Valida se a automação deve rodar e se o ambiente está saudável (Pre-Flight).
+2.  **Trigger:** Dispara o `run.ps1` da automação específica.
+3.  **Action (Python):** Conecta ao Oracle, extrai dados, compara com o "Estado Anterior" (Idempotência), gera o HTML do e-mail e a planilha Excel formatada.
+4.  **Delivery:** O PowerShell retoma o controle, anexa os arquivos e dispara para e-mail/WhatsApp.
 
 ---
 
-## Componentes centrais
+## Governança e Segurança
 
-### 1. Monitor central
+### Zero Trust Security
+O repositório é blindado contra vazamento de credenciais. O arquivo `.env` (não versionado) é a única fonte de verdade para secrets. O script `Tools/Test-ZeroTrust.ps1` valida isso no pre-commit.
 
-Responsabilidades:
+### Base64 Bridge Protocol
+Para evitar corrupção de caracteres especiais (acentuação PT-BR) entre as camadas (PS -> PY -> NODE), todas as strings críticas viajam codificadas em Base64.
 
-- agendamento
-- mutex global
-- hot-reload de `config.json`
-- heartbeat operacional
-- snapshot de métricas
-- persistência de estado do dashboard
-- publicação do dashboard HTML
-
-Artefatos principais:
-
-- `Monitor_Metrics.json`
-- `dashboard-state.json`
-- dashboard HTML publicado
-- log consolidado do monitor
+### Gerenciamento de Memória
+A arquitetura é proativa na liberação de recursos. Objetos COM do Outlook são liberados via `[System.GC]::Collect()` para evitar processos zumbis que degradam a performance do servidor.
 
 ---
 
-### 2. Camada de entrada das automações
+## Componentes de Legado (Arquivados)
 
-Há dois modelos principais:
-
-- legado via `TriggerAutomation.vbs`
-- moderno via `run.ps1`
-
-Esses entrypoints iniciam a execução do Excel, acionam a macro principal, acompanham o fluxo e registram logs operacionais.
+As pastas `Legacy/` em cada módulo contêm os artefatos antigos (`.xlsm`, `.bas`, `.pq`). Estes arquivos:
+- **NÃO** devem sofrer manutenção.
+- Servem apenas como referência histórica.
+- Devem ser ignorados pelo monitoramento ativo.
 
 ---
 
-### 3. Runtime de negócio
+## Regra de Mudança (AI-Native)
 
-A lógica de negócio está em transição agressiva para um modelo **Nativo Python + Oracle**, seguindo a SKILL `python-oracle-migration`:
-
--   **Extração (Fetch):** Scripts nativos Python conectados diretamente ao banco Oracle utilizando queries otimizadas com bind variables (o uso de `SELECT *` é ativamente bloqueado pelo linter de performance).
--   **Processamento (Logic):** Python com `pandas`/`numpy` assume o protagonismo exigindo complexidade algorítmica O(n) e vetorização. Loops manuais são evitados. *Type Hints* rigorosos são aplicados e validados pelo `mypy`.
--   **Fallback e Interação:** Caso a automação dependa fortemente de interface visual legada, ela adota o **Híbrido de Alta Fidelidade** (usando Excel COM temporariamente para lidar com strings e lógicas limitadas).
--   **Notificação (Output):** PowerShell orquestra a entrega via Outlook, utilizando o **Base64 Bridge Protocol** para garantir integridade de caracteres PT-BR.
-
-### 3.1 Governança e Segurança Zero Trust
-A arquitetura é blindada pelas 8 SKILLs consolidadas do repositório, garantindo:
-- **Zero Trust:** Nenhuma credencial hardcoded é permitida (bloqueada via CI por `Tools/Test-ZeroTrust.ps1`). Todos os secrets residem em variáveis de ambiente `.env`.
-- **Contrato Universal:** Idempotência e ExecId roteados uniformente entre todas as tecnologias.
-
----
-
-### 4. Bridge WhatsApp
-
-O envio via WhatsApp usa Node.js e um bridge com:
-
-- modo `AUTO`
-- modo `PAIRING`
-- lock de concorrência
-- idempotência
-- retry
-- tratamento de reautenticação
-- validação de `whatsapp-config.json`
-
-No fluxo de Receitas Bloqueadas, o VBA salva o artefato final e o launcher chama o bridge Node.js para distribuição.
-
----
-
-## Contratos operacionais importantes
-
-### ExecId
-
-`ExecId` é a chave de correlação entre as camadas da execução.
-Ele deve ser preservado em qualquer refatoração, endurecimento ou evolução de observabilidade.
-
-### Logs
-
-O projeto possui log humano consolidado com formato operacional padronizado.
-Mudanças futuras devem preferir manter esse log e, se necessário, adicionar logging estruturado em paralelo.
-
-### Exit codes
-
-Os fluxos usam códigos padronizados para expressar sucesso, timeout, erro de negócio, workbook bloqueado, cooldown e concorrência do bridge WhatsApp.
-Esses códigos fazem parte do contrato operacional e não devem ser alterados sem necessidade forte.
-
-### Dashboard e heartbeat
-
-O monitor mantém artefatos de estado e métricas usados para observabilidade.
-Esses arquivos são críticos para operação e diagnóstico rápido.
-
----
-
-## Principais pontos fortes
-
-- arquitetura já operacional em produção
-- monitor central com observabilidade básica
-- compatibilidade entre fluxo legado e fluxo PowerShell
-- logs padronizados
-- rastreabilidade por `ExecId`
-- bridge WhatsApp com controles operacionais relevantes
-
----
-
-## Principais limitações atuais
-
-- dependência forte de Excel/VBA para lógica crítica
-- parte do fluxo ainda síncrona e frágil a travamentos
-- bridge WhatsApp sensível a sessão e pareamento
-- observabilidade ainda centrada em logs e artefatos locais
-- acoplamento elevado entre runner, workbook e canais de saída
-
----
-
-## Direção de evolução recomendada
-
-A evolução deve ser incremental e não disruptiva.
-
-Prioridades:
-
-1. timeout e cleanup seguro
-2. validação de configuração
-3. clareza de erros operacionais
-4. watchdog externo do monitor
-5. logging estruturado paralelo
-6. refatoração por adapters e wrappers
-7. migração gradual de partes do runtime legado
-
----
-
-## Regra de mudança
-
-Qualquer alteração futura deve respeitar estas premissas:
-
-- preservar compatibilidade operacional
-- manter rollback simples
-- não remover entrypoints legados sem camada de transição
-- não quebrar `ExecId`
-- não quebrar logs existentes
-- não alterar a semântica do bridge WhatsApp sem fallback operacional
+Qualquer alteração futura deve:
+1.  Atualizar o cabeçalho JSON do arquivo fonte.
+2.  Preservar o `ExecId` para rastreabilidade.
+3.  Manter a portabilidade (caminhos relativos).
+4.  Seguir o padrão de cores corporativo (#0f4c81).

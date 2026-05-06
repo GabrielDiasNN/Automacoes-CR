@@ -3,7 +3,7 @@
     "enabled": true
   },
   "paths": {
-    "attachmentPath": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsm",
+    "attachmentPath": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsx",
     "logFile": "C:\\Automacoes\\Receitas Bloqueadas\\ReceitasBloqueadas.txt",
     "stateFile": "whatsapp-state.json",
     "authDir": ".wwebjs_auth"
@@ -13,7 +13,7 @@
     "type": "contact",
     "groupName": "",
     "contactPhone": "5547999999999",
-    "contactId": "61851991822356@lid",
+    "contactId": "5547999999999@c.us",
     "mentions": {
       "enabled": false,
       "list": []
@@ -55,10 +55,10 @@
   },
   "retry": {
     "enabled": true,
-    "maxAttempts": 3,
-    "attemptDelayMs": 20000,
-    "sendSettleMs": 20000,
-    "finalWaitMs": 15000,
-    "initTimeoutMs": 180000
+    "maxAttempts": 2,
+    "attemptDelayMs": 5000,
+    "sendSettleMs": 3000,
+    "finalWaitMs": 1000,
+    "initTimeoutMs": 120000
   }
 }

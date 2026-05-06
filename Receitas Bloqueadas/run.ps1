@@ -3,13 +3,13 @@
     Orquestrador PS-Nativo para Receitas Bloqueadas.
 .DESCRIPTION
     Este script coordena o processamento de receitas retidas e sua distribuicao multicanal:
-    1. Pre-Flight: Diagnostico de saude (Excel, WhatsApp Config, Espaco em Disco).
-    2. Excel/VBA: Processa a logica de negocio e gera artefatos de saida (E-mail legado).
-    3. WhatsApp Bridge: Dispara notificacoes via Node.js utilizando idempotencia.
+    1. Pre-Flight: Diagnostico de saude (Python, WhatsApp Config, Espaco em Disco).
+    2. Python: Processa a logica de negocio, consulta Oracle e gera artefatos de saida (.xlsx e .html).
+    3. E-mail: Envia o HTML gerado para os destinatarios configurados.
+    4. WhatsApp Bridge: Dispara notificacoes via Node.js utilizando idempotencia.
 .NOTES
-    Version: 1.2.1
+    Version: 2.0.0
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract
-    Contract: legacy-vba-logic, base64-bridge-logs, preflight-v1
 #>
 [CmdletBinding()]
 param([string]$ExecId = "")
@@ -24,11 +24,12 @@ $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $BasePath = $ScriptDir
-$ExcelPath = Join-Path $BasePath "Receitas Bloqueadas.xlsm"
+$PythonScript = Join-Path $BasePath "processar_receitas.py"
+$ExcelPath = Join-Path $BasePath "Receitas Bloqueadas.xlsx"
+$HtmlPath = Join-Path $BasePath "email_body.html"
+$EmailConfigPath = Join-Path $BasePath "receitas_config.json"
 $LogDir = Join-Path $BasePath "Logs"
-$MacroName = "ExecutarProcessoCompleto"
 $MaxTimeoutSec = 300
-$PollIntervalMs = 3000
 
 # Bibliotecas e Caminhos
 $projectRoot = Split-Path -Parent $ScriptDir
@@ -36,6 +37,9 @@ $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
+
+# Activate VENV
+$venvActivate = Join-Path $projectRoot ".venv\Scripts\activate.ps1"
 
 Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
@@ -66,7 +70,7 @@ function Exit-WithCode {
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
-$preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($ExcelPath, $SendWhatsAppScript, $WhatsAppConfig)
+$preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($PythonScript, $SendWhatsAppScript, $WhatsAppConfig, $EmailConfigPath)
 if (-not $preFlight) {
     Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
 }
@@ -76,111 +80,95 @@ if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
 }
 
 Write-Log "========================================================================================="
-Write-Log "INICIO - run.ps1 Receitas Bloqueadas (VBA + Node.js). ExecId=$ExecId"
-
-$excel = $null
-$wb = $null
-$success = $false
-$vbaLogFile = $LogFile
+Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$ExecId"
 
 try {
-    # 0. Limpeza de Excel (Removido para evitar fechar a instancia do usuario)
-    # Get-Process excel -ErrorAction SilentlyContinue | Stop-Process -Force
-
-    # 1. Abrir Excel COM
-    Write-Log "Abrindo Excel COM..."
-    $testEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
-    if (-not [string]::IsNullOrWhiteSpace($testEmail)) {
-        Write-Log "TRAVA DE SEGURANCA: Modo de teste detectado ($testEmail)." -Lvl "WARN"
-    }
-
-    try { $excel = New-Object -ComObject Excel.Application } catch [System.Exception] { Exit-WithCode 2 "Falha Excel COM." }
-    $excel.Visible = $false
-    $excel.DisplayAlerts = $false
-    $excel.ScreenUpdating = $false
-    $excel.EnableEvents = $false
-    $excel.AskToUpdateLinks = $false
-
-    Write-Log "Abrindo workbook: $ExcelPath"
-    try { $wb = $excel.Workbooks.Open($ExcelPath) } catch [System.Exception] { Exit-WithCode 3 "Falha ao abrir workbook." }
-    if ($wb.ReadOnly) { Exit-WithCode 7 "Workbook em modo somente leitura." }
-
-    if (-not (Test-Path $vbaLogFile)) {
-        if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
-        New-Item -ItemType File -Path $vbaLogFile -Force | Out-Null
-    }
-    $initialLogSize = (Get-Item $vbaLogFile).Length
-    Write-Log "Monitoramento VBA ativo. LogVBA=$vbaLogFile | Inicial=$initialLogSize bytes"
-
-    # Executar macro com fallback
-    $fullMacroName = "modReceitasBloqueadas.$MacroName"
-    Write-Log "Executando macro VBA: $fullMacroName com ExecId=$ExecId"
-    
-    try {
-        $excel.Run($fullMacroName, $ExecId) | Out-Null
-        $successVba = $true
-    } catch [System.Exception] {
-        Write-Log "Falha na chamada da macro: $_" -Lvl "ERRO"
-        $successVba = $false
-    }
-
-    if (-not $successVba) {
-        Exit-WithCode 4 "Falha ao invocar macro VBA."
-    }
-
-    # Monitorar VBA log por conclusao
-    Write-Log "Aguardando conclusao via log VBA (timeout: ${MaxTimeoutSec}s)..."
-
-    $watchStart = Get-Date
-    $previousSize = $initialLogSize
-    $foundEnd = $false
-    $successResult = $false
-
-    while (-not $foundEnd) {
-        $elapsed = (New-TimeSpan -Start $watchStart -End (Get-Date)).TotalSeconds
-        if ($elapsed -ge $MaxTimeoutSec) {
-            Exit-WithCode 5 "TIMEOUT: VBA nao registrou termino em ${MaxTimeoutSec}s"
-        }
-
-        Start-Sleep -Milliseconds $PollIntervalMs
-
-        if (-not (Test-Path $vbaLogFile)) { continue }
-
-        $currentSize = (Get-Item $vbaLogFile).Length
-        if ($currentSize -lt $previousSize) {
-            $initialLogSize = $currentSize; $previousSize = $currentSize; continue
-        }
-
-        if ($currentSize -gt $previousSize) {
-            try { $allContent = Get-Content $vbaLogFile -Raw -Encoding UTF8 -ErrorAction Stop } catch [System.Exception] { continue }
-            $newContent = if ($allContent.Length -gt $initialLogSize) { $allContent.Substring([int]$initialLogSize) } else { "" }
-
-            if ($newContent -match "ERRO FATAL") {
-                $successResult = $false; $foundEnd = $true
-            } elseif ($newContent -match "FIM DO PROCESSO\.") {
-                $successResult = ($newContent -match "Resultado=Sucesso")
-                $foundEnd = $true
+    # Carregar Variaveis de Ambiente (.env)
+    $envPath = Join-Path $projectRoot ".env"
+    if (Test-Path $envPath) {
+        Get-Content $envPath | ForEach-Object {
+            $line = $_.Trim()
+            if ($line -and -not $line.StartsWith("#")) {
+                $key, $value = $line -split '=', 2
+                if ($key -and $value) { [System.Environment]::SetEnvironmentVariable($key.Trim(), $value.Trim(), "Process") }
             }
-            $previousSize = $currentSize
         }
     }
-
-    if (-not $successResult) { Exit-WithCode 6 "VBA reportou falha ou erro fatal nos logs" }
-    
-    # BUFFER PARA OUTLOOK
-    Write-Log "VBA finalizado com sucesso. Aguardando 5 segundos para flush do Outlook Outbox..."
-    Start-Sleep -Seconds 5
-    $success = $true
-
-} finally {
-    if ($wb) { try { $wb.Close($false) } catch [System.Exception] {} }
-    if ($excel) { try { $excel.Quit() } catch [System.Exception] {} }
-    [System.GC]::Collect()
+} catch {
+    Write-Log "Falha ao carregar .env: $_" -Lvl "WARN"
 }
 
-if (-not $success) { Exit-WithCode 6 "Conclusao anormal do Excel/VBA." }
+# 1. Executar Python Script
+Write-Log "Acionando script Python..."
+if (-not (Test-Path $venvActivate)) {
+    Exit-WithCode 2 "Virtual environment não encontrado em $venvActivate."
+}
 
-# 2. WhatsApp Post-Execution
+try {
+    # Carrega VENV
+    . $venvActivate
+    
+    # Chama o script python capturando StdErr (os logs em base64)
+    $proc = Start-Process -FilePath "python" -ArgumentList "`"$PythonScript`" `"$ExecId`"" -NoNewWindow -Wait -PassThru -RedirectStandardError "$LogDir\python_stderr.log"
+    
+    # Processa os logs retornados do python (skill ipc-stdio)
+    if (Test-Path "$LogDir\python_stderr.log") {
+        $pyLogs = Get-Content "$LogDir\python_stderr.log" -Encoding UTF8
+        foreach ($l in $pyLogs) {
+            if ([string]::IsNullOrWhiteSpace($l)) { continue }
+            if ($l.StartsWith("B64:")) {
+                try {
+                    $b64Str = $l.Substring(4)
+                    $bytes = [System.Convert]::FromBase64String($b64Str)
+                    $decoded = [System.Text.Encoding]::UTF8.GetString($bytes)
+                    Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $ExecId -LogPath $LogFile
+                } catch {
+                    Write-AutomacaoLog -Message "Falha ao decodificar B64: $l" -Level "WARN" -ExecId $ExecId -LogPath $LogFile
+                }
+            } else {
+                Write-AutomacaoLog -Message $l -Level "INFO" -ExecId $ExecId -LogPath $LogFile
+            }
+        }
+        Remove-Item "$LogDir\python_stderr.log" -Force -ErrorAction SilentlyContinue
+    }
+    
+    if ($proc.ExitCode -ne 0) {
+        Exit-WithCode 3 "Script Python retornou ExitCode $($proc.ExitCode)."
+    }
+
+} catch [System.Exception] {
+    Exit-WithCode 4 "Falha ao invocar script Python: $_"
+}
+
+# 2. Enviar E-mail
+Write-Log "Preparando envio de e-mail..."
+if (Test-Path $HtmlPath) {
+    try {
+        $htmlBody = Get-Content $HtmlPath -Raw -Encoding UTF8
+        $emailConfig = Get-Content $EmailConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        
+        $to = $emailConfig.email.to -join ";"
+        $cc = if ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
+        $bcc = if ($emailConfig.email.bcc) { $emailConfig.email.bcc -join ";" } else { $null }
+        
+        $subject = "Alerta: Receitas Bloqueadas - $(Get-Date -Format 'dd/MM/yyyy')"
+        
+        if ([string]::IsNullOrWhiteSpace($to)) {
+            Write-Log "Destinatarios 'to' não configurados. Pulando e-mail." -Lvl "WARN"
+        } else {
+            Write-Log "Enviando e-mail para $to..."
+            Send-OutlookEmail -To $to -Cc $cc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
+            Write-Log "E-mail enviado com sucesso."
+        }
+    } catch {
+        Write-Log "Falha ao enviar e-mail: $_" -Lvl "ERRO"
+    }
+} else {
+    Write-Log "Arquivo $HtmlPath não gerado. Nenhuma receita para notificar ou erro no processo." -Lvl "WARN"
+    Exit-WithCode 0 "Processo concluido sem dados."
+}
+
+# 3. WhatsApp Post-Execution
 Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
 try {
     $whatsAppProc = Start-Process "powershell.exe" `
@@ -198,4 +186,3 @@ try {
 }
 
 Exit-WithCode 0 "Processo concluido com sucesso."
-

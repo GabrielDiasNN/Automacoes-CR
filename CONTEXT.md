@@ -1,35 +1,38 @@
 # Cognitive Context: Automacoes Hub
 
 ## Repository Philosophy
-Este repositorio e um ecossistema de automacoes "AI-Native". Ele foi projetado para ser mantido e evoluido por Inteligencia Artificial, mantendo padroes rigorosos de seguranca e confiabilidade empresarial (Padrao Ouro).
+Este repositório é um ecossistema de automações **AI-Native**, 100% migrado para uma arquitetura moderna e soberana. O projeto abandonou formalmente o uso de VBA e Power Query como motores ativos, operando agora sob padrões rigorosos de segurança e confiabilidade industrial (Padão Ouro).
 
 ## System Architecture
-O hub opera sob o modelo **Monitor-Trigger-Action**:
-- **Monitor:** `MonitorAutomacoes.ps1` coordena agendamentos e saude dos robos com diagnostico preventivo (Pre-Flight).
-- **Bridges:** Scripts `run.ps1` gerenciam a interoperabilidade, suportando estrategias de **Fallback** (Nativo -> Hibrido).
-- **Runtimes:** Uso harmonioso de Excel (Bypass de politica Oracle), Python (Inteligencia e UI) e Node.js (Comunicacoes Moveis).
+O hub opera sob o modelo **Monitor-Trigger-Action** com stack 100% nativa:
+- **Monitor:** `MonitorAutomacoes.ps1` coordena agendamentos e saúde dos robôs com diagnóstico preventivo (Pre-Flight).
+- **Orquestração:** Scripts `run.ps1` em PowerShell gerenciam o fluxo, garantindo interoperabilidade entre camadas.
+- **Data Engine:** Python (Pandas/OracleDB) processa dados complexos com performance O(n) e soberania técnica (Zero dependência de Excel).
+- **Communication:** Node.js (WhatsApp Web Headless) e Outlook COM (PowerShell) realizam a entrega multicanal.
 
 ## AI Interoperability Standards (Skill: ai-native-development-standard)
-1.  **Contextual Headers:** Todos os arquivos fonte possuem metadados JSON para auto-identificacao por LLMs.
-2.  **ASCII-Safe Core:** As mensagens de log no codigo-fonte utilizam apenas ASCII ou sequencias de escape, garantindo que o codigo nao corrompa independente do encoding do editor.
-3.  **Base64 Bridge Protocol:** A troca de strings entre camadas utiliza Base64 para garantir 100% de integridade no Portugues Brasileiro (PT-BR).
-4.  **Traceability:** `ExecId` e a chave mestra de correlacao universal em logs, e-mails e banco de dados (DNA de Correlacao SQL).
+1.  **Contextual Headers:** Todos os arquivos fonte possuem metadados JSON para auto-identificação por LLMs.
+2.  **ASCII-Safe Core:** Mensagens de log utilizam sequências de escape, garantindo integridade de código independente do encoding.
+3.  **Base64 Bridge Protocol:** Transporte de strings acentuadas entre PowerShell/Python/Node via Base64 para garantir integridade PT-BR.
+4.  **Universal Traceability:** `ExecId` é a chave mestra de correlação em logs, e-mails e telemetria.
 
-## Security & Resilience
-- **Zero Secrets:** Credenciais geridas via `.env` e variaveis de ambiente de processo.
-- **Auto-Masking:** Protecao proativa de dados sensiveis em logs via `Lib-Logging.psm1`.
-- **Zombie Prevention:** Gestao rigorosa de instancias COM (Outlook/Excel) com liberacao explicita de memoria.
+## Security & Resilience (Zero Trust)
+- **Zero Secrets:** Credenciais geridas estritamente via `.env` e variáveis de ambiente.
+- **Idempotency State:** Controle de estado via arquivos JSON (`*_state.json`) para evitar spam e garantir envios apenas em mudanças.
+- **Auto-Masking:** Proteção automática de dados sensíveis em logs via `Lib-Logging.psm1`.
 
 ## Knowledge Graph (8 SKILLs Consolidadas)
-Consulte `.github/skills/` para as diretrizes canônicas, que agora governam rigidamente a base:
+O repositório é governado por 8 diretrizes canônicas em `.github/skills/`:
 - `enterprise-orchestration-contract`: Fluxo ponta-a-ponta e ExecId.
 - `automation-runtime-safety`: Zero Trust, Diagnósticos e Logs limpos.
-- `python-oracle-migration`: Uso de vetorização O(n), Type Hints e restrição total ao `SELECT *`.
-- `powershell-automation-monitor`: Tipagem PowerShell estrita e restrição de Try/Catch genérico.
+- `python-oracle-migration`: Vetorização O(n), Type Hints e BAN de `SELECT *`.
+- `powershell-automation-monitor`: Tipagem PowerShell estrita.
 - `nodejs-communications`: Automação do WhatsApp e bridges `.bat`.
-- `vba-enterprise-core`: Segurança no VBE, Exportação PT-BR e COM do Outlook.
+- `vba-enterprise-core`: **(Arquivado)** Padrões para o legado mantido em `Legacy/`.
 - `html-css-enterprise-standard`: Contratos de layout e dashboard.
-- `ai-native-development-standard`: Regras de frontmatter JSON em todos os scripts.
+- `ai-native-development-standard`: Regras de metadados JSON.
 
 ## Absolute Rules (Anti-Regression)
-- **Portability First:** É expressamente proibido comitar arquivos com caminhos absolutos (ex: `C:\...`). O projeto foi desenhado para operar puramente em variáveis e caminhos relativos (`.\` ou `$PSScriptRoot`). Existe um Linter de pre-commit blindando o repositório contra isso.
+- **Legacy Freeze:** É proibido criar novas funcionalidades em VBA ou Power Query. Qualquer evolução deve ser feita em Python/PS.
+- **Portability First:** Proibido caminhos absolutos (ex: `C:\...`). Utilize `.\` ou variáveis dinâmicas.
+- **Explicit SQL:** Proibido `SELECT *`. Colunas devem ser listadas nominalmente para performance e previsibilidade.

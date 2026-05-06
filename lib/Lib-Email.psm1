@@ -9,7 +9,7 @@
     - Preservacao de assinaturas oficiais do Outlook.
     - Resiliencia contra processos zumbis (GetActiveObject).
 .NOTES
-    Version: 1.2.0
+    Version: 1.2.1
     Skill: ai-native-development-standard, enterprise-local-automation-stack
     Contract: outlook-com-integration
 #>
@@ -38,6 +38,7 @@ function Send-OutlookEmail {
 
         [string]$CC = "",
         [string]$BCC = "",
+        [string[]]$Attachments = @(),
         [string]$ExecId = "",
         [string]$LogPath = ""
     )
@@ -103,6 +104,18 @@ function Send-OutlookEmail {
             if (-not [string]::IsNullOrWhiteSpace($finalCc)) { $mailItem.CC = $finalCc }
             if (-not [string]::IsNullOrWhiteSpace($finalBcc)) { $mailItem.BCC = $finalBcc }
 
+            # Processar Anexos
+            if ($Attachments -and $Attachments.Count -gt 0) {
+                foreach ($file in $Attachments) {
+                    if (Test-Path $file) {
+                        $mailItem.Attachments.Add($file) | Out-Null
+                        Write-LocalLog "Anexo adicionado: $file"
+                    } else {
+                        Write-LocalLog "Aviso: Arquivo de anexo não encontrado: $file" -l "WARN"
+                    }
+                }
+            }
+
             $mailItem.Send()
             Write-LocalLog "E-mail enviado com sucesso. Para=$finalTo"
             return $true
@@ -135,4 +148,3 @@ function Send-OutlookEmail {
 }
 
 Export-ModuleMember -Function Send-OutlookEmail
-
