@@ -13,8 +13,11 @@ if sys.stderr.encoding != 'utf-8':
     sys.stderr.reconfigure(encoding='utf-8')
 
 # Configura o stdin para ler UTF-8-SIG do PowerShell (limpando o BOM automaticamente)
-if sys.stdin.encoding != 'utf-8-sig':
-    sys.stdin.reconfigure(encoding='utf-8-sig')
+if hasattr(sys.stdin, 'encoding') and sys.stdin.encoding != 'utf-8-sig':
+    try:
+        sys.stdin.reconfigure(encoding='utf-8-sig')
+    except AttributeError:
+        pass  # Evita falha durante testes (ex: pytest mock de stdin)
 
 def log(message, level="INFO", exec_id="manual"):
     """Envia logs em Base64 para o stderr (Isolamento total)."""

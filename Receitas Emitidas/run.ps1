@@ -56,6 +56,14 @@ function Write-Log {
     }
 }
 
+function Exit-WithCode {
+    param([int]$Code, [string]$Msg = "")
+    if ($Msg) { Write-Log $Msg -Lvl $(if ($Code -eq 0) { "INFO" } else { "ERRO" }) }
+    Write-Log "FIM - Finalizado. ExitCode=$Code"
+    Write-Log "========================================================================================="
+    exit $Code
+}
+
 # --- BOOTSTRAP / PRE-FLIGHT (inclui validacao do Oracle Client local) ---
 # Carregar .env antes do Pre-Flight para que ORACLE_CLIENT_LIB_DIR esteja disponivel
 if (Test-Path $envPath) {
@@ -88,13 +96,12 @@ if ([string]::IsNullOrWhiteSpace($oracleClientLib)) {
 }
 
 if (-not $oraClientPreFlightOk) {
-    Write-Log "ERRO CRITICO: Oracle Client invalido. Extracao vai falhar em Thin Mode. Abortando." -Lvl "ERRO"
-    exit 9
+    Exit-WithCode 9 "ERRO CRITICO: Oracle Client invalido. Extracao vai falhar em Thin Mode. Abortando."
 }
 
 $preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($pythonExe, $extractPy, $generatePy, $configPath)
 if (-not $preFlight) {
-    Write-Log "FALHA NO PRE-FLIGHT CHECK. Abortando execucao." -Lvl "ERRO"; exit 9
+    Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
 }
 
 Write-Log "========================================================================================="
@@ -125,6 +132,12 @@ try {
             $process.WaitForExit()
 
             if ($err) { $err -split "`n" | ForEach-Object { if ($_.Trim()) { Write-AutomacaoLog -Message $_.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile } } }
+            
+            if ($process.ExitCode -eq 2) {
+                Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
+                Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
+            }
+            
             if ($process.ExitCode -ne 0) { throw "Python extract_oracle.py falhou com ExitCode=$($process.ExitCode)." }
             if ([string]::IsNullOrWhiteSpace($out)) { throw "Extracao retornou dados vazios (stdout vazio)." }
             
@@ -198,10 +211,12 @@ try {
     if (-not $emailOk) { throw "Falha definitiva no envio do e-mail via Outlook COM." }
 
     Write-Log "FIM - Processo concluido com sucesso."
-    Write-Log "========================================================================================="
+    Exit-WithCode 0
 
 } catch [System.Exception] {
-    Write-Log "ERRO FATAL: $_" -Lvl "ERRO"; exit 1
+    # Re-throw para nao engolir o Exit-WithCode 0 do bloco de idempotencia
+    if ($_.Exception.Message -match "Processo finalizado") { throw }
+    Exit-WithCode 1 "ERRO FATAL: $_"
 } finally {
     [System.GC]::Collect()
 }

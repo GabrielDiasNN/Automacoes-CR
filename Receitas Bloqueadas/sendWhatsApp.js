@@ -123,7 +123,12 @@ async function processar() {
         log('INFO', 'Fluxo concluido com sucesso real.');
         process.exit(0);
     } catch (e) {
-        log('ERROR', `ENCERRAMENTO POR FALHA: ${e.message}`);
-        process.exit(24);
+        if (e && e.message && e.message.includes('No LID for user')) {
+            log('WARN', `Contato invalido / No LID: ${e.message}. Encerrando graciosamente sem falhar a automacao.`);
+            process.exit(0);
+        } else {
+            log('ERROR', `ENCERRAMENTO POR FALHA: ${e.message}`);
+            process.exit(24);
+        }
     }
 })();

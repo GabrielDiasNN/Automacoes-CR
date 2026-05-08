@@ -125,6 +125,12 @@ jobs:
         run: |
           ./Tools/Test-PythonGovernance.ps1 -RootPath "${{ github.workspace }}"
 
+      - name: Executar Testes Unitarios Python (Pytest)
+        shell: pwsh
+        run: |
+          pip install pytest pytest-cov
+          pytest "Receitas Emitidas\tests" -v
+
       - name: Validar Performance SQL (Oracle)
         shell: pwsh
         run: |
@@ -134,6 +140,11 @@ jobs:
         shell: pwsh
         run: |
           ./Tools/Test-PowerShellGovernance.ps1 -RootPath "${{ github.workspace }}"
+
+      - name: Executar Testes Unitarios PowerShell (Pester)
+        shell: pwsh
+        run: |
+          Invoke-Pester "lib\tests" -EnableExit
 
       - name: Validar Portabilidade (Sem Caminhos Absolutos)
         shell: pwsh

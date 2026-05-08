@@ -6,12 +6,11 @@ Este projeto opera sob uma politica de **Confianca Zero Local** e **Isolamento d
 ---
 
 ## 1. Zero-Secrets Policy
-**Regra de Ouro:** E terminantemente proibido o hardcode de senhas, tokens ou chaves de API em qualquer arquivo `.ps1`, `.py`, `.vbs`, `.js`, `.bas` ou `.cls`.
+**Regra de Ouro:** E terminantemente proibido o hardcode de senhas, tokens ou chaves de API em qualquer arquivo `.ps1`, `.py`, `.js` ou `.json`.
 
 ### Como gerenciar segredos:
 - **Desenvolvimento:** Utilize o arquivo `.env` (ja listado no `.gitignore`).
 - **Producao:** Utilize as Variaveis de Ambiente de Sistema ou o Windows Credential Manager.
-- **VBA:** Segredos devem ser injetados via ambiente pelo orquestrador PowerShell, nunca salvos em planilhas ou constantes de codigo.
 
 ---
 
@@ -33,12 +32,19 @@ Para grandes volumes de dados (JSON), utilizamos o **Secure File-Payload Protoco
 
 ## 4. Auditoria e Conformidade
 Todas as alteracoes de codigo sao filtradas pelo `pre-commit` hook, que impede:
-1.  Vazamento de caracteres nao-ASCII em modulos VBA e scripts (ASCII-Safe Core).
-2.  Sincronismo inconsistente entre Git e XLSM (Drift Check).
-3.  Logs fora do padrao canonico ou com datas em formato nao-BR.
-4.  Ausencia de cabecalhos de contexto AI-Native e arquivos `CONTEXT.md`.
+1.  Vazamento de caracteres nao-ASCII em scripts (ASCII-Safe Core).
+2.  Logs fora do padrao canonico ou com datas em formato nao-BR.
+3.  Ausencia de cabecalhos de contexto AI-Native e arquivos `CONTEXT.md`.
+4.  Violações do Protocolo V.A.L.E.G. e práticas não-soberanas.
 
 ---
 
 ## 5. Reportando Vulnerabilidades
 Se voce identificar uma falha de seguranca em qualquer automacao, notifique imediatamente a gestao de TI e abra um ticket de **Soberania de Dados** para correcao cirurgica por IA.
+
+---
+
+## 🧠 Gestão de Contexto (AI-Native)
+Este arquivo define as diretrizes de segurança que a IA deve seguir.
+- **Obrigação:** Qualquer nova política de segurança ou alteração em protocolos de segredos deve ser refletida aqui imediatamente.
+- **Objetivo:** Garantir que a IA opere sempre sob as restrições de segurança mais recentes, protegendo a soberania dos dados.

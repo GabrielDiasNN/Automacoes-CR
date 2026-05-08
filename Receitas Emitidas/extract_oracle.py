@@ -12,6 +12,7 @@ import json
 import oracledb
 from datetime import datetime
 import base64
+import hashlib
 
 # Forca UTF-8 para garantir interoperabilidade
 if sys.stdout.encoding != 'utf-8':
@@ -58,71 +59,16 @@ def extract():
         log(f"ERRO CRITICO: Nao foi possivel ativar Thick Mode: {e}", "ERROR", exec_id)
         sys.exit(1)
 
-    # Query Original Estavel com CTE (Velocidade maxima sem timeout)
-    sql = f"""
-    WITH
-        TINGIMENTO_TEMPOS AS (
-            SELECT
-                UPO.NUMEROORDEMREAL AS NUMERO_OB,
-                MAX(UNP.DTTEMPOINICIAL) AS INICIO_TING,
-                MAX(UNP.DTTEMPOFINAL) AS FINAL_TING
-            FROM SGTPRD.UP_ORDEM_MVTO UPO
-            JOIN SGTPRD.UNIDADE_PROGRAMACAO UNP ON UPO.NUMEROUP = UNP.NUMEROUP
-            WHERE UNP.TIPO_MAQUINA = 19 
-            AND UNP.EXCLUIDA = 0 
-            GROUP BY UPO.NUMEROORDEMREAL
-        ),
-        MAQUINAS_TINGIMENTO AS (
-            SELECT 
-                NUMERO_OB,
-                MAX(LTRIM(NUMERO_MAQUINA, '0')) AS MQ_TING
-            FROM SGTPRD.OB_FASES 
-            WHERE CODIGO_FASE = 40
-            GROUP BY NUMERO_OB
-        ),
-        DADOS_AGREGADOS AS (
-            SELECT
-                OBF.NUMERO_OB, M.NUMEROORDEM, OBF.CODIGO_GRUPO, OBP.CODPRO_REDUZIDO,
-                MAX(TRIM(OPE.NOME)) AS USUARIO,
-                MAX(M.DT_PESAGEM) AS HORARIO_PESADO,
-                SUM(M.QUANTIDADEPESADA) AS QUANT_PESADA
-            FROM SGTPRD.OB_FASES OBF
-            JOIN SGTPRD.VW_BNF_FASEATUALOB OB ON OB.NUMERO_OB = OBF.NUMERO_OB       
-            JOIN SGTPRD.OB_PRODUTO OBP ON OBP.NUMERO_OB = OBF.NUMERO_OB
-            JOIN SGTPRD.MOVTO_RECEITA M ON M.NUMEROORDEM = OBF.NUMEROORDEMMOVIMENTO 
-                AND M.SEQUENCIAFASEOB = OBF.SEQUENCIAORDEMMOVIME
-            LEFT JOIN SGTPRD.OPERADOR OPE ON OPE.IDOPERADOR = M.IDOPE_PESAGEM
-            WHERE OBF.CODIGO_FASE = 40 AND OBF.STATUS IN (1, 2, 3)
-            GROUP BY OBF.NUMERO_OB, M.NUMEROORDEM, OBF.CODIGO_GRUPO, OBP.CODPRO_REDUZIDO
-        )
-    
-    SELECT /*+ FIRST_ROWS(1000) ExecId:{exec_id} */
-        *
-    FROM (
-        SELECT
-            SYSDATE AS Valida_Atualizacao,
-            BASE.CODIGO_GRUPO AS GRUPO, BASE.NUMERO_OB,
-            CASE WHEN SGTPRD.FNC_ESP_REC_PES(BASE.NUMERO_OB) = 0 THEN 'NAO' ELSE 'SIM' END AS PESADA,
-            MT.MQ_TING, TT.INICIO_TING, TT.FINAL_TING,
-            ART.CDARTIGOCRU AS ARTIGO, BASE.CODPRO_REDUZIDO AS REDUZIDO,
-            TRIM(ITE.DESCRICAO) AS DESCRICAO, FAS.DESCR_FASE AS FASE_ATUAL,
-            CASE FAS.STATUS
-                WHEN 0 THEN 'PROGRAMADA' WHEN 1 THEN 'EMITIDA'
-                WHEN 2 THEN 'PESADA' WHEN 3 THEN 'EM EXECUCAO'
-            END AS STATUS_FASE,
-            BASE.USUARIO, BASE.HORARIO_PESADO,
-            ROUND((SYSDATE) - BASE.HORARIO_PESADO, 2) AS DIAS_PESADO,
-            BASE.QUANT_PESADA
-        FROM DADOS_AGREGADOS BASE
-        LEFT JOIN TINGIMENTO_TEMPOS TT ON TT.NUMERO_OB = BASE.NUMERO_OB
-        LEFT JOIN MAQUINAS_TINGIMENTO MT ON MT.NUMERO_OB = BASE.NUMERO_OB
-        LEFT JOIN SGTPRD.ENGEITEMESTOARTCRU ART ON ART.CDREDUZIDO = BASE.CODPRO_REDUZIDO
-        LEFT JOIN SGTPRD.ITENS_ESTOQUE ITE ON ITE.CODIGO_REDUZIDO = BASE.CODPRO_REDUZIDO
-        LEFT JOIN SGTPRD.VW_BNF_FASEATUALOB FAS ON FAS.NUMERO_OB = BASE.NUMERO_OB
-    )
-    WHERE PESADA = 'NAO'
-    ORDER BY INICIO_TING NULLS LAST
-    """
+    sql_file = os.path.join(os.path.dirname(__file__), "SQL-ReceitasEmitidas.sql")
+    if not os.path.exists(sql_file):
+        log(f"Arquivo SQL nao encontrado: {sql_file}", "ERROR", exec_id)
+        sys.exit(1)
+
+    with open(sql_file, "r", encoding="utf-8") as f:
+        sql = f.read()
+
+    # Adiciona o ExecId para rastreabilidade no Oracle (Skill: SQL-Correlation-DNA)
+    sql = sql.replace("/*+ FIRST_ROWS(1000) */", f"/*+ FIRST_ROWS(1000) ExecId:{exec_id} */")
 
     max_retries = 3
     retry_count = 0
@@ -151,8 +97,35 @@ def extract():
                     elif isinstance(value, str) and value: record[key] = value.strip()
                 data.append(record)
                 
+            json_payload = json.dumps(data, ensure_ascii=False)
+            current_hash = hashlib.sha256(json_payload.encode('utf-8')).hexdigest()
+            
+            state_path = os.path.join(os.path.dirname(__file__), "receitas_state.json")
+            last_state_data = {}
+            if os.path.exists(state_path):
+                try:
+                    with open(state_path, "r", encoding="utf-8") as f:
+                        last_state_data = json.load(f)
+                except:
+                    pass
+            
+            last_hash = last_state_data.get("last_hash")
+            
+            if last_hash and current_hash == last_hash:
+                log("Sem alteracoes relevantes detectadas no ciclo (Idempotencia).", "INFO", exec_id)
+                # Atualiza apenas timestamp e mantem o hash
+                state_data = {"last_hash": current_hash, "updated_at": datetime.now().isoformat()}
+                with open(state_path, "w", encoding="utf-8") as f:
+                    json.dump(state_data, f, ensure_ascii=False, indent=4)
+                sys.exit(2) # ExitCode 2 indica sucesso, mas sem necessidade de notificacao
+                
+            # Atualiza o state antes do output
+            state_data = {"last_hash": current_hash, "updated_at": datetime.now().isoformat()}
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump(state_data, f, ensure_ascii=False, indent=4)
+                
             # O Payload sai pelo Stdout limpo para o Orquestrador ler
-            sys.stdout.write(json.dumps(data, ensure_ascii=False))
+            sys.stdout.write(json_payload)
             sys.stdout.flush()
             log(f"Extracao concluida: {len(data)} registros.", "INFO", exec_id)
             return # Sucesso total

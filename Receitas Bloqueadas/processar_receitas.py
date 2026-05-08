@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # {
-#   "version": "2.1.1",
+#   "version": "2.1.2",
 #   "skill": "python-oracle-migration",
-#   "description": "Processa Receitas Bloqueadas com Controle de Estado, Realce Visual e Excel Profissional"
+#   "description": "Processa Receitas Bloqueadas com Controle de Estado, Realce Visual, Excel Profissional e Resiliencia (Stamina)"
 # }
 import os
 import sys
@@ -10,6 +10,7 @@ import base64
 import oracledb
 import pandas as pd
 import json
+import stamina
 from datetime import datetime
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -30,81 +31,13 @@ def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     sys.stderr.write(f"B64:{b64_msg}\n")
     sys.stderr.flush()
 
-def get_sql() -> str:
-    return """
-        WITH 
-        CTE_TEMPOS AS (
-            SELECT 
-                UPO.NUMEROORDEMREAL AS NR_OB,
-                MAX(UNP.DTTEMPOINICIAL) AS INICIO_TING,
-                MAX(UNP.DTTEMPOFINAL) AS FINAL_TING,
-                MAX(SUBSTR(UNP.NUMERO_MAQUINA, 7, 4)) AS MQ_TING
-            FROM SGTPRD.UP_ORDEM_MVTO UPO
-            INNER JOIN SGTPRD.UNIDADE_PROGRAMACAO UNP ON UPO.NUMEROUP = UNP.NUMEROUP
-            WHERE UNP.TIPO_MAQUINA = 19 
-              AND UNP.EXCLUIDA = 0 
-              AND UNP.TIPOUP = 0
-              AND UNP.DTTEMPOFINAL >= TRUNC(SYSDATE)
-            GROUP BY UPO.NUMEROORDEMREAL
-        ),
-        CTE_GRAFICO AS (
-            SELECT IDLCRIR_PRD, MAX(GRAFICO) AS GRAFICO
-            FROM SGTPRD.VW_LAC_RECPRD_RECLAB
-            GROUP BY IDLCRIR_PRD
-        ),
-        CTE_DADOS AS (
-            SELECT 
-                OBFX.CODIGO_GRUPO AS GRUPO,
-                OBFX.NUMERO_OB AS NR_OB,
-                TRIM(OBFX.CODIGO_COR_DESENHO) AS COR_OB,
-                TRIM(SUBSTR(CREX.CODCOR, 1, 11)) AS COR_REC,
-                OBFX.ESPECIFICACAO_PRODUT AS EP_OB,
-                CREX.ESPECIFICACAO_PRODUT AS EP_REC,
-                OBFX.PROCESSO_ESPECIFICO AS PE_OB,
-                CREX.PROCESSO_ESPECIFICO AS PE_REC,
-                T.MQ_TING,
-                T.INICIO_TING,
-                T.FINAL_TING,
-                GR.GRAFICO,
-                DECODE(LCR.DATA_ULTIMA_PRODUC, 0, TO_DATE('1899-12-31','YYYY-MM-DD'), 
-                       TO_DATE(LCR.DATA_ULTIMA_PRODUC,'YYYYMMDD')) AS DATA_ULT_PROD,
-                CREX.CODIGO_CLASSIFICACAO AS CD_CLASSIF,
-                UPPER(TRIM(CLF.DESCRICAO)) AS CLASSIF_COR,
-                LCR.CODIGO_REDUZIDO_RECE AS CODIGO_REDUZIDO_RECE,
-                UPPER(LRB.USUARIO_BLOQUEIO) AS USUARIO_BLOQUEIO,
-                TO_DATE(LRB.DATA_BLOQUEIO, 'YYYY/MM/DD') AS DATA_BLOQUEIO,
-                TO_DATE(LCR.DATA_ALTERACAO, 'YYYY/MM/DD') AS DATA_ALTERACAO,
-                LCR.USUARIO_ALTEROU,
-                UPPER(TRIM(VSU.NOME)) AS NOME_USUARIO_ALTEROU,
-                CASE 
-                    WHEN OBFX.PROCESSO_ESPECIFICO IS NULL OR CREX.PROCESSO_ESPECIFICO IS NULL THEN 'Indefinido'
-                    WHEN OBFX.PROCESSO_ESPECIFICO = CREX.PROCESSO_ESPECIFICO THEN 'OK'
-                    ELSE 'Divergente'
-                END AS STATUS_PE
-            FROM CTE_TEMPOS T
-            INNER JOIN SGTPRD.UP_ORDEM_MVTO UPO ON UPO.NUMEROORDEMREAL = T.NR_OB
-            INNER JOIN SGTPRD.OB_FASES OBFX ON OBFX.NUMERO_OB = T.NR_OB
-            INNER JOIN SGTPRD.OB OB ON OBFX.NUMERO_OB = OB.NUMERO_OB
-            LEFT JOIN SGTPRD.CADASTRO_RECEITAS CREX 
-                ON CREX.PROCESSOINDUSTRIAL = (OBFX.CODIGO_FASE || OBFX.TIPO_PROCESSO)
-                AND SUBSTR(CREX.CODCOR, 1, 11) = OBFX.CODIGO_COR_DESENHO
-                AND CREX.ESPECIFICACAO_PRODUT = OBFX.ESPECIFICACAO_PRODUT
-                AND CREX.PROCESSO_ATIVO_PRODU = 1
-            LEFT JOIN SGTPRD.LIGA_CADREC_ITEMREC LCR ON LCR.CODIGO_REDUZIDO_RECE = CREX.CODIGO_REDUZIDO_RECE
-            LEFT JOIN CTE_GRAFICO GR ON GR.IDLCRIR_PRD = LCR.ID_LIGA_CADREC_ITEMR
-            LEFT JOIN SGTPRD.CLASSIFICACAO_COR CLF ON CLF.CODIGO_CLASSIFICACAO = CREX.CODIGO_CLASSIFICACAO
-            INNER JOIN SGTPRD.LABRECEITA_BLOQUEADA LRB ON LRB.ID_LABRECEITA_BLOQ = LCR.ID_LABRECEITA_BLOQ
-            LEFT JOIN SGTPRD.VW_SIS_SENHA_USUARIO VSU ON VSU.CODREDUSUARIO = LCR.USUARIO_ALTEROU
-            WHERE OB.STATUS <> 0
-              AND OBFX.CODIGO_FASE = 40
-              AND OBFX.STATUS = 0
-              AND LRB.BLOQUEIO_RECEITA = 0
-        )
-        SELECT * FROM CTE_DADOS
-        ORDER BY INICIO_TING ASC, NR_OB ASC, GRUPO ASC
-    """
+@stamina.retry(on=oracledb.DatabaseError, attempts=3)
+def fetch_data_with_retry(user: str, password: str, dsn: str, sql_query: str, exec_id: str) -> pd.DataFrame:
+    log("Estabelecendo conexao e extraindo dados...", "INFO", exec_id)
+    with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
+        return pd.read_sql(sql_query, con=connection)
 
-def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: dict) -> str:
+def gerar_html_artistico(df_display: pd.DataFrame, stats: dict) -> str:
     # Cores Classicas
     cor_header = "#0f4c81"
     cor_header_text = "#ffffff"
@@ -113,17 +46,18 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
     cor_table_border = "#cbd5e1"
     
     # Cores de Status
+    cor_new_bg = "#f0fdf4"   # Verde muito claro para novos
     cor_mod_bg = "#fef9c3"   # Amarelo suave para alteradas
-    cor_del_bg = "#f1f5f9"   # Cinza muito claro para liberadas
+    cor_del_bg = "#f1f5f9"   # Cinza muito claro para liberadas (riscado)
     
     # Textos ASCII-Safe
-    rel_title = "Relat\u00f3rio de Receitas Bloqueadas"
+    rel_title = "Painel Geral de Receitas Bloqueadas"
     ciclo_resumo = "Resumo do Ciclo:"
     col_cor = "Cor Rec."
     col_ult_prod = "Data \u00daltima Prod."
     col_bloqueio = "Data Bloqueio"
     col_status = "Status / Mudan\u00e7a"
-    txt_intro = "Abaixo, as altera\u00e7\u00f5es detectadas desde o \u00faltimo processamento:"
+    txt_intro = "Abaixo, a listagem completa de receitas sob bloqueio com os destaques do ciclo:"
     txt_footer_ob = "Favor consultar a planilha em anexo para o detalhamento t\u00e9cnico completo por Ordem de Beneficiamento (OB)."
     txt_footer_auto = "Mensagem autom\u00e1tica."
     txt_warning = "Por favor, atualizar os status com as previs\u00f5es de liberar cada receita."
@@ -148,7 +82,7 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
                             <b style="color:{cor_header}; font-size:12pt;">{ciclo_resumo}</b><br>
                             <table cellspacing="5" cellpadding="0" style="margin-top:5px; font-size:10.5pt;">
                                 <tr>
-                                    <td><span style="display:inline-block; width:12px; height:12px; background-color:#ffffff; border:1px solid {cor_table_border};"></span> Novas: <b>{stats['new']}</b></td>
+                                    <td><span style="display:inline-block; width:12px; height:12px; background-color:{cor_new_bg}; border:1px solid #bbf7d0;"></span> Novas: <b>{stats['new']}</b></td>
                                     <td style="padding-left:20px;"><span style="display:inline-block; width:12px; height:12px; background-color:{cor_mod_bg}; border:1px solid #fef08a;"></span> Alteradas: <b>{stats['mod']}</b></td>
                                     <td style="padding-left:20px;"><span style="display:inline-block; width:12px; height:12px; background-color:{cor_del_bg}; border:1px solid {cor_table_border};"></span> Liberadas: <b>{stats['del']}</b></td>
                                 </tr>
@@ -168,12 +102,20 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
                             </thead>
                             <tbody>
     """
-    for _, row in df_diff.iterrows():
+    
+    # Ordenar: Liberadas no fim, o resto por Cor/EP
+    df_display['_sort_order'] = df_display['_change_type'].apply(lambda x: 1 if x == 'DELETED' else 0)
+    df_display = df_display.sort_values(by=['_sort_order', 'Cor Rec.', 'EP Rec.'])
+
+    for _, row in df_display.iterrows():
         change_type = row['_change_type']
         bg = "#ffffff"
         status_text = ""
         font_style = "normal"
+        text_decor = "none"
+        
         if change_type == 'NEW':
+            bg = cor_new_bg
             status_text = "\u2728 NOVO BLOQUEIO"
         elif change_type == 'MODIFIED':
             bg = cor_mod_bg
@@ -182,15 +124,18 @@ def gerar_html_artistico(df_atual: pd.DataFrame, df_diff: pd.DataFrame, stats: d
             bg = cor_del_bg
             status_text = "<b style='color:#059669;'>\u2705 LIBERADA</b>"
             font_style = "italic"
+            text_decor = "line-through"
+        else:
+            status_text = "<span style='color:#94a3b8;'>BLOQUEIO MANTIDO</span>"
             
         html += f"""
-                                <tr style="background-color:{bg}; font-style:{font_style};">
+                                <tr style="background-color:{bg}; font-style:{font_style}; text-decoration:{text_decor};">
                                     <td style="border:1px solid {cor_table_border}; text-align:center; font-weight:bold;">{row['Cor Rec.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['EP Rec.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['PE Rec']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data \u00daltima Prod.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data Bloqueio']}</td>
-                                    <td style="border:1px solid {cor_table_border}; text-align:center; font-size:9pt; font-weight:bold;">{status_text}</td>
+                                    <td style="border:1px solid {cor_table_border}; text-align:center; font-size:8.5pt; font-weight:bold;">{status_text}</td>
                                 </tr>
         """
     html += f"""
@@ -248,6 +193,13 @@ def formatar_excel(file_path: str) -> None:
 def process() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
     log("Iniciando processo V2 de Receitas Bloqueadas (Controle de Estado)", "INFO", exec_id)
+    
+    # Limpar artefatos de execucoes anteriores para evitar disparos indevidos
+    html_path = os.path.join(os.path.dirname(__file__), "email_body.html")
+    if os.path.exists(html_path):
+        os.remove(html_path)
+        log("Artefato email_body.html antigo removido.", "DEBUG", exec_id)
+
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = "dbprd" 
@@ -262,11 +214,12 @@ def process() -> None:
         log("Oracle Thick Mode ativado.", "INFO", exec_id)
     except Exception as e: log(f"Aviso Thick client: {e}", "WARN", exec_id)
 
-    connection = None
     try:
-        connection = oracledb.connect(user=user, password=password, dsn=dsn)
-        sql_query = f"SELECT GRUPO, NR_OB, COR_OB, COR_REC, EP_OB, EP_REC, PE_OB, PE_REC, MQ_TING, INICIO_TING, FINAL_TING, GRAFICO, DATA_ULT_PROD, CD_CLASSIF, CLASSIF_COR, CODIGO_REDUZIDO_RECE, USUARIO_BLOQUEIO, DATA_BLOQUEIO, DATA_ALTERACAO, USUARIO_ALTEROU, NOME_USUARIO_ALTEROU, STATUS_PE FROM ({get_sql()})"
-        df_raw = pd.read_sql(sql_query, con=connection)
+        sql_path = os.path.join(os.path.dirname(__file__), "SQL-ReceitasBloqueadas.sql")
+        with open(sql_path, "r", encoding="utf-8") as f:
+            sql_query = f.read()
+
+        df_raw = fetch_data_with_retry(user, password, dsn, sql_query, exec_id)
         df_raw = df_raw.rename(columns={"COR_REC": "Cor Rec.", "EP_REC": "EP Rec.", "PE_REC": "PE Rec", "DATA_ULT_PROD": "Data \u00daltima Prod.", "DATA_BLOQUEIO": "Data Bloqueio"})
         for col in ["Data \u00daltima Prod.", "Data Bloqueio"]:
             df_raw[col] = pd.to_datetime(df_raw[col], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
@@ -302,10 +255,11 @@ def process() -> None:
                     row_diff = row.copy(); row_diff['_change_type'] = 'DELETED'; diff_rows.append(row_diff); stats['del'] += 1
 
         if not diff_rows:
-            log("Sem alteracoes. Notificacao suprimida.", "INFO", exec_id)
+            log("Sem alteracoes relevantes detectadas no ciclo.", "INFO", exec_id)
+            # Atualiza apenas o timestamp e o hash no arquivo de estado para manter sincronia
             state_data = {"last_hash": pd.util.hash_pandas_object(df_agreg).sum().astype(str), "updated_at": datetime.now().isoformat(), "records": df_agreg.to_dict(orient='records')}
             with open(state_path, "w", encoding="utf-8") as f: json.dump(state_data, f, ensure_ascii=False, indent=4)
-            sys.exit(0)
+            sys.exit(2) # Exit code 2 indica sucesso, mas sem necessidade de notificacao
 
         state_data = {"last_hash": pd.util.hash_pandas_object(df_agreg).sum().astype(str), "updated_at": datetime.now().isoformat(), "records": df_agreg.to_dict(orient='records')}
         with open(state_path, "w", encoding="utf-8") as f: json.dump(state_data, f, ensure_ascii=False, indent=4)
@@ -318,14 +272,28 @@ def process() -> None:
         try: formatar_excel(excel_path); log("Excel formatado.", "INFO", exec_id)
         except Exception as e: log(f"Aviso Excel: {e}", "WARN", exec_id)
             
-        html_content = gerar_html_artistico(df_agreg, pd.DataFrame(diff_rows), stats)
-        with open(os.path.join(os.path.dirname(__file__), "email_body.html"), "w", encoding="utf-8") as f: f.write(html_content)
-        log("Processo concluido.", "INFO", exec_id)
+        # Preparar DataFrame para exibicao unificada no HTML
+        df_diff = pd.DataFrame(diff_rows)
+        df_display = df_agreg.copy()
+        df_display['_change_type'] = 'STABLE'
+        
+        # Mapear mudancas para o dataframe principal
+        for _, row in df_diff.iterrows():
+            if row['_change_type'] in ['NEW', 'MODIFIED']:
+                df_display.loc[df_display['Key'] == row['Key'], '_change_type'] = row['_change_type']
+        
+        # Adicionar as liberadas (que nao estao mais no df_agreg)
+        df_deleted = df_diff[df_diff['_change_type'] == 'DELETED']
+        if not df_deleted.empty:
+            df_display = pd.concat([df_display, df_deleted], ignore_index=True)
+
+        html_content = gerar_html_artistico(df_display, stats)
+        with open(html_path, "w", encoding="utf-8") as f: f.write(html_content)
+        log("Processo concluido com alteracoes. Notificacao gerada.", "INFO", exec_id)
+        sys.exit(0)
 
     except oracledb.DatabaseError as de:
         error_obj, = de.args; log(f"Erro DB: {error_obj.message}", "ERROR", exec_id); sys.exit(1)
     except Exception as e: log(f"Erro fatal: {str(e)}", "ERROR", exec_id); sys.exit(1)
-    finally:
-        if connection: connection.close()
 
 if __name__ == "__main__": process()

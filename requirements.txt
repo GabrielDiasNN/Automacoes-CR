@@ -1,4 +1,5 @@
 # Core Libraries
+stamina>=24.2.0
 oracledb>=3.4.2
 pandas
 openpyxl
@@ -11,3 +12,5 @@ pandas-stubs
 types-openpyxl
 black
 isort
+pytest
+pytest-cov

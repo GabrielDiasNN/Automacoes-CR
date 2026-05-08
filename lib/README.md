@@ -1,5 +1,7 @@
 # Biblioteca PowerShell Compartilhada (`lib/`)
 
+[⬅️ Voltar para o Hub Central](file:///c:/Automacoes/README.md)
+
 Este diretorio contem os modulos e scripts utilitarios consumidos pelos orquestradores de automacao. Estes componentes formam a fundacao tecnica para a soberania e seguranca do hub.
 
 ## 📝 `Lib-Logging.psm1` (v1.3)
@@ -28,6 +30,19 @@ Interface de alta fidelidade para disparos via Outlook COM.
 ## 💬 `Send-WhatsApp.ps1`
 
 Wrapper PowerShell para o motor Node.js. Gerencia concorrencia e sessao (Pairing) do WhatsApp Web de forma transparente para os robos.
+
+---
+
+## 🧪 Testes de Qualidade (Pester)
+
+Para garantir a resiliência industrial, a biblioteca conta com testes automatizados utilizando o framework **Pester**.
+
+- **`tests\Lib-Logging.Tests.ps1`**: Valida o motor de logging, garantindo que o registro de eventos e o tratamento de erros estejam operantes antes do deploy em produção.
+
+Execução recomendada:
+```powershell
+Invoke-Pester -Path ".\tests\Lib-Logging.Tests.ps1" -Output Detailed
+```
 
 ---
 

@@ -1,10 +1,4 @@
-let
-    // =============================================================================
-    // 1. CONSULTA SQL (Lógica Otimizada / Nomes Nativos)
-    // =============================================================================
-    ConsultaSQL = "
         WITH 
-        -- Filtro temporal antecipado para reduzir I/O
         CTE_TEMPOS AS (
             SELECT 
                 UPO.NUMEROORDEMREAL AS NR_OB,
@@ -16,17 +10,14 @@ let
             WHERE UNP.TIPO_MAQUINA = 19 
               AND UNP.EXCLUIDA = 0 
               AND UNP.TIPOUP = 0
-              AND UNP.DTTEMPOFINAL >= TRUNC(SYSDATE) -- Filtro 'Hoje em diante' no banco
+              AND UNP.DTTEMPOFINAL >= TRUNC(SYSDATE)
             GROUP BY UPO.NUMEROORDEMREAL
         ),
-
-        -- Pré-agregação para evitar subqueries linha-a-linha
         CTE_GRAFICO AS (
             SELECT IDLCRIR_PRD, MAX(GRAFICO) AS GRAFICO
             FROM SGTPRD.VW_LAC_RECPRD_RECLAB
             GROUP BY IDLCRIR_PRD
         ),
-
         CTE_DADOS AS (
             SELECT 
                 OBFX.CODIGO_GRUPO AS GRUPO,
@@ -41,7 +32,6 @@ let
                 T.INICIO_TING,
                 T.FINAL_TING,
                 GR.GRAFICO,
-                -- Tratamento de datas nulas/inválidas no banco
                 DECODE(LCR.DATA_ULTIMA_PRODUC, 0, TO_DATE('1899-12-31','YYYY-MM-DD'), 
                        TO_DATE(LCR.DATA_ULTIMA_PRODUC,'YYYYMMDD')) AS DATA_ULT_PROD,
                 CREX.CODIGO_CLASSIFICACAO AS CD_CLASSIF,
@@ -52,13 +42,13 @@ let
                 TO_DATE(LCR.DATA_ALTERACAO, 'YYYY/MM/DD') AS DATA_ALTERACAO,
                 LCR.USUARIO_ALTEROU,
                 UPPER(TRIM(VSU.NOME)) AS NOME_USUARIO_ALTEROU,
-                -- Cálculo de Status PE feito no Oracle (muito mais rápido que no M)
                 CASE 
                     WHEN OBFX.PROCESSO_ESPECIFICO IS NULL OR CREX.PROCESSO_ESPECIFICO IS NULL THEN 'Indefinido'
                     WHEN OBFX.PROCESSO_ESPECIFICO = CREX.PROCESSO_ESPECIFICO THEN 'OK'
                     ELSE 'Divergente'
                 END AS STATUS_PE
             FROM CTE_TEMPOS T
+            INNER JOIN SGTPRD.UP_ORDEM_MVTO UPO ON UPO.NUMEROORDEMREAL = T.NR_OB
             INNER JOIN SGTPRD.OB_FASES OBFX ON OBFX.NUMERO_OB = T.NR_OB
             INNER JOIN SGTPRD.OB OB ON OBFX.NUMERO_OB = OB.NUMERO_OB
             LEFT JOIN SGTPRD.CADASTRO_RECEITAS CREX 
@@ -76,58 +66,5 @@ let
               AND OBFX.STATUS = 0
               AND LRB.BLOQUEIO_RECEITA = 0
         )
-        
-        SELECT * FROM CTE_DADOS
+        SELECT GRUPO, NR_OB, COR_OB, COR_REC, EP_OB, EP_REC, PE_OB, PE_REC, MQ_TING, INICIO_TING, FINAL_TING, GRAFICO, DATA_ULT_PROD, CD_CLASSIF, CLASSIF_COR, CODIGO_REDUZIDO_RECE, USUARIO_BLOQUEIO, DATA_BLOQUEIO, DATA_ALTERACAO, USUARIO_ALTEROU, NOME_USUARIO_ALTEROU, STATUS_PE FROM CTE_DADOS
         ORDER BY INICIO_TING ASC, NR_OB ASC, GRUPO ASC
-    ",
-
-    // =============================================================================
-    // 2. PROCESSAMENTO NO POWER QUERY (M)
-    // =============================================================================
-    Fonte = Oracle.Database("dbprd", [
-        HierarchicalNavigation = true, 
-        Query = ConsultaSQL,
-        // CommandTimeout: 10 min — alinhado com VW_EXC_OB_PED_ROM_Faccao.pq
-        CommandTimeout = #duration(0, 0, 10, 0)
-    ]),
-
-    // Renomeação explícita: Oracle (UPPER) -> PowerBI (Friendly)
-    RenomearColunas = Table.RenameColumns(Fonte, {
-        {"GRUPO", "Grupo"},
-        {"NR_OB", "Nº OB"},
-        {"COR_OB", "Cor OB"},
-        {"COR_REC", "Cor Rec."},
-        {"EP_OB", "EP OB"},
-        {"EP_REC", "EP Rec."},
-        {"PE_OB", "PE OB"},
-        {"PE_REC", "PE Rec"},
-        {"MQ_TING", "Máq. Ting."},
-        {"INICIO_TING", "Início do Ting."},
-        {"FINAL_TING", "Final do Ting."},
-        {"GRAFICO", "Gráfico"},
-        {"DATA_ULT_PROD", "Data Última Prod."},
-        {"CD_CLASSIF", "Cód. Classificação"},
-        {"CLASSIF_COR", "Classificação Cor"},
-        {"CODIGO_REDUZIDO_RECE", "Reduzido Receita"},
-        {"USUARIO_BLOQUEIO", "Usuário Bloqueio"},
-        {"DATA_BLOQUEIO", "Data Bloqueio"},
-        {"DATA_ALTERACAO", "Data Alteração"},
-        {"USUARIO_ALTEROU", "Usuário Alterou"},
-        {"NOME_USUARIO_ALTEROU", "Nome Usuário Alterou"},
-        {"STATUS_PE", "Status PE"}
-    }),
-
-    // Definição de Tipos nas colunas já renomeadas
-    DefinirTipos = Table.TransformColumnTypes(RenomearColunas, {
-        {"Grupo", Int64.Type},
-        {"Nº OB", Int64.Type},
-        {"Início do Ting.", type datetime},
-        {"Final do Ting.", type datetime},
-        {"Data Última Prod.", type date},
-        {"Data Bloqueio", type date},
-        {"Data Alteração", type date},
-        {"Reduzido Receita", Int64.Type},
-        {"Status PE", type text}
-    })
-in
-    DefinirTipos

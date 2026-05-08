@@ -184,7 +184,7 @@ function Get-TargetFiles {
 
 
 
-            if ($candidate -match '\\Audit\\|\\Tools\\') {
+            if ($candidate -match '\\Tools\\') {
 
                 continue
 
@@ -220,9 +220,9 @@ function Get-TargetFiles {
 
             if (-not $rel) { continue }
 
-            # Excluir diretorios Audit/ e Tools/ do escopo de validacao
+            # Excluir diretorios Tools/ do escopo de validacao
 
-            if ($rel -match '^(Audit/|Tools/)') { continue }
+            if ($rel -match '^Tools/') { continue }
 
             $ext = [System.IO.Path]::GetExtension($rel).ToLowerInvariant()
 
@@ -250,7 +250,7 @@ function Get-TargetFiles {
 
             $files += Get-ChildItem -Path $RootPath -Filter $ext -Recurse -File -ErrorAction SilentlyContinue |
 
-            Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.git\\|\\Audit\\|\\Tools\\' }
+            Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.git\\|\\Tools\\' }
 
         }
 

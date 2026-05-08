@@ -30,7 +30,7 @@ foreach ($file in $targetFiles) {
     if (-not (Test-Path $fullPath)) { continue }
 
     # Ignorando scripts de setup e pastas de legado/template
-    if ($file -match 'SetupMonitor|Copilot|CONTEXT|README|runbook|Legacy|Legacy_VBA|_Template') { continue }
+    if ($file -match 'SetupMonitor|Copilot|CONTEXT|README|runbook|_Template') { continue }
 
     $lines = Get-Content $fullPath -ErrorAction SilentlyContinue
     $lineNum = 1

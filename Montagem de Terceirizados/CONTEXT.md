@@ -26,3 +26,9 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
 -   **Logging:** Todas as mensagens acentuadas utilizam o **Base64 Bridge Protocol**.
 -   **No UI dependency:** Remocao total de dependencias do Office Excel para processamento de dados.
 -   **Encapsulamento SQL:** Regras de negocio complexas estao isoladas no arquivo SQL, facilitando o tuning sem alterar o core da aplicacao.
+
+---
+
+## 🧠 Gestão de Contexto (AI-Native)
+- **Obrigação:** Atualizar este arquivo se houver mudanças nas `Validation Rules` de NF vs OB ou na estrutura do `.cache_erros.json`.
+- **Objetivo:** Garantir que a IA mantenha o rigor fiscal do cruzamento de dados sem analisar o script de validação.

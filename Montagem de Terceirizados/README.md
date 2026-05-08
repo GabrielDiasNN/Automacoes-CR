@@ -1,4 +1,6 @@
-# Automacao - Montagem de Terceirizados (v2.0 - Pure-Native)
+# Automacao - Montagem de Terceirizados (v2.0 - Pure-Native) ⚙️
+
+[⬅️ Voltar para o Hub Central](file:///c:/Automacoes/README.md)
 
 ## Visao Geral
 
@@ -48,3 +50,9 @@ A migracao para o modo nativo reduziu o tempo de execucao de minutos (via Excel 
 ## Regras de Negocio Criticas
 1. **Idempotencia**: O sistema utiliza cache de estado para enviar alertas apenas quando surgem novos erros ou mudancas significativas.
 2. **Filtros de Producao**: A automacao foca exclusivamente em OBs Montadas (Setor 5), com Destino Receita 1 e Programacao do tipo `%T`.
+
+---
+
+## 🧠 Gestão de Contexto (AI-Native)
+- **Obrigação:** Este arquivo deve refletir qualquer mudança no `Secure File-Payload Protocol` ou na lógica de idempotência.
+- **Objetivo:** Manter a IA ciente da arquitetura "Pure-Native" e da ausência de dependências de interface COM.

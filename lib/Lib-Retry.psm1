@@ -71,16 +71,16 @@ function Invoke-WithRetry {
         $attempt++
         try {
             if ($attempt -gt 1) {
-                Write-RetryLog "[RETRY] $OperationName - Tentativa $attempt/$MaxAttempts" -Lvl "WARN"
+                Write-RetryLog "[RETRY] $OperationName - Tentativa $attempt/$($MaxAttempts)" -Lvl "WARN"
             }
             $result = & $Action
             if ($result -eq $false) { throw "Acao retornou false na tentativa $attempt." }
-            Write-RetryLog "[RETRY] $OperationName - Sucesso na tentativa $attempt/$MaxAttempts"
+            Write-RetryLog "[RETRY] $OperationName - Sucesso na tentativa $attempt/$($MaxAttempts)"
             return $true
         }
         catch [System.Exception] {
             $errMsg = $_.Exception.Message
-            Write-RetryLog "[RETRY] $OperationName - Falha na tentativa $attempt/$MaxAttempts: $errMsg" -Lvl "WARN"
+            Write-RetryLog "[RETRY] $OperationName - Falha na tentativa $attempt/$($MaxAttempts): $errMsg" -Lvl "WARN"
 
             if ($attempt -ge $MaxAttempts) {
                 Write-RetryLog "[RETRY_ESGOTADO] $OperationName - Todas as $MaxAttempts tentativas falharam. Ultimo erro: $errMsg" -Lvl "ERRO"
