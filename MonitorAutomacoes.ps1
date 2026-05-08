@@ -8,7 +8,7 @@
     3. Health & Metrics: Gera dashboards e snapshots de performance.
     4. Mutex: Garante instancia unica de monitoramento.
 .NOTES
-    Version: 3.7.0
+    Version: 3.7.2
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract
     Contract: monitor-trigger-action, base64-bridge-logs, preflight-v1
 #>
@@ -27,23 +27,24 @@ if (-not $ScriptPath) { $ScriptPath = "." }
 
 # Bibliotecas e Dependencias Criticas
 $libLogging = Join-Path $ScriptPath "lib\Lib-Logging.psm1"
-$libRetry  = Join-Path $ScriptPath "lib\Lib-Retry.psm1"
-$libEmail  = Join-Path $ScriptPath "lib\Lib-Email.psm1"
+$libRetry = Join-Path $ScriptPath "lib\Lib-Retry.psm1"
+$libEmail = Join-Path $ScriptPath "lib\Lib-Email.psm1"
 $ConfigFilePath = Join-Path $ScriptPath "config.json"
 $EmergencyLog = Join-Path $ScriptPath "Startup_Error.txt"
 
 # --- BOOTSTRAP / PRE-FLIGHT (Self-Diagnosing) ---
 if (Test-Path $libLogging) {
     Import-Module $libLogging -Force
-    if (Test-Path $libRetry)  { Import-Module $libRetry  -Force }
-    if (Test-Path $libEmail)  { Import-Module $libEmail  -Force }
+    if (Test-Path $libRetry) { Import-Module $libRetry  -Force }
+    if (Test-Path $libEmail) { Import-Module $libEmail  -Force }
     # O Monitor realiza o seu proprio Pre-Flight para garantir que o Hub esta saudavel
     $preFlight = Test-AutomationPreFlight -ExecId "bootstrap" -LogPath $EmergencyLog -CheckPaths @($ConfigFilePath)
     if (-not $preFlight) {
         Write-Host "ERRO CRITICO: Pre-Flight do Monitor falhou. Verifique $EmergencyLog" -ForegroundColor Red
         Exit 9
     }
-} else {
+}
+else {
     Write-Host "ERRO CRITICO: Biblioteca de log nao encontrada em $libLogging" -ForegroundColor Red
     Exit 1
 }
@@ -55,7 +56,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 try { if ($host.Name -eq "ConsoleHost") { chcp 65001 | Out-Null } } catch [System.Exception] {}
 
 $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-
+$script:ApiListener = $null
 $script:MonitorExitCode = 0
 
 # Helper para Log com suporte a Base64 e Auto-Masking (Skill log-standardization)
@@ -71,7 +72,8 @@ function Write-Log {
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
         $b64 = [System.Convert]::ToBase64String($bytes)
         Write-AutomacaoLog -Message "B64:$b64" -Level $Type -ExecId "MONITOR" -LogPath $logPath
-    } else {
+    }
+    else {
         Write-AutomacaoLog -Message $Msg -Level $Type -ExecId "MONITOR" -LogPath $logPath
     }
 }
@@ -119,12 +121,10 @@ $script:MonitorStartedAt = Get-Date
 $script:LastConfigReloadAt = $null
 $script:LastConfigReloadStatus = "N/A"
 $script:LastHeartbeatAt = $script:MonitorStartedAt
-$script:OperationsApiToken = [guid]::NewGuid().ToString("N")
+$script:ApiToken = [guid]::NewGuid().ToString("N")
 $script:DashboardOutputPath = Join-Path $ScriptPath "Dashboard\dashboard.html"
-$script:DashboardSettings = [ordered]@{ enabled = $true; mode = "modern"; refreshSeconds = 60; historyLimitPerTask = 50; scheduleDelayToleranceMinutes = 5 }
 
 # --- RETRY QUEUE (VALEG: A-Arquitetura, Retry em Duas Camadas) ---
-# Estrutura: taskName -> { Attempts; MaxAttempts; BackoffSeconds; RetryOnExitCodes; NextRetryAt; OriginalExecId; AlertOnDefinitive }
 $script:RetryQueue = @{}
 
 function Get-LogDirectory {
@@ -141,7 +141,8 @@ function Update-Configuration {
         $sha = New-Object System.Security.Cryptography.SHA256Managed
         $currentHash = [System.BitConverter]::ToString($sha.ComputeHash($stream)).Replace("-", "")
         $stream.Close(); $stream.Dispose()
-    } catch [System.Exception] { return $false }
+    }
+    catch [System.Exception] { return $false }
 
     if ($Force -or $currentHash -ne $script:ConfigHash) {
         try {
@@ -149,9 +150,13 @@ function Update-Configuration {
             $script:Config = $raw | ConvertFrom-Json
             $script:ConfigHash = $currentHash
             Write-Log "Configuracao carregada. Tarefas: $($script:Config.tasks.Count) | Hash=$($currentHash.Substring(0,8))"
+            $script:LastConfigReloadAt = Get-Date
+            $script:LastConfigReloadStatus = "Sucesso"
             return $true
-        } catch [System.Exception] {
+        }
+        catch [System.Exception] {
             Write-Log "Falha ao carregar config.json: $_" -Type "ERRO"
+            $script:LastConfigReloadStatus = "Erro: $_"
             return $false
         }
     }
@@ -163,22 +168,20 @@ function Remove-FinishedTask {
     $agora = Get-Date
     foreach ($taskName in $script:RunningTasks.Keys) {
         $record = $script:RunningTasks[$taskName]
-        $proc = if ($record -is [hashtable]) { $record.Proc } else { $record }
+        $proc = $record.Proc
         if ($proc.HasExited) {
             $exitCode = $proc.ExitCode
-            $startedAt = if ($record -is [hashtable]) { $record.StartedAt } else { $agora }
+            $startedAt = $record.StartedAt
             $duration = [math]::Round(($agora - $startedAt).TotalSeconds, 1)
             
             Write-Log "Tarefa '$taskName' finalizada. ExitCode=$exitCode PID=$($proc.Id) Duracao=$($duration)s"
             
-            # Atualiza Metricas
             $script:Metrics.TasksCompleted++
             $script:MetricsWindow.TasksCompleted++
             if ($exitCode -ne 0) {
                 $script:Metrics.TasksFinishedNonZero++
                 $script:MetricsWindow.TasksFinishedNonZero++
 
-                # --- RETRY QUEUE: Enfileirar retry se configurado para este ExitCode ---
                 $taskConfig = $script:Config.tasks | Where-Object { [string]$_.name -eq $taskName }
                 if ($taskConfig -and $taskConfig.retryOnFailure -and $taskConfig.retryOnFailure.enabled) {
                     $retryConf = $taskConfig.retryOnFailure
@@ -186,8 +189,7 @@ function Remove-FinishedTask {
                     
                     if ($retryOnCodes -contains $exitCode) {
                         if (-not $script:RetryQueue.ContainsKey($taskName)) {
-                            # Primeira falha: inicializa fila
-                            $execIdOriginal = if ($record -is [hashtable] -and $record.ExecId) { $record.ExecId } else { "MONITOR" }
+                            $execIdOriginal = if ($record.ExecId) { $record.ExecId } else { "MONITOR" }
                             $script:RetryQueue[$taskName] = @{
                                 Attempts          = 0
                                 MaxAttempts       = [int]$retryConf.maxAttempts
@@ -205,7 +207,6 @@ function Remove-FinishedTask {
                         $q.LastExitCode = $exitCode
                         
                         if ($q.Attempts -ge $q.MaxAttempts) {
-                            # Esgotou retries: alerta definitivo
                             Write-Log "[RETRY_ESGOTADO] '$taskName' falhou definitivamente apos $($q.MaxAttempts) tentativas. ExitCode=$exitCode" -Type "ERRO"
                             if ($q.AlertOnDefinitive) {
                                 try {
@@ -213,36 +214,36 @@ function Remove-FinishedTask {
                                     Send-AlertaFalhaDefinitiva -TaskName $taskName -ExecId $q.OriginalExecId `
                                         -UltimoErro "ExitCode=$exitCode (apos $($q.MaxAttempts) tentativas)" `
                                         -Tentativas $q.MaxAttempts -LogPath $alertLogPath
-                                } catch [System.Exception] {
+                                }
+                                catch [System.Exception] {
                                     Write-Log "Falha ao enviar alerta definitivo: $_" -Type "WARN"
                                 }
                             }
                             $script:RetryQueue.Remove($taskName)
-                        } else {
-                            # Agenda proximo retry com backoff
+                        }
+                        else {
                             $backoffIdx = [Math]::Min($q.Attempts - 1, $q.BackoffSeconds.Count - 1)
                             $waitSec = $q.BackoffSeconds[$backoffIdx]
                             $q.NextRetryAt = $agora.AddSeconds($waitSec)
-                            Write-Log "[RETRY] '$taskName' agendado para retry $($q.Attempts)/$($q.MaxAttempts) em ${waitSec}s (as $($q.NextRetryAt.ToString('HH:mm:ss'))). ExitCode anterior=$exitCode" -Type "WARN"
+                            Write-Log "[RETRY] '$taskName' agendado para retry $($q.Attempts)/$($q.MaxAttempts) em ${waitSec}s (as $($q.NextRetryAt.ToString('dd/MM HH:mm:ss'))). ExitCode anterior=$exitCode" -Type "WARN"
                         }
-                    } else {
-                        # ExitCode nao esta na lista de retry (ex: 0, 2, 23, 40) - limpa fila se existia
+                    }
+                    else {
                         if ($script:RetryQueue.ContainsKey($taskName)) { $script:RetryQueue.Remove($taskName) }
                     }
                 }
-            } else {
-                # Sucesso: limpa qualquer estado de retry pendente
+            }
+            else {
                 if ($script:RetryQueue.ContainsKey($taskName)) {
                     Write-Log "[RETRY] '$taskName' concluiu com sucesso. Fila de retry limpa."
                     $script:RetryQueue.Remove($taskName)
                 }
             }
             
-            # Atualiza Historico
             if (-not $script:TaskHistory.ContainsKey($taskName)) { $script:TaskHistory[$taskName] = New-Object System.Collections.Generic.List[PSObject] }
             $historyEntry = [PSCustomObject]@{
-                exitCode = $exitCode
-                finishedAt = $agora.ToString("yyyy-MM-dd HH:mm:ss")
+                exitCode        = $exitCode
+                finishedAt      = $agora.ToString("dd/MM/yyyy HH:mm:ss")
                 durationSeconds = $duration
             }
             $script:TaskHistory[$taskName].Insert(0, $historyEntry)
@@ -255,13 +256,11 @@ function Remove-FinishedTask {
     foreach ($name in $toRemove) { $script:RunningTasks.Remove($name) | Out-Null }
 }
 
-
 function Invoke-ScheduledTask {
     param($Task, [datetime]$Now, [string]$RetryExecId = "")
     $taskName = [string]$Task.name
     if ($script:RunningTasks.ContainsKey($taskName)) { return }
     
-    # Resolve caminho dinamico (Skill: ai-native-development-standard)
     $rawPath = [string]$Task.scriptPath
     $absPath = if ([System.IO.Path]::IsPathRooted($rawPath)) { $rawPath } else { Join-Path $ScriptPath $rawPath }
 
@@ -270,63 +269,104 @@ function Invoke-ScheduledTask {
     try {
         $proc = Start-Process "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$absPath`" `"$execId`"" -WindowStyle Hidden -PassThru
         $script:RunningTasks[$taskName] = @{ Proc = $proc; StartedAt = $Now; ExecId = $execId }
-        $script:StateControl[$taskName] = $Now.ToString("yyyy-MM-dd HH:mm")
+        $script:StateControl[$taskName] = $Now.ToString("dd/MM HH:mm")
         $script:Metrics.TasksTriggered++
         $script:MetricsWindow.TasksTriggered++
-    } catch [System.Exception] {
+    }
+    catch [System.Exception] {
         Write-Log "Falha ao iniciar '$taskName': $_" -Type "ERRO"
     }
 }
 
 function Invoke-RetryQueue {
-    <#
-    .SYNOPSIS
-        Processa a fila de retry: re-dispara tarefas que falharam quando o backoff expirou.
-    #>
     param([datetime]$Now)
-    
     foreach ($taskName in @($script:RetryQueue.Keys)) {
         $q = $script:RetryQueue[$taskName]
         if ($null -eq $q.NextRetryAt -or $Now -lt $q.NextRetryAt) { continue }
-        if ($script:RunningTasks.ContainsKey($taskName)) { continue } # Ja rodando
+        if ($script:RunningTasks.ContainsKey($taskName)) { continue }
 
         $retryExecId = "$($q.OriginalExecId)_RETRY_$($q.Attempts)"
         Write-Log "[RETRY] Re-disparando '$taskName'. Tentativa $($q.Attempts)/$($q.MaxAttempts). ExecId=$retryExecId" -Type "WARN"
         
         $taskConfig = $script:Config.tasks | Where-Object { [string]$_.name -eq $taskName }
         if ($taskConfig) {
-            # Invalida o NextRetryAt para nao re-agendar ate a tarefa terminar
             $q.NextRetryAt = $null
             Invoke-ScheduledTask -Task $taskConfig -Now $Now -RetryExecId $retryExecId
         }
     }
 }
 
-
 function Test-TaskExecution {
     param($Task, [datetime]$Now, [string]$TimeKey)
     if (-not $Task.enabled) { return $false }
     
-    # Valida Dia da Semana (0=Domingo, 6=Sabado)
     $currentDay = [int]$Now.DayOfWeek
-    if ($Task.schedule.daysOfWeek -ne $null -and $Task.schedule.daysOfWeek.Count -gt 0) {
+    if ($null -ne $Task.schedule.daysOfWeek -and $Task.schedule.daysOfWeek.Count -gt 0) {
         if ($Task.schedule.daysOfWeek -notcontains $currentDay) { return $false }
     }
 
-    # Valida Hora (Se vazio, assume todas as horas - "cada hora")
-    if ($Task.schedule.hours -ne $null -and $Task.schedule.hours.Count -gt 0) {
+    if ($null -ne $Task.schedule.hours -and $Task.schedule.hours.Count -gt 0) {
         if ($Task.schedule.hours -notcontains $Now.Hour) { return $false }
     }
 
-    # Valida Minutos
-    if ($Task.schedule.minutes -ne $null -and $Task.schedule.minutes.Count -gt 0) {
+    if ($null -ne $Task.schedule.minutes -and $Task.schedule.minutes.Count -gt 0) {
         if ($Task.schedule.minutes -notcontains $Now.Minute) { return $false }
     }
 
-    # Previne duplicidade no mesmo minuto
     if ($script:StateControl[[string]$Task.name] -eq $TimeKey) { return $false }
     
     return $true
+}
+
+function Start-ApiServer {
+    try {
+        $script:ApiListener = New-Object System.Net.HttpListener
+        $script:ApiListener.Prefixes.Add("http://localhost:8765/")
+        $script:ApiListener.Start()
+        Write-Log "API Server iniciado em http://localhost:8765/"
+    }
+    catch {
+        Write-Log "Falha ao iniciar API Server: $_" -Type "WARN"
+    }
+}
+
+function Invoke-ApiRequests {
+    if ($null -eq $script:ApiListener -or -not $script:ApiListener.IsListening) { return }
+    try {
+        if (-not $script:ApiListener.BeginGetContext($null, $null).AsyncWaitHandle.WaitOne(1)) { return }
+        $ctx = $script:ApiListener.EndGetContext($script:ApiListener.BeginGetContext($null, $null))
+        $req = $ctx.Request
+        $res = $ctx.Response
+        
+        $res.AddHeader("Access-Control-Allow-Origin", "*")
+        $res.AddHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+        $res.AddHeader("Access-Control-Allow-Headers", "Content-Type, X-Monitor-Token")
+        
+        if ($req.HttpMethod -eq "OPTIONS") { $res.StatusCode = 200; $res.Close(); return }
+
+        if ($req.Headers["X-Monitor-Token"] -ne $script:ApiToken) { $res.StatusCode = 403; $res.Close(); return }
+
+        $reader = New-Object System.IO.StreamReader($req.InputStream)
+        $body = $reader.ReadToEnd()
+        $data = $body | ConvertFrom-Json
+        
+        $status = "Comando recebido"
+        if ($data.action -eq "run-now") {
+            $taskName = $data.payload.taskName
+            $task = $script:Config.tasks | Where-Object { $_.name -eq $taskName }
+            if ($task) {
+                Invoke-ScheduledTask -Task $task -Now (Get-Date)
+                $status = "Tarefa '$taskName' disparada"
+            }
+        }
+
+        $responseJson = @{ status = $status } | ConvertTo-Json
+        $buffer = [System.Text.Encoding]::UTF8.GetBytes($responseJson)
+        $res.ContentLength64 = $buffer.Length
+        $res.OutputStream.Write($buffer, 0, $buffer.Length)
+        $res.Close()
+    }
+    catch { }
 }
 
 function Update-Dashboard {
@@ -337,68 +377,53 @@ function Update-Dashboard {
     foreach ($task in $script:Config.tasks) {
         $taskName = [string]$task.name
         $isRunning = $script:RunningTasks.ContainsKey($taskName)
-        $runningSince = if ($isRunning) { $script:RunningTasks[$taskName].StartedAt.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
+        $runningSince = if ($isRunning) { $script:RunningTasks[$taskName].StartedAt.ToString("dd/MM/yyyy HH:mm:ss") } else { $null }
         
         $tasksState += [ordered]@{
-            name = $taskName
-            enabled = $task.enabled
-            isRunning = $isRunning
+            name         = $taskName
+            enabled      = $task.enabled
+            isRunning    = $isRunning
             runningSince = $runningSince
-            lastResult = $script:TaskLastResult[$taskName]
-            history = $script:TaskHistory[$taskName]
-            config = $task
+            lastResult   = $script:TaskLastResult[$taskName]
+            history      = $script:TaskHistory[$taskName]
+            config       = $task
         }
     }
 
     $state = [ordered]@{
-        monitorVersion = "3.7.0"
-        generatedAt = $agora.ToString("yyyy-MM-dd HH:mm:ss")
-        startedAt = $script:MonitorStartedAt.ToString("yyyy-MM-dd HH:mm:ss")
-        taskCount = $script:Config.tasks.Count
-        runningTasks = $script:RunningTasks.Count
-        health = @{
-            lastHeartbeatAt = $script:LastHeartbeatAt.ToString("yyyy-MM-dd HH:mm:ss")
-            lastConfigReloadAt = if ($script:LastConfigReloadAt) { $script:LastConfigReloadAt.ToString("yyyy-MM-dd HH:mm:ss") } else { "N/A" }
+        monitorVersion = "3.7.2"
+        generatedAt    = $agora.ToString("dd/MM/yyyy HH:mm:ss")
+        startedAt      = $script:MonitorStartedAt.ToString("dd/MM/yyyy HH:mm:ss")
+        taskCount      = $script:Config.tasks.Count
+        runningTasks   = $script:RunningTasks.Count
+        health         = @{
+            lastHeartbeatAt        = $script:LastHeartbeatAt.ToString("dd/MM/yyyy HH:mm:ss")
+            lastConfigReloadAt     = $(if ($script:LastConfigReloadAt) { $script:LastConfigReloadAt.ToString("dd/MM/yyyy HH:mm:ss") } else { "N/A" })
             lastConfigReloadStatus = $script:LastConfigReloadStatus
             mainLoopConsecutiveErr = $script:MainLoopConsecutiveErrors
         }
-        metrics = @{
-            cumulative = $script:Metrics
-            window = $script:MetricsWindow
-        }
-        tasks = $tasksState
+        metrics        = @{ cumulative = $script:Metrics; window = $script:MetricsWindow }
+        tasks          = $tasksState
+        operations     = @{ apiBaseUrl = "http://localhost:8765"; endpoint = "/api/operations"; token = $script:ApiToken; apiMode = "LocalHttpListener"; statusMessage = "Servidor Ativo" }
     }
 
     $json = $state | ConvertTo-Json -Depth 10 -Compress
-    $logDir = Get-LogDirectory
-    $statePath = Join-Path $logDir "dashboard-state.json"
+    $statePath = Join-Path (Get-LogDirectory) "dashboard-state.json"
     $json | Out-File $statePath -Encoding utf8
-
-    # Gera o HTML se o template existir
-    $templatePath = Join-Path $ScriptPath ".github\templates\dashboard-modern.html"
-    if (Test-Path $templatePath) {
-        try {
-            $template = Get-Content $templatePath -Raw
-            $html = $template.Replace("__DASHBOARD_JSON__", $json).Replace("__REFRESH_SECONDS__", $script:DashboardSettings.refreshSeconds.ToString())
-            $html | Out-File $script:DashboardOutputPath -Encoding utf8
-        } catch [System.Exception] {
-            Write-Log "Falha ao gerar HTML do Dashboard: $_" -Type "WARN"
-        }
-    }
 }
 
-# --- LOOP PRINCIPAL ---
-Update-Configuration -Force | Out-Null
-Write-Log "Monitor iniciado v3.7.0. Modo=$(if ($RunOnce){'RunOnce'}else{'Continuo'})"
+# --- MAIN LOOP ---
+Update-Configuration -Force
+Start-ApiServer
+Update-Dashboard
 
 while ($true) {
     try {
         Remove-FinishedTask
         Update-Configuration | Out-Null
         $agora = Get-Date
-        $timeKey = $agora.ToString("yyyy-MM-dd HH:mm")
+        $timeKey = $agora.ToString("dd/MM HH:mm")
 
-        # Processa retries antes dos agendamentos normais (prioridade)
         Invoke-RetryQueue -Now $agora
 
         foreach ($task in $script:Config.tasks) {
@@ -407,17 +432,25 @@ while ($true) {
             }
         }
         
+        Invoke-ApiRequests
         Update-Dashboard
 
         if ($RunOnce) { break }
         Start-Sleep -Seconds 20
+        $script:MainLoopConsecutiveErrors = 0
     }
-    catch [System.Exception] {
+    catch {
+        $script:MainLoopConsecutiveErrors++
         Write-Log "ERRO NO LOOP: $_" -Type "ERRO"
-        Start-Sleep -Seconds 30
+        if ($script:MainLoopConsecutiveErrors -ge $script:MainLoopMaxConsecutiveErrors) {
+            Write-Log "Muitos erros consecutivos no loop. Encerrando monitor." -Type "ERRO"
+            $script:MonitorExitCode = 1
+            break
+        }
+        Start-Sleep -Seconds 10
     }
 }
 
-
 if ($script:MonitorMutex) { $script:MonitorMutex.ReleaseMutex(); $script:MonitorMutex.Dispose() }
 Exit $script:MonitorExitCode
+

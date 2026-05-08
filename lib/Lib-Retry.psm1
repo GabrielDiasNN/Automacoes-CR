@@ -191,3 +191,4 @@ function Send-AlertaFalhaDefinitiva {
 }
 
 Export-ModuleMember -Function Invoke-WithRetry, Send-AlertaFalhaDefinitiva
+

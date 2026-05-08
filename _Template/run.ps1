@@ -70,3 +70,4 @@ try {
 } finally {
     Write-Log "FIM - Processo finalizado."
 }
+
