@@ -1,8 +1,8 @@
 # {
-#   "version": "1.1.0",
-#   "skill": "python-oracle-migration",
-#   "contract": "direct-oracle-fetch",
-#   "description": "Extrai dados diretamente do Oracle via oracledb (File-Payload)",
+#   "version": "1.2.0",
+#   "skill": "python-oracle-migration, protocolo-valeg",
+#   "contract": "direct-oracle-fetch, thick-mode-padronizado, retry-on-failure",
+#   "description": "Extrai dados diretamente do Oracle via oracledb com Thick Mode garantido e Retry",
 #   "reliability": "Base64-Bridge-Logs"
 # }
 import os
@@ -66,39 +66,55 @@ def extract():
         sql = f.read()
 
     connection = None
-    try:
-        log("Conectando ao Oracle via TNS Alias '" + dsn + "'...", "INFO", exec_id)
-        connection = oracledb.connect(user=user, password=password, dsn=dsn)
-        cursor = connection.cursor()
-        cursor.arraysize = 100
-        
-        log("Executando extracao nativa...", "INFO", exec_id)
-        cursor.execute(sql)
-        columns = [col[0] for col in cursor.description]
-        rows = cursor.fetchall()
-        
-        data = []
-        for row in rows:
-            record = dict(zip(columns, row))
-            for key, value in record.items():
-                if isinstance(value, str):
-                    record[key] = value.strip()
-                elif isinstance(value, datetime):
-                    record[key] = value.isoformat()
-            data.append(record)
-            
-        data_file = os.path.join(script_dir, f".data_{exec_id}.json")
-        with open(data_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False)
-            
-        log("Extracao nativa concluida: " + str(len(data)) + " registros.", "INFO", exec_id)
-        
-    except Exception as e:
-        log("Erro fatal na extracao via TNS: " + str(e), "ERROR", exec_id)
-        sys.exit(1)
-    finally:
-        if connection:
-            connection.close()
+    max_retries = 3
+    retry_count = 0
+
+    while retry_count < max_retries:
+        connection = None
+        try:
+            if retry_count > 0:
+                import time
+                wait_sec = [30, 60, 120][min(retry_count - 1, 2)]
+                log(f"Tentativa {retry_count + 1}/{max_retries} apos {wait_sec}s...", "WARN", exec_id)
+                time.sleep(wait_sec)
+
+            log("Conectando ao Oracle via TNS Alias '" + dsn + "'...", "INFO", exec_id)
+            connection = oracledb.connect(user=user, password=password, dsn=dsn)
+            cursor = connection.cursor()
+            cursor.arraysize = 100
+
+            log("Executando extracao nativa...", "INFO", exec_id)
+            cursor.execute(sql)
+            columns = [col[0] for col in cursor.description]
+            rows = cursor.fetchall()
+
+            data = []
+            for row in rows:
+                record = dict(zip(columns, row))
+                for key, value in record.items():
+                    if isinstance(value, str):
+                        record[key] = value.strip()
+                    elif isinstance(value, datetime):
+                        record[key] = value.isoformat()
+                data.append(record)
+
+            data_file = os.path.join(script_dir, f".data_{exec_id}.json")
+            with open(data_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False)
+
+            log(f"Extracao nativa concluida: {len(data)} registros.", "INFO", exec_id)
+            return  # Sucesso
+
+        except Exception as e:
+            retry_count += 1
+            log(f"Erro na extracao (Tentativa {retry_count}/{max_retries}): {e}", "ERROR", exec_id)
+            if retry_count >= max_retries:
+                log(f"[RETRY_ESGOTADO] Extracao falhou definitivamente apos {max_retries} tentativas.", "ERROR", exec_id)
+                sys.exit(1)
+        finally:
+            if connection:
+                try: connection.close()
+                except: pass
 
 if __name__ == "__main__":
     extract()

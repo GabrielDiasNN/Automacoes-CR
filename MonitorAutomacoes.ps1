@@ -27,12 +27,16 @@ if (-not $ScriptPath) { $ScriptPath = "." }
 
 # Bibliotecas e Dependencias Criticas
 $libLogging = Join-Path $ScriptPath "lib\Lib-Logging.psm1"
+$libRetry  = Join-Path $ScriptPath "lib\Lib-Retry.psm1"
+$libEmail  = Join-Path $ScriptPath "lib\Lib-Email.psm1"
 $ConfigFilePath = Join-Path $ScriptPath "config.json"
 $EmergencyLog = Join-Path $ScriptPath "Startup_Error.txt"
 
 # --- BOOTSTRAP / PRE-FLIGHT (Self-Diagnosing) ---
 if (Test-Path $libLogging) {
     Import-Module $libLogging -Force
+    if (Test-Path $libRetry)  { Import-Module $libRetry  -Force }
+    if (Test-Path $libEmail)  { Import-Module $libEmail  -Force }
     # O Monitor realiza o seu proprio Pre-Flight para garantir que o Hub esta saudavel
     $preFlight = Test-AutomationPreFlight -ExecId "bootstrap" -LogPath $EmergencyLog -CheckPaths @($ConfigFilePath)
     if (-not $preFlight) {
@@ -119,6 +123,10 @@ $script:OperationsApiToken = [guid]::NewGuid().ToString("N")
 $script:DashboardOutputPath = Join-Path $ScriptPath "Dashboard\dashboard.html"
 $script:DashboardSettings = [ordered]@{ enabled = $true; mode = "modern"; refreshSeconds = 60; historyLimitPerTask = 50; scheduleDelayToleranceMinutes = 5 }
 
+# --- RETRY QUEUE (VALEG: A-Arquitetura, Retry em Duas Camadas) ---
+# Estrutura: taskName -> { Attempts; MaxAttempts; BackoffSeconds; RetryOnExitCodes; NextRetryAt; OriginalExecId; AlertOnDefinitive }
+$script:RetryQueue = @{}
+
 function Get-LogDirectory {
     if ($script:Config -and $script:Config.settings -and $script:Config.settings.logDirectory) { return [string]$script:Config.settings.logDirectory }
     return (Join-Path $ScriptPath "Logs")
@@ -169,6 +177,65 @@ function Remove-FinishedTask {
             if ($exitCode -ne 0) {
                 $script:Metrics.TasksFinishedNonZero++
                 $script:MetricsWindow.TasksFinishedNonZero++
+
+                # --- RETRY QUEUE: Enfileirar retry se configurado para este ExitCode ---
+                $taskConfig = $script:Config.tasks | Where-Object { [string]$_.name -eq $taskName }
+                if ($taskConfig -and $taskConfig.retryOnFailure -and $taskConfig.retryOnFailure.enabled) {
+                    $retryConf = $taskConfig.retryOnFailure
+                    $retryOnCodes = @($retryConf.retryOnExitCodes)
+                    
+                    if ($retryOnCodes -contains $exitCode) {
+                        if (-not $script:RetryQueue.ContainsKey($taskName)) {
+                            # Primeira falha: inicializa fila
+                            $execIdOriginal = if ($record -is [hashtable] -and $record.ExecId) { $record.ExecId } else { "MONITOR" }
+                            $script:RetryQueue[$taskName] = @{
+                                Attempts          = 0
+                                MaxAttempts       = [int]$retryConf.maxAttempts
+                                BackoffSeconds    = @($retryConf.backoffSeconds)
+                                RetryOnExitCodes  = $retryOnCodes
+                                AlertOnDefinitive = [bool]$retryConf.alertOnDefinitiveFailure
+                                OriginalExecId    = $execIdOriginal
+                                LastExitCode      = $exitCode
+                                NextRetryAt       = $null
+                            }
+                        }
+                        
+                        $q = $script:RetryQueue[$taskName]
+                        $q.Attempts++
+                        $q.LastExitCode = $exitCode
+                        
+                        if ($q.Attempts -ge $q.MaxAttempts) {
+                            # Esgotou retries: alerta definitivo
+                            Write-Log "[RETRY_ESGOTADO] '$taskName' falhou definitivamente apos $($q.MaxAttempts) tentativas. ExitCode=$exitCode" -Type "ERRO"
+                            if ($q.AlertOnDefinitive) {
+                                try {
+                                    $alertLogPath = Join-Path (Get-LogDirectory) "$(Get-Date -Format 'yyyy-MM')_Monitor.log"
+                                    Send-AlertaFalhaDefinitiva -TaskName $taskName -ExecId $q.OriginalExecId `
+                                        -UltimoErro "ExitCode=$exitCode (apos $($q.MaxAttempts) tentativas)" `
+                                        -Tentativas $q.MaxAttempts -LogPath $alertLogPath
+                                } catch [System.Exception] {
+                                    Write-Log "Falha ao enviar alerta definitivo: $_" -Type "WARN"
+                                }
+                            }
+                            $script:RetryQueue.Remove($taskName)
+                        } else {
+                            # Agenda proximo retry com backoff
+                            $backoffIdx = [Math]::Min($q.Attempts - 1, $q.BackoffSeconds.Count - 1)
+                            $waitSec = $q.BackoffSeconds[$backoffIdx]
+                            $q.NextRetryAt = $agora.AddSeconds($waitSec)
+                            Write-Log "[RETRY] '$taskName' agendado para retry $($q.Attempts)/$($q.MaxAttempts) em ${waitSec}s (as $($q.NextRetryAt.ToString('HH:mm:ss'))). ExitCode anterior=$exitCode" -Type "WARN"
+                        }
+                    } else {
+                        # ExitCode nao esta na lista de retry (ex: 0, 2, 23, 40) - limpa fila se existia
+                        if ($script:RetryQueue.ContainsKey($taskName)) { $script:RetryQueue.Remove($taskName) }
+                    }
+                }
+            } else {
+                # Sucesso: limpa qualquer estado de retry pendente
+                if ($script:RetryQueue.ContainsKey($taskName)) {
+                    Write-Log "[RETRY] '$taskName' concluiu com sucesso. Fila de retry limpa."
+                    $script:RetryQueue.Remove($taskName)
+                }
             }
             
             # Atualiza Historico
@@ -188,8 +255,9 @@ function Remove-FinishedTask {
     foreach ($name in $toRemove) { $script:RunningTasks.Remove($name) | Out-Null }
 }
 
+
 function Invoke-ScheduledTask {
-    param($Task, [datetime]$Now)
+    param($Task, [datetime]$Now, [string]$RetryExecId = "")
     $taskName = [string]$Task.name
     if ($script:RunningTasks.ContainsKey($taskName)) { return }
     
@@ -197,11 +265,11 @@ function Invoke-ScheduledTask {
     $rawPath = [string]$Task.scriptPath
     $absPath = if ([System.IO.Path]::IsPathRooted($rawPath)) { $rawPath } else { Join-Path $ScriptPath $rawPath }
 
-    $execId = New-ExecId
+    $execId = if ([string]::IsNullOrWhiteSpace($RetryExecId)) { New-ExecId } else { $RetryExecId }
     Write-Log "DISPARANDO: $taskName ($absPath) [ExecId:$execId]"
     try {
         $proc = Start-Process "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$absPath`" `"$execId`"" -WindowStyle Hidden -PassThru
-        $script:RunningTasks[$taskName] = @{ Proc = $proc; StartedAt = $Now }
+        $script:RunningTasks[$taskName] = @{ Proc = $proc; StartedAt = $Now; ExecId = $execId }
         $script:StateControl[$taskName] = $Now.ToString("yyyy-MM-dd HH:mm")
         $script:Metrics.TasksTriggered++
         $script:MetricsWindow.TasksTriggered++
@@ -209,6 +277,31 @@ function Invoke-ScheduledTask {
         Write-Log "Falha ao iniciar '$taskName': $_" -Type "ERRO"
     }
 }
+
+function Invoke-RetryQueue {
+    <#
+    .SYNOPSIS
+        Processa a fila de retry: re-dispara tarefas que falharam quando o backoff expirou.
+    #>
+    param([datetime]$Now)
+    
+    foreach ($taskName in @($script:RetryQueue.Keys)) {
+        $q = $script:RetryQueue[$taskName]
+        if ($null -eq $q.NextRetryAt -or $Now -lt $q.NextRetryAt) { continue }
+        if ($script:RunningTasks.ContainsKey($taskName)) { continue } # Ja rodando
+
+        $retryExecId = "$($q.OriginalExecId)_RETRY_$($q.Attempts)"
+        Write-Log "[RETRY] Re-disparando '$taskName'. Tentativa $($q.Attempts)/$($q.MaxAttempts). ExecId=$retryExecId" -Type "WARN"
+        
+        $taskConfig = $script:Config.tasks | Where-Object { [string]$_.name -eq $taskName }
+        if ($taskConfig) {
+            # Invalida o NextRetryAt para nao re-agendar ate a tarefa terminar
+            $q.NextRetryAt = $null
+            Invoke-ScheduledTask -Task $taskConfig -Now $Now -RetryExecId $retryExecId
+        }
+    }
+}
+
 
 function Test-TaskExecution {
     param($Task, [datetime]$Now, [string]$TimeKey)
@@ -305,6 +398,9 @@ while ($true) {
         $agora = Get-Date
         $timeKey = $agora.ToString("yyyy-MM-dd HH:mm")
 
+        # Processa retries antes dos agendamentos normais (prioridade)
+        Invoke-RetryQueue -Now $agora
+
         foreach ($task in $script:Config.tasks) {
             if (Test-TaskExecution -Task $task -Now $agora -TimeKey $timeKey) {
                 Invoke-ScheduledTask -Task $task -Now $agora
@@ -321,6 +417,7 @@ while ($true) {
         Start-Sleep -Seconds 30
     }
 }
+
 
 if ($script:MonitorMutex) { $script:MonitorMutex.ReleaseMutex(); $script:MonitorMutex.Dispose() }
 Exit $script:MonitorExitCode

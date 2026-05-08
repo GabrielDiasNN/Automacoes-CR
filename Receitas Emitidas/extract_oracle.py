@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # {
-#   "version": "2.5.0",
-#   "skill": "python-oracle-migration",
-#   "contract": "ipc-stdio",
-#   "description": "Extrai receitas emitidas via Direct Oracle (Query CTE Nativa)",
-#   "reliability": "Base64-Bridge-Logs, SQL-Correlation-DNA"
+#   "version": "2.6.0",
+#   "skill": "python-oracle-migration, protocolo-valeg",
+#   "contract": "ipc-stdio, thick-mode-padronizado",
+#   "description": "Extrai receitas emitidas via Direct Oracle (Query CTE Nativa) com Thick Mode garantido",
+#   "reliability": "Base64-Bridge-Logs, SQL-Correlation-DNA, Retry-On-Failure"
 # }
 import os
 import sys
@@ -30,22 +30,33 @@ def log(message, level="INFO", exec_id="manual"):
 
 def extract():
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
-    
+
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
-    dsn = os.environ.get("ORACLE_CONNECT_STRING")
+    dsn = os.environ.get("ORACLE_CONNECT_STRING", "dbprd")
     client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR")
+    tns_admin = os.environ.get("TNS_ADMIN")
 
+    # Validacao de pre-requisitos obrigatorios
     if not all([user, password, dsn]):
-        log("Credenciais ausentes no ambiente.", "ERROR", exec_id)
+        log("Credenciais Oracle ausentes no ambiente (ORACLE_READONLY_USER, ORACLE_READONLY_PASSWORD, ORACLE_CONNECT_STRING).", "ERROR", exec_id)
         sys.exit(1)
 
-    if client_lib and os.path.exists(client_lib):
-        try:
-            oracledb.init_oracle_client(lib_dir=client_lib)
-            log("Modo Thick ativado", "INFO", exec_id)
-        except Exception as e:
-            log(f"Aviso ao iniciar modo Thick: {e}", "WARN", exec_id)
+    if not client_lib or not os.path.exists(client_lib):
+        log(f"ORACLE_CLIENT_LIB_DIR invalido ou ausente: '{client_lib}'. Thick Mode impossivel. Abortando para evitar falha DPY-3015.", "ERROR", exec_id)
+        sys.exit(1)
+
+    if not tns_admin or not os.path.exists(tns_admin):
+        log(f"TNS_ADMIN invalido ou ausente: '{tns_admin}'. Thick Mode impossivel sem tnsnames.ora. Abortando.", "ERROR", exec_id)
+        sys.exit(1)
+
+    # Garantir Thick Mode - falha explicita se nao conseguir (nao ha fallback para Thin Mode)
+    try:
+        oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
+        log(f"Thick Mode ativado. client_lib='{client_lib}' tns_admin='{tns_admin}'", "INFO", exec_id)
+    except Exception as e:
+        log(f"ERRO CRITICO: Nao foi possivel ativar Thick Mode: {e}", "ERROR", exec_id)
+        sys.exit(1)
 
     # Query Original Estavel com CTE (Velocidade maxima sem timeout)
     sql = f"""

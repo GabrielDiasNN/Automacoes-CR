@@ -8,8 +8,9 @@
     3. E-mail: Envia o HTML gerado para os destinatarios configurados.
     4. WhatsApp Bridge: Dispara notificacoes via Node.js utilizando idempotencia.
 .NOTES
-    Version: 2.1.0
-    Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract
+    Version: 2.2.0
+    Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract, protocolo-valeg
+    Contract: retry-on-failure, base64-bridge-logs
 #>
 [CmdletBinding()]
 param([string]$ExecId = "")
@@ -37,6 +38,7 @@ $MaxTimeoutSec = 300
 $projectRoot = Split-Path -Parent $ScriptDir
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
+$libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
 
@@ -45,6 +47,7 @@ $venvActivate = Join-Path $projectRoot ".venv\Scripts\activate.ps1"
 
 Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
+Import-Module $libRetry   -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = if (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
@@ -102,7 +105,7 @@ try {
     Write-Log "Falha generica ao carregar .env: $_" -Lvl "WARN"
 }
 
-# 1. Executar Python Script
+# 1. Executar Python Script com Retry
 Write-Log "Acionando script Python..."
 if (-not (Test-Path $venvActivate)) {
     Exit-WithCode 2 "Virtual environment nao encontrado em $venvActivate."
@@ -111,57 +114,71 @@ if (-not (Test-Path $venvActivate)) {
 try {
     # Carrega VENV
     . $venvActivate
-    
-    $pyInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $pyInfo.FileName = "python.exe"
-    $pyInfo.Arguments = "`"$PythonScript`" `"$ExecId`""
-    $pyInfo.RedirectStandardError = $true
-    $pyInfo.UseShellExecute = $false
-    $pyInfo.CreateNoWindow = $true
-    
-    # Injetar variaveis do .env no processo filho
-    $envVars = [System.Environment]::GetEnvironmentVariables("Process")
-    foreach ($key in $envVars.Keys) {
-        if (-not $pyInfo.Environment.ContainsKey($key)) {
-            $pyInfo.Environment.Add($key, $envVars[$key])
-        }
-    }
 
-    $proc = [System.Diagnostics.Process]::Start($pyInfo)
-    $nativeErrors = $proc.StandardError.ReadToEnd()
-    $proc.WaitForExit()
-    
-    # Processa os logs retornados do python (skill ipc-stdio)
-    if ($nativeErrors) {
-        $pyLogs = $nativeErrors -split "`n"
-        foreach ($l in $pyLogs) {
-            if ([string]::IsNullOrWhiteSpace($l)) { continue }
-            if ($l.StartsWith("B64:")) {
-                try {
-                    $b64Str = $l.Substring(4).Trim()
-                    $bytes = [System.Convert]::FromBase64String($b64Str)
-                    $decoded = [System.Text.Encoding]::UTF8.GetString($bytes)
-                    Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $ExecId -LogPath $LogFile
-                } catch [System.Exception] {
-                    Write-AutomacaoLog -Message "Falha ao decodificar B64: $l" -Level "WARN" -ExecId $ExecId -LogPath $LogFile
+    $pythonOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(60, 120, 300) `
+        -OperationName "Processamento Python (processar_receitas.py)" -ExecId $ExecId -LogPath $LogFile `
+        -Action {
+            $pyInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $pyInfo.FileName = "python.exe"
+            $pyInfo.Arguments = "`"$PythonScript`" `"$ExecId`""
+            $pyInfo.RedirectStandardError = $true
+            $pyInfo.UseShellExecute = $false
+            $pyInfo.CreateNoWindow = $true
+
+            # Injetar variaveis do .env no processo filho
+            $envVars = [System.Environment]::GetEnvironmentVariables("Process")
+            foreach ($key in $envVars.Keys) {
+                if (-not $pyInfo.Environment.ContainsKey($key)) {
+                    $pyInfo.Environment.Add($key, $envVars[$key])
                 }
-            } else {
-                Write-AutomacaoLog -Message $l.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile
             }
+
+            $proc = [System.Diagnostics.Process]::Start($pyInfo)
+            $nativeErrors = $proc.StandardError.ReadToEnd()
+            $proc.WaitForExit()
+
+            # Processa os logs retornados do python (skill ipc-stdio)
+            if ($nativeErrors) {
+                $pyLogs = $nativeErrors -split "`n"
+                foreach ($l in $pyLogs) {
+                    if ([string]::IsNullOrWhiteSpace($l)) { continue }
+                    if ($l.StartsWith("B64:")) {
+                        try {
+                            $b64Str = $l.Substring(4).Trim()
+                            Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $ExecId -LogPath $LogFile
+                        } catch [System.Exception] {
+                            Write-AutomacaoLog -Message "Falha ao decodificar B64: $l" -Level "WARN" -ExecId $ExecId -LogPath $LogFile
+                        }
+                    } else {
+                        Write-AutomacaoLog -Message $l.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile
+                    }
+                }
+            }
+
+            if ($proc.ExitCode -eq 2) {
+                Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
+                Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
+            }
+            if ($proc.ExitCode -ne 0) { throw "Script Python retornou ExitCode=$($proc.ExitCode)." }
+            return $true
         }
-    }
-    
-    if ($proc.ExitCode -ne 0) {
-        Exit-WithCode 3 "Script Python retornou ExitCode $($proc.ExitCode)."
+
+    if (-not $pythonOk) {
+        Send-AlertaFalhaDefinitiva -TaskName "Receitas Bloqueadas" -ExecId $ExecId `
+            -UltimoErro "Falha definitiva no processamento Python apos 3 tentativas." -Tentativas 3 -LogPath $LogFile
+        Exit-WithCode 3 "Falha definitiva no script Python. Alerta de falha enviado."
     }
 
 } catch [System.ComponentModel.Win32Exception] {
     Exit-WithCode 4 "Falha de processo ao invocar script Python: $_"
 } catch [System.Exception] {
+    # Re-throw para nao engolir o Exit-WithCode 0 do bloco de idempotencia
+    if ($_.Exception.Message -match "Processo finalizado") { throw }
     Exit-WithCode 4 "Falha ao invocar script Python: $_"
 }
 
-# 2. Enviar E-mail (Com Idempotencia Estrita)
+
+# 2. Enviar E-mail com Retry e Idempotencia
 Write-Log "Preparando envio de e-mail..."
 if (Test-Path $HtmlPath) {
     try {
@@ -176,52 +193,62 @@ if (Test-Path $HtmlPath) {
         }
 
         if ($currentHash -and $currentHash -eq $lastEmailHash) {
-            Write-Log "Conteudo identico ao ultimo envio. Idempotencia de e-mail ativa."
+            Write-Log "Conteudo identico ao ultimo envio (Hash match). Suprimindo E-mail e WhatsApp."
         } else {
             $htmlBody = Get-Content $HtmlPath -Raw -Encoding UTF8
             $emailConfig = Get-Content $EmailConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            
+
             $to = $emailConfig.email.to -join ";"
             $cc = if ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
             $bcc = if ($emailConfig.email.bcc) { $emailConfig.email.bcc -join ";" } else { $null }
-            
+
             $subject = "Alerta: Receitas Bloqueadas - $(Get-Date -Format 'dd/MM/yyyy')"
-            
+
             if ([string]::IsNullOrWhiteSpace($to)) {
                 Write-Log "Destinatarios 'to' nao configurados. Pulando e-mail." -Lvl "WARN"
             } else {
                 Write-Log "Enviando e-mail para $to..."
-                $sent = Send-OutlookEmail -To $to -Cc $cc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
-                if ($sent) {
+                $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) `
+                    -OperationName "Envio E-mail Outlook" -ExecId $ExecId -LogPath $LogFile `
+                    -Action {
+                        $sent = Send-OutlookEmail -To $to -Cc $cc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
+                        if (-not $sent) { throw "Send-OutlookEmail retornou false." }
+                        return $true
+                    }
+
+                if ($emailOk) {
                     $newState = @{ last_sent_hash = $currentHash; sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
                     $newState | ConvertTo-Json | Out-File $EmailStatePath -Encoding UTF8
                     Write-Log "E-mail enviado e estado de idempotencia atualizado."
+                } else {
+                    Write-Log "Falha definitiva no envio de e-mail apos tentativas." -Lvl "ERRO"
                 }
+            }
+
+            # 3. WhatsApp Post-Execution (ExitCode 23/40 NAO disparam retry: sao comportamentos corretos)
+            Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
+            try {
+                $whatsAppProc = Start-Process "powershell.exe" `
+                    -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO" `
+                    -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
+
+                $whatsAppExit = $whatsAppProc.ExitCode
+                Write-Log "Send-WhatsApp.ps1 finalizado. ExitCode=$whatsAppExit"
+
+                if ($whatsAppExit -eq 40) { Write-Log "WhatsApp ignorado por lock ativo (comportamento normal)." -Lvl "INFO" }
+                elseif ($whatsAppExit -eq 23) { Write-Log "WhatsApp em cooldown (comportamento normal)." -Lvl "INFO" }
+                elseif ($whatsAppExit -eq 21) { Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN" }
+                elseif ($whatsAppExit -ne 0) { Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit." -Lvl "WARN" }
+            } catch [System.Exception] {
+                Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
             }
         }
     } catch [System.Exception] {
         Write-Log "Falha na rotina de e-mail/idempotencia: $_" -Lvl "ERRO"
     }
 } else {
-    Write-Log "Arquivo $HtmlPath nao gerado. Nenhuma receita para notificar ou erro no processo." -Lvl "WARN"
-    Exit-WithCode 0 "Processo concluido sem dados."
-}
-
-# 3. WhatsApp Post-Execution
-Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
-try {
-    $whatsAppProc = Start-Process "powershell.exe" `
-        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO" `
-        -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
-
-    $whatsAppExit = $whatsAppProc.ExitCode
-    Write-Log "Send-WhatsApp.ps1 finalizado. ExitCode=$whatsAppExit"
-
-    if ($whatsAppExit -eq 40) { Exit-WithCode 40 "WhatsApp ignorado por lock ativo." }
-    elseif ($whatsAppExit -eq 23) { Exit-WithCode 23 "WhatsApp em cooldown." }
-    elseif ($whatsAppExit -ne 0) { Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit." -Lvl "WARN" }
-} catch [System.Exception] {
-    Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
+    Write-Log "Arquivo $HtmlPath nao encontrado. Python suprimiu a geracao ou houve erro."
+    Exit-WithCode 0 "Processo concluido sem dados para notificar."
 }
 
 Exit-WithCode 0 "Processo concluido com sucesso."
