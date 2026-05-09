@@ -17,7 +17,15 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - **Resiliência:** Alterações em Retry (`stamina`), Idempotência ou Circuit Breakers, sempre alinhadas ao Protocolo V.A.L.E.G.
 
 ## Checklist Local
-- [ ] Os arquivos `README.md`, `CONTEXT.md` e `SECURITY.md` foram revisados?
-- [ ] A seção `## 🧠 Gestão de Contexto (AI-Native)` está atualizada?
-- [ ] O contexto permite economia de tokens na próxima interação?
-- [ ] Tom técnico PT-BR foi mantido?
+- [x] Os arquivos `README.md`, `CONTEXT.md` e `SECURITY.md` foram revisados?
+- [x] A seção `## 🧠 Gestão de Contexto (AI-Native)` está atualizada?
+- [x] O contexto permite economia de tokens na próxima interação?
+- [x] Tom técnico PT-BR foi mantido?
+
+---
+
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 09/05/2026
+- **Estado:** Operacional e Modernizado (v3.5.1).
+- **Interface:** Redesenho completo do Dashboard para padrão "Torre de Comando Premium" (Glassmorphism + PT-BR).
+- **Correção:** Resolvido loop de conexão na API através de fallback de chave de acesso e limpeza de sintaxe JS.
+- **Atenção:** A chave padrão `hub-secret-token` agora é injetada automaticamente para agilizar o acesso local.

@@ -145,16 +145,13 @@ def montar_template_email(tipo_notificacao, total_linhas, total_erros, elapsed_t
     html += f"<hr style='border:0;border-top:1px solid #e5e7eb;margin:32px 0 24px 0;'><p style='font-size:10pt;color:#9ca3af;text-align:center;margin:0;'><span style='font-size:13pt;vertical-align:middle;'>{HTML_ICON_CALENDAR}</span> <b>Data da Validacao:</b> {datetime.now().strftime('%d/%m/%Y &agrave;s %H:%M:%S')}</p></div></div></body></html>"
     return html
 
-def djb2_hash(s):
-    hash_value = 5381
-    for char in s:
-        hash_value = ((hash_value << 5) + hash_value) + ord(char)
-    return str(hash_value & 0xFFFFFFFF)
+import hashlib
 
 def gerar_assinatura(erro):
+    """Gera um hash MD5 único para a combinação de erro/OB."""
     base = f"{str(erro.get('NR_OB', '')).strip().upper()}|{str(erro.get('NR_PROG', '')).strip().upper()}|{str(erro.get('CD_REF_CLT', '')).strip().upper()}|{str(erro.get('DETALHE_ERRO', '')).strip().upper()}"
     if not base.strip('|_'): base = "VAZIO"
-    return djb2_hash(base)
+    return hashlib.md5(base.encode('utf-8')).hexdigest()
 
 def main():
     start_time = time.time()

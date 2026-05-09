@@ -12,6 +12,12 @@
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract, protocolo-valeg
     Contract: retry-on-failure, base64-bridge-logs
 #>
+# {
+#   "name": "orchestrator-receitas-bloqueadas",
+#   "version": "2.2.0",
+#   "skill": "powershell-automation-monitor",
+#   "description": "Use when orchestrating the multi-channel distribution of blocked recipes (Email/WhatsApp)."
+# }
 [CmdletBinding()]
 param([string]$ExecId = "")
 
@@ -57,7 +63,8 @@ $LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
 # Helper para Log com suporte a Base64 Interno (Skill log-standardization)
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO")
-    if ($Msg -match '[\u00C0-\u00FF]') {
+    # Regex expandido para capturar qualquer caractere nao-ASCII (acentos, cedilhas, etc)
+    if ($Msg -match '[^\x00-\x7F]') {
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
         $b64 = [System.Convert]::ToBase64String($bytes)
         Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogFile
@@ -75,6 +82,9 @@ function Exit-WithCode {
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
+# Housekeeping: Limpa artefatos temporarios orfaos (caso existam)
+Get-ChildItem -Path $ScriptDir -Filter ".tmp_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
+
 $preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($PythonScript, $SendWhatsAppScript, $WhatsAppConfig, $EmailConfigPath)
 if (-not $preFlight) {
     Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
@@ -122,6 +132,7 @@ try {
             $pyInfo.FileName = "python.exe"
             $pyInfo.Arguments = "`"$PythonScript`" `"$ExecId`""
             $pyInfo.RedirectStandardError = $true
+            $pyInfo.RedirectStandardOutput = $true
             $pyInfo.UseShellExecute = $false
             $pyInfo.CreateNoWindow = $true
 
@@ -133,33 +144,50 @@ try {
                 }
             }
 
-            $proc = [System.Diagnostics.Process]::Start($pyInfo)
-            $nativeErrors = $proc.StandardError.ReadToEnd()
-            $proc.WaitForExit()
-
-            # Processa os logs retornados do python (skill ipc-stdio)
-            if ($nativeErrors) {
-                $pyLogs = $nativeErrors -split "`n"
-                foreach ($l in $pyLogs) {
-                    if ([string]::IsNullOrWhiteSpace($l)) { continue }
-                    if ($l.StartsWith("B64:")) {
+            $proc = New-Object System.Diagnostics.Process
+            $proc.StartInfo = $pyInfo
+            
+            # ScriptBlock para processar cada linha recebida via eventos assincronos
+            $logAction = {
+                param($sender, $e)
+                if ($e.Data) {
+                    $Line = $e.Data
+                    if ($Line.StartsWith("B64:")) {
                         try {
-                            $b64Str = $l.Substring(4).Trim()
-                            Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $ExecId -LogPath $LogFile
-                        } catch [System.Exception] {
-                            Write-AutomacaoLog -Message "Falha ao decodificar B64: $l" -Level "WARN" -ExecId $ExecId -LogPath $LogFile
-                        }
+                            $b64Str = $Line.Substring(4).Trim()
+                            # Nota: Write-AutomacaoLog e thread-safe para arquivos
+                            Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $EventContext.ExecId -LogPath $EventContext.LogFile
+                        } catch { }
                     } else {
-                        Write-AutomacaoLog -Message $l.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile
+                        Write-AutomacaoLog -Message $Line.Trim() -Level "INFO" -ExecId $EventContext.ExecId -LogPath $EventContext.LogFile
                     }
                 }
             }
 
-            if ($proc.ExitCode -eq 2) {
-                Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
-                Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
+            # Registra eventos para captura em tempo real (VALEG-Compliant)
+            $context = New-Object PSObject -Property @{ ExecId = $ExecId; LogFile = $LogFile }
+            $outEvent = Register-ObjectEvent -InputObject $proc -EventName "OutputDataReceived" -Action $logAction -MessageData $context
+            $errEvent = Register-ObjectEvent -InputObject $proc -EventName "ErrorDataReceived" -Action $logAction -MessageData $context
+
+            $proc.Start() | Out-Null
+            $proc.BeginOutputReadLine()
+            $proc.BeginErrorReadLine()
+            
+            # Aguarda a finalizacao enquanto os eventos processam os logs
+            $proc.WaitForExit()
+
+            # Cleanup de eventos
+            Unregister-Event -SourceIdentifier $outEvent.Name -ErrorAction SilentlyContinue
+            Unregister-Event -SourceIdentifier $errEvent.Name -ErrorAction SilentlyContinue
+
+            $exitCode = $proc.ExitCode
+            $proc.Dispose()
+
+            if ($exitCode -eq 2) {
+                Write-Log "Python detectou idempotencia (ExitCode 2). Suprimindo notificacoes."
+                Exit-WithCode 2 "Processo finalizado (Idempotencia Python)."
             }
-            if ($proc.ExitCode -ne 0) { throw "Script Python retornou ExitCode=$($proc.ExitCode)." }
+            if ($exitCode -ne 0) { throw "Python retornou ExitCode=$exitCode." }
             return $true
         }
 
@@ -229,7 +257,7 @@ if (Test-Path $HtmlPath) {
             Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
             try {
                 $whatsAppProc = Start-Process "powershell.exe" `
-                    -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO" `
+                    -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO -ConfigPath `"$WhatsAppConfig`"" `
                     -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
 
                 $whatsAppExit = $whatsAppProc.ExitCode

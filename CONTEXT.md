@@ -1,49 +1,79 @@
-# Cognitive Context: Automacoes Hub
+# Cognitive Context: Automacoes Hub v5.0.0 (Enterprise)
 
 ## Repository Philosophy
-Este repositório é um ecossistema de automações **AI-Native**, 100% migrado para uma arquitetura moderna e soberana. O projeto opera sob o "Padrão Ouro" de engenharia, priorizando resiliência de protocolo e soberania de ambiente.
+Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v5.0.0 (Enterprise)**. Upgrade do v4.0.1 com os 5 pilares do Protocolo V.A.L.E.G. aplicados ao Orchestrator: Validação pré-flight de scripts, Arquitetura deduplicada, Logging JSON com Correlation ID, Escala com WAL Checkpoint e fila priorizada, Governança com Rate Limiting e CORS hardened.
 
-## System Architecture
-O hub opera sob o modelo **Monitor-Trigger-Action** com stack 100% nativa:
-- **Monitor:** `MonitorAutomacoes.ps1` coordena agendamentos e saúde dos robôs.
-- **Orquestração:** Scripts `run.ps1` (PowerShell) gerenciam o fluxo e a idempotência cruzada.
-- **Data Engine (Soberano):** Python (Pandas/OracleDB Thick) processa dados com carregamento direto de ambiente via `python-dotenv`.
-- **Communication (Soberano):** Node.js com protocolo de **Ack Monitoring** para WhatsApp e Outlook COM para e-mails institucionais.
+## System Architecture (v5.0.0 Enterprise)
+O hub opera sob o modelo **Control Tower Enterprise v5.0.0**:
+- **Modular Control Plane:** Backend FastAPI organizado em 4 routers principais (`automations`, `executions`, `system`, `websocket`).
+- **Utilities Layer:** `app/utils.py` centraliza `log_audit()`, `get_client_ip()` e `validate_script_path()` — elimina duplicação entre routers.
+- **Dashboard Integrado:** Front-end SPA servido nativamente pelo Orchestrator em `/dashboard/`, com assets (fonts/JS) locais para estabilidade offline.
+- **Log Replay Engine:** WebSocket aprimorado que despacha o histórico completo de logs de uma execução imediatamente após o handshake de conexão.
+- **Motor de Execução v5:** Worker com logging JSON estruturado + Correlation ID por tarefa + retry 3x no broadcast + bug task_start_ts corrigido.
+- **WAL Checkpoint Engine:** APScheduler executa `PRAGMA wal_checkpoint(PASSIVE)` a cada 30 min automaticamente.
+- **Daily Purge Job:** APScheduler executa purge de execuções > 90 dias às 03:00 (configurável via `EXECUTION_RETENTION_DAYS`).
+- **Rate Limiting:** Sliding window 120 req/min por IP (configurável via `RATE_LIMIT_RPM`).
+- **Priority Queue:** Campo `priority` (HIGH/NORMAL/LOW) na tabela `executions` com índice composto para ordenação eficiente.
+- **Audit Log System:** Trilha de auditoria persistente que registra toda ação administrativa incluindo CHECKPOINT e PURGE.
+- **Data Engine Hardened:** SQLite em modo **WAL** com `ForeignKeys = ON`, garantindo resiliência sob carga concorrente.
 
-## AI Interoperability Standards
-1.  **Contextual Headers:** Metadados JSON em todos os arquivos fonte.
-2.  **ASCII-Safe & Base64 Bridge:** Garantia de integridade PT-BR e imunidade a variações de encoding do sistema operacional.
-3.  **Strict Idempotency:** Hashes MD5 (`last_hash`) governam a supressão de notificações redundantes em todos os canais.
+## Directory Structure (v5.0 Enterprise)
+```text
+C:\Automacoes\
+├── Infrastructure\     # [NUCLEO] Watchdog, API Launcher (v5), Instaladores
+├── Orchestrator\       # [BACKEND] 
+│   ├── app/            # Modulos FastAPI (routers, models, schemas, middleware, utils)
+│   │   └── utils.py    # [NEW v5] Utilities: log_audit, get_client_ip, validate_script_path
+│   ├── Logs/           # Logs rotativos (JSON estruturado) do Orchestrator e Worker
+│   ├── worker.py       # Motor Concorrente v5 (JSON logs + Correlation ID + retry)
+│   └── automacoes.db   # Banco SQLite v5 (Hardened, WAL auto-checkpoint)
+├── Dashboard\          # [FRONTEND]
+│   ├── css/            # Design System (Glassmorphism)
+│   ├── js/             # Camada API e Logica SPA
+│   └── dashboard.html  # Interface 4 abas
+├── lib\                # [SHARED] Bibliotecas PowerShell e Ativos
+├── Logs\               # [LOGS] Logs unificados dos robos
+└── [Automacoes]\       # [MODULES] Pastas individuais por robo
+```
 
-## Security & Resilience (Zero Trust & Retry Layer)
-- **Zero Secrets:** Credenciais geridas estritamente via `.env`.
-- **Oracle Thick Mode:** Ativado globalmente para suportar senhas e sessões de alta segurança.
-- **Resiliência Multinível (Fail-Fast / Recover-Slow):** Implementada via `Lib-Retry.psm1` (Backoff Exponencial) e `RetryQueue` em memória no Orquestrador.
-- **Pre-Flight Rigoroso:** Verificação obrigatória antes da lógica de negócio:
-    1. **Oracle (Thick Mode)**: Valida `oci.dll` e conectividade.
-    2. **Paths**: Garante acesso ao `.venv` e dependências.
-    3. **Zero Trust**: Carrega `.env` e valida variáveis essenciais.
+## Business Rules (Protocolo v5)
+1.  **Strict Concurrency**: O Worker permite N tarefas simultâneas (configurável via `.env`), com proteção contra execução duplicada do mesmo ID.
+2.  **Priority Queue**: Execuções suportam `priority` = HIGH | NORMAL | LOW. Índice composto garante ordenação eficiente na fila.
+3.  **Graceful Shutdown**: Captura de sinais SIGTERM para finalização limpa de tarefas zumbis e registro no Audit Log.
+4.  **Active Heartbeat**: O sistema considera o Worker "Inativo" se o heartbeat exceder 60s, alertando o Dashboard em tempo real.
+5.  **Schema Validation + Pre-flight V**: 100% dos inputs da API são validados por Pydantic + existência física do script validada no CREATE.
+6.  **WAL Auto-Checkpoint**: APScheduler executa checkpoint a cada 30min, prevenindo crescimento ilimitado do `.db-wal`.
+7.  **Daily Purge**: Execuções finalizadas há mais de `EXECUTION_RETENTION_DAYS` (default: 90) são removidas às 03:00.
 
-## Knowledge Graph (8 SKILLs Consolidadas)
-O repositório é governado pelas diretrizes em `.github/skills/`:
-1. `ai-native-development-standard`: Padrões de codificação AI-First.
-2. `automation-runtime-safety`: Zero Trust, Diagnósticos e Linter JSON.
-3. `enterprise-orchestration-contract`: Fluxo ponta-a-ponta e ExecId.
-4. `html-css-enterprise-standard`: Interface de Dashboard e Relatórios.
-5. `nodejs-communications`: WhatsApp Soberano (Ack-Monitoring).
-6. `powershell-automation-monitor`: Tipagem PowerShell estrita e Camada de Retry.
-7. `python-oracle-migration`: Performance O(n) e BAN de `SELECT *`.
-8. `vba-enterprise-core`: Padrões de interoperação (quando necessário).
+## Security & Resilience (v5 Enterprise)
+- **Timing-Safe Auth**: Comparação de API Key via `hmac.compare_digest` + log de falhas de auth com IP.
+- **Rate Limiting**: Sliding window 120 req/min por IP via `RateLimitMiddleware` (HTTP 429 com `Retry-After`).
+- **CORS Hardened**: `ALLOWED_ORIGINS` restrito a localhost por padrão (configurável via `.env`).
+- **Integridade Referencial**: Uso obrigatório de Foreign Keys no SQLite para evitar execuções órfãs.
+- **Atomic Backup**: Implementação de `VACUUM INTO` para backups consistentes e automáticos (rotação: 7 cópias).
+- **Middleware Observability**: Rastreabilidade total através de `X-Request-Id` + `correlation_id` nos logs do Worker.
+- **Pre-flight Validation**: `validate_script_path()` em `utils.py` bloqueia scripts inexistentes e path traversal antes de criar a automação.
 
-## Absolute Rules (Anti-Regression)
-- **Legacy Eradicated:** O uso de VBA, VBS ou Power Query foi completamente erradicado e é estritamente proibido. Todas as soluções devem ser 100% nativas (Soberanas) e aderentes ao Protocolo V.A.L.E.G.
-- **Portability First:** Proibido caminhos absolutos. O projeto deve ser 100% móvel.
-- **Explicit SQL:** Todas as consultas devem listar colunas nominalmente.
-- **JSON Integrity:** Arquivos de config e estado devem passar pelo validador sintático no pre-commit.
+## Enterprise API Endpoints (v5)
+| Endpoint | Método | Descrição |
+|---|---|---|
+| `/api/system/health` | GET | Health + `wal_size_mb` |
+| `/api/system/version` | GET | Versão, Python, uptime, max_workers |
+| `/api/system/checkpoint` | POST | WAL checkpoint manual |
+| `/api/system/purge` | POST | Purge de execuções antigas |
+| `/api/system/backup` | POST | Backup atômico (VACUUM INTO) |
+| `/api/system/audit` | GET | Trilha de auditoria |
+
+- **Obrigação:** Deve ser a primeira leitura da IA e **DEVE** ser atualizado após mudanças estruturais.
+- **Objetivo:** Economia de tokens e precisão cirúrgica na evolução do Hub.
 
 ---
 
 ## 🧠 Gestão de Contexto (AI-Native)
-Este é o documento mestre de contexto cognitivo.
-- **Obrigação:** Este arquivo **DEVE** ser a primeira leitura da IA em qualquer tarefa complexa e **DEVE** ser atualizado após mudanças em qualquer uma das 8 SKILLs ou na arquitetura Monitor-Trigger-Action.
-- **Objetivo:** Minimizar o consumo de tokens e maximizar a precisão da IA através de um mapa mental técnico sempre atualizado.
+Este é o documento mestre de contexto cognitivo v5.0.
+- **Obrigação:** Deve ser a primeira leitura da IA e **DEVE** ser atualizado após mudanças estruturais.
+- **Objetivo:** Economia de tokens e precisão cirúrgica na evolução do Hub.
+- **ADR-001 (09/05/2026):** Upgrade v4→v5 aplicando Protocolo V.A.L.E.G. completo. Deduplicação via `utils.py`, WAL checkpoint automático, Rate Limiting, CORS restrito a localhost, Priority Queue, Worker com JSON logs + Correlation ID.
+
+---
+Mantido pela equipe de Automacoes & Antigravity AI

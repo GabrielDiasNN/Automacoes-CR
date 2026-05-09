@@ -57,7 +57,7 @@ function Invoke-WithRetry {
 
     function Write-RetryLog {
         param([string]$Msg, [string]$Lvl = "INFO")
-        if ($Msg -match '[\u00C0-\u00FF]') {
+        if ($Msg -match '[^\x00-\x7F]') {
             $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
             $b64 = [System.Convert]::ToBase64String($bytes)
             Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogPath

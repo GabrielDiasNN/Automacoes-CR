@@ -20,8 +20,11 @@ function agoraBR() {
 }
 
 function log(nivel, mensagem) {
+    const logDir = path.join(__dirname, 'Logs');
+    if (!fs.existsSync(logDir)) { fs.mkdirSync(logDir, { recursive: true }); }
+    const logFile = path.join(logDir, 'WhatsApp.log');
     const linha = `[${agoraBR()}] [NODE] [${nivel}] [ExecId:${EXEC_ID || 'sem-id'}] ${mensagem}\r\n`;
-    try { fs.appendFileSync(path.join(__dirname, 'ReceitasBloqueadas.txt'), linha, 'utf8'); } catch (_) { }
+    try { fs.appendFileSync(logFile, linha, 'utf8'); } catch (_) { }
 }
 
 async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -69,13 +72,13 @@ async function processar() {
                 
                 // 1. Warming
                 log('INFO', `Aquecendo canal para ${chatId}...`);
-                await client.sendMessage(chatId, '\u231b _Iniciando transmiss\u00e3o do relat\u00f3rio..._');
+                await client.sendMessage(chatId, '\u231b _Iniciando transmissao do relatorio..._');
                 await sleep(2000);
 
                 // 2. Disparo do Anexo
                 log('INFO', 'Enviando anexo Excel...');
                 const media = MessageMedia.fromFilePath(config.paths.attachmentPath);
-                const sentMsg = await client.sendMessage(chatId, media, { caption: '*Relat\u00f3rio: Receitas Bloqueadas*' });
+                const sentMsg = await client.sendMessage(chatId, media, { caption: '*Relatorio: Receitas Bloqueadas*' });
                 targetMsgId = sentMsg.id._serialized;
                 log('INFO', `Mensagem em fila local: ${targetMsgId}. Aguardando Ack do servidor...`);
 

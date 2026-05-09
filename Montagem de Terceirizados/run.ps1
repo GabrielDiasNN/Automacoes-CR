@@ -8,8 +8,14 @@
     Version: 2.0.0
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-runtime-safety
     Contract: native-fetch-logic, ipc-file-payload, base64-bridge-logs, preflight-v1
-#>
-[CmdletBinding()]
+    #>
+    # {
+    #   "name": "orchestrator-montagem-terceirizados",
+    #   "version": "2.0.0",
+    #   "skill": "powershell-automation-monitor",
+    #   "description": "Use when orchestrating fiscal validation of outsourcing assembly orders."
+    # }
+    [CmdletBinding()]
 param(
     [string]$ExecId = "",
     [switch]$EmailPreviewOnly,
@@ -55,6 +61,11 @@ function Write-Log {
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
 $pathsToCheck = @($pythonExe, $extractPy, $validatePy)
+
+# Housekeeping: Limpa arquivos temporarios orfaos com mais de 24h
+Get-ChildItem -Path $ScriptDir -Filter ".data_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path $ScriptDir -Filter ".payload_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
+
 if (-not (Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths $pathsToCheck)) {
     Write-Log "FALHA NO PRE-FLIGHT (Python/Oracle/Paths). Abortando execucao." -Lvl "ERRO"; exit 9
 }

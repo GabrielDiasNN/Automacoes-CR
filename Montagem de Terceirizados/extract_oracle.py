@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 import base64
 from dotenv import load_dotenv
+from typing import List, Dict, Any, Optional
 
 # Carregar ambiente (.env) do projeto raiz
 # O arquivo .env esta 1 nivel acima da pasta da automacao
@@ -24,7 +25,7 @@ if sys.stdout.encoding != 'utf-8':
 if sys.stderr.encoding != 'utf-8':
     sys.stderr.reconfigure(encoding='utf-8')
 
-def log(message, level="INFO", exec_id="manual"):
+def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs em Base64 para o stderr para garantir integridade total."""
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
@@ -32,8 +33,8 @@ def log(message, level="INFO", exec_id="manual"):
     sys.stderr.write(f"B64:{b64_msg}\n")
     sys.stderr.flush()
 
-def extract():
-    exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
+def extract() -> None:
+    exec_id: str = sys.argv[1] if len(sys.argv) > 1 else "manual"
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
     user = os.environ.get("ORACLE_READONLY_USER")

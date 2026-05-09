@@ -108,7 +108,7 @@ if ($OnlyGovernance) {
 }
 
 # (Execucao de automacoes segue...)
-$config = Get-Content (Join-Path $BasePath 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$config = Get-Content (Join-Path $BasePath 'Deprecated\config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $execRe = New-BatchExecId -Prefix 'VALIDACAO_RE'
 $execRb = New-BatchExecId -Prefix 'VALIDACAO_RB'
 $execMt = New-BatchExecId -Prefix 'VALIDACAO_MT'

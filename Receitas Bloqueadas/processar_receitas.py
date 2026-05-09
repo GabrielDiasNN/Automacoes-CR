@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 # {
-#   "version": "2.1.2",
+#   "name": "processar-receitas-bloqueadas",
+#   "version": "2.3.0",
 #   "skill": "python-oracle-migration",
-#   "description": "Processa Receitas Bloqueadas com Controle de Estado, Realce Visual, Excel Profissional e Resiliencia (Stamina)"
+#   "description": "Use when processing blocked recipes with state control, visual highlighting, and Excel generation."
 # }
 import os
 import sys
@@ -11,6 +12,9 @@ import oracledb
 import pandas as pd
 import json
 import stamina
+import pybreaker
+from pydantic import BaseModel, Field, ValidationError
+from typing import List, Optional
 from datetime import datetime
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -31,9 +35,28 @@ def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     sys.stderr.write(f"B64:{b64_msg}\n")
     sys.stderr.flush()
 
+# --- CONTRATOS DE DADOS (Pydantic) ---
+class RecipeRecord(BaseModel):
+    key: str = Field(alias="Key")
+    cor: str = Field(alias="Cor Rec.")
+    ep: int = Field(alias="EP Rec.")
+    pe: int = Field(alias="PE Rec")
+    data_prod: Optional[str] = Field(alias="Data \u00daltima Prod.", default="")
+    data_bloqueio: Optional[str] = Field(alias="Data Bloqueio", default="")
+
+class StateFile(BaseModel):
+    last_hash: str
+    updated_at: str
+    records: List[RecipeRecord]
+
+# --- RESILIENCIA DE CONEXAO ---
+# Circuit Breaker: Abre após 3 falhas, permanece aberto por 60s
+db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
+
+@db_breaker
 @stamina.retry(on=oracledb.DatabaseError, attempts=3)
 def fetch_data_with_retry(user: str, password: str, dsn: str, sql_query: str, exec_id: str) -> pd.DataFrame:
-    log("Estabelecendo conexao e extraindo dados...", "INFO", exec_id)
+    log("Estabelecendo conexao e extraindo dados (com Circuit Breaker)...", "INFO", exec_id)
     with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
         return pd.read_sql(sql_query, con=connection)
 
@@ -192,19 +215,26 @@ def formatar_excel(file_path: str) -> None:
 
 def process() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
-    log("Iniciando processo V2 de Receitas Bloqueadas (Controle de Estado)", "INFO", exec_id)
+    log("Iniciando processo V2 de Receitas Bloqueadas (Resiliente e Validado)", "INFO", exec_id)
     
-    # Limpar artefatos de execucoes anteriores para evitar disparos indevidos
     html_path = os.path.join(os.path.dirname(__file__), "email_body.html")
     if os.path.exists(html_path):
         os.remove(html_path)
-        log("Artefato email_body.html antigo removido.", "DEBUG", exec_id)
 
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
-    dsn = "dbprd" 
+    dsn = os.environ.get("ORACLE_CONNECT_STRING", "dbprd") 
     client_lib = os.environ.get("ORACLE_CLIENT_PATH")
     tns_admin = os.environ.get("TNS_ADMIN")
+
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        log(f"FALHA NÃO TRATADA: {exc_value}", "ERROR", exec_id)
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+    sys.excepthook = handle_exception
 
     if not client_lib or not tns_admin:
         log("Caminhos Oracle ausentes no ambiente.", "ERROR", exec_id); sys.exit(1)
@@ -232,8 +262,17 @@ def process() -> None:
         last_state_data = {}
         if os.path.exists(state_path):
             try:
-                with open(state_path, "r", encoding="utf-8") as f: last_state_data = json.load(f)
-            except: last_state_data = {}
+                with open(state_path, "r", encoding="utf-8") as f: 
+                    raw_json = json.load(f)
+                    # Validação de Contrato de Dados (Pydantic)
+                    StateFile.model_validate(raw_json)
+                    last_state_data = raw_json
+            except ValidationError as ve:
+                log(f"Contrato de Dados Violado no Estado: {ve}", "ERROR", exec_id)
+                last_state_data = {}
+            except Exception as e:
+                log(f"Erro ao carregar estado: {e}", "WARN", exec_id)
+                last_state_data = {}
         
         last_records = last_state_data.get("records", []) if isinstance(last_state_data, dict) else last_state_data
         df_last = pd.DataFrame(last_records)
@@ -255,11 +294,10 @@ def process() -> None:
                     row_diff = row.copy(); row_diff['_change_type'] = 'DELETED'; diff_rows.append(row_diff); stats['del'] += 1
 
         if not diff_rows:
-            log("Sem alteracoes relevantes detectadas no ciclo.", "INFO", exec_id)
-            # Atualiza apenas o timestamp e o hash no arquivo de estado para manter sincronia
+            log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
             state_data = {"last_hash": pd.util.hash_pandas_object(df_agreg).sum().astype(str), "updated_at": datetime.now().isoformat(), "records": df_agreg.to_dict(orient='records')}
             with open(state_path, "w", encoding="utf-8") as f: json.dump(state_data, f, ensure_ascii=False, indent=4)
-            sys.exit(2) # Exit code 2 indica sucesso, mas sem necessidade de notificacao
+            sys.exit(2)
 
         state_data = {"last_hash": pd.util.hash_pandas_object(df_agreg).sum().astype(str), "updated_at": datetime.now().isoformat(), "records": df_agreg.to_dict(orient='records')}
         with open(state_path, "w", encoding="utf-8") as f: json.dump(state_data, f, ensure_ascii=False, indent=4)
@@ -272,17 +310,13 @@ def process() -> None:
         try: formatar_excel(excel_path); log("Excel formatado.", "INFO", exec_id)
         except Exception as e: log(f"Aviso Excel: {e}", "WARN", exec_id)
             
-        # Preparar DataFrame para exibicao unificada no HTML
         df_diff = pd.DataFrame(diff_rows)
         df_display = df_agreg.copy()
         df_display['_change_type'] = 'STABLE'
-        
-        # Mapear mudancas para o dataframe principal
         for _, row in df_diff.iterrows():
             if row['_change_type'] in ['NEW', 'MODIFIED']:
                 df_display.loc[df_display['Key'] == row['Key'], '_change_type'] = row['_change_type']
         
-        # Adicionar as liberadas (que nao estao mais no df_agreg)
         df_deleted = df_diff[df_diff['_change_type'] == 'DELETED']
         if not df_deleted.empty:
             df_display = pd.concat([df_display, df_deleted], ignore_index=True)
@@ -292,6 +326,8 @@ def process() -> None:
         log("Processo concluido com alteracoes. Notificacao gerada.", "INFO", exec_id)
         sys.exit(0)
 
+    except pybreaker.CircuitBreakerError:
+        log("Circuit Breaker Aberto: Banco de dados inacessivel.", "ERROR", exec_id); sys.exit(1)
     except oracledb.DatabaseError as de:
         error_obj, = de.args; log(f"Erro DB: {error_obj.message}", "ERROR", exec_id); sys.exit(1)
     except Exception as e: log(f"Erro fatal: {str(e)}", "ERROR", exec_id); sys.exit(1)

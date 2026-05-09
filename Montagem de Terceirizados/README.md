@@ -47,6 +47,13 @@ A migracao para o modo nativo reduziu o tempo de execucao de minutos (via Excel 
 
 ---
 
+## 🧠 Gestão de Contexto (AI-Native)
+Este arquivo é o mapa cognitivo local do robô de Montagem de Terceirizados.
+- **Obrigação**: Deve ser atualizado após mudanças nas regras fiscais de validação NF vs OB ou alteração na query SQL otimizada.
+- **Sincronismo**: Garante que a IA compreenda a transição Legacy -> Pure-Native e a lógica de cache de erros em JSON.
+
+---
+
 ## Regras de Negocio Criticas
 1. **Idempotencia**: O sistema utiliza cache de estado para enviar alertas apenas quando surgem novos erros ou mudancas significativas.
 2. **Filtros de Producao**: A automacao foca exclusivamente em OBs Montadas (Setor 5), com Destino Receita 1 e Programacao do tipo `%T`.

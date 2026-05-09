@@ -3,8 +3,8 @@
     "enabled": true
   },
   "paths": {
-    "attachmentPath": "C:\\Automacoes\\Receitas Bloqueadas\\Receitas Bloqueadas.xlsx",
-    "logFile": "C:\\Automacoes\\Receitas Bloqueadas\\ReceitasBloqueadas.txt",
+    "attachmentPath": "Receitas Bloqueadas.xlsx",
+    "logFile": "Logs\\ReceitasBloqueadas.log",
     "stateFile": "whatsapp-state.json",
     "authDir": ".wwebjs_auth"
   },

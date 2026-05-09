@@ -100,7 +100,7 @@ if (-not (Test-Path $BasePath)) {
     exit 1
 }
 
-$configPath = Join-Path $BasePath "config.json"
+$configPath = Join-Path $BasePath "Deprecated\config.json"
 if (-not (Test-Path $configPath)) {
     Write-Step "config.json nao encontrado em: $configPath" -Type "ERRO"
     exit 1

@@ -57,8 +57,11 @@ function Get-FromBase64 {
 function Protect-SensitiveData {
     param([string]$Text)
     if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
+    # Mascara E-mails
     $masked = $Text -replace '([a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', '$1***@$2'
-    $masked = $masked -replace '(?i)(token|key|password|pass|secret|credential|auth)([:= ]\s*)([a-zA-Z0-9._%+-]{8,})', '$1$2[REDACTED]'
+    # Mascara Senhas e Tokens (Expandido)
+    $masked = $masked -replace '(?i)(token|key|password|pass|secret|credential|auth|apikey|client_secret)([:= ]\s*)([a-zA-Z0-9._%+-]{4,})', '$1$2[REDACTED]'
+    # Mascara Strings de Conexao Oracle
     $masked = $masked -replace '(DESCRIPTION\s*=\s*\(ADDRESS\s*=\s*\(PROTOCOL\s*=\s*TCP\)\(HOST\s*=\s*)[^)]+', '$1[HIDDEN]'
     return $masked
 }
@@ -77,8 +80,14 @@ function Test-AutomationPreFlight {
 
     Write-AutomacaoLog -Message "Iniciando Pre-Flight Check..." -Level "INFO" -ExecId $ExecId -LogPath $LogPath
     $results = @()
-    $drive = (Get-Item "C:\").PSDrive
-    $freeGB = [math]::Round($drive.Free / 1GB, 2)
+    
+    # Portabilidade: Detecta a unidade de disco do projeto dinamicamente
+    $projectRoot = Get-AutomacaoProjectRoot
+    $driveLetter = (Split-Path -Path $projectRoot -Qualifier)
+    if (-not $driveLetter) { $driveLetter = "C:" }
+    $drive = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$driveLetter'"
+    
+    $freeGB = [math]::Round($drive.FreeSpace / 1GB, 2)
     if ($freeGB -lt 1) { $results += "ERRO: Disco critico ($freeGB GB)" } else { $results += "OK: Disco estavel ($freeGB GB)" }
     foreach ($p in $CheckPaths) { if (Test-Path $p) { $results += "OK: Path: $(Split-Path $p -Leaf)" } else { $results += "ERRO: Path inacessivel: $(Split-Path $p -Leaf)" } }
     if ($CheckOracle) { if (Test-Connection -ComputerName "SRVDB02" -Count 1 -Quiet) { $results += "OK: SRVDB02 On" } else { $results += "WARN: SRVDB02 Off" } }

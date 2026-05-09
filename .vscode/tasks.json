@@ -32,7 +32,7 @@
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                "${workspaceFolder}\\MonitorAutomacoes.ps1",
+                "${workspaceFolder}\\Infrastructure\\MonitorAutomacoes.ps1",
                 "-RunOnce",
                 "-DryRun"
             ],
@@ -51,7 +51,7 @@
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                "${workspaceFolder}\\MonitorAutomacoes.ps1",
+                "${workspaceFolder}\\Infrastructure\\MonitorAutomacoes.ps1",
                 "-RunOnce"
             ],
             "problemMatcher": []
@@ -65,7 +65,7 @@
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                "${workspaceFolder}\\SetupMonitor.ps1"
+                "${workspaceFolder}\\Deprecated\\SetupMonitor.ps1"
             ],
             "problemMatcher": []
         },

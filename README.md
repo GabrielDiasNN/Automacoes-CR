@@ -1,30 +1,39 @@
-# Central de Automacoes (Automacoes Hub)
+# Central de Automacoes (Hub Soberano) — v4.0.1 🚀
 
-Este repositório é o núcleo técnico para orquestração de automações operacionais e fiscais. O projeto opera em **Arquitetura Soberana**, com 100% de modernização atingida e independência total de macros legadas.
+Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto atingiu o **Estado de Excelência v4.0.1**, operando com uma arquitetura modular enterprise, dashboard integrado e observabilidade total.
 
-## 🏗️ Arquitetura Tecnica (Nativa e Soberana)
+## 🏗️ Arquitetura Tecnica (Soberano Control Tower v4)
 
 ```mermaid
 graph TD
-    A[MonitorAutomacoes.ps1] -->|Agenda/Hot-Reload| B(config.json)
-    A -->|Pre-Flight| P[run.ps1]
-    
-    subgraph "Camada de Resiliencia (Multinivel)"
-        P -->|Lib-Retry| R[Retry Interno]
-        R -->|Falha Fatal| A
-        A -->|RetryQueue| P
+    subgraph "FRONTEND — Dashboard SPA"
+        UI[Dashboard v4.0<br/>Glassmorphism Premium]
+        WS_CLIENT[WebSocket Client<br/>Logs + Events]
+        UI --> WS_CLIENT
     end
 
-    subgraph "Execucao Soberana"
-        R -->|1. Orquestracao| PS[PowerShell Core]
-        R -->|2. Inteligencia| PY[Python + Dotenv]
-        PY -->|Thick Mode| E[(Oracle DB)]
+    subgraph "GATEWAY — FastAPI v4"
+        ROUTERS[Routers Modulares<br/>Auto, Exec, Sys, WS]
+        MIDDLEWARE[Middleware Stack<br/>Auth, RequestId, Timing]
+        ROUTERS <--> MIDDLEWARE
     end
 
-    subgraph "Canais de Saida"
-        PS -->|Outlook + Hash| F[Email Profissional]
-        PS -->|Node + Ack| G[WhatsApp Business]
+    subgraph "CORE — Motor de Execucao"
+        WORKER[Worker v4<br/>ThreadPool Concorrente]
+        HEARTBEAT[Heartbeat System<br/>Saude Real-time]
+        WORKER --- HEARTBEAT
     end
+
+    subgraph "DATA — Persistencia Hardened"
+        DB[(SQLite WAL<br/>+ ForeignKeys)]
+        AUDIT[Audit Log<br/>Trilha de Auditoria]
+        DB --- AUDIT
+    end
+
+    UI -->|REST + WS| ROUTERS
+    ROUTERS --> DB
+    WORKER -->|Consome PENDING| DB
+    WORKER -->|Broadcast Logs| ROUTERS
 ```
 
 ---
@@ -32,52 +41,52 @@ graph TD
 ## 🚀 Modulos de Automacao (Estado de Excelencia)
 
 ### 1. [**Receitas Bloqueadas**](file:///c:/Automacoes/Receitas%20Bloqueadas/README.md) (Soberana v2.1.2) 🌟
-- **Diferencial**: Idempotência estrita em ambos os canais (E-mail/WhatsApp). Geração de Excel analítico formatado (PT-BR) via `openpyxl`.
+- **Diferencial**: Idempotência estrita, geração de Excel analítico e alertas multicanal (Email/WhatsApp).
 - **Frequência**: 07:00/30, 10:00/30 e 14:00/30.
 
 ### 2. [**Receitas Emitidas**](file:///c:/Automacoes/Receitas%20Emitidas/README.md) (Nativo v2.5.0) 🚀
-- **Diferencial**: Comunicação via *IPC Stdio Pipes* em memória.
+- **Diferencial**: Comunicação via *IPC Stdio Pipes* em memória para ultra-performance.
 
 ### 3. [**Montagem de Terceirizados**](file:///c:/Automacoes/Montagem%20de%20Terceirizados/README.md) (Pure-Native v2.0) ⚙️
-- **Diferencial**: Validação fiscal nativa direta no Oracle via Python.
+- **Diferencial**: Validação fiscal nativa direta no Oracle via Python (Thick Mode).
 
 ---
 
-## 🛠️ Operacao e Monitoramento
+## 🛠️ Operacao e Monitoramento v4.0
 
-- **Dashboard Principal**: Acompanhe o estado em tempo real em [dashboard.html](file:///c:/Automacoes/Dashboard/dashboard.html).
-- **Bibliotecas**: [Documentacao das Libs Compartilhadas](file:///c:/Automacoes/lib/README.md).
-- **Historico de Incidentes**: Auditoria de falhas passadas em [incident-log.md](file:///c:/Automacoes/docs/incident-log.md).
+- **Torre de Comando**: Dashboard reativo servido nativamente em `http://localhost:8766/dashboard/`.
+- **Log Replay**: WebSocket inteligente que envia o histórico completo de logs ao conectar em uma execução ativa.
+- **Worker v4**: Motor concorrente com **Heartbeat** (saúde ativa) e suporte a **Stop/Kill** real de processos.
+- **Offline Ready**: Assets de interface (fonts/JS) servidos localmente para máxima estabilidade em redes isoladas.
+- **Audit Log**: Toda ação administrativa (criação, edição, disparo) é registrada para auditoria técnica.
 
-### Tabela de Erros e Diagnosticos (Protocolo de Estabilidade)
+### Tabela de Erros e Diagnosticos (Protocolo v4)
 
-| Codigo  | Descricao                                           | Acao do Monitor           |
+| Codigo  | Descricao                                           | Acao do Hub               |
 | :------ | :-------------------------------------------------- | :------------------------ |
 | **0**   | Sucesso Absoluto                                    | Finaliza Ciclo            |
-| **1-3** | Falha de Ambiente ou Caminho                        | Log Fatal                 |
-| **4**   | Erro Tecnico (Python/Node)                          | Log Fatal + Alerta E-mail |
+| **2**   | Sucesso: Idempotencia (Sem alteracoes)              | Finaliza Ciclo (Suprimido) |
+| **3**   | Sucesso: Sem Dados Encontrados                      | Finaliza Ciclo            |
+| **4**   | Erro Tecnico (Python/Node)                          | Alerta Multicanal + Audit |
 | **9**   | Falha de Pre-Flight (Banco/OCI/Paths)               | **Trigger Retry (Fila)**  |
-| **20**  | WhatsApp: Timeout de Inicializacao                  | Log Fatal                 |
-| **23/40**| WhatsApp: Cooldown/Lock (Previsto)                 | Ignora Retry              |
-| **24**  | WhatsApp: Falha de Entrega (Ack nao recebido)       | Log Fatal                 |
-| **21**  | WhatsApp: Reautenticacao Necessaria                 | Log Fatal                 |
+| **20**  | WhatsApp: Timeout de Inicializacao                  | Log Fatal + Alerta        |
+| **TIMEOUT**| Execução excedeu tempo máximo                      | Taskkill Tree + Alerta    |
 
 ---
 
-## 📏 Governanca (Padrao Ouro)
-O projeto é auditado automaticamente em cada commit:
-1.  **Protocolo V.A.L.E.G.**: Conformidade absoluta (Validação, Arquitetura, Logging, Escala e Governança).
-2.  **Zero Trust**: Credenciais apenas em `.env`.
-3.  **Sintaxe JSON**: Todos os configs validados pelo `Test-JsonConfig.ps1`.
-4.  **ASCII-Safe**: Codigo-fonte imune a corrupcao de encoding.
-5.  **Portabilidade**: Proibido caminhos absolutos (`C:\...`).
+## 📏 Governanca (Padrao Ouro v4)
+O projeto é auditado pelo **Protocolo V.A.L.E.G.** e blidado por:
+1.  **Modular Routers**: API organizada por domínios (Automations, Executions, System, WS).
+2.  **Schema Validation**: Proteção Pydantic contra Path Traversal e inputs maliciosos.
+3.  **Timing-Safe Auth**: Proteção contra ataques de timing em toda a API.
+4.  **WebSocket Event Bus**: Distribuição de eventos e logs com latência zero.
 
 ---
 
 ## 🧠 Gestão de Contexto (AI-Native)
-Este arquivo é uma **unidade de contexto vital** para a IA. 
-- **Obrigação:** Deve ser atualizado imediatamente após qualquer alteração estrutural, de regra de negócio ou de arquitetura no Hub.
-- **Objetivo:** Manter a "memória central" do projeto sincronizada, garantindo que a IA carregue o contexto correto e economize tokens ao evitar a leitura exaustiva de código-fonte.
+Este arquivo é uma **unidade de contexto vital** v4.0.
+- **Obrigação:** Deve ser atualizado imediatamente após qualquer alteração estrutural ou de regra de negócio.
+- **Objetivo:** Manter a "memória central" sincronizada, garantindo que a IA opere com máxima precisão técnica.
 
 ---
 Mantido pela equipe de Automacoes & Antigravity AI

@@ -38,3 +38,10 @@ Audit/
 *.pem
 *.key
 .aider*
+
+# Banco de Dados SQLite (runtime — nao versionar)
+Orchestrator/automacoes.db
+Orchestrator/automacoes.db-shm
+Orchestrator/automacoes.db-wal
+Orchestrator/worker.pid
+Backups/

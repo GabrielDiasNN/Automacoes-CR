@@ -5,11 +5,12 @@ chcp 65001 >nul
 title Ativar Modo de Teste - Automacoes Hub
 
 echo [1/2] Configurando redirecionamento de e-mail...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Tools\ConfigurarEmailTeste.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0ConfigurarEmailTeste.ps1"
 
 echo [2/2] Reiniciando Monitor Central...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*MonitorAutomacoes.ps1*' } | Stop-Process -Force -ErrorAction SilentlyContinue"
-start /min "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0MonitorAutomacoes.ps1"
+start /min "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0..\Infrastructure\MonitorAutomacoes.ps1"
+
 
 echo.
 echo ============================================================

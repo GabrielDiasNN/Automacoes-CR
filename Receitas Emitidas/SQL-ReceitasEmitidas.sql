@@ -35,7 +35,22 @@ WITH
     )
 
 SELECT /*+ FIRST_ROWS(1000) */
-    *
+    Valida_Atualizacao,
+    GRUPO,
+    NUMERO_OB,
+    PESADA,
+    MQ_TING,
+    INICIO_TING,
+    FINAL_TING,
+    ARTIGO,
+    REDUZIDO,
+    DESCRICAO,
+    FASE_ATUAL,
+    STATUS_FASE,
+    USUARIO,
+    HORARIO_PESADO,
+    DIAS_PESADO,
+    QUANT_PESADA
 FROM (
     SELECT
         SYSDATE AS Valida_Atualizacao,

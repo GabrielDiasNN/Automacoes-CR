@@ -48,6 +48,13 @@ A automação possui controle rigoroso de estado para evitar execuções redunda
 - Se o `extract_oracle.py` identificar que os dados recém extraídos possuem o mesmo Hash da execução anterior, ele encerra antecipadamente emitindo o **ExitCode 2**.
 - O Orquestrador intercepta esse código como sucesso sem alterações e interrompe a cadeia de processamento visual (evitando o acionamento do gerador HTML e do e-mail).
 
+---
+
+## 🧠 Gestão de Contexto (AI-Native)
+Este arquivo é o mapa cognitivo local do robô de Receitas Emitidas.
+- **Obrigação**: Deve ser atualizado após mudanças na query SQL (Oracle) ou na lógica de geração do relatório adaptativo.
+- **Sincronismo**: Garante que a IA compreenda o fluxo de memória via Stdout Pipes (IPC) e o controle de estado SHA-256.
+
 ### Codigos de Saida (Exit Codes)
 - `0`: Sucesso Absoluto.
 - `1`: Falha tecnica tratada.

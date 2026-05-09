@@ -17,6 +17,7 @@ PS_GOV_PATH="$REPO_ROOT/Tools/Test-PowerShellGovernance.ps1"
 PORT_GOV_PATH="$REPO_ROOT/Tools/Test-PortablePaths.ps1"
 ENC_GOV_PATH="$REPO_ROOT/Tools/Test-SourceEncoding.ps1"
 JSON_GOV_PATH="$REPO_ROOT/Tools/Test-JsonConfig.ps1"
+ORCH_GOV_PATH="$REPO_ROOT/Tools/Test-OrchestratorIntegrity.ps1"
 
 if command -v pwsh >/dev/null 2>&1; then
   PS_BIN="pwsh"
@@ -79,6 +80,12 @@ fi
 
 if [ -f "$VERBS_SCRIPT_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VERBS_SCRIPT_PATH"
+  if [ $? -ne 0 ]; then exit 1; fi
+fi
+
+# 9. Integridade do Orquestrador (Novo)
+if [ -f "$ORCH_GOV_PATH" ]; then
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$ORCH_GOV_PATH"
   if [ $? -ne 0 ]; then exit 1; fi
 fi
 

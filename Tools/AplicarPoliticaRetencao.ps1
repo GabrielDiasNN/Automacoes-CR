@@ -353,14 +353,9 @@ function Remove-DirectorySafe {
 
 
     catch [System.Exception] {
-
-
-        $script:Stats.Errors++
-
-
+        # Em politicas de retencao, falhar ao remover um diretorio (geralmente por estar em uso)
+        # deve ser um aviso, nao um erro critico que faz o robo falhar no Orquestrador.
         Write-RunLog -Level "WARN" -Message ("Falha ao remover diretorio ({0}): {1} | Erro: {2}" -f $Reason, $DirectoryPath, $_)
-
-
     }
 
 
