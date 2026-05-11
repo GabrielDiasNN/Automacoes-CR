@@ -26,9 +26,18 @@ foreach ($file in $targetFiles) {
     if (-not (Test-Path $fullPath)) { continue }
 
     Write-Host "Analisando: $file"
-    
+
+    # Tentativa de carregar o modulo se nao estiver na sessao
+    if (-not (Get-Module PSScriptAnalyzer)) {
+        $userModulePath = Join-Path $HOME "Documents\WindowsPowerShell\Modules\PSScriptAnalyzer\PSScriptAnalyzer.psd1"
+        if (Test-Path $userModulePath) {
+            Import-Module $userModulePath -ErrorAction SilentlyContinue
+        }
+    }
+
     # Executa PSScriptAnalyzer se o modulo estiver disponivel
-    if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
+    if (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue) {
+
         $analyzerResults = Invoke-ScriptAnalyzer -Path $fullPath -Severity Error,Warning
         if ($analyzerResults) {
             Write-Host "[AVISO] PSScriptAnalyzer encontrou falhas em '$file':" -ForegroundColor Yellow
