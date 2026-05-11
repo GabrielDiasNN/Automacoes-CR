@@ -18,7 +18,18 @@ if ($targetFiles.Count -eq 0) {
     exit 0
 }
 
+# Helper para encontrar executaveis no venv ou no PATH
+function Get-PythonTool {
+    param([string]$ToolName)
+    $venvTool = Join-Path $RootPath ".venv\Scripts\$ToolName.exe"
+    if (Test-Path $venvTool) { return $venvTool }
+    if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $ToolName }
+    return $null
+}
+
 $hasErrors = $false
+$mypy = Get-PythonTool "mypy"
+$pylint = Get-PythonTool "pylint"
 
 foreach ($file in $targetFiles) {
     $file = $file.Trim('"')
@@ -28,8 +39,8 @@ foreach ($file in $targetFiles) {
     Write-Host "Verificando: $file"
 
     # Verificacao Mypy (Tipagem Estrita)
-    if (Get-Command mypy -ErrorAction SilentlyContinue) {
-        $mypyOutput = & mypy --strict $fullPath 2>&1
+    if ($mypy) {
+        $mypyOutput = & $mypy --strict $fullPath 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERRO] Falha de Tipagem Estrita (Mypy) em $file" -ForegroundColor Red
             $mypyOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
@@ -40,8 +51,8 @@ foreach ($file in $targetFiles) {
     }
 
     # Verificacao Pylint (Qualidade)
-    if (Get-Command pylint -ErrorAction SilentlyContinue) {
-        $pylintOutput = & pylint --disable=C0114,C0116 $fullPath 2>&1
+    if ($pylint) {
+        $pylintOutput = & $pylint --disable=C0114,C0116 $fullPath 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint) em $file" -ForegroundColor Red
             $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
