@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=line-too-long, too-many-locals, f-string-without-interpolation, broad-exception-caught, bare-except, too-many-statements, unused-import
 # {
-#   "version": "2.7.0",
+#   "version": "2.7.1",
 #   "skill": "python-oracle-migration, protocolo-valeg",
 #   "contract": "ipc-stdio, thick-mode-padronizado",
 #   "description": "Extrai receitas emitidas via Direct Oracle (Query CTE Nativa) com Thick Mode garantido",
@@ -101,6 +101,9 @@ def extract() -> None:
                 elif isinstance(value, str) and value:
                     record[key] = value.strip()
             data.append(record)
+
+        # Ordenacao deterministica para garantir estabilidade do hash
+        data.sort(key=lambda x: str(x.get("NUMERO_OB", "")))
 
         json_payload = json.dumps(data, ensure_ascii=False)
         current_hash = hashlib.sha256(json_payload.encode("utf-8")).hexdigest()

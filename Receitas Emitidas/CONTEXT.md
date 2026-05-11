@@ -44,4 +44,5 @@ O objetivo e fornecer uma visao clara para a equipe de producao sobre o volume d
 
 ## 🧠 Gestão de Contexto (AI-Native)
 - **Obrigação:** Atualizar este contexto se houver mudanças na Query CTE, no layout HTML ou no fluxo IPC Stdio.
+- **Estado (2026-05-11):** Idempotência estabilizada via remoção de campos voláteis (SYSDATE) e ordenação determinística por NUMERO_OB.
 - **Objetivo:** Garantir que a IA entenda a natureza "VBA-Free" e "Soberana" deste módulo sem re-analisar o código Python.

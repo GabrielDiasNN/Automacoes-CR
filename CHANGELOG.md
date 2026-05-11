@@ -6,6 +6,12 @@ O projeto segue os princípios de **Resiliência, Escala e Governança (Protocol
 
 ---
 
+## [5.1.3] — 2026-05-11
+### 🛠️ Corrigido
+- **Receitas Emitidas (Idempotência)**: Corrigida falha que causava disparos duplicados de e-mails. Removidos campos voláteis (`SYSDATE`/`Valida_Atualizacao` e `DIAS_PESADO`) da query SQL e implementada ordenação determinística (`NUMERO_OB`) no Python para garantir estabilidade do hash de idempotência.
+
+---
+
 ## [5.1.2] — 2026-05-11
 ### 🏗️ Governança e Qualidade
 - **Tipagem Estrita (Mypy)**: Correção abrangente de assinaturas de funções e anotações de tipo em todas as automações (`Montagem de Terceirizados`, `Receitas Bloqueadas`, `Receitas Emitidas`) e no `Orchestrator`, alcançando conformidade com `mypy --strict`.

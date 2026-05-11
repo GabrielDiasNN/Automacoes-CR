@@ -9,13 +9,13 @@
     4. PowerShell: Entrega visual via Outlook utilizando Base64 Bridge para logs.
     Cada etapa critica e executada com Invoke-WithRetry (VALEG: A-Arquitetura).
 .NOTES
-    Version: 2.6.0
+    Version: 2.6.1
     Skill: ai-native-development-standard, python-oracle-migration, protocolo-valeg
     Contract: ipc-stdio, base64-bridge-logs, retry-on-failure
 #>
 # {
 #   "name": "orchestrator-receitas-emitidas",
-#   "version": "2.6.0",
+#   "version": "2.6.1",
 #   "skill": "powershell-automation-monitor",
 #   "description": "Use when orchestrating the weekly report of emitted recipes using IPC pipes."
 # }
