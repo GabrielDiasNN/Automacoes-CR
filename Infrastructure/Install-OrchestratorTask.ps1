@@ -28,6 +28,6 @@ try {
     Write-Host "[OK] Tarefa registrada com sucesso! O Orquestrador iniciara silenciosamente no proximo login." -ForegroundColor Green
     Write-Host "Para iniciar agora manualmente de forma invisivel, execute:" -ForegroundColor Yellow
     Write-Host "Start-ScheduledTask -TaskName $TaskName" -ForegroundColor Yellow
-} catch {
+} catch [System.Exception] {
     Write-Host "[ERRO] Falha ao registrar tarefa: $_" -ForegroundColor Red
 }

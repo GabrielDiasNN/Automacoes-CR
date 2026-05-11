@@ -64,7 +64,7 @@ def client(db_session):
 
     db_module.SessionLocal = TestingSessionLocal
     main_module.SessionLocal = TestingSessionLocal
-    # Redirecionar PROJECT_ROOT para o diretorio de testes (contém /test/*.ps1)
+    # Redirecionar PROJECT_ROOT para o diretorio de testes (contem /test/*.ps1)
     auto_router.PROJECT_ROOT = TESTS_DIR
 
     def override_get_db():

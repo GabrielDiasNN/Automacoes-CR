@@ -53,10 +53,16 @@ if ([string]::IsNullOrWhiteSpace($ExecId)) {
 }
 $LogFile = Get-AutomacaoLogPath -Slug "Montagem_Terceirizados" -LogDir $LogDir
 
-# Helper para Log
+# Helper para Log com suporte a Base64 Interno (v5.0.0)
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO")
-    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    if ($Msg -match '[^\x00-\x7F]') {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
+        $b64 = [System.Convert]::ToBase64String($bytes)
+        Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    } else {
+        Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    }
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
@@ -109,16 +115,15 @@ try {
     }
     
     $nativeProc = [System.Diagnostics.Process]::Start($nativeExtractInfo)
-    $null = $nativeProc.StandardOutput.ReadToEnd() 
-    $nativeErrors = $nativeProc.StandardError.ReadToEnd()
-    $nativeProc.WaitForExit()
     
-    # Processa logs do Python (B64 Bridge)
-    if ($nativeErrors) { 
-        $nativeErrors -split "`n" | ForEach-Object { 
-            if ($_.Trim()) { Write-AutomacaoLog -Message $_.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile } 
-        } 
+    # Processa logs do Python em tempo real
+    while (-not $nativeProc.HasExited) {
+        $line = $nativeProc.StandardOutput.ReadLine()
+        if ($line) { Write-Log $line }
+        $err = $nativeProc.StandardError.ReadLine()
+        if ($err) { Write-Log $err -Lvl "WARN" }
     }
+    $nativeProc.WaitForExit()
 
     if ($nativeProc.ExitCode -ne 0 -or -not (Test-Path $dataFile)) {
         throw "Falha critica na extracao nativa (ExitCode: $($nativeProc.ExitCode))."
@@ -138,15 +143,13 @@ try {
     $genInfo.CreateNoWindow = $true
     
     $genProcess = [System.Diagnostics.Process]::Start($genInfo)
-    $null = $genProcess.StandardOutput.ReadToEnd()
-    $genErrors = $genProcess.StandardError.ReadToEnd()
-    $genProcess.WaitForExit()
-
-    if ($genErrors) { 
-        $genErrors -split "`n" | ForEach-Object { 
-            if ($_.Trim()) { Write-AutomacaoLog -Message $_.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile } 
-        } 
+    while (-not $genProcess.HasExited) {
+        $line = $genProcess.StandardOutput.ReadLine()
+        if ($line) { Write-Log $line }
+        $err = $genProcess.StandardError.ReadLine()
+        if ($err) { Write-Log $err -Lvl "WARN" }
     }
+    $genProcess.WaitForExit()
     
     if ($genProcess.ExitCode -ne 0) { throw "Falha na validacao Python (ExitCode: $($genProcess.ExitCode))." }
 

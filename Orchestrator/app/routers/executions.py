@@ -1,5 +1,5 @@
 """
-Router: Executions — Historico de execucoes com filtros, logs, artefatos e controle. v5.0
+Router: Executions - Historico de execucoes com filtros, logs, artefatos e controle. v5.0
 """
 
 import logging

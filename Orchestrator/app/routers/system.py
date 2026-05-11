@@ -1,5 +1,5 @@
 """
-Router: System — Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.0.
+Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.0.
 """
 
 import json
@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timedelta
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, func, text
@@ -61,6 +62,10 @@ def health_check(db: Session = Depends(get_db)):
 
     wal_mb = get_wal_size_mb()
 
+    import psutil
+    cpu = psutil.cpu_percent()
+    ram = psutil.virtual_memory().percent
+
     return schemas.SystemHealth(
         status=overall,
         timestamp=datetime.now(),
@@ -70,6 +75,8 @@ def health_check(db: Session = Depends(get_db)):
         pending_tasks=pending,
         disk_usage_mb=disk_mb,
         wal_size_mb=wal_mb,
+        cpu_usage=cpu,
+        ram_usage_percent=ram
     )
 
 
@@ -174,6 +181,7 @@ def get_metrics(
             avg_duration_sec=round(auto_avg, 2),
             last_status=last_exec.status if last_exec else None,
             last_run=last_exec.started_at if last_exec else None,
+            test_mode=auto.test_mode,
         ))
 
     return schemas.MetricsResponse(
@@ -269,7 +277,48 @@ def get_uptime(api_key: str = Depends(get_api_key)):
 
 
 # ---------------------------------------------------------------------------
-# VERSION — Endpoint enterprise de versao e build
+# AGENDAMENTO - Lista de tarefas programadas
+# ---------------------------------------------------------------------------
+
+@router.get("/scheduler/jobs", response_model=List[schemas.ScheduledJob])
+def list_scheduled_jobs(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Retorna a lista de tarefas agendadas no APScheduler."""
+    from ..main import scheduler
+    
+    jobs = []
+    for job in scheduler.get_jobs():
+        # Tentar extrair automation_id do ID do job (ex: job_1)
+        auto_id = None
+        auto_name = "Enterprise Job"
+        
+        if job.id.startswith("job_"):
+            try:
+                auto_id = int(job.id.split("_")[1])
+                auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+                if auto:
+                    auto_name = auto.name
+            except (IndexError, ValueError):
+                pass
+        elif job.id.startswith("enterprise_"):
+            auto_name = f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"
+
+        jobs.append(schemas.ScheduledJob(
+            id=job.id,
+            automation_id=auto_id,
+            automation_name=auto_name,
+            next_run_time=job.next_run_time,
+            trigger=str(job.trigger)
+        ))
+    
+    # Ordenar por proxima execucao
+    return sorted(jobs, key=lambda x: x.next_run_time if x.next_run_time else datetime.max)
+
+
+# ---------------------------------------------------------------------------
+# VERSION - Endpoint enterprise de versao e build
 # ---------------------------------------------------------------------------
 
 @router.get("/version", response_model=schemas.SystemVersion)
@@ -281,7 +330,7 @@ def get_version():
         o.strip()
         for o in os.environ.get(
             "ALLOWED_ORIGINS",
-            "http://localhost,http://127.0.0.1,http://localhost:8766,http://127.0.0.1:8766"
+            "http://localhost,http://127.0.0.1,http://localhost:8000,http://127.0.0.1:8000"
         ).split(",")
         if o.strip()
     ]
@@ -296,7 +345,7 @@ def get_version():
 
 
 # ---------------------------------------------------------------------------
-# CHECKPOINT — WAL manual
+# CHECKPOINT - WAL manual
 # ---------------------------------------------------------------------------
 
 @router.post("/checkpoint")
@@ -320,7 +369,7 @@ def manual_checkpoint(
 
 
 # ---------------------------------------------------------------------------
-# PURGE — Limpeza de execucoes antigas
+# PURGE - Limpeza de execucoes antigas
 # ---------------------------------------------------------------------------
 
 @router.post("/purge")

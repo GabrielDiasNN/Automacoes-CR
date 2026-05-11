@@ -58,7 +58,7 @@ if ([string]::IsNullOrWhiteSpace($LogFile)) {
 }
 
 # --- Execucao ---
-Write-Host "📱 Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
+Write-Host "? Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
 
 $args = @(
     "`"$NodeScript`"",
@@ -74,8 +74,8 @@ $args = @(
 $proc = Start-Process -FilePath $NodeExe -ArgumentList $args -WindowStyle Hidden -Wait -PassThru -WorkingDirectory $LibDir
 
 if ($proc.ExitCode -eq 0) {
-    Write-Host "✅ WhatsApp enviado com sucesso." -ForegroundColor Green
+    Write-Host "[OK] WhatsApp enviado com sucesso." -ForegroundColor Green
 } else {
-    Write-Host "❌ Falha no envio do WhatsApp (ExitCode: $($proc.ExitCode)). Verifique os logs." -ForegroundColor Red
+    Write-Host "[FAIL] Falha no envio do WhatsApp (ExitCode: $($proc.ExitCode)). Verifique os logs." -ForegroundColor Red
     exit $proc.ExitCode
 }

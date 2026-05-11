@@ -1,5 +1,5 @@
 """
-Worker Hub Soberano v5.0 — Motor de Execucao Concorrente.
+Worker Hub Soberano v5.0 - Motor de Execucao Concorrente.
 
 Capacidades:
   - ThreadPoolExecutor com max_workers configuravel (padrao: 2)
@@ -23,7 +23,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from queue import Empty, Queue
 
 import requests
@@ -49,8 +49,8 @@ load_dotenv(os.path.join(project_root, ".env"))
 MAX_WORKERS = int(os.environ.get("WORKER_MAX_CONCURRENCY", "2"))
 HEARTBEAT_INTERVAL = 15  # segundos
 POLL_INTERVAL = 2  # segundos
-WORKER_VERSION = "4.0.0"
-API_BASE = "http://127.0.0.1:8766"
+WORKER_VERSION = "5.0.0"
+API_BASE = "http://127.0.0.1:8000"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -78,7 +78,7 @@ class _JsonFormatter(logging.Formatter):
 
 _json_handler = logging.handlers.RotatingFileHandler(
     os.path.join(log_dir, "Worker.log"),
-    maxBytes=10 * 1024 * 1024,
+    maxBytes=5 * 1024 * 1024,
     backupCount=5,
     encoding="utf-8",
 )
@@ -123,7 +123,7 @@ def heartbeat_loop():
         try:
             db = SessionLocal()
             hb = db.query(models.WorkerHeartbeat).filter(models.WorkerHeartbeat.id == 1).first()
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
 
             with stats["lock"]:
                 completed = stats["tasks_completed"]
@@ -252,7 +252,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
             "automation_id": db_exec.automation_id,
         })
 
-        task_start = datetime.now()
+        task_start = datetime.now(timezone.utc)
         task_start_ts = time.time()
         timeout_delta = timedelta(minutes=max_runtime)
         robot_dir = os.path.dirname(script_path)
@@ -262,6 +262,8 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
 
@@ -305,7 +307,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
                     return
 
                 # Verificar timeout
-                if (datetime.now() - task_start) > timeout_delta:
+                if (datetime.now(timezone.utc) - task_start) > timeout_delta:
                     subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
                     broadcast_log(f"\n[TIMEOUT AUTOMATICO: {max_runtime}min]\n", exec_id)
 
@@ -314,7 +316,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
                     ).first()
                     if db_exec_upd:
                         db_exec_upd.status = "TIMEOUT"
-                        db_exec_upd.finished_at = datetime.now()
+                        db_exec_upd.finished_at = datetime.now(timezone.utc)
                         db_exec_upd.duration_seconds = round(time.time() - task_start_ts, 2)
                         db_exec_upd.logs = "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo maximo."
                         check_db.commit()
@@ -353,7 +355,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
 
             db_exec.logs = "".join(logs)
             db_exec.artifacts = artifacts_json
-            db_exec.finished_at = datetime.now()
+            db_exec.finished_at = datetime.now(timezone.utc)
             db.commit()
 
             if db_exec.status == "ERROR":
@@ -410,11 +412,15 @@ def main_loop():
     while not shutdown_event.is_set():
         db = SessionLocal()
         try:
-            # Buscar proxima tarefa PENDING
+            # Buscar proxima tarefa PENDING - Fila de Prioridade (Pilar E)
             pending_task = (
                 db.query(models.Execution)
                 .filter(models.Execution.status == "PENDING")
-                .order_by(models.Execution.started_at.asc())
+                .order_by(
+                    # HIGH (1) -> NORMAL (2) -> LOW (3)
+                    models.Execution.priority.asc(), 
+                    models.Execution.started_at.asc()
+                )
                 .first()
             )
 

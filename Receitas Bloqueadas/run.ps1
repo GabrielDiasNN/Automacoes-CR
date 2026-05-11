@@ -157,7 +157,7 @@ try {
                             $b64Str = $Line.Substring(4).Trim()
                             # Nota: Write-AutomacaoLog e thread-safe para arquivos
                             Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $EventContext.ExecId -LogPath $EventContext.LogFile
-                        } catch { }
+                        } catch [System.Exception] { }
                     } else {
                         Write-AutomacaoLog -Message $Line.Trim() -Level "INFO" -ExecId $EventContext.ExecId -LogPath $EventContext.LogFile
                     }

@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # Validadores reutilizaveis
 # ---------------------------------------------------------------------------
 
-_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9 _\-]{2,100}$")
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9 a-uA-UcC_\-]{2,100}$")
 _DANGEROUS_PATH_PATTERNS = ["..", "//", "\\\\", "%", "\x00"]
 
 
@@ -204,7 +204,9 @@ class SystemHealth(BaseModel):
     worker: WorkerStatus
     pending_tasks: int = 0
     disk_usage_mb: Optional[float] = None
-    wal_size_mb: Optional[float] = None   # Indicador de checkpoint pendente
+    wal_size_mb: Optional[float] = None
+    cpu_usage: Optional[float] = None
+    ram_usage_percent: Optional[float] = None
 
 
 class SystemVersion(BaseModel):
@@ -215,6 +217,15 @@ class SystemVersion(BaseModel):
     uptime_seconds: float
     max_workers: int
     allowed_origins: List[str]
+
+
+class ScheduledJob(BaseModel):
+    """Representacao de um job agendado no APScheduler."""
+    id: str
+    automation_id: Optional[int] = None
+    automation_name: Optional[str] = None
+    next_run_time: Optional[datetime] = None
+    trigger: str
 
 
 class MetricsSummary(BaseModel):
@@ -233,6 +244,7 @@ class AutomationMetric(BaseModel):
     avg_duration_sec: float
     last_status: Optional[str] = None
     last_run: Optional[datetime] = None
+    test_mode: bool = False
 
 
 class MetricsResponse(BaseModel):

@@ -89,7 +89,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
 
 
 # ---------------------------------------------------------------------------
-# Rate Limit Middleware — Sliding Window por IP
+# Rate Limit Middleware - Sliding Window por IP
 # ---------------------------------------------------------------------------
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

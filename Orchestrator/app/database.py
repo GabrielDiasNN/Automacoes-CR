@@ -6,8 +6,8 @@ Configuracoes hardened de SQLite:
   - foreign_keys = ON para integridade referencial
   - busy_timeout = 5000ms para resiliencia sob carga
   - synchronous = NORMAL para performance com seguranca
-  - WAL Checkpoint automatico agendado (Pilar E — Escala)
-  - Purge automatico de execucoes antigas (Pilar G — Governança)
+  - WAL Checkpoint automatico agendado (Pilar E - Escala)
+  - Purge automatico de execucoes antigas (Pilar G - Governanca)
 """
 
 import logging
@@ -49,7 +49,7 @@ Base = declarative_base()
 
 
 def get_db():
-    """Dependency injection do FastAPI — garante cleanup via finally."""
+    """Dependency injection do FastAPI - garante cleanup via finally."""
     db = SessionLocal()
     try:
         yield db
@@ -73,12 +73,12 @@ def get_wal_size_mb() -> float:
 
 
 # ---------------------------------------------------------------------------
-# Pilar E — Escala: WAL Checkpoint Automático
+# Pilar E - Escala: WAL Checkpoint Automatico
 # ---------------------------------------------------------------------------
 
 def run_wal_checkpoint() -> dict:
     """
-    Executa WAL checkpoint passivo — consolida o WAL no banco principal.
+    Executa WAL checkpoint passivo - consolida o WAL no banco principal.
     Chamado pelo APScheduler a cada 30 minutos.
 
     Retorna: {"mode": str, "log": int, "checkpointed": int}
@@ -99,18 +99,18 @@ def run_wal_checkpoint() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Pilar G — Governança: Purge de Execuções Antigas
+# Pilar G - Governanca: Purge de Execucoes Antigas
 # ---------------------------------------------------------------------------
 
 def purge_old_executions(retention_days: int = 90) -> int:
     """
-    Remove execuções finalizadas mais antigas que retention_days.
-    Mantém sempre: PENDING, RUNNING e últimas 50 execuções por automação.
-    Chamado pelo APScheduler diariamente às 03:00.
+    Remove execucoes finalizadas mais antigas que retention_days.
+    Mantem sempre: PENDING, RUNNING e ultimas 50 execucoes por automacao.
+    Chamado pelo APScheduler diariamente as 03:00.
 
     Retorna: quantidade de registros removidos.
     """
-    # Importação local para evitar circular import (models depende de Base)
+    # Importacao local para evitar circular import (models depende de Base)
     from . import models as _models
 
     cutoff = datetime.now() - timedelta(days=retention_days)
@@ -133,11 +133,11 @@ def purge_old_executions(retention_days: int = 90) -> int:
 
         db.commit()
         if removed:
-            logger.info(f"Purge concluído: {removed} execuções removidas (>{retention_days} dias).")
+            logger.info(f"Purge concluido: {removed} execucoes removidas (>{retention_days} dias).")
         return removed
     except Exception as e:
         db.rollback()
-        logger.error(f"Falha no purge de execuções: {e}")
+        logger.error(f"Falha no purge de execucoes: {e}")
         return 0
     finally:
         db.close()

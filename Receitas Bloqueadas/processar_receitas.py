@@ -50,7 +50,7 @@ class StateFile(BaseModel):
     records: List[RecipeRecord]
 
 # --- RESILIENCIA DE CONEXAO ---
-# Circuit Breaker: Abre após 3 falhas, permanece aberto por 60s
+# Circuit Breaker: Abre apos 3 falhas, permanece aberto por 60s
 db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
 
 @db_breaker
@@ -231,7 +231,7 @@ def process() -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-        log(f"FALHA NÃO TRATADA: {exc_value}", "ERROR", exec_id)
+        log(f"FALHA NAO TRATADA: {exc_value}", "ERROR", exec_id)
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
     sys.excepthook = handle_exception
@@ -264,7 +264,7 @@ def process() -> None:
             try:
                 with open(state_path, "r", encoding="utf-8") as f: 
                     raw_json = json.load(f)
-                    # Validação de Contrato de Dados (Pydantic)
+                    # Validacao de Contrato de Dados (Pydantic)
                     StateFile.model_validate(raw_json)
                     last_state_data = raw_json
             except ValidationError as ve:

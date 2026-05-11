@@ -29,7 +29,7 @@ $script:MutexAcquired = $false
 try {
     $script:MonitorMutex = New-Object System.Threading.Mutex($false, $MutexName)
     $script:MutexAcquired = $script:MonitorMutex.WaitOne([TimeSpan]::FromSeconds(5), $false)
-} catch {
+} catch [System.Exception] {
     $script:MutexAcquired = $true
 }
 
@@ -38,18 +38,18 @@ if (-not $script:MutexAcquired) {
     Exit 0
 }
 
-Write-Log "Watchdog iniciado de forma enxuta. Vigiando Orquestrador na porta 8766..."
+Write-Log "Watchdog iniciado de forma enxuta. Vigiando Orquestrador na porta 8000..."
 $script:LastOrchestratorRestart = $null
 
 while ($true) {
     try {
-        $orchestratorStatus = Invoke-RestMethod -Uri "http://127.0.0.1:8766/" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $orchestratorStatus = Invoke-RestMethod -Uri "http://127.0.0.1:8000/" -TimeoutSec 5 -ErrorAction SilentlyContinue
         if ($null -eq $orchestratorStatus -or $orchestratorStatus.scheduler_running -ne $true) {
             throw "Offline"
         }
         $script:LastOrchestratorRestart = $null
     }
-    catch {
+    catch [System.Exception] {
         $now = Get-Date
         if ($null -eq $script:LastOrchestratorRestart -or ($now - $script:LastOrchestratorRestart).TotalSeconds -gt 60) {
             Write-Log "Watchdog: Orquestrador nao detectado. Reiniciando de forma controlada..." -Type "WARN"

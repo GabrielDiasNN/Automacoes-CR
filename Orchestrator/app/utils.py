@@ -1,11 +1,11 @@
 """
-Utilitários compartilhados do Orchestrator Hub Soberano v5.0.
+Utilitarios compartilhados do Orchestrator Hub Soberano v5.0.
 
-Módulo centralizado para eliminar duplicação entre routers:
+Modulo centralizado para eliminar duplicacao entre routers:
   - log_audit(): Registra trilha de auditoria no AuditLog.
   - get_client_ip(): Extrai IP do cliente de forma segura.
-  - sanitize_name(): Valida naming ASCII-safe para automações.
-  - validate_script_path(): Pré-flight de existência de script (Pilar V).
+  - sanitize_name(): Valida naming ASCII-safe para automacoes.
+  - validate_script_path(): Pre-flight de existencia de script (Pilar V).
 """
 
 import os
@@ -18,7 +18,7 @@ from . import models
 
 
 # ---------------------------------------------------------------------------
-# Auditoria (deduplicação de automations.py e executions.py)
+# Auditoria (deduplicacao de automations.py e executions.py)
 # ---------------------------------------------------------------------------
 
 def log_audit(
@@ -54,14 +54,14 @@ def get_client_ip(request: Request) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Validação V — Pilar de Validação (Pre-flight)
+# Validacao V - Pilar de Validacao (Pre-flight)
 # ---------------------------------------------------------------------------
 
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 _\-\.]+$")
 
 
 def sanitize_name(name: str) -> bool:
-    """Retorna True se o nome é ASCII-safe (sem path traversal)."""
+    """Retorna True se o nome e ASCII-safe (sem path traversal)."""
     return bool(_SAFE_NAME_RE.match(name)) if name else False
 
 
@@ -70,14 +70,14 @@ def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str
     Resolve e valida o caminho do script.
 
     Retorna (True, caminho_absoluto) se o arquivo existir,
-    ou (False, mensagem_de_erro) caso contrário.
+    ou (False, mensagem_de_erro) caso contrario.
 
     Regras:
-      - Caminhos relativos (./  ou .\\) são resolvidos contra project_root.
-      - Path traversal (/../) é bloqueado.
+      - Caminhos relativos (./  ou .\\) sao resolvidos contra project_root.
+      - Path traversal (/../) e bloqueado.
     """
     if not script_path:
-        return False, "script_path não pode ser vazio."
+        return False, "script_path nao pode ser vazio."
 
     # Resolver caminho
     if script_path.startswith("./") or script_path.startswith(".\\"):
@@ -91,9 +91,9 @@ def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str
 
     # Anti path-traversal: o caminho resolvido deve estar dentro do project_root
     if not abs_path.startswith(os.path.normpath(project_root)):
-        return False, f"script_path fora do diretório permitido: {abs_path}"
+        return False, f"script_path fora do diretorio permitido: {abs_path}"
 
     if not os.path.isfile(abs_path):
-        return False, f"Script não encontrado: {abs_path}"
+        return False, f"Script nao encontrado: {abs_path}"
 
     return True, abs_path

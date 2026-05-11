@@ -1,5 +1,5 @@
 """
-Router: Automations — CRUD completo com paginacao, validacao e auditoria. v5.0
+Router: Automations - CRUD completo com paginacao, validacao e auditoria. v5.0
 """
 
 import json
@@ -18,6 +18,8 @@ from ..utils import log_audit, get_client_ip, validate_script_path
 logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/automations", tags=["Automations"])
+
+
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -244,8 +246,48 @@ def start_automation(
     log_audit(db, "START", "EXECUTION", exec_id, client_ip, f"Disparado: {db_auto.name}")
     db.commit()
 
-    logger.info(f"Execucao enfileirada: {db_auto.name} -> {exec_id}")
     return {"message": "Automacao enfileirada com sucesso.", "exec_id": exec_id}
+    
+
+# --- MODO TESTE (GLOBAL) ---
+
+@router.post("/test-mode/global")
+def set_global_test_mode(
+    enabled: bool,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Ativa ou desativa o Modo Teste para TODAS as automacoes cadastradas."""
+    db.query(models.Automation).update({models.Automation.test_mode: enabled})
+    log_audit(db, "TEST_MODE_GLOBAL", "SYSTEM", "ALL", get_client_ip(request), f"Modo Teste Global: {enabled}")
+    db.commit()
+    return {"message": f"Modo Teste Global {'ativado' if enabled else 'desativado'} para todas as automacoes."}
+
+
+
+
+
+
+
+
+@router.post("/{automation_id}/test-mode")
+def set_automation_test_mode(
+    automation_id: int,
+    enabled: bool,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Ativa ou desativa o Modo Teste para uma automacao especifica."""
+    db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+    if not db_auto:
+        raise HTTPException(status_code=404, detail="Automacao nao encontrada.")
+    
+    db_auto.test_mode = enabled
+    log_audit(db, "TEST_MODE", "AUTOMATION", str(automation_id), get_client_ip(request), f"Modo Teste: {enabled} ({db_auto.name})")
+    db.commit()
+    return {"message": f"Modo Teste da automacao {db_auto.name} definido para {enabled}."}
 
 
 # ---------------------------------------------------------------------------

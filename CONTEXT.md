@@ -1,10 +1,10 @@
-# Cognitive Context: Automacoes Hub v5.0.0 (Enterprise)
+# Cognitive Context: Automacoes Hub v5.1.0 (Enterprise)
 
 ## Repository Philosophy
-Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v5.0.0 (Enterprise)**. Upgrade do v4.0.1 com os 5 pilares do Protocolo V.A.L.E.G. aplicados ao Orchestrator: Validação pré-flight de scripts, Arquitetura deduplicada, Logging JSON com Correlation ID, Escala com WAL Checkpoint e fila priorizada, Governança com Rate Limiting e CORS hardened.
+Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v5.1.0 (Enterprise)**. Upgrade do v4.0.1 com os 5 pilares do Protocolo V.A.L.E.G. aplicados ao Orchestrator: Validação pré-flight de scripts, Arquitetura deduplicada, Logging JSON com Correlation ID, Escala com WAL Checkpoint e fila priorizada, Governança com Rate Limiting e CORS hardened.
 
-## System Architecture (v5.0.0 Enterprise)
-O hub opera sob o modelo **Control Tower Enterprise v5.0.0**:
+## System Architecture (v5.1.0 Enterprise)
+O hub opera sob o modelo **Control Tower Enterprise v5.1.0**:
 - **Modular Control Plane:** Backend FastAPI organizado em 4 routers principais (`automations`, `executions`, `system`, `websocket`).
 - **Utilities Layer:** `app/utils.py` centraliza `log_audit()`, `get_client_ip()` e `validate_script_path()` — elimina duplicação entre routers.
 - **Dashboard Integrado:** Front-end SPA servido nativamente pelo Orchestrator em `/dashboard/`, com assets (fonts/JS) locais para estabilidade offline.
@@ -74,6 +74,12 @@ Este é o documento mestre de contexto cognitivo v5.0.
 - **Obrigação:** Deve ser a primeira leitura da IA e **DEVE** ser atualizado após mudanças estruturais.
 - **Objetivo:** Economia de tokens e precisão cirúrgica na evolução do Hub.
 - **ADR-001 (09/05/2026):** Upgrade v4→v5 aplicando Protocolo V.A.L.E.G. completo. Deduplicação via `utils.py`, WAL checkpoint automático, Rate Limiting, CORS restrito a localhost, Priority Queue, Worker com JSON logs + Correlation ID.
+- **ADR-002 (09/05/2026):** Implementação da **B64 Bridge** para logs e atualização de schemas Pydantic para suportar acentuação brasileira (à-ú, ç). Adicionado controle de **Modo Teste Global** (Sandbox) persistente em banco.
+
+---
+Mantido pela equipe de Automacoes & Antigravity AI
+s legados (`Deprecated/`, `scratch/`).
+- **ADR-003 (11/05/2026):** Estabilização da porta de operação 8000 e ativação do **Modo Teste Global** (Sandbox) persistente em banco.
 
 ---
 Mantido pela equipe de Automacoes & Antigravity AI

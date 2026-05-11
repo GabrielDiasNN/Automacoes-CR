@@ -148,7 +148,7 @@ def montar_template_email(tipo_notificacao, total_linhas, total_erros, elapsed_t
 import hashlib
 
 def gerar_assinatura(erro):
-    """Gera um hash MD5 único para a combinação de erro/OB."""
+    """Gera um hash MD5 unico para a combinacao de erro/OB."""
     base = f"{str(erro.get('NR_OB', '')).strip().upper()}|{str(erro.get('NR_PROG', '')).strip().upper()}|{str(erro.get('CD_REF_CLT', '')).strip().upper()}|{str(erro.get('DETALHE_ERRO', '')).strip().upper()}"
     if not base.strip('|_'): base = "VAZIO"
     return hashlib.md5(base.encode('utf-8')).hexdigest()

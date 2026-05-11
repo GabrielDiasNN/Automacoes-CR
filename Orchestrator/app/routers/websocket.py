@@ -1,5 +1,5 @@
 """
-Router: WebSocket — Gerenciador de conexoes e Event Bus para logs e eventos.
+Router: WebSocket - Gerenciador de conexoes e Event Bus para logs e eventos.
 Implementa Log Replay (v4.0.1) para garantir continuidade de visualizacao.
 """
 

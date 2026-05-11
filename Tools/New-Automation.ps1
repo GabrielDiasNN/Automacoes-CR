@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+?# ==============================================================================
 # ARQUIVO: New-Automation.ps1
 # VERSAO: 1.0
 # DESCRICAO: Scaffolding para novas automacoes. Cria a estrutura de diretorios,

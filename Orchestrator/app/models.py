@@ -76,7 +76,7 @@ class Execution(Base):
 
 
 class WorkerHeartbeat(Base):
-    """Registro de saude do Worker — atualizado a cada ciclo."""
+    """Registro de saude do Worker - atualizado a cada ciclo."""
     __tablename__ = "worker_heartbeat"
 
     id = Column(Integer, primary_key=True, default=1)

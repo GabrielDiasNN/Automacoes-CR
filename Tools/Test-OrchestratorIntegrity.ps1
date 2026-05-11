@@ -20,7 +20,7 @@ $hasErrors = $false
 Write-Host "1. Verificando processos ativos..." -NoNewline
 $pythonProcs = Get-Process -Name "python" -ErrorAction SilentlyContinue
 if ($pythonProcs.Count -ge 2) {
-    Write-Host " [OK] ($($pythonProcs.Count) instâncias detectadas)" -ForegroundColor Green
+    Write-Host " [OK] ($($pythonProcs.Count) instancias detectadas)" -ForegroundColor Green
 } else {
     Write-Host " [FALHA] Orquestrador ou Worker nao encontrados." -ForegroundColor Red
     $hasErrors = $true
@@ -29,20 +29,20 @@ if ($pythonProcs.Count -ge 2) {
 # 2. Checagem de API (Health Check)
 Write-Host "2. Verificando conectividade da API..." -NoNewline
 try {
-    $res = Invoke-RestMethod -Uri "http://127.0.0.1:8766/" -TimeoutSec 5
+    $res = Invoke-RestMethod -Uri "http://127.0.0.1:8000/" -TimeoutSec 5
     if ($res.scheduler_running -eq $true) {
         Write-Host " [OK] (FastAPI Online & Scheduler Ativo)" -ForegroundColor Green
     } else {
         Write-Host " [AVISO] API Online, mas Scheduler esta desligado." -ForegroundColor Yellow
         $hasErrors = $true
     }
-} catch {
-    Write-Host " [FALHA] API Offline na porta 8766." -ForegroundColor Red
+    } catch [System.Exception] {
+    Write-Host " [FALHA] API Offline na porta 8000." -ForegroundColor Red
     $hasErrors = $true
-}
+    }
 
 # 3. Execucao de Testes Unitarios (PyTest)
-Write-Host "3. Executando suíte PyTest..." -ForegroundColor Cyan
+Write-Host "3. Executando suite PyTest..." -ForegroundColor Cyan
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $PyTest = Join-Path $ProjectRoot ".venv\Scripts\pytest.exe"
 
