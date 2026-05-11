@@ -17,15 +17,15 @@ $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowSt
 # Gatilho: Ao fazer logon com o usuario atual
 $Trigger = New-ScheduledTaskTrigger -AtLogOn
 
-# Configuracoes: Rodar indefinidamente, nao parar se na bateria
-$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 0)
+# Configuracoes: Rodar indefinidamente, nao parar se na bateria, REINICIAR se falhar
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 0) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 
 # Principal: Roda com os privilegios do usuario atual (nao exige Admin)
 $Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
 
 try {
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal -Force | Out-Null
-    Write-Host "[OK] Tarefa registrada com sucesso! O Orquestrador iniciara silenciosamente no proximo login." -ForegroundColor Green
+    Write-Host "[OK] Tarefa registrada com sucesso! O Orquestrador iniciara silenciosamente em cada login do usuario." -ForegroundColor Green
     Write-Host "Para iniciar agora manualmente de forma invisivel, execute:" -ForegroundColor Yellow
     Write-Host "Start-ScheduledTask -TaskName $TaskName" -ForegroundColor Yellow
 } catch [System.Exception] {
