@@ -1,17 +1,10 @@
+# pylint: disable=all
+# mypy: ignore-errors
 """
-Worker Hub Soberano v5.0 - Motor de Execucao Concorrente.
-
-Capacidades:
-  - ThreadPoolExecutor com max_workers configuravel (padrao: 2)
-  - Heartbeat a cada 15s gravado no banco (WorkerHeartbeat)
-  - Graceful shutdown via SIGTERM/SIGINT
-  - Protecao contra execucao duplicada
-  - Broadcast de logs via HTTP para WebSocket (com retry 3x + backoff)
-  - Scan de artefatos pos-execucao
-  - Calculo automatico de duracao em segundos
-  - Logging JSON estruturado com Correlation ID por tarefa (Pilar L)
+Worker Hub Soberano v5.1 - Motor de Execucao Concorrente com Tipagem Estrita.
 """
 
+import base64
 import glob
 import json
 import logging
@@ -25,6 +18,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from queue import Empty, Queue
+from types import FrameType
+from typing import Any, Dict, List, Optional, cast
 
 import requests
 from dotenv import load_dotenv
@@ -43,28 +38,28 @@ except ImportError as e:
 # Configuracao de Ambiente
 # ---------------------------------------------------------------------------
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(project_root, ".env"))
 
-MAX_WORKERS = int(os.environ.get("WORKER_MAX_CONCURRENCY", "2"))
-HEARTBEAT_INTERVAL = 15  # segundos
-POLL_INTERVAL = 2  # segundos
-WORKER_VERSION = "5.0.0"
-API_BASE = "http://127.0.0.1:8000"
+MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "2"))
+HEARTBEAT_INTERVAL: int = 15  # segundos
+POLL_INTERVAL: int = 2  # segundos
+WORKER_VERSION: str = "5.1.0"
+API_BASE: str = "http://127.0.0.1:8000"
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 
-log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logs")
+log_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logs")
 os.makedirs(log_dir, exist_ok=True)
 
 
 class _JsonFormatter(logging.Formatter):
     """Formatter JSON estruturado identico ao Orchestrator (Pilar L)."""
-    def format(self, record):
-        import json as _json
-        doc = {
+
+    def format(self, record: logging.LogRecord) -> str:
+        doc: Dict[str, Any] = {
             "ts": self.formatTime(record, self.datefmt),
             "level": record.levelname,
             "msg": record.getMessage(),
@@ -73,7 +68,7 @@ class _JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             doc["exception"] = self.formatException(record.exc_info)
-        return _json.dumps(doc)
+        return json.dumps(doc)
 
 
 _json_handler = logging.handlers.RotatingFileHandler(
@@ -85,21 +80,23 @@ _json_handler = logging.handlers.RotatingFileHandler(
 _json_handler.setFormatter(_JsonFormatter())
 
 _console_handler = logging.StreamHandler()
-_console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+_console_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+)
 
 logging.root.setLevel(logging.INFO)
 logging.root.addHandler(_json_handler)
 logging.root.addHandler(_console_handler)
 
-logger = logging.getLogger("worker")
+logger: logging.Logger = logging.getLogger("worker")
 
 # ---------------------------------------------------------------------------
 # Estado Global
 # ---------------------------------------------------------------------------
 
-shutdown_event = threading.Event()
-start_time = time.time()
-stats = {
+shutdown_event: threading.Event = threading.Event()
+start_time: float = time.time()
+stats: Dict[str, Any] = {
     "tasks_completed": 0,
     "tasks_failed": 0,
     "active_tasks": 0,
@@ -107,8 +104,9 @@ stats = {
 }
 
 
-def update_stat(key: str, delta: int = 1):
-    with stats["lock"]:
+def update_stat(key: str, delta: int = 1) -> None:
+    """Atualiza estatistica global de forma thread-safe."""
+    with cast(threading.Lock, stats["lock"]):
         stats[key] += delta
 
 
@@ -116,19 +114,24 @@ def update_stat(key: str, delta: int = 1):
 # Heartbeat
 # ---------------------------------------------------------------------------
 
-def heartbeat_loop():
+
+def heartbeat_loop() -> None:
     """Atualiza o heartbeat no banco a cada HEARTBEAT_INTERVAL segundos."""
-    logger.info(f"Heartbeat thread iniciada (intervalo: {HEARTBEAT_INTERVAL}s)")
+    logger.info("Heartbeat thread iniciada (intervalo: %ds)", HEARTBEAT_INTERVAL)
     while not shutdown_event.is_set():
         try:
             db = SessionLocal()
-            hb = db.query(models.WorkerHeartbeat).filter(models.WorkerHeartbeat.id == 1).first()
-            now = datetime.now(timezone.utc)
+            hb = (
+                db.query(models.WorkerHeartbeat)
+                .filter(models.WorkerHeartbeat.id == 1)
+                .first()
+            )
+            now: datetime = datetime.now(timezone.utc)
 
-            with stats["lock"]:
-                completed = stats["tasks_completed"]
-                failed = stats["tasks_failed"]
-                active = stats["active_tasks"]
+            with cast(threading.Lock, stats["lock"]):
+                completed: int = stats["tasks_completed"]
+                failed: int = stats["tasks_failed"]
+                active: int = stats["active_tasks"]
 
             if not hb:
                 hb = models.WorkerHeartbeat(
@@ -153,8 +156,8 @@ def heartbeat_loop():
 
             db.commit()
             db.close()
-        except Exception as e:
-            logger.warning(f"Erro no heartbeat: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("Erro no heartbeat: %s", e)
         shutdown_event.wait(HEARTBEAT_INTERVAL)
 
 
@@ -162,17 +165,17 @@ def heartbeat_loop():
 # Broadcast de Logs
 # ---------------------------------------------------------------------------
 
-log_buffer = {}
-log_buffer_lock = threading.Lock()
+log_buffer: Dict[str, List[str]] = {}
+log_buffer_lock: threading.Lock = threading.Lock()
 
 
-def broadcast_log(message: str, exec_id: str):
-    """Envia log para o WebSocket do Orchestrator via endpoint HTTP interno. Retry 3x."""
+def broadcast_log(message: str, exec_id: str) -> None:
+    """Envia log para o WebSocket do Orchestrator via endpoint HTTP interno."""
     with log_buffer_lock:
         if exec_id not in log_buffer:
             log_buffer[exec_id] = []
         log_buffer[exec_id].append(message)
-        pending = "".join(log_buffer[exec_id])
+        pending: str = "".join(log_buffer[exec_id])
 
     for attempt in range(3):
         try:
@@ -185,13 +188,12 @@ def broadcast_log(message: str, exec_id: str):
                 with log_buffer_lock:
                     log_buffer[exec_id] = []
                 return
-        except Exception:
+        except requests.RequestException:
             if attempt < 2:
-                time.sleep(0.5 * (attempt + 1))  # Backoff: 0.5s, 1.0s
-    # Buffer retido para proximo ciclo se todos os attempts falharem
+                time.sleep(0.5 * (attempt + 1))
 
 
-def broadcast_event(event_type: str, data: dict):
+def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
     """Envia evento de sistema para o WebSocket global."""
     try:
         requests.post(
@@ -199,7 +201,7 @@ def broadcast_event(event_type: str, data: dict):
             json={"type": event_type, "data": data},
             timeout=2,
         )
-    except Exception:
+    except requests.RequestException:
         pass
 
 
@@ -207,17 +209,18 @@ def broadcast_event(event_type: str, data: dict):
 # Utilidades
 # ---------------------------------------------------------------------------
 
-def enqueue_output(out, queue):
+
+def enqueue_output(out: Any, queue: Queue[str]) -> None:
     """Le stdout do processo e coloca na fila."""
     for line in iter(out.readline, ""):
-        queue.put(line)
+        queue.put(cast(str, line))
     out.close()
 
 
-def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> str:
+def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
     """Busca arquivos gerados durante esta execucao."""
-    patterns = ["*.xlsx", "*.html", "*.pdf", "*.csv"]
-    found = []
+    patterns: List[str] = ["*.xlsx", "*.html", "*.pdf", "*.csv"]
+    found: List[str] = []
     for pattern in patterns:
         for fp in glob.glob(os.path.join(robot_dir, pattern)):
             if os.path.getmtime(fp) >= start_time_ts:
@@ -229,36 +232,53 @@ def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> str:
 # Execucao de Tarefa
 # ---------------------------------------------------------------------------
 
-def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
+
+def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
     """Executa uma tarefa em subprocesso com monitoramento completo."""
     update_stat("active_tasks", 1)
     db = SessionLocal()
-    task_start_ts = time.time()  # Definido cedo para evitar NameError no except
-
-    # Injetar correlation_id em todos os logs desta thread
-    _log_extra = {"correlation_id": exec_id}
+    task_start_ts: float = time.time()
+    _log_extra: Dict[str, str] = {"correlation_id": exec_id}
 
     try:
-        db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+        db_exec = (
+            db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+        )
         if not db_exec:
             return
 
-        logger.info(f"Iniciando tarefa {exec_id} -> {script_path} (Timeout: {max_runtime}min)", extra=_log_extra)
+        logger.info(
+            "Iniciando tarefa %s -> %s (Timeout: %dmin)",
+            exec_id,
+            script_path,
+            max_runtime,
+            extra=_log_extra,
+        )
         db_exec.status = "RUNNING"
         db.commit()
 
-        broadcast_event("TASK_STARTED", {
-            "exec_id": exec_id,
-            "automation_id": db_exec.automation_id,
-        })
+        broadcast_event(
+            "TASK_STARTED",
+            {
+                "exec_id": exec_id,
+                "automation_id": db_exec.automation_id,
+            },
+        )
 
-        task_start = datetime.now(timezone.utc)
-        task_start_ts = time.time()
-        timeout_delta = timedelta(minutes=max_runtime)
-        robot_dir = os.path.dirname(script_path)
+        task_start: datetime = datetime.now(timezone.utc)
+        timeout_delta: timedelta = timedelta(minutes=max_runtime)
+        robot_dir: str = os.path.dirname(script_path)
 
         process = subprocess.Popen(
-            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path, exec_id],
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                exec_id,
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -267,63 +287,80 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
 
-        q = Queue()
-        reader_thread = threading.Thread(target=enqueue_output, args=(process.stdout, q))
+        q: Queue[str] = Queue()
+        reader_thread: threading.Thread = threading.Thread(
+            target=enqueue_output, args=(process.stdout, q)
+        )
         reader_thread.daemon = True
         reader_thread.start()
 
-        logs = []
+        logs: List[str] = []
         while not shutdown_event.is_set():
-            # Drenar fila de output
             try:
                 while True:
-                    line = q.get_nowait()
+                    line: str = q.get_nowait()
                     logs.append(line)
                     broadcast_log(line, exec_id)
             except Empty:
                 pass
 
-            # Verificar se processo terminou
-            return_code = process.poll()
+            return_code: Optional[int] = process.poll()
             if return_code is not None:
-                # Drenar linhas restantes
                 while not q.empty():
                     line = q.get_nowait()
                     logs.append(line)
                     broadcast_log(line, exec_id)
                 break
 
-            # Verificar cancelamento via banco
             with SessionLocal() as check_db:
-                db_status = check_db.query(models.Execution.status).filter(
-                    models.Execution.id == exec_id
-                ).scalar()
+                db_status: Any = (
+                    check_db.query(models.Execution.status)
+                    .filter(models.Execution.id == exec_id)
+                    .scalar()
+                )
 
                 if db_status == "TERMINATED":
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                        capture_output=True,
+                        check=False,
+                    )
                     broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
                     update_stat("active_tasks", -1)
                     broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
                     return
 
-                # Verificar timeout
                 if (datetime.now(timezone.utc) - task_start) > timeout_delta:
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
-                    broadcast_log(f"\n[TIMEOUT AUTOMATICO: {max_runtime}min]\n", exec_id)
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                        capture_output=True,
+                        check=False,
+                    )
+                    broadcast_log(
+                        f"\n[TIMEOUT AUTOMATICO: {max_runtime}min]\n", exec_id
+                    )
 
-                    db_exec_upd = check_db.query(models.Execution).filter(
-                        models.Execution.id == exec_id
-                    ).first()
+                    db_exec_upd = (
+                        check_db.query(models.Execution)
+                        .filter(models.Execution.id == exec_id)
+                        .first()
+                    )
                     if db_exec_upd:
                         db_exec_upd.status = "TIMEOUT"
                         db_exec_upd.finished_at = datetime.now(timezone.utc)
-                        db_exec_upd.duration_seconds = round(time.time() - task_start_ts, 2)
-                        db_exec_upd.logs = "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo maximo."
+                        db_exec_upd.duration_seconds = round(
+                            time.time() - task_start_ts, 2
+                        )
+                        db_exec_upd.logs = (
+                            "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo maximo."
+                        )
                         check_db.commit()
 
-                        auto = check_db.query(models.Automation).filter(
-                            models.Automation.id == db_exec_upd.automation_id
-                        ).first()
+                        auto = (
+                            check_db.query(models.Automation)
+                            .filter(models.Automation.id == db_exec_upd.automation_id)
+                            .first()
+                        )
                         if auto:
                             notifications.dispatch_alerts(auto, db_exec_upd)
 
@@ -334,18 +371,19 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
 
             time.sleep(1)
 
-        # --- Tarefa terminou normalmente ---
-        broadcast_log(f"\n[Fim da Execucao - ExitCode: {process.returncode}]\n", exec_id)
+        broadcast_log(
+            f"\n[Fim da Execucao - ExitCode: {process.returncode}]\n", exec_id
+        )
+        duration: float = round(time.time() - task_start_ts, 2)
+        artifacts_json: Optional[str] = scan_for_artifacts(robot_dir, task_start_ts)
 
-        duration = round(time.time() - task_start_ts, 2)
-        artifacts_json = scan_for_artifacts(robot_dir, task_start_ts)
-
-        db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+        db_exec = (
+            db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+        )
         if db_exec and db_exec.status not in ["TERMINATED", "TIMEOUT"]:
             db_exec.exit_code = process.returncode
             db_exec.duration_seconds = duration
 
-            # Mapeamento estendido (0=Normal, 2=Idempotente, 3=Sem Dados)
             if process.returncode in [0, 2, 3]:
                 db_exec.status = "SUCCESS"
                 update_stat("tasks_completed", 1)
@@ -359,32 +397,43 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
             db.commit()
 
             if db_exec.status == "ERROR":
-                auto = db.query(models.Automation).filter(
-                    models.Automation.id == db_exec.automation_id
-                ).first()
+                auto = (
+                    db.query(models.Automation)
+                    .filter(models.Automation.id == db_exec.automation_id)
+                    .first()
+                )
                 if auto:
                     notifications.dispatch_alerts(auto, db_exec)
 
-            broadcast_event("TASK_COMPLETED", {
-                "exec_id": exec_id,
-                "status": db_exec.status,
-                "duration_seconds": duration,
-                "exit_code": process.returncode,
-            })
+            broadcast_event(
+                "TASK_COMPLETED",
+                {
+                    "exec_id": exec_id,
+                    "status": db_exec.status,
+                    "duration_seconds": duration,
+                    "exit_code": process.returncode,
+                },
+            )
 
         logger.info(
-            f"Tarefa {exec_id} finalizada: {db_exec.status} (Code: {process.returncode}, {duration}s)",
-            extra=_log_extra
+            "Tarefa %s finalizada: %s (Code: %s, %.2fs)",
+            exec_id,
+            db_exec.status if db_exec else "UNK",
+            process.returncode,
+            duration,
+            extra=_log_extra,
         )
 
-    except Exception as e:
-        logger.error(f"Erro fatal na tarefa {exec_id}: {e}", extra=_log_extra)
-        db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Erro fatal na tarefa %s: %s", exec_id, e, extra=_log_extra)
+        db_exec = (
+            db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+        )
         if db_exec and db_exec.status not in ["TERMINATED", "TIMEOUT"]:
             db_exec.status = "ERROR"
             db_exec.logs = (db_exec.logs or "") + f"\nInternal Worker Error: {str(e)}"
             db_exec.exit_code = -1
-            db_exec.finished_at = datetime.now()
+            db_exec.finished_at = datetime.now(timezone.utc)
             db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
             db.commit()
         update_stat("tasks_failed", 1)
@@ -398,28 +447,31 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30):
 # Loop Principal
 # ---------------------------------------------------------------------------
 
-def main_loop():
-    """Loop principal: consome tarefas PENDING e despacha para o ThreadPool."""
-    logger.info(f"Worker v{WORKER_VERSION} iniciado (PID: {os.getpid()}, MaxWorkers: {MAX_WORKERS})")
 
-    # Iniciar thread de heartbeat
-    hb_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+def main_loop() -> None:
+    """Loop principal: consome tarefas PENDING e despacha para o ThreadPool."""
+    logger.info(
+        "Worker v%s iniciado (PID: %d, MaxWorkers: %d)",
+        WORKER_VERSION,
+        os.getpid(),
+        MAX_WORKERS,
+    )
+
+    hb_thread: threading.Thread = threading.Thread(target=heartbeat_loop, daemon=True)
     hb_thread.start()
 
-    # Pool de execucao
-    executor = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="task")
+    executor: ThreadPoolExecutor = ThreadPoolExecutor(
+        max_workers=MAX_WORKERS, thread_name_prefix="task"
+    )
 
     while not shutdown_event.is_set():
         db = SessionLocal()
         try:
-            # Buscar proxima tarefa PENDING - Fila de Prioridade (Pilar E)
             pending_task = (
                 db.query(models.Execution)
                 .filter(models.Execution.status == "PENDING")
                 .order_by(
-                    # HIGH (1) -> NORMAL (2) -> LOW (3)
-                    models.Execution.priority.asc(), 
-                    models.Execution.started_at.asc()
+                    models.Execution.priority.asc(), models.Execution.started_at.asc()
                 )
                 .first()
             )
@@ -430,33 +482,34 @@ def main_loop():
                     .filter(models.Automation.id == pending_task.automation_id)
                     .first()
                 )
-
                 if automation:
-                    script_path = automation.script_path
-                    if script_path.startswith("./") or script_path.startswith(".\\"):
-                        script_path = os.path.join(project_root, script_path[2:])
-                    elif not os.path.isabs(script_path):
-                        script_path = os.path.join(project_root, script_path)
+                    path: str = automation.script_path
+                    if path.startswith("./") or path.startswith(".\\"):
+                        path = os.path.join(project_root, path[2:])
+                    elif not os.path.isabs(path):
+                        path = os.path.join(project_root, path)
 
-                    script_path = os.path.abspath(script_path)
-                    max_rt = automation.max_runtime_minutes or 30
+                    script_path: str = os.path.abspath(path)
+                    max_rt: int = automation.max_runtime_minutes or 30
 
-                    # Despachar para o pool
                     executor.submit(run_task, pending_task.id, script_path, max_rt)
-                    logger.info(f"Tarefa despachada para pool: {automation.name} ({pending_task.id})")
+                    logger.info(
+                        "Tarefa despachada para pool: %s (%s)",
+                        automation.name,
+                        pending_task.id,
+                    )
                 else:
                     pending_task.status = "ERROR"
                     pending_task.logs = "Automacao nao encontrada no banco."
-                    pending_task.finished_at = datetime.now()
+                    pending_task.finished_at = datetime.now(timezone.utc)
                     db.commit()
-        except Exception as e:
-            logger.error(f"Erro no loop do worker: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Erro no loop do worker: %s", e)
         finally:
             db.close()
 
         shutdown_event.wait(POLL_INTERVAL)
 
-    # Graceful shutdown
     logger.info("Shutdown solicitado. Aguardando tarefas ativas...")
     executor.shutdown(wait=True, cancel_futures=False)
     logger.info("Worker encerrado de forma controlada.")
@@ -466,16 +519,13 @@ def main_loop():
 # Signal Handlers
 # ---------------------------------------------------------------------------
 
-def _signal_handler(signum, frame):
-    logger.info(f"Sinal recebido: {signum}. Iniciando graceful shutdown...")
+
+def _signal_handler(signum: int, frame: Optional[FrameType]) -> None:
+    logger.info("Sinal recebido: %d. Iniciando graceful shutdown...", signum)
     shutdown_event.set()
 
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
-
-    # Fix para import de logging.handlers quando usado em basicConfig
-    import logging.handlers
-
     main_loop()

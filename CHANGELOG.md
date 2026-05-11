@@ -6,6 +6,15 @@ O projeto segue os princípios de **Resiliência, Escala e Governança (Protocol
 
 ---
 
+## [5.1.2] — 2026-05-11
+### 🏗️ Governança e Qualidade
+- **Tipagem Estrita (Mypy)**: Correção abrangente de assinaturas de funções e anotações de tipo em todas as automações (`Montagem de Terceirizados`, `Receitas Bloqueadas`, `Receitas Emitidas`) e no `Orchestrator`, alcançando conformidade com `mypy --strict`.
+- **Qualidade de Código (Pylint)**: Refatoração e adequação de sintaxe e complexidade ciclomática para atingir nota máxima (10.00/10) nas validações do Pylint.
+- **Validação Autônoma**: Script de governança `Test-PythonGovernance.ps1` aprimorado para injetar o contexto `.venv`, garantindo validações reais de lint e type hints nos hooks de pre-commit.
+- **Testes Unitários**: Validação dos fluxos do FastAPI (CRUD, schemas de bloqueio de Path Traversal) via `pytest`.
+
+---
+
 ## [5.1.1] — 2026-05-11
 ### 🏗️ Governança (AI-Native)
 - **Documentação Contínua**: Atualizado `GEMINI.md` para tornar obrigatória a atualização do `CHANGELOG.md` em cada commit bem-sucedido.

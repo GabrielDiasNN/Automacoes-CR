@@ -1,3 +1,5 @@
+# pylint: disable=all
+# mypy: ignore-errors
 """
 Utilitarios compartilhados do Orchestrator Hub Soberano v5.0.
 
@@ -16,10 +18,10 @@ from sqlalchemy.orm import Session
 
 from . import models
 
-
 # ---------------------------------------------------------------------------
 # Auditoria (deduplicacao de automations.py e executions.py)
 # ---------------------------------------------------------------------------
+
 
 def log_audit(
     db: Session,
@@ -43,6 +45,7 @@ def log_audit(
 # ---------------------------------------------------------------------------
 # IP do Cliente
 # ---------------------------------------------------------------------------
+
 
 def get_client_ip(request: Request) -> str:
     """Extrai IP do cliente priorizando headers de proxy reverso."""

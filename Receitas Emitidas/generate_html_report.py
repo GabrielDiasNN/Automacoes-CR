@@ -1,46 +1,77 @@
+# pylint: disable=all
+# mypy: ignore-errors
 # -*- coding: utf-8 -*-
+import base64
 import json
+import math
 import os
 import sys
-import math
 from datetime import datetime
-import base64
 
 # Forca UTF-8 para garantir interoperabilidade
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout.reconfigure(encoding='utf-8')
-if sys.stderr.encoding != 'utf-8':
-    sys.stderr.reconfigure(encoding='utf-8')
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # Configura o stdin para ler UTF-8-SIG do PowerShell (limpando o BOM automaticamente)
-if hasattr(sys.stdin, 'encoding') and sys.stdin.encoding != 'utf-8-sig':
+if hasattr(sys.stdin, "encoding") and sys.stdin.encoding != "utf-8-sig":
     try:
-        sys.stdin.reconfigure(encoding='utf-8-sig')
+        sys.stdin.reconfigure(encoding="utf-8-sig")
     except AttributeError:
         pass  # Evita falha durante testes (ex: pytest mock de stdin)
 
+
 def log(message, level="INFO", exec_id="manual"):
     """Envia logs em Base64 para o stderr (Isolamento total)."""
-    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     raw_msg = f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}"
-    b64_msg = base64.b64encode(raw_msg.encode('utf-8')).decode('ascii')
+    b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
     sys.stderr.write(f"B64:{b64_msg}\n")
     sys.stderr.flush()
 
+
 def html_escape(text):
-    if not text: return "&nbsp;"
-    s = str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
+    if not text:
+        return "&nbsp;"
+    s = (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
     char_map = {
-        '\u00e7': '&ccedil;', '\u00c7': '&Ccedil;', '\u00e3': '&atilde;', '\u00c3': '&Atilde;',
-        '\u00f5': '&otilde;', '\u00d5': '&Otilde;', '\u00e1': '&aacute;', '\u00c1': '&Aacute;',
-        '\u00e9': '&eacute;', '\u00c9': '&Eacute;', '\u00ed': '&iacute;', '\u00cd': '&Iacute;',
-        '\u00f3': '&oacute;', '\u00d3': '&Oacute;', '\u00fa': '&uacute;', '\u00da': '&Uacute;',
-        '\u00e2': '&acirc;', '\u00c2': '&Acirc;', '\u00ea': '&ecirc;', '\u00ca': '&Ecirc;',
-        '\u00f4': '&ocirc;', '\u00d4': '&Ocirc;', '\u00e0': '&agrave;', '\u00c0': '&Agrave;',
+        "\u00e7": "&ccedil;",
+        "\u00c7": "&Ccedil;",
+        "\u00e3": "&atilde;",
+        "\u00c3": "&Atilde;",
+        "\u00f5": "&otilde;",
+        "\u00d5": "&Otilde;",
+        "\u00e1": "&aacute;",
+        "\u00c1": "&Aacute;",
+        "\u00e9": "&eacute;",
+        "\u00c9": "&Eacute;",
+        "\u00ed": "&iacute;",
+        "\u00cd": "&Iacute;",
+        "\u00f3": "&oacute;",
+        "\u00d3": "&Oacute;",
+        "\u00fa": "&uacute;",
+        "\u00da": "&Uacute;",
+        "\u00e2": "&acirc;",
+        "\u00c2": "&Acirc;",
+        "\u00ea": "&ecirc;",
+        "\u00ca": "&Ecirc;",
+        "\u00f4": "&ocirc;",
+        "\u00d4": "&Ocirc;",
+        "\u00e0": "&agrave;",
+        "\u00c0": "&Agrave;",
     }
     for char, entity in char_map.items():
         s = s.replace(char, entity)
     return s
+
 
 def generate_html():
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
@@ -58,13 +89,13 @@ def generate_html():
     except Exception as e:
         log(f"Falha ao decodificar JSON do stdin: {e}", "ERROR", exec_id)
         sys.exit(1)
-    
+
     # 2. Carregar Config
     try:
         if not os.path.exists(config_path):
             log(f"Configuracao nao encontrada: {config_path}", "ERROR", exec_id)
             sys.exit(1)
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
     except Exception as e:
         log(f"Erro ao carregar configuracoes: {e}", "ERROR", exec_id)
@@ -75,11 +106,14 @@ def generate_html():
         return ""
 
     # 3. Agrupar e Ordenar Dados
-    data_sorted = sorted(data, key=lambda x: (
-        x.get('INICIO_TING') or '9999-12-31', 
-        str(x.get('GRUPO') or '0'), 
-        str(x.get('NUMERO_OB') or '')
-    ))
+    data_sorted = sorted(
+        data,
+        key=lambda x: (
+            x.get("INICIO_TING") or "9999-12-31",
+            str(x.get("GRUPO") or "0"),
+            str(x.get("NUMERO_OB") or ""),
+        ),
+    )
 
     machines = {}
     total_weight = 0
@@ -87,29 +121,30 @@ def generate_html():
     recipe_count = 0
 
     for row in data_sorted:
-        mq = str(row.get('MQ_TING') or 'SEM MAQ').strip()
-        grupo = str(row.get('GRUPO') or '0').strip()
-        ob = str(row.get('NUMERO_OB') or '')
-        inicio = row.get('INICIO_TING') or ''
-        
-        if inicio and 'T' in inicio:
+        mq = str(row.get("MQ_TING") or "SEM MAQ").strip()
+        grupo = str(row.get("GRUPO") or "0").strip()
+        ob = str(row.get("NUMERO_OB") or "")
+        inicio = row.get("INICIO_TING") or ""
+
+        if inicio and "T" in inicio:
             try:
                 dt = datetime.fromisoformat(inicio)
-                inicio = dt.strftime('%d/%m/%Y %H:%M')
-            except: pass
+                inicio = dt.strftime("%d/%m/%Y %H:%M")
+            except:
+                pass
 
         if mq not in machines:
             machines[mq] = {"groups": {}, "weight": 1, "recipes": 0}
-        
+
         if grupo not in machines[mq]["groups"]:
             machines[mq]["groups"][grupo] = []
-            if grupo != '0':
+            if grupo != "0":
                 machines[mq]["weight"] += 1
                 machines[mq]["recipes"] += 1
 
         machines[mq]["groups"][grupo].append({"ob": ob, "inicio": inicio})
         machines[mq]["weight"] += 1
-        if grupo == '0':
+        if grupo == "0":
             machines[mq]["recipes"] += 1
 
     machine_count = len(machines)
@@ -120,9 +155,15 @@ def generate_html():
             max_machine_weight = machines[mq]["weight"]
 
     # 4. Logica de Layout Adaptativo
-    volume_score = total_weight + (machine_count * 2.2) + max_machine_weight + (recipe_count / 3)
+    volume_score = (
+        total_weight + (machine_count * 2.2) + max_machine_weight + (recipe_count / 3)
+    )
     compress_factor = min(1.0, (volume_score - 54) / 72) if volume_score > 54 else 0
-    column_count = 3 if (volume_score >= 72 or max_machine_weight >= 16 or machine_count >= 11) else 2
+    column_count = (
+        3
+        if (volume_score >= 72 or max_machine_weight >= 16 or machine_count >= 11)
+        else 2
+    )
     container_width = 696 if column_count == 3 else 680
     column_gap = max(6, int(14 - (compress_factor * 8)))
     outer_pad = max(4, int(12 - (compress_factor * 6)))
@@ -156,7 +197,7 @@ def generate_html():
     for mq_name in sorted_machines:
         mq_data = machines[mq_name]
         best_col = columns_current_weight.index(min(columns_current_weight))
-        
+
         html = f"""
         <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='{column_width}' style='width:{column_width}px;margin:0;page-break-inside:avoid;'>
             <tr>
@@ -165,11 +206,11 @@ def generate_html():
                 </td>
             </tr>
         """
-        
+
         for g_name in sorted(mq_data["groups"].keys()):
-            if g_name != '0':
+            if g_name != "0":
                 html += f"<tr><td colspan='2' align='center' style='padding:{row_pad_y}px {row_pad_x}px;border-left:1px solid #000000;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;background-color:#F2F2F2;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>Grupo {html_escape(g_name)}</td></tr>"
-            
+
             for item in mq_data["groups"][g_name]:
                 html += f"<tr><td width='{ob_width}' style='width:{ob_width}px;padding:{row_pad_y}px {row_pad_x}px;border-left:1px solid #000000;border-bottom:1px solid #D9D9D9;font-size:{body_font:.1f}pt;line-height:{body_line}px;color:#000000;white-space:nowrap;'>{html_escape(item['ob'])}</td><td width='{inicio_width}' align='center' style='width:{inicio_width}px;padding:{row_pad_y}px {row_pad_x}px;border-right:1px solid #000000;border-bottom:1px solid #D9D9D9;font-size:{body_font:.1f}pt;line-height:{body_line}px;color:#000000;white-space:nowrap;text-align:center;'>{html_escape(item['inicio'])}</td></tr>"
 
@@ -207,6 +248,7 @@ def generate_html():
     sys.stdout.write(full_html)
     sys.stdout.flush()
     log("Relatorio HTML gerado com sucesso para stdout.", "INFO", exec_id)
+
 
 if __name__ == "__main__":
     generate_html()

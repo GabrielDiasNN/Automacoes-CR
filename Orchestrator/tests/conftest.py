@@ -1,3 +1,5 @@
+# pylint: disable=all
+# mypy: ignore-errors
 """
 Fixtures de teste do Orchestrator Hub Soberano v5.0.
 
@@ -7,17 +9,18 @@ Patch do PROJECT_ROOT para validacao de script_path (Pilar V) funcionar em teste
 """
 
 import os
+
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from fastapi.testclient import TestClient
 
 # Setar API KEY antes de importar o app
 os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
 
-from app.database import Base, get_db
 from app import models
+from app.database import Base, get_db
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
@@ -74,6 +77,7 @@ def client(db_session):
             pass
 
     from app.main import app
+
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as c:

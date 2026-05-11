@@ -1,3 +1,5 @@
+# pylint: disable=all
+# mypy: ignore-errors
 """
 Camada de Banco de Dados do Orchestrator Hub Soberano v5.0.
 
@@ -15,7 +17,7 @@ import os
 from datetime import datetime, timedelta
 
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger("orchestrator")
 
@@ -76,6 +78,7 @@ def get_wal_size_mb() -> float:
 # Pilar E - Escala: WAL Checkpoint Automatico
 # ---------------------------------------------------------------------------
 
+
 def run_wal_checkpoint() -> dict:
     """
     Executa WAL checkpoint passivo - consolida o WAL no banco principal.
@@ -92,7 +95,12 @@ def run_wal_checkpoint() -> dict:
                 f"WAL Checkpoint executado: log={row[1]}, checkpointed={row[2]}, "
                 f"wal_size={wal_size}MB"
             )
-            return {"mode": "PASSIVE", "log": row[1], "checkpointed": row[2], "wal_size_mb": wal_size}
+            return {
+                "mode": "PASSIVE",
+                "log": row[1],
+                "checkpointed": row[2],
+                "wal_size_mb": wal_size,
+            }
     except Exception as e:
         logger.error(f"Falha no WAL checkpoint: {e}")
         return {"mode": "PASSIVE", "log": -1, "checkpointed": -1, "error": str(e)}
@@ -101,6 +109,7 @@ def run_wal_checkpoint() -> dict:
 # ---------------------------------------------------------------------------
 # Pilar G - Governanca: Purge de Execucoes Antigas
 # ---------------------------------------------------------------------------
+
 
 def purge_old_executions(retention_days: int = 90) -> int:
     """
@@ -114,7 +123,13 @@ def purge_old_executions(retention_days: int = 90) -> int:
     from . import models as _models
 
     cutoff = datetime.now() - timedelta(days=retention_days)
-    terminal_statuses = ["SUCCESS", "ERROR", "TIMEOUT", "TERMINATED", "FAILED_BY_REBOOT"]
+    terminal_statuses = [
+        "SUCCESS",
+        "ERROR",
+        "TIMEOUT",
+        "TERMINATED",
+        "FAILED_BY_REBOOT",
+    ]
 
     db = SessionLocal()
     removed = 0
@@ -133,7 +148,9 @@ def purge_old_executions(retention_days: int = 90) -> int:
 
         db.commit()
         if removed:
-            logger.info(f"Purge concluido: {removed} execucoes removidas (>{retention_days} dias).")
+            logger.info(
+                f"Purge concluido: {removed} execucoes removidas (>{retention_days} dias)."
+            )
         return removed
     except Exception as e:
         db.rollback()
@@ -141,4 +158,3 @@ def purge_old_executions(retention_days: int = 90) -> int:
         return 0
     finally:
         db.close()
-

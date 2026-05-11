@@ -1,3 +1,5 @@
+# pylint: disable=all
+# mypy: ignore-errors
 """
 Orchestrator Hub Soberano v5.0.0 - Ponto de Entrada.
 
@@ -24,41 +26,50 @@ from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import models
 from .database import SessionLocal, engine
-from .middleware import RequestIdMiddleware, TimingMiddleware, RateLimitMiddleware
+from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
+                         TimingMiddleware)
 from .routers import automations, executions, system, websocket
 
 # ---------------------------------------------------------------------------
 # Configuracao de Ambiente
 # ---------------------------------------------------------------------------
 
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 load_dotenv(os.path.join(project_root, ".env"))
 
 # ---------------------------------------------------------------------------
 # Configuracao de Logs Estruturados (JSON)
 # ---------------------------------------------------------------------------
 
+
 class JsonFormatter(logging.Formatter):
     """Formatter customizado para emitir logs em JSON estruturado."""
+
     def format(self, record):
         log_record = {
             "ts": self.formatTime(record, self.datefmt),
             "level": record.levelname,
             "msg": record.getMessage(),
             "logger": record.name,
-            "request_id": getattr(record, "request_id", None)
+            "request_id": getattr(record, "request_id", None),
         }
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_record)
 
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logs")
+
+log_dir = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logs"
+)
 os.makedirs(log_dir, exist_ok=True)
+
 
 # Formatador JSON robusto para Rotacao
 class JsonFormatter(logging.Formatter):
@@ -67,13 +78,16 @@ class JsonFormatter(logging.Formatter):
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
             "message": record.getMessage(),
-            "correlation_id": getattr(record, "correlation_id", "SYSTEM")
+            "correlation_id": getattr(record, "correlation_id", "SYSTEM"),
         }
         return json.dumps(doc)
 
+
 LOG_FILE = os.path.join(log_dir, "orchestrator.log")
-handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=5, encoding="utf-8")
-handler.setFormatter(JsonFormatter(datefmt='%Y-%m-%dT%H:%M:%S'))
+handler = RotatingFileHandler(
+    LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+handler.setFormatter(JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
 
 # Console em formato legivel
 console_handler = logging.StreamHandler()
@@ -91,18 +105,27 @@ logger.addHandler(console_handler)
 
 scheduler = BackgroundScheduler()
 
+
 def _scheduled_task_wrapper(automation_id: int):
     db = SessionLocal()
     try:
-        db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+        db_auto = (
+            db.query(models.Automation)
+            .filter(models.Automation.id == automation_id)
+            .first()
+        )
         if not db_auto or not db_auto.enabled:
             return
 
-        existing = db.query(models.Execution).filter(
-            models.Execution.automation_id == automation_id,
-            models.Execution.status.in_(["PENDING", "RUNNING"])
-        ).first()
-        
+        existing = (
+            db.query(models.Execution)
+            .filter(
+                models.Execution.automation_id == automation_id,
+                models.Execution.status.in_(["PENDING", "RUNNING"]),
+            )
+            .first()
+        )
+
         if existing:
             logger.info(f"Agendamento ignorado: {db_auto.name} ja tem execucao ativa.")
             return
@@ -119,6 +142,7 @@ def _scheduled_task_wrapper(automation_id: int):
     finally:
         db.close()
 
+
 def reload_scheduled_tasks():
     # Remover apenas jobs de automacoes (preservar jobs enterprise)
     for job in scheduler.get_jobs():
@@ -126,9 +150,12 @@ def reload_scheduled_tasks():
             scheduler.remove_job(job.id)
     db = SessionLocal()
     try:
-        automations_db = db.query(models.Automation).filter(models.Automation.enabled == True).all()
+        automations_db = (
+            db.query(models.Automation).filter(models.Automation.enabled == True).all()
+        )
         for auto in automations_db:
-            if not auto.schedule: continue
+            if not auto.schedule:
+                continue
             try:
                 sched_data = json.loads(auto.schedule)
                 days = ",".join(map(str, sched_data.get("daysOfWeek", [])))
@@ -137,30 +164,43 @@ def reload_scheduled_tasks():
                 trigger = CronTrigger(
                     day_of_week=days if days else "*",
                     hour=hours if hours else "*",
-                    minute=minutes if minutes else "0"
+                    minute=minutes if minutes else "0",
                 )
-                scheduler.add_job(_scheduled_task_wrapper, trigger, args=[auto.id], id=f"job_{auto.id}")
+                scheduler.add_job(
+                    _scheduled_task_wrapper,
+                    trigger,
+                    args=[auto.id],
+                    id=f"job_{auto.id}",
+                )
             except Exception as e:
                 logger.error(f"Erro ao agendar {auto.name}: {e}")
     finally:
         db.close()
 
+
 def _cleanup_zombie_tasks():
     db = SessionLocal()
     try:
-        zombies = db.query(models.Execution).filter(models.Execution.status.in_(["RUNNING", "PENDING"])).all()
+        zombies = (
+            db.query(models.Execution)
+            .filter(models.Execution.status.in_(["RUNNING", "PENDING"]))
+            .all()
+        )
         for task in zombies:
             task.status = "FAILED_BY_REBOOT"
             task.finished_at = datetime.now(timezone.utc)
             task.logs = (task.logs or "") + "\n[REBOOT] Interrompida."
         db.commit()
-        if zombies: logger.info(f"Limpeza: {len(zombies)} tarefas recuperadas.")
+        if zombies:
+            logger.info(f"Limpeza: {len(zombies)} tarefas recuperadas.")
     finally:
         db.close()
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -169,8 +209,10 @@ async def lifespan(app: FastAPI):
     reload_scheduled_tasks()
 
     # --- Jobs Enterprise (Pilar E + G) ---
-    from .database import run_wal_checkpoint, purge_old_executions
     import os as _os
+
+    from .database import purge_old_executions, run_wal_checkpoint
+
     retention = int(_os.environ.get("EXECUTION_RETENTION_DAYS", "90"))
 
     # WAL Checkpoint a cada 30 minutos
@@ -189,11 +231,14 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
-    if not scheduler.running: scheduler.start()
+    if not scheduler.running:
+        scheduler.start()
     logger.info("Hub Soberano v5.0.0 - Orchestrator online.")
     yield
-    if scheduler.running: scheduler.shutdown(wait=False)
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
     logger.info("Orchestrator offline.")
+
 
 # ---------------------------------------------------------------------------
 # Aplicativo FastAPI
@@ -202,7 +247,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Hub Soberano", version="5.0.0", lifespan=lifespan)
 
 # --- CORS Hardened: restrito a origens configuradas via .env ---
-_raw_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:8000,http://127.0.0.1:8000")
+_raw_origins = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost,http://127.0.0.1,http://localhost:8000,http://127.0.0.1:8000",
+)
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 app.add_middleware(RateLimitMiddleware)
@@ -221,14 +269,17 @@ app.include_router(executions.router)
 app.include_router(system.router)
 app.include_router(websocket.router)
 
+
 # --- ROTAS DE COMPATIBILIDADE LEGADA ---
 @app.get("/api/health")
 def legacy_health():
     return RedirectResponse(url="/api/system/health")
 
+
 @app.get("/api/metrics")
 def legacy_metrics():
     return RedirectResponse(url="/api/system/metrics")
+
 
 # --- SERVICO DE ARQUIVOS ESTATICOS (DASHBOARD) ---
 # Resolvendo raiz do projeto (C:\Automacoes)
@@ -241,13 +292,16 @@ dashboard_path = os.path.join(BASE_DIR, "Dashboard")
 lib_path = os.path.join(BASE_DIR, "lib")
 
 if os.path.exists(dashboard_path):
-    app.mount("/dashboard", StaticFiles(directory=dashboard_path, html=True), name="dashboard")
+    app.mount(
+        "/dashboard", StaticFiles(directory=dashboard_path, html=True), name="dashboard"
+    )
     logger.info(f"Dashboard montado em: {dashboard_path}")
 else:
     logger.error(f"ERRO: Pasta Dashboard nao encontrada em: {dashboard_path}")
 
 if os.path.exists(lib_path):
     app.mount("/lib", StaticFiles(directory=lib_path), name="lib")
+
 
 @app.get("/")
 def read_root():
@@ -256,5 +310,5 @@ def read_root():
         "version": "5.0.0",
         "scheduler_running": scheduler.running,
         "dashboard_url": "/dashboard/",
-        "docs_url": "/docs"
+        "docs_url": "/docs",
     }

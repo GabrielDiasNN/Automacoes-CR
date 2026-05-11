@@ -40,7 +40,7 @@ foreach ($file in $targetFiles) {
 
     # Verificacao Mypy (Tipagem Estrita)
     if ($mypy) {
-        $mypyOutput = & $mypy --strict $fullPath 2>&1
+        $mypyOutput = & $mypy --strict --explicit-package-bases --namespace-packages $fullPath 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERRO] Falha de Tipagem Estrita (Mypy) em $file" -ForegroundColor Red
             $mypyOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }

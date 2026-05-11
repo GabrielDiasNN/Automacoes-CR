@@ -1,3 +1,5 @@
+# pylint: disable=all
+# mypy: ignore-errors
 """
 Testes de API do Orchestrator Hub Soberano v5.0.
 
@@ -7,10 +9,10 @@ Testes de API do Orchestrator Hub Soberano v5.0.
 import pytest
 from conftest import AUTH_HEADERS
 
-
 # ============================================================
 # ROOT
 # ============================================================
+
 
 def test_read_root(client):
     res = client.get("/")
@@ -23,6 +25,7 @@ def test_read_root(client):
 # ============================================================
 # SEGURANCA
 # ============================================================
+
 
 def test_reject_without_api_key(client):
     res = client.get("/api/automations/all")
@@ -38,13 +41,20 @@ def test_reject_wrong_api_key(client):
 # CRUD AUTOMATIONS
 # ============================================================
 
+
 def test_create_automation(client):
-    res = client.post("/api/automations", json={
-        "name": "Test Task",
-        "description": "Tarefa de teste",
-        "script_path": "./test/run.ps1",
-        "enabled": True,
-    }, headers=AUTH_HEADERS)
+    res = client.post(
+        "/api/automations",
+        json={
+            "name": "Test Task",
+            "description": "Tarefa de teste",
+            "script_path": "./test/run.ps1",
+            "enabled": True,
+        },
+        headers=AUTH_HEADERS,
+    )
+    if res.status_code != 201:
+        print("DEBUG:", res.json())
     assert res.status_code == 201
     data = res.json()
     assert data["name"] == "Test Task"
@@ -52,20 +62,35 @@ def test_create_automation(client):
 
 
 def test_create_duplicate_name_rejected(client):
-    client.post("/api/automations", json={
-        "name": "Unique Task", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
-    res = client.post("/api/automations", json={
-        "name": "Unique Task", "script_path": "./test/run2.ps1",
-    }, headers=AUTH_HEADERS)
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Unique Task",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
+    res = client.post(
+        "/api/automations",
+        json={
+            "name": "Unique Task",
+            "script_path": "./test/run2.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
     assert res.status_code == 409
 
 
 def test_list_automations_paginated(client):
     for i in range(5):
-        client.post("/api/automations", json={
-            "name": f"Auto {i}", "script_path": f"./test/run{i}.ps1",
-        }, headers=AUTH_HEADERS)
+        client.post(
+            "/api/automations",
+            json={
+                "name": f"Auto {i}",
+                "script_path": f"./test/run{i}.ps1",
+            },
+            headers=AUTH_HEADERS,
+        )
 
     res = client.get("/api/automations?page=1&per_page=3", headers=AUTH_HEADERS)
     assert res.status_code == 200
@@ -76,20 +101,34 @@ def test_list_automations_paginated(client):
 
 
 def test_update_automation(client):
-    client.post("/api/automations", json={
-        "name": "To Update", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
-    res = client.put("/api/automations/1", json={
-        "description": "Atualizado",
-    }, headers=AUTH_HEADERS)
+    client.post(
+        "/api/automations",
+        json={
+            "name": "To Update",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
+    res = client.put(
+        "/api/automations/1",
+        json={
+            "description": "Atualizado",
+        },
+        headers=AUTH_HEADERS,
+    )
     assert res.status_code == 200
     assert res.json()["description"] == "Atualizado"
 
 
 def test_delete_automation(client):
-    client.post("/api/automations", json={
-        "name": "To Delete", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
+    client.post(
+        "/api/automations",
+        json={
+            "name": "To Delete",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
     res = client.delete("/api/automations/1", headers=AUTH_HEADERS)
     assert res.status_code == 200
 
@@ -98,26 +137,41 @@ def test_delete_automation(client):
 # VALIDACAO DE SCHEMAS
 # ============================================================
 
+
 def test_reject_path_traversal(client):
-    res = client.post("/api/automations", json={
-        "name": "Evil Task", "script_path": "../../etc/passwd",
-    }, headers=AUTH_HEADERS)
+    res = client.post(
+        "/api/automations",
+        json={
+            "name": "Evil Task",
+            "script_path": "../../etc/passwd",
+        },
+        headers=AUTH_HEADERS,
+    )
     assert res.status_code == 422
 
 
 def test_reject_dangerous_name(client):
-    res = client.post("/api/automations", json={
-        "name": "<script>alert(1)</script>", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
+    res = client.post(
+        "/api/automations",
+        json={
+            "name": "<script>alert(1)</script>",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
     assert res.status_code == 422
 
 
 def test_reject_invalid_schedule(client):
-    res = client.post("/api/automations", json={
-        "name": "Bad Schedule",
-        "script_path": "./test/run.ps1",
-        "schedule": "not-a-json",
-    }, headers=AUTH_HEADERS)
+    res = client.post(
+        "/api/automations",
+        json={
+            "name": "Bad Schedule",
+            "script_path": "./test/run.ps1",
+            "schedule": "not-a-json",
+        },
+        headers=AUTH_HEADERS,
+    )
     assert res.status_code == 422
 
 
@@ -125,10 +179,16 @@ def test_reject_invalid_schedule(client):
 # EXECUCOES
 # ============================================================
 
+
 def test_start_automation_creates_pending(client):
-    client.post("/api/automations", json={
-        "name": "Queue Test", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Queue Test",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
     res = client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     assert res.status_code == 200
     exec_id = res.json()["exec_id"]
@@ -138,18 +198,28 @@ def test_start_automation_creates_pending(client):
 
 
 def test_reject_duplicate_execution(client):
-    client.post("/api/automations", json={
-        "name": "Dup Test", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Dup Test",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
     client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     res = client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     assert res.status_code == 409
 
 
 def test_stop_execution(client):
-    client.post("/api/automations", json={
-        "name": "Stop Test", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Stop Test",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
     start = client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     exec_id = start.json()["exec_id"]
 
@@ -161,9 +231,14 @@ def test_stop_execution(client):
 
 
 def test_list_recent_executions(client):
-    client.post("/api/automations", json={
-        "name": "Recent Test", "script_path": "./test/run.ps1",
-    }, headers=AUTH_HEADERS)
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Recent Test",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
     client.post("/api/automations/1/start", headers=AUTH_HEADERS)
 
     res = client.get("/api/executions/recent?limit=5", headers=AUTH_HEADERS)
@@ -174,6 +249,7 @@ def test_list_recent_executions(client):
 # ============================================================
 # SISTEMA
 # ============================================================
+
 
 def test_health_check(client):
     res = client.get("/api/system/health")

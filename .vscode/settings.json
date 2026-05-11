@@ -1,5 +1,9 @@
 {
-    "//": { "version": "2.0.0", "skill": "ai-native-development-standard", "description": "Global Hub Governance" },
+    "//": {
+        "version": "2.0.0",
+        "skill": "ai-native-development-standard",
+        "description": "Global Hub Governance"
+    },
     "files.encoding": "utf8",
     "editor.formatOnSave": true,
     "editor.tabSize": 4,
@@ -198,5 +202,10 @@
     "gitlens.views.branches.files.layout": "list",
     "gitlens.views.fileHistory.avatars": false,
     "snyk.advanced.autoSelectOrganization": true,
-    "snyk.advanced.organization": "c106430a-69f5-4706-aeba-d8f52965b2fe"
+    "snyk.advanced.organization": "c106430a-69f5-4706-aeba-d8f52965b2fe",
+    "python.testing.pytestArgs": [
+        "Dashboard"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }
