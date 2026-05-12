@@ -1,33 +1,25 @@
-﻿@echo off
-:: Central de Automações v5.1.0 - Enterprise Access Script
-:: Garantindo caminhos absolutos e robustez operacional
+@echo off
+:: Central de Automações v5.2.1 - Instant Access Button
+:: Foco: Velocidade e Acesso Direto
 
-SET APP_ROOT=C:\Automacoes
-SET VENV_PYTHON=%APP_ROOT%\.venv\Scripts\python.exe
+SET URL=http://127.0.0.1:8000/dashboard/
 SET API_PORT=8000
-SET URL=http://localhost:8000/dashboard/
+SET INFRA_DIR=%~dp0Infrastructure
 
-echo [INFO] Verificando Central de Automações na porta %API_PORT%...
-
-:: Tenta verificar se a porta ja esta aberta
-netstat -ano | findstr ":%API_PORT%" > nul
+:: 1. Verificacao ultra-rapida de porta (LISTENING)
+netstat -ano | findstr "127.0.0.1:%API_PORT% " | findstr "LISTENING" > nul
 if %errorlevel% == 0 (
-    echo [OK] Servidor ja esta ativo.
-) else (
-    echo [WARN] Servidores offline. Iniciando...
-    
-    :: Iniciar API (Uvicorn)
-    cd /d "%APP_ROOT%\Orchestrator"
-    start /min "Orchestrator_API" "%VENV_PYTHON%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-    
-    :: Iniciar Worker
-    start /min "Orchestrator_Worker" "%VENV_PYTHON%" worker.py
-    
-    echo [INFO] Aguardando 5 segundos para estabilizacao...
-    timeout /t 5 /nobreak > nul
+    :: Servidor online: abre instantaneamente
+    start "" "%URL%"
+    exit
 )
 
-echo [DONE] Abrindo Dashboard no navegador...
-start "" "%URL%"
-exit
+:: 2. Se chegou aqui, o servidor esta offline.
+echo [!] Central em Standby. Acionando motores...
+powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "%INFRA_DIR%\Start-Orchestrator.ps1"
 
+:: 3. Abre o navegador e o proprio dashboard tentara reconectar automaticamente
+:: gracas ao nosso interceptor de resiliencia no JS.
+start "" "%URL%"
+
+exit

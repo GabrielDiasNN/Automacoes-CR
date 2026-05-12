@@ -231,6 +231,11 @@ function Enter-AutomationLock {
 # Exit-AutomationLock
 # ------------------------------------------------------------------------------
 function Exit-AutomationLock {
+    [CmdletBinding()]
+    param(
+        [string]$ExecId = "",
+        [string]$LogPath = ""
+    )
     if ($script:AutomationMutex) {
         $script:AutomationMutex.ReleaseMutex()
         $script:AutomationMutex.Dispose()

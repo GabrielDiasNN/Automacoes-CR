@@ -42,7 +42,8 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
     
     # Resolve anexo (assume relativo ao config.json se nao for absoluto)
     if ($json.message.sendAttachment -and $json.paths.attachmentPath) {
-        $base = Split-Path -Parent $ConfigPath
+        $resolvedConfig = Convert-Path $ConfigPath
+        $base = Split-Path -Parent $resolvedConfig
         $finalAttachment = Join-Path $base $json.paths.attachmentPath
     }
 }
@@ -66,12 +67,21 @@ $args = @(
     "`"$Mode`"",
     "`"$finalClientId`"",
     "`"$finalPhone`"",
-    (if ($finalAttachment) { "`"$finalAttachment`"" } else { '""' }),
+    $(if ($finalAttachment) { "`"$finalAttachment`"" } else { '""' }),
     "`"$finalMessage`"",
     "`"$LogFile`""
 )
 
-$proc = Start-Process -FilePath $NodeExe -ArgumentList $args -WindowStyle Hidden -Wait -PassThru -WorkingDirectory $LibDir
+$WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) { 
+    $resolvedPath = Convert-Path $ConfigPath
+    $parent = Split-Path -Parent $resolvedPath
+    if ([string]::IsNullOrWhiteSpace($parent)) { (Get-Location).Path } else { $parent }
+} else { 
+    (Get-Location).Path 
+}
+$env:NODE_PATH = Join-Path $WorkDir "node_modules"
+
+$proc = Start-Process -FilePath $NodeExe -ArgumentList $args -WindowStyle Hidden -Wait -PassThru -WorkingDirectory $WorkDir
 
 if ($proc.ExitCode -eq 0) {
     Write-Host "[OK] WhatsApp enviado com sucesso." -ForegroundColor Green
