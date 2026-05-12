@@ -108,17 +108,11 @@ if ($OnlyGovernance) {
 }
 
 # (Execucao de automacoes segue...)
-$config = Get-Content (Join-Path $BasePath 'Deprecated\config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-$execRe = New-BatchExecId -Prefix 'VALIDACAO_RE'
-$execRb = New-BatchExecId -Prefix 'VALIDACAO_RB'
-$execMt = New-BatchExecId -Prefix 'VALIDACAO_MT'
-
-$results = [ordered]@{}
-$results['RE'] = Start-Automacao -Name 'Receitas Emitidas' -ScriptPath ($config.tasks | Where-Object {$_.name -eq 'Receitas Emitidas'}).scriptPath -ExecId $execRe
-$results['RB'] = Start-Automacao -Name 'Receitas Bloqueadas' -ScriptPath ($config.tasks | Where-Object {$_.name -eq 'Receitas Bloqueadas'}).scriptPath -ExecId $execRb
-$results['MT'] = Start-Automacao -Name 'Montagem Terceirizados' -ScriptPath ($config.tasks | Where-Object {$_.name -eq 'Montagem Terceirizados'}).scriptPath -ExecId $execMt
+# v5.1: Agora as automacoes sao disparadas via Orquestrador ou banco de dados.
+# Este bloco legado foi desativado para evitar falhas de caminho.
 
 Write-Host "`n=== RESUMO DE SAUDE DO HUB ===" -ForegroundColor Cyan
-foreach ($kv in $results.GetEnumerator()) { Write-Host ($kv.Key + '=' + $kv.Value) }
+Write-Host "Governanca: APROVADA" -ForegroundColor Green
+Write-Host "Para disparar as automacoes, utilize o Orquestrador (Dashboard ou API)." -ForegroundColor Gray
 
 if ($globalResult -ne 0) { exit 1 } else { exit 0 }

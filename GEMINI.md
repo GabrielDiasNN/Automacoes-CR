@@ -25,10 +25,9 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 
 ---
 
-## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 09/05/2026
-- **Estado:** Operacional Enterprise (v5.1.0 Estabilizado).
-- **Interoperabilidade:** Implementada **B64 Bridge** para logs e suporte UTF-8/Acentos no Pydantic.
-- **Governança:** Controle de **Modo Teste Global** integrado ao Dashboard.
-- **Encoding:** Implementada **Trava de Regressão** (`Test-EncodingResilience.ps1`). Obrigatório manter código-fonte ASCII-Safe e I/O em UTF-8.
-- **Manutenção:** Realizada faxina técnica com remoção de scripts de migração (`migrate_v4.py`) e arquivos legados.
-- **Resiliência:** UI do Dashboard blindada com `try-catch` contra falhas de dados.
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 12/05/2026
+- **Estado:** Estabilizado v5.2.0 (Enterprise).
+- **Infra:** Implementada `Lib-Config` para centralização de variáveis via `.env`.
+- **Resiliência:** Correção definitiva de falsos positivos de disco via CIM/PSDrive.
+- **Auditoria:** Script `Audit-DailyStatus.ps1` ativo para telemetria AI-Native.
+- **Porta:** Padronização absoluta na porta 8000 para API/Watchdog.

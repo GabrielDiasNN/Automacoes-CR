@@ -1,9 +1,10 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Router: Executions - Historico de execucoes com filtros, logs, artefatos e controle. v5.0
+Router: Executions - Historico de execucoes com filtros, logs, artefatos e controle. v5.1.0
 """
 
+import json
 import logging
 import math
 import os
@@ -171,7 +172,7 @@ def get_execution(
 ):
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execucao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
 
     resp = schemas.ExecutionResponse.model_validate(db_exec)
     auto_name = (
@@ -199,7 +200,7 @@ def get_execution_logs(
     """Retorna logs de uma execucao com paginacao por linhas."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execucao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
 
     all_lines = (db_exec.logs or "").split("\n")
     total_lines = len(all_lines)
@@ -228,9 +229,7 @@ def list_artifacts(
     """Lista artefatos gerados por uma execucao."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execucao nao encontrada.")
-
-    import json
+        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
 
     artifacts = []
     if db_exec.artifacts:
@@ -252,7 +251,7 @@ def download_artifact(
     """Download de um artefato especifico."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execucao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
 
     db_auto = (
         db.query(models.Automation)
@@ -260,22 +259,28 @@ def download_artifact(
         .first()
     )
     if not db_auto:
-        raise HTTPException(status_code=404, detail="Automacao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
 
-    # Anti-path-traversal no filename
-    if ".." in filename or "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=400, detail="Nome de arquivo invalido.")
+    # Anti-path-traversal no filename: permitir apenas nome puro do arquivo
+    clean_filename = os.path.basename(filename)
+    if clean_filename != filename:
+        raise HTTPException(status_code=400, detail="Caminho de arquivo inv\u00e1lido.")
 
     script_path = db_auto.script_path
     if script_path.startswith("./") or script_path.startswith(".\\"):
-        robot_dir = os.path.join(PROJECT_ROOT, os.path.dirname(script_path[2:]))
+        robot_dir = os.path.normpath(os.path.join(PROJECT_ROOT, os.path.dirname(script_path[2:])))
     else:
-        robot_dir = os.path.dirname(os.path.abspath(script_path))
+        robot_dir = os.path.normpath(os.path.dirname(os.path.abspath(script_path)))
 
-    file_path = os.path.join(robot_dir, filename)
-    if not os.path.exists(file_path):
+    file_path = os.path.normpath(os.path.join(robot_dir, filename))
+    
+    # Validar se o arquivo resolvido ainda reside dentro do diretorio do robo ou do projeto
+    if not file_path.startswith(robot_dir):
+        raise HTTPException(status_code=403, detail="Acesso negado ao arquivo.")
+
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
         raise HTTPException(
-            status_code=404, detail=f"Arquivo '{filename}' nao encontrado."
+            status_code=404, detail=f"Arquivo '{filename}' n\u00e3o encontrado."
         )
 
     return FileResponse(path=file_path, filename=filename)
@@ -295,10 +300,10 @@ def stop_execution(
 ):
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execucao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
 
     if db_exec.status not in ["PENDING", "RUNNING"]:
-        raise HTTPException(status_code=400, detail="Execucao ja finalizada.")
+        raise HTTPException(status_code=400, detail="Execu\u00e7\u00e3o j\u00e1 finalizada.")
 
     db_exec.status = "TERMINATED"
     db_exec.finished_at = datetime.now()
@@ -308,3 +313,5 @@ def stop_execution(
 
     logger.info(f"Execucao interrompida: {exec_id}")
     return {"message": "Sinal de parada registrado.", "exec_id": exec_id}
+
+

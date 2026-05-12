@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Worker Hub Soberano v5.1 - Motor de Execucao Concorrente com Tipagem Estrita.
+Worker Central de Automacoes v5.1 - Motor de Execucao Concorrente com Tipagem Estrita.
 """
 
 import base64
@@ -44,8 +44,9 @@ load_dotenv(os.path.join(project_root, ".env"))
 MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "2"))
 HEARTBEAT_INTERVAL: int = 15  # segundos
 POLL_INTERVAL: int = 2  # segundos
-WORKER_VERSION: str = "5.1.0"
-API_BASE: str = "http://127.0.0.1:8000"
+WORKER_VERSION: str = "5.2.0"
+_port = os.environ.get("HUB_API_PORT", "8000")
+API_BASE: str = f"http://127.0.0.1:{_port}"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -101,6 +102,7 @@ stats: Dict[str, Any] = {
     "tasks_failed": 0,
     "active_tasks": 0,
     "lock": threading.Lock(),
+    "active_processes": {}, # {exec_id: Popen_object}
 }
 
 
@@ -287,6 +289,10 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
 
+        # Registrar processo ativo para encerramento em caso de shutdown
+        with cast(threading.Lock, stats["lock"]):
+            stats["active_processes"][exec_id] = process
+
         q: Queue[str] = Queue()
         reader_thread: threading.Thread = threading.Thread(
             target=enqueue_output, args=(process.stdout, q)
@@ -325,7 +331,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                         capture_output=True,
                         check=False,
                     )
-                    broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
+                    broadcast_log("\n[INTERROMPIDO PELO USU\u00c1RIO]\n", exec_id)
                     update_stat("active_tasks", -1)
                     broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
                     return
@@ -337,7 +343,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                         check=False,
                     )
                     broadcast_log(
-                        f"\n[TIMEOUT AUTOMATICO: {max_runtime}min]\n", exec_id
+                        f"\n[TIMEOUT AUTOM\u00c1TICO: {max_runtime}min]\n", exec_id
                     )
 
                     db_exec_upd = (
@@ -352,7 +358,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                             time.time() - task_start_ts, 2
                         )
                         db_exec_upd.logs = (
-                            "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo maximo."
+                            "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo m\u00e1ximo."
                         )
                         check_db.commit()
 
@@ -372,7 +378,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             time.sleep(1)
 
         broadcast_log(
-            f"\n[Fim da Execucao - ExitCode: {process.returncode}]\n", exec_id
+            f"\n[Fim da Execu\u00e7\u00e3o - ExitCode: {process.returncode}]\n", exec_id
         )
         duration: float = round(time.time() - task_start_ts, 2)
         artifacts_json: Optional[str] = scan_for_artifacts(robot_dir, task_start_ts)
@@ -439,7 +445,10 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
         update_stat("tasks_failed", 1)
         broadcast_event("TASK_FAILED", {"exec_id": exec_id, "error": str(e)})
     finally:
-        update_stat("active_tasks", -1)
+        with cast(threading.Lock, stats["lock"]):
+            stats["active_tasks"] -= 1
+            if exec_id in stats["active_processes"]:
+                del stats["active_processes"][exec_id]
         db.close()
 
 
@@ -467,21 +476,29 @@ def main_loop() -> None:
     while not shutdown_event.is_set():
         db = SessionLocal()
         try:
+            # Atomic Claim Logic (v5.2.1)
             pending_task = (
                 db.query(models.Execution)
                 .filter(models.Execution.status == "PENDING")
-                .order_by(
-                    models.Execution.priority.asc(), models.Execution.started_at.asc()
-                )
+                .order_by(models.Execution.priority.asc(), models.Execution.started_at.asc())
+                .with_for_update(skip_locked=True) # SQLite ignora with_for_update, mas mantemos para padrao
                 .first()
             )
 
             if pending_task:
+                # Marcar como RUNNING imediatamente no banco antes de despachar
+                exec_id = pending_task.id
+                pending_task.status = "RUNNING"
+                pending_task.started_at = datetime.now(timezone.utc)
+                db.commit()
+                
+                # Re-buscar para garantir que temos os dados apos o commit
                 automation = (
                     db.query(models.Automation)
                     .filter(models.Automation.id == pending_task.automation_id)
                     .first()
                 )
+                
                 if automation:
                     path: str = automation.script_path
                     if path.startswith("./") or path.startswith(".\\"):
@@ -492,11 +509,11 @@ def main_loop() -> None:
                     script_path: str = os.path.abspath(path)
                     max_rt: int = automation.max_runtime_minutes or 30
 
-                    executor.submit(run_task, pending_task.id, script_path, max_rt)
+                    executor.submit(run_task, exec_id, script_path, max_rt)
                     logger.info(
                         "Tarefa despachada para pool: %s (%s)",
                         automation.name,
-                        pending_task.id,
+                        exec_id,
                     )
                 else:
                     pending_task.status = "ERROR"
@@ -510,7 +527,17 @@ def main_loop() -> None:
 
         shutdown_event.wait(POLL_INTERVAL)
 
-    logger.info("Shutdown solicitado. Aguardando tarefas ativas...")
+    logger.info("Shutdown solicitado. Encerrando tarefas ativas...")
+    
+    # Pillar G: Terminacao forcada de processos filhos para evitar orfaos
+    with cast(threading.Lock, stats["lock"]):
+        for eid, proc in stats["active_processes"].items():
+            logger.warning("Terminando processo %s (Shutdown)", eid)
+            try:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
+            except Exception as e:
+                logger.warning("Falha ao encerrar processo %s: %s", eid, e)
+
     executor.shutdown(wait=True, cancel_futures=False)
     logger.info("Worker encerrado de forma controlada.")
 

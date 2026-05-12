@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Modelos SQLAlchemy do Orchestrator Hub Soberano v5.0.
+Modelos SQLAlchemy do Orchestrator Central de Automacoes v5.0.
 
 Tabelas:
   - Automation: Cadastro de robos e suas configuracoes.
@@ -13,9 +13,9 @@ Tabelas:
 from sqlalchemy import (Boolean, Column, DateTime, Float, ForeignKey, Index,
                         Integer, String, Text)
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 
 from .database import Base
+from .timezone import get_now_local
 
 
 class Automation(Base):
@@ -32,8 +32,8 @@ class Automation(Base):
     enabled = Column(Boolean, default=True)
     test_mode = Column(Boolean, default=False)
     notification_channels = Column(Text, nullable=True)  # Ex: "whatsapp,email"
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime, default=get_now_local)
+    updated_at = Column(DateTime, default=get_now_local, onupdate=get_now_local)
 
     # Relationship bidirecional
     executions = relationship(
@@ -62,8 +62,8 @@ class Execution(Base):
     )  # HIGH | NORMAL | LOW
     exit_code = Column(Integer, nullable=True)
     requested_by = Column(String(100), default="SYSTEM")
-    started_at = Column(DateTime(timezone=True), server_default=func.now())
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(DateTime, default=get_now_local)
+    finished_at = Column(DateTime, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     artifacts = Column(Text, nullable=True)  # JSON list de nomes de arquivo
     logs = Column(Text, nullable=True)
@@ -86,7 +86,7 @@ class WorkerHeartbeat(Base):
 
     id = Column(Integer, primary_key=True, default=1)
     pid = Column(Integer, nullable=True)
-    last_ping = Column(DateTime(timezone=True), server_default=func.now())
+    last_ping = Column(DateTime, default=get_now_local, onupdate=get_now_local)
     uptime_seconds = Column(Float, default=0)
     tasks_completed = Column(Integer, default=0)
     tasks_failed = Column(Integer, default=0)
@@ -100,7 +100,7 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    timestamp = Column(DateTime, default=get_now_local, index=True)
     action = Column(
         String(50), nullable=False
     )  # CREATE, UPDATE, DELETE, START, STOP, BACKUP

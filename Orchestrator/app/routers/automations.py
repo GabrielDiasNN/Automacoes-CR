@@ -2,7 +2,7 @@
 # mypy: ignore-errors
 """
 
-Router: Automations - CRUD completo com paginacao, validacao e auditoria. v5.0
+Router: Automations - CRUD completo com paginacao, validacao e auditoria. v5.1.0
 
 """
 
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas  # type: ignore
 from ..database import get_db
 from ..middleware import get_api_key
+from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit, validate_script_path
 
 logger = logging.getLogger("orchestrator")
@@ -161,7 +162,7 @@ def get_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automacao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
 
     return db_auto
 
@@ -190,7 +191,7 @@ def create_automation(
     if existing:
 
         raise HTTPException(
-            status_code=409, detail="Automacao com este nome ja existe."
+            status_code=409, detail="Automa\u00e7\u00e3o com este nome j\u00e1 existe."
         )
 
     # --- Pilar V: Pre-flight de existencia do script ---
@@ -199,7 +200,7 @@ def create_automation(
 
     if not ok:
 
-        raise HTTPException(status_code=422, detail=f"Validacao do script: {result}")
+        raise HTTPException(status_code=422, detail=f"Valida\u00e7\u00e3o do script: {result}")
 
     db_auto = models.Automation(**automation.model_dump())
 
@@ -249,7 +250,7 @@ def update_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automacao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
 
     update_data = automation_update.model_dump(exclude_unset=True)
 
@@ -295,7 +296,7 @@ def delete_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automacao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
 
     auto_name = db_auto.name
 
@@ -342,7 +343,7 @@ def start_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automacao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
 
     # Protecao contra execucao duplicada
 
@@ -359,7 +360,7 @@ def start_automation(
 
         raise HTTPException(
             status_code=409,
-            detail=f"Automacao ja possui uma execucao ativa (ID: {running.id}).",
+            detail=f"Automa\u00e7\u00e3o j\u00e1 possui uma execu\u00e7\u00e3o ativa (ID: {running.id}).",
         )
 
     exec_id = f"EXEC_{int(_time.time())}"
@@ -381,10 +382,8 @@ def start_automation(
 
     db.commit()
 
-    return {"message": "Automacao enfileirada com sucesso.", "exec_id": exec_id}
+    return {"message": "Automa\u00e7\u00e3o enfileirada com sucesso.", "exec_id": exec_id}
 
-
-# --- MODO TESTE (GLOBAL) ---
 
 
 @router.post("/test-mode/global")
@@ -396,7 +395,12 @@ def set_global_test_mode(
 ):
     """Ativa ou desativa o Modo Teste para TODAS as automacoes cadastradas."""
 
-    db.query(models.Automation).update({models.Automation.test_mode: enabled})
+    db.query(models.Automation).update(
+        {
+            models.Automation.test_mode: enabled,
+            models.Automation.updated_at: get_now_local(),
+        }
+    )
 
     log_audit(
         db,
@@ -410,7 +414,7 @@ def set_global_test_mode(
     db.commit()
 
     return {
-        "message": f"Modo Teste Global {'ativado' if enabled else 'desativado'} para todas as automacoes."
+        "message": f"Modo Teste Global {'ativado' if enabled else 'desativado'} para todas as automa\u00e7\u00f5es."
     }
 
 
@@ -432,7 +436,7 @@ def set_automation_test_mode(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automacao nao encontrada.")
+        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
 
     db_auto.test_mode = enabled
 
@@ -448,7 +452,7 @@ def set_automation_test_mode(
     db.commit()
 
     return {
-        "message": f"Modo Teste da automacao {db_auto.name} definido para {enabled}."
+        "message": f"Modo Teste da automa\u00e7\u00e3o {db_auto.name} definido para {enabled}."
     }
 
 
@@ -472,7 +476,7 @@ def pause_all(
 
     db.commit()
 
-    return {"message": "Todas as automacoes pausadas."}
+    return {"message": "Todas as automa\u00e7\u00f5es pausadas."}
 
 
 @router.post("/control/resume-all")
@@ -488,4 +492,6 @@ def resume_all(
 
     db.commit()
 
-    return {"message": "Todas as automacoes retomadas."}
+    return {"message": "Todas as automa\u00e7\u00f5es retomadas."}
+
+

@@ -84,13 +84,48 @@ function Test-AutomationPreFlight {
     # Portabilidade: Detecta a unidade de disco do projeto dinamicamente
     $projectRoot = Get-AutomacaoProjectRoot
     $driveLetter = (Split-Path -Path $projectRoot -Qualifier)
-    if (-not $driveLetter) { $driveLetter = "C:" }
-    $drive = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='$driveLetter'"
+    if ([string]::IsNullOrWhiteSpace($driveLetter)) { $driveLetter = "C:" }
     
-    $freeGB = [math]::Round($drive.FreeSpace / 1GB, 2)
-    if ($freeGB -lt 1) { $results += "ERRO: Disco critico ($freeGB GB)" } else { $results += "OK: Disco estavel ($freeGB GB)" }
-    foreach ($p in $CheckPaths) { if (Test-Path $p) { $results += "OK: Path: $(Split-Path $p -Leaf)" } else { $results += "ERRO: Path inacessivel: $(Split-Path $p -Leaf)" } }
-    if ($CheckOracle) { if (Test-Connection -ComputerName "SRVDB02" -Count 1 -Quiet) { $results += "OK: SRVDB02 On" } else { $results += "WARN: SRVDB02 Off" } }
+    # Deteccao de Disco Hardened (v5.2.0)
+    $freeGB = 0
+    try {
+        # Tentativa 1: Get-CimInstance (Moderno)
+        $cimDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$driveLetter'" -ErrorAction Stop
+        $freeGB = [math]::Round($cimDisk.FreeSpace / 1GB, 2)
+    } catch {
+        try {
+            # Tentativa 2: Fallback para Get-PSDrive (Nativo PS)
+            $psDrive = Get-PSDrive ($driveLetter.TrimEnd(':')) -ErrorAction Stop
+            $freeGB = [math]::Round($psDrive.Free / 1GB, 2)
+        } catch {
+            $freeGB = -1 # Sinaliza falha na leitura
+        }
+    }
+
+    if ($freeGB -eq -1) {
+        $results += "WARN: Falha ao ler espaco em disco (Ignorado)"
+    } elseif ($freeGB -lt 1) {
+        $results += "ERRO: Disco critico ($freeGB GB)"
+    } else {
+        $results += "OK: Disco estavel ($freeGB GB)"
+    }
+
+    foreach ($p in $CheckPaths) {
+        if (Test-Path $p) {
+            $results += "OK: Path: $(Split-Path $p -Leaf)"
+        } else {
+            $results += "ERRO: Path inacessivel: $(Split-Path $p -Leaf)"
+        }
+    }
+
+    if ($CheckOracle) {
+        if (Test-Connection -ComputerName "SRVDB02" -Count 1 -Quiet) {
+            $results += "OK: SRVDB02 On"
+        } else {
+            $results += "WARN: SRVDB02 Off"
+        }
+    }
+
     $allOk = -not ($results -match "ERRO")
     Write-AutomacaoLog -Message "Pre-Flight: $($results -join ' | ')" -Level $(if($allOk){"INFO"}else{"ERRO"}) -ExecId $ExecId -LogPath $LogPath
     return $allOk
@@ -177,5 +212,31 @@ function Invoke-LogRotation {
     } catch [System.Exception] {}
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight
+# ------------------------------------------------------------------------------
+# Enter-AutomationLock
+# ------------------------------------------------------------------------------
+function Enter-AutomationLock {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$ExecId)
+
+    $mutexName = "Global\AutomationHub_$ExecId"
+    $script:AutomationMutex = New-Object System.Threading.Mutex($false, $mutexName)
+    
+    if (-not $script:AutomationMutex.WaitOne(5000)) {
+        throw "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId. Abortando para evitar corrupcao."
+    }
+}
+
+# ------------------------------------------------------------------------------
+# Exit-AutomationLock
+# ------------------------------------------------------------------------------
+function Exit-AutomationLock {
+    if ($script:AutomationMutex) {
+        $script:AutomationMutex.ReleaseMutex()
+        $script:AutomationMutex.Dispose()
+        $script:AutomationMutex = $null
+    }
+}
+
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock
 

@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Testes de API do Orchestrator Hub Soberano v5.0.
+Testes de API do Orchestrator Central de Automacoes v5.0.
 
 15+ cenarios cobrindo: CRUD, validacao, seguranca, execucoes, sistema.
 """

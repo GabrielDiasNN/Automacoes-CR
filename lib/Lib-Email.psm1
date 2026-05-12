@@ -40,7 +40,8 @@ function Send-OutlookEmail {
         [string]$BCC = "",
         [string[]]$Attachments = @(),
         [string]$ExecId = "",
-        [string]$LogPath = ""
+        [string]$LogPath = "",
+        [switch]$PreviewOnly
     )
 
     function Write-LocalLog {
@@ -114,6 +115,11 @@ function Send-OutlookEmail {
                         Write-LocalLog "Aviso: Arquivo de anexo nao encontrado: $file" -l "WARN"
                     }
                 }
+            }
+
+            if ($PreviewOnly) {
+                Write-LocalLog "Modo PREVIEW ativo. E-mail exibido mas NAO enviado automaticamente." -l "WARN"
+                return $true
             }
 
             $mailItem.Send()

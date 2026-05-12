@@ -15,13 +15,19 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = "." }
 
 # Bibliotecas (apenas logging basico)
 $libLogging = Join-Path $ProjectRoot "lib\Lib-Logging.psm1"
+$libConfig  = Join-Path $ProjectRoot "lib\Lib-Config.psm1"
 if (Test-Path $libLogging) { Import-Module $libLogging -Force }
+if (Test-Path $libConfig)  { Import-Module $libConfig  -Force }
 
 function Write-Log {
     param([string]$Msg, [string]$Type = "INFO")
     $logPath = Join-Path $ProjectRoot "Logs\$(Get-Date -Format 'yyyy-MM')_Monitor.log"
     Write-AutomacaoLog -Message $Msg -Level $Type -ExecId "WATCHDOG" -LogPath $logPath
 }
+
+# --- CONFIGURACAO CENTRALIZADA ---
+$HubPort = if (Get-Command Get-HubConfig -ErrorAction SilentlyContinue) { Get-HubConfig -Key "HUB_API_PORT" -Default "8000" } else { "8000" }
+$HealthUrl = "http://127.0.0.1:$HubPort/"
 
 # --- GERENCIAMENTO DE MUTEX (Instancia Unica) ---
 $MutexName = if ([string]::IsNullOrWhiteSpace($MutexNameOverride)) { "Global\MonitorAutomacoesMutex" } else { $MutexNameOverride }
@@ -38,25 +44,25 @@ if (-not $script:MutexAcquired) {
     Exit 0
 }
 
-Write-Log "Watchdog iniciado de forma enxuta. Vigiando Orquestrador na porta 8000..."
+Write-Log "Watchdog iniciado v5.2.0. Vigiando Orquestrador em $HealthUrl"
 $script:LastOrchestratorRestart = $null
 
 while ($true) {
     try {
-        $orchestratorStatus = Invoke-RestMethod -Uri "http://127.0.0.1:8000/" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $orchestratorStatus = Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 5 -ErrorAction Stop
         if ($null -eq $orchestratorStatus -or $orchestratorStatus.scheduler_running -ne $true) {
-            throw "Offline"
+            throw "Orquestrador respondeu mas o Scheduler esta inativo."
         }
         $script:LastOrchestratorRestart = $null
     }
-    catch [System.Exception] {
+    catch {
+        $errReason = $_.Exception.Message
         $now = Get-Date
         if ($null -eq $script:LastOrchestratorRestart -or ($now - $script:LastOrchestratorRestart).TotalSeconds -gt 60) {
-            Write-Log "Watchdog: Orquestrador nao detectado. Reiniciando de forma controlada..." -Type "WARN"
+            Write-Log "Watchdog: Orquestrador inacessivel ou instavel ($errReason). Reiniciando..." -Type "WARN"
             $script:LastOrchestratorRestart = $now
             $startScript = Join-Path $InfrastructureDir "Start-Orchestrator.ps1"
             Start-Process "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
-
             Start-Sleep -Seconds 15
         }
     }

@@ -37,6 +37,7 @@ $HtmlPath = Join-Path $BasePath "email_body.html"
 $EmailConfigPath = Join-Path $BasePath "receitas_config.json"
 $LogDir     = Join-Path $BasePath "Logs"
 $PythonStatePath = Join-Path $BasePath "receitas_state.json"
+$PythonStateTmp  = $PythonStatePath + ".tmp"
 $EmailStatePath = Join-Path $BasePath "email_state.json"
 $MaxTimeoutSec = 300
 
@@ -94,10 +95,15 @@ if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
     Invoke-LogRotation -LogPath $LogFile -KeepDays 15
 }
 
-Write-Log "========================================================================================="
 Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$ExecId"
 
 try {
+    # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
+    if (-not (Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile)) {
+        Exit-WithCode 0 "Execucao abortada: Mutex ja retido por outra instancia deste ExecId."
+    }
+
+    try {
     # Carregar Variaveis de Ambiente (.env)
     $envPath = Join-Path $projectRoot ".env"
     if (Test-Path $envPath) {
@@ -245,16 +251,15 @@ if (Test-Path $HtmlPath) {
                     }
 
                 if ($emailOk) {
-                    $newState = @{ last_sent_hash = $currentHash; sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
-                    $newState | ConvertTo-Json | Out-File $EmailStatePath -Encoding UTF8
-                    Write-Log "E-mail enviado e estado de idempotencia atualizado."
+                    Write-Log "E-mail enviado com sucesso. Aguardando processamento WhatsApp para commit de estado."
                 } else {
-                    Write-Log "Falha definitiva no envio de e-mail apos tentativas." -Lvl "ERRO"
+                    Write-Log "Falha definitiva no envio de e-mail apos tentativas. O estado NAO sera atualizado." -Lvl "ERRO"
                 }
             }
 
             # 3. WhatsApp Post-Execution (ExitCode 23/40 NAO disparam retry: sao comportamentos corretos)
             Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
+            $allSuccess = $emailOk
             try {
                 $whatsAppProc = Start-Process "powershell.exe" `
                     -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO -ConfigPath `"$WhatsAppConfig`"" `
@@ -265,18 +270,41 @@ if (Test-Path $HtmlPath) {
 
                 if ($whatsAppExit -eq 40) { Write-Log "WhatsApp ignorado por lock ativo (comportamento normal)." -Lvl "INFO" }
                 elseif ($whatsAppExit -eq 23) { Write-Log "WhatsApp em cooldown (comportamento normal)." -Lvl "INFO" }
-                elseif ($whatsAppExit -eq 21) { Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN" }
-                elseif ($whatsAppExit -ne 0) { Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit." -Lvl "WARN" }
+                elseif ($whatsAppExit -eq 21) { 
+                    Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN" 
+                    $allSuccess = $false
+                }
+                elseif ($whatsAppExit -ne 0) { 
+                    Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit. Notificacao incompleta." -Lvl "WARN" 
+                    $allSuccess = $false
+                }
             } catch [System.Exception] {
                 Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
+                $allSuccess = $false
+            }
+
+            # --- SAFE-STATE COMMIT (Ouro/VALEG) ---
+            if ($allSuccess) {
+                Write-Log "Confirmando compromisso de estado (Two-Phase Commit Success)..."
+                if (Test-Path $PythonStateTmp) {
+                    Move-Item -Path $PythonStateTmp -Destination $PythonStatePath -Force
+                    Write-Log "Estado Python atualizado: $PythonStatePath"
+                }
+                
+                $newState = @{ last_sent_hash = $currentHash; sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
+                $newState | ConvertTo-Json | Out-File $EmailStatePath -Encoding UTF8
+                Write-Log "Estado de notificacao global (Email/WhatsApp) consolidado."
+            } else {
+                Write-Log "Commit de estado ABORTADO devido a falhas nas notificacoes. Retentativa ocorrera na proxima execucao." -Lvl "WARN"
             }
         }
-    } catch [System.Exception] {
-        Write-Log "Falha na rotina de e-mail/idempotencia: $_" -Lvl "ERRO"
+    } finally {
+        # Liberacao do bloqueio global
+        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
     }
-} else {
-    Write-Log "Arquivo $HtmlPath nao encontrado. Python suprimiu a geracao ou houve erro."
-    Exit-WithCode 0 "Processo concluido sem dados para notificar."
-}
 
-Exit-WithCode 0 "Processo concluido com sucesso."
+} catch [System.Exception] {
+    # Re-throw para nao engolir o Exit-WithCode 0 do bloco de idempotencia
+    if ($_.Exception.Message -match "Processo finalizado") { throw }
+    Exit-WithCode 4 "Falha ao invocar script Python: $_"
+}

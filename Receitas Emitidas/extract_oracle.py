@@ -28,7 +28,7 @@ if sys.stderr.encoding != "utf-8":
 
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
     b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
     sys.stderr.write(f"B64:{b64_msg}\n")
@@ -119,21 +119,20 @@ def extract() -> None:
 
         last_hash = last_state_data.get("last_hash")
 
+        state_tmp_path = state_path + ".tmp"
         if last_hash and current_hash == last_hash:
-            log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
-            state_data = {
-                "last_hash": current_hash,
-                "updated_at": datetime.now().isoformat(),
-            }
-            with open(state_path, "w", encoding="utf-8") as f:
-                json.dump(state_data, f, ensure_ascii=False, indent=4)
-            sys.exit(2)
+            if os.path.exists(state_tmp_path):
+                log("Sem novas alteracoes, mas detectado estado temporario pendente de notificacao.", "INFO", exec_id)
+            else:
+                log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
+                sys.exit(2)
 
         state_data = {
             "last_hash": current_hash,
             "updated_at": datetime.now().isoformat(),
         }
-        with open(state_path, "w", encoding="utf-8") as f:
+        # Salva apenas no temporario. O commit oficial ocorre no run.ps1 apos sucesso.
+        with open(state_tmp_path, "w", encoding="utf-8") as f:
             json.dump(state_data, f, ensure_ascii=False, indent=4)
 
         sys.stdout.write(json_payload)
@@ -154,3 +153,5 @@ def extract() -> None:
 
 if __name__ == "__main__":
     extract()
+
+

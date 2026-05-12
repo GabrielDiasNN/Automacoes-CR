@@ -1,4 +1,4 @@
-# {
+﻿# {
 #   "version": "1.1.0",
 #   "skill": "ai-native-development-standard",
 #   "contract": "hybrid-fetch-logic",
@@ -24,7 +24,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs em Base64 para o stderr (Isolamento total)."""
-    ts: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    ts: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg: str = f"[{ts}] [PY-EXTRACT-XL] [{level}] [ExecId:{exec_id}] {message}"
     b64_msg: str = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
     sys.stderr.write(f"B64:{b64_msg}\n")
@@ -99,3 +99,5 @@ def extract() -> None:
 
 if __name__ == "__main__":
     extract()
+
+

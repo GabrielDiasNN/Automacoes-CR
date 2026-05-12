@@ -1,5 +1,5 @@
-@echo off
-:: Hub Soberano v5.1.0 - Enterprise Access Script
+﻿@echo off
+:: Central de Automações v5.1.0 - Enterprise Access Script
 :: Garantindo caminhos absolutos e robustez operacional
 
 SET APP_ROOT=C:\Automacoes
@@ -7,7 +7,7 @@ SET VENV_PYTHON=%APP_ROOT%\.venv\Scripts\python.exe
 SET API_PORT=8000
 SET URL=http://localhost:8000/dashboard/
 
-echo [INFO] Verificando Hub Soberano na porta %API_PORT%...
+echo [INFO] Verificando Central de Automações na porta %API_PORT%...
 
 :: Tenta verificar se a porta ja esta aberta
 netstat -ano | findstr ":%API_PORT%" > nul
@@ -30,3 +30,4 @@ if %errorlevel% == 0 (
 echo [DONE] Abrindo Dashboard no navegador...
 start "" "%URL%"
 exit
+

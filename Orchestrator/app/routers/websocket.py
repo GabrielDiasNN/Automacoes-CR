@@ -45,7 +45,7 @@ class ConnectionManager:
                 await websocket.send_text(db_exec.logs)
                 await websocket.send_text("\n--- Historico recuperado ---\n")
         except Exception as e:
-            logger.warn(f"Falha ao recuperar replay de logs para {exec_id}: {e}")
+            logger.warning(f"Falha ao recuperar replay de logs para {exec_id}: {e}")
         finally:
             db.close()
 
@@ -74,6 +74,10 @@ class ConnectionManager:
 
     async def broadcast_log(self, message: str, exec_id: str):
         if exec_id in self.exec_connections:
+            # Pilar E: Limitar tamanho da mensagem individual para evitar OOM em logs massivos
+            if len(message) > 50000:
+                message = message[:50000] + "\n... [TRUNCATED FOR WS PERFORMANCE]"
+                
             dead = []
             for ws in self.exec_connections[exec_id]:
                 try:
@@ -157,3 +161,5 @@ async def broadcast_event_endpoint(event_data: dict):
         event_data.get("type", "UNKNOWN"), event_data.get("data", {})
     )
     return {"status": "ok"}
+
+

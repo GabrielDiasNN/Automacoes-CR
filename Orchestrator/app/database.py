@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Camada de Banco de Dados do Orchestrator Hub Soberano v5.0.
+Camada de Banco de Dados do Orchestrator Central de Automacoes v5.0.
 
 Configuracoes hardened de SQLite:
   - WAL mode para acesso concorrente (API + Worker)
@@ -42,6 +42,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA busy_timeout=5000")
     cursor.execute("PRAGMA cache_size=-8000")  # 8MB de cache
+    cursor.execute("PRAGMA temp_store=MEMORY") # Tabelas temporarias em RAM
     cursor.close()
 
 
@@ -132,29 +133,22 @@ def purge_old_executions(retention_days: int = 90) -> int:
     ]
 
     db = SessionLocal()
-    removed = 0
     try:
-        old_execs = (
-            db.query(_models.Execution)
-            .filter(
-                _models.Execution.status.in_(terminal_statuses),
-                _models.Execution.finished_at < cutoff,
-            )
-            .all()
+        # Delete em massa via query direta para performance (Pilar E)
+        query = db.query(_models.Execution).filter(
+            _models.Execution.status.in_(terminal_statuses),
+            _models.Execution.finished_at < cutoff
         )
-        for ex in old_execs:
-            db.delete(ex)
-            removed += 1
-
+        removed = query.delete(synchronize_session=False)
         db.commit()
         if removed:
             logger.info(
-                f"Purge concluido: {removed} execucoes removidas (>{retention_days} dias)."
+                f"Purge conclu\u00eddo: {removed} execu\u00e7\u00f5es removidas (>{retention_days} dias)."
             )
         return removed
     except Exception as e:
         db.rollback()
-        logger.error(f"Falha no purge de execucoes: {e}")
+        logger.error(f"Falha no purge de execu\u00e7\u00f5es: {e}")
         return 0
     finally:
         db.close()

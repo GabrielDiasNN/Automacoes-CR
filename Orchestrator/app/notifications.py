@@ -1,4 +1,4 @@
-# pylint: disable=all
+﻿# pylint: disable=all
 # mypy: ignore-errors
 """
 Hub de Notificacoes do Orchestrator v4.0.
@@ -165,3 +165,5 @@ def dispatch_alerts(automation, execution):
 
     if sent_any:
         _mark_sent(automation.id)
+
+

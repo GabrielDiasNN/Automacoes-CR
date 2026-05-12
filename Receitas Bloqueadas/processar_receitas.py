@@ -32,7 +32,7 @@ if sys.stderr.encoding != "utf-8":
 
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-PROCESS] [{level}] [ExecId:{exec_id}] {message}"
     b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
     sys.stderr.write(f"B64:{b64_msg}\n")
@@ -109,7 +109,7 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
                     <th colspan="6" style="background-color:{cor_header}; color:{cor_header_text}; padding:18px; text-align:center;">
                         <div style="font-size:17pt; font-weight:bold; margin-bottom:5px;">{rel_title}</div>
                         <div style="font-size:10.5pt; font-weight:normal; color:{cor_sub_header};">
-                            Atualizado em {datetime.now().strftime('%d/%m/%Y %H:%M')}
+                            Atualizado em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                         </div>
                     </th>
                 </tr>
@@ -386,15 +386,12 @@ def process() -> None:
                     diff_rows.append(row_diff)
                     stats["del"] += 1
 
+        state_tmp_path = state_path + ".tmp"
         if not diff_rows:
+            if os.path.exists(state_tmp_path):
+                log("Sem novas alteracoes, mas detectado estado temporario pendente de notificacao.", "INFO", exec_id)
+                sys.exit(0)
             log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
-            state_data = {
-                "last_hash": str(pd.util.hash_pandas_object(df_agreg).sum()),
-                "updated_at": datetime.now().isoformat(),
-                "records": df_agreg.to_dict(orient="records"),
-            }
-            with open(state_path, "w", encoding="utf-8") as f:
-                json.dump(state_data, f, ensure_ascii=False, indent=4)
             sys.exit(2)
 
         state_data = {
@@ -402,7 +399,8 @@ def process() -> None:
             "updated_at": datetime.now().isoformat(),
             "records": df_agreg.to_dict(orient="records"),
         }
-        with open(state_path, "w", encoding="utf-8") as f:
+        # Salva apenas no temporario. O commit para o oficial sera via PowerShell apos notificacoes.
+        with open(state_tmp_path, "w", encoding="utf-8") as f:
             json.dump(state_data, f, ensure_ascii=False, indent=4)
 
         excel_path = os.path.join(os.path.dirname(__file__), "Receitas Bloqueadas.xlsx")
@@ -451,3 +449,5 @@ def process() -> None:
 
 if __name__ == "__main__":
     process()
+
+

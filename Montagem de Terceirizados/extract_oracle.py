@@ -1,4 +1,4 @@
-# {
+﻿# {
 #   "version": "1.2.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
 #   "contract": "direct-oracle-fetch, thick-mode-padronizado, retry-on-failure",
@@ -28,7 +28,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs em Base64 para o stderr para garantir integridade total."""
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
     b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
     sys.stderr.write(f"B64:{b64_msg}\n")
@@ -144,3 +144,5 @@ def extract() -> None:
 
 if __name__ == "__main__":
     extract()
+
+

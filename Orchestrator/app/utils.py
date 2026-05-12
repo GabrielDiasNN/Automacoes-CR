@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Utilitarios compartilhados do Orchestrator Hub Soberano v5.0.
+Utilitarios compartilhados do Orchestrator Central de Automacoes v5.0.
 
 Modulo centralizado para eliminar duplicacao entre routers:
   - log_audit(): Registra trilha de auditoria no AuditLog.
@@ -12,15 +12,13 @@ Modulo centralizado para eliminar duplicacao entre routers:
 
 import os
 import re
+from datetime import datetime
 
+import pytz
 from fastapi import Request
 from sqlalchemy.orm import Session
 
 from . import models
-
-# ---------------------------------------------------------------------------
-# Auditoria (deduplicacao de automations.py e executions.py)
-# ---------------------------------------------------------------------------
 
 
 def log_audit(
@@ -31,13 +29,18 @@ def log_audit(
     actor: str,
     details: str = None,
 ) -> None:
-    """Registra uma entrada no AuditLog de forma centralizada."""
+    """Registra uma entrada no AuditLog de forma centralizada com protecao de tamanho."""
+    # Truncar detalhes excessivos para evitar inchaco do DB (max 20k chars)
+    safe_details = details
+    if details and len(details) > 20000:
+        safe_details = details[:20000] + "\n... [TRUNCATED BY SYSTEM]"
+
     entry = models.AuditLog(
         action=action,
         entity_type=entity_type,
         entity_id=str(entity_id) if entity_id is not None else None,
         actor=actor,
-        details=details,
+        details=safe_details,
     )
     db.add(entry)
 
@@ -60,12 +63,15 @@ def get_client_ip(request: Request) -> str:
 # Validacao V - Pilar de Validacao (Pre-flight)
 # ---------------------------------------------------------------------------
 
-_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 _\-\.]+$")
+# Regex permite alfanumericos, espacos, pontos, hifens e acentuacao PT-BR comum (ASCII-Safe via Unicode Range)
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 _\-\.\u00C0-\u00FF]+$")
 
 
 def sanitize_name(name: str) -> bool:
-    """Retorna True se o nome e ASCII-safe (sem path traversal)."""
-    return bool(_SAFE_NAME_RE.match(name)) if name else False
+    """Retorna True se o nome e seguro para uso no sistema (sem path traversal)."""
+    if not name or ".." in name:
+        return False
+    return bool(_SAFE_NAME_RE.match(name))
 
 
 def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str]:
@@ -80,7 +86,7 @@ def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str
       - Path traversal (/../) e bloqueado.
     """
     if not script_path:
-        return False, "script_path nao pode ser vazio."
+        return False, "script_path n\u00e3o pode ser vazio."
 
     # Resolver caminho
     if script_path.startswith("./") or script_path.startswith(".\\"):
@@ -94,9 +100,9 @@ def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str
 
     # Anti path-traversal: o caminho resolvido deve estar dentro do project_root
     if not abs_path.startswith(os.path.normpath(project_root)):
-        return False, f"script_path fora do diretorio permitido: {abs_path}"
+        return False, f"script_path fora do diret\u00f3rio permitido: {abs_path}"
 
     if not os.path.isfile(abs_path):
-        return False, f"Script nao encontrado: {abs_path}"
+        return False, f"Script n\u00e3o encontrado: {abs_path}"
 
     return True, abs_path

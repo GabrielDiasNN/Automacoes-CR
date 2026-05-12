@@ -43,7 +43,7 @@ ROBO_VERSAO: str = "v1.1"
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs em Base64 para o stderr (Isolamento total)."""
-    ts: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    ts: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg: str = f"[{ts}] [PY-VALIDATE] [{level}] [ExecId:{exec_id}] {message}"
     b64_msg: str = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
     sys.stderr.write(f"B64:{b64_msg}\n")
@@ -205,7 +205,7 @@ def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
     )
     html += "<div style='overflow-x:auto; border: 1px solid #e5e7eb; border-radius: 8px;'><table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9pt;width:100%; white-space:nowrap;'>"
     html += "<tr style='background-color:#f87171; color:#ffffff; text-align:center; font-weight:bold;'><th>Sit. OB</th><th>Prog.</th><th>Fac&ccedil;&atilde;o</th><th>N&ordm; OB</th><th>Ref. Cliente</th><th>NF (Montagem)</th><th>NF (Prog.)</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th></tr>"
-    agora: str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    agora: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     for idx, e in enumerate(erros):
         bg: str = "#ffffff" if idx % 2 == 0 else "#fef2f2"
         html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('ST_OB_ABERTO'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('NR_OB'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td style='color:#6b7280;'>{agora}</td></tr>"
@@ -358,16 +358,18 @@ def main() -> None:
         elif total_erros > 0 and (novos or corrigidos):
             tipo_notif = "ALTERACAO"
 
+    cache_tmp_file = cache_file + ".tmp"
     try:
-        with open(cache_file, "w", encoding="utf-8") as f_out:
+        # Salva apenas no temporario. O commit ocorre no run.ps1 apos sucesso no e-mail.
+        with open(cache_tmp_file, "w", encoding="utf-8") as f_out:
             json.dump(
                 {"timestamp": datetime.now().isoformat(), "itens": dic_atuais},
                 f_out,
                 ensure_ascii=False,
                 indent=2,
             )
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
+    except Exception as e:
+        log(f"Falha ao gravar cache temporario: {e}", "WARN", exec_id)
 
     if tipo_notif != "NENHUMA":
         elapsed_time: float = time.time() - start_time
@@ -425,3 +427,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+

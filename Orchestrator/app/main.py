@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Orchestrator Hub Soberano v5.0.0 - Ponto de Entrada.
+Orchestrator Central de Automacoes v5.0.0 - Ponto de Entrada.
 
 Responsabilidades:
   1. Inicializar FastAPI e agendador
@@ -17,9 +17,9 @@ import json
 import logging
 import os
 import time
+from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from logging.handlers import RotatingFileHandler
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -34,6 +34,7 @@ from .database import SessionLocal, engine
 from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
                          TimingMiddleware)
 from .routers import automations, executions, system, websocket
+from .timezone import get_now_local
 
 # ---------------------------------------------------------------------------
 # Configuracao de Ambiente
@@ -50,7 +51,7 @@ load_dotenv(os.path.join(project_root, ".env"))
 
 
 class JsonFormatter(logging.Formatter):
-    """Formatter customizado para emitir logs em JSON estruturado."""
+    """Formatter customizado para emitir logs em JSON estruturado (Pilar L)."""
 
     def format(self, record):
         log_record = {
@@ -58,7 +59,7 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "msg": record.getMessage(),
             "logger": record.name,
-            "request_id": getattr(record, "request_id", None),
+            "request_id": getattr(record, "request_id", "SYSTEM"),
         }
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
@@ -69,19 +70,6 @@ log_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logs"
 )
 os.makedirs(log_dir, exist_ok=True)
-
-
-# Formatador JSON robusto para Rotacao
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        doc = {
-            "timestamp": self.formatTime(record, self.datefmt),
-            "level": record.levelname,
-            "message": record.getMessage(),
-            "correlation_id": getattr(record, "correlation_id", "SYSTEM"),
-        }
-        return json.dumps(doc)
-
 
 LOG_FILE = os.path.join(log_dir, "orchestrator.log")
 handler = RotatingFileHandler(
@@ -103,7 +91,10 @@ logger.addHandler(console_handler)
 # Motor de Agendamento (APScheduler)
 # ---------------------------------------------------------------------------
 
-scheduler = BackgroundScheduler()
+# Nota: pytz deve estar disponivel se usado explicitamente
+import pytz
+
+scheduler = BackgroundScheduler(timezone=pytz.timezone("America/Sao_Paulo"))
 
 
 def _scheduled_task_wrapper(automation_id: int):
@@ -127,7 +118,7 @@ def _scheduled_task_wrapper(automation_id: int):
         )
 
         if existing:
-            logger.info(f"Agendamento ignorado: {db_auto.name} ja tem execucao ativa.")
+            logger.info(f"Agendamento ignorado: {db_auto.name} j\u00e1 tem execu\u00e7\u00e3o ativa.")
             return
 
         exec_id = f"CRON_{automation_id}_{int(time.time())}"
@@ -188,7 +179,7 @@ def _cleanup_zombie_tasks():
         )
         for task in zombies:
             task.status = "FAILED_BY_REBOOT"
-            task.finished_at = datetime.now(timezone.utc)
+            task.finished_at = get_now_local()
             task.logs = (task.logs or "") + "\n[REBOOT] Interrompida."
         db.commit()
         if zombies:
@@ -233,7 +224,7 @@ async def lifespan(app: FastAPI):
 
     if not scheduler.running:
         scheduler.start()
-    logger.info("Hub Soberano v5.0.0 - Orchestrator online.")
+    logger.info("Central de Automa\u00e7\u00f5es v5.2.0 - Orchestrator online.")
     yield
     if scheduler.running:
         scheduler.shutdown(wait=False)
@@ -244,7 +235,7 @@ async def lifespan(app: FastAPI):
 # Aplicativo FastAPI
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Hub Soberano", version="5.0.0", lifespan=lifespan)
+app = FastAPI(title="Central de Automa\u00e7\u00f5es", version="5.2.0", lifespan=lifespan)
 
 # --- CORS Hardened: restrito a origens configuradas via .env ---
 _raw_origins = os.environ.get(
@@ -283,10 +274,6 @@ def legacy_metrics():
 
 # --- SERVICO DE ARQUIVOS ESTATICOS (DASHBOARD) ---
 # Resolvendo raiz do projeto (C:\Automacoes)
-# __file__ = C:\Automacoes\Orchestrator\app\main.py
-# 1 level = C:\Automacoes\Orchestrator\app
-# 2 levels = C:\Automacoes\Orchestrator
-# 3 levels = C:\Automacoes
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 dashboard_path = os.path.join(BASE_DIR, "Dashboard")
 lib_path = os.path.join(BASE_DIR, "lib")
@@ -297,7 +284,7 @@ if os.path.exists(dashboard_path):
     )
     logger.info(f"Dashboard montado em: {dashboard_path}")
 else:
-    logger.error(f"ERRO: Pasta Dashboard nao encontrada em: {dashboard_path}")
+    logger.error(f"ERRO: Pasta Dashboard n\u00e3o encontrada em: {dashboard_path}")
 
 if os.path.exists(lib_path):
     app.mount("/lib", StaticFiles(directory=lib_path), name="lib")
@@ -307,7 +294,7 @@ if os.path.exists(lib_path):
 def read_root():
     return {
         "status": "online",
-        "version": "5.0.0",
+        "version": "5.2.0",
         "scheduler_running": scheduler.running,
         "dashboard_url": "/dashboard/",
         "docs_url": "/docs",

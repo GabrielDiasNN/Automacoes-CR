@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Middleware Stack do Orchestrator Hub Soberano v5.0.
+Middleware Stack do Orchestrator Central de Automacoes v5.0.
 
 Camadas de seguranca e observabilidade:
   - RequestIdMiddleware: Injeta X-Request-Id unico em toda requisicao
@@ -18,6 +18,7 @@ import os
 import time
 import uuid
 
+from typing import Optional
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import APIKeyHeader
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -35,15 +36,20 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 def get_api_key(request: Request, api_key: str = Depends(api_key_header)):
     """Valida API Key com comparacao timing-safe (anti timing-attack)."""
-    expected_key = os.environ.get("ORCHESTRATOR_API_KEY", "hub-secret-token")
+    # Secure-by-Default: Se a key nao estiver no ENV, gera um valor aleatorio impossivel de usar.
+    expected_key = os.environ.get("ORCHESTRATOR_API_KEY")
+    if not expected_key:
+        expected_key = f"MISSING_ENV_{uuid.uuid4()}"
+
     if api_key is None or not hmac.compare_digest(api_key, expected_key):
         client_ip = request.client.host if request.client else "unknown"
+        req_id = getattr(request.state, "request_id", "UNK")
         logger.warning(
-            f"[AUTH_FAIL] Tentativa de acesso invalida de IP={client_ip} "
+            f"[{req_id}] [AUTH_FAIL] Tentativa de acesso inv\u00e1lida de IP={client_ip} "
             f"path={request.url.path}"
         )
         raise HTTPException(
-            status_code=403, detail="Acesso negado: API Key invalida ou ausente."
+            status_code=403, detail="Acesso negado: API Key inv\u00e1lida ou ausente."
         )
     return api_key
 
@@ -103,7 +109,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Aplica-se apenas a endpoints /api (nao afeta dashboard/static).
     """
 
-    def __init__(self, app, rpm: int = None):
+    def __init__(self, app, rpm: Optional[int] = None):
         super().__init__(app)
         self.rpm = rpm or int(os.environ.get("RATE_LIMIT_RPM", "120"))
         self._window: dict[str, collections.deque] = {}

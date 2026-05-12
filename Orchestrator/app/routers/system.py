@@ -2,7 +2,7 @@
 # mypy: ignore-errors
 """
 
-Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.0.
+Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.1.
 
 """
 
@@ -49,46 +49,32 @@ def health_check(db: Session = Depends(get_db)):
     from ..main import scheduler
 
     # Status do banco
-
     db_status = "online"
-
     try:
-
         db.execute(text("SELECT 1"))
-
     except Exception as e:
-
-        db_status = f"error: {str(e)}"
+        db_status = f"erro: {str(e)}"
 
     # Status do scheduler
-
-    sched_status = "running" if scheduler.running else "stopped"
+    sched_status = "executando" if scheduler.running else "parado"
 
     # Status do worker
-
     worker_status = _get_worker_status(db)
 
     # Tarefas pendentes
-
     pending = (
         db.query(models.Execution).filter(models.Execution.status == "PENDING").count()
     )
 
     # Tamanho do banco
-
     disk_mb = get_db_size_mb()
 
     # Determinar saude geral
-
-    overall = "healthy"
-
+    overall = "saud\u00e1vel"
     if db_status != "online" or not scheduler.running:
-
-        overall = "unhealthy"
-
+        overall = "inst\u00e1vel"
     elif not worker_status.is_alive:
-
-        overall = "degraded"
+        overall = "degradado"
 
     wal_mb = get_wal_size_mb()
 
@@ -494,7 +480,7 @@ def get_version():
     ]
 
     return schemas.SystemVersion(
-        version="5.0.0",
+        version="5.2.0",
         python_version=sys.version.split()[0],
         started_at=STARTUP_TIME.isoformat(),
         uptime_seconds=round(uptime.total_seconds(), 2),
@@ -574,7 +560,9 @@ def manual_purge(
     db.commit()
 
     return {
-        "message": f"{removed} execucao(oes) removida(s).",
+        "message": f"{removed} execu\u00e7\u00e3o(\u00f5es) removida(s).",
         "retention_days": retention_days,
         "removed_count": removed,
     }
+
+

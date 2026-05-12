@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Fixtures de teste do Orchestrator Hub Soberano v5.0.
+Fixtures de teste do Orchestrator Central de Automacoes v5.0.
 
 Usa banco SQLite in-memory com StaticPool para isolamento.
 Sobrescreve tanto get_db quanto o engine global para que o lifespan funcione.

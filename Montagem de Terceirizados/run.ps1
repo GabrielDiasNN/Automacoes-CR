@@ -41,6 +41,8 @@ $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 # Scripts
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $validatePy = Join-Path $ScriptDir "validate_and_generate_html.py"
+$CacheFile  = Join-Path $ScriptDir ".cache_erros.json"
+$CacheTmp   = $CacheFile + ".tmp"
 $LogDir     = Join-Path $ScriptDir "Logs"
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
@@ -51,6 +53,8 @@ Import-Module $libEmail   -Force
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = if (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 }
+Enter-AutomationLock -ExecId $ExecId
+
 $LogFile = Get-AutomacaoLogPath -Slug "Montagem_Terceirizados" -LogDir $LogDir
 
 # Helper para Log com suporte a Base64 Interno (v5.0.0)
@@ -126,8 +130,14 @@ try {
     $nativeProc.WaitForExit()
 
     if ($nativeProc.ExitCode -ne 0 -or -not (Test-Path $dataFile)) {
-        throw "Falha critica na extracao nativa (ExitCode: $($nativeProc.ExitCode))."
+        throw "Falha critica na extracao nativa (ExitCode: $($nativeProc.ExitCode)). Arquivo de dados nao encontrado."
     }
+
+    $fileSize = (Get-Item $dataFile).Length
+    if ($fileSize -lt 10) {
+        throw "Arquivo de dados $dataFile gerado mas parece vazio ou corrompido (Tamanho: $fileSize bytes)."
+    }
+    Write-Log "Dados extraidos com sucesso ($( [math]::round($fileSize/1kb, 2) ) KB)."
 
     # 2. Validacao e HTML
     Write-Log "Fase 2: Validando dados e gerando notificacao..."
@@ -169,11 +179,22 @@ try {
         
         if ($EmailPreviewOnly -or -not [string]::IsNullOrWhiteSpace($finalTo)) {
             Write-Log "Enviando e-mail de teste para: $finalTo"
-            Send-OutlookEmail -To $finalTo -Subject $subject -HtmlBody $htmlOutput -ExecId $ExecId -LogPath $LogFile -PreviewOnly:([bool]$EmailPreviewOnly)
+            $sent = Send-OutlookEmail -To $finalTo -Subject $subject -HtmlBody $htmlOutput -ExecId $ExecId -LogPath $LogFile -PreviewOnly:([bool]$EmailPreviewOnly)
         } else {
             Write-Log "Disparando e-mail oficial..."
-            Send-OutlookEmail -To "gabriel.dias@costaricamalhas.ind.br" -Subject $subject -HtmlBody $htmlOutput -ExecId $ExecId -LogPath $LogFile
+            $sent = Send-OutlookEmail -To "gabriel.dias@costaricamalhas.ind.br" -Subject $subject -HtmlBody $htmlOutput -ExecId $ExecId -LogPath $LogFile
         }
+
+        if ($sent) {
+            Write-Log "Confirmando compromisso de estado (Commit Success)..."
+            if (Test-Path $CacheTmp) {
+                Move-Item -Path $CacheTmp -Destination $CacheFile -Force
+                Write-Log "Cache de erros consolidado: $CacheFile"
+            }
+        } else {
+            Write-Log "Falha no envio de e-mail. O cache NAO sera atualizado para garantir retentativa." -Lvl "WARN"
+        }
+
         Remove-Item $payloadFile -Force
         if (Test-Path $dataFile) { Remove-Item $dataFile -Force }
     } else {
@@ -192,5 +213,6 @@ try {
         }
     }
     Write-Log "FIM - Processo finalizado."
+    Exit-AutomationLock
 }
 

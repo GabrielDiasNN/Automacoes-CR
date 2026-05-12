@@ -41,6 +41,8 @@ $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $generatePy = Join-Path $ScriptDir "generate_html_report.py"
 $configPath = Join-Path $ScriptDir "receitas_config.json"
+$StatePath  = Join-Path $ScriptDir "receitas_state.json"
+$StateTmp   = $StatePath + ".tmp"
 $LogDir     = Join-Path $ScriptDir "Logs"
 
 Import-Module $libLogging -Force
@@ -110,10 +112,15 @@ if (-not $preFlight) {
     Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
 }
 
-Write-Log "========================================================================================="
 Write-Log "INICIO - Arquitetura Pure-Python (CTE Nativo) Receitas Emitidas. ExecId=$ExecId"
 
 try {
+    # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
+    if (-not (Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile)) {
+        Exit-WithCode 0 "Execucao abortada: Mutex ja retido por outra instancia deste ExecId."
+    }
+
+    try {
     # =========================================================================
     # 1. Extracao de Dados (Python -> JSON Stdout) com Retry
     # =========================================================================
@@ -216,8 +223,21 @@ try {
 
     if (-not $emailOk) { throw "Falha definitiva no envio do e-mail via Outlook COM." }
 
+    if ($emailOk) {
+        Write-Log "Confirmando compromisso de estado (Two-Phase Commit Success)..."
+        if (Test-Path $StateTmp) {
+            Move-Item -Path $StateTmp -Destination $StatePath -Force
+            Write-Log "Estado de idempotencia consolidado: $StatePath"
+        }
+    }
+
     Write-Log "FIM - Processo concluido com sucesso."
     Exit-WithCode 0
+
+    } finally {
+        # Liberacao do bloqueio global
+        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
+    }
 
 } catch [System.Exception] {
     # Re-throw para nao engolir o Exit-WithCode 0 do bloco de idempotencia

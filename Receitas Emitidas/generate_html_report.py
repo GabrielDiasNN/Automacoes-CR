@@ -1,4 +1,4 @@
-# pylint: disable=all
+﻿# pylint: disable=all
 # mypy: ignore-errors
 # -*- coding: utf-8 -*-
 import base64
@@ -24,7 +24,7 @@ if hasattr(sys.stdin, "encoding") and sys.stdin.encoding != "utf-8-sig":
 
 def log(message, level="INFO", exec_id="manual"):
     """Envia logs em Base64 para o stderr (Isolamento total)."""
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}"
     b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
     sys.stderr.write(f"B64:{b64_msg}\n")
@@ -129,7 +129,7 @@ def generate_html():
         if inicio and "T" in inicio:
             try:
                 dt = datetime.fromisoformat(inicio)
-                inicio = dt.strftime("%d/%m/%Y %H:%M")
+                inicio = dt.strftime("%d/%m/%Y %H:%M:%S")
             except:
                 pass
 
@@ -238,7 +238,7 @@ def generate_html():
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{title_font:.1f}pt;font-weight:bold;line-height:{title_line}px;color:#000000;text-align:center;'>{html_escape(config['layout']['title'])}</td></tr>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>{html_escape(config['layout']['subtitle'])}</td></tr>
-    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M')} | Maquinas: {machine_count} | Receitas: {recipe_count}</td></tr>
+    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | Maquinas: {machine_count} | Receitas: {recipe_count}</td></tr>
     </table>
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr>{header_row}</tr><tr>{content_row}</tr>
@@ -252,3 +252,5 @@ def generate_html():
 
 if __name__ == "__main__":
     generate_html()
+
+

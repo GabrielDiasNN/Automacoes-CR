@@ -58,13 +58,24 @@ if (-not (Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckPaths
     Write-Log "FALHA NO PRE-FLIGHT. Abortando." -Lvl "ERRO"; exit 9
 }
 
-Write-Log "========================================================================================="
 Write-Log "INICIO - Nova Automacao | ExecId=$ExecId"
 
 try {
-    # 1. LOGICA DE NEGOCIO AQUI
-    Write-Log "Executando tarefas..."
-    
+    # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
+    if (-not (Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile)) {
+        Write-Log "Execucao abortada: Mutex ja retido por outra instancia deste ExecId."
+        exit 0
+    }
+
+    try {
+        # 1. LOGICA DE NEGOCIO AQUI
+        Write-Log "Executando tarefas..."
+        
+    } finally {
+        # Liberacao do bloqueio global
+        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
+    }
+
 } catch [System.Exception] {
     Write-Log "ERRO FATAL: $_" -Lvl "ERRO"; exit 1
 } finally {

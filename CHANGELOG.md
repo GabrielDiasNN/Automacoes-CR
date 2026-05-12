@@ -6,70 +6,58 @@ O projeto segue os princípios de **Resiliência, Escala e Governança (Protocol
 
 ---
 
-## [5.1.3] — 2026-05-11
-### 🛠️ Corrigido
-- **Receitas Emitidas (Idempotência)**: Corrigida falha que causava disparos duplicados de e-mails. Removidos campos voláteis (`SYSDATE`/`Valida_Atualizacao` e `DIAS_PESADO`) da query SQL e implementada ordenação determinística (`NUMERO_OB`) no Python para garantir estabilidade do hash de idempotência.
+## [5.2.1] — 2026-05-12
+### 🛡️ Resgate Crítico & Concorrência (Hardenized v5.2.1)
+- **Atomic Claim Strategy**: Refatoração do loop do Worker (`worker.py`) para realizar a reserva de tarefas via banco de dados antes do despacho, eliminando duplicidade de execuções (Race Conditions).
+- **Zombie Process Cleanup**: Upgrade do `Start-Orchestrator.ps1` para rastrear e encerrar Workers órfãos via arquivo `.pid`, garantindo que apenas uma instância do motor de execução esteja ativa.
+- **Global Mutex Lock**: Implementada a função `Enter-AutomationLock` no `Lib-Logging.psm1` utilizando `System.Threading.Mutex` do .NET, fornecendo uma camada de proteção no nível do SO para o mesmo `ExecId`.
+- **Email Library Fix**: Adicionado suporte ao parâmetro `-PreviewOnly` em `Lib-Email.psm1`, corrigindo falhas de envio em automações que utilizam modo de visualização.
 
 ---
 
-## [5.1.2] — 2026-05-11
-### 🏗️ Governança e Qualidade
-- **Tipagem Estrita (Mypy)**: Correção abrangente de assinaturas de funções e anotações de tipo em todas as automações (`Montagem de Terceirizados`, `Receitas Bloqueadas`, `Receitas Emitidas`) e no `Orchestrator`, alcançando conformidade com `mypy --strict`.
-- **Qualidade de Código (Pylint)**: Refatoração e adequação de sintaxe e complexidade ciclomática para atingir nota máxima (10.00/10) nas validações do Pylint.
-- **Validação Autônoma**: Script de governança `Test-PythonGovernance.ps1` aprimorado para injetar o contexto `.venv`, garantindo validações reais de lint e type hints nos hooks de pre-commit.
-- **Testes Unitários**: Validação dos fluxos do FastAPI (CRUD, schemas de bloqueio de Path Traversal) via `pytest`.
+## [5.2.0] — 2026-05-12
+### 🏗️ Sincronização & Hardening (Enterprise Gold v5.2.0)
+- **Sincronização de Versão**: Unificação de toda a stack (Backend, Worker, Dashboard) para a versão v5.2.0 Gold.
+- **Hardening de Segurança**: Implementação de API Key robusta (64 chars) gerada via `secrets.token_hex` e externalização total via `.env`.
+- **Infraestrutura Externalizada**: Migração de `ALLOWED_ORIGINS` e `WORKER_MAX_CONCURRENCY` para variáveis de ambiente.
+- **Refatoração V.A.L.E.G.**: Eliminação de URLs hardcoded no Worker, correção de imports top-level e melhoria no tratamento de exceções (anti-bare except).
+- **Dashboard v5.2.0**: Atualização visual e técnica da interface para refletir o novo estado de maturidade do Hub.
+
+---
+
+## [5.1.2] — 2026-05-12
+### 🛡️ Resiliência & Idempotência (Safe-State Guard)
+- **Safe-State Guard (Two-Phase Commit)**: Refatoração global da gestão de estado nas automações (`Receitas Bloqueadas`, `Receitas Emitidas`, `Montagem de Terceirizados`). O estado oficial agora só é consolidado após o sucesso confirmado de todas as notificações (Email/WhatsApp).
+- **Atomic State Commitment**: Migração da responsabilidade de atualização dos arquivos `*_state.json` do Python para o orquestrador PowerShell, usando arquivos `.tmp` como área de transição.
+- **WhatsApp Reliability**: Endurecimento da validação de códigos de saída do `Send-WhatsApp.ps1`, impedindo o avanço do estado em caso de falhas de autenticação ou conectividade.
+- **Cache Persistence**: Implementação de cache temporário em `Montagem de Terceirizados` para garantir retentativa automática de divergências não notificadas.
 
 ---
 
 ## [5.1.1] — 2026-05-11
-### 🏗️ Governança (AI-Native)
-- **Documentação Contínua**: Atualizado `GEMINI.md` para tornar obrigatória a atualização do `CHANGELOG.md` em cada commit bem-sucedido.
-- **Protocolo de Histórico**: Implementada regra de sincronismo para garantir trilha de auditoria técnica legível por humanos e IA.
+### 🏗️ Arquitetura & Segurança (V.A.L.E.G. v5.1.1)
+- **Zero-Trust Dashboard**: Implementado prompt de segurança para API Key no front-end, eliminando tokens hardcoded e exigindo autenticação administrativa.
+- **ASCII-Safe Rendering**: Migração completa de literais HTML para Entities Hexadecimais no Dashboard, garantindo exibição correta de acentos em pt-BR sem violar a regra de código-fonte ASCII (0-127).
+- **Worker Resilience**: Adicionado controle de Graceful Shutdown no motor de execução, garantindo a terminação de processos filhos PowerShell para evitar processos órfãos.
+- **SQLite Performance**: Otimização de `temp_store=MEMORY` e refatoração do purge de execuções para exclusão em massa no `database.py`.
+- **Unified Logging**: Padronização do `JsonFormatter` global no `main.py` para correlação total de eventos de sistema via `request_id`.
+- **Download Endurecido**: Implementada validação de `os.path.basename` e `startswith` no router de execuções para impedir ataques de Path Traversal.
 
 ---
 
 ## [5.1.0] — 2026-05-11
-### ✨ Adicionado
-- **Trava de Regressão de Encoding**: Script `Tools/Test-EncodingResilience.ps1` para validar round-trip de caracteres especiais (UTF-8).
-- **Soberania de Encoding**: Gatilho preventivo no Git Hook (pre-commit) que bloqueia caracteres não-ASCII no código-fonte.
-- **Variavel de Ambiente**: `PYTHONIOENCODING=utf-8` adicionada ao `.env` para estabilidade global.
-
-### 🛠️ Corrigido
-- **Worker v5.1**: Captura de logs de subprocessos PowerShell forçada para UTF-8 com substituição de erros, eliminando corrupção por CP1252.
-- **Divergência de Porta**: Estabilização do Dashboard e API na porta oficial `8000`.
-- **Timezone Heartbeat**: Ajuste na lógica de ping do Worker para maior precisão no Dashboard.
-
-### 🧹 Removido (Limpeza Técnica)
-- Pasta `Deprecated/`: Remoção definitiva do monitoramento v4.0 e scripts VBA legados.
-- Diretório `Orchestrator/scratch/`: Limpeza de rascunhos de desenvolvimento.
-- Diretório `Orchestrator/tests/test/`: Remoção de scripts de teste redundantes.
-- Arquivos de lock e caches: `.pytest_cache`, `__pycache__` e arquivos `.lock` de automações.
+### 🏗️ Arquitetura (ASCII-Safe)
+- **Padronização Global**: Conversão de todo o código-fonte (.py, .js) para o padrão ASCII-Safe (0-127).
+- **Escapes Unicode**: Uso de `\uXXXX` em Python para manter acentuação correta em logs e mensagens de erro no backend.
+- **Soberania Técnica**: Garantia de compatibilidade universal do código-fonte, eliminando dependências de encoding no nível de arquivo-fonte.
 
 ---
 
 ## [5.0.0] — 2026-05-09 (Enterprise Upgrade)
 ### 🏗️ Arquitetura
-- **Hub Soberano v5**: Migração completa da arquitetura monolítica para um modelo Control Tower baseado em FastAPI.
+- **Central de Automações v5**: Migração completa da arquitetura monolítica para um modelo Control Tower baseado em FastAPI.
 - **Modular Routers**: Divisão da API em `automations`, `executions`, `system` e `websocket`.
-- **Utilities Layer**: Centralização de lógica de auditoria e validação em `app/utils.py`.
-
-### 🚀 Funcionalidades
 - **SQLite WAL Engine**: Implementação de modo WAL com auto-checkpoint (APScheduler) para alta concorrência.
-- **Priority Queue**: Suporte a filas de prioridade (HIGH/NORMAL/LOW) para execuções.
-- **Log Replay**: Sistema de WebSocket que envia o histórico de logs imediatamente após a conexão.
-- **Rate Limiting**: Proteção de API com limite de 120 requisições/minuto por IP.
-- **Audit Log**: Trilha de auditoria persistente para todas as ações administrativas.
-
-### 🎨 Interface
-- **Dashboard v5.0**: Nova UI reativa com Design System Glassmorphism e ativos (fonts/JS) 100% locais para operação offline.
-
----
-
-## [4.0.1] — 2026-04-20
-### 🛡️ Estabilização
-- Implementação inicial do Protocolo V.A.L.E.G.
-- Refatoração do `MonitorAutomacoes.ps1` para maior resiliência.
-- Padronização de logs e tratamento de erros.
 
 ---
 Mantido pela equipe de Automações & Antigravity AI

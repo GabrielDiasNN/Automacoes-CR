@@ -13,9 +13,10 @@ if ($portInUse) {
         $procId = $conn.OwningProcess
         if ($procId -gt 0) {
             Write-Host "[UPGRADE] Liberando porta 8000 (Encerrando PID $procId)..." -ForegroundColor Yellow
-            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
-            # Fallback agressivo via taskkill para instancias zumbis
-            taskkill /F /PID $procId /T 2>$null
+            try { 
+                Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue 
+                taskkill /F /PID $procId /T 2>$null
+            } catch {}
         }
     }
     Start-Sleep -Seconds 2
@@ -30,13 +31,27 @@ if (Test-Path $envPath) {
     }
 }
 
-# 3. Iniciar Worker em Background
+# 3. Encerrar Worker anterior se existir (Pilar G)
+$workerPidFile = Join-Path $OrchestratorDir "worker.pid"
+if (Test-Path $workerPidFile) {
+    $oldPid = (Get-Content $workerPidFile -Raw -ErrorAction SilentlyContinue).Trim()
+    if ($oldPid -and (Get-Process -Id $oldPid -ErrorAction SilentlyContinue)) {
+        Write-Host "[RESET] Encerrando Worker anterior (PID $oldPid)..." -ForegroundColor Yellow
+        try {
+            Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue
+            taskkill /F /PID $oldPid /T 2>$null
+        } catch {}
+    }
+}
+
+# 4. Iniciar Worker em Background
 Set-Location $OrchestratorDir
-Write-Host "Iniciando Worker v5.0..." -ForegroundColor Cyan
+Write-Host "Iniciando Worker v5.2 (Hardenized)..." -ForegroundColor Cyan
 $workerProcess = Start-Process -FilePath $VenvPython -ArgumentList "worker.py" -WindowStyle Hidden -PassThru
-$workerProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "worker.pid") -Encoding ascii -Force
+$workerProcess.Id | Out-File -FilePath $workerPidFile -Encoding ascii -Force
 
 # 4. Iniciar FastAPI
-Write-Host "Iniciando Hub Soberano v5.0.0 na porta 8000 (Localhost)..." -ForegroundColor Green
-Write-Host "Dashboard disponivel em: http://localhost:8000/dashboard" -ForegroundColor White
+Write-Host "Iniciando Central de Automa$([char]0xE7)$([char]0xF5)es v5.0.0 na porta 8000 (Localhost)..." -ForegroundColor Green
+Write-Host "Dashboard disponiv$([char]0xED)l em: http://localhost:8000/dashboard" -ForegroundColor White
+
 & $VenvPython -m uvicorn app.main:app --host 127.0.0.1 --port 8000
