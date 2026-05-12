@@ -92,7 +92,7 @@ class ConnectionManager:
             {
                 "type": event_type,
                 "data": data,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_now_local().isoformat(),
             }
         )
         dead = []
@@ -161,5 +161,8 @@ async def broadcast_event_endpoint(event_data: dict):
         event_data.get("type", "UNKNOWN"), event_data.get("data", {})
     )
     return {"status": "ok"}
+
+
+
 
 

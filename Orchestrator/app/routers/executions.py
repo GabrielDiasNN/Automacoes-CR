@@ -306,7 +306,7 @@ def stop_execution(
         raise HTTPException(status_code=400, detail="Execu\u00e7\u00e3o j\u00e1 finalizada.")
 
     db_exec.status = "TERMINATED"
-    db_exec.finished_at = datetime.now()
+    db_exec.finished_at = get_now_local()
 
     log_audit(db, "STOP", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()

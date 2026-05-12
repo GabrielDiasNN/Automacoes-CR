@@ -1,11 +1,16 @@
 [CmdletBinding()]
 param(
     [string]$ExecId = "",
-    [string]$BasePath = "C:\Automacoes",
+    [string]$BasePath = "",
     [int]$KeepLogsDays = 7,
     [int]$KeepBackupsDays = 30,
     [switch]$DryRun
 )
+
+if ([string]::IsNullOrWhiteSpace($BasePath)) {
+    $BasePath = Split-Path -Parent $PSScriptRoot
+}
+if ([string]::IsNullOrWhiteSpace($BasePath)) { $BasePath = "." }
 
 $ErrorActionPreference = "Stop"
 

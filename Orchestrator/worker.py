@@ -16,7 +16,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from queue import Empty, Queue
 from types import FrameType
 from typing import Any, Dict, List, Optional, cast
@@ -30,6 +30,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 try:
     from app import models, notifications
     from app.database import SessionLocal
+    from app.timezone import get_now_local
 except ImportError as e:
     print(f"CRITICAL: Falha ao importar componentes do app: {e}")
     sys.exit(1)
@@ -128,7 +129,7 @@ def heartbeat_loop() -> None:
                 .filter(models.WorkerHeartbeat.id == 1)
                 .first()
             )
-            now: datetime = datetime.now(timezone.utc)
+            now: datetime = get_now_local()
 
             with cast(threading.Lock, stats["lock"]):
                 completed: int = stats["tasks_completed"]
@@ -267,7 +268,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             },
         )
 
-        task_start: datetime = datetime.now(timezone.utc)
+        task_start: datetime = get_now_local()
         timeout_delta: timedelta = timedelta(minutes=max_runtime)
         robot_dir: str = os.path.dirname(script_path)
 
@@ -336,7 +337,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                     broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
                     return
 
-                if (datetime.now(timezone.utc) - task_start) > timeout_delta:
+                if (get_now_local() - task_start) > timeout_delta:
                     subprocess.run(
                         ["taskkill", "/F", "/T", "/PID", str(process.pid)],
                         capture_output=True,
@@ -353,7 +354,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                     )
                     if db_exec_upd:
                         db_exec_upd.status = "TIMEOUT"
-                        db_exec_upd.finished_at = datetime.now(timezone.utc)
+                        db_exec_upd.finished_at = get_now_local()
                         db_exec_upd.duration_seconds = round(
                             time.time() - task_start_ts, 2
                         )
@@ -399,7 +400,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
 
             db_exec.logs = "".join(logs)
             db_exec.artifacts = artifacts_json
-            db_exec.finished_at = datetime.now(timezone.utc)
+            db_exec.finished_at = get_now_local()
             db.commit()
 
             if db_exec.status == "ERROR":
@@ -439,7 +440,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             db_exec.status = "ERROR"
             db_exec.logs = (db_exec.logs or "") + f"\nInternal Worker Error: {str(e)}"
             db_exec.exit_code = -1
-            db_exec.finished_at = datetime.now(timezone.utc)
+            db_exec.finished_at = get_now_local()
             db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
             db.commit()
         update_stat("tasks_failed", 1)
@@ -489,7 +490,7 @@ def main_loop() -> None:
                 # Marcar como RUNNING imediatamente no banco antes de despachar
                 exec_id = pending_task.id
                 pending_task.status = "RUNNING"
-                pending_task.started_at = datetime.now(timezone.utc)
+                pending_task.started_at = get_now_local()
                 db.commit()
                 
                 # Re-buscar para garantir que temos os dados apos o commit
@@ -518,7 +519,7 @@ def main_loop() -> None:
                 else:
                     pending_task.status = "ERROR"
                     pending_task.logs = "Automacao nao encontrada no banco."
-                    pending_task.finished_at = datetime.now(timezone.utc)
+                    pending_task.finished_at = get_now_local()
                     db.commit()
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Erro no loop do worker: %s", e)

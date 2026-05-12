@@ -25,9 +25,21 @@ function Write-Log {
     Write-AutomacaoLog -Message $Msg -Level $Type -ExecId "WATCHDOG" -LogPath $logPath
 }
 
-# --- CONFIGURACAO CENTRALIZADA ---
-$HubPort = if (Get-Command Get-HubConfig -ErrorAction SilentlyContinue) { Get-HubConfig -Key "HUB_API_PORT" -Default "8000" } else { "8000" }
-$HealthUrl = "http://127.0.0.1:$HubPort/"
+# --- CARREGAR CONFIGURACOES (.env) ---
+$envPath = Join-Path $ProjectRoot ".env"
+if (Test-Path $envPath) {
+    Get-Content $envPath | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
+        $parts = $_.Split('=', 2)
+        [System.Environment]::SetEnvironmentVariable($parts[0].Trim(), $parts[1].Trim().Trim('"').Trim("'"), "Process")
+    }
+}
+
+$HubPort = $env:HUB_API_PORT
+if (-not $HubPort) { $HubPort = "8000" }
+$ApiKey  = $env:ORCHESTRATOR_API_KEY
+
+# Endpoint de Health real
+$HealthUrl = "http://127.0.0.1:$HubPort/api/system/health"
 
 # --- GERENCIAMENTO DE MUTEX (Instancia Unica) ---
 $MutexName = if ([string]::IsNullOrWhiteSpace($MutexNameOverride)) { "Global\MonitorAutomacoesMutex" } else { $MutexNameOverride }
@@ -35,36 +47,39 @@ $script:MutexAcquired = $false
 try {
     $script:MonitorMutex = New-Object System.Threading.Mutex($false, $MutexName)
     $script:MutexAcquired = $script:MonitorMutex.WaitOne([TimeSpan]::FromSeconds(5), $false)
-} catch [System.Exception] {
-    $script:MutexAcquired = $true
-}
+} catch [System.Exception] { $script:MutexAcquired = $true }
 
 if (-not $script:MutexAcquired) {
     Write-Host "AVISO: Watchdog ja esta rodando." -ForegroundColor Yellow
     Exit 0
 }
 
-Write-Log "Watchdog iniciado v5.2.0. Vigiando Orquestrador em $HealthUrl"
+Write-Log "Watchdog iniciado v5.2.3. Vigiando Orquestrador em $HealthUrl"
+Start-Sleep -Seconds 10 # Tempo rapido de estabilizacao
 $script:LastOrchestratorRestart = $null
 
 while ($true) {
     try {
-        $orchestratorStatus = Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 5 -ErrorAction Stop
-        if ($null -eq $orchestratorStatus -or $orchestratorStatus.scheduler_running -ne $true) {
-            throw "Orquestrador respondeu mas o Scheduler esta inativo."
+        # Validacao autenticada (Pilar V)
+        $headers = @{ "X-API-Key" = $ApiKey }
+        $health = Invoke-RestMethod -Uri $HealthUrl -Headers $headers -TimeoutSec 5 -ErrorAction Stop
+        
+        if ($health.database -ne "online" -or $health.scheduler -ne "executando") {
+            throw "Sinal de vida OK, mas componentes internos falharam: DB=$($health.database), Sched=$($health.scheduler)"
         }
         $script:LastOrchestratorRestart = $null
     }
     catch {
         $errReason = $_.Exception.Message
         $now = Get-Date
-        if ($null -eq $script:LastOrchestratorRestart -or ($now - $script:LastOrchestratorRestart).TotalSeconds -gt 60) {
-            Write-Log "Watchdog: Orquestrador inacessivel ou instavel ($errReason). Reiniciando..." -Type "WARN"
+        # Cooldown de 120 segundos para evitar loops de reinicio infinito (Pilar E)
+        if ($null -eq $script:LastOrchestratorRestart -or ($now - $script:LastOrchestratorRestart).TotalSeconds -gt 120) {
+            Write-Log "Watchdog: Orquestrador instavel ou inacessivel ($errReason). Reiniciando..." -Type "WARN"
             $script:LastOrchestratorRestart = $now
             $startScript = Join-Path $InfrastructureDir "Start-Orchestrator.ps1"
             Start-Process "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
-            Start-Sleep -Seconds 15
+            Start-Sleep -Seconds 20
         }
     }
-    Start-Sleep -Seconds 20
+    Start-Sleep -Seconds 30
 }

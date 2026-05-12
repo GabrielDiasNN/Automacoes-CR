@@ -19,6 +19,8 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **ADR-004 (11/05/2026):** Hardening v5.2.0: Zero-Trust API Prompt e Graceful Shutdown de processos PowerShell.
 - **ADR-005 (12/05/2026):** Safe-State Guard (Two-Phase Commit): Estado de idempotência só é consolidado após confirmação de sucesso em todas as notificações (Email/WhatsApp).
 - **ADR-006 (12/05/2026):** Centralizacao de Config: Porta da API e parametros de infraestrutura movidos para `.env`. Acesso via `lib\Lib-Config.psm1`. Correcao de Disco (CIM+PSDrive) eliminando falsos positivos.
+- **ADR-008 (12/05/2026):** Auth-Resilience: Dashboard agora limpa automaticamente `localStorage` ao receber 403, forçando novo prompt de chave e evitando estados "zumbis" de desconexão.
+- **ADR-009 (12/05/2026):** Dynamic Tooling: Scripts de suporte (.bat/.ps1) devem obrigatoriamente carregar configurações do `.env` via `Lib-Config`, eliminando segredos hardcoded e garantindo consistência com a porta da API.
 
 ---
 Mantido pela equipe de Automações & Antigravity AI

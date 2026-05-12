@@ -14,10 +14,12 @@ Configuracoes hardened de SQLite:
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+from .timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
 
@@ -80,31 +82,32 @@ def get_wal_size_mb() -> float:
 # ---------------------------------------------------------------------------
 
 
-def run_wal_checkpoint() -> dict:
+def run_wal_checkpoint(mode: str = "PASSIVE") -> dict:
     """
-    Executa WAL checkpoint passivo - consolida o WAL no banco principal.
-    Chamado pelo APScheduler a cada 30 minutos.
-
-    Retorna: {"mode": str, "log": int, "checkpointed": int}
+    Executa WAL checkpoint para consolidar logs no banco principal.
+    Modos:
+      - PASSIVE (default): Nao bloqueia, consolida o que for possivel.
+      - TRUNCATE: Tenta consolidar TUDO e zera o arquivo WAL (usado no startup).
     """
     try:
         with engine.connect() as conn:
-            result = conn.execute(text("PRAGMA wal_checkpoint(PASSIVE)"))
+            # SQLAlchemy text() para execucao de pragmas com retorno
+            result = conn.execute(text(f"PRAGMA wal_checkpoint({mode})"))
             row = result.fetchone()
             wal_size = get_wal_size_mb()
             logger.info(
-                f"WAL Checkpoint executado: log={row[1]}, checkpointed={row[2]}, "
+                f"WAL Checkpoint ({mode}) executado: log={row[1]}, checkpointed={row[2]}, "
                 f"wal_size={wal_size}MB"
             )
             return {
-                "mode": "PASSIVE",
+                "mode": mode,
                 "log": row[1],
                 "checkpointed": row[2],
                 "wal_size_mb": wal_size,
             }
     except Exception as e:
-        logger.error(f"Falha no WAL checkpoint: {e}")
-        return {"mode": "PASSIVE", "log": -1, "checkpointed": -1, "error": str(e)}
+        logger.error(f"Falha no WAL checkpoint ({mode}): {e}")
+        return {"mode": mode, "log": -1, "checkpointed": -1, "error": str(e)}
 
 
 # ---------------------------------------------------------------------------
@@ -122,8 +125,9 @@ def purge_old_executions(retention_days: int = 90) -> int:
     """
     # Importacao local para evitar circular import (models depende de Base)
     from . import models as _models
+    from .timezone import get_now_local
 
-    cutoff = datetime.now() - timedelta(days=retention_days)
+    cutoff = get_now_local() - timedelta(days=retention_days)
     terminal_statuses = [
         "SUCCESS",
         "ERROR",

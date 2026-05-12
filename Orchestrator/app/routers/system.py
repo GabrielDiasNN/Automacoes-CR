@@ -21,6 +21,7 @@ from .. import models, schemas
 from ..database import (DB_PATH, get_db, get_db_size_mb, get_wal_size_mb,
                         purge_old_executions, run_wal_checkpoint)
 from ..middleware import get_api_key
+from ..timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
 
@@ -32,7 +33,7 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-STARTUP_TIME = datetime.now()
+STARTUP_TIME = get_now_local()
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +87,7 @@ def health_check(db: Session = Depends(get_db)):
 
     return schemas.SystemHealth(
         status=overall,
-        timestamp=datetime.now(),
+        timestamp=get_now_local(),
         database=db_status,
         scheduler=sched_status,
         worker=worker_status,
@@ -116,17 +117,9 @@ def _get_worker_status(db: Session) -> schemas.WorkerStatus:
 
     # Worker e considerado "vivo" se o heartbeat foi nos ultimos 60 segundos
 
-    now = datetime.now()
+    now = get_now_local()
 
     last_ping = hb.last_ping
-
-    # Lidar com timezone awareness
-
-    if last_ping.tzinfo is not None:
-
-        from datetime import timezone
-
-        now = datetime.now(timezone.utc)
 
     is_alive = (now - last_ping).total_seconds() < 60
 
@@ -283,7 +276,7 @@ def manual_backup(
 
     os.makedirs(backup_dir, exist_ok=True)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = get_now_local().strftime("%Y%m%d_%H%M%S")
 
     backup_path = os.path.join(backup_dir, f"automacoes_backup_{ts}.db")
 
@@ -377,7 +370,7 @@ def list_audit_log(
 def get_uptime(api_key: str = Depends(get_api_key)):
     """Retorna o tempo de atividade do Orchestrator."""
 
-    uptime = datetime.now() - STARTUP_TIME
+    uptime = get_now_local() - STARTUP_TIME
 
     return {
         "started_at": STARTUP_TIME.isoformat(),
@@ -466,7 +459,7 @@ def list_scheduled_jobs(
 def get_version():
     """Retorna informacoes detalhadas de versao e build do Orchestrator."""
 
-    uptime = datetime.now() - STARTUP_TIME
+    uptime = get_now_local() - STARTUP_TIME
 
     max_workers = int(os.environ.get("WORKER_MAX_CONCURRENCY", "2"))
 

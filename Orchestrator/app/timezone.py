@@ -1,11 +1,26 @@
-﻿from datetime import datetime, timedelta
+import pytz
+from datetime import datetime
 
 def get_now_local() -> datetime:
     """
-    Retorna o datetime atual ajustado para Brasilia (18:xx).
-    O SQLAlchemy/SQLite no Windows tende a tratar o horario local como UTC,
-    causando uma exibicao de +3h (21:xx). Esta funcao compensa essa diferenca.
+    Retorna o datetime atual no fuso horario de Brasilia (GMT-3).
+    Garante explicitamente que o fuso usado e America/Sao_Paulo, 
+    independentemente de como o SO esta configurado, e retorna naive.
+    Isso previne regressoes de fuso horario.
     """
-    return datetime.now() - timedelta(hours=3)
+    tz_br = pytz.timezone("America/Sao_Paulo")
+    return datetime.now(tz_br).replace(tzinfo=None)
 
-
+def to_br_timezone(dt: datetime) -> datetime:
+    """
+    Garante que o datetime seja naive e em Brasilia.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    
+    # Se aware, converte para local e remove tzinfo
+    tz_br = pytz.timezone("America/Sao_Paulo")
+    dt_br = dt.astimezone(tz_br)
+    return dt_br.replace(tzinfo=None)

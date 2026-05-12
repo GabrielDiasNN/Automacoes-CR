@@ -195,6 +195,10 @@ def _cleanup_zombie_tasks():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Pilar E - Escala: Garantir integridade do banco no startup
+    from .database import run_wal_checkpoint
+    run_wal_checkpoint("TRUNCATE")
+
     models.Base.metadata.create_all(bind=engine)
     _cleanup_zombie_tasks()
     reload_scheduled_tasks()

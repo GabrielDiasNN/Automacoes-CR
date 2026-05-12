@@ -25,18 +25,29 @@ _DANGEROUS_PATH_PATTERNS = ["..", "//", "\\\\", "%", "\x00"]
 
 
 def format_dt_br(val: Any) -> Any:
-    """Converte qualquer formato de data para o padrao brasileiro."""
+    """Converte qualquer formato de data para o padrao brasileiro (DD/MM/YYYY HH:MM:SS)."""
+    from .timezone import to_br_timezone
     if val is None:
         return None
+    
+    # Se for datetime, garante que seja naive BRT antes de formatar
     if isinstance(val, datetime):
-        return val.strftime("%d/%m/%Y %H:%M:%S")
+        dt = to_br_timezone(val)
+        return dt.strftime("%d/%m/%Y %H:%M:%S")
+    
     if isinstance(val, str):
         try:
-            # ISO format
+            # ISO format (ex: 2023-01-01T12:00:00Z ou 2023-01-01T12:00:00)
             if "T" in val:
-                dt = datetime.fromisoformat(val.replace("Z", ""))
+                # Remove Z se existir para evitar que fromisoformat force UTC aware
+                clean_val = val.replace("Z", "")
+                dt = datetime.fromisoformat(clean_val)
+                # Se for aware, converte para naive BRT
+                if dt.tzinfo is not None:
+                    dt = to_br_timezone(dt)
                 return dt.strftime("%d/%m/%Y %H:%M:%S")
-            # SQLite format
+            
+            # SQLite format (ex: 2023-01-01 12:00:00)
             dt = datetime.strptime(val.split(".")[0], "%Y-%m-%d %H:%M:%S")
             return dt.strftime("%d/%m/%Y %H:%M:%S")
         except (ValueError, TypeError, AttributeError):
@@ -246,8 +257,17 @@ class AutomationMetric(BaseModel):
         return self
 
 
+class MetricsSummary(BaseModel):
+    total_executions: int
+    success_count: int
+    error_count: int
+    success_rate: float
+    pending_count: int
+    avg_duration_sec: float
+
+
 class MetricsResponse(BaseModel):
-    summary: Any
+    summary: MetricsSummary
     automations: List[AutomationMetric]
 
 

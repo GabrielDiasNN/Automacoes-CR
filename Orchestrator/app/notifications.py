@@ -105,7 +105,7 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
         logger.warning("Lib-Email.psm1 nao encontrada. Alerta de e-mail suprimido.")
         return False
 
-    agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    agora = get_now_local().strftime("%d/%m/%Y %H:%M:%S")
     subject = f"[FALHA] Automacao '{task_name}' - {agora}"
 
     ps_command = (
