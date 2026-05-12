@@ -1,8 +1,9 @@
-?# ==============================================================================
+# ==============================================================================
 # ARQUIVO: ConfigurarEmailTeste.ps1
 # DESCRICAO: Define ou remove o e-mail de redirecionamento para modo de teste.
 # ==============================================================================
 
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
     [string]$Email = "gabriel.dias@costaricamalhas.ind.br",

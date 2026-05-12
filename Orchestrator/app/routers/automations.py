@@ -10,6 +10,7 @@ import json
 import logging
 import math
 import os
+import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -401,6 +402,17 @@ def set_global_test_mode(
             models.Automation.updated_at: get_now_local(),
         }
     )
+
+    # Sincroniza a variavel de ambiente do Windows
+    ps_script = os.path.join(PROJECT_ROOT, "Tools", "ConfigurarEmailTeste.ps1")
+    if os.path.exists(ps_script):
+        try:
+            if enabled:
+                subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps_script], check=True)
+            else:
+                subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps_script, "-Remover"], check=True)
+        except Exception as e:
+            logger.error(f"Erro ao sincronizar variavel AUTOMACAO_TEST_EMAIL: {e}")
 
     log_audit(
         db,
