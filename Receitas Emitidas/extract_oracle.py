@@ -45,17 +45,29 @@ def connect_and_execute(
     user: str, password: str, dsn: str, sql: str, exec_id: str
 ) -> tuple[list[str], list[Any]]:
     log(
-        "Conectando ao Oracle para extracao Nativa (com Circuit Breaker)...",
+        f"Conectando ao Oracle (DSN: {dsn}) para extra\u00e7\u00e3o Nativa (com Circuit Breaker)...",
         "INFO",
         exec_id,
     )
-    with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
-        cursor = connection.cursor()
-        log("Executando extracao oficial otimizada...", "INFO", exec_id)
-        cursor.execute(sql)
-        columns = [col[0] for col in cursor.description]
-        rows = cursor.fetchall()
-        return columns, rows
+    try:
+        with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
+            cursor = connection.cursor()
+            log("Executando extra\u00e7\u00e3o oficial otimizada...", "INFO", exec_id)
+            try:
+                cursor.execute(sql)
+                columns = [col[0] for col in cursor.description]
+                rows = cursor.fetchall()
+                log(f"Query executada com sucesso. Linhas retornadas: {len(rows)}", "INFO", exec_id)
+                return columns, rows
+            except oracledb.Error as e:
+                error_obj, = e.args
+                log(f"Erro SQL Oracle (ORA-{error_obj.code}): {error_obj.message}", "ERROR", exec_id)
+                # Log da query (parcial para seguranca)
+                log(f"DNA da Query: {sql[:200]}...", "DEBUG", exec_id)
+                raise
+    except oracledb.Error as e:
+        log(f"Erro de Conexao Oracle: {e}", "ERROR", exec_id)
+        raise
 
 
 def extract() -> None:
@@ -102,11 +114,17 @@ def extract() -> None:
                     record[key] = value.strip()
             data.append(record)
 
-        # Ordenacao deterministica para garantir estabilidade do hash
-        data.sort(key=lambda x: str(x.get("NUMERO_OB", "")))
+        # Ordenacao deterministica multi-coluna para garantir estabilidade absoluta do hash
+        data.sort(key=lambda x: (
+            str(x.get("NUMERO_OB", "")),
+            str(x.get("REDUZIDO", "")),
+            str(x.get("GRUPO", "")),
+            str(x.get("INICIO_TING", ""))
+        ))
 
-        json_payload = json.dumps(data, ensure_ascii=False)
+        json_payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
         current_hash = hashlib.sha256(json_payload.encode("utf-8")).hexdigest()
+        log(f"Hash calculado para {len(data)} registros: {current_hash}", "DEBUG", exec_id)
 
         state_path = os.path.join(os.path.dirname(__file__), "receitas_state.json")
         last_state_data = {}
@@ -122,9 +140,9 @@ def extract() -> None:
         state_tmp_path = state_path + ".tmp"
         if last_hash and current_hash == last_hash:
             if os.path.exists(state_tmp_path):
-                log("Sem novas alteracoes, mas detectado estado temporario pendente de notificacao.", "INFO", exec_id)
+                log("Sem novas altera\u00e7\u00f5es, mas detectado estado tempor\u00e1rio pendente de notifica\u00e7\u00e3o.", "INFO", exec_id)
             else:
-                log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
+                log("Sem altera\u00e7\u00f5es relevantes detectadas (Idempot\u00eancia).", "INFO", exec_id)
                 sys.exit(2)
 
         state_data = {
@@ -133,11 +151,11 @@ def extract() -> None:
         }
         # Salva apenas no temporario. O commit oficial ocorre no run.ps1 apos sucesso.
         with open(state_tmp_path, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, ensure_ascii=False, indent=4)
+            json.dump(state_data, f, ensure_ascii=False, indent=4, sort_keys=True)
 
         sys.stdout.write(json_payload)
         sys.stdout.flush()
-        log(f"Extracao concluida: {len(data)} registros.", "INFO", exec_id)
+        log(f"Extra\u00e7\u00e3o conclu\u00edda: {len(data)} registros.", "INFO", exec_id)
 
     except pybreaker.CircuitBreakerError:
         log(

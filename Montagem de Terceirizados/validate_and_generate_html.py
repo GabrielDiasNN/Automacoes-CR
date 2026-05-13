@@ -2,10 +2,10 @@
 # mypy: ignore-errors
 # -*- coding: utf-8 -*-
 # {
-#   "version": "1.1.0",
+#   "version": "1.2.0",
 #   "skill": "ai-native-development-standard",
 #   "contract": "ipc-file-payload",
-#   "description": "Nucleo de validacao NF/OB com tipagem estrita",
+#   "description": "Nucleo de validacao NF/OB com tipagem estrita e gramatica corrigida",
 #   "reliability": "Base64-Bridge-Logs, HTML-Entity-Shield"
 # }
 import base64
@@ -133,11 +133,11 @@ def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         detalhe_erro: str = ""
 
         if not montagem_ok and not prog_ok:
-            detalhe_erro = "Erro de Montagem e Programacao"
+            detalhe_erro = "Erro de Montagem e Programa\u00e7\u00e3o"
         elif not montagem_ok:
             detalhe_erro = "Erro de Montagem"
         elif not prog_ok:
-            detalhe_erro = "Erro de Programacao"
+            detalhe_erro = "Erro de Programa\u00e7\u00e3o"
 
         if detalhe_erro:
             row["DETALHE_ERRO"] = detalhe_erro
@@ -188,7 +188,7 @@ def gerar_tabela_categoria_html(
             + "<p style='font-size:10pt;color:#6b7280;margin:0 0 8px 0; background:#f9fafb; padding:10px; border-radius:6px;'><i>Nenhum item nesta categoria.</i></p></div>"
         )
 
-    html += "<table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;'><tr style='background:#f3f4f6; color:#374151; text-align:center; font-weight:bold; border-bottom:2px solid #e5e7eb;'><th>N&ordm; OB</th><th>Prog.</th><th>Ref. Cliente (Esperada)</th><th>NF Usada (Mont.)</th><th>NF Usada (Prog.)</th><th>Detalhe do Erro</th></tr>"
+    html += "<table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;'><tr style='background:#f3f4f6; color:#374151; text-align:center; font-weight:bold; border-bottom:2px solid #e5e7eb;'><th>N\u00ba OB</th><th>Prog.</th><th>Ref. Cliente (Esperada)</th><th>NF Usada (Mont.)</th><th>NF Usada (Prog.)</th><th>Detalhe do Erro</th></tr>"
     for idx, e in enumerate(erros):
         bg: str = "#ffffff" if idx % 2 == 0 else "#f9fafb"
         html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('NR_OB'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #bfdbfe;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td></tr>"
@@ -201,10 +201,10 @@ def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
     if not erros:
         return ""
     html: str = (
-        "<div style='margin-top: 30px;'><h3 style='font-size:14pt; margin:0 0 12px 0; color:#1f2937; text-align:center;'>Detalhamento Completo das Divergencias</h3>"
+        "<div style='margin-top: 30px;'><h3 style='font-size:14pt; margin:0 0 12px 0; color:#1f2937; text-align:center;'>Detalhamento Completo das Diverg\u00eancias</h3>"
     )
     html += "<div style='overflow-x:auto; border: 1px solid #e5e7eb; border-radius: 8px;'><table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9pt;width:100%; white-space:nowrap;'>"
-    html += "<tr style='background-color:#f87171; color:#ffffff; text-align:center; font-weight:bold;'><th>Sit. OB</th><th>Prog.</th><th>Fac&ccedil;&atilde;o</th><th>N&ordm; OB</th><th>Ref. Cliente</th><th>NF (Montagem)</th><th>NF (Prog.)</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th></tr>"
+    html += "<tr style='background-color:#f87171; color:#ffffff; text-align:center; font-weight:bold;'><th>Sit. OB</th><th>Prog.</th><th>Fac\u00e7\u00e3o</th><th>N\u00ba OB</th><th>Ref. Cliente</th><th>NF (Montagem)</th><th>NF (Prog.)</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th></tr>"
     agora: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     for idx, e in enumerate(erros):
         bg: str = "#ffffff" if idx % 2 == 0 else "#fef2f2"
@@ -224,21 +224,21 @@ def montar_template_email(
     tipo: str = tipo_notificacao.upper().strip()
     cor: str = "#dc2626"
     icon: str = HTML_ICON_WARNING
-    msg: str = "Divergencias Detectadas"
+    msg: str = "Diverg\u00eancias Detectadas"
     res: str = f"{total_erros} erros"
 
     if tipo == "ALTERACAO":
         cor, icon, msg, res = (
             "#ea580c",
             HTML_ICON_TARGET,
-            "Divergencias Alteradas",
+            "Diverg\u00eancias Alteradas",
             f"{total_erros} erros",
         )
     elif tipo == "ACERTO":
         cor, icon, msg, res = (
             "#16a34a",
             HTML_ICON_CHECK,
-            "Validacao Aprovada",
+            "Valida\u00e7\u00e3o Aprovada",
             "100% OK",
         )
 
@@ -247,11 +247,11 @@ def montar_template_email(
     )
 
     if tipo == "ERRO":
-        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_MAGNIFY}</span> <b>Foram detectadas divergencias entre a Montagem e a Programacao.</b></p>"
+        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_MAGNIFY}</span> <b>Foram detectadas diverg\u00eancias entre a Montagem e a Programa\u00e7\u00e3o.</b></p>"
     elif tipo == "ALTERACAO":
-        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_CHART_UP}</span> <b>Houve uma atualizacao no status das divergencias acompanhadas.</b></p>"
+        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_CHART_UP}</span> <b>Houve uma atualiza\u00e7\u00e3o no status das diverg\u00eancias acompanhadas.</b></p>"
     else:
-        html += f"<p style='font-size:13pt;margin:0 0 12px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_TROPHY}</span> <b>Nenhuma divergencia foi encontrada na rotina atual. O processo esta liberado.</b></p>"
+        html += f"<p style='font-size:13pt;margin:0 0 12px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_TROPHY}</span> <b>Nenhuma diverg\u00eancia foi encontrada na rotina atual. O processo est\u00e1 liberado.</b></p>"
 
     card_tpl: str = (
         "<td style='width:33%;padding:16px;'><div style='background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;text-align:center;'><div style='font-size:20pt;margin-bottom:8px;'>{icon}</div><div style='color:#6b7280;font-size:10pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;'>{label}</div><div style='color:{val_color};font-size:18pt;font-weight:bold;margin-top:4px;'>{value}</div></div></td>"
@@ -281,7 +281,7 @@ def montar_template_email(
     html += f"<div style='margin: 24px -16px;'><table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='border-collapse:collapse;'><tr>{cards}</tr></table></div>"
     if detalhes_html:
         html += f"<div>{detalhes_html}</div>"
-    html += f"<hr style='border:0;border-top:1px solid #e5e7eb;margin:32px 0 24px 0;'><p style='font-size:10pt;color:#9ca3af;text-align:center;margin:0;'><span style='font-size:13pt;vertical-align:middle;'>{HTML_ICON_CALENDAR}</span> <b>Data da Validacao:</b> {datetime.now().strftime('%d/%m/%Y &agrave;s %H:%M:%S')}</p></div></div></body></html>"
+    html += f"<hr style='border:0;border-top:1px solid #e5e7eb;margin:32px 0 24px 0;'><p style='font-size:10pt;color:#9ca3af;text-align:center;margin:0;'><span style='font-size:13pt;vertical-align:middle;'>{HTML_ICON_CALENDAR}</span> <b>Data da Valida\u00e7\u00e3o:</b> {datetime.now().strftime('%d/%m/%Y \u00e0s %H:%M:%S')}</p></div></div></body></html>"
     return html
 
 
@@ -358,30 +358,30 @@ def main() -> None:
         elif total_erros > 0 and (novos or corrigidos):
             tipo_notif = "ALTERACAO"
 
-    cache_tmp_file = cache_file + ".tmp"
-    try:
-        # Salva apenas no temporario. O commit ocorre no run.ps1 apos sucesso no e-mail.
-        with open(cache_tmp_file, "w", encoding="utf-8") as f_out:
-            json.dump(
-                {"timestamp": datetime.now().isoformat(), "itens": dic_atuais},
-                f_out,
-                ensure_ascii=False,
-                indent=2,
-            )
-    except Exception as e:
-        log(f"Falha ao gravar cache temporario: {e}", "WARN", exec_id)
-
     if tipo_notif != "NENHUMA":
+        cache_tmp_file = cache_file + ".tmp"
+        try:
+            # Salva apenas no temporario. O commit ocorre no run.ps1 apos sucesso no e-mail.
+            with open(cache_tmp_file, "w", encoding="utf-8") as f_out:
+                json.dump(
+                    {"timestamp": datetime.now().isoformat(), "itens": dic_atuais},
+                    f_out,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+        except Exception as e:
+            log(f"Falha ao gravar cache temporario: {e}", "WARN", exec_id)
+
         elapsed_time: float = time.time() - start_time
         detalhes_html: str = ""
         subject: str = (
-            f"Alerta: Divergencias Montagem - {datetime.now().strftime('%d/%m/%Y')}"
+            f"Alerta: Diverg\u00eancias Montagem - {datetime.now().strftime('%d/%m/%Y')}"
         )
 
         if tipo_notif == "ERRO":
             detalhes_html = gerar_tabela_completa_erros(erros_atuais)
         elif tipo_notif == "ALTERACAO":
-            subject = f"Alteracao: Divergencias Montagem - {datetime.now().strftime('%d/%m/%Y')}"
+            subject = f"Altera\u00e7\u00e3o: Diverg\u00eancias Montagem - {datetime.now().strftime('%d/%m/%Y')}"
             txt_novos: str = "Novo Erro" if len(novos) == 1 else "Novos Erros"
             txt_cor: str = (
                 "Erro Corrigido" if len(corrigidos) == 1 else "Erros Corrigidos"
@@ -391,7 +391,7 @@ def main() -> None:
             )
 
             resumo_painel: str = (
-                f"""<div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:24px; margin: 30px 0; text-align:center;"><h3 style="margin:0 0 20px 0; color:#1f2937; font-size:14pt; font-weight:600;">Resumo da Atualizacao</h3><table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto; width: 100%; max-width: 600px; table-layout:fixed;"><tr><td align="center" style="padding: 0 10px;"><div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#991b1b; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Novos</span><span style="display:block; font-size:28pt; color:#b91c1c; font-weight:bold; line-height:1;">{len(novos)}</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#166534; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Corrigidos</span><span style="display:block; font-size:28pt; color:#15803d; font-weight:bold; line-height:1;">{len(corrigidos)}</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#fff7ed; border:1px solid #fdba74; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#9a3412; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Permanentes</span><span style="display:block; font-size:28pt; color:#c2410c; font-weight:bold; line-height:1;">{len(permanentes)}</span></div></td></tr></table></div>"""
+                f"""<div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:24px; margin: 30px 0; text-align:center;"><h3 style="margin:0 0 20px 0; color:#1f2937; font-size:14pt; font-weight:600;">Resumo da Atualiza\u00e7\u00e3o</h3><table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto; width: 100%; max-width: 600px; table-layout:fixed;"><tr><td align="center" style="padding: 0 10px;"><div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#991b1b; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Novos</span><span style="display:block; font-size:28pt; color:#b91c1c; font-weight:bold; line-height:1;">{len(novos)}</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#166534; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Corrigidos</span><span style="display:block; font-size:28pt; color:#15803d; font-weight:bold; line-height:1;">{len(corrigidos)}</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#fff7ed; border:1px solid #fdba74; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#9a3412; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Permanentes</span><span style="display:block; font-size:28pt; color:#c2410c; font-weight:bold; line-height:1;">{len(permanentes)}</span></div></td></tr></table></div>"""
             )
             detalhes_html = (
                 resumo_painel
@@ -401,7 +401,7 @@ def main() -> None:
             )
         elif tipo_notif == "ACERTO":
             subject = (
-                f"Sucesso: Validacao Aprovada - {datetime.now().strftime('%d/%m/%Y')}"
+                f"Sucesso: Valida\u00e7\u00e3o Aprovada - {datetime.now().strftime('%d/%m/%Y')}"
             )
             detalhes_html = ""
 
@@ -420,12 +420,17 @@ def main() -> None:
         except Exception as e:  # pylint: disable=broad-exception-caught
             log(f"Falha ao gravar payload: {e}", "ERROR", exec_id)
             sys.exit(1)
-        log(f"Processamento concluido ({tipo_notif}).", "INFO", exec_id)
+        log(f"Processamento conclu\u00eddo ({tipo_notif}).", "INFO", exec_id)
     else:
-        log("Nenhuma mudanca.", "INFO", exec_id)
+        log("Nenhuma mudan\u00e7a.", "INFO", exec_id)
 
 
 if __name__ == "__main__":
     main()
+
+
+# ## Gestao de Contexto (AI-Native) - Atualizado em 12/05/2026
+# - Estado: Estabilizado v1.2.1 (Sintaxe corrigida).
+# - Objetivo: Garantir que a IA entenda a correcao da sintaxe e a remocao de texto vivo.
 
 

@@ -1,4 +1,4 @@
-﻿# pylint: disable=all
+# pylint: disable=all
 # mypy: ignore-errors
 # -*- coding: utf-8 -*-
 import base64
@@ -224,7 +224,7 @@ def generate_html():
     header_row = ""
     content_row = ""
     for i in range(column_count):
-        header_row += f"<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>Maquina / Grupo / OB / Inicio</td>"
+        header_row += f"<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>M\u00e1quina / Grupo / OB / In\u00edcio</td>"
         content_row += f"<td width='{column_width}' valign='top' style='width:{column_width}px;padding-top:{block_pad_y}px;vertical-align:top;'>{columns_html[i] or '&nbsp;'}</td>"
         if i < column_count - 1:
             header_row += f"<td width='{column_gap}' style='width:{column_gap}px;font-size:0;line-height:0;'>&nbsp;</td>"
@@ -238,7 +238,7 @@ def generate_html():
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{title_font:.1f}pt;font-weight:bold;line-height:{title_line}px;color:#000000;text-align:center;'>{html_escape(config['layout']['title'])}</td></tr>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>{html_escape(config['layout']['subtitle'])}</td></tr>
-    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | Maquinas: {machine_count} | Receitas: {recipe_count}</td></tr>
+    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | M\u00e1quinas: {machine_count} | Receitas: {recipe_count}</td></tr>
     </table>
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr>{header_row}</tr><tr>{content_row}</tr>
@@ -247,7 +247,7 @@ def generate_html():
     # Envia o HTML final para STDOUT (IPC)
     sys.stdout.write(full_html)
     sys.stdout.flush()
-    log("Relatorio HTML gerado com sucesso para stdout.", "INFO", exec_id)
+    log("Relat\u00f3rio HTML gerado com sucesso para stdout.", "INFO", exec_id)
 
 
 if __name__ == "__main__":

@@ -24,11 +24,13 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - [x] Tom técnico PT-BR foi mantido?
 ---
 
-## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 12/05/2026
-- **Estado:** Estabilizado v5.2.2 (Enterprise).
-- **Timezone:** Padronização absoluta para Horário de Brasília (BRT - America/Sao_Paulo) em toda a stack via `get_now_local()`.
-- **Infra:** Implementada `Lib-Config` para centralização de variáveis via `.env`.
-- **Resiliência:** Correção definitiva de falsos positivos de disco via CIM/PSDrive e eliminação de Race Conditions no Worker (Atomic Claim).
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 13/05/2026
+- **Estado:** Estabilizado v5.2.7 (AI-Native Optimization).
+- **Configuração:** Ativada funcionalidade experimental `autoMemory` via `.gemini/settings.json` para otimização de contexto e persistência de aprendizado entre sessões.
+- **Governança de Entrega:** Implementada externalização de destinatários via `config.json` na automação de Montagem, eliminando hardcoding e seguindo o pilar de **Governança** do Protocolo V.A.L.E.G.
+- **UX/UI:** Padronização gramatical PT-BR completa em e-mails e logs, eliminando strings sem acentuação.
+- **Timezone:** Padronização absoluta para Horário de Brasília (BRT - America/Sao_Paulo).
+- **Resiliência:** Implementada higienização rigorosa de arquivos temporários órfãos (`.tmp`) para evitar poluição de diretórios em execuções de idempotência.
 - **Auditoria:** Script `Audit-DailyStatus.ps1` ativo para telemetria AI-Native.
 - **Porta:** Padronização absoluta na porta 8000 para API/Watchdog.
 ---

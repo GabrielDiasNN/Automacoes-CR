@@ -1,4 +1,4 @@
-import pytz
+import pytz  # type: ignore
 from datetime import datetime
 
 def get_now_local() -> datetime:

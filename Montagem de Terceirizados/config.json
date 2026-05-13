@@ -1,0 +1,8 @@
+{
+  "email": {
+    "to": "israel.soares@costaricamalhas.ind.br; dener.silva@costaricamalhas.ind.br",
+    "cc": "acacio.klann@costaricamalhas.ind.br; guilherme.bertolini@costaricamalhas.ind.br"
+  },
+  "version": "1.0.0",
+  "description": "Configurações de entrega para Montagem de Terceirizados"
+}

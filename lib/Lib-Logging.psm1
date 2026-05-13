@@ -217,14 +217,29 @@ function Invoke-LogRotation {
 # ------------------------------------------------------------------------------
 function Enter-AutomationLock {
     [CmdletBinding()]
-    param([Parameter(Mandatory = $true)][string]$ExecId)
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecId,
+        [string]$LogPath = ""
+    )
 
     $mutexName = "Global\AutomationHub_$ExecId"
     $script:AutomationMutex = New-Object System.Threading.Mutex($false, $mutexName)
     
     if (-not $script:AutomationMutex.WaitOne(5000)) {
-        throw "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId. Abortando para evitar corrupcao."
+        $msg = "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId. Abortando para evitar corrupcao."
+        if ([string]::IsNullOrWhiteSpace($LogPath)) {
+            Write-Warning $msg
+        } else {
+            Write-AutomacaoLog -Message $msg -Level "ERRO" -ExecId $ExecId -LogPath $LogPath
+        }
+        throw $msg
     }
+
+    if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
+        Write-AutomacaoLog -Message "Lock global adquirido com sucesso (Mutex: $mutexName)." -Level "DEBUG" -ExecId $ExecId -LogPath $LogPath
+    }
+
+    return $true
 }
 
 # ------------------------------------------------------------------------------

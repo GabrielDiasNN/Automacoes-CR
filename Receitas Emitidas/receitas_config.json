@@ -1,11 +1,11 @@
 {
     "email": {
         "to": "acacio.klann@costaricamalhas.ind.br",
-        "subject_prefix": "Relatorio Semanal: Controle de Receitas Emitidas",
-        "intro_text": "Segue relatorio atualizado para conferencia operacional."
+        "subject_prefix": "Relat\u00f3rio Semanal: Controle de Receitas Emitidas",
+        "intro_text": "Segue relat\u00f3rio atualizado para confer\u00eancia operacional."
     },
     "layout": {
         "title": "Controle de Receitas Emitidas",
-        "subtitle": "Conferencia fisica - cozinha de quimicos"
+        "subtitle": "Confer\u00eancia f\u00edsica - cozinha de qu\u00edmicos"
     }
 }

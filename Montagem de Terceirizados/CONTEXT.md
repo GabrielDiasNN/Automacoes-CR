@@ -29,6 +29,7 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
 
 ---
 
-## 🧠 Gestão de Contexto (AI-Native)
-- **Obrigação:** Atualizar este arquivo se houver mudanças nas `Validation Rules` de NF vs OB ou na estrutura do `.cache_erros.json`.
-- **Objetivo:** Garantir que a IA mantenha o rigor fiscal do cruzamento de dados sem analisar o script de validação.
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 12/05/2026
+- **Estado:** Estabilizado v2.2.1.
+- **Resiliência:** Corrigido erro de sintaxe Python e endurecida a lógica de orquestração PowerShell para garantir o envio de notificações mesmo em situações de variabilidade nos parâmetros de entrada.
+- **Idempotência:** Mantida a lógica de Two-Phase Commit para consolidação do estado apenas após sucesso confirmado.

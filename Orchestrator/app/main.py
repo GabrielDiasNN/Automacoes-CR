@@ -150,19 +150,37 @@ def reload_scheduled_tasks():
             try:
                 sched_data = json.loads(auto.schedule)
                 days = ",".join(map(str, sched_data.get("daysOfWeek", [])))
-                hours = ",".join(map(str, sched_data.get("hours", [])))
-                minutes = ",".join(map(str, sched_data.get("minutes", [])))
-                trigger = CronTrigger(
-                    day_of_week=days if days else "*",
-                    hour=hours if hours else "*",
-                    minute=minutes if minutes else "0",
-                )
-                scheduler.add_job(
-                    _scheduled_task_wrapper,
-                    trigger,
-                    args=[auto.id],
-                    id=f"job_{auto.id}",
-                )
+                
+                # Suporte a multiplos horarios (Novo Formato: "times": [{"h": 8, "m": 0}, ...])
+                times_list = sched_data.get("times")
+                if times_list:
+                    for idx, t in enumerate(times_list):
+                        trigger = CronTrigger(
+                            day_of_week=days if days else "*",
+                            hour=t.get("h", 0),
+                            minute=t.get("m", 0),
+                        )
+                        scheduler.add_job(
+                            _scheduled_task_wrapper,
+                            trigger,
+                            args=[auto.id],
+                            id=f"job_{auto.id}_{idx}",
+                        )
+                else:
+                    # Fallback Legado
+                    hours = ",".join(map(str, sched_data.get("hours", [])))
+                    minutes = ",".join(map(str, sched_data.get("minutes", [])))
+                    trigger = CronTrigger(
+                        day_of_week=days if days else "*",
+                        hour=hours if hours else "*",
+                        minute=minutes if minutes else "0",
+                    )
+                    scheduler.add_job(
+                        _scheduled_task_wrapper,
+                        trigger,
+                        args=[auto.id],
+                        id=f"job_{auto.id}",
+                    )
             except Exception as e:
                 logger.error(f"Erro ao agendar {auto.name}: {e}")
     finally:
