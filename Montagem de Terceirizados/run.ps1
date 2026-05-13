@@ -1,21 +1,15 @@
-<#
+﻿<#
 .SYNOPSIS
-    Orquestrador Ofical para Montagem de Terceirizados (Pure-Native).
+    Orquestrador Oficial para Montagem de Terceirizados (Pure-Native).
 .DESCRIPTION
-    Este script coordena o ciclo de vida da automacao utilizando extracao direta do Oracle via Python.
-    Nao utiliza mais dependencias de Excel/VBA (Migracao Concluida).
+    Este script coordena o ciclo de vida da automação utilizando extração direta do Oracle via Python.
+    Não utiliza mais dependências de Excel/VBA (Migração Concluída).
 .NOTES
-    Version: 2.1.0
+    Version: 2.1.1
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-runtime-safety
     Contract: native-fetch-logic, ipc-file-payload, base64-bridge-logs, preflight-v1
-    #>
-    # {
-    #   "name": "orchestrator-montagem-terceirizados",
-    #   "version": "2.1.0",
-    #   "skill": "powershell-automation-monitor",
-    #   "description": "Use when orchestrating fiscal validation of outsourcing assembly orders."
-    # }
-    [CmdletBinding()]
+#>
+[CmdletBinding()]
 param(
     [string]$ExecId = "",
     [switch]$EmailPreviewOnly,
@@ -25,7 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Configuracao Global de Encoding para Interoperabilidade
+# Configuração Global de Encoding para Interoperabilidade
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -68,7 +62,7 @@ function Write-Log {
 # --- BOOTSTRAP / PRE-FLIGHT ---
 $pathsToCheck = @($pythonExe, $extractPy, $validatePy)
 
-# Housekeeping: Limpa arquivos temporarios orfaos com mais de 24h
+# Housekeeping: Limpa arquivos temporários órfãos com mais de 24h
 Get-ChildItem -Path $ScriptDir -Filter ".data_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path $ScriptDir -Filter ".payload_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
 
@@ -81,7 +75,7 @@ Write-Log "INÍCIO - Execução Montagem Terceirizados (Pure-Native). ExecId=$Ex
 
 $execStatus = "ERROR"
 try {
-    # Carregar Variaveis de Ambiente (.env)
+    # Carregar Variáveis de Ambiente (.env)
     $envPath = Join-Path $projectRoot ".env"
     if (Test-Path $envPath) {
         Get-Content $envPath | ForEach-Object {
@@ -101,22 +95,22 @@ try {
     $nativeExtractInfo = New-Object System.Diagnostics.ProcessStartInfo
     $nativeExtractInfo.FileName = $pythonExe
     $nativeExtractInfo.Arguments = "`"$extractPy`" `"$ExecId`""
-    $nativeExtractInfo.RedirectStandardOutput = $true 
+    $nativeExtractInfo.RedirectStandardOutput = $true
     $nativeExtractInfo.RedirectStandardError = $true
     $nativeExtractInfo.UseShellExecute = $false
     $nativeExtractInfo.CreateNoWindow = $true
     $nativeExtractInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-    
-    # Injetar variaveis do .env no processo filho
+
+    # Injetar variáveis do .env no processo filho
     $envVars = [System.Environment]::GetEnvironmentVariables("Process")
     foreach ($key in $envVars.Keys) {
         if (-not $nativeExtractInfo.Environment.ContainsKey($key)) {
             $nativeExtractInfo.Environment.Add($key, $envVars[$key])
         }
     }
-    
+
     $nativeProc = [System.Diagnostics.Process]::Start($nativeExtractInfo)
-    
+
     # Processa logs do Python em tempo real
     while (-not $nativeProc.HasExited) {
         $line = $nativeProc.StandardOutput.ReadLine()
@@ -148,7 +142,8 @@ try {
     $genInfo.RedirectStandardError = $true
     $genInfo.UseShellExecute = $false
     $genInfo.CreateNoWindow = $true
-    
+    $genInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+
     $genProcess = [System.Diagnostics.Process]::Start($genInfo)
     while (-not $genProcess.HasExited) {
         $line = $genProcess.StandardOutput.ReadLine()
@@ -157,41 +152,34 @@ try {
         if ($err) { Write-Log $err -Lvl "WARN" }
     }
     $genProcess.WaitForExit()
-    
+
     if ($genProcess.ExitCode -ne 0) { throw "Falha na validação Python (ExitCode: $($genProcess.ExitCode))." }
 
     # 3. Envio do E-mail (Se houver payload)
     if (Test-Path $payloadFile) {
         $jsonOutput = Get-Content $payloadFile -Raw -Encoding UTF8
         $payload = $jsonOutput | ConvertFrom-Json
-        $bytes = [System.Convert]::FromBase64String($payload.subject_b64)
-        $subject = [System.Text.Encoding]::UTF8.GetString($bytes)
+        $subject = $payload.subject
         $htmlOutput = $payload.html
 
         Write-Log "Notificação gerada: $subject"
-        
-        # Carregar Configuracoes Oficiais (config.json)
-        # 1. Carregar Destinatarios Oficiais (config.json)
+
+        # Carregar Configurações Oficiais (config.json)
         $configFile = Join-Path $ScriptDir "config.json"
         $config = if (Test-Path $configFile) { Get-Content $configFile -Raw | ConvertFrom-Json } else { $null }
         $officialTo = if ($config -and $config.email -and $config.email.to) { $config.email.to } else { "gabriel.dias@costaricamalhas.ind.br" }
         $officialCc = if ($config -and $config.email -and $config.email.cc) { $config.email.cc } else { "" }
 
-        # 2. Verificar Modo Teste Global (Ativado via AtivarModoTeste.bat / Dashboard)
+        # Verificar Modo Teste Global
         $globalTestEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
-        
-        # 3. Decisao de Entrega
         $isTestMode = (-not [string]::IsNullOrWhiteSpace($EmailToTest)) -or (-not [string]::IsNullOrWhiteSpace($globalTestEmail))
-        
+
         if ($isTestMode) {
-            # MODO TESTE: Redirecionamento para sandbox (AtivarModoTeste ou param)
             $testTarget = if (-not [string]::IsNullOrWhiteSpace($EmailToTest)) { $EmailToTest } else { $globalTestEmail }
             $finalTo = if (-not [string]::IsNullOrWhiteSpace($testTarget)) { $testTarget } else { "gabriel.dias@costaricamalhas.ind.br" }
-            
             Write-Log "MODO TESTE ATIVO: Redirecionando para $finalTo" -Lvl "WARN"
             $sent = Send-OutlookEmail -To $finalTo -Subject $subject -HtmlBody $htmlOutput -ExecId $ExecId -LogPath $LogFile -PreviewOnly:([bool]$EmailPreviewOnly)
         } else {
-            # MODO OFICIAL: Uso estrito do config.json
             Write-Log "MODO OFICIAL ATIVO (config.json): Disparando para $officialTo"
             $sent = Send-OutlookEmail -To $officialTo -Cc $officialCc -Subject $subject -HtmlBody $htmlOutput -ExecId $ExecId -LogPath $LogFile -PreviewOnly:([bool]$EmailPreviewOnly)
         }
@@ -205,19 +193,15 @@ try {
         } else {
             Write-Log "Falha no envio de e-mail. O cache NÃO será atualizado para garantir retentativa." -Lvl "WARN"
         }
-
         Remove-Item $payloadFile -Force
         if (Test-Path $dataFile) { Remove-Item $dataFile -Force }
     } else {
         Write-Log "Nenhuma divergência ou mudança de estado. Nenhuma notificação enviada."
     }
-
     $execStatus = "SUCCESS"
-
 } catch [System.Exception] {
-    Write-Log "ERRO FATAL NA EXECUCAO NATIVA: $_" -Lvl "ERRO"; exit 1
+    Write-Log "ERRO FATAL NA EXECUÇÃO NATIVA: $_" -Lvl "ERRO"; exit 1
 } finally {
-    # Limpeza rigorosa de arquivos temporarios de intercambio
     if ($ExecId) {
         $tempPatterns = ".data_$ExecId.json", ".payload_$ExecId.json"
         foreach ($p in $tempPatterns) {
@@ -225,20 +209,16 @@ try {
             if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue }
         }
     }
-    # Limpeza de cache temporario orfao (se nao foi consolidado)
     if (Test-Path $CacheTmp) { Remove-Item $CacheTmp -Force -ErrorAction SilentlyContinue }
-
     if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
         Close-ExecutionTelemetry -ExecId $ExecId -Status $execStatus -LogPath $LogFile
     }
-
     Write-Log "FIM - Processo finalizado."
     Exit-AutomationLock
 }
 
 <#
-## Gestao de Contexto (AI-Native) - Atualizado em 13/05/2026
-- Estado: Estabilizado v2.1.0 (v5.3.0 Telemetry Sync).
-- Governanca: Implementada telemetria nativa TEL_ para Dashboard.
-- Resiliencia: Sincronia total de ciclo de vida (Start/End).
+## Gestão de Contexto (AI-Native) - Atualizado em 13/05/2026
+- Estado: Estabilizado v2.1.1 (Saneamento de Espaços e Encoding).
+- Governança: Sincronia total v5.4.3 Gold Standard.
 #>

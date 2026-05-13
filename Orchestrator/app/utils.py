@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 
 from . import models
 
-
 def log_audit(
     db: Session,
     action: str,
@@ -44,11 +43,9 @@ def log_audit(
     )
     db.add(entry)
 
-
 # ---------------------------------------------------------------------------
 # IP do Cliente
 # ---------------------------------------------------------------------------
-
 
 def get_client_ip(request: Request) -> str:
     """Extrai IP do cliente priorizando headers de proxy reverso."""
@@ -58,7 +55,6 @@ def get_client_ip(request: Request) -> str:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
-
 # ---------------------------------------------------------------------------
 # Validacao V - Pilar de Validacao (Pre-flight)
 # ---------------------------------------------------------------------------
@@ -66,13 +62,11 @@ def get_client_ip(request: Request) -> str:
 # Regex permite alfanumericos, espacos, pontos, hifens e acentuacao PT-BR comum (ASCII-Safe via Unicode Range)
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 _\-\.À-ÿ]+$")
 
-
 def sanitize_name(name: str) -> bool:
     """Retorna True se o nome e seguro para uso no sistema (sem path traversal)."""
     if not name or ".." in name:
         return False
     return bool(_SAFE_NAME_RE.match(name))
-
 
 def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str]:
     """

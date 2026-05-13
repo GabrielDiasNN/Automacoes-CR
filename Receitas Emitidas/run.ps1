@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Orquestrador Nativo para Receitas Emitidas.
 .DESCRIPTION
@@ -126,7 +126,7 @@ try {
     # 1. Extracao de Dados (Python -> JSON Stdout) com Retry
     # =========================================================================
     Write-Log "Passo 1/2: Extraindo dados via Python (Direct Oracle CTE)..."
-    
+
     $pythonOutput = $null
     $extractOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(30, 60, 120) `
         -OperationName "Extracao Oracle (extract_oracle.py)" -ExecId $ExecId -LogPath $LogFile `
@@ -146,19 +146,19 @@ try {
             $process.WaitForExit()
 
             if ($err) { $err -split "`n" | ForEach-Object { if ($_.Trim()) { Write-AutomacaoLog -Message $_.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile } } }
-            
+
             if ($process.ExitCode -eq 2) {
                 Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
                 Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
             }
-            
+
             if ($process.ExitCode -ne 0) { throw "Python extract_oracle.py falhou com ExitCode=$($process.ExitCode)." }
             if ([string]::IsNullOrWhiteSpace($out)) { throw "Extracao retornou dados vazios (stdout vazio)." }
-            
+
             $script:pythonOutput = $out
             return $true
         }
-    
+
     if (-not $extractOk) {
         Send-AlertaFalhaDefinitiva -TaskName "Receitas Emitidas" -ExecId $ExecId `
             -UltimoErro "Falha definitiva na extracao Oracle apos 3 tentativas." -Tentativas 3 -LogPath $LogFile

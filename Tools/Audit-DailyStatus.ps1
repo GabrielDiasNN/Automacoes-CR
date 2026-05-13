@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Audit-DailyStatus.ps1
 # VERSAO : 1.0.0
 # DESCRICAO: Consolida falhas das ultimas 24h para analise por IA/Humana.
@@ -37,7 +37,7 @@ $logFiles = Get-ChildItem -Path $ProjectRoot -Filter "*.log" -Recurse | Where-Ob
 foreach ($file in $logFiles) {
     $lines = Get-Content $file.FullName
     $errors = $lines | Where-Object { $_ -match "\[ERRO\]" -or $_ -match "ExitCode=[1-9]" }
-    
+
     if ($errors) {
         $Report.ErrorSummary[$file.Name] = $errors.Count
         # Pega os ultimos 3 erros fatais com contexto

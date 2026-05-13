@@ -2,7 +2,7 @@
 
 ## Visão geral
 
-O projeto é um hub de automações fiscais e operacionais consolidado na stack **Python/PowerShell/Node.js**. 
+O projeto é um hub de automações fiscais e operacionais consolidado na stack **Python/PowerShell/Node.js**.
 A arquitetura atingiu o estado **Soberano**, onde cada camada possui autonomia de contexto e resiliência a falhas de protocolo.
 
 ---

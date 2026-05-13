@@ -13,7 +13,6 @@ from conftest import AUTH_HEADERS
 # ROOT
 # ============================================================
 
-
 def test_read_root(client):
     res = client.get("/")
     assert res.status_code == 200
@@ -21,26 +20,21 @@ def test_read_root(client):
     assert "5.0.0" in data["version"]
     assert "dashboard_url" in data
 
-
 # ============================================================
 # SEGURANCA
 # ============================================================
-
 
 def test_reject_without_api_key(client):
     res = client.get("/api/automations/all")
     assert res.status_code == 403
 
-
 def test_reject_wrong_api_key(client):
     res = client.get("/api/automations/all", headers={"X-API-Key": "wrong-key"})
     assert res.status_code == 403
 
-
 # ============================================================
 # CRUD AUTOMATIONS
 # ============================================================
-
 
 def test_create_automation(client):
     res = client.post(
@@ -59,7 +53,6 @@ def test_create_automation(client):
     data = res.json()
     assert data["name"] == "Test Task"
     assert data["id"] is not None
-
 
 def test_create_duplicate_name_rejected(client):
     client.post(
@@ -80,7 +73,6 @@ def test_create_duplicate_name_rejected(client):
     )
     assert res.status_code == 409
 
-
 def test_list_automations_paginated(client):
     for i in range(5):
         client.post(
@@ -98,7 +90,6 @@ def test_list_automations_paginated(client):
     assert len(data["items"]) == 3
     assert data["total"] == 5
     assert data["pages"] == 2
-
 
 def test_update_automation(client):
     client.post(
@@ -119,7 +110,6 @@ def test_update_automation(client):
     assert res.status_code == 200
     assert res.json()["description"] == "Atualizado"
 
-
 def test_delete_automation(client):
     client.post(
         "/api/automations",
@@ -132,11 +122,9 @@ def test_delete_automation(client):
     res = client.delete("/api/automations/1", headers=AUTH_HEADERS)
     assert res.status_code == 200
 
-
 # ============================================================
 # VALIDACAO DE SCHEMAS
 # ============================================================
-
 
 def test_reject_path_traversal(client):
     res = client.post(
@@ -149,7 +137,6 @@ def test_reject_path_traversal(client):
     )
     assert res.status_code == 422
 
-
 def test_reject_dangerous_name(client):
     res = client.post(
         "/api/automations",
@@ -160,7 +147,6 @@ def test_reject_dangerous_name(client):
         headers=AUTH_HEADERS,
     )
     assert res.status_code == 422
-
 
 def test_reject_invalid_schedule(client):
     res = client.post(
@@ -174,11 +160,9 @@ def test_reject_invalid_schedule(client):
     )
     assert res.status_code == 422
 
-
 # ============================================================
 # EXECUCOES
 # ============================================================
-
 
 def test_start_automation_creates_pending(client):
     client.post(
@@ -196,7 +180,6 @@ def test_start_automation_creates_pending(client):
     res2 = client.get(f"/api/executions/{exec_id}", headers=AUTH_HEADERS)
     assert res2.json()["status"] == "PENDING"
 
-
 def test_reject_duplicate_execution(client):
     client.post(
         "/api/automations",
@@ -209,7 +192,6 @@ def test_reject_duplicate_execution(client):
     client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     res = client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     assert res.status_code == 409
-
 
 def test_stop_execution(client):
     client.post(
@@ -229,7 +211,6 @@ def test_stop_execution(client):
     check = client.get(f"/api/executions/{exec_id}", headers=AUTH_HEADERS)
     assert check.json()["status"] == "TERMINATED"
 
-
 def test_list_recent_executions(client):
     client.post(
         "/api/automations",
@@ -245,11 +226,9 @@ def test_list_recent_executions(client):
     assert res.status_code == 200
     assert len(res.json()) >= 1
 
-
 # ============================================================
 # SISTEMA
 # ============================================================
-
 
 def test_health_check(client):
     res = client.get("/api/system/health")
@@ -258,26 +237,22 @@ def test_health_check(client):
     assert data["database"] == "online"
     assert data["status"] in ["healthy", "degraded", "unhealthy"]
 
-
 def test_metrics(client):
     res = client.get("/api/system/metrics", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert "summary" in res.json()
     assert "automations" in res.json()
 
-
 def test_uptime(client):
     res = client.get("/api/system/uptime", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert "uptime_seconds" in res.json()
-
 
 def test_health_includes_wal_size(client):
     """v5.0: health deve incluir wal_size_mb."""
     res = client.get("/api/system/health")
     assert res.status_code == 200
     assert "wal_size_mb" in res.json()
-
 
 def test_version_endpoint(client):
     """v5.0: novo endpoint enterprise /api/system/version."""

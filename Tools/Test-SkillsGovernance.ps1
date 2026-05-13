@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$BasePath = "."
 )
@@ -296,4 +296,3 @@ Format-Table -Wrap -AutoSize |
 Out-Host
 
 exit 2
-

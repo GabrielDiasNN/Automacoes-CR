@@ -34,7 +34,6 @@ engine = create_engine(
     pool_pre_ping=True,
 )
 
-
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     """Configura pragmas de seguranca e performance em cada conexao."""
@@ -47,11 +46,9 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA temp_store=MEMORY") # Tabelas temporarias em RAM
     cursor.close()
 
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
-
 
 def get_db():
     """Dependency injection do FastAPI - garante cleanup via finally."""
@@ -61,13 +58,11 @@ def get_db():
     finally:
         db.close()
 
-
 def get_db_size_mb() -> float:
     """Retorna o tamanho atual do banco em MB."""
     if os.path.exists(DB_PATH):
         return round(os.path.getsize(DB_PATH) / (1024 * 1024), 2)
     return 0.0
-
 
 def get_wal_size_mb() -> float:
     """Retorna o tamanho atual do WAL em MB (indicador de checkpoint pendente)."""
@@ -76,11 +71,9 @@ def get_wal_size_mb() -> float:
         return round(os.path.getsize(wal_path) / (1024 * 1024), 2)
     return 0.0
 
-
 # ---------------------------------------------------------------------------
 # Pilar E - Escala: WAL Checkpoint Automatico
 # ---------------------------------------------------------------------------
-
 
 def run_wal_checkpoint(mode: str = "PASSIVE") -> dict:
     """
@@ -109,11 +102,9 @@ def run_wal_checkpoint(mode: str = "PASSIVE") -> dict:
         logger.error(f"Falha no WAL checkpoint ({mode}): {e}")
         return {"mode": mode, "log": -1, "checkpointed": -1, "error": str(e)}
 
-
 # ---------------------------------------------------------------------------
 # Pilar G - Governanca: Purge de Execucoes Antigas
 # ---------------------------------------------------------------------------
-
 
 def purge_old_executions(retention_days: int = 90) -> int:
     """

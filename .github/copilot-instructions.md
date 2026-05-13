@@ -65,4 +65,3 @@ Rollback:
 - explique o menor teste seguro
 - informe impacto operacional
 - descreva rollback
-

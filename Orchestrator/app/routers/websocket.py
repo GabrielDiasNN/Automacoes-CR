@@ -19,11 +19,9 @@ logger = logging.getLogger("orchestrator")
 
 router = APIRouter(tags=["WebSocket"])
 
-
 # ---------------------------------------------------------------------------
 # Connection Manager (Event Bus)
 # ---------------------------------------------------------------------------
-
 
 class ConnectionManager:
     """Gerencia conexoes WebSocket para broadcast de logs e eventos."""
@@ -77,7 +75,7 @@ class ConnectionManager:
             # Pilar E: Limitar tamanho da mensagem individual para evitar OOM em logs massivos
             if len(message) > 50000:
                 message = message[:50000] + "\n... [TRUNCATED FOR WS PERFORMANCE]"
-                
+
             dead = []
             for ws in self.exec_connections[exec_id]:
                 try:
@@ -104,13 +102,11 @@ class ConnectionManager:
         for ws in dead:
             self.disconnect_global(ws)
 
-
 manager = ConnectionManager()
 
 # ---------------------------------------------------------------------------
 # ENDPOINTS WEBSOCKET
 # ---------------------------------------------------------------------------
-
 
 @router.websocket("/ws/logs/{exec_id}")
 async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
@@ -122,7 +118,6 @@ async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
     except WebSocketDisconnect:
         manager.disconnect_exec(websocket, exec_id)
 
-
 @router.websocket("/ws/events")
 async def websocket_global_events(websocket: WebSocket):
     await manager.connect_global(websocket)
@@ -132,11 +127,9 @@ async def websocket_global_events(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect_global(websocket)
 
-
 # ---------------------------------------------------------------------------
 # ENDPOINT HTTP para broadcast interno (usado pelo Worker)
 # ---------------------------------------------------------------------------
-
 
 @router.post("/api/broadcast_log")
 async def broadcast_log_endpoint(log_data: dict):
@@ -154,15 +147,9 @@ async def broadcast_log_endpoint(log_data: dict):
         )
     return {"status": "ok"}
 
-
 @router.post("/api/broadcast_event")
 async def broadcast_event_endpoint(event_data: dict):
     await manager.broadcast_event(
         event_data.get("type", "UNKNOWN"), event_data.get("data", {})
     )
     return {"status": "ok"}
-
-
-
-
-

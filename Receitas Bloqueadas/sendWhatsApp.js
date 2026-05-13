@@ -69,7 +69,7 @@ async function processar() {
             try {
                 const phone = config.target.contactPhone.replace(/\D/g, '');
                 const chatId = `${phone}@c.us`;
-                
+
                 // 1. Warming
                 log('INFO', `Aquecendo canal para ${chatId}...`);
                 await client.sendMessage(chatId, '\u231b _Iniciando transmissao do relatorio..._');

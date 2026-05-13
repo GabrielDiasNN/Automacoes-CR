@@ -45,4 +45,3 @@ Definir as diretrizes de layout, arquitetura e separação de visualização par
 
 ## Pre-Delivery Checklist
 - Conforme diretrizes globais.
-

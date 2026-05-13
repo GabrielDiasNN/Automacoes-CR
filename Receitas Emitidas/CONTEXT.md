@@ -1,7 +1,7 @@
 # Cognitive Context: Receitas Emitidas
 
 ## Business Purpose
-Esta automacao controla a emissao semanal do relatorio de **Receitas de Tingimento** que foram liberadas pelo laboratorio, mas que ainda nao foram pesadas na Cozinha de Quimicos. 
+Esta automacao controla a emissao semanal do relatorio de **Receitas de Tingimento** que foram liberadas pelo laboratorio, mas que ainda nao foram pesadas na Cozinha de Quimicos.
 O objetivo e fornecer uma visao clara para a equipe de producao sobre o volume de carga pendente, permitindo o planejamento da sequencia de tingimento e a conferencia fisica dos lotes.
 
 ## Technical Identity
@@ -18,7 +18,7 @@ O objetivo e fornecer uma visao clara para a equipe de producao sobre o volume d
 # Cognitive Context: Receitas Emitidas
 
 ## Business Purpose
-Esta automacao controla a emissao semanal do relatorio de **Receitas de Tingimento** que foram liberadas pelo laboratorio, mas que ainda nao foram pesadas na Cozinha de Quimicos. 
+Esta automacao controla a emissao semanal do relatorio de **Receitas de Tingimento** que foram liberadas pelo laboratorio, mas que ainda nao foram pesadas na Cozinha de Quimicos.
 O objetivo e fornecer uma visao clara para a equipe de producao sobre o volume de carga pendente, permitindo o planejamento da sequencia de tingimento e a conferencia fisica dos lotes.
 
 ## Technical Identity

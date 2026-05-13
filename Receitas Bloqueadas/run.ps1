@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Orquestrador PS-Nativo para Receitas Bloqueadas.
 .DESCRIPTION
@@ -120,7 +120,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                         }
                     }
                 }
-            } catch {
+            } catch [System.Exception] {
                 Write-Log "Falha ao carregar .env: $_" -Lvl "WARN"
             }
 
@@ -154,7 +154,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                         $proc = New-Object System.Diagnostics.Process
                         $proc.StartInfo = $pyInfo
-                        
+
                         $logAction = {
                             param($sender, $e)
                             if ($e.Data) {
@@ -163,7 +163,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                                     try {
                                         $b64Str = $Line.Substring(4).Trim()
                                         Write-AutomacaoLog -Message "B64:$b64Str" -Level "INFO" -ExecId $EventContext.ExecId -LogPath $EventContext.LogFile
-                                    } catch { }
+                                    } catch [System.Exception] { }
                                 } else {
                                     Write-AutomacaoLog -Message $Line.Trim() -Level "INFO" -ExecId $EventContext.ExecId -LogPath $EventContext.LogFile
                                 }
@@ -199,7 +199,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                     Exit-WithCode 3 "Falha definitiva no script Python. Alerta de falha enviado."
                 }
 
-            } catch {
+            } catch [System.Exception] {
                 if ($_.Exception.Message -match "Processo finalizado") { throw }
                 Exit-WithCode 4 "Falha ao invocar script Python: $_"
             }
@@ -259,15 +259,15 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                         if ($whatsAppExit -eq 40) { Write-Log "WhatsApp ignorado por lock ativo (comportamento normal)." -Lvl "INFO" }
                         elseif ($whatsAppExit -eq 23) { Write-Log "WhatsApp em cooldown (comportamento normal)." -Lvl "INFO" }
-                        elseif ($whatsAppExit -eq 21) { 
-                            Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN" 
+                        elseif ($whatsAppExit -eq 21) {
+                            Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN"
                             $allSuccess = $false
                         }
-                        elseif ($whatsAppExit -ne 0) { 
-                            Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit. Notificacao incompleta." -Lvl "WARN" 
+                        elseif ($whatsAppExit -ne 0) {
+                            Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit. Notificacao incompleta." -Lvl "WARN"
                             $allSuccess = $false
                         }
-                    } catch {
+                    } catch [System.Exception] {
                         Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
                         $allSuccess = $false
                     }
@@ -279,7 +279,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                             Move-Item -Path $PythonStateTmp -Destination $PythonStatePath -Force
                             Write-Log "Estado Python atualizado: $PythonStatePath"
                         }
-                        
+
                         $newState = @{ last_sent_hash = $currentHash; sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
                         $newState | ConvertTo-Json | Out-File $EmailStatePath -Encoding UTF8
                         Write-Log "Estado de notificacao global (Email/WhatsApp) consolidado."
@@ -294,7 +294,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
             Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
         }
 
-    } catch {
+    } catch [System.Exception] {
         if ($_.Exception.Message -match "Processo finalizado") { throw }
         Exit-WithCode 4 "Falha critica na orquestracao: $_"
     }

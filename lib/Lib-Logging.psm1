@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Lib-Logging.psm1
 # VERSAO : 1.3
 # DESCRICAO: Biblioteca de logging e seguranca para Automacoes Hub.
@@ -97,7 +97,7 @@ function Register-ExecutionTelemetry {
     try {
         $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction Stop
         return $response.exec_id
-    } catch {
+    } catch [System.Exception] {
         Write-Warning "Falha ao registrar telemetria (Orquestrador offline?): $_"
         return (New-ExecId) # Fallback seguro
     }
@@ -121,24 +121,24 @@ function Close-ExecutionTelemetry {
     }
 
     $uri = "http://localhost:8000/api/executions/telemetry/end/$ExecId"
-    
+
     $logContent = $null
     if (-not [string]::IsNullOrWhiteSpace($LogPath) -and (Test-Path $LogPath)) {
         try {
             $logContent = [System.IO.File]::ReadAllText($LogPath, $script:Lib_Utf8NoBom)
-        } catch { }
+        } catch [System.Exception] { }
     }
-    
+
     $body = @{
         status = $Status
         logs = $logContent
         exit_code = if ($Status -eq "SUCCESS") { 0 } else { 1 }
     } | ConvertTo-Json -Depth 10 -Compress
-    
+
     $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
     try {
         Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8" -ErrorAction Stop | Out-Null
-    } catch {
+    } catch [System.Exception] {
         Write-Warning "Falha ao fechar telemetria: $_"
     }
 }
@@ -157,24 +157,24 @@ function Test-AutomationPreFlight {
 
     Write-AutomacaoLog -Message "Iniciando Pre-Flight Check..." -Level "INFO" -ExecId $ExecId -LogPath $LogPath
     $results = @()
-    
+
     # Portabilidade: Detecta a unidade de disco do projeto dinamicamente
     $projectRoot = Get-AutomacaoProjectRoot
     $driveLetter = (Split-Path -Path $projectRoot -Qualifier)
     if ([string]::IsNullOrWhiteSpace($driveLetter)) { $driveLetter = "C:" }
-    
+
     # Deteccao de Disco Hardened (v5.2.0)
     $freeGB = 0
     try {
         # Tentativa 1: Get-CimInstance (Moderno)
         $cimDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$driveLetter'" -ErrorAction Stop
         $freeGB = [math]::Round($cimDisk.FreeSpace / 1GB, 2)
-    } catch {
+    } catch [System.Exception] {
         try {
             # Tentativa 2: Fallback para Get-PSDrive (Nativo PS)
             $psDrive = Get-PSDrive ($driveLetter.TrimEnd(':')) -ErrorAction Stop
             $freeGB = [math]::Round($psDrive.Free / 1GB, 2)
-        } catch {
+        } catch [System.Exception] {
             $freeGB = -1 # Sinaliza falha na leitura
         }
     }
@@ -243,7 +243,7 @@ function Write-AutomacaoLog {
             $body = @{ message = $line; exec_id = $ExecId } | ConvertTo-Json -Compress
             $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
             Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
-        } catch { }
+        } catch [System.Exception] { }
     }
 }
 
@@ -310,7 +310,7 @@ function Enter-AutomationLock {
 
     $mutexName = "Global\AutomationHub_$ExecId"
     $script:AutomationMutex = New-Object System.Threading.Mutex($false, $mutexName)
-    
+
     if (-not $script:AutomationMutex.WaitOne(5000)) {
         $msg = "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId. Abortando para evitar corrupcao."
         if ([string]::IsNullOrWhiteSpace($LogPath)) {

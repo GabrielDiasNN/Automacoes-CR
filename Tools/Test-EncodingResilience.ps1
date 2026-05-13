@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Test-EncodingResilience.ps1
 # VERSAO : 1.0.0
 # DESCRICAO: Trava de Regressao para Caracteres Especiais (UTF-8).
@@ -52,11 +52,11 @@ $auditPayload = @{
 try {
     # Tenta registrar no Log de Auditoria
     $response = Invoke-RestMethod -Uri "$ApiBase/api/system/audit" -Method Get -Headers @{"X-API-Key"=$ApiKey} -ErrorAction SilentlyContinue
-    
+
     # Criar uma entrada de auditoria via um endpoint que permita (ou simular via post se houver)
-    # Como nao temos um endpoint direto de POST audit aberto (apenas interno), 
+    # Como nao temos um endpoint direto de POST audit aberto (apenas interno),
     # vamos testar via criacao de uma automacao temporaria com nome acentuado.
-    
+
     $testAutoName = "Automacao Teste Cae " + (Get-Date -Format "ssmmHH")
     $createPayload = @{
         name = $testAutoName
@@ -64,17 +64,17 @@ try {
         script_path = "./_Template/run.ps1"
         max_runtime_minutes = 10
     } | ConvertTo-Json
-    
+
     Write-Host "Tentando criar automacao com nome: $testAutoName"
     $createResp = Invoke-RestMethod -Uri "$ApiBase/api/automations" -Method Post -Headers @{"X-API-Key"=$ApiKey; "Content-Type"="application/json"} -Body ([System.Text.Encoding]::UTF8.GetBytes($createPayload))
-    
+
     if ($createResp.name -eq $testAutoName) {
         Write-Host "[OK] API aceitou e retornou caracteres especiais corretamente." -ForegroundColor Green
     } else {
         Write-Host "[ERRO] API corrompeu os caracteres no retorno." -ForegroundColor Red
         exit 1
     }
-    
+
     # Limpeza
     Invoke-RestMethod -Uri "$ApiBase/api/automations/$($createResp.id)" -Method Delete -Headers @{"X-API-Key"=$ApiKey} | Out-Null
     Write-Host "[OK] Limpeza concluida." -ForegroundColor Green

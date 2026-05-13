@@ -25,14 +25,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("orchestrator")
 
-
 # ---------------------------------------------------------------------------
 # Autenticacao Timing-Safe
 # ---------------------------------------------------------------------------
 
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
-
 
 def get_api_key(request: Request, api_key: str = Depends(api_key_header)):
     """Valida API Key com comparacao timing-safe (anti timing-attack)."""
@@ -53,11 +51,9 @@ def get_api_key(request: Request, api_key: str = Depends(api_key_header)):
         )
     return api_key
 
-
 # ---------------------------------------------------------------------------
 # Request ID Middleware
 # ---------------------------------------------------------------------------
-
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Injeta um X-Request-Id unico em toda requisicao para rastreabilidade."""
@@ -70,11 +66,9 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         response.headers["X-Request-Id"] = request_id
         return response
 
-
 # ---------------------------------------------------------------------------
 # Timing Middleware
 # ---------------------------------------------------------------------------
-
 
 class TimingMiddleware(BaseHTTPMiddleware):
     """Loga o tempo de resposta e adiciona header X-Process-Time."""
@@ -96,11 +90,9 @@ class TimingMiddleware(BaseHTTPMiddleware):
 
         return response
 
-
 # ---------------------------------------------------------------------------
 # Rate Limit Middleware - Sliding Window por IP
 # ---------------------------------------------------------------------------
-
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """

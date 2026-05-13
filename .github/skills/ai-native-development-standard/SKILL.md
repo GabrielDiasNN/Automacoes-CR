@@ -44,4 +44,3 @@ Estabelecer o paradigma de desenvolvimento assistido por IA, garantindo metadado
 
 ## Pre-Delivery Checklist
 - Conforme diretrizes globais.
-

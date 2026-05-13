@@ -1,7 +1,7 @@
 # Cognitive Context: Montagem de Terceirizados
 
 ## Business Purpose
-Esta automacao e o guardiao da integridade entre a **Programacao de Producao** e a **Montagem Fisica** realizada por terceirizados (faccoes). 
+Esta automacao e o guardiao da integridade entre a **Programacao de Producao** e a **Montagem Fisica** realizada por terceirizados (faccoes).
 O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corresponda exatamente a Nota Fiscal (NF) enviada pelo cliente. Divergencias aqui podem gerar erros de estoque, faturamento errado e multas fiscais.
 
 ## Why this architecture? [ARCH-PURE-NATIVE]

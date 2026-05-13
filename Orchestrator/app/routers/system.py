@@ -25,9 +25,7 @@ from ..timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
 
-
 router = APIRouter(prefix="/api/system", tags=["System"])
-
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,13 +33,11 @@ PROJECT_ROOT = os.path.dirname(
 
 STARTUP_TIME = get_now_local()
 
-
 # ---------------------------------------------------------------------------
 
 # HEALTH CHECK COMPLETO
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/health", response_model=schemas.SystemHealth)
 def health_check(db: Session = Depends(get_db)):
@@ -98,13 +94,11 @@ def health_check(db: Session = Depends(get_db)):
         ram_usage_percent=ram,
     )
 
-
 # ---------------------------------------------------------------------------
 
 # WORKER STATUS
 
 # ---------------------------------------------------------------------------
-
 
 def _get_worker_status(db: Session) -> schemas.WorkerStatus:
     """Le o heartbeat do worker do banco."""
@@ -134,7 +128,6 @@ def _get_worker_status(db: Session) -> schemas.WorkerStatus:
         version=hb.version or "4.0.0",
     )
 
-
 @router.get("/worker/status", response_model=schemas.WorkerStatus)
 def get_worker_status(
     db: Session = Depends(get_db),
@@ -144,13 +137,11 @@ def get_worker_status(
 
     return _get_worker_status(db)
 
-
 # ---------------------------------------------------------------------------
 
 # METRICAS ENRIQUECIDAS
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/metrics", response_model=schemas.MetricsResponse)
 def get_metrics(
@@ -257,13 +248,11 @@ def get_metrics(
         automations=automation_stats,
     )
 
-
 # ---------------------------------------------------------------------------
 
 # BACKUP MANUAL
 
 # ---------------------------------------------------------------------------
-
 
 @router.post("/backup")
 def manual_backup(
@@ -331,13 +320,11 @@ def manual_backup(
 
         raise HTTPException(status_code=500, detail=f"Falha no backup: {str(e)}")
 
-
 # ---------------------------------------------------------------------------
 
 # AUDIT LOG
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/audit", response_model=list[schemas.AuditEntry])
 def list_audit_log(
@@ -358,13 +345,11 @@ def list_audit_log(
 
     return entries
 
-
 # ---------------------------------------------------------------------------
 
 # UPTIME
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/uptime")
 def get_uptime(api_key: str = Depends(get_api_key)):
@@ -378,13 +363,11 @@ def get_uptime(api_key: str = Depends(get_api_key)):
         "uptime_human": str(uptime).split(".")[0],
     }
 
-
 # ---------------------------------------------------------------------------
 
 # AGENDAMENTO - Lista de tarefas programadas
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/scheduler/jobs", response_model=List[schemas.ScheduledJob])
 def list_scheduled_jobs(
@@ -447,13 +430,11 @@ def list_scheduled_jobs(
         jobs, key=lambda x: x.next_run_time if x.next_run_time else datetime.max
     )
 
-
 # ---------------------------------------------------------------------------
 
 # VERSION - Endpoint enterprise de versao e build
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/version", response_model=schemas.SystemVersion)
 def get_version():
@@ -481,13 +462,11 @@ def get_version():
         allowed_origins=allowed_origins,
     )
 
-
 # ---------------------------------------------------------------------------
 
 # CHECKPOINT - WAL manual
 
 # ---------------------------------------------------------------------------
-
 
 @router.post("/checkpoint")
 def manual_checkpoint(
@@ -515,13 +494,11 @@ def manual_checkpoint(
 
     return {"message": "WAL Checkpoint executado com sucesso.", "result": result}
 
-
 # ---------------------------------------------------------------------------
 
 # PURGE - Limpeza de execucoes antigas
 
 # ---------------------------------------------------------------------------
-
 
 @router.post("/purge")
 def manual_purge(
@@ -557,5 +534,3 @@ def manual_purge(
         "retention_days": retention_days,
         "removed_count": removed,
     }
-
-

@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 
 # ARQUIVO: Test-LogConformidade.ps1
 
@@ -30,8 +30,6 @@
 
 # ==============================================================================
 
-
-
 [CmdletBinding()]
 
 param(
@@ -46,19 +44,13 @@ param(
 
 )
 
-
-
 $ErrorActionPreference = "Stop"
-
-
 
 if ([string]::IsNullOrWhiteSpace($RootPath)) {
 
     $RootPath = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { Get-Location }
 
 }
-
-
 
 # Se nenhum modo especificado, assume -StagedOnly
 
@@ -68,19 +60,13 @@ if (-not $StagedOnly -and -not $All -and $Paths.Count -eq 0) {
 
 }
 
-
-
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
-
-
 
 # ==============================================================================
 
 # Padroes proibidos
 
 # ==============================================================================
-
-
 
 # PS: formato ISO em chamadas de log
 
@@ -94,8 +80,6 @@ $psPatterns = @(
 
 )
 
-
-
 # VBA: montagem de nome de arquivo diario
 
 $vbaPatterns = @(
@@ -106,8 +90,6 @@ $vbaPatterns = @(
 
 )
 
-
-
 # PS: nome de arquivo diario com data
 
 $psDailyPatterns = @(
@@ -117,8 +99,6 @@ $psDailyPatterns = @(
     @{ Pattern = '"\$\(\s*Get-Date\s+-Format\s+[''"]dd-MM-yyyy[''"]'; Desc = "Interpolacao de data diaria em nome de log" }
 
 )
-
-
 
 $allPatterns = @{
 
@@ -131,8 +111,6 @@ $allPatterns = @{
     ".cls"  = $vbaPatterns
 
 }
-
-
 
 # ==============================================================================
 
@@ -154,8 +132,6 @@ function Get-TargetFiles {
 
             }
 
-
-
             $candidate = $item.Trim()
 
             if (-not [System.IO.Path]::IsPathRooted($candidate)) {
@@ -164,15 +140,11 @@ function Get-TargetFiles {
 
             }
 
-
-
             if (-not (Test-Path -LiteralPath $candidate)) {
 
                 continue
 
             }
-
-
 
             $ext = [System.IO.Path]::GetExtension($candidate).ToLowerInvariant()
 
@@ -182,35 +154,25 @@ function Get-TargetFiles {
 
             }
 
-
-
             if ($candidate -match '\\Tools\\') {
 
                 continue
 
             }
 
-
-
             $files += (Resolve-Path -LiteralPath $candidate).Path
 
         }
 
-
-
         return @($files | Sort-Object -Unique)
 
     }
-
-
 
     if ($StagedOnly) {
 
         $stagedRaw = git diff --cached --name-only --diff-filter=ACMR 2>$null
 
         if (-not $stagedRaw) { return @() }
-
-
 
         $files = @()
 
@@ -260,8 +222,6 @@ function Get-TargetFiles {
 
 }
 
-
-
 # ==============================================================================
 
 # Varredura
@@ -269,8 +229,6 @@ function Get-TargetFiles {
 # ==============================================================================
 
 $files = Get-TargetFiles
-
-
 
 if ($files.Count -eq 0) {
 
@@ -280,11 +238,7 @@ if ($files.Count -eq 0) {
 
 }
 
-
-
 $violations = @()
-
-
 
 foreach ($filePath in $files) {
 
@@ -294,13 +248,9 @@ foreach ($filePath in $files) {
 
     if (-not $patterns) { continue }
 
-
-
     $lines = Get-Content -LiteralPath $filePath -ErrorAction SilentlyContinue
 
     if (-not $lines) { continue }
-
-
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
 
@@ -338,8 +288,6 @@ foreach ($filePath in $files) {
 
 }
 
-
-
 # ==============================================================================
 
 # Resultado
@@ -354,8 +302,6 @@ if ($violations.Count -eq 0) {
 
 }
 
-
-
 Write-Host ""
 
 Write-Host "============================================================" -ForegroundColor Red
@@ -365,8 +311,6 @@ Write-Host " VIOLACOES DE CONFORMIDADE DE LOG ($($violations.Count) encontrada(s
 Write-Host "============================================================" -ForegroundColor Red
 
 Write-Host ""
-
-
 
 foreach ($v in $violations) {
 
@@ -378,11 +322,8 @@ foreach ($v in $violations) {
 
 }
 
-
-
 Write-Host ""
 
 Write-Host "[FAIL] Corrija as violacoes acima antes de commitar." -ForegroundColor Red
 
 exit 1
-

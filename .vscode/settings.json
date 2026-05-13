@@ -158,7 +158,8 @@
         "editor.defaultFormatter": "vscode.typescript-language-features"
     },
     "[powershell]": {
-        "editor.defaultFormatter": "ms-vscode.powershell"
+        "editor.defaultFormatter": "ms-vscode.powershell",
+        "files.encoding": "utf8bom"
     },
     "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
     "python.analysis.typeCheckingMode": "basic",

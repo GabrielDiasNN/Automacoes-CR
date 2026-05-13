@@ -8,7 +8,6 @@
 #   "description": "Nucleo de validacao NF/OB com tipagem estrita e gramatica corrigida",
 #   "reliability": "Base64-Bridge-Logs, HTML-Entity-Shield"
 # }
-import base64
 import hashlib
 import json
 import os
@@ -40,7 +39,6 @@ HTML_ICON_TARGET: str = "&#127919;"
 
 ROBO_VERSAO: str = "v1.1"
 
-
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs para o stderr."""
     ts: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -48,12 +46,12 @@ def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
-
 def html_escape(text: Optional[Any]) -> str:
-    """Escapa caracteres HTML para garantir renderizacao correta e seguranca."""
+    """Escapa caracteres HTML fundamentais para seguranca.
+    Caracteres acentuados sao mantidos nativos em UTF-8 para melhor legibilidade e suporte moderno."""
     if not text:
         return "&nbsp;"
-    s: str = (
+    return (
         str(text)
         .replace("&", "&amp;")
         .replace("<", "&lt;")
@@ -61,36 +59,6 @@ def html_escape(text: Optional[Any]) -> str:
         .replace('"', "&quot;")
         .replace("'", "&#39;")
     )
-    char_map: Dict[str, str] = {
-        "ç": "&ccedil;",
-        "Ç": "&Ccedil;",
-        "ã": "&atilde;",
-        "Ã": "&Atilde;",
-        "õ": "&otilde;",
-        "Õ": "&Otilde;",
-        "á": "&aacute;",
-        "Á": "&Aacute;",
-        "é": "&eacute;",
-        "É": "&Eacute;",
-        "í": "&iacute;",
-        "Í": "&Iacute;",
-        "ó": "&oacute;",
-        "Ó": "&Oacute;",
-        "ú": "&uacute;",
-        "Ú": "&Uacute;",
-        "â": "&acirc;",
-        "Â": "&Acirc;",
-        "ê": "&ecirc;",
-        "Ê": "&Ecirc;",
-        "ô": "&ocirc;",
-        "Ô": "&Ocirc;",
-        "à": "&agrave;",
-        "À": "&Agrave;",
-    }
-    for char, entity in char_map.items():
-        s = s.replace(char, entity)
-    return s
-
 
 def clean_str(val: Any) -> str:
     """Limpa e normaliza strings ou numeros do Excel/Oracle."""
@@ -99,7 +67,6 @@ def clean_str(val: Any) -> str:
     if isinstance(val, float) and val.is_integer():
         return str(int(val))
     return str(val).strip()
-
 
 def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Executa a logica de negocio: compara Montagem com Programacao."""
@@ -146,7 +113,6 @@ def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             erros.append(row)
     return erros
 
-
 def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NFs divergentes na Montagem."""
     if not nf_montagem_str:
@@ -164,7 +130,6 @@ def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> st
             )
     return ", ".join(res)
 
-
 def destaque_nf_prog(nf_prog: Optional[str], nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NF divergente na Programacao."""
     if not nf_prog:
@@ -172,7 +137,6 @@ def destaque_nf_prog(nf_prog: Optional[str], nf_esperada: str) -> str:
     if nf_prog == nf_esperada:
         return f"<span style='color:#166534; font-weight:bold;'>{html_escape(nf_prog)}</span>"
     return f"<span style='background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #fca5a5;'>{html_escape(nf_prog)}</span>"
-
 
 def gerar_tabela_categoria_html(
     titulo: str, erros: List[Dict[str, Any]], cor_titulo: str
@@ -194,7 +158,6 @@ def gerar_tabela_categoria_html(
     html += "</table></div>"
     return html
 
-
 def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
     """Gera o detalhamento completo das divergencias para o e-mail."""
     if not erros:
@@ -210,7 +173,6 @@ def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
         html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('ST_OB_ABERTO'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('NR_OB'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td style='color:#6b7280;'>{agora}</td></tr>"
     html += "</table></div></div>"
     return html
-
 
 def montar_template_email(
     tipo_notificacao: str,
@@ -283,7 +245,6 @@ def montar_template_email(
     html += f"<hr style='border:0;border-top:1px solid #e5e7eb;margin:32px 0 24px 0;'><p style='font-size:10pt;color:#9ca3af;text-align:center;margin:0;'><span style='font-size:13pt;vertical-align:middle;'>{HTML_ICON_CALENDAR}</span> <b>Data da Validação:</b> {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}</p></div></div></body></html>"
     return html
 
-
 def gerar_assinatura(erro: Dict[str, Any]) -> str:
     """Gera um hash MD5 unico para a combinacao de erro/OB."""
     base: str = (
@@ -292,7 +253,6 @@ def gerar_assinatura(erro: Dict[str, Any]) -> str:
     if not base.strip("|_"):
         base = "VAZIO"
     return hashlib.md5(base.encode("utf-8")).hexdigest()
-
 
 def main() -> None:
     """Orquestrador principal da validacao."""
@@ -408,7 +368,7 @@ def main() -> None:
             tipo_notif, total_linhas, total_erros, elapsed_time, detalhes_html
         )
         result_payload: Dict[str, str] = {
-            "subject_b64": base64.b64encode(subject.encode("utf-8")).decode("ascii"),
+            "subject": subject,
             "html": html_final,
         }
         payload_file: str = os.path.join(script_dir, f".payload_{exec_id}.json")
@@ -423,13 +383,9 @@ def main() -> None:
     else:
         log("Nenhuma mudança.", "INFO", exec_id)
 
-
 if __name__ == "__main__":
     main()
-
 
 # ## Gestao de Contexto (AI-Native) - Atualizado em 12/05/2026
 # - Estado: Estabilizado v1.2.1 (Sintaxe corrigida).
 # - Objetivo: Garantir que a IA entenda a correcao da sintaxe e a remocao de texto vivo.
-
-

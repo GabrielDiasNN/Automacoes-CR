@@ -23,18 +23,17 @@ _SAFE_NAME_RE = re.compile(
 )
 _DANGEROUS_PATH_PATTERNS = ["..", "//", "\\\\", "%", "\x00"]
 
-
 def format_dt_br(val: Any) -> Any:
     """Converte qualquer formato de data para o padrao brasileiro (DD/MM/YYYY HH:MM:SS)."""
     from .timezone import to_br_timezone
     if val is None:
         return None
-    
+
     # Se for datetime, garante que seja naive BRT antes de formatar
     if isinstance(val, datetime):
         dt = to_br_timezone(val)
         return dt.strftime("%d/%m/%Y %H:%M:%S")
-    
+
     if isinstance(val, str):
         try:
             # ISO format (ex: 2023-01-01T12:00:00Z ou 2023-01-01T12:00:00)
@@ -46,7 +45,7 @@ def format_dt_br(val: Any) -> Any:
                 if dt.tzinfo is not None:
                     dt = to_br_timezone(dt)
                 return dt.strftime("%d/%m/%Y %H:%M:%S")
-            
+
             # SQLite format (ex: 2023-01-01 12:00:00)
             dt = datetime.strptime(val.split(".")[0], "%Y-%m-%d %H:%M:%S")
             return dt.strftime("%d/%m/%Y %H:%M:%S")
@@ -54,19 +53,16 @@ def format_dt_br(val: Any) -> Any:
             return val
     return val
 
-
 def _validate_safe_name(v: str) -> str:
     if not _SAFE_NAME_RE.match(v):
         raise ValueError("Nome inv\u00e1lido (2-100 chars, caracteres seguros).")
     return v.strip()
-
 
 def _validate_script_path(v: str) -> str:
     for pattern in _DANGEROUS_PATH_PATTERNS:
         if pattern in v:
             raise ValueError(f"Caminho proibido: '{pattern}'")
     return v
-
 
 def _validate_schedule(v: Optional[str]) -> Optional[str]:
     if not v:
@@ -77,11 +73,9 @@ def _validate_schedule(v: Optional[str]) -> Optional[str]:
     except:
         raise ValueError("Schedule deve ser JSON v\u00e1lido.")
 
-
 # ---------------------------------------------------------------------------
 # Schemas de Automation
 # ---------------------------------------------------------------------------
-
 
 class AutomationBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
@@ -108,10 +102,8 @@ class AutomationBase(BaseModel):
     def v_sched(cls, v: Optional[str]) -> Optional[str]:
         return _validate_schedule(v)
 
-
 class AutomationCreate(AutomationBase):
     pass
-
 
 class AutomationUpdate(BaseModel):
     name: Optional[str] = None
@@ -122,7 +114,6 @@ class AutomationUpdate(BaseModel):
     enabled: Optional[bool] = None
     test_mode: Optional[bool] = None
     notification_channels: Optional[str] = None
-
 
 class AutomationResponse(AutomationBase):
     id: int
@@ -138,11 +129,9 @@ class AutomationResponse(AutomationBase):
         self.updated_at = format_dt_br(self.updated_at)
         return self
 
-
 # ---------------------------------------------------------------------------
 # Schemas de Execution
 # ---------------------------------------------------------------------------
-
 
 class ExecutionBase(BaseModel):
     id: str
@@ -161,13 +150,11 @@ class ExecutionBase(BaseModel):
         self.finished_at = format_dt_br(self.finished_at)
         return self
 
-
 class ExecutionResponse(ExecutionBase):
     logs: Optional[str] = None
     artifacts: Optional[str] = None
     automation_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
-
 
 class ExecutionSummary(BaseModel):
     id: str
@@ -189,10 +176,8 @@ class ExecutionSummary(BaseModel):
         self.finished_at = format_dt_br(self.finished_at)
         return self
 
-
 class ExecutionTelemetryStart(BaseModel):
     automation_name: str
-
 
 class ExecutionTelemetryEnd(BaseModel):
     status: str
@@ -200,11 +185,9 @@ class ExecutionTelemetryEnd(BaseModel):
     logs: Optional[str] = None
     artifacts: Optional[str] = None
 
-
 # ---------------------------------------------------------------------------
 # Schemas de Sistema
 # ---------------------------------------------------------------------------
-
 
 class WorkerStatus(BaseModel):
     is_alive: bool
@@ -220,7 +203,6 @@ class WorkerStatus(BaseModel):
     def apply_br_format(self) -> "WorkerStatus":
         from .timezone import get_now_local; self.last_ping = format_dt_br(self.last_ping)
         return self
-
 
 class SystemHealth(BaseModel):
     status: str
@@ -239,7 +221,6 @@ class SystemHealth(BaseModel):
         self.timestamp = format_dt_br(self.timestamp)
         return self
 
-
 class ScheduledJob(BaseModel):
     id: str
     automation_id: Optional[int] = None
@@ -251,7 +232,6 @@ class ScheduledJob(BaseModel):
     def apply_br_format(self) -> "ScheduledJob":
         self.next_run_time = format_dt_br(self.next_run_time)
         return self
-
 
 class AutomationMetric(BaseModel):
     name: str
@@ -267,7 +247,6 @@ class AutomationMetric(BaseModel):
         self.last_run = format_dt_br(self.last_run)
         return self
 
-
 class MetricsSummary(BaseModel):
     total_executions: int
     success_count: int
@@ -276,11 +255,9 @@ class MetricsSummary(BaseModel):
     pending_count: int
     avg_duration_sec: float
 
-
 class MetricsResponse(BaseModel):
     summary: MetricsSummary
     automations: List[AutomationMetric]
-
 
 class AuditEntry(BaseModel):
     id: int
@@ -297,7 +274,6 @@ class AuditEntry(BaseModel):
         self.timestamp = format_dt_br(self.timestamp)
         return self
 
-
 class SystemVersion(BaseModel):
     version: str = "5.2.0"
     python_version: str
@@ -306,13 +282,11 @@ class SystemVersion(BaseModel):
     max_workers: int
     allowed_origins: List[str]
 
-
 # ---------------------------------------------------------------------------
 # Paginacao
 # ---------------------------------------------------------------------------
 
 T = TypeVar("T")
-
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: List[T]

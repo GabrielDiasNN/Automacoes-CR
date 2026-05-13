@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $InfrastructureDir = $PSScriptRoot
 $ProjectRoot = Split-Path -Parent $InfrastructureDir
 if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = "." }
@@ -14,9 +14,9 @@ if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force }
 Write-Host "[HARD RESET] Realizando limpeza profunda do ambiente..." -ForegroundColor Gray
 
 # Taskkill forca o encerramento de todos os processos relacionados (ignoramos erros se ja estiver limpo)
-try { taskkill /F /IM python.exe /T 2>$null } catch {}
-try { taskkill /F /IM python3.12.exe /T 2>$null } catch {}
-try { taskkill /F /IM py.exe /T 2>$null } catch {}
+try { taskkill /F /IM python.exe /T 2>$null } catch [System.Exception] {}
+try { taskkill /F /IM python3.12.exe /T 2>$null } catch [System.Exception] {}
+try { taskkill /F /IM py.exe /T 2>$null } catch [System.Exception] {}
 
 # Liberar porta 8000
 $portInUse = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue

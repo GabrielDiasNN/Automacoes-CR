@@ -1,11 +1,10 @@
-﻿# {
-#   "version": "1.2.0",
+# {
+#   "version": "1.2.1",
 #   "skill": "python-oracle-migration, protocolo-valeg",
 #   "contract": "direct-oracle-fetch, thick-mode-padronizado, retry-on-failure",
 #   "description": "Extrai dados do Oracle com Thick Mode e Retry",
 #   "reliability": "Base64-Bridge-Logs"
 # }
-import base64
 import json
 import os
 import sys
@@ -25,14 +24,12 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs para o stderr."""
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
-
 
 def extract() -> None:
     """Funcao principal de extracao."""
@@ -140,8 +137,5 @@ def extract() -> None:
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
 
-
 if __name__ == "__main__":
     extract()
-
-

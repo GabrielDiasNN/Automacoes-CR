@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
 # pylint: disable=line-too-long, missing-class-docstring, too-many-locals, bare-except, consider-using-max-builtin, too-many-branches, broad-exception-caught, too-many-statements
 # {
 #   "name": "processar-receitas-bloqueadas",
-#   "version": "2.3.0",
+#   "version": "2.3.1",
 #   "skill": "python-oracle-migration",
 #   "description": "Use when processing blocked recipes with state control, visual highlighting, and Excel generation."
 # }
-import base64
 import json
 import os
 import sys
@@ -30,13 +28,11 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
-
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-PROCESS] [{level}] [ExecId:{exec_id}] {message}"
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
-
 
 # --- CONTRATOS DE DADOS (Pydantic) ---
 class RecipeRecord(BaseModel):
@@ -47,17 +43,14 @@ class RecipeRecord(BaseModel):
     data_prod: Optional[str] = Field(alias="Data Última Prod.", default="")
     data_bloqueio: Optional[str] = Field(alias="Data Bloqueio", default="")
 
-
 class StateFile(BaseModel):
     last_hash: str
     updated_at: str
     records: List[RecipeRecord]
 
-
 # --- RESILIENCIA DE CONEXAO ---
 # Circuit Breaker: Abre apos 3 falhas, permanece aberto por 60s
 db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
-
 
 @db_breaker
 @stamina.retry(on=oracledb.DatabaseError, attempts=3)
@@ -71,7 +64,6 @@ def fetch_data_with_retry(
     )
     with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
         return pd.read_sql(sql_query, con=connection)
-
 
 def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str:
     # Cores Classicas
@@ -194,7 +186,6 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
     """
     return html
 
-
 def formatar_excel(file_path: str) -> None:
     wb = load_workbook(file_path)
     header_fill = PatternFill(
@@ -245,7 +236,6 @@ def formatar_excel(file_path: str) -> None:
                     pass
             ws.column_dimensions[column].width = max_length + 2
     wb.save(file_path)
-
 
 def process() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
@@ -438,15 +428,15 @@ def process() -> None:
         log("Circuit Breaker Aberto: Banco de dados inacessivel.", "ERROR", exec_id)
         sys.exit(1)
     except oracledb.DatabaseError as de:
-        (error_obj,) = de.args
-        log(f"Erro DB: {error_obj.message}", "ERROR", exec_id)
+        if de.args:
+            error_obj = de.args[0]
+            log(f"Erro DB: {error_obj.message}", "ERROR", exec_id)
+        else:
+            log(f"Erro DB desconhecido: {de}", "ERROR", exec_id)
         sys.exit(1)
     except Exception as e:
         log(f"Erro fatal: {str(e)}", "ERROR", exec_id)
         sys.exit(1)
 
-
 if __name__ == "__main__":
     process()
-
-

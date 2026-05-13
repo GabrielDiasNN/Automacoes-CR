@@ -1,9 +1,10 @@
-param(
+﻿param(
     [string]$RootPath = $PSScriptRoot,
     [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
+$env:PYTHONUTF8 = 1
 Write-Host "=== Governanca Python (Type Hints & Pylint) ==="
 
 $targetFiles = @()

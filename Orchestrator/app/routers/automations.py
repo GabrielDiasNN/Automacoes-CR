@@ -23,21 +23,17 @@ from ..utils import get_client_ip, log_audit, validate_script_path
 
 logger = logging.getLogger("orchestrator")
 
-
 router = APIRouter(prefix="/api/automations", tags=["Automations"])
-
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-
 
 # ---------------------------------------------------------------------------
 
 # LISTAGEM com paginacao e ordenacao
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.AutomationResponse])
 def list_automations(
@@ -102,13 +98,11 @@ def list_automations(
         items=result, total=total, page=page, per_page=per_page, pages=pages
     )
 
-
 # ---------------------------------------------------------------------------
 
 # LISTAGEM SIMPLES (compatibilidade com Dashboard legado)
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/all", response_model=list[schemas.AutomationResponse])
 def list_all_automations(
@@ -140,13 +134,11 @@ def list_all_automations(
 
     return result
 
-
 # ---------------------------------------------------------------------------
 
 # GET por ID
 
 # ---------------------------------------------------------------------------
-
 
 @router.get("/{automation_id}", response_model=schemas.AutomationResponse)
 def get_automation(
@@ -167,13 +159,11 @@ def get_automation(
 
     return db_auto
 
-
 # ---------------------------------------------------------------------------
 
 # CREATE
 
 # ---------------------------------------------------------------------------
-
 
 @router.post("", response_model=schemas.AutomationResponse, status_code=201)
 def create_automation(
@@ -226,13 +216,11 @@ def create_automation(
 
     return db_auto
 
-
 # ---------------------------------------------------------------------------
 
 # UPDATE
 
 # ---------------------------------------------------------------------------
-
 
 @router.put("/{automation_id}", response_model=schemas.AutomationResponse)
 def update_automation(
@@ -273,13 +261,11 @@ def update_automation(
 
     return db_auto
 
-
 # ---------------------------------------------------------------------------
 
 # DELETE
 
 # ---------------------------------------------------------------------------
-
 
 @router.delete("/{automation_id}")
 def delete_automation(
@@ -318,13 +304,11 @@ def delete_automation(
 
     return {"message": f"Automacao '{auto_name}' removida com sucesso."}
 
-
 # ---------------------------------------------------------------------------
 
 # START (Enfileirar execucao)
 
 # ---------------------------------------------------------------------------
-
 
 @router.post("/{automation_id}/start")
 def start_automation(
@@ -385,8 +369,6 @@ def start_automation(
 
     return {"message": "Automa\u00e7\u00e3o enfileirada com sucesso.", "exec_id": exec_id}
 
-
-
 @router.post("/test-mode/global")
 def set_global_test_mode(
     enabled: bool,
@@ -429,7 +411,6 @@ def set_global_test_mode(
         "message": f"Modo Teste Global {'ativado' if enabled else 'desativado'} para todas as automa\u00e7\u00f5es."
     }
 
-
 @router.post("/{automation_id}/test-mode")
 def set_automation_test_mode(
     automation_id: int,
@@ -467,13 +448,11 @@ def set_automation_test_mode(
         "message": f"Modo Teste da automa\u00e7\u00e3o {db_auto.name} definido para {enabled}."
     }
 
-
 # ---------------------------------------------------------------------------
 
 # CONTROLE EM MASSA
 
 # ---------------------------------------------------------------------------
-
 
 @router.post("/control/pause-all")
 def pause_all(
@@ -490,7 +469,6 @@ def pause_all(
 
     return {"message": "Todas as automa\u00e7\u00f5es pausadas."}
 
-
 @router.post("/control/resume-all")
 def resume_all(
     request: Request,
@@ -505,5 +483,3 @@ def resume_all(
     db.commit()
 
     return {"message": "Todas as automa\u00e7\u00f5es retomadas."}
-
-

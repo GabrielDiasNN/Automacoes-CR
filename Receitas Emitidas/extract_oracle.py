@@ -1,18 +1,15 @@
-# -*- coding: utf-8 -*-
-# pylint: disable=line-too-long, too-many-locals, f-string-without-interpolation, broad-exception-caught, bare-except, too-many-statements, unused-import
+# pylint: disable=line-too-long, too-many-locals, f-string-without-interpolation, broad-exception-caught, bare-except, too-many-statements, unused-import, too-many-branches
 # {
-#   "version": "2.7.1",
+#   "version": "2.7.2",
 #   "skill": "python-oracle-migration, protocolo-valeg",
 #   "contract": "ipc-stdio, thick-mode-padronizado",
 #   "description": "Extrai receitas emitidas via Direct Oracle (Query CTE Nativa) com Thick Mode garantido",
 #   "reliability": "Base64-Bridge-Logs, SQL-Correlation-DNA, Retry-On-Failure, Circuit-Breaker"
 # }
-import base64
 import hashlib
 import json
 import os
 import sys
-import time
 from datetime import datetime
 from typing import Any
 
@@ -26,17 +23,14 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
-
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
-
 # --- RESILIENCIA DE CONEXAO ---
 db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
-
 
 @db_breaker
 @stamina.retry(on=oracledb.DatabaseError, attempts=3)
@@ -59,15 +53,17 @@ def connect_and_execute(
                 log(f"Query executada com sucesso. Linhas retornadas: {len(rows)}", "INFO", exec_id)
                 return columns, rows
             except oracledb.Error as e:
-                error_obj, = e.args
-                log(f"Erro SQL Oracle (ORA-{error_obj.code}): {error_obj.message}", "ERROR", exec_id)
+                if e.args:
+                    error_obj = e.args[0]
+                    log(f"Erro SQL Oracle (ORA-{error_obj.code}): {error_obj.message}", "ERROR", exec_id)
+                else:
+                    log(f"Erro SQL Oracle desconhecido: {e}", "ERROR", exec_id)
                 # Log da query (parcial para seguranca)
                 log(f"DNA da Query: {sql[:200]}...", "DEBUG", exec_id)
                 raise
     except oracledb.Error as e:
         log(f"Erro de Conexao Oracle: {e}", "ERROR", exec_id)
         raise
-
 
 def extract() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
@@ -167,8 +163,5 @@ def extract() -> None:
         log(f"Erro fatal na extracao: {e}", "ERROR", exec_id)
         sys.exit(1)
 
-
 if __name__ == "__main__":
     extract()
-
-

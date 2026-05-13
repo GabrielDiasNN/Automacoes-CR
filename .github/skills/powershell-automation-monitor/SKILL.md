@@ -47,4 +47,3 @@ Padronizar a criação de scripts corporativos em PowerShell, especialmente os v
 
 ## Pre-Delivery Checklist
 - Conforme diretrizes globais.
-

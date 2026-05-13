@@ -1,4 +1,4 @@
-?# ==============================================================================
+﻿?# ==============================================================================
 # ARQUIVO: New-Automation.ps1
 # VERSAO: 1.0
 # DESCRICAO: Scaffolding para novas automacoes. Cria a estrutura de diretorios,
@@ -53,7 +53,6 @@ param(
     }
 
     $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-
 
 function Write-Step {
     param([string]$Msg, [string]$Type = "INFO")

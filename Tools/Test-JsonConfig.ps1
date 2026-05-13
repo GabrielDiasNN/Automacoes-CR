@@ -1,4 +1,4 @@
-# {
+﻿# {
 #   "version": "1.0.0",
 #   "skill": "automation-runtime-safety",
 #   "description": "Validador de sintaxe JSON para arquivos de configuracao e estado"

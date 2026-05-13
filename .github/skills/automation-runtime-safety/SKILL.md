@@ -45,4 +45,3 @@ Garantir a segurança operacional por meio da abordagem Zero Trust, com padroniz
 
 ## Pre-Delivery Checklist
 - Conforme diretrizes globais.
-

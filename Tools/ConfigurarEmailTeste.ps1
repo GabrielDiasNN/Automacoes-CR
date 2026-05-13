@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: ConfigurarEmailTeste.ps1
 # DESCRICAO: Define ou remove o e-mail de redirecionamento para modo de teste.
 # ==============================================================================
@@ -25,4 +25,3 @@ else {
     Write-Host "[OK] Variavel definida com sucesso." -ForegroundColor Green
     Write-Host "OBSERVACAO: O Monitor foi reiniciado automaticamente pelo arquivo .bat." -ForegroundColor Yellow
 }
-

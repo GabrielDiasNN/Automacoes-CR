@@ -33,18 +33,15 @@ test_engine = create_engine(
 # Diretorio raiz de testes para validacao de script_path
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
-
 @event.listens_for(test_engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
-
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 AUTH_HEADERS = {"X-API-Key": "hub-secret-token"}
-
 
 @pytest.fixture(scope="function")
 def db_session():
@@ -53,7 +50,6 @@ def db_session():
     yield session
     session.close()
     Base.metadata.drop_all(bind=test_engine)
-
 
 @pytest.fixture(scope="function")
 def client(db_session):

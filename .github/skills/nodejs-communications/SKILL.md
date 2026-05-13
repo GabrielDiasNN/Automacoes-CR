@@ -45,4 +45,3 @@ Gerenciar disparos de comunicações automatizadas (como notificações de Whats
 
 ## Pre-Delivery Checklist
 - Conforme diretrizes globais.
-

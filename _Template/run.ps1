@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     TEMPLATE: Orquestrador PowerShell (AI-Native / Soberano).
 .DESCRIPTION
@@ -70,12 +70,12 @@ try {
     try {
         # 1. LOGICA DE NEGOCIO AQUI
         Write-Log "Executando tarefas..."
-        
+
     } finally {
         # Liberacao do bloqueio global
         Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
     }
-    
+
     $execStatus = "SUCCESS"
 
 } catch [System.Exception] {

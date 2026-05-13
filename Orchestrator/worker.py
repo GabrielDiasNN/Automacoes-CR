@@ -56,7 +56,6 @@ API_BASE: str = f"http://127.0.0.1:{_port}"
 log_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logs")
 os.makedirs(log_dir, exist_ok=True)
 
-
 class _JsonFormatter(logging.Formatter):
     """Formatter JSON estruturado identico ao Orchestrator (Pilar L)."""
 
@@ -71,7 +70,6 @@ class _JsonFormatter(logging.Formatter):
         if record.exc_info:
             doc["exception"] = self.formatException(record.exc_info)
         return json.dumps(doc)
-
 
 _json_handler = logging.handlers.RotatingFileHandler(
     os.path.join(log_dir, "Worker.log"),
@@ -106,17 +104,14 @@ stats: Dict[str, Any] = {
     "active_processes": {}, # {exec_id: Popen_object}
 }
 
-
 def update_stat(key: str, delta: int = 1) -> None:
     """Atualiza estatistica global de forma thread-safe."""
     with cast(threading.Lock, stats["lock"]):
         stats[key] += delta
 
-
 # ---------------------------------------------------------------------------
 # Heartbeat
 # ---------------------------------------------------------------------------
-
 
 def heartbeat_loop() -> None:
     """Atualiza o heartbeat no banco a cada HEARTBEAT_INTERVAL segundos."""
@@ -163,14 +158,12 @@ def heartbeat_loop() -> None:
             logger.warning("Erro no heartbeat: %s", e)
         shutdown_event.wait(HEARTBEAT_INTERVAL)
 
-
 # ---------------------------------------------------------------------------
 # Broadcast de Logs
 # ---------------------------------------------------------------------------
 
 log_buffer: Dict[str, List[str]] = {}
 log_buffer_lock: threading.Lock = threading.Lock()
-
 
 def broadcast_log(message: str, exec_id: str) -> None:
     """Envia log para o WebSocket do Orchestrator via endpoint HTTP interno."""
@@ -195,7 +188,6 @@ def broadcast_log(message: str, exec_id: str) -> None:
             if attempt < 2:
                 time.sleep(0.5 * (attempt + 1))
 
-
 def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
     """Envia evento de sistema para o WebSocket global."""
     try:
@@ -207,18 +199,15 @@ def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
     except requests.RequestException:
         pass
 
-
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
-
 
 def enqueue_output(out: Any, queue: Queue[str]) -> None:
     """Le stdout do processo e coloca na fila."""
     for line in iter(out.readline, ""):
         queue.put(cast(str, line))
     out.close()
-
 
 def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
     """Busca arquivos gerados durante esta execucao."""
@@ -230,11 +219,9 @@ def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
                 found.append(os.path.basename(fp))
     return json.dumps(found) if found else None
 
-
 # ---------------------------------------------------------------------------
 # Execucao de Tarefa
 # ---------------------------------------------------------------------------
-
 
 def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
     """Executa uma tarefa em subprocesso com monitoramento completo."""
@@ -452,11 +439,9 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                 del stats["active_processes"][exec_id]
         db.close()
 
-
 # ---------------------------------------------------------------------------
 # Loop Principal
 # ---------------------------------------------------------------------------
-
 
 def main_loop() -> None:
     """Loop principal: consome tarefas PENDING e despacha para o ThreadPool."""
@@ -492,14 +477,14 @@ def main_loop() -> None:
                 pending_task.status = "RUNNING"
                 pending_task.started_at = get_now_local()
                 db.commit()
-                
+
                 # Re-buscar para garantir que temos os dados apos o commit
                 automation = (
                     db.query(models.Automation)
                     .filter(models.Automation.id == pending_task.automation_id)
                     .first()
                 )
-                
+
                 if automation:
                     path: str = automation.script_path
                     if path.startswith("./") or path.startswith(".\\"):
@@ -529,7 +514,7 @@ def main_loop() -> None:
         shutdown_event.wait(POLL_INTERVAL)
 
     logger.info("Shutdown solicitado. Encerrando tarefas ativas...")
-    
+
     # Pillar G: Terminacao forcada de processos filhos para evitar orfaos
     with cast(threading.Lock, stats["lock"]):
         for eid, proc in stats["active_processes"].items():
@@ -542,16 +527,13 @@ def main_loop() -> None:
     executor.shutdown(wait=True, cancel_futures=False)
     logger.info("Worker encerrado de forma controlada.")
 
-
 # ---------------------------------------------------------------------------
 # Signal Handlers
 # ---------------------------------------------------------------------------
 
-
 def _signal_handler(signum: int, frame: Optional[FrameType]) -> None:
     logger.info("Sinal recebido: %d. Iniciando graceful shutdown...", signum)
     shutdown_event.set()
-
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, _signal_handler)

@@ -1,10 +1,10 @@
-import pytz  # type: ignore
 from datetime import datetime
+import pytz  # type: ignore
 
 def get_now_local() -> datetime:
     """
     Retorna o datetime atual no fuso horario de Brasilia (GMT-3).
-    Garante explicitamente que o fuso usado e America/Sao_Paulo, 
+    Garante explicitamente que o fuso usado e America/Sao_Paulo,
     independentemente de como o SO esta configurado, e retorna naive.
     Isso previne regressoes de fuso horario.
     """
@@ -19,7 +19,7 @@ def to_br_timezone(dt: datetime) -> datetime:
         return None
     if dt.tzinfo is None:
         return dt
-    
+
     # Se aware, converte para local e remove tzinfo
     tz_br = pytz.timezone("America/Sao_Paulo")
     dt_br = dt.astimezone(tz_br)

@@ -4,7 +4,51 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 O projeto segue os princípios de **Resiliência, Escala e Governança (Protocolo V.A.L.E.G.)**.
 
----
+## [5.4.7] — 2026-05-13
+### 🔠 Correção Global de Encoding e Pre-commit (UTF-8 com e sem BOM)
+- **PowerShell UTF-8 BOM**: Padronização global de todos os scripts `.ps1` e `.psm1` para UTF-8 com BOM, corrigindo erro de sintaxe no PowerShell 5.1 e destravando o pre-commit.
+- **UTF-8 No-BOM Global**: Modificação de todos os demais arquivos do projeto (`.py`, `.js`, `.json`, etc) para UTF-8 sem BOM.
+- **VS Code Settings**: Atualização do `.vscode/settings.json` para forçar `utf8bom` especificamente em arquivos PowerShell.
+
+## [5.4.6] — 2026-05-13
+### 🔠 Padronização de Encoding (UTF-8 with BOM)
+- **PS 5.1 Compatibility**: Reintrodução global do Byte Order Mark (BOM) em todos os scripts `.ps1` e `.psm1`. A ausência do BOM impedia o PowerShell 5.1 de reconhecer literais acentuados nativos, causando corrupção nos logs.
+- **Log Healing**: Restauração da acentuação correta em 100% das mensagens de log (INÍCIO, Execução, etc.).
+
+## [5.4.5] — 2026-05-13
+### 🩹 Recuperação de Desastre (BOM Eradication) & Correção de Motor
+- **BOM Eradication**: Removidos Byte Order Marks (BOM) invisíveis via manipulação de bytes brutos em todos os scripts `run.ps1` e bibliotecas `Lib-*`. A regressão foi causada por incompatibilidade do saneamento automático com o PowerShell 5.1.
+- **Dependency Healing**: Identificada e corrigida a corrupção na `Lib-Retry.psm1`, que impedia a execução das automações de Receitas.
+- **Worker Fix**: Estabilizada a função `dispatch_alerts` no `notifications.py` com a importação correta de `get_now_local`.
+- **Validation**: Ciclo completo de testes realizado com sucesso, garantindo que 100% da stack está operacional.
+
+## [5.4.4] — 2026-05-13
+### 🧹 Saneamento Estético & Economia de Tokens
+- **Massive Cleanup**: Remoção recursiva de espaços em branco (trailing spaces) e colapso de múltiplas linhas vazias consecutivas em 223 arquivos do projeto.
+- **Token Optimization**: Redução do tamanho dos arquivos-fonte, otimizando o consumo de tokens em interações com IA e melhorando a legibilidade geral.
+- **PowerShell BOM Compliance**: Tentativa de padronização de BOMs (causou regressão de sintaxe, corrigida na v5.4.5).
+
+## [5.4.3] — 2026-05-13
+### 🔠 Saneamento Global de Encoding (UTF-8 BOM Native)
+- **Global Scan & Eradicate**: Varredura completa em `C:\Automacoes` para normalização UTF-8 e erradicação de guardrails ASCII obsoletos (ex: `# coding: utf-8`).
+- **Heal Global**: Reparo recursivo de caracteres corrompidos em todos os scripts PowerShell e Python do Hub.
+- **Bridge EOL**: Desativação definitiva do protocolo Base64 Bridge na automação de Montagem de Terceirizados.
+- **Orquestração**: Forçamento de I/O UTF-8 explícito em todos os sub-processos Python via run.ps1.
+
+## [5.4.2] — 2026-05-13
+### 🛡️ Hardening de Governança e Cura de Bibliotecas (dill)
+- **Cura Crítica**: Correção de encoding na biblioteca 'dill' (logger.py) eliminando falhas de linting.
+- **Governança PS**: Refatoração de catch genéricos para [System.Exception] em infraestrutura central.
+- **Saneamento**: Limpeza de lints residuais e estabilização de ambiente (PYTHONUTF8=1).
+
+## [5.4.1] — 2026-05-13
+### 🩺 Validação de Saúde & Ciclo de Vida de Telemetria
+- **Health Check Executed**: Execução manual de todo o ecossistema de automações (Montagem, Receitas Bloqueadas, Receitas Emitidas) para validação de saúde pós-upgrade UTF-8.
+- **Telemetry Validation**: Confirmação do fluxo de telemetria nativa (TEL_ IDs) enviando logs e- **Estado:** Estabilizado v5.4.3 (Full UTF-8 Native).
+- **Encoding:** Padronização absoluta em UTF-8 com BOM para scripts PowerShell, garantindo integridade PT-BR no Windows.
+- **Governança:** Conformidade total com Protocolo V.A.L.E.G. e extinção de protocolos legados (Base64 Bridge).
+ (Pylint/PowerShell) planejados para refatoração futura.
+- **Modo Teste (Sandbox)**: Validação bem-sucedida em ambiente de teste com 100% de sucesso nos disparos simulados.
 
 ## [5.4.0] — 2026-05-13
 ### 🌐 Universal Encoding (UTF-8) & Extinção do ASCII-Safe

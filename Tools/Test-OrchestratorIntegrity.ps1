@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Valida a integridade do Orquestrador e do Worker (Fase 3).
 .DESCRIPTION

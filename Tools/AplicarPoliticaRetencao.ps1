@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ExecId = "",
     [string]$BasePath = "",
@@ -46,8 +46,8 @@ foreach ($folder in $targetFolders) {
         $files = Get-ChildItem -Path $folder -File -Recurse | Where-Object { $_.LastWriteTime -lt $logsCutoff }
         foreach ($f in $files) {
             if ($DryRun) { Write-RunLog -Level "INFO" -Message "[DRY-RUN] Removendo log antigo: $($f.FullName)" }
-            else { 
-                Remove-Item $f.FullName -Force 
+            else {
+                Remove-Item $f.FullName -Force
                 Write-RunLog -Level "INFO" -Message "Log removido: $($f.Name)"
             }
         }
@@ -60,8 +60,8 @@ if (Test-Path $backupDir) {
     $backups = Get-ChildItem -Path $backupDir -Filter "*.db.bak" | Where-Object { $_.LastWriteTime -lt $backupsCutoff }
     foreach ($b in $backups) {
         if ($DryRun) { Write-RunLog -Level "INFO" -Message "[DRY-RUN] Removendo backup antigo: $($b.Name)" }
-        else { 
-            Remove-Item $b.FullName -Force 
+        else {
+            Remove-Item $b.FullName -Force
             Write-RunLog -Level "INFO" -Message "Backup removido: $($b.Name)"
         }
     }
@@ -71,7 +71,7 @@ if (Test-Path $backupDir) {
 try {
     $apiKey = [System.Environment]::GetEnvironmentVariable("ORCHESTRATOR_API_KEY", "Process")
     if (-not $apiKey) { Write-RunLog -Level "WARN" -Message "ORCHESTRATOR_API_KEY nao encontrada no ambiente."; return }
-    
+
     $apiUrl = "http://127.0.0.1:8000/api/system/purge"
     if (-not $DryRun) {
         $resp = Invoke-RestMethod -Uri $apiUrl -Method Post -Headers @{"X-API-Key"=$apiKey} -ErrorAction Stop

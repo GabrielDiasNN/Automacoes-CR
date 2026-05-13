@@ -47,4 +47,3 @@ Unificar o fluxo de ponta-a-ponta corporativo, definindo o gerenciamento de Exec
 
 ## Pre-Delivery Checklist
 - Conforme diretrizes globais.
-

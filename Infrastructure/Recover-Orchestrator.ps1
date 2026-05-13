@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $InfrastructureDir = $PSScriptRoot
 $ProjectRoot = Split-Path -Parent $InfrastructureDir
 $OrchestratorDir = Join-Path $ProjectRoot "Orchestrator"
@@ -7,7 +7,7 @@ Write-Host "--- [RESCUE MODE: ORQUESTRADOR v5.2] ---" -ForegroundColor Red
 Write-Host "Iniciando limpeza profunda de processos e locks..." -ForegroundColor Yellow
 
 # 1. Matar todos os processos Python e PowerShell relacionados as automacoes
-$procToKill = Get-Process | Where-Object { 
+$procToKill = Get-Process | Where-Object {
     ($_.ProcessName -match "python" -and ($_.Path -match "Automacoes" -or $_.CommandLine -match "uvicorn" -or $_.CommandLine -match "worker.py")) -or
     ($_.ProcessName -match "powershell" -and ($_.CommandLine -match "Start-Orchestrator.ps1" -or $_.CommandLine -match "MonitorAutomacoes.ps1"))
 }

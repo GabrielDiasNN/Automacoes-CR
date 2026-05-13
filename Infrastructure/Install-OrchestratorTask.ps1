@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Registra o Orquestrador FastAPI como uma tarefa de inicializacao oculta.
 .DESCRIPTION

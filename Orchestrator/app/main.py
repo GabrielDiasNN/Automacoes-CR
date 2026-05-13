@@ -49,7 +49,6 @@ load_dotenv(os.path.join(project_root, ".env"))
 # Configuracao de Logs Estruturados (JSON)
 # ---------------------------------------------------------------------------
 
-
 class JsonFormatter(logging.Formatter):
     """Formatter customizado para emitir logs em JSON estruturado (Pilar L)."""
 
@@ -64,7 +63,6 @@ class JsonFormatter(logging.Formatter):
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_record)
-
 
 log_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logs"
@@ -95,7 +93,6 @@ logger.addHandler(console_handler)
 import pytz
 
 scheduler = BackgroundScheduler(timezone=pytz.timezone("America/Sao_Paulo"))
-
 
 def _scheduled_task_wrapper(automation_id: int):
     db = SessionLocal()
@@ -133,7 +130,6 @@ def _scheduled_task_wrapper(automation_id: int):
     finally:
         db.close()
 
-
 def reload_scheduled_tasks():
     # Remover apenas jobs de automacoes (preservar jobs enterprise)
     for job in scheduler.get_jobs():
@@ -150,7 +146,7 @@ def reload_scheduled_tasks():
             try:
                 sched_data = json.loads(auto.schedule)
                 days = ",".join(map(str, sched_data.get("daysOfWeek", [])))
-                
+
                 # Suporte a multiplos horarios (Novo Formato: "times": [{"h": 8, "m": 0}, ...])
                 times_list = sched_data.get("times")
                 if times_list:
@@ -186,7 +182,6 @@ def reload_scheduled_tasks():
     finally:
         db.close()
 
-
 def _cleanup_zombie_tasks():
     db = SessionLocal()
     try:
@@ -205,11 +200,9 @@ def _cleanup_zombie_tasks():
     finally:
         db.close()
 
-
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -252,7 +245,6 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown(wait=False)
     logger.info("Orchestrator offline.")
 
-
 # ---------------------------------------------------------------------------
 # Aplicativo FastAPI
 # ---------------------------------------------------------------------------
@@ -282,17 +274,14 @@ app.include_router(executions.router)
 app.include_router(system.router)
 app.include_router(websocket.router)
 
-
 # --- ROTAS DE COMPATIBILIDADE LEGADA ---
 @app.get("/api/health")
 def legacy_health():
     return RedirectResponse(url="/api/system/health")
 
-
 @app.get("/api/metrics")
 def legacy_metrics():
     return RedirectResponse(url="/api/system/metrics")
-
 
 # --- SERVICO DE ARQUIVOS ESTATICOS (DASHBOARD) ---
 # Resolvendo raiz do projeto (C:\Automacoes)
@@ -310,7 +299,6 @@ else:
 
 if os.path.exists(lib_path):
     app.mount("/lib", StaticFiles(directory=lib_path), name="lib")
-
 
 @app.get("/")
 def read_root():

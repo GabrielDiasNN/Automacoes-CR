@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Biblioteca de envio de e-mail via Outlook COM.
 .DESCRIPTION
@@ -47,7 +47,7 @@ function Send-OutlookEmail {
     function Write-LocalLog {
         param([string]$m, [string]$l = "INFO")
         if ([string]::IsNullOrWhiteSpace($LogPath)) { return }
-        
+
         if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
             Write-AutomacaoLog -Message $m -Level $l -ExecId $ExecId -LogPath $LogPath
         } else {
@@ -61,7 +61,7 @@ function Send-OutlookEmail {
 
     try {
         if ($PSCmdlet.ShouldProcess($To, "Enviar e-mail: $Subject")) {
-            
+
             # Estrategia Anti-Zumbi: Tenta pegar um Outlook ja aberto pelo usuario
             try {
                 $outlook = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Outlook.Application")
@@ -70,7 +70,7 @@ function Send-OutlookEmail {
                 $outlook = New-Object -ComObject Outlook.Application
                 $weStartedOutlook = $true
             }
-            
+
             $mailItem = $outlook.CreateItem(0)
 
             # Redirecionamento de Teste
@@ -129,16 +129,16 @@ function Send-OutlookEmail {
     }
     finally {
         # Liberacao de Objetos COM (NAO FECHAR O OUTLOOK!)
-        if ($mailItem) { 
-            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch [System.Exception] {} 
+        if ($mailItem) {
+            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch [System.Exception] {}
         }
-        
-        if ($outlook) { 
+
+        if ($outlook) {
             # Apenas libera o objeto da memoria do script, NUNCA executa .Quit() para nao matar o Outlook do usuario
             # ou impedir o envio de e-mails que estao na Outbox.
-            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) | Out-Null } catch [System.Exception] {} 
+            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) | Out-Null } catch [System.Exception] {}
         }
-        
+
         # Garante a morte do ponteiro RPC no Windows, mas mantem a aplicacao Outlook.exe viva
         [System.GC]::Collect()
         [System.GC]::WaitForPendingFinalizers()

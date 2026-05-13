@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Lib-Config.psm1
 # VERSAO : 1.0.0
 # DESCRICAO: Biblioteca central para gestao de configuracoes e variaveis de ambiente.

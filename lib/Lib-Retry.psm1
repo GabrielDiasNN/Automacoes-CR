@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Biblioteca compartilhada de Retry com Backoff Exponencial (VALEG-Compliant).
 .DESCRIPTION
@@ -191,4 +191,3 @@ function Send-AlertaFalhaDefinitiva {
 }
 
 Export-ModuleMember -Function Invoke-WithRetry, Send-AlertaFalhaDefinitiva
-

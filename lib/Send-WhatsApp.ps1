@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Send-WhatsApp.ps1
 # VERSAO : 2.1
 # DESCRICAO: Wrapper Global para envio de WhatsApp. Suporta parametros explicitos
@@ -39,7 +39,7 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
     $finalPhone = $json.target.contactPhone
     $finalMessage = "*$($json.message.caption.title.text)*`n$($json.message.caption.body.text)"
     $finalClientId = $json.auth.clientId
-    
+
     # Resolve anexo (assume relativo ao config.json se nao for absoluto)
     if ($json.message.sendAttachment -and $json.paths.attachmentPath) {
         $resolvedConfig = Convert-Path $ConfigPath
@@ -72,12 +72,12 @@ $args = @(
     "`"$LogFile`""
 )
 
-$WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) { 
+$WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
     $resolvedPath = Convert-Path $ConfigPath
     $parent = Split-Path -Parent $resolvedPath
     if ([string]::IsNullOrWhiteSpace($parent)) { (Get-Location).Path } else { $parent }
-} else { 
-    (Get-Location).Path 
+} else {
+    (Get-Location).Path
 }
 $env:NODE_PATH = Join-Path $WorkDir "node_modules"
 

@@ -1,4 +1,4 @@
-?<#
+﻿?<#
 .SYNOPSIS
     Localiza e abre o arquivo de log mais recente do projeto Automacoes.
 

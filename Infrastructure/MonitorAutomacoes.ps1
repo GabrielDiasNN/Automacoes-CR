@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Watchdog do Orquestrador FastAPI.
 .DESCRIPTION
@@ -63,13 +63,13 @@ while ($true) {
         # Validacao autenticada (Pilar V)
         $headers = @{ "X-API-Key" = $ApiKey }
         $health = Invoke-RestMethod -Uri $HealthUrl -Headers $headers -TimeoutSec 5 -ErrorAction Stop
-        
+
         if ($health.database -ne "online" -or $health.scheduler -ne "executando") {
             throw "Sinal de vida OK, mas componentes internos falharam: DB=$($health.database), Sched=$($health.scheduler)"
         }
         $script:LastOrchestratorRestart = $null
     }
-    catch {
+    catch [System.Exception] {
         $errReason = $_.Exception.Message
         $now = Get-Date
         # Cooldown de 120 segundos para evitar loops de reinicio infinito (Pilar E)

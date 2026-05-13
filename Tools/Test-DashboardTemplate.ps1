@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ARQUIVO: Test-DashboardTemplate.ps1
 # DESCRICAO: Valida contrato HTML/CSS do template de dashboard moderno.
 # ==============================================================================
@@ -213,4 +213,3 @@ if ($FailOnWarnings -and $warningFindings.Count -gt 0) {
 }
 
 exit 0
-

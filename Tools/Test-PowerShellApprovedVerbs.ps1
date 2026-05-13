@@ -1,4 +1,4 @@
-# cSpell:words funcao funcoes padrao substantivo verbos aprovados verificados encontrados pscustomobject isnullorwhitespace trimstart startswith additionalapprovedverbs ACMR ERRO pelo devem seguir deve existir
+﻿# cSpell:words funcao funcoes padrao substantivo verbos aprovados verificados encontrados pscustomobject isnullorwhitespace trimstart startswith additionalapprovedverbs ACMR ERRO pelo devem seguir deve existir
 [CmdletBinding()]
 param(
     [string[]]$Paths = @(),
@@ -205,4 +205,3 @@ if ($allVerbViolations.Count -gt 0) {
 
 Write-Host "Dica: nomes de funcao devem seguir Verbo-Substantivo e o verbo deve existir em Get-Verb."
 exit 1
-

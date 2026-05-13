@@ -30,11 +30,9 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-
 # ---------------------------------------------------------------------------
 # LISTAGEM GLOBAL com filtros e paginacao
 # ---------------------------------------------------------------------------
-
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.ExecutionSummary])
 def list_executions(
@@ -92,11 +90,9 @@ def list_executions(
         items=items, total=total, page=page, per_page=per_page, pages=pages
     )
 
-
 # ---------------------------------------------------------------------------
 # EXECUCOES POR AUTOMACAO (compatibilidade)
 # ---------------------------------------------------------------------------
-
 
 @router.get(
     "/by-automation/{automation_id}", response_model=list[schemas.ExecutionSummary]
@@ -127,11 +123,9 @@ def list_by_automation(
         result.append(s)
     return result
 
-
 # ---------------------------------------------------------------------------
 # RECENTES (para dashboard overview)
 # ---------------------------------------------------------------------------
-
 
 @router.get("/recent", response_model=list[schemas.ExecutionSummary])
 def list_recent(
@@ -158,11 +152,9 @@ def list_recent(
         result.append(s)
     return result
 
-
 # ---------------------------------------------------------------------------
 # GET por ID (com logs completos)
 # ---------------------------------------------------------------------------
-
 
 @router.get("/{exec_id}", response_model=schemas.ExecutionResponse)
 def get_execution(
@@ -183,11 +175,9 @@ def get_execution(
     resp.automation_name = auto_name
     return resp
 
-
 # ---------------------------------------------------------------------------
 # LOGS de uma execucao (paginados por linhas)
 # ---------------------------------------------------------------------------
-
 
 @router.get("/{exec_id}/logs")
 def get_execution_logs(
@@ -214,11 +204,9 @@ def get_execution_logs(
         "lines": sliced,
     }
 
-
 # ---------------------------------------------------------------------------
 # ARTEFATOS de uma execucao
 # ---------------------------------------------------------------------------
-
 
 @router.get("/{exec_id}/artifacts")
 def list_artifacts(
@@ -239,7 +227,6 @@ def list_artifacts(
             pass
 
     return {"exec_id": exec_id, "artifacts": artifacts}
-
 
 @router.get("/{exec_id}/download")
 def download_artifact(
@@ -273,7 +260,7 @@ def download_artifact(
         robot_dir = os.path.normpath(os.path.dirname(os.path.abspath(script_path)))
 
     file_path = os.path.normpath(os.path.join(robot_dir, filename))
-    
+
     # Validar se o arquivo resolvido ainda reside dentro do diretorio do robo ou do projeto
     if not file_path.startswith(robot_dir):
         raise HTTPException(status_code=403, detail="Acesso negado ao arquivo.")
@@ -285,11 +272,9 @@ def download_artifact(
 
     return FileResponse(path=file_path, filename=filename)
 
-
 # ---------------------------------------------------------------------------
 # STOP (Parar execucao)
 # ---------------------------------------------------------------------------
-
 
 @router.post("/{exec_id}/stop")
 def stop_execution(
@@ -314,7 +299,6 @@ def stop_execution(
     logger.info(f"Execucao interrompida: {exec_id}")
     return {"message": "Sinal de parada registrado.", "exec_id": exec_id}
 
-
 # ---------------------------------------------------------------------------
 # TELEMETRIA EXTERNA (Terminal / VS Code)
 # ---------------------------------------------------------------------------
@@ -333,15 +317,15 @@ def telemetry_start(
     Inicia o registro de uma execucao disparada externamente (ex: terminal).
     """
     from ..timezone import get_now_local
-    
+
     # Buscar a automacao pelo nome
     db_auto = db.query(models.Automation).filter(models.Automation.name == payload.automation_name).first()
     if not db_auto:
         raise HTTPException(status_code=404, detail=f"Automação '{payload.automation_name}' não encontrada.")
-    
+
     # Gerar ID unico
     exec_id = f"TEL_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    
+
     new_exec = models.Execution(
         id=exec_id,
         automation_id=db_auto.id,
@@ -350,13 +334,12 @@ def telemetry_start(
         started_at=get_now_local(),
     )
     db.add(new_exec)
-    
+
     log_audit(db, "START_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
-    
+
     logger.info(f"Telemetria iniciada: {exec_id} para automacao {payload.automation_name}")
     return {"exec_id": exec_id}
-
 
 @router.post("/telemetry/end/{exec_id}")
 def telemetry_end(
@@ -370,11 +353,11 @@ def telemetry_end(
     Finaliza o registro de uma execucao disparada externamente.
     """
     from ..timezone import get_now_local
-    
+
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
-        
+
     db_exec.status = payload.status.upper()
     if payload.exit_code is not None:
         db_exec.exit_code = payload.exit_code
@@ -382,9 +365,9 @@ def telemetry_end(
         db_exec.logs = payload.logs
     if payload.artifacts is not None:
         db_exec.artifacts = payload.artifacts
-        
+
     db_exec.finished_at = get_now_local()
-    
+
     # Calcular duracao
     if db_exec.started_at and db_exec.finished_at:
         try:
@@ -395,9 +378,6 @@ def telemetry_end(
 
     log_audit(db, "END_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
-    
+
     logger.info(f"Telemetria finalizada: {exec_id} com status {payload.status}")
     return {"message": "Telemetria registrada com sucesso.", "exec_id": exec_id}
-
-
-
