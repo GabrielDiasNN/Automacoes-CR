@@ -25,7 +25,9 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 ---
 
 ## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 13/05/2026
-- **Estado:** Estabilizado v5.2.7 (AI-Native Optimization).
+- **Estado:** Estabilizado v5.3.0 (Terminal Telemetry Sync).
+- **Telemetria:** Implementada Telemetria Nativa para execuções de terminal via prefixo `TEL_`, garantindo sincronia total entre VS Code e Dashboard.
+- **Broadcast:** Ativada transmissão de logs em tempo real para o Dashboard durante execuções manuais.
 - **Configuração:** Ativada funcionalidade experimental `autoMemory` via `.gemini/settings.json` para otimização de contexto e persistência de aprendizado entre sessões.
 - **Governança de Entrega:** Implementada externalização de destinatários via `config.json` na automação de Montagem, eliminando hardcoding e seguindo o pilar de **Governança** do Protocolo V.A.L.E.G.
 - **UX/UI:** Padronização gramatical PT-BR completa em e-mails e logs, eliminando strings sem acentuação.

@@ -5,13 +5,13 @@
     Este script coordena o ciclo de vida da automacao utilizando extracao direta do Oracle via Python.
     Nao utiliza mais dependencias de Excel/VBA (Migracao Concluida).
 .NOTES
-    Version: 2.0.0
+    Version: 2.1.0
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-runtime-safety
     Contract: native-fetch-logic, ipc-file-payload, base64-bridge-logs, preflight-v1
     #>
     # {
     #   "name": "orchestrator-montagem-terceirizados",
-    #   "version": "2.0.0",
+    #   "version": "2.1.0",
     #   "skill": "powershell-automation-monitor",
     #   "description": "Use when orchestrating fiscal validation of outsourcing assembly orders."
     # }
@@ -51,7 +51,9 @@ Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
-    $ExecId = if (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
+    $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Register-ExecutionTelemetry -AutomationName "Montagem de Terceirizados"
+    } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 }
 Enter-AutomationLock -ExecId $ExecId
 
@@ -83,6 +85,7 @@ if (-not (Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracl
 Write-Log "========================================================================================="
 Write-Log "IN$([char]0xCD)CIO - Execu$([char]0xE7)$([char]0xE3)o Montagem Terceirizados (Pure-Native). ExecId=$ExecId"
 
+$execStatus = "ERROR"
 try {
     # Carregar Variaveis de Ambiente (.env)
     $envPath = Join-Path $projectRoot ".env"
@@ -215,6 +218,8 @@ try {
         Write-Log "Nenhuma diverg$([char]0xEA)ncia ou mudan$([char]0xE7)a de estado. Nenhuma notifica$([char]0xE7)$([char]0xE3)o enviada."
     }
 
+    $execStatus = "SUCCESS"
+
 } catch [System.Exception] {
     Write-Log "ERRO FATAL NA EXECUCAO NATIVA: $_" -Lvl "ERRO"; exit 1
 } finally {
@@ -229,14 +234,17 @@ try {
     # Limpeza de cache temporario orfao (se nao foi consolidado)
     if (Test-Path $CacheTmp) { Remove-Item $CacheTmp -Force -ErrorAction SilentlyContinue }
 
+    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Close-ExecutionTelemetry -ExecId $ExecId -Status $execStatus -LogPath $LogFile
+    }
+
     Write-Log "FIM - Processo finalizado."
     Exit-AutomationLock
 }
 
 <#
-## Gestao de Contexto (AI-Native) - Atualizado em 12/05/2026
-- Estado: Estabilizado v2.2.1 (Hardened Email Logic).
-- Governanca: Implementada protecao contra destinatario vazio no Send-OutlookEmail.
-- Acentuacao: Mantida padronizacao PT-BR.
+## Gestao de Contexto (AI-Native) - Atualizado em 13/05/2026
+- Estado: Estabilizado v2.1.0 (v5.3.0 Telemetry Sync).
+- Governanca: Implementada telemetria nativa TEL_ para Dashboard.
+- Resiliencia: Sincronia total de ciclo de vida (Start/End).
 #>
-

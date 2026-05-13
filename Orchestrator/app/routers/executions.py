@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Router: Executions - Historico de execucoes com filtros, logs, artefatos e controle. v5.1.0
+Router: Executions - Historico de execucoes com filtros, logs, artefatos e controle. v5.3.0
 """
 
 import json
@@ -313,5 +313,91 @@ def stop_execution(
 
     logger.info(f"Execucao interrompida: {exec_id}")
     return {"message": "Sinal de parada registrado.", "exec_id": exec_id}
+
+
+# ---------------------------------------------------------------------------
+# TELEMETRIA EXTERNA (Terminal / VS Code)
+# ---------------------------------------------------------------------------
+
+import time
+import uuid
+
+@router.post("/telemetry/start")
+def telemetry_start(
+    payload: schemas.ExecutionTelemetryStart,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Inicia o registro de uma execucao disparada externamente (ex: terminal).
+    """
+    from ..timezone import get_now_local
+    
+    # Buscar a automacao pelo nome
+    db_auto = db.query(models.Automation).filter(models.Automation.name == payload.automation_name).first()
+    if not db_auto:
+        raise HTTPException(status_code=404, detail=f"Automa\u00e7\u00e3o '{payload.automation_name}' n\u00e3o encontrada.")
+    
+    # Gerar ID unico
+    exec_id = f"TEL_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    
+    new_exec = models.Execution(
+        id=exec_id,
+        automation_id=db_auto.id,
+        status="RUNNING",
+        requested_by="TERMINAL",
+        started_at=get_now_local(),
+    )
+    db.add(new_exec)
+    
+    log_audit(db, "START_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
+    db.commit()
+    
+    logger.info(f"Telemetria iniciada: {exec_id} para automacao {payload.automation_name}")
+    return {"exec_id": exec_id}
+
+
+@router.post("/telemetry/end/{exec_id}")
+def telemetry_end(
+    exec_id: str,
+    payload: schemas.ExecutionTelemetryEnd,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Finaliza o registro de uma execucao disparada externamente.
+    """
+    from ..timezone import get_now_local
+    
+    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    if not db_exec:
+        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
+        
+    db_exec.status = payload.status.upper()
+    if payload.exit_code is not None:
+        db_exec.exit_code = payload.exit_code
+    if payload.logs is not None:
+        db_exec.logs = payload.logs
+    if payload.artifacts is not None:
+        db_exec.artifacts = payload.artifacts
+        
+    db_exec.finished_at = get_now_local()
+    
+    # Calcular duracao
+    if db_exec.started_at and db_exec.finished_at:
+        try:
+            delta = db_exec.finished_at - db_exec.started_at
+            db_exec.duration_seconds = round(delta.total_seconds(), 2)
+        except Exception:
+            pass
+
+    log_audit(db, "END_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
+    db.commit()
+    
+    logger.info(f"Telemetria finalizada: {exec_id} com status {payload.status}")
+    return {"message": "Telemetria registrada com sucesso.", "exec_id": exec_id}
+
 
 

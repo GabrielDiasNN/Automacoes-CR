@@ -9,13 +9,13 @@
     4. PowerShell: Entrega visual via Outlook utilizando Base64 Bridge para logs.
     Cada etapa critica e executada com Invoke-WithRetry (VALEG: A-Arquitetura).
 .NOTES
-    Version: 2.6.1
+    Version: 2.6.2
     Skill: ai-native-development-standard, python-oracle-migration, protocolo-valeg
     Contract: ipc-stdio, base64-bridge-logs, retry-on-failure
 #>
 # {
 #   "name": "orchestrator-receitas-emitidas",
-#   "version": "2.6.1",
+#   "version": "2.6.2",
 #   "skill": "powershell-automation-monitor",
 #   "description": "Use when orchestrating the weekly report of emitted recipes using IPC pipes."
 # }
@@ -50,7 +50,9 @@ Import-Module $libEmail   -Force
 Import-Module $libRetry   -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
-    $ExecId = if (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
+    $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Register-ExecutionTelemetry -AutomationName "Receitas Emitidas"
+    } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 }
 $LogFile = Get-AutomacaoLogPath -Slug "ReceitasEmitidas" -LogDir $LogDir
 
@@ -69,6 +71,10 @@ function Exit-WithCode {
     if ($Msg) { Write-Log $Msg -Lvl $(if ($Code -eq 0) { "INFO" } else { "ERRO" }) }
     Write-Log "FIM - Finalizado. ExitCode=$Code"
     Write-Log "========================================================================================="
+    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        $finalStatus = if ($Code -eq 0) { "SUCCESS" } else { "ERROR" }
+        Close-ExecutionTelemetry -ExecId $ExecId -Status $finalStatus -LogPath $LogFile
+    }
     exit $Code
 }
 

@@ -67,6 +67,83 @@ function Protect-SensitiveData {
 }
 
 # ------------------------------------------------------------------------------
+# Get-AutomacaoApiKey
+# ------------------------------------------------------------------------------
+function Get-AutomacaoApiKey {
+    $envPath = Join-Path (Get-AutomacaoProjectRoot) ".env"
+    if (Test-Path $envPath) {
+        $content = Get-Content $envPath
+        foreach ($line in $content) {
+            if ($line -match '^ORCHESTRATOR_API_KEY=(.*)$') {
+                return $Matches[1].Trim()
+            }
+        }
+    }
+    return ""
+}
+
+# ------------------------------------------------------------------------------
+# Register-ExecutionTelemetry
+# ------------------------------------------------------------------------------
+function Register-ExecutionTelemetry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AutomationName
+    )
+    $uri = "http://localhost:8000/api/executions/telemetry/start"
+    $body = @{ automation_name = $AutomationName } | ConvertTo-Json
+    $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction Stop
+        return $response.exec_id
+    } catch {
+        Write-Warning "Falha ao registrar telemetria (Orquestrador offline?): $_"
+        return (New-ExecId) # Fallback seguro
+    }
+}
+
+# ------------------------------------------------------------------------------
+# Close-ExecutionTelemetry
+# ------------------------------------------------------------------------------
+function Close-ExecutionTelemetry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ExecId,
+        [Parameter(Mandatory = $true)]
+        [string]$Status,
+        [string]$LogPath = ""
+    )
+    # Evita chamadas caso o ID seja de Fallback ou nulo
+    if ([string]::IsNullOrWhiteSpace($ExecId) -or $ExecId -notmatch '^TEL_') {
+        return
+    }
+
+    $uri = "http://localhost:8000/api/executions/telemetry/end/$ExecId"
+    
+    $logContent = $null
+    if (-not [string]::IsNullOrWhiteSpace($LogPath) -and (Test-Path $LogPath)) {
+        try {
+            $logContent = [System.IO.File]::ReadAllText($LogPath, $script:Lib_Utf8NoBom)
+        } catch { }
+    }
+    
+    $body = @{
+        status = $Status
+        logs = $logContent
+        exit_code = if ($Status -eq "SUCCESS") { 0 } else { 1 }
+    } | ConvertTo-Json -Depth 10 -Compress
+    
+    $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+    try {
+        Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8" -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Warning "Falha ao fechar telemetria: $_"
+    }
+}
+
+# ------------------------------------------------------------------------------
 # Test-AutomationPreFlight
 # ------------------------------------------------------------------------------
 function Test-AutomationPreFlight {
@@ -159,6 +236,16 @@ function Write-AutomacaoLog {
     } catch [System.Exception] {}
     $color = switch ($Level) { "ERRO" { "Red" }; "WARN" { "Yellow" }; "DEBUG" { "Gray" }; default { "Cyan" } }
     Write-Host $line -ForegroundColor $color
+
+    # Envio de Broadcast para o Dashboard (se tiver ExecId atrelado)
+    if (-not [string]::IsNullOrWhiteSpace($ExecId) -and $ExecId -match '^TEL_') {
+        try {
+            $uri = "http://localhost:8000/api/broadcast_log"
+            $body = @{ message = $line; exec_id = $ExecId } | ConvertTo-Json -Compress
+            $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+            Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
+        } catch { }
+    }
 }
 
 # ------------------------------------------------------------------------------
@@ -258,5 +345,4 @@ function Exit-AutomationLock {
     }
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock
-
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry

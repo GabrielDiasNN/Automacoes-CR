@@ -38,7 +38,11 @@ $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
 
-if ([string]::IsNullOrWhiteSpace($ExecId)) { $ExecId = New-ExecId }
+if ([string]::IsNullOrWhiteSpace($ExecId)) {
+    $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Register-ExecutionTelemetry -AutomationName "TEMPLATE_SLUG"
+    } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
+}
 $LogFile = Get-AutomacaoLogPath -Slug "TEMPLATE_SLUG" -LogDir (Join-Path $ScriptDir "Logs")
 
 # Helper para Log (Blindagem Base64)
@@ -60,6 +64,7 @@ if (-not (Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckPaths
 
 Write-Log "INICIO - Nova Automacao | ExecId=$ExecId"
 
+$execStatus = "ERROR"
 try {
     # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
     if (-not (Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile)) {
@@ -75,10 +80,14 @@ try {
         # Liberacao do bloqueio global
         Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
     }
+    
+    $execStatus = "SUCCESS"
 
 } catch [System.Exception] {
     Write-Log "ERRO FATAL: $_" -Lvl "ERRO"; exit 1
 } finally {
+    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Close-ExecutionTelemetry -ExecId $ExecId -Status $execStatus -LogPath $LogFile
+    }
     Write-Log "FIM - Processo finalizado."
 }
-

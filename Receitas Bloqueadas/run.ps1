@@ -57,7 +57,9 @@ Import-Module $libEmail   -Force
 Import-Module $libRetry   -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
-    $ExecId = if (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
+    $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Register-ExecutionTelemetry -AutomationName "Receitas Bloqueadas"
+    } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 }
 $LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
 
@@ -76,9 +78,13 @@ function Write-Log {
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
-    if ($Msg) { Write-Log $Msg -Lvl $(if ($Code -eq 0) { "INFO" } else { "ERRO" }) }
+    if ($Msg) { Write-Log $Msg -Lvl $(if ($Code -eq 0 -or $Code -eq 2) { "INFO" } else { "ERRO" }) }
     Write-Log "FIM - Finalizado. ExitCode=$Code"
     Write-Log "========================================================================================="
+    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        $finalStatus = if ($Code -eq 0 -or $Code -eq 2) { "SUCCESS" } else { "ERROR" }
+        Close-ExecutionTelemetry -ExecId $ExecId -Status $finalStatus -LogPath $LogFile
+    }
     exit $Code
 }
 

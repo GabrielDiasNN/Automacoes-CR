@@ -190,6 +190,17 @@ class ExecutionSummary(BaseModel):
         return self
 
 
+class ExecutionTelemetryStart(BaseModel):
+    automation_name: str
+
+
+class ExecutionTelemetryEnd(BaseModel):
+    status: str
+    exit_code: Optional[int] = None
+    logs: Optional[str] = None
+    artifacts: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Schemas de Sistema
 # ---------------------------------------------------------------------------
