@@ -30,8 +30,7 @@ if sys.stderr.encoding != "utf-8":
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
-    b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
-    sys.stderr.write(f"B64:{b64_msg}\n")
+    sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
 
@@ -45,14 +44,14 @@ def connect_and_execute(
     user: str, password: str, dsn: str, sql: str, exec_id: str
 ) -> tuple[list[str], list[Any]]:
     log(
-        f"Conectando ao Oracle (DSN: {dsn}) para extra\u00e7\u00e3o Nativa (com Circuit Breaker)...",
+        f"Conectando ao Oracle (DSN: {dsn}) para extração Nativa (com Circuit Breaker)...",
         "INFO",
         exec_id,
     )
     try:
         with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
             cursor = connection.cursor()
-            log("Executando extra\u00e7\u00e3o oficial otimizada...", "INFO", exec_id)
+            log("Executando extração oficial otimizada...", "INFO", exec_id)
             try:
                 cursor.execute(sql)
                 columns = [col[0] for col in cursor.description]
@@ -140,9 +139,9 @@ def extract() -> None:
         state_tmp_path = state_path + ".tmp"
         if last_hash and current_hash == last_hash:
             if os.path.exists(state_tmp_path):
-                log("Sem novas altera\u00e7\u00f5es, mas detectado estado tempor\u00e1rio pendente de notifica\u00e7\u00e3o.", "INFO", exec_id)
+                log("Sem novas alterações, mas detectado estado temporário pendente de notificação.", "INFO", exec_id)
             else:
-                log("Sem altera\u00e7\u00f5es relevantes detectadas (Idempot\u00eancia).", "INFO", exec_id)
+                log("Sem alterações relevantes detectadas (Idempotência).", "INFO", exec_id)
                 sys.exit(2)
 
         state_data = {
@@ -155,7 +154,7 @@ def extract() -> None:
 
         sys.stdout.write(json_payload)
         sys.stdout.flush()
-        log(f"Extra\u00e7\u00e3o conclu\u00edda: {len(data)} registros.", "INFO", exec_id)
+        log(f"Extração concluída: {len(data)} registros.", "INFO", exec_id)
 
     except pybreaker.CircuitBreakerError:
         log(

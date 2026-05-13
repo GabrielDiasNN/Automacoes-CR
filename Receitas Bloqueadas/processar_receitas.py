@@ -34,8 +34,7 @@ if sys.stderr.encoding != "utf-8":
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-PROCESS] [{level}] [ExecId:{exec_id}] {message}"
-    b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
-    sys.stderr.write(f"B64:{b64_msg}\n")
+    sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
 
@@ -45,7 +44,7 @@ class RecipeRecord(BaseModel):
     cor: str = Field(alias="Cor Rec.")
     ep: int = Field(alias="EP Rec.")
     pe: int = Field(alias="PE Rec")
-    data_prod: Optional[str] = Field(alias="Data \u00daltima Prod.", default="")
+    data_prod: Optional[str] = Field(alias="Data Última Prod.", default="")
     data_bloqueio: Optional[str] = Field(alias="Data Bloqueio", default="")
 
 
@@ -91,14 +90,14 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
     rel_title = "Painel Geral de Receitas Bloqueadas"
     ciclo_resumo = "Resumo do Ciclo:"
     col_cor = "Cor Rec."
-    col_ult_prod = "Data \u00daltima Prod."
+    col_ult_prod = "Data Última Prod."
     col_bloqueio = "Data Bloqueio"
-    col_status = "Status / Mudan\u00e7a"
+    col_status = "Status / Mudança"
     txt_intro = "Abaixo, a listagem completa de receitas sob bloqueio com os destaques do ciclo:"
-    txt_footer_ob = "Favor consultar a planilha em anexo para o detalhamento t\u00e9cnico completo por Ordem de Beneficiamento (OB)."
-    txt_footer_auto = "Mensagem autom\u00e1tica."
+    txt_footer_ob = "Favor consultar a planilha em anexo para o detalhamento técnico completo por Ordem de Beneficiamento (OB)."
+    txt_footer_auto = "Mensagem automática."
     txt_warning = (
-        "Por favor, atualizar os status com as previs\u00f5es de liberar cada receita."
+        "Por favor, atualizar os status com as previsões de liberar cada receita."
     )
 
     html = f"""
@@ -157,13 +156,13 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
 
         if change_type == "NEW":
             bg = cor_new_bg
-            status_text = "\u2728 NOVO BLOQUEIO"
+            status_text = "✨ NOVO BLOQUEIO"
         elif change_type == "MODIFIED":
             bg = cor_mod_bg
-            status_text = "\u26a0 DATA ALTERADA"
+            status_text = "⚠ DATA ALTERADA"
         elif change_type == "DELETED":
             bg = cor_del_bg
-            status_text = "<b style='color:#059669;'>\u2705 LIBERADA</b>"
+            status_text = "<b style='color:#059669;'>✅ LIBERADA</b>"
             font_style = "italic"
             text_decor = "line-through"
         else:
@@ -174,7 +173,7 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
                                     <td style="border:1px solid {cor_table_border}; text-align:center; font-weight:bold;">{row['Cor Rec.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['EP Rec.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['PE Rec']}</td>
-                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data \u00daltima Prod.']}</td>
+                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data Última Prod.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data Bloqueio']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center; font-size:8.5pt; font-weight:bold;">{status_text}</td>
                                 </tr>
@@ -298,11 +297,11 @@ def process() -> None:
                 "COR_REC": "Cor Rec.",
                 "EP_REC": "EP Rec.",
                 "PE_REC": "PE Rec",
-                "DATA_ULT_PROD": "Data \u00daltima Prod.",
+                "DATA_ULT_PROD": "Data Última Prod.",
                 "DATA_BLOQUEIO": "Data Bloqueio",
             }
         )
-        for col in ["Data \u00daltima Prod.", "Data Bloqueio"]:
+        for col in ["Data Última Prod.", "Data Bloqueio"]:
             df_raw[col] = (
                 pd.to_datetime(df_raw[col], errors="coerce")
                 .dt.strftime("%d/%m/%Y")
@@ -313,7 +312,7 @@ def process() -> None:
             "Cor Rec.",
             "EP Rec.",
             "PE Rec",
-            "Data \u00daltima Prod.",
+            "Data Última Prod.",
             "Data Bloqueio",
         ]
         df_agreg = (
@@ -370,7 +369,7 @@ def process() -> None:
                 diff_rows.append(row_diff)
                 stats["new"] += 1
             elif (
-                match.iloc[0]["Data \u00daltima Prod."] != row["Data \u00daltima Prod."]
+                match.iloc[0]["Data Última Prod."] != row["Data Última Prod."]
                 or match.iloc[0]["Data Bloqueio"] != row["Data Bloqueio"]
             ):
                 row_diff = row.copy()

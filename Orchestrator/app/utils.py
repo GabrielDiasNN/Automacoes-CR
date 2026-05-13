@@ -64,7 +64,7 @@ def get_client_ip(request: Request) -> str:
 # ---------------------------------------------------------------------------
 
 # Regex permite alfanumericos, espacos, pontos, hifens e acentuacao PT-BR comum (ASCII-Safe via Unicode Range)
-_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 _\-\.\u00C0-\u00FF]+$")
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 _\-\.À-ÿ]+$")
 
 
 def sanitize_name(name: str) -> bool:
@@ -86,7 +86,7 @@ def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str
       - Path traversal (/../) e bloqueado.
     """
     if not script_path:
-        return False, "script_path n\u00e3o pode ser vazio."
+        return False, "script_path não pode ser vazio."
 
     # Resolver caminho
     if script_path.startswith("./") or script_path.startswith(".\\"):
@@ -100,9 +100,9 @@ def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str
 
     # Anti path-traversal: o caminho resolvido deve estar dentro do project_root
     if not abs_path.startswith(os.path.normpath(project_root)):
-        return False, f"script_path fora do diret\u00f3rio permitido: {abs_path}"
+        return False, f"script_path fora do diretório permitido: {abs_path}"
 
     if not os.path.isfile(abs_path):
-        return False, f"Script n\u00e3o encontrado: {abs_path}"
+        return False, f"Script não encontrado: {abs_path}"
 
     return True, abs_path

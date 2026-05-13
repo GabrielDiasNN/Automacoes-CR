@@ -223,8 +223,7 @@ function Write-AutomacaoLog {
         [string]$LogPath
     )
 
-    $cleanMessage = if ($Message -match 'B64:(.*)') { Get-FromBase64 $Matches[1] } else { $Message }
-    $cleanMessage = Protect-SensitiveData $cleanMessage
+    $cleanMessage = Protect-SensitiveData $Message
     $timestamp = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
     $execPrefix = if ([string]::IsNullOrWhiteSpace($ExecId)) { "" } else { " [ExecId:$ExecId]" }
     $line = "[$timestamp] [PS] [$Level]$execPrefix $cleanMessage"

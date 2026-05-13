@@ -27,11 +27,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
-    """Envia logs em Base64 para o stderr para garantir integridade total."""
+    """Envia logs para o stderr."""
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
-    b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
-    sys.stderr.write(f"B64:{b64_msg}\n")
+    sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
 

@@ -172,7 +172,7 @@ def get_execution(
 ):
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
     resp = schemas.ExecutionResponse.model_validate(db_exec)
     auto_name = (
@@ -200,7 +200,7 @@ def get_execution_logs(
     """Retorna logs de uma execucao com paginacao por linhas."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
     all_lines = (db_exec.logs or "").split("\n")
     total_lines = len(all_lines)
@@ -229,7 +229,7 @@ def list_artifacts(
     """Lista artefatos gerados por uma execucao."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
     artifacts = []
     if db_exec.artifacts:
@@ -251,7 +251,7 @@ def download_artifact(
     """Download de um artefato especifico."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
     db_auto = (
         db.query(models.Automation)
@@ -259,12 +259,12 @@ def download_artifact(
         .first()
     )
     if not db_auto:
-        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     # Anti-path-traversal no filename: permitir apenas nome puro do arquivo
     clean_filename = os.path.basename(filename)
     if clean_filename != filename:
-        raise HTTPException(status_code=400, detail="Caminho de arquivo inv\u00e1lido.")
+        raise HTTPException(status_code=400, detail="Caminho de arquivo inválido.")
 
     script_path = db_auto.script_path
     if script_path.startswith("./") or script_path.startswith(".\\"):
@@ -280,7 +280,7 @@ def download_artifact(
 
     if not os.path.exists(file_path) or not os.path.isfile(file_path):
         raise HTTPException(
-            status_code=404, detail=f"Arquivo '{filename}' n\u00e3o encontrado."
+            status_code=404, detail=f"Arquivo '{filename}' não encontrado."
         )
 
     return FileResponse(path=file_path, filename=filename)
@@ -300,10 +300,10 @@ def stop_execution(
 ):
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
     if db_exec.status not in ["PENDING", "RUNNING"]:
-        raise HTTPException(status_code=400, detail="Execu\u00e7\u00e3o j\u00e1 finalizada.")
+        raise HTTPException(status_code=400, detail="Execução já finalizada.")
 
     db_exec.status = "TERMINATED"
     db_exec.finished_at = get_now_local()
@@ -337,7 +337,7 @@ def telemetry_start(
     # Buscar a automacao pelo nome
     db_auto = db.query(models.Automation).filter(models.Automation.name == payload.automation_name).first()
     if not db_auto:
-        raise HTTPException(status_code=404, detail=f"Automa\u00e7\u00e3o '{payload.automation_name}' n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail=f"Automação '{payload.automation_name}' não encontrada.")
     
     # Gerar ID unico
     exec_id = f"TEL_{int(time.time())}_{uuid.uuid4().hex[:6]}"
@@ -373,7 +373,7 @@ def telemetry_end(
     
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
-        raise HTTPException(status_code=404, detail="Execu\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
         
     db_exec.status = payload.status.upper()
     if payload.exit_code is not None:

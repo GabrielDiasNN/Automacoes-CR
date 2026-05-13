@@ -48,18 +48,10 @@ function Send-OutlookEmail {
         param([string]$m, [string]$l = "INFO")
         if ([string]::IsNullOrWhiteSpace($LogPath)) { return }
         
-        if ($m -match '[\u00C0-\u00FF]') {
-            $b = [System.Text.Encoding]::UTF8.GetBytes($m)
-            $b64 = [System.Convert]::ToBase64String($b)
-            if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
-                Write-AutomacaoLog -Message "B64:$b64" -Level $l -ExecId $ExecId -LogPath $LogPath
-            }
+        if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
+            Write-AutomacaoLog -Message $m -Level $l -ExecId $ExecId -LogPath $LogPath
         } else {
-            if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
-                Write-AutomacaoLog -Message $m -Level $l -ExecId $ExecId -LogPath $LogPath
-            } else {
-                Write-Host "[$l] [ExecId:$ExecId] $m"
-            }
+            Write-Host "[$l] [ExecId:$ExecId] $m"
         }
     }
 

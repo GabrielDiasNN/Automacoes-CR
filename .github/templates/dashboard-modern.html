@@ -882,9 +882,9 @@
             }
 
             function formatDateTime(iso) {
-                if (!iso) return '\u2013';
+                if (!iso) return '–';
                 var d = new Date(iso);
-                if (isNaN(d)) return '\u2013';
+                if (isNaN(d)) return '–';
                 return d.toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit', year: 'numeric',
                     hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -892,9 +892,9 @@
             }
 
             function formatShortDateTime(iso) {
-                if (!iso) return '\u2013';
+                if (!iso) return '–';
                 var d = new Date(iso);
-                if (isNaN(d)) return '\u2013';
+                if (isNaN(d)) return '–';
                 return d.toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit',
                     hour: '2-digit', minute: '2-digit'
@@ -966,7 +966,7 @@
             function openLogModal(taskName, logLines) {
                 var html = '<div class="log-viewer">';
                 if (!logLines || logLines.length === 0) {
-                    html += '<div class="log-line">Nenhum log encontrado para esta automa\u00e7\u00e3o.</div>';
+                    html += '<div class="log-line">Nenhum log encontrado para esta automação.</div>';
                 } else {
                     html += logLines.map(function(line) {
                         var css = '';
@@ -977,7 +977,7 @@
                     }).join('');
                 }
                 html += '</div>';
-                return openModal('Logs recentes \u2014 ' + taskName, html, true);
+                return openModal('Logs recentes — ' + taskName, html, true);
             }
 
             function closeModal(result) {
@@ -1000,9 +1000,9 @@
             function promptSchedule(taskName) {
                 var html =
                     '<div class="modal-field">' +
-                    '<label for="sched-days">Dias da semana (0=Dom, 6=S\u00e1b)</label>' +
+                    '<label for="sched-days">Dias da semana (0=Dom, 6=Sáb)</label>' +
                     '<input id="sched-days" name="daysOfWeek" type="text" value="1,2,3,4,5" placeholder="1,2,3,4,5">' +
-                    '<div class="field-hint">Separe por v\u00edrgula. Ex.: 1,2,3,4,5</div>' +
+                    '<div class="field-hint">Separe por vírgula. Ex.: 1,2,3,4,5</div>' +
                     '</div>' +
                     '<div class="modal-field">' +
                     '<label for="sched-hours">Horas (vazio = todas)</label>' +
@@ -1010,16 +1010,16 @@
                     '<div class="field-hint">Vazio significa sem filtro de hora.</div>' +
                     '</div>' +
                     '<div class="modal-field">' +
-                    '<label for="sched-min">Minutos (obrigat\u00f3rio)</label>' +
+                    '<label for="sched-min">Minutos (obrigatório)</label>' +
                     '<input id="sched-min" name="minutes" type="text" value="0" placeholder="0,30">' +
                     '<div class="field-hint">Ex.: 0 ou 0,30</div>' +
                     '</div>';
 
-                return openModal('Editar agenda \u2014 ' + taskName, html).then(function (result) {
+                return openModal('Editar agenda — ' + taskName, html).then(function (result) {
                     if (!result) return null;
                     var minutes = parseCsvToIntList(result.minutes);
                     if (minutes.length === 0 || minutes.some(function (m) { return m < 0 || m > 59; })) {
-                        setStatus('Agenda cancelada: minutos inv\u00e1lidos.', 'warn');
+                        setStatus('Agenda cancelada: minutos inválidos.', 'warn');
                         return null;
                     }
                     return {
@@ -1034,16 +1034,16 @@
                 var current = (state.dashboard && state.dashboard.refreshSeconds) ? state.dashboard.refreshSeconds : 60;
                 var html =
                     '<div class="modal-field">' +
-                    '<label for="refresh-val">Intervalo de atualiza\u00e7\u00e3o (segundos)</label>' +
+                    '<label for="refresh-val">Intervalo de atualização (segundos)</label>' +
                     '<input id="refresh-val" name="refreshSeconds" type="number" min="10" max="3600" value="' + current + '">' +
                     '<div class="field-hint">Valor entre 10 e 3600 segundos.</div>' +
                     '</div>';
 
-                return openModal('Alterar intervalo de atualiza\u00e7\u00e3o', html).then(function (result) {
+                return openModal('Alterar intervalo de atualização', html).then(function (result) {
                     if (!result) return null;
                     var val = Number(result.refreshSeconds);
                     if (!Number.isInteger(val) || val < 10 || val > 3600) {
-                        setStatus('Refresh cancelado: valor fora do intervalo (10\u20133600).', 'warn');
+                        setStatus('Refresh cancelado: valor fora do intervalo (10–3600).', 'warn');
                         return null;
                     }
                     return val;
@@ -1052,14 +1052,14 @@
 
             /* --- Renderers --- */
             function getTaskStatus(task) {
-                if (task.isRunning) return { category: 'running', text: 'Executando', badgeClass: 'running', exitText: '\u2013' };
+                if (task.isRunning) return { category: 'running', text: 'Executando', badgeClass: 'running', exitText: '–' };
                 if (task.lastResult) {
                     if (task.lastResult.exitCode === 0) return { category: 'ok', text: 'OK', badgeClass: 'ok', exitText: '0' };
                     if ([7, 23, 40].indexOf(task.lastResult.exitCode) >= 0) return { category: 'issues', text: 'Aviso', badgeClass: 'warn', exitText: String(task.lastResult.exitCode) };
                     return { category: 'issues', text: 'Erro', badgeClass: 'err', exitText: String(task.lastResult.exitCode) };
                 }
-                if (!task.enabled) return { category: 'all', text: 'Desabilitado', badgeClass: 'off', exitText: '\u2013' };
-                return { category: 'ok', text: 'Aguardando', badgeClass: 'off', exitText: '\u2013' };
+                if (!task.enabled) return { category: 'all', text: 'Desabilitado', badgeClass: 'off', exitText: '–' };
+                return { category: 'ok', text: 'Aguardando', badgeClass: 'off', exitText: '–' };
             }
 
             var currentFilter = 'all';
@@ -1070,7 +1070,7 @@
                 var tbody = document.getElementById('tasks-body');
 
                 if (tasks.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o configurada.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automação configurada.</td></tr>';
                     return;
                 }
 
@@ -1082,7 +1082,7 @@
                 });
 
                 if (filtered.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automa\u00e7\u00e3o corresponde aos filtros.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automação corresponde aos filtros.</td></tr>';
                     return;
                 }
 
@@ -1090,8 +1090,8 @@
                     var st = getTaskStatus(task);
                     var lastText = task.isRunning && task.runningSince
                         ? ('desde ' + formatShortDateTime(task.runningSince))
-                        : (task.lastResult ? formatShortDateTime(task.lastResult.finishedAt) : '\u2013');
-                    var nextText = task.nextRun ? formatShortDateTime(task.nextRun) : '\u2013';
+                        : (task.lastResult ? formatShortDateTime(task.lastResult.finishedAt) : '–');
+                    var nextText = task.nextRun ? formatShortDateTime(task.nextRun) : '–';
                     var toggleLabel = task.enabled ? 'Desabilitar' : 'Habilitar';
                     var toggleClass = task.enabled ? 'danger' : 'primary';
                     var tn = escapeHtml(task.name);
@@ -1112,7 +1112,7 @@
                     return '<tr>' +
                         '<td>' + tn + progressHtml + '</td>' +
                         '<td><span class="badge ' + st.badgeClass + '">' + st.text + '</span></td>' +
-                        '<td class="mono">' + escapeHtml(task.scheduleText || '\u2013') + '</td>' +
+                        '<td class="mono">' + escapeHtml(task.scheduleText || '–') + '</td>' +
                         '<td class="r">' + st.exitText + '</td>' +
                         '<td>' + lastText + '</td>' +
                         '<td>' + nextText + '</td>' +
@@ -1133,7 +1133,7 @@
             function renderConfigs() {
                 var tasks = state.tasks || [];
                 if (tasks.length === 0) {
-                    document.getElementById('config-grid').innerHTML = '<p class="empty-state">Nenhuma configura\u00e7\u00e3o dispon\u00edvel.</p>';
+                    document.getElementById('config-grid').innerHTML = '<p class="empty-state">Nenhuma configuração disponível.</p>';
                     return;
                 }
                 var html = [];
@@ -1144,10 +1144,10 @@
                     html.push(
                         '<article class="cfg-card">' +
                         '<div class="cfg-title">' + tn + '</div>' +
-                        '<div class="cfg-row"><span>Script:</span><code class="mono">' + escapeHtml(cfg.scriptPath || '\u2013') + '</code></div>' +
-                        '<div class="cfg-row"><span>Habilitado:</span>' + (task.enabled ? 'Sim' : 'N\u00e3o') + '</div>' +
-                        '<div class="cfg-row"><span>Evitar sobreposi\u00e7\u00e3o:</span>' + (cfg.preventOverlap ? 'Sim' : 'N\u00e3o') + '</div>' +
-                        '<div class="cfg-row"><span>Aguardar t\u00e9rmino:</span>' + (cfg.waitForExit ? 'Sim' : 'N\u00e3o') + '</div>' +
+                        '<div class="cfg-row"><span>Script:</span><code class="mono">' + escapeHtml(cfg.scriptPath || '–') + '</code></div>' +
+                        '<div class="cfg-row"><span>Habilitado:</span>' + (task.enabled ? 'Sim' : 'Não') + '</div>' +
+                        '<div class="cfg-row"><span>Evitar sobreposição:</span>' + (cfg.preventOverlap ? 'Sim' : 'Não') + '</div>' +
+                        '<div class="cfg-row"><span>Aguardar término:</span>' + (cfg.waitForExit ? 'Sim' : 'Não') + '</div>' +
                         '<div class="cfg-row"><span>Dias:</span>' + escapeHtml(JSON.stringify(schedule.daysOfWeek || [])) + '</div>' +
                         '<div class="cfg-row"><span>Horas:</span>' + escapeHtml(JSON.stringify(schedule.hours || [])) + '</div>' +
                         '<div class="cfg-row"><span>Minutos:</span>' + escapeHtml(JSON.stringify(schedule.minutes || [])) + '</div>' +
@@ -1164,13 +1164,13 @@
                 document.getElementById('metrics-window').textContent = String(state.windowMinutes || 0);
                 var labels = {
                     TasksTriggered: 'Disparos',
-                    TasksCompleted: 'Conclu\u00eddas',
-                    TasksFinishedNonZero: 'Exit N\u00e3o-Zero',
+                    TasksCompleted: 'Concluídas',
+                    TasksFinishedNonZero: 'Exit Não-Zero',
                     TasksFinishedWarn: 'Avisos Operacionais',
                     ExitCode7ReadOnly: 'Exit 7 (Bloqueado)',
                     ExitCode23Cooldown: 'Exit 23 (Cooldown)',
                     ExitCode40Concurrent: 'Exit 40 (Concorrente)',
-                    TasksSkippedOverlap: 'Skips Sobreposi\u00e7\u00e3o',
+                    TasksSkippedOverlap: 'Skips Sobreposição',
                     ConfigReloadSuccess: 'Reloads Config OK',
                     ConfigReloadFailure: 'Reloads Config Falha'
                 };
@@ -1187,10 +1187,10 @@
                 var health = state.health || {};
                 document.getElementById('health-body').innerHTML = [
                     '<tr><th scope="row">Schema</th><td>' + escapeHtml(state.dashboardSchemaVersion || 'n/a') + '</td></tr>',
-                    '<tr><th scope="row">Monitor</th><td>v' + escapeHtml(state.monitorVersion || '\u2013') + '</td></tr>',
+                    '<tr><th scope="row">Monitor</th><td>v' + escapeHtml(state.monitorVersion || '–') + '</td></tr>',
                     '<tr><th scope="row">Heartbeat</th><td>' + formatDateTime(health.lastHeartbeatAt) + '</td></tr>',
-                    '<tr><th scope="row">\u00daltimo reload</th><td>' + formatDateTime(health.lastConfigReloadAt) + '</td></tr>',
-                    '<tr><th scope="row">Status reload</th><td>' + escapeHtml(health.lastConfigReloadStatus || '\u2013') + '</td></tr>',
+                    '<tr><th scope="row">Último reload</th><td>' + formatDateTime(health.lastConfigReloadAt) + '</td></tr>',
+                    '<tr><th scope="row">Status reload</th><td>' + escapeHtml(health.lastConfigReloadStatus || '–') + '</td></tr>',
                     '<tr><th scope="row">Erros consecutivos</th><td>' + String(health.mainLoopConsecutiveErr || 0) + '</td></tr>',
                     '<tr><th scope="row">Intervalo check</th><td>' + String(health.checkIntervalSeconds || 20) + 's</td></tr>'
                 ].join('');
@@ -1211,7 +1211,7 @@
             function renderHistory() {
                 var history = state.history || [];
                 if (history.length === 0) {
-                    document.getElementById('history-body').innerHTML = '<tr><td colspan="5" class="empty-state">Sem hist\u00f3rico recente.</td></tr>';
+                    document.getElementById('history-body').innerHTML = '<tr><td colspan="5" class="empty-state">Sem histórico recente.</td></tr>';
                     return;
                 }
                 var badgeMap = { 'OK': 'ok', 'WARN': 'warn', 'AVISO': 'warn', 'ERRO': 'err' };
@@ -1297,7 +1297,7 @@
                             if (val === null) return;
                             gPayload.refreshSeconds = val;
                             setButtonLoading(globalBtn, true);
-                            setStatus('Executando a\u00e7\u00e3o global: ' + gAction, 'ok');
+                            setStatus('Executando ação global: ' + gAction, 'ok');
                             callOperation(gAction, gPayload).then(function () {
                                 setButtonLoading(globalBtn, false);
                             });
@@ -1311,7 +1311,7 @@
                     }
 
                     setButtonLoading(globalBtn, true);
-                    setStatus('Executando a\u00e7\u00e3o global: ' + gAction, 'ok');
+                    setStatus('Executando ação global: ' + gAction, 'ok');
                     callOperation(gAction, gPayload).then(function () {
                         setButtonLoading(globalBtn, false);
                     });
@@ -1321,15 +1321,15 @@
 
             /* --- Initial render --- */
             document.getElementById('header-meta').textContent =
-                'Vers\u00e3o ' + (state.monitorVersion || '\u2013') +
-                ' \u00b7 Iniciado: ' + formatDateTime(state.startedAt) +
-                ' \u00b7 Atualizado: ' + formatDateTime(state.generatedAt) +
-                ' \u00b7 Tarefas: ' + String(state.taskCount || 0) +
-                ' \u00b7 Em execu\u00e7\u00e3o: ' + String(state.runningTasks || 0);
+                'Versão ' + (state.monitorVersion || '–') +
+                ' · Iniciado: ' + formatDateTime(state.startedAt) +
+                ' · Atualizado: ' + formatDateTime(state.generatedAt) +
+                ' · Tarefas: ' + String(state.taskCount || 0) +
+                ' · Em execução: ' + String(state.runningTasks || 0);
 
             var ops = state.operations || {};
             document.getElementById('ops-banner').textContent =
-                'Opera\u00e7\u00f5es: ' + (ops.apiMode || 'n/a') +
+                'Operações: ' + (ops.apiMode || 'n/a') +
                 ' | Endpoint: ' + (ops.apiBaseUrl || 'http://localhost:8765') + (ops.endpoint || '/api/operations') +
                 ' | Estado: ' + (ops.statusMessage || 'Sem status');
 

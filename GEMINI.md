@@ -25,7 +25,7 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 ---
 
 ## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 13/05/2026
-- **Estado:** Estabilizado v5.3.0 (Terminal Telemetry Sync).
+- **Estado:** Estabilizado v5.4.0 (Universal UTF-8 Encoding).
 - **Telemetria:** Implementada Telemetria Nativa para execuções de terminal via prefixo `TEL_`, garantindo sincronia total entre VS Code e Dashboard.
 - **Broadcast:** Ativada transmissão de logs em tempo real para o Dashboard durante execuções manuais.
 - **Configuração:** Ativada funcionalidade experimental `autoMemory` via `.gemini/settings.json` para otimização de contexto e persistência de aprendizado entre sessões.
@@ -35,4 +35,5 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - **Resiliência:** Implementada higienização rigorosa de arquivos temporários órfãos (`.tmp`) para evitar poluição de diretórios em execuções de idempotência.
 - **Auditoria:** Script `Audit-DailyStatus.ps1` ativo para telemetria AI-Native.
 - **Porta:** Padronização absoluta na porta 8000 para API/Watchdog.
+- **Encoding (v5.4.0):** Descontinuado o guardrail ASCII-Safe e protocolo Base64 Bridge. Adoção global de codificação UTF-8 direta no código-fonte, habilitada pela variável `PYTHONUTF8=1` no `.env`.
 ---

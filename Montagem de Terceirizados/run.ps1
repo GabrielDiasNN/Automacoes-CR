@@ -59,16 +59,10 @@ Enter-AutomationLock -ExecId $ExecId
 
 $LogFile = Get-AutomacaoLogPath -Slug "Montagem_Terceirizados" -LogDir $LogDir
 
-# Helper para Log com suporte a Base64 Interno (v5.0.0)
+# Helper para Log (v5.4.0)
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO")
-    if ($Msg -match '[^\x00-\x7F]') {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
-        $b64 = [System.Convert]::ToBase64String($bytes)
-        Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogFile
-    } else {
-        Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
-    }
+    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
@@ -79,11 +73,11 @@ Get-ChildItem -Path $ScriptDir -Filter ".data_*.json" | Where-Object { $_.LastWr
 Get-ChildItem -Path $ScriptDir -Filter ".payload_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths $pathsToCheck)) {
-    Write-Log "FALHA NO PRE-FLIGHT (Python/Oracle/Paths). Abortando execu$([char]0xE7)$([char]0xE3)o." -Lvl "ERRO"; exit 9
+    Write-Log "FALHA NO PRE-FLIGHT (Python/Oracle/Paths). Abortando execução." -Lvl "ERRO"; exit 9
 }
 
 Write-Log "========================================================================================="
-Write-Log "IN$([char]0xCD)CIO - Execu$([char]0xE7)$([char]0xE3)o Montagem Terceirizados (Pure-Native). ExecId=$ExecId"
+Write-Log "INÍCIO - Execução Montagem Terceirizados (Pure-Native). ExecId=$ExecId"
 
 $execStatus = "ERROR"
 try {
@@ -102,8 +96,8 @@ try {
     $dataFile = Join-Path $ScriptDir ".data_$ExecId.json"
     if (Test-Path $dataFile) { Remove-Item $dataFile -Force }
 
-    # 1. Extra$([char]0xE7)$([char]0xE3)o Nativa (Pure-Python via Oracle)
-    Write-Log "Fase 1: Executando extra$([char]0xE7)$([char]0xE3)o nativa direta do Oracle..."
+    # 1. Extração Nativa (Pure-Python via Oracle)
+    Write-Log "Fase 1: Executando extração nativa direta do Oracle..."
     $nativeExtractInfo = New-Object System.Diagnostics.ProcessStartInfo
     $nativeExtractInfo.FileName = $pythonExe
     $nativeExtractInfo.Arguments = "`"$extractPy`" `"$ExecId`""
@@ -133,17 +127,17 @@ try {
     $nativeProc.WaitForExit()
 
     if ($nativeProc.ExitCode -ne 0 -or -not (Test-Path $dataFile)) {
-        throw "Falha cr$([char]0xED)tica na extra$([char]0xE7)$([char]0xE3)o nativa (ExitCode: $($nativeProc.ExitCode)). Arquivo de dados n$([char]0xE3)o encontrado."
+        throw "Falha crítica na extração nativa (ExitCode: $($nativeProc.ExitCode)). Arquivo de dados não encontrado."
     }
 
     $fileSize = (Get-Item $dataFile).Length
     if ($fileSize -lt 10) {
         throw "Arquivo de dados $dataFile gerado mas parece vazio ou corrompido (Tamanho: $fileSize bytes)."
     }
-    Write-Log "Dados extra$([char]0xED)dos com sucesso ($( [math]::round($fileSize/1kb, 2) ) KB)."
+    Write-Log "Dados extraídos com sucesso ($( [math]::round($fileSize/1kb, 2) ) KB)."
 
-    # 2. Valida$([char]0xE7)$([char]0xE3)o e HTML
-    Write-Log "Fase 2: Validando dados e gerando notifica$([char]0xE7)$([char]0xE3)o..."
+    # 2. Validação e HTML
+    Write-Log "Fase 2: Validando dados e gerando notificação..."
     $payloadFile = Join-Path $ScriptDir ".payload_$ExecId.json"
     if (Test-Path $payloadFile) { Remove-Item $payloadFile -Force }
 
@@ -164,7 +158,7 @@ try {
     }
     $genProcess.WaitForExit()
     
-    if ($genProcess.ExitCode -ne 0) { throw "Falha na valida$([char]0xE7)$([char]0xE3)o Python (ExitCode: $($genProcess.ExitCode))." }
+    if ($genProcess.ExitCode -ne 0) { throw "Falha na validação Python (ExitCode: $($genProcess.ExitCode))." }
 
     # 3. Envio do E-mail (Se houver payload)
     if (Test-Path $payloadFile) {
@@ -174,7 +168,7 @@ try {
         $subject = [System.Text.Encoding]::UTF8.GetString($bytes)
         $htmlOutput = $payload.html
 
-        Write-Log "Notifica$([char]0xE7)$([char]0xE3)o gerada: $subject"
+        Write-Log "Notificação gerada: $subject"
         
         # Carregar Configuracoes Oficiais (config.json)
         # 1. Carregar Destinatarios Oficiais (config.json)
@@ -209,13 +203,13 @@ try {
                 Write-Log "Cache de erros consolidado: $CacheFile"
             }
         } else {
-            Write-Log "Falha no envio de e-mail. O cache N$([char]0xC3)O ser$([char]0xE1) atualizado para garantir retentativa." -Lvl "WARN"
+            Write-Log "Falha no envio de e-mail. O cache NÃO será atualizado para garantir retentativa." -Lvl "WARN"
         }
 
         Remove-Item $payloadFile -Force
         if (Test-Path $dataFile) { Remove-Item $dataFile -Force }
     } else {
-        Write-Log "Nenhuma diverg$([char]0xEA)ncia ou mudan$([char]0xE7)a de estado. Nenhuma notifica$([char]0xE7)$([char]0xE3)o enviada."
+        Write-Log "Nenhuma divergência ou mudança de estado. Nenhuma notificação enviada."
     }
 
     $execStatus = "SUCCESS"

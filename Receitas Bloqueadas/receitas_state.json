@@ -1,6 +1,6 @@
 {
-    "last_hash": "13882899538242925025",
-    "updated_at": "2026-05-12T12:47:12.199588",
+    "last_hash": "3851672583357910622",
+    "updated_at": "2026-05-13T10:00:09.278604",
     "records": [
         {
             "Cor Rec.": "00008",
@@ -41,22 +41,6 @@
             "Data Última Prod.": "23/05/2024",
             "Data Bloqueio": "06/05/2026",
             "Key": "00061_31_2"
-        },
-        {
-            "Cor Rec.": "00063",
-            "EP Rec.": 22,
-            "PE Rec": 3,
-            "Data Última Prod.": "08/05/2026",
-            "Data Bloqueio": "11/05/2026",
-            "Key": "00063_22_3"
-        },
-        {
-            "Cor Rec.": "00073",
-            "EP Rec.": 11,
-            "PE Rec": 3,
-            "Data Última Prod.": "30/04/2026",
-            "Data Bloqueio": "08/05/2026",
-            "Key": "00073_11_3"
         },
         {
             "Cor Rec.": "00B73",

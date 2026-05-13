@@ -23,11 +23,10 @@ if hasattr(sys.stdin, "encoding") and sys.stdin.encoding != "utf-8-sig":
 
 
 def log(message, level="INFO", exec_id="manual"):
-    """Envia logs em Base64 para o stderr (Isolamento total)."""
+    """Envia logs para o stderr."""
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}"
-    b64_msg = base64.b64encode(raw_msg.encode("utf-8")).decode("ascii")
-    sys.stderr.write(f"B64:{b64_msg}\n")
+    sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
 
@@ -43,30 +42,30 @@ def html_escape(text):
         .replace("'", "&#39;")
     )
     char_map = {
-        "\u00e7": "&ccedil;",
-        "\u00c7": "&Ccedil;",
-        "\u00e3": "&atilde;",
-        "\u00c3": "&Atilde;",
-        "\u00f5": "&otilde;",
-        "\u00d5": "&Otilde;",
-        "\u00e1": "&aacute;",
-        "\u00c1": "&Aacute;",
-        "\u00e9": "&eacute;",
-        "\u00c9": "&Eacute;",
-        "\u00ed": "&iacute;",
-        "\u00cd": "&Iacute;",
-        "\u00f3": "&oacute;",
-        "\u00d3": "&Oacute;",
-        "\u00fa": "&uacute;",
-        "\u00da": "&Uacute;",
-        "\u00e2": "&acirc;",
-        "\u00c2": "&Acirc;",
-        "\u00ea": "&ecirc;",
-        "\u00ca": "&Ecirc;",
-        "\u00f4": "&ocirc;",
-        "\u00d4": "&Ocirc;",
-        "\u00e0": "&agrave;",
-        "\u00c0": "&Agrave;",
+        "ç": "&ccedil;",
+        "Ç": "&Ccedil;",
+        "ã": "&atilde;",
+        "Ã": "&Atilde;",
+        "õ": "&otilde;",
+        "Õ": "&Otilde;",
+        "á": "&aacute;",
+        "Á": "&Aacute;",
+        "é": "&eacute;",
+        "É": "&Eacute;",
+        "í": "&iacute;",
+        "Í": "&Iacute;",
+        "ó": "&oacute;",
+        "Ó": "&Oacute;",
+        "ú": "&uacute;",
+        "Ú": "&Uacute;",
+        "â": "&acirc;",
+        "Â": "&Acirc;",
+        "ê": "&ecirc;",
+        "Ê": "&Ecirc;",
+        "ô": "&ocirc;",
+        "Ô": "&Ocirc;",
+        "à": "&agrave;",
+        "À": "&Agrave;",
     }
     for char, entity in char_map.items():
         s = s.replace(char, entity)
@@ -224,7 +223,7 @@ def generate_html():
     header_row = ""
     content_row = ""
     for i in range(column_count):
-        header_row += f"<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>M\u00e1quina / Grupo / OB / In\u00edcio</td>"
+        header_row += f"<td width='{column_width}' align='center' valign='middle' style='width:{column_width}px;padding:{block_pad_y}px {row_pad_x}px;border:1px solid #000000;background-color:#D9E2F3;font-size:{header_font:.1f}pt;font-weight:bold;line-height:{header_line}px;text-align:center;'>Máquina / Grupo / OB / Início</td>"
         content_row += f"<td width='{column_width}' valign='top' style='width:{column_width}px;padding-top:{block_pad_y}px;vertical-align:top;'>{columns_html[i] or '&nbsp;'}</td>"
         if i < column_count - 1:
             header_row += f"<td width='{column_gap}' style='width:{column_gap}px;font-size:0;line-height:0;'>&nbsp;</td>"
@@ -238,7 +237,7 @@ def generate_html():
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{title_font:.1f}pt;font-weight:bold;line-height:{title_line}px;color:#000000;text-align:center;'>{html_escape(config['layout']['title'])}</td></tr>
     <tr><td align='center' style='padding:0 0 2px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>{html_escape(config['layout']['subtitle'])}</td></tr>
-    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | M\u00e1quinas: {machine_count} | Receitas: {recipe_count}</td></tr>
+    <tr><td align='center' style='padding:0 0 {block_pad_y}px 0;font-size:{meta_font:.1f}pt;line-height:{meta_line}px;color:#333333;text-align:center;'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | Máquinas: {machine_count} | Receitas: {recipe_count}</td></tr>
     </table>
     <table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='width:100%;border-collapse:collapse;'>
     <tr>{header_row}</tr><tr>{content_row}</tr>
@@ -247,7 +246,7 @@ def generate_html():
     # Envia o HTML final para STDOUT (IPC)
     sys.stdout.write(full_html)
     sys.stdout.flush()
-    log("Relat\u00f3rio HTML gerado com sucesso para stdout.", "INFO", exec_id)
+    log("Relatório HTML gerado com sucesso para stdout.", "INFO", exec_id)
 
 
 if __name__ == "__main__":

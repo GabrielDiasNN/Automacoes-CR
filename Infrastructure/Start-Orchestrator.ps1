@@ -44,7 +44,7 @@ $workerProcess = Start-Process -FilePath $VenvPython -ArgumentList "worker.py" -
 $workerProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "worker.pid") -Encoding ascii -Force
 
 # 4. INICIAR FASTAPI (Background)
-Write-Host "Iniciando Central de Automa$([char]0xE7)$([char]0xF5)es (API)..." -ForegroundColor Green
+Write-Host "Iniciando Central de Automações (API)..." -ForegroundColor Green
 $apiLog = Join-Path $LogDir "uvicorn_startup.log"
 $apiProcess = Start-Process -FilePath $VenvPython -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WindowStyle Hidden -PassThru -RedirectStandardError $apiLog
 $apiProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "orchestrator.pid") -Encoding ascii -Force

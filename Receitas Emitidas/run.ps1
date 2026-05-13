@@ -58,12 +58,7 @@ $LogFile = Get-AutomacaoLogPath -Slug "ReceitasEmitidas" -LogDir $LogDir
 
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO")
-    if ($Msg -match '[\u00C0-\u00FF]') {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg); $b64 = [System.Convert]::ToBase64String($bytes)
-        Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogFile
-    } else {
-        Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
-    }
+    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
 }
 
 function Exit-WithCode {

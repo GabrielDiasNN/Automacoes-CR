@@ -7,7 +7,7 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 ...
 - **ADR-007 (12/05/2026):** Sincronização v5.2.0: Consolidação de versões em toda a stack, hardening de seguranca (API Key robusta), eliminação de URLs hardcoded e refatoração arquitetural de imports/typing.
 - **Zero-Trust Dashboard**: Front-end não armazena chaves; solicita via prompt e persiste em `localStorage` seguro.
-- **ASCII-Safe Source**: Todo código-fonte (.py, .js) é restrito ao range 0-127. Acentuação pt-BR é gerida via HTML Entities (Front) ou Escapes Unicode (Back).
+- **UTF-8 Native Source (v5.4.0)**: Todo código-fonte (.py, .js, .ps1) opera nativamente em UTF-8. A restrição ASCII-Safe e o protocolo Base64 Bridge foram descontinuados para maximizar a legibilidade.
 - **Graceful Worker**: Worker v5.2.0 monitora processos ativos e garante o `taskkill` de toda a árvore de processos no shutdown.
 - **SQLite Hardened**: WAL mode com `synchronous=NORMAL` e `temp_store=MEMORY` para máxima performance de I/O.
 - **Unified JSON Logging**: Loggers do Orchestrator e Worker unificados para rastreabilidade via `correlation_id`.

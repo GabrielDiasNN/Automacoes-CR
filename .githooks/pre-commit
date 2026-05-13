@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 # {
-#   "version": "3.1.0",
+#   "version": "3.2.0",
 #   "skill": "automation-runtime-safety",
-#   "description": "Pre-commit hook focado em stack 100% Nativa (Soberana) com validacao JSON"
+#   "description": "Pre-commit hook focado em stack 100% Nativa (Soberana) com validacao JSON e suporte UTF-8"
 # }
 set -eu
 
@@ -15,7 +15,6 @@ PY_GOV_PATH="$REPO_ROOT/Tools/Test-PythonGovernance.ps1"
 SQL_GOV_PATH="$REPO_ROOT/Tools/Test-SqlPerformance.ps1"
 PS_GOV_PATH="$REPO_ROOT/Tools/Test-PowerShellGovernance.ps1"
 PORT_GOV_PATH="$REPO_ROOT/Tools/Test-PortablePaths.ps1"
-ENC_GOV_PATH="$REPO_ROOT/Tools/Test-SourceEncoding.ps1"
 JSON_GOV_PATH="$REPO_ROOT/Tools/Test-JsonConfig.ps1"
 ORCH_GOV_PATH="$REPO_ROOT/Tools/Test-OrchestratorIntegrity.ps1"
 
@@ -42,37 +41,31 @@ if [ -f "$PORT_GOV_PATH" ]; then
   if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-# 3. Encoding ASCII-Safe
-if [ -f "$ENC_GOV_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$ENC_GOV_PATH" -RootPath "$REPO_ROOT" -StagedOnly
-  if [ $? -ne 0 ]; then exit 1; fi
-fi
-
-# 4. Sintaxe JSON (Novo)
+# 3. Sintaxe JSON
 if [ -f "$JSON_GOV_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$JSON_GOV_PATH" -RootPath "$REPO_ROOT"
   if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-# 5. Performance SQL
+# 4. Performance SQL
 if [ -f "$SQL_GOV_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SQL_GOV_PATH" -RootPath "$REPO_ROOT"
   if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-# 6. Governanca Python
+# 5. Governanca Python
 if [ -f "$PY_GOV_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PY_GOV_PATH" -RootPath "$REPO_ROOT"
   if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-# 7. Governanca PowerShell
+# 6. Governanca PowerShell
 if [ -f "$PS_GOV_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$PS_GOV_PATH" -RootPath "$REPO_ROOT"
   if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-# 8. Metadados e Verbos
+# 7. Metadados e Verbos
 if [ -f "$SKILLS_SCRIPT_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$SKILLS_SCRIPT_PATH" -BasePath "$REPO_ROOT"
   if [ $? -ne 0 ]; then exit 1; fi
@@ -83,7 +76,7 @@ if [ -f "$VERBS_SCRIPT_PATH" ]; then
   if [ $? -ne 0 ]; then exit 1; fi
 fi
 
-# 9. Integridade do Orquestrador (Novo)
+# 8. Integridade do Orquestrador
 if [ -f "$ORCH_GOV_PATH" ]; then
   "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$ORCH_GOV_PATH"
   if [ $? -ne 0 ]; then exit 1; fi

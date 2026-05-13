@@ -32,9 +32,9 @@ graph TD
     ROUTERS --> DB[(SQLite WAL Engine)]
 ```
 
-## 🎯 Novidades v5.1.1
-- **Zero-Trust Auth**: O Dashboard agora solicita a API Key dinamicamente, eliminando segredos no código.
-- **ASCII-Safe Rendering**: Interface 100% compatível com pt-BR via HTML Entities, mantendo o código-fonte limpo.
+## 🎯 Novidades v5.4.0
+- **UTF-8 Universal Encoding**: Adoção global do padrão UTF-8 para código-fonte e logs, abolindo as restrições de ASCII-Safe e Base64 Bridge para garantir máxima legibilidade humana e suporte nativo a PT-BR.
+- **Zero-Trust Auth**: O Dashboard solicita a API Key dinamicamente, eliminando segredos no código.
 - **Worker Resilience**: Encerramento limpo de processos PowerShell para evitar consumo de recursos zumbi.
 - **Performance SQLite**: Pragmas otimizados para operação em RAM (`temp_store=MEMORY`).
 
