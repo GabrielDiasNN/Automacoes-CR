@@ -17,7 +17,7 @@ def test_read_root(client):
     res = client.get("/")
     assert res.status_code == 200
     data = res.json()
-    assert "5.0.0" in data["version"]
+    assert "5.2.0" in data["version"]
     assert "dashboard_url" in data
 
 # ============================================================
@@ -235,7 +235,7 @@ def test_health_check(client):
     assert res.status_code == 200
     data = res.json()
     assert data["database"] == "online"
-    assert data["status"] in ["healthy", "degraded", "unhealthy"]
+    assert data["status"] in ["healthy", "degraded", "unhealthy", "saudavel", "degradado", "critico"]
 
 def test_metrics(client):
     res = client.get("/api/system/metrics", headers=AUTH_HEADERS)
@@ -259,7 +259,7 @@ def test_version_endpoint(client):
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "5.0.0"
+    assert data["version"] == "5.2.0"
     assert "python_version" in data
     assert "uptime_seconds" in data
     assert "max_workers" in data

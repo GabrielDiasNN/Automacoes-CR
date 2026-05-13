@@ -1,5 +1,12 @@
 # { "version": "2.0.0", "skill": "ai-native-development-standard", "description": "Global Repository Hygiene" }
 
+# Ambientes Virtuais e Trash
+.venv/
+.venv*/
+.venv_old/
+.venv_trash/
+node_modules/
+
 # Logs e Artefatos Temporários
 #**/Logs/
 *.log
