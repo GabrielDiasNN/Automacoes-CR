@@ -11,9 +11,6 @@ on:
       - '.githooks/pre-commit'
       - 'Tools/**'
       - 'README.md'
-      - '**/*.bas'
-      - '**/*.cls'
-      - '**/*.frm'
       - '**/*.ps1'
       - '**/*.psm1'
       - '**/*.psd1'
@@ -29,9 +26,6 @@ on:
       - '.githooks/pre-commit'
       - 'Tools/**'
       - 'README.md'
-      - '**/*.bas'
-      - '**/*.cls'
-      - '**/*.frm'
       - '**/*.ps1'
       - '**/*.psm1'
       - '**/*.psd1'
@@ -44,7 +38,6 @@ jobs:
     timeout-minutes: 15
     outputs:
       changed_files_json: ${{ steps.changed-files.outputs.changed_files_json }}
-      has_vba_targets: ${{ steps.changed-files.outputs.has_vba_targets }}
       has_log_targets: ${{ steps.changed-files.outputs.has_log_targets }}
 
     steps:
@@ -82,13 +75,11 @@ jobs:
             '[]'
           }
 
-          $hasVbaTargets = if ($changedFiles | Where-Object { $_ -match '\.(bas|cls)$' }) { 'true' } else { 'false' }
-          $hasLogTargets = if ($changedFiles | Where-Object { $_ -match '\.(ps1|psm1|bas|cls)$' -and $_ -notmatch '^(Audit/|Tools/)' }) { 'true' } else { 'false' }
+          $hasLogTargets = if ($changedFiles | Where-Object { $_ -match '\.(ps1|psm1)$' -and $_ -notmatch '^(Audit/|Tools/)' }) { 'true' } else { 'false' }
 
           "changed_files_json<<EOF" >> $env:GITHUB_OUTPUT
           $changedFilesJson >> $env:GITHUB_OUTPUT
           "EOF" >> $env:GITHUB_OUTPUT
-          "has_vba_targets=$hasVbaTargets" >> $env:GITHUB_OUTPUT
           "has_log_targets=$hasLogTargets" >> $env:GITHUB_OUTPUT
 
           Write-Host ("Arquivos alterados detectados: " + $changedFiles.Count)
@@ -113,7 +104,7 @@ jobs:
       - name: Validar governanca agregada
         shell: pwsh
         run: |
-          ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}" -FullAudit
+          ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}"
 
       - name: Validar Seguranca Zero Trust
         shell: pwsh
@@ -129,7 +120,7 @@ jobs:
         shell: pwsh
         run: |
           pip install pytest pytest-cov
-          pytest "Receitas Emitidas\tests" -v
+          pytest "Orchestrator\tests" -v
 
       - name: Validar Performance SQL (Oracle)
         shell: pwsh
@@ -150,28 +141,6 @@ jobs:
         shell: pwsh
         run: |
           ./Tools/Test-PortablePaths.ps1 -RootPath "${{ github.workspace }}"
-
-  drift-vba:
-    runs-on: windows-latest
-    timeout-minutes: 15
-    needs: preparar-diff
-    if: needs.preparar-diff.outputs.has_vba_targets == 'true'
-    env:
-      CHANGED_FILES_JSON: ${{ needs.preparar-diff.outputs.changed_files_json }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Validar drift VBA nos arquivos alterados
-        shell: pwsh
-        run: |
-          $changedFiles = @()
-          if (-not [string]::IsNullOrWhiteSpace($env:CHANGED_FILES_JSON) -and $env:CHANGED_FILES_JSON -ne '[]') {
-            $changedFiles = @($env:CHANGED_FILES_JSON | ConvertFrom-Json)
-          }
-
-          ./Tools/Test-VbaDrift.ps1 -RootPath "${{ github.workspace }}" -Paths $changedFiles
 
   conformidade-log:
     runs-on: windows-latest

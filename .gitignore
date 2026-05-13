@@ -50,5 +50,6 @@ Audit/
 Orchestrator/automacoes.db
 Orchestrator/automacoes.db-shm
 Orchestrator/automacoes.db-wal
+Orchestrator/orchestrator.pid
 Orchestrator/worker.pid
 Backups/
