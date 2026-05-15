@@ -1,0 +1,9 @@
+﻿{
+    "delivery_status":  {
+                            "email":  {
+                                          "sent_at":  "2026-05-15 13:39:43",
+                                          "success":  true
+                                      }
+                        },
+    "last_sent_hash":  "0b4033b4d6a851463e45f8ce31745b42de86b7eeb3b160f99f4f0f1b9f8ad976"
+}

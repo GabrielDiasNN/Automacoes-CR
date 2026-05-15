@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Orquestrador Nativo para Receitas Emitidas.
 .DESCRIPTION
@@ -9,16 +9,11 @@
     4. PowerShell: Entrega visual via Outlook utilizando Base64 Bridge para logs.
     Cada etapa critica e executada com Invoke-WithRetry (VALEG: A-Arquitetura).
 .NOTES
-    Version: 2.6.2
+    Version: 2.7.2
     Skill: ai-native-development-standard, python-oracle-migration, protocolo-valeg
-    Contract: ipc-stdio, base64-bridge-logs, retry-on-failure
+    Contract: ipc-stdio, base64-bridge-logs, retry-on-failure, granular-idempotency
 #>
-# {
-#   "name": "orchestrator-receitas-emitidas",
-#   "version": "2.6.2",
-#   "skill": "powershell-automation-monitor",
-#   "description": "Use when orchestrating the weekly report of emitted recipes using IPC pipes."
-# }
+
 [CmdletBinding()]
 param([string]$ExecId = "")
 
@@ -35,14 +30,16 @@ $projectRoot = Split-Path -Parent $ScriptDir
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
+$libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $envPath     = Join-Path $projectRoot ".env"
-$pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
+$pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $generatePy = Join-Path $ScriptDir "generate_html_report.py"
 $configPath = Join-Path $ScriptDir "receitas_config.json"
 $StatePath  = Join-Path $ScriptDir "receitas_state.json"
 $StateTmp   = $StatePath + ".tmp"
+$DeliveryStatePath = Join-Path $ScriptDir "delivery_state.json"
 $LogDir     = Join-Path $ScriptDir "Logs"
 
 Import-Module $libLogging -Force
@@ -54,6 +51,7 @@ if ([string]::IsNullOrWhiteSpace($ExecId)) {
         Register-ExecutionTelemetry -AutomationName "Receitas Emitidas"
     } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 }
+
 $LogFile = Get-AutomacaoLogPath -Slug "ReceitasEmitidas" -LogDir $LogDir
 
 function Write-Log {
@@ -73,8 +71,7 @@ function Exit-WithCode {
     exit $Code
 }
 
-# --- BOOTSTRAP / PRE-FLIGHT (inclui validacao do Oracle Client local) ---
-# Carregar .env antes do Pre-Flight para que ORACLE_CLIENT_LIB_DIR esteja disponivel
+# --- BOOTSTRAP / PRE-FLIGHT ---
 if (Test-Path $envPath) {
     Get-Content $envPath | ForEach-Object {
         $line = $_.Trim()
@@ -85,7 +82,6 @@ if (Test-Path $envPath) {
     }
 }
 
-# Validacao do Oracle Client local (causa do DPY-3015/Thin Mode involuntario)
 $oracleClientLib = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_LIB_DIR", "Process")
 $oraClientPreFlightOk = $true
 if ([string]::IsNullOrWhiteSpace($oracleClientLib)) {
@@ -116,132 +112,119 @@ if (-not $preFlight) {
 Write-Log "INICIO - Arquitetura Pure-Python (CTE Nativo) Receitas Emitidas. ExecId=$ExecId"
 
 try {
-    # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
     if (-not (Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile)) {
         Exit-WithCode 0 "Execucao abortada: Mutex ja retido por outra instancia deste ExecId."
     }
 
     try {
-    # =========================================================================
-    # 1. Extracao de Dados (Python -> JSON Stdout) com Retry
-    # =========================================================================
-    Write-Log "Passo 1/2: Extraindo dados via Python (Direct Oracle CTE)..."
+        # 1. Extracao de Dados
+        Write-Log "Passo 1/2: Extraindo dados via Python (Direct Oracle CTE)..."
+        $pythonOutput = $null
+        Import-Module $libProcess -Force
 
-    $pythonOutput = $null
-    $extractOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(30, 60, 120) `
-        -OperationName "Extracao Oracle (extract_oracle.py)" -ExecId $ExecId -LogPath $LogFile `
-        -Action {
-            $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-            $processInfo.FileName = $pythonExe
-            $processInfo.Arguments = "`"$extractPy`" `"$ExecId`""
-            $processInfo.RedirectStandardOutput = $true
-            $processInfo.RedirectStandardError = $true
-            $processInfo.UseShellExecute = $false
-            $processInfo.CreateNoWindow = $true
-            $processInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $extractOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(30, 60, 120) -OperationName "Extracao Oracle" -ExecId $ExecId -LogPath $LogFile -Action {
+            $res = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$extractPy`" `"$ExecId`"" -LogAction {
+                param($msg, $lvl)
+                # Filtramos logs do motor Python, nao precisamos do stdout JSON aqui
+                if ($lvl -ne "INFO" -or ($msg.Trim() -and -not $msg.StartsWith("[") -and -not $msg.StartsWith("{"))) {
+                    Write-AutomacaoLog -Message $msg.Trim() -Level $lvl -ExecId $ExecId -LogPath $LogFile
+                }
+            }
 
-            $process = [System.Diagnostics.Process]::Start($processInfo)
-            $out = $process.StandardOutput.ReadToEnd()
-            $err = $process.StandardError.ReadToEnd()
-            $process.WaitForExit()
-
-            if ($err) { $err -split "`n" | ForEach-Object { if ($_.Trim()) { Write-AutomacaoLog -Message $_.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile } } }
-
-            if ($process.ExitCode -eq 2) {
+            if ($res.ExitCode -eq 2) {
                 Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
                 Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
             }
 
-            if ($process.ExitCode -ne 0) { throw "Python extract_oracle.py falhou com ExitCode=$($process.ExitCode)." }
-            if ([string]::IsNullOrWhiteSpace($out)) { throw "Extracao retornou dados vazios (stdout vazio)." }
+            if ($res.ExitCode -ne 0) { throw "Python extract_oracle.py falhou com ExitCode=$($res.ExitCode)." }
+            if ([string]::IsNullOrWhiteSpace($res.StandardOutput)) { throw "Extracao retornou dados vazios." }
 
-            $script:pythonOutput = $out
+            $script:pythonOutput = $res.StandardOutput
             return $true
         }
 
-    if (-not $extractOk) {
-        Send-AlertaFalhaDefinitiva -TaskName "Receitas Emitidas" -ExecId $ExecId `
-            -UltimoErro "Falha definitiva na extracao Oracle apos 3 tentativas." -Tentativas 3 -LogPath $LogFile
-        throw "Falha definitiva na extracao Python. Alerta enviado."
-    }
+        if (-not $extractOk) {
+            Send-AlertaFalhaDefinitiva -TaskName "Receitas Emitidas" -ExecId $ExecId -UltimoErro "Falha na extracao Oracle." -Tentativas 3 -LogPath $LogFile
+            throw "Falha definitiva na extracao Python."
+        }
 
-    # =========================================================================
-    # 2. Geracao do HTML (JSON Stdout -> HTML Stdout) com Retry
-    # =========================================================================
-    Write-Log "Passo 2/2: Gerando HTML visual moderno..."
-
-    $htmlOutput = $null
-    $htmlOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(10, 30, 60) `
-        -OperationName "Geracao HTML (generate_html_report.py)" -ExecId $ExecId -LogPath $LogFile `
-        -Action {
-            $genInfo = New-Object System.Diagnostics.ProcessStartInfo
-            $genInfo.FileName = $pythonExe
-            $genInfo.Arguments = "`"$generatePy`" `"$ExecId`""
-            $genInfo.RedirectStandardInput = $true
-            $genInfo.RedirectStandardOutput = $true
-            $genInfo.RedirectStandardError = $true
-            $genInfo.UseShellExecute = $false
-            $genInfo.CreateNoWindow = $true
-            $genInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-
-            $genProcess = [System.Diagnostics.Process]::Start($genInfo)
-            $genProcess.StandardInput.Write($script:pythonOutput)
-            $genProcess.StandardInput.Close()
-
-            $html = $genProcess.StandardOutput.ReadToEnd()
-            $genErr = $genProcess.StandardError.ReadToEnd()
-            $genProcess.WaitForExit()
-
-            if ($genErr) { $genErr -split "`n" | ForEach-Object { if ($_.Trim()) { Write-AutomacaoLog -Message $_.Trim() -Level "INFO" -ExecId $ExecId -LogPath $LogFile } } }
-            if ($genProcess.ExitCode -ne 0) { throw "Python generate_html_report.py falhou com ExitCode=$($genProcess.ExitCode)." }
-            if ([string]::IsNullOrWhiteSpace($html)) { throw "Geracao HTML retornou conteudo vazio." }
-
-            $script:htmlOutput = $html
+        # 2. Geracao do HTML
+        Write-Log "Passo 2/2: Gerando HTML visual moderno..."
+        $htmlOutput = $null
+        $htmlOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(10, 30, 60) -OperationName "Geracao HTML" -ExecId $ExecId -LogPath $LogFile -Action {
+            $res = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$generatePy`" `"$ExecId`"" -InputData $script:pythonOutput -LogAction {
+                param($msg, $lvl)
+                if ($lvl -ne "INFO") { Write-AutomacaoLog -Message $msg.Trim() -Level $lvl -ExecId $ExecId -LogPath $LogFile }
+            }
+            if ($res.ExitCode -ne 0) { throw "Python generate_html_report.py falhou com ExitCode=$($res.ExitCode)." }
+            if ([string]::IsNullOrWhiteSpace($res.StandardOutput)) { throw "Geracao HTML retornou conteudo vazio." }
+            $script:htmlOutput = $res.StandardOutput
             return $true
         }
 
-    if (-not $htmlOk) { throw "Falha definitiva na geracao do HTML apos 3 tentativas." }
+        if (-not $htmlOk) { throw "Falha definitiva na geracao do HTML." }
 
-    # =========================================================================
-    # 3. Envio de E-mail com Retry
-    # =========================================================================
-    Write-Log "Enviando e-mail oficial via Outlook COM..."
-    $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $subject = "$($config.email.subject_prefix) - $(Get-Date -Format 'dd/MM/yyyy')"
-
-    $fullHtmlBody = @"
-    <p>$($config.email.intro_text)</p>
-    $($script:htmlOutput)
-"@
-
-    $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) `
-        -OperationName "Envio E-mail Outlook" -ExecId $ExecId -LogPath $LogFile `
-        -Action {
-            $sent = Send-OutlookEmail -To $config.email.to -Subject $subject -HtmlBody $fullHtmlBody -ExecId $ExecId -LogPath $LogFile
-            if (-not $sent) { throw "Send-OutlookEmail retornou false." }
-            return $true
-        }
-
-    if (-not $emailOk) { throw "Falha definitiva no envio do e-mail via Outlook COM." }
-
-    if ($emailOk) {
-        Write-Log "Confirmando compromisso de estado (Two-Phase Commit Success)..."
+        # 3. Envio de E-mail
+        Write-Log "Verificando estado de notificacoes (Idempotencia Granular)..."
+        $currentHash = ""
         if (Test-Path $StateTmp) {
-            Move-Item -Path $StateTmp -Destination $StatePath -Force
-            Write-Log "Estado de idempotencia consolidado: $StatePath"
+            $currentHash = (Get-Content $StateTmp -Raw -Encoding UTF8 | ConvertFrom-Json).last_hash
+        } elseif (Test-Path $StatePath) {
+            $currentHash = (Get-Content $StatePath -Raw -Encoding UTF8 | ConvertFrom-Json).last_hash
         }
-    }
 
-    Write-Log "FIM - Processo concluido com sucesso."
-    Exit-WithCode 0
+        $deliveryState = @{ last_sent_hash = ""; delivery_status = @{ email = @{ success = $false; sent_at = $null } } }
+        if (Test-Path $DeliveryStatePath) {
+            try {
+                $savedState = Get-Content $DeliveryStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($savedState.last_sent_hash) { $deliveryState.last_sent_hash = $savedState.last_sent_hash }
+                if ($null -ne $savedState.delivery_status.email) {
+                    $deliveryState.delivery_status.email.success = [bool]$savedState.delivery_status.email.success
+                    $deliveryState.delivery_status.email.sent_at = $savedState.delivery_status.email.sent_at
+                }
+            } catch [System.Exception] { }
+        }
 
+        if ($currentHash -and $currentHash -ne $deliveryState.last_sent_hash) {
+            Write-Log "Novo Hash detectado ($currentHash). Resetando status de entrega."
+            $deliveryState.last_sent_hash = $currentHash
+            $deliveryState.delivery_status.email.success = $false
+        }
+
+        if ($deliveryState.delivery_status.email.success -and ($currentHash -eq $deliveryState.last_sent_hash)) {
+            Write-Log "Conteudo identico ao ultimo envio e ja entregue. Suprimindo."
+        } else {
+            Write-Log "Enviando e-mail oficial via Outlook COM..."
+            $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $subject = "$($config.email.subject_prefix) - $(Get-Date -Format 'dd/MM/yyyy')"
+            $targetTo = $config.email.to
+            $fullHtmlBody = "<p>$($config.email.intro_text)</p>$($script:htmlOutput)"
+
+            $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -ExecId $ExecId -LogPath $LogFile -Action {
+                $sent = Send-OutlookEmail -To $targetTo -Subject $subject -HtmlBody $fullHtmlBody -ExecId $ExecId -LogPath $LogFile
+                if (-not $sent) { throw "Send-OutlookEmail retornou false." }
+                return $true
+            }
+
+            if ($emailOk) {
+                Write-Log "E-mail enviado com sucesso. Consolidando estado parcial."
+                $deliveryState.delivery_status.email.success = $true
+                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                $deliveryState | ConvertTo-Json -Depth 5 | Out-File $DeliveryStatePath -Encoding UTF8
+            } else { throw "Falha definitiva no envio do e-mail." }
+        }
+
+        if (Test-Path $StateTmp) {
+            Write-Log "Confirmando compromisso de estado (Commit Success)..."
+            Move-Item -Path $StateTmp -Destination $StatePath -Force
+        }
+
+        Write-Log "FIM - Processo concluido com sucesso."
+        Exit-WithCode 0
     } finally {
-        # Liberacao do bloqueio global
         Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
     }
-
 } catch [System.Exception] {
-    # Re-throw para nao engolir o Exit-WithCode 0 do bloco de idempotencia
     if ($_.Exception.Message -match "Processo finalizado") { throw }
     Exit-WithCode 1 "ERRO FATAL: $_"
 } finally {

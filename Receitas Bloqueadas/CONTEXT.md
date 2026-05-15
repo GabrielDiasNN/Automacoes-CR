@@ -17,7 +17,7 @@ Gerenciar o fluxo de **Receitas de Produção Retidas** no sistema Oracle por fa
 
 ## Operação
 - **Horários:** 07:30, 10:00 e 14:00 (Segunda a Sexta).
-- **Modo Teste:** Redirecionamento automático via variável `AUTOMACAO_TEST_EMAIL`.
+- **Modo Teste:** Sincronizado com o Orquestrador (Dashboard). Fonte da verdade: `ORCHESTRATOR_TEST_MODE`. Fallback via `AUTOMACAO_TEST_EMAIL`.
 
 ---
 *Este módulo opera sob o padrão de idempotência cruzada e resiliência de banco de dados desde Maio/2026.*
