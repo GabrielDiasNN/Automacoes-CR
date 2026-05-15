@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from datetime import datetime
+from typing import Any
 
 import oracledb
 from dotenv import load_dotenv
@@ -97,17 +98,22 @@ def extract() -> None:
                 return
 
             columns = [col[0] for col in cursor.description]
-            rows = cursor.fetchall()
 
             data = []
-            for row in rows:
-                record = dict(zip(columns, row))
-                for key, value in record.items():
-                    if isinstance(value, str):
-                        record[key] = value.strip()
-                    elif isinstance(value, datetime):
-                        record[key] = value.isoformat()
-                data.append(record)
+
+            def _clean_val(v: Any) -> Any:
+                if isinstance(v, str):
+                    return v.strip()
+                if isinstance(v, datetime):
+                    return v.isoformat()
+                return v
+
+            while True:
+                batch = cursor.fetchmany(5000)
+                if not batch:
+                    break
+                for row in batch:
+                    data.append({col: _clean_val(val) for col, val in zip(columns, row)})
 
             data_file = os.path.join(script_dir, f".data_{exec_id}.json")
             with open(data_file, "w", encoding="utf-8") as f:

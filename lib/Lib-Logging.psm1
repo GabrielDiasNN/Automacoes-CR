@@ -218,6 +218,10 @@ return
 
 }
 
+# Garante que os logs remanescentes do buffer sejam enviados antes do fechamento
+
+Send-AutomacaoLogBroadcast
+
 $uri = "http://localhost:8000/api/executions/telemetry/end/$ExecId"
 
 $logContent = $null
@@ -372,6 +376,40 @@ return $allOk
 
 # ------------------------------------------------------------------------------
 
+# Send-AutomacaoLogBroadcast
+
+# ------------------------------------------------------------------------------
+
+function Send-AutomacaoLogBroadcast {
+
+    if (-not $script:BroadcastQueue -or $script:BroadcastQueue.Count -eq 0) { return }
+
+    try {
+
+        $uri = "http://localhost:8000/api/broadcast_logs"
+
+        $body = @{ logs = $script:BroadcastQueue } | ConvertTo-Json -Depth 3 -Compress
+
+        $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+
+        # Inicia Runspace ou Start-Job? Nao, no caso faremos sincrono por lote (Batch)
+
+        Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8" -ErrorAction SilentlyContinue -TimeoutSec 2 | Out-Null
+
+    } catch [System.Exception] { }
+
+    finally {
+
+        $script:BroadcastQueue.Clear()
+
+    }
+
+}
+
+
+
+# ------------------------------------------------------------------------------
+
 # Write-AutomacaoLog
 
 # ------------------------------------------------------------------------------
@@ -412,9 +450,9 @@ $logDir = Split-Path -Parent $LogPath
 
 if ($logDir -and -not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
 
-$sw = New-Object System.IO.StreamWriter($LogPath, $true, $script:Lib_Utf8WithBom)
+# Otimizacao de I/O: AppendAllText eh mais rapido que instanciar StreamWriter, usar e fechar linha a linha.
 
-try { $sw.WriteLine($line); $sw.Flush() } finally { $sw.Close(); $sw.Dispose() }
+[System.IO.File]::AppendAllText($LogPath, "$line`r`n", $script:Lib_Utf8WithBom)
 
 } catch [System.Exception] {}
 
@@ -426,17 +464,15 @@ Write-Host $line -ForegroundColor $color
 
 if (-not [string]::IsNullOrWhiteSpace($ExecId) -and $ExecId -match '^TEL_') {
 
-try {
+    if (-not $script:BroadcastQueue) { $script:BroadcastQueue = [System.Collections.Generic.List[Hashtable]]::new() }
 
-$uri = "http://localhost:8000/api/broadcast_log"
+    $script:BroadcastQueue.Add(@{ message = $line; exec_id = $ExecId })
 
-$body = @{ message = $line; exec_id = $ExecId } | ConvertTo-Json -Compress
+    if ($script:BroadcastQueue.Count -ge 10) {
 
-$headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+        Send-AutomacaoLogBroadcast
 
-Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
-
-} catch [System.Exception] { }
+    }
 
 }
 
@@ -613,6 +649,6 @@ $script:AutomationMutex = $null
 
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
 
 

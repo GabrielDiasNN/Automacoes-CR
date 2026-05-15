@@ -9,7 +9,7 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 
 import oracledb
 import pandas as pd
@@ -139,7 +139,7 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
     )
     df_display = df_display.sort_values(by=["_sort_order", "Cor Rec.", "EP Rec."])
 
-    for _, row in df_display.iterrows():
+    for row in df_display.to_dict('records'):
         change_type = row["_change_type"]
         bg = "#ffffff"
         status_text = ""
@@ -338,42 +338,45 @@ def process() -> None:
             else last_state_data
         )
         df_last = pd.DataFrame(last_records)
-        diff_rows = []
         stats = {"new": 0, "mod": 0, "del": 0}
+        diff_rows: List[Dict[str, Any]] = []
 
-        for _, row in df_agreg.iterrows():
-            if df_last.empty:
-                row_diff = row.copy()
-                row_diff["_change_type"] = "NEW"
-                diff_rows.append(row_diff)
-                stats["new"] += 1
-                continue
-            match = (
-                df_last[df_last["Key"] == row["Key"]]
-                if "Key" in df_last.columns
-                else pd.DataFrame()
+        if df_last.empty:
+            df_diff_new = df_agreg.copy()
+            df_diff_new["_change_type"] = "NEW"
+            diff_rows = df_diff_new.to_dict('records')
+            stats["new"] = len(df_diff_new)
+            df_deleted = pd.DataFrame()
+        else:
+            df_merge = df_agreg.merge(df_last, on="Key", how="outer", indicator=True, suffixes=("", "_last"))
+
+            new_mask = df_merge["_merge"] == "left_only"
+            del_mask = df_merge["_merge"] == "right_only"
+
+            mod_mask = (df_merge["_merge"] == "both") & (
+                (df_merge["Data Última Prod."] != df_merge["Data Última Prod._last"]) |
+                (df_merge["Data Bloqueio"] != df_merge["Data Bloqueio_last"])
             )
-            if match.empty:
-                row_diff = row.copy()
-                row_diff["_change_type"] = "NEW"
-                diff_rows.append(row_diff)
-                stats["new"] += 1
-            elif (
-                match.iloc[0]["Data Última Prod."] != row["Data Última Prod."]
-                or match.iloc[0]["Data Bloqueio"] != row["Data Bloqueio"]
-            ):
-                row_diff = row.copy()
-                row_diff["_change_type"] = "MODIFIED"
-                diff_rows.append(row_diff)
-                stats["mod"] += 1
 
-        if not df_last.empty:
-            for _, row in df_last.iterrows():
-                if df_agreg.empty or df_agreg[df_agreg["Key"] == row["Key"]].empty:
-                    row_diff = row.copy()
-                    row_diff["_change_type"] = "DELETED"
-                    diff_rows.append(row_diff)
-                    stats["del"] += 1
+            stats["new"] = int(new_mask.sum())
+            stats["mod"] = int(mod_mask.sum())
+            stats["del"] = int(del_mask.sum())
+
+            if stats["new"] > 0:
+                df_new = df_merge[new_mask][df_agreg.columns].copy()
+                df_new["_change_type"] = "NEW"
+                diff_rows.extend(df_new.to_dict('records'))
+
+            if stats["mod"] > 0:
+                df_mod = df_merge[mod_mask][df_agreg.columns].copy()
+                df_mod["_change_type"] = "MODIFIED"
+                diff_rows.extend(df_mod.to_dict('records'))
+
+            if stats["del"] > 0:
+                rename_cols = {col + "_last": col for col in df_agreg.columns if col != "Key"}
+                df_deleted = df_merge[del_mask][["Key"] + list(rename_cols.keys())].rename(columns=rename_cols).copy()
+                df_deleted["_change_type"] = "DELETED"
+                diff_rows.extend(df_deleted.to_dict('records'))
 
         state_tmp_path = state_path + ".tmp"
         if not diff_rows:
@@ -408,15 +411,15 @@ def process() -> None:
         df_diff = pd.DataFrame(diff_rows)
         df_display = df_agreg.copy()
         df_display["_change_type"] = "STABLE"
-        for _, row in df_diff.iterrows():
-            if row["_change_type"] in ["NEW", "MODIFIED"]:
-                df_display.loc[df_display["Key"] == row["Key"], "_change_type"] = row[
-                    "_change_type"
-                ]
 
-        df_deleted = df_diff[df_diff["_change_type"] == "DELETED"]
-        if not df_deleted.empty:
-            df_display = pd.concat([df_display, df_deleted], ignore_index=True)
+        if not df_diff.empty:
+            change_map = df_diff[df_diff["_change_type"].isin(["NEW", "MODIFIED"])].set_index("Key")["_change_type"]
+            if not change_map.empty:
+                df_display["_change_type"] = df_display["Key"].map(change_map).fillna("STABLE")
+
+            df_deleted = df_diff[df_diff["_change_type"] == "DELETED"]
+            if not df_deleted.empty:
+                df_display = pd.concat([df_display, df_deleted], ignore_index=True)
 
         html_content = gerar_html_artistico(df_display, stats)
         with open(html_path, "w", encoding="utf-8") as f:

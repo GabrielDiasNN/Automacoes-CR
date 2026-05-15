@@ -1,13 +1,13 @@
-# Central de Automações — v5.1.1 Enterprise 🚀
+# Central de Automações — v6.0.0 Enterprise High-Performance 🚀
 
-Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto atingiu o **Estado de Excelência v5.1.1 Enterprise**, operando com arquitetura hardened, resiliência de escala (WAL Engine) e governança de segurança avançada Zero-Trust.
+Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto atingiu o **Estado de Excelência v6.0.0**, operando com arquitetura de alta performance, resiliência de escala (Adaptive Polling) e governança de segurança avançada Zero-Trust.
 
-## 🏗️ Arquitetura Técnica (Enterprise Control Tower v5.1.1)
+## 🏗️ Arquitetura Técnica (Enterprise Control Tower v6.0.0)
 
 ```mermaid
 graph TD
     subgraph "FRONTEND — Dashboard SPA"
-        UI["Dashboard v5.1.1<br/>Zero-Trust + ASCII-Safe"]
+        UI["Dashboard v6.0.0<br/>Zero-Trust + ASCII-Safe"]
         WS_CLIENT["WebSocket Client<br/>Logs + Events Replay"]
         UI --> WS_CLIENT
     end

@@ -49,7 +49,12 @@ def connect_and_execute(
             try:
                 cursor.execute(sql)
                 columns = [col[0] for col in cursor.description]
-                rows = cursor.fetchall()
+                rows = []
+                while True:
+                    batch = cursor.fetchmany(5000)
+                    if not batch:
+                        break
+                    rows.extend(batch)
                 log(f"Query executada com sucesso. Linhas retornadas: {len(rows)}", "INFO", exec_id)
                 return columns, rows
             except oracledb.Error as e:

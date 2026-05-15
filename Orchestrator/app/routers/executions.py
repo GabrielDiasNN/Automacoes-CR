@@ -110,7 +110,7 @@ def list_by_automation(
         .limit(limit)
         .all()
     )
-    
+
     result = []
     for ex in execs:
         s = schemas.ExecutionSummary.model_validate(ex)

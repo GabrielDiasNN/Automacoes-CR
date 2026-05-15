@@ -1,4 +1,16 @@
-# Changelog — Hub de Automações (Soberano)
+# Changelog
+
+## [6.0.0] - 2026-05-15
+### Adicionado
+- **Orchestrator**: Adicionado endpoint assíncrono em lote `/api/broadcast_logs` para suportar transmissões consolidadas do motor Powershell sem sofrer bloqueio I/O.
+- **Worker**: Otimização profunda em `worker.py` (v6.0.0) com adoção de **Adaptive Polling** (backoff exponencial de 2s a 15s) reduzindo gargalos de CPU e lock database.
+
+### Corrigido
+- **Python Data Pipeline**: Substituição completa dos laços síncronos iterativos do Pandas (`iterrows`) por processamentos vetorizados (`np.where` / `pd.merge`) garantindo eliminação de Overhead Computacional na geração de arrays HTML ("Receitas Bloqueadas" e "Montagem de Terceirizados").
+- **Oracle Fetch**: Alteração de cursores lentos `fetchall()` para leitura paginada por lotes via `fetchmany(5000)`, evitando Out-Of-Memory e latências agressivas de alocação de memória no servidor.
+
+### Alterado
+- **PowerShell Resiliency**: `Write-AutomacaoLog` refatorado para utilizar chamadas `AppendAllText` e buffer de filas enfileiradas assíncronas `[System.Collections.Generic.List[Hashtable]]::new()` para envio de Broadcast log por Batch em lote. Elimina o antigo modelo 1:1 I/O Blocking I/O. — Hub de Automações (Soberano)
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 

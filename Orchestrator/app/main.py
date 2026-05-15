@@ -183,7 +183,7 @@ def reload_scheduled_tasks():
                     )
             except Exception as e:
                 logger.error(f"Erro ao agendar {auto.name}: {e}")
-        
+
         logger.info(f"Agendador sincronizado: {len(scheduler.get_jobs())} jobs ativos no total.")
     finally:
         db.close()

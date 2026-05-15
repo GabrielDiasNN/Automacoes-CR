@@ -44,8 +44,9 @@ load_dotenv(os.path.join(project_root, ".env"))
 
 MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
 HEARTBEAT_INTERVAL: int = 15  # segundos
-POLL_INTERVAL: int = 2  # segundos
-WORKER_VERSION: str = "5.3.0"
+POLL_INTERVAL: float = 2.0
+MAX_POLL_INTERVAL: float = 15.0
+WORKER_VERSION: str = "6.0.0"
 _port = os.environ.get("HUB_API_PORT", "8000")
 API_BASE: str = f"http://127.0.0.1:{_port}"
 
@@ -177,22 +178,25 @@ def log_flusher_loop() -> None:
     logger.info("Log flusher thread iniciada.")
     while not shutdown_event.is_set():
         shutdown_event.wait(1.0) # Intervalo do batch
-        
+
         # Copiar o buffer rapidamente e limpar o original
         with log_buffer_lock:
             if not log_buffer:
                 continue
             to_flush = log_buffer.copy()
             log_buffer.clear()
-            
+
+        payload = []
         for exec_id, messages in to_flush.items():
             if not messages:
                 continue
-            pending = "".join(messages)
+            payload.append({"exec_id": exec_id, "message": "".join(messages)})
+
+        if payload:
             try:
                 requests.post(
-                    f"{API_BASE}/api/broadcast_log",
-                    json={"exec_id": exec_id, "message": pending},
+                    f"{API_BASE}/api/broadcast_logs",
+                    json={"logs": payload},
                     timeout=2,
                 )
             except requests.RequestException:
@@ -477,6 +481,8 @@ def main_loop() -> None:
         max_workers=MAX_WORKERS, thread_name_prefix="task"
     )
 
+    current_poll_interval = POLL_INTERVAL
+
     while not shutdown_event.is_set():
         db = SessionLocal()
         try:
@@ -490,6 +496,7 @@ def main_loop() -> None:
             )
 
             if pending_task:
+                current_poll_interval = POLL_INTERVAL # Reset do polling
                 # Marcar como RUNNING imediatamente no banco antes de despachar
                 exec_id = pending_task.id
                 pending_task.status = "RUNNING"
@@ -524,12 +531,14 @@ def main_loop() -> None:
                     pending_task.logs = "Automacao nao encontrada no banco."
                     pending_task.finished_at = get_now_local()
                     db.commit()
+            else:
+                current_poll_interval = min(current_poll_interval * 1.5, MAX_POLL_INTERVAL)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Erro no loop do worker: %s", e)
         finally:
             db.close()
 
-        shutdown_event.wait(POLL_INTERVAL)
+        shutdown_event.wait(current_poll_interval)
 
     logger.info("Shutdown solicitado. Encerrando tarefas ativas...")
 

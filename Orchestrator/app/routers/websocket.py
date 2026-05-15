@@ -148,6 +148,31 @@ async def broadcast_log_endpoint(log_data: dict):
         )
     return {"status": "ok"}
 
+@router.post("/api/broadcast_logs")
+async def broadcast_logs_endpoint(logs_data: dict):
+    logs = logs_data.get("logs", [])
+    grouped = {}
+    for log_data in logs:
+        exec_id = log_data.get("exec_id")
+        message = log_data.get("message")
+        if exec_id and message:
+            if exec_id not in grouped:
+                grouped[exec_id] = []
+            grouped[exec_id].append(message)
+
+    for exec_id, messages in grouped.items():
+        combined_message = "\n".join(messages)
+        await manager.broadcast_log(combined_message, exec_id)
+        preview_msg = messages[-1]
+        await manager.broadcast_event(
+            "LOG_UPDATE",
+            {
+                "exec_id": exec_id,
+                "preview": preview_msg[:100] + "..." if len(preview_msg) > 100 else preview_msg,
+            },
+        )
+    return {"status": "ok", "processed": len(logs)}
+
 @router.post("/api/broadcast_event")
 async def broadcast_event_endpoint(event_data: dict):
     await manager.broadcast_event(
