@@ -327,3 +327,4 @@ Write-Host ""
 Write-Host "[FAIL] Corrija as violacoes acima antes de commitar." -ForegroundColor Red
 
 exit 1
+

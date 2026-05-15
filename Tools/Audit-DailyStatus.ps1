@@ -74,3 +74,4 @@ foreach ($crit in $Report.RecentCriticals) {
 $ReportPath = Join-Path $LogDir "Audit_$(Get-Date -Format 'yyyyMMdd').json"
 $Report | ConvertTo-Json -Depth 5 | Out-File $ReportPath -Encoding UTF8
 Write-Host "`nRelatorio denso salvo em: $ReportPath" -ForegroundColor DarkGray
+

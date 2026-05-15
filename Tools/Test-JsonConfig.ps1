@@ -40,3 +40,4 @@ if ($hasErrors) {
     Write-Host "Sintaxe JSON validada com sucesso.`n" -ForegroundColor Green
     exit 0
 }
+

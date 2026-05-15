@@ -67,3 +67,4 @@ if ($hasErrors) {
 
 Write-Host "`n[SUCESSO] Sistema integro e validado." -ForegroundColor Green
 exit 0
+

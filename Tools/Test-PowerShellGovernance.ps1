@@ -56,3 +56,4 @@ if ($hasErrors) {
 
 Write-Host "Validacao PowerShell concluida com sucesso." -ForegroundColor Green
 exit 0
+

@@ -25,3 +25,4 @@ else {
     Write-Host "[OK] Variavel definida com sucesso." -ForegroundColor Green
     Write-Host "OBSERVACAO: O Monitor foi reiniciado automaticamente pelo arquivo .bat." -ForegroundColor Yellow
 }
+

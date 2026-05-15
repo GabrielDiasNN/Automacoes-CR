@@ -49,3 +49,4 @@ if ($hasErrors) {
 
 Write-Host "Validacao Zero Trust concluida com sucesso (nenhum secret detectado)." -ForegroundColor Green
 exit 0
+

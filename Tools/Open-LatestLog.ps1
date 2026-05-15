@@ -74,3 +74,4 @@ Write-Host "--------------------------------------------------------------------
 # -- Abrir o arquivo --
 Write-Host "Abrindo log..." -ForegroundColor Cyan
 Invoke-Item $LatestLog.FullName
+

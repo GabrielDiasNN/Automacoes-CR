@@ -55,3 +55,4 @@ if ($hasErrors) {
 
 Write-Host "Validacao de Portabilidade concluida com sucesso." -ForegroundColor Green
 exit 0
+

@@ -42,3 +42,4 @@ if ($hasErrors) {
 
 Write-Host "Validacao SQL concluida com sucesso." -ForegroundColor Green
 exit 0
+

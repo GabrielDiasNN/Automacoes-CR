@@ -264,3 +264,4 @@ else {
 
 Write-Step "Scaffold concluido para '$Name'."
 if ($DryRun) { Write-Step "Modo DRY-RUN: nenhum arquivo foi criado." -Type "WARN" }
+

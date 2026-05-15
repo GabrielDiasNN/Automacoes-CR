@@ -180,3 +180,4 @@ if ($DryRun) {
 
 Write-Host ("[OK] Correcao concluida. Arquivos alterados: {0} | Linhas ajustadas: {1}" -f $totalFilesChanged, $totalLineChanges)
 exit 0
+

@@ -213,3 +213,4 @@ if ($FailOnWarnings -and $warningFindings.Count -gt 0) {
 }
 
 exit 0
+

@@ -71,3 +71,4 @@ if ($hasErrors) {
 
 Write-Host "Validacao Python concluida com sucesso." -ForegroundColor Green
 exit 0
+

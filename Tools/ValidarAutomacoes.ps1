@@ -116,3 +116,4 @@ Write-Host "Governanca: APROVADA" -ForegroundColor Green
 Write-Host "Para disparar as automacoes, utilize o Orquestrador (Dashboard ou API)." -ForegroundColor Gray
 
 if ($globalResult -ne 0) { exit 1 } else { exit 0 }
+

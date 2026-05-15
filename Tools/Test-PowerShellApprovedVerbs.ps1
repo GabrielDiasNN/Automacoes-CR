@@ -205,3 +205,4 @@ if ($allVerbViolations.Count -gt 0) {
 
 Write-Host "Dica: nomes de funcao devem seguir Verbo-Substantivo e o verbo deve existir em Get-Verb."
 exit 1
+

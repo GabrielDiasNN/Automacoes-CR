@@ -90,3 +90,4 @@ try {
 
 Write-Host "`n--- TRAVA DE REGRESSAO APROVADA ---" -ForegroundColor Green
 exit 0
+
