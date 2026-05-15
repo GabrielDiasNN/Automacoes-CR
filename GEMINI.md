@@ -1,5 +1,11 @@
 # Governança de Contexto: Projeto Automacoes (C:\Automacoes)
 
+## 🛡️ Mandatos de Encoding (Soberania PT-BR)
+**ESTA REGRA É ABSOLUTA E NÃO PODE SER VIOLADA:**
+1. **PowerShell (.ps1, .psm1):** DEVEM ser salvos obrigatoriamente como `UTF-8 with BOM`. O PowerShell 5.1 não reconhece acentuação nativa sem o BOM, causando corrupção nos logs do Orquestrador.
+2. **Outros Arquivos (.py, .txt, .json, .md, .sql):** DEVEM ser salvos como `UTF-8` (sem BOM).
+3. **Validação:** Antes de qualquer `replace` ou `write_file`, verifique se o encoding resultante respeita estas regras. Se você (IA) oscilar e causar regressão de acentuação, você falhou no pilar de Governança.
+
 ## Propósito do Contexto Local
 Garantir a soberania técnica e o histórico do Hub de Automações. Este documento força a sincronização entre código e documentação para que a IA entenda o ecossistema sem re-analisar scripts Python/PowerShell repetidamente.
 
@@ -23,17 +29,19 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - [x] O contexto permite economia de tokens na próxima interação?
 - [x] Tom técnico PT-BR foi mantido?
 ---
-
-## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 13/05/2026
-- **Estado:** Estabilizado v5.4.0 (Universal UTF-8 Encoding).
-- **Telemetria:** Implementada Telemetria Nativa para execuções de terminal via prefixo `TEL_`, garantindo sincronia total entre VS Code e Dashboard.
-- **Broadcast:** Ativada transmissão de logs em tempo real para o Dashboard durante execuções manuais.
-- **Configuração:** Ativada funcionalidade experimental `autoMemory` via `.gemini/settings.json` para otimização de contexto e persistência de aprendizado entre sessões.
-- **Governança de Entrega:** Implementada externalização de destinatários via `config.json` na automação de Montagem, eliminando hardcoding e seguindo o pilar de **Governança** do Protocolo V.A.L.E.G.
-- **UX/UI:** Padronização gramatical PT-BR completa em e-mails e logs, eliminando strings sem acentuação.
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 14/05/2026
+- **Estado:** Estabilizado v5.6.5 (Encoding & Saneamento).
+- **SQL Tuning:** Otimização profunda do script `NFFaccaoControle.sql` com consolidação de scans e hints de materialização (Pilar E).
+- **Encoding:** Padronização absoluta de todos os scripts PowerShell para `UTF-8 with BOM`. Captura de processos via `StandardErrorEncoding=UTF8`.
+- **Hardening:** Implementado `misfire_grace_time=60` e proteção de I/O em logs no Orquestrador para evitar omissões de disparo por instabilidade do terminal.
+- **Ferramentas:** Consolidado `tools/diagnostics.py` como ferramenta oficial de saúde do Hub. Saneamento de artefatos de teste e scratch.
+- **Modo Teste (Source of Truth):** Implementada injeção de `ORCHESTRATOR_TEST_MODE` via `worker.py`.
+- **Telemetria:** Implementada Telemetria Nativa para execuções de terminal via prefixo `TEL_`.
+- **Idempotência:** Universalização da ADR-013 (Idempotência Granular) em todo o Hub.
+---
+- **Resiliência:** Implementado `Scheduler Heartbeat` resiliente e telemetria de carga de jobs (v5.6.4).
+- **Broadcast:** Ativada transmissão de logs em tempo real para o Dashboard.
 - **Timezone:** Padronização absoluta para Horário de Brasília (BRT - America/Sao_Paulo).
-- **Resiliência:** Implementada higienização rigorosa de arquivos temporários órfãos (`.tmp`) para evitar poluição de diretórios em execuções de idempotência.
 - **Auditoria:** Script `Audit-DailyStatus.ps1` ativo para telemetria AI-Native.
 - **Porta:** Padronização absoluta na porta 8000 para API/Watchdog.
-- **Encoding (v5.4.0):** Descontinuado o guardrail ASCII-Safe e protocolo Base64 Bridge. Adoção global de codificação UTF-8 direta no código-fonte, habilitada pela variável `PYTHONUTF8=1` no `.env`.
 ---

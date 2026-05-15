@@ -4,6 +4,80 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 O projeto segue os princípios de **Resiliência, Escala e Governança (Protocolo V.A.L.E.G.)**.
 
+## [5.8.0] — 2026-05-15
+### 🚀 Alta Performance: Pragmatic Upgrade (ADR-016)
+- **Zero N+1 Queries**: Refatoração crítica nos routers `system.py` e `executions.py` do Orchestrator. Implementados `joinedload` e agregações SQLAlchemy massivas (`func.count`, `func.avg` com `case`), colapsando dezenas de queries em transações únicas (O(1) database footprint).
+- **Batched Broadcasting**: Implementação de Log Flusher Assíncrono no `worker.py`. A transmissão de telemetria agora ocorre em lotes temporais (a cada 1 segundo) via thread dedicada, erradicando a sobrecarga de I/O de rede síncrona gerada pela leitura linha-a-linha dos processos filhos.
+- **Throughput Tuning**: Aumento do `WORKER_MAX_CONCURRENCY` padrão de 2 para 4, viabilizado pela drástica redução de contenção de banco e I/O de rede.
+
+## [5.7.1] — 2026-05-15
+### 🩺 Consolidação de Saúde e Saneamento de Processos
+- **Orquestrador:** Saneamento de processos duplicados (rogue) que operavam fora do ambiente virtual (.venv), causando conflitos de concorrência e falhas de carga de tipos .NET (NativeProcessRunner).
+- **Resiliência:** Implementado log de diagnóstico no `Lib-Process.psm1` para monitorar falhas silenciosas do `Add-Type`.
+- **Sintaxe:** Correção de risco de interpretação de parâmetros em `Receitas Bloqueadas` e `Receitas Emitidas` (Send-AlertaFalhaDefinitiva).
+- **Estabilidade:** Execução de Hard Reset (Rescue Mode) para estabilização da árvore de processos (API, Worker e Watchdog).
+
+## [5.7.0] — 2026-05-15
+### 🚀 Alta Performance: Async I/O Wrapper (ADR-015)
+- **Deadlock Elimination**: Resolvido o travamento crônico das automações "Receitas Emitidas" e "Receitas Bloqueadas" causado pelo esgotamento de buffers de pipe no PowerShell 5.1.
+- **AsyncProcessRunner**: Introduzida a biblioteca `lib\Lib-Process.psm1` com wrapper C# nativo. A leitura de `stdout` e `stderr` agora ocorre em threads paralelas, garantindo fluidez total mesmo sob alto volume de dados (Base64/HTML).
+- **Hub Standardization**: Padronização preventiva de 100% dos orquestradores para o novo motor de execução assíncrona.
+
+## [5.6.6] — 2026-05-15
+### 🛡️ Endurecimento Crítico: Prevenção de Órfãos e Hangs (Pilar A/R)
+- **Zombie Eradication**: Corrigido o vazamento de processos órfãos (`node.exe`) em "Receitas Bloqueadas". O acionamento via `Start-Process` foi substituído por `System.Diagnostics.Process` para atrelar rigorosamente os filhos à árvore principal, garantindo a eficácia do `taskkill /T` do Orquestrador.
+- **Network Hang Prevention**: Injetados `expire_time=2` e `call_timeout=180000` (3 minutos) nas conexões `oracledb` em `processar_receitas.py`. Isso impede que oscilações silenciosas de rede travem a execução indefinidamente ("hangs").
+- **Mutex Resilience**: Atualizada a `Lib-Logging.psm1` (`Enter-AutomationLock`) para tratar e reciclar graciosamente a `System.Threading.AbandonedMutexException`, evitando crashes sistêmicos caso uma execução anterior seja derrubada forçosamente.
+- **Saneamento Ativo**: Executado comando PowerShell para purgar dezenas de processos `python`, `pwsh` e `node` que estavam pendurados desde o dia 14/05, estabilizando os recursos do servidor.
+
+## [5.6.5] — 2026-05-14
+### 🔠 Estabilidade de Encoding e Saneamento (Pilar V/G)
+- **UTF-8 Normalization**: Convertidos todos os scripts `.ps1` e `.psm1` para `UTF-8 with BOM` para garantir integridade absoluta de acentuação no PowerShell 5.1.
+- **Process I/O Integrity**: Implementada a captura explícita de `StandardErrorEncoding` como UTF-8 na orquestração de processos Python, resolvendo falhas de `UnicodeEncodeError`.
+- **Double-Encoding Fix**: Revertida a corrupção de caracteres (ex: `Ã§`) em mensagens de log nativas, restaurando a padronização gramatical PT-BR.
+- **Repo Cleanup**: Removidos artefatos de teste obsoletos e scripts temporários de manutenção, mantendo o repositório em conformidade Lean.
+
+## [5.6.4] — 2026-05-14
+### 🛡️ Endurecimento e Resiliência do Agendador (Pilar R)
+- **Misfire Resilience**: Implementado `misfire_grace_time=60` em todos os jobs do APScheduler, garantindo que disparos atrasados por instabilidades do SO sejam recuperados.
+- **I/O Guard (Logs)**: Envolvido o loop de heartbeat em blocos `try/except` para prevenir que erros de escrita no console (OSError 22) travem o motor de agendamento.
+- **Diagnostic Toolkit**: Consolidada a infraestrutura de diagnóstico no script `tools/diagnostics.py`, substituindo scripts temporários por uma ferramenta unificada de saúde (DB, API e Logs).
+- **Saneamento**: Limpeza completa do diretório `scratch` e normalização da stack para v5.6.4.
+
+## [5.6.3] — 2026-05-14
+### 🎯 Idempotência Granular Universal (Hub Global)
+- **Extensão ADR-013**: Implementada a gestão granular de notificações em `Receitas Emitidas` (v2.7.0) e `Montagem de Terceirizados` (v2.2.0).
+- **Delivery Checkpoints**: Introduzido o arquivo `delivery_state.json` para rastrear o sucesso individual de canais de saída, eliminando o risco de spam em caso de falhas na orquestração.
+- **Template v2.1.0**: Atualizado o template oficial para suportar nativamente a lógica de supressão granular de notificações.
+- **Resiliência**: Scripts `run.ps1` agora realizam leitura resiliente de estados, migrando automaticamente para o novo modelo de checkpoints.
+
+## [5.6.2] — 2026-05-14
+### 🕰️ Resiliência e Telemetria do Agendador
+- **Saneamento de Processos**: Realizada limpeza profunda de instâncias duplicadas do Orquestrador/Worker, estabilizando o motor de agendamento após restart crítico.
+- **Scheduler Telemetry**: Implementado log de carga de automações no startup, permitindo verificar a paridade entre banco de dados e motor in-memory.
+- **Proof-of-Life (Heartbeat)**: Adicionado job de sistema `enterprise_scheduler_heartbeat` que loga o status do motor a cada 15 minutos, garantindo visibilidade sobre o loop do APScheduler.
+- **Diagnóstico Resolvido**: Identificada e corrigida instabilidade transiente no motor de agendamento que causou a omissão de disparos entre 11:30 e 12:00.
+
+## [5.6.1] — 2026-05-14
+### 🎯 Idempotência Granular (Receitas Bloqueadas)
+- **Checkpoints de Canal**: Substituição do modelo de "Compromisso Atômico" pela "Idempotência Granular" (ADR-013). Agora, o estado de envio de E-mail e WhatsApp é rastreado separadamente no `email_state.json`.
+- **Prevenção de Spam**: Se o e-mail for entregue com sucesso, mas o WhatsApp falhar, o sistema salvará o estado parcial. Na próxima execução, apenas o WhatsApp será retentado, eliminando o reenvio duplicado de e-mails.
+- **Resiliência de Estado**: Implementada lógica de leitura resiliente no `run.ps1` (v2.3.0) para migrar automaticamente formatos de estado antigos para a nova estrutura baseada em objetos.
+
+## [5.6.0] — 2026-05-14
+### 🛡️ Padronização Global e Blindagem UTF-8
+- **UTF-8 with BOM (Logs)**: Migração total da `Lib-Logging.psm1` para `UTF-8 with BOM`. Essa mudança garante que o PowerShell 5.1 identifique corretamente os arquivos de log como UTF-8, eliminando caracteres corrompidos ("ASCII residual") em visualizadores de log.
+- **Audit Modo Teste**: Concluída a padronização de todas as automações (`Receitas Bloqueadas`, `Receitas Emitidas`, `Montagem`) para respeitarem a hierarquia: Orquestrador > Registro do Windows.
+- **Template Update**: O script de `_Template\run.ps1` foi atualizado com as novas diretrizes de encoding e exemplos de Modo Teste hierárquico.
+- **Saneamento de Log**: Removida lógica redundante de Base64 manual em `Receitas Bloqueadas`, agora centralizada e simplificada via `Lib-Logging`.
+
+## [5.5.0] — 2026-05-14
+### 🎯 Unificação do Modo Teste (Source of Truth)
+- **Orchestrator Injection**: O `worker.py` agora injeta a variável de ambiente `ORCHESTRATOR_TEST_MODE` (`true`/`false`) em cada execução, baseando-se estritamente no status do banco de dados (Dashboard).
+- **Lib-Email Update**: `Lib-Email.psm1` agora prioriza o status vindo do Orquestrador, resolvendo o problema de "Split-Brain" onde o Modo Teste permanecia ativo mesmo após ser desabilitado no Dashboard.
+- **Manual Fallback**: Mantido suporte ao redirecionamento automático via `AUTOMACAO_TEST_EMAIL` (registro do Windows) para execuções manuais via VS Code.
+- **Uniformidade**: Aplicada a mesma lógica de prioridade na automação de Montagem de Terceirizados.
+
 ## [5.4.7] — 2026-05-13
 ### 🔠 Correção Global de Encoding e Pre-commit (UTF-8 com e sem BOM)
 - **PowerShell UTF-8 BOM**: Padronização global de todos os scripts `.ps1` e `.psm1` para UTF-8 com BOM, corrigindo erro de sintaxe no PowerShell 5.1 e destravando o pre-commit.
