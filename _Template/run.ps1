@@ -8,9 +8,9 @@
     3. Logging: Log Standard com Correlation ID.
     4. Escala e Governanca: Tratamento idempotente e Zero Trust.
 .NOTES
-    Version: 2.0.0
+    Version: 2.1.0
     Skill: ai-native-development-standard, protocolo-valeg
-    Contract: pure-native-logic, base64-bridge-logs, preflight-v1
+    Contract: pure-native-logic, base64-bridge-logs, preflight-v1, granular-idempotency
 #>
 [CmdletBinding()]
 param(
@@ -71,6 +71,25 @@ try {
         # 1. LOGICA DE NEGOCIO AQUI
         Write-Log "Executando tarefas..."
 
+        # Exemplo de Envio de E-mail com Modo Teste Hierarquico e Idempotencia Granular
+        # $currentHash = "..." # Gerar hash do conteudo (ex: MD5 do HTML)
+        # $DeliveryStatePath = Join-Path $ScriptDir "delivery_state.json"
+        # $deliveryState = @{ last_sent_hash = ""; delivery_status = @{ email = @{ success = $false; sent_at = $null } } }
+        # if (Test-Path $DeliveryStatePath) { $deliveryState = Get-Content $DeliveryStatePath -Raw | ConvertFrom-Json }
+        # if ($currentHash -ne $deliveryState.last_sent_hash) { $deliveryState.last_sent_hash = $currentHash; $deliveryState.delivery_status.email.success = $false }
+        
+        # if ($deliveryState.delivery_status.email.success) { Write-Log "Ja enviado. Suprimindo." }
+        # else {
+        #    $globalTestEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
+        #    $isTestMode = ($env:ORCHESTRATOR_TEST_MODE -eq "true") -or ($null -eq $env:ORCHESTRATOR_TEST_MODE -and $globalTestEmail)
+        #    $targetTo = if ($isTestMode) { ($globalTestEmail, "gabriel.dias@costaricamalhas.ind.br" | Select-Object -First 1) } else { "OFICIAL@..." }
+        #    $sent = Send-OutlookEmail -To $targetTo ...
+        #    if ($sent) { 
+        #        $deliveryState.delivery_status.email.success = $true; $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'o')
+        #        $deliveryState | ConvertTo-Json | Out-File $DeliveryStatePath -Encoding UTF8
+        #    }
+        # }
+
     } finally {
         # Liberacao do bloqueio global
         Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
@@ -86,3 +105,5 @@ try {
     }
     Write-Log "FIM - Processo finalizado."
 }
+
+

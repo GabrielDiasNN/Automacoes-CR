@@ -259,7 +259,7 @@ def test_version_endpoint(client):
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "5.2.0"
+    assert data["version"] == "5.3.0"
     assert "python_version" in data
     assert "uptime_seconds" in data
     assert "max_workers" in data

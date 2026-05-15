@@ -1,18 +1,20 @@
-# Core Libraries
-stamina>=24.2.0
-oracledb>=3.4.2
-pandas
-openpyxl
-python-dotenv
-
-# Development Tools & Static Analysis
-pylint
-mypy
-pandas-stubs
-types-openpyxl
-types-requests
-types-setuptools
-black
-isort
-pytest
-pytest-cov
+# Core Libraries
+stamina>=24.2.0
+oracledb==2.5.1
+pandas
+openpyxl
+python-dotenv
+requests
+
+
+# Development Tools & Static Analysis
+pylint
+mypy
+pandas-stubs
+types-openpyxl
+types-requests
+types-setuptools
+black
+isort
+pytest
+pytest-cov
