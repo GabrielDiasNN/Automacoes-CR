@@ -115,7 +115,7 @@ def _scheduled_task_wrapper(automation_id: int):
         )
 
         if existing:
-            logger.info(f"Agendamento ignorado: {db_auto.name} j\u00e1 tem execu\u00e7\u00e3o ativa.")
+            logger.info(f"Agendamento ignorado: {db_auto.name} já tem execução ativa.")
             return
 
         exec_id = f"CRON_{automation_id}_{int(time.time())}"
@@ -140,6 +140,8 @@ def reload_scheduled_tasks():
         automations_db = (
             db.query(models.Automation).filter(models.Automation.enabled == True).all()
         )
+        logger.info(f"Recarregando agendamentos para {len(automations_db)} automações habilitadas.")
+        jobs_count = 0
         for auto in automations_db:
             if not auto.schedule:
                 continue
@@ -161,6 +163,7 @@ def reload_scheduled_tasks():
                             trigger,
                             args=[auto.id],
                             id=f"job_{auto.id}_{idx}",
+                            misfire_grace_time=60,
                         )
                 else:
                     # Fallback Legado
@@ -176,9 +179,12 @@ def reload_scheduled_tasks():
                         trigger,
                         args=[auto.id],
                         id=f"job_{auto.id}",
+                        misfire_grace_time=60,
                     )
             except Exception as e:
                 logger.error(f"Erro ao agendar {auto.name}: {e}")
+        
+        logger.info(f"Agendador sincronizado: {len(scheduler.get_jobs())} jobs ativos no total.")
     finally:
         db.close()
 
@@ -228,6 +234,7 @@ async def lifespan(app: FastAPI):
         minutes=30,
         id="enterprise_wal_checkpoint",
         replace_existing=True,
+        misfire_grace_time=300,
     )
     # Purge diario as 03:00
     scheduler.add_job(
@@ -235,11 +242,30 @@ async def lifespan(app: FastAPI):
         CronTrigger(hour=3, minute=0),
         id="enterprise_daily_purge",
         replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    def _safe_heartbeat():
+        """Batimento cardíaco resiliente a erros de terminal (Pilar R)."""
+        try:
+            logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
+        except Exception:
+            # Se o log falhar (ex: OSError no terminal), apenas ignoramos para não travar o loop
+            pass
+
+    # Log de Heartbeat do Agendador (v5.3.0)
+    scheduler.add_job(
+        _safe_heartbeat,
+        "interval",
+        minutes=15,
+        id="enterprise_scheduler_heartbeat",
+        replace_existing=True,
+        misfire_grace_time=60,
     )
 
     if not scheduler.running:
         scheduler.start()
-    logger.info("Central de Automa\u00e7\u00f5es v5.2.0 - Orchestrator online.")
+    logger.info("Central de Automações v5.2.0 - Orchestrator online.")
     yield
     if scheduler.running:
         scheduler.shutdown(wait=False)
@@ -249,7 +275,7 @@ async def lifespan(app: FastAPI):
 # Aplicativo FastAPI
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Central de Automa\u00e7\u00f5es", version="5.2.0", lifespan=lifespan)
+app = FastAPI(title="Central de Automações", version="5.2.0", lifespan=lifespan)
 
 # --- CORS Hardened: restrito a origens configuradas via .env ---
 _raw_origins = os.environ.get(
@@ -295,7 +321,7 @@ if os.path.exists(dashboard_path):
     )
     logger.info(f"Dashboard montado em: {dashboard_path}")
 else:
-    logger.error(f"ERRO: Pasta Dashboard n\u00e3o encontrada em: {dashboard_path}")
+    logger.error(f"ERRO: Pasta Dashboard não encontrada em: {dashboard_path}")
 
 if os.path.exists(lib_path):
     app.mount("/lib", StaticFiles(directory=lib_path), name="lib")

@@ -1,20 +1,22 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Router: Executions - Historico de execucoes com filtros, logs, artefatos e controle. v5.3.0
+Router: Executions - Historico de execucoes com filtros, logs, artefatos e controle. v5.4.0
 """
 
 import json
 import logging
 import math
 import os
+import time
+import uuid
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import desc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
 from ..database import get_db
@@ -47,8 +49,8 @@ def list_executions(
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    """Lista execucoes com filtros avancados e paginacao."""
-    query = db.query(models.Execution)
+    """Lista execucoes com filtros avancados e paginacao. Otimizado com joinedload."""
+    query = db.query(models.Execution).options(joinedload(models.Execution.automation))
 
     if status:
         query = query.filter(models.Execution.status == status.upper())
@@ -75,16 +77,11 @@ def list_executions(
     pages = math.ceil(total / per_page) if per_page > 0 else 1
     items_raw = query.offset((page - 1) * per_page).limit(per_page).all()
 
-    # Enriquecer com nome da automacao
+    # Enriquecer com nome da automacao (agora em memoria via joinedload)
     items = []
     for ex in items_raw:
         summary = schemas.ExecutionSummary.model_validate(ex)
-        auto = (
-            db.query(models.Automation.name)
-            .filter(models.Automation.id == ex.automation_id)
-            .scalar()
-        )
-        summary.automation_name = auto
+        summary.automation_name = ex.automation.name if ex.automation else "Desconhecido"
         items.append(summary)
 
     return schemas.PaginatedResponse(
@@ -107,20 +104,17 @@ def list_by_automation(
     """Retorna execucoes de uma automacao especifica."""
     execs = (
         db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
         .filter(models.Execution.automation_id == automation_id)
         .order_by(desc(models.Execution.started_at))
         .limit(limit)
         .all()
     )
-    auto_name = (
-        db.query(models.Automation.name)
-        .filter(models.Automation.id == automation_id)
-        .scalar()
-    )
+    
     result = []
     for ex in execs:
         s = schemas.ExecutionSummary.model_validate(ex)
-        s.automation_name = auto_name
+        s.automation_name = ex.automation.name if ex.automation else "Desconhecido"
         result.append(s)
     return result
 
@@ -137,6 +131,7 @@ def list_recent(
     """Retorna as execucoes mais recentes de todas as automacoes."""
     execs = (
         db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
         .order_by(desc(models.Execution.started_at))
         .limit(limit)
         .all()
@@ -144,12 +139,7 @@ def list_recent(
     result = []
     for ex in execs:
         s = schemas.ExecutionSummary.model_validate(ex)
-        auto_name = (
-            db.query(models.Automation.name)
-            .filter(models.Automation.id == ex.automation_id)
-            .scalar()
-        )
-        s.automation_name = auto_name
+        s.automation_name = ex.automation.name if ex.automation else "Desconhecido"
         result.append(s)
     return result
 
@@ -163,17 +153,12 @@ def get_execution(
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    db_exec = db.query(models.Execution).options(joinedload(models.Execution.automation)).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
     resp = schemas.ExecutionResponse.model_validate(db_exec)
-    auto_name = (
-        db.query(models.Automation.name)
-        .filter(models.Automation.id == db_exec.automation_id)
-        .scalar()
-    )
-    resp.automation_name = auto_name
+    resp.automation_name = db_exec.automation.name if db_exec.automation else "Desconhecido"
     return resp
 
 # ---------------------------------------------------------------------------
@@ -237,15 +222,11 @@ def download_artifact(
     api_key: str = Depends(get_api_key),
 ):
     """Download de um artefato especifico."""
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    db_exec = db.query(models.Execution).options(joinedload(models.Execution.automation)).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == db_exec.automation_id)
-        .first()
-    )
+    db_auto = db_exec.automation
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
@@ -304,9 +285,6 @@ def stop_execution(
 # TELEMETRIA EXTERNA (Terminal / VS Code)
 # ---------------------------------------------------------------------------
 
-import time
-import uuid
-
 @router.post("/telemetry/start")
 def telemetry_start(
     payload: schemas.ExecutionTelemetryStart,
@@ -317,8 +295,6 @@ def telemetry_start(
     """
     Inicia o registro de uma execucao disparada externamente (ex: terminal).
     """
-    from ..timezone import get_now_local
-
     # Buscar a automacao pelo nome
     db_auto = db.query(models.Automation).filter(models.Automation.name == payload.automation_name).first()
     if not db_auto:
@@ -353,8 +329,6 @@ def telemetry_end(
     """
     Finaliza o registro de uma execucao disparada externamente.
     """
-    from ..timezone import get_now_local
-
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")

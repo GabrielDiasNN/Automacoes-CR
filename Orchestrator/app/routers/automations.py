@@ -155,7 +155,7 @@ def get_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     return db_auto
 
@@ -182,7 +182,7 @@ def create_automation(
     if existing:
 
         raise HTTPException(
-            status_code=409, detail="Automa\u00e7\u00e3o com este nome j\u00e1 existe."
+            status_code=409, detail="Automação com este nome já existe."
         )
 
     # --- Pilar V: Pre-flight de existencia do script ---
@@ -191,7 +191,7 @@ def create_automation(
 
     if not ok:
 
-        raise HTTPException(status_code=422, detail=f"Valida\u00e7\u00e3o do script: {result}")
+        raise HTTPException(status_code=422, detail=f"Validação do script: {result}")
 
     db_auto = models.Automation(**automation.model_dump())
 
@@ -239,7 +239,7 @@ def update_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     update_data = automation_update.model_dump(exclude_unset=True)
 
@@ -283,7 +283,7 @@ def delete_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     auto_name = db_auto.name
 
@@ -319,6 +319,7 @@ def start_automation(
 ):
 
     import time as _time
+    import uuid as _uuid
 
     db_auto = (
         db.query(models.Automation)
@@ -328,7 +329,7 @@ def start_automation(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     # Protecao contra execucao duplicada
 
@@ -345,10 +346,11 @@ def start_automation(
 
         raise HTTPException(
             status_code=409,
-            detail=f"Automa\u00e7\u00e3o j\u00e1 possui uma execu\u00e7\u00e3o ativa (ID: {running.id}).",
+            detail=f"Automação já possui uma execução ativa (ID: {running.id}).",
         )
 
-    exec_id = f"EXEC_{int(_time.time())}"
+    # exec_id com precisão de microsegundos + sufixo aleatório para evitar colisões (ADR-016)
+    exec_id = f"EXEC_{int(_time.time())}_{_uuid.uuid4().hex[:4].upper()}"
 
     client_ip = get_client_ip(request)
 
@@ -367,7 +369,7 @@ def start_automation(
 
     db.commit()
 
-    return {"message": "Automa\u00e7\u00e3o enfileirada com sucesso.", "exec_id": exec_id}
+    return {"message": "Automação enfileirada com sucesso.", "exec_id": exec_id}
 
 @router.post("/test-mode/global")
 def set_global_test_mode(
@@ -408,7 +410,7 @@ def set_global_test_mode(
     db.commit()
 
     return {
-        "message": f"Modo Teste Global {'ativado' if enabled else 'desativado'} para todas as automa\u00e7\u00f5es."
+        "message": f"Modo Teste Global {'ativado' if enabled else 'desativado'} para todas as automações."
     }
 
 @router.post("/{automation_id}/test-mode")
@@ -429,7 +431,7 @@ def set_automation_test_mode(
 
     if not db_auto:
 
-        raise HTTPException(status_code=404, detail="Automa\u00e7\u00e3o n\u00e3o encontrada.")
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     db_auto.test_mode = enabled
 
@@ -445,7 +447,7 @@ def set_automation_test_mode(
     db.commit()
 
     return {
-        "message": f"Modo Teste da automa\u00e7\u00e3o {db_auto.name} definido para {enabled}."
+        "message": f"Modo Teste da automação {db_auto.name} definido para {enabled}."
     }
 
 # ---------------------------------------------------------------------------
@@ -467,7 +469,7 @@ def pause_all(
 
     db.commit()
 
-    return {"message": "Todas as automa\u00e7\u00f5es pausadas."}
+    return {"message": "Todas as automações pausadas."}
 
 @router.post("/control/resume-all")
 def resume_all(
@@ -482,4 +484,4 @@ def resume_all(
 
     db.commit()
 
-    return {"message": "Todas as automa\u00e7\u00f5es retomadas."}
+    return {"message": "Todas as automações retomadas."}

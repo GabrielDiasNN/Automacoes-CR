@@ -1,7 +1,7 @@
 # pylint: disable=all
 # mypy: ignore-errors
 """
-Worker Central de Automacoes v5.1 - Motor de Execucao Concorrente com Tipagem Estrita.
+Worker Central de Automacoes v5.3 - Motor de Execucao Concorrente com Tipagem Estrita e Log Batching.
 """
 
 import base64
@@ -42,10 +42,10 @@ except ImportError as e:
 project_root: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(project_root, ".env"))
 
-MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "2"))
+MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
 HEARTBEAT_INTERVAL: int = 15  # segundos
 POLL_INTERVAL: int = 2  # segundos
-WORKER_VERSION: str = "5.2.0"
+WORKER_VERSION: str = "5.3.0"
 _port = os.environ.get("HUB_API_PORT", "8000")
 API_BASE: str = f"http://127.0.0.1:{_port}"
 
@@ -166,27 +166,37 @@ log_buffer: Dict[str, List[str]] = {}
 log_buffer_lock: threading.Lock = threading.Lock()
 
 def broadcast_log(message: str, exec_id: str) -> None:
-    """Envia log para o WebSocket do Orchestrator via endpoint HTTP interno."""
+    """Apenas enfileira o log para envio em lote (Batched Broadcasting)."""
     with log_buffer_lock:
         if exec_id not in log_buffer:
             log_buffer[exec_id] = []
         log_buffer[exec_id].append(message)
-        pending: str = "".join(log_buffer[exec_id])
 
-    for attempt in range(3):
-        try:
-            res = requests.post(
-                f"{API_BASE}/api/broadcast_log",
-                json={"exec_id": exec_id, "message": pending},
-                timeout=2,
-            )
-            if res.status_code == 200:
-                with log_buffer_lock:
-                    log_buffer[exec_id] = []
-                return
-        except requests.RequestException:
-            if attempt < 2:
-                time.sleep(0.5 * (attempt + 1))
+def log_flusher_loop() -> None:
+    """Thread em background que envia os logs em lote a cada 1 segundo para o WebSocket."""
+    logger.info("Log flusher thread iniciada.")
+    while not shutdown_event.is_set():
+        shutdown_event.wait(1.0) # Intervalo do batch
+        
+        # Copiar o buffer rapidamente e limpar o original
+        with log_buffer_lock:
+            if not log_buffer:
+                continue
+            to_flush = log_buffer.copy()
+            log_buffer.clear()
+            
+        for exec_id, messages in to_flush.items():
+            if not messages:
+                continue
+            pending = "".join(messages)
+            try:
+                requests.post(
+                    f"{API_BASE}/api/broadcast_log",
+                    json={"exec_id": exec_id, "message": pending},
+                    timeout=2,
+                )
+            except requests.RequestException:
+                pass # Em caso de erro, os logs daquela janela sao perdidos no websocket, mas estarao salvos no banco.
 
 def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
     """Envia evento de sistema para o WebSocket global."""
@@ -259,6 +269,10 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
         timeout_delta: timedelta = timedelta(minutes=max_runtime)
         robot_dir: str = os.path.dirname(script_path)
 
+        # Injeta status de modo teste para o processo filho
+        env = os.environ.copy()
+        env["ORCHESTRATOR_TEST_MODE"] = "true" if db_exec.automation.test_mode else "false"
+
         process = subprocess.Popen(
             [
                 "powershell.exe",
@@ -275,6 +289,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             encoding="utf-8",
             errors="replace",
             creationflags=subprocess.CREATE_NO_WINDOW,
+            env=env
         )
 
         # Registrar processo ativo para encerramento em caso de shutdown
@@ -319,7 +334,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                         capture_output=True,
                         check=False,
                     )
-                    broadcast_log("\n[INTERROMPIDO PELO USU\u00c1RIO]\n", exec_id)
+                    broadcast_log("\n[INTERROMPIDO PELO USUÁRIO]\n", exec_id)
                     update_stat("active_tasks", -1)
                     broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
                     return
@@ -331,7 +346,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                         check=False,
                     )
                     broadcast_log(
-                        f"\n[TIMEOUT AUTOM\u00c1TICO: {max_runtime}min]\n", exec_id
+                        f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
                     )
 
                     db_exec_upd = (
@@ -346,7 +361,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                             time.time() - task_start_ts, 2
                         )
                         db_exec_upd.logs = (
-                            "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo m\u00e1ximo."
+                            "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo máximo."
                         )
                         check_db.commit()
 
@@ -366,7 +381,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             time.sleep(1)
 
         broadcast_log(
-            f"\n[Fim da Execu\u00e7\u00e3o - ExitCode: {process.returncode}]\n", exec_id
+            f"\n[Fim da Execução - ExitCode: {process.returncode}]\n", exec_id
         )
         duration: float = round(time.time() - task_start_ts, 2)
         artifacts_json: Optional[str] = scan_for_artifacts(robot_dir, task_start_ts)
@@ -454,6 +469,9 @@ def main_loop() -> None:
 
     hb_thread: threading.Thread = threading.Thread(target=heartbeat_loop, daemon=True)
     hb_thread.start()
+
+    flusher_thread: threading.Thread = threading.Thread(target=log_flusher_loop, daemon=True)
+    flusher_thread.start()
 
     executor: ThreadPoolExecutor = ThreadPoolExecutor(
         max_workers=MAX_WORKERS, thread_name_prefix="task"

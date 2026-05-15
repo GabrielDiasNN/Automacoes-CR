@@ -2,7 +2,7 @@
 # mypy: ignore-errors
 """
 
-Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.1.
+Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.2.0
 
 """
 
@@ -14,8 +14,8 @@ from datetime import datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import desc, func, text
-from sqlalchemy.orm import Session
+from sqlalchemy import desc, func, text, case
+from sqlalchemy.orm import Session, aliased
 
 from .. import models, schemas
 from ..database import (DB_PATH, get_db, get_db_size_mb, get_wal_size_mb,
@@ -67,9 +67,9 @@ def health_check(db: Session = Depends(get_db)):
     disk_mb = get_db_size_mb()
 
     # Determinar saude geral
-    overall = "saud\u00e1vel"
+    overall = "saudável"
     if db_status != "online" or not scheduler.running:
-        overall = "inst\u00e1vel"
+        overall = "instável"
     elif not worker_status.is_alive:
         overall = "degradado"
 
@@ -139,7 +139,7 @@ def get_worker_status(
 
 # ---------------------------------------------------------------------------
 
-# METRICAS ENRIQUECIDAS
+# METRICAS ENRIQUECIDAS (N+1 Query Eliminada)
 
 # ---------------------------------------------------------------------------
 
@@ -148,7 +148,7 @@ def get_metrics(
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    """Metricas completas do sistema."""
+    """Metricas completas do sistema (Otimizado sem N+1)."""
 
     total_execs = db.query(models.Execution).count()
 
@@ -180,58 +180,49 @@ def get_metrics(
         round((success_count / total_execs * 100), 2) if total_execs > 0 else 0
     )
 
-    # Metricas por automacao
+    # Agregacao de metricas por automacao em uma unica query
+    stats_query = db.query(
+        models.Execution.automation_id,
+        func.count(case((models.Execution.status == 'SUCCESS', 1))).label("total_success"),
+        func.count(case((models.Execution.status == 'ERROR', 1))).label("total_errors"),
+        func.avg(case((models.Execution.status == 'SUCCESS', models.Execution.duration_seconds))).label("avg_duration")
+    ).group_by(models.Execution.automation_id).all()
+
+    stats_map = {row.automation_id: row for row in stats_query}
+
+    # Subquery para ultima execucao
+    subq = db.query(
+        models.Execution.automation_id,
+        func.max(models.Execution.started_at).label("max_started_at")
+    ).group_by(models.Execution.automation_id).subquery()
+
+    last_execs = db.query(
+        models.Execution.automation_id,
+        models.Execution.status,
+        models.Execution.started_at
+    ).join(
+        subq,
+        (models.Execution.automation_id == subq.c.automation_id) &
+        (models.Execution.started_at == subq.c.max_started_at)
+    ).all()
+
+    last_execs_map = {row.automation_id: row for row in last_execs}
 
     automation_stats = []
-
     automations = db.query(models.Automation).all()
 
     for auto in automations:
-
-        auto_success = (
-            db.query(models.Execution)
-            .filter(
-                models.Execution.automation_id == auto.id,
-                models.Execution.status == "SUCCESS",
-            )
-            .count()
-        )
-
-        auto_errors = (
-            db.query(models.Execution)
-            .filter(
-                models.Execution.automation_id == auto.id,
-                models.Execution.status == "ERROR",
-            )
-            .count()
-        )
-
-        auto_avg = (
-            db.query(func.avg(models.Execution.duration_seconds))
-            .filter(
-                models.Execution.automation_id == auto.id,
-                models.Execution.status == "SUCCESS",
-                models.Execution.duration_seconds.isnot(None),
-            )
-            .scalar()
-            or 0
-        )
-
-        last_exec = (
-            db.query(models.Execution)
-            .filter(models.Execution.automation_id == auto.id)
-            .order_by(desc(models.Execution.started_at))
-            .first()
-        )
+        stat = stats_map.get(auto.id)
+        last_ex = last_execs_map.get(auto.id)
 
         automation_stats.append(
             schemas.AutomationMetric(
                 name=auto.name,
-                total_success=auto_success,
-                total_errors=auto_errors,
-                avg_duration_sec=round(auto_avg, 2),
-                last_status=last_exec.status if last_exec else None,
-                last_run=last_exec.started_at if last_exec else None,
+                total_success=stat.total_success if stat else 0,
+                total_errors=stat.total_errors if stat else 0,
+                avg_duration_sec=round(stat.avg_duration, 2) if stat and stat.avg_duration else 0,
+                last_status=last_ex.status if last_ex else None,
+                last_run=last_ex.started_at if last_ex else None,
                 test_mode=auto.test_mode,
             )
         )
@@ -442,7 +433,7 @@ def get_version():
 
     uptime = get_now_local() - STARTUP_TIME
 
-    max_workers = int(os.environ.get("WORKER_MAX_CONCURRENCY", "2"))
+    max_workers = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4")) # Aumentado para 4 (Pragmatic Performance)
 
     allowed_origins = [
         o.strip()
@@ -454,7 +445,7 @@ def get_version():
     ]
 
     return schemas.SystemVersion(
-        version="5.2.0",
+        version="5.3.0", # Bump version for performance release
         python_version=sys.version.split()[0],
         started_at=STARTUP_TIME.isoformat(),
         uptime_seconds=round(uptime.total_seconds(), 2),
@@ -530,7 +521,7 @@ def manual_purge(
     db.commit()
 
     return {
-        "message": f"{removed} execu\u00e7\u00e3o(\u00f5es) removida(s).",
+        "message": f"{removed} execução(ões) removida(s).",
         "retention_days": retention_days,
         "removed_count": removed,
     }

@@ -19,7 +19,7 @@ from pydantic import (BaseModel, ConfigDict, Field, field_validator,
 # ---------------------------------------------------------------------------
 
 _SAFE_NAME_RE = re.compile(
-    r"^[a-zA-Z0-9 \u00E0-\u00FA\u00C0-\u00DA\u00E7\u00C7_\-\[\]\(\)\.]{2,100}$"
+    r"^[a-zA-Z0-9 à-úÀ-ÚçÇ_\-\[\]\(\)\.]{2,100}$"
 )
 _DANGEROUS_PATH_PATTERNS = ["..", "//", "\\\\", "%", "\x00"]
 
@@ -55,7 +55,7 @@ def format_dt_br(val: Any) -> Any:
 
 def _validate_safe_name(v: str) -> str:
     if not _SAFE_NAME_RE.match(v):
-        raise ValueError("Nome inv\u00e1lido (2-100 chars, caracteres seguros).")
+        raise ValueError("Nome inválido (2-100 chars, caracteres seguros).")
     return v.strip()
 
 def _validate_script_path(v: str) -> str:
@@ -71,7 +71,7 @@ def _validate_schedule(v: Optional[str]) -> Optional[str]:
         obj = json.loads(v.replace("'", '"'))
         return json.dumps(obj)
     except:
-        raise ValueError("Schedule deve ser JSON v\u00e1lido.")
+        raise ValueError("Schedule deve ser JSON válido.")
 
 # ---------------------------------------------------------------------------
 # Schemas de Automation

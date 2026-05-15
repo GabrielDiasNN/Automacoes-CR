@@ -138,12 +138,12 @@ def purge_old_executions(retention_days: int = 90) -> int:
         db.commit()
         if removed:
             logger.info(
-                f"Purge conclu\u00eddo: {removed} execu\u00e7\u00f5es removidas (>{retention_days} dias)."
+                f"Purge concluído: {removed} execuções removidas (>{retention_days} dias)."
             )
         return removed
     except Exception as e:
         db.rollback()
-        logger.error(f"Falha no purge de execu\u00e7\u00f5es: {e}")
+        logger.error(f"Falha no purge de execuções: {e}")
         return 0
     finally:
         db.close()

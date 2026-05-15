@@ -43,11 +43,11 @@ def get_api_key(request: Request, api_key: str = Depends(api_key_header)):
         client_ip = request.client.host if request.client else "unknown"
         req_id = getattr(request.state, "request_id", "UNK")
         logger.warning(
-            f"[{req_id}] [AUTH_FAIL] Tentativa de acesso inv\u00e1lida de IP={client_ip} "
+            f"[{req_id}] [AUTH_FAIL] Tentativa de acesso inválida de IP={client_ip} "
             f"path={request.url.path}"
         )
         raise HTTPException(
-            status_code=403, detail="Acesso negado: API Key inv\u00e1lida ou ausente."
+            status_code=403, detail="Acesso negado: API Key inválida ou ausente."
         )
     return api_key
 
