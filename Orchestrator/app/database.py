@@ -16,7 +16,7 @@ import logging
 import os
 from datetime import timedelta
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .timezone import get_now_local
@@ -50,6 +50,54 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+EXPECTED_SCHEMA = {
+    "automations": {
+        "id",
+        "name",
+        "description",
+        "script_path",
+        "schedule",
+        "max_runtime_minutes",
+        "enabled",
+        "test_mode",
+        "notification_channels",
+        "created_at",
+        "updated_at",
+    },
+    "executions": {
+        "id",
+        "automation_id",
+        "status",
+        "priority",
+        "exit_code",
+        "requested_by",
+        "started_at",
+        "finished_at",
+        "duration_seconds",
+        "artifacts",
+        "logs",
+    },
+    "worker_heartbeat": {
+        "id",
+        "pid",
+        "last_ping",
+        "uptime_seconds",
+        "tasks_completed",
+        "tasks_failed",
+        "active_tasks",
+        "version",
+    },
+    "audit_log": {
+        "id",
+        "timestamp",
+        "action",
+        "entity_type",
+        "entity_id",
+        "actor",
+        "details",
+    },
+}
+
 def get_db():
     """Dependency injection do FastAPI - garante cleanup via finally."""
     db = SessionLocal()
@@ -57,6 +105,28 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def validate_database_schema() -> dict:
+    """Valida tabelas/colunas essenciais esperadas pelo Orchestrator atual."""
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    missing_tables = sorted(set(EXPECTED_SCHEMA) - existing_tables)
+    missing_columns = {}
+
+    for table, expected_columns in EXPECTED_SCHEMA.items():
+        if table not in existing_tables:
+            continue
+        actual_columns = {column["name"] for column in inspector.get_columns(table)}
+        missing = sorted(expected_columns - actual_columns)
+        if missing:
+            missing_columns[table] = missing
+
+    valid = not missing_tables and not missing_columns
+    return {
+        "valid": valid,
+        "missing_tables": missing_tables,
+        "missing_columns": missing_columns,
+    }
 
 def get_db_size_mb() -> float:
     """Retorna o tamanho atual do banco em MB."""

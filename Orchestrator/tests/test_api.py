@@ -6,6 +6,9 @@ Testes de API do Orchestrator Central de Automacoes v5.0.
 15+ cenarios cobrindo: CRUD, validacao, seguranca, execucoes, sistema.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from conftest import AUTH_HEADERS
 
@@ -17,7 +20,7 @@ def test_read_root(client):
     res = client.get("/")
     assert res.status_code == 200
     data = res.json()
-    assert "5.2.0" in data["version"]
+    assert data["version"] == "6.2.0"
     assert "dashboard_url" in data
 
 # ============================================================
@@ -110,6 +113,49 @@ def test_update_automation(client):
     assert res.status_code == 200
     assert res.json()["description"] == "Atualizado"
 
+def test_update_automation_reloads_scheduler(client, monkeypatch):
+    import app.routers.automations as auto_router
+
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Reload Scheduler",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
+    calls = []
+    monkeypatch.setattr(auto_router, "_reload_scheduler_safe", lambda: calls.append("reload"))
+
+    res = client.put(
+        "/api/automations/1",
+        json={
+            "enabled": False,
+        },
+        headers=AUTH_HEADERS,
+    )
+
+    assert res.status_code == 200
+    assert calls == ["reload"]
+
+def test_update_automation_rejects_path_escape(client):
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Path Guard",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
+    res = client.put(
+        "/api/automations/1",
+        json={
+            "script_path": "C:\\Windows\\win.ini",
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 422
+
 def test_delete_automation(client):
     client.post(
         "/api/automations",
@@ -155,6 +201,18 @@ def test_reject_invalid_schedule(client):
             "name": "Bad Schedule",
             "script_path": "./test/run.ps1",
             "schedule": "not-a-json",
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 422
+
+def test_reject_schedule_with_invalid_time(client):
+    res = client.post(
+        "/api/automations",
+        json={
+            "name": "Bad Time",
+            "script_path": "./test/run.ps1",
+            "schedule": '{"times":[{"h":25,"m":0}]}',
         },
         headers=AUTH_HEADERS,
     )
@@ -210,6 +268,8 @@ def test_stop_execution(client):
 
     check = client.get(f"/api/executions/{exec_id}", headers=AUTH_HEADERS)
     assert check.json()["status"] == "TERMINATED"
+    assert "[STOP] Interrupcao solicitada via API" in check.json()["logs"]
+    assert check.json()["duration_seconds"] is not None
 
 def test_list_recent_executions(client):
     client.post(
@@ -235,7 +295,7 @@ def test_health_check(client):
     assert res.status_code == 200
     data = res.json()
     assert data["database"] == "online"
-    assert data["status"] in ["healthy", "degraded", "unhealthy", "saudavel", "degradado", "critico"]
+    assert data["status"] in ["healthy", "degraded", "unhealthy"]
 
 def test_metrics(client):
     res = client.get("/api/system/metrics", headers=AUTH_HEADERS)
@@ -259,7 +319,132 @@ def test_version_endpoint(client):
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "5.3.0"
+    assert data["version"] == "6.2.0"
     assert "python_version" in data
     assert "uptime_seconds" in data
     assert "max_workers" in data
+
+def test_diagnostics_endpoint(client):
+    res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["version"] == "6.2.0"
+    assert "database" in data
+    assert data["database"]["schema"]["valid"] is True
+    assert "scheduler" in data
+    assert "worker" in data
+    assert "queue" in data
+
+def test_wait_for_task_requires_api_key(client):
+    res = client.get("/api/system/wait-for-task")
+    assert res.status_code == 403
+
+def test_update_automation_config_creates_backup(client, monkeypatch, tmp_path):
+    import app.routers.automations as auto_router
+
+    bot_dir = tmp_path / "Bot"
+    bot_dir.mkdir()
+    script_path = bot_dir / "run.ps1"
+    config_path = bot_dir / "config.json"
+    script_path.write_text("Write-Host 'ok'", encoding="utf-8")
+    config_path.write_text('{"old": true}', encoding="utf-8")
+
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+    client.post(
+        "/api/automations",
+        json={"name": "Config Backup", "script_path": "./Bot/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+
+    res = client.put(
+        "/api/automations/1/configs/config.json",
+        json={"content": '{"new": true}'},
+        headers=AUTH_HEADERS,
+    )
+
+    assert res.status_code == 200
+    backup_relpath = res.json()["backup"]
+    backup_path = bot_dir / backup_relpath
+    assert backup_path.exists()
+    assert json.loads(backup_path.read_text(encoding="utf-8")) == {"old": True}
+    assert json.loads(config_path.read_text(encoding="utf-8")) == {"new": True}
+
+def test_update_automation_script_creates_backup_and_preserves_ps_bom(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    import app.routers.automations as auto_router
+
+    bot_dir = tmp_path / "Bot"
+    bot_dir.mkdir()
+    script_path = bot_dir / "run.ps1"
+    script_path.write_text("Write-Host 'old'", encoding="utf-8-sig")
+
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+    client.post(
+        "/api/automations",
+        json={"name": "Script Backup", "script_path": "./Bot/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+
+    res = client.put(
+        "/api/automations/1/scripts/run.ps1",
+        json={"content": "Write-Host 'new'"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert res.status_code == 200
+    backup_path = bot_dir / res.json()["backup"]
+    assert backup_path.exists()
+    assert "old" in backup_path.read_text(encoding="utf-8-sig")
+    assert script_path.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert "new" in script_path.read_text(encoding="utf-8-sig")
+
+def test_update_automation_script_rejects_path_escape(client, monkeypatch, tmp_path):
+    import app.routers.automations as auto_router
+
+    bot_dir = tmp_path / "Bot"
+    bot_dir.mkdir()
+    (bot_dir / "run.ps1").write_text("Write-Host 'ok'", encoding="utf-8")
+
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+    client.post(
+        "/api/automations",
+        json={"name": "Script Escape", "script_path": "./Bot/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+
+    res = client.put(
+        "/api/automations/1/scripts/..%2Frun.ps1",
+        json={"content": "bad"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert res.status_code in (400, 404)
+
+def test_update_env_creates_backup(client, monkeypatch, tmp_path):
+    import app.routers.system as system_router
+
+    env_path = tmp_path / ".env"
+    env_path.write_text("ORCHESTRATOR_API_KEY=old\n", encoding="utf-8")
+    monkeypatch.setattr(system_router, "PROJECT_ROOT", str(tmp_path))
+
+    res = client.put(
+        "/api/system/env",
+        json={"content": "ORCHESTRATOR_API_KEY=new\n"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert res.status_code == 200
+    backup_relpath = res.json()["backup"]
+    backup_path = tmp_path / backup_relpath
+    assert backup_path.exists()
+    assert backup_path.read_text(encoding="utf-8") == "ORCHESTRATOR_API_KEY=old\n"
+    assert env_path.read_text(encoding="utf-8") == "ORCHESTRATOR_API_KEY=new\n"
+
+def test_system_router_project_root_points_to_repo_root():
+    import app.routers.system as system_router
+
+    expected_root = Path(__file__).resolve().parents[2]
+    assert Path(system_router.PROJECT_ROOT).resolve() == expected_root.resolve()

@@ -10,6 +10,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,6 +29,81 @@ router = APIRouter(prefix="/api/automations", tags=["Automations"])
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
+
+def _reload_scheduler_safe() -> None:
+    """Recarrega o APScheduler sem quebrar a operacao CRUD que ja foi persistida."""
+    try:
+        from ..main import reload_scheduled_tasks
+
+        reload_scheduled_tasks()
+    except Exception as e:
+        logger.error(f"Falha ao recarregar agendador apos alteracao: {e}")
+
+def _extract_automation_id_from_job(job_id: str):
+    """Extrai automation_id de IDs de job no formato job_<id> ou job_<id>_<idx>."""
+    if not job_id.startswith("job_"):
+        return None
+    parts = job_id.split("_")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1])
+    except (TypeError, ValueError):
+        return None
+
+def _load_next_run_lookup():
+    """Mapeia proxima execucao por automacao consultando o scheduler em memoria."""
+    lookup = {}
+    try:
+        from ..main import scheduler
+        for job in scheduler.get_jobs():
+            auto_id = _extract_automation_id_from_job(job.id)
+            if auto_id is None or not job.next_run_time:
+                continue
+            current = lookup.get(auto_id)
+            if current is None or job.next_run_time < current:
+                lookup[auto_id] = job.next_run_time
+    except Exception as e:
+        logger.warning(f"Nao foi possivel carregar next_run do scheduler: {e}")
+    return lookup
+
+def _resolve_automation_dir(script_path: str) -> str:
+    """Resolve a pasta da automacao garantindo permanencia no PROJECT_ROOT."""
+    if script_path.startswith("./") or script_path.startswith(".\\"):
+        resolved_script = os.path.join(PROJECT_ROOT, script_path[2:])
+    elif not os.path.isabs(script_path):
+        resolved_script = os.path.join(PROJECT_ROOT, script_path)
+    else:
+        resolved_script = script_path
+
+    auto_dir = os.path.dirname(os.path.abspath(os.path.normpath(resolved_script)))
+    project_root = os.path.abspath(os.path.normpath(PROJECT_ROOT))
+    if os.path.commonpath([project_root, auto_dir]) != project_root:
+        raise HTTPException(status_code=403, detail="Diretorio da automacao fora do projeto.")
+    return auto_dir
+
+def _resolve_managed_file(auto_dir: str, filename: str) -> str:
+    """Resolve arquivo gerenciado impedindo path traversal por nome ou symlink."""
+    if os.path.basename(filename) != filename or filename.startswith("."):
+        raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
+
+    target_path = os.path.abspath(os.path.normpath(os.path.join(auto_dir, filename)))
+    auto_dir_abs = os.path.abspath(os.path.normpath(auto_dir))
+    if os.path.commonpath([auto_dir_abs, target_path]) != auto_dir_abs:
+        raise HTTPException(status_code=403, detail="Acesso negado ao arquivo.")
+    if not os.path.exists(target_path) or not os.path.isfile(target_path):
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+    return target_path
+
+def _backup_file_before_write(target_path: str, auto_dir: str) -> str:
+    """Cria backup local antes de sobrescrever arquivo gerenciado."""
+    backup_dir = os.path.join(auto_dir, ".orchestrator_backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    ts = get_now_local().strftime("%Y%m%d_%H%M%S_%f")
+    backup_name = f"{os.path.basename(target_path)}.{ts}.bak"
+    backup_path = os.path.join(backup_dir, backup_name)
+    shutil.copy2(target_path, backup_path)
+    return os.path.relpath(backup_path, auto_dir)
 
 # ---------------------------------------------------------------------------
 
@@ -75,6 +151,7 @@ def list_automations(
 
     # Enriquecer com last_status
 
+    next_run_lookup = _load_next_run_lookup()
     result = []
 
     for auto in items:
@@ -91,6 +168,7 @@ def list_automations(
         if last_exec:
 
             auto_dict.last_status = last_exec.status
+        auto_dict.next_run = schemas.format_dt_br(next_run_lookup.get(auto.id))
 
         result.append(auto_dict)
 
@@ -113,6 +191,7 @@ def list_all_automations(
 
     automations = db.query(models.Automation).order_by(models.Automation.name).all()
 
+    next_run_lookup = _load_next_run_lookup()
     result = []
 
     for auto in automations:
@@ -129,6 +208,7 @@ def list_all_automations(
         if last_exec:
 
             auto_resp.last_status = last_exec.status
+        auto_resp.next_run = schemas.format_dt_br(next_run_lookup.get(auto.id))
 
         result.append(auto_resp)
 
@@ -157,7 +237,17 @@ def get_automation(
 
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    return db_auto
+    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
+    last_exec = (
+        db.query(models.Execution)
+        .filter(models.Execution.automation_id == db_auto.id)
+        .order_by(models.Execution.started_at.desc())
+        .first()
+    )
+    if last_exec:
+        auto_resp.last_status = last_exec.status
+    auto_resp.next_run = schemas.format_dt_br(_load_next_run_lookup().get(db_auto.id))
+    return auto_resp
 
 # ---------------------------------------------------------------------------
 
@@ -213,8 +303,11 @@ def create_automation(
     db.refresh(db_auto)
 
     logger.info(f"Automacao criada: {db_auto.name} (ID: {db_auto.id})")
+    _reload_scheduler_safe()
 
-    return db_auto
+    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
+    auto_resp.next_run = schemas.format_dt_br(_load_next_run_lookup().get(db_auto.id))
+    return auto_resp
 
 # ---------------------------------------------------------------------------
 
@@ -244,6 +337,10 @@ def update_automation(
     update_data = automation_update.model_dump(exclude_unset=True)
 
     for key, value in update_data.items():
+        if key == "script_path":
+            ok, result = validate_script_path(value, PROJECT_ROOT)
+            if not ok:
+                raise HTTPException(status_code=422, detail=f"Validação do script: {result}")
 
         setattr(db_auto, key, value)
 
@@ -258,8 +355,94 @@ def update_automation(
     db.refresh(db_auto)
 
     logger.info(f"Automacao atualizada: {db_auto.name} (ID: {automation_id})")
+    _reload_scheduler_safe()
 
-    return db_auto
+    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
+    last_exec = (
+        db.query(models.Execution)
+        .filter(models.Execution.automation_id == db_auto.id)
+        .order_by(models.Execution.started_at.desc())
+        .first()
+    )
+    if last_exec:
+        auto_resp.last_status = last_exec.status
+    auto_resp.next_run = schemas.format_dt_br(_load_next_run_lookup().get(db_auto.id))
+    return auto_resp
+
+@router.get("/{automation_id}/overview")
+def get_automation_overview(
+    automation_id: int,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Retorna payload consolidado da automacao para telas operacionais."""
+    db_auto = (
+        db.query(models.Automation)
+        .filter(models.Automation.id == automation_id)
+        .first()
+    )
+    if not db_auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+
+    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
+    next_run_lookup = _load_next_run_lookup()
+    auto_resp.next_run = schemas.format_dt_br(next_run_lookup.get(db_auto.id))
+
+    recent_execs = (
+        db.query(models.Execution)
+        .filter(models.Execution.automation_id == automation_id)
+        .order_by(models.Execution.started_at.desc())
+        .limit(10)
+        .all()
+    )
+    recent_payload = []
+    for item in recent_execs:
+        summary = schemas.ExecutionSummary.model_validate(item)
+        summary.automation_name = db_auto.name
+        recent_payload.append(summary)
+
+    if recent_execs:
+        auto_resp.last_status = recent_execs[0].status
+
+    from datetime import timedelta
+    from ..timezone import get_now_local
+    window_start = get_now_local() - timedelta(hours=24)
+    success_24h = (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.automation_id == automation_id,
+            models.Execution.status == "SUCCESS",
+            models.Execution.started_at >= window_start,
+        )
+        .count()
+    )
+    errors_24h = (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.automation_id == automation_id,
+            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+            models.Execution.started_at >= window_start,
+        )
+        .count()
+    )
+    pending_now = (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.automation_id == automation_id,
+            models.Execution.status.in_(["PENDING", "RUNNING"]),
+        )
+        .count()
+    )
+
+    return {
+        "automation": auto_resp,
+        "metrics_24h": {
+            "success_count": success_24h,
+            "error_count": errors_24h,
+            "pending_count": pending_now,
+        },
+        "recent_executions": recent_payload,
+    }
 
 # ---------------------------------------------------------------------------
 
@@ -301,6 +484,7 @@ def delete_automation(
     db.commit()
 
     logger.info(f"Automacao removida: {auto_name} (ID: {automation_id})")
+    _reload_scheduler_safe()
 
     return {"message": f"Automacao '{auto_name}' removida com sucesso."}
 
@@ -311,7 +495,7 @@ def delete_automation(
 # ---------------------------------------------------------------------------
 
 @router.post("/{automation_id}/start")
-def start_automation(
+async def start_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -368,6 +552,10 @@ def start_automation(
     )
 
     db.commit()
+
+    # Sinaliza o Worker (Instant Wakeup v6.2.0)
+    from ..main import task_queued_event
+    task_queued_event.set()
 
     return {"message": "Automação enfileirada com sucesso.", "exec_id": exec_id}
 
@@ -468,6 +656,7 @@ def pause_all(
     log_audit(db, "PAUSE_ALL", "AUTOMATION", None, get_client_ip(request))
 
     db.commit()
+    _reload_scheduler_safe()
 
     return {"message": "Todas as automações pausadas."}
 
@@ -483,5 +672,161 @@ def resume_all(
     log_audit(db, "RESUME_ALL", "AUTOMATION", None, get_client_ip(request))
 
     db.commit()
+    _reload_scheduler_safe()
 
     return {"message": "Todas as automações retomadas."}
+
+# ---------------------------------------------------------------------------
+# CONFIG MANAGER (JSON) - Fase 3
+# ---------------------------------------------------------------------------
+import glob
+
+@router.get("/{auto_id}/configs")
+def get_automation_configs(
+    auto_id: int,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Busca arquivos JSON na pasta da automação."""
+    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+    if not auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+
+    auto_dir = _resolve_automation_dir(auto.script_path)
+
+    json_files = glob.glob(os.path.join(auto_dir, "*.json"))
+    configs = []
+
+    for jf in json_files:
+        filename = os.path.basename(jf)
+        # Ignora arquivos de lock e estado
+        if "wwebjs" in filename or filename.startswith(".") or "state" in filename.lower():
+            continue
+        try:
+            with open(jf, "r", encoding="utf-8") as f:
+                content = f.read()
+            configs.append({"filename": filename, "content": content})
+        except Exception as e:
+            pass
+
+    return configs
+
+@router.put("/{auto_id}/configs/{filename}")
+def update_automation_config(
+    auto_id: int,
+    filename: str,
+    payload: schemas.FileContent,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Atualiza um arquivo JSON específico da automação."""
+    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+    if not auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+
+    auto_dir = _resolve_automation_dir(auto.script_path)
+    target_path = _resolve_managed_file(auto_dir, filename)
+    if not filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Apenas arquivos JSON podem ser editados por esta rota.")
+
+    try:
+        json.loads(payload.content)
+        backup_relpath = _backup_file_before_write(target_path, auto_dir)
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(payload.content)
+
+        log_audit(
+            db,
+            "UPDATE_CONFIG",
+            "AUTOMATION",
+            str(auto_id),
+            get_client_ip(request),
+            json.dumps({"filename": filename, "backup": backup_relpath}),
+        )
+        db.commit()
+        return {"message": "Configuração salva com sucesso!", "backup": backup_relpath}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="O conteúdo fornecido não é um JSON válido.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ---------------------------------------------------------------------------
+# WEB IDE MANAGER (Scripts) - Fase 4
+# ---------------------------------------------------------------------------
+
+@router.get("/{auto_id}/scripts")
+def get_automation_scripts(
+    auto_id: int,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Busca arquivos de script (.ps1, .py, .sql, .bat) na pasta da automação."""
+    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+    if not auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+
+    auto_dir = _resolve_automation_dir(auto.script_path)
+
+    allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
+    scripts = []
+
+    for filename in os.listdir(auto_dir):
+        if not filename.endswith(allowed_exts) or filename.startswith("."):
+            continue
+
+        jf = os.path.join(auto_dir, filename)
+        if not os.path.isfile(jf):
+            continue
+
+        try:
+            with open(jf, "r", encoding="utf-8") as f:
+                content = f.read()
+            scripts.append({"filename": filename, "content": content})
+        except Exception:
+            pass
+
+    return scripts
+
+@router.put("/{auto_id}/scripts/{filename}")
+def update_automation_script(
+    auto_id: int,
+    filename: str,
+    payload: schemas.FileContent,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Atualiza um arquivo de script garantindo o encoding correto."""
+    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+    if not auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+
+    auto_dir = _resolve_automation_dir(auto.script_path)
+    allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
+    if not filename.endswith(allowed_exts):
+        raise HTTPException(status_code=400, detail="Extensão de script não permitida.")
+    target_path = _resolve_managed_file(auto_dir, filename)
+
+    try:
+        backup_relpath = _backup_file_before_write(target_path, auto_dir)
+        # Forçar UTF-8 with BOM para .ps1 e .psm1 (Soberania PT-BR)
+        if filename.endswith(".ps1") or filename.endswith(".psm1"):
+            with open(target_path, "w", encoding="utf-8-sig") as f:
+                f.write(payload.content)
+        else:
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(payload.content)
+
+        log_audit(
+            db,
+            "UPDATE_SCRIPT",
+            "AUTOMATION",
+            str(auto_id),
+            get_client_ip(request),
+            json.dumps({"filename": filename, "backup": backup_relpath}),
+        )
+        db.commit()
+        return {"message": "Código-fonte salvo com sucesso!", "backup": backup_relpath}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

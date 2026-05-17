@@ -28,6 +28,16 @@ logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/executions", tags=["Executions"])
 
+ALLOWED_EXEC_STATUSES = {
+    "PENDING",
+    "RUNNING",
+    "SUCCESS",
+    "ERROR",
+    "TIMEOUT",
+    "TERMINATED",
+    "FAILED_BY_REBOOT",
+}
+
 # Raiz do projeto para resolver caminhos
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,26 +60,39 @@ def list_executions(
     api_key: str = Depends(get_api_key),
 ):
     """Lista execucoes com filtros avancados e paginacao. Otimizado com joinedload."""
+    if page < 1:
+        raise HTTPException(status_code=422, detail="page deve ser >= 1.")
+    if per_page < 1 or per_page > 200:
+        raise HTTPException(status_code=422, detail="per_page deve estar entre 1 e 200.")
+
     query = db.query(models.Execution).options(joinedload(models.Execution.automation))
 
     if status:
-        query = query.filter(models.Execution.status == status.upper())
+        normalized_status = status.upper()
+        if normalized_status not in ALLOWED_EXEC_STATUSES:
+            allowed = ", ".join(sorted(ALLOWED_EXEC_STATUSES))
+            raise HTTPException(status_code=422, detail=f"status inválido. Use: {allowed}.")
+        query = query.filter(models.Execution.status == normalized_status)
     if automation_id:
         query = query.filter(models.Execution.automation_id == automation_id)
     if requested_by:
         query = query.filter(models.Execution.requested_by.ilike(f"%{requested_by}%"))
+    dt_from = None
+    dt_to = None
     if date_from:
         try:
             dt_from = datetime.fromisoformat(date_from)
             query = query.filter(models.Execution.started_at >= dt_from)
         except ValueError:
-            pass
+            raise HTTPException(status_code=422, detail="date_from inválido. Use formato ISO-8601.")
     if date_to:
         try:
             dt_to = datetime.fromisoformat(date_to)
             query = query.filter(models.Execution.started_at <= dt_to)
         except ValueError:
-            pass
+            raise HTTPException(status_code=422, detail="date_to inválido. Use formato ISO-8601.")
+    if dt_from and dt_to and dt_from > dt_to:
+        raise HTTPException(status_code=422, detail="date_from não pode ser maior que date_to.")
 
     query = query.order_by(desc(models.Execution.started_at))
 
@@ -272,8 +295,18 @@ def stop_execution(
     if db_exec.status not in ["PENDING", "RUNNING"]:
         raise HTTPException(status_code=400, detail="Execução já finalizada.")
 
+    previous_status = db_exec.status
     db_exec.status = "TERMINATED"
     db_exec.finished_at = get_now_local()
+    if db_exec.started_at and db_exec.finished_at:
+        try:
+            delta = db_exec.finished_at - db_exec.started_at
+            db_exec.duration_seconds = round(delta.total_seconds(), 2)
+        except Exception:
+            pass
+    db_exec.logs = (
+        db_exec.logs or ""
+    ) + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
 
     log_audit(db, "STOP", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()

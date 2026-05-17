@@ -25,6 +25,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("orchestrator")
 
+RATE_LIMIT_EXEMPT_PATHS = {
+    "/api/system/health",
+}
+
 # ---------------------------------------------------------------------------
 # Autenticacao Timing-Safe
 # ---------------------------------------------------------------------------
@@ -110,6 +114,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Aplicar rate limit somente em rotas /api
         if not request.url.path.startswith("/api"):
+            return await call_next(request)
+        if request.url.path in RATE_LIMIT_EXEMPT_PATHS:
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"

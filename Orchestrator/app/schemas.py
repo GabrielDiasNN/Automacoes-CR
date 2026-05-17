@@ -14,6 +14,8 @@ from typing import Any, Generic, List, Optional, TypeVar
 from pydantic import (BaseModel, ConfigDict, Field, field_validator,
                       model_validator)
 
+from .constants import ORCHESTRATOR_VERSION, WORKER_VERSION
+
 # ---------------------------------------------------------------------------
 # Validadores e Utilitarios
 # ---------------------------------------------------------------------------
@@ -69,9 +71,50 @@ def _validate_schedule(v: Optional[str]) -> Optional[str]:
         return None
     try:
         obj = json.loads(v.replace("'", '"'))
-        return json.dumps(obj)
-    except:
+    except Exception:
         raise ValueError("Schedule deve ser JSON válido.")
+
+    if not isinstance(obj, dict):
+        raise ValueError("Schedule deve ser um objeto JSON.")
+
+    days = obj.get("daysOfWeek", [])
+    if days is not None:
+        if not isinstance(days, list):
+            raise ValueError("daysOfWeek deve ser uma lista.")
+        if any(not isinstance(day, int) or day < 0 or day > 6 for day in days):
+            raise ValueError("daysOfWeek deve conter inteiros entre 0 e 6.")
+
+    times = obj.get("times")
+    if times is not None:
+        if not isinstance(times, list) or not times:
+            raise ValueError("times deve ser uma lista não vazia.")
+        for item in times:
+            if not isinstance(item, dict):
+                raise ValueError("Cada item de times deve ser objeto com h e m.")
+            hour = item.get("h")
+            minute = item.get("m")
+            if not isinstance(hour, int) or hour < 0 or hour > 23:
+                raise ValueError("times[].h deve estar entre 0 e 23.")
+            if not isinstance(minute, int) or minute < 0 or minute > 59:
+                raise ValueError("times[].m deve estar entre 0 e 59.")
+    else:
+        hours = obj.get("hours", [])
+        minutes = obj.get("minutes", [])
+        if hours is not None:
+            if not isinstance(hours, list):
+                raise ValueError("hours deve ser uma lista.")
+            if any(not isinstance(hour, int) or hour < 0 or hour > 23 for hour in hours):
+                raise ValueError("hours deve conter inteiros entre 0 e 23.")
+        if minutes is not None:
+            if not isinstance(minutes, list):
+                raise ValueError("minutes deve ser uma lista.")
+            if any(
+                not isinstance(minute, int) or minute < 0 or minute > 59
+                for minute in minutes
+            ):
+                raise ValueError("minutes deve conter inteiros entre 0 e 59.")
+
+    return json.dumps(obj)
 
 # ---------------------------------------------------------------------------
 # Schemas de Automation
@@ -114,6 +157,18 @@ class AutomationUpdate(BaseModel):
     enabled: Optional[bool] = None
     test_mode: Optional[bool] = None
     notification_channels: Optional[str] = None
+
+    @field_validator("script_path")
+    @classmethod
+    def v_path(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _validate_script_path(v)
+
+    @field_validator("schedule")
+    @classmethod
+    def v_sched(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_schedule(v)
 
 class AutomationResponse(AutomationBase):
     id: int
@@ -197,12 +252,18 @@ class WorkerStatus(BaseModel):
     tasks_completed: int = 0
     tasks_failed: int = 0
     active_tasks: int = 0
-    version: str = "5.2.0"
+    version: str = WORKER_VERSION
 
     @model_validator(mode="after")
     def apply_br_format(self) -> "WorkerStatus":
         from .timezone import get_now_local; self.last_ping = format_dt_br(self.last_ping)
         return self
+
+class EnvContent(BaseModel):
+    content: str
+
+class FileContent(BaseModel):
+    content: str
 
 class SystemHealth(BaseModel):
     status: str
@@ -275,7 +336,7 @@ class AuditEntry(BaseModel):
         return self
 
 class SystemVersion(BaseModel):
-    version: str = "5.2.0"
+    version: str = ORCHESTRATOR_VERSION
     python_version: str
     started_at: str
     uptime_seconds: float

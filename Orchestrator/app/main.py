@@ -24,12 +24,13 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import models
+from .constants import ORCHESTRATOR_VERSION
 from .database import SessionLocal, engine
 from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
                          TimingMiddleware)
@@ -84,6 +85,9 @@ logger = logging.getLogger("orchestrator")
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 logger.addHandler(console_handler)
+
+# --- EVENTO GLOBAL DE WAKEUP (v6.2.0) ---
+task_queued_event = asyncio.Event()
 
 # ---------------------------------------------------------------------------
 # Motor de Agendamento (APScheduler)
@@ -193,7 +197,7 @@ def _cleanup_zombie_tasks():
     try:
         zombies = (
             db.query(models.Execution)
-            .filter(models.Execution.status.in_(["RUNNING", "PENDING"]))
+            .filter(models.Execution.status == "RUNNING")
             .all()
         )
         for task in zombies:
@@ -213,10 +217,14 @@ def _cleanup_zombie_tasks():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Pilar E - Escala: Garantir integridade do banco no startup
-    from .database import run_wal_checkpoint
+    from .database import run_wal_checkpoint, validate_database_schema
     run_wal_checkpoint("TRUNCATE")
 
     models.Base.metadata.create_all(bind=engine)
+    schema_status = validate_database_schema()
+    if not schema_status["valid"]:
+        logger.error(f"Schema do banco incompleto: {schema_status}")
+        raise RuntimeError(f"Schema do banco incompleto: {schema_status}")
     _cleanup_zombie_tasks()
     reload_scheduled_tasks()
 
@@ -265,7 +273,7 @@ async def lifespan(app: FastAPI):
 
     if not scheduler.running:
         scheduler.start()
-    logger.info("Central de Automações v5.2.0 - Orchestrator online.")
+    logger.info(f"Central de Automações v{ORCHESTRATOR_VERSION} - Orchestrator online.")
     yield
     if scheduler.running:
         scheduler.shutdown(wait=False)
@@ -275,7 +283,22 @@ async def lifespan(app: FastAPI):
 # Aplicativo FastAPI
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Central de Automações", version="5.2.0", lifespan=lifespan)
+app = FastAPI(title="Central de Automações", version=ORCHESTRATOR_VERSION, lifespan=lifespan)
+
+# --- GLOBAL EXCEPTION HANDLER (v6.2.0) ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Captura qualquer erro não tratado e devolve JSON padronizado (Pilar R)."""
+    error_id = str(int(time.time()))
+    logger.error(f"Unhandled Error [{error_id}]: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Ocorreu um erro interno no servidor.",
+            "error_id": error_id,
+            "type": type(exc).__name__
+        }
+    )
 
 # --- CORS Hardened: restrito a origens configuradas via .env ---
 _raw_origins = os.environ.get(
@@ -330,7 +353,7 @@ if os.path.exists(lib_path):
 def read_root():
     return {
         "status": "online",
-        "version": "5.2.0",
+        "version": ORCHESTRATOR_VERSION,
         "scheduler_running": scheduler.running,
         "dashboard_url": "/dashboard/",
         "docs_url": "/docs",

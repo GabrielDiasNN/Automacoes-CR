@@ -6,32 +6,60 @@ Router: System - Health check, metricas, backup, status do worker, audit log e e
 
 """
 
+import asyncio
 import json
 import logging
 import os
+import shutil
 import sys
 from datetime import datetime, timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import desc, func, text, case
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
+from ..constants import ORCHESTRATOR_VERSION
 from ..database import (DB_PATH, get_db, get_db_size_mb, get_wal_size_mb,
-                        purge_old_executions, run_wal_checkpoint)
+                        purge_old_executions, run_wal_checkpoint,
+                        validate_database_schema)
 from ..middleware import get_api_key
 from ..timezone import get_now_local
+from ..utils import get_client_ip, log_audit
 
 logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/system", tags=["System"])
 
 PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
 STARTUP_TIME = get_now_local()
+
+def _extract_automation_id_from_job(job_id: str):
+    if not job_id.startswith("job_"):
+        return None
+    parts = job_id.split("_")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1])
+    except (TypeError, ValueError):
+        return None
+
+def _backup_env_file(env_path: str) -> str:
+    """Cria backup do .env antes de alteracao administrativa."""
+    if not os.path.exists(env_path):
+        return ""
+
+    backup_dir = os.path.join(PROJECT_ROOT, "Backups", "env")
+    os.makedirs(backup_dir, exist_ok=True)
+    ts = get_now_local().strftime("%Y%m%d_%H%M%S_%f")
+    backup_path = os.path.join(backup_dir, f".env.{ts}.bak")
+    shutil.copy2(env_path, backup_path)
+    return os.path.relpath(backup_path, PROJECT_ROOT)
 
 # ---------------------------------------------------------------------------
 
@@ -67,11 +95,11 @@ def health_check(db: Session = Depends(get_db)):
     disk_mb = get_db_size_mb()
 
     # Determinar saude geral
-    overall = "saudável"
+    overall = "healthy"
     if db_status != "online" or not scheduler.running:
-        overall = "instável"
+        overall = "unhealthy"
     elif not worker_status.is_alive:
-        overall = "degradado"
+        overall = "degraded"
 
     wal_mb = get_wal_size_mb()
 
@@ -125,7 +153,7 @@ def _get_worker_status(db: Session) -> schemas.WorkerStatus:
         tasks_completed=hb.tasks_completed,
         tasks_failed=hb.tasks_failed,
         active_tasks=hb.active_tasks,
-        version=hb.version or "4.0.0",
+        version=hb.version or "unknown",
     )
 
 @router.get("/worker/status", response_model=schemas.WorkerStatus)
@@ -247,6 +275,7 @@ def get_metrics(
 
 @router.post("/backup")
 def manual_backup(
+    request: Request,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
@@ -286,16 +315,14 @@ def manual_backup(
 
                 logger.info(f"Backup antigo removido: {old_b}")
 
-        # Registrar auditoria
-
-        entry = models.AuditLog(
-            action="BACKUP",
-            entity_type="SYSTEM",
-            actor="MANUAL",
-            details=json.dumps({"path": backup_path, "size_mb": size_mb}),
+        log_audit(
+            db,
+            "BACKUP",
+            "SYSTEM",
+            "GLOBAL",
+            get_client_ip(request),
+            json.dumps({"path": backup_path, "size_mb": size_mb}),
         )
-
-        db.add(entry)
 
         db.commit()
 
@@ -421,6 +448,144 @@ def list_scheduled_jobs(
         jobs, key=lambda x: x.next_run_time if x.next_run_time else datetime.max
     )
 
+@router.get("/overview")
+def get_system_overview(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Agrega métricas, saúde, jobs e eventos recentes para o dashboard operacional."""
+    from ..main import scheduler
+
+    health_payload = health_check(db).model_dump()
+    jobs = list_scheduled_jobs(db, api_key)
+    next_run_lookup = {}
+    for job in jobs:
+        if job.automation_id is None or not job.next_run_time:
+            continue
+        current = next_run_lookup.get(job.automation_id)
+        if current is None or job.next_run_time < current:
+            next_run_lookup[job.automation_id] = job.next_run_time
+
+    window_start = get_now_local() - timedelta(hours=24)
+    success_24h = (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.status == "SUCCESS",
+            models.Execution.started_at >= window_start,
+        )
+        .count()
+    )
+    errors_24h = (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+            models.Execution.started_at >= window_start,
+        )
+        .count()
+    )
+    pending_now = (
+        db.query(models.Execution)
+        .filter(models.Execution.status.in_(["PENDING", "RUNNING"]))
+        .count()
+    )
+
+    status_rows = (
+        db.query(models.Execution.status, func.count(models.Execution.id))
+        .group_by(models.Execution.status)
+        .all()
+    )
+    status_breakdown = {status: count for status, count in status_rows}
+
+    top_failures_rows = (
+        db.query(
+            models.Automation.id.label("automation_id"),
+            models.Automation.name.label("automation_name"),
+            func.count(models.Execution.id).label("failures"),
+        )
+        .join(models.Execution, models.Execution.automation_id == models.Automation.id)
+        .filter(
+            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+            models.Execution.started_at >= window_start,
+        )
+        .group_by(models.Automation.id, models.Automation.name)
+        .order_by(desc(func.count(models.Execution.id)))
+        .limit(5)
+        .all()
+    )
+    top_failures = [
+        {
+            "automation_id": row.automation_id,
+            "automation_name": row.automation_name,
+            "failures": row.failures,
+        }
+        for row in top_failures_rows
+    ]
+
+    recent_execs = (
+        db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
+        .order_by(desc(models.Execution.started_at))
+        .limit(12)
+        .all()
+    )
+    recent_payload = []
+    for ex in recent_execs:
+        summary = schemas.ExecutionSummary.model_validate(ex)
+        if ex.automation:
+            summary.automation_name = ex.automation.name
+        recent_payload.append(summary)
+
+    automations = db.query(models.Automation).order_by(models.Automation.name.asc()).all()
+    autos_payload = []
+    for auto in automations:
+        last_exec = (
+            db.query(models.Execution)
+            .filter(models.Execution.automation_id == auto.id)
+            .order_by(desc(models.Execution.started_at))
+            .first()
+        )
+        autos_payload.append(
+            {
+                "id": auto.id,
+                "name": auto.name,
+                "enabled": auto.enabled,
+                "test_mode": auto.test_mode,
+                "last_status": last_exec.status if last_exec else None,
+                "next_run": schemas.format_dt_br(next_run_lookup.get(auto.id)),
+            }
+        )
+
+    next_window = min(
+        (job.next_run_time for job in jobs if job.next_run_time),
+        default=None,
+    )
+
+    return {
+        "generated_at": get_now_local().isoformat(),
+        "version": ORCHESTRATOR_VERSION,
+        "kpis": {
+            "active_automations": sum(1 for auto in automations if auto.enabled),
+            "success_24h": success_24h,
+            "errors_24h": errors_24h,
+            "pending_now": pending_now,
+            "next_window": schemas.format_dt_br(next_window),
+        },
+        "health": health_payload,
+        "status_breakdown": status_breakdown,
+        "jobs": [job.model_dump() for job in jobs],
+        "recent": [item.model_dump() for item in recent_payload],
+        "automations": autos_payload,
+        "top_failures": top_failures,
+        "scheduler": {
+            "running": scheduler.running,
+            "jobs_loaded": len(scheduler.get_jobs()),
+        },
+        "queue": {
+            "active_count": pending_now,
+            "by_status": status_breakdown,
+        },
+    }
+
 # ---------------------------------------------------------------------------
 
 # VERSION - Endpoint enterprise de versao e build
@@ -445,13 +610,49 @@ def get_version():
     ]
 
     return schemas.SystemVersion(
-        version="5.3.0", # Bump version for performance release
+        version=ORCHESTRATOR_VERSION,
         python_version=sys.version.split()[0],
         started_at=STARTUP_TIME.isoformat(),
         uptime_seconds=round(uptime.total_seconds(), 2),
         max_workers=max_workers,
         allowed_origins=allowed_origins,
     )
+
+@router.get("/diagnostics")
+def get_diagnostics(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Retorna diagnostico operacional consolidado do Orchestrator."""
+    from ..main import scheduler
+
+    statuses = (
+        db.query(models.Execution.status, func.count(models.Execution.id))
+        .group_by(models.Execution.status)
+        .all()
+    )
+    queue = {status: count for status, count in statuses}
+    active_count = sum(queue.get(status, 0) for status in ("PENDING", "RUNNING"))
+
+    return {
+        "version": ORCHESTRATOR_VERSION,
+        "timestamp": get_now_local().isoformat(),
+        "database": {
+            "path": DB_PATH,
+            "size_mb": get_db_size_mb(),
+            "wal_size_mb": get_wal_size_mb(),
+            "schema": validate_database_schema(),
+        },
+        "scheduler": {
+            "running": scheduler.running,
+            "jobs_loaded": len(scheduler.get_jobs()),
+        },
+        "worker": _get_worker_status(db).model_dump(),
+        "queue": {
+            "active_count": active_count,
+            "by_status": queue,
+        },
+    }
 
 # ---------------------------------------------------------------------------
 
@@ -461,6 +662,7 @@ def get_version():
 
 @router.post("/checkpoint")
 def manual_checkpoint(
+    request: Request,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
@@ -470,16 +672,14 @@ def manual_checkpoint(
 
     logger.info(f"Checkpoint manual executado: {result}")
 
-    from .. import models as _models
-
-    entry = _models.AuditLog(
-        action="CHECKPOINT",
-        entity_type="SYSTEM",
-        actor="MANUAL",
-        details=json.dumps(result),
+    log_audit(
+        db,
+        "CHECKPOINT",
+        "SYSTEM",
+        "GLOBAL",
+        get_client_ip(request),
+        json.dumps(result),
     )
-
-    db.add(entry)
 
     db.commit()
 
@@ -493,6 +693,7 @@ def manual_checkpoint(
 
 @router.post("/purge")
 def manual_purge(
+    request: Request,
     retention_days: int = 90,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
@@ -509,14 +710,14 @@ def manual_purge(
         f"Purge manual: {removed} execucoes removidas (>{retention_days} dias)."
     )
 
-    entry = models.AuditLog(
-        action="PURGE",
-        entity_type="SYSTEM",
-        actor="MANUAL",
-        details=json.dumps({"retention_days": retention_days, "removed": removed}),
+    log_audit(
+        db,
+        "PURGE",
+        "SYSTEM",
+        "GLOBAL",
+        get_client_ip(request),
+        json.dumps({"retention_days": retention_days, "removed": removed}),
     )
-
-    db.add(entry)
 
     db.commit()
 
@@ -525,3 +726,69 @@ def manual_purge(
         "retention_days": retention_days,
         "removed_count": removed,
     }
+
+# ---------------------------------------------------------------------------
+# ENV MANAGEMENT - Gestao global
+# ---------------------------------------------------------------------------
+
+@router.get("/wait-for-task")
+async def wait_for_task(api_key: str = Depends(get_api_key)):
+    """Endpoint de long-polling para wake-up do Worker (v6.2.0)."""
+    from ..main import task_queued_event
+    try:
+        # Espera ate 30 segundos por um evento
+        await asyncio.wait_for(task_queued_event.wait(), timeout=30)
+        task_queued_event.clear()
+        return {"status": "wakeup"}
+    except asyncio.TimeoutError:
+        return {"status": "timeout"}
+
+@router.get("/env", response_model=schemas.EnvContent)
+def get_env_content(api_key: str = Depends(get_api_key)):
+    """Lê o conteúdo do arquivo .env global."""
+    env_path = os.path.join(PROJECT_ROOT, ".env")
+    if not os.path.exists(env_path):
+        return schemas.EnvContent(content="")
+
+    with open(env_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return schemas.EnvContent(content=content)
+
+@router.put("/env")
+def update_env_content(
+    payload: schemas.EnvContent,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Atualiza o arquivo .env global de forma segura."""
+    env_path = os.path.join(PROJECT_ROOT, ".env")
+
+    try:
+        backup_relpath = _backup_env_file(env_path)
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(payload.content)
+
+        logger.info("Arquivo .env global atualizado via API.")
+
+        log_audit(
+            db,
+            "UPDATE_ENV",
+            "SYSTEM",
+            "GLOBAL",
+            "API_ADMIN",
+            json.dumps(
+                {
+                    "message": "O arquivo .env foi modificado via Dashboard.",
+                    "backup": backup_relpath,
+                }
+            )
+        )
+        db.commit()
+
+        return {
+            "message": "Arquivo .env salvo com sucesso. Reinicie o Orchestrator para aplicar certas mudanças.",
+            "backup": backup_relpath,
+        }
+    except Exception as e:
+        logger.error(f"Erro ao salvar .env: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar o arquivo: {str(e)}")
