@@ -43,7 +43,7 @@ def extract() -> None:
     dsn = "dbprd"
 
     # Portabilidade: Utilizar caminhos dinamicos ou de ambiente
-    client_lib = os.environ.get("ORACLE_CLIENT_PATH")
+    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
     tns_admin = os.environ.get("TNS_ADMIN")
 
     if not user or not password or not client_lib or not tns_admin:

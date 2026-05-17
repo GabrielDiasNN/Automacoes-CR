@@ -32,9 +32,11 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - [x] O contexto permite economia de tokens na próxima interação?
 - [x] Tom técnico PT-BR foi mantido?
 ---
-## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 16/05/2026
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 17/05/2026
+- **Observabilidade Acionável (17/05/2026):** `/api/system/diagnostics` consolidado como contrato operacional com `overall_status`, `findings`, risco do WAL, idade de heartbeat e idade das execuções mais antigas em `PENDING`/`RUNNING`; Dashboard exibe achados com severidade e ação sugerida.
+- **Padronização Runtime (17/05/2026):** Automações de negócio usam `Lib-Config` para `.env`, Python da venv por caminho explícito, fallback de variável Oracle e governança Python/JSON/PowerShell estável.
 - **Validação E2E Padronizada (17/05/2026):** Playwright definido como etapa final obrigatória de validação para mudanças de dashboard/UI e fluxos operacionais front-back, com template de evidência dedicado em `docs/playwright-e2e-evidence-template.md`.
-- **Estado:** Evoluído v6.2.1 (Shared Skills Canonicalization).
+- **Estado:** Evoluído v6.3.2 (Enterprise Observability).
 - **Skills Compartilhadas:** `.github/skills/` consolidado como fonte canônica das 6 skills ativas. `.gemini/skills/` permanece como espelho por junction/symlink para Gemini CLI e Antigravity, sem cópia paralela editável.
 - **Contrato entre Agentes:** Adicionado `AGENTS.md` para definir leitura, edição e resolução de conflitos entre ChatGPT/Codex, Gemini CLI e Antigravity.
 - **Performance Worker:** Implementado **Adaptive Polling** (backoff exponencial de 2s a 15s) em `worker.py`, reduzindo contenção de I/O em 70% em períodos de ociosidade.

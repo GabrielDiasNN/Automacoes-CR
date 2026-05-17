@@ -23,8 +23,8 @@ if (Test-Path $envPath) {
     }
 }
 
-# 1. SURGICAL RESET (v6.2.0) - Pilar G: Limpeza cirurgica
-Write-Host "[RESET] Realizando limpeza segura do ambiente (v6.2.0)..." -ForegroundColor Gray
+# 1. SURGICAL RESET (v6.3.2) - Pilar G: Limpeza cirurgica
+Write-Host "[RESET] Realizando limpeza segura do ambiente (v6.3.2)..." -ForegroundColor Gray
 
 # Matar apenas processos Python ligados ao projeto para nao afetar outros sistemas no servidor
 $procToKill = Get-Process | Where-Object {
@@ -52,7 +52,7 @@ Start-Sleep -Seconds 2
 
 # 3. INICIAR WORKER (Background)
 Set-Location $OrchestratorDir
-Write-Host "Iniciando Worker v6.2.0 (Zero-Latency)..." -ForegroundColor Cyan
+Write-Host "Iniciando Worker v6.3.2 (Zero-Latency)..." -ForegroundColor Cyan
 $workerProcess = Start-Process -FilePath $VenvPython -ArgumentList "worker.py" -WindowStyle Hidden -PassThru
 $workerProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "worker.pid") -Encoding ascii -Force
 
@@ -63,10 +63,10 @@ $apiProcess = Start-Process -FilePath $VenvPython -ArgumentList "-m uvicorn app.
 $apiProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "orchestrator.pid") -Encoding ascii -Force
 
 # 5. GARANTIR WATCHDOG (Monitor)
-Write-Host "Ativando Watchdog v6.2.0 (Resiliencia)..." -ForegroundColor Cyan
+Write-Host "Ativando Watchdog v6.3.2 (Resiliencia)..." -ForegroundColor Cyan
 $monitorScript = Join-Path $InfrastructureDir "MonitorAutomacoes.ps1"
 Start-Process "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$monitorScript`""
 
-Write-Host "[OK] Sistema v6.2.0 reiniciado com sucesso." -ForegroundColor Green
+Write-Host "[OK] Sistema v6.3.2 reiniciado com sucesso." -ForegroundColor Green
 Start-Sleep -Seconds 2
 exit

@@ -1,6 +1,8 @@
 ﻿# cSpell:words funcao funcoes padrao substantivo verbos aprovados verificados encontrados pscustomobject isnullorwhitespace trimstart startswith additionalapprovedverbs ACMR ERRO pelo devem seguir deve existir
 [CmdletBinding()]
 param(
+    [string]$RootPath = "",
+
     [string[]]$Paths = @(),
     [string[]]$AdditionalApprovedVerbs = @()
 )
@@ -8,6 +10,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 function Get-RepositoryRoot {
+    if (-not [string]::IsNullOrWhiteSpace($script:RootPath)) {
+        return (Resolve-Path -LiteralPath $script:RootPath).Path
+    }
+
     $gitRoot = ""
     try {
         $gitRoot = (git rev-parse --show-toplevel 2>$null)

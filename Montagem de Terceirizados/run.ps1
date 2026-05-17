@@ -53,6 +53,7 @@ $projectRoot = Split-Path -Parent $ScriptDir
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
+$libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
 # Scripts
@@ -72,6 +73,7 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDi
 Import-Module $libLogging -Force
 
 Import-Module $libEmail   -Force
+Import-Module $libConfig  -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
@@ -82,8 +84,6 @@ if ([string]::IsNullOrWhiteSpace($ExecId)) {
     } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 
 }
-
-Enter-AutomationLock -ExecId $ExecId
 
 $LogFile = Get-AutomacaoLogPath -Slug "Montagem_Terceirizados" -LogDir $LogDir
 
@@ -116,32 +116,13 @@ if (-not (Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracl
 Write-Log "========================================================================================="
 
 Write-Log "INÍCIO - Execução Montagem Terceirizados (Pure-Native). ExecId=$ExecId"
+Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
 
 $execStatus = "ERROR"
 
 try {
 
-    # Carregar Variáveis de Ambiente (.env)
-
-    $envPath = Join-Path $projectRoot ".env"
-
-    if (Test-Path $envPath) {
-
-        Get-Content $envPath | ForEach-Object {
-
-            $line = $_.Trim()
-
-            if ($line -and -not $line.StartsWith("#")) {
-
-                $key, $value = $line -split '=', 2
-
-                if ($key -and $value) { [System.Environment]::SetEnvironmentVariable($key.Trim(), $value.Trim(), "Process") }
-
-            }
-
-        }
-
-    }
+    Import-HubEnv
 
     $dataFile = Join-Path $ScriptDir ".data_$ExecId.json"
 
@@ -315,7 +296,7 @@ try {
 
                 $deliveryState.delivery_status.email.success = $true
 
-                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
 
                 $deliveryState | ConvertTo-Json -Depth 5 | Out-File $DeliveryStatePath -Encoding UTF8
 
@@ -383,7 +364,7 @@ try {
 
     Write-Log "FIM - Processo finalizado."
 
-    Exit-AutomationLock
+    Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
 
 }
 

@@ -84,6 +84,7 @@ $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 
 $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
+$libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
 
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
@@ -91,12 +92,14 @@ $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
 # Activate VENV
 
 $venvActivate = Join-Path $projectRoot ".venv\Scripts\activate.ps1"
+$pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
 Import-Module $libLogging -Force
 
 Import-Module $libEmail   -Force
 
 Import-Module $libRetry   -Force
+Import-Module $libConfig  -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
@@ -168,33 +171,13 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
         # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
 
-        Enter-AutomationLock -ExecId $ExecId
+        Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
 
         try {
 
             try {
 
-                # Carregar Variaveis de Ambiente (.env)
-
-                $envPath = Join-Path $projectRoot ".env"
-
-                if (Test-Path $envPath) {
-
-                    Get-Content $envPath | ForEach-Object {
-
-                        $line = $_.Trim()
-
-                        if ($line -and -not $line.StartsWith("#")) {
-
-                            $key, $value = $line -split '=', 2
-
-                            if ($key -and $value) { [System.Environment]::SetEnvironmentVariable($key.Trim(), $value.Trim(), "Process") }
-
-                        }
-
-                    }
-
-                }
+                Import-HubEnv
 
             } catch [System.Exception] {
 
@@ -206,21 +189,19 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
             Write-Log "Acionando script Python..."
 
-            if (-not (Test-Path $venvActivate)) {
+            if (-not (Test-Path $pythonExe)) {
 
-                Exit-WithCode 2 "Virtual environment nao encontrado em $venvActivate."
+                Exit-WithCode 2 "Python do ambiente virtual nao encontrado em $pythonExe."
 
             }
 
             try {
-                # Carrega VENV
-                . $venvActivate
                 Import-Module $libProcess -Force
 
                 $pythonOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(60, 120, 300) `
                     -OperationName "Processamento Python (processar_receitas.py)" -ExecId $ExecId -LogPath $LogFile `
                     -Action {
-                        $res = Invoke-NativeProcess -FilePath "python.exe" -Arguments "`"$PythonScript`" `"$ExecId`"" -LogAction {
+                        $res = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$PythonScript`" `"$ExecId`"" -LogAction {
                             param($msg, $lvl)
                             # Silenciamos o log de stdout se for muito grande ou redundante, 
                             # mas aqui processar_receitas.py loga infos importantes, entao mantemos o filtro.
@@ -405,7 +386,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                                 $deliveryState.delivery_status.email.success = $true
 
-                                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
 
                                 $deliveryState | ConvertTo-Json -Depth 5 | Out-File $EmailStatePath -Encoding UTF8
 
@@ -471,7 +452,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                                 $deliveryState.delivery_status.whatsapp.success = $true
 
-                                $deliveryState.delivery_status.whatsapp.sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                                $deliveryState.delivery_status.whatsapp.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
 
                                 $deliveryState | ConvertTo-Json -Depth 5 | Out-File $EmailStatePath -Encoding UTF8
 

@@ -7,6 +7,7 @@ Testes de API do Orchestrator Central de Automacoes v5.0.
 """
 
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ def test_read_root(client):
     res = client.get("/")
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "6.2.0"
+    assert data["version"] == "6.3.2"
     assert "dashboard_url" in data
 
 # ============================================================
@@ -319,7 +320,7 @@ def test_version_endpoint(client):
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "6.2.0"
+    assert data["version"] == "6.3.2"
     assert "python_version" in data
     assert "uptime_seconds" in data
     assert "max_workers" in data
@@ -328,12 +329,58 @@ def test_diagnostics_endpoint(client):
     res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "6.2.0"
+    assert data["version"] == "6.3.2"
+    assert data["overall_status"] in ["healthy", "degraded", "unhealthy"]
+    assert "findings" in data
     assert "database" in data
     assert data["database"]["schema"]["valid"] is True
+    assert "wal_risk" in data["database"]
     assert "scheduler" in data
+    assert "next_runs" in data["scheduler"]
     assert "worker" in data
     assert "queue" in data
+    assert "oldest_pending" in data["queue"]
+    assert "oldest_running" in data["queue"]
+    assert "heartbeat" in data
+
+def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_session, monkeypatch):
+    import app.routers.system as system_router
+    from app import models
+    from app.timezone import get_now_local
+
+    auto = models.Automation(name="Diag Queue", script_path="./test/run.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_OLD_PENDING",
+            automation_id=auto.id,
+            status="PENDING",
+            requested_by="TEST",
+            started_at=get_now_local() - timedelta(minutes=20),
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(system_router, "get_wal_size_mb", lambda: 128.0)
+
+    res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+
+    assert data["overall_status"] in ["degraded", "unhealthy"]
+    assert data["database"]["wal_risk"] == "elevated"
+    assert data["queue"]["oldest_pending"]["exec_id"] == "EXEC_OLD_PENDING"
+    assert data["queue"]["oldest_pending"]["age_seconds"] >= 1200
+    components = {item["component"] for item in data["findings"]}
+    assert {"database", "queue"}.issubset(components)
+
+def test_system_overview_includes_diagnostics_summary(client):
+    res = client.get("/api/system/overview", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+    assert "diagnostics" in data
+    assert data["diagnostics"]["overall_status"] in ["healthy", "degraded", "unhealthy"]
+    assert "findings" in data["diagnostics"]
 
 def test_wait_for_task_requires_api_key(client):
     res = client.get("/api/system/wait-for-task")

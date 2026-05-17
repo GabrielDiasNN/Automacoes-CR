@@ -17,9 +17,11 @@ param(
     [string]$LogFile = ""
 )
 
-$ErrorActionPreference = "Stop"
-$LibDir = $PSScriptRoot
-$NodeScript = Join-Path $LibDir "WhatsApp-Core.js"
+$ErrorActionPreference = "Stop"
+$LibDir = $PSScriptRoot
+$NodeScript = Join-Path $LibDir "WhatsApp-Core.js"
+$ProcessModule = Join-Path $LibDir "Lib-Process.psm1"
+Import-Module $ProcessModule -Force
 
 # --- Detectar Node.js ---
 $NodeExe = "node"
@@ -59,7 +61,7 @@ if ([string]::IsNullOrWhiteSpace($LogFile)) {
 }
 
 # --- Execucao ---
-Write-Host "? Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
+Write-Host "Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
 
 $nodeArgs = @(
     "`"$NodeScript`"",
@@ -81,12 +83,19 @@ $WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
 }
 $env:NODE_PATH = Join-Path $WorkDir "node_modules"
 
-$proc = Start-Process -FilePath $NodeExe -ArgumentList $nodeArgs -WindowStyle Hidden -Wait -PassThru -WorkingDirectory $WorkDir
-
-if ($proc.ExitCode -eq 0) {
-    Write-Host "[OK] WhatsApp enviado com sucesso." -ForegroundColor Green
-} else {
-    Write-Host "[FAIL] Falha no envio do WhatsApp (ExitCode: $($proc.ExitCode)). Verifique os logs." -ForegroundColor Red
-    exit $proc.ExitCode
-}
+$result = Invoke-NativeProcess -FilePath $NodeExe -Arguments ($nodeArgs -join " ") -WorkingDirectory $WorkDir -LogAction {
+    param($msg, $lvl)
+    if ($lvl -eq "WARN") {
+        Write-Host $msg -ForegroundColor Yellow
+    } else {
+        Write-Host $msg
+    }
+}
+
+if ($result.ExitCode -eq 0) {
+    Write-Host "[OK] WhatsApp enviado com sucesso." -ForegroundColor Green
+} else {
+    Write-Host "[FAIL] Falha no envio do WhatsApp (ExitCode: $($result.ExitCode)). Verifique os logs." -ForegroundColor Red
+    exit $result.ExitCode
+}
 

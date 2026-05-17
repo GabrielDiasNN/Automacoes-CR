@@ -10,8 +10,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$jsonFiles = Get-ChildItem -Path $RootPath -Filter "*.json" -Recurse | Where-Object {
-    $_.FullName -notmatch "\\(\.venv|node_modules|\.git)\\" -and $_.Name -ne "package-lock.json"
+$excludedPathRegex = "\\(\.venv|node_modules|\.git|\.wwebjs_auth|\.playwright-mcp|\.pytest_cache|\.mypy_cache)\\"
+
+$jsonFiles = Get-ChildItem -Path $RootPath -Filter "*.json" -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+    $_.FullName -notmatch $excludedPathRegex -and $_.Name -ne "package-lock.json"
 }
 
 Write-Host "=== Validando Sintaxe JSON ===" -ForegroundColor Cyan

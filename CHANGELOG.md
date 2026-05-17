@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.3.2] - 2026-05-17
+### Adicionado
+- **Diagnóstico Acionável**: `/api/system/diagnostics` agora expõe `overall_status`, `findings`, risco do WAL, idade do heartbeat e idade das execuções mais antigas em `PENDING` e `RUNNING`.
+- **Resumo Operacional no Overview**: `/api/system/overview` passou a incluir resumo de diagnóstico sem quebrar o contrato existente do Dashboard.
+- **Achados na Observabilidade**: Dashboard passou a renderizar achados operacionais com severidade, componente afetado e ação sugerida para o operador.
+
+### Alterado
+- **Versão Unificada**: Orchestrator e Worker atualizados para `6.3.2` na fonte única `Orchestrator/app/constants.py`.
+- **Restart Canônico**: `Infrastructure/Start-Orchestrator.ps1` alinhado para reportar `6.3.2` nas mensagens operacionais.
+- **Regressões de Observabilidade**: Testes de API ampliados para cobrir diagnóstico saudável, fila antiga, WAL elevado e compatibilidade do overview.
+- **Runtime Padronizado**: Automações de negócio passaram a carregar `.env` via `Lib-Config`, usar Python da venv por caminho explícito e aceitar `ORACLE_CLIENT_LIB_DIR`/`ORACLE_CLIENT_PATH` como fallback.
+- **Governança de Alta Estabilidade**: Validadores JSON, Python e PowerShell approved verbs foram ajustados para evitar falhas por cache/runtime local e reduzir tempo de validação agregada.
+
+### Corrigido
+- **Conformidade de Logs**: Timestamps de estado e watchdog alinhados para `dd/MM/yyyy HH:mm:ss`, fechando violações do guardrail de log.
+- **WhatsApp Wrapper**: `lib/Send-WhatsApp.ps1` passou a usar `Invoke-NativeProcess` para captura estruturada de saída e exit code.
+
 ## [6.3.1] - 2026-05-17
 ### Alterado
 - **Governança E2E (Playwright)**: Formalizado Playwright como validação final obrigatória para mudanças de Dashboard/UI e contratos front-back operacionais.

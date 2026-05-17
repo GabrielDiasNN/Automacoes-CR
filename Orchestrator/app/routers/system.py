@@ -156,6 +156,178 @@ def _get_worker_status(db: Session) -> schemas.WorkerStatus:
         version=hb.version or "unknown",
     )
 
+def _add_finding(findings, severity: str, component: str, message: str, action_hint: str) -> None:
+    findings.append(
+        {
+            "severity": severity,
+            "component": component,
+            "message": message,
+            "action_hint": action_hint,
+        }
+    )
+
+def _seconds_since(value) -> float:
+    if not value:
+        return 0.0
+    return round((get_now_local() - value).total_seconds(), 2)
+
+def _build_diagnostics_payload(db: Session, scheduler) -> dict:
+    """Monta diagnostico acionavel sem executar correcoes automaticas."""
+    findings = []
+    schema_status = validate_database_schema()
+    wal_size_mb = get_wal_size_mb()
+    db_size_mb = get_db_size_mb()
+    worker_status = _get_worker_status(db)
+    heartbeat = (
+        db.query(models.WorkerHeartbeat)
+        .filter(models.WorkerHeartbeat.id == 1)
+        .first()
+    )
+
+    statuses = (
+        db.query(models.Execution.status, func.count(models.Execution.id))
+        .group_by(models.Execution.status)
+        .all()
+    )
+    queue = {status: count for status, count in statuses}
+    active_count = sum(queue.get(status, 0) for status in ("PENDING", "RUNNING"))
+
+    oldest_pending = (
+        db.query(models.Execution)
+        .filter(models.Execution.status == "PENDING")
+        .order_by(models.Execution.started_at.asc())
+        .first()
+    )
+    oldest_running = (
+        db.query(models.Execution)
+        .filter(models.Execution.status == "RUNNING")
+        .order_by(models.Execution.started_at.asc())
+        .first()
+    )
+
+    pending_age_seconds = _seconds_since(oldest_pending.started_at) if oldest_pending else 0.0
+    running_age_seconds = _seconds_since(oldest_running.started_at) if oldest_running else 0.0
+
+    if not schema_status["valid"]:
+        _add_finding(
+            findings,
+            "ERROR",
+            "database",
+            "Schema SQLite diverge do contrato esperado.",
+            "Executar diagnóstico de schema e revisar migração/backup antes de operar.",
+        )
+
+    wal_risk = "normal"
+    if wal_size_mb >= 256:
+        wal_risk = "critical"
+        _add_finding(
+            findings,
+            "ERROR",
+            "database",
+            f"WAL elevado ({wal_size_mb} MB).",
+            "Executar checkpoint e verificar contenção de escrita no SQLite.",
+        )
+    elif wal_size_mb >= 64:
+        wal_risk = "elevated"
+        _add_finding(
+            findings,
+            "WARN",
+            "database",
+            f"WAL acima do normal ({wal_size_mb} MB).",
+            "Agendar checkpoint operacional se o valor continuar crescendo.",
+        )
+
+    if not scheduler.running:
+        _add_finding(
+            findings,
+            "ERROR",
+            "scheduler",
+            "Scheduler está parado.",
+            "Reiniciar Orchestrator e confirmar carregamento dos jobs.",
+        )
+    elif len(scheduler.get_jobs()) == 0:
+        _add_finding(
+            findings,
+            "WARN",
+            "scheduler",
+            "Scheduler está ativo, mas sem jobs carregados.",
+            "Verificar automações habilitadas com agenda configurada.",
+        )
+
+    last_ping_age_seconds = _seconds_since(heartbeat.last_ping) if heartbeat and heartbeat.last_ping else None
+    if not worker_status.is_alive:
+        _add_finding(
+            findings,
+            "ERROR" if active_count else "WARN",
+            "worker",
+            "Worker sem heartbeat recente.",
+            "Reiniciar worker e confirmar atualização do heartbeat.",
+        )
+
+    if pending_age_seconds >= 900:
+        _add_finding(
+            findings,
+            "WARN",
+            "queue",
+            f"Execução pendente há {round(pending_age_seconds / 60, 1)} minutos.",
+            "Verificar worker, concorrência e bloqueios antes de reenfileirar.",
+        )
+
+    if running_age_seconds >= 3600:
+        _add_finding(
+            findings,
+            "WARN",
+            "queue",
+            f"Execução em RUNNING há {round(running_age_seconds / 60, 1)} minutos.",
+            "Consultar logs da execução e avaliar parada controlada se houver hang.",
+        )
+
+    severity_rank = {"INFO": 0, "WARN": 1, "ERROR": 2}
+    max_severity = max((severity_rank.get(item["severity"], 0) for item in findings), default=0)
+    overall_status = "healthy"
+    if max_severity == 2:
+        overall_status = "unhealthy"
+    elif max_severity == 1:
+        overall_status = "degraded"
+
+    jobs = scheduler.get_jobs()
+    next_runs = sorted((job.next_run_time for job in jobs if job.next_run_time))[:5]
+
+    return {
+        "version": ORCHESTRATOR_VERSION,
+        "timestamp": get_now_local().isoformat(),
+        "overall_status": overall_status,
+        "findings": findings,
+        "database": {
+            "path": DB_PATH,
+            "size_mb": db_size_mb,
+            "wal_size_mb": wal_size_mb,
+            "wal_risk": wal_risk,
+            "schema": schema_status,
+        },
+        "scheduler": {
+            "running": scheduler.running,
+            "jobs_loaded": len(jobs),
+            "next_runs": [schemas.format_dt_br(item) for item in next_runs],
+        },
+        "worker": worker_status.model_dump(),
+        "queue": {
+            "active_count": active_count,
+            "by_status": queue,
+            "oldest_pending": {
+                "exec_id": oldest_pending.id if oldest_pending else None,
+                "age_seconds": pending_age_seconds,
+            },
+            "oldest_running": {
+                "exec_id": oldest_running.id if oldest_running else None,
+                "age_seconds": running_age_seconds,
+            },
+        },
+        "heartbeat": {
+            "last_ping_age_seconds": last_ping_age_seconds,
+        },
+    }
+
 @router.get("/worker/status", response_model=schemas.WorkerStatus)
 def get_worker_status(
     db: Session = Depends(get_db),
@@ -559,6 +731,7 @@ def get_system_overview(
         (job.next_run_time for job in jobs if job.next_run_time),
         default=None,
     )
+    diagnostics = _build_diagnostics_payload(db, scheduler)
 
     return {
         "generated_at": get_now_local().isoformat(),
@@ -583,6 +756,10 @@ def get_system_overview(
         "queue": {
             "active_count": pending_now,
             "by_status": status_breakdown,
+        },
+        "diagnostics": {
+            "overall_status": diagnostics["overall_status"],
+            "findings": diagnostics["findings"],
         },
     }
 
@@ -626,33 +803,7 @@ def get_diagnostics(
     """Retorna diagnostico operacional consolidado do Orchestrator."""
     from ..main import scheduler
 
-    statuses = (
-        db.query(models.Execution.status, func.count(models.Execution.id))
-        .group_by(models.Execution.status)
-        .all()
-    )
-    queue = {status: count for status, count in statuses}
-    active_count = sum(queue.get(status, 0) for status in ("PENDING", "RUNNING"))
-
-    return {
-        "version": ORCHESTRATOR_VERSION,
-        "timestamp": get_now_local().isoformat(),
-        "database": {
-            "path": DB_PATH,
-            "size_mb": get_db_size_mb(),
-            "wal_size_mb": get_wal_size_mb(),
-            "schema": validate_database_schema(),
-        },
-        "scheduler": {
-            "running": scheduler.running,
-            "jobs_loaded": len(scheduler.get_jobs()),
-        },
-        "worker": _get_worker_status(db).model_dump(),
-        "queue": {
-            "active_count": active_count,
-            "by_status": queue,
-        },
-    }
+    return _build_diagnostics_payload(db, scheduler)
 
 # ---------------------------------------------------------------------------
 

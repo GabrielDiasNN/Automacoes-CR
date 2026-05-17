@@ -5,6 +5,8 @@
 
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = 1
+$env:PYLINTHOME = Join-Path $RootPath ".mypy_cache\pylint"
+New-Item -ItemType Directory -Force -Path $env:PYLINTHOME | Out-Null
 Write-Host "=== Governanca Python (Type Hints & Pylint) ==="
 
 $targetFiles = @()
@@ -19,7 +21,6 @@ if ($targetFiles.Count -eq 0) {
     exit 0
 }
 
-# Helper para encontrar executaveis no venv ou no PATH
 function Get-PythonTool {
     param([string]$ToolName)
     $venvTool = Join-Path $RootPath ".venv\Scripts\$ToolName.exe"
@@ -28,40 +29,46 @@ function Get-PythonTool {
     return $null
 }
 
-$hasErrors = $false
-$mypy = Get-PythonTool "mypy"
-$pylint = Get-PythonTool "pylint"
-
+$resolvedTargetFiles = @()
 foreach ($file in $targetFiles) {
     $file = $file.Trim('"')
     $fullPath = Join-Path $RootPath $file
     if (-not (Test-Path $fullPath)) { continue }
-
     Write-Host "Verificando: $file"
+    $resolvedTargetFiles += $fullPath
+}
 
-    # Verificacao Mypy (Tipagem Estrita)
-    if ($mypy) {
-        $mypyOutput = & $mypy --strict --explicit-package-bases --namespace-packages $fullPath 2>&1
+if ($resolvedTargetFiles.Count -eq 0) {
+    Write-Host "Nenhum arquivo Python (.py) existente para validar."
+    exit 0
+}
+
+$hasErrors = $false
+$mypy = Get-PythonTool "mypy"
+$pylint = Get-PythonTool "pylint"
+
+if ($mypy) {
+    foreach ($file in $resolvedTargetFiles) {
+        $mypyOutput = & $mypy --strict --explicit-package-bases --namespace-packages $file 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERRO] Falha de Tipagem Estrita (Mypy) em $file" -ForegroundColor Red
             $mypyOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
             $hasErrors = $true
         }
-    } else {
-        Write-Host "[AVISO] Mypy nao instalado. Validacao de tipagem Python pulada para '$file'." -ForegroundColor Yellow
     }
+} else {
+    Write-Host "[AVISO] Mypy nao instalado. Validacao de tipagem Python pulada." -ForegroundColor Yellow
+}
 
-    # Verificacao Pylint (Qualidade)
-    if ($pylint) {
-        $pylintOutput = & $pylint --disable=C0114,C0116 $fullPath 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint) em $file" -ForegroundColor Red
-            $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
-            $hasErrors = $true
-        }
-    } else {
-        Write-Host "[AVISO] Pylint nao instalado. Validacao de qualidade Python pulada para '$file'." -ForegroundColor Yellow
+if ($pylint) {
+    $pylintOutput = & $pylint --disable=C0114,C0116,R0801 @resolvedTargetFiles 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint)" -ForegroundColor Red
+        $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        $hasErrors = $true
     }
+} else {
+    Write-Host "[AVISO] Pylint nao instalado. Validacao de qualidade Python pulada." -ForegroundColor Yellow
 }
 
 if ($hasErrors) {
@@ -71,4 +78,3 @@ if ($hasErrors) {
 
 Write-Host "Validacao Python concluida com sucesso." -ForegroundColor Green
 exit 0
-

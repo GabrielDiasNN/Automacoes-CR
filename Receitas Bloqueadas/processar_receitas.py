@@ -252,7 +252,7 @@ def process() -> None:
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = os.environ.get("ORACLE_CONNECT_STRING", "dbprd")
-    client_lib = os.environ.get("ORACLE_CLIENT_PATH")
+    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
     tns_admin = os.environ.get("TNS_ADMIN")
 
     def handle_exception(

@@ -433,7 +433,10 @@ async function loadSystem() {
     ]);
 
     if (health) renderHealthCards(health);
-    if (diagnostics) renderWorkerDetails(diagnostics);
+    if (diagnostics) {
+        renderWorkerDetails(diagnostics);
+        renderDiagnosticFindings(diagnostics);
+    }
     if (audit) renderAuditTable(audit);
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -463,6 +466,7 @@ function renderWorkerDetails(diagnostics) {
 
     const worker = diagnostics.worker || {};
     const queue = diagnostics.queue || {};
+    const heartbeat = diagnostics.heartbeat || {};
 
     details.innerHTML = `
         <div class="info-row"><span>Status:</span><b>${worker.is_alive ? 'ONLINE' : 'OFFLINE'}</b></div>
@@ -471,8 +475,55 @@ function renderWorkerDetails(diagnostics) {
         <div class="info-row"><span>Falhas:</span><b>${worker.tasks_failed || 0}</b></div>
         <div class="info-row"><span>Ativas:</span><b>${worker.active_tasks || 0}</b></div>
         <div class="info-row"><span>Fila Ativa:</span><b>${queue.active_count || 0}</b></div>
+        <div class="info-row"><span>Pendente mais antigo:</span><b>${formatQueueAge(queue.oldest_pending)}</b></div>
+        <div class="info-row"><span>RUNNING mais antigo:</span><b>${formatQueueAge(queue.oldest_running)}</b></div>
+        <div class="info-row"><span>Heartbeat:</span><b>${heartbeat.last_ping_age_seconds == null ? '-' : formatDuration(heartbeat.last_ping_age_seconds)}</b></div>
         <div class="info-row"><span>Versão:</span><b>${worker.version || '-'}</b></div>
     `;
+}
+
+function formatQueueAge(item) {
+    if (!item || !item.exec_id) return '-';
+    return `${escapeHtml(item.exec_id)} · ${formatDuration(item.age_seconds || 0)}`;
+}
+
+function renderDiagnosticFindings(diagnostics) {
+    const container = document.getElementById('diagnostic-findings');
+    if (!container) return;
+
+    const findings = Array.isArray(diagnostics.findings) ? diagnostics.findings : [];
+    if (!findings.length) {
+        container.innerHTML = `
+            <div class="finding-card info">
+                <span class="badge badge-success">OK</span>
+                <div>
+                    <strong>Sem achados críticos</strong>
+                    <p>Diagnóstico atual: ${escapeHtml(diagnostics.overall_status || 'healthy')}.</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    const badgeClass = {
+        ERROR: 'badge-danger',
+        WARN: 'badge-warning',
+        INFO: 'badge-blue',
+    };
+
+    container.innerHTML = findings.map((item) => {
+        const severity = item.severity || 'INFO';
+        return `
+            <article class="finding-card ${severity.toLowerCase()}">
+                <span class="badge ${badgeClass[severity] || 'badge-muted'}">${escapeHtml(severity)}</span>
+                <div>
+                    <strong>${escapeHtml(item.component || 'sistema')}</strong>
+                    <p>${escapeHtml(item.message || '-')}</p>
+                    <small>${escapeHtml(item.action_hint || 'Revisar diagnóstico operacional.')}</small>
+                </div>
+            </article>
+        `;
+    }).join('');
 }
 
 function renderAuditTable(items) {

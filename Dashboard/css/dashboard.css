@@ -349,7 +349,7 @@ textarea:focus-visible {
 }
 
 .sys-details-grid {
-    grid-template-columns: 0.8fr 1.6fr;
+    grid-template-columns: 0.9fr 1.1fr 1.4fr;
 }
 
 .form-row {
@@ -748,6 +748,56 @@ textarea:focus-visible {
 
 .info-row b {
     color: var(--text-primary);
+}
+
+.findings-list {
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-3);
+}
+
+.finding-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent-muted);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.finding-card.error {
+    border-left-color: var(--accent-danger);
+    background: var(--accent-danger-soft);
+}
+
+.finding-card.warn {
+    border-left-color: var(--accent-warning);
+    background: var(--accent-warning-soft);
+}
+
+.finding-card.info {
+    border-left-color: var(--accent-success);
+    background: var(--accent-success-soft);
+}
+
+.finding-card strong,
+.finding-card p,
+.finding-card small {
+    display: block;
+    margin: 0;
+}
+
+.finding-card p {
+    margin-top: 2px;
+    color: var(--text-secondary);
+}
+
+.finding-card small {
+    margin-top: 6px;
+    color: var(--text-muted);
 }
 
 .modal {

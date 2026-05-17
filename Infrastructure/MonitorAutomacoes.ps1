@@ -22,7 +22,7 @@ function Write-Log {
     if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
         Write-AutomacaoLog -Message $Msg -Level $Type -ExecId "WATCHDOG" -LogPath $logPath
     } else {
-        $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $ts = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
         "[$ts] [$Type] [WATCHDOG] $Msg" | Out-File -FilePath $logPath -Append -Encoding utf8
     }
 }

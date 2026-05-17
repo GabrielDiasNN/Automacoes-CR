@@ -1,10 +1,11 @@
-# Cognitive Context: Automações Hub v6.2.0 (Enterprise)
+# Cognitive Context: Automações Hub v6.3.2 (Enterprise Observability)
 
 ## Repository Philosophy
-Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v6.2.0 (Enterprise)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa e segurança Zero-Trust.
+Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v6.3.2 (Enterprise Observability)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
 
-## System Architecture (v6.2.0 Enterprise)
+## System Architecture (v6.3.2 Enterprise)
 
+- **ADR-018 (17/05/2026):** Observabilidade Acionável. `/api/system/diagnostics` passa a emitir `overall_status`, `findings`, risco do WAL, idade do heartbeat e idade das execuções mais antigas em fila/execução. O Dashboard exibe achados com severidade e ação sugerida para reduzir tempo de diagnóstico operacional.
 - **ADR-016 (15/05/2026):** Pragmatic Performance Upgrade. Eliminação de N+1 Queries nos endpoints FastAPI via SQLAlchemy `joinedload` e agregação de dados. Implementação de log batching assíncrono no Worker, reduzindo drasticamente o overhead de I/O de rede e bloqueios, permitindo aumentar a concorrência padrão para 4.
 - **ADR-015 (15/05/2026):** Async Process Wrapper (Anti-Deadlock): Implementação da `Lib-Process.psm1` com wrapper C# nativo. Esta arquitetura resolve a limitação de thread do PowerShell 5.1, garantindo que os fluxos `stdout` e `stderr` sejam consumidos simultaneamente em threads separadas. Isso elimina 100% o risco de travamento de buffer (I/O Deadlock) em automações com alto volume de logs ou dados.
 - **ADR-007 (12/05/2026):** Sincronização v5.2.0: Consolidação de versões em toda a stack, hardening de seguranca (API Key robusta), eliminação de URLs hardcoded e refatoração arquitetural de imports/typing.
@@ -16,7 +17,8 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Shared Skills Model**: `.github/skills/` e a fonte canonica das 6 skills ativas; `.gemini/skills/` existe apenas como espelho por junction/symlink para compatibilidade com Gemini CLI e Antigravity.
 
 ## 🧠 Gestão de Contexto (AI-Native)
-- **Estado:** Estabilizado v6.2.0 (High Performance Edition).
+- **Estado:** Estabilizado v6.3.2 (Enterprise Observability).
+- **Padronização Runtime (17/05/2026):** Robôs de negócio alinhados para `Lib-Config`, Python da venv por caminho explícito, fallback `ORACLE_CLIENT_LIB_DIR`/`ORACLE_CLIENT_PATH`, lock com `ExecId`/`LogPath` e validação agregada de governança concluindo em tempo previsível.
 - **Compliance:** 100% aprovado em saneamento estético (trailing spaces) e encoding UTF-8 com BOM para PowerShell.
 - **Ambiente:** Saneado com `PYTHONUTF8=1`, correção de corrupção na biblioteca `dill` e remoção de redundâncias de espaços.
 - **ADR-011:** Saneamento Global (13/05/2026) - Remoção recursiva de espaços inúteis e normalização de quebras de linha em 223 arquivos para otimização de tokens.

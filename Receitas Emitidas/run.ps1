@@ -31,8 +31,7 @@ $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
-$envPath     = Join-Path $projectRoot ".env"
-
+$libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $generatePy = Join-Path $ScriptDir "generate_html_report.py"
@@ -45,6 +44,7 @@ $LogDir     = Join-Path $ScriptDir "Logs"
 Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
 Import-Module $libRetry   -Force
+Import-Module $libConfig  -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
@@ -72,20 +72,14 @@ function Exit-WithCode {
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
-if (Test-Path $envPath) {
-    Get-Content $envPath | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -and -not $line.StartsWith("#")) {
-            $key, $value = $line -split '=', 2
-            if ($key -and $value) { [System.Environment]::SetEnvironmentVariable($key.Trim(), $value.Trim(), "Process") }
-        }
-    }
-}
+Import-HubEnv
 
 $oracleClientLib = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_LIB_DIR", "Process")
+$oracleClientFallback = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_PATH", "Process")
+if ([string]::IsNullOrWhiteSpace($oracleClientLib)) { $oracleClientLib = $oracleClientFallback }
 $oraClientPreFlightOk = $true
 if ([string]::IsNullOrWhiteSpace($oracleClientLib)) {
-    Write-Log "PRE-FLIGHT WARN: ORACLE_CLIENT_LIB_DIR nao definido. Thick Mode pode falhar." -Lvl "WARN"
+    Write-Log "PRE-FLIGHT WARN: ORACLE_CLIENT_LIB_DIR/ORACLE_CLIENT_PATH nao definido. Thick Mode pode falhar." -Lvl "WARN"
     $oraClientPreFlightOk = $false
 } elseif (-not (Test-Path $oracleClientLib)) {
     Write-Log "PRE-FLIGHT WARN: Oracle Client nao encontrado em '$oracleClientLib'. Thick Mode indisponivel." -Lvl "WARN"
@@ -211,7 +205,7 @@ try {
             if ($emailOk) {
                 Write-Log "E-mail enviado com sucesso. Consolidando estado parcial."
                 $deliveryState.delivery_status.email.success = $true
-                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
                 $deliveryState | ConvertTo-Json -Depth 5 | Out-File $DeliveryStatePath -Encoding UTF8
             } else { throw "Falha definitiva no envio do e-mail." }
         }
