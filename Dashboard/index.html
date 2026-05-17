@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Central de Automações | Orquestrador</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/lib/assets/css/fonts.css">
+    <link rel="stylesheet" href="/dashboard/css/dashboard.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" aria-label="Navegação principal">
+            <div class="logo-area">
+                <div class="logo-icon" aria-hidden="true"><i data-lucide="workflow"></i></div>
+                <div class="logo-text">
+                    <h1>Orquestrador</h1>
+                    <span>Central de Automações</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" type="button" data-target="dashboard">
+                    <i data-lucide="layout-dashboard"></i><span>Comando</span>
+                </button>
+                <button class="nav-item" type="button" data-target="automations">
+                    <i data-lucide="bot"></i><span>Automações</span>
+                </button>
+                <button class="nav-item" type="button" data-target="executions">
+                    <i data-lucide="history"></i><span>Execuções</span>
+                </button>
+                <button class="nav-item" type="button" data-target="observability">
+                    <i data-lucide="activity"></i><span>Observabilidade</span>
+                </button>
+                <button class="nav-item" type="button" data-target="system">
+                    <i data-lucide="server-cog"></i><span>Sistema</span>
+                </button>
+                <button class="nav-item" type="button" data-target="env">
+                    <i data-lucide="settings-2"></i><span>Configuração</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="test-mode-pill" id="test-mode-pill" style="display:none">
+                    <i data-lucide="flask-conical" size="14"></i><span>Sandbox ativo</span>
+                </div>
+                <div class="server-status" aria-live="polite">
+                    <span class="dot" id="server-dot"></span>
+                    <span>API <strong id="server-txt">VERIFICANDO</strong></span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="topbar-title">
+                    <span class="eyebrow">Operação em tempo real</span>
+                    <h2>Centro de controle das automações</h2>
+                </div>
+                <div class="actions-area">
+                    <label class="test-mode-control" for="global-test-toggle">
+                        <span>Modo teste global</span>
+                        <span class="switch">
+                            <input id="global-test-toggle" type="checkbox" onchange="toggleGlobalTestMode(this.checked)">
+                            <span class="slider"></span>
+                        </span>
+                    </label>
+                </div>
+            </header>
+
+            <section id="view-dashboard" class="view-content active" aria-labelledby="dashboard-title">
+                <div class="page-header">
+                    <div>
+                        <span class="eyebrow">Comando</span>
+                        <h1 id="dashboard-title">Painel operacional</h1>
+                    </div>
+                    <div class="quick-actions">
+                        <button class="btn btn-outline" type="button" onclick="location.reload()"><i data-lucide="refresh-cw"></i>Atualizar</button>
+                        <button class="btn btn-danger" type="button" onclick="callSystemAction('pause_all')"><i data-lucide="pause-circle"></i>Pausar frota</button>
+                        <button class="btn btn-primary" type="button" onclick="callSystemAction('resume_all')"><i data-lucide="play-circle"></i>Retomar frota</button>
+                    </div>
+                </div>
+
+                <div class="metrics-row">
+                    <article class="metric-card">
+                        <div class="metric-head"><span>Automações ativas</span><i data-lucide="boxes"></i></div>
+                        <strong id="val-total">-</strong>
+                        <small id="trend-total">Aguardando leitura</small>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-head"><span>Taxa de sucesso</span><i data-lucide="shield-check"></i></div>
+                        <strong id="val-success-rate">-</strong>
+                        <small id="trend-success">Últimas 24h</small>
+                    </article>
+                    <article class="metric-card danger">
+                        <div class="metric-head"><span>Falhas 24h</span><i data-lucide="triangle-alert"></i></div>
+                        <strong id="val-errors">-</strong>
+                        <small id="trend-errors">Monitorando exceções</small>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-head"><span>Tempo médio</span><i data-lucide="timer"></i></div>
+                        <strong id="val-avg-time">-</strong>
+                        <small id="trend-time">CPU/RAM indisponível</small>
+                    </article>
+                </div>
+
+                <div class="insights-grid">
+                    <article class="insight-card">
+                        <span class="insight-label">Maior risco atual</span>
+                        <strong class="insight-value" id="insight-top-fail">Carregando...</strong>
+                    </article>
+                    <article class="insight-card">
+                        <span class="insight-label">Produtividade estimada</span>
+                        <strong class="insight-value" id="insight-time-saved">Carregando...</strong>
+                    </article>
+                    <article class="insight-card">
+                        <span class="insight-label">Próxima janela</span>
+                        <strong class="insight-value" id="insight-next-window">Carregando...</strong>
+                    </article>
+                </div>
+
+                <section class="panel" aria-labelledby="control-title">
+                    <div class="panel-header">
+                        <div>
+                            <h3 id="control-title">Controle operacional</h3>
+                            <p>Último estado conhecido, próxima execução e ações rápidas.</p>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Automação</th>
+                                    <th>Status</th>
+                                    <th>Última execução</th>
+                                    <th>Próxima execução</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="control-tbody">
+                                <tr><td colspan="5">Carregando automações...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <section id="view-automations" class="view-content" aria-labelledby="automations-title">
+                <div class="page-header">
+                    <div>
+                        <span class="eyebrow">Gestão</span>
+                        <h1 id="automations-title">Frota de automações</h1>
+                    </div>
+                    <button class="btn btn-primary" type="button" onclick="openCreateModal()"><i data-lucide="plus"></i>Nova automação</button>
+                </div>
+
+                <div class="filter-strip panel">
+                    <div class="filter-group wide">
+                        <label for="auto-search">Buscar automação</label>
+                        <input id="auto-search" type="search" class="form-control" placeholder="Nome, descrição ou caminho" oninput="handleSearch()">
+                    </div>
+                </div>
+
+                <section class="panel">
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Automação</th>
+                                    <th>Agenda</th>
+                                    <th>Próxima</th>
+                                    <th>Modo</th>
+                                    <th>Estado</th>
+                                    <th>Último status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fleet-tbody">
+                                <tr><td colspan="7">Carregando frota...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <section id="view-executions" class="view-content" aria-labelledby="executions-title">
+                <div class="page-header">
+                    <div>
+                        <span class="eyebrow">Histórico</span>
+                        <h1 id="executions-title">Execuções</h1>
+                    </div>
+                    <button class="btn btn-outline" type="button" onclick="loadExecutions()"><i data-lucide="refresh-cw"></i>Atualizar</button>
+                </div>
+
+                <div class="filter-strip panel">
+                    <div class="filter-group">
+                        <label for="filter-automation">Automação</label>
+                        <select id="filter-automation" class="form-control" onchange="loadExecutions()"><option value="">TODOS OS ROBÔS</option></select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-status">Status</label>
+                        <select id="filter-status" class="form-control" onchange="loadExecutions()">
+                            <option value="">Todos</option>
+                            <option value="SUCCESS">Sucesso</option>
+                            <option value="ERROR">Falha</option>
+                            <option value="RUNNING">Rodando</option>
+                            <option value="PENDING">Fila</option>
+                            <option value="TIMEOUT">Timeout</option>
+                            <option value="TERMINATED">Interrompido</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-requested-by">Solicitante</label>
+                        <input id="filter-requested-by" class="form-control" type="text" placeholder="SYSTEM" onchange="loadExecutions()">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-date-from">De</label>
+                        <input id="filter-date-from" class="form-control" type="date" onchange="loadExecutions()">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-date-to">Até</label>
+                        <input id="filter-date-to" class="form-control" type="date" onchange="loadExecutions()">
+                    </div>
+                </div>
+
+                <section class="panel">
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Automação</th>
+                                    <th>ExecId</th>
+                                    <th>Status</th>
+                                    <th>Solicitante</th>
+                                    <th>Duração</th>
+                                    <th>Início</th>
+                                    <th>Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="exec-tbody">
+                                <tr><td colspan="7">Selecione filtros ou atualize a listagem.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="exec-pagination" class="pagination"></div>
+                </section>
+            </section>
+
+            <section id="view-observability" class="view-content" aria-labelledby="observability-title">
+                <div class="page-header">
+                    <div>
+                        <span class="eyebrow">Observabilidade</span>
+                        <h1 id="observability-title">Sinais operacionais</h1>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <section class="panel">
+                        <div class="panel-header"><h3>Performance por automação</h3></div>
+                        <div class="chart-panel-body" id="chart-performance"></div>
+                    </section>
+                    <section class="panel">
+                        <div class="panel-header"><h3>Distribuição de status</h3></div>
+                        <div class="chart-panel-body" id="chart-status"></div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="view-system" class="view-content" aria-labelledby="system-title">
+                <div class="page-header">
+                    <div>
+                        <span class="eyebrow">Infraestrutura</span>
+                        <h1 id="system-title">Sistema</h1>
+                    </div>
+                    <div class="quick-actions">
+                        <button class="btn btn-outline" type="button" onclick="callSystemAction('backup')"><i data-lucide="database-backup"></i>Backup</button>
+                        <button class="btn btn-danger" type="button" onclick="callSystemAction('purge')"><i data-lucide="trash-2"></i>Purge</button>
+                    </div>
+                </div>
+
+                <div class="health-overview">
+                    <article id="health-db" class="health-card"><span class="health-title">Banco</span><strong class="health-value">-</strong></article>
+                    <article id="health-sched" class="health-card"><span class="health-title">Scheduler</span><strong class="health-value">-</strong></article>
+                    <article id="health-worker" class="health-card"><span class="health-title">Worker</span><strong class="health-value">-</strong></article>
+                    <article id="health-disk" class="health-card"><span class="health-title">Disco/WAL</span><strong class="health-value">-</strong></article>
+                </div>
+
+                <div class="sys-details-grid">
+                    <section class="panel">
+                        <div class="panel-header"><h3>Worker e fila</h3></div>
+                        <div id="worker-details" class="worker-info-list"></div>
+                    </section>
+                    <section class="panel">
+                        <div class="panel-header"><h3>Auditoria recente</h3></div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr><th>Data</th><th>Ação</th><th>Entidade</th><th>ID</th><th>Ator</th></tr>
+                                </thead>
+                                <tbody id="audit-tbody"><tr><td colspan="5">Carregando auditoria...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="view-env" class="view-content" aria-labelledby="env-title">
+                <div class="page-header">
+                    <div>
+                        <span class="eyebrow">Configuração</span>
+                        <h1 id="env-title">Ambiente global</h1>
+                    </div>
+                    <button class="btn btn-primary" type="button" onclick="saveEnv()"><i data-lucide="save"></i>Salvar .env</button>
+                </div>
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Editor controlado</h3>
+                            <p>Alterações podem exigir reinício dos serviços do Orchestrator.</p>
+                        </div>
+                    </div>
+                    <textarea id="env-editor" class="code-area" spellcheck="false" aria-label="Conteúdo do arquivo .env"></textarea>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <dialog id="modal-logs" class="modal modal-xl">
+        <div class="modal-header">
+            <div>
+                <span class="eyebrow">Console operacional</span>
+                <h3 id="log-modal-title">Logs</h3>
+            </div>
+            <button class="close-btn" type="button" onclick="closeLogModal()" aria-label="Fechar logs">×</button>
+        </div>
+        <div id="modal-log-body" class="modal-body logs"></div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" type="button" onclick="closeLogModal()">Fechar</button>
+        </div>
+    </dialog>
+
+    <dialog id="modal-auto" class="modal modal-lg">
+        <form id="form-auto" method="dialog" onsubmit="saveAuto(event)">
+            <div class="modal-header">
+                <h3 id="modal-title">Automação</h3>
+                <button class="close-btn" type="button" onclick="document.getElementById('modal-auto').close()" aria-label="Fechar">×</button>
+            </div>
+            <div class="modal-body">
+                <input id="f-id" type="hidden">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f-name">Nome</label>
+                        <input id="f-name" class="form-control" type="text" required maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-max-runtime">Timeout máximo (min)</label>
+                        <input id="f-max-runtime" class="form-control" type="number" min="1" max="480" value="30">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="f-description">Descrição</label>
+                    <input id="f-description" class="form-control" type="text" maxlength="500">
+                </div>
+                <div class="form-group">
+                    <label for="f-path">Caminho do script</label>
+                    <input id="f-path" class="form-control" type="text" required placeholder="Receitas Emitidas/run.ps1">
+                </div>
+                <div class="form-row">
+                    <label class="inline-toggle" for="f-enabled"><span>Automação ativa</span><input id="f-enabled" type="checkbox" checked></label>
+                    <label class="inline-toggle" for="f-test"><span>Modo teste</span><input id="f-test" type="checkbox"></label>
+                </div>
+                <div class="form-group">
+                    <label for="f-notification-channels">Canais de notificação</label>
+                    <input id="f-notification-channels" class="form-control" type="text" placeholder="email, whatsapp">
+                </div>
+                <section class="scheduling-section" aria-labelledby="schedule-title">
+                    <h4 id="schedule-title">Agenda</h4>
+                    <div class="day-selector" aria-label="Dias da semana">
+                        <button type="button" class="day-btn" data-day="1">Seg</button>
+                        <button type="button" class="day-btn" data-day="2">Ter</button>
+                        <button type="button" class="day-btn" data-day="3">Qua</button>
+                        <button type="button" class="day-btn" data-day="4">Qui</button>
+                        <button type="button" class="day-btn" data-day="5">Sex</button>
+                        <button type="button" class="day-btn" data-day="6">Sáb</button>
+                        <button type="button" class="day-btn" data-day="0">Dom</button>
+                    </div>
+                    <div class="time-adder">
+                        <input id="f-time-input" class="form-control" type="time" aria-label="Horário da agenda">
+                        <button type="button" class="btn-add-time" onclick="addScheduleTime()" aria-label="Adicionar horário">+</button>
+                    </div>
+                    <div id="f-time-list" class="time-list"></div>
+                    <div id="schedule-summary" class="schedule-summary"></div>
+                </section>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" type="button" onclick="document.getElementById('modal-auto').close()">Cancelar</button>
+                <button class="btn btn-primary" type="submit">Salvar automação</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="modal-json" class="modal modal-lg">
+        <div class="modal-header"><h3 id="json-modal-title">Regras JSON</h3><button class="close-btn" type="button" onclick="document.getElementById('modal-json').close()">×</button></div>
+        <div class="modal-body">
+            <input id="json-auto-id" type="hidden">
+            <div class="form-group"><label for="json-file-selector">Arquivo</label><select id="json-file-selector" class="form-control" onchange="loadSelectedJsonFile()"></select></div>
+            <textarea id="json-editor" class="code-area" spellcheck="false"></textarea>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" type="button" onclick="document.getElementById('modal-json').close()">Cancelar</button><button class="btn btn-primary" type="button" onclick="saveJsonFile()">Salvar JSON</button></div>
+    </dialog>
+
+    <dialog id="modal-ide" class="modal modal-xl">
+        <div class="modal-header"><h3 id="ide-modal-title">IDE</h3><button class="close-btn" type="button" onclick="document.getElementById('modal-ide').close()">×</button></div>
+        <div class="modal-body">
+            <input id="ide-auto-id" type="hidden">
+            <div class="form-group"><label for="ide-file-selector">Arquivo</label><select id="ide-file-selector" class="form-control" onchange="loadSelectedIdeFile()"></select></div>
+            <textarea id="ide-editor" class="code-area" spellcheck="false"></textarea>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" type="button" onclick="document.getElementById('modal-ide').close()">Cancelar</button><button class="btn btn-primary" type="button" onclick="saveIdeFile()">Salvar código</button></div>
+    </dialog>
+
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="/lib/assets/js/apexcharts.min.js"></script>
+    <script src="/lib/assets/js/lucide.min.js"></script>
+    <script type="module" src="/dashboard/js/dashboard.js"></script>
+</body>
+
+</html>
