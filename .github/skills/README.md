@@ -1,46 +1,48 @@
-# Skills Canonicos do Repositorio
+# Skills Canônicas do Repositório
 
-Este diretorio e a fonte canonica de skills do workspace.
+Este diretório é a fonte canônica de skills do workspace.
+
+O projeto atual é 100% nativo, com stack consolidada em Python, PowerShell e Node.js. Skills legadas de migração para Python ou de runtime VBA não fazem mais parte da taxonomia ativa e não devem ser reintroduzidas em discovery, `Related Skills` ou documentação operacional.
 
 ## Regra Oficial
 
-- Local canonico: `.github/skills`
+- Local canônico: `.github/skills`
 - Local descontinuado: `.agents/skills`
-- Nao manter skills duplicados em multiplos diretorios para evitar drift.
-- Skills novas devem nascer com responsabilidade clara e relacionamento explicito com as demais.
+- Não manter skills duplicadas em múltiplos diretórios para evitar drift.
+- Melhorar skill existente antes de propor uma skill nova.
 
-## Taxonomia do Workspace
+## Taxonomia Ativa do Workspace
 
-O conjunto de 8 SKILLs hiper-densas está organizado nas seguintes fronteiras de responsabilidade:
+O conjunto ativo de 6 skills está organizado nas seguintes fronteiras de responsabilidade:
 
-1. **Fundação e Governança Universal**:
-   - `ai-native-development-standard`: Metadados e estruturação para IA.
-   - `enterprise-orchestration-contract`: Idempotência e fluxo ponta a ponta (ExecId).
-   - `automation-runtime-safety`: Segurança Zero Trust, logs e tolerância a falhas.
+1. **Fundação**
+   - `ai-native-development-standard`: governança de contexto, documentação AI-Native, discovery e evolução das skills.
 
-2. **Runtimes e Integrações Otimizadas**:
-   - `python-oracle-migration`: Vetorização (Pandas), SQL escalável (sem `SELECT *`) e tipagem estrita Python.
-   - `powershell-automation-monitor`: Monitor central, tratamento nominal de exceções (try/catch) e tipagem PS.
-   - `vba-enterprise-core`: Governança VBE, exportação PT-BR e Outlook COM.
-   - `nodejs-communications`: Serviços de ponte (BAT/Node.js) e automação do WhatsApp.
+2. **Contratos Transversais**
+   - `enterprise-orchestration-contract`: `ExecId`, idempotência, entrypoints, estados e handoff entre runtimes.
+   - `automation-runtime-safety`: Zero Trust, logs, severidade, encoding e falha segura.
 
-3. **Apresentação**:
-   - `html-css-enterprise-standard`: Contratos de layout responsivo para Web (Dashboards) e Outlook.
+3. **Runtimes e Canais**
+   - `powershell-automation-monitor`: scripts corporativos, monitores, módulos compartilhados e governança PowerShell.
+   - `nodejs-communications`: WhatsApp, headless e bootstrap `.bat`/`.cmd` sem ownership de orquestração geral.
+
+4. **Apresentação**
+   - `html-css-enterprise-standard`: dashboard, HTML corporativo, assets compartilhados e separação entre UI e negócio.
 
 ## Estrutura Esperada
 
-Cada skill deve seguir o padrao:
+Cada skill deve seguir o padrão:
 
-- Pasta em kebab-case: `<nome-do-skill>/`
+- Pasta em kebab-case: `<nome-da-skill>/`
 - Arquivo principal: `SKILL.md`
-- Recursos opcionais em um nivel abaixo: `references/`, `scripts/`, `assets/`
+- Recursos opcionais em um nível abaixo: `references/`, `scripts/`, `assets/`
 - Frontmatter com `name` e `description` coerentes com o nome da pasta
 
-## Frontmatter Canonico
+## Frontmatter Canônico
 
 Use somente campos oficialmente suportados pelo sistema de skills:
 
-- Obrigatorios:
+- Obrigatórios:
   - `name`
   - `description`
 - Opcionais:
@@ -48,11 +50,11 @@ Use somente campos oficialmente suportados pelo sistema de skills:
   - `user-invocable`
   - `disable-model-invocation`
 
-Evite metadados ad hoc no YAML, como `version`, `owner` ou `language`. Essas informacoes devem morar no corpo da skill ou em referencias locais para evitar falhas silenciosas de discovery.
+Não adicione metadados ad hoc no YAML. Ownership, exemplos ou detalhe operacional devem viver no corpo do `SKILL.md` ou em `references/`.
 
-## Estrutura Interna Obrigatoria
+## Estrutura Interna Obrigatória
 
-Toda SKILL.md deve ter, no minimo, estas secoes:
+Toda `SKILL.md` deve conter, no mínimo, estas seções em `##`:
 
 1. `Purpose`
 2. `When to Use`
@@ -64,45 +66,50 @@ Toda SKILL.md deve ter, no minimo, estas secoes:
 8. `Troubleshooting`
 9. `Pre-Delivery Checklist`
 
-Uma skill pode ter secoes extras como `Architecture Overview`, `Execution Flow`, `Runtime Contract` ou `Implementation Workflow`, desde que a responsabilidade continue clara.
+Seções extras são permitidas quando agregam decisão operacional real, não texto ornamental.
 
 ## Regras de Descoberta
 
-- `description` deve comecar com `Use when...` e explicar quando usar esta skill em vez de outra parecida.
-- `Related Skills` deve listar complementos naturais e fronteiras de ownership.
-- `Do Not Use When` e obrigatoria para reduzir sobreposicao entre skills.
-- Contratos transversais devem existir em uma unica fonte; outras skills devem referenci-los, nao duplicar blocos longos.
+- `description` deve começar com `Use when`.
+- `description` deve diferenciar a skill de outra skill próxima.
+- `Do Not Use When` é obrigatória para reduzir overlap.
+- `Related Skills` deve citar apenas skills existentes na taxonomia ativa.
+- Regras transversais devem ter fonte única; skills consumidoras devem referenciar, não duplicar.
 
-## Regras de Governanca
+## Regras de Governança
 
-1. Criar ou alterar sempre em `.github/skills`.
-2. Validar sintaxe YAML do frontmatter.
-3. Garantir descricao no formato `Use when...` para facilitar discovery.
-4. Revisar consistencia com os padroes enterprise do repositorio.
-5. Declarar `Related Skills` em toda skill nova ou reescrita.
-6. Se uma regra vale para varias linguagens ou varias automacoes, extraia para uma skill-base ou referencia local compartilhada.
-7. Nao usar a mesma skill para misturar arquitetura, runtime, canal e governanca sem uma necessidade clara.
+1. Criar ou alterar skills sempre em `.github/skills`.
+2. Bloquear placeholders como `Conforme diretrizes globais.`.
+3. Não citar skills legadas ou inexistentes em `Related Skills` ou na taxonomia.
+4. Referenciar artefatos reais do repositório nas seções operacionais sempre que a regra depender da implementação local.
+5. Manter `README.md`, `CONTEXT.md`, `SECURITY.md`, `GEMINI.md` e `CHANGELOG.md` coerentes com a stack atual quando a mudança tocar governança.
+6. Manter documentação Markdown em UTF-8 sem BOM, com acentuação normal em PT-BR e sem mojibake.
 
-## Criterio Para Criar Nova Skill
+## Critério Para Criar Nova Skill
 
-Crie uma nova skill quando houver um fluxo reutilizavel, especializado e recorrente.
+Crie uma nova skill apenas quando houver:
 
-Nao crie nova skill quando:
+- fluxo recorrente e especializado;
+- fronteira clara de ownership;
+- dificuldade real de encaixar o conteúdo em uma das 6 skills atuais ou em `references/` associadas.
 
-- O conteudo cabe melhor em `references/` de uma skill existente.
-- A regra e apenas um detalhe operacional de uma skill maior.
-- O objetivo pode ser resolvido com uma melhoria de `description`, `Related Skills` ou `Repo-Specific Constraints`.
+Não crie nova skill quando:
 
-## Fluxo de Manutencao
+- o conteúdo cabe em `references/` de uma skill existente;
+- a regra é apenas um detalhe de runtime, canal ou governança já coberto;
+- o problema é de discovery e pode ser resolvido com `description`, `Do Not Use When` ou `Related Skills`.
 
-1. Identificar se a mudanca afeta fundacao compartilhada, runtime, canal ou governanca.
-2. Atualizar primeiro a fonte central do contrato, depois as skills consumidoras.
-3. Revisar se as memorias do repositorio continuam refletidas no local correto.
-4. Executar validacao de markdown em dry run antes de concluir.
-5. Fazer revisao manual de discovery para garantir que a skill continua facil de escolher.
+## Fluxo de Manutenção
 
-## Validacao Automatizada
+1. Identificar qual das 6 fronteiras ativas realmente possui a responsabilidade.
+2. Atualizar primeiro a fonte principal do contrato e depois as skills consumidoras.
+3. Revisar discovery para garantir que o pedido correto aciona a skill correta.
+4. Rodar a validação de skills e a validação agregada de governança.
+5. Corrigir drift documental antes de concluir.
 
-- `Tools/Test-SkillsGovernance.ps1` valida local canonico, frontmatter permitido, discovery por `description` e secoes obrigatorias.
-- `Tools/ValidarAutomacoes.ps1 -OnlyGovernance` agrega a governanca de skills com os checks de governanca ja existentes do repositorio.
-- A task recomendada no workspace para revisao rapida e `Validacao: Skills`.
+## Validação Automatizada
+
+- `Tools/Test-SkillsGovernance.ps1` valida local canônico, frontmatter, seções obrigatórias, placeholders, referências cruzadas, consistência da taxonomia ativa, espelhamento em `.gemini/skills/` e presença dos mirrors globais obrigatórios do Codex.
+- `Tools/Test-SourceEncoding.ps1` valida a política de encoding de fontes e documentação, incluindo `.md`, `.py`, `.js`, `.json`, `.txt`, `.sql`, `.html` e `.css` em UTF-8 sem BOM e `.ps1`/`.psm1` em UTF-8 with BOM.
+- `Tools/ValidarAutomacoes.ps1 -OnlyGovernance` agrega a governança de skills com os checks nativos do repositório.
+- A task recomendada no workspace para revisão rápida continua sendo `Validacao: Skills`.

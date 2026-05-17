@@ -177,11 +177,8 @@ if (-not (Test-ContainsPattern -Content $templateText -Pattern 'table-wrap|overf
     $findings.Add((New-Finding -File $relTemplate -Rule "TABLE_RESPONSIVE_MISSING" -Severity "WARN" -Detail "Tabelas sem wrapper de overflow para responsividade mobile."))
 }
 
-# Output esperado opcional: warn quando nao existir.
-$outputPath = Join-Path $BasePath "Dashboard\dashboard.html"
-if (-not (Test-Path -LiteralPath $outputPath)) {
-    $findings.Add((New-Finding -File "Dashboard/dashboard.html" -Rule "DASHBOARD_OUTPUT_MISSING" -Severity "WARN" -Detail "Arquivo de output do dashboard ainda nao existe."))
-}
+# O fluxo real valida apenas o template canonico. O dashboard operacional
+# pode ser servido por outras entradas, como Dashboard/index.html ou pela API.
 
 $blockingFindings = @($findings | Where-Object { $_.Blocking })
 $warningFindings = @($findings | Where-Object { -not $_.Blocking })

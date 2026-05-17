@@ -8,16 +8,21 @@
 node_modules/
 
 # Logs e Artefatos Temporários
-#**/Logs/
+Logs/
 *.log
 Startup_Error.txt
-Dashboard/
+
+# Dashboard gerado/exportado (nao confundir com SPA fonte em Dashboard/)
+Dashboard/dashboard.html
 
 # Caches de Inteligência e Estado
 .cache_erros.json
 **/__pycache__/
+.mypy_cache/
+**/.pytest_cache/
 .pytest_cache/
 .gemini/
+.playwright-mcp/
 
 # Excel Temporários e Lock
 ~$*.xlsm
@@ -37,7 +42,6 @@ Audit/
 
 # Exceções: Apenas arquivos oficiais de produção/extração híbrida
 !Montagem de Terceirizados/Legacy/Validador_Notas_Montagem.xlsm
-!Receitas Bloqueadas/Receitas Bloqueadas.xlsm
 !Receitas Emitidas/Controle de Receitas Emitidas.xlsm
 
 # Segredos (CRÍTICO)
@@ -53,3 +57,10 @@ Orchestrator/automacoes.db-wal
 Orchestrator/orchestrator.pid
 Orchestrator/worker.pid
 Backups/
+
+# Estados runtime por automacao (nao versionar)
+Montagem de Terceirizados/delivery_state.json
+Receitas Bloqueadas/email_state.json
+Receitas Bloqueadas/receitas_state.json
+Receitas Emitidas/delivery_state.json
+Receitas Emitidas/receitas_state.json

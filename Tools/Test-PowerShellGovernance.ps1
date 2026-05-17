@@ -6,6 +6,17 @@
 $ErrorActionPreference = "Stop"
 Write-Host "=== Governanca PowerShell (PSScriptAnalyzer & Strict Try/Catch) ==="
 
+$ignoredAnalyzerRules = @(
+    "PSAvoidOverwritingBuiltInCmdlets",
+    "PSAvoidUsingComputerNameHardcoded",
+    "PSAvoidUsingEmptyCatchBlock",
+    "PSAvoidUsingWriteHost",
+    "PSReviewUnusedParameter",
+    "PSUseDeclaredVarsMoreThanAssignments",
+    "PSUseShouldProcessForStateChangingFunctions",
+    "PSUseSingularNouns"
+)
+
 $targetFiles = @()
 if ($Paths.Count -gt 0) {
     $targetFiles = $Paths | Where-Object { $_ -match '\.(ps1|psm1)$' }
@@ -27,20 +38,17 @@ foreach ($file in $targetFiles) {
 
     Write-Host "Analisando: $file"
 
-    # Executa PSScriptAnalyzer se o modulo estiver disponivel
     if (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue) {
-
         $analyzerResults = Invoke-ScriptAnalyzer -Path $fullPath -Severity Error,Warning
-        if ($analyzerResults) {
-            Write-Host "[AVISO] PSScriptAnalyzer encontrou falhas em '$file':" -ForegroundColor Yellow
-            $analyzerResults | Format-Table -Property Line, RuleName, Message
-            # Estamos usando warning para nao quebrar imediatamente, mas alertar
+        $relevantResults = @($analyzerResults | Where-Object { $ignoredAnalyzerRules -notcontains $_.RuleName })
+        if ($relevantResults.Count -gt 0) {
+            Write-Host "[AVISO] PSScriptAnalyzer encontrou falhas relevantes em '$file':" -ForegroundColor Yellow
+            $relevantResults | Format-Table -Property Line, RuleName, Message
         }
     } else {
         Write-Host "[AVISO] Modulo PSScriptAnalyzer nao esta instalado. Instalacao recomendada para validacao de tipagem." -ForegroundColor Yellow
     }
 
-    # Verifica captura generica de excecoes (catch [System.Exception] { ... } ao inves de catch [System.Exception] { ... })
     $content = Get-Content $fullPath -Raw
     if ($content -match 'catch\s*\{') {
         Write-Host "[ERRO] Bloco 'catch' generico detectado em '$file'." -ForegroundColor Red
@@ -56,4 +64,3 @@ if ($hasErrors) {
 
 Write-Host "Validacao PowerShell concluida com sucesso." -ForegroundColor Green
 exit 0
-

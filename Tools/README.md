@@ -10,7 +10,8 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Test-PythonGovernance.ps1:** Valida Type Hints e padrões Python.
 - **Test-PowerShellGovernance.ps1:** Valida tipagem estrita em PS.
 - **Test-PortablePaths.ps1:** Impede o uso de caminhos absolutos (`C:\...`).
-- **Test-SourceEncoding.ps1:** Garante que os arquivos fonte estejam em UTF-8 sem corrupção.
+- **Test-SourceEncoding.ps1:** Valida encoding por extensão: `.md/.py/.js/.json/.txt/.sql/.html/.css` em UTF-8 sem BOM e `.ps1/.psm1` em UTF-8 with BOM, com detecção de mojibake em Markdown.
+- **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
 
 ### Operação e Utilitários
 - **New-Automation.ps1:** Scaffold para criar novas automações no padrão ouro.

@@ -11,11 +11,17 @@ on:
       - '.githooks/pre-commit'
       - 'Tools/**'
       - 'README.md'
+      - '**/*.md'
       - '**/*.ps1'
       - '**/*.psm1'
       - '**/*.psd1'
       - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
       - '**/*.sql'
+      - '**/*.txt'
+      - '**/*.html'
+      - '**/*.css'
   push:
     branches:
       - main
@@ -26,11 +32,17 @@ on:
       - '.githooks/pre-commit'
       - 'Tools/**'
       - 'README.md'
+      - '**/*.md'
       - '**/*.ps1'
       - '**/*.psm1'
       - '**/*.psd1'
       - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
       - '**/*.sql'
+      - '**/*.txt'
+      - '**/*.html'
+      - '**/*.css'
 
 jobs:
   preparar-diff:
@@ -105,6 +117,11 @@ jobs:
         shell: pwsh
         run: |
           ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}"
+
+      - name: Validar encoding de fontes e documentacao
+        shell: pwsh
+        run: |
+          ./Tools/Test-SourceEncoding.ps1 -RootPath "${{ github.workspace }}"
 
       - name: Validar Seguranca Zero Trust
         shell: pwsh

@@ -46,8 +46,11 @@ O hub implementa um controle de estado cruzado para evitar notificações redund
 ### Zero Trust Security
 O repositório é blindado. Credenciais residem apenas no `.env`. O linter de portabilidade impede o uso de caminhos absolutos (`C:\...`), garantindo que o projeto funcione em qualquer diretório.
 
-### Base64 Bridge Protocol & ASCII-Safe
-Para garantir integridade PT-BR entre camadas (PS -> PY -> NODE), todas as mensagens viajam em Base64. O código-fonte é rigorosamente auditado para ser **ASCII-Safe**, prevenindo corrupção de encoding.
+### UTF-8 Nativo e Governado
+Para garantir integridade PT-BR entre camadas (PS -> PY -> NODE), o repositorio opera em UTF-8 nativo. Scripts PowerShell (`.ps1`, `.psm1`) usam UTF-8 com BOM; arquivos `.py`, `.txt`, `.json`, `.md` e `.sql` usam UTF-8 sem BOM, conforme `GEMINI.md`.
+
+### Skills Compartilhadas entre Agentes
+As skills ativas vivem em `.github/skills/`. O diretório `.gemini/skills/` existe apenas como espelho de compatibilidade para Gemini CLI e Antigravity e deve apontar para as mesmas 6 skills canonicas.
 
 ---
 

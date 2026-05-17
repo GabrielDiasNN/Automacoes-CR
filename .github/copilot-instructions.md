@@ -5,7 +5,7 @@ Você está trabalhando em um repositório de automações operacionais crítica
 ## Contexto
 - O projeto usa PowerShell como orquestrador principal.
 - O monitor central é `MonitorAutomacoes.ps1`.
-- Algumas automações entram por `TriggerAutomation.vbs` e outras por `run.ps1`.
+- As automações entram pelo `run.ps1` de cada dominio e sao coordenadas pela camada `Infrastructure/` e pelo `Orchestrator/`.
 - A stack é 100% Nativa (Soberana), tendo migrado processos legados de Excel/VBA para Python/PowerShell.
 - Oracle é a principal fonte de dados.
 - Outlook COM é usado para e-mail.
@@ -16,7 +16,8 @@ Você está trabalhando em um repositório de automações operacionais crítica
 - **Zero Trust:** Nenhuma credencial, token ou senha hardcoded é permitida (use `.env`).
 - **Python & SQL:** Exija performance O(n), vetorização (Pandas/NumPy) e nunca faça `SELECT *` no Oracle.
 - **PowerShell:** Tipagem estrita (`[string]`, `[int]`) e blocos `try/catch` específicos são mandatórios.
-- As automações obedecem às 8 SKILLs canônicas presentes em `.github/skills/`.
+- As automações obedecem às 6 skills canônicas presentes em `.github/skills/`.
+- O diretório `.gemini/skills/` e apenas um espelho de compatibilidade para Gemini CLI e Antigravity; a fonte de verdade continua sendo `.github/skills/`.
 - Preserve compatibilidade com o fluxo atual e nunca faça rewrite total.
 - Preserve logs humanos existentes e proteja dados sensíveis (Auto-Masking).
 
