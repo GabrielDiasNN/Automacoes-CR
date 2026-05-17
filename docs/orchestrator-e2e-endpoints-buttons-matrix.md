@@ -39,7 +39,7 @@
 - `Executar` / `Parar`: refletem status da execução e logs em tempo real.
 
 ## Evidências de Aceite Técnico (17/05/2026)
-- `C:\Automacoes\.venv\Scripts\python.exe -m pytest tests/test_api_smoke_critical.py tests/test_api.py -q` (workdir `Orchestrator`) -> `33 passed`.
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_smoke_critical.py tests/test_api.py -q` (workdir `Orchestrator`) -> `33 passed`.
 - `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-OrchestratorIntegrity.ps1 -RootPath .` -> `OK`.
 - `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-DashboardTemplate.ps1 -BasePath .` -> `OK`.
 - `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` -> `OK`.

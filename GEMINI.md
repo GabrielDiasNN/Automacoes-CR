@@ -1,4 +1,4 @@
-# Governança de Contexto: Projeto Automacoes (C:\Automacoes)
+# Governança de Contexto: Projeto Automacoes
 
 ## 🛡️ Mandatos de Encoding (Soberania PT-BR)
 **ESTA REGRA É ABSOLUTA E NÃO PODE SER VIOLADA:**

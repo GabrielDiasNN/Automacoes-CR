@@ -18,9 +18,9 @@ Quando houver conflito entre instruções, use esta ordem:
    - `GEMINI.md`
 4. Skills canônicas do workspace em `.github/skills/`.
 5. Diretrizes globais compartilhadas da máquina:
-   - `C:\Users\gabriel.dias\.gemini\GEMINI.md`
-   - `C:\Users\gabriel.dias\.gemini\antigravity\skills\`
-   - `C:\Users\gabriel.dias\.codex\skills\`
+   - `%USERPROFILE%\.gemini\GEMINI.md`
+   - `%USERPROFILE%\.gemini\antigravity\skills\`
+   - `%USERPROFILE%\.codex\skills\`
 6. Espelhos de compatibilidade.
 
 Regra de resolução:
@@ -37,7 +37,7 @@ Antes de análise profunda, refatoração estrutural, mudança de skill ou alter
 3. Ler `GEMINI.md` do repositório quando a tarefa tocar contexto AI-Native, encoding, documentação ou políticas locais.
 4. Ler `.github/skills/README.md` e depois a skill aplicável quando a tarefa tocar governança, runtime, orquestração, UI ou canais.
 5. Se o agente estiver rodando fora do ecossistema Codex, tratar `.gemini/skills/` apenas como alias de `.github/skills/`.
-6. Se a tarefa envolver diretrizes globais compartilhadas entre agentes, ler também `C:\Users\gabriel.dias\.gemini\GEMINI.md` e as skills globais aplicáveis.
+6. Se a tarefa envolver diretrizes globais compartilhadas entre agentes, ler também `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais aplicáveis.
 
 ## Idioma e Comunicação
 
@@ -62,8 +62,8 @@ Antes de análise profunda, refatoração estrutural, mudança de skill ou alter
 ## Fonte Canônica de Skills Globais Compartilhadas
 
 - As skills globais compartilhadas entre Gemini CLI, Antigravity e Codex devem ter fonte única na máquina.
-- A fonte canônica atual das skills globais compartilhadas é `C:\Users\gabriel.dias\.gemini\antigravity\skills\`.
-- As exposições em outros agentes, incluindo `C:\Users\gabriel.dias\.codex\skills\`, devem ser mirrors por junction/symlink sempre que possível.
+- A fonte canônica atual das skills globais compartilhadas é `%USERPROFILE%\.gemini\antigravity\skills\`.
+- As exposições em outros agentes, incluindo `%USERPROFILE%\.codex\skills\`, devem ser mirrors por junction/symlink sempre que possível.
 - Não manter cópias editáveis divergentes da mesma skill global em múltiplos diretórios.
 
 Skills globais compartilhadas obrigatórias:
@@ -74,7 +74,7 @@ Skills globais compartilhadas obrigatórias:
 ## Regra Operacional para Skills
 
 - Ao alterar skill do workspace, editar somente `.github/skills/`.
-- Ao alterar skill global compartilhada, editar somente a fonte canônica em `C:\Users\gabriel.dias\.gemini\antigravity\skills\`.
+- Ao alterar skill global compartilhada, editar somente a fonte canônica em `%USERPROFILE%\.gemini\antigravity\skills\`.
 - Preservar mirrors como link simbólico ou junction para evitar drift.
 - Se um agente descobrir a skill via mirror, ele deve tratar o conteúdo como alias da fonte canônica.
 - Melhorar skill existente antes de propor skill nova.
@@ -110,7 +110,7 @@ Todos os agentes devem operar com estas regras não negociáveis:
 
 - ChatGPT/Codex: ler primeiro `.github/skills/README.md` e depois a skill aplicável.
 - Gemini CLI e Antigravity: podem ler `.gemini/skills/`, mas o conteúdo esperado é o mesmo de `.github/skills/`.
-- Para regras globais compartilhadas entre agentes, carregar `C:\Users\gabriel.dias\.gemini\GEMINI.md` e as skills globais canônicas.
+- Para regras globais compartilhadas entre agentes, carregar `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais canônicas.
 - Quando houver divergência entre `.github/skills/` e `.gemini/skills/`, considerar `.github/skills/` a fonte de verdade do workspace.
 
 ## Validação
