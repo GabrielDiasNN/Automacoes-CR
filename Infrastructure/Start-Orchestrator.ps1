@@ -1,61 +1,72 @@
-﻿$ErrorActionPreference = "Stop"
-$InfrastructureDir = $PSScriptRoot
-$ProjectRoot = Split-Path -Parent $InfrastructureDir
-if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = "." }
-
-$VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
-$OrchestratorDir = Join-Path $ProjectRoot "Orchestrator"
-$LogDir = Join-Path $OrchestratorDir "Logs"
-
-# Garantir diretorio de logs
-if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force }
-
-# 1. HARD RESET (Pilar G) - Limpeza Atomica
-Write-Host "[HARD RESET] Realizando limpeza profunda do ambiente..." -ForegroundColor Gray
-
-# Taskkill forca o encerramento de todos os processos relacionados (ignoramos erros se ja estiver limpo)
-try { taskkill /F /IM python.exe /T 2>$null } catch [System.Exception] {}
-try { taskkill /F /IM python3.12.exe /T 2>$null } catch [System.Exception] {}
-try { taskkill /F /IM py.exe /T 2>$null } catch [System.Exception] {}
-
-# Liberar porta 8000
-$portInUse = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
-if ($portInUse) {
-    $portInUse.OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
-}
-
-# Limpar lock files
-Remove-Item (Join-Path $OrchestratorDir "*.pid") -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 2
-
-# 2. CARREGAR SEGREDOS
-$envPath = Join-Path $ProjectRoot ".env"
-if (Test-Path $envPath) {
-    Get-Content $envPath | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
-        $parts = $_.Split('=', 2)
-        [System.Environment]::SetEnvironmentVariable($parts[0].Trim(), $parts[1].Trim().Trim('"').Trim("'"), "Process")
-    }
-}
-
-# 3. INICIAR WORKER (Background)
-Set-Location $OrchestratorDir
-Write-Host "Iniciando Worker v5.2..." -ForegroundColor Cyan
-$workerProcess = Start-Process -FilePath $VenvPython -ArgumentList "worker.py" -WindowStyle Hidden -PassThru
-$workerProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "worker.pid") -Encoding ascii -Force
-
-# 4. INICIAR FASTAPI (Background)
-Write-Host "Iniciando Central de Automações (API)..." -ForegroundColor Green
-$apiLog = Join-Path $LogDir "uvicorn_startup.log"
-$apiProcess = Start-Process -FilePath $VenvPython -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WindowStyle Hidden -PassThru -RedirectStandardError $apiLog
-$apiProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "orchestrator.pid") -Encoding ascii -Force
-
-# 5. GARANTIR WATCHDOG (Monitor)
-Write-Host "Ativando Watchdog de resiliencia (Monitor)..." -ForegroundColor Cyan
-$monitorScript = Join-Path $InfrastructureDir "MonitorAutomacoes.ps1"
-# Iniciamos o Monitor como processo independente
-Start-Process "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$monitorScript`""
-
-Write-Host "[OK] Ambiente resetado e reiniciado com sucesso." -ForegroundColor Green
-Start-Sleep -Seconds 2
-exit
-
+﻿$ErrorActionPreference = "Stop"
+$InfrastructureDir = $PSScriptRoot
+$ProjectRoot = Split-Path -Parent $InfrastructureDir
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = "." }
+
+$VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$OrchestratorDir = Join-Path $ProjectRoot "Orchestrator"
+$LogDir = Join-Path $OrchestratorDir "Logs"
+
+# Garantir diretorio de logs
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force }
+
+# 0. CARREGAR CONFIGURACOES (.env) - Necessario para saber a porta antes do reset
+$envPath = Join-Path $ProjectRoot ".env"
+$HubPort = "8000"
+if (Test-Path $envPath) {
+    Get-Content $envPath | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
+        $parts = $_.Split('=', 2)
+        $key = $parts[0].Trim()
+        $val = $parts[1].Trim().Trim('"').Trim("'")
+        [System.Environment]::SetEnvironmentVariable($key, $val, "Process")
+        if ($key -eq "HUB_API_PORT") { $HubPort = $val }
+    }
+}
+
+# 1. SURGICAL RESET (v6.2.0) - Pilar G: Limpeza cirurgica
+Write-Host "[RESET] Realizando limpeza segura do ambiente (v6.2.0)..." -ForegroundColor Gray
+
+# Matar apenas processos Python ligados ao projeto para nao afetar outros sistemas no servidor
+$procToKill = Get-Process | Where-Object {
+    ($_.ProcessName -match "python" -and ($_.Path -match "Automacoes" -or $_.CommandLine -match "uvicorn" -or $_.CommandLine -match "worker.py")) -or
+    ($_.ProcessName -match "powershell" -and ($_.CommandLine -match "Start-Orchestrator.ps1" -or $_.CommandLine -match "MonitorAutomacoes.ps1"))
+}
+
+foreach ($p in $procToKill) {
+    try {
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    } catch [System.InvalidOperationException] {
+        Write-Verbose ("Processo {0} ja finalizado durante a limpeza." -f $p.Id)
+    }
+}
+
+# Liberar porta dinamica configurada
+$portInUse = Get-NetTCPConnection -LocalPort $HubPort -ErrorAction SilentlyContinue
+if ($portInUse) {
+    $portInUse.OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+}
+
+# Limpar lock files
+Remove-Item (Join-Path $OrchestratorDir "*.pid") -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+# 3. INICIAR WORKER (Background)
+Set-Location $OrchestratorDir
+Write-Host "Iniciando Worker v6.2.0 (Zero-Latency)..." -ForegroundColor Cyan
+$workerProcess = Start-Process -FilePath $VenvPython -ArgumentList "worker.py" -WindowStyle Hidden -PassThru
+$workerProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "worker.pid") -Encoding ascii -Force
+
+# 4. INICIAR FASTAPI (Background)
+Write-Host "Iniciando Central de Automacoes (API) na porta $HubPort..." -ForegroundColor Green
+$apiLog = Join-Path $LogDir "uvicorn_startup.log"
+$apiProcess = Start-Process -FilePath $VenvPython -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port $HubPort" -WindowStyle Hidden -PassThru -RedirectStandardError $apiLog
+$apiProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "orchestrator.pid") -Encoding ascii -Force
+
+# 5. GARANTIR WATCHDOG (Monitor)
+Write-Host "Ativando Watchdog v6.2.0 (Resiliencia)..." -ForegroundColor Cyan
+$monitorScript = Join-Path $InfrastructureDir "MonitorAutomacoes.ps1"
+Start-Process "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$monitorScript`""
+
+Write-Host "[OK] Sistema v6.2.0 reiniciado com sucesso." -ForegroundColor Green
+Start-Sleep -Seconds 2
+exit

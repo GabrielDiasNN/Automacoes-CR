@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Orquestrador Nativo para Receitas Emitidas.
 .DESCRIPTION
@@ -182,7 +182,9 @@ try {
                     $deliveryState.delivery_status.email.success = [bool]$savedState.delivery_status.email.success
                     $deliveryState.delivery_status.email.sent_at = $savedState.delivery_status.email.sent_at
                 }
-            } catch [System.Exception] { }
+            } catch [System.Exception] {
+                Write-Log ("Falha ao ler delivery_state.json existente. Estado sera reiniciado. Motivo: {0}" -f $_.Exception.Message) "WARN"
+            }
         }
 
         if ($currentHash -and $currentHash -ne $deliveryState.last_sent_hash) {

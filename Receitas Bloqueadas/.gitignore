@@ -12,7 +12,8 @@ ReceitasBloqueadas.txt
 
 # State & Temp Files
 whatsapp-state.json
+email_state.json
+receitas_state.json
 diagnose.js
 
 # Data files (usually kept locally)
-!Receitas Bloqueadas.xlsm

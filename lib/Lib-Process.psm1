@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Módulo de Gerenciamento de Processos Assíncronos (Anti-Deadlock) v2.
 .DESCRIPTION

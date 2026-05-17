@@ -144,13 +144,13 @@ function Send-OutlookEmail {
     finally {
         # Liberacao de Objetos COM (NAO FECHAR O OUTLOOK!)
         if ($mailItem) {
-            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch [System.Exception] {}
+            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch [System.Exception] { Write-Verbose ("Falha ao liberar mailItem COM: {0}" -f $_.Exception.Message) }
         }
 
         if ($outlook) {
             # Apenas libera o objeto da memoria do script, NUNCA executa .Quit() para nao matar o Outlook do usuario
             # ou impedir o envio de e-mails que estao na Outbox.
-            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) | Out-Null } catch [System.Exception] {}
+            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) | Out-Null } catch [System.Exception] { Write-Verbose ("Falha ao liberar Outlook COM: {0}" -f $_.Exception.Message) }
         }
 
         # Garante a morte do ponteiro RPC no Windows, mas mantem a aplicacao Outlook.exe viva

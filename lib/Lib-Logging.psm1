@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 
 # ARQUIVO: Lib-Logging.psm1
 
@@ -454,7 +454,7 @@ if ($logDir -and -not (Test-Path $logDir)) { New-Item -ItemType Directory -Force
 
 [System.IO.File]::AppendAllText($LogPath, "$line`r`n", $script:Lib_Utf8WithBom)
 
-} catch [System.Exception] {}
+} catch [System.Exception] { Write-Verbose ("Falha ao persistir linha de log em disco: {0}" -f $_.Exception.Message) }
 
 $color = switch ($Level) { "ERRO" { "Red" }; "WARN" { "Yellow" }; "DEBUG" { "Gray" }; default { "Cyan" } }
 
@@ -570,7 +570,7 @@ Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
 
 }
 
-} catch [System.Exception] {}
+} catch [System.Exception] { Write-Verbose ("Falha ao aplicar retencao do arquivo de log: {0}" -f $_.Exception.Message) }
 
 }
 

@@ -61,7 +61,7 @@ if ([string]::IsNullOrWhiteSpace($LogFile)) {
 # --- Execucao ---
 Write-Host "? Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
 
-$args = @(
+$nodeArgs = @(
     "`"$NodeScript`"",
     "`"$ExecId`"",
     "`"$Mode`"",
@@ -81,7 +81,7 @@ $WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
 }
 $env:NODE_PATH = Join-Path $WorkDir "node_modules"
 
-$proc = Start-Process -FilePath $NodeExe -ArgumentList $args -WindowStyle Hidden -Wait -PassThru -WorkingDirectory $WorkDir
+$proc = Start-Process -FilePath $NodeExe -ArgumentList $nodeArgs -WindowStyle Hidden -Wait -PassThru -WorkingDirectory $WorkDir
 
 if ($proc.ExitCode -eq 0) {
     Write-Host "[OK] WhatsApp enviado com sucesso." -ForegroundColor Green
