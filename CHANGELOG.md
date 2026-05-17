@@ -1,5 +1,59 @@
 # Changelog
 
+## [6.3.1] - 2026-05-17
+### Alterado
+- **Governança E2E (Playwright)**: Formalizado Playwright como validação final obrigatória para mudanças de Dashboard/UI e contratos front-back operacionais.
+- **Contrato de Agentes**: `AGENTS.md` atualizado com regra explícita de ordem de validação, exigindo Playwright E2E por último para fluxos cobertos.
+- **Skill de Frontend**: `.github/skills/html-css-enterprise-standard/SKILL.md` atualizado para exigir checklist mínimo de validação E2E com Playwright.
+- **Guia Operacional**: Adicionado `docs/playwright-e2e-standard.md` com escopo, ordem, critérios de aceite e evidências obrigatórias para IA.
+- **Template de Evidência**: Adicionado `docs/playwright-e2e-evidence-template.md` para padronizar o fechamento técnico de validação E2E Playwright.
+- **Catálogo de Ferramentas**: `Tools/README.md` atualizado para apontar o padrão oficial de validação E2E.
+
+## [6.3.0] - 2026-05-17
+### Adicionado
+- **API Agregada de Operação**: Novos endpoints opcionais `GET /api/system/overview` e `GET /api/automations/{automation_id}/overview` para reduzir roundtrips no dashboard e consolidar visão operacional.
+- **Next Run Consistente**: `next_run` agora é enriquecido nas respostas de automações (`/api/automations`, `/api/automations/all`, `/api/automations/{id}`) a partir do scheduler carregado em memória.
+
+### Corrigido
+- **SPA Dashboard**: Reimplementados handlers ausentes (`openCreateModal`, `saveAuto`, `addScheduleTime`, `toggleGlobalTestMode`, `callSystemAction`, `handleSearch`) e restaurado fluxo operacional sem erros de console.
+- **Execuções com Filtro Real**: Tela de execuções passou a enviar `status`, `automation_id`, `date_from`, `date_to` e `requested_by` para o backend.
+- **Logs do Painel de Controle**: Abertura de logs agora usa `exec_id` válido da última execução da automação, removendo placeholder inválido.
+- **Gráficos Operacionais**: Renderização de `chart-performance` e `chart-status` com `apexcharts.min.js` baseada em payload agregado.
+- **Dupla Submissão no Cadastro**: Removido gatilho duplicado de submit no modal de automações e adicionado lock transacional do botão de salvar para impedir cliques concorrentes.
+- **Sessão Zero-Trust na SPA**: Ciclo de `403` agora limpa API Key em memória/localStorage, notifica o operador e solicita nova chave imediatamente.
+- **Semântica de Filtros em Execuções**: Endpoint `/api/executions` passou a retornar `422` explícito para `status`, datas, paginação e range inválidos.
+- **Feedback Textual**: Corrigida mensagem com mojibake na ação global `resume-all`.
+- **Auditoria de Ações Críticas**: `backup`, `purge` e `checkpoint` migrados para `log_audit` com ator real via IP do cliente.
+- **Administração .env**: Corrigida resolução de `PROJECT_ROOT` no router de sistema para que `/api/system/env` leia/escreva o arquivo `.env` da raiz do repositório.
+
+### Alterado
+- **Design System do Dashboard**: Migração do visual escuro/glass para tema claro corporativo, com foco em densidade operacional, legibilidade e consistência em desktop/tablet.
+- **Cadastro e Agenda**: Modal de automação expandido para cadastro completo (descrição, timeout, canais de notificação, agenda por dias/horários) com resumo humano da agenda.
+
+## [6.2.1] - 2026-05-16
+### Adicionado
+- **Shared Skills Canonicalization**: Consolidada a fonte canônica das skills em `.github/skills/`, com `.gemini/skills/` mantido como espelho de compatibilidade para Gemini CLI e Antigravity via junction/symlink.
+- **Agent Workspace Contract**: Adicionado `AGENTS.md` para formalizar a convivência entre ChatGPT/Codex, Gemini CLI e Antigravity no mesmo repositório.
+
+### Alterado
+- **Skills Governance**: `Tools/Test-SkillsGovernance.ps1` evoluído para validar placeholders proibidos, referências cruzadas inválidas, taxonomia ativa e consistência do espelhamento entre `.github/skills/` e `.gemini/skills/`.
+- **Codex Shared Skills**: `Tools/Test-SkillsGovernance.ps1` agora valida a presença dos mirrors globais obrigatórios do Codex (`protocolo-valeg` e `git-ide-governance-skill`) apontando para a fonte canônica compartilhada do Gemini/Antigravity.
+- **Encoding Governance**: Adicionado `Tools/Test-SourceEncoding.ps1` ao fluxo de governança para impedir regressão de encoding em documentação Markdown (`.md` em UTF-8 sem BOM, com proteção contra mojibake), validar `.py`, `.js`, `.json`, `.txt`, `.sql`, `.html` e `.css` como UTF-8 sem BOM e preservar a exigência de `UTF-8 with BOM` em `.ps1` e `.psm1`.
+- **Documentação AI-Native**: `README.md`, `CONTEXT.md`, `GEMINI.md`, `.github/copilot-instructions.md` e `.github/references/arquitetura-atual.md` alinhados ao modelo atual de stack 100% nativa e skills compartilhadas.
+
+## [6.2.0] - 2026-05-15
+### Adicionado
+- **Arquitetura Zero-Latency (Worker)**: Implementado mecanismo de *Instant Wake-up* via Long-Polling, eliminando o atraso de 15s no processamento de novas tarefas.
+- **Blindagem de Backend (FastAPI)**: Adicionado *Global Exception Handler* que garante que qualquer erro interno retorne JSON estruturado, evitando travamentos no Dashboard.
+- **Modularização de Frontend (ES Modules)**: Refatoração completa do Dashboard SPA, separando responsabilidades em `ui_manager`, `execution_engine` e `ide_service`.
+- **Saneamento PEP8**: Correção de fluxos de auditoria e padronização de espaços/tabs em todos os routers Python.
+
+## [6.1.0] - 2026-05-15
+### Adicionado
+- **Autonomia Máxima (Dashboard)**: Implementada interface de "Ambiente Global" para gestão visual segura do arquivo `.env`.
+- **Editor Visual de Regras (JSON)**: Criado modal no Dashboard que permite aos usuários modificar as regras de negócio de cada automação remotamente.
+- **Web IDE Minimalista**: Adicionado editor de código-fonte no Dashboard, permitindo ajustar a lógica de arquivos `.ps1`, `.py` e `.sql` em tempo real, com rigorosa soberania de encoding (UTF-8 com BOM).
+
 ## [6.0.0] - 2026-05-15
 ### Adicionado
 - **Orchestrator**: Adicionado endpoint assíncrono em lote `/api/broadcast_logs` para suportar transmissões consolidadas do motor Powershell sem sofrer bloqueio I/O.

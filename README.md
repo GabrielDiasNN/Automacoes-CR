@@ -1,13 +1,13 @@
-# Central de Automações — v6.0.0 Enterprise High-Performance 🚀
+# Central de Automações — v6.2.0 Enterprise High-Performance 🚀
 
-Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto atingiu o **Estado de Excelência v6.0.0**, operando com arquitetura de alta performance, resiliência de escala (Adaptive Polling) e governança de segurança avançada Zero-Trust.
+Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v6.2.0**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
 
-## 🏗️ Arquitetura Técnica (Enterprise Control Tower v6.0.0)
+## 🏗️ Arquitetura Técnica (Enterprise Control Tower v6.2.0)
 
 ```mermaid
 graph TD
     subgraph "FRONTEND — Dashboard SPA"
-        UI["Dashboard v6.0.0<br/>Zero-Trust + ASCII-Safe"]
+        UI["Dashboard v6.2.0<br/>Zero-Trust + UTF-8 Nativo"]
         WS_CLIENT["WebSocket Client<br/>Logs + Events Replay"]
         UI --> WS_CLIENT
     end
@@ -32,11 +32,12 @@ graph TD
     ROUTERS --> DB[(SQLite WAL Engine)]
 ```
 
-## 🎯 Novidades v5.4.0
-- **UTF-8 Universal Encoding**: Adoção global do padrão UTF-8 para código-fonte e logs, abolindo as restrições de ASCII-Safe e Base64 Bridge para garantir máxima legibilidade humana e suporte nativo a PT-BR.
+## 🎯 Estado Atual do Hub
+- **UTF-8 Nativo Governado**: Código-fonte e logs operam em UTF-8, com PowerShell `.ps1`/`.psm1` em UTF-8 com BOM e demais arquivos textuais em UTF-8 sem BOM, conforme `GEMINI.md`.
 - **Zero-Trust Auth**: O Dashboard solicita a API Key dinamicamente, eliminando segredos no código.
 - **Worker Resilience**: Encerramento limpo de processos PowerShell para evitar consumo de recursos zumbi.
 - **Performance SQLite**: Pragmas otimizados para operação em RAM (`temp_store=MEMORY`).
+- **Skills Compartilhadas**: `.github/skills/` e a fonte canonica das 6 skills ativas; `.gemini/skills/` e apenas o espelho de compatibilidade para Gemini CLI e Antigravity.
 
 ---
 Mantido pela equipe de Automações & Antigravity AI

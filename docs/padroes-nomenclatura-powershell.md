@@ -1,6 +1,10 @@
 # Padroes de Nomenclatura e Governanca PowerShell
 
-Este guia define como escrever scripts PowerShell para manter consistencia, evitar avisos do Script Analyzer e aderir as regras globais de estabilidade.
+Este documento e um guia rapido para colaboradores.
+As fontes canonicas de regra continuam sendo:
+- `.github/skills/powershell-automation-monitor/SKILL.md`
+- `Tools/Test-PowerShellApprovedVerbs.ps1`
+- `Tools/Test-PowerShellGovernance.ps1`
 
 ## Regra principal de Nomenclatura
 
@@ -21,11 +25,12 @@ Use sempre o formato `Verbo-Substantivo` em PascalCase:
 - Importacao e exportacao: `Import`, `Export`
 - Conversao: `ConvertTo`, `ConvertFrom`
 
-## Tipagem Estrita e Excecoes (Mandatorio)
+## Tipagem e Excecoes (Mandatorio)
 
-Conforme as diretrizes globais (SKILL: `powershell-automation-monitor`), o PowerShell neste projeto DEVE:
-1. **Tipagem Explicita**: Parametros e variaveis devem declarar seu tipo (`[string]`, `[int]`, `[hashtable]`).
-2. **Tratamento Nominal de Excecoes**: E proibido usar capturas genericas de erro (`catch { ... }`). O bloco catch deve ser especifico para a excecao esperada (ex: `catch [System.IO.IOException] { ... }`).
+Conforme a skill canônica `powershell-automation-monitor`, os scripts operacionais devem:
+1. Usar `[CmdletBinding()]` e `param(...)` quando houver interface publica.
+2. Tipar parametros relevantes e manter fluxo de falha controlada.
+3. Evitar `catch` generico quando houver excecao esperada identificavel.
 
 ## Regras praticas
 
@@ -33,6 +38,7 @@ Conforme as diretrizes globais (SKILL: `powershell-automation-monitor`), o Power
 - Evite abreviacoes opacas em nomes de funcoes.
 - Nao use verbos fora da lista oficial (`Get-Verb`) sem alinhamento do time.
 - Para novos scripts, valide antes de commit com as ferramentas em `Tools/`.
+- Em conflito entre este guia e as fontes canonicas, prevalecem as fontes canonicas.
 
 ## Validacao automatica
 
