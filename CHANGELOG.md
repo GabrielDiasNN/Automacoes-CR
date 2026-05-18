@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.5.4] - 2026-05-18
+### Adicionado
+- **Governança de Evidência Playwright**: Novo `Tools/Test-PlaywrightEvidence.ps1` valida padrão, template e evidências E2E, exigindo URL real do dashboard, Playwright como etapa final, console limpo e resultado aprovado.
+
+### Alterado
+- **Governança Agregada**: `Tools/ValidarAutomacoes.ps1 -OnlyGovernance` passa a executar o validador de evidência Playwright junto aos checks nativos.
+
 ## [6.5.3] - 2026-05-18
 ### Adicionado
 - **Classificação de Falhas de Canal**: Worker passou a traduzir exit codes conhecidos em `failure_reason` e `recovery_action` operacionais, diferenciando sessão WhatsApp expirada, falha de entrega de canal e erro genérico.

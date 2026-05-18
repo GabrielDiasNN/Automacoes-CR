@@ -33,6 +33,7 @@ Padronizar Playwright como validação E2E final para mudanças que afetem exper
   - ações críticas testadas;
   - status de erros de console.
 - Use o template oficial: `docs/playwright-e2e-evidence-template.md`.
+- O documento de evidência deve passar em `Tools/Test-PlaywrightEvidence.ps1`.
 
 ## Diretriz para agentes de IA
 - Em tarefas cobertas por este padrão, agentes devem considerar a entrega incompleta sem a etapa final Playwright E2E.
