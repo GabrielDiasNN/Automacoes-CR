@@ -12,6 +12,8 @@ export function createExecutionsModule(ctx) {
         execPerPage,
         stopExec,
         openLogModal,
+        showToast,
+        loadOverview,
     } = ctx;
 
     async function loadExecutions(page = getExecPage()) {
@@ -50,7 +52,7 @@ export function createExecutionsModule(ctx) {
         if (!tbody) return;
 
         if (!items.length) {
-            tbody.innerHTML = "<tr><td colspan=\"7\">Nenhuma execução encontrada para os filtros selecionados.</td></tr>";
+            tbody.innerHTML = "<tr><td colspan=\"8\">Nenhuma execução encontrada para os filtros selecionados.</td></tr>";
             return;
         }
 
@@ -62,8 +64,46 @@ export function createExecutionsModule(ctx) {
             <td><span class="badge badge-muted">${escapeHtml(ex.requested_by || "-")}</span></td>
             <td>${ex.duration_seconds ? Number(ex.duration_seconds).toFixed(1) + "s" : "-"}</td>
             <td>${formatDate(ex.started_at)}</td>
-            <td>${["RUNNING", "PENDING"].includes(ex.status) ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopExec('${ex.id}')"><i data-lucide="square"></i></button>` : "-"}</td>        </tr>
+            <td>${renderRecoveryCell(ex)}</td>
+            <td>${renderExecutionActions(ex)}</td>
+        </tr>
     `).join("");
+    }
+
+    function renderRecoveryCell(ex) {
+        const parts = [];
+        if (ex.failure_reason) parts.push(`<span class="badge badge-muted">${escapeHtml(ex.failure_reason)}</span>`);
+        if (ex.recovery_action && ex.recovery_action !== "NONE") parts.push(`<small>${escapeHtml(ex.recovery_action)}</small>`);
+        if (Number(ex.max_retries || 0) > 0) {
+            parts.push(`<small>Retry ${Number(ex.retry_count || 0)}/${Number(ex.max_retries || 0)}</small>`);
+        }
+        return parts.length ? `<div class="recovery-cell">${parts.join("")}</div>` : "-";
+    }
+
+    function renderExecutionActions(ex) {
+        if (["RUNNING", "PENDING"].includes(ex.status)) {
+            return `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopExec('${ex.id}')" title="Parar execução"><i data-lucide="square"></i></button>`;
+        }
+        if (canRequeue(ex)) {
+            return `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();requeueExec('${ex.id}')" title="Reenfileirar com auditoria"><i data-lucide="rotate-cw"></i></button>`;
+        }
+        return "-";
+    }
+
+    function canRequeue(ex) {
+        const queueable = ["ERROR", "TIMEOUT", "TERMINATED", "FAILED_BY_REBOOT", "REQUEUED"];
+        if (!queueable.includes(ex.status)) return false;
+        return Number(ex.retry_count || 0) < Number(ex.max_retries || 0);
+    }
+
+    async function requeueExec(id) {
+        const reason = prompt("Motivo operacional para reenfileirar esta execução:", "Requeue manual após análise operacional.");
+        if (reason === null) return;
+        const payload = { reason: reason.trim() || "Requeue manual após análise operacional." };
+        const res = await api(`/api/executions/${id}/requeue`, "POST", payload);
+        if (!res) return;
+        showToast(res.message || "Execução reenfileirada.", "success");
+        await Promise.all([loadOverview(), loadExecutions(getExecPage())]);
     }
 
     function openAutomationHistory(id) {
@@ -80,5 +120,6 @@ export function createExecutionsModule(ctx) {
         loadExecutions,
         renderExecutionsTable,
         openAutomationHistory,
+        requeueExec,
     };
 }

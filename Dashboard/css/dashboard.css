@@ -256,7 +256,8 @@ textarea:focus-visible {
 
 .actions-area,
 .quick-actions,
-.inline-actions {
+.inline-actions,
+.operator-actions {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -798,6 +799,27 @@ textarea:focus-visible {
 .finding-card small {
     margin-top: 6px;
     color: var(--text-muted);
+}
+
+.operator-actions {
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.recovery-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 130px;
+}
+
+.recovery-cell small {
+    color: var(--text-muted);
+    line-height: 1.25;
 }
 
 .modal {

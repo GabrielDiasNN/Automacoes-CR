@@ -430,6 +430,11 @@ class ExecutionSummary(BaseModel):
     automation_name: Optional[str] = None
     status: str
     priority: str = "NORMAL"
+    retry_count: int = 0
+    max_retries: int = 0
+    queue_group: Optional[str] = None
+    failure_reason: Optional[str] = None
+    recovery_action: Optional[str] = None
     exit_code: Optional[int] = None
     requested_by: Optional[str] = None
     started_at: Any
@@ -538,6 +543,10 @@ class DiagnosticFinding(BaseModel):
     component: str
     message: str
     action_hint: str
+    action_code: Optional[str] = None
+    action_label: Optional[str] = None
+    impact: Optional[str] = None
+    priority: int = 3
 
     @field_validator("severity")
     @classmethod
@@ -569,11 +578,28 @@ class DiagnosticsQueueItem(BaseModel):
 class DiagnosticsQueue(BaseModel):
     active_count: int
     by_status: dict[str, int]
+    active_by_priority: dict[str, int] = {}
+    active_by_group: dict[str, int] = {}
     oldest_pending: DiagnosticsQueueItem
     oldest_running: DiagnosticsQueueItem
 
 class DiagnosticsHeartbeat(BaseModel):
     last_ping_age_seconds: Optional[float] = None
+
+class DiagnosticsFailureHotspot(BaseModel):
+    automation_id: int
+    automation_name: str
+    failures_24h: int
+    last_failure_at: Optional[str] = None
+    notification_channels: Optional[str] = None
+
+class DiagnosticsOperatorAction(BaseModel):
+    action_code: str
+    action_label: str
+    severity: str
+    component: str
+    reason: str
+    priority: int = 3
 
 class DiagnosticsPayload(BaseModel):
     version: str = ORCHESTRATOR_VERSION
@@ -586,6 +612,8 @@ class DiagnosticsPayload(BaseModel):
     worker: WorkerStatus
     queue: DiagnosticsQueue
     heartbeat: DiagnosticsHeartbeat
+    failure_hotspots: List[DiagnosticsFailureHotspot] = []
+    operator_actions: List[DiagnosticsOperatorAction] = []
 
 class ExecutionQueueActionRequest(BaseModel):
     reason: Optional[str] = Field(None, max_length=200)

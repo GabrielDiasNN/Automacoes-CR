@@ -85,5 +85,7 @@ def test_finalize_terminated_task_persists_terminal_metadata(db_session):
     assert stopped.status == "TERMINATED"
     assert stopped.exit_code == -15
     assert stopped.duration_seconds >= 3
+    assert stopped.failure_reason == "USER_TERMINATED"
+    assert stopped.recovery_action == "REVIEW_LOGS_BEFORE_REQUEUE"
     assert "runtime log" in stopped.logs
     assert "[INTERROMPIDO PELO USUARIO]" in stopped.logs

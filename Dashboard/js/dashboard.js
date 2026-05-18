@@ -31,6 +31,8 @@ const executionsModule = createExecutionsModule({
     execPerPage: EXEC_PER_PAGE,
     stopExec: window.stopExec,
     openLogModal: engine.openLogModal,
+    showToast,
+    loadOverview,
 });
 
 const systemModule = createSystemModule({
@@ -110,6 +112,7 @@ window.resumeAuto = (id) => resumeAuto(id);
 window.cloneAuto = (id) => cloneAuto(id);
 window.openAutomationHistory = (id) => openAutomationHistory(id);
 window.loadExecutions = () => loadExecutions(1);
+window.requeueExec = (id) => requeueExec(id);
 
 function bindStaticEvents() {
     document.querySelectorAll(".day-btn").forEach((btn) => {
@@ -404,6 +407,10 @@ async function cloneAuto(id) {
 
 function openAutomationHistory(id) {
     return executionsModule.openAutomationHistory(id);
+}
+
+function requeueExec(id) {
+    return executionsModule.requeueExec(id);
 }
 
 function formatSeconds(value) {

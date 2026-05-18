@@ -1,0 +1,33 @@
+# Roadmap de Melhoria Operacional
+
+Este roteiro mantém a direção escolhida: operação estável, fases pequenas e validação auditável.
+
+## Fase 1 — Baseline e higiene
+
+- Manter snapshot técnico por entrega relevante.
+- Evitar alterações sobre trabalho local não relacionado sem inspeção.
+- Manter `pytest` sem dependência de cache local no Orchestrator.
+
+## Fase 2 — Observabilidade acionável
+
+- Evoluir diagnósticos com impacto, prioridade e ação estruturada.
+- Priorizar achados de worker, scheduler, WAL, fila parada e falhas recorrentes.
+- Manter `operator_actions` como contrato para botões do Dashboard.
+
+## Fase 3 — Recovery e requeue
+
+- Preservar `failure_reason`, `recovery_action`, `retry_count`, `max_retries` e `queue_group` em toda execução.
+- Requeue deve exigir motivo operacional, respeitar limite de retry e gerar nova execução rastreável.
+- Falhas terminais devem orientar revisão de logs antes de nova tentativa.
+
+## Fase 4 — Console de operação
+
+- Dashboard deve continuar clássico, denso e empresarial.
+- Fluxos principais: executar, parar, reenfileirar, filtrar, abrir logs, recuperar worker, sincronizar agenda e executar checkpoint.
+- Playwright deve ser a última validação quando a UI ou contrato front-back mudar.
+
+## Fase 5 — Escala controlada
+
+- Converter recorrências de incidentes em validadores, testes ou documentação viva.
+- Avaliar retenção de logs, métricas históricas, alertas de saúde e backup/restore antes de qualquer troca de banco.
+- Considerar evolução além de SQLite apenas com evidência de volume, contenção ou limite operacional real.

@@ -80,6 +80,7 @@ export function createSystemModule(ctx) {
         if (!container) return;
 
         const findings = Array.isArray(diagnostics.findings) ? diagnostics.findings : [];
+        const operatorActions = Array.isArray(diagnostics.operator_actions) ? diagnostics.operator_actions : [];
         if (!findings.length) {
             container.innerHTML = `
             <div class="finding-card info">
@@ -104,11 +105,26 @@ export function createSystemModule(ctx) {
             worker: workerAction,
             queue: workerAction,
             scheduler: { action: "scheduler_reload", label: "Sincronizar agenda" },
+            database: { action: "checkpoint", label: "Executar checkpoint" },
         };
 
-        container.innerHTML = findings.map((item) => {
+        const actionsHtml = operatorActions.length
+            ? `
+            <div class="operator-actions">
+                ${operatorActions.map((item) => `
+                    <button class="btn btn-outline btn-sm" type="button" onclick="callSystemAction('${escapeHtml(item.action_code)}')">
+                        ${escapeHtml(item.action_label || item.action_code)}
+                    </button>
+                `).join("")}
+            </div>
+        `
+            : "";
+
+        const findingsHtml = findings.map((item) => {
             const severity = item.severity || "INFO";
-            const shortcut = actionByComponent[item.component];
+            const shortcut = item.action_code
+                ? { action: item.action_code, label: item.action_label || item.action_hint }
+                : actionByComponent[item.component];
             const actionHtml = shortcut
                 ? `<button class="btn btn-outline btn-sm" onclick="callSystemAction('${shortcut.action}')">${shortcut.label}</button>`
                 : "";
@@ -118,12 +134,15 @@ export function createSystemModule(ctx) {
                 <div>
                     <strong>${escapeHtml(item.component || "sistema")}</strong>
                     <p>${escapeHtml(item.message || "-")}</p>
+                    ${item.impact ? `<small>${escapeHtml(item.impact)}</small>` : ""}
                     <small>${escapeHtml(item.action_hint || "Revisar diagnóstico operacional.")}</small>
                     <div style="margin-top:8px">${actionHtml}</div>
                 </div>
             </article>
         `;
         }).join("");
+
+        container.innerHTML = actionsHtml + findingsHtml;
     }
 
     function getWorkerSystemAction(diagnostics) {
@@ -174,10 +193,20 @@ export function createSystemModule(ctx) {
             scheduler_reload: { path: "/api/system/scheduler/reload", method: "POST", label: "sincronizar agenda do scheduler" },
             worker_wakeup: { path: "/api/system/worker/wakeup", method: "POST", label: "acordar worker para validar fila" },
             worker_recover: { path: "/api/system/worker/recover", method: "POST", label: "recuperar Orchestrator e worker" },
+            checkpoint: { path: "/api/system/checkpoint", method: "POST", label: "executar checkpoint WAL" },
             backup: { path: "/api/system/backup", method: "POST", label: "executar backup do banco" },
         };
 
         let request = map[action];
+        if (action === "show_running" || action === "show_errors") {
+            const status = action === "show_running" ? "RUNNING" : "ERROR";
+            const select = document.getElementById("filter-status");
+            if (select) select.value = status;
+            const navBtn = document.querySelector(".nav-item[data-target=\"executions\"]");
+            if (navBtn) navBtn.click();
+            await loadExecutions(1);
+            return;
+        }
         if (action === "purge") {
             const retention = prompt("Informe retenção em dias para purge (mínimo 7):", "90");
             if (retention === null) return;

@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.5.2] - 2026-05-18
+### Adicionado
+- **Diagnóstico Operacional Acionável**: `/api/system/diagnostics` passou a expor impacto, prioridade, `action_code`, `action_label`, `operator_actions`, hotspots de falhas em 24h e fila ativa por prioridade/grupo.
+- **Console de Recovery no Dashboard**: A aba `Sistema` agora usa ações estruturadas do diagnóstico para orientar checkpoint, sincronização de agenda, wake-up/recovery e triagem de execuções.
+- **Requeue Auditável na UI**: A tela `Execuções` passou a exibir motivo de falha, ação de recuperação, retries e botão de requeue quando o contrato permitir.
+- **Baseline de Melhoria Operacional**: Documentados snapshot, fases pequenas e roteiro de evolução em `docs/operational-improvement-baseline.md` e `docs/operational-improvement-roadmap.md`.
+
+### Corrigido
+- **Cache de Testes do Orchestrator**: `Orchestrator/pytest.ini` desabilita o cache do pytest para evitar warnings de permissão em ambientes restritos sem alterar a lógica do produto.
+
+## [6.5.1] - 2026-05-18
+### Corrigido
+- **WhatsApp de Receitas Bloqueadas**: `lib/WhatsApp-Core.js` passou a registrar bootstrap, autenticação, desconexão e ACK com mais clareza e aumentou o `protocolTimeout` do Puppeteer para mitigar a falha `Runtime.callFunctionOn timed out` na inicialização.
+- **Retentativa de Bootstrap**: Falhas transitórias na inicialização do cliente WhatsApp agora fazem uma retentativa curta antes de devolver erro definitivo ao orquestrador, sem reenviar o e-mail.
+
+### Removido
+- **Política Local em `.gemini/`**: `project_auto_approve.toml` foi desindexado do Git para respeitar o contrato de limpeza de artefatos locais já cobertos por `.gitignore`.
+
 ## [6.5.0] - 2026-05-18
 ### Adicionado
 - **Recorrência v2 na Aba Automações**: Contrato de agenda evoluído com `schedule_version=2` e `schedule_type` (`manual`, `daily`, `weekly`, `monthly`, `interval`, `once`), mantendo leitura retrocompatível de payload legado.

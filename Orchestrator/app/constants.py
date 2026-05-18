@@ -2,8 +2,8 @@
 # mypy: ignore-errors
 """Constantes compartilhadas do Orchestrator."""
 
-ORCHESTRATOR_VERSION = "6.4.0"
-WORKER_VERSION = "6.4.0"
+ORCHESTRATOR_VERSION = "6.5.2"
+WORKER_VERSION = "6.5.2"
 ORCHESTRATOR_SCHEMA_VERSION = "2026.05.17.1"
 
 EXECUTION_STATUS_PENDING = "PENDING"

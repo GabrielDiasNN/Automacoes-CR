@@ -342,7 +342,11 @@ def test_diagnostics_endpoint(client):
     assert "queue" in data
     assert "oldest_pending" in data["queue"]
     assert "oldest_running" in data["queue"]
+    assert "active_by_priority" in data["queue"]
+    assert "active_by_group" in data["queue"]
     assert "heartbeat" in data
+    assert "operator_actions" in data
+    assert "failure_hotspots" in data
 
 def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_session, monkeypatch):
     import app.routers.system as system_router
@@ -374,6 +378,9 @@ def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_sessio
     assert data["queue"]["oldest_pending"]["age_seconds"] >= 1200
     components = {item["component"] for item in data["findings"]}
     assert {"database", "queue"}.issubset(components)
+    assert any(item["action_code"] == "checkpoint" for item in data["findings"])
+    assert any(item["action_code"] == "worker_wakeup" for item in data["findings"])
+    assert any(item["action_code"] == "checkpoint" for item in data["operator_actions"])
 
 def test_diagnostics_offline_worker_prefers_recovery_action(client, db_session, monkeypatch):
     import app.routers.system as system_router
@@ -417,6 +424,7 @@ def test_diagnostics_offline_worker_prefers_recovery_action(client, db_session, 
     worker_findings = [item for item in data["findings"] if item["component"] == "worker"]
     assert worker_findings
     assert any("Recuperar" in item["action_hint"] for item in worker_findings)
+    assert any(item["action_code"] == "worker_recover" for item in worker_findings)
 
     recover = client.post("/api/system/worker/recover", headers=AUTH_HEADERS)
     assert recover.status_code == 200
@@ -431,6 +439,82 @@ def test_system_overview_includes_diagnostics_summary(client):
     assert "diagnostics" in data
     assert data["diagnostics"]["overall_status"] in ["healthy", "degraded", "unhealthy"]
     assert "findings" in data["diagnostics"]
+
+def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
+    from app import models
+    from app.timezone import get_now_local
+
+    auto = models.Automation(
+        name="Retry Source",
+        script_path="./test/run.ps1",
+        max_retries=2,
+        queue_group="oracle",
+    )
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_RETRY_SRC",
+            automation_id=auto.id,
+            status="ERROR",
+            retry_count=0,
+            max_retries=2,
+            queue_group="oracle",
+            failure_reason="EXIT_CODE_24",
+            recovery_action="REVIEW_LOGS_AND_OPTIONALLY_REQUEUE",
+            requested_by="TEST",
+            started_at=get_now_local() - timedelta(minutes=5),
+        )
+    )
+    db_session.commit()
+
+    res = client.post(
+        "/api/executions/EXEC_RETRY_SRC/requeue",
+        json={"reason": "Reteste controlado", "requested_by": "QA", "priority": "HIGH"},
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["source_exec_id"] == "EXEC_RETRY_SRC"
+    assert payload["retry_count"] == 1
+    assert payload["max_retries"] == 2
+
+    source = db_session.query(models.Execution).filter(models.Execution.id == "EXEC_RETRY_SRC").first()
+    queued = db_session.query(models.Execution).filter(models.Execution.id == payload["queued_exec_id"]).first()
+    assert source.status == "REQUEUED"
+    assert source.recovery_action == "REQUEUED_TO_NEW_EXECUTION"
+    assert queued.status == "PENDING"
+    assert queued.priority == "HIGH"
+    assert queued.queue_group == "oracle"
+    assert queued.failure_reason == "EXIT_CODE_24"
+    assert queued.recovery_action == "REQUEUE_MANUAL"
+
+def test_execution_requeue_blocks_retry_limit(client, db_session):
+    from app import models
+    from app.timezone import get_now_local
+
+    auto = models.Automation(name="Retry Limit", script_path="./test/run.ps1", max_retries=1)
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_RETRY_LIMIT",
+            automation_id=auto.id,
+            status="ERROR",
+            retry_count=1,
+            max_retries=1,
+            requested_by="TEST",
+            started_at=get_now_local(),
+        )
+    )
+    db_session.commit()
+
+    res = client.post(
+        "/api/executions/EXEC_RETRY_LIMIT/requeue",
+        json={"reason": "limite"},
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 409
 
 def test_wait_for_task_requires_api_key(client):
     res = client.get("/api/system/wait-for-task")
