@@ -1,3 +1,7 @@
+import { normalizeDiagnosticsPayload } from "./contracts.js";
+import { getSystemActionRequest } from "./system_actions.js";
+import { bindActionElements } from "./action_registry.js";
+
 export function createSystemModule(ctx) {
     const {
         api,
@@ -20,10 +24,12 @@ export function createSystemModule(ctx) {
 
         if (health) renderHealthCards(health);
         if (diagnostics) {
-            setLatestSystemDiagnostics(diagnostics);
-            updateWorkerActionButton(diagnostics);
-            renderWorkerDetails(diagnostics);
-            renderDiagnosticFindings(diagnostics);
+            const normalizedDiagnostics = normalizeDiagnosticsPayload(diagnostics);
+            setLatestSystemDiagnostics(normalizedDiagnostics);
+            updateWorkerActionButton(normalizedDiagnostics);
+            renderWorkerDetails(normalizedDiagnostics);
+            renderDiagnosticFindings(normalizedDiagnostics);
+            renderRuntimeContract(normalizedDiagnostics);
         }
         if (audit) renderAuditTable(audit);
 
@@ -112,7 +118,7 @@ export function createSystemModule(ctx) {
             ? `
             <div class="operator-actions">
                 ${operatorActions.map((item) => `
-                    <button class="btn btn-outline btn-sm" type="button" onclick="callSystemAction('${escapeHtml(item.action_code)}')">
+                    <button class="btn btn-outline btn-sm" type="button" data-action="system-action" data-system-action="${escapeHtml(item.action_code)}">
                         ${escapeHtml(item.action_label || item.action_code)}
                     </button>
                 `).join("")}
@@ -126,7 +132,7 @@ export function createSystemModule(ctx) {
                 ? { action: item.action_code, label: item.action_label || item.action_hint }
                 : actionByComponent[item.component];
             const actionHtml = shortcut
-                ? `<button class="btn btn-outline btn-sm" onclick="callSystemAction('${shortcut.action}')">${shortcut.label}</button>`
+                ? `<button class="btn btn-outline btn-sm" data-action="system-action" data-system-action="${escapeHtml(shortcut.action)}">${escapeHtml(shortcut.label)}</button>`
                 : "";
             return `
             <article class="finding-card ${severity.toLowerCase()}">
@@ -143,6 +149,53 @@ export function createSystemModule(ctx) {
         }).join("");
 
         container.innerHTML = actionsHtml + findingsHtml;
+        bindActionElements(container);
+    }
+
+    function renderRuntimeContract(diagnostics) {
+        const container = document.getElementById("diagnostic-contract");
+        if (!container) return;
+
+        const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
+        const recovery = diagnostics.recovery || {};
+        const lightActions = Array.isArray(recovery.light_actions) ? recovery.light_actions : [];
+        const strongActions = Array.isArray(recovery.strong_actions) ? recovery.strong_actions : [];
+
+        const checksHtml = checks.length
+            ? checks.map((item) => `
+                <article class="contract-card">
+                    <h4>${escapeHtml(item.label || item.code || "check")}</h4>
+                    <p>Status: <strong>${escapeHtml(String(item.status || "unknown").toUpperCase())}</strong></p>
+                    <small>${escapeHtml(item.detail || "-")}</small>
+                    ${item.value ? `<small>Valor: ${escapeHtml(String(item.value))}</small>` : ""}
+                </article>
+            `).join("")
+            : `<article class="contract-card"><h4>Checks indisponíveis</h4><p>O diagnóstico ainda não retornou checks de runtime.</p></article>`;
+
+        const recommended = recovery.recommended_action
+            ? `<small>Ação recomendada: ${escapeHtml(recovery.recommended_action)}</small>`
+            : "";
+
+        container.innerHTML = `
+            <article class="contract-card">
+                <h4>Contrato de payload</h4>
+                <p>Versão ativa: <strong>${escapeHtml(diagnostics.contract_version || "legacy")}</strong></p>
+                <small>O dashboard consome este contrato para overview, diagnósticos e ações operacionais.</small>
+                ${recommended}
+            </article>
+            <article class="contract-card">
+                <h4>Recovery leve</h4>
+                <p>${escapeHtml(lightActions.join(", ") || "Nenhuma ação sugerida")}</p>
+                <small>Ações para wake-up, reload, checkpoint e triagem sem restart forte.</small>
+            </article>
+            <article class="contract-card">
+                <h4>Recovery forte</h4>
+                <p>${escapeHtml(strongActions.join(", ") || "Nenhuma ação sugerida")}</p>
+                <small>Ações para recuperação canônica e proteção operacional antes de mudanças maiores.</small>
+            </article>
+            ${checksHtml}
+        `;
+        bindActionElements(container);
     }
 
     function getWorkerSystemAction(diagnostics) {
@@ -160,7 +213,7 @@ export function createSystemModule(ctx) {
         const descriptor = override || getWorkerSystemAction(diagnostics);
         button.innerHTML = `<i data-lucide="${descriptor.icon || "activity"}"></i>${escapeHtml(descriptor.label || "Acordar worker")}`;
         button.disabled = Boolean(descriptor.disabled);
-        button.onclick = descriptor.action ? () => callSystemAction(descriptor.action) : null;
+        button.dataset.systemAction = descriptor.action || "";
         if (typeof lucide !== "undefined") lucide.createIcons();
     }
 
@@ -186,18 +239,7 @@ export function createSystemModule(ctx) {
 
     async function callSystemAction(action) {
         if (!action) return;
-
-        const map = {
-            resume_all: { path: "/api/automations/control/resume-all", method: "POST", label: "retomar todas as automações" },
-            pause_all: { path: "/api/automations/control/pause-all", method: "POST", label: "pausar todas as automações" },
-            scheduler_reload: { path: "/api/system/scheduler/reload", method: "POST", label: "sincronizar agenda do scheduler" },
-            worker_wakeup: { path: "/api/system/worker/wakeup", method: "POST", label: "acordar worker para validar fila" },
-            worker_recover: { path: "/api/system/worker/recover", method: "POST", label: "recuperar Orchestrator e worker" },
-            checkpoint: { path: "/api/system/checkpoint", method: "POST", label: "executar checkpoint WAL" },
-            backup: { path: "/api/system/backup", method: "POST", label: "executar backup do banco" },
-        };
-
-        let request = map[action];
+        let request = getSystemActionRequest(action);
         if (action === "show_running" || action === "show_errors") {
             const status = action === "show_running" ? "RUNNING" : "ERROR";
             const select = document.getElementById("filter-status");

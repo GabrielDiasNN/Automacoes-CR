@@ -11,47 +11,28 @@ Responsabilidades:
   5. Jobs enterprise: WAL checkpoint + purge automatico (Pilares E + G)
 """
 
-import ast
-import asyncio
 import json
 import logging
 import os
 import time
 from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
-
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.date import DateTrigger
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import models
-from .constants import (EXECUTION_ACTIVE_STATUSES,
-                        EXECUTION_STATUS_FAILED_BY_REBOOT,
-                        EXECUTION_STATUS_RUNNING,
-                        ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION,
-                        PRIORITY_NORMAL)
+from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
 from .database import SessionLocal, engine
 from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
                          TimingMiddleware)
 from .routers import automations, executions, system, websocket
-from . import schemas
-from .timezone import get_now_local
-
-# ---------------------------------------------------------------------------
-# Configuracao de Ambiente
-# ---------------------------------------------------------------------------
-
-project_root = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-load_dotenv(os.path.join(project_root, ".env"))
+from .runtime import (get_allowed_origins, get_dashboard_path, get_lib_path,
+                      scheduler)
+from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
+from .services.scheduler_runtime import (register_enterprise_jobs,
+                                         reload_scheduled_tasks)
 
 # ---------------------------------------------------------------------------
 # Configuracao de Logs Estruturados (JSON)
@@ -93,159 +74,12 @@ logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 logger.addHandler(console_handler)
 
-# --- EVENTO GLOBAL DE WAKEUP (v6.2.0) ---
-task_queued_event = asyncio.Event()
-
-# ---------------------------------------------------------------------------
-# Motor de Agendamento (APScheduler)
-# ---------------------------------------------------------------------------
-
-# Nota: pytz deve estar disponivel se usado explicitamente
-import pytz
-
-scheduler = BackgroundScheduler(timezone=pytz.timezone("America/Sao_Paulo"))
-
-def _scheduled_task_wrapper(automation_id: int):
-    db = SessionLocal()
-    try:
-        db_auto = (
-            db.query(models.Automation)
-            .filter(models.Automation.id == automation_id)
-            .first()
-        )
-        if not db_auto or not db_auto.enabled:
-            return
-
-        existing = (
-            db.query(models.Execution)
-            .filter(
-                models.Execution.automation_id == automation_id,
-                models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
-            )
-            .first()
-        )
-
-        if existing:
-            logger.info(f"Agendamento ignorado: {db_auto.name} já tem execução ativa.")
-            return
-
-        exec_id = f"CRON_{automation_id}_{int(time.time())}"
-        db_exec = models.Execution(
-            id=exec_id,
-            automation_id=db_auto.id,
-            status="PENDING",
-            priority=PRIORITY_NORMAL,
-            retry_count=0,
-            max_retries=db_auto.max_retries or 0,
-            queue_group=db_auto.queue_group,
-            requested_by="CRON",
-        )
-        db.add(db_exec)
-        db.commit()
-        logger.info(f"Disparo agendado: {db_auto.name} -> {exec_id}")
-    except Exception as e:
-        logger.error(f"Erro no disparo agendado id={automation_id}: {e}")
-    finally:
-        db.close()
-
-def reload_scheduled_tasks():
-    # Remover apenas jobs de automacoes (preservar jobs enterprise)
-    for job in scheduler.get_jobs():
-        if job.id.startswith("job_"):
-            scheduler.remove_job(job.id)
-    db = SessionLocal()
-    try:
-        automations_db = (
-            db.query(models.Automation).filter(models.Automation.enabled == True).all()
-        )
-        logger.info(f"Recarregando agendamentos para {len(automations_db)} automações habilitadas.")
-        for auto in automations_db:
-            if not auto.schedule:
-                continue
-            try:
-                sched_data = schemas.parse_schedule(auto.schedule)
-                if not sched_data:
-                    continue
-                schedule_type = sched_data.get("schedule_type")
-
-                if schedule_type == "manual":
-                    continue
-                if schedule_type == "interval":
-                    trigger = IntervalTrigger(minutes=int(sched_data["interval_minutes"]))
-                    scheduler.add_job(
-                        _scheduled_task_wrapper,
-                        trigger,
-                        args=[auto.id],
-                        id=f"job_{auto.id}_interval",
-                        misfire_grace_time=60,
-                    )
-                    continue
-                if schedule_type == "once":
-                    run_at = datetime.fromisoformat(str(sched_data["run_at"]).replace("Z", ""))
-                    if run_at >= get_now_local():
-                        trigger = DateTrigger(run_date=run_at)
-                        scheduler.add_job(
-                            _scheduled_task_wrapper,
-                            trigger,
-                            args=[auto.id],
-                            id=f"job_{auto.id}_once",
-                            misfire_grace_time=60,
-                        )
-                    continue
-
-                times = sched_data.get("times", [])
-                for idx, t in enumerate(times):
-                    if schedule_type == "daily":
-                        trigger = CronTrigger(hour=t.get("h", 0), minute=t.get("m", 0))
-                    elif schedule_type == "weekly":
-                        # Contrato UI/legado: 0=Dom,1=Seg..6=Sáb; APScheduler: 0=Seg..6=Dom
-                        mapped_days = [str((int(day) + 6) % 7) for day in sched_data.get("days_of_week", [])]
-                        days = ",".join(mapped_days)
-                        trigger = CronTrigger(
-                            day_of_week=days if days else "*",
-                            hour=t.get("h", 0),
-                            minute=t.get("m", 0),
-                        )
-                    elif schedule_type == "monthly":
-                        days = ",".join(map(str, sched_data.get("days_of_month", [])))
-                        trigger = CronTrigger(
-                            day=days,
-                            hour=t.get("h", 0),
-                            minute=t.get("m", 0),
-                        )
-                    else:
-                        continue
-                    scheduler.add_job(
-                        _scheduled_task_wrapper,
-                        trigger,
-                        args=[auto.id],
-                        id=f"job_{auto.id}_{schedule_type}_{idx}",
-                        misfire_grace_time=60,
-                    )
-            except Exception as e:
-                logger.error(f"Erro ao agendar {auto.name}: {e}")
-
-        logger.info(f"Agendador sincronizado: {len(scheduler.get_jobs())} jobs ativos no total.")
-    finally:
-        db.close()
-
 def _cleanup_zombie_tasks():
     db = SessionLocal()
     try:
-        zombies = (
-            db.query(models.Execution)
-            .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
-            .all()
-        )
-        for task in zombies:
-            task.status = EXECUTION_STATUS_FAILED_BY_REBOOT
-            task.finished_at = get_now_local()
-            task.failure_reason = "ORCHESTRATOR_REBOOT"
-            task.recovery_action = "REQUEUE_IF_SAFE"
-            task.logs = (task.logs or "") + "\n[REBOOT] Interrompida."
-        db.commit()
-        if zombies:
-            logger.info(f"Limpeza: {len(zombies)} tarefas recuperadas.")
+        zombie_count = mark_running_tasks_as_failed_by_reboot(db)
+        if zombie_count:
+            logger.info("Limpeza: %d tarefas recuperadas.", zombie_count)
     finally:
         db.close()
 
@@ -273,49 +107,8 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(f"Schema do banco incompleto: {schema_status}")
     _cleanup_zombie_tasks()
     reload_scheduled_tasks()
-
-    # --- Jobs Enterprise (Pilar E + G) ---
-    import os as _os
-
-    from .database import purge_old_executions, run_wal_checkpoint
-
-    retention = int(_os.environ.get("EXECUTION_RETENTION_DAYS", "90"))
-
-    # WAL Checkpoint a cada 30 minutos
-    scheduler.add_job(
-        run_wal_checkpoint,
-        "interval",
-        minutes=30,
-        id="enterprise_wal_checkpoint",
-        replace_existing=True,
-        misfire_grace_time=300,
-    )
-    # Purge diario as 03:00
-    scheduler.add_job(
-        lambda: purge_old_executions(retention),
-        CronTrigger(hour=3, minute=0),
-        id="enterprise_daily_purge",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-
-    def _safe_heartbeat():
-        """Batimento cardíaco resiliente a erros de terminal (Pilar R)."""
-        try:
-            logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
-        except Exception:
-            # Se o log falhar (ex: OSError no terminal), apenas ignoramos para não travar o loop
-            pass
-
-    # Log de Heartbeat do Agendador (v5.3.0)
-    scheduler.add_job(
-        _safe_heartbeat,
-        "interval",
-        minutes=15,
-        id="enterprise_scheduler_heartbeat",
-        replace_existing=True,
-        misfire_grace_time=60,
-    )
+    retention = int(os.environ.get("EXECUTION_RETENTION_DAYS", "90"))
+    register_enterprise_jobs(retention)
 
     if not scheduler.running:
         scheduler.start()
@@ -351,11 +144,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # --- CORS Hardened: restrito a origens configuradas via .env ---
-_raw_origins = os.environ.get(
-    "ALLOWED_ORIGINS",
-    "http://localhost,http://127.0.0.1,http://localhost:8000,http://127.0.0.1:8000",
-)
-_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+_allowed_origins = get_allowed_origins()
 
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(TimingMiddleware)
@@ -384,9 +173,8 @@ def legacy_metrics():
 
 # --- SERVICO DE ARQUIVOS ESTATICOS (DASHBOARD) ---
 # Resolvendo raiz do projeto (C:\Automacoes)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-dashboard_path = os.path.join(BASE_DIR, "Dashboard")
-lib_path = os.path.join(BASE_DIR, "lib")
+dashboard_path = get_dashboard_path()
+lib_path = get_lib_path()
 
 if os.path.exists(dashboard_path):
     app.mount(

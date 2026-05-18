@@ -9,9 +9,15 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..constants import (
+    ACTION_CODE_BACKUP,
+    ACTION_CODE_CHECKPOINT,
+    ACTION_CODE_SCHEDULER_RELOAD,
+    ACTION_CODE_WORKER_RECOVER,
+    ACTION_CODE_WORKER_WAKEUP,
     EXECUTION_ACTIVE_STATUSES,
     EXECUTION_STATUS_PENDING,
     EXECUTION_STATUS_RUNNING,
+    ORCHESTRATOR_CONTRACT_VERSION,
     ORCHESTRATOR_SCHEMA_VERSION,
     ORCHESTRATOR_VERSION,
     SEVERITY_ERROR,
@@ -24,19 +30,8 @@ from ..database import (
     get_wal_size_mb,
     validate_database_schema,
 )
+from .scheduler_runtime import extract_automation_id_from_job
 from ..timezone import get_now_local
-
-
-def extract_automation_id_from_job(job_id: str) -> int | None:
-    if not job_id.startswith("job_"):
-        return None
-    parts = job_id.split("_")
-    if len(parts) < 2:
-        return None
-    try:
-        return int(parts[1])
-    except (TypeError, ValueError):
-        return None
 
 
 def add_finding(
@@ -252,7 +247,7 @@ def build_diagnostics_payload(
             "Schema SQLite diverge do contrato esperado.",
             {
                 "action_hint": "Executar diagnóstico de schema e revisar migração/backup antes de operar.",
-                "action_code": "backup",
+                "action_code": ACTION_CODE_BACKUP,
                 "action_label": "Gerar backup antes de corrigir schema",
                 "impact": "Risco de erro em leitura/escrita e de decisões operacionais baseadas em estrutura divergente.",
                 "priority": 1,
@@ -267,7 +262,7 @@ def build_diagnostics_payload(
             f"Schema version divergente: banco={schema_version}, app={ORCHESTRATOR_SCHEMA_VERSION}.",
             {
                 "action_hint": "Reiniciar o Orchestrator para reaplicar migracoes leves e validar o banco.",
-                "action_code": "worker_recover",
+                "action_code": ACTION_CODE_WORKER_RECOVER,
                 "action_label": "Reiniciar Orchestrator",
                 "impact": "Pode indicar migração leve pendente ou instância desatualizada servindo a operação.",
                 "priority": 2,
@@ -284,7 +279,7 @@ def build_diagnostics_payload(
             f"WAL elevado ({wal_size_mb} MB).",
             {
                 "action_hint": "Executar checkpoint e verificar contenção de escrita no SQLite.",
-                "action_code": "checkpoint",
+                "action_code": ACTION_CODE_CHECKPOINT,
                 "action_label": "Executar checkpoint",
                 "impact": "Risco de degradação de I/O, crescimento de disco e lentidão no dashboard.",
                 "priority": 1,
@@ -299,7 +294,7 @@ def build_diagnostics_payload(
             f"WAL acima do normal ({wal_size_mb} MB).",
             {
                 "action_hint": "Agendar checkpoint operacional se o valor continuar crescendo.",
-                "action_code": "checkpoint",
+                "action_code": ACTION_CODE_CHECKPOINT,
                 "action_label": "Executar checkpoint",
                 "impact": "Indica acúmulo de escrita; se crescer, pode virar incidente de banco.",
                 "priority": 2,
@@ -314,7 +309,7 @@ def build_diagnostics_payload(
             "Scheduler está parado.",
             {
                 "action_hint": "Reiniciar Orchestrator e confirmar carregamento dos jobs.",
-                "action_code": "worker_recover",
+                "action_code": ACTION_CODE_WORKER_RECOVER,
                 "action_label": "Recuperar Orchestrator",
                 "impact": "Automações agendadas podem deixar de disparar.",
                 "priority": 1,
@@ -328,7 +323,7 @@ def build_diagnostics_payload(
             "Scheduler está ativo, mas sem jobs carregados.",
             {
                 "action_hint": "Verificar automações habilitadas com agenda configurada.",
-                "action_code": "scheduler_reload",
+                "action_code": ACTION_CODE_SCHEDULER_RELOAD,
                 "action_label": "Sincronizar agenda",
                 "impact": "Agenda vazia pode ser legítima, mas também pode indicar sincronismo quebrado.",
                 "priority": 3,
@@ -344,7 +339,7 @@ def build_diagnostics_payload(
             item,
             {
                 "action_hint": "Sincronizar scheduler com o banco e revisar automações habilitadas.",
-                "action_code": "scheduler_reload",
+                "action_code": ACTION_CODE_SCHEDULER_RELOAD,
                 "action_label": "Sincronizar agenda",
                 "impact": "Banco e memória divergem; disparos podem ser omitidos ou ficar órfãos.",
                 "priority": 2,
@@ -428,9 +423,56 @@ def build_diagnostics_payload(
 
     jobs = scheduler.get_jobs()
     next_runs = sorted((job.next_run_time for job in jobs if job.next_run_time))[:5]
+    operator_actions = build_operator_actions(findings)
+    checks = [
+        {
+            "code": "contract_version",
+            "label": "Contrato de payload",
+            "status": "ok",
+            "detail": "Payload agregado do sistema está versionado para evolução controlada.",
+            "value": ORCHESTRATOR_CONTRACT_VERSION,
+        },
+        {
+            "code": "worker_heartbeat",
+            "label": "Heartbeat do worker",
+            "status": "ok" if worker_status.is_alive else "error",
+            "detail": "Worker respondendo via heartbeat recente." if worker_status.is_alive else "Worker sem heartbeat recente.",
+            "value": str(last_ping_age_seconds) if last_ping_age_seconds is not None else None,
+        },
+        {
+            "code": "scheduler_jobs",
+            "label": "Jobs carregados",
+            "status": "ok" if scheduler.running and len(jobs) > 0 else "warn",
+            "detail": "Scheduler carregado com jobs em memória." if scheduler.running and len(jobs) > 0 else "Scheduler sem jobs ativos ou não iniciado.",
+            "value": str(len(jobs)),
+        },
+        {
+            "code": "queue_stalled",
+            "label": "Fila parada",
+            "status": "warn" if pending_age_seconds >= 900 or running_age_seconds >= 7200 else "ok",
+            "detail": "Há execuções envelhecidas na fila ou em execução." if pending_age_seconds >= 900 or running_age_seconds >= 7200 else "Sem indício de fila parada.",
+            "value": f"pending={pending_age_seconds}s,running={running_age_seconds}s",
+        },
+        {
+            "code": "wal_health",
+            "label": "Saúde do WAL",
+            "status": "error" if wal_risk == "critical" else ("warn" if wal_risk == "elevated" else "ok"),
+            "detail": "Tamanho do WAL dentro da faixa operacional." if wal_risk == "normal" else "WAL exige ação operacional.",
+            "value": str(wal_size_mb),
+        },
+        {
+            "code": "schema_minimum",
+            "label": "Consistência mínima de schema",
+            "status": "ok" if schema_status["valid"] else "error",
+            "detail": "Schema consistente com o contrato esperado." if schema_status["valid"] else "Schema divergente do contrato esperado.",
+            "value": schema_version,
+        },
+    ]
+    recommended_action = operator_actions[0]["action_code"] if operator_actions else ACTION_CODE_WORKER_WAKEUP
 
     return {
         "version": ORCHESTRATOR_VERSION,
+        "contract_version": ORCHESTRATOR_CONTRACT_VERSION,
         "timestamp": get_now_local().isoformat(),
         "overall_status": overall_status,
         "findings": findings,
@@ -467,6 +509,19 @@ def build_diagnostics_payload(
             "last_ping_age_seconds": last_ping_age_seconds,
         },
         "failure_hotspots": failure_hotspots,
-        "operator_actions": build_operator_actions(findings),
+        "operator_actions": operator_actions,
+        "checks": checks,
+        "recovery": {
+            "light_actions": [
+                ACTION_CODE_WORKER_WAKEUP,
+                ACTION_CODE_SCHEDULER_RELOAD,
+                ACTION_CODE_CHECKPOINT,
+            ],
+            "strong_actions": [
+                ACTION_CODE_WORKER_RECOVER,
+                ACTION_CODE_BACKUP,
+            ],
+            "recommended_action": recommended_action,
+        },
         "schema_version": schema_version,
     }

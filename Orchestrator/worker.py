@@ -23,7 +23,6 @@ from typing import Any, Dict, List, Optional, cast
 
 import requests
 from dotenv import load_dotenv
-from sqlalchemy import case
 
 # Garantir que o pacote 'app' seja localizavel
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -35,19 +34,33 @@ try:
                                EXECUTION_STATUS_RUNNING,
                                EXECUTION_STATUS_TERMINATED,
                                EXECUTION_STATUS_TIMEOUT,
-                               PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_NORMAL,
                                WORKER_VERSION)
     from app.database import SessionLocal
+    from app.runtime import get_project_root
+    from app.services.execution_runtime import (
+        apply_internal_worker_error,
+        apply_timeout_result,
+        claim_next_task,
+        classify_process_result,
+        complete_process_execution,
+        finalize_terminated_task,
+        mark_task_as_failed,
+        resolve_script_path,
+    )
     from app.timezone import get_now_local
 except ImportError as e:
     print(f"CRITICAL: Falha ao importar componentes do app: {e}")
     sys.exit(1)
 
+# Compatibilidade de testes e chamadas legadas durante a refatoração.
+_finalize_terminated_task = finalize_terminated_task
+_mark_task_as_failed = mark_task_as_failed
+
 # ---------------------------------------------------------------------------
 # Configuracao de Ambiente
 # ---------------------------------------------------------------------------
 
-project_root: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root: str = get_project_root()
 load_dotenv(os.path.join(project_root, ".env"))
 
 MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
@@ -117,114 +130,6 @@ def update_stat(key: str, delta: int = 1) -> None:
     """Atualiza estatistica global de forma thread-safe."""
     with cast(threading.Lock, stats["lock"]):
         stats[key] += delta
-
-def _mark_task_as_failed(
-    db: Any,
-    exec_id: str,
-    message: str,
-    exit_code: int = -1,
-) -> None:
-    """Finaliza uma execucao que nao pode mais ser processada pelo worker."""
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
-    if not db_exec:
-        return
-    db_exec.status = EXECUTION_STATUS_ERROR
-    db_exec.logs = (db_exec.logs or "") + message
-    db_exec.exit_code = exit_code
-    db_exec.failure_reason = "AUTOMATION_NOT_FOUND"
-    db_exec.recovery_action = "REVIEW_AUTOMATION_REGISTRY"
-    db_exec.finished_at = get_now_local()
-    if db_exec.started_at and db_exec.finished_at:
-        db_exec.duration_seconds = round(
-            (db_exec.finished_at - db_exec.started_at).total_seconds(), 2
-        )
-    db.commit()
-
-def _finalize_terminated_task(
-    db: Any,
-    exec_id: str,
-    logs: List[str],
-    task_start_ts: float,
-) -> None:
-    """Persiste os detalhes finais quando uma execucao RUNNING e interrompida."""
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
-    if not db_exec:
-        return
-
-    termination_log = "\n[INTERROMPIDO PELO USUARIO]\n"
-    db_exec.status = EXECUTION_STATUS_TERMINATED
-    db_exec.exit_code = -15
-    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
-    db_exec.finished_at = get_now_local()
-    db_exec.failure_reason = "USER_TERMINATED"
-    db_exec.recovery_action = "REVIEW_LOGS_BEFORE_REQUEUE"
-    db_exec.logs = (db_exec.logs or "") + "".join(logs) + termination_log
-    db.commit()
-
-def classify_process_result(return_code: Optional[int]) -> tuple[str, Optional[str], str]:
-    """Classifica o resultado do subprocesso em status, causa e acao operacional."""
-    if return_code in [0, 2, 3]:
-        return "SUCCESS", None, "NONE"
-
-    if return_code == 21:
-        return (
-            EXECUTION_STATUS_ERROR,
-            "WHATSAPP_SESSION_EXPIRED",
-            "REAUTHENTICATE_WHATSAPP_SESSION",
-        )
-
-    if return_code == 24:
-        return (
-            EXECUTION_STATUS_ERROR,
-            "CHANNEL_DELIVERY_FAILED",
-            "REVIEW_CHANNEL_STATE_BEFORE_REQUEUE",
-        )
-
-    return (
-        EXECUTION_STATUS_ERROR,
-        f"EXIT_CODE_{return_code}",
-        "REVIEW_LOGS_AND_OPTIONALLY_REQUEUE",
-    )
-
-def claim_next_task(db: Any) -> Optional[str]:
-    """
-    Reivindica uma unica tarefa pendente de forma segura para SQLite.
-
-    SQLite ignora SELECT ... FOR UPDATE, entao a protecao real e o UPDATE
-    condicional por status. Se outro worker chegar antes, rowcount sera zero.
-    """
-    priority_rank = case(
-        (models.Execution.priority == PRIORITY_HIGH, 0),
-        (models.Execution.priority == PRIORITY_NORMAL, 1),
-        (models.Execution.priority == PRIORITY_LOW, 2),
-        else_=1,
-    )
-    candidate = (
-        db.query(models.Execution.id)
-        .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
-        .order_by(priority_rank.asc(), models.Execution.started_at.asc())
-        .first()
-    )
-    if not candidate:
-        return None
-
-    exec_id = candidate.id
-    updated = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.id == exec_id,
-            models.Execution.status == EXECUTION_STATUS_PENDING,
-        )
-        .update(
-            {
-                models.Execution.status: EXECUTION_STATUS_RUNNING,
-                models.Execution.started_at: get_now_local(),
-            },
-            synchronize_session=False,
-        )
-    )
-    db.commit()
-    return exec_id if updated == 1 else None
 
 # ---------------------------------------------------------------------------
 # Wakeup Listener (Instant Wakeup)
@@ -490,7 +395,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                     )
                     termination_log = "\n[INTERROMPIDO PELO USUARIO]\n"
                     broadcast_log(termination_log, exec_id)
-                    _finalize_terminated_task(
+                    finalize_terminated_task(
                         check_db,
                         exec_id,
                         logs,
@@ -509,24 +414,13 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                         f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
                     )
 
-                    db_exec_upd = (
-                        check_db.query(models.Execution)
-                        .filter(models.Execution.id == exec_id)
-                        .first()
+                    db_exec_upd = apply_timeout_result(
+                        check_db,
+                        exec_id,
+                        logs,
+                        task_start_ts,
                     )
                     if db_exec_upd:
-                        db_exec_upd.status = EXECUTION_STATUS_TIMEOUT
-                        db_exec_upd.finished_at = get_now_local()
-                        db_exec_upd.duration_seconds = round(
-                            time.time() - task_start_ts, 2
-                        )
-                        db_exec_upd.failure_reason = "MAX_RUNTIME_EXCEEDED"
-                        db_exec_upd.recovery_action = "REVIEW_TIMEOUT_AND_REQUEUE"
-                        db_exec_upd.logs = (
-                            "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo máximo."
-                        )
-                        check_db.commit()
-
                         auto = (
                             check_db.query(models.Automation)
                             .filter(models.Automation.id == db_exec_upd.automation_id)
@@ -551,25 +445,18 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             db.query(models.Execution).filter(models.Execution.id == exec_id).first()
         )
         if db_exec and db_exec.status not in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
-            db_exec.exit_code = process.returncode
-            db_exec.duration_seconds = duration
-
-            status, failure_reason, recovery_action = classify_process_result(
-                process.returncode
+            db_exec = complete_process_execution(
+                db,
+                exec_id,
+                process.returncode,
+                logs,
+                artifacts_json,
+                duration,
             )
-            db_exec.status = status
-            db_exec.failure_reason = failure_reason
-            db_exec.recovery_action = recovery_action
-
-            if status == "SUCCESS":
+            if db_exec and db_exec.status == "SUCCESS":
                 update_stat("tasks_completed", 1)
             else:
                 update_stat("tasks_failed", 1)
-
-            db_exec.logs = "".join(logs)
-            db_exec.artifacts = artifacts_json
-            db_exec.finished_at = get_now_local()
-            db.commit()
 
             if db_exec.status == EXECUTION_STATUS_ERROR:
                 auto = (
@@ -601,18 +488,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
 
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Erro fatal na tarefa %s: %s", exec_id, e, extra=_log_extra)
-        db_exec = (
-            db.query(models.Execution).filter(models.Execution.id == exec_id).first()
-        )
-        if db_exec and db_exec.status not in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
-            db_exec.status = EXECUTION_STATUS_ERROR
-            db_exec.logs = (db_exec.logs or "") + f"\nInternal Worker Error: {str(e)}"
-            db_exec.exit_code = -1
-            db_exec.failure_reason = "INTERNAL_WORKER_ERROR"
-            db_exec.recovery_action = "REVIEW_WORKER_LOGS"
-            db_exec.finished_at = get_now_local()
-            db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
-            db.commit()
+        apply_internal_worker_error(db, exec_id, str(e), task_start_ts)
         update_stat("tasks_failed", 1)
         broadcast_event("TASK_FAILED", {"exec_id": exec_id, "error": str(e)})
     finally:
@@ -683,13 +559,7 @@ def main_loop() -> None:
                 )
 
                 if automation:
-                    path: str = automation.script_path
-                    if path.startswith("./") or path.startswith(".\\"):
-                        path = os.path.join(project_root, path[2:])
-                    elif not os.path.isabs(path):
-                        path = os.path.join(project_root, path)
-
-                    script_path: str = os.path.abspath(path)
+                    script_path: str = resolve_script_path(project_root, automation.script_path)
                     max_rt: int = automation.max_runtime_minutes or 30
 
                     future = executor.submit(run_task, exec_id, script_path, max_rt)
@@ -700,7 +570,7 @@ def main_loop() -> None:
                         exec_id,
                     )
                 else:
-                    _mark_task_as_failed(
+                    mark_task_as_failed(
                         db,
                         exec_id,
                         "\nAutomacao nao encontrada no banco.",

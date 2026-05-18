@@ -16,7 +16,8 @@ from pydantic import (BaseModel, ConfigDict, Field, field_validator,
 
 from .constants import (DIAGNOSTIC_SEVERITIES, EXECUTION_ALLOWED_PRIORITIES,
                         EXECUTION_ALLOWED_STATUSES, ORCHESTRATOR_VERSION,
-                        ORCHESTRATOR_SCHEMA_VERSION, WORKER_VERSION)
+                        ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_CONTRACT_VERSION,
+                        WORKER_VERSION)
 
 # ---------------------------------------------------------------------------
 # Validadores e Utilitarios
@@ -601,9 +602,22 @@ class DiagnosticsOperatorAction(BaseModel):
     reason: str
     priority: int = 3
 
+class RuntimeCheckItem(BaseModel):
+    code: str
+    label: str
+    status: str
+    detail: str
+    value: Optional[str] = None
+
+class RecoveryPlan(BaseModel):
+    light_actions: List[str] = []
+    strong_actions: List[str] = []
+    recommended_action: Optional[str] = None
+
 class DiagnosticsPayload(BaseModel):
     version: str = ORCHESTRATOR_VERSION
     schema_version: str = ORCHESTRATOR_SCHEMA_VERSION
+    contract_version: str = ORCHESTRATOR_CONTRACT_VERSION
     timestamp: str
     overall_status: str
     findings: List[DiagnosticFinding]
@@ -614,6 +628,8 @@ class DiagnosticsPayload(BaseModel):
     heartbeat: DiagnosticsHeartbeat
     failure_hotspots: List[DiagnosticsFailureHotspot] = []
     operator_actions: List[DiagnosticsOperatorAction] = []
+    checks: List[RuntimeCheckItem] = []
+    recovery: RecoveryPlan = Field(default_factory=RecoveryPlan)
 
 class ExecutionQueueActionRequest(BaseModel):
     reason: Optional[str] = Field(None, max_length=200)
@@ -703,6 +719,7 @@ class SystemOverviewResponse(BaseModel):
     generated_at: str
     version: str = ORCHESTRATOR_VERSION
     schema_version: str = ORCHESTRATOR_SCHEMA_VERSION
+    contract_version: str = ORCHESTRATOR_CONTRACT_VERSION
     kpis: SystemOverviewKpis
     health: SystemHealth
     status_breakdown: dict[str, int]
@@ -732,6 +749,7 @@ class AuditEntry(BaseModel):
 class SystemVersion(BaseModel):
     version: str = ORCHESTRATOR_VERSION
     schema_version: str = ORCHESTRATOR_SCHEMA_VERSION
+    contract_version: str = ORCHESTRATOR_CONTRACT_VERSION
     python_version: str
     started_at: str
     uptime_seconds: float

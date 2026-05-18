@@ -11,6 +11,7 @@ Este roteiro mantém a direção escolhida: operação estável, fases pequenas 
 ## Fase 2 — Observabilidade acionável
 
 - Evoluir diagnósticos com impacto, prioridade e ação estruturada.
+- Padronizar `contract_version`, `checks` mínimos de runtime e recovery em duas camadas como contrato público do diagnóstico.
 - Priorizar achados de worker, scheduler, WAL, fila parada e falhas recorrentes.
 - Manter `operator_actions` como contrato para botões do Dashboard.
 
@@ -24,6 +25,7 @@ Este roteiro mantém a direção escolhida: operação estável, fases pequenas 
 ## Fase 4 — Console de operação
 
 - Dashboard deve continuar clássico, denso e empresarial.
+- Migrar ações fixas da interface para registro controlado (`data-action`) sem quebrar IDs e handlers legados exigidos pela SPA.
 - Fluxos principais: executar, parar, reenfileirar, filtrar, abrir logs, recuperar worker, sincronizar agenda e executar checkpoint.
 - Playwright deve ser a última validação quando a UI ou contrato front-back mudar.
 

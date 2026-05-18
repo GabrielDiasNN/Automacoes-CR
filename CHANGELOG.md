@@ -3,9 +3,15 @@
 ## [6.5.4] - 2026-05-18
 ### Adicionado
 - **Governança de Evidência Playwright**: Novo `Tools/Test-PlaywrightEvidence.ps1` valida padrão, template e evidências E2E, exigindo URL real do dashboard, Playwright como etapa final, console limpo e resultado aprovado.
+- **Contrato Operacional Versionado**: `/api/system/overview`, `/api/system/diagnostics` e `/api/system/version` agora expõem `contract_version`; diagnósticos também incluem `checks` mínimos de runtime e plano de recovery em duas camadas.
 
 ### Alterado
 - **Governança Agregada**: `Tools/ValidarAutomacoes.ps1 -OnlyGovernance` passa a executar o validador de evidência Playwright junto aos checks nativos.
+- **Runtime Compartilhado do Orchestrator**: scheduler, wake-up do worker, helpers de execução e criação base de jobs/executions foram extraídos para módulos comuns, reduzindo acoplamento entre `main.py`, routers e `worker.py`.
+- **Dashboard SPA**: botões estáticos críticos iniciaram migração de `onclick` para registro controlado via `data-action`, preservando compatibilidade com handlers legados dinâmicos.
+
+### Testado
+- **Contrato de Payload**: testes de API e smoke agora validam `contract_version` nos endpoints agregados de sistema.
 
 ## [6.5.3] - 2026-05-18
 ### Adicionado

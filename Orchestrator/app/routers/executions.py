@@ -23,10 +23,16 @@ from ..constants import (EXECUTION_ACTIVE_STATUSES, EXECUTION_ALLOWED_PRIORITIES
                          EXECUTION_ALLOWED_STATUSES,
                          EXECUTION_QUEUEABLE_SOURCE_STATUSES,
                          EXECUTION_STATUS_REQUEUED, EXECUTION_STATUS_RUNNING,
-                         EXECUTION_STATUS_TERMINATED)
+                         EXECUTION_STATUS_TERMINATED,
+                         RECOVERY_ACTION_REQUEUE_MANUAL,
+                         RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION)
 from ..database import get_db
 from ..timezone import get_now_local
 from ..middleware import get_api_key
+from ..runtime import get_project_root, trigger_worker_wakeup
+from ..services.execution_runtime import (build_queued_execution,
+                                          generate_execution_id,
+                                          get_group_active_execution)
 from ..utils import get_client_ip, log_audit
 
 logger = logging.getLogger("orchestrator")
@@ -34,26 +40,7 @@ logger = logging.getLogger("orchestrator")
 router = APIRouter(prefix="/api/executions", tags=["Executions"])
 
 # Raiz do projeto para resolver caminhos
-PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-
-def _get_active_queue_group_execution(
-    db: Session,
-    queue_group: Optional[str],
-) -> Optional[models.Execution]:
-    """Retorna execucao ativa que ocupa o mesmo grupo operacional."""
-    if not queue_group:
-        return None
-    return (
-        db.query(models.Execution)
-        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
-        .filter(
-            models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
-            models.Automation.queue_group == queue_group,
-        )
-        .first()
-    )
+PROJECT_ROOT = get_project_root()
 
 # ---------------------------------------------------------------------------
 # LISTAGEM GLOBAL com filtros e paginacao
@@ -366,7 +353,7 @@ def requeue_execution(
         )
 
     queue_group = db_exec.queue_group or db_exec.automation.queue_group
-    group_active = _get_active_queue_group_execution(db, queue_group)
+    group_active = get_group_active_execution(db, queue_group)
     if group_active:
         raise HTTPException(
             status_code=409,
@@ -387,29 +374,28 @@ def requeue_execution(
             ),
         )
 
-    new_exec_id = f"REQ_{int(time.time())}_{uuid.uuid4().hex[:4].upper()}"
+    new_exec_id = generate_execution_id("REQ")
     requested_by = payload.requested_by or get_client_ip(request)
     priority = (payload.priority or db_exec.priority or "NORMAL").upper()
     if priority not in EXECUTION_ALLOWED_PRIORITIES:
         raise HTTPException(status_code=422, detail="Prioridade inválida para requeue.")
 
     reason = payload.reason or f"Requeue manual originado de {exec_id}."
-    new_exec = models.Execution(
-        id=new_exec_id,
-        automation_id=db_exec.automation_id,
-        status="PENDING",
+    new_exec = build_queued_execution(
+        automation=db_exec.automation,
+        exec_id=new_exec_id,
+        requested_by=requested_by,
         priority=priority,
         retry_count=next_retry_count,
         max_retries=max_retries,
-        queue_group=queue_group,
-        requested_by=requested_by,
         failure_reason=db_exec.failure_reason or db_exec.status,
-        recovery_action="REQUEUE_MANUAL",
+        recovery_action=RECOVERY_ACTION_REQUEUE_MANUAL,
     )
+    new_exec.queue_group = queue_group
     db.add(new_exec)
 
     db_exec.status = EXECUTION_STATUS_REQUEUED
-    db_exec.recovery_action = "REQUEUED_TO_NEW_EXECUTION"
+    db_exec.recovery_action = RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION
     db_exec.logs = (db_exec.logs or "") + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"
 
     log_audit(
@@ -431,8 +417,7 @@ def requeue_execution(
     )
     db.commit()
 
-    from ..main import task_queued_event
-    task_queued_event.set()
+    trigger_worker_wakeup()
 
     return schemas.ExecutionQueueActionResponse(
         message="Execução reenfileirada com sucesso.",

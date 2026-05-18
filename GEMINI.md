@@ -34,6 +34,8 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 ---
 ## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 17/05/2026
 - **Playwright Evidence Governance v6.5.4 (18/05/2026):** `Tools/Test-PlaywrightEvidence.ps1` foi integrado ao `ValidarAutomacoes.ps1 -OnlyGovernance` para bloquear evidência E2E sem URL real, Playwright como última etapa, console limpo e resultado aprovado.
+- **Contrato Operacional Versionado v6.5.4 (18/05/2026):** payloads agregados de sistema agora carregam `contract_version`, checks mínimos de runtime e recovery em duas camadas, permitindo evolução controlada do Dashboard sem quebrar o contrato existente.
+- **Runtime Compartilhado v6.5.4 (18/05/2026):** scheduler, wake-up do worker e helpers de execução foram extraídos para módulos comuns, reduzindo drift entre `main.py`, routers e `worker.py`.
 - **Recovery Guard v6.5.3 (18/05/2026):** Worker classifica falhas de canal por exit code e requeue respeita `queue_group` ativo para impedir concorrência operacional indevida antes de novo retry.
 - **Console Operacional v6.5.2 (18/05/2026):** Diagnóstico operacional enriquecido com prioridade, impacto, `action_code`, `operator_actions`, hotspots de falha 24h e fila ativa por prioridade/grupo. A tela de execuções expõe `failure_reason`, `recovery_action`, retries e requeue auditável para reduzir leitura manual de logs.
 - **Enterprise Operations (17/05/2026):** Orchestrator evoluído para `v6.4.0` com migração leve de schema, `schema_version` persistida e payloads tipados para `overview`, `diagnostics` e ações de fila.

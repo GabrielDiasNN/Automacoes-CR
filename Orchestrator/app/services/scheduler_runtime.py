@@ -1,0 +1,212 @@
+# pylint: disable=all
+# mypy: ignore-errors
+"""Serviços compartilhados de agendamento e jobs do Orchestrator."""
+
+import logging
+from datetime import datetime
+from typing import Any
+
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy.orm import Session
+
+from .. import models, schemas
+from ..constants import ACTION_CODE_SCHEDULER_RELOAD, EXECUTION_ACTIVE_STATUSES
+from ..database import SessionLocal, purge_old_executions, run_wal_checkpoint
+from ..runtime import scheduler
+from ..timezone import get_now_local
+from .execution_runtime import build_queued_execution
+
+logger = logging.getLogger("orchestrator")
+
+
+def extract_automation_id_from_job(job_id: str) -> int | None:
+    if not job_id.startswith("job_"):
+        return None
+    parts = job_id.split("_")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1])
+    except (TypeError, ValueError):
+        return None
+
+
+def scheduled_task_wrapper(automation_id: int) -> None:
+    db = SessionLocal()
+    try:
+        db_auto = (
+            db.query(models.Automation)
+            .filter(models.Automation.id == automation_id)
+            .first()
+        )
+        if not db_auto or not db_auto.enabled:
+            return
+
+        existing = (
+            db.query(models.Execution)
+            .filter(
+                models.Execution.automation_id == automation_id,
+                models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+            )
+            .first()
+        )
+        if existing:
+            logger.info("Agendamento ignorado: %s já tem execução ativa.", db_auto.name)
+            return
+
+        exec_id = f"CRON_{automation_id}_{int(get_now_local().timestamp())}"
+        db.add(
+            build_queued_execution(
+                automation=db_auto,
+                exec_id=exec_id,
+                requested_by="CRON",
+            )
+        )
+        db.commit()
+        logger.info("Disparo agendado: %s -> %s", db_auto.name, exec_id)
+    except Exception as exc:
+        logger.error("Erro no disparo agendado id=%s: %s", automation_id, exc)
+    finally:
+        db.close()
+
+
+def reload_scheduled_tasks() -> None:
+    for job in scheduler.get_jobs():
+        if job.id.startswith("job_"):
+            scheduler.remove_job(job.id)
+
+    db = SessionLocal()
+    try:
+        automations_db = (
+            db.query(models.Automation).filter(models.Automation.enabled == True).all()
+        )
+        logger.info(
+            "Recarregando agendamentos para %d automações habilitadas.",
+            len(automations_db),
+        )
+        for auto in automations_db:
+            if not auto.schedule:
+                continue
+            try:
+                sched_data = schemas.parse_schedule(auto.schedule)
+                if not sched_data:
+                    continue
+                _register_schedule(auto.id, sched_data)
+            except Exception as exc:
+                logger.error("Erro ao agendar %s: %s", auto.name, exc)
+        logger.info(
+            "Agendador sincronizado: %d jobs ativos no total.",
+            len(scheduler.get_jobs()),
+        )
+    finally:
+        db.close()
+
+
+def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
+    schedule_type = sched_data.get("schedule_type")
+    if schedule_type == "manual":
+        return
+    if schedule_type == "interval":
+        scheduler.add_job(
+            scheduled_task_wrapper,
+            IntervalTrigger(minutes=int(sched_data["interval_minutes"])),
+            args=[automation_id],
+            id=f"job_{automation_id}_interval",
+            misfire_grace_time=60,
+        )
+        return
+    if schedule_type == "once":
+        run_at = datetime.fromisoformat(str(sched_data["run_at"]).replace("Z", ""))
+        if run_at >= get_now_local():
+            scheduler.add_job(
+                scheduled_task_wrapper,
+                DateTrigger(run_date=run_at),
+                args=[automation_id],
+                id=f"job_{automation_id}_once",
+                misfire_grace_time=60,
+            )
+        return
+
+    times = sched_data.get("times", [])
+    for idx, item in enumerate(times):
+        if schedule_type == "daily":
+            trigger = CronTrigger(hour=item.get("h", 0), minute=item.get("m", 0))
+        elif schedule_type == "weekly":
+            mapped_days = [str((int(day) + 6) % 7) for day in sched_data.get("days_of_week", [])]
+            trigger = CronTrigger(
+                day_of_week=",".join(mapped_days) if mapped_days else "*",
+                hour=item.get("h", 0),
+                minute=item.get("m", 0),
+            )
+        elif schedule_type == "monthly":
+            trigger = CronTrigger(
+                day=",".join(map(str, sched_data.get("days_of_month", []))),
+                hour=item.get("h", 0),
+                minute=item.get("m", 0),
+            )
+        else:
+            continue
+        scheduler.add_job(
+            scheduled_task_wrapper,
+            trigger,
+            args=[automation_id],
+            id=f"job_{automation_id}_{schedule_type}_{idx}",
+            misfire_grace_time=60,
+        )
+
+
+def register_enterprise_jobs(retention_days: int) -> None:
+    scheduler.add_job(
+        run_wal_checkpoint,
+        "interval",
+        minutes=30,
+        id="enterprise_wal_checkpoint",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        lambda: purge_old_executions(retention_days),
+        CronTrigger(hour=3, minute=0),
+        id="enterprise_daily_purge",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        safe_scheduler_heartbeat,
+        "interval",
+        minutes=15,
+        id="enterprise_scheduler_heartbeat",
+        replace_existing=True,
+        misfire_grace_time=60,
+    )
+
+
+def safe_scheduler_heartbeat() -> None:
+    try:
+        logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
+    except Exception:
+        pass
+
+
+def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
+    jobs = []
+    for job in scheduler.get_jobs():
+        auto_id = extract_automation_id_from_job(job.id)
+        auto_name = None
+        if auto_id is not None:
+            auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+            auto_name = auto.name if auto else None
+        elif job.id.startswith("enterprise_"):
+            auto_name = f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"
+        jobs.append(
+            schemas.ScheduledJob(
+                id=job.id,
+                automation_id=auto_id,
+                automation_name=auto_name,
+                next_run_time=job.next_run_time,
+                trigger=str(job.trigger),
+            )
+        )
+    return sorted(jobs, key=lambda item: item.next_run_time if item.next_run_time else datetime.max)

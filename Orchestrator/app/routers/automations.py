@@ -21,6 +21,12 @@ from .. import models, schemas  # type: ignore
 from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
+from ..runtime import get_project_root, trigger_worker_wakeup
+from ..services.execution_runtime import (build_queued_execution,
+                                          generate_execution_id,
+                                          get_group_active_execution)
+from ..services.scheduler_runtime import (extract_automation_id_from_job,
+                                          reload_scheduled_tasks, scheduler)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit, validate_script_path
 
@@ -28,38 +34,21 @@ logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/automations", tags=["Automations"])
 
-PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+PROJECT_ROOT = get_project_root()
 
 def _reload_scheduler_safe() -> None:
     """Recarrega o APScheduler sem quebrar a operacao CRUD que ja foi persistida."""
     try:
-        from ..main import reload_scheduled_tasks
-
         reload_scheduled_tasks()
     except Exception as e:
         logger.error(f"Falha ao recarregar agendador apos alteracao: {e}")
-
-def _extract_automation_id_from_job(job_id: str):
-    """Extrai automation_id de IDs de job no formato job_<id> ou job_<id>_<idx>."""
-    if not job_id.startswith("job_"):
-        return None
-    parts = job_id.split("_")
-    if len(parts) < 2:
-        return None
-    try:
-        return int(parts[1])
-    except (TypeError, ValueError):
-        return None
 
 def _load_next_run_lookup():
     """Mapeia proxima execucao por automacao consultando o scheduler em memoria."""
     lookup = {}
     try:
-        from ..main import scheduler
         for job in scheduler.get_jobs():
-            auto_id = _extract_automation_id_from_job(job.id)
+            auto_id = extract_automation_id_from_job(job.id)
             if auto_id is None or not job.next_run_time:
                 continue
             current = lookup.get(auto_id)
@@ -90,26 +79,6 @@ def _build_automation_response(db: Session, auto: models.Automation, next_run_lo
     auto_resp.schedule_summary = schemas.describe_schedule_payload(parsed_schedule)
     auto_resp.next_runs_preview = schemas.preview_next_runs(parsed_schedule, 3)
     return auto_resp
-
-def _get_group_active_execution(
-    db: Session,
-    queue_group: str,
-    exclude_automation_id: int,
-):
-    """Bloqueia concorrencia entre automacoes do mesmo grupo operacional."""
-    if not queue_group:
-        return None
-    return (
-        db.query(models.Execution)
-        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
-        .filter(
-            models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
-            models.Automation.queue_group == queue_group,
-            models.Automation.id != exclude_automation_id,
-        )
-        .order_by(models.Execution.started_at.desc())
-        .first()
-    )
 
 def _resolve_automation_dir(script_path: str) -> str:
     """Resolve a pasta da automacao garantindo permanencia no PROJECT_ROOT."""
@@ -494,9 +463,6 @@ async def start_automation(
     api_key: str = Depends(get_api_key),
 ):
 
-    import time as _time
-    import uuid as _uuid
-
     db_auto = (
         db.query(models.Automation)
         .filter(models.Automation.id == automation_id)
@@ -525,7 +491,11 @@ async def start_automation(
             detail=f"Automação já possui uma execução ativa (ID: {running.id}).",
         )
 
-    group_running = _get_group_active_execution(db, db_auto.queue_group, automation_id)
+    group_running = get_group_active_execution(
+        db,
+        db_auto.queue_group,
+        exclude_automation_id=automation_id,
+    )
     if group_running:
         raise HTTPException(
             status_code=409,
@@ -556,20 +526,15 @@ async def start_automation(
                     ),
                 )
 
-    # exec_id com precisão de microsegundos + sufixo aleatório para evitar colisões (ADR-016)
-    exec_id = f"EXEC_{int(_time.time())}_{_uuid.uuid4().hex[:4].upper()}"
+    exec_id = generate_execution_id("EXEC")
 
     client_ip = get_client_ip(request)
 
-    db_exec = models.Execution(
-        id=exec_id,
-        automation_id=db_auto.id,
-        status="PENDING",
-        priority=PRIORITY_NORMAL,
-        retry_count=0,
-        max_retries=db_auto.max_retries or 0,
-        queue_group=db_auto.queue_group,
+    db_exec = build_queued_execution(
+        automation=db_auto,
+        exec_id=exec_id,
         requested_by=client_ip,
+        priority=PRIORITY_NORMAL,
     )
 
     db.add(db_exec)
@@ -580,9 +545,7 @@ async def start_automation(
 
     db.commit()
 
-    # Sinaliza o Worker (Instant Wakeup v6.2.0)
-    from ..main import task_queued_event
-    task_queued_event.set()
+    trigger_worker_wakeup()
 
     return {"message": "Automação enfileirada com sucesso.", "exec_id": exec_id}
 

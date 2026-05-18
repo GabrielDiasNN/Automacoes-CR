@@ -1,3 +1,5 @@
+import { normalizeExecutionsPayload } from "./contracts.js";
+
 export function createExecutionsModule(ctx) {
     const {
         api,
@@ -14,6 +16,7 @@ export function createExecutionsModule(ctx) {
         openLogModal,
         showToast,
         loadOverview,
+        bindActionElements,
     } = ctx;
 
     async function loadExecutions(page = getExecPage()) {
@@ -36,8 +39,9 @@ export function createExecutionsModule(ctx) {
         if (dateFrom) params.set("date_from", `${dateFrom}T00:00:00`);
         if (dateTo) params.set("date_to", `${dateTo}T23:59:59`);
 
-        const data = await api(`/api/executions?${params.toString()}`);
-        if (!data) return;
+        const rawData = await api(`/api/executions?${params.toString()}`);
+        if (!rawData) return;
+        const data = normalizeExecutionsPayload(rawData);
 
         renderExecutionsTable(data.items || []);
         ui.renderPagination(data.total || 0, data.page || 1, data.pages || 1, "exec-pagination", (nextPage) => {
@@ -57,7 +61,7 @@ export function createExecutionsModule(ctx) {
         }
 
         tbody.innerHTML = items.map((ex) => `
-        <tr onclick="openLogModal('${ex.id}')" style="cursor:pointer">
+        <tr data-action="open-log-row" data-execution-id="${escapeHtml(ex.id)}" style="cursor:pointer">
             <td><strong>${escapeHtml(ex.automation_name || "?")}</strong></td>
             <td style="font-family:monospace;font-size:0.75rem;opacity:0.85">${ex.id}</td>
             <td><span class="badge ${getBadgeClass(ex.status)}">${translateStatus(ex.status)}</span></td>
@@ -68,6 +72,7 @@ export function createExecutionsModule(ctx) {
             <td>${renderExecutionActions(ex)}</td>
         </tr>
     `).join("");
+        bindActionElements(tbody);
     }
 
     function renderRecoveryCell(ex) {
@@ -82,10 +87,10 @@ export function createExecutionsModule(ctx) {
 
     function renderExecutionActions(ex) {
         if (["RUNNING", "PENDING"].includes(ex.status)) {
-            return `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopExec('${ex.id}')" title="Parar execução"><i data-lucide="square"></i></button>`;
+            return `<button class="btn btn-danger btn-sm" data-action="stop-exec" data-execution-id="${escapeHtml(ex.id)}" title="Parar execução"><i data-lucide="square"></i></button>`;
         }
         if (canRequeue(ex)) {
-            return `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();requeueExec('${ex.id}')" title="Reenfileirar com auditoria"><i data-lucide="rotate-cw"></i></button>`;
+            return `<button class="btn btn-outline btn-sm" data-action="requeue-exec" data-execution-id="${escapeHtml(ex.id)}" title="Reenfileirar com auditoria"><i data-lucide="rotate-cw"></i></button>`;
         }
         return "-";
     }

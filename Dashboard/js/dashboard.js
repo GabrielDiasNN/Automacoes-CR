@@ -4,6 +4,8 @@
  */
 
 import { api, showToast, formatDate, getBadgeClass, translateStatus } from "./api.js";
+import { bindActionElements, registerAction } from "./action_registry.js";
+import { normalizeOverviewPayload } from "./contracts.js";
 import * as ui from "./ui_manager.js";
 import * as ide from "./ide_service.js";
 import * as engine from "./execution_engine.js";
@@ -33,6 +35,7 @@ const executionsModule = createExecutionsModule({
     openLogModal: engine.openLogModal,
     showToast,
     loadOverview,
+    bindActionElements,
 });
 
 const systemModule = createSystemModule({
@@ -60,9 +63,12 @@ const automationsModule = createAutomationsModule({
     loadOverview,
     loadExecutions: (page) => executionsModule.loadExecutions(page),
     syncGlobalTestToggle,
+    bindActionElements,
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+    registerStaticActions();
+    bindActionElements();
     ui.initNavigation();
     bindStaticEvents();
     Promise.all([loadOverview(), loadConfig()]);
@@ -115,6 +121,30 @@ window.loadExecutions = () => loadExecutions(1);
 window.requeueExec = (id) => requeueExec(id);
 
 function bindStaticEvents() {
+    const globalTestToggle = document.getElementById("global-test-toggle");
+    if (globalTestToggle) {
+        globalTestToggle.addEventListener("change", (event) => {
+            toggleGlobalTestMode(Boolean(event.target?.checked));
+        });
+    }
+
+    const autoSearch = document.getElementById("auto-search");
+    if (autoSearch) {
+        autoSearch.addEventListener("input", () => handleSearch());
+    }
+
+    ["filter-automation", "filter-status", "filter-requested-by", "filter-date-from", "filter-date-to"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("change", () => loadExecutions(1));
+        }
+    });
+
+    const automationForm = document.getElementById("form-auto");
+    if (automationForm) {
+        automationForm.addEventListener("submit", (event) => saveAutomation(event));
+    }
+
     document.querySelectorAll(".day-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             automationsModule.toggleScheduleDay(Number(btn.dataset.day));
@@ -139,12 +169,63 @@ function bindStaticEvents() {
     });
 }
 
+function registerStaticActions() {
+    registerAction("refresh-page", () => location.reload());
+    registerAction("open-create-modal", () => openAutomationModal());
+    registerAction("refresh-executions", () => loadExecutions(1));
+    registerAction("system-action", (_event, element) => callSystemAction(element?.dataset?.systemAction || ""));
+    registerAction("save-env", () => ide.saveEnv());
+    registerAction("run-auto", (_event, element) => runAuto(Number(element?.dataset?.automationId || 0)));
+    registerAction("open-log", (_event, element) => {
+        const executionId = element?.dataset?.executionId;
+        if (!executionId) {
+            showToast("Sem execução para exibir logs.", "warning");
+            return;
+        }
+        openLogModal(executionId);
+    });
+    registerAction("pause-auto", (_event, element) => pauseAuto(Number(element?.dataset?.automationId || 0)));
+    registerAction("resume-auto", (_event, element) => resumeAuto(Number(element?.dataset?.automationId || 0)));
+    registerAction("open-edit-auto", (_event, element) => openAutomationModal(Number(element?.dataset?.automationId || 0)));
+    registerAction("clone-auto", (_event, element) => cloneAuto(Number(element?.dataset?.automationId || 0)));
+    registerAction("open-automation-history", (_event, element) => openAutomationHistory(Number(element?.dataset?.automationId || 0)));
+    registerAction("open-json-modal", (_event, element) => ide.openJsonModal(Number(element?.dataset?.automationId || 0), element?.dataset?.automationName || ""));
+    registerAction("open-ide-modal", (_event, element) => ide.openIdeModal(Number(element?.dataset?.automationId || 0), element?.dataset?.automationName || ""));
+    registerAction("remove-schedule-time", (_event, element) => removeScheduleTime(element?.dataset?.hhmm || ""));
+    registerAction("open-log-row", (_event, element) => {
+        const executionId = element?.dataset?.executionId;
+        if (executionId) {
+            openLogModal(executionId);
+        }
+    });
+    registerAction("stop-exec", (event, element) => {
+        event.stopPropagation();
+        stopExec(element?.dataset?.executionId || "");
+    });
+    registerAction("requeue-exec", (event, element) => {
+        event.stopPropagation();
+        requeueExec(element?.dataset?.executionId || "");
+    });
+    registerAction("close-log-modal", () => closeLogModal());
+    registerAction("close-dialog", (_event, element) => {
+        const dialogId = element?.dataset?.dialogId;
+        if (!dialogId) return;
+        document.getElementById(dialogId)?.close();
+    });
+    registerAction("add-schedule-time", () => addScheduleTimeFromInput());
+    registerAction("load-selected-json-file", () => ide.loadSelectedJsonFile());
+    registerAction("save-json-file", () => ide.saveJsonFile());
+    registerAction("load-selected-ide-file", () => ide.loadSelectedIdeFile());
+    registerAction("save-ide-file", () => ide.saveIdeFile());
+}
+
 async function loadOverview() {
-    const overview = await api("/api/system/overview");
-    if (!overview) {
+    const rawOverview = await api("/api/system/overview");
+    if (!rawOverview) {
         ui.updateConnectionStatus(false);
         return;
     }
+    const overview = normalizeOverviewPayload(rawOverview);
     ui.updateConnectionStatus(true);
 
     applyOverviewKpis(overview);
@@ -152,6 +233,7 @@ async function loadOverview() {
     renderOverviewCharts(overview);
     await populateControlTable(overview);
     syncGlobalTestToggle(overview.automations || []);
+    document.body.dataset.contractVersion = overview.contract_version || "legacy";
     if (typeof lucide !== "undefined") lucide.createIcons();
 }
 
@@ -310,7 +392,7 @@ async function populateControlTable(overview) {
             ? `<span class="badge ${getBadgeClass(last.status)}">${translateStatus(last.status)}</span>`
             : "<span class=\"badge badge-muted\">Sem histórico</span>";
         const nextRun = auto.next_run || "-";
-        const openLogAction = last ? `openLogModal('${last.id}')` : "showToast('Sem execução para exibir logs.', 'warning')";
+        const executionIdAttr = last?.id ? `data-execution-id="${escapeHtml(last.id)}"` : "";
 
         return `
             <tr>
@@ -320,13 +402,14 @@ async function populateControlTable(overview) {
                 <td>${nextRun}</td>
                 <td>
                     <div class="inline-actions">
-                        <button class="btn-icon" onclick="runAuto(${auto.id})" title="Executar agora"><i data-lucide="play"></i></button>
-                        <button class="btn-icon" onclick="${openLogAction}" title="Abrir logs"><i data-lucide="terminal"></i></button>
+                        <button class="btn-icon" data-action="run-auto" data-automation-id="${auto.id}" title="Executar agora"><i data-lucide="play"></i></button>
+                        <button class="btn-icon" data-action="open-log" ${executionIdAttr} title="Abrir logs"><i data-lucide="terminal"></i></button>
                     </div>
                 </td>
             </tr>
         `;
     }).join("");
+    bindActionElements(tbody);
 }
 
 async function loadExecutions(page = execPage) {

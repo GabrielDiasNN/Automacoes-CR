@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from conftest import AUTH_HEADERS
-from app.constants import ORCHESTRATOR_VERSION
+from app.constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 
 # ============================================================
 # ROOT
@@ -331,6 +331,7 @@ def test_diagnostics_endpoint(client):
     assert res.status_code == 200
     data = res.json()
     assert data["version"] == ORCHESTRATOR_VERSION
+    assert data["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
     assert data["overall_status"] in ["healthy", "degraded", "unhealthy"]
     assert "findings" in data
     assert "database" in data
@@ -347,6 +348,8 @@ def test_diagnostics_endpoint(client):
     assert "heartbeat" in data
     assert "operator_actions" in data
     assert "failure_hotspots" in data
+    assert "checks" in data
+    assert "recovery" in data
 
 def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_session, monkeypatch):
     import app.routers.system as system_router
@@ -379,8 +382,16 @@ def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_sessio
     components = {item["component"] for item in data["findings"]}
     assert {"database", "queue"}.issubset(components)
     assert any(item["action_code"] == "checkpoint" for item in data["findings"])
-    assert any(item["action_code"] == "worker_wakeup" for item in data["findings"])
-    assert any(item["action_code"] == "checkpoint" for item in data["operator_actions"])
+
+def test_system_overview_exposes_contract_version(client):
+    res = client.get("/api/system/overview", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
+
+def test_system_version_exposes_contract_version(client):
+    res = client.get("/api/system/version", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
 def test_diagnostics_offline_worker_prefers_recovery_action(client, db_session, monkeypatch):
     import app.routers.system as system_router

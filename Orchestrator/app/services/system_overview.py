@@ -8,7 +8,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
-from ..constants import ORCHESTRATOR_VERSION
+from ..constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from ..timezone import get_now_local
 
 
@@ -126,6 +126,10 @@ def build_system_overview_payload(
         "generated_at": get_now_local().isoformat(),
         "version": ORCHESTRATOR_VERSION,
         "schema_version": diagnostics_payload["schema_version"],
+        "contract_version": diagnostics_payload.get(
+            "contract_version",
+            ORCHESTRATOR_CONTRACT_VERSION,
+        ),
         "kpis": {
             "active_automations": sum(1 for auto in automations if auto.enabled),
             "success_24h": success_24h,

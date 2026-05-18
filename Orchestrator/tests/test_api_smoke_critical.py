@@ -7,6 +7,7 @@ Smoke critico de API (fluxo E2E): automacoes, execucoes e sistema.
 import re
 from pathlib import Path
 
+from app.constants import ORCHESTRATOR_CONTRACT_VERSION
 from conftest import AUTH_HEADERS
 
 
@@ -169,6 +170,7 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
     assert overview.status_code == 200
     assert "kpis" in overview.json()
     assert "schema_version" in overview.json()
+    assert overview.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
     jobs = client.get("/api/system/scheduler/jobs", headers=AUTH_HEADERS)
     assert jobs.status_code == 200
@@ -179,6 +181,7 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
     diagnostics = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
     assert diagnostics.status_code == 200
     assert "schema_version" in diagnostics.json()
+    assert diagnostics.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
     schedule_validate = client.post(
         "/api/system/schedule/validate",

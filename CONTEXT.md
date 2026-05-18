@@ -18,6 +18,8 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 
 ## 🧠 Gestão de Contexto (AI-Native)
 - **Playwright Evidence Governance v6.5.4 (18/05/2026):** `Tools/Test-PlaywrightEvidence.ps1` passa a validar padrão, template e evidências E2E; `ValidarAutomacoes.ps1 -OnlyGovernance` agora falha se a evidência não registrar URL real, Playwright por último, console limpo e resultado aprovado.
+- **Contrato Operacional Versionado v6.5.4 (18/05/2026):** `overview`, `diagnostics` e `version` passam a expor `contract_version`; diagnósticos agora incluem `checks` mínimos de runtime e plano de recovery em duas camadas para estabilizar o consumo pelo Dashboard.
+- **Runtime Compartilhado v6.5.4 (18/05/2026):** scheduler, wake-up do worker e criação base de execuções foram centralizados em serviços e runtime comum, reduzindo dependências cruzadas entre `main.py`, routers e `worker.py`.
 - **Recovery Guard v6.5.3 (18/05/2026):** Worker passou a classificar exit codes de canal em causas operacionais (`WHATSAPP_SESSION_EXPIRED`, `CHANNEL_DELIVERY_FAILED`) e requeue manual agora bloqueia concorrência por `queue_group`, evitando duplicidade quando outro fluxo do mesmo recurso já está ativo.
 - **Console Operacional v6.5.2 (18/05/2026):** `/api/system/diagnostics` passou a expor `action_code`, `action_label`, `impact`, `priority`, `operator_actions`, hotspots de falhas em 24h e fila ativa por prioridade/grupo; Dashboard usa esses dados para atalhos operacionais e requeue auditável na tela de execuções.
 - **Baseline de Melhoria Operacional (18/05/2026):** Documentos `docs/operational-improvement-baseline.md` e `docs/operational-improvement-roadmap.md` registram a fotografia validada, as fases pequenas e a ordem de validação para evolução estável.

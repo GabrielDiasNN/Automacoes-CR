@@ -63,7 +63,7 @@
                     <label class="test-mode-control" for="global-test-toggle">
                         <span>Modo teste global</span>
                         <span class="switch">
-                            <input id="global-test-toggle" type="checkbox" onchange="toggleGlobalTestMode(this.checked)">
+                            <input id="global-test-toggle" type="checkbox">
                             <span class="slider"></span>
                         </span>
                     </label>
@@ -77,9 +77,9 @@
                         <h1 id="dashboard-title">Painel operacional</h1>
                     </div>
                     <div class="quick-actions">
-                        <button class="btn btn-outline" type="button" onclick="location.reload()"><i data-lucide="refresh-cw"></i>Atualizar</button>
-                        <button class="btn btn-danger" type="button" onclick="callSystemAction('pause_all')"><i data-lucide="pause-circle"></i>Pausar frota</button>
-                        <button class="btn btn-primary" type="button" onclick="callSystemAction('resume_all')"><i data-lucide="play-circle"></i>Retomar frota</button>
+                        <button class="btn btn-outline" type="button" data-action="refresh-page"><i data-lucide="refresh-cw"></i>Atualizar</button>
+                        <button class="btn btn-danger" type="button" data-action="system-action" data-system-action="pause_all"><i data-lucide="pause-circle"></i>Pausar frota</button>
+                        <button class="btn btn-primary" type="button" data-action="system-action" data-system-action="resume_all"><i data-lucide="play-circle"></i>Retomar frota</button>
                     </div>
                 </div>
 
@@ -153,13 +153,13 @@
                         <span class="eyebrow">Gestão</span>
                         <h1 id="automations-title">Frota de automações</h1>
                     </div>
-                    <button class="btn btn-primary" type="button" onclick="openCreateModal()"><i data-lucide="plus"></i>Nova automação</button>
+                    <button class="btn btn-primary" type="button" data-action="open-create-modal"><i data-lucide="plus"></i>Nova automação</button>
                 </div>
 
                 <div class="filter-strip panel">
                     <div class="filter-group wide">
                         <label for="auto-search">Buscar automação</label>
-                        <input id="auto-search" type="search" class="form-control" placeholder="Nome, descrição ou caminho" oninput="handleSearch()">
+                        <input id="auto-search" type="search" class="form-control" placeholder="Nome, descrição ou caminho">
                     </div>
                 </div>
 
@@ -192,17 +192,17 @@
                         <span class="eyebrow">Histórico</span>
                         <h1 id="executions-title">Execuções</h1>
                     </div>
-                    <button class="btn btn-outline" type="button" onclick="loadExecutions()"><i data-lucide="refresh-cw"></i>Atualizar</button>
+                    <button class="btn btn-outline" type="button" data-action="refresh-executions"><i data-lucide="refresh-cw"></i>Atualizar</button>
                 </div>
 
                 <div class="filter-strip panel">
                     <div class="filter-group">
                         <label for="filter-automation">Automação</label>
-                        <select id="filter-automation" class="form-control" onchange="loadExecutions()"><option value="">TODOS OS ROBÔS</option></select>
+                        <select id="filter-automation" class="form-control"><option value="">TODOS OS ROBÔS</option></select>
                     </div>
                     <div class="filter-group">
                         <label for="filter-status">Status</label>
-                        <select id="filter-status" class="form-control" onchange="loadExecutions()">
+                        <select id="filter-status" class="form-control">
                             <option value="">Todos</option>
                             <option value="SUCCESS">Sucesso</option>
                             <option value="ERROR">Falha</option>
@@ -214,15 +214,15 @@
                     </div>
                     <div class="filter-group">
                         <label for="filter-requested-by">Solicitante</label>
-                        <input id="filter-requested-by" class="form-control" type="text" placeholder="SYSTEM" onchange="loadExecutions()">
+                        <input id="filter-requested-by" class="form-control" type="text" placeholder="SYSTEM">
                     </div>
                     <div class="filter-group">
                         <label for="filter-date-from">De</label>
-                        <input id="filter-date-from" class="form-control" type="date" onchange="loadExecutions()">
+                        <input id="filter-date-from" class="form-control" type="date">
                     </div>
                     <div class="filter-group">
                         <label for="filter-date-to">Até</label>
-                        <input id="filter-date-to" class="form-control" type="date" onchange="loadExecutions()">
+                        <input id="filter-date-to" class="form-control" type="date">
                     </div>
                 </div>
 
@@ -277,10 +277,10 @@
                         <h1 id="system-title">Sistema</h1>
                     </div>
                     <div class="quick-actions">
-                        <button class="btn btn-outline" type="button" onclick="callSystemAction('scheduler_reload')"><i data-lucide="refresh-cw"></i>Sincronizar agenda</button>
-                        <button id="system-worker-action" class="btn btn-outline" type="button" onclick="callSystemAction('worker_wakeup')"><i data-lucide="activity"></i>Acordar worker</button>
-                        <button class="btn btn-outline" type="button" onclick="callSystemAction('backup')"><i data-lucide="database-backup"></i>Backup</button>
-                        <button class="btn btn-danger" type="button" onclick="callSystemAction('purge')"><i data-lucide="trash-2"></i>Purge</button>
+                        <button class="btn btn-outline" type="button" data-action="system-action" data-system-action="scheduler_reload"><i data-lucide="refresh-cw"></i>Sincronizar agenda</button>
+                        <button id="system-worker-action" class="btn btn-outline" type="button" data-action="system-action" data-system-action="worker_wakeup"><i data-lucide="activity"></i>Acordar worker</button>
+                        <button class="btn btn-outline" type="button" data-action="system-action" data-system-action="backup"><i data-lucide="database-backup"></i>Backup</button>
+                        <button class="btn btn-danger" type="button" data-action="system-action" data-system-action="purge"><i data-lucide="trash-2"></i>Purge</button>
                     </div>
                 </div>
 
@@ -303,6 +303,12 @@
                         </div>
                     </section>
                     <section class="panel">
+                        <div class="panel-header"><h3>Contrato e recovery</h3></div>
+                        <div id="diagnostic-contract" class="contract-list">
+                            <div class="empty-state">Carregando contrato operacional...</div>
+                        </div>
+                    </section>
+                    <section class="panel">
                         <div class="panel-header"><h3>Auditoria recente</h3></div>
                         <div class="table-wrap">
                             <table class="data-table">
@@ -322,7 +328,7 @@
                         <span class="eyebrow">Configuração</span>
                         <h1 id="env-title">Ambiente global</h1>
                     </div>
-                    <button class="btn btn-primary" type="button" onclick="saveEnv()"><i data-lucide="save"></i>Salvar .env</button>
+                    <button class="btn btn-primary" type="button" data-action="save-env"><i data-lucide="save"></i>Salvar .env</button>
                 </div>
                 <section class="panel">
                     <div class="panel-header">
@@ -343,19 +349,19 @@
                 <span class="eyebrow">Console operacional</span>
                 <h3 id="log-modal-title">Logs</h3>
             </div>
-            <button class="close-btn" type="button" onclick="closeLogModal()" aria-label="Fechar logs">×</button>
+            <button class="close-btn" type="button" data-action="close-log-modal" aria-label="Fechar logs">×</button>
         </div>
         <div id="modal-log-body" class="modal-body logs"></div>
         <div class="modal-footer">
-            <button class="btn btn-outline" type="button" onclick="closeLogModal()">Fechar</button>
+            <button class="btn btn-outline" type="button" data-action="close-log-modal">Fechar</button>
         </div>
     </dialog>
 
     <dialog id="modal-auto" class="modal modal-lg">
-        <form id="form-auto" method="dialog" onsubmit="saveAuto(event)">
+        <form id="form-auto" method="dialog">
             <div class="modal-header">
                 <h3 id="modal-title">Automação</h3>
-                <button class="close-btn" type="button" onclick="document.getElementById('modal-auto').close()" aria-label="Fechar">×</button>
+                <button class="close-btn" type="button" data-action="close-dialog" data-dialog-id="modal-auto" aria-label="Fechar">×</button>
             </div>
             <div class="modal-body">
                 <input id="f-id" type="hidden">
@@ -423,7 +429,7 @@
                     </div>
                     <div class="time-adder">
                         <input id="f-time-input" class="form-control" type="time" aria-label="Horário da agenda">
-                        <button type="button" class="btn-add-time" onclick="addScheduleTime()" aria-label="Adicionar horário">+</button>
+                        <button type="button" class="btn-add-time" data-action="add-schedule-time" aria-label="Adicionar horário">+</button>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -445,30 +451,30 @@
                 </section>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline" type="button" onclick="document.getElementById('modal-auto').close()">Cancelar</button>
+                <button class="btn btn-outline" type="button" data-action="close-dialog" data-dialog-id="modal-auto">Cancelar</button>
                 <button class="btn btn-primary" type="submit">Salvar automação</button>
             </div>
         </form>
     </dialog>
 
     <dialog id="modal-json" class="modal modal-lg">
-        <div class="modal-header"><h3 id="json-modal-title">Regras JSON</h3><button class="close-btn" type="button" onclick="document.getElementById('modal-json').close()">×</button></div>
+        <div class="modal-header"><h3 id="json-modal-title">Regras JSON</h3><button class="close-btn" type="button" data-action="close-dialog" data-dialog-id="modal-json">×</button></div>
         <div class="modal-body">
             <input id="json-auto-id" type="hidden">
-            <div class="form-group"><label for="json-file-selector">Arquivo</label><select id="json-file-selector" class="form-control" onchange="loadSelectedJsonFile()"></select></div>
+            <div class="form-group"><label for="json-file-selector">Arquivo</label><select id="json-file-selector" class="form-control" data-action="load-selected-json-file" data-action-event="change"></select></div>
             <textarea id="json-editor" class="code-area" spellcheck="false"></textarea>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" type="button" onclick="document.getElementById('modal-json').close()">Cancelar</button><button class="btn btn-primary" type="button" onclick="saveJsonFile()">Salvar JSON</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" type="button" data-action="close-dialog" data-dialog-id="modal-json">Cancelar</button><button class="btn btn-primary" type="button" data-action="save-json-file">Salvar JSON</button></div>
     </dialog>
 
     <dialog id="modal-ide" class="modal modal-xl">
-        <div class="modal-header"><h3 id="ide-modal-title">IDE</h3><button class="close-btn" type="button" onclick="document.getElementById('modal-ide').close()">×</button></div>
+        <div class="modal-header"><h3 id="ide-modal-title">IDE</h3><button class="close-btn" type="button" data-action="close-dialog" data-dialog-id="modal-ide">×</button></div>
         <div class="modal-body">
             <input id="ide-auto-id" type="hidden">
-            <div class="form-group"><label for="ide-file-selector">Arquivo</label><select id="ide-file-selector" class="form-control" onchange="loadSelectedIdeFile()"></select></div>
+            <div class="form-group"><label for="ide-file-selector">Arquivo</label><select id="ide-file-selector" class="form-control" data-action="load-selected-ide-file" data-action-event="change"></select></div>
             <textarea id="ide-editor" class="code-area" spellcheck="false"></textarea>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" type="button" onclick="document.getElementById('modal-ide').close()">Cancelar</button><button class="btn btn-primary" type="button" onclick="saveIdeFile()">Salvar código</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" type="button" data-action="close-dialog" data-dialog-id="modal-ide">Cancelar</button><button class="btn btn-primary" type="button" data-action="save-ide-file">Salvar código</button></div>
     </dialog>
 
     <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>

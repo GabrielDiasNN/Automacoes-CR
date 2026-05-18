@@ -757,6 +757,36 @@ textarea:focus-visible {
     gap: var(--space-3);
 }
 
+.contract-list {
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-3);
+}
+
+.contract-card {
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.contract-card h4,
+.contract-card p,
+.contract-card small {
+    margin: 0;
+    display: block;
+}
+
+.contract-card p {
+    margin-top: 6px;
+    color: var(--text-secondary);
+}
+
+.contract-card small {
+    margin-top: 6px;
+    color: var(--text-muted);
+}
+
 .finding-card {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);

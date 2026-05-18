@@ -10,6 +10,7 @@
 - **Worker Isolation**: Uso de `subprocess.CREATE_NO_WINDOW` e encerramento forçado de processos filhos para evitar persistência de robôs após cancelamento (Graceful Shutdown).
 - **SQL Hardening**: Pragmas SQLite configurados para integridade referencial (`foreign_keys=ON`) e resiliência sob carga.
 - **Diagnóstico Sem Segredos**: Achados operacionais de `/api/system/diagnostics` devem expor severidade, componente e ação sugerida sem revelar credenciais, caminhos sensíveis fora do contrato ou conteúdo de `.env`.
+- **Contrato Versionado Sem Segredos**: `contract_version`, `checks` e `recovery` podem orientar front-end e operação, mas não devem carregar credenciais, conteúdo de `.env` ou detalhes de infraestrutura fora do contrato público.
 - **Mutação Administrativa Validada**: Alterações de `.env` e `schedule` devem passar por validação pré-save antes de atingir disco ou banco.
 - **Retry Auditável**: Requeue de execuções deve preservar trilha de auditoria, origem da execução, motivo operacional e limite explícito de tentativas.
 - **Ações Diagnósticas Sem Segredo**: `action_code`, `operator_actions`, hotspots e impactos operacionais podem orientar o operador, mas não devem expor conteúdo de `.env`, credenciais, caminhos sensíveis fora do contrato ou payloads de negócio.

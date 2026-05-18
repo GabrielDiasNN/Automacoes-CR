@@ -1,23 +1,19 @@
 # pylint: disable=all
+# pylint: disable=all
 # mypy: ignore-errors
 """
 
 Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.2.0
 
 """
-
-import asyncio
 import json
 import logging
 import os
-import subprocess
-import shutil
-import sys
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import desc, func, text, case
+from sqlalchemy import desc, func, case
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -25,13 +21,24 @@ from ..constants import (EXECUTION_ACTIVE_STATUSES,
                          EXECUTION_STATUS_PENDING,
                          EXECUTION_STATUS_RUNNING, ORCHESTRATOR_SCHEMA_VERSION,
                          ORCHESTRATOR_VERSION, SEVERITY_ERROR, SEVERITY_WARN)
-from ..database import (DB_PATH, get_db, get_db_size_mb, get_wal_size_mb,
-                        get_schema_version, purge_old_executions,
+from ..database import (get_db, get_wal_size_mb, purge_old_executions,
                         run_wal_checkpoint,
                         validate_database_schema)
 from ..middleware import get_api_key
+from ..runtime import (get_project_root, scheduler,
+                       trigger_worker_wakeup, wait_for_task_signal)
+from ..services.env_admin import (backup_env_file, read_env_content,
+                                  validate_env_content as validate_env_payload,
+                                  write_env_content)
+from ..services.scheduler_runtime import (list_scheduled_jobs as build_scheduled_jobs,
+                                          reload_scheduled_tasks)
 from ..services.system_diagnostics import build_diagnostics_payload
 from ..services.system_overview import build_system_overview_payload
+from ..services.system_runtime import (build_health_payload,
+                                       build_version_payload,
+                                       get_worker_status as get_worker_status_service,
+                                       launch_orchestrator_recovery,
+                                       perform_manual_backup)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
@@ -39,94 +46,9 @@ logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/system", tags=["System"])
 
-def _resolve_project_root() -> str:
-    """Localiza a raiz real do repositório mesmo quando a cópia de execução é aninhada."""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    fallback = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-    )
-
-    marker_names = {"README.md", "Dashboard", "Infrastructure", "Orchestrator"}
-    search_dir = current_dir
-    while True:
-        if all(os.path.exists(os.path.join(search_dir, marker)) for marker in marker_names):
-            return search_dir
-
-        parent_dir = os.path.dirname(search_dir)
-        if parent_dir == search_dir:
-            return fallback
-        search_dir = parent_dir
-
-
-PROJECT_ROOT = _resolve_project_root()
+PROJECT_ROOT = get_project_root()
 
 STARTUP_TIME = get_now_local()
-
-def _backup_env_file(env_path: str) -> str:
-    """Cria backup do .env antes de alteracao administrativa."""
-    if not os.path.exists(env_path):
-        return ""
-
-    backup_dir = os.path.join(PROJECT_ROOT, "Backups", "env")
-    os.makedirs(backup_dir, exist_ok=True)
-    ts = get_now_local().strftime("%Y%m%d_%H%M%S_%f")
-    backup_path = os.path.join(backup_dir, f".env.{ts}.bak")
-    shutil.copy2(env_path, backup_path)
-    return os.path.relpath(backup_path, PROJECT_ROOT)
-
-def _validate_env_content(content: str) -> schemas.EnvValidationResponse:
-    issues = []
-    seen_keys = set()
-    lines = content.splitlines()
-
-    for idx, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in raw_line:
-            issues.append(
-                schemas.EnvValidationIssue(
-                    line=idx,
-                    code="INVALID_FORMAT",
-                    message="Linha deve seguir o formato CHAVE=VALOR.",
-                )
-            )
-            continue
-        key, _ = raw_line.split("=", 1)
-        key = key.strip()
-        if not key:
-            issues.append(
-                schemas.EnvValidationIssue(
-                    line=idx,
-                    code="EMPTY_KEY",
-                    message="Chave vazia não é permitida.",
-                )
-            )
-            continue
-        if " " in key:
-            issues.append(
-                schemas.EnvValidationIssue(
-                    line=idx,
-                    code="INVALID_KEY",
-                    message="Chave não pode conter espaços.",
-                )
-            )
-        if key in seen_keys:
-            issues.append(
-                schemas.EnvValidationIssue(
-                    line=idx,
-                    code="DUPLICATE_KEY",
-                    message=f"Chave duplicada detectada: {key}.",
-                )
-            )
-        seen_keys.add(key)
-
-    return schemas.EnvValidationResponse(
-        valid=len(issues) == 0,
-        issue_count=len(issues),
-        normalized_line_count=len(lines),
-        issues=issues,
-    )
 
 # ---------------------------------------------------------------------------
 
@@ -137,57 +59,7 @@ def _validate_env_content(content: str) -> schemas.EnvValidationResponse:
 @router.get("/health", response_model=schemas.SystemHealth)
 def health_check(db: Session = Depends(get_db)):
     """Health check completo: DB, Scheduler, Worker, Disco."""
-
-    from ..main import scheduler
-
-    # Status do banco
-    db_status = "online"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception as e:
-        db_status = f"erro: {str(e)}"
-
-    # Status do scheduler
-    sched_status = "executando" if scheduler.running else "parado"
-
-    # Status do worker
-    worker_status = _get_worker_status(db)
-
-    # Tarefas pendentes
-    pending = (
-        db.query(models.Execution).filter(models.Execution.status == "PENDING").count()
-    )
-
-    # Tamanho do banco
-    disk_mb = get_db_size_mb()
-
-    # Determinar saude geral
-    overall = "healthy"
-    if db_status != "online" or not scheduler.running:
-        overall = "unhealthy"
-    elif not worker_status.is_alive:
-        overall = "degraded"
-
-    wal_mb = get_wal_size_mb()
-
-    import psutil
-
-    cpu = psutil.cpu_percent()
-
-    ram = psutil.virtual_memory().percent
-
-    return schemas.SystemHealth(
-        status=overall,
-        timestamp=get_now_local(),
-        database=db_status,
-        scheduler=sched_status,
-        worker=worker_status,
-        pending_tasks=pending,
-        disk_usage_mb=disk_mb,
-        wal_size_mb=wal_mb,
-        cpu_usage=cpu,
-        ram_usage_percent=ram,
-    )
+    return build_health_payload(db, _get_worker_status(db))
 
 # ---------------------------------------------------------------------------
 
@@ -197,66 +69,11 @@ def health_check(db: Session = Depends(get_db)):
 
 def _get_worker_status(db: Session) -> schemas.WorkerStatus:
     """Le o heartbeat do worker do banco."""
-
-    hb = db.query(models.WorkerHeartbeat).filter(models.WorkerHeartbeat.id == 1).first()
-
-    if not hb or not hb.last_ping:
-
-        return schemas.WorkerStatus(is_alive=False)
-
-    # Worker e considerado "vivo" se o heartbeat foi nos ultimos 60 segundos
-
-    now = get_now_local()
-
-    last_ping = hb.last_ping
-
-    is_alive = (now - last_ping).total_seconds() < 60
-
-    return schemas.WorkerStatus(
-        is_alive=is_alive,
-        pid=hb.pid,
-        last_ping=hb.last_ping,
-        uptime_seconds=hb.uptime_seconds,
-        tasks_completed=hb.tasks_completed,
-        tasks_failed=hb.tasks_failed,
-        active_tasks=hb.active_tasks,
-        version=hb.version or "unknown",
-    )
+    return get_worker_status_service(db)
 
 def _launch_orchestrator_recovery() -> str:
     """Dispara o fluxo canônico de recuperação do Orchestrator em background."""
-    infrastructure_dir = os.path.join(PROJECT_ROOT, "Infrastructure")
-    candidates = ("Recover-Orchestrator.ps1", "Start-Orchestrator.ps1")
-
-    for script_name in candidates:
-        script_path = os.path.join(infrastructure_dir, script_name)
-        if not os.path.exists(script_path):
-            continue
-
-        log_dir = os.path.join(PROJECT_ROOT, "Orchestrator", "Logs")
-        os.makedirs(log_dir, exist_ok=True)
-        base_name = os.path.splitext(script_name)[0].lower()
-        stdout_log = os.path.join(log_dir, f"{base_name}_stdout.log")
-        stderr_log = os.path.join(log_dir, f"{base_name}_stderr.log")
-
-        with open(stdout_log, "a", encoding="utf-8") as stdout, open(stderr_log, "a", encoding="utf-8") as stderr:
-            subprocess.Popen(
-                [
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    script_path,
-                ],
-                cwd=PROJECT_ROOT,
-                stdout=stdout,
-                stderr=stderr,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        return script_name
-
-    raise FileNotFoundError("Script canônico de recuperação não encontrado.")
+    return launch_orchestrator_recovery(PROJECT_ROOT)
 
 @router.get("/worker/status", response_model=schemas.WorkerStatus)
 def get_worker_status(
@@ -382,40 +199,9 @@ def manual_backup(
     api_key: str = Depends(get_api_key),
 ):
     """Realiza backup atomico do banco de dados SQLite."""
-
-    backup_dir = os.path.join(PROJECT_ROOT, "Backups")
-
-    os.makedirs(backup_dir, exist_ok=True)
-
-    ts = get_now_local().strftime("%Y%m%d_%H%M%S")
-
-    backup_path = os.path.join(backup_dir, f"automacoes_backup_{ts}.db")
-
     try:
-
-        db.execute(text(f"VACUUM INTO '{backup_path}'"))
-
-        size_mb = round(os.path.getsize(backup_path) / (1024 * 1024), 2)
-
-        logger.info(f"Backup manual concluido: {backup_path} ({size_mb}MB)")
-
-        # Rotacao: manter apenas os 7 mais recentes
-
-        backups = sorted(
-            [
-                os.path.join(backup_dir, f)
-                for f in os.listdir(backup_dir)
-                if f.endswith(".db")
-            ]
-        )
-
-        if len(backups) > 7:
-
-            for old_b in backups[:-7]:
-
-                os.remove(old_b)
-
-                logger.info(f"Backup antigo removido: {old_b}")
+        result = perform_manual_backup(db, PROJECT_ROOT)
+        logger.info("Backup manual concluido: %s (%sMB)", result["path"], result["size_mb"])
 
         log_audit(
             db,
@@ -423,16 +209,11 @@ def manual_backup(
             "SYSTEM",
             "GLOBAL",
             get_client_ip(request),
-            json.dumps({"path": backup_path, "size_mb": size_mb}),
+            json.dumps({"path": result["path"], "size_mb": result["size_mb"]}),
         )
 
         db.commit()
-
-        return {
-            "message": "Backup realizado com sucesso.",
-            "path": backup_path,
-            "size_mb": size_mb,
-        }
+        return result
 
     except Exception as e:
 
@@ -447,8 +228,6 @@ def reload_scheduler_jobs(
     api_key: str = Depends(get_api_key),
 ):
     """Forca sincronizacao do APScheduler com automacoes habilitadas."""
-    from ..main import reload_scheduled_tasks, scheduler
-
     reload_scheduled_tasks()
     jobs_loaded = len(scheduler.get_jobs())
 
@@ -474,9 +253,7 @@ def wakeup_worker(
     api_key: str = Depends(get_api_key),
 ):
     """Dispara wake-up para o worker verificar a fila imediatamente."""
-    from ..main import task_queued_event
-
-    task_queued_event.set()
+    trigger_worker_wakeup()
 
     log_audit(
         db,
@@ -590,60 +367,7 @@ def list_scheduled_jobs(
     api_key: str = Depends(get_api_key),
 ):
     """Retorna a lista de tarefas agendadas no APScheduler."""
-
-    from ..main import scheduler
-
-    jobs = []
-
-    for job in scheduler.get_jobs():
-
-        # Tentar extrair automation_id do ID do job (ex: job_1)
-
-        auto_id = None
-
-        auto_name = "Enterprise Job"
-
-        if job.id.startswith("job_"):
-
-            try:
-
-                auto_id = int(job.id.split("_")[1])
-
-                auto = (
-                    db.query(models.Automation)
-                    .filter(models.Automation.id == auto_id)
-                    .first()
-                )
-
-                if auto:
-
-                    auto_name = auto.name
-
-            except (IndexError, ValueError):
-
-                pass
-
-        elif job.id.startswith("enterprise_"):
-
-            auto_name = (
-                f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"
-            )
-
-        jobs.append(
-            schemas.ScheduledJob(
-                id=job.id,
-                automation_id=auto_id,
-                automation_name=auto_name,
-                next_run_time=job.next_run_time,
-                trigger=str(job.trigger),
-            )
-        )
-
-    # Ordenar por proxima execucao
-
-    return sorted(
-        jobs, key=lambda x: x.next_run_time if x.next_run_time else datetime.max
-    )
+    return build_scheduled_jobs(db)
 
 @router.get("/overview", response_model=schemas.SystemOverviewResponse)
 def get_system_overview(
@@ -651,8 +375,6 @@ def get_system_overview(
     api_key: str = Depends(get_api_key),
 ):
     """Agrega métricas, saúde, jobs e eventos recentes para o dashboard operacional."""
-    from ..main import scheduler
-
     health_payload = health_check(db).model_dump()
     jobs = list_scheduled_jobs(db, api_key)
     diagnostics = build_diagnostics_payload(
@@ -678,29 +400,7 @@ def get_system_overview(
 @router.get("/version", response_model=schemas.SystemVersion)
 def get_version():
     """Retorna informacoes detalhadas de versao e build do Orchestrator."""
-
-    uptime = get_now_local() - STARTUP_TIME
-
-    max_workers = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4")) # Aumentado para 4 (Pragmatic Performance)
-
-    allowed_origins = [
-        o.strip()
-        for o in os.environ.get(
-            "ALLOWED_ORIGINS",
-            "http://localhost,http://127.0.0.1,http://localhost:8000,http://127.0.0.1:8000",
-        ).split(",")
-        if o.strip()
-    ]
-
-    return schemas.SystemVersion(
-        version=ORCHESTRATOR_VERSION,
-        schema_version=get_schema_version(),
-        python_version=sys.version.split()[0],
-        started_at=STARTUP_TIME.isoformat(),
-        uptime_seconds=round(uptime.total_seconds(), 2),
-        max_workers=max_workers,
-        allowed_origins=allowed_origins,
-    )
+    return build_version_payload(STARTUP_TIME)
 
 @router.get("/diagnostics", response_model=schemas.DiagnosticsPayload)
 def get_diagnostics(
@@ -708,8 +408,6 @@ def get_diagnostics(
     api_key: str = Depends(get_api_key),
 ):
     """Retorna diagnostico operacional consolidado do Orchestrator."""
-    from ..main import scheduler
-
     return build_diagnostics_payload(
         db,
         scheduler,
@@ -848,25 +546,13 @@ def manual_purge(
 @router.get("/wait-for-task")
 async def wait_for_task(api_key: str = Depends(get_api_key)):
     """Endpoint de long-polling para wake-up do Worker (v6.2.0)."""
-    from ..main import task_queued_event
-    try:
-        # Espera ate 30 segundos por um evento
-        await asyncio.wait_for(task_queued_event.wait(), timeout=30)
-        task_queued_event.clear()
-        return {"status": "wakeup"}
-    except asyncio.TimeoutError:
-        return {"status": "timeout"}
+    return {"status": await wait_for_task_signal(timeout_seconds=30)}
 
 @router.get("/env", response_model=schemas.EnvContent)
 def get_env_content(api_key: str = Depends(get_api_key)):
     """Lê o conteúdo do arquivo .env global."""
     env_path = os.path.join(PROJECT_ROOT, ".env")
-    if not os.path.exists(env_path):
-        return schemas.EnvContent(content="")
-
-    with open(env_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    return schemas.EnvContent(content=content)
+    return schemas.EnvContent(content=read_env_content(env_path))
 
 @router.post("/env/validate", response_model=schemas.EnvValidationResponse)
 def validate_env_content(
@@ -874,7 +560,7 @@ def validate_env_content(
     api_key: str = Depends(get_api_key),
 ):
     """Valida o conteúdo do .env sem persistir alterações."""
-    return _validate_env_content(payload.content)
+    return validate_env_payload(payload.content)
 
 @router.put("/env")
 def update_env_content(
@@ -886,7 +572,7 @@ def update_env_content(
     env_path = os.path.join(PROJECT_ROOT, ".env")
 
     try:
-        validation = _validate_env_content(payload.content)
+        validation = validate_env_payload(payload.content)
         if not validation.valid:
             raise HTTPException(
                 status_code=422,
@@ -895,9 +581,8 @@ def update_env_content(
                     "issues": [item.model_dump() for item in validation.issues],
                 },
             )
-        backup_relpath = _backup_env_file(env_path)
-        with open(env_path, "w", encoding="utf-8") as f:
-            f.write(payload.content)
+        backup_relpath = backup_env_file(PROJECT_ROOT, env_path)
+        write_env_content(env_path, payload.content)
 
         logger.info("Arquivo .env global atualizado via API.")
 

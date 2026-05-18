@@ -12,6 +12,7 @@ export function createAutomationsModule(ctx) {
         loadOverview,
         loadExecutions,
         syncGlobalTestToggle,
+        bindActionElements,
     } = ctx;
 
     let cachedAutomations = [];
@@ -75,12 +76,12 @@ export function createAutomationsModule(ctx) {
             const scheduleLabel = auto.schedule_summary || describeSchedule(auto.schedule);
             const nextRun = auto.next_run || formatDate(nextRunByAuto.get(auto.id)) || "-";
             const escapedName = escapeHtml(auto.name);
-            const autoNameJs = String(auto.name || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
             const riskLabel = buildRiskLabel(auto);
             const lastLabel = auto.last_status ? `<span class="badge ${getBadgeClass(auto.last_status)}">${translateStatus(auto.last_status)}</span>` : "<span class=\"badge badge-muted\">Sem histórico</span>";
             const pauseResumeBtn = auto.enabled
-                ? `<button class="btn-icon" onclick="pauseAuto(${auto.id})" title="Pausar"><i data-lucide="pause" size="14"></i></button>`
-                : `<button class="btn-icon" onclick="resumeAuto(${auto.id})" title="Retomar"><i data-lucide="play-circle" size="14"></i></button>`;
+                ? `<button class="btn-icon" data-action="pause-auto" data-automation-id="${auto.id}" title="Pausar"><i data-lucide="pause" size="14"></i></button>`
+                : `<button class="btn-icon" data-action="resume-auto" data-automation-id="${auto.id}" title="Retomar"><i data-lucide="play-circle" size="14"></i></button>`;
+            const escapedNameAttr = escapeHtml(String(auto.name || ""));
 
             return `
             <tr>
@@ -98,18 +99,19 @@ export function createAutomationsModule(ctx) {
                 <td>${riskLabel}</td>
                 <td>
                     <div class="inline-actions">
-                        <button class="btn-icon" onclick="runAuto(${auto.id})" title="Executar"><i data-lucide="play" size="14"></i></button>
+                        <button class="btn-icon" data-action="run-auto" data-automation-id="${auto.id}" title="Executar"><i data-lucide="play" size="14"></i></button>
                         ${pauseResumeBtn}
-                        <button class="btn-icon" onclick="openEditAuto(${auto.id})" title="Editar cadastro"><i data-lucide="pencil" size="14"></i></button>
-                        <button class="btn-icon" onclick="cloneAuto(${auto.id})" title="Clonar"><i data-lucide="copy" size="14"></i></button>
-                        <button class="btn-icon" onclick="openAutomationHistory(${auto.id})" title="Histórico"><i data-lucide="history" size="14"></i></button>
-                        <button class="btn-icon" onclick="openJsonModal(${auto.id}, '${autoNameJs}')" title="Editar JSON"><i data-lucide="file-json" size="14"></i></button>
-                        <button class="btn-icon" onclick="openIdeModal(${auto.id}, '${autoNameJs}')" title="Editar scripts"><i data-lucide="code" size="14"></i></button>
+                        <button class="btn-icon" data-action="open-edit-auto" data-automation-id="${auto.id}" title="Editar cadastro"><i data-lucide="pencil" size="14"></i></button>
+                        <button class="btn-icon" data-action="clone-auto" data-automation-id="${auto.id}" title="Clonar"><i data-lucide="copy" size="14"></i></button>
+                        <button class="btn-icon" data-action="open-automation-history" data-automation-id="${auto.id}" title="Histórico"><i data-lucide="history" size="14"></i></button>
+                        <button class="btn-icon" data-action="open-json-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar JSON"><i data-lucide="file-json" size="14"></i></button>
+                        <button class="btn-icon" data-action="open-ide-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar scripts"><i data-lucide="code" size="14"></i></button>
                     </div>
                 </td>
             </tr>
         `;
         }).join("");
+        bindActionElements(tbody);
     }
 
     function handleSearch() {
@@ -297,9 +299,10 @@ export function createAutomationsModule(ctx) {
         list.innerHTML = scheduleTimes.map((hhmm) => `
         <span class="time-tag">
             ${hhmm}
-            <span class="remove-time" onclick="removeScheduleTime('${hhmm}')">✕</span>
+            <span class="remove-time" data-action="remove-schedule-time" data-hhmm="${hhmm}">✕</span>
         </span>
     `).join("");
+        bindActionElements(list);
     }
 
     function renderScheduleDays() {
