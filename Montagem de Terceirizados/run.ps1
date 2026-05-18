@@ -177,8 +177,19 @@ try {
         $subject = $payload.subject
 
         $htmlOutput = $payload.html
+        $tipoNotif = [string]$payload.tipo_notificacao
+        $totalLinhas = [int]$payload.total_linhas
+        $totalErros = [int]$payload.total_erros
+        $totalPecasNfIncorreta = [int]$payload.total_pecas_nf_incorreta
+        $novos = [int]$payload.novos
+        $novosPecasNfIncorreta = [int]$payload.novos_pecas_nf_incorreta
+        $corrigidos = [int]$payload.corrigidos
+        $corrigidosPecasNfIncorreta = [int]$payload.corrigidos_pecas_nf_incorreta
+        $permanentes = [int]$payload.permanentes
+        $permanentesPecasNfIncorreta = [int]$payload.permanentes_pecas_nf_incorreta
 
         Write-Log "Notificação gerada: $subject"
+        Write-Log "Resumo seguro payload => tipo=$tipoNotif; total_linhas=$totalLinhas; total_erros=$totalErros; total_pecas_nf_incorreta=$totalPecasNfIncorreta; novos=$novos; novos_pecas_nf_incorreta=$novosPecasNfIncorreta; corrigidos=$corrigidos; corrigidos_pecas_nf_incorreta=$corrigidosPecasNfIncorreta; permanentes=$permanentes; permanentes_pecas_nf_incorreta=$permanentesPecasNfIncorreta"
 
         # Idempotência Granular (ADR-013)
 

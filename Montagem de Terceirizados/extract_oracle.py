@@ -16,8 +16,10 @@ import oracledb
 from dotenv import load_dotenv
 
 # Carregar ambiente (.env) do projeto raiz
-# O arquivo .env esta 1 nivel acima da pasta da automacao
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+# O arquivo .env esta 1 nivel acima da pasta da automacao.
+# override=True alinha a execucao direta ao contrato do Orchestrator,
+# evitando que variaveis stale da sessao atual vencam o .env do repositorio.
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=True)
 
 # Forca UTF-8 para stdout e stderr para garantir interoperabilidade
 if hasattr(sys.stdout, "reconfigure"):

@@ -38,6 +38,7 @@ HTML_ICON_TROPHY: str = "&#127942;"
 HTML_ICON_TARGET: str = "&#127919;"
 
 ROBO_VERSAO: str = "v1.1"
+LEMBRETE_INTERVALO_MINUTOS: int = 20
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs para o stderr."""
@@ -68,6 +69,31 @@ def clean_str(val: Any) -> str:
         return str(int(val))
     return str(val).strip()
 
+
+def parse_qt_pc_nf(qt_pc_nf: str) -> List[Dict[str, Any]]:
+    """Quebra o campo QT_PC_NF em itens de quantidade/NF, tolerando sufixos e separadores variaveis."""
+    itens: List[Dict[str, Any]] = []
+    if not qt_pc_nf:
+        return itens
+
+    partes: List[str] = [
+        trecho.strip()
+        for trecho in re.split(r"\s*;\s*|\s*,\s*(?=\d+\s*-)", qt_pc_nf)
+        if trecho.strip()
+    ]
+    for parte in partes:
+        match = re.match(r"^\s*(\d+)\s*-\s*(\d+)(?:\s*-\s*(.*))?$", parte)
+        if not match:
+            continue
+        itens.append(
+            {
+                "qtd": int(match.group(1)),
+                "nf": match.group(2).strip(),
+                "origem": clean_str(match.group(3)),
+            }
+        )
+    return itens
+
 def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Executa a logica de negocio: compara Montagem com Programacao."""
     erros: List[Dict[str, Any]] = []
@@ -76,20 +102,19 @@ def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         qt_pc_nf: str = clean_str(row.get("QT_PC_NF"))
         obs_ob: str = clean_str(row.get("OBS_OB"))
 
-        montagem_ok: bool = True
-        nfs_montagem: List[str] = []
-
-        if qt_pc_nf:
-            partes: List[str] = qt_pc_nf.split(",")
-            for parte in partes:
-                sub_partes: List[str] = parte.split("-")
-                if len(sub_partes) >= 2:
-                    nf_atual: str = sub_partes[1].strip()
-                    nfs_montagem.append(nf_atual)
-                    if nf_atual != cd_ref_clt:
-                        montagem_ok = False
-
+        itens_montagem: List[Dict[str, Any]] = parse_qt_pc_nf(qt_pc_nf)
+        nfs_montagem: List[str] = [clean_str(item.get("nf")) for item in itens_montagem]
+        itens_incorretos: List[Dict[str, Any]] = [
+            item for item in itens_montagem if clean_str(item.get("nf")) != cd_ref_clt
+        ]
+        montagem_ok: bool = len(itens_incorretos) == 0
         nf_montagem_str: str = ", ".join(nfs_montagem)
+        nf_montagem_incorretas: str = ", ".join(
+            clean_str(item.get("nf")) for item in itens_incorretos
+        )
+        qt_peca_nf_incorreta: int = sum(
+            int(cast(int, item.get("qtd", 0))) for item in itens_incorretos
+        )
         nf_prog: str = ""
         match = re.search(r"NF:\s*(\d+)", obs_ob, re.IGNORECASE)
         if match:
@@ -109,9 +134,23 @@ def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             row["DETALHE_ERRO"] = detalhe_erro
             row["NF_ESPERADA"] = cd_ref_clt
             row["NF_MONTAGEM"] = nf_montagem_str
+            row["NF_MONTAGEM_INCORRETAS"] = nf_montagem_incorretas
             row["NF_PROGRAMACAO"] = nf_prog
+            row["QT_PECA_NF_INCORRETA"] = qt_peca_nf_incorreta
+            row["TEM_ERRO_MONTAGEM"] = not montagem_ok
             erros.append(row)
     return erros
+
+
+def formatar_qtd_pecas_incorretas(erro: Dict[str, Any]) -> str:
+    """Renderiza a quantidade de pecas com NF incorreta apenas para divergencia de montagem."""
+    if not bool(erro.get("TEM_ERRO_MONTAGEM")):
+        return "<span style='color:#9ca3af;'><i>N/A</i></span>"
+    qtd: int = int(erro.get("QT_PECA_NF_INCORRETA", 0) or 0)
+    return (
+        f"<span style='background:#fff7ed; color:#9a3412; padding:2px 6px; "
+        f"border-radius:4px; font-weight:bold; border:1px solid #fdba74;'>{qtd}</span>"
+    )
 
 def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NFs divergentes na Montagem."""
@@ -151,10 +190,10 @@ def gerar_tabela_categoria_html(
             + "<p style='font-size:10pt;color:#6b7280;margin:0 0 8px 0; background:#f9fafb; padding:10px; border-radius:6px;'><i>Nenhum item nesta categoria.</i></p></div>"
         )
 
-    html += "<table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;'><tr style='background:#f3f4f6; color:#374151; text-align:center; font-weight:bold; border-bottom:2px solid #e5e7eb;'><th>Nº OB</th><th>Prog.</th><th>Ref. Cliente (Esperada)</th><th>NF Usada (Mont.)</th><th>NF Usada (Prog.)</th><th>Detalhe do Erro</th></tr>"
+    html += "<table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;'><tr style='background:#f3f4f6; color:#374151; text-align:center; font-weight:bold; border-bottom:2px solid #e5e7eb;'><th>Categoria</th><th>Nº OB</th><th>Prog.</th><th>Facção</th><th>Alternativo</th><th>NF esperada da Facção</th><th>NF informada na montagem</th><th>Qtd. peças NF incorreta</th><th>NF informada na programação</th><th>Detalhe do Erro</th></tr>"
     for idx, e in enumerate(erros):
         bg: str = "#ffffff" if idx % 2 == 0 else "#f9fafb"
-        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('NR_OB'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #bfdbfe;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td></tr>"
+        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(titulo)}</td><td>{html_escape(e.get('NR_OB'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #bfdbfe;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{formatar_qtd_pecas_incorretas(e)}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td></tr>"
     html += "</table></div>"
     return html
 
@@ -166,11 +205,11 @@ def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
         "<div style='margin-top: 30px;'><h3 style='font-size:14pt; margin:0 0 12px 0; color:#1f2937; text-align:center;'>Detalhamento Completo das Divergências</h3>"
     )
     html += "<div style='overflow-x:auto; border: 1px solid #e5e7eb; border-radius: 8px;'><table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9pt;width:100%; white-space:nowrap;'>"
-    html += "<tr style='background-color:#f87171; color:#ffffff; text-align:center; font-weight:bold;'><th>Sit. OB</th><th>Prog.</th><th>Facção</th><th>Nº OB</th><th>Ref. Cliente</th><th>NF (Montagem)</th><th>NF (Prog.)</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th></tr>"
+    html += "<tr style='background-color:#f87171; color:#ffffff; text-align:center; font-weight:bold;'><th>Sit. OB</th><th>Prog.</th><th>Facção</th><th>Nº OB</th><th>NF esperada da Facção</th><th>NF informada na montagem</th><th>Qtd. peças NF incorreta</th><th>NF informada na programação</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th></tr>"
     agora: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     for idx, e in enumerate(erros):
         bg: str = "#ffffff" if idx % 2 == 0 else "#fef2f2"
-        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('ST_OB_ABERTO'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('NR_OB'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td style='color:#6b7280;'>{agora}</td></tr>"
+        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('ST_OB_ABERTO'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('NR_OB'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{formatar_qtd_pecas_incorretas(e)}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td style='color:#6b7280;'>{agora}</td></tr>"
     html += "</table></div></div>"
     return html
 
@@ -178,22 +217,32 @@ def montar_template_email(
     tipo_notificacao: str,
     total_linhas: int,
     total_erros: int,
-    elapsed_time: float,
+    total_pecas_nf_incorreta: int,
+    novos_count: int,
+    corrigidos_count: int,
+    permanentes_count: int,
     detalhes_html: str,
 ) -> str:
     """Envolve os detalhes no template de e-mail padronizado."""
     tipo: str = tipo_notificacao.upper().strip()
     cor: str = "#dc2626"
     icon: str = HTML_ICON_WARNING
-    msg: str = "Divergências Detectadas"
+    msg: str = "Divergências NF x OB"
     res: str = f"{total_erros} erros"
 
     if tipo == "ALTERACAO":
         cor, icon, msg, res = (
             "#ea580c",
             HTML_ICON_TARGET,
-            "Divergências Alteradas",
+            "Atualização de Divergências",
             f"{total_erros} erros",
+        )
+    elif tipo == "LEMBRETE":
+        cor, icon, msg, res = (
+            "#b45309",
+            HTML_ICON_WARNING,
+            "Lembrete de Pendências",
+            f"{total_erros} pendências",
         )
     elif tipo == "ACERTO":
         cor, icon, msg, res = (
@@ -208,38 +257,64 @@ def montar_template_email(
     )
 
     if tipo == "ERRO":
-        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_MAGNIFY}</span> <b>Foram detectadas divergências entre a Montagem e a Programação.</b></p>"
+        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_MAGNIFY}</span> <b>Divergências encontradas entre NF esperada, montagem e programação.</b></p><p style='font-size:11pt;margin:0 0 12px 0;text-align:center;color:#4b5563;'>Conferir as OBs listadas antes de seguir com a montagem do lote.</p>"
     elif tipo == "ALTERACAO":
-        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_CHART_UP}</span> <b>Houve uma atualização no status das divergências acompanhadas.</b></p>"
+        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_CHART_UP}</span> <b>Conjunto de divergências atualizado. Priorizar novos itens e revisar pendências.</b></p>"
+    elif tipo == "LEMBRETE":
+        html += f"<p style='font-size:13pt;margin:0 0 8px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_WARNING}</span> <b>Pendências NF x OB ainda abertas. Conferir as OBs listadas.</b></p>"
     else:
-        html += f"<p style='font-size:13pt;margin:0 0 12px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_TROPHY}</span> <b>Nenhuma divergência foi encontrada na rotina atual. O processo está liberado.</b></p>"
+        html += f"<p style='font-size:13pt;margin:0 0 12px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_TROPHY}</span> <b>Nenhuma divergência NF x OB encontrada nesta execução. Sem ação pendente.</b></p>"
 
-    card_tpl: str = (
-        "<td style='width:33%;padding:16px;'><div style='background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;text-align:center;'><div style='font-size:20pt;margin-bottom:8px;'>{icon}</div><div style='color:#6b7280;font-size:10pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;'>{label}</div><div style='color:{val_color};font-size:18pt;font-weight:bold;margin-top:4px;'>{value}</div></div></td>"
-    )
+    card_tpl: str = "<td style='width:{width};padding:16px;'><div style='background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;text-align:center;'><div style='font-size:20pt;margin-bottom:8px;'>{icon}</div><div style='color:#6b7280;font-size:10pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;'>{label}</div><div style='color:{val_color};font-size:18pt;font-weight:bold;margin-top:4px;'>{value}</div></div></td>"
     res_color: str = "#16a34a" if tipo == "ACERTO" else "#dc2626"
-    cards: str = (
+    acao_label = "Ação necessária" if tipo in ("ERRO", "ALTERACAO", "LEMBRETE") else "Status"
+    acao_value = "Conferir OBs com divergência" if tipo in ("ERRO", "ALTERACAO", "LEMBRETE") else "Sem ação pendente"
+    acao_color = "#b91c1c" if tipo in ("ERRO", "ALTERACAO", "LEMBRETE") else "#166534"
+    saldo_value = (
+        f"N:{novos_count} | C:{corrigidos_count} | P:{permanentes_count}"
+        if tipo in ("ALTERACAO", "LEMBRETE")
+        else f"{total_erros}"
+    )
+    width_padrao: str = "25%" if tipo != "ACERTO" else "33.33%"
+    cards: List[str] = [
         card_tpl.format(
-            icon=HTML_ICON_CHART,
-            label="Total de Linhas",
-            value=total_linhas,
+            width=width_padrao,
+            icon=HTML_ICON_CROSS if tipo != "ACERTO" else HTML_ICON_CHECK,
+            label="OBs com divergência",
+            value=saldo_value,
             val_color="#111827",
         )
-        + card_tpl.format(
-            icon=(HTML_ICON_CHECK if tipo == "ACERTO" else HTML_ICON_CROSS),
-            label="Resultado",
-            value=res,
-            val_color=res_color,
+    ]
+    if tipo != "ACERTO":
+        cards.append(
+            card_tpl.format(
+                width=width_padrao,
+                icon=HTML_ICON_CHART,
+                label="Peças NF incorreta",
+                value=str(total_pecas_nf_incorreta),
+                val_color="#9a3412",
+            )
         )
-        + card_tpl.format(
-            icon=HTML_ICON_STOPWATCH,
-            label="Tempo Total",
-            value=f"{elapsed_time:.2f}s",
-            val_color="#111827",
-        )
+    cards.extend(
+        [
+            card_tpl.format(
+                width=width_padrao,
+                icon=(HTML_ICON_CHECK if tipo == "ACERTO" else HTML_ICON_CROSS),
+                label="Resultado",
+                value=res,
+                val_color=res_color,
+            ),
+            card_tpl.format(
+                width=width_padrao,
+                icon=HTML_ICON_TARGET,
+                label=acao_label,
+                value=acao_value,
+                val_color=acao_color,
+            ),
+        ]
     )
 
-    html += f"<div style='margin: 24px -16px;'><table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='border-collapse:collapse;'><tr>{cards}</tr></table></div>"
+    html += f"<div style='margin: 24px -16px;'><table role='presentation' border='0' cellspacing='0' cellpadding='0' width='100%' style='border-collapse:collapse;'><tr>{''.join(cards)}</tr></table></div>"
     if detalhes_html:
         html += f"<div>{detalhes_html}</div>"
     html += f"<hr style='border:0;border-top:1px solid #e5e7eb;margin:32px 0 24px 0;'><p style='font-size:10pt;color:#9ca3af;text-align:center;margin:0;'><span style='font-size:13pt;vertical-align:middle;'>{HTML_ICON_CALENDAR}</span> <b>Data da Validação:</b> {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}</p></div></div></body></html>"
@@ -248,7 +323,7 @@ def montar_template_email(
 def gerar_assinatura(erro: Dict[str, Any]) -> str:
     """Gera um hash MD5 unico para a combinacao de erro/OB."""
     base: str = (
-        f"{str(erro.get('NR_OB', '')).strip().upper()}|{str(erro.get('NR_PROG', '')).strip().upper()}|{str(erro.get('CD_REF_CLT', '')).strip().upper()}|{str(erro.get('DETALHE_ERRO', '')).strip().upper()}"
+        f"{str(erro.get('NR_OB', '')).strip().upper()}|{str(erro.get('NR_PROG', '')).strip().upper()}|{str(erro.get('CD_REF_CLT', '')).strip().upper()}|{str(erro.get('DETALHE_ERRO', '')).strip().upper()}|{str(erro.get('NF_MONTAGEM', '')).strip().upper()}|{str(erro.get('NF_PROGRAMACAO', '')).strip().upper()}|{str(erro.get('QT_PECA_NF_INCORRETA', '')).strip().upper()}"
     )
     if not base.strip("|_"):
         base = "VAZIO"
@@ -277,6 +352,9 @@ def main() -> None:
     total_linhas: int = len(data)
     erros_atuais: List[Dict[str, Any]] = processar_validacao(data)
     total_erros: int = len(erros_atuais)
+    total_pecas_nf_incorreta: int = sum(
+        int(erro.get("QT_PECA_NF_INCORRETA", 0) or 0) for erro in erros_atuais
+    )
     dic_atuais: Dict[str, Dict[str, Any]] = {
         gerar_assinatura(e): e for e in erros_atuais
     }
@@ -305,7 +383,28 @@ def main() -> None:
         if ass not in dic_atuais:
             corrigidos.append(erro_ant)
 
+    novos_pecas_nf_incorreta: int = sum(
+        int(erro.get("QT_PECA_NF_INCORRETA", 0) or 0) for erro in novos
+    )
+    corrigidos_pecas_nf_incorreta: int = sum(
+        int(erro.get("QT_PECA_NF_INCORRETA", 0) or 0) for erro in corrigidos
+    )
+    permanentes_pecas_nf_incorreta: int = sum(
+        int(erro.get("QT_PECA_NF_INCORRETA", 0) or 0) for erro in permanentes
+    )
+
     tipo_notif: str = "NENHUMA"
+    lembrete_enviado_em: str = str(cache_anterior.get("last_reminder_at", "")).strip()
+    pode_enviar_lembrete: bool = False
+    if lembrete_enviado_em:
+        try:
+            ts_lembrete = datetime.fromisoformat(lembrete_enviado_em)
+            minutos = (datetime.now() - ts_lembrete).total_seconds() / 60.0
+            pode_enviar_lembrete = minutos >= LEMBRETE_INTERVALO_MINUTOS
+        except Exception:
+            pode_enviar_lembrete = True
+    else:
+        pode_enviar_lembrete = True
     if not ja_existia_cache:
         if total_erros > 0:
             tipo_notif = "ERRO"
@@ -316,6 +415,8 @@ def main() -> None:
             tipo_notif = "ERRO"
         elif total_erros > 0 and (novos or corrigidos):
             tipo_notif = "ALTERACAO"
+        elif total_erros > 0 and permanentes and not novos and not corrigidos and pode_enviar_lembrete:
+            tipo_notif = "LEMBRETE"
 
     if tipo_notif != "NENHUMA":
         cache_tmp_file = cache_file + ".tmp"
@@ -323,7 +424,15 @@ def main() -> None:
             # Salva apenas no temporario. O commit ocorre no run.ps1 apos sucesso no e-mail.
             with open(cache_tmp_file, "w", encoding="utf-8") as f_out:
                 json.dump(
-                    {"timestamp": datetime.now().isoformat(), "itens": dic_atuais},
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "itens": dic_atuais,
+                        "last_reminder_at": (
+                            datetime.now().isoformat()
+                            if tipo_notif == "LEMBRETE"
+                            else lembrete_enviado_em
+                        ),
+                    },
                     f_out,
                     ensure_ascii=False,
                     indent=2,
@@ -331,16 +440,13 @@ def main() -> None:
         except Exception as e:
             log(f"Falha ao gravar cache temporario: {e}", "WARN", exec_id)
 
-        elapsed_time: float = time.time() - start_time
         detalhes_html: str = ""
-        subject: str = (
-            f"Alerta: Divergências Montagem - {datetime.now().strftime('%d/%m/%Y')}"
-        )
+        subject: str = f"Ação necessária: divergências NF x OB - Montagem Terceirizados - {datetime.now().strftime('%d/%m/%Y')}"
 
         if tipo_notif == "ERRO":
             detalhes_html = gerar_tabela_completa_erros(erros_atuais)
         elif tipo_notif == "ALTERACAO":
-            subject = f"Alteração: Divergências Montagem - {datetime.now().strftime('%d/%m/%Y')}"
+            subject = f"Atualização de divergências NF x OB - Novos: {len(novos)} | Corrigidos: {len(corrigidos)} | Pendentes: {len(permanentes)} - {datetime.now().strftime('%d/%m/%Y')}"
             txt_novos: str = "Novo Erro" if len(novos) == 1 else "Novos Erros"
             txt_cor: str = (
                 "Erro Corrigido" if len(corrigidos) == 1 else "Erros Corrigidos"
@@ -350,7 +456,7 @@ def main() -> None:
             )
 
             resumo_painel: str = (
-                f"""<div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:24px; margin: 30px 0; text-align:center;"><h3 style="margin:0 0 20px 0; color:#1f2937; font-size:14pt; font-weight:600;">Resumo da Atualização</h3><table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto; width: 100%; max-width: 600px; table-layout:fixed;"><tr><td align="center" style="padding: 0 10px;"><div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#991b1b; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Novos</span><span style="display:block; font-size:28pt; color:#b91c1c; font-weight:bold; line-height:1;">{len(novos)}</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#166534; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Corrigidos</span><span style="display:block; font-size:28pt; color:#15803d; font-weight:bold; line-height:1;">{len(corrigidos)}</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#fff7ed; border:1px solid #fdba74; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#9a3412; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Permanentes</span><span style="display:block; font-size:28pt; color:#c2410c; font-weight:bold; line-height:1;">{len(permanentes)}</span></div></td></tr></table></div>"""
+                f"""<div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:24px; margin: 30px 0; text-align:center;"><h3 style="margin:0 0 20px 0; color:#1f2937; font-size:14pt; font-weight:600;">Resumo da Atualização</h3><table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto; width: 100%; max-width: 720px; table-layout:fixed;"><tr><td align="center" style="padding: 0 10px;"><div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#991b1b; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Novos</span><span style="display:block; font-size:28pt; color:#b91c1c; font-weight:bold; line-height:1;">{len(novos)}</span><span style="display:block; font-size:10pt; color:#7f1d1d; margin-top:6px;">{novos_pecas_nf_incorreta} peças</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#166534; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Corrigidos</span><span style="display:block; font-size:28pt; color:#15803d; font-weight:bold; line-height:1;">{len(corrigidos)}</span><span style="display:block; font-size:10pt; color:#166534; margin-top:6px;">{corrigidos_pecas_nf_incorreta} peças</span></div></td><td align="center" style="padding: 0 10px;"><div style="background:#fff7ed; border:1px solid #fdba74; border-radius:8px; padding:16px;"><span style="display:block; font-size:11pt; color:#9a3412; margin-bottom:8px; text-transform:uppercase; font-weight:bold; letter-spacing:0.05em;">Permanentes</span><span style="display:block; font-size:28pt; color:#c2410c; font-weight:bold; line-height:1;">{len(permanentes)}</span><span style="display:block; font-size:10pt; color:#9a3412; margin-top:6px;">{permanentes_pecas_nf_incorreta} peças</span></div></td></tr></table></div>"""
             )
             detalhes_html = (
                 resumo_painel
@@ -358,18 +464,36 @@ def main() -> None:
                 + gerar_tabela_categoria_html(txt_cor, corrigidos, "#15803d")
                 + gerar_tabela_categoria_html(txt_perm, permanentes, "#c2410c")
             )
+        elif tipo_notif == "LEMBRETE":
+            subject = f"Lembrete: pendências NF x OB - Montagem Terceirizados - {datetime.now().strftime('%d/%m/%Y')}"
+            detalhes_html = gerar_tabela_categoria_html("Pendências Permanentes", permanentes, "#c2410c")
         elif tipo_notif == "ACERTO":
-            subject = (
-                f"Sucesso: Validação Aprovada - {datetime.now().strftime('%d/%m/%Y')}"
-            )
+            subject = f"Validação OK: sem divergências NF x OB - Montagem Terceirizados - {datetime.now().strftime('%d/%m/%Y')}"
             detalhes_html = ""
 
         html_final: str = montar_template_email(
-            tipo_notif, total_linhas, total_erros, elapsed_time, detalhes_html
+            tipo_notif,
+            total_linhas,
+            total_erros,
+            total_pecas_nf_incorreta,
+            len(novos),
+            len(corrigidos),
+            len(permanentes),
+            detalhes_html,
         )
-        result_payload: Dict[str, str] = {
+        result_payload: Dict[str, Any] = {
             "subject": subject,
             "html": html_final,
+            "tipo_notificacao": tipo_notif,
+            "total_linhas": total_linhas,
+            "total_erros": total_erros,
+            "total_pecas_nf_incorreta": total_pecas_nf_incorreta,
+            "novos": len(novos),
+            "novos_pecas_nf_incorreta": novos_pecas_nf_incorreta,
+            "corrigidos": len(corrigidos),
+            "corrigidos_pecas_nf_incorreta": corrigidos_pecas_nf_incorreta,
+            "permanentes": len(permanentes),
+            "permanentes_pecas_nf_incorreta": permanentes_pecas_nf_incorreta,
         }
         payload_file: str = os.path.join(script_dir, f".payload_{exec_id}.json")
         try:
