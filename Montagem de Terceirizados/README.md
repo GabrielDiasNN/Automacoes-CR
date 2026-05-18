@@ -28,7 +28,7 @@ O motor de execucao nativa:
 ### 2. Camada de Dados e Inteligencia
 - **`SQL-MontagemTerceirizados.sql`**: Query ultra-otimizada utilizando CTEs (Common Table Expressions) e agregados de I/O reduzido. Substitui a dependencia da View lenta do Oracle.
 - **`extract_oracle.py`**: Extrator nativo que carrega dinamicamente o SQL externo.
-- **`validate_and_generate_html.py`**: Nucleo de validacao. Implementa idempotencia (cache `.cache_erros.json`) e gera o dashboard visual com cards e destaques de erro.
+- **`validate_and_generate_html.py`**: Nucleo de validacao. Implementa idempotencia (cache `.cache_erros.json`), calcula a quantidade de pecas vinculadas a NF incorreta em cada OB e gera o dashboard visual com cards e destaques de erro.
 
 ### 3. Pasta Legado (`Legacy/`)
 Contem o workbook e scripts da arquitetura antiga (v1.1 e anteriores). Mantidos apenas para historico de auditoria. **Nao sao mais utilizados no fluxo de producao.**
@@ -57,9 +57,12 @@ Este arquivo é o mapa cognitivo local do robô de Montagem de Terceirizados.
 ## Regras de Negocio Criticas
 1. **Idempotencia**: O sistema utiliza cache de estado para enviar alertas apenas quando surgem novos erros ou mudancas significativas.
 2. **Filtros de Producao**: A automacao foca exclusivamente em OBs Montadas (Setor 5), com Destino Receita 1 e Programacao do tipo `%T`.
+3. **Quantidade para Expedicao**: Os e-mails de divergencia informam quantas pecas estao ligadas a NF incorreta na montagem, permitindo retirada fisica precisa por OB.
 
 ---
 
 ## 🧠 Gestão de Contexto (AI-Native)
 - **Obrigação:** Este arquivo deve refletir qualquer mudança no `Secure File-Payload Protocol` ou na lógica de idempotência.
 - **Objetivo:** Manter a IA ciente da arquitetura "Pure-Native" e da ausência de dependências de interface COM.
+- **Atualização 17/05/2026:** A notificacao agora destaca, por OB e no resumo do e-mail, a quantidade de pecas vinculadas a NF incorreta na montagem a partir de `QT_PC_NF`.
+- **Atualização 17/05/2026:** A extracao Python direta passou a usar `load_dotenv(..., override=True)` para garantir que o `.env` do repositorio prevaleca sobre variaveis stale da sessao local, alinhando a execucao manual ao contrato do Orchestrator.

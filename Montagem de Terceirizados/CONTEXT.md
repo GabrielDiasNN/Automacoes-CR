@@ -14,13 +14,15 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
 2.  **Fetch Layer:** `extract_oracle.py` carrega o SQL externo e extrai dados diretamente via driver `oracledb`.
 3.  **Intelligence Layer:** `validate_and_generate_html.py`.
     -   **Validation Rule 1:** A NF na observacao da OB (`NF:\d+`) deve ser igual a Ref. Cliente.
-    -   **Validation Rule 2:** A NF no campo de Montagem (`QT_PC_NF` formatado como `Qtd-NF`) deve ser igual a Ref. Cliente.
+    -   **Validation Rule 2:** A NF no campo de Montagem (`QT_PC_NF` formatado como `Qtd - NF - complemento`) deve ser igual a Ref. Cliente.
+    -   **Validation Rule 3:** Quando houver NF incorreta na montagem, a automacao soma a quantidade de pecas erradas para orientar a retirada fisica pela expedicao.
 4.  **Delivery Layer:** PowerShell envia e-mail moderno via Outlook COM (Outlook-Safe).
 
 ## Key Identifiers
 -   `ExecId`: Correlation ID para rastrear o fluxo entre Python e Logs.
 -   `.cache_erros.json`: Persistencia de estado para garantir **Idempotencia** (nao repetir alertas identicos).
 -   `SQL-MontagemTerceirizados.sql`: Unica fonte de verdade para a extracao de dados de producao.
+-   `QT_PECA_NF_INCORRETA`: Campo derivado no validador para somar as pecas ligadas a NFs divergentes na montagem.
 
 ## Security & Integrity
 -   **Logging:** Todas as mensagens acentuadas utilizam o **Base64 Bridge Protocol**.
@@ -33,3 +35,5 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
 - **Estado:** Estabilizado v2.2.1.
 - **Resiliência:** Corrigido erro de sintaxe Python e endurecida a lógica de orquestração PowerShell para garantir o envio de notificações mesmo em situações de variabilidade nos parâmetros de entrada.
 - **Idempotência:** Mantida a lógica de Two-Phase Commit para consolidação do estado apenas após sucesso confirmado.
+- **Expedição NF x OB (17/05/2026):** O e-mail agora diferencia divergência documental e divergência física, exibindo a quantidade de peças com NF incorreta por OB e no resumo agregado da notificação.
+- **Ambiente Oracle (17/05/2026):** A execução direta do extrator foi alinhada ao Orchestrator com `load_dotenv(..., override=True)`, evitando que credenciais stale da sessão local vençam o `.env`.

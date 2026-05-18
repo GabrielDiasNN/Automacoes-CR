@@ -2,6 +2,7 @@
 
 ## [6.3.2] - 2026-05-17
 ### Adicionado
+- **Montagem de Terceirizados**: E-mails de divergência agora informam a quantidade de peças vinculadas a NF incorreta por OB e no resumo agregado da notificação, usando o campo `QT_PC_NF`.
 - **Diagnóstico Acionável**: `/api/system/diagnostics` agora expõe `overall_status`, `findings`, risco do WAL, idade do heartbeat e idade das execuções mais antigas em `PENDING` e `RUNNING`.
 - **Resumo Operacional no Overview**: `/api/system/overview` passou a incluir resumo de diagnóstico sem quebrar o contrato existente do Dashboard.
 - **Achados na Observabilidade**: Dashboard passou a renderizar achados operacionais com severidade, componente afetado e ação sugerida para o operador.
@@ -14,6 +15,7 @@
 - **Governança de Alta Estabilidade**: Validadores JSON, Python e PowerShell approved verbs foram ajustados para evitar falhas por cache/runtime local e reduzir tempo de validação agregada.
 
 ### Corrigido
+- **Montagem de Terceirizados**: `extract_oracle.py` agora carrega o `.env` com `override=True`, eliminando divergência entre execução manual e execução via Orchestrator quando a sessão local tiver variáveis Oracle stale.
 - **Conformidade de Logs**: Timestamps de estado e watchdog alinhados para `dd/MM/yyyy HH:mm:ss`, fechando violações do guardrail de log.
 - **WhatsApp Wrapper**: `lib/Send-WhatsApp.ps1` passou a usar `Invoke-NativeProcess` para captura estruturada de saída e exit code.
 
