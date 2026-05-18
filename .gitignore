@@ -24,6 +24,7 @@ Dashboard/dashboard.html
 .gemini/
 .playwright-mcp/
 .playwright-cli/
+email_body.html
 
 # Excel Temporários e Lock
 ~$*.xlsm

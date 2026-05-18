@@ -19,7 +19,7 @@ A execução segue o pipeline de missão crítica:
      - Verifica o hash gerado pela Fase 1. Se não houver mudanças, aborta E-mail e WhatsApp.
   -> **Fase 3**: Distribuição Multicanal
      - **E-mail**: Envio via Outlook (COM) com corpo HTML artístico.
-     - **WhatsApp**: Bridge via `sendWhatsApp.js` (Node.js) com protocolo de Ack e tratamento gracioso de erros de contato (LID).
+     - **WhatsApp**: Bridge via `lib/WhatsApp-Core.js` (Node.js), acionado por `lib/Send-WhatsApp.ps1`, com protocolo de Ack e tratamento gracioso de erros de contato (LID).
 
 ---
 
@@ -42,7 +42,13 @@ Para evitar redundância e "fadiga de alertas", o sistema só dispara notificaç
 
 ### Logs e Auditoria
 - **Log Central**: `Logs/ReceitasBloqueadas.log` (formato padronizado).
-- **Log WhatsApp**: `ReceitasBloqueadas.txt` (detalhamento do protocolo de Ack).
+- **Log WhatsApp**: `Logs/WhatsApp_Global.log` (detalhamento do bootstrap, envio e protocolo de Ack).
+
+### Hardening do WhatsApp
+- O bridge ativo é `lib/WhatsApp-Core.js`, chamado pelo wrapper PowerShell global.
+- O bootstrap do cliente usa `protocolTimeout` ampliado para reduzir falhas de inicialização do Puppeteer em sessões lentas.
+- A inicialização agora registra bootstrap, autenticação, desconexão e ACK para facilitar a triagem sem reenviar o e-mail.
+- Falhas transitórias de inicialização fazem uma retentativa curta antes do erro definitivo.
 
 ### Matriz de Exit Codes
 | Código | Significado |

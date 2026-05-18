@@ -12,12 +12,13 @@ Gerenciar o fluxo de **Receitas de Produção Retidas** no sistema Oracle por fa
     - ✅ **Liberadas:** Receitas resolvidas pelo laboratório.
 - **Idempotência Unificada (Zero Spam):**
     - **E-mail & WhatsApp:** Ambos condicionados ao hash de conteúdo gerado pelo Python. Se não houver alteração, nenhuma notificação é disparada.
-    - **WhatsApp:** Motor v1.3 com **Ack Monitoring** e **Graceful Degradation** para erros de validação de contato (LID handling).
+    - **WhatsApp:** Motor v1.3 com **Ack Monitoring**, **Graceful Degradation** para erros de validação de contato (LID handling) e hardening de bootstrap com `protocolTimeout` maior + retentativa curta de inicialização.
 - **Formatação:** Planilha Excel analítica com máscaras **PT-BR** e realce de divergências de processo.
 
 ## Operação
 - **Horários:** 07:30, 10:00 e 14:00 (Segunda a Sexta).
 - **Modo Teste:** Sincronizado com o Orquestrador (Dashboard). Fonte da verdade: `ORCHESTRATOR_TEST_MODE`. Fallback via `AUTOMACAO_TEST_EMAIL`.
+- **Diagnóstico do Canal:** O log canônico do WhatsApp é `Logs/WhatsApp_Global.log`; `Logs/ReceitasBloqueadas.log` registra apenas a orquestração de alto nível.
 
 ---
 *Este módulo opera sob o padrão de idempotência cruzada e resiliência de banco de dados desde Maio/2026.*
