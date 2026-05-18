@@ -161,6 +161,31 @@ def _finalize_terminated_task(
     db_exec.logs = (db_exec.logs or "") + "".join(logs) + termination_log
     db.commit()
 
+def classify_process_result(return_code: Optional[int]) -> tuple[str, Optional[str], str]:
+    """Classifica o resultado do subprocesso em status, causa e acao operacional."""
+    if return_code in [0, 2, 3]:
+        return "SUCCESS", None, "NONE"
+
+    if return_code == 21:
+        return (
+            EXECUTION_STATUS_ERROR,
+            "WHATSAPP_SESSION_EXPIRED",
+            "REAUTHENTICATE_WHATSAPP_SESSION",
+        )
+
+    if return_code == 24:
+        return (
+            EXECUTION_STATUS_ERROR,
+            "CHANNEL_DELIVERY_FAILED",
+            "REVIEW_CHANNEL_STATE_BEFORE_REQUEUE",
+        )
+
+    return (
+        EXECUTION_STATUS_ERROR,
+        f"EXIT_CODE_{return_code}",
+        "REVIEW_LOGS_AND_OPTIONALLY_REQUEUE",
+    )
+
 def claim_next_task(db: Any) -> Optional[str]:
     """
     Reivindica uma unica tarefa pendente de forma segura para SQLite.
@@ -529,15 +554,16 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             db_exec.exit_code = process.returncode
             db_exec.duration_seconds = duration
 
-            if process.returncode in [0, 2, 3]:
-                db_exec.status = "SUCCESS"
-                db_exec.failure_reason = None
-                db_exec.recovery_action = "NONE"
+            status, failure_reason, recovery_action = classify_process_result(
+                process.returncode
+            )
+            db_exec.status = status
+            db_exec.failure_reason = failure_reason
+            db_exec.recovery_action = recovery_action
+
+            if status == "SUCCESS":
                 update_stat("tasks_completed", 1)
             else:
-                db_exec.status = EXECUTION_STATUS_ERROR
-                db_exec.failure_reason = f"EXIT_CODE_{process.returncode}"
-                db_exec.recovery_action = "REVIEW_LOGS_AND_OPTIONALLY_REQUEUE"
                 update_stat("tasks_failed", 1)
 
             db_exec.logs = "".join(logs)

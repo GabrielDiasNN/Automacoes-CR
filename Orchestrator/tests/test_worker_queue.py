@@ -6,7 +6,7 @@ import time
 
 from app import models
 from app.timezone import get_now_local
-from worker import _finalize_terminated_task, claim_next_task
+from worker import _finalize_terminated_task, claim_next_task, classify_process_result
 
 
 def _add_execution(db_session, exec_id, automation_id, priority="NORMAL"):
@@ -89,3 +89,23 @@ def test_finalize_terminated_task_persists_terminal_metadata(db_session):
     assert stopped.recovery_action == "REVIEW_LOGS_BEFORE_REQUEUE"
     assert "runtime log" in stopped.logs
     assert "[INTERROMPIDO PELO USUARIO]" in stopped.logs
+
+
+def test_classify_process_result_identifies_channel_recovery_actions():
+    assert classify_process_result(0) == ("SUCCESS", None, "NONE")
+    assert classify_process_result(2) == ("SUCCESS", None, "NONE")
+    assert classify_process_result(21) == (
+        "ERROR",
+        "WHATSAPP_SESSION_EXPIRED",
+        "REAUTHENTICATE_WHATSAPP_SESSION",
+    )
+    assert classify_process_result(24) == (
+        "ERROR",
+        "CHANNEL_DELIVERY_FAILED",
+        "REVIEW_CHANNEL_STATE_BEFORE_REQUEUE",
+    )
+    assert classify_process_result(99) == (
+        "ERROR",
+        "EXIT_CODE_99",
+        "REVIEW_LOGS_AND_OPTIONALLY_REQUEUE",
+    )

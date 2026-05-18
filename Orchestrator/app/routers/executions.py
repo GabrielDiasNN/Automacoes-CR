@@ -38,6 +38,23 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+def _get_active_queue_group_execution(
+    db: Session,
+    queue_group: Optional[str],
+) -> Optional[models.Execution]:
+    """Retorna execucao ativa que ocupa o mesmo grupo operacional."""
+    if not queue_group:
+        return None
+    return (
+        db.query(models.Execution)
+        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .filter(
+            models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+            models.Automation.queue_group == queue_group,
+        )
+        .first()
+    )
+
 # ---------------------------------------------------------------------------
 # LISTAGEM GLOBAL com filtros e paginacao
 # ---------------------------------------------------------------------------
@@ -348,6 +365,17 @@ def requeue_execution(
             detail=f"Já existe uma execução ativa para esta automação ({active.id}).",
         )
 
+    queue_group = db_exec.queue_group or db_exec.automation.queue_group
+    group_active = _get_active_queue_group_execution(db, queue_group)
+    if group_active:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Já existe uma execução ativa no mesmo grupo operacional "
+                f"({group_active.id}, Grupo: {queue_group})."
+            ),
+        )
+
     next_retry_count = (db_exec.retry_count or 0) + 1
     max_retries = db_exec.max_retries or db_exec.automation.max_retries or 0
     if next_retry_count > max_retries:
@@ -373,7 +401,7 @@ def requeue_execution(
         priority=priority,
         retry_count=next_retry_count,
         max_retries=max_retries,
-        queue_group=db_exec.queue_group or db_exec.automation.queue_group,
+        queue_group=queue_group,
         requested_by=requested_by,
         failure_reason=db_exec.failure_reason or db_exec.status,
         recovery_action="REQUEUE_MANUAL",

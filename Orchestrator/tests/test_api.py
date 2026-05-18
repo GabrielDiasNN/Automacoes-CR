@@ -516,6 +516,59 @@ def test_execution_requeue_blocks_retry_limit(client, db_session):
     )
     assert res.status_code == 409
 
+def test_execution_requeue_blocks_active_queue_group(client, db_session):
+    from app import models
+    from app.timezone import get_now_local
+
+    source_auto = models.Automation(
+        name="Retry Group Source",
+        script_path="./test/run.ps1",
+        max_retries=2,
+        queue_group="oracle",
+    )
+    active_auto = models.Automation(
+        name="Retry Group Active",
+        script_path="./test/run2.ps1",
+        max_retries=2,
+        queue_group="oracle",
+    )
+    db_session.add_all([source_auto, active_auto])
+    db_session.flush()
+    db_session.add_all(
+        [
+            models.Execution(
+                id="EXEC_GROUP_SOURCE",
+                automation_id=source_auto.id,
+                status="ERROR",
+                retry_count=0,
+                max_retries=2,
+                queue_group="oracle",
+                requested_by="TEST",
+                started_at=get_now_local() - timedelta(minutes=5),
+            ),
+            models.Execution(
+                id="EXEC_GROUP_ACTIVE",
+                automation_id=active_auto.id,
+                status="RUNNING",
+                retry_count=0,
+                max_retries=2,
+                queue_group="oracle",
+                requested_by="TEST",
+                started_at=get_now_local(),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    res = client.post(
+        "/api/executions/EXEC_GROUP_SOURCE/requeue",
+        json={"reason": "grupo ocupado"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert res.status_code == 409
+    assert "mesmo grupo operacional" in res.json()["detail"]
+
 def test_wait_for_task_requires_api_key(client):
     res = client.get("/api/system/wait-for-task")
     assert res.status_code == 403

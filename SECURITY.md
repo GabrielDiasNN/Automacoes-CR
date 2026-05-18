@@ -1,4 +1,4 @@
-# Security Governance: Automações Hub v6.5.2 (Hardened)
+# Security Governance: Automações Hub v6.5.3 (Hardened)
 
 ## 1. Zero-Trust & API Security
 - **Dynamic API Key**: Removidos segredos do código. O Dashboard solicita a chave ao administrador.
@@ -13,6 +13,7 @@
 - **Mutação Administrativa Validada**: Alterações de `.env` e `schedule` devem passar por validação pré-save antes de atingir disco ou banco.
 - **Retry Auditável**: Requeue de execuções deve preservar trilha de auditoria, origem da execução, motivo operacional e limite explícito de tentativas.
 - **Ações Diagnósticas Sem Segredo**: `action_code`, `operator_actions`, hotspots e impactos operacionais podem orientar o operador, mas não devem expor conteúdo de `.env`, credenciais, caminhos sensíveis fora do contrato ou payloads de negócio.
+- **Bloqueio por Grupo Operacional**: Requeue deve respeitar execução ativa no mesmo `queue_group`, evitando duplicidade de canal, banco ou recurso externo compartilhado.
 
 ---
 Mantido pela equipe de Automações & Antigravity AI

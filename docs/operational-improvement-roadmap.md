@@ -18,7 +18,8 @@ Este roteiro mantém a direção escolhida: operação estável, fases pequenas 
 
 - Preservar `failure_reason`, `recovery_action`, `retry_count`, `max_retries` e `queue_group` em toda execução.
 - Requeue deve exigir motivo operacional, respeitar limite de retry e gerar nova execução rastreável.
-- Falhas terminais devem orientar revisão de logs antes de nova tentativa.
+- Requeue deve bloquear concorrência no mesmo `queue_group` quando outro fluxo já estiver ativo.
+- Falhas terminais devem orientar revisão de logs antes de nova tentativa, com classificação explícita para sessão WhatsApp expirada, falha de entrega de canal e erro genérico.
 
 ## Fase 4 — Console de operação
 

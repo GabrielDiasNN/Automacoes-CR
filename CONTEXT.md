@@ -1,9 +1,9 @@
-# Cognitive Context: Automações Hub v6.5.2 (Enterprise Operations)
+# Cognitive Context: Automações Hub v6.5.3 (Enterprise Operations)
 
 ## Repository Philosophy
-Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v6.5.2 (Enterprise Operations)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
+Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v6.5.3 (Enterprise Operations)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
 
-## System Architecture (v6.5.2 Enterprise)
+## System Architecture (v6.5.3 Enterprise)
 
 - **ADR-018 (17/05/2026):** Observabilidade Acionável. `/api/system/diagnostics` passa a emitir `overall_status`, `findings`, risco do WAL, idade do heartbeat e idade das execuções mais antigas em fila/execução. O Dashboard exibe achados com severidade e ação sugerida para reduzir tempo de diagnóstico operacional.
 - **ADR-016 (15/05/2026):** Pragmatic Performance Upgrade. Eliminação de N+1 Queries nos endpoints FastAPI via SQLAlchemy `joinedload` e agregação de dados. Implementação de log batching assíncrono no Worker, reduzindo drasticamente o overhead de I/O de rede e bloqueios, permitindo aumentar a concorrência padrão para 4.
@@ -17,13 +17,14 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Shared Skills Model**: `.github/skills/` e a fonte canonica das 6 skills ativas; `.gemini/skills/` existe apenas como espelho por junction/symlink para compatibilidade com Gemini CLI e Antigravity.
 
 ## 🧠 Gestão de Contexto (AI-Native)
+- **Recovery Guard v6.5.3 (18/05/2026):** Worker passou a classificar exit codes de canal em causas operacionais (`WHATSAPP_SESSION_EXPIRED`, `CHANNEL_DELIVERY_FAILED`) e requeue manual agora bloqueia concorrência por `queue_group`, evitando duplicidade quando outro fluxo do mesmo recurso já está ativo.
 - **Console Operacional v6.5.2 (18/05/2026):** `/api/system/diagnostics` passou a expor `action_code`, `action_label`, `impact`, `priority`, `operator_actions`, hotspots de falhas em 24h e fila ativa por prioridade/grupo; Dashboard usa esses dados para atalhos operacionais e requeue auditável na tela de execuções.
 - **Baseline de Melhoria Operacional (18/05/2026):** Documentos `docs/operational-improvement-baseline.md` e `docs/operational-improvement-roadmap.md` registram a fotografia validada, as fases pequenas e a ordem de validação para evolução estável.
 - **Recorrência v2 na Aba Automações (18/05/2026):** Agenda evoluída para `schedule_version=2` com `schedule_type` (`manual`, `daily`, `weekly`, `monthly`, `interval`, `once`), mantendo compatibilidade de leitura com payload legado e normalização centralizada no backend.
 - **Operação Direta por Automação (18/05/2026):** Novas ações `pause`, `resume` e `clone` expostas na API e consumidas na aba `Automações`.
 - **Preview Operacional de Agenda (18/05/2026):** Novo endpoint `POST /api/system/schedule/preview` habilita simulação das próximas execuções antes de salvar configuração.
 - **Recuperação Operacional da Aba Sistema (18/05/2026):** A interface passou a separar wake-up leve de recuperação canônica; quando o worker está offline, a ação exibida aciona `Recover-Orchestrator.ps1` / `Start-Orchestrator.ps1` para retomar o processamento da fila.
-- **Estado:** Estabilizado v6.5.2 (Enterprise Operations).
+- **Estado:** Estabilizado v6.5.3 (Enterprise Operations).
 - **Operação de Fila (17/05/2026):** Execuções agora registram `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`, habilitando requeue seguro via API.
 - **Schema Evolutivo (17/05/2026):** O startup do Orchestrator aplica migrações leves de SQLite e persiste `schema_version` em `orchestrator_metadata` para diagnóstico e drift controlado.
 - **Administração Segura (17/05/2026):** O backend passou a validar `schedule` e `.env` antes de salvar mudanças administrativas.

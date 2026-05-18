@@ -1,13 +1,13 @@
-# Central de Automações — v6.5.2 Enterprise Operations
+# Central de Automações — v6.5.3 Enterprise Operations
 
-Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v6.5.2**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
+Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v6.5.3**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
 
-## 🏗️ Arquitetura Técnica (Enterprise Control Tower v6.5.2)
+## 🏗️ Arquitetura Técnica (Enterprise Control Tower v6.5.3)
 
 ```mermaid
 graph TD
     subgraph "FRONTEND — Dashboard SPA"
-        UI["Dashboard v6.5.2<br/>Zero-Trust + UTF-8 Nativo"]
+        UI["Dashboard v6.5.3<br/>Zero-Trust + UTF-8 Nativo"]
         WS_CLIENT["WebSocket Client<br/>Logs + Events Replay"]
         UI --> WS_CLIENT
     end
@@ -21,7 +21,7 @@ graph TD
     end
 
     subgraph "CORE — Motor de Execução v5"
-        WORKER["Worker v6.5.2<br/>Graceful Shutdown + JSON Logs"]
+        WORKER["Worker v6.5.3<br/>Graceful Shutdown + JSON Logs"]
         PRIORITY["Priority Queue<br/>HIGH/NORMAL/LOW"]
         SCHEDULER["APScheduler<br/>WAL Checkpoint + Purge"]
         WORKER --- PRIORITY
@@ -38,6 +38,7 @@ graph TD
 - **Observabilidade Acionável**: `/api/system/diagnostics` consolida saúde, fila, worker, scheduler, banco/WAL e achados com ação sugerida.
 - **Console Operacional de Recovery**: Diagnósticos agora expõem impacto, prioridade, ação estruturada e atalhos para checkpoint, sincronização de agenda, wake-up/recovery e triagem de execuções.
 - **Fila Operacional Auditável**: Execuções agora carregam `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`, habilitando requeue seguro e rastreável.
+- **Recovery com Lock de Grupo**: Requeue manual respeita `queue_group` ativo para evitar concorrência entre automações que disputam o mesmo canal, banco ou recurso operacional.
 - **Schema Evolutivo**: Startup aplica migrações leves de SQLite e mantém `schema_version` em metadados do próprio banco.
 - **Validação Administrativa**: API expõe validação de `schedule` e `.env` antes de persistência.
 - **Worker Resilience**: Encerramento limpo de processos PowerShell para evitar consumo de recursos zumbi.

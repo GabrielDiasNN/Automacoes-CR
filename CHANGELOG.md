@@ -1,5 +1,13 @@
 # Changelog
 
+## [6.5.3] - 2026-05-18
+### Adicionado
+- **Classificação de Falhas de Canal**: Worker passou a traduzir exit codes conhecidos em `failure_reason` e `recovery_action` operacionais, diferenciando sessão WhatsApp expirada, falha de entrega de canal e erro genérico.
+- **Lock de Grupo no Requeue**: `/api/executions/{exec_id}/requeue` agora bloqueia retry manual quando já existe execução ativa no mesmo `queue_group`, reduzindo risco de duplicidade em canais, Oracle ou recursos compartilhados.
+
+### Testado
+- **Regressões de Recovery**: Adicionados testes focados para classificação de resultado do subprocesso e bloqueio de requeue por grupo operacional ativo.
+
 ## [6.5.2] - 2026-05-18
 ### Adicionado
 - **Diagnóstico Operacional Acionável**: `/api/system/diagnostics` passou a expor impacto, prioridade, `action_code`, `action_label`, `operator_actions`, hotspots de falhas em 24h e fila ativa por prioridade/grupo.
