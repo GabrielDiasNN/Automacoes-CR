@@ -49,3 +49,5 @@ def test_startup_recovery_preserves_pending_and_fails_running(
     )
     assert "[REBOOT] Interrompida." in running.logs
     assert running.finished_at is not None
+    assert running.failure_reason == "ORCHESTRATOR_REBOOT"
+    assert running.recovery_action == "REQUEUE_IF_SAFE"

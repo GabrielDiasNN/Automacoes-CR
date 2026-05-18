@@ -19,6 +19,11 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
+from ..constants import (EXECUTION_ACTIVE_STATUSES, EXECUTION_ALLOWED_PRIORITIES,
+                         EXECUTION_ALLOWED_STATUSES,
+                         EXECUTION_QUEUEABLE_SOURCE_STATUSES,
+                         EXECUTION_STATUS_REQUEUED, EXECUTION_STATUS_RUNNING,
+                         EXECUTION_STATUS_TERMINATED)
 from ..database import get_db
 from ..timezone import get_now_local
 from ..middleware import get_api_key
@@ -27,16 +32,6 @@ from ..utils import get_client_ip, log_audit
 logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/executions", tags=["Executions"])
-
-ALLOWED_EXEC_STATUSES = {
-    "PENDING",
-    "RUNNING",
-    "SUCCESS",
-    "ERROR",
-    "TIMEOUT",
-    "TERMINATED",
-    "FAILED_BY_REBOOT",
-}
 
 # Raiz do projeto para resolver caminhos
 PROJECT_ROOT = os.path.dirname(
@@ -69,8 +64,8 @@ def list_executions(
 
     if status:
         normalized_status = status.upper()
-        if normalized_status not in ALLOWED_EXEC_STATUSES:
-            allowed = ", ".join(sorted(ALLOWED_EXEC_STATUSES))
+        if normalized_status not in EXECUTION_ALLOWED_STATUSES:
+            allowed = ", ".join(sorted(EXECUTION_ALLOWED_STATUSES))
             raise HTTPException(status_code=422, detail=f"status inválido. Use: {allowed}.")
         query = query.filter(models.Execution.status == normalized_status)
     if automation_id:
@@ -292,11 +287,11 @@ def stop_execution(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    if db_exec.status not in ["PENDING", "RUNNING"]:
+    if db_exec.status not in EXECUTION_ACTIVE_STATUSES:
         raise HTTPException(status_code=400, detail="Execução já finalizada.")
 
     previous_status = db_exec.status
-    db_exec.status = "TERMINATED"
+    db_exec.status = EXECUTION_STATUS_TERMINATED
     db_exec.finished_at = get_now_local()
     if db_exec.started_at and db_exec.finished_at:
         try:
@@ -313,6 +308,113 @@ def stop_execution(
 
     logger.info(f"Execucao interrompida: {exec_id}")
     return {"message": "Sinal de parada registrado.", "exec_id": exec_id}
+
+@router.post("/{exec_id}/requeue", response_model=schemas.ExecutionQueueActionResponse)
+def requeue_execution(
+    exec_id: str,
+    payload: schemas.ExecutionQueueActionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Reenfileira uma execucao terminal mantendo rastreabilidade de retry."""
+    db_exec = (
+        db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
+        .filter(models.Execution.id == exec_id)
+        .first()
+    )
+    if not db_exec:
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
+    if db_exec.status not in EXECUTION_QUEUEABLE_SOURCE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="Somente execuções terminais ou já reenfileiradas podem ser reabertas.",
+        )
+    if not db_exec.automation:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+
+    active = (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.automation_id == db_exec.automation_id,
+            models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+        )
+        .first()
+    )
+    if active:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Já existe uma execução ativa para esta automação ({active.id}).",
+        )
+
+    next_retry_count = (db_exec.retry_count or 0) + 1
+    max_retries = db_exec.max_retries or db_exec.automation.max_retries or 0
+    if next_retry_count > max_retries:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Limite de retry excedido para esta execução: "
+                f"{next_retry_count - 1}/{max_retries}."
+            ),
+        )
+
+    new_exec_id = f"REQ_{int(time.time())}_{uuid.uuid4().hex[:4].upper()}"
+    requested_by = payload.requested_by or get_client_ip(request)
+    priority = (payload.priority or db_exec.priority or "NORMAL").upper()
+    if priority not in EXECUTION_ALLOWED_PRIORITIES:
+        raise HTTPException(status_code=422, detail="Prioridade inválida para requeue.")
+
+    reason = payload.reason or f"Requeue manual originado de {exec_id}."
+    new_exec = models.Execution(
+        id=new_exec_id,
+        automation_id=db_exec.automation_id,
+        status="PENDING",
+        priority=priority,
+        retry_count=next_retry_count,
+        max_retries=max_retries,
+        queue_group=db_exec.queue_group or db_exec.automation.queue_group,
+        requested_by=requested_by,
+        failure_reason=db_exec.failure_reason or db_exec.status,
+        recovery_action="REQUEUE_MANUAL",
+    )
+    db.add(new_exec)
+
+    db_exec.status = EXECUTION_STATUS_REQUEUED
+    db_exec.recovery_action = "REQUEUED_TO_NEW_EXECUTION"
+    db_exec.logs = (db_exec.logs or "") + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"
+
+    log_audit(
+        db,
+        "REQUEUE",
+        "EXECUTION",
+        exec_id,
+        get_client_ip(request),
+        json.dumps(
+            {
+                "source_exec_id": exec_id,
+                "queued_exec_id": new_exec_id,
+                "reason": reason,
+                "retry_count": next_retry_count,
+                "max_retries": max_retries,
+                "priority": priority,
+            }
+        ),
+    )
+    db.commit()
+
+    from ..main import task_queued_event
+    task_queued_event.set()
+
+    return schemas.ExecutionQueueActionResponse(
+        message="Execução reenfileirada com sucesso.",
+        source_exec_id=exec_id,
+        queued_exec_id=new_exec_id,
+        automation_id=db_exec.automation_id,
+        retry_count=next_retry_count,
+        max_retries=max_retries,
+        recovery_action="REQUEUE_MANUAL",
+    )
 
 # ---------------------------------------------------------------------------
 # TELEMETRIA EXTERNA (Terminal / VS Code)
@@ -339,9 +441,11 @@ def telemetry_start(
     new_exec = models.Execution(
         id=exec_id,
         automation_id=db_auto.id,
-        status="RUNNING",
+        status=EXECUTION_STATUS_RUNNING,
         requested_by="TERMINAL",
         started_at=get_now_local(),
+        max_retries=db_auto.max_retries or 0,
+        queue_group=db_auto.queue_group,
     )
     db.add(new_exec)
 

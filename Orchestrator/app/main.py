@@ -22,7 +22,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,11 +32,16 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import models
-from .constants import ORCHESTRATOR_VERSION
+from .constants import (EXECUTION_ACTIVE_STATUSES,
+                        EXECUTION_STATUS_FAILED_BY_REBOOT,
+                        EXECUTION_STATUS_RUNNING,
+                        ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION,
+                        PRIORITY_NORMAL)
 from .database import SessionLocal, engine
 from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
                          TimingMiddleware)
 from .routers import automations, executions, system, websocket
+from . import schemas
 from .timezone import get_now_local
 
 # ---------------------------------------------------------------------------
@@ -113,7 +120,7 @@ def _scheduled_task_wrapper(automation_id: int):
             db.query(models.Execution)
             .filter(
                 models.Execution.automation_id == automation_id,
-                models.Execution.status.in_(["PENDING", "RUNNING"]),
+                models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
             )
             .first()
         )
@@ -124,7 +131,14 @@ def _scheduled_task_wrapper(automation_id: int):
 
         exec_id = f"CRON_{automation_id}_{int(time.time())}"
         db_exec = models.Execution(
-            id=exec_id, automation_id=db_auto.id, status="PENDING", requested_by="CRON"
+            id=exec_id,
+            automation_id=db_auto.id,
+            status="PENDING",
+            priority=PRIORITY_NORMAL,
+            retry_count=0,
+            max_retries=db_auto.max_retries or 0,
+            queue_group=db_auto.queue_group,
+            requested_by="CRON",
         )
         db.add(db_exec)
         db.commit()
@@ -145,44 +159,67 @@ def reload_scheduled_tasks():
             db.query(models.Automation).filter(models.Automation.enabled == True).all()
         )
         logger.info(f"Recarregando agendamentos para {len(automations_db)} automações habilitadas.")
-        jobs_count = 0
         for auto in automations_db:
             if not auto.schedule:
                 continue
             try:
-                sched_data = json.loads(auto.schedule)
-                days = ",".join(map(str, sched_data.get("daysOfWeek", [])))
+                sched_data = schemas.parse_schedule(auto.schedule)
+                if not sched_data:
+                    continue
+                schedule_type = sched_data.get("schedule_type")
 
-                # Suporte a multiplos horarios (Novo Formato: "times": [{"h": 8, "m": 0}, ...])
-                times_list = sched_data.get("times")
-                if times_list:
-                    for idx, t in enumerate(times_list):
+                if schedule_type == "manual":
+                    continue
+                if schedule_type == "interval":
+                    trigger = IntervalTrigger(minutes=int(sched_data["interval_minutes"]))
+                    scheduler.add_job(
+                        _scheduled_task_wrapper,
+                        trigger,
+                        args=[auto.id],
+                        id=f"job_{auto.id}_interval",
+                        misfire_grace_time=60,
+                    )
+                    continue
+                if schedule_type == "once":
+                    run_at = datetime.fromisoformat(str(sched_data["run_at"]).replace("Z", ""))
+                    if run_at >= get_now_local():
+                        trigger = DateTrigger(run_date=run_at)
+                        scheduler.add_job(
+                            _scheduled_task_wrapper,
+                            trigger,
+                            args=[auto.id],
+                            id=f"job_{auto.id}_once",
+                            misfire_grace_time=60,
+                        )
+                    continue
+
+                times = sched_data.get("times", [])
+                for idx, t in enumerate(times):
+                    if schedule_type == "daily":
+                        trigger = CronTrigger(hour=t.get("h", 0), minute=t.get("m", 0))
+                    elif schedule_type == "weekly":
+                        # Contrato UI/legado: 0=Dom,1=Seg..6=Sáb; APScheduler: 0=Seg..6=Dom
+                        mapped_days = [str((int(day) + 6) % 7) for day in sched_data.get("days_of_week", [])]
+                        days = ",".join(mapped_days)
                         trigger = CronTrigger(
                             day_of_week=days if days else "*",
                             hour=t.get("h", 0),
                             minute=t.get("m", 0),
                         )
-                        scheduler.add_job(
-                            _scheduled_task_wrapper,
-                            trigger,
-                            args=[auto.id],
-                            id=f"job_{auto.id}_{idx}",
-                            misfire_grace_time=60,
+                    elif schedule_type == "monthly":
+                        days = ",".join(map(str, sched_data.get("days_of_month", [])))
+                        trigger = CronTrigger(
+                            day=days,
+                            hour=t.get("h", 0),
+                            minute=t.get("m", 0),
                         )
-                else:
-                    # Fallback Legado
-                    hours = ",".join(map(str, sched_data.get("hours", [])))
-                    minutes = ",".join(map(str, sched_data.get("minutes", [])))
-                    trigger = CronTrigger(
-                        day_of_week=days if days else "*",
-                        hour=hours if hours else "*",
-                        minute=minutes if minutes else "0",
-                    )
+                    else:
+                        continue
                     scheduler.add_job(
                         _scheduled_task_wrapper,
                         trigger,
                         args=[auto.id],
-                        id=f"job_{auto.id}",
+                        id=f"job_{auto.id}_{schedule_type}_{idx}",
                         misfire_grace_time=60,
                     )
             except Exception as e:
@@ -197,12 +234,14 @@ def _cleanup_zombie_tasks():
     try:
         zombies = (
             db.query(models.Execution)
-            .filter(models.Execution.status == "RUNNING")
+            .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
             .all()
         )
         for task in zombies:
-            task.status = "FAILED_BY_REBOOT"
+            task.status = EXECUTION_STATUS_FAILED_BY_REBOOT
             task.finished_at = get_now_local()
+            task.failure_reason = "ORCHESTRATOR_REBOOT"
+            task.recovery_action = "REQUEUE_IF_SAFE"
             task.logs = (task.logs or "") + "\n[REBOOT] Interrompida."
         db.commit()
         if zombies:
@@ -217,10 +256,17 @@ def _cleanup_zombie_tasks():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Pilar E - Escala: Garantir integridade do banco no startup
-    from .database import run_wal_checkpoint, validate_database_schema
+    from .database import (run_schema_migrations, run_wal_checkpoint,
+                           validate_database_schema)
     run_wal_checkpoint("TRUNCATE")
 
     models.Base.metadata.create_all(bind=engine)
+    migration_result = run_schema_migrations()
+    if migration_result["applied"]:
+        logger.info(
+            "Migracoes de schema aplicadas: %s",
+            ", ".join(migration_result["applied"]),
+        )
     schema_status = validate_database_schema()
     if not schema_status["valid"]:
         logger.error(f"Schema do banco incompleto: {schema_status}")
@@ -273,7 +319,11 @@ async def lifespan(app: FastAPI):
 
     if not scheduler.running:
         scheduler.start()
-    logger.info(f"Central de Automações v{ORCHESTRATOR_VERSION} - Orchestrator online.")
+    logger.info(
+        "Central de Automações v%s - Orchestrator online. Schema=%s",
+        ORCHESTRATOR_VERSION,
+        ORCHESTRATOR_SCHEMA_VERSION,
+    )
     yield
     if scheduler.running:
         scheduler.shutdown(wait=False)

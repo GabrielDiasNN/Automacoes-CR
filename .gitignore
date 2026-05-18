@@ -23,6 +23,7 @@ Dashboard/dashboard.html
 .pytest_cache/
 .gemini/
 .playwright-mcp/
+.playwright-cli/
 
 # Excel Temporários e Lock
 ~$*.xlsm

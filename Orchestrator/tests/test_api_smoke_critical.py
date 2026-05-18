@@ -17,6 +17,9 @@ def _create_default_automation(client, name="Smoke Auto"):
             "name": name,
             "description": "Fluxo smoke",
             "script_path": "./test/run.ps1",
+            "max_retries": 2,
+            "cooldown_minutes": 0,
+            "queue_group": "smoke-group",
             "enabled": True,
         },
         headers=AUTH_HEADERS,
@@ -60,6 +63,15 @@ def test_smoke_automations_flow_and_controls(client):
     resumed = client.post("/api/automations/control/resume-all", headers=AUTH_HEADERS)
     assert resumed.status_code == 200
     assert "retomadas" in resumed.json()["message"].lower()
+
+    paused_single = client.post(f"/api/automations/{auto_id}/pause", headers=AUTH_HEADERS)
+    assert paused_single.status_code == 200
+    resumed_single = client.post(f"/api/automations/{auto_id}/resume", headers=AUTH_HEADERS)
+    assert resumed_single.status_code == 200
+
+    cloned = client.post(f"/api/automations/{auto_id}/clone", headers=AUTH_HEADERS)
+    assert cloned.status_code == 201
+    assert cloned.json()["enabled"] is False
 
     overview = client.get(f"/api/automations/{auto_id}/overview", headers=AUTH_HEADERS)
     assert overview.status_code == 200
@@ -116,6 +128,16 @@ def test_smoke_executions_filters_and_errors(client):
     stop_again = client.post(f"/api/executions/{exec_id}/stop", headers=AUTH_HEADERS)
     assert stop_again.status_code == 400
 
+    requeue = client.post(
+        f"/api/executions/{exec_id}/requeue",
+        json={"reason": "retry operacional", "priority": "HIGH"},
+        headers=AUTH_HEADERS,
+    )
+    assert requeue.status_code == 200
+    requeue_payload = requeue.json()
+    assert requeue_payload["source_exec_id"] == exec_id
+    assert requeue_payload["retry_count"] == 1
+
     missing_exec = client.get("/api/executions/EXEC_INEXISTENTE", headers=AUTH_HEADERS)
     assert missing_exec.status_code == 404
 
@@ -146,6 +168,7 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
     overview = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert overview.status_code == 200
     assert "kpis" in overview.json()
+    assert "schema_version" in overview.json()
 
     jobs = client.get("/api/system/scheduler/jobs", headers=AUTH_HEADERS)
     assert jobs.status_code == 200
@@ -153,8 +176,43 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
     audit = client.get("/api/system/audit?limit=10", headers=AUTH_HEADERS)
     assert audit.status_code == 200
 
+    diagnostics = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert diagnostics.status_code == 200
+    assert "schema_version" in diagnostics.json()
+
+    schedule_validate = client.post(
+        "/api/system/schedule/validate",
+        json={"schedule": '{"schedule_type":"weekly","days_of_week":[1,2,3],"times":[{"h":9,"m":0}]}'},
+        headers=AUTH_HEADERS,
+    )
+    assert schedule_validate.status_code == 200
+    assert schedule_validate.json()["valid"] is True
+    assert "Semanal" in schedule_validate.json()["summary"]
+
+    schedule_preview = client.post(
+        "/api/system/schedule/preview",
+        json={
+            "schedule": '{"schedule_type":"interval","interval_minutes":15}',
+            "limit": 3,
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert schedule_preview.status_code == 200
+    preview_payload = schedule_preview.json()
+    assert preview_payload["valid"] is True
+    assert preview_payload["schedule_type"] == "interval"
+    assert len(preview_payload["next_runs_preview"]) == 3
+
     env_get = client.get("/api/system/env", headers=AUTH_HEADERS)
     assert env_get.status_code == 200
+
+    env_validate = client.post(
+        "/api/system/env/validate",
+        json={"content": "ORCHESTRATOR_API_KEY=new\nRATE_LIMIT_RPM=120\n"},
+        headers=AUTH_HEADERS,
+    )
+    assert env_validate.status_code == 200
+    assert env_validate.json()["valid"] is True
 
     env_put = client.put(
         "/api/system/env",
@@ -167,6 +225,13 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
     backup = client.post("/api/system/backup", headers=AUTH_HEADERS)
     assert backup.status_code == 200
     assert backup.json()["size_mb"] >= 0
+
+    scheduler_reload = client.post("/api/system/scheduler/reload", headers=AUTH_HEADERS)
+    assert scheduler_reload.status_code == 200
+    assert "jobs_loaded" in scheduler_reload.json()
+
+    worker_wakeup = client.post("/api/system/worker/wakeup", headers=AUTH_HEADERS)
+    assert worker_wakeup.status_code == 200
 
     purge_ok = client.post("/api/system/purge?retention_days=7", headers=AUTH_HEADERS)
     assert purge_ok.status_code == 200

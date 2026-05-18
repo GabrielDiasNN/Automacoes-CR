@@ -169,16 +169,17 @@
                             <thead>
                                 <tr>
                                     <th>Automação</th>
-                                    <th>Agenda</th>
+                                    <th>Cadência</th>
                                     <th>Próxima</th>
+                                    <th>Última</th>
                                     <th>Modo</th>
                                     <th>Estado</th>
-                                    <th>Último status</th>
+                                    <th>Risco</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="fleet-tbody">
-                                <tr><td colspan="7">Carregando frota...</td></tr>
+                                <tr><td colspan="8">Carregando frota...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -275,6 +276,8 @@
                         <h1 id="system-title">Sistema</h1>
                     </div>
                     <div class="quick-actions">
+                        <button class="btn btn-outline" type="button" onclick="callSystemAction('scheduler_reload')"><i data-lucide="refresh-cw"></i>Sincronizar agenda</button>
+                        <button id="system-worker-action" class="btn btn-outline" type="button" onclick="callSystemAction('worker_wakeup')"><i data-lucide="activity"></i>Acordar worker</button>
                         <button class="btn btn-outline" type="button" onclick="callSystemAction('backup')"><i data-lucide="database-backup"></i>Backup</button>
                         <button class="btn btn-danger" type="button" onclick="callSystemAction('purge')"><i data-lucide="trash-2"></i>Purge</button>
                     </div>
@@ -374,6 +377,20 @@
                     <input id="f-path" class="form-control" type="text" required placeholder="Receitas Emitidas/run.ps1">
                 </div>
                 <div class="form-row">
+                    <div class="form-group">
+                        <label for="f-max-retries">Máx. retries</label>
+                        <input id="f-max-retries" class="form-control" type="number" min="0" max="10" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-cooldown">Cooldown (min)</label>
+                        <input id="f-cooldown" class="form-control" type="number" min="0" max="1440" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-queue-group">Grupo operacional</label>
+                        <input id="f-queue-group" class="form-control" type="text" maxlength="100" placeholder="financeiro-fechamento">
+                    </div>
+                </div>
+                <div class="form-row">
                     <label class="inline-toggle" for="f-enabled"><span>Automação ativa</span><input id="f-enabled" type="checkbox" checked></label>
                     <label class="inline-toggle" for="f-test"><span>Modo teste</span><input id="f-test" type="checkbox"></label>
                 </div>
@@ -383,6 +400,17 @@
                 </div>
                 <section class="scheduling-section" aria-labelledby="schedule-title">
                     <h4 id="schedule-title">Agenda</h4>
+                    <div class="form-group">
+                        <label for="f-schedule-type">Tipo de recorrência</label>
+                        <select id="f-schedule-type" class="form-control">
+                            <option value="manual">Manual</option>
+                            <option value="daily">Diária</option>
+                            <option value="weekly">Semanal</option>
+                            <option value="monthly">Mensal</option>
+                            <option value="interval">Intervalo</option>
+                            <option value="once">Única</option>
+                        </select>
+                    </div>
                     <div class="day-selector" aria-label="Dias da semana">
                         <button type="button" class="day-btn" data-day="1">Seg</button>
                         <button type="button" class="day-btn" data-day="2">Ter</button>
@@ -396,8 +424,23 @@
                         <input id="f-time-input" class="form-control" type="time" aria-label="Horário da agenda">
                         <button type="button" class="btn-add-time" onclick="addScheduleTime()" aria-label="Adicionar horário">+</button>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="f-days-of-month">Dias do mês (1-31, CSV)</label>
+                            <input id="f-days-of-month" class="form-control" type="text" placeholder="1,5,15">
+                        </div>
+                        <div class="form-group">
+                            <label for="f-interval-minutes">Intervalo (min)</label>
+                            <input id="f-interval-minutes" class="form-control" type="number" min="1" max="1440" value="30">
+                        </div>
+                        <div class="form-group">
+                            <label for="f-once-run-at">Executar em</label>
+                            <input id="f-once-run-at" class="form-control" type="datetime-local">
+                        </div>
+                    </div>
                     <div id="f-time-list" class="time-list"></div>
                     <div id="schedule-summary" class="schedule-summary"></div>
+                    <div id="schedule-preview" class="schedule-summary"></div>
                 </section>
             </div>
             <div class="modal-footer">

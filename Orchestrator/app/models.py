@@ -28,6 +28,9 @@ class Automation(Base):
     script_path = Column(String(500), nullable=False)
     schedule = Column(Text, nullable=True)  # JSON estruturado
     max_runtime_minutes = Column(Integer, default=30)
+    max_retries = Column(Integer, default=0)
+    cooldown_minutes = Column(Integer, default=0)
+    queue_group = Column(String(100), nullable=True)
     enabled = Column(Boolean, default=True)
     test_mode = Column(Boolean, default=False)
     notification_channels = Column(Text, nullable=True)  # Ex: "whatsapp,email"
@@ -58,6 +61,11 @@ class Execution(Base):
     priority = Column(
         String(10), default="NORMAL", nullable=False
     )  # HIGH | NORMAL | LOW
+    retry_count = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=0, nullable=False)
+    queue_group = Column(String(100), nullable=True)
+    failure_reason = Column(String(200), nullable=True)
+    recovery_action = Column(String(200), nullable=True)
     exit_code = Column(Integer, nullable=True)
     requested_by = Column(String(100), default="SYSTEM")
     started_at = Column(DateTime, default=get_now_local)

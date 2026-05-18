@@ -33,6 +33,9 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - [x] Tom técnico PT-BR foi mantido?
 ---
 ## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 17/05/2026
+- **Enterprise Operations (17/05/2026):** Orchestrator evoluído para `v6.4.0` com migração leve de schema, `schema_version` persistida e payloads tipados para `overview`, `diagnostics` e ações de fila.
+- **Requeue Auditável (17/05/2026):** Execuções agora mantêm `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`; requeue manual fica bloqueado por execução ativa e por limite de retry.
+- **Validação Administrativa (17/05/2026):** API valida `schedule` e conteúdo de `.env` antes de gravar alterações sensíveis.
 - **Observabilidade Acionável (17/05/2026):** `/api/system/diagnostics` consolidado como contrato operacional com `overall_status`, `findings`, risco do WAL, idade de heartbeat e idade das execuções mais antigas em `PENDING`/`RUNNING`; Dashboard exibe achados com severidade e ação sugerida.
 - **Padronização Runtime (17/05/2026):** Automações de negócio usam `Lib-Config` para `.env`, Python da venv por caminho explícito, fallback de variável Oracle e governança Python/JSON/PowerShell estável.
 - **Validação E2E Padronizada (17/05/2026):** Playwright definido como etapa final obrigatória de validação para mudanças de dashboard/UI e fluxos operacionais front-back, com template de evidência dedicado em `docs/playwright-e2e-evidence-template.md`.

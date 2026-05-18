@@ -59,9 +59,13 @@ def client(db_session):
     import app.routers.automations as auto_router
 
     original_session_local = db_module.SessionLocal
+    original_engine = db_module.engine
+    original_db_path = db_module.DB_PATH
     original_project_root = auto_router.PROJECT_ROOT
 
     db_module.SessionLocal = TestingSessionLocal
+    db_module.engine = test_engine
+    db_module.DB_PATH = os.path.join(TESTS_DIR, "test-automacoes.db")
     main_module.SessionLocal = TestingSessionLocal
     # Redirecionar PROJECT_ROOT para o diretorio de testes (contem /test/*.ps1)
     auto_router.PROJECT_ROOT = TESTS_DIR
@@ -81,5 +85,7 @@ def client(db_session):
 
     app.dependency_overrides.clear()
     db_module.SessionLocal = original_session_local
+    db_module.engine = original_engine
+    db_module.DB_PATH = original_db_path
     main_module.SessionLocal = original_session_local
     auto_router.PROJECT_ROOT = original_project_root

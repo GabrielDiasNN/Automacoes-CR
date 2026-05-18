@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 from conftest import AUTH_HEADERS
+from app.constants import ORCHESTRATOR_VERSION
 
 # ============================================================
 # ROOT
@@ -21,7 +22,7 @@ def test_read_root(client):
     res = client.get("/")
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "6.3.2"
+    assert data["version"] == ORCHESTRATOR_VERSION
     assert "dashboard_url" in data
 
 # ============================================================
@@ -320,7 +321,7 @@ def test_version_endpoint(client):
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "6.3.2"
+    assert data["version"] == ORCHESTRATOR_VERSION
     assert "python_version" in data
     assert "uptime_seconds" in data
     assert "max_workers" in data
@@ -329,7 +330,7 @@ def test_diagnostics_endpoint(client):
     res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["version"] == "6.3.2"
+    assert data["version"] == ORCHESTRATOR_VERSION
     assert data["overall_status"] in ["healthy", "degraded", "unhealthy"]
     assert "findings" in data
     assert "database" in data
@@ -373,6 +374,55 @@ def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_sessio
     assert data["queue"]["oldest_pending"]["age_seconds"] >= 1200
     components = {item["component"] for item in data["findings"]}
     assert {"database", "queue"}.issubset(components)
+
+def test_diagnostics_offline_worker_prefers_recovery_action(client, db_session, monkeypatch):
+    import app.routers.system as system_router
+    from app import models
+    from app.schemas import WorkerStatus
+    from app.timezone import get_now_local
+
+    auto = models.Automation(name="Recover Worker", script_path="./test/run.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_OFFLINE_PENDING",
+            automation_id=auto.id,
+            status="PENDING",
+            requested_by="TEST",
+            started_at=get_now_local() - timedelta(minutes=20),
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        system_router,
+        "_get_worker_status",
+        lambda db: WorkerStatus(
+            is_alive=False,
+            pid=5092,
+            last_ping=None,
+            tasks_completed=0,
+            tasks_failed=0,
+            active_tasks=0,
+            version="6.4.0",
+        ),
+    )
+    monkeypatch.setattr(system_router, "_launch_orchestrator_recovery", lambda: "Recover-Orchestrator.ps1")
+
+    res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+
+    worker_findings = [item for item in data["findings"] if item["component"] == "worker"]
+    assert worker_findings
+    assert any("Recuperar" in item["action_hint"] for item in worker_findings)
+
+    recover = client.post("/api/system/worker/recover", headers=AUTH_HEADERS)
+    assert recover.status_code == 200
+    recover_payload = recover.json()
+    assert recover_payload["script"] == "Recover-Orchestrator.ps1"
+    assert recover_payload["queue_active_count"] == 1
 
 def test_system_overview_includes_diagnostics_summary(client):
     res = client.get("/api/system/overview", headers=AUTH_HEADERS)

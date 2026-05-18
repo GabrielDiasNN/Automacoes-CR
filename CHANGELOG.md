@@ -1,5 +1,38 @@
 # Changelog
 
+## [6.5.0] - 2026-05-18
+### Adicionado
+- **Recorrência v2 na Aba Automações**: Contrato de agenda evoluído com `schedule_version=2` e `schedule_type` (`manual`, `daily`, `weekly`, `monthly`, `interval`, `once`), mantendo leitura retrocompatível de payload legado.
+- **Preview de Agenda**: Novo endpoint `POST /api/system/schedule/preview` para simular próximas execuções e retornar resumo humano da recorrência.
+- **Ações Operacionais por Automação**: Novos endpoints `POST /api/automations/{id}/pause`, `POST /api/automations/{id}/resume` e `POST /api/automations/{id}/clone`.
+
+### Alterado
+- **Scheduler Enterprise**: `reload_scheduled_tasks` agora traduz agenda v2 para jobs APScheduler auditáveis por tipo de recorrência.
+- **Contrato de Resposta de Automação**: `AutomationResponse` passa a incluir `schedule_type`, `schedule_summary` e `next_runs_preview`.
+- **UX da Aba Automações**: Tabela operacional ampliada com sinais de risco (`cooldown`, `retries`, `queue_group`), ações rápidas (executar, pausar/retomar, clonar, histórico) e formulário de configuração expandido.
+- **Validação de Agenda**: `POST /api/system/schedule/validate` passou a usar normalização centralizada e resumo consistente com o preview.
+
+### Corrigido
+- **Recuperação da Aba Sistema**: `POST /api/system/worker/wakeup` voltou a ser apenas um nudge leve e a recuperação canônica do worker passou a usar o fluxo `Recover-Orchestrator.ps1` / `Start-Orchestrator.ps1` quando o worker está offline.
+- **Ação Contextual no Dashboard**: A aba `Sistema` agora troca a ação operacional exibida conforme o estado real do worker, mostrando wake-up quando o worker está online e recuperação quando está offline.
+
+## [6.4.0] - 2026-05-17
+### Adicionado
+- **Schema Evolutivo do Orchestrator**: Startup agora aplica migrações leves em SQLite e persiste `schema_version` em `orchestrator_metadata`.
+- **Contrato de Fila Operacional**: Execuções passaram a registrar `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`.
+- **Requeue Auditável**: Novo endpoint `POST /api/executions/{exec_id}/requeue` cria nova execução `PENDING`, preserva origem da tentativa e audita o motivo operacional.
+- **Validação Administrativa**: Novos endpoints `POST /api/system/schedule/validate` e `POST /api/system/env/validate` permitem validar payloads antes de persistência.
+
+### Alterado
+- **Overview e Diagnostics Tipados**: `/api/system/overview`, `/api/system/diagnostics` e `/api/system/version` passaram a expor `schema_version` e contratos de resposta mais estáveis para front-end e operação.
+- **Disparo de Execuções**: Criação manual e agendada agora herda `max_retries` e `queue_group` da automação; disparo manual também respeita `cooldown_minutes` e bloqueio por grupo.
+- **Diagnóstico de Scheduler**: `/api/system/diagnostics` agora detecta inconsistências entre automações agendadas no banco e jobs carregados em memória.
+- **Documentação AI-Native**: `README.md`, `CONTEXT.md`, `SECURITY.md` e `GEMINI.md` sincronizados com o novo contrato operacional.
+
+### Corrigido
+- **Persistência de Recovery**: Limpeza de execuções `RUNNING` após reboot agora registra `failure_reason=ORCHESTRATOR_REBOOT` e `recovery_action=REQUEUE_IF_SAFE`.
+- **Timeout e Falha do Worker**: Worker passou a classificar falhas com `failure_reason` e `recovery_action`, reduzindo ambiguidade para operação e requeue.
+
 ## [6.3.2] - 2026-05-17
 ### Adicionado
 - **Montagem de Terceirizados**: E-mails de divergência agora informam a quantidade de peças vinculadas a NF incorreta por OB e no resumo agregado da notificação, usando o campo `QT_PC_NF`.

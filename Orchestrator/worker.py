@@ -30,7 +30,13 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from app import models, notifications
-    from app.constants import WORKER_VERSION
+    from app.constants import (EXECUTION_STATUS_ERROR,
+                               EXECUTION_STATUS_PENDING,
+                               EXECUTION_STATUS_RUNNING,
+                               EXECUTION_STATUS_TERMINATED,
+                               EXECUTION_STATUS_TIMEOUT,
+                               PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_NORMAL,
+                               WORKER_VERSION)
     from app.database import SessionLocal
     from app.timezone import get_now_local
 except ImportError as e:
@@ -122,9 +128,11 @@ def _mark_task_as_failed(
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         return
-    db_exec.status = "ERROR"
+    db_exec.status = EXECUTION_STATUS_ERROR
     db_exec.logs = (db_exec.logs or "") + message
     db_exec.exit_code = exit_code
+    db_exec.failure_reason = "AUTOMATION_NOT_FOUND"
+    db_exec.recovery_action = "REVIEW_AUTOMATION_REGISTRY"
     db_exec.finished_at = get_now_local()
     if db_exec.started_at and db_exec.finished_at:
         db_exec.duration_seconds = round(
@@ -144,10 +152,12 @@ def _finalize_terminated_task(
         return
 
     termination_log = "\n[INTERROMPIDO PELO USUARIO]\n"
-    db_exec.status = "TERMINATED"
+    db_exec.status = EXECUTION_STATUS_TERMINATED
     db_exec.exit_code = -15
     db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
     db_exec.finished_at = get_now_local()
+    db_exec.failure_reason = "USER_TERMINATED"
+    db_exec.recovery_action = "REVIEW_LOGS_BEFORE_REQUEUE"
     db_exec.logs = (db_exec.logs or "") + "".join(logs) + termination_log
     db.commit()
 
@@ -159,14 +169,14 @@ def claim_next_task(db: Any) -> Optional[str]:
     condicional por status. Se outro worker chegar antes, rowcount sera zero.
     """
     priority_rank = case(
-        (models.Execution.priority == "HIGH", 0),
-        (models.Execution.priority == "NORMAL", 1),
-        (models.Execution.priority == "LOW", 2),
+        (models.Execution.priority == PRIORITY_HIGH, 0),
+        (models.Execution.priority == PRIORITY_NORMAL, 1),
+        (models.Execution.priority == PRIORITY_LOW, 2),
         else_=1,
     )
     candidate = (
         db.query(models.Execution.id)
-        .filter(models.Execution.status == "PENDING")
+        .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
         .order_by(priority_rank.asc(), models.Execution.started_at.asc())
         .first()
     )
@@ -178,11 +188,11 @@ def claim_next_task(db: Any) -> Optional[str]:
         db.query(models.Execution)
         .filter(
             models.Execution.id == exec_id,
-            models.Execution.status == "PENDING",
+            models.Execution.status == EXECUTION_STATUS_PENDING,
         )
         .update(
             {
-                models.Execution.status: "RUNNING",
+                models.Execution.status: EXECUTION_STATUS_RUNNING,
                 models.Execution.started_at: get_now_local(),
             },
             synchronize_session=False,
@@ -363,11 +373,11 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             max_runtime,
             extra=_log_extra,
         )
-        if db_exec.status == "PENDING":
-            db_exec.status = "RUNNING"
+        if db_exec.status == EXECUTION_STATUS_PENDING:
+            db_exec.status = EXECUTION_STATUS_RUNNING
             db_exec.started_at = get_now_local()
             db.commit()
-        elif db_exec.status != "RUNNING":
+        elif db_exec.status != EXECUTION_STATUS_RUNNING:
             logger.warning(
                 "Tarefa %s ignorada: status atual=%s",
                 exec_id,
@@ -447,7 +457,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                     .scalar()
                 )
 
-                if db_status == "TERMINATED":
+                if db_status == EXECUTION_STATUS_TERMINATED:
                     subprocess.run(
                         ["taskkill", "/F", "/T", "/PID", str(process.pid)],
                         capture_output=True,
@@ -480,11 +490,13 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                         .first()
                     )
                     if db_exec_upd:
-                        db_exec_upd.status = "TIMEOUT"
+                        db_exec_upd.status = EXECUTION_STATUS_TIMEOUT
                         db_exec_upd.finished_at = get_now_local()
                         db_exec_upd.duration_seconds = round(
                             time.time() - task_start_ts, 2
                         )
+                        db_exec_upd.failure_reason = "MAX_RUNTIME_EXCEEDED"
+                        db_exec_upd.recovery_action = "REVIEW_TIMEOUT_AND_REQUEUE"
                         db_exec_upd.logs = (
                             "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo máximo."
                         )
@@ -513,15 +525,19 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
         db_exec = (
             db.query(models.Execution).filter(models.Execution.id == exec_id).first()
         )
-        if db_exec and db_exec.status not in ["TERMINATED", "TIMEOUT"]:
+        if db_exec and db_exec.status not in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
             db_exec.exit_code = process.returncode
             db_exec.duration_seconds = duration
 
             if process.returncode in [0, 2, 3]:
                 db_exec.status = "SUCCESS"
+                db_exec.failure_reason = None
+                db_exec.recovery_action = "NONE"
                 update_stat("tasks_completed", 1)
             else:
-                db_exec.status = "ERROR"
+                db_exec.status = EXECUTION_STATUS_ERROR
+                db_exec.failure_reason = f"EXIT_CODE_{process.returncode}"
+                db_exec.recovery_action = "REVIEW_LOGS_AND_OPTIONALLY_REQUEUE"
                 update_stat("tasks_failed", 1)
 
             db_exec.logs = "".join(logs)
@@ -529,7 +545,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             db_exec.finished_at = get_now_local()
             db.commit()
 
-            if db_exec.status == "ERROR":
+            if db_exec.status == EXECUTION_STATUS_ERROR:
                 auto = (
                     db.query(models.Automation)
                     .filter(models.Automation.id == db_exec.automation_id)
@@ -562,10 +578,12 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
         db_exec = (
             db.query(models.Execution).filter(models.Execution.id == exec_id).first()
         )
-        if db_exec and db_exec.status not in ["TERMINATED", "TIMEOUT"]:
-            db_exec.status = "ERROR"
+        if db_exec and db_exec.status not in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
+            db_exec.status = EXECUTION_STATUS_ERROR
             db_exec.logs = (db_exec.logs or "") + f"\nInternal Worker Error: {str(e)}"
             db_exec.exit_code = -1
+            db_exec.failure_reason = "INTERNAL_WORKER_ERROR"
+            db_exec.recovery_action = "REVIEW_WORKER_LOGS"
             db_exec.finished_at = get_now_local()
             db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
             db.commit()

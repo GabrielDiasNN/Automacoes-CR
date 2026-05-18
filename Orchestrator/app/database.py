@@ -19,6 +19,7 @@ from datetime import timedelta
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+from .constants import ORCHESTRATOR_SCHEMA_VERSION
 from .timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
@@ -58,6 +59,9 @@ EXPECTED_SCHEMA = {
         "script_path",
         "schedule",
         "max_runtime_minutes",
+        "max_retries",
+        "cooldown_minutes",
+        "queue_group",
         "enabled",
         "test_mode",
         "notification_channels",
@@ -69,6 +73,11 @@ EXPECTED_SCHEMA = {
         "automation_id",
         "status",
         "priority",
+        "retry_count",
+        "max_retries",
+        "queue_group",
+        "failure_reason",
+        "recovery_action",
         "exit_code",
         "requested_by",
         "started_at",
@@ -96,6 +105,26 @@ EXPECTED_SCHEMA = {
         "actor",
         "details",
     },
+    "orchestrator_metadata": {
+        "key",
+        "value",
+        "updated_at",
+    },
+}
+
+SCHEMA_MIGRATIONS = {
+    "automations": [
+        ("max_retries", "INTEGER NOT NULL DEFAULT 0"),
+        ("cooldown_minutes", "INTEGER NOT NULL DEFAULT 0"),
+        ("queue_group", "VARCHAR(100)"),
+    ],
+    "executions": [
+        ("retry_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("max_retries", "INTEGER NOT NULL DEFAULT 0"),
+        ("queue_group", "VARCHAR(100)"),
+        ("failure_reason", "VARCHAR(200)"),
+        ("recovery_action", "VARCHAR(200)"),
+    ],
 }
 
 def get_db():
@@ -126,6 +155,71 @@ def validate_database_schema() -> dict:
         "valid": valid,
         "missing_tables": missing_tables,
         "missing_columns": missing_columns,
+    }
+
+def get_schema_version() -> str:
+    """Retorna a versao logica atual gravada no banco."""
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT value FROM orchestrator_metadata WHERE key = 'schema_version'")
+            ).fetchone()
+            return row[0] if row else "unknown"
+    except Exception:
+        return "unknown"
+
+def run_schema_migrations() -> dict:
+    """Aplica migracoes leves compatíveis com SQLite antes da validacao final."""
+    applied = []
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        existing_tables = set(inspector.get_table_names())
+
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS orchestrator_metadata (
+                    key VARCHAR(100) PRIMARY KEY,
+                    value TEXT,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        if "orchestrator_metadata" not in existing_tables:
+            existing_tables.add("orchestrator_metadata")
+
+        for table_name, columns in SCHEMA_MIGRATIONS.items():
+            if table_name not in existing_tables:
+                continue
+            current_columns = {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            for column_name, ddl in columns:
+                if column_name in current_columns:
+                    continue
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}"))
+                applied.append(f"{table_name}.{column_name}")
+
+        conn.execute(
+            text(
+                """
+                INSERT INTO orchestrator_metadata (key, value, updated_at)
+                VALUES ('schema_version', :value, :updated_at)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """
+            ),
+            {
+                "value": ORCHESTRATOR_SCHEMA_VERSION,
+                "updated_at": get_now_local(),
+            },
+        )
+
+    return {
+        "applied": applied,
+        "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
     }
 
 def get_db_size_mb() -> float:

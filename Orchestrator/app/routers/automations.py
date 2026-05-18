@@ -14,9 +14,11 @@ import shutil
 import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .. import models, schemas  # type: ignore
+from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..timezone import get_now_local
@@ -66,6 +68,48 @@ def _load_next_run_lookup():
     except Exception as e:
         logger.warning(f"Nao foi possivel carregar next_run do scheduler: {e}")
     return lookup
+
+def _build_automation_response(db: Session, auto: models.Automation, next_run_lookup=None):
+    if next_run_lookup is None:
+        next_run_lookup = _load_next_run_lookup()
+    auto_resp = schemas.AutomationResponse.model_validate(auto)
+    last_exec = (
+        db.query(models.Execution)
+        .filter(models.Execution.automation_id == auto.id)
+        .order_by(models.Execution.started_at.desc())
+        .first()
+    )
+    if last_exec:
+        auto_resp.last_status = last_exec.status
+    auto_resp.next_run = schemas.format_dt_br(next_run_lookup.get(auto.id))
+    try:
+        parsed_schedule = schemas.parse_schedule(auto_resp.schedule)
+    except Exception:
+        parsed_schedule = None
+    auto_resp.schedule_type = parsed_schedule.get("schedule_type") if parsed_schedule else "manual"
+    auto_resp.schedule_summary = schemas.describe_schedule_payload(parsed_schedule)
+    auto_resp.next_runs_preview = schemas.preview_next_runs(parsed_schedule, 3)
+    return auto_resp
+
+def _get_group_active_execution(
+    db: Session,
+    queue_group: str,
+    exclude_automation_id: int,
+):
+    """Bloqueia concorrencia entre automacoes do mesmo grupo operacional."""
+    if not queue_group:
+        return None
+    return (
+        db.query(models.Execution)
+        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .filter(
+            models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+            models.Automation.queue_group == queue_group,
+            models.Automation.id != exclude_automation_id,
+        )
+        .order_by(models.Execution.started_at.desc())
+        .first()
+    )
 
 def _resolve_automation_dir(script_path: str) -> str:
     """Resolve a pasta da automacao garantindo permanencia no PROJECT_ROOT."""
@@ -156,21 +200,7 @@ def list_automations(
 
     for auto in items:
 
-        auto_dict = schemas.AutomationResponse.model_validate(auto)
-
-        last_exec = (
-            db.query(models.Execution)
-            .filter(models.Execution.automation_id == auto.id)
-            .order_by(models.Execution.started_at.desc())
-            .first()
-        )
-
-        if last_exec:
-
-            auto_dict.last_status = last_exec.status
-        auto_dict.next_run = schemas.format_dt_br(next_run_lookup.get(auto.id))
-
-        result.append(auto_dict)
+        result.append(_build_automation_response(db, auto, next_run_lookup))
 
     return schemas.PaginatedResponse(
         items=result, total=total, page=page, per_page=per_page, pages=pages
@@ -196,21 +226,7 @@ def list_all_automations(
 
     for auto in automations:
 
-        auto_resp = schemas.AutomationResponse.model_validate(auto)
-
-        last_exec = (
-            db.query(models.Execution)
-            .filter(models.Execution.automation_id == auto.id)
-            .order_by(models.Execution.started_at.desc())
-            .first()
-        )
-
-        if last_exec:
-
-            auto_resp.last_status = last_exec.status
-        auto_resp.next_run = schemas.format_dt_br(next_run_lookup.get(auto.id))
-
-        result.append(auto_resp)
+        result.append(_build_automation_response(db, auto, next_run_lookup))
 
     return result
 
@@ -237,17 +253,7 @@ def get_automation(
 
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
-    last_exec = (
-        db.query(models.Execution)
-        .filter(models.Execution.automation_id == db_auto.id)
-        .order_by(models.Execution.started_at.desc())
-        .first()
-    )
-    if last_exec:
-        auto_resp.last_status = last_exec.status
-    auto_resp.next_run = schemas.format_dt_br(_load_next_run_lookup().get(db_auto.id))
-    return auto_resp
+    return _build_automation_response(db, db_auto)
 
 # ---------------------------------------------------------------------------
 
@@ -305,9 +311,7 @@ def create_automation(
     logger.info(f"Automacao criada: {db_auto.name} (ID: {db_auto.id})")
     _reload_scheduler_safe()
 
-    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
-    auto_resp.next_run = schemas.format_dt_br(_load_next_run_lookup().get(db_auto.id))
-    return auto_resp
+    return _build_automation_response(db, db_auto)
 
 # ---------------------------------------------------------------------------
 
@@ -357,17 +361,7 @@ def update_automation(
     logger.info(f"Automacao atualizada: {db_auto.name} (ID: {automation_id})")
     _reload_scheduler_safe()
 
-    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
-    last_exec = (
-        db.query(models.Execution)
-        .filter(models.Execution.automation_id == db_auto.id)
-        .order_by(models.Execution.started_at.desc())
-        .first()
-    )
-    if last_exec:
-        auto_resp.last_status = last_exec.status
-    auto_resp.next_run = schemas.format_dt_br(_load_next_run_lookup().get(db_auto.id))
-    return auto_resp
+    return _build_automation_response(db, db_auto)
 
 @router.get("/{automation_id}/overview")
 def get_automation_overview(
@@ -384,9 +378,7 @@ def get_automation_overview(
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_resp = schemas.AutomationResponse.model_validate(db_auto)
-    next_run_lookup = _load_next_run_lookup()
-    auto_resp.next_run = schemas.format_dt_br(next_run_lookup.get(db_auto.id))
+    auto_resp = _build_automation_response(db, db_auto)
 
     recent_execs = (
         db.query(models.Execution)
@@ -533,6 +525,37 @@ async def start_automation(
             detail=f"Automação já possui uma execução ativa (ID: {running.id}).",
         )
 
+    group_running = _get_group_active_execution(db, db_auto.queue_group, automation_id)
+    if group_running:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Grupo operacional já possui execução ativa "
+                f"(Execução: {group_running.id}, Grupo: {db_auto.queue_group})."
+            ),
+        )
+
+    if db_auto.cooldown_minutes and db_auto.cooldown_minutes > 0:
+        latest_exec = (
+            db.query(models.Execution)
+            .filter(models.Execution.automation_id == automation_id)
+            .order_by(desc(models.Execution.started_at))
+            .first()
+        )
+        if latest_exec and latest_exec.started_at:
+            elapsed_minutes = (
+                (get_now_local() - latest_exec.started_at).total_seconds() / 60
+            )
+            if elapsed_minutes < db_auto.cooldown_minutes:
+                remaining = round(db_auto.cooldown_minutes - elapsed_minutes, 1)
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Cooldown operacional ativo para esta automação. "
+                        f"Aguarde aproximadamente {remaining} minuto(s)."
+                    ),
+                )
+
     # exec_id com precisão de microsegundos + sufixo aleatório para evitar colisões (ADR-016)
     exec_id = f"EXEC_{int(_time.time())}_{_uuid.uuid4().hex[:4].upper()}"
 
@@ -542,6 +565,10 @@ async def start_automation(
         id=exec_id,
         automation_id=db_auto.id,
         status="PENDING",
+        priority=PRIORITY_NORMAL,
+        retry_count=0,
+        max_retries=db_auto.max_retries or 0,
+        queue_group=db_auto.queue_group,
         requested_by=client_ip,
     )
 
@@ -675,6 +702,83 @@ def resume_all(
     _reload_scheduler_safe()
 
     return {"message": "Todas as automações retomadas."}
+
+@router.post("/{automation_id}/pause")
+def pause_automation(
+    automation_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+    if not db_auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+    db_auto.enabled = False
+    log_audit(db, "PAUSE", "AUTOMATION", str(automation_id), get_client_ip(request), db_auto.name)
+    db.commit()
+    _reload_scheduler_safe()
+    return {"message": f"Automação '{db_auto.name}' pausada."}
+
+@router.post("/{automation_id}/resume")
+def resume_automation(
+    automation_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+    if not db_auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+    db_auto.enabled = True
+    log_audit(db, "RESUME", "AUTOMATION", str(automation_id), get_client_ip(request), db_auto.name)
+    db.commit()
+    _reload_scheduler_safe()
+    return {"message": f"Automação '{db_auto.name}' retomada."}
+
+@router.post("/{automation_id}/clone", response_model=schemas.AutomationResponse, status_code=201)
+def clone_automation(
+    automation_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+    if not db_auto:
+        raise HTTPException(status_code=404, detail="Automação não encontrada.")
+    base_name = f"{db_auto.name} (Clone)"
+    candidate = base_name
+    idx = 2
+    while db.query(models.Automation).filter(models.Automation.name == candidate).first():
+        candidate = f"{base_name} {idx}"
+        idx += 1
+
+    clone = models.Automation(
+        name=candidate,
+        description=db_auto.description,
+        script_path=db_auto.script_path,
+        schedule=db_auto.schedule,
+        max_runtime_minutes=db_auto.max_runtime_minutes,
+        max_retries=db_auto.max_retries,
+        cooldown_minutes=db_auto.cooldown_minutes,
+        queue_group=db_auto.queue_group,
+        enabled=False,
+        test_mode=db_auto.test_mode,
+        notification_channels=db_auto.notification_channels,
+    )
+    db.add(clone)
+    db.flush()
+    log_audit(
+        db,
+        "CLONE",
+        "AUTOMATION",
+        str(clone.id),
+        get_client_ip(request),
+        json.dumps({"source_automation_id": automation_id}),
+    )
+    db.commit()
+    db.refresh(clone)
+    _reload_scheduler_safe()
+    return _build_automation_response(db, clone)
 
 # ---------------------------------------------------------------------------
 # CONFIG MANAGER (JSON) - Fase 3
