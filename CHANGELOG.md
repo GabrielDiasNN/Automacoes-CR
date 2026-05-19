@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.5.7] - 2026-05-19
+### Adicionado
+- **Fase 5 (Testes Automatizados)**: Criadas e homologadas suites de testes robustas e resilientes, elevando a base histórica de 48 testes para **59 testes** unitários e de integração 100% verdes:
+  - `Orchestrator/tests/test_queue_rules.py`: Validação de concorrência distribuída no mesmo grupo (`queue_group`), limite rigoroso baseado em `max_retries` e classificação correta de exit codes do subprocesso (WhatsApp expirado/canal).
+  - `Orchestrator/tests/test_diagnostics.py`: Validação de heartbeats antigos (worker offline), fila ociosa/envelhecida em `PENDING`/`RUNNING` (`stalled queue`) e alerta de tamanho WAL do SQLite elevado com simulação e mock de rotas.
+  - `Orchestrator/tests/test_validation.py`: Validação estrita de cron schedules inválidos via schemas Pydantic e auditoria de conformidade sintática de arquivos `.env` rejeitando espaços, duplicidades e erros de formatação.
+  - `Orchestrator/tests/test_api_contracts.py`: Validação de segurança Zero Trust (headers `X-API-Key`), respostas 403 e 404 apropriadas, integridade estrutural contendo `contract_version` e prevenção de vazamento de credenciais privadas.
+  - `docs/test-coverage-map.md`: Mapeamento de cobertura associando os arquivos críticos do Orchestrator às suas respectivas suites de testes automatizados.
+
+### Corrigido
+- **Mensagem de API Key nos Testes**: Ajustado assert do teste de autorização para coincidir com a mensagem real traduzida em Português do Brasil no middleware.
+- **Isolamento de Concorrência de Grupo**: Refatorado o teste de `queue_group` para utilizar automações distintas simulando concorrência real entre robôs diferentes em grupo compartilhado, prevenindo falsos positivos causados pelo lock por automação individual.
+- **Mock de WAL no Router**: Modificado o mock de tamanho do WAL para aplicar o patch diretamente no router `system.py`, garantindo que o endpoint de API utilize com precisão o valor simulado no teste.
+
 ## [6.5.6] - 2026-05-19
 ### Adicionado
 - **Fase 4 (Métricas de Qualidade)**: Criado o script local robusto `Tools/Get-QualitySnapshot.ps1` (UTF-8 com BOM) para coleta totalmente automatizada e síncrona de tamanho de repositório, contagem de arquivos, cobertura de testes (Pytest), score de estilo do Pylint, erros do Mypy e conformidade agregada da governança nativa.

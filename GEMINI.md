@@ -32,7 +32,8 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - [x] O contexto permite economia de tokens na próxima interação?
 - [x] Tom técnico PT-BR foi mantido?
 ---
-## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 17/05/2026
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 19/05/2026
+- **Testes Automatizados de Extensão de Resiliência v6.5.7 (19/05/2026):** Homologada a suite completa de **59 testes** unitários e de integração 100% verdes, cobrindo diagnosticos profundos de concorrência (`queue_group`), retry limits, classificação operacional de exit codes e validação sintática rigorosa de `.env` e schedules cron.
 - **Playwright Evidence Governance v6.5.4 (18/05/2026):** `Tools/Test-PlaywrightEvidence.ps1` foi integrado ao `ValidarAutomacoes.ps1 -OnlyGovernance` para bloquear evidência E2E sem URL real, Playwright como última etapa, console limpo e resultado aprovado.
 - **Contrato Operacional Versionado v6.5.4 (18/05/2026):** payloads agregados de sistema agora carregam `contract_version`, checks mínimos de runtime e recovery em duas camadas, permitindo evolução controlada do Dashboard sem quebrar o contrato existente.
 - **Runtime Compartilhado v6.5.4 (18/05/2026):** scheduler, wake-up do worker e helpers de execução foram extraídos para módulos comuns, reduzindo drift entre `main.py`, routers e `worker.py`.

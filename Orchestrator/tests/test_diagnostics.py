@@ -1,0 +1,109 @@
+# pylint: disable=all
+# mypy: ignore-errors
+"""
+Suite de testes focado em diagnósticos de sistema e saúde da fila (Fase 5.3).
+
+Valida:
+1. Detecção de worker offline baseado no atraso de heartbeat.
+2. Diagnóstico de fila parada ou execuções lentas envelhecidas.
+3. Alerta de risco do WAL elevado do banco SQLite.
+"""
+
+from datetime import datetime, timedelta
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app import models
+from app.constants import (
+    ACTION_CODE_CHECKPOINT,
+    EXECUTION_STATUS_PENDING,
+    EXECUTION_STATUS_RUNNING,
+)
+from app.timezone import get_now_local
+from tests.conftest import AUTH_HEADERS
+
+
+def test_diagnostics_worker_offline(client: TestClient, db_session: Session):
+    """Garante que um worker sem ping recente seja classificado como offline no diagnóstico."""
+    # Criar um heartbeat muito antigo (ex: 2 minutos atrás, limite é 30s)
+    old_ping = get_now_local() - timedelta(minutes=2)
+    hb = models.WorkerHeartbeat(
+        id=1,
+        last_ping=old_ping,
+        pid=1234,
+    )
+    db_session.add(hb)
+    db_session.commit()
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+
+    # overall_status deve ser degraded ou unhealthy
+    assert data["overall_status"] in ["degraded", "unhealthy"]
+    
+    # Encontrar a descoberta sobre o worker sem heartbeat
+    findings = [f for f in data["findings"] if f["component"] == "worker"]
+    assert len(findings) > 0
+    assert "Worker sem heartbeat recente" in findings[0]["message"]
+
+
+def test_diagnostics_stalled_queue(client: TestClient, db_session: Session):
+    """Verifica se execuções pendentes ou em execução há muito tempo ativam alertas de fila parada."""
+    # Criar automação de teste
+    auto = models.Automation(
+        id=903,
+        name="Automacao Diagnostico",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        enabled=True,
+    )
+    db_session.add(auto)
+    db_session.commit()
+
+    # Criar execução pendente há 20 minutos (limite para alerta é 15 minutos / 900s)
+    stalled_time = get_now_local() - timedelta(minutes=20)
+    exec_stalled = models.Execution(
+        id="STALLED_001",
+        automation_id=903,
+        status=EXECUTION_STATUS_PENDING,
+        started_at=stalled_time,  # started_at ou data de criação servem como marco
+    )
+    db_session.add(exec_stalled)
+    db_session.commit()
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+
+    # Deve conter um finding relacionado à fila (queue)
+    queue_findings = [f for f in data["findings"] if f["component"] == "queue"]
+    assert len(queue_findings) > 0
+    assert "Execução pendente há" in queue_findings[0]["message"]
+
+
+def test_diagnostics_wal_risk(client: TestClient, db_session: Session):
+    """Garante que um arquivo WAL do SQLite excessivamente grande seja sinalizado com risco crítico."""
+    # Fazer mock do get_wal_size_mb no router de system
+    import app.routers.system as system_router
+    
+    original_get_wal = system_router.get_wal_size_mb
+    # Simular WAL gigante com 300 MB (limite para erro é 256 MB)
+    system_router.get_wal_size_mb = lambda: 300.0
+
+    try:
+        response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+        assert response.status_code == 200
+        data = response.json()
+
+        # overall_status deve ser degraded ou unhealthy
+        assert data["overall_status"] in ["degraded", "unhealthy"]
+
+        # Procurar o achado do WAL elevado
+        db_findings = [f for f in data["findings"] if f["component"] == "database" and "WAL" in f["message"]]
+        assert len(db_findings) > 0
+        assert db_findings[0]["severity"] == "ERROR"
+        assert db_findings[0]["action_code"] == ACTION_CODE_CHECKPOINT
+    finally:
+        # Restaurar a função original
+        system_router.get_wal_size_mb = original_get_wal
