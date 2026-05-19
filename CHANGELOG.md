@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.8.0] - 2026-05-19
+### Adicionado
+- **Fase 8 (Runbooks Operacionais & SLAs)**: Conclusão da Fase 8 focada na padronização documental e governança operacional de incidentes:
+  - `docs/templates/automation-runbook-template.md`: Criado o template padrão de runbooks operacionais de missão crítica.
+  - `docs/runbooks/receitas-bloqueadas-runbook.md`: Elaborado o runbook operacional detalhado da automação crítica de Receitas Bloqueadas, cobrindo ficha técnica, arquitetura, dependências, engenharia de resiliência (retry exponencial do Oracle e graceful degradation de canais), exit codes detalhados e troubleshooting passo a passo.
+  - `docs/automation-criticality-map.md`: Criado o mapa formal de criticidades e SLAs do Hub de Automações, categorizando todos os robôs ativos por criticidade (Tiers 1 a 4), SLAs de recuperação, cadências de disparo, impacto de parada e fluxos automáticos de escalonamento.
+
 ## [6.7.0] - 2026-05-19
 ### Adicionado
 - **Fase 7 (Arquitetura e Modularização)**: Conclusão da Fase 7 focada em modularizar a definição de contratos de dados Pydantic:
