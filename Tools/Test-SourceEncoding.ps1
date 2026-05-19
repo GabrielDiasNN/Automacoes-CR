@@ -26,7 +26,11 @@ $script:SkipPathFragments = @(
     "\node_modules\",
     "\Logs\",
     "\.wwebjs_auth\",
-    "\.code-search\"
+    "\.code-search\",
+    # Arquivos de estado runtime gerados pelo Orchestrator (ignorados pelo .gitignore)
+    "email_state.json",
+    "receitas_state.json",
+    "delivery_state.json"
 )
 
 function Convert-ToRelativePath {

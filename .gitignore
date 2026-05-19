@@ -1,4 +1,4 @@
-# { "version": "2.0.0", "skill": "ai-native-development-standard", "description": "Global Repository Hygiene" }
+# { "version": "2.1.0", "skill": "ai-native-development-standard", "description": "Global Repository Hygiene" }
 
 # Ambientes Virtuais e Trash
 .venv/*
@@ -6,11 +6,30 @@
 .venv_old/
 .venv_trash/
 node_modules/
+npm-debug.log*
+playwright-report/
+test-results/
+
+# Artefatos de build e compressão
+*.zip
+*.7z
+*.rar
+artifacts/
+
+# pip-tools
+requirements*.txt
+!requirements.txt
 
 # Logs e Artefatos Temporários
 Logs/
 *.log
+*.tmp
+*.bak
 Startup_Error.txt
+
+# Cobertura de testes
+.coverage
+htmlcov/
 
 # Dashboard gerado/exportado (nao confundir com SPA fonte em Dashboard/)
 Dashboard/dashboard.html
