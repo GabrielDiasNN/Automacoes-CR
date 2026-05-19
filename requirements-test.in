@@ -1,0 +1,7 @@
+-r requirements.in
+
+# Testing Tools & Frameworks
+pytest
+pytest-cov
+pytest-asyncio
+httpx

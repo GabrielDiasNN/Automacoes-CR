@@ -1,0 +1,12 @@
+-r requirements.in
+
+# Development Tools & Static Analysis
+pylint
+mypy
+pandas-stubs
+types-openpyxl
+types-requests
+types-setuptools
+black
+isort
+pip-tools

@@ -1,0 +1,13 @@
+# Core Runtime Dependencies
+stamina>=24.2.0
+oracledb==2.5.1
+pandas
+openpyxl
+python-dotenv
+requests
+fastapi
+uvicorn[standard]
+apscheduler
+aiosqlite
+sqlalchemy
+pydantic

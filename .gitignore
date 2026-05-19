@@ -19,6 +19,8 @@ artifacts/
 # pip-tools
 requirements*.txt
 !requirements.txt
+!requirements-dev.txt
+!requirements-test.txt
 
 # Logs e Artefatos Temporários
 Logs/
