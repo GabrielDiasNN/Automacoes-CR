@@ -23,6 +23,9 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 
 ## O que Documentar (Automacoes)
 - **Mudanças de Versão:** Incrementar versões nativas nos cabeçalhos e registrar no `CHANGELOG.md`.
+
+## O que Documentar (Automacoes)
+- **Mudanças de Versão:** Incrementar versões nativas nos cabeçalhos e registrar no `CHANGELOG.md`.
 - **Regras de Negócio:** Novos filtros de produção ou comportamentos do Oracle.
 - **Resiliência:** Alterações em Retry (`stamina`), Idempotência ou Circuit Breakers, sempre alinhadas ao Protocolo V.A.L.E.G.
 
@@ -33,6 +36,7 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - [x] Tom técnico PT-BR foi mantido?
 ---
 ## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 19/05/2026
+- **Modularização de Contratos Pydantic v6.7.0 (19/05/2026):** Quebra do arquivo monolítico `Orchestrator/app/schemas.py` (~850 linhas) em submódulos específicos de domínio sob a pasta `schemas/` (`common.py`, `automations.py`, `executions.py`, `system.py` e `__init__.py`). Isso melhora consideravelmente a manutenibilidade do ecossistema e a economia de tokens de contexto. Toda a suíte pytest (65 testes) e o validador de governança local retornaram **100% de conformidade verde**.
 - **Higienização Central de Logs e Payloads v6.6.0 (19/05/2026):** Criado o módulo `Orchestrator/app/security.py` contendo o mascarador de logs `sanitize_log_payload` altamente resiliente contra vazamento de segredos. Criada suite de testes unitários `test_sanitization.py` e integrada a higienização no core do runtime de logs (`execution_runtime.py`) e na rota de telemetria externa (`telemetry_end`), elevando a suite pytest para **65 testes 100% verdes**.
 - **Testes Automatizados de Extensão de Resiliência v6.5.7 (19/05/2026):** Homologada a suite completa de **59 testes** unitários e de integração 100% verdes, cobrindo diagnosticos profundos de concorrência (`queue_group`), retry limits, classificação operacional de exit codes e validação sintática rigorosa de `.env` e schedules cron.
 - **Playwright Evidence Governance v6.5.4 (18/05/2026):** `Tools/Test-PlaywrightEvidence.ps1` foi integrado ao `ValidarAutomacoes.ps1 -OnlyGovernance` para bloquear evidência E2E sem URL real, Playwright como última etapa, console limpo e resultado aprovado.
@@ -46,7 +50,7 @@ Garantir a soberania técnica e o histórico do Hub de Automações. Este docume
 - **Observabilidade Acionável (17/05/2026):** `/api/system/diagnostics` consolidado como contrato operacional com `overall_status`, `findings`, risco do WAL, idade de heartbeat e idade das execuções mais antigas em `PENDING`/`RUNNING`; Dashboard exibe achados com severidade e ação sugerida.
 - **Padronização Runtime (17/05/2026):** Automações de negócio usam `Lib-Config` para `.env`, Python da venv por caminho explícito, fallback de variável Oracle e governança Python/JSON/PowerShell estável.
 - **Validação E2E Padronizada (17/05/2026):** Playwright definido como etapa final obrigatória de validação para mudanças de dashboard/UI e fluxos operacionais front-back, com template de evidência dedicado em `docs/playwright-e2e-evidence-template.md`.
-- **Estado:** Evoluído v6.6.0 (Segurança Hardened).
+- **Estado:** Evoluído v6.7.0 (Arquitetura Modular).
 - **Skills Compartilhadas:** `.github/skills/` consolidado como fonte canônica das 6 skills ativas. `.gemini/skills/` permanece como espelho por junction/symlink para Gemini CLI e Antigravity, sem cópia paralela editável.
 - **Contrato entre Agentes:** Adicionado `AGENTS.md` para definir leitura, edição e resolução de conflitos entre ChatGPT/Codex, Gemini CLI e Antigravity.
 - **Performance Worker:** Implementado **Adaptive Polling** (backoff exponencial de 2s a 15s) em `worker.py`, reduzindo contenção de I/O em 70% em períodos de ociosidade.

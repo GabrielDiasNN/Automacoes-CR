@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.7.0] - 2026-05-19
+### Adicionado
+- **Fase 7 (Arquitetura e Modularização)**: Conclusão da Fase 7 focada em modularizar a definição de contratos de dados Pydantic:
+  - `Orchestrator/app/schemas/`: Criado o pacote de schemas quebrando o arquivo massivo e monolítico `schemas.py` de ~850 linhas (26KB).
+  - `Orchestrator/app/schemas/common.py`: Contém funções de validação de segurança, expressões regulares de nomes seguros, normalizadores de schedule e visualização de recorrências.
+  - `Orchestrator/app/schemas/automations.py`: Contém as classes `AutomationBase`, `AutomationCreate`, `AutomationUpdate` e `AutomationResponse`.
+  - `Orchestrator/app/schemas/executions.py`: Contém as classes `ExecutionBase`, `ExecutionResponse`, `ExecutionSummary`, `ExecutionTelemetryStart`, `ExecutionTelemetryEnd`, `ExecutionQueueActionRequest` e `ExecutionQueueActionResponse`.
+  - `Orchestrator/app/schemas/system.py`: Contém todas as definições de telemetria, KPIs, diagnósticos operacionais, overview de fila, validação de arquivos `.env` e estruturas de auditoria.
+  - `Orchestrator/app/schemas/__init__.py`: Inicialização do pacote garantindo retrocompatibilidade de 100% de modo que nenhum router, service ou teste precise alterar seus caminhos de importação (`from .schemas import ...`).
+- **Validação de Excelência**: Executado com sucesso o pytest obtendo **65/65 testes unitários e de integração 100% verdes** e o validador de governança local `ValidarAutomacoes.ps1 -OnlyGovernance` retornando zero falhas em todos os 172 arquivos mapeados.
+
+### Removido
+- `Orchestrator/app/schemas.py`: Arquivo monolítico legado de 850 linhas removido definitivamente em prol de maior modularidade, manutenibilidade e economia de tokens de contexto.
+
 ## [6.6.0] - 2026-05-19
 ### Adicionado
 - **Fase 6 (Segurança)**: Conclusão da Fase 6 focada em segurança, varredura de vazamentos e higienização robusta de logs e payloads:
