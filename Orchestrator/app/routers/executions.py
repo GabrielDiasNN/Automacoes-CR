@@ -19,20 +19,26 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
-from ..constants import (EXECUTION_ACTIVE_STATUSES, EXECUTION_ALLOWED_PRIORITIES,
-                         EXECUTION_ALLOWED_STATUSES,
-                         EXECUTION_QUEUEABLE_SOURCE_STATUSES,
-                         EXECUTION_STATUS_REQUEUED, EXECUTION_STATUS_RUNNING,
-                         EXECUTION_STATUS_TERMINATED,
-                         RECOVERY_ACTION_REQUEUE_MANUAL,
-                         RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION)
+from ..constants import (
+    EXECUTION_ACTIVE_STATUSES,
+    EXECUTION_ALLOWED_PRIORITIES,
+    EXECUTION_ALLOWED_STATUSES,
+    EXECUTION_QUEUEABLE_SOURCE_STATUSES,
+    EXECUTION_STATUS_REQUEUED,
+    EXECUTION_STATUS_RUNNING,
+    EXECUTION_STATUS_TERMINATED,
+    RECOVERY_ACTION_REQUEUE_MANUAL,
+    RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION,
+)
 from ..database import get_db
-from ..timezone import get_now_local
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
-from ..services.execution_runtime import (build_queued_execution,
-                                          generate_execution_id,
-                                          get_group_active_execution)
+from ..services.execution_runtime import (
+    build_queued_execution,
+    generate_execution_id,
+    get_group_active_execution,
+)
+from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
 logger = logging.getLogger("orchestrator")
@@ -45,6 +51,7 @@ PROJECT_ROOT = get_project_root()
 # ---------------------------------------------------------------------------
 # LISTAGEM GLOBAL com filtros e paginacao
 # ---------------------------------------------------------------------------
+
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.ExecutionSummary])
 def list_executions(
@@ -62,7 +69,9 @@ def list_executions(
     if page < 1:
         raise HTTPException(status_code=422, detail="page deve ser >= 1.")
     if per_page < 1 or per_page > 200:
-        raise HTTPException(status_code=422, detail="per_page deve estar entre 1 e 200.")
+        raise HTTPException(
+            status_code=422, detail="per_page deve estar entre 1 e 200."
+        )
 
     query = db.query(models.Execution).options(joinedload(models.Execution.automation))
 
@@ -70,7 +79,9 @@ def list_executions(
         normalized_status = status.upper()
         if normalized_status not in EXECUTION_ALLOWED_STATUSES:
             allowed = ", ".join(sorted(EXECUTION_ALLOWED_STATUSES))
-            raise HTTPException(status_code=422, detail=f"status inválido. Use: {allowed}.")
+            raise HTTPException(
+                status_code=422, detail=f"status inválido. Use: {allowed}."
+            )
         query = query.filter(models.Execution.status == normalized_status)
     if automation_id:
         query = query.filter(models.Execution.automation_id == automation_id)
@@ -83,15 +94,21 @@ def list_executions(
             dt_from = datetime.fromisoformat(date_from)
             query = query.filter(models.Execution.started_at >= dt_from)
         except ValueError:
-            raise HTTPException(status_code=422, detail="date_from inválido. Use formato ISO-8601.")
+            raise HTTPException(
+                status_code=422, detail="date_from inválido. Use formato ISO-8601."
+            )
     if date_to:
         try:
             dt_to = datetime.fromisoformat(date_to)
             query = query.filter(models.Execution.started_at <= dt_to)
         except ValueError:
-            raise HTTPException(status_code=422, detail="date_to inválido. Use formato ISO-8601.")
+            raise HTTPException(
+                status_code=422, detail="date_to inválido. Use formato ISO-8601."
+            )
     if dt_from and dt_to and dt_from > dt_to:
-        raise HTTPException(status_code=422, detail="date_from não pode ser maior que date_to.")
+        raise HTTPException(
+            status_code=422, detail="date_from não pode ser maior que date_to."
+        )
 
     query = query.order_by(desc(models.Execution.started_at))
 
@@ -103,16 +120,20 @@ def list_executions(
     items = []
     for ex in items_raw:
         summary = schemas.ExecutionSummary.model_validate(ex)
-        summary.automation_name = ex.automation.name if ex.automation else "Desconhecido"
+        summary.automation_name = (
+            ex.automation.name if ex.automation else "Desconhecido"
+        )
         items.append(summary)
 
     return schemas.PaginatedResponse(
         items=items, total=total, page=page, per_page=per_page, pages=pages
     )
 
+
 # ---------------------------------------------------------------------------
 # EXECUCOES POR AUTOMACAO (compatibilidade)
 # ---------------------------------------------------------------------------
+
 
 @router.get(
     "/by-automation/{automation_id}", response_model=list[schemas.ExecutionSummary]
@@ -140,9 +161,11 @@ def list_by_automation(
         result.append(s)
     return result
 
+
 # ---------------------------------------------------------------------------
 # RECENTES (para dashboard overview)
 # ---------------------------------------------------------------------------
+
 
 @router.get("/recent", response_model=list[schemas.ExecutionSummary])
 def list_recent(
@@ -165,9 +188,11 @@ def list_recent(
         result.append(s)
     return result
 
+
 # ---------------------------------------------------------------------------
 # GET por ID (com logs completos)
 # ---------------------------------------------------------------------------
+
 
 @router.get("/{exec_id}", response_model=schemas.ExecutionResponse)
 def get_execution(
@@ -175,17 +200,26 @@ def get_execution(
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    db_exec = db.query(models.Execution).options(joinedload(models.Execution.automation)).filter(models.Execution.id == exec_id).first()
+    db_exec = (
+        db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
+        .filter(models.Execution.id == exec_id)
+        .first()
+    )
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
     resp = schemas.ExecutionResponse.model_validate(db_exec)
-    resp.automation_name = db_exec.automation.name if db_exec.automation else "Desconhecido"
+    resp.automation_name = (
+        db_exec.automation.name if db_exec.automation else "Desconhecido"
+    )
     return resp
+
 
 # ---------------------------------------------------------------------------
 # LOGS de uma execucao (paginados por linhas)
 # ---------------------------------------------------------------------------
+
 
 @router.get("/{exec_id}/logs")
 def get_execution_logs(
@@ -212,9 +246,11 @@ def get_execution_logs(
         "lines": sliced,
     }
 
+
 # ---------------------------------------------------------------------------
 # ARTEFATOS de uma execucao
 # ---------------------------------------------------------------------------
+
 
 @router.get("/{exec_id}/artifacts")
 def list_artifacts(
@@ -236,6 +272,7 @@ def list_artifacts(
 
     return {"exec_id": exec_id, "artifacts": artifacts}
 
+
 @router.get("/{exec_id}/download")
 def download_artifact(
     exec_id: str,
@@ -244,7 +281,12 @@ def download_artifact(
     api_key: str = Depends(get_api_key),
 ):
     """Download de um artefato especifico."""
-    db_exec = db.query(models.Execution).options(joinedload(models.Execution.automation)).filter(models.Execution.id == exec_id).first()
+    db_exec = (
+        db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
+        .filter(models.Execution.id == exec_id)
+        .first()
+    )
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
@@ -259,7 +301,9 @@ def download_artifact(
 
     script_path = db_auto.script_path
     if script_path.startswith("./") or script_path.startswith(".\\"):
-        robot_dir = os.path.normpath(os.path.join(PROJECT_ROOT, os.path.dirname(script_path[2:])))
+        robot_dir = os.path.normpath(
+            os.path.join(PROJECT_ROOT, os.path.dirname(script_path[2:]))
+        )
     else:
         robot_dir = os.path.normpath(os.path.dirname(os.path.abspath(script_path)))
 
@@ -276,9 +320,11 @@ def download_artifact(
 
     return FileResponse(path=file_path, filename=filename)
 
+
 # ---------------------------------------------------------------------------
 # STOP (Parar execucao)
 # ---------------------------------------------------------------------------
+
 
 @router.post("/{exec_id}/stop")
 def stop_execution(
@@ -304,14 +350,16 @@ def stop_execution(
         except Exception:
             pass
     db_exec.logs = (
-        db_exec.logs or ""
-    ) + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
+        (db_exec.logs or "")
+        + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
+    )
 
     log_audit(db, "STOP", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
 
     logger.info(f"Execucao interrompida: {exec_id}")
     return {"message": "Sinal de parada registrado.", "exec_id": exec_id}
+
 
 @router.post("/{exec_id}/requeue", response_model=schemas.ExecutionQueueActionResponse)
 def requeue_execution(
@@ -396,7 +444,9 @@ def requeue_execution(
 
     db_exec.status = EXECUTION_STATUS_REQUEUED
     db_exec.recovery_action = RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION
-    db_exec.logs = (db_exec.logs or "") + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"
+    db_exec.logs = (
+        db_exec.logs or ""
+    ) + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"
 
     log_audit(
         db,
@@ -429,9 +479,11 @@ def requeue_execution(
         recovery_action="REQUEUE_MANUAL",
     )
 
+
 # ---------------------------------------------------------------------------
 # TELEMETRIA EXTERNA (Terminal / VS Code)
 # ---------------------------------------------------------------------------
+
 
 @router.post("/telemetry/start")
 def telemetry_start(
@@ -444,9 +496,16 @@ def telemetry_start(
     Inicia o registro de uma execucao disparada externamente (ex: terminal).
     """
     # Buscar a automacao pelo nome
-    db_auto = db.query(models.Automation).filter(models.Automation.name == payload.automation_name).first()
+    db_auto = (
+        db.query(models.Automation)
+        .filter(models.Automation.name == payload.automation_name)
+        .first()
+    )
     if not db_auto:
-        raise HTTPException(status_code=404, detail=f"Automação '{payload.automation_name}' não encontrada.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Automação '{payload.automation_name}' não encontrada.",
+        )
 
     # Gerar ID unico
     exec_id = f"TEL_{int(time.time())}_{uuid.uuid4().hex[:6]}"
@@ -465,8 +524,11 @@ def telemetry_start(
     log_audit(db, "START_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
 
-    logger.info(f"Telemetria iniciada: {exec_id} para automacao {payload.automation_name}")
+    logger.info(
+        f"Telemetria iniciada: {exec_id} para automacao {payload.automation_name}"
+    )
     return {"exec_id": exec_id}
+
 
 @router.post("/telemetry/end/{exec_id}")
 def telemetry_end(

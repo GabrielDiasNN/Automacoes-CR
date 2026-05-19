@@ -23,14 +23,17 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
+
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
+
 # --- RESILIENCIA DE CONEXAO ---
 db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
+
 
 @db_breaker
 @stamina.retry(on=oracledb.DatabaseError, attempts=3)
@@ -55,12 +58,20 @@ def connect_and_execute(
                     if not batch:
                         break
                     rows.extend(batch)
-                log(f"Query executada com sucesso. Linhas retornadas: {len(rows)}", "INFO", exec_id)
+                log(
+                    f"Query executada com sucesso. Linhas retornadas: {len(rows)}",
+                    "INFO",
+                    exec_id,
+                )
                 return columns, rows
             except oracledb.Error as e:
                 if e.args:
                     error_obj = e.args[0]
-                    log(f"Erro SQL Oracle (ORA-{error_obj.code}): {error_obj.message}", "ERROR", exec_id)
+                    log(
+                        f"Erro SQL Oracle (ORA-{error_obj.code}): {error_obj.message}",
+                        "ERROR",
+                        exec_id,
+                    )
                 else:
                     log(f"Erro SQL Oracle desconhecido: {e}", "ERROR", exec_id)
                 # Log da query (parcial para seguranca)
@@ -70,13 +81,16 @@ def connect_and_execute(
         log(f"Erro de Conexao Oracle: {e}", "ERROR", exec_id)
         raise
 
+
 def extract() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
 
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = os.environ.get("ORACLE_CONNECT_STRING", "dbprd")
-    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
+    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get(
+        "ORACLE_CLIENT_PATH"
+    )
     tns_admin = os.environ.get("TNS_ADMIN")
 
     if not all([user, password, dsn]):
@@ -115,16 +129,22 @@ def extract() -> None:
             data.append(record)
 
         # Ordenacao deterministica multi-coluna para garantir estabilidade absoluta do hash
-        data.sort(key=lambda x: (
-            str(x.get("NUMERO_OB", "")),
-            str(x.get("REDUZIDO", "")),
-            str(x.get("GRUPO", "")),
-            str(x.get("INICIO_TING", ""))
-        ))
+        data.sort(
+            key=lambda x: (
+                str(x.get("NUMERO_OB", "")),
+                str(x.get("REDUZIDO", "")),
+                str(x.get("GRUPO", "")),
+                str(x.get("INICIO_TING", "")),
+            )
+        )
 
         json_payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
         current_hash = hashlib.sha256(json_payload.encode("utf-8")).hexdigest()
-        log(f"Hash calculado para {len(data)} registros: {current_hash}", "DEBUG", exec_id)
+        log(
+            f"Hash calculado para {len(data)} registros: {current_hash}",
+            "DEBUG",
+            exec_id,
+        )
 
         state_path = os.path.join(os.path.dirname(__file__), "receitas_state.json")
         last_state_data = {}
@@ -140,9 +160,17 @@ def extract() -> None:
         state_tmp_path = state_path + ".tmp"
         if last_hash and current_hash == last_hash:
             if os.path.exists(state_tmp_path):
-                log("Sem novas alterações, mas detectado estado temporário pendente de notificação.", "INFO", exec_id)
+                log(
+                    "Sem novas alterações, mas detectado estado temporário pendente de notificação.",
+                    "INFO",
+                    exec_id,
+                )
             else:
-                log("Sem alterações relevantes detectadas (Idempotência).", "INFO", exec_id)
+                log(
+                    "Sem alterações relevantes detectadas (Idempotência).",
+                    "INFO",
+                    exec_id,
+                )
                 sys.exit(2)
 
         state_data = {
@@ -167,6 +195,7 @@ def extract() -> None:
     except Exception as e:
         log(f"Erro fatal na extracao: {e}", "ERROR", exec_id)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     extract()

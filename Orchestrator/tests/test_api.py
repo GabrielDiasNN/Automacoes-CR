@@ -11,12 +11,13 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from conftest import AUTH_HEADERS
 from app.constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
+from conftest import AUTH_HEADERS
 
 # ============================================================
 # ROOT
 # ============================================================
+
 
 def test_read_root(client):
     res = client.get("/")
@@ -25,21 +26,26 @@ def test_read_root(client):
     assert data["version"] == ORCHESTRATOR_VERSION
     assert "dashboard_url" in data
 
+
 # ============================================================
 # SEGURANCA
 # ============================================================
+
 
 def test_reject_without_api_key(client):
     res = client.get("/api/automations/all")
     assert res.status_code == 403
 
+
 def test_reject_wrong_api_key(client):
     res = client.get("/api/automations/all", headers={"X-API-Key": "wrong-key"})
     assert res.status_code == 403
 
+
 # ============================================================
 # CRUD AUTOMATIONS
 # ============================================================
+
 
 def test_create_automation(client):
     res = client.post(
@@ -58,6 +64,7 @@ def test_create_automation(client):
     data = res.json()
     assert data["name"] == "Test Task"
     assert data["id"] is not None
+
 
 def test_create_duplicate_name_rejected(client):
     client.post(
@@ -78,6 +85,7 @@ def test_create_duplicate_name_rejected(client):
     )
     assert res.status_code == 409
 
+
 def test_list_automations_paginated(client):
     for i in range(5):
         client.post(
@@ -95,6 +103,7 @@ def test_list_automations_paginated(client):
     assert len(data["items"]) == 3
     assert data["total"] == 5
     assert data["pages"] == 2
+
 
 def test_update_automation(client):
     client.post(
@@ -115,6 +124,7 @@ def test_update_automation(client):
     assert res.status_code == 200
     assert res.json()["description"] == "Atualizado"
 
+
 def test_update_automation_reloads_scheduler(client, monkeypatch):
     import app.routers.automations as auto_router
 
@@ -127,7 +137,9 @@ def test_update_automation_reloads_scheduler(client, monkeypatch):
         headers=AUTH_HEADERS,
     )
     calls = []
-    monkeypatch.setattr(auto_router, "_reload_scheduler_safe", lambda: calls.append("reload"))
+    monkeypatch.setattr(
+        auto_router, "_reload_scheduler_safe", lambda: calls.append("reload")
+    )
 
     res = client.put(
         "/api/automations/1",
@@ -139,6 +151,7 @@ def test_update_automation_reloads_scheduler(client, monkeypatch):
 
     assert res.status_code == 200
     assert calls == ["reload"]
+
 
 def test_update_automation_rejects_path_escape(client):
     client.post(
@@ -158,6 +171,7 @@ def test_update_automation_rejects_path_escape(client):
     )
     assert res.status_code == 422
 
+
 def test_delete_automation(client):
     client.post(
         "/api/automations",
@@ -170,9 +184,11 @@ def test_delete_automation(client):
     res = client.delete("/api/automations/1", headers=AUTH_HEADERS)
     assert res.status_code == 200
 
+
 # ============================================================
 # VALIDACAO DE SCHEMAS
 # ============================================================
+
 
 def test_reject_path_traversal(client):
     res = client.post(
@@ -185,6 +201,7 @@ def test_reject_path_traversal(client):
     )
     assert res.status_code == 422
 
+
 def test_reject_dangerous_name(client):
     res = client.post(
         "/api/automations",
@@ -195,6 +212,7 @@ def test_reject_dangerous_name(client):
         headers=AUTH_HEADERS,
     )
     assert res.status_code == 422
+
 
 def test_reject_invalid_schedule(client):
     res = client.post(
@@ -208,6 +226,7 @@ def test_reject_invalid_schedule(client):
     )
     assert res.status_code == 422
 
+
 def test_reject_schedule_with_invalid_time(client):
     res = client.post(
         "/api/automations",
@@ -220,9 +239,11 @@ def test_reject_schedule_with_invalid_time(client):
     )
     assert res.status_code == 422
 
+
 # ============================================================
 # EXECUCOES
 # ============================================================
+
 
 def test_start_automation_creates_pending(client):
     client.post(
@@ -240,6 +261,7 @@ def test_start_automation_creates_pending(client):
     res2 = client.get(f"/api/executions/{exec_id}", headers=AUTH_HEADERS)
     assert res2.json()["status"] == "PENDING"
 
+
 def test_reject_duplicate_execution(client):
     client.post(
         "/api/automations",
@@ -252,6 +274,7 @@ def test_reject_duplicate_execution(client):
     client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     res = client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     assert res.status_code == 409
+
 
 def test_stop_execution(client):
     client.post(
@@ -273,6 +296,7 @@ def test_stop_execution(client):
     assert "[STOP] Interrupcao solicitada via API" in check.json()["logs"]
     assert check.json()["duration_seconds"] is not None
 
+
 def test_list_recent_executions(client):
     client.post(
         "/api/automations",
@@ -288,9 +312,11 @@ def test_list_recent_executions(client):
     assert res.status_code == 200
     assert len(res.json()) >= 1
 
+
 # ============================================================
 # SISTEMA
 # ============================================================
+
 
 def test_health_check(client):
     res = client.get("/api/system/health")
@@ -299,22 +325,26 @@ def test_health_check(client):
     assert data["database"] == "online"
     assert data["status"] in ["healthy", "degraded", "unhealthy"]
 
+
 def test_metrics(client):
     res = client.get("/api/system/metrics", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert "summary" in res.json()
     assert "automations" in res.json()
 
+
 def test_uptime(client):
     res = client.get("/api/system/uptime", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert "uptime_seconds" in res.json()
+
 
 def test_health_includes_wal_size(client):
     """v5.0: health deve incluir wal_size_mb."""
     res = client.get("/api/system/health")
     assert res.status_code == 200
     assert "wal_size_mb" in res.json()
+
 
 def test_version_endpoint(client):
     """v5.0: novo endpoint enterprise /api/system/version."""
@@ -325,6 +355,7 @@ def test_version_endpoint(client):
     assert "python_version" in data
     assert "uptime_seconds" in data
     assert "max_workers" in data
+
 
 def test_diagnostics_endpoint(client):
     res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
@@ -351,7 +382,10 @@ def test_diagnostics_endpoint(client):
     assert "checks" in data
     assert "recovery" in data
 
-def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_session, monkeypatch):
+
+def test_diagnostics_reports_actionable_queue_and_wal_findings(
+    client, db_session, monkeypatch
+):
     import app.routers.system as system_router
     from app import models
     from app.timezone import get_now_local
@@ -383,17 +417,22 @@ def test_diagnostics_reports_actionable_queue_and_wal_findings(client, db_sessio
     assert {"database", "queue"}.issubset(components)
     assert any(item["action_code"] == "checkpoint" for item in data["findings"])
 
+
 def test_system_overview_exposes_contract_version(client):
     res = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
+
 
 def test_system_version_exposes_contract_version(client):
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
-def test_diagnostics_offline_worker_prefers_recovery_action(client, db_session, monkeypatch):
+
+def test_diagnostics_offline_worker_prefers_recovery_action(
+    client, db_session, monkeypatch
+):
     import app.routers.system as system_router
     from app import models
     from app.schemas import WorkerStatus
@@ -426,13 +465,19 @@ def test_diagnostics_offline_worker_prefers_recovery_action(client, db_session, 
             version="6.4.0",
         ),
     )
-    monkeypatch.setattr(system_router, "_launch_orchestrator_recovery", lambda: "Recover-Orchestrator.ps1")
+    monkeypatch.setattr(
+        system_router,
+        "_launch_orchestrator_recovery",
+        lambda: "Recover-Orchestrator.ps1",
+    )
 
     res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
 
-    worker_findings = [item for item in data["findings"] if item["component"] == "worker"]
+    worker_findings = [
+        item for item in data["findings"] if item["component"] == "worker"
+    ]
     assert worker_findings
     assert any("Recuperar" in item["action_hint"] for item in worker_findings)
     assert any(item["action_code"] == "worker_recover" for item in worker_findings)
@@ -443,6 +488,7 @@ def test_diagnostics_offline_worker_prefers_recovery_action(client, db_session, 
     assert recover_payload["script"] == "Recover-Orchestrator.ps1"
     assert recover_payload["queue_active_count"] == 1
 
+
 def test_system_overview_includes_diagnostics_summary(client):
     res = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert res.status_code == 200
@@ -450,6 +496,7 @@ def test_system_overview_includes_diagnostics_summary(client):
     assert "diagnostics" in data
     assert data["diagnostics"]["overall_status"] in ["healthy", "degraded", "unhealthy"]
     assert "findings" in data["diagnostics"]
+
 
 def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
     from app import models
@@ -490,8 +537,16 @@ def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
     assert payload["retry_count"] == 1
     assert payload["max_retries"] == 2
 
-    source = db_session.query(models.Execution).filter(models.Execution.id == "EXEC_RETRY_SRC").first()
-    queued = db_session.query(models.Execution).filter(models.Execution.id == payload["queued_exec_id"]).first()
+    source = (
+        db_session.query(models.Execution)
+        .filter(models.Execution.id == "EXEC_RETRY_SRC")
+        .first()
+    )
+    queued = (
+        db_session.query(models.Execution)
+        .filter(models.Execution.id == payload["queued_exec_id"])
+        .first()
+    )
     assert source.status == "REQUEUED"
     assert source.recovery_action == "REQUEUED_TO_NEW_EXECUTION"
     assert queued.status == "PENDING"
@@ -500,11 +555,14 @@ def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
     assert queued.failure_reason == "EXIT_CODE_24"
     assert queued.recovery_action == "REQUEUE_MANUAL"
 
+
 def test_execution_requeue_blocks_retry_limit(client, db_session):
     from app import models
     from app.timezone import get_now_local
 
-    auto = models.Automation(name="Retry Limit", script_path="./test/run.ps1", max_retries=1)
+    auto = models.Automation(
+        name="Retry Limit", script_path="./test/run.ps1", max_retries=1
+    )
     db_session.add(auto)
     db_session.flush()
     db_session.add(
@@ -526,6 +584,7 @@ def test_execution_requeue_blocks_retry_limit(client, db_session):
         headers=AUTH_HEADERS,
     )
     assert res.status_code == 409
+
 
 def test_execution_requeue_blocks_active_queue_group(client, db_session):
     from app import models
@@ -580,9 +639,11 @@ def test_execution_requeue_blocks_active_queue_group(client, db_session):
     assert res.status_code == 409
     assert "mesmo grupo operacional" in res.json()["detail"]
 
+
 def test_wait_for_task_requires_api_key(client):
     res = client.get("/api/system/wait-for-task")
     assert res.status_code == 403
+
 
 def test_update_automation_config_creates_backup(client, monkeypatch, tmp_path):
     import app.routers.automations as auto_router
@@ -613,6 +674,7 @@ def test_update_automation_config_creates_backup(client, monkeypatch, tmp_path):
     assert backup_path.exists()
     assert json.loads(backup_path.read_text(encoding="utf-8")) == {"old": True}
     assert json.loads(config_path.read_text(encoding="utf-8")) == {"new": True}
+
 
 def test_update_automation_script_creates_backup_and_preserves_ps_bom(
     client,
@@ -646,6 +708,7 @@ def test_update_automation_script_creates_backup_and_preserves_ps_bom(
     assert script_path.read_bytes().startswith(b"\xef\xbb\xbf")
     assert "new" in script_path.read_text(encoding="utf-8-sig")
 
+
 def test_update_automation_script_rejects_path_escape(client, monkeypatch, tmp_path):
     import app.routers.automations as auto_router
 
@@ -668,6 +731,7 @@ def test_update_automation_script_rejects_path_escape(client, monkeypatch, tmp_p
 
     assert res.status_code in (400, 404)
 
+
 def test_update_env_creates_backup(client, monkeypatch, tmp_path):
     import app.routers.system as system_router
 
@@ -687,6 +751,7 @@ def test_update_env_creates_backup(client, monkeypatch, tmp_path):
     assert backup_path.exists()
     assert backup_path.read_text(encoding="utf-8") == "ORCHESTRATOR_API_KEY=old\n"
     assert env_path.read_text(encoding="utf-8") == "ORCHESTRATOR_API_KEY=new\n"
+
 
 def test_system_router_project_root_points_to_repo_root():
     import app.routers.system as system_router

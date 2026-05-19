@@ -9,7 +9,7 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Any, List, Optional, Dict
+from typing import Any, Dict, List, Optional
 
 import oracledb
 import pandas as pd
@@ -28,11 +28,13 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
+
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-PROCESS] [{level}] [ExecId:{exec_id}] {message}"
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
+
 
 # --- CONTRATOS DE DADOS (Pydantic) ---
 class RecipeRecord(BaseModel):
@@ -43,14 +45,17 @@ class RecipeRecord(BaseModel):
     data_prod: Optional[str] = Field(alias="Data Última Prod.", default="")
     data_bloqueio: Optional[str] = Field(alias="Data Bloqueio", default="")
 
+
 class StateFile(BaseModel):
     last_hash: str
     updated_at: str
     records: List[RecipeRecord]
 
+
 # --- RESILIENCIA DE CONEXAO ---
 # Circuit Breaker: Abre apos 3 falhas, permanece aberto por 60s
 db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
+
 
 @db_breaker
 @stamina.retry(on=oracledb.DatabaseError, attempts=3)
@@ -64,6 +69,7 @@ def fetch_data_with_retry(
     )
     with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
         return pd.read_sql(sql_query, con=connection)
+
 
 def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str:
     # Cores Classicas
@@ -139,7 +145,7 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
     )
     df_display = df_display.sort_values(by=["_sort_order", "Cor Rec.", "EP Rec."])
 
-    for row in df_display.to_dict('records'):
+    for row in df_display.to_dict("records"):
         change_type = row["_change_type"]
         bg = "#ffffff"
         status_text = ""
@@ -186,6 +192,7 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
     """
     return html
 
+
 def formatar_excel(file_path: str) -> None:
     wb = load_workbook(file_path)
     header_fill = PatternFill(
@@ -223,7 +230,9 @@ def formatar_excel(file_path: str) -> None:
                         cell.number_format = "DD/MM/YYYY"
                 if sheet_name == "OBsReceitasBloqueadas":
                     if ws.cell(row=int(cell.row or 0), column=22).value == "Divergente":
-                        ws.cell(row=int(cell.row or 0), column=22).fill = status_err_fill
+                        ws.cell(row=int(cell.row or 0), column=22).fill = (
+                            status_err_fill
+                        )
                     ws.cell(row=int(cell.row or 0), column=2).font = Font(bold=True)
         for col in ws.columns:
             max_length = 0
@@ -236,6 +245,7 @@ def formatar_excel(file_path: str) -> None:
                     pass
             ws.column_dimensions[column].width = max_length + 2
     wb.save(file_path)
+
 
 def process() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
@@ -252,12 +262,12 @@ def process() -> None:
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = os.environ.get("ORACLE_CONNECT_STRING", "dbprd")
-    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
+    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get(
+        "ORACLE_CLIENT_PATH"
+    )
     tns_admin = os.environ.get("TNS_ADMIN")
 
-    def handle_exception(
-        exc_type: Any, exc_value: Any, exc_traceback: Any
-    ) -> None:
+    def handle_exception(exc_type: Any, exc_value: Any, exc_traceback: Any) -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
@@ -344,18 +354,20 @@ def process() -> None:
         if df_last.empty:
             df_diff_new = df_agreg.copy()
             df_diff_new["_change_type"] = "NEW"
-            diff_rows = df_diff_new.to_dict('records')
+            diff_rows = df_diff_new.to_dict("records")
             stats["new"] = len(df_diff_new)
             df_deleted = pd.DataFrame()
         else:
-            df_merge = df_agreg.merge(df_last, on="Key", how="outer", indicator=True, suffixes=("", "_last"))
+            df_merge = df_agreg.merge(
+                df_last, on="Key", how="outer", indicator=True, suffixes=("", "_last")
+            )
 
             new_mask = df_merge["_merge"] == "left_only"
             del_mask = df_merge["_merge"] == "right_only"
 
             mod_mask = (df_merge["_merge"] == "both") & (
-                (df_merge["Data Última Prod."] != df_merge["Data Última Prod._last"]) |
-                (df_merge["Data Bloqueio"] != df_merge["Data Bloqueio_last"])
+                (df_merge["Data Última Prod."] != df_merge["Data Última Prod._last"])
+                | (df_merge["Data Bloqueio"] != df_merge["Data Bloqueio_last"])
             )
 
             stats["new"] = int(new_mask.sum())
@@ -365,23 +377,33 @@ def process() -> None:
             if stats["new"] > 0:
                 df_new = df_merge[new_mask][df_agreg.columns].copy()
                 df_new["_change_type"] = "NEW"
-                diff_rows.extend(df_new.to_dict('records'))
+                diff_rows.extend(df_new.to_dict("records"))
 
             if stats["mod"] > 0:
                 df_mod = df_merge[mod_mask][df_agreg.columns].copy()
                 df_mod["_change_type"] = "MODIFIED"
-                diff_rows.extend(df_mod.to_dict('records'))
+                diff_rows.extend(df_mod.to_dict("records"))
 
             if stats["del"] > 0:
-                rename_cols = {col + "_last": col for col in df_agreg.columns if col != "Key"}
-                df_deleted = df_merge[del_mask][["Key"] + list(rename_cols.keys())].rename(columns=rename_cols).copy()
+                rename_cols = {
+                    col + "_last": col for col in df_agreg.columns if col != "Key"
+                }
+                df_deleted = (
+                    df_merge[del_mask][["Key"] + list(rename_cols.keys())]
+                    .rename(columns=rename_cols)
+                    .copy()
+                )
                 df_deleted["_change_type"] = "DELETED"
-                diff_rows.extend(df_deleted.to_dict('records'))
+                diff_rows.extend(df_deleted.to_dict("records"))
 
         state_tmp_path = state_path + ".tmp"
         if not diff_rows:
             if os.path.exists(state_tmp_path):
-                log("Sem novas alteracoes, mas detectado estado temporario pendente de notificacao.", "INFO", exec_id)
+                log(
+                    "Sem novas alteracoes, mas detectado estado temporario pendente de notificacao.",
+                    "INFO",
+                    exec_id,
+                )
                 sys.exit(0)
             log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
             sys.exit(2)
@@ -413,9 +435,13 @@ def process() -> None:
         df_display["_change_type"] = "STABLE"
 
         if not df_diff.empty:
-            change_map = df_diff[df_diff["_change_type"].isin(["NEW", "MODIFIED"])].set_index("Key")["_change_type"]
+            change_map = df_diff[
+                df_diff["_change_type"].isin(["NEW", "MODIFIED"])
+            ].set_index("Key")["_change_type"]
             if not change_map.empty:
-                df_display["_change_type"] = df_display["Key"].map(change_map).fillna("STABLE")
+                df_display["_change_type"] = (
+                    df_display["Key"].map(change_map).fillna("STABLE")
+                )
 
             df_deleted = df_diff[df_diff["_change_type"] == "DELETED"]
             if not df_deleted.empty:
@@ -440,6 +466,7 @@ def process() -> None:
     except Exception as e:
         log(f"Erro fatal: {str(e)}", "ERROR", exec_id)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     process()

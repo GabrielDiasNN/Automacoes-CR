@@ -21,12 +21,14 @@ if hasattr(sys.stdin, "encoding") and sys.stdin.encoding != "utf-8-sig":
     except AttributeError:
         pass  # Evita falha durante testes (ex: pytest mock de stdin)
 
+
 def log(message, level="INFO", exec_id="manual"):
     """Envia logs para o stderr."""
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}"
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
+
 
 def html_escape(text):
     if not text:
@@ -68,6 +70,7 @@ def html_escape(text):
     for char, entity in char_map.items():
         s = s.replace(char, entity)
     return s
+
 
 def generate_html():
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
@@ -244,6 +247,7 @@ def generate_html():
     sys.stdout.write(full_html)
     sys.stdout.flush()
     log("Relatório HTML gerado com sucesso para stdout.", "INFO", exec_id)
+
 
 if __name__ == "__main__":
     generate_html()

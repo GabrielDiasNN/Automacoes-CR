@@ -15,7 +15,9 @@ def test_validate_database_schema_passes_for_current_models(client):
 
 def test_expected_schema_covers_execution_queue_contract():
     assert {"status", "priority", "started_at"}.issubset(EXPECTED_SCHEMA["executions"])
-    assert {"enabled", "schedule", "script_path"}.issubset(EXPECTED_SCHEMA["automations"])
+    assert {"enabled", "schedule", "script_path"}.issubset(
+        EXPECTED_SCHEMA["automations"]
+    )
     assert {"retry_count", "max_retries", "failure_reason", "recovery_action"}.issubset(
         EXPECTED_SCHEMA["executions"]
     )

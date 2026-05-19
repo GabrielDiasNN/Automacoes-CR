@@ -29,12 +29,14 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from app import models, notifications
-    from app.constants import (EXECUTION_STATUS_ERROR,
-                               EXECUTION_STATUS_PENDING,
-                               EXECUTION_STATUS_RUNNING,
-                               EXECUTION_STATUS_TERMINATED,
-                               EXECUTION_STATUS_TIMEOUT,
-                               WORKER_VERSION)
+    from app.constants import (
+        EXECUTION_STATUS_ERROR,
+        EXECUTION_STATUS_PENDING,
+        EXECUTION_STATUS_RUNNING,
+        EXECUTION_STATUS_TERMINATED,
+        EXECUTION_STATUS_TIMEOUT,
+        WORKER_VERSION,
+    )
     from app.database import SessionLocal
     from app.runtime import get_project_root
     from app.services.execution_runtime import (
@@ -77,6 +79,7 @@ API_BASE: str = f"http://127.0.0.1:{_port}"
 log_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logs")
 os.makedirs(log_dir, exist_ok=True)
 
+
 class _JsonFormatter(logging.Formatter):
     """Formatter JSON estruturado identico ao Orchestrator (Pilar L)."""
 
@@ -91,6 +94,7 @@ class _JsonFormatter(logging.Formatter):
         if record.exc_info:
             doc["exception"] = self.formatException(record.exc_info)
         return json.dumps(doc)
+
 
 _json_handler = logging.handlers.RotatingFileHandler(
     os.path.join(log_dir, "Worker.log"),
@@ -116,24 +120,27 @@ logger: logging.Logger = logging.getLogger("worker")
 # ---------------------------------------------------------------------------
 
 shutdown_event: threading.Event = threading.Event()
-wakeup_event: threading.Event = threading.Event() # Novo: Evento de Wakeup (v6.2.0)
+wakeup_event: threading.Event = threading.Event()  # Novo: Evento de Wakeup (v6.2.0)
 start_time: float = time.time()
 stats: Dict[str, Any] = {
     "tasks_completed": 0,
     "tasks_failed": 0,
     "active_tasks": 0,
     "lock": threading.Lock(),
-    "active_processes": {}, # {exec_id: Popen_object}
+    "active_processes": {},  # {exec_id: Popen_object}
 }
+
 
 def update_stat(key: str, delta: int = 1) -> None:
     """Atualiza estatistica global de forma thread-safe."""
     with cast(threading.Lock, stats["lock"]):
         stats[key] += delta
 
+
 # ---------------------------------------------------------------------------
 # Wakeup Listener (Instant Wakeup)
 # ---------------------------------------------------------------------------
+
 
 def wakeup_listener_loop() -> None:
     """Escuta o sinal de wakeup do Orchestrator via Long-Polling (v6.2.0)."""
@@ -155,9 +162,11 @@ def wakeup_listener_loop() -> None:
             # Em caso de erro (ex: API offline), aguarda um pouco antes de tentar novamente
             shutdown_event.wait(5)
 
+
 # ---------------------------------------------------------------------------
 # Heartbeat
 # ---------------------------------------------------------------------------
+
 
 def heartbeat_loop() -> None:
     """Atualiza o heartbeat no banco a cada HEARTBEAT_INTERVAL segundos."""
@@ -204,12 +213,14 @@ def heartbeat_loop() -> None:
             logger.warning("Erro no heartbeat: %s", e)
         shutdown_event.wait(HEARTBEAT_INTERVAL)
 
+
 # ---------------------------------------------------------------------------
 # Broadcast de Logs
 # ---------------------------------------------------------------------------
 
 log_buffer: Dict[str, List[str]] = {}
 log_buffer_lock: threading.Lock = threading.Lock()
+
 
 def broadcast_log(message: str, exec_id: str) -> None:
     """Apenas enfileira o log para envio em lote (Batched Broadcasting)."""
@@ -218,11 +229,12 @@ def broadcast_log(message: str, exec_id: str) -> None:
             log_buffer[exec_id] = []
         log_buffer[exec_id].append(message)
 
+
 def log_flusher_loop() -> None:
     """Thread em background que envia os logs em lote a cada 1 segundo para o WebSocket."""
     logger.info("Log flusher thread iniciada.")
     while not shutdown_event.is_set():
-        shutdown_event.wait(1.0) # Intervalo do batch
+        shutdown_event.wait(1.0)  # Intervalo do batch
 
         # Copiar o buffer rapidamente e limpar o original
         with log_buffer_lock:
@@ -245,7 +257,8 @@ def log_flusher_loop() -> None:
                     timeout=2,
                 )
             except requests.RequestException:
-                pass # Em caso de erro, os logs daquela janela sao perdidos no websocket, mas estarao salvos no banco.
+                pass  # Em caso de erro, os logs daquela janela sao perdidos no websocket, mas estarao salvos no banco.
+
 
 def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
     """Envia evento de sistema para o WebSocket global."""
@@ -258,15 +271,18 @@ def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
     except requests.RequestException:
         pass
 
+
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
+
 
 def enqueue_output(out: Any, queue: Queue[str]) -> None:
     """Le stdout do processo e coloca na fila."""
     for line in iter(out.readline, ""):
         queue.put(cast(str, line))
     out.close()
+
 
 def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
     """Busca arquivos gerados durante esta execucao."""
@@ -278,9 +294,11 @@ def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
                 found.append(os.path.basename(fp))
     return json.dumps(found) if found else None
 
+
 # ---------------------------------------------------------------------------
 # Execucao de Tarefa
 # ---------------------------------------------------------------------------
+
 
 def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
     """Executa uma tarefa em subprocesso com monitoramento completo."""
@@ -330,7 +348,9 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
 
         # Injeta status de modo teste para o processo filho
         env = os.environ.copy()
-        env["ORCHESTRATOR_TEST_MODE"] = "true" if db_exec.automation.test_mode else "false"
+        env["ORCHESTRATOR_TEST_MODE"] = (
+            "true" if db_exec.automation.test_mode else "false"
+        )
 
         process = subprocess.Popen(
             [
@@ -348,7 +368,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             encoding="utf-8",
             errors="replace",
             creationflags=subprocess.CREATE_NO_WINDOW,
-            env=env
+            env=env,
         )
 
         # Registrar processo ativo para encerramento em caso de shutdown
@@ -444,7 +464,10 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
         db_exec = (
             db.query(models.Execution).filter(models.Execution.id == exec_id).first()
         )
-        if db_exec and db_exec.status not in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
+        if db_exec and db_exec.status not in [
+            EXECUTION_STATUS_TERMINATED,
+            EXECUTION_STATUS_TIMEOUT,
+        ]:
             db_exec = complete_process_execution(
                 db,
                 exec_id,
@@ -498,9 +521,11 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                 del stats["active_processes"][exec_id]
         db.close()
 
+
 # ---------------------------------------------------------------------------
 # Loop Principal
 # ---------------------------------------------------------------------------
+
 
 def main_loop() -> None:
     """Loop principal: consome tarefas PENDING e despacha para o ThreadPool."""
@@ -514,11 +539,15 @@ def main_loop() -> None:
     hb_thread: threading.Thread = threading.Thread(target=heartbeat_loop, daemon=True)
     hb_thread.start()
 
-    flusher_thread: threading.Thread = threading.Thread(target=log_flusher_loop, daemon=True)
+    flusher_thread: threading.Thread = threading.Thread(
+        target=log_flusher_loop, daemon=True
+    )
     flusher_thread.start()
 
     # Inicia listener de wakeup (v6.2.0)
-    wk_thread: threading.Thread = threading.Thread(target=wakeup_listener_loop, daemon=True)
+    wk_thread: threading.Thread = threading.Thread(
+        target=wakeup_listener_loop, daemon=True
+    )
     wk_thread.start()
 
     executor: ThreadPoolExecutor = ThreadPoolExecutor(
@@ -541,8 +570,8 @@ def main_loop() -> None:
             exec_id = claim_next_task(db)
 
             if exec_id:
-                current_poll_interval = POLL_INTERVAL # Reset do polling
-                wakeup_event.clear() # Limpa sinal caso tenha sido wakeup
+                current_poll_interval = POLL_INTERVAL  # Reset do polling
+                wakeup_event.clear()  # Limpa sinal caso tenha sido wakeup
 
                 claimed_task = (
                     db.query(models.Execution)
@@ -559,7 +588,9 @@ def main_loop() -> None:
                 )
 
                 if automation:
-                    script_path: str = resolve_script_path(project_root, automation.script_path)
+                    script_path: str = resolve_script_path(
+                        project_root, automation.script_path
+                    )
                     max_rt: int = automation.max_runtime_minutes or 30
 
                     future = executor.submit(run_task, exec_id, script_path, max_rt)
@@ -576,7 +607,9 @@ def main_loop() -> None:
                         "\nAutomacao nao encontrada no banco.",
                     )
             else:
-                current_poll_interval = min(current_poll_interval * 1.5, MAX_POLL_INTERVAL)
+                current_poll_interval = min(
+                    current_poll_interval * 1.5, MAX_POLL_INTERVAL
+                )
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Erro no loop do worker: %s", e)
         finally:
@@ -595,20 +628,27 @@ def main_loop() -> None:
         for eid, proc in stats["active_processes"].items():
             logger.warning("Terminando processo %s (Shutdown)", eid)
             try:
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True,
+                    check=False,
+                )
             except Exception as e:
                 logger.warning("Falha ao encerrar processo %s: %s", eid, e)
 
     executor.shutdown(wait=True, cancel_futures=False)
     logger.info("Worker encerrado de forma controlada.")
 
+
 # ---------------------------------------------------------------------------
 # Signal Handlers
 # ---------------------------------------------------------------------------
 
+
 def _signal_handler(signum: int, frame: Optional[FrameType]) -> None:
     logger.info("Sinal recebido: %d. Iniciando graceful shutdown...", signum)
     shutdown_event.set()
+
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, _signal_handler)

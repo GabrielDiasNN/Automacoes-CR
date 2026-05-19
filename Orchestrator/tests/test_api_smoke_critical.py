@@ -65,9 +65,13 @@ def test_smoke_automations_flow_and_controls(client):
     assert resumed.status_code == 200
     assert "retomadas" in resumed.json()["message"].lower()
 
-    paused_single = client.post(f"/api/automations/{auto_id}/pause", headers=AUTH_HEADERS)
+    paused_single = client.post(
+        f"/api/automations/{auto_id}/pause", headers=AUTH_HEADERS
+    )
     assert paused_single.status_code == 200
-    resumed_single = client.post(f"/api/automations/{auto_id}/resume", headers=AUTH_HEADERS)
+    resumed_single = client.post(
+        f"/api/automations/{auto_id}/resume", headers=AUTH_HEADERS
+    )
     assert resumed_single.status_code == 200
 
     cloned = client.post(f"/api/automations/{auto_id}/clone", headers=AUTH_HEADERS)
@@ -143,7 +147,9 @@ def test_smoke_executions_filters_and_errors(client):
     assert missing_exec.status_code == 404
 
 
-def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypatch, tmp_path):
+def test_smoke_system_endpoints_success_and_operational_errors(
+    client, monkeypatch, tmp_path
+):
     import app.routers.system as system_router
 
     env_path = tmp_path / ".env"
@@ -151,6 +157,7 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
     monkeypatch.setattr(system_router, "PROJECT_ROOT", str(tmp_path))
 
     from sqlalchemy.orm.session import Session as SqlAlchemySession
+
     original_execute = SqlAlchemySession.execute
 
     def fake_execute(self, stmt, *args, **kwargs):
@@ -161,7 +168,9 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
             return None
         return original_execute(self, stmt, *args, **kwargs)
 
-    monkeypatch.setattr("sqlalchemy.orm.session.Session.execute", fake_execute, raising=False)
+    monkeypatch.setattr(
+        "sqlalchemy.orm.session.Session.execute", fake_execute, raising=False
+    )
 
     health = client.get("/api/system/health")
     assert health.status_code == 200
@@ -185,7 +194,9 @@ def test_smoke_system_endpoints_success_and_operational_errors(client, monkeypat
 
     schedule_validate = client.post(
         "/api/system/schedule/validate",
-        json={"schedule": '{"schedule_type":"weekly","days_of_week":[1,2,3],"times":[{"h":9,"m":0}]}'},
+        json={
+            "schedule": '{"schedule_type":"weekly","days_of_week":[1,2,3],"times":[{"h":9,"m":0}]}'
+        },
         headers=AUTH_HEADERS,
     )
     assert schedule_validate.status_code == 200

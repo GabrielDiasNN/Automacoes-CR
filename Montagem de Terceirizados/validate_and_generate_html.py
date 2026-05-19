@@ -40,6 +40,7 @@ HTML_ICON_TARGET: str = "&#127919;"
 ROBO_VERSAO: str = "v1.1"
 LEMBRETE_INTERVALO_MINUTOS: int = 20
 
+
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs para o stderr."""
     ts: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -47,9 +48,11 @@ def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
 
+
 def html_escape(text: Optional[Any]) -> str:
     """Escapa caracteres HTML fundamentais para seguranca.
-    Caracteres acentuados sao mantidos nativos em UTF-8 para melhor legibilidade e suporte moderno."""
+    Caracteres acentuados sao mantidos nativos em UTF-8 para melhor legibilidade e suporte moderno.
+    """
     if not text:
         return "&nbsp;"
     return (
@@ -60,6 +63,7 @@ def html_escape(text: Optional[Any]) -> str:
         .replace('"', "&quot;")
         .replace("'", "&#39;")
     )
+
 
 def clean_str(val: Any) -> str:
     """Limpa e normaliza strings ou numeros do Excel/Oracle."""
@@ -93,6 +97,7 @@ def parse_qt_pc_nf(qt_pc_nf: str) -> List[Dict[str, Any]]:
             }
         )
     return itens
+
 
 def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Executa a logica de negocio: compara Montagem com Programacao."""
@@ -152,6 +157,7 @@ def formatar_qtd_pecas_incorretas(erro: Dict[str, Any]) -> str:
         f"border-radius:4px; font-weight:bold; border:1px solid #fdba74;'>{qtd}</span>"
     )
 
+
 def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NFs divergentes na Montagem."""
     if not nf_montagem_str:
@@ -169,6 +175,7 @@ def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> st
             )
     return ", ".join(res)
 
+
 def destaque_nf_prog(nf_prog: Optional[str], nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NF divergente na Programacao."""
     if not nf_prog:
@@ -176,6 +183,7 @@ def destaque_nf_prog(nf_prog: Optional[str], nf_esperada: str) -> str:
     if nf_prog == nf_esperada:
         return f"<span style='color:#166534; font-weight:bold;'>{html_escape(nf_prog)}</span>"
     return f"<span style='background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #fca5a5;'>{html_escape(nf_prog)}</span>"
+
 
 def gerar_tabela_categoria_html(
     titulo: str, erros: List[Dict[str, Any]], cor_titulo: str
@@ -197,6 +205,7 @@ def gerar_tabela_categoria_html(
     html += "</table></div>"
     return html
 
+
 def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
     """Gera o detalhamento completo das divergencias para o e-mail."""
     if not erros:
@@ -212,6 +221,7 @@ def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
         html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('ST_OB_ABERTO'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('NR_OB'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{formatar_qtd_pecas_incorretas(e)}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td style='color:#6b7280;'>{agora}</td></tr>"
     html += "</table></div></div>"
     return html
+
 
 def montar_template_email(
     tipo_notificacao: str,
@@ -265,10 +275,18 @@ def montar_template_email(
     else:
         html += f"<p style='font-size:13pt;margin:0 0 12px 0;text-align:center;color:#374151;'><span style='font-size:16pt;'>{HTML_ICON_TROPHY}</span> <b>Nenhuma divergência NF x OB encontrada nesta execução. Sem ação pendente.</b></p>"
 
-    card_tpl: str = "<td style='width:{width};padding:16px;'><div style='background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;text-align:center;'><div style='font-size:20pt;margin-bottom:8px;'>{icon}</div><div style='color:#6b7280;font-size:10pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;'>{label}</div><div style='color:{val_color};font-size:18pt;font-weight:bold;margin-top:4px;'>{value}</div></div></td>"
+    card_tpl: str = (
+        "<td style='width:{width};padding:16px;'><div style='background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;text-align:center;'><div style='font-size:20pt;margin-bottom:8px;'>{icon}</div><div style='color:#6b7280;font-size:10pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;'>{label}</div><div style='color:{val_color};font-size:18pt;font-weight:bold;margin-top:4px;'>{value}</div></div></td>"
+    )
     res_color: str = "#16a34a" if tipo == "ACERTO" else "#dc2626"
-    acao_label = "Ação necessária" if tipo in ("ERRO", "ALTERACAO", "LEMBRETE") else "Status"
-    acao_value = "Conferir OBs com divergência" if tipo in ("ERRO", "ALTERACAO", "LEMBRETE") else "Sem ação pendente"
+    acao_label = (
+        "Ação necessária" if tipo in ("ERRO", "ALTERACAO", "LEMBRETE") else "Status"
+    )
+    acao_value = (
+        "Conferir OBs com divergência"
+        if tipo in ("ERRO", "ALTERACAO", "LEMBRETE")
+        else "Sem ação pendente"
+    )
     acao_color = "#b91c1c" if tipo in ("ERRO", "ALTERACAO", "LEMBRETE") else "#166534"
     saldo_value = (
         f"N:{novos_count} | C:{corrigidos_count} | P:{permanentes_count}"
@@ -320,6 +338,7 @@ def montar_template_email(
     html += f"<hr style='border:0;border-top:1px solid #e5e7eb;margin:32px 0 24px 0;'><p style='font-size:10pt;color:#9ca3af;text-align:center;margin:0;'><span style='font-size:13pt;vertical-align:middle;'>{HTML_ICON_CALENDAR}</span> <b>Data da Validação:</b> {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}</p></div></div></body></html>"
     return html
 
+
 def gerar_assinatura(erro: Dict[str, Any]) -> str:
     """Gera um hash MD5 unico para a combinacao de erro/OB."""
     base: str = (
@@ -328,6 +347,7 @@ def gerar_assinatura(erro: Dict[str, Any]) -> str:
     if not base.strip("|_"):
         base = "VAZIO"
     return hashlib.md5(base.encode("utf-8")).hexdigest()
+
 
 def main() -> None:
     """Orquestrador principal da validacao."""
@@ -415,7 +435,13 @@ def main() -> None:
             tipo_notif = "ERRO"
         elif total_erros > 0 and (novos or corrigidos):
             tipo_notif = "ALTERACAO"
-        elif total_erros > 0 and permanentes and not novos and not corrigidos and pode_enviar_lembrete:
+        elif (
+            total_erros > 0
+            and permanentes
+            and not novos
+            and not corrigidos
+            and pode_enviar_lembrete
+        ):
             tipo_notif = "LEMBRETE"
 
     if tipo_notif != "NENHUMA":
@@ -441,7 +467,9 @@ def main() -> None:
             log(f"Falha ao gravar cache temporario: {e}", "WARN", exec_id)
 
         detalhes_html: str = ""
-        subject: str = f"Ação necessária: divergências NF x OB - Montagem Terceirizados - {datetime.now().strftime('%d/%m/%Y')}"
+        subject: str = (
+            f"Ação necessária: divergências NF x OB - Montagem Terceirizados - {datetime.now().strftime('%d/%m/%Y')}"
+        )
 
         if tipo_notif == "ERRO":
             detalhes_html = gerar_tabela_completa_erros(erros_atuais)
@@ -466,7 +494,9 @@ def main() -> None:
             )
         elif tipo_notif == "LEMBRETE":
             subject = f"Lembrete: pendências NF x OB - Montagem Terceirizados - {datetime.now().strftime('%d/%m/%Y')}"
-            detalhes_html = gerar_tabela_categoria_html("Pendências Permanentes", permanentes, "#c2410c")
+            detalhes_html = gerar_tabela_categoria_html(
+                "Pendências Permanentes", permanentes, "#c2410c"
+            )
         elif tipo_notif == "ACERTO":
             subject = f"Validação OK: sem divergências NF x OB - Montagem Terceirizados - {datetime.now().strftime('%d/%m/%Y')}"
             detalhes_html = ""
@@ -506,6 +536,7 @@ def main() -> None:
         log(f"Processamento concluído ({tipo_notif}).", "INFO", exec_id)
     else:
         log("Nenhuma mudança.", "INFO", exec_id)
+
 
 if __name__ == "__main__":
     main()

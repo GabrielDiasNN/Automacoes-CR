@@ -6,6 +6,7 @@
 Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.2.0
 
 """
+
 import json
 import logging
 import os
@@ -13,32 +14,46 @@ from datetime import timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import desc, func, case
+from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import (EXECUTION_ACTIVE_STATUSES,
-                         EXECUTION_STATUS_PENDING,
-                         EXECUTION_STATUS_RUNNING, ORCHESTRATOR_SCHEMA_VERSION,
-                         ORCHESTRATOR_VERSION, SEVERITY_ERROR, SEVERITY_WARN)
-from ..database import (get_db, get_wal_size_mb, purge_old_executions,
-                        run_wal_checkpoint,
-                        validate_database_schema)
+from ..constants import (
+    EXECUTION_ACTIVE_STATUSES,
+    EXECUTION_STATUS_PENDING,
+    EXECUTION_STATUS_RUNNING,
+    ORCHESTRATOR_SCHEMA_VERSION,
+    ORCHESTRATOR_VERSION,
+    SEVERITY_ERROR,
+    SEVERITY_WARN,
+)
+from ..database import (
+    get_db,
+    get_wal_size_mb,
+    purge_old_executions,
+    run_wal_checkpoint,
+    validate_database_schema,
+)
 from ..middleware import get_api_key
-from ..runtime import (get_project_root, scheduler,
-                       trigger_worker_wakeup, wait_for_task_signal)
-from ..services.env_admin import (backup_env_file, read_env_content,
-                                  validate_env_content as validate_env_payload,
-                                  write_env_content)
-from ..services.scheduler_runtime import (list_scheduled_jobs as build_scheduled_jobs,
-                                          reload_scheduled_tasks)
+from ..runtime import (
+    get_project_root,
+    scheduler,
+    trigger_worker_wakeup,
+    wait_for_task_signal,
+)
+from ..services.env_admin import backup_env_file, read_env_content
+from ..services.env_admin import validate_env_content as validate_env_payload
+from ..services.env_admin import write_env_content
+from ..services.scheduler_runtime import list_scheduled_jobs as build_scheduled_jobs
+from ..services.scheduler_runtime import reload_scheduled_tasks
 from ..services.system_diagnostics import build_diagnostics_payload
 from ..services.system_overview import build_system_overview_payload
-from ..services.system_runtime import (build_health_payload,
-                                       build_version_payload,
-                                       get_worker_status as get_worker_status_service,
-                                       launch_orchestrator_recovery,
-                                       perform_manual_backup)
+from ..services.system_runtime import build_health_payload, build_version_payload
+from ..services.system_runtime import get_worker_status as get_worker_status_service
+from ..services.system_runtime import (
+    launch_orchestrator_recovery,
+    perform_manual_backup,
+)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
@@ -56,10 +71,12 @@ STARTUP_TIME = get_now_local()
 
 # ---------------------------------------------------------------------------
 
+
 @router.get("/health", response_model=schemas.SystemHealth)
 def health_check(db: Session = Depends(get_db)):
     """Health check completo: DB, Scheduler, Worker, Disco."""
     return build_health_payload(db, _get_worker_status(db))
+
 
 # ---------------------------------------------------------------------------
 
@@ -67,13 +84,16 @@ def health_check(db: Session = Depends(get_db)):
 
 # ---------------------------------------------------------------------------
 
+
 def _get_worker_status(db: Session) -> schemas.WorkerStatus:
     """Le o heartbeat do worker do banco."""
     return get_worker_status_service(db)
 
+
 def _launch_orchestrator_recovery() -> str:
     """Dispara o fluxo canônico de recuperação do Orchestrator em background."""
     return launch_orchestrator_recovery(PROJECT_ROOT)
+
 
 @router.get("/worker/status", response_model=schemas.WorkerStatus)
 def get_worker_status(
@@ -84,11 +104,13 @@ def get_worker_status(
 
     return _get_worker_status(db)
 
+
 # ---------------------------------------------------------------------------
 
 # METRICAS ENRIQUECIDAS (N+1 Query Eliminada)
 
 # ---------------------------------------------------------------------------
+
 
 @router.get("/metrics", response_model=schemas.MetricsResponse)
 def get_metrics(
@@ -128,30 +150,53 @@ def get_metrics(
     )
 
     # Agregacao de metricas por automacao em uma unica query
-    stats_query = db.query(
-        models.Execution.automation_id,
-        func.count(case((models.Execution.status == 'SUCCESS', 1))).label("total_success"),
-        func.count(case((models.Execution.status == 'ERROR', 1))).label("total_errors"),
-        func.avg(case((models.Execution.status == 'SUCCESS', models.Execution.duration_seconds))).label("avg_duration")
-    ).group_by(models.Execution.automation_id).all()
+    stats_query = (
+        db.query(
+            models.Execution.automation_id,
+            func.count(case((models.Execution.status == "SUCCESS", 1))).label(
+                "total_success"
+            ),
+            func.count(case((models.Execution.status == "ERROR", 1))).label(
+                "total_errors"
+            ),
+            func.avg(
+                case(
+                    (
+                        models.Execution.status == "SUCCESS",
+                        models.Execution.duration_seconds,
+                    )
+                )
+            ).label("avg_duration"),
+        )
+        .group_by(models.Execution.automation_id)
+        .all()
+    )
 
     stats_map = {row.automation_id: row for row in stats_query}
 
     # Subquery para ultima execucao
-    subq = db.query(
-        models.Execution.automation_id,
-        func.max(models.Execution.started_at).label("max_started_at")
-    ).group_by(models.Execution.automation_id).subquery()
+    subq = (
+        db.query(
+            models.Execution.automation_id,
+            func.max(models.Execution.started_at).label("max_started_at"),
+        )
+        .group_by(models.Execution.automation_id)
+        .subquery()
+    )
 
-    last_execs = db.query(
-        models.Execution.automation_id,
-        models.Execution.status,
-        models.Execution.started_at
-    ).join(
-        subq,
-        (models.Execution.automation_id == subq.c.automation_id) &
-        (models.Execution.started_at == subq.c.max_started_at)
-    ).all()
+    last_execs = (
+        db.query(
+            models.Execution.automation_id,
+            models.Execution.status,
+            models.Execution.started_at,
+        )
+        .join(
+            subq,
+            (models.Execution.automation_id == subq.c.automation_id)
+            & (models.Execution.started_at == subq.c.max_started_at),
+        )
+        .all()
+    )
 
     last_execs_map = {row.automation_id: row for row in last_execs}
 
@@ -167,7 +212,9 @@ def get_metrics(
                 name=auto.name,
                 total_success=stat.total_success if stat else 0,
                 total_errors=stat.total_errors if stat else 0,
-                avg_duration_sec=round(stat.avg_duration, 2) if stat and stat.avg_duration else 0,
+                avg_duration_sec=(
+                    round(stat.avg_duration, 2) if stat and stat.avg_duration else 0
+                ),
                 last_status=last_ex.status if last_ex else None,
                 last_run=last_ex.started_at if last_ex else None,
                 test_mode=auto.test_mode,
@@ -186,11 +233,13 @@ def get_metrics(
         automations=automation_stats,
     )
 
+
 # ---------------------------------------------------------------------------
 
 # BACKUP MANUAL
 
 # ---------------------------------------------------------------------------
+
 
 @router.post("/backup")
 def manual_backup(
@@ -201,7 +250,9 @@ def manual_backup(
     """Realiza backup atomico do banco de dados SQLite."""
     try:
         result = perform_manual_backup(db, PROJECT_ROOT)
-        logger.info("Backup manual concluido: %s (%sMB)", result["path"], result["size_mb"])
+        logger.info(
+            "Backup manual concluido: %s (%sMB)", result["path"], result["size_mb"]
+        )
 
         log_audit(
             db,
@@ -220,6 +271,7 @@ def manual_backup(
         logger.error(f"Falha no backup manual: {e}")
 
         raise HTTPException(status_code=500, detail=f"Falha no backup: {str(e)}")
+
 
 @router.post("/scheduler/reload")
 def reload_scheduler_jobs(
@@ -246,6 +298,7 @@ def reload_scheduler_jobs(
         "jobs_loaded": jobs_loaded,
     }
 
+
 @router.post("/worker/wakeup")
 def wakeup_worker(
     request: Request,
@@ -266,6 +319,7 @@ def wakeup_worker(
     db.commit()
 
     return {"message": "Sinal de wake-up enviado ao worker."}
+
 
 @router.post("/worker/recover")
 def recover_worker(
@@ -312,11 +366,13 @@ def recover_worker(
         "queue_active_count": active_count,
     }
 
+
 # ---------------------------------------------------------------------------
 
 # AUDIT LOG
 
 # ---------------------------------------------------------------------------
+
 
 @router.get("/audit", response_model=list[schemas.AuditEntry])
 def list_audit_log(
@@ -337,11 +393,13 @@ def list_audit_log(
 
     return entries
 
+
 # ---------------------------------------------------------------------------
 
 # UPTIME
 
 # ---------------------------------------------------------------------------
+
 
 @router.get("/uptime")
 def get_uptime(api_key: str = Depends(get_api_key)):
@@ -355,11 +413,13 @@ def get_uptime(api_key: str = Depends(get_api_key)):
         "uptime_human": str(uptime).split(".")[0],
     }
 
+
 # ---------------------------------------------------------------------------
 
 # AGENDAMENTO - Lista de tarefas programadas
 
 # ---------------------------------------------------------------------------
+
 
 @router.get("/scheduler/jobs", response_model=List[schemas.ScheduledJob])
 def list_scheduled_jobs(
@@ -368,6 +428,7 @@ def list_scheduled_jobs(
 ):
     """Retorna a lista de tarefas agendadas no APScheduler."""
     return build_scheduled_jobs(db)
+
 
 @router.get("/overview", response_model=schemas.SystemOverviewResponse)
 def get_system_overview(
@@ -391,16 +452,19 @@ def get_system_overview(
         diagnostics_payload=diagnostics,
     )
 
+
 # ---------------------------------------------------------------------------
 
 # VERSION - Endpoint enterprise de versao e build
 
 # ---------------------------------------------------------------------------
 
+
 @router.get("/version", response_model=schemas.SystemVersion)
 def get_version():
     """Retorna informacoes detalhadas de versao e build do Orchestrator."""
     return build_version_payload(STARTUP_TIME)
+
 
 @router.get("/diagnostics", response_model=schemas.DiagnosticsPayload)
 def get_diagnostics(
@@ -414,6 +478,7 @@ def get_diagnostics(
         _get_worker_status,
         wal_size_fn=get_wal_size_mb,
     )
+
 
 @router.post("/schedule/validate", response_model=schemas.ScheduleValidationResponse)
 def validate_schedule_payload(
@@ -438,6 +503,7 @@ def validate_schedule_payload(
             summary="Schedule inválido.",
             errors=[str(exc)],
         )
+
 
 @router.post("/schedule/preview", response_model=schemas.SchedulePreviewResponse)
 def preview_schedule_payload(
@@ -466,11 +532,13 @@ def preview_schedule_payload(
             errors=[str(exc)],
         )
 
+
 # ---------------------------------------------------------------------------
 
 # CHECKPOINT - WAL manual
 
 # ---------------------------------------------------------------------------
+
 
 @router.post("/checkpoint")
 def manual_checkpoint(
@@ -497,11 +565,13 @@ def manual_checkpoint(
 
     return {"message": "WAL Checkpoint executado com sucesso.", "result": result}
 
+
 # ---------------------------------------------------------------------------
 
 # PURGE - Limpeza de execucoes antigas
 
 # ---------------------------------------------------------------------------
+
 
 @router.post("/purge")
 def manual_purge(
@@ -539,20 +609,24 @@ def manual_purge(
         "removed_count": removed,
     }
 
+
 # ---------------------------------------------------------------------------
 # ENV MANAGEMENT - Gestao global
 # ---------------------------------------------------------------------------
+
 
 @router.get("/wait-for-task")
 async def wait_for_task(api_key: str = Depends(get_api_key)):
     """Endpoint de long-polling para wake-up do Worker (v6.2.0)."""
     return {"status": await wait_for_task_signal(timeout_seconds=30)}
 
+
 @router.get("/env", response_model=schemas.EnvContent)
 def get_env_content(api_key: str = Depends(get_api_key)):
     """Lê o conteúdo do arquivo .env global."""
     env_path = os.path.join(PROJECT_ROOT, ".env")
     return schemas.EnvContent(content=read_env_content(env_path))
+
 
 @router.post("/env/validate", response_model=schemas.EnvValidationResponse)
 def validate_env_content(
@@ -562,11 +636,12 @@ def validate_env_content(
     """Valida o conteúdo do .env sem persistir alterações."""
     return validate_env_payload(payload.content)
 
+
 @router.put("/env")
 def update_env_content(
     payload: schemas.EnvContent,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key),
 ):
     """Atualiza o arquivo .env global de forma segura."""
     env_path = os.path.join(PROJECT_ROOT, ".env")
@@ -597,7 +672,7 @@ def update_env_content(
                     "message": "O arquivo .env foi modificado via Dashboard.",
                     "backup": backup_relpath,
                 }
-            )
+            ),
         )
         db.commit()
 
@@ -607,4 +682,6 @@ def update_env_content(
         }
     except Exception as e:
         logger.error(f"Erro ao salvar .env: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao salvar o arquivo: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Erro ao salvar o arquivo: {str(e)}"
+        )

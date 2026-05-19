@@ -24,6 +24,7 @@ router = APIRouter(tags=["WebSocket"])
 # Connection Manager (Event Bus)
 # ---------------------------------------------------------------------------
 
+
 class ConnectionManager:
     """Gerencia conexoes WebSocket para broadcast de logs e eventos."""
 
@@ -103,11 +104,13 @@ class ConnectionManager:
         for ws in dead:
             self.disconnect_global(ws)
 
+
 manager = ConnectionManager()
 
 # ---------------------------------------------------------------------------
 # ENDPOINTS WEBSOCKET
 # ---------------------------------------------------------------------------
+
 
 @router.websocket("/ws/logs/{exec_id}")
 async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
@@ -119,6 +122,7 @@ async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
     except WebSocketDisconnect:
         manager.disconnect_exec(websocket, exec_id)
 
+
 @router.websocket("/ws/events")
 async def websocket_global_events(websocket: WebSocket):
     await manager.connect_global(websocket)
@@ -128,9 +132,11 @@ async def websocket_global_events(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect_global(websocket)
 
+
 # ---------------------------------------------------------------------------
 # ENDPOINT HTTP para broadcast interno (usado pelo Worker)
 # ---------------------------------------------------------------------------
+
 
 @router.post("/api/broadcast_log")
 async def broadcast_log_endpoint(log_data: dict):
@@ -147,6 +153,7 @@ async def broadcast_log_endpoint(log_data: dict):
             },
         )
     return {"status": "ok"}
+
 
 @router.post("/api/broadcast_logs")
 async def broadcast_logs_endpoint(logs_data: dict):
@@ -168,10 +175,13 @@ async def broadcast_logs_endpoint(logs_data: dict):
             "LOG_UPDATE",
             {
                 "exec_id": exec_id,
-                "preview": preview_msg[:100] + "..." if len(preview_msg) > 100 else preview_msg,
+                "preview": (
+                    preview_msg[:100] + "..." if len(preview_msg) > 100 else preview_msg
+                ),
             },
         )
     return {"status": "ok", "processed": len(logs)}
+
 
 @router.post("/api/broadcast_event")
 async def broadcast_event_endpoint(event_data: dict):

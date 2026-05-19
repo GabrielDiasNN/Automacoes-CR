@@ -134,7 +134,9 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
         if schedule_type == "daily":
             trigger = CronTrigger(hour=item.get("h", 0), minute=item.get("m", 0))
         elif schedule_type == "weekly":
-            mapped_days = [str((int(day) + 6) % 7) for day in sched_data.get("days_of_week", [])]
+            mapped_days = [
+                str((int(day) + 6) % 7) for day in sched_data.get("days_of_week", [])
+            ]
             trigger = CronTrigger(
                 day_of_week=",".join(mapped_days) if mapped_days else "*",
                 hour=item.get("h", 0),
@@ -196,10 +198,16 @@ def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
         auto_id = extract_automation_id_from_job(job.id)
         auto_name = None
         if auto_id is not None:
-            auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+            auto = (
+                db.query(models.Automation)
+                .filter(models.Automation.id == auto_id)
+                .first()
+            )
             auto_name = auto.name if auto else None
         elif job.id.startswith("enterprise_"):
-            auto_name = f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"
+            auto_name = (
+                f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"
+            )
         jobs.append(
             schemas.ScheduledJob(
                 id=job.id,
@@ -209,4 +217,7 @@ def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
                 trigger=str(job.trigger),
             )
         )
-    return sorted(jobs, key=lambda item: item.next_run_time if item.next_run_time else datetime.max)
+    return sorted(
+        jobs,
+        key=lambda item: item.next_run_time if item.next_run_time else datetime.max,
+    )

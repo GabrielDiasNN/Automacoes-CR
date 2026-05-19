@@ -11,26 +11,30 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, Generic, List, Optional, TypeVar
 
-from pydantic import (BaseModel, ConfigDict, Field, field_validator,
-                      model_validator)
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .constants import (DIAGNOSTIC_SEVERITIES, EXECUTION_ALLOWED_PRIORITIES,
-                        EXECUTION_ALLOWED_STATUSES, ORCHESTRATOR_VERSION,
-                        ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_CONTRACT_VERSION,
-                        WORKER_VERSION)
+from .constants import (
+    DIAGNOSTIC_SEVERITIES,
+    EXECUTION_ALLOWED_PRIORITIES,
+    EXECUTION_ALLOWED_STATUSES,
+    ORCHESTRATOR_CONTRACT_VERSION,
+    ORCHESTRATOR_SCHEMA_VERSION,
+    ORCHESTRATOR_VERSION,
+    WORKER_VERSION,
+)
 
 # ---------------------------------------------------------------------------
 # Validadores e Utilitarios
 # ---------------------------------------------------------------------------
 
-_SAFE_NAME_RE = re.compile(
-    r"^[a-zA-Z0-9 à-úÀ-ÚçÇ_\-\[\]\(\)\.]{2,100}$"
-)
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9 à-úÀ-ÚçÇ_\-\[\]\(\)\.]{2,100}$")
 _DANGEROUS_PATH_PATTERNS = ["..", "//", "\\\\", "%", "\x00"]
+
 
 def format_dt_br(val: Any) -> Any:
     """Converte qualquer formato de data para o padrao brasileiro (DD/MM/YYYY HH:MM:SS)."""
     from .timezone import to_br_timezone
+
     if val is None:
         return None
 
@@ -58,16 +62,19 @@ def format_dt_br(val: Any) -> Any:
             return val
     return val
 
+
 def _validate_safe_name(v: str) -> str:
     if not _SAFE_NAME_RE.match(v):
         raise ValueError("Nome inválido (2-100 chars, caracteres seguros).")
     return v.strip()
+
 
 def _validate_script_path(v: str) -> str:
     for pattern in _DANGEROUS_PATH_PATTERNS:
         if pattern in v:
             raise ValueError(f"Caminho proibido: '{pattern}'")
     return v
+
 
 def _validate_schedule(v: Optional[str]) -> Optional[str]:
     if not v:
@@ -82,6 +89,7 @@ def _validate_schedule(v: Optional[str]) -> Optional[str]:
 
     normalized = normalize_schedule_payload(obj)
     return json.dumps(normalized, separators=(",", ":"))
+
 
 def _normalized_time_list(times: list[dict]) -> list[dict]:
     items = []
@@ -106,6 +114,7 @@ def _normalized_time_list(times: list[dict]) -> list[dict]:
         uniq.append(item)
     return uniq
 
+
 def _normalize_days(days: Optional[list]) -> list[int]:
     if days is None:
         return []
@@ -116,10 +125,12 @@ def _normalize_days(days: Optional[list]) -> list[int]:
         raise ValueError("daysOfWeek deve conter inteiros entre 0 e 6.")
     return norm
 
+
 def _ui_day_to_python_weekday(day: int) -> int:
     # Contrato UI/legado: 0=Dom, 1=Seg ... 6=Sáb
     # datetime.weekday(): 0=Seg ... 6=Dom
     return (day + 6) % 7
+
 
 def normalize_schedule_payload(obj: dict) -> dict:
     if not isinstance(obj, dict):
@@ -150,7 +161,9 @@ def normalize_schedule_payload(obj: dict) -> dict:
             "times": norm_times,
         }
 
-    schedule_type = str(obj.get("schedule_type") or obj.get("scheduleType") or "").lower().strip()
+    schedule_type = (
+        str(obj.get("schedule_type") or obj.get("scheduleType") or "").lower().strip()
+    )
     valid_types = {"manual", "daily", "weekly", "monthly", "interval", "once"}
     if schedule_type not in valid_types:
         raise ValueError("schedule_type inválido.")
@@ -200,11 +213,13 @@ def normalize_schedule_payload(obj: dict) -> dict:
     base["days_of_month"] = norm_month
     return base
 
+
 def parse_schedule(v: Optional[str]) -> Optional[dict]:
     if not v:
         return None
     obj = json.loads(v.replace("'", '"'))
     return normalize_schedule_payload(obj)
+
 
 def describe_schedule_payload(schedule: Optional[dict]) -> str:
     if not schedule:
@@ -216,18 +231,29 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
         times = schedule.get("times", [])
         return "Diário às " + ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
     if stype == "weekly":
-        day_names = {0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb"}
+        day_names = {
+            0: "Dom",
+            1: "Seg",
+            2: "Ter",
+            3: "Qua",
+            4: "Qui",
+            5: "Sex",
+            6: "Sáb",
+        }
         days = schedule.get("days_of_week", [])
         times = schedule.get("times", [])
-        day_label = ", ".join(day_names.get(d, str(d)) for d in days) if days else "Todos os dias"
+        day_label = (
+            ", ".join(day_names.get(d, str(d)) for d in days)
+            if days
+            else "Todos os dias"
+        )
         time_label = ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
         return f"Semanal: {day_label} às {time_label}"
     if stype == "monthly":
         days = schedule.get("days_of_month", [])
         times = schedule.get("times", [])
-        return (
-            f"Mensal dia(s) {', '.join(str(d) for d in days)} às "
-            + ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
+        return f"Mensal dia(s) {', '.join(str(d) for d in days)} às " + ", ".join(
+            f"{t['h']:02d}:{t['m']:02d}" for t in times
         )
     if stype == "interval":
         return f"A cada {schedule.get('interval_minutes', 0)} min"
@@ -235,10 +261,12 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
         return f"Execução única em {schedule.get('run_at', '-')}"
     return "Configurada"
 
+
 def preview_next_runs(schedule: Optional[dict], count: int = 5) -> list[str]:
     if not schedule:
         return []
     from .timezone import get_now_local
+
     now = get_now_local().replace(second=0, microsecond=0)
     out = []
     stype = schedule.get("schedule_type")
@@ -282,9 +310,11 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> list[str]:
                 out.append(format_dt_br(candidate))
     return out
 
+
 # ---------------------------------------------------------------------------
 # Schemas de Automation
 # ---------------------------------------------------------------------------
+
 
 class AutomationBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
@@ -314,8 +344,10 @@ class AutomationBase(BaseModel):
     def v_sched(cls, v: Optional[str]) -> Optional[str]:
         return _validate_schedule(v)
 
+
 class AutomationCreate(AutomationBase):
     pass
+
 
 class AutomationUpdate(BaseModel):
     name: Optional[str] = None
@@ -360,6 +392,7 @@ class AutomationUpdate(BaseModel):
             raise ValueError("cooldown_minutes deve estar entre 0 e 1440.")
         return v
 
+
 class AutomationResponse(AutomationBase):
     id: int
     created_at: Any
@@ -377,9 +410,11 @@ class AutomationResponse(AutomationBase):
         self.updated_at = format_dt_br(self.updated_at)
         return self
 
+
 # ---------------------------------------------------------------------------
 # Schemas de Execution
 # ---------------------------------------------------------------------------
+
 
 class ExecutionBase(BaseModel):
     id: str
@@ -419,11 +454,13 @@ class ExecutionBase(BaseModel):
         self.finished_at = format_dt_br(self.finished_at)
         return self
 
+
 class ExecutionResponse(ExecutionBase):
     logs: Optional[str] = None
     artifacts: Optional[str] = None
     automation_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
 
 class ExecutionSummary(BaseModel):
     id: str
@@ -450,8 +487,10 @@ class ExecutionSummary(BaseModel):
         self.finished_at = format_dt_br(self.finished_at)
         return self
 
+
 class ExecutionTelemetryStart(BaseModel):
     automation_name: str
+
 
 class ExecutionTelemetryEnd(BaseModel):
     status: str
@@ -459,9 +498,11 @@ class ExecutionTelemetryEnd(BaseModel):
     logs: Optional[str] = None
     artifacts: Optional[str] = None
 
+
 # ---------------------------------------------------------------------------
 # Schemas de Sistema
 # ---------------------------------------------------------------------------
+
 
 class WorkerStatus(BaseModel):
     is_alive: bool
@@ -475,14 +516,19 @@ class WorkerStatus(BaseModel):
 
     @model_validator(mode="after")
     def apply_br_format(self) -> "WorkerStatus":
-        from .timezone import get_now_local; self.last_ping = format_dt_br(self.last_ping)
+        from .timezone import get_now_local
+
+        self.last_ping = format_dt_br(self.last_ping)
         return self
+
 
 class EnvContent(BaseModel):
     content: str
 
+
 class FileContent(BaseModel):
     content: str
+
 
 class SystemHealth(BaseModel):
     status: str
@@ -501,6 +547,7 @@ class SystemHealth(BaseModel):
         self.timestamp = format_dt_br(self.timestamp)
         return self
 
+
 class ScheduledJob(BaseModel):
     id: str
     automation_id: Optional[int] = None
@@ -512,6 +559,7 @@ class ScheduledJob(BaseModel):
     def apply_br_format(self) -> "ScheduledJob":
         self.next_run_time = format_dt_br(self.next_run_time)
         return self
+
 
 class AutomationMetric(BaseModel):
     name: str
@@ -527,6 +575,7 @@ class AutomationMetric(BaseModel):
         self.last_run = format_dt_br(self.last_run)
         return self
 
+
 class MetricsSummary(BaseModel):
     total_executions: int
     success_count: int
@@ -535,9 +584,11 @@ class MetricsSummary(BaseModel):
     pending_count: int
     avg_duration_sec: float
 
+
 class MetricsResponse(BaseModel):
     summary: MetricsSummary
     automations: List[AutomationMetric]
+
 
 class DiagnosticFinding(BaseModel):
     severity: str
@@ -557,6 +608,7 @@ class DiagnosticFinding(BaseModel):
             raise ValueError("Severidade inválida.")
         return value
 
+
 class DiagnosticsDatabase(BaseModel):
     path: str
     size_mb: float
@@ -566,15 +618,18 @@ class DiagnosticsDatabase(BaseModel):
     schema_version: str
     model_config = ConfigDict(populate_by_name=True)
 
+
 class DiagnosticsScheduler(BaseModel):
     running: bool
     jobs_loaded: int
     next_runs: List[str]
     inconsistencies: List[str] = []
 
+
 class DiagnosticsQueueItem(BaseModel):
     exec_id: Optional[str] = None
     age_seconds: float = 0.0
+
 
 class DiagnosticsQueue(BaseModel):
     active_count: int
@@ -584,8 +639,10 @@ class DiagnosticsQueue(BaseModel):
     oldest_pending: DiagnosticsQueueItem
     oldest_running: DiagnosticsQueueItem
 
+
 class DiagnosticsHeartbeat(BaseModel):
     last_ping_age_seconds: Optional[float] = None
+
 
 class DiagnosticsFailureHotspot(BaseModel):
     automation_id: int
@@ -593,6 +650,7 @@ class DiagnosticsFailureHotspot(BaseModel):
     failures_24h: int
     last_failure_at: Optional[str] = None
     notification_channels: Optional[str] = None
+
 
 class DiagnosticsOperatorAction(BaseModel):
     action_code: str
@@ -602,6 +660,7 @@ class DiagnosticsOperatorAction(BaseModel):
     reason: str
     priority: int = 3
 
+
 class RuntimeCheckItem(BaseModel):
     code: str
     label: str
@@ -609,10 +668,12 @@ class RuntimeCheckItem(BaseModel):
     detail: str
     value: Optional[str] = None
 
+
 class RecoveryPlan(BaseModel):
     light_actions: List[str] = []
     strong_actions: List[str] = []
     recommended_action: Optional[str] = None
+
 
 class DiagnosticsPayload(BaseModel):
     version: str = ORCHESTRATOR_VERSION
@@ -631,6 +692,7 @@ class DiagnosticsPayload(BaseModel):
     checks: List[RuntimeCheckItem] = []
     recovery: RecoveryPlan = Field(default_factory=RecoveryPlan)
 
+
 class ExecutionQueueActionRequest(BaseModel):
     reason: Optional[str] = Field(None, max_length=200)
     requested_by: Optional[str] = Field(None, max_length=100)
@@ -646,6 +708,7 @@ class ExecutionQueueActionRequest(BaseModel):
             raise ValueError("Prioridade inválida.")
         return value
 
+
 class ExecutionQueueActionResponse(BaseModel):
     message: str
     source_exec_id: str
@@ -655,8 +718,10 @@ class ExecutionQueueActionResponse(BaseModel):
     max_retries: int
     recovery_action: str
 
+
 class ScheduleValidationRequest(BaseModel):
     schedule: Optional[str] = None
+
 
 class ScheduleValidationResponse(BaseModel):
     valid: bool
@@ -664,9 +729,11 @@ class ScheduleValidationResponse(BaseModel):
     summary: str
     errors: List[str] = []
 
+
 class SchedulePreviewRequest(BaseModel):
     schedule: Optional[str] = None
     limit: int = Field(5, ge=1, le=20)
+
 
 class SchedulePreviewResponse(BaseModel):
     valid: bool
@@ -676,16 +743,19 @@ class SchedulePreviewResponse(BaseModel):
     next_runs_preview: List[str] = []
     errors: List[str] = []
 
+
 class EnvValidationIssue(BaseModel):
     line: int
     code: str
     message: str
+
 
 class EnvValidationResponse(BaseModel):
     valid: bool
     issue_count: int
     normalized_line_count: int
     issues: List[EnvValidationIssue]
+
 
 class SystemOverviewKpis(BaseModel):
     active_automations: int
@@ -694,13 +764,16 @@ class SystemOverviewKpis(BaseModel):
     pending_now: int
     next_window: Optional[str] = None
 
+
 class SystemOverviewScheduler(BaseModel):
     running: bool
     jobs_loaded: int
 
+
 class SystemOverviewQueue(BaseModel):
     active_count: int
     by_status: dict[str, int]
+
 
 class SystemOverviewAutomationCard(BaseModel):
     id: int
@@ -710,10 +783,12 @@ class SystemOverviewAutomationCard(BaseModel):
     last_status: Optional[str] = None
     next_run: Optional[str] = None
 
+
 class SystemOverviewFailure(BaseModel):
     automation_id: int
     automation_name: str
     failures: int
+
 
 class SystemOverviewResponse(BaseModel):
     generated_at: str
@@ -731,6 +806,7 @@ class SystemOverviewResponse(BaseModel):
     queue: SystemOverviewQueue
     diagnostics: DiagnosticsPayload
 
+
 class AuditEntry(BaseModel):
     id: int
     timestamp: Any
@@ -746,6 +822,7 @@ class AuditEntry(BaseModel):
         self.timestamp = format_dt_br(self.timestamp)
         return self
 
+
 class SystemVersion(BaseModel):
     version: str = ORCHESTRATOR_VERSION
     schema_version: str = ORCHESTRATOR_SCHEMA_VERSION
@@ -756,11 +833,13 @@ class SystemVersion(BaseModel):
     max_workers: int
     allowed_origins: List[str]
 
+
 # ---------------------------------------------------------------------------
 # Paginacao
 # ---------------------------------------------------------------------------
 
 T = TypeVar("T")
+
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: List[T]

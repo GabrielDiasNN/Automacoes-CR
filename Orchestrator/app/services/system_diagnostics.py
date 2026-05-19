@@ -1,4 +1,5 @@
 """Serviços de diagnóstico operacional do Orchestrator."""
+
 # pylint: disable=relative-beyond-top-level,too-many-locals,not-callable,too-many-branches,too-many-statements,line-too-long
 
 from datetime import datetime, timedelta
@@ -30,8 +31,8 @@ from ..database import (
     get_wal_size_mb,
     validate_database_schema,
 )
-from .scheduler_runtime import extract_automation_id_from_job
 from ..timezone import get_now_local
+from .scheduler_runtime import extract_automation_id_from_job
 
 
 def add_finding(
@@ -70,7 +71,9 @@ def build_operator_actions(findings: list[dict[str, Any]]) -> list[dict[str, Any
         current = actions.get(action_code)
         candidate = {
             "action_code": action_code,
-            "action_label": item.get("action_label") or item.get("action_hint") or action_code,
+            "action_label": item.get("action_label")
+            or item.get("action_hint")
+            or action_code,
             "severity": item.get("severity", "INFO"),
             "component": item.get("component", "system"),
             "reason": item.get("message", ""),
@@ -81,7 +84,10 @@ def build_operator_actions(findings: list[dict[str, Any]]) -> list[dict[str, Any
             continue
         current_rank = severity_rank.get(str(current.get("severity", "INFO")), 2)
         candidate_rank = severity_rank.get(str(candidate.get("severity", "INFO")), 2)
-        if (candidate_rank, candidate["priority"]) < (current_rank, int(current.get("priority", 3))):
+        if (candidate_rank, candidate["priority"]) < (
+            current_rank,
+            int(current.get("priority", 3)),
+        ):
             actions[action_code] = candidate
 
     return sorted(
@@ -136,6 +142,7 @@ def seconds_since(value: datetime | None) -> float:
         return 0.0
     return round((get_now_local() - value).total_seconds(), 2)
 
+
 def coerce_datetime(value: Any) -> datetime | None:
     return value if isinstance(value, datetime) else None
 
@@ -144,13 +151,17 @@ def collect_scheduler_inconsistencies(db: Session, scheduler: Any) -> list[str]:
     inconsistencies = []
     scheduled_automations = (
         db.query(models.Automation)
-        .filter(models.Automation.enabled.is_(True), models.Automation.schedule.isnot(None))
+        .filter(
+            models.Automation.enabled.is_(True), models.Automation.schedule.isnot(None)
+        )
         .all()
     )
     expected_ids = {auto.id for auto in scheduled_automations}
     loaded_ids = {
         auto_id
-        for auto_id in (extract_automation_id_from_job(job.id) for job in scheduler.get_jobs())
+        for auto_id in (
+            extract_automation_id_from_job(job.id) for job in scheduler.get_jobs()
+        )
         if auto_id is not None
     }
 
@@ -185,9 +196,7 @@ def build_diagnostics_payload(
     db_size_mb = get_db_size_mb()
     worker_status = worker_status_fn(db)
     heartbeat = (
-        db.query(models.WorkerHeartbeat)
-        .filter(models.WorkerHeartbeat.id == 1)
-        .first()
+        db.query(models.WorkerHeartbeat).filter(models.WorkerHeartbeat.id == 1).first()
     )
 
     statuses = (
@@ -195,9 +204,7 @@ def build_diagnostics_payload(
         .group_by(models.Execution.status)
         .all()
     )
-    queue: dict[str, int] = {
-        str(status): int(count) for status, count in statuses
-    }
+    queue: dict[str, int] = {str(status): int(count) for status, count in statuses}
     active_count = sum(queue.get(status, 0) for status in EXECUTION_ACTIVE_STATUSES)
     priority_rows = (
         db.query(models.Execution.priority, func.count(models.Execution.id))
@@ -358,7 +365,9 @@ def build_diagnostics_payload(
             {
                 "action_hint": "Recuperar o Orchestrator para reativar o worker e retomar a fila.",
                 "action_code": "worker_recover" if active_count else "worker_wakeup",
-                "action_label": "Recuperar worker" if active_count else "Acordar worker",
+                "action_label": (
+                    "Recuperar worker" if active_count else "Acordar worker"
+                ),
                 "impact": "Execuções pendentes ou em andamento podem ficar sem processamento.",
                 "priority": 1 if active_count else 2,
             },
@@ -398,7 +407,11 @@ def build_diagnostics_payload(
         if hotspot["failures_24h"] < 3:
             continue
         channels = str(hotspot.get("notification_channels") or "").lower()
-        channel_hint = " e canais de notificação" if ("whatsapp" in channels or "email" in channels) else ""
+        channel_hint = (
+            " e canais de notificação"
+            if ("whatsapp" in channels or "email" in channels)
+            else ""
+        )
         add_finding(
             findings,
             SEVERITY_WARN,
@@ -414,7 +427,9 @@ def build_diagnostics_payload(
         )
 
     severity_rank = {"INFO": 0, "WARN": 1, "ERROR": 2}
-    max_severity = max((severity_rank.get(item["severity"], 0) for item in findings), default=0)
+    max_severity = max(
+        (severity_rank.get(item["severity"], 0) for item in findings), default=0
+    )
     overall_status = "healthy"
     if max_severity == 2:
         overall_status = "unhealthy"
@@ -436,39 +451,75 @@ def build_diagnostics_payload(
             "code": "worker_heartbeat",
             "label": "Heartbeat do worker",
             "status": "ok" if worker_status.is_alive else "error",
-            "detail": "Worker respondendo via heartbeat recente." if worker_status.is_alive else "Worker sem heartbeat recente.",
-            "value": str(last_ping_age_seconds) if last_ping_age_seconds is not None else None,
+            "detail": (
+                "Worker respondendo via heartbeat recente."
+                if worker_status.is_alive
+                else "Worker sem heartbeat recente."
+            ),
+            "value": (
+                str(last_ping_age_seconds)
+                if last_ping_age_seconds is not None
+                else None
+            ),
         },
         {
             "code": "scheduler_jobs",
             "label": "Jobs carregados",
             "status": "ok" if scheduler.running and len(jobs) > 0 else "warn",
-            "detail": "Scheduler carregado com jobs em memória." if scheduler.running and len(jobs) > 0 else "Scheduler sem jobs ativos ou não iniciado.",
+            "detail": (
+                "Scheduler carregado com jobs em memória."
+                if scheduler.running and len(jobs) > 0
+                else "Scheduler sem jobs ativos ou não iniciado."
+            ),
             "value": str(len(jobs)),
         },
         {
             "code": "queue_stalled",
             "label": "Fila parada",
-            "status": "warn" if pending_age_seconds >= 900 or running_age_seconds >= 7200 else "ok",
-            "detail": "Há execuções envelhecidas na fila ou em execução." if pending_age_seconds >= 900 or running_age_seconds >= 7200 else "Sem indício de fila parada.",
+            "status": (
+                "warn"
+                if pending_age_seconds >= 900 or running_age_seconds >= 7200
+                else "ok"
+            ),
+            "detail": (
+                "Há execuções envelhecidas na fila ou em execução."
+                if pending_age_seconds >= 900 or running_age_seconds >= 7200
+                else "Sem indício de fila parada."
+            ),
             "value": f"pending={pending_age_seconds}s,running={running_age_seconds}s",
         },
         {
             "code": "wal_health",
             "label": "Saúde do WAL",
-            "status": "error" if wal_risk == "critical" else ("warn" if wal_risk == "elevated" else "ok"),
-            "detail": "Tamanho do WAL dentro da faixa operacional." if wal_risk == "normal" else "WAL exige ação operacional.",
+            "status": (
+                "error"
+                if wal_risk == "critical"
+                else ("warn" if wal_risk == "elevated" else "ok")
+            ),
+            "detail": (
+                "Tamanho do WAL dentro da faixa operacional."
+                if wal_risk == "normal"
+                else "WAL exige ação operacional."
+            ),
             "value": str(wal_size_mb),
         },
         {
             "code": "schema_minimum",
             "label": "Consistência mínima de schema",
             "status": "ok" if schema_status["valid"] else "error",
-            "detail": "Schema consistente com o contrato esperado." if schema_status["valid"] else "Schema divergente do contrato esperado.",
+            "detail": (
+                "Schema consistente com o contrato esperado."
+                if schema_status["valid"]
+                else "Schema divergente do contrato esperado."
+            ),
             "value": schema_version,
         },
     ]
-    recommended_action = operator_actions[0]["action_code"] if operator_actions else ACTION_CODE_WORKER_WAKEUP
+    recommended_action = (
+        operator_actions[0]["action_code"]
+        if operator_actions
+        else ACTION_CODE_WORKER_WAKEUP
+    )
 
     return {
         "version": ORCHESTRATOR_VERSION,

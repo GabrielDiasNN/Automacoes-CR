@@ -10,12 +10,22 @@ Tabelas:
   - AuditLog: Trilha de auditoria de toda acao administrativa.
 """
 
-from sqlalchemy import (Boolean, Column, DateTime, Float, ForeignKey, Index,
-                        Integer, String, Text)
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
 
 from .database import Base
 from .timezone import get_now_local
+
 
 class Automation(Base):
     """Cadastro de automacoes registradas no Hub."""
@@ -44,6 +54,7 @@ class Automation(Base):
         cascade="all, delete-orphan",
         lazy="dynamic",
     )
+
 
 class Execution(Base):
     """Historico de execucoes de automacoes."""
@@ -84,6 +95,7 @@ class Execution(Base):
         Index("ix_exec_priority_status", "priority", "status", "started_at"),
     )
 
+
 class WorkerHeartbeat(Base):
     """Registro de saude do Worker - atualizado a cada ciclo."""
 
@@ -97,6 +109,7 @@ class WorkerHeartbeat(Base):
     tasks_failed = Column(Integer, default=0)
     active_tasks = Column(Integer, default=0)
     version = Column(String(20), default="4.0.0")
+
 
 class AuditLog(Base):
     """Trilha de auditoria para toda acao administrativa no Hub."""

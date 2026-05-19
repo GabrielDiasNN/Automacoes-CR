@@ -15,8 +15,9 @@ import json
 import logging
 import os
 import time
-from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -25,18 +26,16 @@ from fastapi.staticfiles import StaticFiles
 from . import models
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
 from .database import SessionLocal, engine
-from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
-                         TimingMiddleware)
+from .middleware import RateLimitMiddleware, RequestIdMiddleware, TimingMiddleware
 from .routers import automations, executions, system, websocket
-from .runtime import (get_allowed_origins, get_dashboard_path, get_lib_path,
-                      scheduler)
+from .runtime import get_allowed_origins, get_dashboard_path, get_lib_path, scheduler
 from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
-from .services.scheduler_runtime import (register_enterprise_jobs,
-                                         reload_scheduled_tasks)
+from .services.scheduler_runtime import register_enterprise_jobs, reload_scheduled_tasks
 
 # ---------------------------------------------------------------------------
 # Configuracao de Logs Estruturados (JSON)
 # ---------------------------------------------------------------------------
+
 
 class JsonFormatter(logging.Formatter):
     """Formatter customizado para emitir logs em JSON estruturado (Pilar L)."""
@@ -52,6 +51,7 @@ class JsonFormatter(logging.Formatter):
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_record)
+
 
 log_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logs"
@@ -74,6 +74,7 @@ logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 logger.addHandler(console_handler)
 
+
 def _cleanup_zombie_tasks():
     db = SessionLocal()
     try:
@@ -83,15 +84,21 @@ def _cleanup_zombie_tasks():
     finally:
         db.close()
 
+
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Pilar E - Escala: Garantir integridade do banco no startup
-    from .database import (run_schema_migrations, run_wal_checkpoint,
-                           validate_database_schema)
+    from .database import (
+        run_schema_migrations,
+        run_wal_checkpoint,
+        validate_database_schema,
+    )
+
     run_wal_checkpoint("TRUNCATE")
 
     models.Base.metadata.create_all(bind=engine)
@@ -122,11 +129,15 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown(wait=False)
     logger.info("Orchestrator offline.")
 
+
 # ---------------------------------------------------------------------------
 # Aplicativo FastAPI
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Central de Automações", version=ORCHESTRATOR_VERSION, lifespan=lifespan)
+app = FastAPI(
+    title="Central de Automações", version=ORCHESTRATOR_VERSION, lifespan=lifespan
+)
+
 
 # --- GLOBAL EXCEPTION HANDLER (v6.2.0) ---
 @app.exception_handler(Exception)
@@ -139,9 +150,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "detail": "Ocorreu um erro interno no servidor.",
             "error_id": error_id,
-            "type": type(exc).__name__
-        }
+            "type": type(exc).__name__,
+        },
     )
+
 
 # --- CORS Hardened: restrito a origens configuradas via .env ---
 _allowed_origins = get_allowed_origins()
@@ -162,14 +174,17 @@ app.include_router(executions.router)
 app.include_router(system.router)
 app.include_router(websocket.router)
 
+
 # --- ROTAS DE COMPATIBILIDADE LEGADA ---
 @app.get("/api/health")
 def legacy_health():
     return RedirectResponse(url="/api/system/health")
 
+
 @app.get("/api/metrics")
 def legacy_metrics():
     return RedirectResponse(url="/api/system/metrics")
+
 
 # --- SERVICO DE ARQUIVOS ESTATICOS (DASHBOARD) ---
 # Resolvendo raiz do projeto (C:\Automacoes)
@@ -186,6 +201,7 @@ else:
 
 if os.path.exists(lib_path):
     app.mount("/lib", StaticFiles(directory=lib_path), name="lib")
+
 
 @app.get("/")
 def read_root():

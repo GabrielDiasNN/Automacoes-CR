@@ -22,11 +22,16 @@ from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
-from ..services.execution_runtime import (build_queued_execution,
-                                          generate_execution_id,
-                                          get_group_active_execution)
-from ..services.scheduler_runtime import (extract_automation_id_from_job,
-                                          reload_scheduled_tasks, scheduler)
+from ..services.execution_runtime import (
+    build_queued_execution,
+    generate_execution_id,
+    get_group_active_execution,
+)
+from ..services.scheduler_runtime import (
+    extract_automation_id_from_job,
+    reload_scheduled_tasks,
+    scheduler,
+)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit, validate_script_path
 
@@ -36,12 +41,14 @@ router = APIRouter(prefix="/api/automations", tags=["Automations"])
 
 PROJECT_ROOT = get_project_root()
 
+
 def _reload_scheduler_safe() -> None:
     """Recarrega o APScheduler sem quebrar a operacao CRUD que ja foi persistida."""
     try:
         reload_scheduled_tasks()
     except Exception as e:
         logger.error(f"Falha ao recarregar agendador apos alteracao: {e}")
+
 
 def _load_next_run_lookup():
     """Mapeia proxima execucao por automacao consultando o scheduler em memoria."""
@@ -58,7 +65,10 @@ def _load_next_run_lookup():
         logger.warning(f"Nao foi possivel carregar next_run do scheduler: {e}")
     return lookup
 
-def _build_automation_response(db: Session, auto: models.Automation, next_run_lookup=None):
+
+def _build_automation_response(
+    db: Session, auto: models.Automation, next_run_lookup=None
+):
     if next_run_lookup is None:
         next_run_lookup = _load_next_run_lookup()
     auto_resp = schemas.AutomationResponse.model_validate(auto)
@@ -75,10 +85,13 @@ def _build_automation_response(db: Session, auto: models.Automation, next_run_lo
         parsed_schedule = schemas.parse_schedule(auto_resp.schedule)
     except Exception:
         parsed_schedule = None
-    auto_resp.schedule_type = parsed_schedule.get("schedule_type") if parsed_schedule else "manual"
+    auto_resp.schedule_type = (
+        parsed_schedule.get("schedule_type") if parsed_schedule else "manual"
+    )
     auto_resp.schedule_summary = schemas.describe_schedule_payload(parsed_schedule)
     auto_resp.next_runs_preview = schemas.preview_next_runs(parsed_schedule, 3)
     return auto_resp
+
 
 def _resolve_automation_dir(script_path: str) -> str:
     """Resolve a pasta da automacao garantindo permanencia no PROJECT_ROOT."""
@@ -92,8 +105,11 @@ def _resolve_automation_dir(script_path: str) -> str:
     auto_dir = os.path.dirname(os.path.abspath(os.path.normpath(resolved_script)))
     project_root = os.path.abspath(os.path.normpath(PROJECT_ROOT))
     if os.path.commonpath([project_root, auto_dir]) != project_root:
-        raise HTTPException(status_code=403, detail="Diretorio da automacao fora do projeto.")
+        raise HTTPException(
+            status_code=403, detail="Diretorio da automacao fora do projeto."
+        )
     return auto_dir
+
 
 def _resolve_managed_file(auto_dir: str, filename: str) -> str:
     """Resolve arquivo gerenciado impedindo path traversal por nome ou symlink."""
@@ -108,6 +124,7 @@ def _resolve_managed_file(auto_dir: str, filename: str) -> str:
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
     return target_path
 
+
 def _backup_file_before_write(target_path: str, auto_dir: str) -> str:
     """Cria backup local antes de sobrescrever arquivo gerenciado."""
     backup_dir = os.path.join(auto_dir, ".orchestrator_backups")
@@ -118,11 +135,13 @@ def _backup_file_before_write(target_path: str, auto_dir: str) -> str:
     shutil.copy2(target_path, backup_path)
     return os.path.relpath(backup_path, auto_dir)
 
+
 # ---------------------------------------------------------------------------
 
 # LISTAGEM com paginacao e ordenacao
 
 # ---------------------------------------------------------------------------
+
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.AutomationResponse])
 def list_automations(
@@ -175,11 +194,13 @@ def list_automations(
         items=result, total=total, page=page, per_page=per_page, pages=pages
     )
 
+
 # ---------------------------------------------------------------------------
 
 # LISTAGEM SIMPLES (compatibilidade com Dashboard legado)
 
 # ---------------------------------------------------------------------------
+
 
 @router.get("/all", response_model=list[schemas.AutomationResponse])
 def list_all_automations(
@@ -199,11 +220,13 @@ def list_all_automations(
 
     return result
 
+
 # ---------------------------------------------------------------------------
 
 # GET por ID
 
 # ---------------------------------------------------------------------------
+
 
 @router.get("/{automation_id}", response_model=schemas.AutomationResponse)
 def get_automation(
@@ -224,11 +247,13 @@ def get_automation(
 
     return _build_automation_response(db, db_auto)
 
+
 # ---------------------------------------------------------------------------
 
 # CREATE
 
 # ---------------------------------------------------------------------------
+
 
 @router.post("", response_model=schemas.AutomationResponse, status_code=201)
 def create_automation(
@@ -282,11 +307,13 @@ def create_automation(
 
     return _build_automation_response(db, db_auto)
 
+
 # ---------------------------------------------------------------------------
 
 # UPDATE
 
 # ---------------------------------------------------------------------------
+
 
 @router.put("/{automation_id}", response_model=schemas.AutomationResponse)
 def update_automation(
@@ -313,7 +340,9 @@ def update_automation(
         if key == "script_path":
             ok, result = validate_script_path(value, PROJECT_ROOT)
             if not ok:
-                raise HTTPException(status_code=422, detail=f"Validação do script: {result}")
+                raise HTTPException(
+                    status_code=422, detail=f"Validação do script: {result}"
+                )
 
         setattr(db_auto, key, value)
 
@@ -331,6 +360,7 @@ def update_automation(
     _reload_scheduler_safe()
 
     return _build_automation_response(db, db_auto)
+
 
 @router.get("/{automation_id}/overview")
 def get_automation_overview(
@@ -366,7 +396,9 @@ def get_automation_overview(
         auto_resp.last_status = recent_execs[0].status
 
     from datetime import timedelta
+
     from ..timezone import get_now_local
+
     window_start = get_now_local() - timedelta(hours=24)
     success_24h = (
         db.query(models.Execution)
@@ -405,11 +437,13 @@ def get_automation_overview(
         "recent_executions": recent_payload,
     }
 
+
 # ---------------------------------------------------------------------------
 
 # DELETE
 
 # ---------------------------------------------------------------------------
+
 
 @router.delete("/{automation_id}")
 def delete_automation(
@@ -449,11 +483,13 @@ def delete_automation(
 
     return {"message": f"Automacao '{auto_name}' removida com sucesso."}
 
+
 # ---------------------------------------------------------------------------
 
 # START (Enfileirar execucao)
 
 # ---------------------------------------------------------------------------
+
 
 @router.post("/{automation_id}/start")
 async def start_automation(
@@ -514,8 +550,8 @@ async def start_automation(
         )
         if latest_exec and latest_exec.started_at:
             elapsed_minutes = (
-                (get_now_local() - latest_exec.started_at).total_seconds() / 60
-            )
+                get_now_local() - latest_exec.started_at
+            ).total_seconds() / 60
             if elapsed_minutes < db_auto.cooldown_minutes:
                 remaining = round(db_auto.cooldown_minutes - elapsed_minutes, 1)
                 raise HTTPException(
@@ -549,6 +585,7 @@ async def start_automation(
 
     return {"message": "Automação enfileirada com sucesso.", "exec_id": exec_id}
 
+
 @router.post("/test-mode/global")
 def set_global_test_mode(
     enabled: bool,
@@ -570,9 +607,30 @@ def set_global_test_mode(
     if os.path.exists(ps_script):
         try:
             if enabled:
-                subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps_script], check=True)
+                subprocess.run(
+                    [
+                        "powershell.exe",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        ps_script,
+                    ],
+                    check=True,
+                )
             else:
-                subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps_script, "-Remover"], check=True)
+                subprocess.run(
+                    [
+                        "powershell.exe",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        ps_script,
+                        "-Remover",
+                    ],
+                    check=True,
+                )
         except Exception as e:
             logger.error(f"Erro ao sincronizar variavel AUTOMACAO_TEST_EMAIL: {e}")
 
@@ -590,6 +648,7 @@ def set_global_test_mode(
     return {
         "message": f"Modo Teste Global {'ativado' if enabled else 'desativado'} para todas as automações."
     }
+
 
 @router.post("/{automation_id}/test-mode")
 def set_automation_test_mode(
@@ -628,11 +687,13 @@ def set_automation_test_mode(
         "message": f"Modo Teste da automação {db_auto.name} definido para {enabled}."
     }
 
+
 # ---------------------------------------------------------------------------
 
 # CONTROLE EM MASSA
 
 # ---------------------------------------------------------------------------
+
 
 @router.post("/control/pause-all")
 def pause_all(
@@ -650,6 +711,7 @@ def pause_all(
 
     return {"message": "Todas as automações pausadas."}
 
+
 @router.post("/control/resume-all")
 def resume_all(
     request: Request,
@@ -666,6 +728,7 @@ def resume_all(
 
     return {"message": "Todas as automações retomadas."}
 
+
 @router.post("/{automation_id}/pause")
 def pause_automation(
     automation_id: int,
@@ -673,14 +736,26 @@ def pause_automation(
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+    db_auto = (
+        db.query(models.Automation)
+        .filter(models.Automation.id == automation_id)
+        .first()
+    )
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
     db_auto.enabled = False
-    log_audit(db, "PAUSE", "AUTOMATION", str(automation_id), get_client_ip(request), db_auto.name)
+    log_audit(
+        db,
+        "PAUSE",
+        "AUTOMATION",
+        str(automation_id),
+        get_client_ip(request),
+        db_auto.name,
+    )
     db.commit()
     _reload_scheduler_safe()
     return {"message": f"Automação '{db_auto.name}' pausada."}
+
 
 @router.post("/{automation_id}/resume")
 def resume_automation(
@@ -689,29 +764,49 @@ def resume_automation(
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+    db_auto = (
+        db.query(models.Automation)
+        .filter(models.Automation.id == automation_id)
+        .first()
+    )
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
     db_auto.enabled = True
-    log_audit(db, "RESUME", "AUTOMATION", str(automation_id), get_client_ip(request), db_auto.name)
+    log_audit(
+        db,
+        "RESUME",
+        "AUTOMATION",
+        str(automation_id),
+        get_client_ip(request),
+        db_auto.name,
+    )
     db.commit()
     _reload_scheduler_safe()
     return {"message": f"Automação '{db_auto.name}' retomada."}
 
-@router.post("/{automation_id}/clone", response_model=schemas.AutomationResponse, status_code=201)
+
+@router.post(
+    "/{automation_id}/clone", response_model=schemas.AutomationResponse, status_code=201
+)
 def clone_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    db_auto = db.query(models.Automation).filter(models.Automation.id == automation_id).first()
+    db_auto = (
+        db.query(models.Automation)
+        .filter(models.Automation.id == automation_id)
+        .first()
+    )
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
     base_name = f"{db_auto.name} (Clone)"
     candidate = base_name
     idx = 2
-    while db.query(models.Automation).filter(models.Automation.name == candidate).first():
+    while (
+        db.query(models.Automation).filter(models.Automation.name == candidate).first()
+    ):
         candidate = f"{base_name} {idx}"
         idx += 1
 
@@ -743,10 +838,12 @@ def clone_automation(
     _reload_scheduler_safe()
     return _build_automation_response(db, clone)
 
+
 # ---------------------------------------------------------------------------
 # CONFIG MANAGER (JSON) - Fase 3
 # ---------------------------------------------------------------------------
 import glob
+
 
 @router.get("/{auto_id}/configs")
 def get_automation_configs(
@@ -767,7 +864,11 @@ def get_automation_configs(
     for jf in json_files:
         filename = os.path.basename(jf)
         # Ignora arquivos de lock e estado
-        if "wwebjs" in filename or filename.startswith(".") or "state" in filename.lower():
+        if (
+            "wwebjs" in filename
+            or filename.startswith(".")
+            or "state" in filename.lower()
+        ):
             continue
         try:
             with open(jf, "r", encoding="utf-8") as f:
@@ -777,6 +878,7 @@ def get_automation_configs(
             pass
 
     return configs
+
 
 @router.put("/{auto_id}/configs/{filename}")
 def update_automation_config(
@@ -795,7 +897,10 @@ def update_automation_config(
     auto_dir = _resolve_automation_dir(auto.script_path)
     target_path = _resolve_managed_file(auto_dir, filename)
     if not filename.endswith(".json"):
-        raise HTTPException(status_code=400, detail="Apenas arquivos JSON podem ser editados por esta rota.")
+        raise HTTPException(
+            status_code=400,
+            detail="Apenas arquivos JSON podem ser editados por esta rota.",
+        )
 
     try:
         json.loads(payload.content)
@@ -814,13 +919,17 @@ def update_automation_config(
         db.commit()
         return {"message": "Configuração salva com sucesso!", "backup": backup_relpath}
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="O conteúdo fornecido não é um JSON válido.")
+        raise HTTPException(
+            status_code=400, detail="O conteúdo fornecido não é um JSON válido."
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ---------------------------------------------------------------------------
 # WEB IDE MANAGER (Scripts) - Fase 4
 # ---------------------------------------------------------------------------
+
 
 @router.get("/{auto_id}/scripts")
 def get_automation_scripts(
@@ -854,6 +963,7 @@ def get_automation_scripts(
             pass
 
     return scripts
+
 
 @router.put("/{auto_id}/scripts/{filename}")
 def update_automation_script(

@@ -1,5 +1,7 @@
 from datetime import datetime
+
 import pytz  # type: ignore
+
 
 def get_now_local() -> datetime:
     """
@@ -10,6 +12,7 @@ def get_now_local() -> datetime:
     """
     tz_br = pytz.timezone("America/Sao_Paulo")
     return datetime.now(tz_br).replace(tzinfo=None)
+
 
 def to_br_timezone(dt: datetime) -> datetime:
     """

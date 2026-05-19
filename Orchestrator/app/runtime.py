@@ -9,7 +9,6 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 
-
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )

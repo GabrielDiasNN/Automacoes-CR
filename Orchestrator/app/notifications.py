@@ -16,6 +16,7 @@ import os
 import subprocess
 import time
 from datetime import datetime
+
 from app.timezone import get_now_local
 
 logger = logging.getLogger("orchestrator.notifications")
@@ -28,6 +29,7 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+
 def _is_throttled(automation_id: int) -> bool:
     """Verifica se o alerta esta em cooldown."""
     last = _alert_cooldown.get(automation_id)
@@ -38,9 +40,11 @@ def _is_throttled(automation_id: int) -> bool:
         return True
     return False
 
+
 def _mark_sent(automation_id: int):
     """Marca o timestamp do ultimo alerta enviado."""
     _alert_cooldown[automation_id] = time.time()
+
 
 def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = ""):
     """Dispara alerta via script nativo de WhatsApp do projeto."""
@@ -85,6 +89,7 @@ def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = ""):
     except Exception as e:
         logger.error(f"Erro ao enviar alerta WhatsApp: {e}")
         return False
+
 
 def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
     """Dispara alerta via Outlook COM (reusa Lib-Email.psm1)."""
@@ -138,6 +143,7 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
     except Exception as e:
         logger.error(f"Erro ao enviar alerta e-mail: {e}")
         return False
+
 
 def dispatch_alerts(automation, execution):
     """Analisa os canais configurados e dispara os alertas necessarios (com throttling)."""

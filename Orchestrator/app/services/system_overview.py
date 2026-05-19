@@ -1,4 +1,5 @@
 """Serviços de visão agregada do painel operacional."""
+
 # pylint: disable=relative-beyond-top-level,too-many-locals,not-callable
 
 from datetime import timedelta
@@ -99,7 +100,9 @@ def build_system_overview_payload(
             summary.automation_name = ex.automation.name
         recent_payload.append(summary)
 
-    automations = db.query(models.Automation).order_by(models.Automation.name.asc()).all()
+    automations = (
+        db.query(models.Automation).order_by(models.Automation.name.asc()).all()
+    )
     autos_payload: list[dict[str, Any]] = []
     for auto in automations:
         auto_id = int(auto.id)
@@ -120,7 +123,9 @@ def build_system_overview_payload(
             }
         )
 
-    next_window = min((job.next_run_time for job in jobs if job.next_run_time), default=None)
+    next_window = min(
+        (job.next_run_time for job in jobs if job.next_run_time), default=None
+    )
 
     return {
         "generated_at": get_now_local().isoformat(),

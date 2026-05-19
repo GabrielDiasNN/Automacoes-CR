@@ -5,17 +5,19 @@ Ferramenta de Diagnóstico - Hub de Automações.
 Valida saúde do banco de Dados, API do agendador e integridade de logs.
 """
 
-import sqlite3
-import os
 import json
+import os
+import sqlite3
 from datetime import datetime
 from typing import Optional
+
 import requests
 
 # Caminhos Padronizados
 BASE_DIR = r"c:\Automacoes"
 DB_PATH = os.path.join(BASE_DIR, "Orchestrator", "automacoes.db")
 ENV_PATH = os.path.join(BASE_DIR, ".env")
+
 
 def get_api_key() -> Optional[str]:
     """Recupera a API Key do arquivo .env."""
@@ -29,6 +31,7 @@ def get_api_key() -> Optional[str]:
     except Exception:
         return None
     return None
+
 
 def check_db_health() -> None:
     """Verifica a integridade e estado das tabelas do banco de dados SQLite."""
@@ -45,7 +48,9 @@ def check_db_health() -> None:
         active = cursor.fetchone()[0]
         print(f"   - Automações habilitadas: {active}")
 
-        cursor.execute("SELECT count(*) FROM executions WHERE status IN ('PENDING', 'RUNNING')")
+        cursor.execute(
+            "SELECT count(*) FROM executions WHERE status IN ('PENDING', 'RUNNING')"
+        )
         running = cursor.fetchone()[0]
         print(f"   - Tarefas ativas (PENDING/RUNNING): {running}")
 
@@ -57,6 +62,7 @@ def check_db_health() -> None:
     except Exception as e:
         print(f"   - ERRO no Banco: {e}")
 
+
 def check_scheduler_api() -> None:
     """Verifica se o agendador está respondendo via API REST."""
     print("\n[2] Verificando Agendador via API...")
@@ -66,18 +72,24 @@ def check_scheduler_api() -> None:
         return
 
     try:
-        r = requests.get("http://localhost:8000/api/system/scheduler/jobs",
-                         headers={"X-API-Key": api_key}, timeout=5)
+        r = requests.get(
+            "http://localhost:8000/api/system/scheduler/jobs",
+            headers={"X-API-Key": api_key},
+            timeout=5,
+        )
         if r.status_code == 200:
             jobs = r.json()
             print(f"   - Total de Jobs no APScheduler: {len(jobs)}")
             for j in jobs:
-                print(f"     > {j['id']} ({j['automation_name']}): "
-                      f"Próximo disparo em {j['next_run_time']}")
+                print(
+                    f"     > {j['id']} ({j['automation_name']}): "
+                    f"Próximo disparo em {j['next_run_time']}"
+                )
         else:
             print(f"   - API retornou status {r.status_code}")
     except Exception as e:
         print(f"   - ERRO ao conectar na API: {e} (O Orquestrador está online?)")
+
 
 def check_recent_logs() -> None:
     """Analisa o arquivo de log do orquestrador em busca de erros recentes."""
@@ -109,14 +121,15 @@ def check_recent_logs() -> None:
     except Exception as e:
         print(f"   - ERRO ao ler logs: {e}")
 
+
 if __name__ == "__main__":
-    print("="*60)
+    print("=" * 60)
     print("FERRAMENTA DE DIAGNÓSTICO - HUB DE AUTOMAÇÕES v1.0")
     print(f"Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    print("="*60)
+    print("=" * 60)
 
     check_db_health()
     check_scheduler_api()
     check_recent_logs()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)

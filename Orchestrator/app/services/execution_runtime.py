@@ -20,20 +20,6 @@ from ..constants import (
     EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TERMINATED,
     EXECUTION_STATUS_TIMEOUT,
-    PRIORITY_HIGH,
-    PRIORITY_LOW,
-    PRIORITY_NORMAL,
-    RECOVERY_ACTION_NONE,
-    RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
-    RECOVERY_ACTION_REQUEUE_MANUAL,
-    RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION,
-    RECOVERY_ACTION_REQUEUE_IF_SAFE,
-    RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY,
-    RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
-    RECOVERY_ACTION_REVIEW_LOGS_AND_OPTIONALLY_REQUEUE,
-    RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
-    RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE,
-    RECOVERY_ACTION_REVIEW_WORKER_LOGS,
     FAILURE_REASON_AUTOMATION_NOT_FOUND,
     FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
     FAILURE_REASON_INTERNAL_WORKER_ERROR,
@@ -41,6 +27,20 @@ from ..constants import (
     FAILURE_REASON_ORCHESTRATOR_REBOOT,
     FAILURE_REASON_USER_TERMINATED,
     FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
+    PRIORITY_HIGH,
+    PRIORITY_LOW,
+    PRIORITY_NORMAL,
+    RECOVERY_ACTION_NONE,
+    RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
+    RECOVERY_ACTION_REQUEUE_IF_SAFE,
+    RECOVERY_ACTION_REQUEUE_MANUAL,
+    RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION,
+    RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY,
+    RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
+    RECOVERY_ACTION_REVIEW_LOGS_AND_OPTIONALLY_REQUEUE,
+    RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
+    RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE,
+    RECOVERY_ACTION_REVIEW_WORKER_LOGS,
 )
 from ..timezone import get_now_local
 
@@ -65,7 +65,9 @@ def build_queued_execution(
         status=EXECUTION_STATUS_PENDING,
         priority=priority,
         retry_count=retry_count,
-        max_retries=max_retries if max_retries is not None else (automation.max_retries or 0),
+        max_retries=(
+            max_retries if max_retries is not None else (automation.max_retries or 0)
+        ),
         queue_group=automation.queue_group,
         requested_by=requested_by,
         failure_reason=failure_reason,
@@ -138,7 +140,9 @@ def claim_next_task(db: Session) -> Optional[str]:
     return exec_id if updated == 1 else None
 
 
-def classify_process_result(return_code: Optional[int]) -> tuple[str, Optional[str], str]:
+def classify_process_result(
+    return_code: Optional[int],
+) -> tuple[str, Optional[str], str]:
     if return_code in [0, 2, 3]:
         return "SUCCESS", None, RECOVERY_ACTION_NONE
     if return_code == 21:
@@ -230,7 +234,10 @@ def complete_process_execution(
     duration_seconds: float,
 ) -> Optional[models.Execution]:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
-    if not db_exec or db_exec.status in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
+    if not db_exec or db_exec.status in [
+        EXECUTION_STATUS_TERMINATED,
+        EXECUTION_STATUS_TIMEOUT,
+    ]:
         return db_exec
 
     status, failure_reason, recovery_action = classify_process_result(return_code)
@@ -253,7 +260,10 @@ def apply_internal_worker_error(
     task_start_ts: float,
 ) -> None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
-    if not db_exec or db_exec.status in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
+    if not db_exec or db_exec.status in [
+        EXECUTION_STATUS_TERMINATED,
+        EXECUTION_STATUS_TIMEOUT,
+    ]:
         return
     db_exec.status = EXECUTION_STATUS_ERROR
     db_exec.logs = (db_exec.logs or "") + f"\nInternal Worker Error: {message}"

@@ -27,12 +27,14 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
+
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs para o stderr."""
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
     sys.stderr.write(f"{raw_msg}\n")
     sys.stderr.flush()
+
 
 def extract() -> None:
     """Funcao principal de extracao."""
@@ -45,7 +47,9 @@ def extract() -> None:
     dsn = "dbprd"
 
     # Portabilidade: Utilizar caminhos dinamicos ou de ambiente
-    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
+    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get(
+        "ORACLE_CLIENT_PATH"
+    )
     tns_admin = os.environ.get("TNS_ADMIN")
 
     if not user or not password or not client_lib or not tns_admin:
@@ -115,7 +119,9 @@ def extract() -> None:
                 if not batch:
                     break
                 for row in batch:
-                    data.append({col: _clean_val(val) for col, val in zip(columns, row)})
+                    data.append(
+                        {col: _clean_val(val) for col, val in zip(columns, row)}
+                    )
 
             data_file = os.path.join(script_dir, f".data_{exec_id}.json")
             with open(data_file, "w", encoding="utf-8") as f:
@@ -144,6 +150,7 @@ def extract() -> None:
                     connection.close()
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
+
 
 if __name__ == "__main__":
     extract()

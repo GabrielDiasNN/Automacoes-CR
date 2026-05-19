@@ -35,6 +35,7 @@ engine = create_engine(
     pool_pre_ping=True,
 )
 
+
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     """Configura pragmas de seguranca e performance em cada conexao."""
@@ -44,8 +45,9 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA busy_timeout=5000")
     cursor.execute("PRAGMA cache_size=-8000")  # 8MB de cache
-    cursor.execute("PRAGMA temp_store=MEMORY") # Tabelas temporarias em RAM
+    cursor.execute("PRAGMA temp_store=MEMORY")  # Tabelas temporarias em RAM
     cursor.close()
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -127,6 +129,7 @@ SCHEMA_MIGRATIONS = {
     ],
 }
 
+
 def get_db():
     """Dependency injection do FastAPI - garante cleanup via finally."""
     db = SessionLocal()
@@ -134,6 +137,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 def validate_database_schema() -> dict:
     """Valida tabelas/colunas essenciais esperadas pelo Orchestrator atual."""
@@ -157,16 +161,20 @@ def validate_database_schema() -> dict:
         "missing_columns": missing_columns,
     }
 
+
 def get_schema_version() -> str:
     """Retorna a versao logica atual gravada no banco."""
     try:
         with engine.connect() as conn:
             row = conn.execute(
-                text("SELECT value FROM orchestrator_metadata WHERE key = 'schema_version'")
+                text(
+                    "SELECT value FROM orchestrator_metadata WHERE key = 'schema_version'"
+                )
             ).fetchone()
             return row[0] if row else "unknown"
     except Exception:
         return "unknown"
+
 
 def run_schema_migrations() -> dict:
     """Aplica migracoes leves compatíveis com SQLite antes da validacao final."""
@@ -175,17 +183,13 @@ def run_schema_migrations() -> dict:
         inspector = inspect(conn)
         existing_tables = set(inspector.get_table_names())
 
-        conn.execute(
-            text(
-                """
+        conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS orchestrator_metadata (
                     key VARCHAR(100) PRIMARY KEY,
                     value TEXT,
                     updated_at DATETIME
                 )
-                """
-            )
-        )
+                """))
         if "orchestrator_metadata" not in existing_tables:
             existing_tables.add("orchestrator_metadata")
 
@@ -198,19 +202,19 @@ def run_schema_migrations() -> dict:
             for column_name, ddl in columns:
                 if column_name in current_columns:
                     continue
-                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}"))
+                conn.execute(
+                    text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
+                )
                 applied.append(f"{table_name}.{column_name}")
 
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO orchestrator_metadata (key, value, updated_at)
                 VALUES ('schema_version', :value, :updated_at)
                 ON CONFLICT(key) DO UPDATE SET
                     value = excluded.value,
                     updated_at = excluded.updated_at
-                """
-            ),
+                """),
             {
                 "value": ORCHESTRATOR_SCHEMA_VERSION,
                 "updated_at": get_now_local(),
@@ -222,11 +226,13 @@ def run_schema_migrations() -> dict:
         "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
     }
 
+
 def get_db_size_mb() -> float:
     """Retorna o tamanho atual do banco em MB."""
     if os.path.exists(DB_PATH):
         return round(os.path.getsize(DB_PATH) / (1024 * 1024), 2)
     return 0.0
+
 
 def get_wal_size_mb() -> float:
     """Retorna o tamanho atual do WAL em MB (indicador de checkpoint pendente)."""
@@ -235,9 +241,11 @@ def get_wal_size_mb() -> float:
         return round(os.path.getsize(wal_path) / (1024 * 1024), 2)
     return 0.0
 
+
 # ---------------------------------------------------------------------------
 # Pilar E - Escala: WAL Checkpoint Automatico
 # ---------------------------------------------------------------------------
+
 
 def run_wal_checkpoint(mode: str = "PASSIVE") -> dict:
     """
@@ -266,9 +274,11 @@ def run_wal_checkpoint(mode: str = "PASSIVE") -> dict:
         logger.error(f"Falha no WAL checkpoint ({mode}): {e}")
         return {"mode": mode, "log": -1, "checkpointed": -1, "error": str(e)}
 
+
 # ---------------------------------------------------------------------------
 # Pilar G - Governanca: Purge de Execucoes Antigas
 # ---------------------------------------------------------------------------
+
 
 def purge_old_executions(retention_days: int = 90) -> int:
     """
@@ -296,7 +306,7 @@ def purge_old_executions(retention_days: int = 90) -> int:
         # Delete em massa via query direta para performance (Pilar E)
         query = db.query(_models.Execution).filter(
             _models.Execution.status.in_(terminal_statuses),
-            _models.Execution.finished_at < cutoff
+            _models.Execution.finished_at < cutoff,
         )
         removed = query.delete(synchronize_session=False)
         db.commit()

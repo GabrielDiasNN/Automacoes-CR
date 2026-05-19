@@ -38,7 +38,9 @@ def get_worker_status(db: Session) -> schemas.WorkerStatus:
     )
 
 
-def build_health_payload(db: Session, worker_status: schemas.WorkerStatus) -> schemas.SystemHealth:
+def build_health_payload(
+    db: Session, worker_status: schemas.WorkerStatus
+) -> schemas.SystemHealth:
     db_status = "online"
     try:
         db.execute(text("SELECT 1"))
@@ -46,7 +48,9 @@ def build_health_payload(db: Session, worker_status: schemas.WorkerStatus) -> sc
         db_status = f"erro: {str(exc)}"
 
     sched_status = "executando" if scheduler.running else "parado"
-    pending = db.query(models.Execution).filter(models.Execution.status == "PENDING").count()
+    pending = (
+        db.query(models.Execution).filter(models.Execution.status == "PENDING").count()
+    )
     overall = "healthy"
     if db_status != "online" or not scheduler.running:
         overall = "unhealthy"
@@ -82,7 +86,9 @@ def launch_orchestrator_recovery(project_root: str) -> str:
         base_name = os.path.splitext(script_name)[0].lower()
         stdout_log = os.path.join(log_dir, f"{base_name}_stdout.log")
         stderr_log = os.path.join(log_dir, f"{base_name}_stderr.log")
-        with open(stdout_log, "a", encoding="utf-8") as stdout, open(stderr_log, "a", encoding="utf-8") as stderr:
+        with open(stdout_log, "a", encoding="utf-8") as stdout, open(
+            stderr_log, "a", encoding="utf-8"
+        ) as stderr:
             subprocess.Popen(
                 [
                     "powershell.exe",
