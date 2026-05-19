@@ -26,6 +26,7 @@ Este roteiro mantém a direção escolhida: operação estável, fases pequenas 
 
 - Dashboard deve continuar clássico, denso e empresarial.
 - Migrar ações fixas da interface para registro controlado (`data-action`) sem quebrar IDs e handlers legados exigidos pela SPA.
+- Status: concluído no ciclo atual, incluindo paginação sem `onclick` inline e validação E2E sem cache.
 - Fluxos principais: executar, parar, reenfileirar, filtrar, abrir logs, recuperar worker, sincronizar agenda e executar checkpoint.
 - Playwright deve ser a última validação quando a UI ou contrato front-back mudar.
 

@@ -8,10 +8,11 @@
 ### Alterado
 - **Governança Agregada**: `Tools/ValidarAutomacoes.ps1 -OnlyGovernance` passa a executar o validador de evidência Playwright junto aos checks nativos.
 - **Runtime Compartilhado do Orchestrator**: scheduler, wake-up do worker, helpers de execução e criação base de jobs/executions foram extraídos para módulos comuns, reduzindo acoplamento entre `main.py`, routers e `worker.py`.
-- **Dashboard SPA**: botões estáticos críticos iniciaram migração de `onclick` para registro controlado via `data-action`, preservando compatibilidade com handlers legados dinâmicos.
+- **Dashboard SPA**: migração de ações para registro controlado via `data-action` avançou para ações dinâmicas e modais; paginação saiu de `onclick` inline para listeners explícitos em `ui_manager.js`.
 
 ### Testado
 - **Contrato de Payload**: testes de API e smoke agora validam `contract_version` nos endpoints agregados de sistema.
+- **E2E sem Cache**: Playwright validou fluxo real do dashboard em sessão nova, incluindo navegação entre abas e paginação de execuções com console limpo.
 
 ## [6.5.3] - 2026-05-18
 ### Adicionado

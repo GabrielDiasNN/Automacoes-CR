@@ -44,15 +44,16 @@ export function renderPagination(total, current, pages, containerId, callback) {
     }
     
     let html = `<span class="page-info">${total} registros</span><div class="page-controls">`;
-    html += `<button class="btn-page" ${current === 1 ? 'disabled' : ''} onclick="window.paginationCallback(${current - 1}, '${containerId}')">&lt;</button>`;
+    html += `<button class="btn-page" ${current === 1 ? "disabled" : ""} data-page="${current - 1}">&lt;</button>`;
     html += `<span class="page-current">${current} / ${pages}</span>`;
-    html += `<button class="btn-page" ${current === pages ? 'disabled' : ''} onclick="window.paginationCallback(${current + 1}, '${containerId}')">&gt;</button>`;
+    html += `<button class="btn-page" ${current === pages ? "disabled" : ""} data-page="${current + 1}">&gt;</button>`;
     html += `</div>`;
     
     container.innerHTML = html;
-    window[`cb_${containerId}`] = callback;
+    container.querySelectorAll(".btn-page[data-page]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const page = Number(button.dataset.page || 1);
+            callback(page);
+        });
+    });
 }
-
-window.paginationCallback = (page, containerId) => {
-    if (window[`cb_${containerId}`]) window[`cb_${containerId}`](page);
-};
