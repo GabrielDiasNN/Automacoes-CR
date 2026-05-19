@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.5.5] - 2026-05-19
+### Adicionado
+- **Fase 1 (Higiene do Repositório)**: Criado o arquivo `.env.example` com o mapeamento completo e seguro de todas as variáveis de ambiente necessárias para o deploy da aplicação.
+- **Fase 2 (Dependências Reproduzíveis)**: Criados os arquivos de especificação `requirements.in`, `requirements-dev.in` e `requirements-test.in`, gerando os respectivos lockfiles `requirements.txt`, `requirements-dev.txt` e `requirements-test.txt` através de `pip-compile`.
+
+### Alterado
+- **Higiene e Gitignore**: `.gitignore` v2.1.1 configurado para ignorar relatórios Playwright, coberturas, caches locais e artefatos de compressão, mantendo a permissão explícita para o versionamento dos lockfiles.
+- **Governança de Encoding**: `Tools/Test-SourceEncoding.ps1` ajustado para ignorar arquivos de estado runtime dinâmicos (`email_state.json`, `receitas_state.json`, `delivery_state.json`) do scanner de UTF-8 sem BOM, evitando falsos positivos no pre-commit causados pelo Orchestrator.
+
 ## [6.5.4] - 2026-05-18
 ### Adicionado
 - **Governança de Evidência Playwright**: Novo `Tools/Test-PlaywrightEvidence.ps1` valida padrão, template e evidências E2E, exigindo URL real do dashboard, Playwright como etapa final, console limpo e resultado aprovado.
