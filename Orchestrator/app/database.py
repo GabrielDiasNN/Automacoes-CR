@@ -64,6 +64,7 @@ EXPECTED_SCHEMA = {
         "max_retries",
         "cooldown_minutes",
         "queue_group",
+        "sla_minutes",
         "enabled",
         "test_mode",
         "notification_channels",
@@ -119,6 +120,7 @@ SCHEMA_MIGRATIONS = {
         ("max_retries", "INTEGER NOT NULL DEFAULT 0"),
         ("cooldown_minutes", "INTEGER NOT NULL DEFAULT 0"),
         ("queue_group", "VARCHAR(100)"),
+        ("sla_minutes", "INTEGER"),
     ],
     "executions": [
         ("retry_count", "INTEGER NOT NULL DEFAULT 0"),

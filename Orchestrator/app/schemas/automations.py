@@ -24,6 +24,7 @@ class AutomationBase(BaseModel):
     max_retries: int = Field(0, ge=0, le=10)
     cooldown_minutes: int = Field(0, ge=0, le=1440)
     queue_group: Optional[str] = Field(None, max_length=100)
+    sla_minutes: Optional[int] = Field(None, ge=1, le=10080, description="SLA de recuperação em minutos (1 minuto a 7 dias).")
     enabled: bool = True
     test_mode: bool = False
     notification_channels: Optional[str] = None
@@ -57,6 +58,7 @@ class AutomationUpdate(BaseModel):
     max_retries: Optional[int] = None
     cooldown_minutes: Optional[int] = None
     queue_group: Optional[str] = None
+    sla_minutes: Optional[int] = None
     enabled: Optional[bool] = None
     test_mode: Optional[bool] = None
     notification_channels: Optional[str] = None

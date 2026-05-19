@@ -1,5 +1,26 @@
 # Changelog
 
+## [7.0.0] - 2026-05-19
+### Adicionado
+- **Fase 10 (Documentação de Governança)**: Conclusão da Fase 10 com a criação de 4 documentos de governança técnica formalizando o ciclo completo de desenvolvimento e operação do Hub:
+  - `docs/development-workflow.md`: Fluxo de branches, convenção de commits semânticos PT-BR, ciclo de qualidade local (black/isort/pylint/mypy/pytest), uso de lockfiles, processo de criação de nova automação e gates obrigatórios antes do push.
+  - `docs/testing-strategy.md`: Mapa de cobertura por camada (unit/integration/e2e), suite completa de 65 testes, política de cobertura mínima de 60%, convenções de mock/fixtures e guia de adição de novos testes.
+  - `docs/security-policy.md`: Política formal de Zero Trust, mandatos de encoding (UTF-8 BOM para PS1), gestão de segredos, higienizador `sanitize_log_payload`, Gitleaks, autenticação do Dashboard, ciclo de rotação de credenciais e proteção de dados sensíveis.
+  - `docs/release-checklist.md`: Checklist completo de promoção de versão: gates de qualidade (tests/lint/governança/segurança), validação E2E Playwright, commit semântico de release, verificação pós-deploy e protocolo de rollback auditado.
+
+## [6.9.0] - 2026-05-19
+### Adicionado
+- **Fase 9 (Dashboard Operacional)**: Conclusão da Fase 9 com evolução significativa do Dashboard Operacional e da camada de dados:
+  - **SLA por Automação**: Adicionada coluna `sla_minutes` no modelo `Automation` com migração inline automática. Schemas Pydantic (`AutomationBase`, `AutomationUpdate`, `SystemOverviewAutomationCard`) atualizados para incluir `sla_minutes`, `sla_status` (ok/at_risk/violated/unknown) e `sla_avg_duration_minutes`.
+  - **Cálculo de SLA**: `system_overview.py` calcula o status de SLA de cada automação com base na duração média das execuções bem-sucedidas das últimas 24h vs. `sla_minutes` configurado (< 80% = ok, 80-100% = at_risk, > 100% = violated).
+  - **Painel de Fila por Prioridade**: Novo painel visual no Dashboard com contadores em tempo real de execuções por prioridade (HIGH/NORMAL/LOW), alimentado pelos dados já existentes em `DiagnosticsQueue.active_by_priority`.
+  - **Score de Saúde Consolidado**: Widget de score (0-100) calculado dinamicamente a partir de achados de diagnóstico (findings CRITICAL/WARN) e violações de SLA, exibido ao lado do painel de fila.
+  - **Modo Operador**: Toggle `⚙ Modo Operador` no Dashboard que, quando ativado, exibe botões avançados por linha (⏸ Pausar, ▶ Retomar, 📋 Clonar) e botões globais (⏸ Pausar Todas, ▶ Retomar Todas). Todos os botões chamam os endpoints FastAPI já existentes.
+  - **Badge de SLA**: Coluna SLA na tabela de automações com badge colorido (✅ OK / ⚠️ Risco / 🔴 Violado / ➖ N/A) e tooltip com duração média vs. SLA configurado.
+  - **Badge de Grupo Operacional**: Coluna Grupo exibindo o `queue_group` de cada automação como badge na tabela.
+  - **Fila com `active_by_priority`**: `SystemOverviewQueue` enriquecido com `active_by_priority` propagado do `DiagnosticsQueue`.
+- **Validação**: Suite pytest **65/65 testes verdes** após migração de schema e alterações de backend.
+
 ## [6.8.0] - 2026-05-19
 ### Adicionado
 - **Fase 8 (Runbooks Operacionais & SLAs)**: Conclusão da Fase 8 focada na padronização documental e governança operacional de incidentes:

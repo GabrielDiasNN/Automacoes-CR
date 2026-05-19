@@ -674,6 +674,120 @@
                 font-size: var(--fs-sm);
             }
         }
+
+        /* -- Fila por Prioridade -- */
+        .queue-panel {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+        }
+
+        .queue-tile {
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            text-align: center;
+            border: 2px solid transparent;
+        }
+
+        .queue-tile .qt-count {
+            font-size: 2rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .queue-tile .qt-label {
+            font-size: var(--fs-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 4px;
+            opacity: 0.85;
+        }
+
+        .queue-tile.high {
+            background: var(--err-bg);
+            border-color: var(--err-border);
+            color: var(--err);
+        }
+
+        .queue-tile.normal {
+            background: var(--run-bg);
+            border-color: var(--run-border);
+            color: var(--run);
+        }
+
+        .queue-tile.low {
+            background: var(--off-bg);
+            border-color: var(--off-border);
+            color: var(--off);
+        }
+
+        /* -- Toggle Modo Operador -- */
+        #operator-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: none;
+            border: 2px solid var(--warn-border);
+            border-radius: var(--radius-sm);
+            padding: 6px 14px;
+            font-size: var(--fs-xs);
+            font-weight: 700;
+            cursor: pointer;
+            color: var(--warn);
+            background: var(--warn-bg);
+            transition: background 0.16s ease, border-color 0.16s ease;
+        }
+
+        #operator-toggle.active {
+            background: var(--warn);
+            color: #fff;
+            border-color: var(--warn);
+        }
+
+        .operator-mode-btn {
+            display: none;
+        }
+
+        body.operator-mode .operator-mode-btn {
+            display: inline-block;
+        }
+
+        /* -- SLA Badge -- */
+        .badge.sla-ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-bg); }
+        .badge.sla-risk { color: var(--warn); border-color: var(--warn-border); background: var(--warn-bg); }
+        .badge.sla-violated { color: var(--err); border-color: var(--err-border); background: var(--err-bg); }
+        .badge.sla-unknown { color: var(--off); border-color: var(--off-border); background: var(--off-bg); }
+
+        /* -- Score de Saúde -- */
+        .health-score {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-sm) 0;
+            border-top: 1px solid var(--line);
+            margin-top: var(--space-sm);
+        }
+
+        .score-ring {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            font-weight: 800;
+            border: 4px solid var(--ok-border);
+            color: var(--ok);
+            flex-shrink: 0;
+        }
+
+        .score-ring.degraded { border-color: var(--warn-border); color: var(--warn); }
+        .score-ring.critical { border-color: var(--err-border); color: var(--err); }
+
+        .score-meta { font-size: var(--fs-sm); color: var(--text-secondary); }
+        .score-meta strong { display: block; font-size: var(--fs-base); color: var(--text); }
     </style>
 </head>
 
@@ -719,6 +833,11 @@
                             aria-label="Configurar intervalo de atualização do painel">Alterar refresh</button>
                         <button class="btn warn" data-global-op="dry-run-all"
                             aria-label="Executar dry run global das automações">Dry Run geral</button>
+                        <button class="btn operator-mode-btn" data-global-op="pause-all"
+                            aria-label="Pausar todas as automações">⏸ Pausar Todas</button>
+                        <button class="btn primary operator-mode-btn" data-global-op="resume-all"
+                            aria-label="Retomar todas as automações">▶ Retomar Todas</button>
+                        <button id="operator-toggle" aria-pressed="false" aria-label="Ativar modo operador">⚙ Modo Operador</button>
                     </div>
                 </div>
                 <div>
@@ -736,6 +855,18 @@
             </section>
         </div>
 
+        <!-- Painel de Fila por Prioridade + Score de Saúde -->
+        <section class="card" aria-labelledby="queue-title" style="margin-bottom: var(--space-md);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h2 id="queue-title" style="margin:0;">Fila Operacional por Prioridade</h2>
+                <div id="health-score-widget" class="health-score" style="margin:0; padding:0; border:none;"></div>
+            </div>
+            <div class="queue-panel" id="queue-priority-panel">
+                <div class="queue-tile high"><div class="qt-count" id="queue-high">0</div><div class="qt-label">🚨 Alta Prioridade</div></div>
+                <div class="queue-tile normal"><div class="qt-count" id="queue-normal">0</div><div class="qt-label">🔵 Normal</div></div>
+                <div class="queue-tile low"><div class="qt-count" id="queue-low">0</div><div class="qt-label">⚪ Baixa</div></div>
+            </div>
+        </section>
         <section class="card" aria-labelledby="tasks-title">
             <h2 id="tasks-title">Automações</h2>
             <div class="filters-row" style="display:flex; flex-wrap:wrap; gap:var(--space-md); align-items:flex-end; margin-bottom:12px;">
@@ -759,6 +890,8 @@
                         <tr>
                             <th>Nome</th>
                             <th>Status</th>
+                            <th>SLA</th>
+                            <th>Grupo</th>
                             <th>Agendamento</th>
                             <th class="r">Exit</th>
                             <th>Última</th>
@@ -1070,7 +1203,7 @@
                 var tbody = document.getElementById('tasks-body');
 
                 if (tasks.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automação configurada.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Nenhuma automação configurada.</td></tr>';
                     return;
                 }
 
@@ -1082,9 +1215,15 @@
                 });
 
                 if (filtered.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma automação corresponde aos filtros.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Nenhuma automação corresponde aos filtros.</td></tr>';
                     return;
                 }
+
+                var ovAutomations = ((state.overview || {}).automations) || [];
+                var slaMap = {};
+                ovAutomations.forEach(function(a) {
+                    slaMap[a.name] = a;
+                });
 
                 var rows = filtered.map(function (task) {
                     var st = getTaskStatus(task);
@@ -1109,9 +1248,36 @@
                             '</div>';
                     }
 
+                    // Badge SLA
+                    var slaInfo = slaMap[task.name] || {};
+                    var slaHtml = '–';
+                    if (slaInfo.sla_minutes) {
+                        var slaStatusMap = { ok: 'sla-ok', at_risk: 'sla-risk', violated: 'sla-violated', unknown: 'sla-unknown' };
+                        var slaLabelMap = { ok: '✅ OK', at_risk: '⚠️ Risco', violated: '🔴 Violado', unknown: '➖ N/A' };
+                        var slaKey = slaInfo.sla_status || 'unknown';
+                        var slaTip = slaInfo.sla_avg_duration_minutes
+                            ? (' (média: ' + slaInfo.sla_avg_duration_minutes + 'min / SLA: ' + slaInfo.sla_minutes + 'min)')
+                            : (' (SLA: ' + slaInfo.sla_minutes + 'min)')
+                        slaHtml = '<span class="badge ' + (slaStatusMap[slaKey] || 'sla-unknown') + '" title="' + escapeHtml(slaTip) + '">' + (slaLabelMap[slaKey] || '➖') + '</span>';
+                    }
+
+                    // Badge Grupo Operacional
+                    var groupHtml = slaInfo.queue_group
+                        ? '<span class="badge off" style="font-size:0.7rem;">' + escapeHtml(slaInfo.queue_group) + '</span>'
+                        : '<span style="color:var(--muted); font-size:var(--fs-xs)">–</span>';
+
+                    // Botões do Modo Operador
+                    var pauseBtn = task.enabled
+                        ? '<button class="btn warn operator-mode-btn task-op" data-action="pause-automation" data-task="' + tn + '" aria-label="Pausar ' + tn + '">⏸ Pausar</button>'
+                        : '<button class="btn primary operator-mode-btn task-op" data-action="resume-automation" data-task="' + tn + '" aria-label="Retomar ' + tn + '">▶ Retomar</button>';
+
+                    var cloneBtn = '<button class="btn operator-mode-btn task-op" data-action="clone-automation" data-task="' + tn + '" aria-label="Clonar ' + tn + '">📋 Clonar</button>';
+
                     return '<tr>' +
                         '<td>' + tn + progressHtml + '</td>' +
                         '<td><span class="badge ' + st.badgeClass + '">' + st.text + '</span></td>' +
+                        '<td>' + slaHtml + '</td>' +
+                        '<td>' + groupHtml + '</td>' +
                         '<td class="mono">' + escapeHtml(task.scheduleText || '–') + '</td>' +
                         '<td class="r">' + st.exitText + '</td>' +
                         '<td>' + lastText + '</td>' +
@@ -1121,6 +1287,8 @@
                         '<button class="btn primary task-op" data-action="run-now" data-task="' + tn + '" aria-label="Executar agora ' + tn + '">Executar</button>' +
                         '<button class="btn warn task-op" data-action="dry-run" data-task="' + tn + '" aria-label="Dry run de ' + tn + '">Dry Run</button>' +
                         '<button class="btn ' + toggleClass + ' task-op" data-action="toggle-enabled" data-task="' + tn + '" aria-label="Alterar estado de ' + tn + '">' + toggleLabel + '</button>' +
+                        pauseBtn +
+                        cloneBtn +
                         '<button class="btn task-op" data-action="open-logs" data-task="' + tn + '" aria-label="Abrir logs de ' + tn + '">Logs</button>' +
                         '<button class="btn task-op" data-action="set-schedule" data-task="' + tn + '" aria-label="Editar agenda de ' + tn + '">Agenda</button>' +
                         '</div></td>' +
@@ -1238,6 +1406,51 @@
                 }
             }
 
+            /* --- Fila por Prioridade e Score de Saúde --- */
+            function renderQueuePanel() {
+                var ov = state.overview || {};
+                var queue = ov.queue || {};
+                var byPriority = queue.active_by_priority || {};
+                document.getElementById('queue-high').textContent = String(byPriority['HIGH'] || 0);
+                document.getElementById('queue-normal').textContent = String(byPriority['NORMAL'] || 0);
+                document.getElementById('queue-low').textContent = String(byPriority['LOW'] || 0);
+            }
+
+            function renderHealthScore() {
+                var ov = state.overview || {};
+                var diagnostics = ov.diagnostics || {};
+                var findings = diagnostics.findings || [];
+                var critCount = findings.filter(function(f) { return f.severity === 'CRITICAL'; }).length;
+                var warnCount = findings.filter(function(f) { return f.severity === 'WARN'; }).length;
+                var score = Math.max(0, 100 - (critCount * 25) - (warnCount * 10));
+
+                var automations = ov.automations || [];
+                var violated = automations.filter(function(a) { return a.sla_status === 'violated'; }).length;
+                var atRisk = automations.filter(function(a) { return a.sla_status === 'at_risk'; }).length;
+                score = Math.max(0, score - (violated * 15) - (atRisk * 5));
+
+                var ringClass = score >= 75 ? '' : (score >= 50 ? 'degraded' : 'critical');
+                var label = score >= 75 ? 'Saudável' : (score >= 50 ? 'Degradado' : 'Crítico');
+                var widget = document.getElementById('health-score-widget');
+                if (!widget) return;
+                widget.innerHTML =
+                    '<div class="score-ring ' + ringClass + '">' + score + '</div>' +
+                    '<div class="score-meta"><strong>Score de Saúde</strong>' +
+                    label + (violated ? ' • ' + violated + ' SLA violado(s)' : '') +
+                    (atRisk ? ' • ' + atRisk + ' em risco' : '') +
+                    '</div>';
+            }
+
+            /* --- Modo Operador Toggle --- */
+            var operatorToggle = document.getElementById('operator-toggle');
+            operatorToggle.addEventListener('click', function () {
+                var isActive = document.body.classList.toggle('operator-mode');
+                operatorToggle.classList.toggle('active', isActive);
+                operatorToggle.setAttribute('aria-pressed', String(isActive));
+                operatorToggle.textContent = isActive ? '❌ Modo Operador Ativo' : '⚙ Modo Operador';
+                renderTasks();
+            });
+
             document.getElementById('task-search').addEventListener('input', function(ev) {
                 currentSearch = ev.target.value;
                 renderTasks();
@@ -1319,6 +1532,73 @@
                 }
             });
 
+            /* --- Handlers para operações de Modo Operador via API FastAPI --- */
+            document.addEventListener('click', function(ev) {
+                var btn = ev.target.closest('.task-op[data-action]');
+                if (!btn) return;
+                var action = btn.getAttribute('data-action');
+                var taskName = btn.getAttribute('data-task');
+
+                if (action === 'pause-automation') {
+                    setButtonLoading(btn, true);
+                    fetch(API_BASE + '/api/automations/' + encodeURIComponent(taskName) + '/pause', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Monitor-Token': API_TOKEN }
+                    }).then(function(r) { return r.json(); }).then(function(r) {
+                        setButtonLoading(btn, false);
+                        setStatus('⏸ Automação pausada: ' + taskName, 'ok');
+                    }).catch(function(e) { setButtonLoading(btn, false); setStatus('Falha ao pausar: ' + e.message, 'err'); });
+                    return;
+                }
+
+                if (action === 'resume-automation') {
+                    setButtonLoading(btn, true);
+                    fetch(API_BASE + '/api/automations/' + encodeURIComponent(taskName) + '/resume', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Monitor-Token': API_TOKEN }
+                    }).then(function(r) { return r.json(); }).then(function(r) {
+                        setButtonLoading(btn, false);
+                        setStatus('▶ Automação retomada: ' + taskName, 'ok');
+                    }).catch(function(e) { setButtonLoading(btn, false); setStatus('Falha ao retomar: ' + e.message, 'err'); });
+                    return;
+                }
+
+                if (action === 'clone-automation') {
+                    setButtonLoading(btn, true);
+                    fetch(API_BASE + '/api/automations/' + encodeURIComponent(taskName) + '/clone', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Monitor-Token': API_TOKEN }
+                    }).then(function(r) { return r.json(); }).then(function(r) {
+                        setButtonLoading(btn, false);
+                        setStatus('📋 Automação clonada com sucesso!', 'ok');
+                    }).catch(function(e) { setButtonLoading(btn, false); setStatus('Falha ao clonar: ' + e.message, 'err'); });
+                    return;
+                }
+            });
+
+            /* --- Handlers de ações globais para pause-all e resume-all --- */
+            document.addEventListener('click', function(ev) {
+                var gBtn = ev.target.closest('[data-global-op="pause-all"]');
+                if (gBtn) {
+                    setButtonLoading(gBtn, true);
+                    fetch(API_BASE + '/api/automations/control/pause-all', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Monitor-Token': API_TOKEN }
+                    }).then(function(r) { return r.json(); }).then(function() {
+                        setButtonLoading(gBtn, false);
+                        setStatus('⏸ Todas as automações pausadas.', 'ok');
+                    }).catch(function(e) { setButtonLoading(gBtn, false); setStatus('Erro: ' + e.message, 'err'); });
+                    return;
+                }
+                var rBtn = ev.target.closest('[data-global-op="resume-all"]');
+                if (rBtn) {
+                    setButtonLoading(rBtn, true);
+                    fetch(API_BASE + '/api/automations/control/resume-all', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Monitor-Token': API_TOKEN }
+                    }).then(function(r) { return r.json(); }).then(function() {
+                        setButtonLoading(rBtn, false);
+                        setStatus('▶ Todas as automações retomadas.', 'ok');
+                    }).catch(function(e) { setButtonLoading(rBtn, false); setStatus('Erro: ' + e.message, 'err'); });
+                    return;
+                }
+            });
+
             /* --- Initial render --- */
             document.getElementById('header-meta').textContent =
                 'Versão ' + (state.monitorVersion || '–') +
@@ -1339,6 +1619,8 @@
             renderHistory();
             renderTasks('all');
             renderConfigs();
+            renderQueuePanel();
+            renderHealthScore();
         })();
     </script>
 </body>

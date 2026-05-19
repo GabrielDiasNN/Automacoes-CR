@@ -112,12 +112,45 @@ def build_system_overview_payload(
             .order_by(desc(models.Execution.started_at))
             .first()
         )
+
+        # --- Cálculo de SLA ---
+        sla_minutes = auto.sla_minutes
+        sla_status = "unknown"
+        sla_avg_duration_minutes: float | None = None
+        if sla_minutes:
+            avg_row = (
+                db.query(func.avg(models.Execution.duration_seconds))
+                .filter(
+                    models.Execution.automation_id == auto_id,
+                    models.Execution.status == "SUCCESS",
+                    models.Execution.started_at >= window_start,
+                    models.Execution.duration_seconds.isnot(None),
+                )
+                .scalar()
+            )
+            if avg_row is not None:
+                avg_min = float(avg_row) / 60.0
+                sla_avg_duration_minutes = round(avg_min, 2)
+                ratio = avg_min / sla_minutes
+                if ratio <= 0.80:
+                    sla_status = "ok"
+                elif ratio <= 1.0:
+                    sla_status = "at_risk"
+                else:
+                    sla_status = "violated"
+            else:
+                sla_status = "ok"  # sem execuções recentes = sem violação
+
         autos_payload.append(
             {
                 "id": auto_id,
                 "name": auto.name,
                 "enabled": auto.enabled,
                 "test_mode": auto.test_mode,
+                "queue_group": auto.queue_group,
+                "sla_minutes": sla_minutes,
+                "sla_status": sla_status,
+                "sla_avg_duration_minutes": sla_avg_duration_minutes,
                 "last_status": last_exec.status if last_exec else None,
                 "next_run": schemas.format_dt_br(next_run_lookup.get(auto_id)),
             }
@@ -155,6 +188,9 @@ def build_system_overview_payload(
         "queue": {
             "active_count": pending_now,
             "by_status": status_breakdown,
+            "active_by_priority": (
+                diagnostics_payload.get("queue", {}).get("active_by_priority", {})
+            ),
         },
         "diagnostics": diagnostics_payload,
     }

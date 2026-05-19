@@ -40,6 +40,7 @@ class Automation(Base):
     max_runtime_minutes = Column(Integer, default=30)
     max_retries = Column(Integer, default=0)
     cooldown_minutes = Column(Integer, default=0)
+    sla_minutes = Column(Integer, nullable=True)  # SLA de recuperação esperado em minutos
     queue_group = Column(String(100), nullable=True)
     enabled = Column(Boolean, default=True)
     test_mode = Column(Boolean, default=False)

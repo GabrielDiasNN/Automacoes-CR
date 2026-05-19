@@ -259,6 +259,7 @@ class SystemOverviewScheduler(BaseModel):
 class SystemOverviewQueue(BaseModel):
     active_count: int
     by_status: dict[str, int]
+    active_by_priority: dict[str, int] = {}
 
 
 class SystemOverviewAutomationCard(BaseModel):
@@ -266,6 +267,10 @@ class SystemOverviewAutomationCard(BaseModel):
     name: str
     enabled: bool
     test_mode: bool
+    queue_group: Optional[str] = None
+    sla_minutes: Optional[int] = None
+    sla_status: str = "unknown"  # ok | at_risk | violated | unknown
+    sla_avg_duration_minutes: Optional[float] = None
     last_status: Optional[str] = None
     next_run: Optional[str] = None
 
