@@ -4,10 +4,16 @@
 ### Adicionado
 - **Fase 1 (Higiene do Repositório)**: Criado o arquivo `.env.example` com o mapeamento completo e seguro de todas as variáveis de ambiente necessárias para o deploy da aplicação.
 - **Fase 2 (Dependências Reproduzíveis)**: Criados os arquivos de especificação `requirements.in`, `requirements-dev.in` e `requirements-test.in`, gerando os respectivos lockfiles `requirements.txt`, `requirements-dev.txt` e `requirements-test.txt` através de `pip-compile`.
+- **Fase 3 (CI Obrigatório & Gitleaks)**: Integrado job Gitleaks Security Scan oficial usando a action oficial no GitHub Actions (`gitleaks/gitleaks-action@v8`) para verificação automática de vazamento de segredos.
 
 ### Alterado
 - **Higiene e Gitignore**: `.gitignore` v2.1.1 configurado para ignorar relatórios Playwright, coberturas, caches locais e artefatos de compressão, mantendo a permissão explícita para o versionamento dos lockfiles.
 - **Governança de Encoding**: `Tools/Test-SourceEncoding.ps1` ajustado para ignorar arquivos de estado runtime dinâmicos (`email_state.json`, `receitas_state.json`, `delivery_state.json`) do scanner de UTF-8 sem BOM, evitando falsos positivos no pre-commit causados pelo Orchestrator.
+- **CI / GitHub Actions**: Atualizado o job de governança do workflow `.github/workflows/governanca.yml` para usar setup-python com cache de pip, instalar dependências a partir dos lockfiles compilados de dev/test/runtime, e validar a conformidade de estilo de código via Black e Isort de forma contínua.
+- **Estilo de Código (Python Lint & Formatter)**: Formatados 30 arquivos Python em todo o ecossistema com Black e ordenados os imports com Isort para consolidação de padrões estéticos homogêneos e eliminação de drifts de código.
+
+### Testado
+- **Validação Local e Unitária**: Execução bem-sucedida do pytest (48 testes passando) e governança local agregada via `ValidarAutomacoes.ps1` pós-formatação de imports e estilo Python.
 
 ## [6.5.4] - 2026-05-18
 ### Adicionado
