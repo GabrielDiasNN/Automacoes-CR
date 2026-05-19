@@ -1,6 +1,6 @@
 # Mapa de Cobertura de Testes (Test Coverage Map)
 
-Este documento mapeia os módulos críticos do backend do **Orquestrador (FastAPI & SQLite)**, identificando as suites de teste correspondentes, os cenários cobertos e as lacunas (gaps) que foram mitigados na **Fase 5**.
+Este documento mapeia os módulos críticos do backend do **Orquestrador (FastAPI & SQLite)**, identificando as suites de teste correspondentes, os cenários cobertos e as lacunas (gaps).
 
 ---
 
@@ -18,7 +18,7 @@ O quadro abaixo descreve a cobertura dos módulos prioritários de runtime do pr
 
 ---
 
-## 🎯 Gaps Mitigados na Fase 5
+## 🎯 Gaps Mitigados
 
 ### 1. Regras de Fila (`queue_group`)
 *   **Gap anterior:** Requeues manuais podiam ignorar a concorrência por grupo ativo.

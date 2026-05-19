@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.6.0] - 2026-05-19
+### Adicionado
+- **Fase 6 (Segurança)**: Conclusão da Fase 6 focada em segurança, varredura de vazamentos e higienização robusta de logs e payloads:
+  - `Orchestrator/app/security.py`: Implementado o higienizador de alto desempenho `sanitize_log_payload` com suporte a strings, dicionários e listas recursivos. Ele mascara chaves sensíveis como `api_key`, `password`, `senha`, `token`, `jwt`, `secret_key` para `********`, oculta senhas em conexões `oracle://` ou `http://` e mascara CPFs e CNPJs formatados.
+  - `Orchestrator/tests/test_sanitization.py`: Criada a suite com 6 novos testes unitários testando todos os casos de mascaramento de URLs, chaves, dicionários e listas recursivas (todos verdes).
+  - **Integração no Core**: O higienizador foi integrado no core do runtime de logs (`execution_runtime.py`) e na rota de telemetria externa (`telemetry_end`), prevenindo vazamento físico de credenciais para o banco de dados.
+  - **Gitleaks CI**: Homologada a integração do scanner oficial de segurança no GitHub Actions com `gitleaks-action@v8` para auditoria estática contra vazamento de segredos em cada push/PR.
+  - **Base Ampliada**: Elevada a suite do Pytest para **65 testes unitários e de integração 100% verdes**.
+
 ## [6.5.7] - 2026-05-19
 ### Adicionado
 - **Fase 5 (Testes Automatizados)**: Criadas e homologadas suites de testes robustas e resilientes, elevando a base histórica de 48 testes para **59 testes** unitários e de integração 100% verdes:

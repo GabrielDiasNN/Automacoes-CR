@@ -33,6 +33,7 @@ from ..constants import (
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
+from ..security import sanitize_log_payload
 from ..services.execution_runtime import (
     build_queued_execution,
     generate_execution_id,
@@ -549,7 +550,7 @@ def telemetry_end(
     if payload.exit_code is not None:
         db_exec.exit_code = payload.exit_code
     if payload.logs is not None:
-        db_exec.logs = payload.logs
+        db_exec.logs = sanitize_log_payload(payload.logs)
     if payload.artifacts is not None:
         db_exec.artifacts = payload.artifacts
 
