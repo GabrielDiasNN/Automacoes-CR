@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.5.6] - 2026-05-19
+### Adicionado
+- **Fase 4 (Métricas de Qualidade)**: Criado o script local robusto `Tools/Get-QualitySnapshot.ps1` (UTF-8 com BOM) para coleta totalmente automatizada e síncrona de tamanho de repositório, contagem de arquivos, cobertura de testes (Pytest), score de estilo do Pylint, erros do Mypy e conformidade agregada da governança nativa.
+- **Fase 4 (Quality Dashboard)**: Criado o documento centralizador `docs/quality-dashboard.md` consolidando as métricas obtidas e definindo as metas estabelecidas na governança técnica.
+
+### Alterado
+- **Cálculo de Tamanho Real**: O script de snapshot foi ajustado para ignorar os gigas e megabytes gerados pelas sessões temporárias do WhatsApp (`lib/.wwebjs_auth/`) no cálculo de arquivos grandes e tamanho total do repositório, refletindo de forma real a baseline do git clone (caindo de 368 MB para **96.97 MB**).
+- **Validação Síncrona da Governança**: Substituída a chamada concorrente em background por uma execução síncrona e nativa via `$LASTEXITCODE`, garantindo que o status consolidado de governança do snapshot reflita com precisão o estado real do ecossistema.
+
 ## [6.5.5] - 2026-05-19
 ### Adicionado
 - **Fase 1 (Higiene do Repositório)**: Criado o arquivo `.env.example` com o mapeamento completo e seguro de todas as variáveis de ambiente necessárias para o deploy da aplicação.
