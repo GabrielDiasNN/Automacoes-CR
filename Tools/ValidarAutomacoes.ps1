@@ -72,6 +72,17 @@ $globalResult = 0
 if (-not $SkipGovernance) {
     $res = Invoke-NativeGovernanceCheck -RootPath $BasePath
     if ($res -ne 0) { $globalResult = 1 }
+
+    # Executa a suite de testes Python de forma integrada ao Quality Gate
+    Write-Host "`n=== Testes Automatizados (pytest + Playwright E2E) ===" -ForegroundColor Cyan
+    $env:PYTHONPATH = "Orchestrator"
+    & .venv\Scripts\pytest -v | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[FALHA] Suite de testes pytest falhou ou retornou erros de integridade." -ForegroundColor Red
+        $globalResult = 1
+    } else {
+        Write-Host "[OK] Suite de testes pytest executada com 100% de sucesso." -ForegroundColor Green
+    }
 }
 
 if (-not $SkipSkillsGovernance) {

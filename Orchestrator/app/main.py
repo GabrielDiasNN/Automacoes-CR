@@ -71,7 +71,11 @@ log_dir = os.path.join(
 )
 os.makedirs(log_dir, exist_ok=True)
 
-LOG_FILE = os.path.join(log_dir, "orchestrator.jsonl")
+import sys
+is_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+log_filename = "orchestrator_test.jsonl" if is_pytest else "orchestrator.jsonl"
+LOG_FILE = os.path.join(log_dir, log_filename)
+
 handler = RotatingFileHandler(
     LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
@@ -114,11 +118,10 @@ async def lifespan(app: FastAPI):
 
     run_wal_checkpoint("TRUNCATE")
 
-    models.Base.metadata.create_all(bind=engine)
     migration_result = run_schema_migrations()
-    if migration_result["applied"]:
+    if migration_result.get("applied"):
         logger.info(
-            "Migracoes de schema aplicadas: %s",
+            "Migracoes estruturadas do Alembic aplicadas com sucesso: %s",
             ", ".join(migration_result["applied"]),
         )
     schema_status = validate_database_schema()

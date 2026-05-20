@@ -73,7 +73,30 @@ def _validate_schedule(v: Optional[str]) -> Optional[str]:
     if not isinstance(obj, dict):
         raise ValueError("Schedule deve ser um objeto JSON.")
 
-    normalized = normalize_schedule_payload(obj)
+    normalized = normalize_schedule_payload(obj, strict=True)
+    return json.dumps(normalized, separators=(",", ":"))
+
+
+def _validate_schedule_tolerant(v: Optional[str]) -> Optional[str]:
+    if not v:
+        return None
+    try:
+        obj = json.loads(v.replace("'", '"'))
+    except Exception:
+        return json.dumps({
+            "schedule_version": 2,
+            "schedule_type": "manual",
+            "timezone": "America/Sao_Paulo"
+        }, separators=(",", ":"))
+
+    if not isinstance(obj, dict):
+        return json.dumps({
+            "schedule_version": 2,
+            "schedule_type": "manual",
+            "timezone": "America/Sao_Paulo"
+        }, separators=(",", ":"))
+
+    normalized = normalize_schedule_payload(obj, strict=False)
     return json.dumps(normalized, separators=(",", ":"))
 
 
@@ -118,41 +141,96 @@ def _ui_day_to_python_weekday(day: int) -> int:
     return (day + 6) % 7
 
 
-def normalize_schedule_payload(obj: dict) -> dict:
+def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
+    import logging
+    logger = logging.getLogger("orchestrator.schemas")
+
     if not isinstance(obj, dict):
-        raise ValueError("Schedule deve ser um objeto JSON.")
+        if strict:
+            raise ValueError("Schedule deve ser um objeto JSON.")
+        logger.warning("Schedule inválido recebido (esperava dict, recebeu %s). Aplicando fallback manual.", type(obj).__name__)
+        return {
+            "schedule_version": 2,
+            "schedule_type": "manual",
+            "timezone": "America/Sao_Paulo"
+        }
+
     # Legado: daysOfWeek + times/hours/minutes
     if "schedule_type" not in obj and "scheduleType" not in obj:
-        days = _normalize_days(obj.get("daysOfWeek", []))
+        try:
+            days = _normalize_days(obj.get("daysOfWeek", []))
+        except Exception as e:
+            if strict:
+                raise
+            logger.warning("Erro na validação do daysOfWeek legado: %s. Aplicando fallback de todos os dias.", str(e))
+            days = [1, 2, 3, 4, 5]
+
         times = obj.get("times")
         if times is not None:
-            norm_times = _normalized_time_list(times)
+            try:
+                norm_times = _normalized_time_list(times)
+            except Exception as e:
+                if strict:
+                    raise
+                logger.warning("Erro na validação do times legado: %s. Aplicando fallback de horário (08:00).", str(e))
+                norm_times = [{"h": 8, "m": 0}]
         else:
             hours = obj.get("hours", [])
             minutes = obj.get("minutes", [0])
+            
+            # Fallbacks preventivos se as listas vierem vazias
+            if not hours:
+                if strict:
+                    raise ValueError("times deve conter ao menos um horário válido.")
+                logger.warning("Lista de 'hours' vazia recebida na agenda legada. Aplicando fallback de hora 08:00.")
+                hours = [8]
+            if not minutes:
+                if strict:
+                    raise ValueError("times deve conter ao menos um horário válido.")
+                logger.warning("Lista de 'minutes' vazia recebida na agenda legada. Aplicando fallback de minuto 0.")
+                minutes = [0]
+
             if not isinstance(hours, list) or not isinstance(minutes, list):
-                raise ValueError("hours e minutes devem ser listas.")
+                if strict:
+                    raise ValueError("hours e minutes devem ser listas.")
+                hours = [8] if not isinstance(hours, list) else hours
+                minutes = [0] if not isinstance(minutes, list) else minutes
+
             raw_times = []
             for hour in hours:
                 for minute in minutes:
                     raw_times.append({"h": hour, "m": minute})
-            norm_times = _normalized_time_list(raw_times)
+            try:
+                norm_times = _normalized_time_list(raw_times)
+            except Exception as e:
+                if strict:
+                    raise
+                logger.warning("Erro ao normalizar horários legados: %s. Usando fallback de horário 08:00.", str(e))
+                norm_times = [{"h": 8, "m": 0}]
+
         if not norm_times:
-            raise ValueError("times deve conter ao menos um horário válido.")
+            if strict:
+                raise ValueError("times deve conter ao menos um horário válido.")
+            logger.warning("Nenhum horário válido gerado na agenda legada. Aplicando fallback de horário 08:00.")
+            norm_times = [{"h": 8, "m": 0}]
+
         return {
             "schedule_version": 2,
             "schedule_type": "weekly",
             "timezone": "America/Sao_Paulo",
-            "days_of_week": days,
+            "days_of_week": days if days else [1, 2, 3, 4, 5],
             "times": norm_times,
         }
 
     schedule_type = (
         str(obj.get("schedule_type") or obj.get("scheduleType") or "").lower().strip()
     )
-    valid_types = {"manual", "daily", "weekly", "monthly", "interval", "once"}
+    valid_types = {"manual", "daily", "weekly", "monthly", "interval", "once", "cron"}
     if schedule_type not in valid_types:
-        raise ValueError("schedule_type inválido.")
+        if strict:
+            raise ValueError("schedule_type inválido.")
+        logger.warning("schedule_type '%s' inválido. Aplicando fallback para 'manual'.", schedule_type)
+        schedule_type = "manual"
 
     timezone_name = str(obj.get("timezone") or "America/Sao_Paulo")
     base = {
@@ -163,39 +241,117 @@ def normalize_schedule_payload(obj: dict) -> dict:
 
     if schedule_type == "manual":
         return base
+    if schedule_type == "cron":
+        expr = obj.get("cron_expression")
+        if not isinstance(expr, str) or not expr.strip():
+            if strict:
+                raise ValueError("cron_expression é obrigatório para schedule_type=cron.")
+            logger.warning("cron_expression ausente ou inválida para cadência cron. Usando fallback.")
+            expr = "0 8 * * 1-5"
+        base["cron_expression"] = expr.strip()
+        return base
     if schedule_type == "interval":
         val = obj.get("interval_minutes")
         if not isinstance(val, int) or val < 1 or val > 1440:
-            raise ValueError("interval_minutes deve estar entre 1 e 1440.")
+            if strict:
+                raise ValueError("interval_minutes deve estar entre 1 e 1440.")
+            logger.warning("interval_minutes '%s' inválido. Usando fallback de 60 minutos.", val)
+            val = 60
         base["interval_minutes"] = val
+
+        # Novas propriedades de restrição de janela
+        start_t = obj.get("start_time")
+        if start_t:
+            if not isinstance(start_t, str) or not re.match(r"^\d{2}:\d{2}$", start_t):
+                if strict:
+                    raise ValueError("start_time deve estar no formato HH:MM.")
+                start_t = None
+        base["start_time"] = start_t
+
+        end_t = obj.get("end_time")
+        if end_t:
+            if not isinstance(end_t, str) or not re.match(r"^\d{2}:\d{2}$", end_t):
+                if strict:
+                    raise ValueError("end_time deve estar no formato HH:MM.")
+                end_t = None
+        base["end_time"] = end_t
+
+        days = obj.get("days_of_week")
+        if days is not None:
+            try:
+                base["days_of_week"] = _normalize_days(days)
+            except Exception as e:
+                if strict:
+                    raise
+                logger.warning("Erro na validação de days_of_week de intervalo restrito: %s", str(e))
+                base["days_of_week"] = None
+        else:
+            base["days_of_week"] = None
+
         return base
     if schedule_type == "once":
         run_at = obj.get("run_at")
         if not isinstance(run_at, str) or not run_at.strip():
-            raise ValueError("run_at é obrigatório para schedule_type=once.")
+            if strict:
+                raise ValueError("run_at é obrigatório para schedule_type=once.")
+            fallback_time = (datetime.now() + timedelta(hours=1)).isoformat()
+            logger.warning("run_at ausente para cadência única. Aplicando fallback para daqui 1 hora: %s", fallback_time)
+            run_at = fallback_time
         base["run_at"] = run_at.strip()
         return base
 
-    times = _normalized_time_list(obj.get("times") or [])
+    # Para daily, weekly e monthly, validamos 'times' com fallback preventivo
+    try:
+        times = _normalized_time_list(obj.get("times") or [])
+    except Exception as e:
+        if strict:
+            raise
+        logger.warning("Erro ao ler lista 'times' moderna: %s. Aplicando fallback de horário (08:00).", str(e))
+        times = []
+        
     if not times:
-        raise ValueError("times deve conter ao menos um horário.")
+        if strict:
+            raise ValueError("times deve conter ao menos um horário.")
+        logger.warning("Nenhum horário definido no campo 'times'. Aplicando fallback preventivo de 08:00.")
+        times = [{"h": 8, "m": 0}]
     base["times"] = times
 
     if schedule_type == "daily":
         return base
     if schedule_type == "weekly":
-        days = _normalize_days(obj.get("days_of_week"))
+        try:
+            days = _normalize_days(obj.get("days_of_week"))
+        except Exception as e:
+            if strict:
+                raise
+            logger.warning("Erro na validação do days_of_week semanal: %s. Aplicando fallback Segunda a Sexta.", str(e))
+            days = []
         if not days:
-            raise ValueError("days_of_week é obrigatório para schedule_type=weekly.")
+            if strict:
+                raise ValueError("days_of_week é obrigatório para schedule_type=weekly.")
+            logger.warning("days_of_week ausente ou vazio para weekly. Usando fallback de Segunda a Sexta.")
+            days = [1, 2, 3, 4, 5]
         base["days_of_week"] = days
         return base
 
+    # monthly
     days_of_month = obj.get("days_of_month")
     if not isinstance(days_of_month, list) or not days_of_month:
-        raise ValueError("days_of_month é obrigatório para schedule_type=monthly.")
-    norm_month = sorted(set(days_of_month))
-    if any(not isinstance(day, int) or day < 1 or day > 31 for day in norm_month):
-        raise ValueError("days_of_month deve conter inteiros entre 1 e 31.")
+        if strict:
+            raise ValueError("days_of_month é obrigatório para schedule_type=monthly.")
+        logger.warning("days_of_month ausente ou vazio para monthly. Usando fallback de dia 1.")
+        norm_month = [1]
+    else:
+        try:
+            norm_month = sorted(set(days_of_month))
+            if any(not isinstance(day, int) or day < 1 or day > 31 for day in norm_month):
+                raise ValueError("Contém valores fora do intervalo 1-31.")
+        except Exception as e:
+            if strict:
+                raise
+            logger.warning("Erro na validação dos dias do mês: %s. Aplicando fallback de dia 1.", str(e))
+            norm_month = [1]
+            
     base["days_of_month"] = norm_month
     return base
 
@@ -203,8 +359,15 @@ def normalize_schedule_payload(obj: dict) -> dict:
 def parse_schedule(v: Optional[str]) -> Optional[dict]:
     if not v:
         return None
-    obj = json.loads(v.replace("'", '"'))
-    return normalize_schedule_payload(obj)
+    try:
+        obj = json.loads(v.replace("'", '"'))
+    except Exception:
+        return {
+            "schedule_version": 2,
+            "schedule_type": "manual",
+            "timezone": "America/Sao_Paulo"
+        }
+    return normalize_schedule_payload(obj, strict=False)
 
 
 def describe_schedule_payload(schedule: Optional[dict]) -> str:
@@ -213,6 +376,8 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
     stype = schedule.get("schedule_type")
     if stype == "manual":
         return "Manual"
+    if stype == "cron":
+        return f"Cron: {schedule.get('cron_expression', '')}"
     if stype == "daily":
         times = schedule.get("times", [])
         return "Diário às " + ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
@@ -242,7 +407,16 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
             f"{t['h']:02d}:{t['m']:02d}" for t in times
         )
     if stype == "interval":
-        return f"A cada {schedule.get('interval_minutes', 0)} min"
+        min_lbl = f"A cada {schedule.get('interval_minutes', 0)} min"
+        start_t = schedule.get("start_time")
+        end_t = schedule.get("end_time")
+        days = schedule.get("days_of_week")
+        if start_t or end_t or days:
+            day_names = {0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb"}
+            day_lbl = ", ".join(day_names.get(d, str(d)) for d in days) if days else "Todos"
+            time_lbl = f"{start_t or '00:00'} às {end_t or '23:59'}"
+            return f"{min_lbl} ({day_lbl}, {time_lbl})"
+        return min_lbl
     if stype == "once":
         return f"Execução única em {schedule.get('run_at', '-')}"
     return "Configurada"
@@ -256,12 +430,59 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
     now = get_now_local().replace(second=0, microsecond=0)
     out = []
     stype = schedule.get("schedule_type")
+    if stype == "cron":
+        from apscheduler.triggers.cron import CronTrigger
+        try:
+            trigger = CronTrigger.from_crontab(
+                schedule.get("cron_expression"),
+                timezone=schedule.get("timezone", "America/Sao_Paulo")
+            )
+            curr = now
+            for _ in range(count):
+                nxt = trigger.get_next_fire_time(None, curr)
+                if not nxt:
+                    break
+                out.append(format_dt_br(nxt))
+                curr = nxt
+        except Exception:
+            pass
+        return out
     if stype == "interval":
         step = int(schedule.get("interval_minutes", 1))
-        start = now + timedelta(minutes=step)
-        for idx in range(count):
-            out.append(format_dt_br(start + timedelta(minutes=idx * step)))
-        return out
+        start_t = schedule.get("start_time")
+        end_t = schedule.get("end_time")
+        days = schedule.get("days_of_week")
+        
+        if start_t or end_t or days:
+            py_days = {_ui_day_to_python_weekday(int(day)) for day in days} if days else None
+            
+            def is_valid_time(dt):
+                if py_days is not None and dt.weekday() not in py_days:
+                    return False
+                if start_t:
+                    sh, sm = map(int, start_t.split(":"))
+                    if dt.hour < sh or (dt.hour == sh and dt.minute < sm):
+                        return False
+                if end_t:
+                    eh, em = map(int, end_t.split(":"))
+                    if dt.hour > eh or (dt.hour == eh and dt.minute > em):
+                        return False
+                return True
+            
+            candidate = now + timedelta(minutes=step)
+            limit_days = 90
+            cutoff = now + timedelta(days=limit_days)
+            
+            while len(out) < count and candidate < cutoff:
+                if is_valid_time(candidate):
+                    out.append(format_dt_br(candidate))
+                candidate += timedelta(minutes=step)
+            return out
+        else:
+            start = now + timedelta(minutes=step)
+            for idx in range(count):
+                out.append(format_dt_br(start + timedelta(minutes=idx * step)))
+            return out
     if stype == "once":
         run_at = schedule.get("run_at")
         try:

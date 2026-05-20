@@ -24,4 +24,3 @@ def test_expected_schema_covers_execution_queue_contract():
     assert {"queue_group", "cooldown_minutes", "max_retries"}.issubset(
         EXPECTED_SCHEMA["automations"]
     )
-    assert {"key", "value", "updated_at"} == EXPECTED_SCHEMA["orchestrator_metadata"]

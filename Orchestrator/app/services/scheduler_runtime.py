@@ -46,6 +46,37 @@ def scheduled_task_wrapper(automation_id: int) -> None:
         if not db_auto or not db_auto.enabled:
             return
 
+        # Validação de janela operacional restrita para cadência de intervalo
+        if db_auto.schedule:
+            try:
+                sched_data = schemas.parse_schedule(db_auto.schedule)
+                if sched_data and sched_data.get("schedule_type") == "interval":
+                    start_t = sched_data.get("start_time")
+                    end_t = sched_data.get("end_time")
+                    days = sched_data.get("days_of_week")
+                    
+                    if start_t or end_t or days:
+                        now = get_now_local()
+                        
+                        if days is not None:
+                            py_days = {((int(d) + 6) % 7) for d in days}
+                            if now.weekday() not in py_days:
+                                logger.info("Disparo de intervalo ignorado para %s: fora do dia operacional permitido.", db_auto.name)
+                                return
+                        
+                        if start_t:
+                            sh, sm = map(int, start_t.split(":"))
+                            if now.hour < sh or (now.hour == sh and now.minute < sm):
+                                logger.info("Disparo de intervalo ignorado para %s: antes do horário operacional permitido (%s).", db_auto.name, start_t)
+                                return
+                        if end_t:
+                            eh, em = map(int, end_t.split(":"))
+                            if now.hour > eh or (now.hour == eh and now.minute > em):
+                                logger.info("Disparo de intervalo ignorado para %s: após o horário operacional permitido (%s).", db_auto.name, end_t)
+                                return
+            except Exception as e:
+                logger.warning("Falha ao validar janela operacional do disparo de %s: %s", db_auto.name, str(e))
+
         existing = (
             db.query(models.Execution)
             .filter(
@@ -109,6 +140,18 @@ def reload_scheduled_tasks() -> None:
 def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
     schedule_type = sched_data.get("schedule_type")
     if schedule_type == "manual":
+        return
+    if schedule_type == "cron":
+        scheduler.add_job(
+            scheduled_task_wrapper,
+            CronTrigger.from_crontab(
+                sched_data["cron_expression"],
+                timezone=sched_data.get("timezone", "America/Sao_Paulo")
+            ),
+            args=[automation_id],
+            id=f"job_{automation_id}_cron",
+            misfire_grace_time=60,
+        )
         return
     if schedule_type == "interval":
         scheduler.add_job(

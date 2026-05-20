@@ -26,7 +26,7 @@ logger = logging.getLogger("orchestrator")
 
 # O banco de dados sera criado no diretorio Orchestrator
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "automacoes.db")
+DB_PATH = os.environ.get("ORCHESTRATOR_DB_PATH") or os.path.join(BASE_DIR, "automacoes.db")
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(
@@ -108,29 +108,7 @@ EXPECTED_SCHEMA = {
         "actor",
         "details",
     },
-    "orchestrator_metadata": {
-        "key",
-        "value",
-        "updated_at",
-    },
 }
-
-SCHEMA_MIGRATIONS = {
-    "automations": [
-        ("max_retries", "INTEGER NOT NULL DEFAULT 0"),
-        ("cooldown_minutes", "INTEGER NOT NULL DEFAULT 0"),
-        ("queue_group", "VARCHAR(100)"),
-        ("sla_minutes", "INTEGER"),
-    ],
-    "executions": [
-        ("retry_count", "INTEGER NOT NULL DEFAULT 0"),
-        ("max_retries", "INTEGER NOT NULL DEFAULT 0"),
-        ("queue_group", "VARCHAR(100)"),
-        ("failure_reason", "VARCHAR(200)"),
-        ("recovery_action", "VARCHAR(200)"),
-    ],
-}
-
 
 def get_db():
     """Dependency injection do FastAPI - garante cleanup via finally."""
@@ -165,68 +143,52 @@ def validate_database_schema() -> dict:
 
 
 def get_schema_version() -> str:
-    """Retorna a versao logica atual gravada no banco."""
+    """Retorna a versao logica atual da revisao do Alembic gravada no banco."""
     try:
         with engine.connect() as conn:
             row = conn.execute(
-                text(
-                    "SELECT value FROM orchestrator_metadata WHERE key = 'schema_version'"
-                )
+                text("SELECT version_num FROM alembic_version")
             ).fetchone()
-            return row[0] if row else "unknown"
+            return row[0] if row else "none"
     except Exception:
         return "unknown"
 
 
+def run_alembic_migrations():
+    """Roda migrações do Alembic até o HEAD programaticamente de forma segura."""
+    if ":memory:" in SQLALCHEMY_DATABASE_URL:
+        logger.info("Banco de dados em memoria detectado. Desviando execucao do Alembic nos testes.")
+        return
+
+    from alembic.config import Config
+    from alembic import command
+
+    # Encontra a pasta do Orchestrator para achar o alembic.ini
+    current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ini_path = os.path.join(current_dir, "alembic.ini")
+
+    alembic_cfg = Config(ini_path)
+    # Garante que ele use a string de conexão correta
+    alembic_cfg.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
+
+    logger.info("Iniciando aplicacao programática de migracao via Alembic...")
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Migracao do Alembic aplicada com sucesso.")
+
+
 def run_schema_migrations() -> dict:
-    """Aplica migracoes leves compatíveis com SQLite antes da validacao final."""
-    applied = []
-    with engine.begin() as conn:
-        inspector = inspect(conn)
-        existing_tables = set(inspector.get_table_names())
-
-        conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS orchestrator_metadata (
-                    key VARCHAR(100) PRIMARY KEY,
-                    value TEXT,
-                    updated_at DATETIME
-                )
-                """))
-        if "orchestrator_metadata" not in existing_tables:
-            existing_tables.add("orchestrator_metadata")
-
-        for table_name, columns in SCHEMA_MIGRATIONS.items():
-            if table_name not in existing_tables:
-                continue
-            current_columns = {
-                column["name"] for column in inspector.get_columns(table_name)
-            }
-            for column_name, ddl in columns:
-                if column_name in current_columns:
-                    continue
-                conn.execute(
-                    text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
-                )
-                applied.append(f"{table_name}.{column_name}")
-
-        conn.execute(
-            text("""
-                INSERT INTO orchestrator_metadata (key, value, updated_at)
-                VALUES ('schema_version', :value, :updated_at)
-                ON CONFLICT(key) DO UPDATE SET
-                    value = excluded.value,
-                    updated_at = excluded.updated_at
-                """),
-            {
-                "value": ORCHESTRATOR_SCHEMA_VERSION,
-                "updated_at": get_now_local(),
-            },
-        )
-
+    """Mantido por compatibilidade - executa migrações estruturadas via Alembic."""
+    if ":memory:" in SQLALCHEMY_DATABASE_URL:
+        return {
+            "applied": ["in_memory_test_skip"],
+            "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+        }
+    run_alembic_migrations()
     return {
-        "applied": applied,
+        "applied": ["alembic_upgrade_head"],
         "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
     }
+
 
 
 def get_db_size_mb() -> float:

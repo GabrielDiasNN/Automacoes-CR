@@ -11,6 +11,7 @@ from .common import (
     _validate_safe_name,
     _validate_script_path,
     _validate_schedule,
+    _validate_schedule_tolerant,
     format_dt_br,
 )
 
@@ -104,6 +105,11 @@ class AutomationResponse(AutomationBase):
     schedule_summary: Optional[str] = None
     next_runs_preview: List[str] = []
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("schedule")
+    @classmethod
+    def v_sched(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_schedule_tolerant(v)
 
     @model_validator(mode="after")
     def apply_br_format(self) -> "AutomationResponse":

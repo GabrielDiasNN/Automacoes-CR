@@ -106,8 +106,11 @@ class _JsonFormatter(logging.Formatter):
         return json.dumps(doc)
 
 
+is_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+log_filename = "Worker_test.jsonl" if is_pytest else "Worker.jsonl"
+
 _json_handler = logging.handlers.RotatingFileHandler(
-    os.path.join(log_dir, "Worker.jsonl"),
+    os.path.join(log_dir, log_filename),
     maxBytes=5 * 1024 * 1024,
     backupCount=5,
     encoding="utf-8",

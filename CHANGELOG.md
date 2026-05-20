@@ -1,5 +1,33 @@
 # Changelog
 
+## [9.0.0] - 2026-05-20
+### Adicionado
+- **Migração de Banco de Dados com Alembic**: Transição completa do ecossistema de infraestrutura de banco de dados SQLite para o controle estruturado, versionado e auditável utilizando o Alembic integrado ao SQLAlchemy.
+- **Startup Dinâmico e Programático**: FastAPI agora executa programaticamente as migrações até a versão mais recente (`upgrade head`) no evento de startup (`lifespan`), dispensando a execução de comandos manuais CLI por operadores no deploy do servidor.
+- **Modo Batch para SQLite**: Configurado o modo batch (`render_as_batch=True`) no ambiente do Alembic (`env.py`), garantindo suporte perfeito e livre de falhas para comandos `ALTER TABLE` que possuem limitações nativas severas na arquitetura SQLite.
+
+### Corrigido
+- **Resiliência e Desvio nos Testes In-Memory**: Implementada a verificação dinâmica na função `run_alembic_migrations()` para identificar e desviar silenciosamente a execução do Alembic quando a conexão do banco de dados for `:memory:` (banco em memória de testes do pytest). Isso eliminou concorrências de conexões e instâncias duplicadas do SQLite em memória nas threads secundárias do lifespan do FastAPI durante a suite do pytest.
+- **Resolução Dinâmica de URL no env.py do Alembic**: Ajustado o carregamento do `env.py` para respeitar URLs injetadas programaticamente (como o banco de dados temporário físico de testes do Playwright E2E) e blindar a resolução de caminho de `:memory:` contra concatenações relativas a caminhos físicos do Windows (como `<PASTA_PROJETO>\:memory:`), resolvendo o erro `OperationalError: unable to open database file`.
+- **Ajuste de Teste E2E do Dashboard**: Refatorada a fixture `setup_test_database` no arquivo `test_e2e_dashboard.py` para estruturar as tabelas do banco de teste físico temporário aplicando as migrações do próprio Alembic (`upgrade head`) em vez de usar `Base.metadata.create_all()`. Isso alinha 100% o ambiente de homologação ao de produção, garantindo que o Uvicorn de teste detecte a tabela `alembic_version` no `head` e não cause colisões de tabelas existentes no startup.
+- **Remoção de Tabela Obsoleta**: Saneada a asserção da tabela obsoleta `orchestrator_metadata` no teste de integridade `test_database_schema.py`, uma vez que a tabela foi substituída com sucesso pela tabela nativa `alembic_version` do Alembic.
+
+## [8.0.0] - 2026-05-20
+### Adicionado
+- **Suíte de Testes com Mocks Resilientes**: Criação dos testes unitários isolados `test_receitas_bloqueadas.py` e `test_montagem_terceirizados.py` cobrindo validação sintática, mocks do banco de dados Oracle Thick Mode e prevenção de efeitos colaterais.
+- **E2E Playwright no Dashboard**: Criada suite `test_e2e_dashboard.py` cobrindo a navegação do Dashboard SPA por completo, capturando evidências de console e gerando relatório regulatório automático de homologação (`docs/playwright-e2e-evidence-generated.md`).
+
+### Corrigido
+- **Interferência de Variáveis na Suite Pytest**: Implementada a fixture global com `autouse=True` (`force_env_vars`) em `conftest.py` que re-injeta a variável `ORCHESTRATOR_API_KEY` com o valor de teste `hub-secret-token` e o caminho `ORCHESTRATOR_DB_PATH` como `:memory:` antes de cada execução de teste. Isso neutralizou a interferência causada pela importação tardia de robôs de negócio (como `extract_oracle.py`) que executavam `load_dotenv(..., override=True)` sobrescrevendo as chaves de teste pelas de produção, sanando todas as 40 falhas de `403 Forbidden` na suite completa (agora **73/73 testes verdes**).
+- **Isolamento de Banco in-memory**: Configurada a injeção do banco em memória SQLite (`os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"`) no topo absoluto de `conftest.py` com patches sobre `SessionLocal` em múltiplos arquivos de API e serviços.
+- **Prevenção de Locks de Logs**: Desviada dinamicamente a gravação de logs físicos no `main.py` e `worker.py` para arquivos de teste específicos (`orchestrator_test.jsonl` e `Worker_test.jsonl`) sob ambiente de teste `pytest`, evitando colisões de arquivos com o runtime de produção ativo.
+- **Validação de Governança Local**: Saneado o script do Quality Gate (`Tools/ValidarAutomacoes.ps1`) com codificação `UTF-8 com BOM`, obtendo conformidade perfeita de encodings e aprovação de 100% no validador.
+
+## [7.0.4] - 2026-05-20
+### Corrigido
+- **Correção nos Alertas de Falha (Orchestrator)**: Refatorado o módulo de notificações do orquestrador (`Orchestrator/app/notifications.py`) para utilizar variáveis de ambiente na passagem de parâmetros ao PowerShell. Isso elimina a falha onde nomes de robô com aspas simples (ex: `Montagem de Terceirizados`) causavam injeção sintática e faziam o PowerShell atribuir indevidamente termos como `"Montagem"` no Cc e `"de"` no Cco (autocompletado pelo Outlook para `"Dener Santos da Silva"`).
+- **Encoding de Alertas de Falha**: Corrigido o envio de e-mails em formato ASCII no Orchestrator, adotando codificação UTF-8 completa com suporte a caracteres acentuados PT-BR (como `"Automação"`, `"Horário"`, `"Divergência"`) sem quebras sintáticas ou de caracteres.
+
 ## [7.0.3] - 2026-05-19
 ### Adicionado
 - **Homologação Definitiva de Automações**: Homologação completa de todas as 5 automações em lote concorrente no modo de teste global. Todas as execuções obtiveram status de `SUCCESS` com 100% de integridade e estabilidade.

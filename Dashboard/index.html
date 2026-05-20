@@ -363,93 +363,189 @@
                 <h3 id="modal-title">Automação</h3>
                 <button class="close-btn" type="button" data-action="close-dialog" data-dialog-id="modal-auto" aria-label="Fechar">×</button>
             </div>
+            
+            <div class="modal-tabs">
+                <button class="tab-btn active" type="button" data-tab="tab-general">Geral</button>
+                <button class="tab-btn" type="button" data-tab="tab-schedule">Agenda & Gatilhos</button>
+                <button class="tab-btn" type="button" data-tab="tab-resilience">Resiliência & Canais</button>
+            </div>
+            
             <div class="modal-body">
                 <input id="f-id" type="hidden">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="f-name">Nome</label>
-                        <input id="f-name" class="form-control" type="text" required maxlength="100">
+                
+                <!-- ABA 1: GERAL -->
+                <div id="tab-general" class="tab-content active">
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label for="f-name">Nome da automação</label>
+                            <input id="f-name" class="form-control" type="text" required maxlength="100" placeholder="Ex: Fechamento de Receitas Bloqueadas">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="f-queue-group">Grupo operacional (Fila)</label>
+                            <input id="f-queue-group" class="form-control" type="text" maxlength="100" placeholder="Ex: financeiro-fechamento">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label for="f-max-runtime">Timeout máximo (min)</label>
-                        <input id="f-max-runtime" class="form-control" type="number" min="1" max="480" value="30">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="f-description">Descrição</label>
-                    <input id="f-description" class="form-control" type="text" maxlength="500">
-                </div>
-                <div class="form-group">
-                    <label for="f-path">Caminho do script</label>
-                    <input id="f-path" class="form-control" type="text" required placeholder="Receitas Emitidas/run.ps1">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="f-max-retries">Máx. retries</label>
-                        <input id="f-max-retries" class="form-control" type="number" min="0" max="10" value="0">
+                        <label for="f-description">Descrição operacional / Objetivo de negócio</label>
+                        <input id="f-description" class="form-control" type="text" maxlength="500" placeholder="Ex: Consolida relatórios do Oracle e envia ao faturamento">
                     </div>
                     <div class="form-group">
-                        <label for="f-cooldown">Cooldown (min)</label>
-                        <input id="f-cooldown" class="form-control" type="number" min="0" max="1440" value="0">
+                        <label for="f-path">Caminho relativo do script (PowerShell ou Python)</label>
+                        <input id="f-path" class="form-control" type="text" required placeholder="Ex: Receitas Emitidas/run.ps1">
                     </div>
-                    <div class="form-group">
-                        <label for="f-queue-group">Grupo operacional</label>
-                        <input id="f-queue-group" class="form-control" type="text" maxlength="100" placeholder="financeiro-fechamento">
+                    <div class="form-row" style="margin-top: 15px;">
+                        <label class="inline-toggle" for="f-enabled">
+                            <span>Automação ativa (Permite disparos automáticos)</span>
+                            <input id="f-enabled" type="checkbox" checked>
+                        </label>
+                        <label class="inline-toggle" for="f-test">
+                            <span>Modo teste (Execução simulada isolada)</span>
+                            <input id="f-test" type="checkbox">
+                        </label>
                     </div>
                 </div>
-                <div class="form-row">
-                    <label class="inline-toggle" for="f-enabled"><span>Automação ativa</span><input id="f-enabled" type="checkbox" checked></label>
-                    <label class="inline-toggle" for="f-test"><span>Modo teste</span><input id="f-test" type="checkbox"></label>
+                
+                <!-- ABA 2: AGENDA & GATILHOS -->
+                <div id="tab-schedule" class="tab-content">
+                    <section class="scheduling-section" aria-labelledby="schedule-title" style="margin-top: 0; border: none; background: transparent; padding: 0;">
+                        <div class="form-group">
+                            <label for="f-schedule-type">Tipo de recorrência</label>
+                            <select id="f-schedule-type" class="form-control">
+                                <option value="manual">Manual (Apenas sob demanda)</option>
+                                <option value="daily">Diária</option>
+                                <option value="weekly">Semanal</option>
+                                <option value="monthly">Mensal</option>
+                                <option value="interval">Intervalo Periódico</option>
+                                <option value="once">Execução Única (Data específica)</option>
+                                <option value="cron">Cron Avançado (Padrão Linux)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Bloco Semanal (Dias da Semana) -->
+                        <div id="schedule-block-weekly" class="schedule-block" style="display: none; margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 8px;">Dias da semana permitidos</label>
+                            <div class="day-selector" aria-label="Dias da semana">
+                                <button type="button" class="day-btn" data-day="1">Seg</button>
+                                <button type="button" class="day-btn" data-day="2">Ter</button>
+                                <button type="button" class="day-btn" data-day="3">Qua</button>
+                                <button type="button" class="day-btn" data-day="4">Qui</button>
+                                <button type="button" class="day-btn" data-day="5">Sex</button>
+                                <button type="button" class="day-btn" data-day="6">Sáb</button>
+                                <button type="button" class="day-btn" data-day="0">Dom</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Bloco Horários (Adição de Horários) -->
+                        <div id="schedule-block-times" class="schedule-block" style="display: none; margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 8px;">Horários de disparo</label>
+                            <div class="time-adder">
+                                <input id="f-time-input" class="form-control" type="time" aria-label="Horário da agenda">
+                                <button type="button" class="btn-add-time" data-action="add-schedule-time" aria-label="Adicionar horário">+</button>
+                            </div>
+                            <div id="f-time-list" class="time-list"></div>
+                        </div>
+                        
+                        <!-- Bloco Mensal -->
+                        <div id="schedule-block-monthly" class="schedule-block" style="display: none; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label for="f-days-of-month">Dias do mês (1-31, separados por vírgula)</label>
+                                <input id="f-days-of-month" class="form-control" type="text" placeholder="Ex: 1, 5, 15, 30">
+                            </div>
+                        </div>
+                        
+                        <!-- Bloco Execução Única -->
+                        <div id="schedule-block-once" class="schedule-block" style="display: none; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label for="f-once-run-at">Executar em</label>
+                                <input id="f-once-run-at" class="form-control" type="datetime-local">
+                            </div>
+                        </div>
+                        
+                        <!-- Bloco Intervalo Periódico com Janela Opcional -->
+                        <div id="schedule-block-interval" class="schedule-block" style="display: none; margin-bottom: 15px;">
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 1;">
+                                    <label for="f-interval-minutes">Executar a cada (minutos)</label>
+                                    <input id="f-interval-minutes" class="form-control" type="number" min="1" max="1440" value="30">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group" style="margin-top: 15px;">
+                                <label class="inline-toggle" for="f-interval-restricted">
+                                    <span>Restringir a uma Janela Operacional</span>
+                                    <input id="f-interval-restricted" type="checkbox">
+                                </label>
+                            </div>
+                            
+                            <div id="interval-restriction-panel" class="restriction-panel" style="display: none; border-top: 1px dashed var(--border); padding-top: 15px; margin-top: 15px;">
+                                <label style="display: block; margin-bottom: 8px;">Dias da semana permitidos na janela</label>
+                                <div class="day-selector" aria-label="Dias operacionais restritos">
+                                    <button type="button" class="day-btn" data-day="1">Seg</button>
+                                    <button type="button" class="day-btn" data-day="2">Ter</button>
+                                    <button type="button" class="day-btn" data-day="3">Qua</button>
+                                    <button type="button" class="day-btn" data-day="4">Qui</button>
+                                    <button type="button" class="day-btn" data-day="5">Sex</button>
+                                    <button type="button" class="day-btn" data-day="6">Sáb</button>
+                                    <button type="button" class="day-btn" data-day="0">Dom</button>
+                                </div>
+                                <div class="form-row" style="margin-top: 15px;">
+                                    <div class="form-group">
+                                        <label for="f-interval-start-time">Horário de início da janela</label>
+                                        <input id="f-interval-start-time" class="form-control" type="time" value="08:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="f-interval-end-time">Horário de término da janela</label>
+                                        <input id="f-interval-end-time" class="form-control" type="time" value="18:00">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Bloco Cron Avançado -->
+                        <div id="schedule-block-cron" class="schedule-block" style="display: none; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label for="f-cron-expression">Expressão Cron (5 campos: min h dia_mês mês dia_semana)</label>
+                                <input id="f-cron-expression" class="form-control" type="text" placeholder="Ex: */15 8-18 * * 1-5">
+                                <div class="cron-helper" style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);">
+                                    <span style="font-weight: bold;">Exemplos rápidos (clique para aplicar):</span>
+                                    <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px;">
+                                        <span class="cron-preset" style="cursor: pointer; text-decoration: underline; color: var(--accent-blue);" data-cron="*/10 8-18 * * 1-5">A cada 10 min comercial</span>
+                                        <span class="cron-preset" style="cursor: pointer; text-decoration: underline; color: var(--accent-blue);" data-cron="0 8,12,18 * * 1-5">08h, 12h e 18h dias úteis</span>
+                                        <span class="cron-preset" style="cursor: pointer; text-decoration: underline; color: var(--accent-blue);" data-cron="0 22 * * 1-5">Diário às 22h dias úteis</span>
+                                        <span class="cron-preset" style="cursor: pointer; text-decoration: underline; color: var(--accent-blue);" data-cron="0 0 1 * *">Todo dia 1º à meia-noite</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="schedule-summary" class="schedule-summary" style="margin-top: 15px;"></div>
+                        <div id="schedule-preview" class="schedule-summary" style="margin-top: 10px;"></div>
+                    </section>
                 </div>
-                <div class="form-group">
-                    <label for="f-notification-channels">Canais de notificação</label>
-                    <input id="f-notification-channels" class="form-control" type="text" placeholder="email, whatsapp">
-                </div>
-                <section class="scheduling-section" aria-labelledby="schedule-title">
-                    <h4 id="schedule-title">Agenda</h4>
-                    <div class="form-group">
-                        <label for="f-schedule-type">Tipo de recorrência</label>
-                        <select id="f-schedule-type" class="form-control">
-                            <option value="manual">Manual</option>
-                            <option value="daily">Diária</option>
-                            <option value="weekly">Semanal</option>
-                            <option value="monthly">Mensal</option>
-                            <option value="interval">Intervalo</option>
-                            <option value="once">Única</option>
-                        </select>
-                    </div>
-                    <div class="day-selector" aria-label="Dias da semana">
-                        <button type="button" class="day-btn" data-day="1">Seg</button>
-                        <button type="button" class="day-btn" data-day="2">Ter</button>
-                        <button type="button" class="day-btn" data-day="3">Qua</button>
-                        <button type="button" class="day-btn" data-day="4">Qui</button>
-                        <button type="button" class="day-btn" data-day="5">Sex</button>
-                        <button type="button" class="day-btn" data-day="6">Sáb</button>
-                        <button type="button" class="day-btn" data-day="0">Dom</button>
-                    </div>
-                    <div class="time-adder">
-                        <input id="f-time-input" class="form-control" type="time" aria-label="Horário da agenda">
-                        <button type="button" class="btn-add-time" data-action="add-schedule-time" aria-label="Adicionar horário">+</button>
-                    </div>
+                
+                <!-- ABA 3: RESILIÊNCIA & CANAIS -->
+                <div id="tab-resilience" class="tab-content">
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="f-days-of-month">Dias do mês (1-31, CSV)</label>
-                            <input id="f-days-of-month" class="form-control" type="text" placeholder="1,5,15">
+                            <label for="f-max-runtime">Timeout máximo permitido (minutos)</label>
+                            <input id="f-max-runtime" class="form-control" type="number" min="1" max="480" value="30">
                         </div>
                         <div class="form-group">
-                            <label for="f-interval-minutes">Intervalo (min)</label>
-                            <input id="f-interval-minutes" class="form-control" type="number" min="1" max="1440" value="30">
+                            <label for="f-max-retries">Tentativas automáticas em falhas (Retries)</label>
+                            <input id="f-max-retries" class="form-control" type="number" min="0" max="10" value="0">
                         </div>
                         <div class="form-group">
-                            <label for="f-once-run-at">Executar em</label>
-                            <input id="f-once-run-at" class="form-control" type="datetime-local">
+                            <label for="f-cooldown">Tempo de recarga entre retries (minutos)</label>
+                            <input id="f-cooldown" class="form-control" type="number" min="0" max="1440" value="0">
                         </div>
                     </div>
-                    <div id="f-time-list" class="time-list"></div>
-                    <div id="schedule-summary" class="schedule-summary"></div>
-                    <div id="schedule-preview" class="schedule-summary"></div>
-                </section>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="f-notification-channels">Canais de Notificação de Alertas (Separados por vírgula)</label>
+                        <input id="f-notification-channels" class="form-control" type="text" placeholder="Ex: email, whatsapp, teams">
+                    </div>
+                </div>
             </div>
+            
             <div class="modal-footer">
                 <button class="btn btn-outline" type="button" data-action="close-dialog" data-dialog-id="modal-auto">Cancelar</button>
                 <button class="btn btn-primary" type="submit">Salvar automação</button>

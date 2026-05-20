@@ -21,6 +21,110 @@ export function createAutomationsModule(ctx) {
     let scheduleTimes = [];
     let scheduleDays = new Set();
     let scheduleType = "manual";
+    let hasInitializedEvents = false;
+
+    function initTabsAndEvents() {
+        if (hasInitializedEvents) return;
+        hasInitializedEvents = true;
+
+        // Abas do modal (exclusivo: dashboard.js não gerencia abas internas do modal)
+        const tabButtons = document.querySelectorAll(".modal-tabs .tab-btn");
+        tabButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const tabId = btn.dataset.tab;
+                switchTab(tabId);
+            });
+        });
+
+        // Presets Cron (exclusivo: dashboard.js não conhece .cron-preset)
+        const cronPresets = document.querySelectorAll(".cron-preset");
+        cronPresets.forEach((preset) => {
+            preset.addEventListener("click", () => {
+                const cronVal = preset.dataset.cron;
+                setValue("f-cron-expression", cronVal);
+                renderScheduleSummary();
+            });
+        });
+
+        // Checkbox de restrição de janela (exclusivo: controle novo, não existia antes)
+        const restrictedCheckbox = document.getElementById("f-interval-restricted");
+        const restrictionPanel = document.getElementById("interval-restriction-panel");
+        if (restrictedCheckbox && restrictionPanel) {
+            restrictedCheckbox.addEventListener("change", (e) => {
+                restrictionPanel.style.display = e.target.checked ? "block" : "none";
+                renderScheduleSummary();
+            });
+        }
+
+        // Campos novos que dashboard.js não cobre (f-cron-expression, horários da janela)
+        const cronInput = document.getElementById("f-cron-expression");
+        if (cronInput) {
+            cronInput.addEventListener("input", () => renderScheduleSummary());
+        }
+
+        const intervalStartInput = document.getElementById("f-interval-start-time");
+        if (intervalStartInput) {
+            intervalStartInput.addEventListener("change", () => renderScheduleSummary());
+        }
+
+        const intervalEndInput = document.getElementById("f-interval-end-time");
+        if (intervalEndInput) {
+            intervalEndInput.addEventListener("change", () => renderScheduleSummary());
+        }
+
+        // NOTA: .day-btn, f-schedule-type, f-interval-minutes, f-days-of-month e
+        // f-once-run-at são gerenciados pelo dashboard.js (bindStaticEvents).
+        // NÃO registrar aqui para evitar duplo disparo que cancela o efeito.
+    }
+
+    function switchTab(tabId) {
+        const tabButtons = document.querySelectorAll(".modal-tabs .tab-btn");
+        tabButtons.forEach((btn) => {
+            btn.classList.toggle("active", btn.dataset.tab === tabId);
+        });
+
+        const tabContents = document.querySelectorAll(".modal-body .tab-content");
+        tabContents.forEach((content) => {
+            content.classList.toggle("active", content.id === tabId);
+        });
+    }
+
+    function updateScheduleBlocksVisibility(type) {
+        const blocks = document.querySelectorAll(".schedule-block");
+        blocks.forEach((block) => {
+            block.style.display = "none";
+        });
+
+        if (type === "daily") {
+            const blockTimes = document.getElementById("schedule-block-times");
+            if (blockTimes) blockTimes.style.display = "block";
+        } else if (type === "weekly") {
+            const blockWeekly = document.getElementById("schedule-block-weekly");
+            const blockTimes = document.getElementById("schedule-block-times");
+            if (blockWeekly) blockWeekly.style.display = "block";
+            if (blockTimes) blockTimes.style.display = "block";
+        } else if (type === "monthly") {
+            const blockMonthly = document.getElementById("schedule-block-monthly");
+            const blockTimes = document.getElementById("schedule-block-times");
+            if (blockMonthly) blockMonthly.style.display = "block";
+            if (blockTimes) blockTimes.style.display = "block";
+        } else if (type === "interval") {
+            const blockInterval = document.getElementById("schedule-block-interval");
+            if (blockInterval) blockInterval.style.display = "block";
+            
+            const restrictedCheckbox = document.getElementById("f-interval-restricted");
+            const restrictionPanel = document.getElementById("interval-restriction-panel");
+            if (restrictedCheckbox && restrictionPanel) {
+                restrictionPanel.style.display = restrictedCheckbox.checked ? "block" : "none";
+            }
+        } else if (type === "once") {
+            const blockOnce = document.getElementById("schedule-block-once");
+            if (blockOnce) blockOnce.style.display = "block";
+        } else if (type === "cron") {
+            const blockCron = document.getElementById("schedule-block-cron");
+            if (blockCron) blockCron.style.display = "block";
+        }
+    }
 
     async function loadConfig() {
         const [autos, jobs] = await Promise.all([
@@ -115,18 +219,13 @@ export function createAutomationsModule(ctx) {
     }
 
     function handleSearch() {
-        const query = (getValue("auto-search") || "").toLowerCase().trim();
-        if (!query) {
-            renderAutomationTable(cachedAutomations, cachedJobs);
-            if (typeof lucide !== "undefined") lucide.createIcons();
-            return;
-        }
-
+        const query = (document.getElementById("auto-search")?.value || "").toLowerCase().trim();
         const filtered = cachedAutomations.filter((auto) => {
-            const name = (auto.name || "").toLowerCase();
-            const path = (auto.script_path || "").toLowerCase();
-            const desc = (auto.description || "").toLowerCase();
-            return name.includes(query) || path.includes(query) || desc.includes(query);
+            return (
+                auto.name.toLowerCase().includes(query) ||
+                (auto.description || "").toLowerCase().includes(query) ||
+                auto.script_path.toLowerCase().includes(query)
+            );
         });
 
         renderAutomationTable(filtered, cachedJobs);
@@ -138,6 +237,7 @@ export function createAutomationsModule(ctx) {
         if (!modal) return;
 
         resetAutomationForm();
+        initTabsAndEvents();
 
         if (automationId !== null) {
             const auto = await api(`/api/automations/${automationId}`);
@@ -169,12 +269,20 @@ export function createAutomationsModule(ctx) {
         setValue("f-days-of-month", "");
         setValue("f-interval-minutes", "30");
         setValue("f-once-run-at", "");
+        setValue("f-cron-expression", "");
+
+        const restrictedCheckbox = document.getElementById("f-interval-restricted");
+        if (restrictedCheckbox) restrictedCheckbox.checked = false;
+        setValue("f-interval-start-time", "08:00");
+        setValue("f-interval-end-time", "18:00");
 
         const enabled = document.getElementById("f-enabled");
         const test = document.getElementById("f-test");
         if (enabled) enabled.checked = true;
         if (test) test.checked = false;
 
+        switchTab("tab-general");
+        updateScheduleBlocksVisibility("manual");
         resetScheduleBuilder();
     }
 
@@ -205,41 +313,62 @@ export function createAutomationsModule(ctx) {
             const schedule = typeof rawSchedule === "string" ? JSON.parse(rawSchedule.replace(/'/g, "\"")) : rawSchedule;
             scheduleType = schedule.schedule_type || inferLegacyType(schedule);
             setValue("f-schedule-type", scheduleType);
-            const days = Array.isArray(schedule.days_of_week) ? schedule.days_of_week : (Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : []);
-            days.forEach((day) => {
-                const d = Number(day);
-                if (Number.isInteger(d) && d >= 0 && d <= 6) scheduleDays.add(d);
-            });
 
-            if (Array.isArray(schedule.times)) {
-                schedule.times.forEach((t) => {
-                    const hh = String(Number(t.h || 0)).padStart(2, "0");
-                    const mm = String(Number(t.m || 0)).padStart(2, "0");
-                    scheduleTimes.push(`${hh}:${mm}`);
+            if (scheduleType === "cron") {
+                setValue("f-cron-expression", schedule.cron_expression || "");
+            } else if (scheduleType === "interval") {
+                setValue("f-interval-minutes", String(schedule.interval_minutes || 30));
+                const hasRestriction = Boolean(schedule.start_time || schedule.end_time || (Array.isArray(schedule.days_of_week) && schedule.days_of_week.length > 0));
+                const restrictedCheckbox = document.getElementById("f-interval-restricted");
+                if (restrictedCheckbox) {
+                    restrictedCheckbox.checked = hasRestriction;
+                }
+                setValue("f-interval-start-time", schedule.start_time || "08:00");
+                setValue("f-interval-end-time", schedule.end_time || "18:00");
+
+                const days = Array.isArray(schedule.days_of_week) ? schedule.days_of_week : [];
+                days.forEach((day) => {
+                    const d = Number(day);
+                    if (Number.isInteger(d) && d >= 0 && d <= 6) scheduleDays.add(d);
                 });
             } else {
-                const hours = Array.isArray(schedule.hours) ? schedule.hours : [];
-                const minutes = Array.isArray(schedule.minutes) ? schedule.minutes : [0];
-                hours.forEach((h) => {
-                    minutes.forEach((m) => {
-                        const hh = String(Number(h || 0)).padStart(2, "0");
-                        const mm = String(Number(m || 0)).padStart(2, "0");
+                const days = Array.isArray(schedule.days_of_week) ? schedule.days_of_week : (Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : []);
+                days.forEach((day) => {
+                    const d = Number(day);
+                    if (Number.isInteger(d) && d >= 0 && d <= 6) scheduleDays.add(d);
+                });
+
+                if (Array.isArray(schedule.times)) {
+                    schedule.times.forEach((t) => {
+                        const hh = String(Number(t.h || 0)).padStart(2, "0");
+                        const mm = String(Number(t.m || 0)).padStart(2, "0");
                         scheduleTimes.push(`${hh}:${mm}`);
                     });
-                });
-            }
-            if (Array.isArray(schedule.days_of_month)) {
-                setValue("f-days-of-month", schedule.days_of_month.join(","));
-            }
-            if (schedule.interval_minutes) {
-                setValue("f-interval-minutes", String(schedule.interval_minutes));
-            }
-            if (schedule.run_at) {
-                const iso = String(schedule.run_at).replace(" ", "T");
-                setValue("f-once-run-at", iso.slice(0, 16));
+                } else {
+                    const hours = Array.isArray(schedule.hours) ? schedule.hours : [];
+                    const minutes = Array.isArray(schedule.minutes) ? schedule.minutes : [0];
+                    hours.forEach((h) => {
+                        minutes.forEach((m) => {
+                            const hh = String(Number(h || 0)).padStart(2, "0");
+                            const mm = String(Number(m || 0)).padStart(2, "0");
+                            scheduleTimes.push(`${hh}:${mm}`);
+                        });
+                    });
+                }
+                if (Array.isArray(schedule.days_of_month)) {
+                    setValue("f-days-of-month", schedule.days_of_month.join(","));
+                }
+                if (schedule.interval_minutes) {
+                    setValue("f-interval-minutes", String(schedule.interval_minutes));
+                }
+                if (schedule.run_at) {
+                    const iso = String(schedule.run_at).replace(" ", "T");
+                    setValue("f-once-run-at", iso.slice(0, 16));
+                }
             }
 
             scheduleTimes = Array.from(new Set(scheduleTimes)).sort();
+            updateScheduleBlocksVisibility(scheduleType);
             refreshScheduleUi();
         } catch (_err) {
             showToast("Agenda existente inválida. Ajuste os horários manualmente.", "warning");
@@ -334,6 +463,12 @@ export function createAutomationsModule(ctx) {
             renderSchedulePreview();
             return;
         }
+        if (scheduleType === "cron" && !getValue("f-cron-expression").trim()) {
+            summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Insira uma expressão Cron.</span>";
+            if (typeof lucide !== "undefined") lucide.createIcons();
+            renderSchedulePreview();
+            return;
+        }
 
         const dayNames = { 0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb" };
         let label = "Agenda configurada.";
@@ -346,10 +481,24 @@ export function createAutomationsModule(ctx) {
             const dom = (getValue("f-days-of-month") || "").trim();
             label = `Mensal: dia(s) ${dom || "?"} às ${scheduleTimes.join(", ")}`;
         } else if (scheduleType === "interval") {
-            label = `Intervalo: a cada ${getValue("f-interval-minutes") || 0} min`;
+            const intervalVal = getValue("f-interval-minutes") || 0;
+            const restrictedCheckbox = document.getElementById("f-interval-restricted");
+            if (restrictedCheckbox && restrictedCheckbox.checked) {
+                const days = scheduleDays.size > 0 
+                    ? Array.from(scheduleDays).sort((a, b) => a - b).map((d) => dayNames[d]).join(", ") 
+                    : "Qualquer dia";
+                const start = getValue("f-interval-start-time") || "08:00";
+                const end = getValue("f-interval-end-time") || "18:00";
+                label = `Intervalo: a cada ${intervalVal} min (${days}, das ${start} às ${end})`;
+            } else {
+                label = `Intervalo: a cada ${intervalVal} min`;
+            }
         } else if (scheduleType === "once") {
             label = `Execução única em ${getValue("f-once-run-at") || "-"}`;
+        } else if (scheduleType === "cron") {
+            label = `Cron: ${getValue("f-cron-expression")}`;
         }
+        
         summary.innerHTML = `<i data-lucide="calendar-clock" size="14"></i><span>${label}</span>`;
         if (typeof lucide !== "undefined") lucide.createIcons();
         renderSchedulePreview();
@@ -388,16 +537,33 @@ export function createAutomationsModule(ctx) {
             return JSON.stringify({ schedule_type: "monthly", schedule_version: 2, timezone: "America/Sao_Paulo", days_of_month: days, times });
         }
         if (scheduleType === "interval") {
-            return JSON.stringify({
+            const intervalPayload = {
                 schedule_type: "interval",
                 schedule_version: 2,
                 timezone: "America/Sao_Paulo",
                 interval_minutes: Number(getValue("f-interval-minutes") || 30),
-            });
+            };
+
+            const restrictedCheckbox = document.getElementById("f-interval-restricted");
+            if (restrictedCheckbox && restrictedCheckbox.checked) {
+                intervalPayload.start_time = getValue("f-interval-start-time") || "08:00";
+                intervalPayload.end_time = getValue("f-interval-end-time") || "18:00";
+                intervalPayload.days_of_week = Array.from(scheduleDays).sort((a, b) => a - b);
+            }
+
+            return JSON.stringify(intervalPayload);
         }
         if (scheduleType === "once") {
             const dt = getValue("f-once-run-at");
             return JSON.stringify({ schedule_type: "once", schedule_version: 2, timezone: "America/Sao_Paulo", run_at: dt ? `${dt}:00` : null });
+        }
+        if (scheduleType === "cron") {
+            return JSON.stringify({
+                schedule_type: "cron",
+                schedule_version: 2,
+                timezone: "America/Sao_Paulo",
+                cron_expression: (getValue("f-cron-expression") || "").trim(),
+            });
         }
         return null;
     }
@@ -465,7 +631,13 @@ export function createAutomationsModule(ctx) {
         if (!rawSchedule) return "MANUAL";
         try {
             const parsed = typeof rawSchedule === "string" ? JSON.parse(rawSchedule.replace(/'/g, "\"")) : rawSchedule;
-            if (parsed.schedule_type === "interval") return `A cada ${parsed.interval_minutes || 0} min`;
+            if (parsed.schedule_type === "cron") {
+                return `Cron: ${parsed.cron_expression || ""}`;
+            }
+            if (parsed.schedule_type === "interval") {
+                const hasRestriction = Boolean(parsed.start_time || parsed.end_time || (Array.isArray(parsed.days_of_week) && parsed.days_of_week.length > 0));
+                return hasRestriction ? `A cada ${parsed.interval_minutes || 0} min (Janela)` : `A cada ${parsed.interval_minutes || 0} min`;
+            }
             if (parsed.schedule_type === "once") return "Execução única";
             if (parsed.schedule_type === "daily") return `Diária (${(parsed.times || []).length} horário(s))`;
             if (parsed.schedule_type === "weekly") return `Semanal (${(parsed.times || []).length} horário(s))`;
@@ -541,6 +713,7 @@ export function createAutomationsModule(ctx) {
 
     function onScheduleTypeChanged(nextType) {
         scheduleType = nextType || "manual";
+        updateScheduleBlocksVisibility(scheduleType);
         refreshScheduleUi();
     }
 

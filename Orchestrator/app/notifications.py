@@ -108,18 +108,28 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
         return False
 
     agora = get_now_local().strftime("%d/%m/%Y %H:%M:%S")
-    subject = f"[FALHA] Automacao '{task_name}' - {agora}"
+    subject = f"[FALHA] Automação '{task_name}' - {agora}"
+    html_body = (
+        f"<p><b>Automação:</b> {task_name}<br>"
+        f"<b>ExecId:</b> {exec_id}<br>"
+        f"<b>Horário:</b> {agora}<br>"
+        f"<b>Erro:</b> Verifique os logs no Dashboard.</p>"
+    )
 
+    # Prepara o comando PowerShell seguro usando variáveis de ambiente para evitar quebras de aspas
     ps_command = (
         f"Import-Module '{lib_email}' -Force; "
-        f"Send-OutlookEmail -To '{alert_email}' "
-        f"-Subject '{subject}' "
-        f"-HtmlBody '<p><b>Automacao:</b> {task_name}<br>"
-        f"<b>ExecId:</b> {exec_id}<br>"
-        f"<b>Horario:</b> {agora}<br>"
-        f"<b>Erro:</b> Verifique os logs no Dashboard.</p>' "
+        f"Send-OutlookEmail -To $env:ALERT_TO "
+        f"-Subject $env:ALERT_SUBJECT "
+        f"-HtmlBody $env:ALERT_HTML_BODY "
         f"-ExecId '{exec_id}' -LogPath 'ALERT'"
     )
+
+    # Configura o dicionário de variáveis de ambiente herdando as do sistema
+    env = os.environ.copy()
+    env["ALERT_TO"] = alert_email
+    env["ALERT_SUBJECT"] = subject
+    env["ALERT_HTML_BODY"] = html_body
 
     try:
         result = subprocess.run(
@@ -131,6 +141,7 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
                 "-Command",
                 ps_command,
             ],
+            env=env,
             capture_output=True,
             timeout=30,
         )
@@ -138,7 +149,8 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
             logger.info(f"Alerta e-mail enviado para {alert_email}")
             return True
         else:
-            logger.warning(f"E-mail retornou code {result.returncode}")
+            stderr_decoded = result.stderr.decode("utf-8", errors="replace")
+            logger.warning(f"E-mail retornou code {result.returncode}. Stderr: {stderr_decoded}")
             return False
     except Exception as e:
         logger.error(f"Erro ao enviar alerta e-mail: {e}")

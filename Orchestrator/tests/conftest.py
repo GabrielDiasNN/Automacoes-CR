@@ -10,14 +10,14 @@ Patch do PROJECT_ROOT para validacao de script_path (Pilar V) funcionar em teste
 
 import os
 
+os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
+os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-# Setar API KEY antes de importar o app
-os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
 
 from app import models
 from app.database import Base, get_db
@@ -46,6 +46,13 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_
 AUTH_HEADERS = {"X-API-Key": "hub-secret-token"}
 
 
+@pytest.fixture(autouse=True)
+def force_env_vars():
+    """Garante que as variaveis de ambiente de teste prevalecam sobre qualquer override de imports."""
+    os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
+    os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
+
+
 @pytest.fixture(scope="function")
 def db_session():
     Base.metadata.create_all(bind=test_engine)
@@ -61,16 +68,22 @@ def client(db_session):
     import app.database as db_module
     import app.main as main_module
     import app.routers.automations as auto_router
+    import app.services.scheduler_runtime as scheduler_runtime
+    import app.routers.websocket as websocket_router
 
     original_session_local = db_module.SessionLocal
     original_engine = db_module.engine
     original_db_path = db_module.DB_PATH
     original_project_root = auto_router.PROJECT_ROOT
+    original_scheduler_session = scheduler_runtime.SessionLocal
+    original_websocket_session = websocket_router.SessionLocal
 
     db_module.SessionLocal = TestingSessionLocal
     db_module.engine = test_engine
     db_module.DB_PATH = os.path.join(TESTS_DIR, "test-automacoes.db")
     main_module.SessionLocal = TestingSessionLocal
+    scheduler_runtime.SessionLocal = TestingSessionLocal
+    websocket_router.SessionLocal = TestingSessionLocal
     # Redirecionar PROJECT_ROOT para o diretorio de testes (contem /test/*.ps1)
     auto_router.PROJECT_ROOT = TESTS_DIR
 
@@ -93,3 +106,5 @@ def client(db_session):
     db_module.DB_PATH = original_db_path
     main_module.SessionLocal = original_session_local
     auto_router.PROJECT_ROOT = original_project_root
+    scheduler_runtime.SessionLocal = original_scheduler_session
+    websocket_router.SessionLocal = original_websocket_session

@@ -11,3 +11,4 @@ apscheduler
 aiosqlite
 sqlalchemy
 pydantic
+alembic
