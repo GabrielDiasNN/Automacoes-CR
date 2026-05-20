@@ -1,10 +1,12 @@
 # Painel de Controle de Qualidade (Quality Dashboard)
 
-Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v6.5.5). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
+> **Versão:** v7.0.0 | **Atualizado:** 2026-05-20
+
+Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v7.0.0). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
 
 ---
 
-## 📈 Status Atual das Métricas (Snapshot 19/05/2026)
+## 📈 Status Atual das Métricas (Snapshot 20/05/2026)
 
 O quadro abaixo resume a conformidade da codebase do projeto em relação às metas estabelecidas na governança técnica:
 

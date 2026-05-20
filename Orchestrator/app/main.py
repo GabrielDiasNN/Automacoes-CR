@@ -41,15 +41,28 @@ class JsonFormatter(logging.Formatter):
     """Formatter customizado para emitir logs em JSON estruturado (Pilar L)."""
 
     def format(self, record):
+        from .security import sanitize_log_payload
+        from .middleware import request_id_var, exec_id_var, automation_name_var
+        
+        req_id = request_id_var.get("SYSTEM")
+        
         log_record = {
-            "ts": self.formatTime(record, self.datefmt),
+            "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
-            "msg": record.getMessage(),
-            "logger": record.name,
-            "request_id": getattr(record, "request_id", "SYSTEM"),
+            "component": "orchestrator",
+            "environment": os.environ.get("ENVIRONMENT", "PRD"),
+            "automation_name": automation_name_var.get(""),
+            "exec_id": exec_id_var.get(""),
+            "request_id": getattr(record, "request_id", req_id),
+            "message": sanitize_log_payload(record.getMessage()),
         }
+        
+        if hasattr(record, "context"):
+            log_record["context"] = sanitize_log_payload(record.context)
+            
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
+            
         return json.dumps(log_record)
 
 
@@ -58,11 +71,11 @@ log_dir = os.path.join(
 )
 os.makedirs(log_dir, exist_ok=True)
 
-LOG_FILE = os.path.join(log_dir, "orchestrator.log")
+LOG_FILE = os.path.join(log_dir, "orchestrator.jsonl")
 handler = RotatingFileHandler(
     LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
-handler.setFormatter(JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
+handler.setFormatter(JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%SZ"))
 
 # Console em formato legivel
 console_handler = logging.StreamHandler()

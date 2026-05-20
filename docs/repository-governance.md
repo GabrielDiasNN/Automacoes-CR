@@ -1,6 +1,8 @@
 # Diretrizes de Governança do Repositório (Hub de Automações)
 
-Este documento estabelece as regras e padrões de integridade do Hub de Automações (v6.5.5), garantindo consistência técnica, segurança e idempotência operacional entre desenvolvedores e agentes autônomos (ChatGPT/Codex, Gemini CLI e Antigravity).
+> **Versão:** v7.0.0 | **Atualizado:** 2026-05-20
+
+Este documento estabelece as regras e padrões de integridade do Hub de Automações (v7.0.0), garantindo consistência técnica, segurança e idempotência operacional entre desenvolvedores e agentes autônomos (ChatGPT/Codex, Gemini CLI e Antigravity).
 
 ---
 
@@ -31,15 +33,16 @@ O projeto utiliza o ecossistema `pip-tools` para garantir dependências 100% rep
 
 ## 3. Estilo e Qualidade de Código (Python)
 
-Toda a codebase Python segue os seguintes padrões oficiais de formatação, garantindo "Zero Drift" visual:
-*   **Formatador de Estilo:** `black`
-*   **Organizador de Imports:** `isort`
+Toda a codebase Python segue a governança descrita na skill canônica `.github/skills/python-enterprise-standard/SKILL.md`.
 
-**Validação de Estilo:**
-Antes de qualquer commit, os arquivos Python são automaticamente analisados e formatados. Para rodar a verificação de conformidade de estilo localmente:
+*   **Tipagem Estrita:** Uso obrigatório de `mypy --strict`.
+*   **Análise Estática:** Qualidade garantida por `pylint`.
+*   **Formatação e Imports:** Código garantido por `black` e `isort`.
+
+**Validação Local:**
+Antes de qualquer commit, os arquivos Python podem ser validados localmente através do validador corporativo:
 ```powershell
-.venv\Scripts\python.exe -m black --check .
-.venv\Scripts\python.exe -m isort --check-only .
+pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PythonGovernance.ps1 -RootPath .
 ```
 
 ---

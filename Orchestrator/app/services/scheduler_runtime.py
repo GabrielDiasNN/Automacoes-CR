@@ -3,6 +3,8 @@
 """Serviços compartilhados de agendamento e jobs do Orchestrator."""
 
 import logging
+import os
+import subprocess
 from datetime import datetime
 from typing import Any
 
@@ -183,6 +185,23 @@ def register_enterprise_jobs(retention_days: int) -> None:
         replace_existing=True,
         misfire_grace_time=60,
     )
+    scheduler.add_job(
+        run_file_cleanup,
+        CronTrigger(hour=2, minute=0),
+        id="enterprise_file_cleanup",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+
+def run_file_cleanup() -> None:
+    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../Tools/AplicarPoliticaRetencao.ps1"))
+    try:
+        logger.info("Iniciando limpeza de arquivos (Self-Cleaning)...")
+        subprocess.run(["pwsh.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path], check=True)
+        logger.info("Limpeza de arquivos concluída com sucesso.")
+    except Exception as e:
+        logger.error("Erro ao executar limpeza de arquivos: %s", e)
 
 
 def safe_scheduler_heartbeat() -> None:

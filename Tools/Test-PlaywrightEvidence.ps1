@@ -5,7 +5,8 @@
 
 [CmdletBinding()]
 param(
-    [string]$RootPath = "."
+    [string]$RootPath = ".",
+    [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"

@@ -31,7 +31,8 @@ $script:ActiveSkillNames = @(
     "enterprise-orchestration-contract",
     "html-css-enterprise-standard",
     "nodejs-communications",
-    "powershell-automation-monitor"
+    "powershell-automation-monitor",
+    "python-enterprise-standard"
 )
 
 $script:LegacySkillNames = @(

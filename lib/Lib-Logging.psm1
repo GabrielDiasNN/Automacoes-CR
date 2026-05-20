@@ -164,6 +164,8 @@ param(
 
 )
 
+$script:CurrentAutomationName = $AutomationName
+
 $uri = "http://localhost:8000/api/executions/telemetry/start"
 
 $body = @{ automation_name = $AutomationName } | ConvertTo-Json
@@ -438,11 +440,25 @@ param(
 
 $cleanMessage = Protect-SensitiveData $Message
 
-$timestamp = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
-
+$timestampText = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
 $execPrefix = if ([string]::IsNullOrWhiteSpace($ExecId)) { "" } else { " [ExecId:$ExecId]" }
+$line = "[$timestampText] [PS] [$Level]$execPrefix $cleanMessage"
 
-$line = "[$timestamp] [PS] [$Level]$execPrefix $cleanMessage"
+$envStr = $env:ENVIRONMENT
+if ([string]::IsNullOrWhiteSpace($envStr)) { $envStr = "PRD" }
+
+$autoName = if ([string]::IsNullOrWhiteSpace($script:CurrentAutomationName)) { "" } else { $script:CurrentAutomationName }
+$logObj = [ordered]@{
+    timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    level = $Level
+    component = "ps_script"
+    environment = $envStr
+    automation_name = $autoName
+    exec_id = $ExecId
+    request_id = "SYSTEM"
+    message = $cleanMessage
+}
+$jsonLine = $logObj | ConvertTo-Json -Depth 3 -Compress
 
 try {
 
@@ -452,7 +468,7 @@ if ($logDir -and -not (Test-Path $logDir)) { New-Item -ItemType Directory -Force
 
 # Otimizacao de I/O: AppendAllText eh mais rapido que instanciar StreamWriter, usar e fechar linha a linha.
 
-[System.IO.File]::AppendAllText($LogPath, "$line`r`n", $script:Lib_Utf8WithBom)
+[System.IO.File]::AppendAllText($LogPath, "$jsonLine`r`n", $script:Lib_Utf8WithBom)
 
 } catch [System.Exception] { Write-Verbose ("Falha ao persistir linha de log em disco: {0}" -f $_.Exception.Message) }
 
@@ -498,7 +514,7 @@ elseif (-not [System.IO.Path]::IsPathRooted($LogDir)) { $LogDir = Join-Path $roo
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
 
-return (Join-Path $LogDir "$Slug.log")
+return (Join-Path $LogDir "$Slug.jsonl")
 
 }
 
@@ -514,7 +530,7 @@ function Test-AutomationEnvironment {
 
 param([string]$ConfigPath, [string[]]$RequiredPaths = @())
 
-$res = Test-AutomationPreFlight -CheckPaths $RequiredPaths -LogPath (Join-Path $script:ProjectRoot "Logs\EnvTest.log")
+$res = Test-AutomationPreFlight -CheckPaths $RequiredPaths -LogPath (Join-Path $script:ProjectRoot "Logs\EnvTest.jsonl")
 
 return [PSCustomObject]@{ Success = $res; Message = "Ambiente validado" }
 
@@ -544,13 +560,13 @@ $kept = [System.Collections.Generic.List[string]]::new($lines.Length)
 
 foreach ($line in $lines) {
 
-if ($line -match '^\[(\d{2}/\d{2}/\d{4})') {
+if ($line -match '^\{"timestamp":"(\d{4}-\d{2}-\d{2})T') {
 
 $dateStr = $Matches[1]
 
 $parsed = [datetime]::MinValue
 
-if ([datetime]::TryParseExact($dateStr, 'dd/MM/yyyy', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+if ([datetime]::TryParseExact($dateStr, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
 
 if ($parsed -lt $cutoff) { continue }
 

@@ -5,15 +5,27 @@
 # }
 [CmdletBinding()]
 param(
-    [string]$RootPath = "."
+    [string]$RootPath = ".",
+    [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
 
 $excludedPathRegex = "\\(\.venv|node_modules|\.git|\.wwebjs_auth|\.playwright-mcp|\.pytest_cache|\.mypy_cache)\\"
 
-$jsonFiles = Get-ChildItem -Path $RootPath -Filter "*.json" -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
-    $_.FullName -notmatch $excludedPathRegex -and $_.Name -ne "package-lock.json"
+if ($Paths.Count -gt 0) {
+    $jsonFiles = @()
+    foreach ($p in $Paths) {
+        $p = $p.Trim('"')
+        $fullPath = Join-Path $RootPath $p
+        if ((Test-Path -LiteralPath $fullPath -PathType Leaf) -and $fullPath -match '\.json$') {
+            $jsonFiles += Get-Item -LiteralPath $fullPath | Where-Object { $_.FullName -notmatch $excludedPathRegex -and $_.Name -ne "package-lock.json" }
+        }
+    }
+} else {
+    $jsonFiles = Get-ChildItem -Path $RootPath -Filter "*.json" -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+        $_.FullName -notmatch $excludedPathRegex -and $_.Name -ne "package-lock.json"
+    }
 }
 
 Write-Host "=== Validando Sintaxe JSON ===" -ForegroundColor Cyan

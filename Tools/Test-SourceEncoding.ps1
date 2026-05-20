@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$RootPath = "."
+    [string]$RootPath = ".",
+    [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -170,14 +171,29 @@ function Test-SourceFileEncoding {
 }
 
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
-$targetFiles = @(
-    Get-ChildItem -LiteralPath $resolvedRoot -Recurse -File -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.Extension -in ($script:PowerShellExtensions + $script:Utf8NoBomExtensions) -and
-        -not (Test-ShouldSkipFile -FilePath $_.FullName)
-    } |
-    Sort-Object FullName
-)
+$targetFiles = @()
+
+if ($Paths.Count -gt 0) {
+    foreach ($p in $Paths) {
+        $p = $p.Trim('"')
+        $fullPath = Join-Path $resolvedRoot $p
+        if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
+            $fileInfo = Get-Item -LiteralPath $fullPath
+            if ($fileInfo.Extension -in ($script:PowerShellExtensions + $script:Utf8NoBomExtensions) -and -not (Test-ShouldSkipFile -FilePath $fileInfo.FullName)) {
+                $targetFiles += $fileInfo
+            }
+        }
+    }
+} else {
+    $targetFiles = @(
+        Get-ChildItem -LiteralPath $resolvedRoot -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Extension -in ($script:PowerShellExtensions + $script:Utf8NoBomExtensions) -and
+            -not (Test-ShouldSkipFile -FilePath $_.FullName)
+        } |
+        Sort-Object FullName
+    )
+}
 
 $findings = @()
 foreach ($file in $targetFiles) {

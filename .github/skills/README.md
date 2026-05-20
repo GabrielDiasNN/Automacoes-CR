@@ -13,7 +13,7 @@ O projeto atual é 100% nativo, com stack consolidada em Python, PowerShell e No
 
 ## Taxonomia Ativa do Workspace
 
-O conjunto ativo de 6 skills está organizado nas seguintes fronteiras de responsabilidade:
+O conjunto ativo de 7 skills está organizado nas seguintes fronteiras de responsabilidade:
 
 1. **Fundação**
    - `ai-native-development-standard`: governança de contexto, documentação AI-Native, discovery e evolução das skills.
@@ -23,6 +23,7 @@ O conjunto ativo de 6 skills está organizado nas seguintes fronteiras de respon
    - `automation-runtime-safety`: Zero Trust, logs, severidade, encoding e falha segura.
 
 3. **Runtimes e Canais**
+   - `python-enterprise-standard`: desenvolvimento backend, qualidade Mypy/Pylint, Pydantic, e regras estritas para processamento Python.
    - `powershell-automation-monitor`: scripts corporativos, monitores, módulos compartilhados e governança PowerShell.
    - `nodejs-communications`: WhatsApp, headless e bootstrap `.bat`/`.cmd` sem ownership de orquestração geral.
 

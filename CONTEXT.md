@@ -17,6 +17,7 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Shared Skills Model**: `.github/skills/` e a fonte canonica das 6 skills ativas; `.gemini/skills/` existe apenas como espelho por junction/symlink para compatibilidade com Gemini CLI e Antigravity.
 
 ## 🧠 Gestão de Contexto (AI-Native)
+- **Self-Cleaning Repository v7.0.1 (19/05/2026):** O script `AplicarPoliticaRetencao.ps1` foi internalizado no `APScheduler` do Orchestrator (job `enterprise_file_cleanup`). A rotina agora roda de forma autônoma às 02:00 AM, garantindo a expurgação automática de logs e backups antigos. A invocação redundante via API (`/purge`) foi removida do script, consolidando a exclusão do banco de dados exclusivamente na rotina interna `enterprise_daily_purge`.
 - **Playwright Evidence Governance v6.5.4 (18/05/2026):** `Tools/Test-PlaywrightEvidence.ps1` passa a validar padrão, template e evidências E2E; `ValidarAutomacoes.ps1 -OnlyGovernance` agora falha se a evidência não registrar URL real, Playwright por último, console limpo e resultado aprovado.
 - **Contrato Operacional Versionado v6.5.4 (18/05/2026):** `overview`, `diagnostics` e `version` passam a expor `contract_version`; diagnósticos agora incluem `checks` mínimos de runtime e plano de recovery em duas camadas para estabilizar o consumo pelo Dashboard.
 - **Runtime Compartilhado v6.5.4 (18/05/2026):** scheduler, wake-up do worker e criação base de execuções foram centralizados em serviços e runtime comum, reduzindo dependências cruzadas entre `main.py`, routers e `worker.py`.

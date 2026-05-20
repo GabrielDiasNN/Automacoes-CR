@@ -18,12 +18,18 @@ import os
 import time
 import uuid
 from typing import Optional
+from contextvars import ContextVar
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import APIKeyHeader
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("orchestrator")
+
+# Variaveis de contexto para o Padrão Enterprise de Logs (Pilar L)
+request_id_var: ContextVar[str] = ContextVar("request_id", default="SYSTEM")
+exec_id_var: ContextVar[str] = ContextVar("exec_id", default="")
+automation_name_var: ContextVar[str] = ContextVar("automation_name", default="")
 
 RATE_LIMIT_EXEMPT_PATHS = {
     "/api/system/health",
@@ -68,10 +74,14 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request_id = request.headers.get("X-Request-Id", str(uuid.uuid4())[:12])
         request.state.request_id = request_id
-
-        response: Response = await call_next(request)
-        response.headers["X-Request-Id"] = request_id
-        return response
+        
+        token = request_id_var.set(request_id)
+        try:
+            response: Response = await call_next(request)
+            response.headers["X-Request-Id"] = request_id
+            return response
+        finally:
+            request_id_var.reset(token)
 
 
 # ---------------------------------------------------------------------------

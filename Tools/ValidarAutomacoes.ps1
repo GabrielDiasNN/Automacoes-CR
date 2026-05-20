@@ -1,4 +1,5 @@
 ﻿# cSpell:words cscript nologo RESUMO
+# cSpell:words cscript nologo RESUMO
 # {
 #   "version": "4.1.0",
 #   "skill": "enterprise-orchestration-contract",
@@ -12,7 +13,8 @@ param(
     [switch]$SkipDashboardTemplateGovernance,
     [switch]$OnlyGovernance,
     [switch]$FailOnHtmlCssWarnings,
-    [switch]$FailOnTermWarnings
+    [switch]$FailOnTermWarnings,
+    [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,7 +45,10 @@ function Invoke-DashboardTemplateCheck {
 }
 
 function Invoke-NativeGovernanceCheck {
-    param([string]$RootPath)
+    param(
+        [string]$RootPath,
+        [string[]]$TargetPaths = @()
+    )
     Write-Host "`n=== Governanca Nativa (Seguranca, SQL, Python, PS, JSON) ===" -ForegroundColor Cyan
     $checks = @("Test-ZeroTrust.ps1", "Test-SqlPerformance.ps1", "Test-PythonGovernance.ps1", "Test-PowerShellGovernance.ps1", "Test-PowerShellApprovedVerbs.ps1", "Test-PortablePaths.ps1", "Test-SourceEncoding.ps1", "Test-JsonConfig.ps1", "Test-PlaywrightEvidence.ps1")
     $allOk = $true
@@ -59,24 +64,6 @@ function Invoke-NativeGovernanceCheck {
         }
     }
     if ($allOk) { return 0 } else { return 1 }
-}
-
-function Start-Automacao {
-    param([string]$Name, [string]$ScriptPath, [string]$ExecId, [int]$TimeoutSec = 360)
-    Write-Host "`n=== $Name | ExecId=$ExecId ===" -ForegroundColor Cyan
-    if ([string]::IsNullOrWhiteSpace($ScriptPath)) { return "SCRIPT_PATH_VAZIO" }
-    $resolved = if ([System.IO.Path]::IsPathRooted($ScriptPath)) { $ScriptPath } else { Join-Path $BasePath $ScriptPath }
-    if (-not (Test-Path $resolved)) { return "SCRIPT_NAO_ENCONTRADO" }
-
-    $dir = Split-Path -Parent $resolved
-    Write-Host ("[INFO] Iniciando automacao em: {0}" -f $dir)
-    $p = Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $resolved, $ExecId -PassThru -WindowStyle Hidden -WorkingDirectory $dir
-
-    $timedOut = $false
-    try { Wait-Process -Id $p.Id -Timeout $TimeoutSec -ErrorAction Stop } catch [System.Exception] { $timedOut = $true }
-    if ($timedOut -or -not $p.HasExited) { Stop-Process -Id $p.Id -Force; $exitCode = 'TIMEOUT' } else { $exitCode = [string]$p.ExitCode }
-    Write-Host ("EXIT=" + $exitCode)
-    return $exitCode
 }
 
 # --- FLUXO PRINCIPAL ---

@@ -1,5 +1,22 @@
 # Changelog
 
+## [7.0.2] - 2026-05-19
+### Adicionado
+- **Nome Dinâmico de Automação nos Logs**: Atualizada a biblioteca `lib/Lib-Logging.psm1` para extrair e injetar dinamicamente o nome correto da automação (campo `automation_name`) nas entradas de log JSONL estruturadas, via variável `$script:CurrentAutomationName`.
+- **Estabilização da Test Task**: Criado o script físico resiliente `test/run.ps1` para simular execuções em modo sandbox/teste e registrar telemetria.
+
+### Corrigido
+- **Falha de Parâmetro de Telemetria**: Removida chamada incorreta ao parâmetro `-ExitCode` em `Close-ExecutionTelemetry` no script `test/run.ps1`, sanando o erro de execução no runtime do PowerShell.
+- **Recuperação do Validador de Governança**: Corrigida a função `Invoke-NativeGovernanceCheck` em `Tools/ValidarAutomacoes.ps1` que possuía chaves órfãs e sintaxe quebrada, permitindo a execução robusta dos validadores locais.
+- **Saneamento de Encodings**: Saneados os arquivos `.ps1` e `.psm1` afetados para `UTF-8 com BOM`, prevenindo falhas de interpretação de acentuação no PowerShell 5.1.
+
+## [7.0.1] - 2026-05-19
+### Adicionado
+- **Self-Cleaning Repository:** Integração do script `AplicarPoliticaRetencao.ps1` diretamente no `APScheduler` interno do Orchestrator (job `enterprise_file_cleanup`). A rotina agora roda de forma autônoma (diariamente às 02:00 AM), removendo logs e backups antigos sem intervenção manual, prevenindo alertas de disco cheio.
+
+### Corrigido
+- Removida a invocação redundante da API `/api/system/purge` no script PowerShell, consolidando o controle de expurgo do banco de dados exclusivamente na rotina Python do Orchestrator (`enterprise_daily_purge`).
+
 ## [7.0.0] - 2026-05-19
 ### Adicionado
 - **Fase 10 (Documentação de Governança)**: Conclusão da Fase 10 com a criação de 4 documentos de governança técnica formalizando o ciclo completo de desenvolvimento e operação do Hub:

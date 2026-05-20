@@ -1,8 +1,8 @@
-# Central de Automações — v6.5.4 Enterprise Operations
+# Central de Automações — v7.0.0 Dashboard Operacional e Governança
 
-Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v6.5.4**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
+Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v7.0.0**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
 
-## 🏗️ Arquitetura Técnica (Enterprise Control Tower v6.5.4)
+## 🏗️ Arquitetura Técnica (Enterprise Control Tower v7.0.0)
 
 ```mermaid
 graph TD
@@ -46,7 +46,7 @@ graph TD
 - **Validação Administrativa**: API expõe validação de `schedule` e `.env` antes de persistência.
 - **Worker Resilience**: Encerramento limpo de processos PowerShell para evitar consumo de recursos zumbi.
 - **Performance SQLite**: Pragmas otimizados para operação em RAM (`temp_store=MEMORY`).
-- **Skills Compartilhadas**: `.github/skills/` e a fonte canonica das 6 skills ativas; `.gemini/skills/` e apenas o espelho de compatibilidade para Gemini CLI e Antigravity.
+- **Skills Compartilhadas**: `.github/skills/` é a fonte canônica das 7 skills ativas; `.gemini/skills/` é apenas o espelho de compatibilidade para Gemini CLI e Antigravity.
 
 ---
 Mantido pela equipe de Automações & Antigravity AI

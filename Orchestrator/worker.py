@@ -84,25 +84,35 @@ class _JsonFormatter(logging.Formatter):
     """Formatter JSON estruturado identico ao Orchestrator (Pilar L)."""
 
     def format(self, record: logging.LogRecord) -> str:
+        from app.security import sanitize_log_payload
+        
         doc: Dict[str, Any] = {
-            "ts": self.formatTime(record, self.datefmt),
+            "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
-            "msg": record.getMessage(),
-            "logger": record.name,
-            "correlation_id": getattr(record, "correlation_id", None),
+            "component": "worker",
+            "environment": os.environ.get("ENVIRONMENT", "PRD"),
+            "automation_name": getattr(record, "automation_name", ""),
+            "exec_id": getattr(record, "correlation_id", ""),
+            "request_id": getattr(record, "request_id", "SYSTEM"),
+            "message": sanitize_log_payload(record.getMessage()),
         }
+        
+        if hasattr(record, "context"):
+            doc["context"] = sanitize_log_payload(record.context)
+            
         if record.exc_info:
             doc["exception"] = self.formatException(record.exc_info)
+            
         return json.dumps(doc)
 
 
 _json_handler = logging.handlers.RotatingFileHandler(
-    os.path.join(log_dir, "Worker.log"),
+    os.path.join(log_dir, "Worker.jsonl"),
     maxBytes=5 * 1024 * 1024,
     backupCount=5,
     encoding="utf-8",
 )
-_json_handler.setFormatter(_JsonFormatter())
+_json_handler.setFormatter(_JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%SZ"))
 
 _console_handler = logging.StreamHandler()
 _console_handler.setFormatter(
