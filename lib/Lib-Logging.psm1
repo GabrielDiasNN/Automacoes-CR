@@ -165,6 +165,7 @@ param(
 )
 
 $script:CurrentAutomationName = $AutomationName
+$global:CurrentAutomationName = $AutomationName
 
 $uri = "http://localhost:8000/api/executions/telemetry/start"
 
@@ -447,7 +448,28 @@ $line = "[$timestampText] [PS] [$Level]$execPrefix $cleanMessage"
 $envStr = $env:ENVIRONMENT
 if ([string]::IsNullOrWhiteSpace($envStr)) { $envStr = "PRD" }
 
-$autoName = if ([string]::IsNullOrWhiteSpace($script:CurrentAutomationName)) { "" } else { $script:CurrentAutomationName }
+$autoName = $script:CurrentAutomationName
+if ([string]::IsNullOrWhiteSpace($autoName)) {
+    $autoName = $global:CurrentAutomationName
+}
+if ([string]::IsNullOrWhiteSpace($autoName)) {
+    try {
+        $stack = Get-PSCallStack
+        foreach ($frame in $stack) {
+            if ($frame.ScriptName -and $frame.ScriptName -notmatch 'Lib-Logging\.psm1$') {
+                $parentDir = Split-Path -Leaf (Split-Path -Parent $frame.ScriptName)
+                if ($parentDir -eq "test") {
+                    $autoName = "Test Task"
+                    break
+                } elseif ($parentDir -and $parentDir -notmatch '^(lib|Tools|_Template)$') {
+                    $autoName = $parentDir
+                    break
+                }
+            }
+        }
+    } catch [System.Exception] { }
+}
+if ([string]::IsNullOrWhiteSpace($autoName)) { $autoName = "" }
 $logObj = [ordered]@{
     timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     level = $Level

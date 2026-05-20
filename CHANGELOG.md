@@ -1,6 +1,11 @@
 # Changelog
 
-## [7.0.2] - 2026-05-19
+## [7.0.3] - 2026-05-19
+### Adicionado
+- **Homologação Definitiva de Automações**: Homologação completa de todas as 5 automações em lote concorrente no modo de teste global. Todas as execuções obtiveram status de `SUCCESS` com 100% de integridade e estabilidade.
+- **Gravação Dinâmica de Logs**: Validação pontual do preenchimento e injeção do campo `"automation_name"` em todas as entradas dos logs estruturados (JSONL) nos robôs.
+
+### [7.0.2] - 2026-05-19
 ### Adicionado
 - **Nome Dinâmico de Automação nos Logs**: Atualizada a biblioteca `lib/Lib-Logging.psm1` para extrair e injetar dinamicamente o nome correto da automação (campo `automation_name`) nas entradas de log JSONL estruturadas, via variável `$script:CurrentAutomationName`.
 - **Estabilização da Test Task**: Criado o script físico resiliente `test/run.ps1` para simular execuções em modo sandbox/teste e registrar telemetria.

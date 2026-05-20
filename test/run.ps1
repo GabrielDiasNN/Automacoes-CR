@@ -25,7 +25,7 @@ Import-Module $libLogging -Force
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = Register-ExecutionTelemetry -AutomationName "Test Task"
 } else {
-    $script:CurrentAutomationName = "Test Task"
+    $global:CurrentAutomationName = "Test Task"
 }
 
 $logPath = Get-AutomacaoLogPath -Slug "Test_Task"
