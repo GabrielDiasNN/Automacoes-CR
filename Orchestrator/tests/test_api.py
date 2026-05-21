@@ -498,6 +498,48 @@ def test_system_overview_includes_diagnostics_summary(client):
     assert "findings" in data["diagnostics"]
 
 
+def test_system_overview_exposes_automation_operational_metrics(client, db_session):
+    from app import models
+    from app.timezone import get_now_local
+
+    auto = models.Automation(name="Metrics Auto", script_path="./test/run.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    now = get_now_local()
+    db_session.add(
+        models.Execution(
+            id="EXEC_METRIC_SUCCESS",
+            automation_id=auto.id,
+            status="SUCCESS",
+            duration_seconds=120,
+            requested_by="TEST",
+            started_at=now - timedelta(minutes=30),
+            finished_at=now - timedelta(minutes=28),
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="EXEC_METRIC_TIMEOUT",
+            automation_id=auto.id,
+            status="TIMEOUT",
+            duration_seconds=600,
+            requested_by="TEST",
+            started_at=now - timedelta(minutes=20),
+            finished_at=now - timedelta(minutes=10),
+        )
+    )
+    db_session.commit()
+
+    res = client.get("/api/system/overview", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    autos = res.json()["automations"]
+    target = next(item for item in autos if item["name"] == "Metrics Auto")
+    assert target["success_24h"] >= 1
+    assert target["failures_24h"] >= 1
+    assert target["timeouts_24h"] >= 1
+    assert target["avg_duration_24h_seconds"] is not None
+
+
 def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
     from app import models
     from app.timezone import get_now_local

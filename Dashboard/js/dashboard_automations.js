@@ -680,8 +680,16 @@ export function createAutomationsModule(ctx) {
         if (Number(auto.cooldown_minutes || 0) > 0) flags.push(`CD ${auto.cooldown_minutes}m`);
         if (Number(auto.max_retries || 0) > 0) flags.push(`RT ${auto.max_retries}`);
         if (auto.queue_group) flags.push("GRP");
+        const failures24h = Number(auto.failures_24h || 0);
+        const timeouts24h = Number(auto.timeouts_24h || 0);
+        const success24h = Number(auto.success_24h || 0);
+        if (timeouts24h > 0) flags.push(`TO ${timeouts24h}/24h`);
+        if (failures24h > 0) flags.push(`ER ${failures24h}/24h`);
+        if (success24h > 0 && failures24h === 0 && timeouts24h === 0) flags.push(`OK ${success24h}/24h`);
+
         if (!flags.length) return "<span class=\"badge badge-success\">OK</span>";
-        return `<span class="badge badge-warning">${flags.join(" • ")}</span>`;
+        const hasFailure = failures24h > 0 || timeouts24h > 0;
+        return `<span class="badge ${hasFailure ? "badge-danger" : "badge-warning"}">${flags.join(" • ")}</span>`;
     }
 
     async function renderSchedulePreview() {

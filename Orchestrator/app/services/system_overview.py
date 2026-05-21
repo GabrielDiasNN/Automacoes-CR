@@ -5,7 +5,7 @@
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import desc, func
+from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
@@ -103,9 +103,37 @@ def build_system_overview_payload(
     automations = (
         db.query(models.Automation).order_by(models.Automation.name.asc()).all()
     )
+    automation_metrics_rows = (
+        db.query(
+            models.Execution.automation_id.label("automation_id"),
+            func.sum(case((models.Execution.status == "SUCCESS", 1), else_=0)).label(
+                "success_24h"
+            ),
+            func.sum(
+                case(
+                    (
+                        models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("failures_24h"),
+            func.sum(case((models.Execution.status == "TIMEOUT", 1), else_=0)).label(
+                "timeouts_24h"
+            ),
+            func.avg(models.Execution.duration_seconds).label("avg_duration_24h_seconds"),
+        )
+        .filter(models.Execution.started_at >= window_start)
+        .group_by(models.Execution.automation_id)
+        .all()
+    )
+    metrics_by_automation = {
+        int(row.automation_id): row for row in automation_metrics_rows if row.automation_id
+    }
     autos_payload: list[dict[str, Any]] = []
     for auto in automations:
         auto_id = int(auto.id)
+        metrics_row = metrics_by_automation.get(auto_id)
         last_exec = (
             db.query(models.Execution)
             .filter(models.Execution.automation_id == auto_id)
@@ -151,6 +179,20 @@ def build_system_overview_payload(
                 "sla_minutes": sla_minutes,
                 "sla_status": sla_status,
                 "sla_avg_duration_minutes": sla_avg_duration_minutes,
+                "success_24h": int(getattr(metrics_row, "success_24h", 0) or 0),
+                "failures_24h": int(getattr(metrics_row, "failures_24h", 0) or 0),
+                "timeouts_24h": int(getattr(metrics_row, "timeouts_24h", 0) or 0),
+                "avg_duration_24h_seconds": (
+                    round(
+                        float(
+                            getattr(metrics_row, "avg_duration_24h_seconds", 0) or 0
+                        ),
+                        2,
+                    )
+                    if getattr(metrics_row, "avg_duration_24h_seconds", None)
+                    is not None
+                    else None
+                ),
                 "last_status": last_exec.status if last_exec else None,
                 "next_run": schemas.format_dt_br(next_run_lookup.get(auto_id)),
             }

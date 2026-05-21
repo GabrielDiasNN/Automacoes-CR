@@ -283,6 +283,10 @@ class SystemOverviewAutomationCard(BaseModel):
     sla_minutes: Optional[int] = None
     sla_status: str = "unknown"  # ok | at_risk | violated | unknown
     sla_avg_duration_minutes: Optional[float] = None
+    success_24h: int = 0
+    failures_24h: int = 0
+    timeouts_24h: int = 0
+    avg_duration_24h_seconds: Optional[float] = None
     last_status: Optional[str] = None
     next_run: Optional[str] = None
 
