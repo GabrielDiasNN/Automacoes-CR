@@ -23,11 +23,15 @@ def test_api_unauthorized_access(client: TestClient):
     response = client.get("/api/system/diagnostics")
     assert response.status_code == 403
     assert "API Key" in response.json()["detail"]
+    assert response.json()["code"] == "access_denied"
+    assert response.json()["correlation_id"]
 
     # Rota protegida com API Key errada
     response = client.get("/api/system/diagnostics", headers={"X-API-Key": "wrong-token"})
     assert response.status_code == 403
     assert "API Key" in response.json()["detail"]
+    assert response.json()["code"] == "access_denied"
+    assert response.json()["correlation_id"]
 
 
 def test_api_not_found(client: TestClient):
@@ -35,10 +39,12 @@ def test_api_not_found(client: TestClient):
     response = client.get("/api/automations/99999", headers=AUTH_HEADERS)
     assert response.status_code == 404
     assert "Automação não encontrada" in response.json()["detail"]
+    assert response.json()["code"] == "resource_not_found"
 
     response = client.get("/api/executions/EXEC_NONEXISTENT", headers=AUTH_HEADERS)
     assert response.status_code == 404
     assert "Execução não encontrada" in response.json()["detail"]
+    assert response.json()["code"] == "resource_not_found"
 
 
 def test_diagnostics_and_overview_contract_version(client: TestClient, db_session: Session):

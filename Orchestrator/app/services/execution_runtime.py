@@ -287,10 +287,19 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
         .all()
     )
     for task in zombies:
+        now = get_now_local()
         task.status = "FAILED_BY_REBOOT"
-        task.finished_at = get_now_local()
+        task.finished_at = now
         task.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT
         task.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE
-        task.logs = (task.logs or "") + "\n[REBOOT] Interrompida."
+        reboot_audit_line = (
+            f"[RECOVERY_AUDIT] actor=SYSTEM_STARTUP "
+            f"action=MARK_FAILED_BY_REBOOT timestamp={now.isoformat()}"
+        )
+        task.logs = (
+            (task.logs or "")
+            + "\n[REBOOT] Interrompida."
+            + f"\n{reboot_audit_line}"
+        )
     db.commit()
     return len(zombies)

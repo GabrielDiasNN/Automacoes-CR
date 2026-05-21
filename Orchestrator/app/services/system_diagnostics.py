@@ -21,6 +21,12 @@ from ..constants import (
     ORCHESTRATOR_CONTRACT_VERSION,
     ORCHESTRATOR_SCHEMA_VERSION,
     ORCHESTRATOR_VERSION,
+    DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
+    DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
+    DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS,
+    DIAGNOSTIC_WAL_CRITICAL_MB,
+    DIAGNOSTIC_WAL_ELEVATED_MB,
+    DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
     SEVERITY_ERROR,
     SEVERITY_WARN,
 )
@@ -198,7 +204,7 @@ def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
         max_runtime_minutes = item.automation.max_runtime_minutes or 30
         age_seconds = round((now - started_at).total_seconds(), 2)
         limit_seconds = int(max_runtime_minutes) * 60
-        if age_seconds <= limit_seconds + 300:
+        if age_seconds <= limit_seconds + DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS:
             continue
         stale.append(
             {
@@ -309,7 +315,7 @@ def build_diagnostics_payload(
         )
 
     wal_risk = "normal"
-    if wal_size_mb >= 256:
+    if wal_size_mb >= DIAGNOSTIC_WAL_CRITICAL_MB:
         wal_risk = "critical"
         add_finding(
             findings,
@@ -324,7 +330,7 @@ def build_diagnostics_payload(
                 "priority": 1,
             },
         )
-    elif wal_size_mb >= 64:
+    elif wal_size_mb >= DIAGNOSTIC_WAL_ELEVATED_MB:
         wal_risk = "elevated"
         add_finding(
             findings,
@@ -391,7 +397,12 @@ def build_diagnostics_payload(
     if not worker_status.is_alive:
         add_finding(
             findings,
-            SEVERITY_ERROR if active_count else SEVERITY_WARN,
+            (
+                SEVERITY_ERROR
+                if active_count
+                or (last_ping_age_seconds or 0) >= DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS
+                else SEVERITY_WARN
+            ),
             "worker",
             "Worker sem heartbeat recente.",
             {
@@ -405,7 +416,7 @@ def build_diagnostics_payload(
             },
         )
 
-    if pending_age_seconds >= 900:
+    if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS:
         add_finding(
             findings,
             SEVERITY_WARN,
@@ -420,7 +431,7 @@ def build_diagnostics_payload(
             },
         )
 
-    if running_age_seconds >= 3600:
+    if running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS:
         add_finding(
             findings,
             SEVERITY_WARN,
@@ -529,12 +540,14 @@ def build_diagnostics_payload(
             "label": "Fila parada",
             "status": (
                 "warn"
-                if pending_age_seconds >= 900 or running_age_seconds >= 7200
+                if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
+                or running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2
                 else "ok"
             ),
             "detail": (
                 "Há execuções envelhecidas na fila ou em execução."
-                if pending_age_seconds >= 900 or running_age_seconds >= 7200
+                if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
+                or running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2
                 else "Sem indício de fila parada."
             ),
             "value": f"pending={pending_age_seconds}s,running={running_age_seconds}s",
@@ -636,6 +649,27 @@ def build_diagnostics_payload(
                 ACTION_CODE_BACKUP,
             ],
             "recommended_action": recommended_action,
+        },
+        "slo": {
+            "thresholds": {
+                "pending_stalled_warn_seconds": DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
+                "running_stalled_warn_seconds": DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
+                "running_over_runtime_grace_seconds": DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS,
+                "worker_offline_warn_seconds": DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
+                "wal_elevated_mb": DIAGNOSTIC_WAL_ELEVATED_MB,
+                "wal_critical_mb": DIAGNOSTIC_WAL_CRITICAL_MB,
+            },
+            "breaches": {
+                "pending_stalled": pending_age_seconds
+                >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
+                "running_stalled": running_age_seconds
+                >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
+                "running_over_runtime": bool(running_over_runtime),
+                "worker_offline": not worker_status.is_alive
+                and (last_ping_age_seconds or 0) >= DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
+                "wal_elevated": wal_size_mb >= DIAGNOSTIC_WAL_ELEVATED_MB,
+                "wal_critical": wal_size_mb >= DIAGNOSTIC_WAL_CRITICAL_MB,
+            },
         },
         "schema_version": schema_version,
     }

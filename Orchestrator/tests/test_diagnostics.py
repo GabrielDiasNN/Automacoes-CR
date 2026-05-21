@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 from app import models
 from app.constants import (
     ACTION_CODE_CHECKPOINT,
+    DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
+    DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS,
     EXECUTION_STATUS_PENDING,
     EXECUTION_STATUS_RUNNING,
 )
@@ -140,3 +142,9 @@ def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Se
     assert checks["running_over_runtime"]["status"] == "warn"
     queue_findings = [f for f in data["findings"] if f["component"] == "queue"]
     assert any("max_runtime" in finding["message"] for finding in queue_findings)
+    assert data["slo"]["thresholds"]["pending_stalled_warn_seconds"] == DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
+    assert (
+        data["slo"]["thresholds"]["running_over_runtime_grace_seconds"]
+        == DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS
+    )
+    assert data["slo"]["breaches"]["running_over_runtime"] is True
