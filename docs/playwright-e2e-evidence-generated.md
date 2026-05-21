@@ -3,7 +3,7 @@
 Preencha este bloco ao final de cada entrega que exija validação E2E Playwright.
 
 ## Evidência E2E Final
-- Data/Hora (BRT): 2026-05-20 16:14:54
+- Data/Hora (BRT): 2026-05-20 21:42:36
 - URL validada: http://127.0.0.1:8000/dashboard/
 - Ordem de execução: Governança -> Testes de contrato/backend -> Playwright E2E (último)
 - Módulos navegados:

@@ -6,6 +6,7 @@
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = 1
 $env:PYLINTHOME = Join-Path $RootPath ".mypy_cache\pylint"
+$env:MYPYPATH = "$(Join-Path $RootPath "Orchestrator");$RootPath"
 New-Item -ItemType Directory -Force -Path $env:PYLINTHOME | Out-Null
 Write-Host "=== Governanca Python (Type Hints & Pylint) ==="
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [9.1.0] - 2026-05-20
+### Adicionado
+- **Horário de Âncora no Agendamento por Intervalo Periódico**: Introduzido suporte ao campo opcional `anchor_time` (Horário de início/âncora) para a recorrência do tipo `interval`. Permite ao usuário definir a partir de qual horário exato do dia (ex: `08:15`) a cadência periódica (ex: a cada 30 min) deve começar a contar de forma robusta e consistente.
+- **Normalização e Validação no Backend**: Implementada a verificação rigorosa via regex `^\d{2}:\d{2}$` do campo `anchor_time` em `normalize_schedule_payload`. Adicionado tratamento tolerante para fallbacks consistentes no modo não-strict.
+- **Cálculo Matemático e Determinístico de Próximos Disparos**: Desenvolvida lógica refinada em `preview_next_runs` para computar os múltiplos do intervalo com precisão, considerando tanto âncoras no passado hoje (calculando o primeiro múltiplo estritamente futuro) quanto no futuro hoje (primeiro disparo coincide na própria âncora).
+- **Integração Gráfica e Textual no Dashboard**: Adicionado input HTML de tipo `time` (`#f-interval-anchor-time`) e ligados os eventos de renderização dinâmicos. A descrição textual e a pré-visualização das próximas execuções foram estendidas para exibir `, a partir das HH:MM` em PT-BR de forma impecável.
+- **Suite Ampliada de Testes Automatizados**: Criada classe de testes `TestAnchorTime` em `test_schedule_advanced.py` cobrindo normalização, descrição humana, fallbacks e preview determinístico com simulação temporal congelada (`monkeypatch` do pytest), elevando a suite pytest para **103/103 testes 100% verdes**.
+- **Vinculação do Agendador no APScheduler**: Modificada a função `_register_schedule` em `scheduler_runtime.py` para processar `anchor_time` e injetá-lo programaticamente como `start_date` no `IntervalTrigger` em relação à timezone local `America/Sao_Paulo`.
+- **Diagnóstico de RUNNING Acima do Limite**: `/api/system/diagnostics` agora expõe `queue.running_over_runtime` e o check `running_over_runtime`, permitindo que o Dashboard mostre execuções ativas que excederam `max_runtime_minutes`.
+- **Alinhamento de Versão Runtime/Contrato**: `constants.py` foi alinhado para `ORCHESTRATOR_VERSION`/`WORKER_VERSION` `9.1.0`, contrato `2026.05.20.1` e schema Alembic ativo `a5b212d4418f`.
+
 ## [9.0.0] - 2026-05-20
 ### Adicionado
 - **Migração de Banco de Dados com Alembic**: Transição completa do ecossistema de infraestrutura de banco de dados SQLite para o controle estruturado, versionado e auditável utilizando o Alembic integrado ao SQLAlchemy.

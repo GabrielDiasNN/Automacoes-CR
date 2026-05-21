@@ -77,9 +77,19 @@ Audit/
 Orchestrator/automacoes.db
 Orchestrator/automacoes.db-shm
 Orchestrator/automacoes.db-wal
+Orchestrator/orchestrator.db
+Orchestrator/orchestrator.db-shm
+Orchestrator/orchestrator.db-wal
+Orchestrator/tests/test-*.db
+Orchestrator/tests/test-*.db-shm
+Orchestrator/tests/test-*.db-wal
+Orchestrator/tests/fix_tests*.py
 Orchestrator/orchestrator.pid
 Orchestrator/worker.pid
 Backups/
+
+# Scratch local de investigação
+scratch/
 
 # Estados runtime por automacao (nao versionar)
 Montagem de Terceirizados/delivery_state.json

@@ -7,7 +7,7 @@ Este repositório é o núcleo soberano para orquestração de automações corp
 ```mermaid
 graph TD
     subgraph "FRONTEND — Dashboard SPA"
-        UI["Dashboard v6.5.4<br/>Zero-Trust + UTF-8 Nativo"]
+        UI["Dashboard v9.1.0<br/>Zero-Trust + UTF-8 Nativo"]
         WS_CLIENT["WebSocket Client<br/>Logs + Events Replay"]
         UI --> WS_CLIENT
     end
@@ -21,7 +21,7 @@ graph TD
     end
 
     subgraph "CORE — Motor de Execução v5"
-        WORKER["Worker v6.5.4<br/>Graceful Shutdown + JSON Logs"]
+        WORKER["Worker v9.1.0<br/>Graceful Shutdown + JSON Logs"]
         PRIORITY["Priority Queue<br/>HIGH/NORMAL/LOW"]
         SCHEDULER["APScheduler<br/>WAL Checkpoint + Purge"]
         WORKER --- PRIORITY
@@ -42,7 +42,8 @@ graph TD
 - **Fila Operacional Auditável**: Execuções agora carregam `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`, habilitando requeue seguro e rastreável.
 - **Recovery com Lock de Grupo**: Requeue manual respeita `queue_group` ativo para evitar concorrência entre automações que disputam o mesmo canal, banco ou recurso operacional.
 - **Evidência E2E Governada**: `Tools/Test-PlaywrightEvidence.ps1` valida que entregas com Playwright registrem URL real, ordem final, console limpo e resultado aprovado.
-- **Schema Evolutivo**: Startup aplica migrações leves de SQLite e mantém `schema_version` em metadados do próprio banco.
+- **Schema Evolutivo com Alembic**: Startup aplica migrações estruturadas de SQLite via Alembic e usa `alembic_version` como fonte auditável de schema.
+- **Diagnóstico de Execuções Acima do Limite**: `/api/system/diagnostics` sinaliza execuções `RUNNING` que excederam `max_runtime_minutes`, diferenciando processamento longo legítimo de provável travamento operacional.
 - **Validação Administrativa**: API expõe validação de `schedule` e `.env` antes de persistência.
 - **Worker Resilience**: Encerramento limpo de processos PowerShell para evitar consumo de recursos zumbi.
 - **Performance SQLite**: Pragmas otimizados para operação em RAM (`temp_store=MEMORY`).

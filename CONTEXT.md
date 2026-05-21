@@ -15,6 +15,7 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Graceful Worker**: Worker monitora processos ativos e garante o `taskkill` de toda a árvore de processos no shutdown.
 - **SQLite Hardened**: WAL mode com `synchronous=NORMAL` e `temp_store=MEMORY` para máxima performance de I/O.
 - **Unified JSON Logging**: Loggers do Orchestrator e Worker unificados para rastreabilidade via `correlation_id`.
+- **Runtime v9.1.0 alinhado:** `ORCHESTRATOR_VERSION`, `WORKER_VERSION`, `ORCHESTRATOR_CONTRACT_VERSION` e `ORCHESTRATOR_SCHEMA_VERSION` foram alinhados ao baseline Alembic/anchor-time, com `ORCHESTRATOR_SCHEMA_VERSION` apontando para a revisão Alembic ativa.
 - **Shared Skills Model**: `.github/skills/` e a fonte canonica das 6 skills ativas; `.gemini/skills/` existe apenas como espelho por junction/symlink para compatibilidade com Gemini CLI e Antigravity.
 
 ## 🧠 Gestão de Contexto (AI-Native)
@@ -33,7 +34,7 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Recuperação Operacional da Aba Sistema (18/05/2026):** A interface passou a separar wake-up leve de recuperação canônica; quando o worker está offline, a ação exibida aciona `Recover-Orchestrator.ps1` / `Start-Orchestrator.ps1` para retomar o processamento da fila.
 - **Estado:** Estabilizado v6.5.4 (Enterprise Operations).
 - **Operação de Fila (17/05/2026):** Execuções agora registram `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`, habilitando requeue seguro via API.
-- **Schema Evolutivo (17/05/2026):** O startup do Orchestrator aplica migrações leves de SQLite e persiste `schema_version` em `orchestrator_metadata` para diagnóstico e drift controlado.
+- **Schema Evolutivo (17/05/2026):** O startup do Orchestrator aplica migrações estruturadas de SQLite via Alembic e compara o schema runtime com `alembic_version` para diagnóstico e drift controlado.
 - **Administração Segura (17/05/2026):** O backend passou a validar `schedule` e `.env` antes de salvar mudanças administrativas.
 - **Padronização Runtime (17/05/2026):** Robôs de negócio alinhados para `Lib-Config`, Python da venv por caminho explícito, fallback `ORACLE_CLIENT_LIB_DIR`/`ORACLE_CLIENT_PATH`, lock com `ExecId`/`LogPath` e validação agregada de governança concluindo em tempo previsível.
 - **Compliance:** 100% aprovado em saneamento estético (trailing spaces) e encoding UTF-8 com BOM para PowerShell.
