@@ -38,6 +38,7 @@ graph TD
 - **Observabilidade Acionável**: `/api/system/diagnostics` consolida saúde, fila, worker, scheduler, banco/WAL e achados com ação sugerida.
 - **Contrato Operacional Versionado**: `overview`, `diagnostics` e `version` agora expõem `contract_version`, checks mínimos de runtime e recovery em camadas para evolução controlada do front-back.
 - **Console Operacional de Recovery**: Diagnósticos agora expõem impacto, prioridade, ação estruturada e atalhos para checkpoint, sincronização de agenda, wake-up/recovery e triagem de execuções.
+- **Runbook de Incidente e Rollback**: Procedimento operacional oficial para triagem, contenção, recuperação forte e rollback com validação E2E final em `docs/orchestrator-incident-rollback-runbook.md`.
 - **Runtime Compartilhado**: estado de scheduler, wake-up do worker, helpers de execução e criação base de jobs/executions foram centralizados para reduzir acoplamento entre `main.py`, routers e worker.
 - **Fila Operacional Auditável**: Execuções agora carregam `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`, habilitando requeue seguro e rastreável.
 - **Recovery com Lock de Grupo**: Requeue manual respeita `queue_group` ativo para evitar concorrência entre automações que disputam o mesmo canal, banco ou recurso operacional.

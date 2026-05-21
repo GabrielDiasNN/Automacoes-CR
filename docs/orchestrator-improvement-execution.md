@@ -36,3 +36,7 @@ Preparar avaliação de PostgreSQL apenas se dois ou mais indicadores acima vira
 - `Tools/Test-SourceEncoding.ps1 -RootPath .`
 - `Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance`
 - Playwright por último quando houver mudança front-back servida em `/dashboard/`.
+
+## Runbook Operacional
+
+- Referência oficial de incidente/rollback: `docs/orchestrator-incident-rollback-runbook.md`.
