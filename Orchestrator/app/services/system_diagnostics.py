@@ -181,6 +181,37 @@ def collect_scheduler_inconsistencies(db: Session, scheduler: Any) -> list[str]:
     return inconsistencies
 
 
+def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
+    """Lista execuções RUNNING que passaram do limite operacional cadastrado."""
+    now = get_now_local()
+    running = (
+        db.query(models.Execution)
+        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
+        .all()
+    )
+    stale: list[dict[str, Any]] = []
+    for item in running:
+        started_at = coerce_datetime(item.started_at)
+        if not started_at:
+            continue
+        max_runtime_minutes = item.automation.max_runtime_minutes or 30
+        age_seconds = round((now - started_at).total_seconds(), 2)
+        limit_seconds = int(max_runtime_minutes) * 60
+        if age_seconds <= limit_seconds + 300:
+            continue
+        stale.append(
+            {
+                "exec_id": item.id,
+                "automation_id": item.automation_id,
+                "automation_name": item.automation.name if item.automation else None,
+                "age_seconds": age_seconds,
+                "max_runtime_minutes": int(max_runtime_minutes),
+            }
+        )
+    return sorted(stale, key=lambda entry: entry["age_seconds"], reverse=True)
+
+
 def build_diagnostics_payload(
     db: Session,
     scheduler: Any,
@@ -225,6 +256,7 @@ def build_diagnostics_payload(
         str(group or "default"): int(count) for group, count in group_rows
     }
     failure_hotspots = collect_failure_hotspots(db)
+    running_over_runtime = collect_running_over_runtime(db)
 
     oldest_pending = (
         db.query(models.Execution)
@@ -403,6 +435,25 @@ def build_diagnostics_payload(
             },
         )
 
+    if running_over_runtime:
+        first_stale = running_over_runtime[0]
+        add_finding(
+            findings,
+            SEVERITY_WARN,
+            "queue",
+            (
+                f"{first_stale['automation_name'] or first_stale['exec_id']} excedeu "
+                f"o max_runtime cadastrado ({first_stale['max_runtime_minutes']} min)."
+            ),
+            {
+                "action_hint": "Abrir logs da execução, confirmar se há progresso real e avaliar parada controlada.",
+                "action_code": "show_running",
+                "action_label": "Ver execuções em andamento",
+                "impact": "Execução acima do limite pode indicar subprocesso travado, timeout não aplicado ou automação sem heartbeat operacional.",
+                "priority": 1,
+            },
+        )
+
     for hotspot in failure_hotspots:
         if hotspot["failures_24h"] < 3:
             continue
@@ -489,6 +540,17 @@ def build_diagnostics_payload(
             "value": f"pending={pending_age_seconds}s,running={running_age_seconds}s",
         },
         {
+            "code": "running_over_runtime",
+            "label": "Execuções acima do limite",
+            "status": "warn" if running_over_runtime else "ok",
+            "detail": (
+                "Há execução em RUNNING acima do max_runtime cadastrado."
+                if running_over_runtime
+                else "Nenhuma execução ativa acima do limite cadastrado."
+            ),
+            "value": str(len(running_over_runtime)),
+        },
+        {
             "code": "wal_health",
             "label": "Saúde do WAL",
             "status": (
@@ -547,6 +609,7 @@ def build_diagnostics_payload(
             "by_status": queue,
             "active_by_priority": active_by_priority,
             "active_by_group": active_by_group,
+            "running_over_runtime": running_over_runtime,
             "oldest_pending": {
                 "exec_id": oldest_pending.id if oldest_pending else None,
                 "age_seconds": pending_age_seconds,

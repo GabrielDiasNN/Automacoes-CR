@@ -171,6 +171,25 @@ def run_alembic_migrations():
     # Garante que ele use a string de conexão correta
     alembic_cfg.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
 
+    schema_status = validate_database_schema()
+    schema_version = get_schema_version()
+    if schema_version == ORCHESTRATOR_SCHEMA_VERSION:
+        logger.info("Schema Alembic ja esta no head %s.", ORCHESTRATOR_SCHEMA_VERSION)
+        return
+
+    if schema_status["valid"] and schema_version in {"none", "unknown"}:
+        logger.info(
+            "Schema legado valido sem revisao Alembic. Aplicando stamp para %s.",
+            ORCHESTRATOR_SCHEMA_VERSION,
+        )
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM alembic_version"))
+            conn.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:version)"),
+                {"version": ORCHESTRATOR_SCHEMA_VERSION},
+            )
+        return
+
     logger.info("Iniciando aplicacao programática de migracao via Alembic...")
     command.upgrade(alembic_cfg, "head")
     logger.info("Migracao do Alembic aplicada com sucesso.")

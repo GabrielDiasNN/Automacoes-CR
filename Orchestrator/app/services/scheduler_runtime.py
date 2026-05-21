@@ -17,6 +17,7 @@ from .. import models, schemas
 from ..constants import ACTION_CODE_SCHEDULER_RELOAD, EXECUTION_ACTIVE_STATUSES
 from ..database import SessionLocal, purge_old_executions, run_wal_checkpoint
 from ..runtime import scheduler
+from ..schemas.schedule_rules import first_interval_candidate
 from ..timezone import get_now_local
 from .execution_runtime import build_queued_execution
 
@@ -154,9 +155,20 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
         )
         return
     if schedule_type == "interval":
+        step_minutes = int(sched_data["interval_minutes"])
+        anchor_time = sched_data.get("anchor_time")
+        start_date = None
+        if anchor_time:
+            now = get_now_local().replace(second=0, microsecond=0)
+            start_date = first_interval_candidate(now, step_minutes, anchor_time)
+
         scheduler.add_job(
             scheduled_task_wrapper,
-            IntervalTrigger(minutes=int(sched_data["interval_minutes"])),
+            IntervalTrigger(
+                minutes=step_minutes,
+                start_date=start_date,
+                timezone=scheduler.timezone
+            ),
             args=[automation_id],
             id=f"job_{automation_id}_interval",
             misfire_grace_time=60,

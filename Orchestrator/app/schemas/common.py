@@ -9,6 +9,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
+from .schedule_rules import first_interval_candidate, normalize_hhmm, parse_hhmm
+
 # ---------------------------------------------------------------------------
 # Validadores e Utilitários de Nomes e Caminhos
 # ---------------------------------------------------------------------------
@@ -260,20 +262,10 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
         base["interval_minutes"] = val
 
         # Novas propriedades de restrição de janela
-        start_t = obj.get("start_time")
-        if start_t:
-            if not isinstance(start_t, str) or not re.match(r"^\d{2}:\d{2}$", start_t):
-                if strict:
-                    raise ValueError("start_time deve estar no formato HH:MM.")
-                start_t = None
+        start_t = normalize_hhmm(obj.get("start_time"), "start_time", strict, logger)
         base["start_time"] = start_t
 
-        end_t = obj.get("end_time")
-        if end_t:
-            if not isinstance(end_t, str) or not re.match(r"^\d{2}:\d{2}$", end_t):
-                if strict:
-                    raise ValueError("end_time deve estar no formato HH:MM.")
-                end_t = None
+        end_t = normalize_hhmm(obj.get("end_time"), "end_time", strict, logger)
         base["end_time"] = end_t
 
         days = obj.get("days_of_week")
@@ -287,6 +279,9 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
                 base["days_of_week"] = None
         else:
             base["days_of_week"] = None
+
+        anchor_t = normalize_hhmm(obj.get("anchor_time"), "anchor_time", strict, logger)
+        base["anchor_time"] = anchor_t
 
         return base
     if schedule_type == "once":
@@ -411,11 +406,18 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
         start_t = schedule.get("start_time")
         end_t = schedule.get("end_time")
         days = schedule.get("days_of_week")
+        anchor_t = schedule.get("anchor_time")
+        
+        anchor_suffix = f", a partir das {anchor_t}" if anchor_t else ""
+        
         if start_t or end_t or days:
             day_names = {0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb"}
             day_lbl = ", ".join(day_names.get(d, str(d)) for d in days) if days else "Todos"
             time_lbl = f"{start_t or '00:00'} às {end_t or '23:59'}"
-            return f"{min_lbl} ({day_lbl}, {time_lbl})"
+            return f"{min_lbl} ({day_lbl}, {time_lbl}{anchor_suffix})"
+            
+        if anchor_t:
+            return f"{min_lbl} (a partir das {anchor_t})"
         return min_lbl
     if stype == "once":
         return f"Execução única em {schedule.get('run_at', '-')}"
@@ -452,6 +454,9 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
         start_t = schedule.get("start_time")
         end_t = schedule.get("end_time")
         days = schedule.get("days_of_week")
+        anchor_t = schedule.get("anchor_time")
+        
+        initial_candidate = first_interval_candidate(now, step, anchor_t)
         
         if start_t or end_t or days:
             py_days = {_ui_day_to_python_weekday(int(day)) for day in days} if days else None
@@ -460,16 +465,16 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
                 if py_days is not None and dt.weekday() not in py_days:
                     return False
                 if start_t:
-                    sh, sm = map(int, start_t.split(":"))
+                    sh, sm = parse_hhmm(start_t)
                     if dt.hour < sh or (dt.hour == sh and dt.minute < sm):
                         return False
                 if end_t:
-                    eh, em = map(int, end_t.split(":"))
+                    eh, em = parse_hhmm(end_t)
                     if dt.hour > eh or (dt.hour == eh and dt.minute > em):
                         return False
                 return True
             
-            candidate = now + timedelta(minutes=step)
+            candidate = initial_candidate
             limit_days = 90
             cutoff = now + timedelta(days=limit_days)
             
@@ -479,9 +484,8 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
                 candidate += timedelta(minutes=step)
             return out
         else:
-            start = now + timedelta(minutes=step)
             for idx in range(count):
-                out.append(format_dt_br(start + timedelta(minutes=idx * step)))
+                out.append(format_dt_br(initial_candidate + timedelta(minutes=idx * step)))
             return out
     if stype == "once":
         run_at = schedule.get("run_at")

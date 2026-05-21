@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name, line-too-long, no-member
 """create_initial_schema
 
 Revision ID: a5b212d4418f

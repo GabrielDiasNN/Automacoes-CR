@@ -1,3 +1,4 @@
+# pylint: disable=no-member, wrong-import-position, unused-import
 import os
 import sys
 from logging.config import fileConfig
@@ -23,7 +24,9 @@ db_url = context.config.get_main_option("sqlalchemy.url")
 
 # Se for a URL padrão do .ini (placeholder) ou se não estiver definida, resolve via ambiente
 if not db_url or db_url == "sqlite:///orchestrator.db":
-    db_path = os.environ.get("ORCHESTRATOR_DB_PATH") or os.path.join(orchestrator_dir, "automacoes.db")
+    db_path = os.environ.get("ORCHESTRATOR_DB_PATH")
+    if not db_path:
+        db_path = os.path.join(orchestrator_dir, "automacoes.db")
     if db_path != ":memory:" and not os.path.isabs(db_path):
         db_path = os.path.abspath(os.path.join(project_root, db_path))
     db_url = f"sqlite:///{db_path}"
