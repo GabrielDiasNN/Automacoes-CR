@@ -13,6 +13,7 @@ export function createSystemModule(ctx) {
         getExecPage,
         setLatestSystemDiagnostics,
         getLatestSystemDiagnostics,
+        getLastCorrelationId,
     } = ctx;
 
     async function loadSystem() {
@@ -61,6 +62,7 @@ export function createSystemModule(ctx) {
         const worker = diagnostics.worker || {};
         const queue = diagnostics.queue || {};
         const heartbeat = diagnostics.heartbeat || {};
+        const trace = diagnostics.trace || {};
         const runningOverRuntime = Array.isArray(queue.running_over_runtime) ? queue.running_over_runtime : [];
         const overRuntimeLabel = runningOverRuntime.length
             ? `${runningOverRuntime.length} acima do limite`
@@ -77,6 +79,7 @@ export function createSystemModule(ctx) {
         <div class="info-row"><span>RUNNING mais antigo:</span><b>${formatQueueAge(queue.oldest_running)}</b></div>
         <div class="info-row"><span>Acima do limite:</span><b>${escapeHtml(overRuntimeLabel)}</b></div>
         <div class="info-row"><span>Heartbeat:</span><b>${heartbeat.last_ping_age_seconds == null ? "-" : formatDuration(heartbeat.last_ping_age_seconds)}</b></div>
+        <div class="info-row"><span>Correlação API:</span><b>${escapeHtml(trace.correlation_id || getLastCorrelationId() || "SYSTEM")}</b></div>
         <div class="info-row"><span>Versão:</span><b>${worker.version || "-"}</b></div>
     `;
     }
@@ -163,6 +166,7 @@ export function createSystemModule(ctx) {
 
         const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
         const recovery = diagnostics.recovery || {};
+        const trace = diagnostics.trace || {};
         const lightActions = Array.isArray(recovery.light_actions) ? recovery.light_actions : [];
         const strongActions = Array.isArray(recovery.strong_actions) ? recovery.strong_actions : [];
 
@@ -186,6 +190,7 @@ export function createSystemModule(ctx) {
                 <h4>Contrato de payload</h4>
                 <p>Versão ativa: <strong>${escapeHtml(diagnostics.contract_version || "legacy")}</strong></p>
                 <small>O dashboard consome este contrato para overview, diagnósticos e ações operacionais.</small>
+                <small>Correlation: ${escapeHtml(trace.correlation_id || getLastCorrelationId() || "SYSTEM")}</small>
                 ${recommended}
             </article>
             <article class="contract-card">

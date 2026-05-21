@@ -7,6 +7,11 @@
 export const API_URL = ""; 
 export const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
 export let API_KEY = localStorage.getItem("orchestrator_api_key");
+let latestCorrelationId = "SYSTEM";
+
+function nextRequestId() {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function promptApiKey() {
     const provided = prompt("Segurança Zero-Trust: Informe a API Key do Orchestrator:");
@@ -39,10 +44,16 @@ export async function api(path, method = "GET", body = null, options = {}) {
     try {
         const opts = {
             method,
-            headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": API_KEY,
+                "X-Request-Id": nextRequestId(),
+            },
         };
         if (body) opts.body = JSON.stringify(body);
         const res = await fetch(path, opts);
+        const headerCorrelation = res.headers.get("x-request-id");
+        if (headerCorrelation) latestCorrelationId = headerCorrelation;
         if (res.status === 403) {
             clearApiKey();
             showToast("API Key inválida ou expirada. Informe novamente para continuar.", "warning");
@@ -51,10 +62,15 @@ export async function api(path, method = "GET", body = null, options = {}) {
         }
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            throw new Error(err.detail || `HTTP ${res.status}`);
+            if (err?.correlation_id) latestCorrelationId = err.correlation_id;
+            const baseMessage = err.message || err.detail || `HTTP ${res.status}`;
+            const correlationSuffix = latestCorrelationId ? ` (corr: ${latestCorrelationId})` : "";
+            throw new Error(`${baseMessage}${correlationSuffix}`);
         }
         if (res.status === 204) return {};
-        return await res.json().catch(() => ({}));
+        const payload = await res.json().catch(() => ({}));
+        if (payload?.trace?.correlation_id) latestCorrelationId = payload.trace.correlation_id;
+        return payload;
     } catch (e) {
         console.warn(`[API] ${method} ${path} falhou:`, e.message);
         if (!options.silentErrorToast) {
@@ -62,6 +78,10 @@ export async function api(path, method = "GET", body = null, options = {}) {
         }
         return null;
     }
+}
+
+export function getLastCorrelationId() {
+    return latestCorrelationId;
 }
 
 export function showToast(msg, type = "info") {

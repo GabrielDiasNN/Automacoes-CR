@@ -3,7 +3,7 @@
  * SPA operacional do orquestrador.
  */
 
-import { api, showToast, formatDate, getBadgeClass, translateStatus } from "./api.js";
+import { api, showToast, formatDate, getBadgeClass, translateStatus, getLastCorrelationId } from "./api.js";
 import { bindActionElements, registerAction } from "./action_registry.js";
 import { normalizeOverviewPayload } from "./contracts.js";
 import * as ui from "./ui_manager.js";
@@ -48,6 +48,7 @@ const systemModule = createSystemModule({
     getExecPage: () => execPage,
     setLatestSystemDiagnostics: (value) => { latestSystemDiagnostics = value; },
     getLatestSystemDiagnostics: () => latestSystemDiagnostics,
+    getLastCorrelationId,
 });
 
 const automationsModule = createAutomationsModule({

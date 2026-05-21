@@ -31,6 +31,8 @@ export function normalizeDiagnosticsPayload(payload) {
         queue: payload?.queue || {},
         heartbeat: payload?.heartbeat || {},
         failure_hotspots: Array.isArray(payload?.failure_hotspots) ? payload.failure_hotspots : [],
+        trace: payload?.trace || {},
+        slo: payload?.slo || { thresholds: {}, breaches: {} },
     };
 }
 

@@ -432,6 +432,7 @@ def list_scheduled_jobs(
 
 @router.get("/overview", response_model=schemas.SystemOverviewResponse)
 def get_system_overview(
+    request: Request,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
@@ -444,6 +445,9 @@ def get_system_overview(
         _get_worker_status,
         wal_size_fn=get_wal_size_mb,
     )
+    diagnostics["trace"] = {
+        "correlation_id": getattr(request.state, "request_id", "SYSTEM")
+    }
     return build_system_overview_payload(
         db=db,
         scheduler=scheduler,
@@ -468,16 +472,19 @@ def get_version():
 
 @router.get("/diagnostics", response_model=schemas.DiagnosticsPayload)
 def get_diagnostics(
+    request: Request,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
     """Retorna diagnostico operacional consolidado do Orchestrator."""
-    return build_diagnostics_payload(
+    payload = build_diagnostics_payload(
         db,
         scheduler,
         _get_worker_status,
         wal_size_fn=get_wal_size_mb,
     )
+    payload["trace"] = {"correlation_id": getattr(request.state, "request_id", "SYSTEM")}
+    return payload
 
 
 @router.post("/schedule/validate", response_model=schemas.ScheduleValidationResponse)

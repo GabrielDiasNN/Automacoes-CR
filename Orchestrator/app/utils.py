@@ -12,6 +12,7 @@ Modulo centralizado para eliminar duplicacao entre routers:
 
 import os
 import re
+import json
 from datetime import datetime
 
 import pytz
@@ -19,6 +20,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from . import models
+from .middleware import request_id_var
 
 
 def log_audit(
@@ -30,10 +32,30 @@ def log_audit(
     details: str = None,
 ) -> None:
     """Registra uma entrada no AuditLog de forma centralizada com protecao de tamanho."""
+    correlation_id = request_id_var.get("SYSTEM")
     # Truncar detalhes excessivos para evitar inchaco do DB (max 20k chars)
     safe_details = details
-    if details and len(details) > 20000:
-        safe_details = details[:20000] + "\n... [TRUNCATED BY SYSTEM]"
+    if details:
+        try:
+            parsed = json.loads(details)
+            if isinstance(parsed, dict):
+                parsed.setdefault("correlation_id", correlation_id)
+                safe_details = json.dumps(parsed, ensure_ascii=False)
+            else:
+                safe_details = json.dumps(
+                    {"value": parsed, "correlation_id": correlation_id},
+                    ensure_ascii=False,
+                )
+        except Exception:
+            safe_details = json.dumps(
+                {"message": str(details), "correlation_id": correlation_id},
+                ensure_ascii=False,
+            )
+    else:
+        safe_details = json.dumps({"correlation_id": correlation_id}, ensure_ascii=False)
+
+    if safe_details and len(safe_details) > 20000:
+        safe_details = safe_details[:20000] + "\n... [TRUNCATED BY SYSTEM]"
 
     entry = models.AuditLog(
         action=action,

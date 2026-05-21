@@ -44,6 +44,7 @@ from ..constants import (
 )
 from ..timezone import get_now_local
 from ..security import sanitize_log_payload
+from ..middleware import request_id_var
 
 
 def generate_execution_id(prefix: str) -> str:
@@ -60,6 +61,7 @@ def build_queued_execution(
     failure_reason: Optional[str] = None,
     recovery_action: str = RECOVERY_ACTION_NONE,
 ) -> models.Execution:
+    correlation_id = request_id_var.get("SYSTEM")
     return models.Execution(
         id=exec_id,
         automation_id=automation.id,
@@ -73,6 +75,7 @@ def build_queued_execution(
         requested_by=requested_by,
         failure_reason=failure_reason,
         recovery_action=recovery_action,
+        logs=f"[TRACE] correlation_id={correlation_id} event=QUEUED requested_by={requested_by}",
     )
 
 

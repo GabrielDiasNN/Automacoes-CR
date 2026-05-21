@@ -58,6 +58,7 @@ def test_diagnostics_and_overview_contract_version(client: TestClient, db_sessio
     assert "contract_version" in data
     assert "schema_version" in data
     assert "version" in data
+    assert data["trace"]["correlation_id"]
     
     # Garantir que dados sensíveis de banco/arquivos não sejam vazados
     # diagnostics expõe informações de saúde e caminhos, mas não chaves do .env

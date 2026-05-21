@@ -193,6 +193,10 @@ class DiagnosticsSlo(BaseModel):
     breaches: dict[str, bool] = {}
 
 
+class DiagnosticsTrace(BaseModel):
+    correlation_id: Optional[str] = None
+
+
 class DiagnosticsPayload(BaseModel):
     version: str = ORCHESTRATOR_VERSION
     schema_version: str = ORCHESTRATOR_SCHEMA_VERSION
@@ -210,6 +214,7 @@ class DiagnosticsPayload(BaseModel):
     checks: List[RuntimeCheckItem] = []
     recovery: RecoveryPlan = Field(default_factory=RecoveryPlan)
     slo: DiagnosticsSlo = Field(default_factory=DiagnosticsSlo)
+    trace: DiagnosticsTrace = Field(default_factory=DiagnosticsTrace)
 
 
 class ScheduleValidationRequest(BaseModel):
