@@ -263,6 +263,50 @@ def build_diagnostics_payload(
     }
     failure_hotspots = collect_failure_hotspots(db)
     running_over_runtime = collect_running_over_runtime(db)
+    retry_pressure_rows = (
+        db.query(
+            models.Execution.queue_group,
+            models.Execution.priority,
+            func.count(models.Execution.id).label("active_count"),
+        )
+        .filter(
+            models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES),
+            models.Execution.retry_count > 0,
+        )
+        .group_by(models.Execution.queue_group, models.Execution.priority)
+        .order_by(desc(func.count(models.Execution.id)))
+        .limit(10)
+        .all()
+    )
+    retry_pressure = [
+        {
+            "queue_group": str(row.queue_group or "default"),
+            "priority": str(row.priority or "NORMAL"),
+            "active_count": int(row.active_count or 0),
+        }
+        for row in retry_pressure_rows
+    ]
+    timeout_rows = (
+        db.query(
+            models.Execution.queue_group,
+            func.count(models.Execution.id).label("timeouts_24h"),
+        )
+        .filter(
+            models.Execution.status == "TIMEOUT",
+            models.Execution.started_at >= get_now_local() - timedelta(hours=24),
+        )
+        .group_by(models.Execution.queue_group)
+        .order_by(desc(func.count(models.Execution.id)))
+        .limit(10)
+        .all()
+    )
+    timeouts_24h_by_group = [
+        {
+            "queue_group": str(row.queue_group or "default"),
+            "timeouts_24h": int(row.timeouts_24h or 0),
+        }
+        for row in timeout_rows
+    ]
 
     oldest_pending = (
         db.query(models.Execution)
@@ -623,6 +667,8 @@ def build_diagnostics_payload(
             "active_by_priority": active_by_priority,
             "active_by_group": active_by_group,
             "running_over_runtime": running_over_runtime,
+            "retry_pressure": retry_pressure,
+            "timeouts_24h_by_group": timeouts_24h_by_group,
             "oldest_pending": {
                 "exec_id": oldest_pending.id if oldest_pending else None,
                 "age_seconds": pending_age_seconds,

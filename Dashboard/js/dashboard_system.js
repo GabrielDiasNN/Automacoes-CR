@@ -64,9 +64,17 @@ export function createSystemModule(ctx) {
         const heartbeat = diagnostics.heartbeat || {};
         const trace = diagnostics.trace || {};
         const runningOverRuntime = Array.isArray(queue.running_over_runtime) ? queue.running_over_runtime : [];
+        const retryPressure = Array.isArray(queue.retry_pressure) ? queue.retry_pressure : [];
+        const timeoutByGroup = Array.isArray(queue.timeouts_24h_by_group) ? queue.timeouts_24h_by_group : [];
         const overRuntimeLabel = runningOverRuntime.length
             ? `${runningOverRuntime.length} acima do limite`
             : "0";
+        const retryLabel = retryPressure.length
+            ? retryPressure.slice(0, 2).map((item) => `${item.queue_group}/${item.priority}:${item.active_count}`).join(" | ")
+            : "Sem pressão";
+        const timeoutLabel = timeoutByGroup.length
+            ? timeoutByGroup.slice(0, 2).map((item) => `${item.queue_group}:${item.timeouts_24h}`).join(" | ")
+            : "Sem timeout";
 
         details.innerHTML = `
         <div class="info-row"><span>Status:</span><b>${worker.is_alive ? "ONLINE" : "OFFLINE"}</b></div>
@@ -78,6 +86,8 @@ export function createSystemModule(ctx) {
         <div class="info-row"><span>Pendente mais antigo:</span><b>${formatQueueAge(queue.oldest_pending)}</b></div>
         <div class="info-row"><span>RUNNING mais antigo:</span><b>${formatQueueAge(queue.oldest_running)}</b></div>
         <div class="info-row"><span>Acima do limite:</span><b>${escapeHtml(overRuntimeLabel)}</b></div>
+        <div class="info-row"><span>Pressão de retry:</span><b>${escapeHtml(retryLabel)}</b></div>
+        <div class="info-row"><span>Timeout por grupo (24h):</span><b>${escapeHtml(timeoutLabel)}</b></div>
         <div class="info-row"><span>Heartbeat:</span><b>${heartbeat.last_ping_age_seconds == null ? "-" : formatDuration(heartbeat.last_ping_age_seconds)}</b></div>
         <div class="info-row"><span>Correlação API:</span><b>${escapeHtml(trace.correlation_id || getLastCorrelationId() || "SYSTEM")}</b></div>
         <div class="info-row"><span>Versão:</span><b>${worker.version || "-"}</b></div>

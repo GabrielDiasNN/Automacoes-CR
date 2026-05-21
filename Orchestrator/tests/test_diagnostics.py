@@ -148,3 +148,45 @@ def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Se
         == DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS
     )
     assert data["slo"]["breaches"]["running_over_runtime"] is True
+
+
+def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session):
+    auto = models.Automation(
+        id=905,
+        name="Fila Pressionada",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        enabled=True,
+        queue_group="financeiro",
+    )
+    db_session.add(auto)
+    db_session.flush()
+    now = get_now_local()
+    db_session.add(
+        models.Execution(
+            id="QUEUE_RETRY_001",
+            automation_id=905,
+            status=EXECUTION_STATUS_PENDING,
+            priority="HIGH",
+            retry_count=1,
+            queue_group="financeiro",
+            started_at=now - timedelta(minutes=2),
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="QUEUE_TIMEOUT_001",
+            automation_id=905,
+            status="TIMEOUT",
+            priority="HIGH",
+            retry_count=0,
+            queue_group="financeiro",
+            started_at=now - timedelta(minutes=30),
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["queue"]["retry_pressure"]
+    assert data["queue"]["timeouts_24h_by_group"]

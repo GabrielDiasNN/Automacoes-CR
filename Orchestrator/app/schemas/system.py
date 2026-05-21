@@ -149,6 +149,8 @@ class DiagnosticsQueue(BaseModel):
     active_by_priority: dict[str, int] = {}
     active_by_group: dict[str, int] = {}
     running_over_runtime: List[dict] = []
+    retry_pressure: List[dict] = []
+    timeouts_24h_by_group: List[dict] = []
     oldest_pending: DiagnosticsQueueItem
     oldest_running: DiagnosticsQueueItem
 
