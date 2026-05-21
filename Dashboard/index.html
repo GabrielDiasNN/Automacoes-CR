@@ -463,10 +463,14 @@
                         
                         <!-- Bloco Intervalo Periódico com Janela Opcional -->
                         <div id="schedule-block-interval" class="schedule-block" style="display: none; margin-bottom: 15px;">
-                            <div class="form-row">
+                            <div class="form-row" style="display: flex; gap: 15px;">
                                 <div class="form-group" style="flex: 1;">
                                     <label for="f-interval-minutes">Executar a cada (minutos)</label>
                                     <input id="f-interval-minutes" class="form-control" type="number" min="1" max="1440" value="30">
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label for="f-interval-anchor-time">Horário de início/âncora (Opcional)</label>
+                                    <input id="f-interval-anchor-time" class="form-control" type="time">
                                 </div>
                             </div>
                             

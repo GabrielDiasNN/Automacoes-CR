@@ -1,15 +1,14 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable
+# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position
 """
 Suite de Testes Unitários: Automação de Montagem de Terceirizados
 Valida o extrator Oracle Thick Mode e o processador sintático de NF/OB.
 """
 
-import json
 import os
 import sys
+from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 # Salvar referência real antes de mockar
 real_exists = os.path.exists
@@ -20,11 +19,11 @@ AUTOMATION_PATH = os.path.abspath(
 )
 sys.path.append(AUTOMATION_PATH)
 
-import extract_oracle
-import validate_and_generate_html
+import extract_oracle  # type: ignore
+import validate_and_generate_html  # type: ignore
 
 
-def test_parse_qt_pc_nf_formats():
+def test_parse_qt_pc_nf_formats() -> None:
     """Valida o parser de quantidade e NF em diversos formatos sintáticos."""
     f = validate_and_generate_html.parse_qt_pc_nf
 
@@ -54,7 +53,7 @@ def test_parse_qt_pc_nf_formats():
     assert len(f("Texto inválido sem padrão")) == 0
 
 
-def test_processar_validacao_erros():
+def test_processar_validacao_erros() -> None:
     """Valida se a regra de negócio compara corretamente NF esperada, montagem e programação."""
     p = validate_and_generate_html.processar_validacao
 
@@ -109,7 +108,7 @@ def test_processar_validacao_erros():
     assert err_ob4["DETALHE_ERRO"] == "Erro de Montagem e Programação"
 
 
-def test_gerar_html_estilo_terceirizados():
+def test_gerar_html_estilo_terceirizados() -> None:
     """Garante que as funções auxiliares de HTML do robô de terceirizados estilizam corretamente."""
     destaque_m = validate_and_generate_html.destaque_nf_montagem
     destaque_p = validate_and_generate_html.destaque_nf_prog
@@ -129,7 +128,9 @@ def test_gerar_html_estilo_terceirizados():
 @patch("extract_oracle.oracledb.connect")
 @patch("extract_oracle.os.path.exists")
 @patch("extract_oracle.open")
-def test_extract_sucesso_oracle_mockado(mock_open, mock_exists, mock_connect, tmp_path):
+def test_extract_sucesso_oracle_mockado(
+    mock_open: Any, mock_exists: Any, mock_connect: Any, tmp_path: Any
+) -> None:
     """Valida se o extract() lê a query SQL e grava os dados extraídos no json temporário."""
     exec_id = "test_extract"
 

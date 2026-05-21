@@ -320,3 +320,120 @@ class TestLegacyCompatibility:
         """String vazia deve retornar None."""
         assert parse_schedule("") is None
         assert parse_schedule(None) is None
+
+
+# --------------------------------------------------------------------------- #
+# 6. Testes para Horário de Âncora (anchor_time)                              #
+# --------------------------------------------------------------------------- #
+
+class TestAnchorTime:
+    """Valida normalização, descrição e cálculo de preview de anchor_time."""
+
+    def test_anchor_time_normalizes_valid(self):
+        """Horário de âncora válido deve ser preservado no payload normalizado."""
+        payload = {
+            "schedule_type": "interval",
+            "interval_minutes": 15,
+            "anchor_time": "08:15",
+        }
+        result = normalize_schedule_payload(payload, strict=True)
+        assert result["schedule_type"] == "interval"
+        assert result["anchor_time"] == "08:15"
+
+    def test_anchor_time_invalid_strict_raises(self):
+        """Em modo estrito, anchor_time fora de formato HH:MM deve lançar ValueError."""
+        payload = {
+            "schedule_type": "interval",
+            "interval_minutes": 15,
+            "anchor_time": "9:30",  # falta zero à esquerda
+        }
+        with pytest.raises(ValueError, match="anchor_time"):
+            normalize_schedule_payload(payload, strict=True)
+
+    def test_anchor_time_invalid_tolerant_fallback(self):
+        """Em modo tolerante, anchor_time inválido deve ser ignorado (None)."""
+        payload = {
+            "schedule_type": "interval",
+            "interval_minutes": 15,
+            "anchor_time": "invalido",
+        }
+        result = normalize_schedule_payload(payload, strict=False)
+        assert result["anchor_time"] is None
+
+    def test_anchor_time_out_of_range_strict_raises(self):
+        """Horário com HH:MM sintático, mas fora de faixa, deve ser rejeitado."""
+        payload = {
+            "schedule_type": "interval",
+            "interval_minutes": 15,
+            "anchor_time": "99:99",
+        }
+        with pytest.raises(ValueError, match="anchor_time"):
+            normalize_schedule_payload(payload, strict=True)
+
+    def test_describe_interval_with_anchor_simple(self):
+        """Descrição de intervalo simples com âncora deve exibir 'a partir das HH:MM'."""
+        schedule = {
+            "schedule_type": "interval",
+            "interval_minutes": 45,
+            "anchor_time": "08:30",
+        }
+        desc = describe_schedule_payload(schedule)
+        assert "A cada 45 min" in desc
+        assert "a partir das 08:30" in desc
+
+    def test_describe_interval_with_anchor_and_window(self):
+        """Descrição de intervalo com janela e âncora deve concatenar corretamente no sufixo."""
+        schedule = {
+            "schedule_type": "interval",
+            "interval_minutes": 30,
+            "start_time": "08:00",
+            "end_time": "18:00",
+            "days_of_week": [1, 2, 3, 4, 5],
+            "anchor_time": "08:30",
+        }
+        desc = describe_schedule_payload(schedule)
+        assert "A cada 30 min" in desc
+        assert "Seg, Ter, Qua, Qui, Sex" in desc
+        assert "08:00 às 18:00" in desc
+        assert "a partir das 08:30" in desc
+
+    def test_anchor_time_preview_future(self, monkeypatch):
+        """Se a âncora estiver no futuro hoje, os disparos subsequentes devem começar exatamente nela."""
+        from datetime import datetime
+        # Simula agora sendo 10:00
+        simulated_now = datetime(2026, 5, 20, 10, 0, 0)
+        monkeypatch.setattr("app.timezone.get_now_local", lambda: simulated_now)
+
+        schedule = {
+            "schedule_type": "interval",
+            "interval_minutes": 30,
+            "anchor_time": "12:00",
+            "timezone": "America/Sao_Paulo",
+        }
+        runs = preview_next_runs(schedule, count=3)
+        assert len(runs) == 3
+        # Como a âncora (12:00) está no futuro de now (10:00), o primeiro disparo é a própria âncora
+        assert runs[0] == "20/05/2026 12:00:00"
+        assert runs[1] == "20/05/2026 12:30:00"
+        assert runs[2] == "20/05/2026 13:00:00"
+
+    def test_anchor_time_preview_past(self, monkeypatch):
+        """Se a âncora estiver no passado hoje, os disparos subsequentes devem alinhar com os múltiplos futuros dela."""
+        from datetime import datetime
+        # Simula agora sendo 15:10
+        simulated_now = datetime(2026, 5, 20, 15, 10, 0)
+        monkeypatch.setattr("app.timezone.get_now_local", lambda: simulated_now)
+
+        schedule = {
+            "schedule_type": "interval",
+            "interval_minutes": 30,
+            "anchor_time": "14:00",
+            "timezone": "America/Sao_Paulo",
+        }
+        runs = preview_next_runs(schedule, count=3)
+        assert len(runs) == 3
+        # Os disparos baseados na âncora das 14:00 seriam: 14:00, 14:30, 15:00, 15:30, 16:00
+        # Como o tempo atual simulado é 15:10, o primeiro disparo no futuro deve ser 15:30!
+        assert runs[0] == "20/05/2026 15:30:00"
+        assert runs[1] == "20/05/2026 16:00:00"
+        assert runs[2] == "20/05/2026 16:30:00"

@@ -1,4 +1,4 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable
+# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, too-many-locals, wrong-import-order
 """
 Suite de Testes Unitários: Automação de Receitas Bloqueadas
 Mapeamento de Regras de Negócio e resiliência via Pytest com Mocks.
@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import openpyxl
 import pandas as pd
 import pytest
+from typing import Any
 
 # Adicionar pasta da automacao ao PYTHONPATH dinamicamente
 AUTOMATION_PATH = os.path.abspath(
@@ -19,11 +20,11 @@ AUTOMATION_PATH = os.path.abspath(
 )
 sys.path.append(AUTOMATION_PATH)
 
-import processar_receitas
+import processar_receitas  # type: ignore
 
 
 @pytest.fixture
-def mock_df_receitas():
+def mock_df_receitas() -> Any:
     """Retorna dados de teste estruturados para as receitas."""
     return pd.DataFrame(
         [
@@ -67,7 +68,7 @@ def mock_df_receitas():
     )
 
 
-def test_gerar_html_artistico_badges(mock_df_receitas):
+def test_gerar_html_artistico_badges(mock_df_receitas: Any) -> None:
     """Garante que a geracao de HTML artistico renderiza os badges de status pt-BR corretamente."""
     stats = {"new": 1, "mod": 1, "del": 1}
     html = processar_receitas.gerar_html_artistico(mock_df_receitas, stats)
@@ -83,13 +84,14 @@ def test_gerar_html_artistico_badges(mock_df_receitas):
     assert "Verde" in html
 
 
-def test_formatar_excel_estilos(tmp_path):
+def test_formatar_excel_estilos(tmp_path: Any) -> None:
     """Valida se o formatador Excel ajusta o auto_filter, largura e estilos de cabeçalho."""
     file_path = os.path.join(tmp_path, "test_receitas.xlsx")
 
     # Criar planilha de teste
     wb = openpyxl.Workbook()
     ws1 = wb.active
+    assert ws1 is not None
     ws1.title = "ReceitasBloqueadas"
     ws1.append(["Cor Rec.", "EP Rec.", "PE Rec", "Data Última Prod.", "Data Bloqueio"])
     ws1.append(["Preto", 10, 20, "20/05/2026", "19/05/2026"])
@@ -129,8 +131,11 @@ def test_formatar_excel_estilos(tmp_path):
 @patch("processar_receitas.oracledb.connect")
 @patch("processar_receitas.os.path.exists")
 @patch("processar_receitas.open")
-def test_process_sucesso_com_novos_bloqueios(mock_open, mock_exists, mock_connect, tmp_path):
-    """Valida o fluxo process() quando ha novos bloqueios, garantindo a geracao de html, xlsx e estado tmp."""
+def test_process_sucesso_com_novos_bloqueios(mock_open: Any, mock_exists: Any, mock_connect: Any, tmp_path: Any) -> None:
+    """
+    Valida o fluxo process() quando ha novos bloqueios, garantindo a geracao
+    de html, xlsx e estado tmp.
+    """
     exec_id = "test_123"
 
     # Mocks de ambiente e arquivos
@@ -146,7 +151,7 @@ def test_process_sucesso_com_novos_bloqueios(mock_open, mock_exists, mock_connec
     os.environ["TNS_ADMIN"] = tmp_path.as_posix()
 
     # Mocks de arquivo exist
-    def side_exists(path):
+    def side_exists(path: str) -> bool:
         if "SQL-ReceitasBloqueadas.sql" in path:
             return True
         if "receitas_state.json" in path:
@@ -180,12 +185,19 @@ def test_process_sucesso_com_novos_bloqueios(mock_open, mock_exists, mock_connec
     mock_file_state.read.return_value = state_content
 
     # Retorna o arquivo correto de acordo com a abertura
-    def side_open(path, mode="r", encoding=None):
+    def _context_file(file_obj: Any) -> Any:
+        wrapper = MagicMock()
+        wrapper.__enter__.return_value = file_obj
+        wrapper.__exit__.return_value = None
+        return wrapper
+
+    def side_open(path: str, mode: str = "r", encoding: Any = None) -> Any:
+        # pylint: disable=unused-argument
         if "SQL-ReceitasBloqueadas" in path:
-            return mock_file_sql
+            return _context_file(mock_file_sql)
         if "receitas_state.json" in path and "tmp" not in path:
-            return mock_file_state
-        return MagicMock()
+            return _context_file(mock_file_state)
+        return _context_file(MagicMock())
 
     mock_open.side_effect = side_open
 
@@ -216,14 +228,20 @@ def test_process_sucesso_com_novos_bloqueios(mock_open, mock_exists, mock_connec
         ]
     )
 
+    excel_writer = MagicMock()
+    excel_writer.__enter__.return_value = MagicMock()
+    excel_writer.__exit__.return_value = None
+
     with patch("processar_receitas.pd.read_sql", return_value=mock_df_db), \
+         patch("processar_receitas.pd.ExcelWriter", return_value=excel_writer), \
+         patch("processar_receitas.pd.DataFrame.to_excel"), \
          patch("processar_receitas.formatar_excel") as mock_format, \
          patch("processar_receitas.sys.exit") as mock_exit:
 
         # Executa o processador
         processar_receitas.process()
 
-        # Verifica se o script de formatacao do excel e a gravacao do estado temporario foram chamados
+        # Verifica se o formatador excel e gravacao do estado temporario foram chamados
         assert mock_format.called
         # sys.exit(0) deve ser chamado quando ha alteracoes com sucesso
         mock_exit.assert_called_once_with(0)

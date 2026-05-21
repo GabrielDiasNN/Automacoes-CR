@@ -61,6 +61,10 @@ export function createSystemModule(ctx) {
         const worker = diagnostics.worker || {};
         const queue = diagnostics.queue || {};
         const heartbeat = diagnostics.heartbeat || {};
+        const runningOverRuntime = Array.isArray(queue.running_over_runtime) ? queue.running_over_runtime : [];
+        const overRuntimeLabel = runningOverRuntime.length
+            ? `${runningOverRuntime.length} acima do limite`
+            : "0";
 
         details.innerHTML = `
         <div class="info-row"><span>Status:</span><b>${worker.is_alive ? "ONLINE" : "OFFLINE"}</b></div>
@@ -71,6 +75,7 @@ export function createSystemModule(ctx) {
         <div class="info-row"><span>Fila Ativa:</span><b>${queue.active_count || 0}</b></div>
         <div class="info-row"><span>Pendente mais antigo:</span><b>${formatQueueAge(queue.oldest_pending)}</b></div>
         <div class="info-row"><span>RUNNING mais antigo:</span><b>${formatQueueAge(queue.oldest_running)}</b></div>
+        <div class="info-row"><span>Acima do limite:</span><b>${escapeHtml(overRuntimeLabel)}</b></div>
         <div class="info-row"><span>Heartbeat:</span><b>${heartbeat.last_ping_age_seconds == null ? "-" : formatDuration(heartbeat.last_ping_age_seconds)}</b></div>
         <div class="info-row"><span>Versão:</span><b>${worker.version || "-"}</b></div>
     `;

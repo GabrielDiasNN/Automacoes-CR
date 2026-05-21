@@ -107,3 +107,36 @@ def test_diagnostics_wal_risk(client: TestClient, db_session: Session):
     finally:
         # Restaurar a função original
         system_router.get_wal_size_mb = original_get_wal
+
+
+def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Session):
+    """Diagnóstico deve diferenciar execução longa legítima de RUNNING acima do max_runtime."""
+    auto = models.Automation(
+        id=904,
+        name="Automacao Travada",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        max_runtime_minutes=5,
+        enabled=True,
+    )
+    db_session.add(auto)
+    db_session.commit()
+
+    old_start = get_now_local() - timedelta(minutes=20)
+    execution = models.Execution(
+        id="RUNNING_STALE_001",
+        automation_id=904,
+        status=EXECUTION_STATUS_RUNNING,
+        started_at=old_start,
+    )
+    db_session.add(execution)
+    db_session.commit()
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["queue"]["running_over_runtime"][0]["exec_id"] == "RUNNING_STALE_001"
+    checks = {item["code"]: item for item in data["checks"]}
+    assert checks["running_over_runtime"]["status"] == "warn"
+    queue_findings = [f for f in data["findings"] if f["component"] == "queue"]
+    assert any("max_runtime" in finding["message"] for finding in queue_findings)

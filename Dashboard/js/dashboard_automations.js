@@ -72,6 +72,11 @@ export function createAutomationsModule(ctx) {
             intervalEndInput.addEventListener("change", () => renderScheduleSummary());
         }
 
+        const intervalAnchorInput = document.getElementById("f-interval-anchor-time");
+        if (intervalAnchorInput) {
+            intervalAnchorInput.addEventListener("change", () => renderScheduleSummary());
+        }
+
         // NOTA: .day-btn, f-schedule-type, f-interval-minutes, f-days-of-month e
         // f-once-run-at são gerenciados pelo dashboard.js (bindStaticEvents).
         // NÃO registrar aqui para evitar duplo disparo que cancela o efeito.
@@ -268,6 +273,7 @@ export function createAutomationsModule(ctx) {
         setValue("f-schedule-type", "manual");
         setValue("f-days-of-month", "");
         setValue("f-interval-minutes", "30");
+        setValue("f-interval-anchor-time", "");
         setValue("f-once-run-at", "");
         setValue("f-cron-expression", "");
 
@@ -318,6 +324,7 @@ export function createAutomationsModule(ctx) {
                 setValue("f-cron-expression", schedule.cron_expression || "");
             } else if (scheduleType === "interval") {
                 setValue("f-interval-minutes", String(schedule.interval_minutes || 30));
+                setValue("f-interval-anchor-time", schedule.anchor_time || "");
                 const hasRestriction = Boolean(schedule.start_time || schedule.end_time || (Array.isArray(schedule.days_of_week) && schedule.days_of_week.length > 0));
                 const restrictedCheckbox = document.getElementById("f-interval-restricted");
                 if (restrictedCheckbox) {
@@ -482,6 +489,9 @@ export function createAutomationsModule(ctx) {
             label = `Mensal: dia(s) ${dom || "?"} às ${scheduleTimes.join(", ")}`;
         } else if (scheduleType === "interval") {
             const intervalVal = getValue("f-interval-minutes") || 0;
+            const anchorVal = getValue("f-interval-anchor-time");
+            const anchorSuffix = anchorVal ? `, a partir das ${anchorVal}` : "";
+            
             const restrictedCheckbox = document.getElementById("f-interval-restricted");
             if (restrictedCheckbox && restrictedCheckbox.checked) {
                 const days = scheduleDays.size > 0 
@@ -489,9 +499,9 @@ export function createAutomationsModule(ctx) {
                     : "Qualquer dia";
                 const start = getValue("f-interval-start-time") || "08:00";
                 const end = getValue("f-interval-end-time") || "18:00";
-                label = `Intervalo: a cada ${intervalVal} min (${days}, das ${start} às ${end})`;
+                label = `Intervalo: a cada ${intervalVal} min (${days}, das ${start} às ${end}${anchorSuffix})`;
             } else {
-                label = `Intervalo: a cada ${intervalVal} min`;
+                label = `Intervalo: a cada ${intervalVal} min${anchorSuffix ? ` (${anchorSuffix.slice(2)})` : ""}`;
             }
         } else if (scheduleType === "once") {
             label = `Execução única em ${getValue("f-once-run-at") || "-"}`;
@@ -543,6 +553,11 @@ export function createAutomationsModule(ctx) {
                 timezone: "America/Sao_Paulo",
                 interval_minutes: Number(getValue("f-interval-minutes") || 30),
             };
+
+            const anchorVal = getValue("f-interval-anchor-time");
+            if (anchorVal) {
+                intervalPayload.anchor_time = anchorVal;
+            }
 
             const restrictedCheckbox = document.getElementById("f-interval-restricted");
             if (restrictedCheckbox && restrictedCheckbox.checked) {

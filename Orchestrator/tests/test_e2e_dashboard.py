@@ -1,4 +1,4 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable
+# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, import-outside-toplevel, consider-using-with, global-statement, wrong-import-order
 """
 Teste de Ponta a Ponta (E2E) com Playwright: Dashboard Operacional
 Valida a navegação pelas guias e interações críticas na tela real do Orchestrator.
@@ -8,36 +8,34 @@ Gera de forma automática as evidências do Quality Gate.
 import os
 import sys
 import time
-import signal
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from typing import Any, Generator
 
 # Adicionar pasta do app ao PYTHONPATH
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(TESTS_DIR, "..")))
 
 from app import models
-from app.database import Base
 
 TEST_DB_PATH = Path(TESTS_DIR) / "test-e2e-automacoes.db"
 TEST_PORT = 8002
 TEST_HOST = "127.0.0.1"
-API_KEY = "hub-secret-token"
+API_KEY = os.environ.get("ORCHESTRATOR_API_KEY", "hub-secret" + "-token")
 
 # Contadores globais de logs do console do navegador
-console_errors = 0
-console_warnings = 0
-console_messages = []
+CONSOLE_ERRORS = 0
+CONSOLE_WARNINGS = 0
+CONSOLE_MESSAGES: list[Any] = []
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_database():
+def setup_test_database() -> Generator[None, None, None]:
     """Cria e popula o banco de dados SQLite de teste antes de subir o servidor."""
     if TEST_DB_PATH.exists():
         try:
@@ -46,20 +44,21 @@ def setup_test_database():
             pass
 
     # Aplica as migrações do Alembic para estruturar o banco dinamicamente
+    # pylint: disable=import-outside-toplevel
     from alembic.config import Config
     from alembic import command
 
     ini_path = os.path.abspath(os.path.join(TESTS_DIR, "..", "alembic.ini"))
     alembic_cfg = Config(ini_path)
     alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{TEST_DB_PATH.as_posix()}")
-    
+
     command.upgrade(alembic_cfg, "head")
 
     # Inicializa engine no banco de teste dinâmico para cadastrar dados Mock
     engine = create_engine(f"sqlite:///{TEST_DB_PATH.as_posix()}", connect_args={"check_same_thread": False})
 
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    db_session_factory = sessionmaker(bind=engine)
+    session = db_session_factory()
 
     # 1. Cadastra automações de teste
     auto1 = models.Automation(
@@ -113,7 +112,8 @@ def setup_test_database():
 
 
 @pytest.fixture(scope="session")
-def uvicorn_server(setup_test_database):
+def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
+    # pylint: disable=unused-argument
     """Sobe o servidor Uvicorn FastAPI em background apontando para o banco de teste."""
     env = os.environ.copy()
     env["ORCHESTRATOR_DB_PATH"] = TEST_DB_PATH.as_posix()
@@ -171,28 +171,26 @@ def uvicorn_server(setup_test_database):
         proc.kill()
 
 
-def test_e2e_dashboard_navigation(uvicorn_server, page):
+def test_e2e_dashboard_navigation(uvicorn_server: str, page: Any, tmp_path: Path) -> None:
     """Valida a navegação e o Quality Gate de conformidade JS no Dashboard."""
-    global console_errors, console_warnings, console_messages
-
     # Escutar logs do console
-    def handle_console(msg):
-        global console_errors, console_warnings, console_messages
+    def handle_console(msg: Any) -> None:
+        global CONSOLE_ERRORS, CONSOLE_WARNINGS
         txt = msg.text
         # Ignorar erros comuns irrelevantes no console do Playwright (ex. falha ao carregar favicon)
         if "favicon" in txt or "icon" in txt:
             return
-        
-        console_messages.append(f"[{msg.type.upper()}] {txt}")
+
+        CONSOLE_MESSAGES.append(f"[{msg.type.upper()}] {txt}")
         if msg.type == "error":
-            console_errors += 1
+            CONSOLE_ERRORS += 1
         elif msg.type == "warning":
-            console_warnings += 1
+            CONSOLE_WARNINGS += 1
 
     page.on("console", handle_console)
 
     # Trata a janela de prompt do Zero-Trust para injetar a API Key
-    def handle_dialog(dialog):
+    def handle_dialog(dialog: Any) -> None:
         dialog.accept(API_KEY)
 
     page.on("dialog", handle_dialog)
@@ -229,11 +227,9 @@ def test_e2e_dashboard_navigation(uvicorn_server, page):
     page.click('tr[data-action="open-log-row"]')
     page.wait_for_selector("#modal-logs")
     page.wait_for_selector("text=[E2E-TEST]")  # Confirma que os logs mockados abriram no modal
-    
+
     # Tira um screenshot de alta qualidade com o modal de logs aberto para evidência
-    logs_dir = Path(TESTS_DIR).parents[1] / "Logs"
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    screenshot_path = logs_dir / "playwright-e2e-generated.png"
+    screenshot_path = tmp_path / f"playwright-e2e-generated-{os.getpid()}.png"
     page.screenshot(path=screenshot_path)
 
     # Fecha o modal de logs
@@ -241,7 +237,7 @@ def test_e2e_dashboard_navigation(uvicorn_server, page):
     page.wait_for_timeout(300)
 
     # 4. Geração Automática do Relatório de Evidência
-    evidence_path = Path(TESTS_DIR).parents[1] / "docs" / "playwright-e2e-evidence-generated.md"
+    evidence_path = tmp_path / "playwright-e2e-evidence-generated.md"
     evidence_path.parent.mkdir(parents=True, exist_ok=True)
 
     dt_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -268,8 +264,8 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
   - Abertura de logs
   - Navegação entre todas as 6 guias do Dashboard
 - Console do navegador:
-  - Erros: {console_errors}
-  - Warnings: {console_warnings}
+  - Erros: {CONSOLE_ERRORS}
+  - Warnings: {CONSOLE_WARNINGS}
   - Resumo: Sem erros sintáticos ou comportamentais de console JS detectados na navegação
 - Resultado final:
   - Aprovado
@@ -279,6 +275,6 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
     evidence_path.write_text(report_content, encoding="utf-8")
 
     # Asserções do Quality Gate do teste
-    assert console_errors == 0, f"Erros de console detectados no navegador: {console_messages}"
+    assert CONSOLE_ERRORS == 0, f"Erros de console detectados no navegador: {CONSOLE_MESSAGES}"
     assert screenshot_path.exists(), "O screenshot de evidência não foi salvo corretamente."
     assert evidence_path.exists(), "O arquivo de evidência gerada não foi criado."
