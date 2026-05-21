@@ -8,6 +8,7 @@ export const API_URL = "";
 export const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
 export let API_KEY = localStorage.getItem("orchestrator_api_key");
 let latestCorrelationId = "SYSTEM";
+let contractCompatibility = { compatible: true, reason: "" };
 
 function nextRequestId() {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -34,6 +35,18 @@ function clearApiKey() {
 }
 
 export async function api(path, method = "GET", body = null, options = {}) {
+    const normalizedMethod = String(method || "GET").toUpperCase();
+    const isMutating = ["POST", "PUT", "PATCH", "DELETE"].includes(normalizedMethod);
+    if (isMutating && !contractCompatibility.compatible) {
+        if (!options.silentErrorToast) {
+            showToast(
+                contractCompatibility.reason || "Contrato front-back incompatível. Atualize o dashboard antes de executar ações operacionais.",
+                "error"
+            );
+        }
+        return null;
+    }
+
     if (!API_KEY && !promptApiKey()) {
         if (!options.silentAuthToast) {
             showToast("Informe uma API Key válida para continuar.", "warning");
@@ -82,6 +95,10 @@ export async function api(path, method = "GET", body = null, options = {}) {
 
 export function getLastCorrelationId() {
     return latestCorrelationId;
+}
+
+export function setContractCompatibility(compatible, reason = "") {
+    contractCompatibility = { compatible: Boolean(compatible), reason: String(reason || "") };
 }
 
 export function showToast(msg, type = "info") {

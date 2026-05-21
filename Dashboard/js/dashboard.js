@@ -3,7 +3,15 @@
  * SPA operacional do orquestrador.
  */
 
-import { api, showToast, formatDate, getBadgeClass, translateStatus, getLastCorrelationId } from "./api.js";
+import {
+    api,
+    showToast,
+    formatDate,
+    getBadgeClass,
+    translateStatus,
+    getLastCorrelationId,
+    setContractCompatibility,
+} from "./api.js";
 import { bindActionElements, registerAction } from "./action_registry.js";
 import { normalizeOverviewPayload } from "./contracts.js";
 import * as ui from "./ui_manager.js";
@@ -14,9 +22,11 @@ import { createSystemModule } from "./dashboard_system.js";
 import { createAutomationsModule } from "./dashboard_automations.js";
 
 const EXEC_PER_PAGE = 15;
+const EXPECTED_CONTRACT_PREFIX = "2026.05.";
 let execPage = 1;
 let charts = { performance: null, status: null };
 let latestSystemDiagnostics = null;
+let contractLockNotified = false;
 
 window.automations = [];
 
@@ -227,6 +237,7 @@ async function loadOverview() {
         return;
     }
     const overview = normalizeOverviewPayload(rawOverview);
+    applyContractCompatibility(overview.contract_version || "legacy");
     ui.updateConnectionStatus(true);
 
     applyOverviewKpis(overview);
@@ -236,6 +247,39 @@ async function loadOverview() {
     syncGlobalTestToggle(overview.automations || []);
     document.body.dataset.contractVersion = overview.contract_version || "legacy";
     if (typeof lucide !== "undefined") lucide.createIcons();
+}
+
+function applyContractCompatibility(contractVersion) {
+    const compatible = String(contractVersion || "").startsWith(EXPECTED_CONTRACT_PREFIX);
+    const reason = compatible
+        ? ""
+        : `Contrato incompatível (API=${contractVersion || "desconhecido"}, esperado=${EXPECTED_CONTRACT_PREFIX}x).`;
+    setContractCompatibility(compatible, reason);
+    renderContractGuardBanner(contractVersion, compatible);
+    if (!compatible && !contractLockNotified) {
+        showToast(`${reason} Ações mutáveis foram bloqueadas por segurança.`, "warning");
+        contractLockNotified = true;
+    }
+}
+
+function renderContractGuardBanner(contractVersion, compatible) {
+    const topbar = document.querySelector(".top-bar");
+    if (!topbar) return;
+    let banner = document.getElementById("contract-guard-banner");
+    if (!banner) {
+        banner = document.createElement("div");
+        banner.id = "contract-guard-banner";
+        banner.className = "panel";
+        banner.style.padding = "8px 12px";
+        banner.style.marginTop = "8px";
+        topbar.insertAdjacentElement("afterend", banner);
+    }
+    if (compatible) {
+        banner.style.display = "none";
+        return;
+    }
+    banner.style.display = "block";
+    banner.innerHTML = `<strong>Contrato incompatível:</strong> API ${escapeHtml(contractVersion || "desconhecido")} · esperado ${escapeHtml(EXPECTED_CONTRACT_PREFIX)}x. Ações mutáveis bloqueadas.`;
 }
 
 function applyOverviewKpis(overview) {
