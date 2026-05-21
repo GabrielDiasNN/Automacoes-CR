@@ -17,6 +17,7 @@ export function createExecutionsModule(ctx) {
         showToast,
         loadOverview,
         bindActionElements,
+        safePrompt,
     } = ctx;
 
     async function loadExecutions(page = getExecPage()) {
@@ -102,7 +103,7 @@ export function createExecutionsModule(ctx) {
     }
 
     async function requeueExec(id) {
-        const reason = prompt("Motivo operacional para reenfileirar esta execução:", "Requeue manual após análise operacional.");
+        const reason = safePrompt("Motivo operacional para reenfileirar esta execução:", "Requeue manual após análise operacional.");
         if (reason === null) return;
         const payload = { reason: reason.trim() || "Requeue manual após análise operacional." };
         const res = await api(`/api/executions/${id}/requeue`, "POST", payload);

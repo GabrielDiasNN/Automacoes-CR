@@ -58,9 +58,12 @@ def _load_next_run_lookup():
             auto_id = extract_automation_id_from_job(job.id)
             if auto_id is None or not job.next_run_time:
                 continue
+            candidate = schemas.parse_dt_br(job.next_run_time)
+            if candidate is None:
+                continue
             current = lookup.get(auto_id)
-            if current is None or job.next_run_time < current:
-                lookup[auto_id] = job.next_run_time
+            if current is None or candidate < current:
+                lookup[auto_id] = candidate
     except Exception as e:
         logger.warning(f"Nao foi possivel carregar next_run do scheduler: {e}")
     return lookup

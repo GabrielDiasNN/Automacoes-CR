@@ -297,7 +297,7 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
         task.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE
         reboot_audit_line = (
             f"[RECOVERY_AUDIT] actor=SYSTEM_STARTUP "
-            f"action=MARK_FAILED_BY_REBOOT timestamp={now.isoformat()}"
+            f"action=MARK_FAILED_BY_REBOOT timestamp={now.strftime('%d/%m/%Y %H:%M:%S')}"
         )
         task.logs = (
             (task.logs or "")

@@ -13,6 +13,21 @@ from ..constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from ..timezone import get_now_local
 
 
+def _build_next_run_lookup(jobs: list[schemas.ScheduledJob]) -> dict[int, Any]:
+    """Normaliza o próximo disparo por automação em datetime comparável."""
+    next_run_lookup: dict[int, Any] = {}
+    for job in jobs:
+        if job.automation_id is None or not job.next_run_time:
+            continue
+        candidate = schemas.parse_dt_br(job.next_run_time)
+        if candidate is None:
+            continue
+        current = next_run_lookup.get(job.automation_id)
+        if current is None or candidate < current:
+            next_run_lookup[job.automation_id] = candidate
+    return next_run_lookup
+
+
 def build_system_overview_payload(
     db: Session,
     scheduler: Any,
@@ -21,13 +36,7 @@ def build_system_overview_payload(
     diagnostics_payload: dict[str, Any],
 ) -> dict[str, Any]:
     """Agrega métricas, estado operacional e diagnósticos para o dashboard."""
-    next_run_lookup: dict[int, Any] = {}
-    for job in jobs:
-        if job.automation_id is None or not job.next_run_time:
-            continue
-        current = next_run_lookup.get(job.automation_id)
-        if current is None or job.next_run_time < current:
-            next_run_lookup[job.automation_id] = job.next_run_time
+    next_run_lookup = _build_next_run_lookup(jobs)
 
     window_start = get_now_local() - timedelta(hours=24)
     success_24h = (
@@ -203,7 +212,7 @@ def build_system_overview_payload(
     )
 
     return {
-        "generated_at": get_now_local().isoformat(),
+        "generated_at": schemas.format_dt_br(get_now_local()),
         "version": ORCHESTRATOR_VERSION,
         "schema_version": diagnostics_payload["schema_version"],
         "contract_version": diagnostics_payload.get(

@@ -45,14 +45,20 @@ body {
     min-height: 100%;
 }
 
+html {
+    background: var(--bg-body);
+}
+
 body {
     font-family: var(--font-ui);
+    background-color: var(--bg-body);
     background:
         radial-gradient(circle at 18% -10%, rgba(47, 111, 237, 0.14), transparent 32%),
         linear-gradient(180deg, #0b1018 0%, #0c121b 46%, #090d14 100%);
     color: var(--text-primary);
     font-size: 14px;
     line-height: 1.5;
+    overflow: hidden;
 }
 
 button,
@@ -77,7 +83,8 @@ textarea:focus-visible {
 .app-container {
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
 }
 
 .sidebar {
@@ -215,6 +222,10 @@ textarea:focus-visible {
 
 .main-content {
     min-width: 0;
+    height: 100vh;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    background: var(--bg-body);
 }
 
 .top-bar {
@@ -369,6 +380,10 @@ textarea:focus-visible {
 
 .panel {
     overflow: hidden;
+}
+
+.panel-span-all {
+    grid-column: 1 / -1;
 }
 
 .panel + .panel,
@@ -1210,8 +1225,14 @@ dialog::backdrop {
 }
 
 @media (max-width: 720px) {
+    body {
+        overflow: auto;
+    }
+
     .app-container {
         grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
     }
 
     .sidebar {
@@ -1237,6 +1258,11 @@ dialog::backdrop {
     .top-bar {
         position: static;
         padding: var(--space-4);
+    }
+
+    .main-content {
+        height: auto;
+        overflow: visible;
     }
 
     .view-content {

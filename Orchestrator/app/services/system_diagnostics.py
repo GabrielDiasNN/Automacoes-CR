@@ -643,7 +643,7 @@ def build_diagnostics_payload(
     return {
         "version": ORCHESTRATOR_VERSION,
         "contract_version": ORCHESTRATOR_CONTRACT_VERSION,
-        "timestamp": get_now_local().isoformat(),
+        "timestamp": schemas.format_dt_br(get_now_local()),
         "overall_status": overall_status,
         "findings": findings,
         "database": {

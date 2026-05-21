@@ -408,7 +408,7 @@ def get_uptime(api_key: str = Depends(get_api_key)):
     uptime = get_now_local() - STARTUP_TIME
 
     return {
-        "started_at": STARTUP_TIME.isoformat(),
+        "started_at": schemas.format_dt_br(STARTUP_TIME),
         "uptime_seconds": round(uptime.total_seconds(), 2),
         "uptime_human": str(uptime).split(".")[0],
     }

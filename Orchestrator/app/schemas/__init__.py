@@ -10,6 +10,7 @@ com as diretivas de importação 'from .schemas import ...'.
 
 from .common import (
     format_dt_br,
+    parse_dt_br,
     _validate_safe_name,
     _validate_script_path,
     _validate_schedule,
@@ -76,6 +77,7 @@ from .system import (
 __all__ = [
     # Common
     "format_dt_br",
+    "parse_dt_br",
     "_validate_safe_name",
     "_validate_script_path",
     "_validate_schedule",

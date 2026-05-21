@@ -6,10 +6,11 @@ Gera de forma automática as evidências do Quality Gate.
 """
 
 import os
+import re
 import sys
 import time
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -278,3 +279,107 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
     assert CONSOLE_ERRORS == 0, f"Erros de console detectados no navegador: {CONSOLE_MESSAGES}"
     assert screenshot_path.exists(), "O screenshot de evidência não foi salvo corretamente."
     assert evidence_path.exists(), "O arquivo de evidência gerada não foi criado."
+
+
+def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> None:
+    """Garante que o dashboard renderiza datas em BRT nas abas operacionais."""
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+
+    import requests
+    from app.timezone import get_now_local
+
+    scheduled_run_at = (get_now_local() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    create_response = requests.post(
+        f"{uvicorn_server}/api/automations",
+        json={
+            "name": "Timezone E2E Auto",
+            "script_path": "./Receitas Bloqueadas/processar_receitas.py",
+            "schedule": f'{{"schedule_type":"once","run_at":"{scheduled_run_at}","timezone":"America/Sao_Paulo"}}',
+            "enabled": True,
+        },
+        headers={"X-API-Key": API_KEY},
+        timeout=20,
+    )
+    assert create_response.status_code == 201, create_response.text
+
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector("text=Centro de controle")
+
+    def assert_br_datetime(value: str) -> None:
+        assert re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value), value
+
+    page.click('button[data-target="automations"]')
+    page.wait_for_selector("#fleet-tbody tr")
+    automations = page.locator("#fleet-tbody tr").evaluate_all(
+        """rows => rows.slice(0, 3).map((row) => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            return (cells[2]?.innerText || '').trim();
+        })"""
+    )
+    assert any(value != "-" for value in automations)
+    for value in automations:
+        if value != "-":
+            assert_br_datetime(value)
+
+    page.click('button[data-target="executions"]')
+    page.wait_for_selector("#exec-tbody tr")
+    executions = page.locator("#exec-tbody tr").evaluate_all(
+        """rows => rows.slice(0, 3).map((row) => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            return (cells[5]?.innerText || '').trim();
+        })"""
+    )
+    valid_executions = [value for value in executions if re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value)]
+    assert valid_executions
+    for value in valid_executions:
+        assert_br_datetime(value)
+
+    page.click('button[data-target="system"]')
+    page.wait_for_selector("#audit-tbody tr")
+    page.wait_for_function(
+        """() => Array.from(document.querySelectorAll('#audit-tbody tr td:first-child'))
+            .some((cell) => /^\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}:\\d{2}$/.test((cell.innerText || '').trim()))"""
+    )
+    audit_rows = page.locator("#audit-tbody tr").evaluate_all(
+        """rows => rows.slice(0, 3).map((row) => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            return (cells[0]?.innerText || '').trim();
+        })"""
+    )
+    valid_audit_rows = [value for value in audit_rows if re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value)]
+    assert valid_audit_rows
+    for value in valid_audit_rows:
+        assert_br_datetime(value)
+
+
+def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -> None:
+    """Valida diretamente o módulo JS de datas do dashboard no navegador."""
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+
+    result = page.evaluate(
+        f"""async () => {{
+            localStorage.setItem('orchestrator_api_key', {API_KEY!r});
+            const mod = await import('/dashboard/js/api.js?v=' + Date.now());
+            const utcFormatted = mod.formatDate('2026-05-21T14:00:00Z');
+            const brFormatted = mod.formatDate('21/05/2026 11:05:42');
+            const shortFormatted = mod.formatDate('2026-05-21T14:00:00Z', true);
+            const parsedUtc = mod.parseDateValue('2026-05-21T14:00:00Z');
+            const parsedBr = mod.parseDateValue('21/05/2026 11:05:42');
+            return {{
+                utcFormatted,
+                brFormatted,
+                shortFormatted,
+                parsedUtcIso: parsedUtc ? parsedUtc.toISOString() : null,
+                parsedBrIso: parsedBr ? parsedBr.toISOString() : null,
+            }};
+        }}"""
+    )
+
+    assert result["utcFormatted"] == "21/05/2026 11:00:00"
+    assert result["brFormatted"] == "21/05/2026 11:05:42"
+    assert result["shortFormatted"] == "11:00:00"
+    assert result["parsedUtcIso"] == "2026-05-21T14:00:00.000Z"
+    assert result["parsedBrIso"] == "2026-05-21T14:05:42.000Z"

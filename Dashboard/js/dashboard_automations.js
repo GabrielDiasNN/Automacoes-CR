@@ -3,6 +3,7 @@ export function createAutomationsModule(ctx) {
         api,
         showToast,
         formatDate,
+        parseDateValue,
         getBadgeClass,
         translateStatus,
         escapeHtml,
@@ -175,9 +176,11 @@ export function createAutomationsModule(ctx) {
         const nextRunByAuto = new Map();
         jobs.forEach((job) => {
             if (!job.automation_id || !job.next_run_time) return;
+            const candidate = parseDateValue(job.next_run_time);
+            if (!candidate) return;
             const current = nextRunByAuto.get(job.automation_id);
-            if (!current || new Date(job.next_run_time) < new Date(current)) {
-                nextRunByAuto.set(job.automation_id, job.next_run_time);
+            if (!current || candidate.getTime() < current.getTime()) {
+                nextRunByAuto.set(job.automation_id, candidate);
             }
         });
 

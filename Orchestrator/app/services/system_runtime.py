@@ -142,7 +142,7 @@ def build_version_payload(startup_time: datetime) -> schemas.SystemVersion:
         version=ORCHESTRATOR_VERSION,
         schema_version=get_schema_version(),
         python_version=sys.version.split()[0],
-        started_at=startup_time.isoformat(),
+        started_at=schemas.format_dt_br(startup_time),
         uptime_seconds=round(uptime.total_seconds(), 2),
         max_workers=max_workers,
         allowed_origins=get_allowed_origins(),

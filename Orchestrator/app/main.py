@@ -196,7 +196,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     elif exc.status_code == status.HTTP_409_CONFLICT:
         code = "conflict"
         action_hint = "Resolver conflito operacional e tentar novamente."
-    elif exc.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
+    elif exc.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT:
         code = "validation_error"
         action_hint = "Corrigir os campos inválidos enviados na requisição."
 
@@ -222,7 +222,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             item = {**item, "ctx": ctx}
         errors.append(item)
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=_build_error_payload(
             request,
             code="validation_error",

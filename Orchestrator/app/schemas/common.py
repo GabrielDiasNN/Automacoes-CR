@@ -23,32 +23,52 @@ def format_dt_br(val: Any) -> Any:
     """Converte qualquer formato de data para o padrão brasileiro (DD/MM/YYYY HH:MM:SS)."""
     from ..timezone import to_br_timezone
 
+    dt = parse_dt_br(val)
+    if dt is None:
+        return val
+    return to_br_timezone(dt).strftime("%d/%m/%Y %H:%M:%S")
+
+
+def parse_dt_br(val: Any) -> datetime | None:
+    """Converte datas em datetime naive no fuso do Brasil quando possível."""
+    from ..timezone import to_br_timezone
+
     if val is None:
         return None
-
-    # Se for datetime, garante que seja naive BRT antes de formatar
     if isinstance(val, datetime):
-        dt = to_br_timezone(val)
-        return dt.strftime("%d/%m/%Y %H:%M:%S")
+        return to_br_timezone(val)
+    if not isinstance(val, str):
+        return None
 
-    if isinstance(val, str):
+    value = val.strip()
+    if not value:
+        return None
+
+    try:
+        br_match = re.match(
+            r"^(\d{2})/(\d{2})/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$",
+            value,
+        )
+        if br_match:
+            return datetime(
+                int(br_match.group(3)),
+                int(br_match.group(2)),
+                int(br_match.group(1)),
+                int(br_match.group(4) or 0),
+                int(br_match.group(5) or 0),
+                int(br_match.group(6) or 0),
+            )
+
+        normalized = value.replace(" ", "T")
+        iso_dt = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+        if iso_dt.tzinfo is not None:
+            return to_br_timezone(iso_dt)
+        return iso_dt
+    except (ValueError, TypeError, AttributeError):
         try:
-            # ISO format (ex: 2023-01-01T12:00:00Z ou 2023-01-01T12:00:00)
-            if "T" in val:
-                # Remove Z se existir para evitar que fromisoformat force UTC aware
-                clean_val = val.replace("Z", "")
-                dt = datetime.fromisoformat(clean_val)
-                # Se for aware, converte para naive BRT
-                if dt.tzinfo is not None:
-                    dt = to_br_timezone(dt)
-                return dt.strftime("%d/%m/%Y %H:%M:%S")
-
-            # SQLite format (ex: 2023-01-01 12:00:00)
-            dt = datetime.strptime(val.split(".")[0], "%Y-%m-%d %H:%M:%S")
-            return dt.strftime("%d/%m/%Y %H:%M:%S")
+            return datetime.strptime(value.split(".")[0], "%Y-%m-%d %H:%M:%S")
         except (ValueError, TypeError, AttributeError):
-            return val
-    return val
+            return None
 
 
 def _validate_safe_name(v: str) -> str:
@@ -289,7 +309,9 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
         if not isinstance(run_at, str) or not run_at.strip():
             if strict:
                 raise ValueError("run_at é obrigatório para schedule_type=once.")
-            fallback_time = (datetime.now() + timedelta(hours=1)).isoformat()
+            from ..timezone import get_now_local
+
+            fallback_time = (get_now_local() + timedelta(hours=1)).isoformat()
             logger.warning("run_at ausente para cadência única. Aplicando fallback para daqui 1 hora: %s", fallback_time)
             run_at = fallback_time
         base["run_at"] = run_at.strip()
@@ -490,7 +512,9 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
     if stype == "once":
         run_at = schedule.get("run_at")
         try:
-            dt = datetime.fromisoformat(str(run_at).replace("Z", ""))
+            dt = parse_dt_br(run_at)
+            if dt is None:
+                raise ValueError("run_at inválido.")
             if dt >= now:
                 out.append(format_dt_br(dt))
         except Exception:

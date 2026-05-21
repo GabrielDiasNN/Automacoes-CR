@@ -14,6 +14,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..database import SessionLocal
 from ..models import Execution
+from ..schemas import format_dt_br
 from ..timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
@@ -92,7 +93,7 @@ class ConnectionManager:
             {
                 "type": event_type,
                 "data": data,
-                "timestamp": get_now_local().isoformat(),
+                "timestamp": format_dt_br(get_now_local()),
             }
         )
         dead = []

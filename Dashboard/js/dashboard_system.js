@@ -14,6 +14,7 @@ export function createSystemModule(ctx) {
         setLatestSystemDiagnostics,
         getLatestSystemDiagnostics,
         getLastCorrelationId,
+        safePrompt,
     } = ctx;
 
     async function loadSystem() {
@@ -270,7 +271,7 @@ export function createSystemModule(ctx) {
             return;
         }
         if (action === "purge") {
-            const retention = prompt("Informe retenção em dias para purge (mínimo 7):", "90");
+            const retention = safePrompt("Informe retenção em dias para purge (mínimo 7):", "90");
             if (retention === null) return;
             const days = Number(retention);
             if (!Number.isFinite(days) || days < 7) {

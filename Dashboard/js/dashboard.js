@@ -7,19 +7,21 @@ import {
     api,
     showToast,
     formatDate,
+    parseDateValue,
     getBadgeClass,
     translateStatus,
     getLastCorrelationId,
     setContractCompatibility,
-} from "./api.js";
+    safePrompt,
+} from "./api.js?v=20260521c";
 import { bindActionElements, registerAction } from "./action_registry.js";
 import { normalizeOverviewPayload } from "./contracts.js";
-import * as ui from "./ui_manager.js";
-import * as ide from "./ide_service.js";
-import * as engine from "./execution_engine.js";
+import * as ui from "./ui_manager.js?v=20260521c";
+import * as ide from "./ide_service.js?v=20260521c";
+import * as engine from "./execution_engine.js?v=20260521c";
 import { createExecutionsModule } from "./dashboard_executions.js";
 import { createSystemModule } from "./dashboard_system.js";
-import { createAutomationsModule } from "./dashboard_automations.js";
+import { createAutomationsModule } from "./dashboard_automations.js?v=20260521d";
 
 const EXEC_PER_PAGE = 15;
 const EXPECTED_CONTRACT_PREFIX = "2026.05.";
@@ -46,6 +48,7 @@ const executionsModule = createExecutionsModule({
     showToast,
     loadOverview,
     bindActionElements,
+    safePrompt,
 });
 
 const systemModule = createSystemModule({
@@ -55,6 +58,7 @@ const systemModule = createSystemModule({
     escapeHtml,
     loadOverview,
     loadExecutions: (page) => executionsModule.loadExecutions(page),
+    safePrompt,
     getExecPage: () => execPage,
     setLatestSystemDiagnostics: (value) => { latestSystemDiagnostics = value; },
     getLatestSystemDiagnostics: () => latestSystemDiagnostics,
@@ -65,6 +69,7 @@ const automationsModule = createAutomationsModule({
     api,
     showToast,
     formatDate,
+    parseDateValue,
     getBadgeClass,
     translateStatus,
     escapeHtml,

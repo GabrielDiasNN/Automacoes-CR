@@ -3,7 +3,7 @@
  * Gestão de UI, Navegação e Renderização de Tabelas.
  */
 
-import { api, showToast, formatDate, getBadgeClass, translateStatus } from './api.js';
+import { api, showToast, formatDate, getBadgeClass, translateStatus } from './api.js?v=20260521c';
 
 export function initNavigation() {
     document.querySelectorAll(".nav-item").forEach((item) => {
@@ -13,6 +13,9 @@ export function initNavigation() {
             item.classList.add("active");
             const target = item.dataset.target;
             document.getElementById(`view-${target}`).classList.add("active");
+            const mainContent = document.querySelector(".main-content");
+            if (mainContent) mainContent.scrollTop = 0;
+            window.scrollTo(0, 0);
             
             // Dispatch custom event for modular loading
             window.dispatchEvent(new CustomEvent('view-changed', { detail: { target } }));
