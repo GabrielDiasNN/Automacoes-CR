@@ -1,5 +1,19 @@
 # Changelog
 
+## [9.2.6] - 2026-05-22
+### Alterado
+- **Governança dos Versionados e `.gitignore`**: removido o papel canônico do artefato gerado `docs/playwright-e2e-evidence-generated.md`, mantendo no repositório apenas o padrão e o template de evidência Playwright. O `.gitignore` passa a cobrir explicitamente a evidência gerada e capturas `Logs/playwright-*.png`.
+- **Contrato Atual do Dashboard**: skills e documentação deixam de tratar `Dashboard/dashboard.html` como output operacional válido; a shell real permanece em `Dashboard/index.html` e o template canônico em `.github/templates/dashboard-modern.html`.
+- **Scaffold de Nova Automação**: `Tools/New-Automation.ps1` foi alinhado ao fluxo atual do Hub, removendo dependências quebradas de `Deprecated\config.json` e `_Template\Trigger_Automation.vbs`. O utilitário agora gera o scaffold mínimo e orienta o cadastro posterior via Dashboard/API do Orchestrator.
+
+## [9.2.5] - 2026-05-22
+### Adicionado
+- **Reconstrução da Limpeza Segura do Repositório**: `Tools/AplicarPoliticaRetencao.ps1` foi reescrito do zero com modo `-DryRun`, resumo auditável por categoria e guardrails para impedir remoção de itens rastreados pelo Git, caminhos fora do repositório e artefatos preservados por contrato local.
+
+### Alterado
+- **Política de Retenção Operacional**: a limpeza automática agora trata separadamente resíduos Python, Playwright, artefatos E2E do Orchestrator, logs/backups expirados, temporários de runtime e estados transitórios por automação, com retenção por idade em vez de exclusão cega.
+- **Documentação de Ferramentas**: `Tools/README.md` foi alinhado ao estado real do repositório, removendo a referência obsoleta a `Tools/Legacy_VBA/` e documentando a política conservadora de preservação de `.env`, `.venv`, `.gemini/` e `.wwebjs_auth/`.
+
 ## [9.2.4] - 2026-05-22
 ### Corrigido
 - **Hardening do Outlook COM para Assinaturas Inline**: reforcado o fluxo compartilhado de `lib/Lib-Email.psm1` para estabilizar a assinatura padrao antes do envio automatizado. O modulo agora forca `BodyFormat` HTML, aguarda a prontidao do editor, persiste o draft apos carregar a assinatura, registra a contagem de anexos inline, salva novamente apos montar o `HTMLBody` final e executa uma recarga controlada do draft quando a assinatura referencia imagens mas nenhum anexo inline e detectado. O objetivo e reduzir casos de "imagem nao vinculada" em assinaturas que funcionam no envio manual, mas falhavam em automacoes por timing do Outlook COM.

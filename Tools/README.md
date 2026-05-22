@@ -15,16 +15,15 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
 
 ### Operação e Utilitários
-- **New-Automation.ps1:** Scaffold para criar novas automações no padrão ouro.
+- **New-Automation.ps1:** Scaffold mínimo e atual para criar pasta de automação com `README.md`, `CONTEXT.md`, `run.ps1` e `Logs/`, deixando o cadastro operacional para o Dashboard/API do Orchestrator.
 - **Open-LatestLog.ps1:** Atalho rápido para o log da última execução.
-- **AplicarPoliticaRetencao.ps1:** Gestão de limpeza de logs e arquivos temporários.
+- **AplicarPoliticaRetencao.ps1:** Limpeza segura e auditável do workspace com modo `-DryRun`, retenção por idade e bloqueio contra remoção de itens rastreados pelo Git.
 - **ValidarAutomacoes.ps1:** Health check completo de todo o hub.
 
 ---
 
-## 💾 Ferramentas de Legado (VBA)
+## 🧹 Política Atual de Limpeza
 
-Localizadas em `Tools/Legacy_VBA/`.
-Estas ferramentas foram utilizadas durante o período de transição e agora servem apenas como referência para manipulação de arquivos XLSM e módulos `.bas` antigos.
-
-> **Nota:** Não utilize estas ferramentas para novos desenvolvimentos.
+- O modo padrão da limpeza é conservador: remove resíduos Python, Playwright, artefatos E2E do Orchestrator, logs/backups expirados e temporários operacionais elegíveis.
+- Itens de ambiente local e autenticação são preservados por contrato, incluindo `.env`, `.venv`, `.gemini/` e sessões em `.wwebjs_auth/`.
+- Nenhum item rastreado pelo Git pode ser removido pelo script, mesmo que coincida com um padrão de limpeza.

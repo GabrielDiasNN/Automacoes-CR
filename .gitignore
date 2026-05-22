@@ -36,6 +36,10 @@ htmlcov/
 # Dashboard gerado/exportado (nao confundir com SPA fonte em Dashboard/)
 Dashboard/dashboard.html
 
+# Evidencias geradas localmente (nao versionar)
+docs/playwright-e2e-evidence-generated.md
+Logs/playwright-*.png
+
 # Caches de Inteligência e Estado
 .cache_erros.json
 **/__pycache__/

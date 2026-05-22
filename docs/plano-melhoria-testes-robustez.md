@@ -27,7 +27,7 @@ flowchart TD
 
     subgraph "Frente 2: Playwright E2E Automatizado"
         PW_TEST["test_e2e_dashboard.py"] -->|Navega & Valida| DASH["FastAPI + Dashboard SPA"]
-        PW_TEST -->|Gera Automático| EVI["docs/playwright-e2e-evidence-generated.md"]
+        PW_TEST -->|Gera Automático| EVI["Evidência local/pipeline baseada no template oficial"]
         PW_TEST -->|Gera Automático| SCR["Logs/playwright-e2e-generated.png"]
     end
 
@@ -59,7 +59,7 @@ Introduziremos o Playwright de forma limpa e isolada no repositório:
   - Abertura de modal de logs e replay de log.
   - Verificação de logs de erros do navegador (se `window.errors` ou `console.error` dispararem, o teste falha).
 - **Geração de Evidências Mecânicas:**
-  - Ao concluir os testes E2E com aprovação de 100%, o script do Playwright usará a biblioteca Markdown do Python para criar o arquivo `docs/playwright-e2e-evidence-generated.md` com a exata data da validação, módulos navegados e as estatísticas de console.
+  - Ao concluir os testes E2E com aprovação de 100%, o script do Playwright poderá gerar uma evidência Markdown local ou de pipeline, baseada em `docs/playwright-e2e-evidence-template.md`, com a exata data da validação, módulos navegados e as estatísticas de console.
   - O script salvará capturas de tela em formato de alta resolução em `Logs/playwright-e2e-generated.png`.
 
 ---

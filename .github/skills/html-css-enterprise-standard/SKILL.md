@@ -31,7 +31,7 @@ Definir o contrato visual do hub para dashboards e saidas HTML, mantendo separac
 ## Repo-Specific Constraints
 - Trate `.github/templates/dashboard-modern.html` como template canonico do dashboard moderno.
 - Reutilize `lib/assets/css/fonts.css`, `lib/assets/js/apexcharts.min.js` e `lib/assets/js/lucide.min.js` quando o requisito ja estiver coberto por esses assets.
-- Considere `Dashboard/dashboard.html` um output derivado; a fonte de contrato continua sendo o template e os dados JSON.
+- Considere `Dashboard/index.html` a shell SPA real servida ao operador; a fonte canônica do template continua em `.github/templates/dashboard-modern.html`.
 - Preserve placeholders e funcoes obrigatorias exigidos por `Tools/Test-DashboardTemplate.ps1`, incluindo `__DASHBOARD_JSON__`, `__REFRESH_SECONDS__` e funcoes de renderizacao.
 
 ## Validation
@@ -43,7 +43,7 @@ Definir o contrato visual do hub para dashboards e saidas HTML, mantendo separac
   - acao de listagem/refresh em execucoes;
   - abertura de logs;
   - ausencia de erro de console.
-- Revise manualmente o template gerado em `Dashboard/dashboard.html` quando houver mudanca na experiencia final.
+- Revise manualmente `Dashboard/index.html` e o template canônico quando houver mudanca na experiencia final.
 
 ## Troubleshooting
 - Se o validador acusar funcao ausente, compare o template com a lista de funcoes obrigatorias em `Tools/Test-DashboardTemplate.ps1`.
