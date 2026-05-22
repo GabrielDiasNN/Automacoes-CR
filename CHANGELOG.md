@@ -1,5 +1,57 @@
 # Changelog
 
+## [9.2.3] - 2026-05-22
+### Alterado
+- **Reorganização do Contexto AI-Native**: `GEMINI.md` foi simplificado para atuar como contrato local estável de bootstrap, encoding, skills e validação. O histórico operacional curado passa a viver em `docs/ai-native-context-monitor.md`, enquanto o `CHANGELOG.md` permanece como histórico completo e auditável de versões.
+
+## [9.2.2] - 2026-05-22
+### Adicionado
+- **Disciplina Global de Engenharia com IA**: Formalizada a adoção da skill global `ai-engineering-discipline` como contrato compartilhado entre Codex, Gemini CLI e Antigravity, preservando a precedência dos contratos locais do repositório.
+
+### Alterado
+- **Governança de Skills Globais**: `AGENTS.md`, `GEMINI.md` e `Tools/Test-SkillsGovernance.ps1` passam a reconhecer `ai-engineering-discipline` como skill global obrigatória, junto de `protocolo-valeg` e `git-ide-governance-skill`.
+
+## [9.2.1] - 2026-05-22
+### Alterado
+- **Ajuste na Detecção de Alteração de Receitas Bloqueadas (v2.3.2)**: Modificada a lógica de detecção de alterações da inteligência de estado em `processar_receitas.py` para auditar e marcar receitas modificadas (`MODIFIED` / `⚠ DATA ALTERADA`) exclusivamente quando a data na coluna "Data Bloqueio" for modificada. Alterações na coluna "Data Última Prod." passam a ser desconsideradas para fins de mudança de estado, mitigando alertas redundantes e alinhando o robô ao seu objetivo de negócio principal.
+
+### Testado
+- **Validação de Testes Automatizados**: Suite completa pytest com 134/134 testes verdes executada com sucesso após alteração das regras de comparação na inteligência de estado.
+
+## [9.2.0] - 2026-05-22
+### Adicionado
+- **Decomposição e Modularização de Testes**: Decomposição da suíte monolítica `test_api.py` (~967 linhas) em 4 sub-suítes de testes focadas por domínio de negócio em `tests/` (`test_automations_crud.py`, `test_automations_ide.py`, `test_executions.py` e `test_system.py`), removendo fisicamente o arquivo monolítico do disco para maximizar a testabilidade e isolamento.
+- **Robustez Unitária em Alertas e Worker**: Implementação das suítes de testes unitários `test_notifications.py` (throttling e resiliência sintática de envio via subprocesso mockado de PowerShell) e `test_worker_loop.py` (motor concorrente e backoff exponencial sob ociosidade), elevando a confiabilidade do core.
+- **Saneamento Físico de Disco**: Inclusão de purga rigorosa e dinâmica de arquivos temporários de banco de dados SQLite (`.db`, `.db-shm` e `.db-wal` gerados sob o PID dos testes) no teardown de fixtures no `conftest.py` e `test_e2e_dashboard.py`.
+- **Ajustes de Contratos e Resiliência**: Correção na serialização de hotspots de falha no endpoint de overview `/api/system/overview` mapeando `failures_24h` de forma estrita para `failures` (garantindo compatibilidade retroativa e integridade da SPA) e resolução de colisão de cabeçalhos no router `executions.py`.
+
+### Corrigido
+- **Resiliência contra Deadlock de Buffer (Uvicorn)**: Substituição do `subprocess.PIPE` no stdout/stderr do subprocesso Uvicorn dos testes E2E Playwright (`test_e2e_dashboard.py`) por arquivos físicos temporários de log. Isso impede o congelamento do servidor de testes quando o buffer do Windows enche sob tráfego concorrente intenso.
+- **Correção de BOM para Compatibilidade do PowerShell**: Conversão do script de governança `Tools/Test-PythonGovernance.ps1` para a codificação estrita `UTF-8 com BOM`, garantindo portabilidade absoluta sob PowerShell 5.1 e resolvendo falhas de validação de encoding.
+- **Saneamento Estático e Pylint**: Eliminação de trailing whitespaces órfãos no fixture do Uvicorn e aplicação de `# pylint: disable=no-name-in-module` para falso-positivos em imports dinâmicos Pydantic.
+
+### Testado
+- **Suite Completa Consolidada**: Execução de 134/134 testes automatizados (unitários, integração e Playwright E2E) com status 100% verde (0 falhas) em menos de 25 segundos.
+- **Quality Gate Geral**: Validação de conformidade estática pelo validador global (`ValidarAutomacoes.ps1`), atingindo status de aprovação total com zero erros de segurança, de encoding, de SQL, de linting e de conformidade de design.
+
+## [9.1.1] - 2026-05-21
+### Adicionado
+- **Operação Self-Service no Dashboard**: reorganizada a navegação em trilhas explícitas de `Operação` e `Administração`, com foco em bancada de triagem para execuções e fluxo guiado de cadastro operacional.
+- **Resumo Derivado para Automações**: `AutomationResponse` e o overview do sistema agora expõem `last_execution_id`, horários da última execução, `last_failure_reason`, `last_recovery_action`, `active_execution_count`, métricas `24h` e `operational_state`.
+- **Triagem Derivada para Execuções**: `ExecutionSummary` e `ExecutionResponse` agora expõem `operator_action_label`, `operator_action_hint`, `requeue_allowed`, `requeue_block_reason` e vínculo com execução/grupo relacionado para orientar a operação sem heurística no front-end.
+- **Revisão Final no Modal de Automação**: o fluxo de cadastro/edição passou a exigir revisão operacional final com resumo do cadastro, prévia de agenda e impacto antes do save.
+
+### Alterado
+- **Painel Operacional**: a tabela de controle passou a exibir contexto operacional pronto para leitura, incluindo resumo de agenda, próxima janela, última execução e estado derivado da automação.
+- **Gestão de Automações**: a tabela administrativa agora mostra histórico recente diretamente na listagem e rebaixa JSON/IDE para um bloco visualmente avançado, fora do fluxo principal.
+- **Bancada de Execuções**: a tela de execuções ganhou presets operacionais, banner de estado do recorte atual e ações coerentes com o contrato de retry/bloqueio do backend.
+- **Bancada de Execuções Compacta**: a coluna `Triagem` passou a ficar silenciosa em execuções `SUCCESS` saudáveis, com `requeue` tratado como ação contextual em `Ações` e cards de triagem exibidos apenas quando houver sinal operacional real.
+- **Versionamento do Runtime**: `ORCHESTRATOR_VERSION`/`WORKER_VERSION` avançaram para `9.1.1` e `ORCHESTRATOR_CONTRACT_VERSION` para `2026.05.21.1`.
+
+### Testado
+- **Backend focado**: `pytest tests/test_api.py tests/test_api_smoke_critical.py tests/test_api_contracts.py tests/test_worker_queue.py -q` -> `49 passed`.
+- **Dashboard E2E**: `pytest tests/test_e2e_dashboard.py -q` -> `3 passed`.
+
 ## [9.1.0] - 2026-05-20
 ### Adicionado
 - **Horário de Âncora no Agendamento por Intervalo Periódico**: Introduzido suporte ao campo opcional `anchor_time` (Horário de início/âncora) para a recorrência do tipo `interval`. Permite ao usuário definir a partir de qual horário exato do dia (ex: `08:15`) a cadência periódica (ex: a cada 30 min) deve começar a contar de forma robusta e consistente.

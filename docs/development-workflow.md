@@ -1,6 +1,6 @@
 # Fluxo de Desenvolvimento — Hub de Automações
 
-> **Versão:** v7.0.0 | **Atualizado:** 2026-05-19
+> **Versão:** v9.1.1 | **Atualizado:** 2026-05-21
 
 ---
 
@@ -138,10 +138,10 @@ O validador verifica:
 
 ## 8. Mudanças de Dashboard/UI
 
-Para qualquer mudança no template `dashboard-modern.html` ou nas rotas FastAPI consumidas pela UI:
+Para qualquer mudança em `Dashboard/` ou nas rotas FastAPI consumidas pela UI:
 
 1. Implementar a mudança.
-2. Iniciar o Orchestrator: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
+2. Iniciar o Orchestrator real: `uvicorn app.main:app --host 127.0.0.1 --port 8000`
 3. Rodar a suíte Playwright E2E: ver [playwright-e2e-standard.md](playwright-e2e-standard.md).
 4. Gerar evidência conforme [playwright-e2e-evidence-template.md](playwright-e2e-evidence-template.md).
 5. Incluir evidência no PR.
@@ -152,5 +152,5 @@ Para qualquer mudança no template `dashboard-modern.html` ou nas rotas FastAPI 
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este documento reflete o fluxo de desenvolvimento do Hub de Automações em `v7.0.0`.
+- Este documento reflete o fluxo de desenvolvimento do Hub de Automações em `v9.1.1`.
 - Atualize quando houver mudança de convenção de commit, de pipeline CI ou de gates obrigatórios.

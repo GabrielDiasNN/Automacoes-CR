@@ -1,6 +1,6 @@
 # Checklist de Release — Hub de Automações
 
-> **Versão:** v7.0.0 | **Atualizado:** 2026-05-19
+> **Versão:** v9.1.1 | **Atualizado:** 2026-05-21
 
 ---
 
@@ -48,8 +48,8 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
   - Versão semântica incrementada no cabeçalho
 - [ ] `README.md` reflete o estado atual (versão, features, links)
 - [ ] `CONTEXT.md` atualizado com novas regras de negócio (se aplicável)
-- [ ] `GEMINI.md` atualizado com o resumo da versão na seção AI-Native (se aplicável)
-- [ ] Seção `## 🧠 Gestão de Contexto (AI-Native)` atualizada nos arquivos impactados
+- [ ] `docs/ai-native-context-monitor.md` atualizado quando a mudança alterar estado operacional, arquitetura, governança ou contratos relevantes para agentes
+- [ ] `GEMINI.md` revisado apenas quando a mudança alterar regra local estável de bootstrap, encoding, skills ou validação
 
 ---
 
@@ -139,5 +139,6 @@ Preencha após a conclusão bem-sucedida:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este checklist cobre o processo de release do Hub de Automações em `v7.0.0`.
-- Atualize quando novos gates de qualidade forem adicionados ao pipeline.
+- Este checklist cobre o processo de release do Hub de Automações em `v9.1.1`.
+- Atualize este checklist quando novos gates de qualidade forem adicionados ao pipeline.
+- Registre estado operacional relevante para agentes em `docs/ai-native-context-monitor.md`, não em seções longas dentro de `GEMINI.md`.

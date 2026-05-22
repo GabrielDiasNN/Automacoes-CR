@@ -1,9 +1,10 @@
-# Matriz E2E Crítica — Orchestrator (17/05/2026)
+# Matriz E2E Crítica — Orchestrator (21/05/2026)
 
 ## Escopo Validado
 - Fluxo crítico: cadastro -> agenda -> execução -> parada -> logs.
 - Controles globais do dashboard: `resume_all`, `pause_all`, `backup`, `purge`.
-- Filtros de execuções: `status`, `automation_id`, `requested_by`, `date_from`, `date_to`.
+- Filtros de execuções: `status`, `automation_id`, `queue_group`, `priority`, `requested_by`, `date_from`, `date_to`, `page`, `per_page`.
+- Filtros administrativos do backend: busca/ordenação de automações (`search`, `sort`, `order`) e auditoria (`action`, `limit`).
 
 ## Matriz Endpoint x Origem UI
 | Origem UI | Endpoint | Método | Payload/Query | Resposta Esperada | Erro Esperado |
@@ -18,7 +19,9 @@
 | Ação global `Backup` | `/api/system/backup` | `POST` | - | `200` com `path` e `size_mb` | `500` falha operacional controlada |
 | Ação global `Purge` | `/api/system/purge` | `POST` | `retention_days>=7` | `200` com removidos | `400` retenção inválida |
 | Visão executiva | `/api/system/overview` | `GET` | - | `200` com `kpis`, `status_breakdown`, `recent` | `403` sem API Key |
-| Filtros de execuções | `/api/executions` | `GET` | `status`, `automation_id`, `requested_by`, `date_from`, `date_to`, `page`, `per_page` | `200` paginado | `422` status/data/page/per_page inválidos |
+| Filtros de execuções | `/api/executions` | `GET` | `status`, `automation_id`, `queue_group`, `priority`, `requested_by`, `date_from`, `date_to`, `page`, `per_page` | `200` paginado e combinável | `422` status/priority/data/page/per_page inválidos |
+| Busca e ordenação de automações | `/api/automations` | `GET` | `search`, `sort`, `order`, `page`, `per_page` | `200` paginado | fallback seguro de ordenação |
+| Filtro de auditoria | `/api/system/audit` | `GET` | `action`, `limit` | `200` filtrado por ação | `403` sem API Key |
 
 ## Bugs Fechados
 | ID | Causa raiz | Impacto | Correção aplicada | Regressão coberta |
@@ -37,6 +40,25 @@
 - `Purge de Execuções`: exige retenção válida, bloqueia inválido na UI e valida no backend.
 - `Salvar Automação`: sem dupla submissão, com feedback claro de sucesso/erro.
 - `Executar` / `Parar`: refletem status da execução e logs em tempo real.
+
+## Matriz de Testes de Filtros
+| Superfície | Filtro | Cobertura Automatizada | Evidência |
+|---|---|---|---|
+| `/api/automations` | `search` + `sort` + `order` | `tests/test_filters.py::test_list_automations_search_and_sort` | backend |
+| `/dashboard/` -> `Automações` | busca textual `auto-search` | `tests/test_e2e_dashboard.py::test_e2e_dashboard_automations_search_filters_visible_grid` | Playwright |
+| `/api/executions` | combinação completa de filtros | `tests/test_filters.py::test_list_executions_supports_all_filters_combined` | backend |
+| `/api/executions` | paginação `page` + `per_page` | `tests/test_filters.py::test_list_executions_pagination_filters_respect_page_boundaries` | backend |
+| `/api/executions` | validação `status`, `priority`, `date_from`, `date_to`, `page`, `per_page` | `tests/test_filters.py::test_list_executions_rejects_invalid_status_priority_and_dates` + `tests/test_filters.py::test_list_executions_rejects_invalid_pagination_filter_values` | backend |
+| `/api/system/audit` | `action` | `tests/test_filters.py::test_system_audit_filter_returns_only_requested_action` | backend |
+| `/dashboard/` -> `Execuções` | todos os controles visíveis da UI | `tests/test_e2e_dashboard.py::test_e2e_dashboard_executions_filters_all_controls` | Playwright |
+| `/dashboard/` -> `Sistema` | atalhos de grupo ativo e hotspot para triagem | `tests/test_e2e_dashboard.py::test_e2e_dashboard_system_shortcuts_open_execution_triage` | Playwright |
+| `/api/automations/{id}/start` | disparo manual com criação de execução pendente | `tests/test_api_smoke_critical.py::test_smoke_automations_flow_and_controls` | Integração/API |
+| `/api/automations/{id}/pause` e `/api/automations/{id}/resume` | pausa/retomada individual com persistência operacional | `tests/test_api_smoke_critical.py::test_smoke_automations_flow_and_controls` | Integração/API |
+| `/api/executions/{exec_id}/stop` | parada de execução em andamento com persistência `TERMINATED` | `tests/test_api.py::test_stop_execution`, `tests/test_api_smoke_critical.py::test_smoke_execution_flow_run_stop_requeue`, `tests/test_worker_queue.py::test_stop_running_execution_marks_terminated` | Integração/API |
+
+## Observações de Superfície
+- A tela `Automações` expõe busca textual em tempo real (`auto-search`) na grade visível.
+- A ordenação `sort/order` de `/api/automations` permanece como contrato de backend nesta versão; não há controle visual dedicado na UI administrativa atual.
 
 ## Evidências de Aceite Técnico (17/05/2026)
 - `.\.venv\Scripts\python.exe -m pytest tests/test_api_smoke_critical.py tests/test_api.py -q` (workdir `Orchestrator`) -> `33 passed`.

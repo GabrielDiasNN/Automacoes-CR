@@ -1,6 +1,6 @@
 # Estratégia de Testes — Hub de Automações
 
-> **Versão:** v7.0.0 | **Atualizado:** 2026-05-19
+> **Versão:** v9.1.1 | **Atualizado:** 2026-05-21
 
 ---
 
@@ -26,15 +26,17 @@ O ecossistema de testes do Hub de Automações é organizado em três camadas:
 |---|---|---|
 | `tests/test_api.py` | Integração | Smoke test das rotas principais com banco real |
 | `tests/test_api_smoke_critical.py` | Integração | Endpoints de sistema críticos e erros operacionais |
+| `tests/test_filters.py` | Integração | Matriz de filtros do backend: automações, execuções, auditoria, paginação e inválidos |
 | `tests/test_database_schema.py` | Unitário | Valida colunas do schema contra `EXPECTED_SCHEMA` |
 | `tests/test_diagnostics.py` | Integração | Cenários de diagnóstico: worker offline, fila parada, WAL risk |
 | `tests/test_queue_rules.py` | Integração | Regras de requeue: queue_group, max_retries, prioridade |
 | `tests/test_sanitization.py` | Unitário | `sanitize_log_payload`: mascaramento de segredos |
-| `tests/test_scheduling.py` | Unitário | Validação e parsing de schedules (cron, weekly, daily) |
-| `tests/test_sla.py` | Unitário | Cálculo de `sla_status` (ok/at_risk/violated/unknown) |
+| `tests/test_schedule_advanced.py` | Unitário | Normalização avançada de agenda, cron, intervalos, `anchor_time` e previews |
+| `tests/test_timezone_contract.py` | Unitário | Contrato de datas/horários em BRT nos endpoints e no preview |
+| `tests/test_e2e_dashboard.py` | E2E | Navegação real do dashboard, busca/filtros visíveis, atalhos operacionais, logs e evidência Playwright |
 | `tests/test_validation.py` | Integração | Validação de schedule e `.env` via API |
 
-> **Total atual:** ≥ 65 testes | Meta de cobertura: ≥ 60% (`pytest-cov`)
+> **Total atual:** 128 testes coletados | Meta de cobertura: ≥ 60% (`pytest-cov`)
 
 ---
 
@@ -134,6 +136,7 @@ Ao implementar uma nova feature:
 
 1. **Unitário**: Criar `tests/test_<modulo>.py` para lógica de negócio isolada.
 2. **Integração**: Adicionar cenários em `test_api_smoke_critical.py` ou criar novo arquivo.
+   Para filtros e paginação, preferir consolidar a matriz em `test_filters.py`.
 3. **Nomenclatura**: `test_<o_que_faz>_<quando>_<resultado_esperado>`.
 4. **Exemplos:**
    - `test_sla_status_returns_violated_when_avg_exceeds_limit`
@@ -143,5 +146,5 @@ Ao implementar uma nova feature:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este documento descreve a estratégia de testes em `v7.0.0`.
+- Este documento descreve a estratégia de testes em `v9.1.1`.
 - Atualize quando novas suítes forem criadas ou quando a meta de cobertura mudar.
