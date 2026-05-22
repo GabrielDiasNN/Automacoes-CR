@@ -82,6 +82,8 @@ def test_smoke_automations_flow_and_controls(client):
     assert overview.status_code == 200
     payload = overview.json()
     assert payload["automation"]["id"] == auto_id
+    assert "schedule_summary" in payload["automation"]
+    assert "operational_state" in payload["automation"]
     assert "metrics_24h" in payload
     assert payload["recent_executions"][0]["id"] == exec_id
 
@@ -100,12 +102,34 @@ def test_smoke_executions_filters_and_errors(client):
     data = filtered.json()
     assert data["total"] >= 1
     assert any(item["id"] == exec_id for item in data["items"])
+    assert all("operator_action_label" in item for item in data["items"])
+    assert all("operator_attention_required" in item for item in data["items"])
+
+    filtered_by_group = client.get(
+        "/api/executions?queue_group=smoke-group",
+        headers=AUTH_HEADERS,
+    )
+    assert filtered_by_group.status_code == 200
+    assert any(item["related_queue_group"] == "smoke-group" for item in filtered_by_group.json()["items"])
+
+    filtered_by_priority = client.get(
+        "/api/executions?priority=NORMAL",
+        headers=AUTH_HEADERS,
+    )
+    assert filtered_by_priority.status_code == 200
+    assert any(item["priority"] == "NORMAL" for item in filtered_by_priority.json()["items"])
 
     invalid_status = client.get(
         "/api/executions?status=NOT_A_STATUS",
         headers=AUTH_HEADERS,
     )
     assert invalid_status.status_code == 422
+
+    invalid_priority = client.get(
+        "/api/executions?priority=URGENT",
+        headers=AUTH_HEADERS,
+    )
+    assert invalid_priority.status_code == 422
 
     invalid_date = client.get(
         "/api/executions?date_from=17-05-2026",

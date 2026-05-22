@@ -103,6 +103,16 @@ def client(db_session):
     app.dependency_overrides.clear()
     db_module.SessionLocal = original_session_local
     db_module.engine = original_engine
+
+    # Excluir fisicamente os arquivos de banco de teste temporários criados
+    for suffix in ["", "-shm", "-wal"]:
+        fp = os.path.join(TESTS_DIR, "test-automacoes.db" + suffix)
+        if os.path.exists(fp):
+            try:
+                os.unlink(fp)
+            except OSError:
+                pass
+
     db_module.DB_PATH = original_db_path
     main_module.SessionLocal = original_session_local
     auto_router.PROJECT_ROOT = original_project_root

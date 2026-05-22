@@ -24,7 +24,7 @@ sys.path.append(os.path.abspath(os.path.join(TESTS_DIR, "..")))
 
 from app import models
 
-TEST_DB_PATH = Path(TESTS_DIR) / "test-e2e-automacoes.db"
+TEST_DB_PATH = Path(TESTS_DIR) / f"test-e2e-automacoes-{os.getpid()}.db"
 TEST_PORT = 8002
 TEST_HOST = "127.0.0.1"
 API_KEY = os.environ.get("ORCHESTRATOR_API_KEY", "hub-secret" + "-token")
@@ -38,11 +38,13 @@ CONSOLE_MESSAGES: list[Any] = []
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_database() -> Generator[None, None, None]:
     """Cria e popula o banco de dados SQLite de teste antes de subir o servidor."""
-    if TEST_DB_PATH.exists():
-        try:
-            TEST_DB_PATH.unlink()
-        except OSError:
-            pass
+    for suffix in ["", "-shm", "-wal"]:
+        fp = Path(str(TEST_DB_PATH) + suffix)
+        if fp.exists():
+            try:
+                fp.unlink()
+            except OSError:
+                pass
 
     # Aplica as migrações do Alembic para estruturar o banco dinamicamente
     # pylint: disable=import-outside-toplevel
@@ -104,12 +106,17 @@ def setup_test_database() -> Generator[None, None, None]:
 
     yield
 
+    # Descartar conexões e engine do SQLAlchemy para permitir deleção física no Windows (Fase B10)
+    engine.dispose()
+
     # Cleanup após todos os testes
-    if TEST_DB_PATH.exists():
-        try:
-            TEST_DB_PATH.unlink()
-        except OSError:
-            pass
+    for suffix in ["", "-shm", "-wal"]:
+        fp = Path(str(TEST_DB_PATH) + suffix)
+        if fp.exists():
+            try:
+                fp.unlink()
+            except OSError:
+                pass
 
 
 @pytest.fixture(scope="session")
@@ -134,11 +141,18 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
         "--log-level",
         "warning",
     ]
+    # Usar arquivos físicos temporários para evitar deadlock de buffer no Windows (PIPE cheio)
+    stdout_log_path = Path(TESTS_DIR) / f"uvicorn-stdout-{os.getpid()}.log"
+    stderr_log_path = Path(TESTS_DIR) / f"uvicorn-stderr-{os.getpid()}.log"
+
+    stdout_file = open(stdout_log_path, "w", encoding="utf-8")
+    stderr_file = open(stderr_log_path, "w", encoding="utf-8")
+
     proc = subprocess.Popen(
         cmd,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=stdout_file,
+        stderr=stderr_file,
         cwd=os.path.abspath(os.path.join(TESTS_DIR, "..")),
     )
 
@@ -159,8 +173,16 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
 
     if not success:
         proc.terminate()
-        stdout, stderr = proc.communicate()
-        raise RuntimeError(f"Servidor de teste falhou ao iniciar.\nStdout: {stdout.decode()}\nStderr: {stderr.decode()}")
+        stdout_file.close()
+        stderr_file.close()
+        stdout_content = stdout_log_path.read_text(encoding="utf-8", errors="ignore") if stdout_log_path.exists() else ""
+        stderr_content = stderr_log_path.read_text(encoding="utf-8", errors="ignore") if stderr_log_path.exists() else ""
+        try:
+            stdout_log_path.unlink()
+            stderr_log_path.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(f"Servidor de teste falhou ao iniciar.\nStdout: {stdout_content}\nStderr: {stderr_content}")
 
     yield f"http://{TEST_HOST}:{TEST_PORT}"
 
@@ -170,6 +192,17 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
         proc.wait(timeout=2)
     except subprocess.TimeoutExpired:
         proc.kill()
+
+    # Fecha e remove os arquivos de log físicos
+    stdout_file.close()
+    stderr_file.close()
+    try:
+        if stdout_log_path.exists():
+            stdout_log_path.unlink()
+        if stderr_log_path.exists():
+            stderr_log_path.unlink()
+    except OSError:
+        pass
 
 
 def test_e2e_dashboard_navigation(uvicorn_server: str, page: Any, tmp_path: Path) -> None:
@@ -383,3 +416,327 @@ def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -
     assert result["shortFormatted"] == "11:00:00"
     assert result["parsedUtcIso"] == "2026-05-21T14:00:00.000Z"
     assert result["parsedBrIso"] == "2026-05-21T14:05:42.000Z"
+
+
+def test_e2e_dashboard_executions_filters_all_controls(uvicorn_server: str, page: Any) -> None:
+    """Valida o encadeamento de todos os filtros visíveis da bancada de execuções."""
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
+    try:
+        auto_match = models.Automation(
+            name="Filtro Match Auto",
+            script_path="./Receitas Bloqueadas/processar_receitas.py",
+            enabled=True,
+            queue_group="financeiro",
+        )
+        auto_other = models.Automation(
+            name="Filtro Other Auto",
+            script_path="./Montagem de Terceirizados/validate_and_generate_html.py",
+            enabled=True,
+            queue_group="operacional",
+        )
+        session.add_all([auto_match, auto_other])
+        session.flush()
+
+        now = datetime.now()
+        session.add_all(
+            [
+                models.Execution(
+                    id="EXEC_E2E_FILTER_MATCH",
+                    automation_id=auto_match.id,
+                    status="ERROR",
+                    priority="HIGH",
+                    queue_group="financeiro",
+                    requested_by="Operador QA",
+                    started_at=now - timedelta(hours=1),
+                    logs="[E2E-FILTER] Match",
+                ),
+                models.Execution(
+                    id="EXEC_E2E_FILTER_OTHER_STATUS",
+                    automation_id=auto_match.id,
+                    status="SUCCESS",
+                    priority="HIGH",
+                    queue_group="financeiro",
+                    requested_by="Operador QA",
+                    started_at=now - timedelta(hours=1),
+                    finished_at=now - timedelta(minutes=50),
+                    duration_seconds=120,
+                    logs="[E2E-FILTER] Wrong status",
+                ),
+                models.Execution(
+                    id="EXEC_E2E_FILTER_OTHER_PRIORITY",
+                    automation_id=auto_match.id,
+                    status="ERROR",
+                    priority="LOW",
+                    queue_group="financeiro",
+                    requested_by="Operador QA",
+                    started_at=now - timedelta(hours=1),
+                    logs="[E2E-FILTER] Wrong priority",
+                ),
+                models.Execution(
+                    id="EXEC_E2E_FILTER_OTHER_GROUP",
+                    automation_id=auto_other.id,
+                    status="ERROR",
+                    priority="HIGH",
+                    queue_group="operacional",
+                    requested_by="Operador QA",
+                    started_at=now - timedelta(hours=1),
+                    logs="[E2E-FILTER] Wrong group",
+                ),
+                models.Execution(
+                    id="EXEC_E2E_FILTER_OTHER_REQUESTER",
+                    automation_id=auto_match.id,
+                    status="ERROR",
+                    priority="HIGH",
+                    queue_group="financeiro",
+                    requested_by="SYSTEM",
+                    started_at=now - timedelta(hours=1),
+                    logs="[E2E-FILTER] Wrong requester",
+                ),
+                models.Execution(
+                    id="EXEC_E2E_FILTER_OTHER_DATE",
+                    automation_id=auto_match.id,
+                    status="ERROR",
+                    priority="HIGH",
+                    queue_group="financeiro",
+                    requested_by="Operador QA",
+                    started_at=now - timedelta(days=3),
+                    logs="[E2E-FILTER] Wrong date",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+    page.click('button[data-target="executions"]')
+    page.wait_for_selector("#exec-tbody tr")
+
+    page.select_option("#filter-automation", label="Filtro Match Auto")
+    page.select_option("#filter-queue-group", "financeiro")
+    page.select_option("#filter-status", "ERROR")
+    page.select_option("#filter-priority", "HIGH")
+    page.fill("#filter-requested-by", "operador")
+    page.locator("#filter-requested-by").dispatch_event("change")
+    page.fill("#filter-date-from", today)
+    page.locator("#filter-date-from").dispatch_event("change")
+    page.fill("#filter-date-to", today)
+    page.locator("#filter-date-to").dispatch_event("change")
+
+    payload = page.evaluate(
+        """async (apiKey) => {
+            const params = new URLSearchParams({
+                page: '1',
+                per_page: '20',
+            });
+            const read = (id) => document.getElementById(id)?.value || '';
+            const status = read('filter-status');
+            const automationId = read('filter-automation');
+            const queueGroup = read('filter-queue-group');
+            const priority = read('filter-priority');
+            const requestedBy = read('filter-requested-by');
+            const dateFrom = read('filter-date-from');
+            const dateTo = read('filter-date-to');
+            if (status) params.set('status', status);
+            if (automationId) params.set('automation_id', automationId);
+            if (queueGroup) params.set('queue_group', queueGroup);
+            if (priority) params.set('priority', priority);
+            if (requestedBy) params.set('requested_by', requestedBy);
+            if (dateFrom) params.set('date_from', `${dateFrom}T00:00:00`);
+            if (dateTo) params.set('date_to', `${dateTo}T23:59:59`);
+            const response = await fetch('/api/executions?' + params.toString(), {
+                headers: { 'X-API-Key': apiKey },
+            });
+            const data = await response.json();
+            return {
+                statusCode: response.status,
+                query: params.toString(),
+                ids: (data.items || []).map((item) => item.id),
+                requestedBy: (data.items || []).map((item) => item.requested_by),
+            };
+        }""",
+        API_KEY,
+    )
+
+    assert payload["statusCode"] == 200
+    assert payload["ids"] == ["EXEC_E2E_FILTER_MATCH"]
+    assert payload["requestedBy"] == ["Operador QA"]
+
+
+def test_e2e_dashboard_automations_search_filters_visible_grid(uvicorn_server: str, page: Any) -> None:
+    """Valida a busca textual da tela administrativa de automações na grade visível."""
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
+    try:
+        session.add_all(
+            [
+                models.Automation(
+                    name="Auto Busca Financeiro",
+                    description="Consolidação financeira diária",
+                    script_path="./Receitas Bloqueadas/processar_receitas.py",
+                    enabled=True,
+                ),
+                models.Automation(
+                    name="Auto Busca Operacional",
+                    description="Rotina de expedição",
+                    script_path="./Montagem de Terceirizados/validate_and_generate_html.py",
+                    enabled=True,
+                ),
+                models.Automation(
+                    name="Auto Busca WhatsApp",
+                    description="Envio de alertas por canal",
+                    script_path="./Receitas Emitidas/run.ps1",
+                    enabled=True,
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+    page.click('button[data-target="automations"]')
+    page.wait_for_selector("#fleet-tbody tr")
+
+    page.fill("#auto-search", "financeiro")
+    page.locator("#auto-search").dispatch_event("input")
+    page.wait_for_timeout(300)
+
+    rows = page.locator("#fleet-tbody tr").evaluate_all(
+        """rows => rows.map((row) => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            return {
+                automation: (cells[0]?.innerText || '').trim(),
+                cadence: (cells[1]?.innerText || '').trim(),
+                state: (cells[5]?.innerText || '').trim(),
+            };
+        })"""
+    )
+
+    assert len(rows) == 1
+    assert "Auto Busca Financeiro" in rows[0]["automation"]
+    assert rows[0]["state"] in ["ATIVO", "PAUSADA"]
+
+
+def test_e2e_dashboard_system_shortcuts_open_execution_triage(uvicorn_server: str, page: Any) -> None:
+    """Valida atalhos da aba Sistema para abrir recortes operacionais em Execuções."""
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
+    try:
+        auto_group = models.Automation(
+            name="Atalho Grupo Ativo",
+            script_path="./Receitas Bloqueadas/processar_receitas.py",
+            enabled=True,
+            queue_group="grupo_sistema",
+        )
+        auto_hotspot = models.Automation(
+            name="Atalho Hotspot",
+            script_path="./Montagem de Terceirizados/validate_and_generate_html.py",
+            enabled=True,
+            queue_group="hotspot_ops",
+        )
+        session.add_all([auto_group, auto_hotspot])
+        session.flush()
+
+        now = datetime.now()
+        session.add_all(
+            [
+                models.Execution(
+                    id="EXEC_SYS_GROUP_RUNNING",
+                    automation_id=auto_group.id,
+                    status="RUNNING",
+                    priority="HIGH",
+                    queue_group="grupo_sistema",
+                    requested_by="SYSTEM",
+                    started_at=now - timedelta(minutes=15),
+                    logs="[E2E-SYSTEM] Running group",
+                ),
+                models.Execution(
+                    id="EXEC_SYS_HOTSPOT_1",
+                    automation_id=auto_hotspot.id,
+                    status="ERROR",
+                    priority="HIGH",
+                    queue_group="hotspot_ops",
+                    requested_by="SYSTEM",
+                    started_at=now - timedelta(hours=1),
+                    logs="[E2E-SYSTEM] Hotspot 1",
+                ),
+                models.Execution(
+                    id="EXEC_SYS_HOTSPOT_2",
+                    automation_id=auto_hotspot.id,
+                    status="ERROR",
+                    priority="HIGH",
+                    queue_group="hotspot_ops",
+                    requested_by="SYSTEM",
+                    started_at=now - timedelta(hours=2),
+                    logs="[E2E-SYSTEM] Hotspot 2",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+    page.click('button[data-target="system"]')
+    page.wait_for_selector("#diagnostic-contract")
+
+    page.wait_for_selector('button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]')
+    page.click('button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]')
+    page.wait_for_timeout(500)
+
+    after_group = page.evaluate(
+        """() => ({
+            executionsActive: document.getElementById('view-executions')?.classList.contains('active') || false,
+            queueGroup: document.getElementById('filter-queue-group')?.value || '',
+        })"""
+    )
+    assert after_group["executionsActive"] is True
+    assert after_group["queueGroup"] == "grupo_sistema"
+
+    page.click('button[data-target="system"]')
+    page.wait_for_function(
+        """() => document.getElementById('view-system')?.classList.contains('active') || false"""
+    )
+    hotspot_button = page.locator('#view-system button[data-action="execution-open-hotspot"]').first
+    hotspot_button.wait_for(state="visible")
+    hotspot_button.click()
+    page.wait_for_timeout(500)
+
+    after_hotspot = page.evaluate(
+        """() => ({
+            executionsActive: document.getElementById('view-executions')?.classList.contains('active') || false,
+            automationId: document.getElementById('filter-automation')?.value || '',
+            status: document.getElementById('filter-status')?.value || '',
+        })"""
+    )
+    assert after_hotspot["executionsActive"] is True
+    assert after_hotspot["status"] == "ERROR"
+    assert after_hotspot["automationId"] != ""

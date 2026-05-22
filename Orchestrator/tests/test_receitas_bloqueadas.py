@@ -84,6 +84,22 @@ def test_gerar_html_artistico_badges(mock_df_receitas: Any) -> None:
     assert "Verde" in html
 
 
+def test_gerar_html_artistico_formata_numeros_inteiros(mock_df_receitas: Any) -> None:
+    """Garante que EP Rec. e PE Rec sao renderizados sem casas decimais quando vierem como float inteiro."""
+    df_float = mock_df_receitas.copy()
+    df_float.loc[0, "EP Rec."] = 56.0
+    df_float.loc[0, "PE Rec"] = 1.0
+    df_float.loc[1, "EP Rec."] = 22.0
+    df_float.loc[1, "PE Rec"] = 1.0
+
+    html = processar_receitas.gerar_html_artistico(df_float, {"new": 1, "mod": 1, "del": 1})
+
+    assert "56.0" not in html
+    assert "1.0" not in html
+    assert ">56<" in html
+    assert ">1<" in html
+
+
 def test_formatar_excel_estilos(tmp_path: Any) -> None:
     """Valida se o formatador Excel ajusta o auto_filter, largura e estilos de cabeçalho."""
     file_path = os.path.join(tmp_path, "test_receitas.xlsx")
