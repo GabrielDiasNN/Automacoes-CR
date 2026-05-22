@@ -165,7 +165,6 @@ param(
 )
 
 $script:CurrentAutomationName = $AutomationName
-$global:CurrentAutomationName = $AutomationName
 
 $uri = "http://localhost:8000/api/executions/telemetry/start"
 
@@ -449,9 +448,6 @@ $envStr = $env:ENVIRONMENT
 if ([string]::IsNullOrWhiteSpace($envStr)) { $envStr = "PRD" }
 
 $autoName = $script:CurrentAutomationName
-if ([string]::IsNullOrWhiteSpace($autoName)) {
-    $autoName = $global:CurrentAutomationName
-}
 if ([string]::IsNullOrWhiteSpace($autoName)) {
     try {
         $stack = Get-PSCallStack

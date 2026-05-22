@@ -83,6 +83,9 @@ Orchestrator/orchestrator.db-wal
 Orchestrator/tests/test-*.db
 Orchestrator/tests/test-*.db-shm
 Orchestrator/tests/test-*.db-wal
+Orchestrator/tests/test-e2e-*.db
+Orchestrator/tests/test-e2e-*.db-shm
+Orchestrator/tests/test-e2e-*.db-wal
 Orchestrator/tests/fix_tests*.py
 Orchestrator/orchestrator.pid
 Orchestrator/worker.pid

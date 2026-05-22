@@ -8,7 +8,7 @@ Definir como o workspace deve ser descrito para agentes, como o contexto local d
 
 ## When to Use
 - Use ao criar, revisar ou reescrever qualquer `SKILL.md` em `.github/skills`.
-- Use ao atualizar `README.md`, `CONTEXT.md`, `SECURITY.md`, `GEMINI.md` ou `CHANGELOG.md` apos mudancas estruturais no hub.
+- Use ao atualizar `README.md`, `CONTEXT.md`, `SECURITY.md`, `GEMINI.md`, `CHANGELOG.md` ou `docs/ai-native-context-monitor.md` apos mudancas estruturais no hub.
 - Use ao decidir se uma regra deve viver em uma skill, em `references/` da skill ou em documentacao raiz do repositorio.
 - Use ao corrigir drift entre implementacao real e o que a documentacao afirma sobre stack, governanca ou ownership.
 
@@ -33,13 +33,14 @@ Definir como o workspace deve ser descrito para agentes, como o contexto local d
 - Leia `README.md` para visao geral e estado do hub antes de alterar documentacao estrutural.
 - Leia `CONTEXT.md` quando a mudanca tocar regras de negocio, automacoes fiscais ou contratos operacionais entre componentes.
 - Leia `SECURITY.md` quando a mudanca tocar dados sensiveis, logs, credenciais ou protecao de dados.
-- Leia `GEMINI.md` quando a mudanca tocar encoding, sincronismo de contexto, atualizacao obrigatoria de secoes AI-Native ou politicas locais de edicao.
+- Leia `GEMINI.md` quando a mudanca tocar encoding, bootstrap local, skills ou politicas locais de edicao.
+- Leia `docs/ai-native-context-monitor.md` quando a mudanca tocar estado operacional recente, arquitetura, governanca ou contratos que futuros agentes precisam conhecer.
 - Use `.github/skills/README.md` como fonte canonica da taxonomia ativa; nao reintroduza skills legadas nem referencias a stack anterior.
 
 ## Validation
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SkillsGovernance.ps1 -BasePath .` apos alterar qualquer skill ou o README de skills.
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` quando a mudanca afetar governanca do workspace como um todo.
-- Revise manualmente se `README.md`, `CONTEXT.md`, `SECURITY.md`, `GEMINI.md` e `CHANGELOG.md` continuam coerentes entre si e com os arquivos em `Infrastructure/`, `Orchestrator/` e `lib/`.
+- Revise manualmente se `README.md`, `CONTEXT.md`, `SECURITY.md`, `GEMINI.md`, `CHANGELOG.md` e `docs/ai-native-context-monitor.md` continuam coerentes entre si e com os arquivos em `Infrastructure/`, `Orchestrator/` e `lib/`.
 
 ## Troubleshooting
 - Se duas skills parecerem competir pelo mesmo pedido, refine primeiro `description`, `Do Not Use When` e `Related Skills` em vez de duplicar regras.

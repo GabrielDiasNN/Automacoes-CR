@@ -68,8 +68,11 @@ Antes de análise profunda, refatoração estrutural, mudança de skill ou alter
 
 Skills globais compartilhadas obrigatórias:
 
+- `ai-engineering-discipline`
 - `protocolo-valeg`
 - `git-ide-governance-skill`
+
+`ai-engineering-discipline` define a disciplina global de engenharia com IA: contexto correto, menor mudança suficiente, simplicidade, depuração verificável e separação entre protótipo e produção. Ela não substitui `protocolo-valeg` nem `git-ide-governance-skill`; mudanças envolvendo Git devem continuar usando a skill de Git.
 
 ## Regra Operacional para Skills
 

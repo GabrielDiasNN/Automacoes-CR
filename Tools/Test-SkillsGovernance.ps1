@@ -41,6 +41,7 @@ $script:LegacySkillNames = @(
 )
 
 $script:GlobalSharedSkillNames = @(
+    "ai-engineering-discipline",
     "protocolo-valeg",
     "git-ide-governance-skill"
 )
@@ -211,24 +212,43 @@ function Resolve-LinkTargetPath {
     )
 
     $item = Get-Item -LiteralPath $LinkPath -Force
-    if (-not $item.LinkType) {
+    if (-not $item.LinkType -and -not ($item.Attributes -match "ReparsePoint")) {
         return [pscustomobject]@{
             IsLinked       = $false
             ResolvedTarget = ""
         }
     }
 
-    $resolvedTarget = [string]$item.ResolvedTarget
-    if ([string]::IsNullOrWhiteSpace($resolvedTarget) -and $item.Target) {
-        if ($item.Target -is [System.Array]) {
-            $resolvedTarget = [string]$item.Target[0]
+    # Resolução recursiva robusta compatível com PowerShell 5.1 e 7.x
+    $currentPath = $LinkPath
+    $resolvedTarget = ""
+    for ($i = 0; $i -lt 10; $i++) {
+        if (Test-Path -LiteralPath $currentPath) {
+            $currItem = Get-Item -LiteralPath $currentPath -Force
+            if ($currItem.LinkType -or ($currItem.Attributes -match "ReparsePoint")) {
+                $t = $currItem.ResolvedTarget
+                if ([string]::IsNullOrWhiteSpace($t) -and $currItem.Target) {
+                    if ($currItem.Target -is [System.Array]) {
+                        $t = [string]$currItem.Target[0]
+                    } else {
+                        $t = [string]$currItem.Target
+                    }
+                }
+                if (-not [string]::IsNullOrWhiteSpace($t)) {
+                    if (-not [System.IO.Path]::IsPathRooted($t)) {
+                        $t = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $currentPath) $t))
+                    }
+                    $currentPath = $t
+                    $resolvedTarget = $t
+                } else {
+                    break
+                }
+            } else {
+                break
+            }
         } else {
-            $resolvedTarget = [string]$item.Target
+            break
         }
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($resolvedTarget) -and -not [System.IO.Path]::IsPathRooted($resolvedTarget)) {
-        $resolvedTarget = [System.IO.Path]::GetFullPath((Join-Path $RootForRelativeTarget $resolvedTarget))
     }
 
     return [pscustomobject]@{
@@ -477,7 +497,14 @@ function Test-CodexGlobalSharedSkillMirrors {
         }
 
         $resolvedMirror = $targetState.ResolvedTarget
-        $resolvedCanonical = (Resolve-Path -LiteralPath $canonicalPath).Path
+
+        $canonicalTargetState = Resolve-LinkTargetPath -LinkPath $canonicalPath -RootForRelativeTarget $globalSharedRoot
+        if ($canonicalTargetState.IsLinked -and -not [string]::IsNullOrWhiteSpace($canonicalTargetState.ResolvedTarget)) {
+            $resolvedCanonical = $canonicalTargetState.ResolvedTarget
+        } else {
+            $resolvedCanonical = (Resolve-Path -LiteralPath $canonicalPath).Path
+        }
+
         if ([string]::IsNullOrWhiteSpace($resolvedMirror)) {
             $findings += New-Finding -File $mirrorPath -Rule "CODEX_SHARED_SKILL_MIRROR_UNRESOLVED" -Detail ("Mirror do Codex nao expoe ResolvedTarget para validacao: {0}" -f $skillName) -Severity "WARN"
             continue

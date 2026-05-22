@@ -48,6 +48,8 @@ $hasErrors = $false
 $mypy = Get-PythonTool "mypy"
 $pylint = Get-PythonTool "pylint"
 
+$oldPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 if ($mypy) {
     foreach ($file in $resolvedTargetFiles) {
         $mypyOutput = & $mypy --strict --explicit-package-bases --namespace-packages $file 2>&1
@@ -60,6 +62,7 @@ if ($mypy) {
 } else {
     Write-Host "[AVISO] Mypy nao instalado. Validacao de tipagem Python pulada." -ForegroundColor Yellow
 }
+$ErrorActionPreference = $oldPreference
 
 if ($pylint) {
     $pylintOutput = & $pylint --disable=C0114,C0116,R0801 @resolvedTargetFiles 2>&1
