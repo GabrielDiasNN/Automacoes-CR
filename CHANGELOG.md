@@ -1,5 +1,9 @@
 # Changelog
 
+## [9.2.4] - 2026-05-22
+### Corrigido
+- **Hardening do Outlook COM para Assinaturas Inline**: reforcado o fluxo compartilhado de `lib/Lib-Email.psm1` para estabilizar a assinatura padrao antes do envio automatizado. O modulo agora forca `BodyFormat` HTML, aguarda a prontidao do editor, persiste o draft apos carregar a assinatura, registra a contagem de anexos inline, salva novamente apos montar o `HTMLBody` final e executa uma recarga controlada do draft quando a assinatura referencia imagens mas nenhum anexo inline e detectado. O objetivo e reduzir casos de "imagem nao vinculada" em assinaturas que funcionam no envio manual, mas falhavam em automacoes por timing do Outlook COM.
+
 ## [9.2.3] - 2026-05-22
 ### Alterado
 - **Reorganização do Contexto AI-Native**: `GEMINI.md` foi simplificado para atuar como contrato local estável de bootstrap, encoding, skills e validação. O histórico operacional curado passa a viver em `docs/ai-native-context-monitor.md`, enquanto o `CHANGELOG.md` permanece como histórico completo e auditável de versões.

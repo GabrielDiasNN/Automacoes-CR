@@ -18,12 +18,117 @@ $ErrorActionPreference = "Stop"
 
 # Configuracao Global de Encoding
 $OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-# ------------------------------------------------------------------------------
-# Send-OutlookEmail
-# ------------------------------------------------------------------------------
-function Send-OutlookEmail {
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# ------------------------------------------------------------------------------
+# Helpers Internos
+# ------------------------------------------------------------------------------
+function Wait-OutlookEditorReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$MailItem,
+
+        [int]$MaxAttempts = 20,
+        [int]$DelayMilliseconds = 250
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            $inspector = $MailItem.GetInspector()
+            $htmlBody = $MailItem.HTMLBody
+            if ($inspector -and -not [string]::IsNullOrWhiteSpace($htmlBody)) {
+                return $true
+            }
+        } catch [System.Exception] {
+            # Aguarda a materializacao do editor do Outlook.
+        }
+
+        Start-Sleep -Milliseconds $DelayMilliseconds
+    }
+
+    return $false
+}
+
+function Get-InlineAttachmentCount {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$MailItem
+    )
+
+    $contentIdTag = "http://schemas.microsoft.com/mapi/proptag/0x3712001F"
+    $hiddenTag = "http://schemas.microsoft.com/mapi/proptag/0x7FFE000B"
+    $inlineCount = 0
+
+    try {
+        for ($index = 1; $index -le $MailItem.Attachments.Count; $index++) {
+            $attachment = $null
+            try {
+                $attachment = $MailItem.Attachments.Item($index)
+                $propertyAccessor = $attachment.PropertyAccessor
+                $contentId = $propertyAccessor.GetProperty($contentIdTag)
+                $isHidden = $propertyAccessor.GetProperty($hiddenTag)
+                if (-not [string]::IsNullOrWhiteSpace($contentId) -or $isHidden) {
+                    $inlineCount++
+                }
+            } catch [System.Exception] {
+                # Nem todo anexo expone as propriedades MAPI esperadas; ignorar.
+            } finally {
+                if ($attachment) {
+                    try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($attachment) | Out-Null } catch [System.Exception] { }
+                }
+            }
+        }
+    } catch [System.Exception] {
+        return 0
+    }
+
+    return $inlineCount
+}
+
+function Get-OutlookDraftReloaded {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Outlook,
+
+        [Parameter(Mandatory = $true)]
+        [object]$MailItem
+    )
+
+    $entryId = $MailItem.EntryID
+    if ([string]::IsNullOrWhiteSpace($entryId)) {
+        return $null
+    }
+
+    $storeId = $null
+    try {
+        if ($MailItem.Parent) {
+            $storeId = $MailItem.Parent.StoreID
+        }
+    } catch [System.Exception] {
+        $storeId = $null
+    }
+
+    try {
+        $MailItem.Close(0)
+    } catch [System.Exception] {
+        # Se nao for possivel fechar o draft, tentaremos reabrir assim mesmo.
+    }
+
+    try {
+        if ([string]::IsNullOrWhiteSpace($storeId)) {
+            return $Outlook.Session.GetItemFromID($entryId)
+        }
+
+        return $Outlook.Session.GetItemFromID($entryId, $storeId)
+    } catch [System.Exception] {
+        return $null
+    }
+}
+
+# ------------------------------------------------------------------------------
+# Send-OutlookEmail
+# ------------------------------------------------------------------------------
+function Send-OutlookEmail {
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([bool])]
     param(
@@ -63,15 +168,17 @@ function Send-OutlookEmail {
         if ($PSCmdlet.ShouldProcess($To, "Enviar e-mail: $Subject")) {
 
             # Estrategia Anti-Zumbi: Tenta pegar um Outlook ja aberto pelo usuario
-            try {
-                $outlook = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Outlook.Application")
-            } catch [System.Exception] {
-                # Se nao estiver aberto, nos iniciamos o background COM
-                $outlook = New-Object -ComObject Outlook.Application
-                $weStartedOutlook = $true
-            }
-
-            $mailItem = $outlook.CreateItem(0)
+            try {
+                $outlook = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Outlook.Application")
+                Write-LocalLog "Outlook ja estava aberto no perfil do usuario."
+            } catch [System.Exception] {
+                # Se nao estiver aberto, nos iniciamos o background COM
+                $outlook = New-Object -ComObject Outlook.Application
+                $weStartedOutlook = $true
+                Write-LocalLog "Outlook iniciado via COM para este envio."
+            }
+
+            $mailItem = $outlook.CreateItem(0)
 
             # Redirecionamento de Teste
             $testEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
@@ -100,16 +207,26 @@ function Send-OutlookEmail {
                 $finalCc = ""
                 $finalBcc = ""
                 $finalSubject = "[TESTE] $Subject"
-            }
-
-            # Preserva assinatura (Display carrega o HTML original com CIDs)
-            $mailItem.Display()
-            $mailItem.To = $finalTo
-            $mailItem.Subject = $finalSubject
-            $mailItem.HTMLBody = $HtmlBody + $mailItem.HTMLBody
-
-            if (-not [string]::IsNullOrWhiteSpace($finalCc)) { $mailItem.CC = $finalCc }
-            if (-not [string]::IsNullOrWhiteSpace($finalBcc)) { $mailItem.BCC = $finalBcc }
+            }
+
+            # Preserva assinatura (Display carrega o HTML original com CIDs)
+            $mailItem.BodyFormat = 2
+            $mailItem.Display()
+            if (-not (Wait-OutlookEditorReady -MailItem $mailItem)) {
+                Write-LocalLog "Editor do Outlook nao confirmou prontidao completa no tempo esperado; prosseguindo com a melhor evidencia disponivel." -l "WARN"
+            }
+
+            $mailItem.Save()
+            $signatureHtml = $mailItem.HTMLBody
+            $inlineAttachmentsBeforeMerge = Get-InlineAttachmentCount -MailItem $mailItem
+            Write-LocalLog "Assinatura carregada. InlineAttachments=$inlineAttachmentsBeforeMerge HtmlLength=$($signatureHtml.Length)"
+
+            $mailItem.To = $finalTo
+            $mailItem.Subject = $finalSubject
+            $mailItem.HTMLBody = $HtmlBody + $signatureHtml
+
+            if (-not [string]::IsNullOrWhiteSpace($finalCc)) { $mailItem.CC = $finalCc }
+            if (-not [string]::IsNullOrWhiteSpace($finalBcc)) { $mailItem.BCC = $finalBcc }
 
             # Processar Anexos
             if ($Attachments -and $Attachments.Count -gt 0) {
@@ -119,18 +236,45 @@ function Send-OutlookEmail {
                         Write-LocalLog "Anexo adicionado: $file"
                     } else {
                         Write-LocalLog "Aviso: Arquivo de anexo nao encontrado: $file" -l "WARN"
-                    }
-                }
-            }
-
-            if ($PreviewOnly) {
-                Write-LocalLog "Modo PREVIEW ativo. E-mail exibido mas NAO enviado automaticamente." -l "WARN"
-                return $true
-            }
-
-            $mailItem.Send()
-            Write-LocalLog "E-mail enviado com sucesso. Para=$finalTo"
-            return $true
+                    }
+                }
+            }
+
+            $mailItem.Save()
+            $inlineAttachmentsAfterMerge = Get-InlineAttachmentCount -MailItem $mailItem
+            Write-LocalLog "Mensagem persistida antes do envio. InlineAttachments=$inlineAttachmentsAfterMerge"
+
+            $signatureHasInlineReferences = $signatureHtml -match '(_arquivos/image\d+\.(png|jpg|gif))|(cid:)'
+            if ($signatureHasInlineReferences -and $inlineAttachmentsAfterMerge -le 0) {
+                Write-LocalLog "Nenhum anexo inline detectado apos merge do HTML. Executando recarga controlada do draft antes do envio." -l "WARN"
+                $reloadedMailItem = Get-OutlookDraftReloaded -Outlook $outlook -MailItem $mailItem
+                if ($reloadedMailItem) {
+                    try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch [System.Exception] { }
+                    $mailItem = $reloadedMailItem
+                    $mailItem.Display()
+                    if (-not (Wait-OutlookEditorReady -MailItem $mailItem -MaxAttempts 12 -DelayMilliseconds 250)) {
+                        Write-LocalLog "Draft recarregado sem confirmacao completa do editor no tempo esperado." -l "WARN"
+                    }
+                    $mailItem.Save()
+                    $inlineAttachmentsAfterReload = Get-InlineAttachmentCount -MailItem $mailItem
+                    Write-LocalLog "Draft recarregado com sucesso. InlineAttachments=$inlineAttachmentsAfterReload"
+                } else {
+                    Write-LocalLog "Falha ao recarregar o draft para revalidar anexos inline. Mantendo envio com a mensagem atual." -l "WARN"
+                }
+            }
+
+            Start-Sleep -Milliseconds 350
+            Write-LocalLog "Mensagem estabilizada e pronta para envio."
+
+            if ($PreviewOnly) {
+                Write-LocalLog "Modo PREVIEW ativo. E-mail exibido mas NAO enviado automaticamente." -l "WARN"
+                return $true
+            }
+
+            Write-LocalLog "Disparando envio Outlook COM."
+            $mailItem.Send()
+            Write-LocalLog "E-mail enviado com sucesso. Para=$finalTo"
+            return $true
         }
         else {
             Write-LocalLog "Envio de e-mail suprimido por WhatIf." -l "WARN"
