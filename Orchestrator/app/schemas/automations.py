@@ -101,9 +101,21 @@ class AutomationResponse(AutomationBase):
     updated_at: Optional[Any] = None
     next_run: Optional[str] = None
     last_status: Optional[str] = None
+    last_execution_id: Optional[str] = None
+    last_execution_started_at: Optional[Any] = None
+    last_execution_finished_at: Optional[Any] = None
+    last_execution_duration_seconds: Optional[float] = None
+    last_failure_reason: Optional[str] = None
+    last_recovery_action: Optional[str] = None
+    last_requested_by: Optional[str] = None
     schedule_type: Optional[str] = None
     schedule_summary: Optional[str] = None
     next_runs_preview: List[str] = []
+    active_execution_count: int = 0
+    success_24h: int = 0
+    error_24h: int = 0
+    pending_count: int = 0
+    operational_state: str = "idle"
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("schedule")
@@ -115,4 +127,6 @@ class AutomationResponse(AutomationBase):
     def apply_br_format(self) -> "AutomationResponse":
         self.created_at = format_dt_br(self.created_at)
         self.updated_at = format_dt_br(self.updated_at)
+        self.last_execution_started_at = format_dt_br(self.last_execution_started_at)
+        self.last_execution_finished_at = format_dt_br(self.last_execution_finished_at)
         return self

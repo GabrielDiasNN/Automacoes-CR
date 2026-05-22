@@ -29,7 +29,7 @@ from . import models
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
 from .database import SessionLocal, engine
 from .middleware import RateLimitMiddleware, RequestIdMiddleware, TimingMiddleware
-from .routers import automations, executions, system, websocket
+from .routers import automations, executions, system, websocket, automation_config, automation_ide
 from .runtime import get_allowed_origins, get_dashboard_path, get_lib_path, scheduler
 from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
 from .services.scheduler_runtime import register_enterprise_jobs, reload_scheduled_tasks
@@ -135,6 +135,8 @@ def _cleanup_zombie_tasks():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Pilar E - Escala: Garantir integridade do banco no startup
+    from .timezone import get_now_local
+    app.state.startup_time = get_now_local()
     from .database import (
         run_schema_migrations,
         run_wal_checkpoint,
@@ -275,6 +277,8 @@ app.add_middleware(
 
 # Registrar routers
 app.include_router(automations.router)
+app.include_router(automation_config.router)
+app.include_router(automation_ide.router)
 app.include_router(executions.router)
 app.include_router(system.router)
 app.include_router(websocket.router)

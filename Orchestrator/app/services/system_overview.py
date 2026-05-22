@@ -1,4 +1,4 @@
-"""Serviços de visão agregada do painel operacional."""
+"""Serviços de visão agregada do painel operacional (C3, C4)."""
 
 # pylint: disable=relative-beyond-top-level,too-many-locals,not-callable
 
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from .. import models, schemas
 from ..constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from ..timezone import get_now_local
+from . import metrics  # pylint: disable=no-name-in-module
 
 
 def _build_next_run_lookup(jobs: list[schemas.ScheduledJob]) -> dict[int, Any]:
@@ -35,64 +36,26 @@ def build_system_overview_payload(
     jobs: list[schemas.ScheduledJob],
     diagnostics_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Agrega métricas, estado operacional e diagnósticos para o dashboard."""
+    """Agrega métricas, estado operacional e diagnósticos para o dashboard (C3, C4)."""
     next_run_lookup = _build_next_run_lookup(jobs)
 
     window_start = get_now_local() - timedelta(hours=24)
-    success_24h = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.status == "SUCCESS",
-            models.Execution.started_at >= window_start,
-        )
-        .count()
-    )
-    errors_24h = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
-            models.Execution.started_at >= window_start,
-        )
-        .count()
-    )
+    success_24h, errors_24h = metrics.get_success_errors_count_24h(db)
+
     pending_now = (
         db.query(models.Execution)
         .filter(models.Execution.status.in_(["PENDING", "RUNNING"]))
         .count()
     )
 
-    status_rows = (
-        db.query(models.Execution.status, func.count(models.Execution.id))
-        .group_by(models.Execution.status)
-        .all()
-    )
-    status_breakdown: dict[str, int] = {
-        str(status): int(count) for status, count in status_rows
-    }
-
-    top_failures_rows = (
-        db.query(
-            models.Automation.id.label("automation_id"),
-            models.Automation.name.label("automation_name"),
-            func.count(models.Execution.id).label("failures"),
-        )
-        .join(models.Execution, models.Execution.automation_id == models.Automation.id)
-        .filter(
-            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
-            models.Execution.started_at >= window_start,
-        )
-        .group_by(models.Automation.id, models.Automation.name)
-        .order_by(desc(func.count(models.Execution.id)))
-        .limit(5)
-        .all()
-    )
+    status_breakdown = metrics.get_status_breakdown(db)
     top_failures = [
         {
-            "automation_id": row.automation_id,
-            "automation_name": row.automation_name,
-            "failures": row.failures,
+            "automation_id": item["automation_id"],
+            "automation_name": item["automation_name"],
+            "failures": item["failures_24h"],
         }
-        for row in top_failures_rows
+        for item in metrics.get_failure_hotspots_24h(db)
     ]
 
     recent_execs = (
@@ -112,6 +75,8 @@ def build_system_overview_payload(
     automations = (
         db.query(models.Automation).order_by(models.Automation.name.asc()).all()
     )
+
+    # 1. Buscar métricas agregadas por automação (24h)
     automation_metrics_rows = (
         db.query(
             models.Execution.automation_id.label("automation_id"),
@@ -139,10 +104,22 @@ def build_system_overview_payload(
     metrics_by_automation = {
         int(row.automation_id): row for row in automation_metrics_rows if row.automation_id
     }
+
+    # 2. Buscar duração média SUCCESS para cálculo do SLA sem N+1 (C3)
+    sla_metrics = metrics.get_sla_metrics_by_automation_24h(db)
+
     autos_payload: list[dict[str, Any]] = []
     for auto in automations:
         auto_id = int(auto.id)
         metrics_row = metrics_by_automation.get(auto_id)
+        schedule_value = auto.schedule if isinstance(auto.schedule, str) else None
+        try:
+            parsed_schedule = (
+                schemas.parse_schedule(schedule_value) if schedule_value else None
+            )
+        except (TypeError, ValueError):
+            parsed_schedule = None
+
         last_exec = (
             db.query(models.Execution)
             .filter(models.Execution.automation_id == auto_id)
@@ -150,24 +127,15 @@ def build_system_overview_payload(
             .first()
         )
 
-        # --- Cálculo de SLA ---
+        # --- Cálculo de SLA Otimizado (C3) ---
         sla_minutes = auto.sla_minutes
         sla_status = "unknown"
         sla_avg_duration_minutes: float | None = None
         if sla_minutes:
-            avg_row = (
-                db.query(func.avg(models.Execution.duration_seconds))
-                .filter(
-                    models.Execution.automation_id == auto_id,
-                    models.Execution.status == "SUCCESS",
-                    models.Execution.started_at >= window_start,
-                    models.Execution.duration_seconds.isnot(None),
-                )
-                .scalar()
-            )
-            if avg_row is not None:
-                avg_min = float(avg_row) / 60.0
-                sla_avg_duration_minutes = round(avg_min, 2)
+            metrics_entry = sla_metrics.get(auto_id)
+            if metrics_entry is not None:
+                avg_min = metrics_entry["avg_duration_minutes"]
+                sla_avg_duration_minutes = avg_min
                 ratio = avg_min / sla_minutes
                 if ratio <= 0.80:
                     sla_status = "ok"
@@ -182,9 +150,15 @@ def build_system_overview_payload(
             {
                 "id": auto_id,
                 "name": auto.name,
+                "description": auto.description,
+                "script_path": auto.script_path,
                 "enabled": auto.enabled,
                 "test_mode": auto.test_mode,
                 "queue_group": auto.queue_group,
+                "max_runtime_minutes": auto.max_runtime_minutes,
+                "max_retries": auto.max_retries,
+                "cooldown_minutes": auto.cooldown_minutes,
+                "notification_channels": auto.notification_channels,
                 "sla_minutes": sla_minutes,
                 "sla_status": sla_status,
                 "sla_avg_duration_minutes": sla_avg_duration_minutes,
@@ -203,7 +177,41 @@ def build_system_overview_payload(
                     else None
                 ),
                 "last_status": last_exec.status if last_exec else None,
+                "last_execution_id": last_exec.id if last_exec else None,
+                "last_execution_started_at": schemas.format_dt_br(
+                    last_exec.started_at if last_exec else None
+                ),
+                "last_execution_finished_at": schemas.format_dt_br(
+                    last_exec.finished_at if last_exec else None
+                ),
+                "last_execution_duration_seconds": (
+                    round(float(last_exec.duration_seconds), 2)
+                    if last_exec and last_exec.duration_seconds is not None
+                    else None
+                ),
+                "last_failure_reason": last_exec.failure_reason if last_exec else None,
+                "last_recovery_action": last_exec.recovery_action if last_exec else None,
+                "last_requested_by": last_exec.requested_by if last_exec else None,
                 "next_run": schemas.format_dt_br(next_run_lookup.get(auto_id)),
+                "schedule_summary": schemas.describe_schedule_payload(parsed_schedule),
+                "next_runs_preview": schemas.preview_next_runs(parsed_schedule, 3),
+                "active_execution_count": (
+                    1 if last_exec and last_exec.status in ["PENDING", "RUNNING"] else 0
+                ),
+                "pending_count": (
+                    1 if last_exec and last_exec.status in ["PENDING", "RUNNING"] else 0
+                ),
+                "operational_state": (
+                    "paused"
+                    if not auto.enabled
+                    else "in_progress"
+                    if last_exec and last_exec.status in ["PENDING", "RUNNING"]
+                    else "attention"
+                    if int(getattr(metrics_row, "failures_24h", 0) or 0) > 0
+                    else "healthy"
+                    if int(getattr(metrics_row, "success_24h", 0) or 0) > 0
+                    else "idle"
+                ),
             }
         )
 

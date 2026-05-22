@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import psutil
 from datetime import datetime
 
 from sqlalchemy import text
@@ -56,8 +57,6 @@ def build_health_payload(
         overall = "unhealthy"
     elif not worker_status.is_alive:
         overall = "degraded"
-
-    import psutil
 
     return schemas.SystemHealth(
         status=overall,

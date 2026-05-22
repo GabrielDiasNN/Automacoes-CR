@@ -10,6 +10,7 @@ Pilar de Segurança (Fase 6).
 
 import re
 from typing import Any
+from .constants import MAX_DB_LOGS_CHARS
 
 # Regexes compiladas para performance
 _URL_CREDENTIALS_RE = re.compile(r"\b([a-zA-Z]+://)([^/:\s@]+):([^/:\s@]+)(@[^/:\s@]+)")
@@ -82,3 +83,15 @@ def sanitize_log_payload(payload: Any) -> Any:
 
     return payload
 
+def truncate_log_payload(text: str) -> str:
+    """
+    Trunca uma string de log caso ela exceda o limite MAX_DB_LOGS_CHARS.
+    Mantém os primeiros 100KB e os últimos 100KB com um aviso no meio.
+    """
+    if not text or len(text) <= MAX_DB_LOGS_CHARS:
+        return text
+
+    half_limit = MAX_DB_LOGS_CHARS // 2
+    trunc_msg = f"\n... [LOGS TRUNCADOS PELO SISTEMA (EXCEDEU {MAX_DB_LOGS_CHARS} CARACTERES)] ...\n"
+
+    return text[:half_limit] + trunc_msg + text[-half_limit:]

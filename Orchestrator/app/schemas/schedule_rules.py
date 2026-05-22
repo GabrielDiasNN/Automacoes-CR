@@ -64,3 +64,8 @@ def first_interval_candidate(
     diff_seconds = (now - anchor_dt).total_seconds()
     multiples = int(diff_seconds // step_seconds) + 1
     return anchor_dt + timedelta(minutes=multiples * step_minutes)
+
+
+def ui_day_to_python_weekday(day: int) -> int:
+    """Converte dia da semana da UI (0=Dom, 1=Seg ... 6=Sab) para datetime (0=Seg ... 6=Dom)."""
+    return (int(day) + 6) % 7

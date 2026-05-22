@@ -41,9 +41,10 @@ from ..constants import (
     RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
     RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE,
     RECOVERY_ACTION_REVIEW_WORKER_LOGS,
+    EXIT_CODE_MAP,
 )
 from ..timezone import get_now_local
-from ..security import sanitize_log_payload
+from ..security import sanitize_log_payload, truncate_log_payload
 from ..middleware import request_id_var
 
 
@@ -147,20 +148,8 @@ def claim_next_task(db: Session) -> Optional[str]:
 def classify_process_result(
     return_code: Optional[int],
 ) -> tuple[str, Optional[str], str]:
-    if return_code in [0, 2, 3]:
-        return "SUCCESS", None, RECOVERY_ACTION_NONE
-    if return_code == 21:
-        return (
-            EXECUTION_STATUS_ERROR,
-            FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
-            RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
-        )
-    if return_code == 24:
-        return (
-            EXECUTION_STATUS_ERROR,
-            FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
-            RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
-        )
+    if return_code in EXIT_CODE_MAP:
+        return EXIT_CODE_MAP[return_code]
     return (
         EXECUTION_STATUS_ERROR,
         f"EXIT_CODE_{return_code}",
@@ -178,7 +167,7 @@ def mark_task_as_failed(
     if not db_exec:
         return
     db_exec.status = EXECUTION_STATUS_ERROR
-    db_exec.logs = (db_exec.logs or "") + sanitize_log_payload(message)
+    db_exec.logs = truncate_log_payload((db_exec.logs or "") + sanitize_log_payload(message))
     db_exec.exit_code = exit_code
     db_exec.failure_reason = FAILURE_REASON_AUTOMATION_NOT_FOUND
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY
@@ -206,8 +195,8 @@ def finalize_terminated_task(
     db_exec.finished_at = get_now_local()
     db_exec.failure_reason = FAILURE_REASON_USER_TERMINATED
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE
-    db_exec.logs = sanitize_log_payload(
-        (db_exec.logs or "") + "".join(logs) + termination_log
+    db_exec.logs = truncate_log_payload(
+        sanitize_log_payload((db_exec.logs or "") + "".join(logs) + termination_log)
     )
     db.commit()
 
@@ -226,8 +215,8 @@ def apply_timeout_result(
     db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
     db_exec.failure_reason = FAILURE_REASON_MAX_RUNTIME_EXCEEDED
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE
-    db_exec.logs = sanitize_log_payload(
-        "".join(logs) + "\n[ERRO] Tarefa excedeu o tempo máximo."
+    db_exec.logs = truncate_log_payload(
+        sanitize_log_payload("".join(logs) + "\n[ERRO] Tarefa excedeu o tempo máximo.")
     )
     db.commit()
     return db_exec
@@ -254,7 +243,7 @@ def complete_process_execution(
     db_exec.status = status
     db_exec.failure_reason = failure_reason
     db_exec.recovery_action = recovery_action
-    db_exec.logs = sanitize_log_payload("".join(logs))
+    db_exec.logs = truncate_log_payload(sanitize_log_payload("".join(logs)))
     db_exec.artifacts = artifacts_json
     db_exec.finished_at = get_now_local()
     db.commit()
@@ -274,7 +263,9 @@ def apply_internal_worker_error(
     ]:
         return
     db_exec.status = EXECUTION_STATUS_ERROR
-    db_exec.logs = (db_exec.logs or "") + f"\nInternal Worker Error: {sanitize_log_payload(message)}"
+    db_exec.logs = truncate_log_payload(
+        (db_exec.logs or "") + f"\nInternal Worker Error: {sanitize_log_payload(message)}"
+    )
     db_exec.exit_code = -1
     db_exec.failure_reason = FAILURE_REASON_INTERNAL_WORKER_ERROR
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_WORKER_LOGS

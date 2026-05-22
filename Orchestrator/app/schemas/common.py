@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
-from .schedule_rules import first_interval_candidate, normalize_hhmm, parse_hhmm
+from .schedule_rules import first_interval_candidate, normalize_hhmm, parse_hhmm, ui_day_to_python_weekday
 
 # ---------------------------------------------------------------------------
 # Validadores e Utilitários de Nomes e Caminhos
@@ -158,9 +158,7 @@ def _normalize_days(days: Optional[List]) -> List[int]:
 
 
 def _ui_day_to_python_weekday(day: int) -> int:
-    # Contrato UI/legado: 0=Dom, 1=Seg ... 6=Sáb
-    # datetime.weekday(): 0=Seg ... 6=Dom
-    return (day + 6) % 7
+    return ui_day_to_python_weekday(day)
 
 
 def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:

@@ -32,6 +32,7 @@ from ..services.scheduler_runtime import (
     reload_scheduled_tasks,
     scheduler,
 )
+from ..services.metrics import get_last_execution_status_by_automation
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit, validate_script_path
 
@@ -70,19 +71,22 @@ def _load_next_run_lookup():
 
 
 def _build_automation_response(
-    db: Session, auto: models.Automation, next_run_lookup=None
+    db: Session, auto: models.Automation, next_run_lookup=None, last_status_lookup=None
 ):
     if next_run_lookup is None:
         next_run_lookup = _load_next_run_lookup()
     auto_resp = schemas.AutomationResponse.model_validate(auto)
-    last_exec = (
-        db.query(models.Execution)
-        .filter(models.Execution.automation_id == auto.id)
-        .order_by(models.Execution.started_at.desc())
-        .first()
-    )
-    if last_exec:
-        auto_resp.last_status = last_exec.status
+    if last_status_lookup is not None:
+        auto_resp.last_status = last_status_lookup.get(auto.id)
+    else:
+        last_exec = (
+            db.query(models.Execution)
+            .filter(models.Execution.automation_id == auto.id)
+            .order_by(models.Execution.started_at.desc())
+            .first()
+        )
+        if last_exec:
+            auto_resp.last_status = last_exec.status
     auto_resp.next_run = schemas.format_dt_br(next_run_lookup.get(auto.id))
     try:
         parsed_schedule = schemas.parse_schedule(auto_resp.schedule)
@@ -185,13 +189,12 @@ def list_automations(
     items = query.offset((page - 1) * per_page).limit(per_page).all()
 
     # Enriquecer com last_status
-
     next_run_lookup = _load_next_run_lookup()
+    last_status_lookup = get_last_execution_status_by_automation(db)
     result = []
 
     for auto in items:
-
-        result.append(_build_automation_response(db, auto, next_run_lookup))
+        result.append(_build_automation_response(db, auto, next_run_lookup, last_status_lookup))
 
     return schemas.PaginatedResponse(
         items=result, total=total, page=page, per_page=per_page, pages=pages
@@ -215,11 +218,11 @@ def list_all_automations(
     automations = db.query(models.Automation).order_by(models.Automation.name).all()
 
     next_run_lookup = _load_next_run_lookup()
+    last_status_lookup = get_last_execution_status_by_automation(db)
     result = []
 
     for auto in automations:
-
-        result.append(_build_automation_response(db, auto, next_run_lookup))
+        result.append(_build_automation_response(db, auto, next_run_lookup, last_status_lookup))
 
     return result
 
@@ -840,173 +843,3 @@ def clone_automation(
     db.refresh(clone)
     _reload_scheduler_safe()
     return _build_automation_response(db, clone)
-
-
-# ---------------------------------------------------------------------------
-# CONFIG MANAGER (JSON) - Fase 3
-# ---------------------------------------------------------------------------
-import glob
-
-
-@router.get("/{auto_id}/configs")
-def get_automation_configs(
-    auto_id: int,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Busca arquivos JSON na pasta da automação."""
-    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
-    if not auto:
-        raise HTTPException(status_code=404, detail="Automação não encontrada.")
-
-    auto_dir = _resolve_automation_dir(auto.script_path)
-
-    json_files = glob.glob(os.path.join(auto_dir, "*.json"))
-    configs = []
-
-    for jf in json_files:
-        filename = os.path.basename(jf)
-        # Ignora arquivos de lock e estado
-        if (
-            "wwebjs" in filename
-            or filename.startswith(".")
-            or "state" in filename.lower()
-        ):
-            continue
-        try:
-            with open(jf, "r", encoding="utf-8") as f:
-                content = f.read()
-            configs.append({"filename": filename, "content": content})
-        except Exception as e:
-            pass
-
-    return configs
-
-
-@router.put("/{auto_id}/configs/{filename}")
-def update_automation_config(
-    auto_id: int,
-    filename: str,
-    payload: schemas.FileContent,
-    request: Request,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Atualiza um arquivo JSON específico da automação."""
-    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
-    if not auto:
-        raise HTTPException(status_code=404, detail="Automação não encontrada.")
-
-    auto_dir = _resolve_automation_dir(auto.script_path)
-    target_path = _resolve_managed_file(auto_dir, filename)
-    if not filename.endswith(".json"):
-        raise HTTPException(
-            status_code=400,
-            detail="Apenas arquivos JSON podem ser editados por esta rota.",
-        )
-
-    try:
-        json.loads(payload.content)
-        backup_relpath = _backup_file_before_write(target_path, auto_dir)
-        with open(target_path, "w", encoding="utf-8") as f:
-            f.write(payload.content)
-
-        log_audit(
-            db,
-            "UPDATE_CONFIG",
-            "AUTOMATION",
-            str(auto_id),
-            get_client_ip(request),
-            json.dumps({"filename": filename, "backup": backup_relpath}),
-        )
-        db.commit()
-        return {"message": "Configuração salva com sucesso!", "backup": backup_relpath}
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=400, detail="O conteúdo fornecido não é um JSON válido."
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ---------------------------------------------------------------------------
-# WEB IDE MANAGER (Scripts) - Fase 4
-# ---------------------------------------------------------------------------
-
-
-@router.get("/{auto_id}/scripts")
-def get_automation_scripts(
-    auto_id: int,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Busca arquivos de script (.ps1, .py, .sql, .bat) na pasta da automação."""
-    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
-    if not auto:
-        raise HTTPException(status_code=404, detail="Automação não encontrada.")
-
-    auto_dir = _resolve_automation_dir(auto.script_path)
-
-    allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
-    scripts = []
-
-    for filename in os.listdir(auto_dir):
-        if not filename.endswith(allowed_exts) or filename.startswith("."):
-            continue
-
-        jf = os.path.join(auto_dir, filename)
-        if not os.path.isfile(jf):
-            continue
-
-        try:
-            with open(jf, "r", encoding="utf-8") as f:
-                content = f.read()
-            scripts.append({"filename": filename, "content": content})
-        except Exception:
-            pass
-
-    return scripts
-
-
-@router.put("/{auto_id}/scripts/{filename}")
-def update_automation_script(
-    auto_id: int,
-    filename: str,
-    payload: schemas.FileContent,
-    request: Request,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Atualiza um arquivo de script garantindo o encoding correto."""
-    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
-    if not auto:
-        raise HTTPException(status_code=404, detail="Automação não encontrada.")
-
-    auto_dir = _resolve_automation_dir(auto.script_path)
-    allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
-    if not filename.endswith(allowed_exts):
-        raise HTTPException(status_code=400, detail="Extensão de script não permitida.")
-    target_path = _resolve_managed_file(auto_dir, filename)
-
-    try:
-        backup_relpath = _backup_file_before_write(target_path, auto_dir)
-        # Forçar UTF-8 with BOM para .ps1 e .psm1 (Soberania PT-BR)
-        if filename.endswith(".ps1") or filename.endswith(".psm1"):
-            with open(target_path, "w", encoding="utf-8-sig") as f:
-                f.write(payload.content)
-        else:
-            with open(target_path, "w", encoding="utf-8") as f:
-                f.write(payload.content)
-
-        log_audit(
-            db,
-            "UPDATE_SCRIPT",
-            "AUTOMATION",
-            str(auto_id),
-            get_client_ip(request),
-            json.dumps({"filename": filename, "backup": backup_relpath}),
-        )
-        db.commit()
-        return {"message": "Código-fonte salvo com sucesso!", "backup": backup_relpath}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

@@ -7,6 +7,9 @@ Implementa Log Replay (v4.0.1) para garantir continuidade de visualizacao.
 
 import json
 import logging
+import os
+import hmac
+import asyncio
 from datetime import datetime
 from typing import Dict, List
 
@@ -32,6 +35,7 @@ class ConnectionManager:
     def __init__(self):
         self.exec_connections: Dict[str, List[WebSocket]] = {}
         self.global_connections: List[WebSocket] = []
+        self._lock = asyncio.Lock()
 
     async def connect_exec(self, websocket: WebSocket, exec_id: str):
         """Conecta um cliente para receber logs de uma execucao."""
@@ -50,43 +54,50 @@ class ConnectionManager:
         finally:
             db.close()
 
-        if exec_id not in self.exec_connections:
-            self.exec_connections[exec_id] = []
-        self.exec_connections[exec_id].append(websocket)
+        async with self._lock:
+            if exec_id not in self.exec_connections:
+                self.exec_connections[exec_id] = []
+            self.exec_connections[exec_id].append(websocket)
         logger.info(f"WebSocket conectado para exec_id: {exec_id} (Replay OK)")
 
     async def connect_global(self, websocket: WebSocket):
         await websocket.accept()
-        self.global_connections.append(websocket)
+        async with self._lock:
+            self.global_connections.append(websocket)
         logger.info(
             f"WebSocket global conectado. Total: {len(self.global_connections)}"
         )
 
-    def disconnect_exec(self, websocket: WebSocket, exec_id: str):
-        if exec_id in self.exec_connections:
-            if websocket in self.exec_connections[exec_id]:
-                self.exec_connections[exec_id].remove(websocket)
-            if not self.exec_connections[exec_id]:
-                del self.exec_connections[exec_id]
+    async def disconnect_exec(self, websocket: WebSocket, exec_id: str):
+        async with self._lock:
+            if exec_id in self.exec_connections:
+                if websocket in self.exec_connections[exec_id]:
+                    self.exec_connections[exec_id].remove(websocket)
+                if not self.exec_connections[exec_id]:
+                    del self.exec_connections[exec_id]
 
-    def disconnect_global(self, websocket: WebSocket):
-        if websocket in self.global_connections:
-            self.global_connections.remove(websocket)
+    async def disconnect_global(self, websocket: WebSocket):
+        async with self._lock:
+            if websocket in self.global_connections:
+                self.global_connections.remove(websocket)
 
     async def broadcast_log(self, message: str, exec_id: str):
-        if exec_id in self.exec_connections:
-            # Pilar E: Limitar tamanho da mensagem individual para evitar OOM em logs massivos
-            if len(message) > 50000:
-                message = message[:50000] + "\n... [TRUNCATED FOR WS PERFORMANCE]"
+        # Pilar E: Limitar tamanho da mensagem individual para evitar OOM em logs massivos
+        if len(message) > 50000:
+            message = message[:50000] + "\n... [TRUNCATED FOR WS PERFORMANCE]"
 
-            dead = []
-            for ws in self.exec_connections[exec_id]:
-                try:
-                    await ws.send_text(message)
-                except Exception:
-                    dead.append(ws)
+        async with self._lock:
+            targets = list(self.exec_connections.get(exec_id, []))
+
+        dead = []
+        for ws in targets:
+            try:
+                await ws.send_text(message)
+            except Exception:
+                dead.append(ws)
+        if dead:
             for ws in dead:
-                self.disconnect_exec(ws, exec_id)
+                await self.disconnect_exec(ws, exec_id)
 
     async def broadcast_event(self, event_type: str, data: dict):
         payload = json.dumps(
@@ -96,14 +107,18 @@ class ConnectionManager:
                 "timestamp": format_dt_br(get_now_local()),
             }
         )
+        async with self._lock:
+            targets = list(self.global_connections)
+
         dead = []
-        for ws in self.global_connections:
+        for ws in targets:
             try:
                 await ws.send_text(payload)
             except Exception:
                 dead.append(ws)
-        for ws in dead:
-            self.disconnect_global(ws)
+        if dead:
+            for ws in dead:
+                await self.disconnect_global(ws)
 
 
 manager = ConnectionManager()
@@ -115,23 +130,47 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/logs/{exec_id}")
 async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
+    # Validar API Key recebida via query parameter
+    api_key = websocket.query_params.get("key")
+    expected_key = os.environ.get("ORCHESTRATOR_API_KEY")
+    if not expected_key:
+        from uuid import uuid4
+        expected_key = f"MISSING_ENV_{uuid4()}"
+
+    if not api_key or not hmac.compare_digest(api_key, expected_key):
+        await websocket.close(code=4003)
+        logger.warning(f"WebSocket recusado por API Key inválida para exec_id: {exec_id}")
+        return
+
     await manager.connect_exec(websocket, exec_id)
     try:
         while True:
             # Manter conexao aberta e lidar com pings se necessario
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect_exec(websocket, exec_id)
+        await manager.disconnect_exec(websocket, exec_id)
 
 
 @router.websocket("/ws/events")
 async def websocket_global_events(websocket: WebSocket):
+    # Validar API Key recebida via query parameter
+    api_key = websocket.query_params.get("key")
+    expected_key = os.environ.get("ORCHESTRATOR_API_KEY")
+    if not expected_key:
+        from uuid import uuid4
+        expected_key = f"MISSING_ENV_{uuid4()}"
+
+    if not api_key or not hmac.compare_digest(api_key, expected_key):
+        await websocket.close(code=4003)
+        logger.warning("WebSocket global recusado por API Key inválida.")
+        return
+
     await manager.connect_global(websocket)
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect_global(websocket)
+        await manager.disconnect_global(websocket)
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Serviços de diagnóstico operacional do Orchestrator."""
+"""Serviços de diagnóstico operacional do Orchestrator (C1, C4)."""
 
 # pylint: disable=relative-beyond-top-level,too-many-locals,not-callable,too-many-branches,too-many-statements,line-too-long
 
@@ -27,6 +27,8 @@ from ..constants import (
     DIAGNOSTIC_WAL_CRITICAL_MB,
     DIAGNOSTIC_WAL_ELEVATED_MB,
     DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
+    DIAGNOSTIC_FAILURE_HOTSPOT_THRESHOLD,
+    DIAGNOSTIC_DEFAULT_MAX_RUNTIME_MINUTES,
     SEVERITY_ERROR,
     SEVERITY_WARN,
 )
@@ -39,7 +41,7 @@ from ..database import (
 )
 from ..timezone import get_now_local
 from .scheduler_runtime import extract_automation_id_from_job
-
+from . import metrics  # pylint: disable=no-name-in-module
 
 def add_finding(
     findings: list[dict[str, Any]],
@@ -63,7 +65,6 @@ def add_finding(
             "priority": int(details.get("priority", 3)),
         }
     )
-
 
 def build_operator_actions(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Agrupa ações sugeridas para o operador sem duplicar botões na UI."""
@@ -105,53 +106,13 @@ def build_operator_actions(findings: list[dict[str, Any]]) -> list[dict[str, Any
         ),
     )
 
-
-def collect_failure_hotspots(db: Session) -> list[dict[str, Any]]:
-    """Identifica automações com falhas recorrentes nas últimas 24h."""
-    window_start = get_now_local() - timedelta(hours=24)
-    rows = (
-        db.query(
-            models.Automation.id.label("automation_id"),
-            models.Automation.name.label("automation_name"),
-            models.Automation.notification_channels.label("notification_channels"),
-            func.count(models.Execution.id).label("failures"),
-            func.max(models.Execution.started_at).label("last_failure_at"),
-        )
-        .join(models.Execution, models.Execution.automation_id == models.Automation.id)
-        .filter(
-            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
-            models.Execution.started_at >= window_start,
-        )
-        .group_by(
-            models.Automation.id,
-            models.Automation.name,
-            models.Automation.notification_channels,
-        )
-        .order_by(desc(func.count(models.Execution.id)))
-        .limit(5)
-        .all()
-    )
-    return [
-        {
-            "automation_id": row.automation_id,
-            "automation_name": row.automation_name,
-            "failures_24h": int(row.failures),
-            "last_failure_at": schemas.format_dt_br(row.last_failure_at),
-            "notification_channels": row.notification_channels,
-        }
-        for row in rows
-    ]
-
-
 def seconds_since(value: datetime | None) -> float:
     if not value:
         return 0.0
     return round((get_now_local() - value).total_seconds(), 2)
 
-
 def coerce_datetime(value: Any) -> datetime | None:
     return value if isinstance(value, datetime) else None
-
 
 def collect_scheduler_inconsistencies(db: Session, scheduler: Any) -> list[str]:
     inconsistencies = []
@@ -186,7 +147,6 @@ def collect_scheduler_inconsistencies(db: Session, scheduler: Any) -> list[str]:
         )
     return inconsistencies
 
-
 def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
     """Lista execuções RUNNING que passaram do limite operacional cadastrado."""
     now = get_now_local()
@@ -201,7 +161,7 @@ def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
         started_at = coerce_datetime(item.started_at)
         if not started_at:
             continue
-        max_runtime_minutes = item.automation.max_runtime_minutes or 30
+        max_runtime_minutes = item.automation.max_runtime_minutes or DIAGNOSTIC_DEFAULT_MAX_RUNTIME_MINUTES
         age_seconds = round((now - started_at).total_seconds(), 2)
         limit_seconds = int(max_runtime_minutes) * 60
         if age_seconds <= limit_seconds + DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS:
@@ -217,117 +177,10 @@ def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
         )
     return sorted(stale, key=lambda entry: entry["age_seconds"], reverse=True)
 
+# --- ANALISADORES FOCADOS (C1) ---
 
-def build_diagnostics_payload(
-    db: Session,
-    scheduler: Any,
-    worker_status_fn: Callable[[Session], Any],
-    wal_size_fn: Callable[[], float] | None = None,
-) -> dict[str, Any]:
-    """Monta diagnostico acionavel sem executar correcoes automaticas."""
+def check_schema_integrity(schema_status: dict[str, Any], schema_version: str) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    schema_status = validate_database_schema()
-    schema_version = get_schema_version()
-    wal_provider = wal_size_fn or get_wal_size_mb
-    wal_size_mb = wal_provider()
-    db_size_mb = get_db_size_mb()
-    worker_status = worker_status_fn(db)
-    heartbeat = (
-        db.query(models.WorkerHeartbeat).filter(models.WorkerHeartbeat.id == 1).first()
-    )
-
-    statuses = (
-        db.query(models.Execution.status, func.count(models.Execution.id))
-        .group_by(models.Execution.status)
-        .all()
-    )
-    queue: dict[str, int] = {str(status): int(count) for status, count in statuses}
-    active_count = sum(queue.get(status, 0) for status in EXECUTION_ACTIVE_STATUSES)
-    priority_rows = (
-        db.query(models.Execution.priority, func.count(models.Execution.id))
-        .filter(models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES))
-        .group_by(models.Execution.priority)
-        .all()
-    )
-    active_by_priority = {
-        str(priority or "NORMAL"): int(count) for priority, count in priority_rows
-    }
-    group_rows = (
-        db.query(models.Execution.queue_group, func.count(models.Execution.id))
-        .filter(models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES))
-        .group_by(models.Execution.queue_group)
-        .all()
-    )
-    active_by_group = {
-        str(group or "default"): int(count) for group, count in group_rows
-    }
-    failure_hotspots = collect_failure_hotspots(db)
-    running_over_runtime = collect_running_over_runtime(db)
-    retry_pressure_rows = (
-        db.query(
-            models.Execution.queue_group,
-            models.Execution.priority,
-            func.count(models.Execution.id).label("active_count"),
-        )
-        .filter(
-            models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES),
-            models.Execution.retry_count > 0,
-        )
-        .group_by(models.Execution.queue_group, models.Execution.priority)
-        .order_by(desc(func.count(models.Execution.id)))
-        .limit(10)
-        .all()
-    )
-    retry_pressure = [
-        {
-            "queue_group": str(row.queue_group or "default"),
-            "priority": str(row.priority or "NORMAL"),
-            "active_count": int(row.active_count or 0),
-        }
-        for row in retry_pressure_rows
-    ]
-    timeout_rows = (
-        db.query(
-            models.Execution.queue_group,
-            func.count(models.Execution.id).label("timeouts_24h"),
-        )
-        .filter(
-            models.Execution.status == "TIMEOUT",
-            models.Execution.started_at >= get_now_local() - timedelta(hours=24),
-        )
-        .group_by(models.Execution.queue_group)
-        .order_by(desc(func.count(models.Execution.id)))
-        .limit(10)
-        .all()
-    )
-    timeouts_24h_by_group = [
-        {
-            "queue_group": str(row.queue_group or "default"),
-            "timeouts_24h": int(row.timeouts_24h or 0),
-        }
-        for row in timeout_rows
-    ]
-
-    oldest_pending = (
-        db.query(models.Execution)
-        .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
-        .order_by(models.Execution.started_at.asc())
-        .first()
-    )
-    oldest_running = (
-        db.query(models.Execution)
-        .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
-        .order_by(models.Execution.started_at.asc())
-        .first()
-    )
-
-    pending_age_seconds = seconds_since(
-        coerce_datetime(oldest_pending.started_at) if oldest_pending else None
-    )
-    running_age_seconds = seconds_since(
-        coerce_datetime(oldest_running.started_at) if oldest_running else None
-    )
-
     if not schema_status["valid"]:
         add_finding(
             findings,
@@ -357,7 +210,10 @@ def build_diagnostics_payload(
                 "priority": 2,
             },
         )
+    return findings
 
+def check_wal_health(wal_size_mb: float) -> tuple[list[dict[str, Any]], str]:
+    findings: list[dict[str, Any]] = []
     wal_risk = "normal"
     if wal_size_mb >= DIAGNOSTIC_WAL_CRITICAL_MB:
         wal_risk = "critical"
@@ -389,7 +245,10 @@ def build_diagnostics_payload(
                 "priority": 2,
             },
         )
+    return findings, wal_risk
 
+def check_scheduler_health(scheduler: Any, inconsistencies: list[str]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
     if not scheduler.running:
         add_finding(
             findings,
@@ -419,7 +278,6 @@ def build_diagnostics_payload(
             },
         )
 
-    inconsistencies = collect_scheduler_inconsistencies(db, scheduler)
     for item in inconsistencies:
         add_finding(
             findings,
@@ -434,10 +292,10 @@ def build_diagnostics_payload(
                 "priority": 2,
             },
         )
+    return findings
 
-    last_ping_age_seconds = None
-    if heartbeat and heartbeat.last_ping:
-        last_ping_age_seconds = seconds_since(coerce_datetime(heartbeat.last_ping))
+def check_worker_health(worker_status: Any, active_count: int, last_ping_age_seconds: float | None) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
     if not worker_status.is_alive:
         add_finding(
             findings,
@@ -459,7 +317,10 @@ def build_diagnostics_payload(
                 "priority": 1 if active_count else 2,
             },
         )
+    return findings
 
+def check_queue_health(pending_age_seconds: float, running_age_seconds: float) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
     if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS:
         add_finding(
             findings,
@@ -489,7 +350,10 @@ def build_diagnostics_payload(
                 "priority": 2,
             },
         )
+    return findings
 
+def check_running_over_runtime(running_over_runtime: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
     if running_over_runtime:
         first_stale = running_over_runtime[0]
         add_finding(
@@ -508,9 +372,12 @@ def build_diagnostics_payload(
                 "priority": 1,
             },
         )
+    return findings
 
+def check_failure_hotspots(failure_hotspots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
     for hotspot in failure_hotspots:
-        if hotspot["failures_24h"] < 3:
+        if hotspot["failures_24h"] < DIAGNOSTIC_FAILURE_HOTSPOT_THRESHOLD:
             continue
         channels = str(hotspot.get("notification_channels") or "").lower()
         channel_hint = (
@@ -531,7 +398,127 @@ def build_diagnostics_payload(
                 "priority": 2,
             },
         )
+    return findings
 
+# --- ORQUESTRADOR CENTRAL (C1) ---
+
+def build_diagnostics_payload(
+    db: Session,
+    scheduler: Any,
+    worker_status_fn: Callable[[Session], Any],
+    wal_size_fn: Callable[[], float] | None = None,
+) -> dict[str, Any]:
+    """Monta diagnostico acionavel delegando para sub-funções focadas (C1)."""
+    findings: list[dict[str, Any]] = []
+
+    # 1. Obter informações fundamentais
+    schema_status = validate_database_schema()
+    schema_version = get_schema_version()
+    wal_provider = wal_size_fn or get_wal_size_mb
+    wal_size_mb = wal_provider()
+    db_size_mb = get_db_size_mb()
+    worker_status = worker_status_fn(db)
+    heartbeat = (
+        db.query(models.WorkerHeartbeat).filter(models.WorkerHeartbeat.id == 1).first()
+    )
+
+    # 2. Utilizar as consultas centralizadas de services/metrics.py (C4)
+    queue = metrics.get_status_breakdown(db)
+    active_count = sum(queue.get(status, 0) for status in EXECUTION_ACTIVE_STATUSES)
+    active_by_priority = metrics.get_active_by_priority(db)
+    active_by_group = metrics.get_active_by_group(db)
+    failure_hotspots = metrics.get_failure_hotspots_24h(db)
+
+    running_over_runtime = collect_running_over_runtime(db)
+
+    # Retry pressure (métrica complementar de diagnóstico)
+    retry_pressure_rows = (
+        db.query(
+            models.Execution.queue_group,
+            models.Execution.priority,
+            func.count(models.Execution.id).label("active_count"),
+        )
+        .filter(
+            models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES),
+            models.Execution.retry_count > 0,
+        )
+        .group_by(models.Execution.queue_group, models.Execution.priority)
+        .order_by(desc(func.count(models.Execution.id)))
+        .limit(10)
+        .all()
+    )
+    retry_pressure = [
+        {
+            "queue_group": str(row.queue_group or "default"),
+            "priority": str(row.priority or "NORMAL"),
+            "active_count": int(row.active_count or 0),
+        }
+        for row in retry_pressure_rows
+    ]
+
+    # Timeouts nas últimas 24h
+    timeout_rows = (
+        db.query(
+            models.Execution.queue_group,
+            func.count(models.Execution.id).label("timeouts_24h"),
+        )
+        .filter(
+            models.Execution.status == "TIMEOUT",
+            models.Execution.started_at >= get_now_local() - timedelta(hours=24),
+        )
+        .group_by(models.Execution.queue_group)
+        .order_by(desc(func.count(models.Execution.id)))
+        .limit(10)
+        .all()
+    )
+    timeouts_24h_by_group = [
+        {
+            "queue_group": str(row.queue_group or "default"),
+            "timeouts_24h": int(row.timeouts_24h or 0),
+        }
+        for row in timeout_rows
+    ]
+
+    # Execuções mais antigas
+    oldest_pending = (
+        db.query(models.Execution)
+        .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
+        .order_by(models.Execution.started_at.asc())
+        .first()
+    )
+    oldest_running = (
+        db.query(models.Execution)
+        .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
+        .order_by(models.Execution.started_at.asc())
+        .first()
+    )
+
+    pending_age_seconds = seconds_since(
+        coerce_datetime(oldest_pending.started_at) if oldest_pending else None
+    )
+    running_age_seconds = seconds_since(
+        coerce_datetime(oldest_running.started_at) if oldest_running else None
+    )
+
+    # 3. Executar as análises através das funções puras focadas (C1)
+    findings.extend(check_schema_integrity(schema_status, schema_version))
+
+    wal_findings, wal_risk = check_wal_health(wal_size_mb)
+    findings.extend(wal_findings)
+
+    inconsistencies = collect_scheduler_inconsistencies(db, scheduler)
+    findings.extend(check_scheduler_health(scheduler, inconsistencies))
+
+    last_ping_age_seconds = None
+    if heartbeat and heartbeat.last_ping:
+        last_ping_age_seconds = seconds_since(coerce_datetime(heartbeat.last_ping))
+
+    findings.extend(check_worker_health(worker_status, active_count, last_ping_age_seconds))
+    findings.extend(check_queue_health(pending_age_seconds, running_age_seconds))
+    findings.extend(check_running_over_runtime(running_over_runtime))
+    findings.extend(check_failure_hotspots(failure_hotspots))
+
+    # 4. Consolidar o status geral e ações recomendadas
     severity_rank = {"INFO": 0, "WARN": 1, "ERROR": 2}
     max_severity = max(
         (severity_rank.get(item["severity"], 0) for item in findings), default=0
@@ -545,6 +532,8 @@ def build_diagnostics_payload(
     jobs = scheduler.get_jobs()
     next_runs = sorted((job.next_run_time for job in jobs if job.next_run_time))[:5]
     operator_actions = build_operator_actions(findings)
+
+    # 5. Criar checks formatados para telemetria
     checks = [
         {
             "code": "contract_version",
@@ -671,10 +660,26 @@ def build_diagnostics_payload(
             "timeouts_24h_by_group": timeouts_24h_by_group,
             "oldest_pending": {
                 "exec_id": oldest_pending.id if oldest_pending else None,
+                "automation_id": oldest_pending.automation_id if oldest_pending else None,
+                "automation_name": (
+                    oldest_pending.automation.name
+                    if oldest_pending and getattr(oldest_pending, "automation", None)
+                    else None
+                ),
+                "priority": oldest_pending.priority if oldest_pending else None,
+                "queue_group": oldest_pending.queue_group if oldest_pending else None,
                 "age_seconds": pending_age_seconds,
             },
             "oldest_running": {
                 "exec_id": oldest_running.id if oldest_running else None,
+                "automation_id": oldest_running.automation_id if oldest_running else None,
+                "automation_name": (
+                    oldest_running.automation.name
+                    if oldest_running and getattr(oldest_running, "automation", None)
+                    else None
+                ),
+                "priority": oldest_running.priority if oldest_running else None,
+                "queue_group": oldest_running.queue_group if oldest_running else None,
                 "age_seconds": running_age_seconds,
             },
         },

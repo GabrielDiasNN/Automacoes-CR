@@ -54,6 +54,19 @@ class ExecutionResponse(ExecutionBase):
     logs: Optional[str] = None
     artifacts: Optional[str] = None
     automation_name: Optional[str] = None
+    operator_attention_required: bool = False
+    operator_severity: Optional[str] = None
+    operator_score: int = 0
+    operator_reason_summary: Optional[str] = None
+    operator_action_code: Optional[str] = None
+    operator_action_label: Optional[str] = None
+    operator_action_hint: Optional[str] = None
+    requeue_allowed: bool = False
+    requeue_block_reason: Optional[str] = None
+    stop_allowed: bool = False
+    related_execution_id: Optional[str] = None
+    related_execution_status: Optional[str] = None
+    related_queue_group: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -74,6 +87,19 @@ class ExecutionSummary(BaseModel):
     finished_at: Optional[Any] = None
     duration_seconds: Optional[float] = None
     artifacts: Optional[str] = None
+    operator_attention_required: bool = False
+    operator_severity: Optional[str] = None
+    operator_score: int = 0
+    operator_reason_summary: Optional[str] = None
+    operator_action_code: Optional[str] = None
+    operator_action_label: Optional[str] = None
+    operator_action_hint: Optional[str] = None
+    requeue_allowed: bool = False
+    requeue_block_reason: Optional[str] = None
+    stop_allowed: bool = False
+    related_execution_id: Optional[str] = None
+    related_execution_status: Optional[str] = None
+    related_queue_group: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     @model_validator(mode="after")

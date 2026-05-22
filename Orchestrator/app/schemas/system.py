@@ -140,6 +140,10 @@ class DiagnosticsScheduler(BaseModel):
 
 class DiagnosticsQueueItem(BaseModel):
     exec_id: Optional[str] = None
+    automation_id: Optional[int] = None
+    automation_name: Optional[str] = None
+    priority: Optional[str] = None
+    queue_group: Optional[str] = None
     age_seconds: float = 0.0
 
 
@@ -279,9 +283,15 @@ class SystemOverviewQueue(BaseModel):
 class SystemOverviewAutomationCard(BaseModel):
     id: int
     name: str
+    description: Optional[str] = None
+    script_path: Optional[str] = None
     enabled: bool
     test_mode: bool
     queue_group: Optional[str] = None
+    max_runtime_minutes: Optional[int] = None
+    max_retries: Optional[int] = None
+    cooldown_minutes: Optional[int] = None
+    notification_channels: Optional[str] = None
     sla_minutes: Optional[int] = None
     sla_status: str = "unknown"  # ok | at_risk | violated | unknown
     sla_avg_duration_minutes: Optional[float] = None
@@ -290,7 +300,19 @@ class SystemOverviewAutomationCard(BaseModel):
     timeouts_24h: int = 0
     avg_duration_24h_seconds: Optional[float] = None
     last_status: Optional[str] = None
+    last_execution_id: Optional[str] = None
+    last_execution_started_at: Optional[str] = None
+    last_execution_finished_at: Optional[str] = None
+    last_execution_duration_seconds: Optional[float] = None
+    last_failure_reason: Optional[str] = None
+    last_recovery_action: Optional[str] = None
+    last_requested_by: Optional[str] = None
     next_run: Optional[str] = None
+    schedule_summary: Optional[str] = None
+    next_runs_preview: List[str] = []
+    active_execution_count: int = 0
+    pending_count: int = 0
+    operational_state: str = "idle"
 
 
 class SystemOverviewFailure(BaseModel):

@@ -1,5 +1,4 @@
 # pylint: disable=all
-# pylint: disable=all
 # mypy: ignore-errors
 """
 
@@ -62,8 +61,6 @@ logger = logging.getLogger("orchestrator")
 router = APIRouter(prefix="/api/system", tags=["System"])
 
 PROJECT_ROOT = get_project_root()
-
-STARTUP_TIME = get_now_local()
 
 # ---------------------------------------------------------------------------
 
@@ -402,13 +399,13 @@ def list_audit_log(
 
 
 @router.get("/uptime")
-def get_uptime(api_key: str = Depends(get_api_key)):
+def get_uptime(request: Request, api_key: str = Depends(get_api_key)):
     """Retorna o tempo de atividade do Orchestrator."""
-
-    uptime = get_now_local() - STARTUP_TIME
+    startup_time = request.app.state.startup_time
+    uptime = get_now_local() - startup_time
 
     return {
-        "started_at": schemas.format_dt_br(STARTUP_TIME),
+        "started_at": schemas.format_dt_br(startup_time),
         "uptime_seconds": round(uptime.total_seconds(), 2),
         "uptime_human": str(uptime).split(".")[0],
     }
@@ -465,9 +462,9 @@ def get_system_overview(
 
 
 @router.get("/version", response_model=schemas.SystemVersion)
-def get_version():
+def get_version(request: Request):
     """Retorna informacoes detalhadas de versao e build do Orchestrator."""
-    return build_version_payload(STARTUP_TIME)
+    return build_version_payload(request.app.state.startup_time)
 
 
 @router.get("/diagnostics", response_model=schemas.DiagnosticsPayload)

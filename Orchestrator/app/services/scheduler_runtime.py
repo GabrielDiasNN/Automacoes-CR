@@ -17,7 +17,7 @@ from .. import models, schemas
 from ..constants import ACTION_CODE_SCHEDULER_RELOAD, EXECUTION_ACTIVE_STATUSES
 from ..database import SessionLocal, purge_old_executions, run_wal_checkpoint
 from ..runtime import scheduler
-from ..schemas.schedule_rules import first_interval_candidate
+from ..schemas.schedule_rules import first_interval_candidate, ui_day_to_python_weekday
 from ..timezone import get_now_local
 from .execution_runtime import build_queued_execution
 
@@ -60,7 +60,7 @@ def scheduled_task_wrapper(automation_id: int) -> None:
                         now = get_now_local()
                         
                         if days is not None:
-                            py_days = {((int(d) + 6) % 7) for d in days}
+                            py_days = {ui_day_to_python_weekday(d) for d in days}
                             if now.weekday() not in py_days:
                                 logger.info("Disparo de intervalo ignorado para %s: fora do dia operacional permitido.", db_auto.name)
                                 return
@@ -192,7 +192,7 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
             trigger = CronTrigger(hour=item.get("h", 0), minute=item.get("m", 0))
         elif schedule_type == "weekly":
             mapped_days = [
-                str((int(day) + 6) % 7) for day in sched_data.get("days_of_week", [])
+                str(ui_day_to_python_weekday(day)) for day in sched_data.get("days_of_week", [])
             ]
             trigger = CronTrigger(
                 day_of_week=",".join(mapped_days) if mapped_days else "*",
