@@ -1,4 +1,4 @@
-# Automacao - Receitas Bloqueadas (v2.1.2 - Pure Python + Resilience) 🌟
+# Automacao - Receitas Bloqueadas (v2.3.2 - Pure Python + Resilience) 🌟
 
 [⬅️ Voltar para o Hub Central](file:///c:/Automacoes/README.md)
 
@@ -70,6 +70,7 @@ Para evitar redundância e "fadiga de alertas", o sistema só dispara notificaç
 
 ---
 
-## 🧠 Gestão de Contexto (AI-Native)
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 22/05/2026
+- **Ajuste Fino de Datas (v2.3.2 - 22/05/2026):** Alteração da inteligência de estado para auditar e marcar receitas modificadas unicamente sob alteração da coluna "Data Bloqueio", mantendo silenciada a alteração da coluna "Data Última Prod." que causava falsos positivos de alteração no painel.
 - **Obrigação:** Atualizar este documento após alterações na lógica de Retry (`stamina`), no motor de WhatsApp ou na lógica de Diff de receitas.
 - **Objetivo:** Preservar o histórico de resiliência e evitar que a IA degrade os protocolos de segurança e idempotência.

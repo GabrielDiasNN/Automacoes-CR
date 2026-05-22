@@ -1,7 +1,7 @@
 # pylint: disable=line-too-long, missing-class-docstring, too-many-locals, bare-except, consider-using-max-builtin, too-many-branches, broad-exception-caught, too-many-statements
 # {
 #   "name": "processar-receitas-bloqueadas",
-#   "version": "2.3.1",
+#   "version": "2.3.2",
 #   "skill": "python-oracle-migration",
 #   "description": "Use when processing blocked recipes with state control, visual highlighting, and Excel generation."
 # }
@@ -98,6 +98,22 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
         "Por favor, atualizar os status com as previsões de liberar cada receita."
     )
 
+    def formatar_numero_inteiro_html(valor: Any) -> str:
+        """Renderiza numeros inteiros sem casas decimais no corpo do e-mail."""
+        if pd.isna(valor):
+            return ""
+        if isinstance(valor, (bool, int)):
+            return str(valor)
+        if isinstance(valor, float) and valor.is_integer():
+            return str(int(valor))
+        try:
+            valor_float = float(valor)
+            if valor_float.is_integer():
+                return str(int(valor_float))
+        except (TypeError, ValueError):
+            pass
+        return str(valor)
+
     html = f"""
     <div style="font-family:'Segoe UI', Calibri, Arial, sans-serif; font-size:11pt; color:#1f2937; line-height:1.5;">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:1100px; border-collapse:collapse; border:1px solid #d1d5db;">
@@ -169,8 +185,8 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
         html += f"""
                                 <tr style="background-color:{bg}; font-style:{font_style}; text-decoration:{text_decor};">
                                     <td style="border:1px solid {cor_table_border}; text-align:center; font-weight:bold;">{row['Cor Rec.']}</td>
-                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{row['EP Rec.']}</td>
-                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{row['PE Rec']}</td>
+                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{formatar_numero_inteiro_html(row['EP Rec.'])}</td>
+                                    <td style="border:1px solid {cor_table_border}; text-align:center;">{formatar_numero_inteiro_html(row['PE Rec'])}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data Última Prod.']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center;">{row['Data Bloqueio']}</td>
                                     <td style="border:1px solid {cor_table_border}; text-align:center; font-size:8.5pt; font-weight:bold;">{status_text}</td>
@@ -366,8 +382,7 @@ def process() -> None:
             del_mask = df_merge["_merge"] == "right_only"
 
             mod_mask = (df_merge["_merge"] == "both") & (
-                (df_merge["Data Última Prod."] != df_merge["Data Última Prod._last"])
-                | (df_merge["Data Bloqueio"] != df_merge["Data Bloqueio_last"])
+                df_merge["Data Bloqueio"] != df_merge["Data Bloqueio_last"]
             )
 
             stats["new"] = int(new_mask.sum())

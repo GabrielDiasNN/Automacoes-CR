@@ -3,7 +3,7 @@
 ## Objetivo de Negócio
 Gerenciar o fluxo de **Receitas de Produção Retidas** no sistema Oracle por falta de insumos ou inconsistências técnicas. O foco está no acompanhamento das **Ordens de Beneficiamento (OB)**.
 
-## Arquitetura Soberana (v2.1.2)
+## Arquitetura Soberana (v2.3.2)
 - **Extração:** Python com **Oracle Thick Mode** e resiliência via biblioteca `stamina` (Retry exponencial para quedas de rede ORA-00028).
 - **Separação de Preocupações:** SQL isolado no arquivo `SQL-ReceitasBloqueadas.sql` para facilitar a manutenção DBA.
 - **Inteligência de Estado:**
@@ -25,6 +25,7 @@ Gerenciar o fluxo de **Receitas de Produção Retidas** no sistema Oracle por fa
 
 ---
 
-## 🧠 Gestão de Contexto (AI-Native)
+## 🧠 Gestão de Contexto (AI-Native) - Atualizado em 22/05/2026
+- **Detecção de Alterações (v2.3.2 - 22/05/2026):** Ajuste fino na regra de inteligência de estado para marcar receitas como `MODIFIED` ("⚠ DATA ALTERADA") exclusivamente quando a data na coluna "Data Bloqueio" sofrer modificações. Mudanças na coluna "Data Última Prod." são ignoradas para este fim, alinhando a automação ao seu objetivo estratégico.
 - **Obrigação:** Manter este contexto sincronizado com o arquivo `receitas_state.json` e as regras de negócio de OBs retidas.
 - **Objetivo:** Permitir que a IA entenda as condições de disparo (Novas/Alteradas/Liberadas) sem gastar tokens lendo o SQL.
