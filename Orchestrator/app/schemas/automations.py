@@ -113,6 +113,8 @@ class AutomationResponse(AutomationBase):
     next_runs_preview: List[str] = []
     active_execution_count: int = 0
     success_24h: int = 0
+    failures_24h: int = 0
+    timeouts_24h: int = 0
     error_24h: int = 0
     pending_count: int = 0
     operational_state: str = "idle"
@@ -129,4 +131,5 @@ class AutomationResponse(AutomationBase):
         self.updated_at = format_dt_br(self.updated_at)
         self.last_execution_started_at = format_dt_br(self.last_execution_started_at)
         self.last_execution_finished_at = format_dt_br(self.last_execution_finished_at)
+        self.error_24h = self.failures_24h
         return self

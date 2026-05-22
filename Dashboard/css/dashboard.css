@@ -579,6 +579,13 @@ textarea:focus-visible {
     white-space: nowrap;
 }
 
+.badge-wrap {
+    white-space: normal;
+    text-align: left;
+    justify-content: flex-start;
+    line-height: 1.35;
+}
+
 .badge-success { background: var(--accent-success-soft); color: #7ee0b1; border-color: rgba(50, 177, 120, 0.35); }
 .badge-warning { background: var(--accent-warning-soft); color: #f3c56f; border-color: rgba(217, 154, 43, 0.38); }
 .badge-danger { background: var(--accent-danger-soft); color: #ff9a9a; border-color: rgba(224, 82, 82, 0.36); }
@@ -665,6 +672,17 @@ textarea:focus-visible {
     gap: 6px;
 }
 
+.btn-icon-subtle {
+    width: 30px;
+    height: 30px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.btn-icon-subtle:hover {
+    color: var(--text-primary);
+}
+
 .inline-actions-advanced {
     font-size: 0.72rem;
 }
@@ -675,6 +693,117 @@ textarea:focus-visible {
     font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+}
+
+.fleet-cell-schedule,
+.fleet-cell-last,
+.fleet-cell-risk,
+.fleet-cell-actions {
+    vertical-align: top;
+}
+
+.fleet-schedule-badge {
+    max-width: 260px;
+}
+
+.fleet-last-stack {
+    display: grid;
+    gap: 3px;
+    min-width: 170px;
+}
+
+.fleet-last-stack .badge {
+    width: fit-content;
+}
+
+.fleet-cell-next {
+    white-space: nowrap;
+}
+
+.fleet-risk-badge {
+    max-width: 160px;
+}
+
+.fleet-cell-actions {
+    width: 190px;
+    white-space: nowrap;
+}
+
+.fleet-actions-inline {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.fleet-actions-inline .btn-icon {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+}
+
+.fleet-actions-menu {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-icon-menu-toggle {
+    color: var(--text-secondary);
+}
+
+.btn-icon-glyph {
+    display: inline-block;
+    font-size: 15px;
+    line-height: 1;
+    letter-spacing: -0.08em;
+    transform: translateY(-1px);
+}
+
+.fleet-actions-menu-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 156px;
+    padding: 6px;
+    display: grid;
+    gap: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: rgba(14, 21, 32, 0.98);
+    box-shadow: var(--shadow-soft);
+    z-index: 35;
+    white-space: normal;
+}
+
+.fleet-actions-menu-panel[hidden] {
+    display: none !important;
+}
+
+.fleet-actions-menu-item {
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    text-align: left;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.fleet-actions-menu-item:hover,
+.fleet-actions-menu-item:focus-visible {
+    background: var(--bg-hover);
+    border-color: rgba(70, 91, 118, 0.72);
+    color: var(--text-primary);
 }
 
 .filter-strip {
@@ -1372,6 +1501,18 @@ dialog::backdrop {
     .filter-strip {
         grid-template-columns: repeat(2, minmax(150px, 1fr));
     }
+
+    .fleet-schedule-badge {
+        max-width: 220px;
+    }
+
+    .fleet-risk-badge {
+        max-width: 145px;
+    }
+
+    .fleet-cell-actions {
+        width: 182px;
+    }
 }
 
 @media (max-width: 960px) {
@@ -1395,6 +1536,10 @@ dialog::backdrop {
     .page-header {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .fleet-cell-actions {
+        width: 174px;
     }
 }
 

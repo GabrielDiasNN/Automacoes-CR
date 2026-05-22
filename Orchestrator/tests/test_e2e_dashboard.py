@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from typing import Any, Generator
+from typing import Any, Generator, cast
 
 # Adicionar pasta do app ao PYTHONPATH
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -635,6 +635,165 @@ def test_e2e_dashboard_automations_search_filters_visible_grid(uvicorn_server: s
     assert len(rows) == 1
     assert "Auto Busca Financeiro" in rows[0]["automation"]
     assert rows[0]["state"] in ["ATIVO", "PAUSADA"]
+
+
+def _read_automation_history_row(page: Any) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        page.locator("#fleet-tbody tr").evaluate_all(
+        """rows => rows.map((row) => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            const scheduleBadge = cells[1]?.querySelector('.fleet-schedule-badge');
+            const riskBadge = cells[6]?.querySelector('.fleet-risk-badge');
+            const actionsWrapper = cells[7]?.querySelector('.fleet-actions-inline');
+            const toggleButton = cells[7]?.querySelector('[data-action-menu-toggle]');
+            return {
+                automation: (cells[0]?.innerText || '').trim(),
+                last: (cells[3]?.innerText || '').trim(),
+                risk: (cells[6]?.innerText || '').trim(),
+                primaryControls: actionsWrapper ? actionsWrapper.querySelectorAll(':scope > button, :scope > .fleet-actions-menu > button').length : 0,
+                actionsInlineHeight: actionsWrapper ? Math.round(actionsWrapper.getBoundingClientRect().height) : 0,
+                menuExpanded: toggleButton ? toggleButton.getAttribute('aria-expanded') : null,
+                scheduleWrapsCleanly: scheduleBadge ? scheduleBadge.scrollWidth <= scheduleBadge.clientWidth + 2 : false,
+                riskWrapsCleanly: riskBadge ? riskBadge.scrollWidth <= riskBadge.clientWidth + 2 : false,
+                actionsOverflow: actionsWrapper ? actionsWrapper.scrollWidth > actionsWrapper.clientWidth + 2 : true,
+            };
+        })"""
+        )[0],
+    )
+
+
+def _open_more_actions_and_read_state(page: Any) -> dict[str, Any]:
+    page.click('#fleet-tbody tr [data-action-menu-toggle]')
+    page.wait_for_selector('.fleet-actions-menu-panel:not([hidden])')
+    return cast(
+        dict[str, Any],
+        page.evaluate(
+        """() => {
+            const panel = document.querySelector('.fleet-actions-menu-panel:not([hidden])');
+            const labels = panel
+                ? Array.from(panel.querySelectorAll('.fleet-actions-menu-item span')).map((item) => (item.textContent || '').trim())
+                : [];
+            const host = document.querySelector('#fleet-tbody tr .fleet-actions-inline');
+            return {
+                menuVisible: Boolean(panel),
+                labels,
+                menuOpenCount: document.querySelectorAll('.fleet-actions-menu-panel:not([hidden])').length,
+                actionsOverflow: host ? host.scrollWidth > host.clientWidth + 2 : true,
+            };
+        }"""
+        ),
+    )
+
+
+def _assert_menu_closes_on_outside_click(page: Any) -> None:
+    page.mouse.click(40, 40)
+    page.wait_for_function(
+        """() => document.querySelectorAll('.fleet-actions-menu-panel:not([hidden])').length === 0"""
+    )
+
+
+def _assert_menu_action_closes_and_opens_json_modal(page: Any) -> None:
+    page.click('#fleet-tbody tr [data-action-menu-toggle]')
+    page.wait_for_selector('.fleet-actions-menu-panel:not([hidden])')
+    page.click('.fleet-actions-menu-panel:not([hidden]) [data-action="open-json-modal"]')
+    page.wait_for_function("""() => document.getElementById('modal-json')?.open === true""")
+    page.wait_for_function(
+        """() => document.querySelectorAll('.fleet-actions-menu-panel:not([hidden])').length === 0"""
+    )
+    page.click('button[data-action="close-dialog"][data-dialog-id="modal-json"]')
+    page.wait_for_function("""() => document.getElementById('modal-json')?.open === false""")
+
+
+def test_e2e_dashboard_automations_last_execution_snapshot_visible(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Garante que a aba Automações exibe o histórico recente real e compacta a célula de ações."""
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+    session_factory = sessionmaker(bind=engine)
+    session = session_factory()
+    try:
+        auto = models.Automation(
+            name="Auto E2E Histórico",
+            description="Validação visual do histórico recente",
+            script_path="./Receitas Emitidas/run.ps1",
+            enabled=True,
+            cooldown_minutes=10,
+            max_retries=3,
+            queue_group="ops",
+            schedule='{"schedule_type":"weekly","schedule_version":2,"timezone":"America/Sao_Paulo","days_of_week":[1,2,3,4,5,6],"times":[{"h":5,"m":0},{"h":22,"m":0}]}',
+        )
+        session.add(auto)
+        session.flush()
+
+        now = datetime.now()
+        session.add_all(
+            [
+                models.Execution(
+                    id="EXEC_E2E_HISTORY_OLD",
+                    automation_id=auto.id,
+                    status="ERROR",
+                    priority="NORMAL",
+                    queue_group="ops",
+                    requested_by="SYSTEM",
+                    started_at=now - timedelta(hours=6),
+                    finished_at=now - timedelta(hours=6) + timedelta(minutes=2),
+                    duration_seconds=120,
+                    failure_reason="Falha antiga",
+                ),
+                models.Execution(
+                    id="EXEC_E2E_HISTORY_LATEST",
+                    automation_id=auto.id,
+                    status="SUCCESS",
+                    priority="NORMAL",
+                    queue_group="ops",
+                    requested_by="CRON",
+                    started_at=now - timedelta(minutes=18),
+                    finished_at=now - timedelta(minutes=15),
+                    duration_seconds=180,
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+    page.click('button[data-target="automations"]')
+    page.wait_for_selector("#fleet-tbody tr")
+
+    page.fill("#auto-search", "E2E Histórico")
+    page.locator("#auto-search").dispatch_event("input")
+    page.wait_for_timeout(400)
+
+    target = _read_automation_history_row(page)
+    assert "Auto E2E Histórico" in target["automation"]
+    assert "Sem execução recente" not in target["last"]
+    assert "SUCESSO" in target["last"]
+    assert re.search(r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}", target["last"])
+    assert "ER 1/24H" in target["risk"].upper()
+    assert target["primaryControls"] == 5
+    assert target["actionsInlineHeight"] <= 32
+    assert target["menuExpanded"] == "false"
+    assert target["scheduleWrapsCleanly"] is True
+    assert target["riskWrapsCleanly"] is True
+    assert target["actionsOverflow"] is False
+
+    menu_state = _open_more_actions_and_read_state(page)
+    assert menu_state["menuVisible"] is True
+    assert menu_state["menuOpenCount"] == 1
+    assert menu_state["labels"] == ["Clonar", "Editar JSON", "Editar scripts"]
+    assert menu_state["actionsOverflow"] is False
+
+    _assert_menu_closes_on_outside_click(page)
+    _assert_menu_action_closes_and_opens_json_modal(page)
 
 
 def test_e2e_dashboard_system_shortcuts_open_execution_triage(uvicorn_server: str, page: Any) -> None:

@@ -23,9 +23,11 @@ export function createAutomationsModule(ctx) {
     let scheduleDays = new Set();
     let scheduleType = "manual";
     let hasInitializedEvents = false;
+    let hasInitializedActionMenuEvents = false;
     let currentTabId = "tab-identification";
     let latestSchedulePreview = null;
     let currentAutomationContext = null;
+    let openActionMenuAutomationId = null;
     const TAB_ORDER = ["tab-identification", "tab-schedule", "tab-execution", "tab-review"];
 
     function initTabsAndEvents() {
@@ -157,6 +159,7 @@ export function createAutomationsModule(ctx) {
     }
 
     async function loadConfig() {
+        initActionMenuEvents();
         const [autos, jobs] = await Promise.all([
             api("/api/automations/all"),
             api("/api/system/scheduler/jobs"),
@@ -209,6 +212,7 @@ export function createAutomationsModule(ctx) {
     function renderAutomationTable(autos, jobs) {
         const tbody = document.getElementById("fleet-tbody");
         if (!tbody) return;
+        closeActionMenu();
 
         if (!autos.length) {
             tbody.innerHTML = "<tr><td colspan=\"8\">Nenhuma automação cadastrada.</td></tr>";
@@ -239,8 +243,8 @@ export function createAutomationsModule(ctx) {
                 ? `<span class="cell-meta">Falha: ${escapeHtml(auto.last_failure_reason)}</span>`
                 : "";
             const pauseResumeBtn = auto.enabled
-                ? `<button class="btn-icon" data-action="pause-auto" data-automation-id="${auto.id}" title="Pausar"><i data-lucide="pause" size="14"></i></button>`
-                : `<button class="btn-icon" data-action="resume-auto" data-automation-id="${auto.id}" title="Retomar"><i data-lucide="play-circle" size="14"></i></button>`;
+                ? `<button class="btn-icon" type="button" data-action="pause-auto" data-automation-id="${auto.id}" title="Pausar"><i data-lucide="pause" size="14"></i></button>`
+                : `<button class="btn-icon" type="button" data-action="resume-auto" data-automation-id="${auto.id}" title="Retomar"><i data-lucide="play-circle" size="14"></i></button>`;
             const escapedNameAttr = escapeHtml(String(auto.name || ""));
 
             return `
@@ -251,25 +255,51 @@ export function createAutomationsModule(ctx) {
                         <span class="auto-path">${escapeHtml(auto.script_path || "")}</span>
                     </div>
                 </td>
-                <td><span class="badge badge-muted">${scheduleLabel}</span></td>
-                <td>${nextRun}</td>
-                <td>${lastLabel}${lastMeta}${lastReason}</td>
+                <td class="fleet-cell-schedule"><span class="badge badge-muted badge-wrap fleet-schedule-badge">${scheduleLabel}</span></td>
+                <td class="fleet-cell-next">${nextRun}</td>
+                <td class="fleet-cell-last"><div class="fleet-last-stack">${lastLabel}${lastMeta}${lastReason}</div></td>
                 <td>${auto.test_mode ? "<span class=\"badge badge-warning\">TESTE</span>" : "<span class=\"badge badge-blue\">PROD</span>"}</td>
                 <td>${auto.enabled ? "<span class=\"badge badge-success\">ATIVO</span>" : "<span class=\"badge badge-danger\">PAUSADA</span>"}</td>
-                <td>${riskLabel}</td>
-                <td>
-                    <div class="inline-actions-stack">
-                        <div class="inline-actions">
-                            <button class="btn-icon" data-action="run-auto" data-automation-id="${auto.id}" title="Executar"><i data-lucide="play" size="14"></i></button>
-                            ${pauseResumeBtn}
-                            <button class="btn-icon" data-action="open-edit-auto" data-automation-id="${auto.id}" title="Editar cadastro"><i data-lucide="pencil" size="14"></i></button>
-                            <button class="btn-icon" data-action="clone-auto" data-automation-id="${auto.id}" title="Clonar"><i data-lucide="copy" size="14"></i></button>
-                            <button class="btn-icon" data-action="open-automation-history" data-automation-id="${auto.id}" title="Histórico"><i data-lucide="history" size="14"></i></button>
-                        </div>
-                        <div class="inline-actions inline-actions-advanced">
-                            <span class="mini-label">Avançado</span>
-                            <button class="btn-icon" data-action="open-json-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar JSON"><i data-lucide="file-json" size="14"></i></button>
-                            <button class="btn-icon" data-action="open-ide-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar scripts"><i data-lucide="code" size="14"></i></button>
+                <td class="fleet-cell-risk">${riskLabel}</td>
+                <td class="fleet-cell-actions">
+                    <div class="fleet-actions-inline" data-automation-id="${auto.id}">
+                        <button class="btn-icon" type="button" data-action="run-auto" data-automation-id="${auto.id}" title="Executar"><i data-lucide="play" size="14"></i></button>
+                        ${pauseResumeBtn}
+                        <button class="btn-icon" type="button" data-action="open-edit-auto" data-automation-id="${auto.id}" title="Editar cadastro"><i data-lucide="pencil" size="14"></i></button>
+                        <button class="btn-icon" type="button" data-action="open-automation-history" data-automation-id="${auto.id}" title="Histórico"><i data-lucide="history" size="14"></i></button>
+                        <div class="fleet-actions-menu" data-automation-id="${auto.id}">
+                            <button
+                                class="btn-icon btn-icon-subtle btn-icon-menu-toggle"
+                                type="button"
+                                data-action-menu-toggle="${auto.id}"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                                aria-controls="fleet-actions-menu-${auto.id}"
+                                title="Mais ações"
+                            >
+                                <span class="btn-icon-glyph" aria-hidden="true">···</span>
+                            </button>
+                            <div
+                                id="fleet-actions-menu-${auto.id}"
+                                class="fleet-actions-menu-panel"
+                                role="menu"
+                                aria-label="Mais ações para ${escapedNameAttr}"
+                                aria-hidden="true"
+                                hidden
+                            >
+                                <button class="fleet-actions-menu-item" type="button" role="menuitem" data-action="clone-auto" data-automation-id="${auto.id}" title="Clonar">
+                                    <i data-lucide="copy" size="14"></i>
+                                    <span>Clonar</span>
+                                </button>
+                                <button class="fleet-actions-menu-item" type="button" role="menuitem" data-action="open-json-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar JSON">
+                                    <i data-lucide="file-json" size="14"></i>
+                                    <span>Editar JSON</span>
+                                </button>
+                                <button class="fleet-actions-menu-item" type="button" role="menuitem" data-action="open-ide-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar scripts">
+                                    <i data-lucide="code" size="14"></i>
+                                    <span>Editar scripts</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </td>
@@ -277,6 +307,89 @@ export function createAutomationsModule(ctx) {
         `;
         }).join("");
         bindActionElements(tbody);
+    }
+
+    function initActionMenuEvents() {
+        if (hasInitializedActionMenuEvents) return;
+        hasInitializedActionMenuEvents = true;
+
+        document.addEventListener("click", handleActionMenuClick);
+        document.addEventListener("keydown", handleActionMenuKeydown);
+        window.addEventListener("view-changed", (event) => {
+            if (event?.detail?.target !== "automations") {
+                closeActionMenu();
+            }
+        });
+    }
+
+    function handleActionMenuClick(event) {
+        const toggleButton = event.target.closest("[data-action-menu-toggle]");
+        if (toggleButton) {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleActionMenu(toggleButton.dataset.actionMenuToggle || "");
+            return;
+        }
+
+        const menuItem = event.target.closest(".fleet-actions-menu-item");
+        if (menuItem) {
+            closeActionMenu();
+            return;
+        }
+
+        if (openActionMenuAutomationId && !event.target.closest(".fleet-actions-menu")) {
+            closeActionMenu();
+        }
+    }
+
+    function handleActionMenuKeydown(event) {
+        if (event.key !== "Escape" || !openActionMenuAutomationId) return;
+        event.preventDefault();
+        closeActionMenu({ restoreFocus: true });
+    }
+
+    function toggleActionMenu(automationId) {
+        if (!automationId) return;
+        if (openActionMenuAutomationId === automationId) {
+            closeActionMenu({ restoreFocus: true });
+            return;
+        }
+        openActionMenu(automationId);
+    }
+
+    function openActionMenu(automationId) {
+        closeActionMenu();
+
+        const menuPanel = document.getElementById(`fleet-actions-menu-${automationId}`);
+        const toggleButton = document.querySelector(`[data-action-menu-toggle="${automationId}"]`);
+        if (!menuPanel || !toggleButton) return;
+
+        openActionMenuAutomationId = automationId;
+        menuPanel.hidden = false;
+        menuPanel.setAttribute("aria-hidden", "false");
+        toggleButton.setAttribute("aria-expanded", "true");
+        const firstAction = menuPanel.querySelector(".fleet-actions-menu-item");
+        firstAction?.focus();
+    }
+
+    function closeActionMenu(options = {}) {
+        if (!openActionMenuAutomationId) return;
+
+        const { restoreFocus = false } = options;
+        const automationId = openActionMenuAutomationId;
+        const menuPanel = document.getElementById(`fleet-actions-menu-${automationId}`);
+        const toggleButton = document.querySelector(`[data-action-menu-toggle="${automationId}"]`);
+
+        if (menuPanel) {
+            menuPanel.hidden = true;
+            menuPanel.setAttribute("aria-hidden", "true");
+        }
+        if (toggleButton) {
+            toggleButton.setAttribute("aria-expanded", "false");
+            if (restoreFocus) toggleButton.focus();
+        }
+
+        openActionMenuAutomationId = null;
     }
 
     function handleSearch() {
@@ -758,9 +871,9 @@ export function createAutomationsModule(ctx) {
         if (failures24h > 0) flags.push(`ER ${failures24h}/24h`);
         if (success24h > 0 && failures24h === 0 && timeouts24h === 0) flags.push(`OK ${success24h}/24h`);
 
-        if (!flags.length) return "<span class=\"badge badge-success\">OK</span>";
+        if (!flags.length) return "<span class=\"badge badge-success badge-wrap fleet-risk-badge\">OK</span>";
         const hasFailure = failures24h > 0 || timeouts24h > 0;
-        return `<span class="badge ${hasFailure ? "badge-danger" : "badge-warning"}">${flags.join(" • ")}</span>`;
+        return `<span class="badge ${hasFailure ? "badge-danger" : "badge-warning"} badge-wrap fleet-risk-badge">${flags.join(" • ")}</span>`;
     }
 
     async function renderSchedulePreview() {

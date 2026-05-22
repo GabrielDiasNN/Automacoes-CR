@@ -22,6 +22,11 @@ from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
+from ..services.automation_snapshot import (
+    build_automation_response as build_operational_automation_response,
+    build_automation_response_batch,
+    load_snapshot_dependencies,
+)
 from ..services.execution_runtime import (
     build_queued_execution,
     generate_execution_id,
@@ -32,7 +37,10 @@ from ..services.scheduler_runtime import (
     reload_scheduled_tasks,
     scheduler,
 )
-from ..services.metrics import get_last_execution_status_by_automation
+from ..services.metrics import (
+    get_automation_metrics_24h,
+    get_latest_execution_snapshot_by_automation,
+)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit, validate_script_path
 
@@ -71,33 +79,26 @@ def _load_next_run_lookup():
 
 
 def _build_automation_response(
-    db: Session, auto: models.Automation, next_run_lookup=None, last_status_lookup=None
+    db: Session,
+    auto: models.Automation,
+    next_run_lookup=None,
+    latest_execution_lookup=None,
+    metrics_24h_lookup=None,
 ):
     if next_run_lookup is None:
         next_run_lookup = _load_next_run_lookup()
-    auto_resp = schemas.AutomationResponse.model_validate(auto)
-    if last_status_lookup is not None:
-        auto_resp.last_status = last_status_lookup.get(auto.id)
-    else:
-        last_exec = (
-            db.query(models.Execution)
-            .filter(models.Execution.automation_id == auto.id)
-            .order_by(models.Execution.started_at.desc())
-            .first()
+    if latest_execution_lookup is None:
+        latest_execution_lookup = get_latest_execution_snapshot_by_automation(
+            db, [int(auto.id)]
         )
-        if last_exec:
-            auto_resp.last_status = last_exec.status
-    auto_resp.next_run = schemas.format_dt_br(next_run_lookup.get(auto.id))
-    try:
-        parsed_schedule = schemas.parse_schedule(auto_resp.schedule)
-    except Exception:
-        parsed_schedule = None
-    auto_resp.schedule_type = (
-        parsed_schedule.get("schedule_type") if parsed_schedule else "manual"
+    if metrics_24h_lookup is None:
+        metrics_24h_lookup = get_automation_metrics_24h(db, [int(auto.id)])
+    return build_operational_automation_response(
+        auto=auto,
+        next_run_lookup=next_run_lookup,
+        latest_execution_lookup=latest_execution_lookup,
+        metrics_24h_lookup=metrics_24h_lookup,
     )
-    auto_resp.schedule_summary = schemas.describe_schedule_payload(parsed_schedule)
-    auto_resp.next_runs_preview = schemas.preview_next_runs(parsed_schedule, 3)
-    return auto_resp
 
 
 def _resolve_automation_dir(script_path: str) -> str:
@@ -188,13 +189,14 @@ def list_automations(
 
     items = query.offset((page - 1) * per_page).limit(per_page).all()
 
-    # Enriquecer com last_status
     next_run_lookup = _load_next_run_lookup()
-    last_status_lookup = get_last_execution_status_by_automation(db)
-    result = []
-
-    for auto in items:
-        result.append(_build_automation_response(db, auto, next_run_lookup, last_status_lookup))
+    snapshot_dependencies = load_snapshot_dependencies(db, items)
+    result = build_automation_response_batch(
+        items,
+        next_run_lookup=next_run_lookup,
+        latest_execution_lookup=snapshot_dependencies["latest_execution"],
+        metrics_24h_lookup=snapshot_dependencies["metrics_24h"],
+    )
 
     return schemas.PaginatedResponse(
         items=result, total=total, page=page, per_page=per_page, pages=pages
@@ -218,11 +220,13 @@ def list_all_automations(
     automations = db.query(models.Automation).order_by(models.Automation.name).all()
 
     next_run_lookup = _load_next_run_lookup()
-    last_status_lookup = get_last_execution_status_by_automation(db)
-    result = []
-
-    for auto in automations:
-        result.append(_build_automation_response(db, auto, next_run_lookup, last_status_lookup))
+    snapshot_dependencies = load_snapshot_dependencies(db, automations)
+    result = build_automation_response_batch(
+        automations,
+        next_run_lookup=next_run_lookup,
+        latest_execution_lookup=snapshot_dependencies["latest_execution"],
+        metrics_24h_lookup=snapshot_dependencies["metrics_24h"],
+    )
 
     return result
 
@@ -383,7 +387,16 @@ def get_automation_overview(
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_resp = _build_automation_response(db, db_auto)
+    latest_execution_lookup = get_latest_execution_snapshot_by_automation(
+        db, [automation_id]
+    )
+    metrics_24h_lookup = get_automation_metrics_24h(db, [automation_id])
+    auto_resp = _build_automation_response(
+        db,
+        db_auto,
+        latest_execution_lookup=latest_execution_lookup,
+        metrics_24h_lookup=metrics_24h_lookup,
+    )
 
     recent_execs = (
         db.query(models.Execution)
@@ -398,47 +411,12 @@ def get_automation_overview(
         summary.automation_name = db_auto.name
         recent_payload.append(summary)
 
-    if recent_execs:
-        auto_resp.last_status = recent_execs[0].status
-
-    from datetime import timedelta
-
-    from ..timezone import get_now_local
-
-    window_start = get_now_local() - timedelta(hours=24)
-    success_24h = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.automation_id == automation_id,
-            models.Execution.status == "SUCCESS",
-            models.Execution.started_at >= window_start,
-        )
-        .count()
-    )
-    errors_24h = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.automation_id == automation_id,
-            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
-            models.Execution.started_at >= window_start,
-        )
-        .count()
-    )
-    pending_now = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.automation_id == automation_id,
-            models.Execution.status.in_(["PENDING", "RUNNING"]),
-        )
-        .count()
-    )
-
     return {
         "automation": auto_resp,
         "metrics_24h": {
-            "success_count": success_24h,
-            "error_count": errors_24h,
-            "pending_count": pending_now,
+            "success_count": auto_resp.success_24h,
+            "error_count": auto_resp.failures_24h,
+            "pending_count": auto_resp.pending_count,
         },
         "recent_executions": recent_payload,
     }

@@ -21,7 +21,7 @@ import * as ide from "./ide_service.js?v=20260521c";
 import * as engine from "./execution_engine.js?v=20260521c";
 import { createExecutionsModule } from "./dashboard_executions.js";
 import { createSystemModule } from "./dashboard_system.js";
-import { createAutomationsModule } from "./dashboard_automations.js?v=20260521d";
+import { createAutomationsModule } from "./dashboard_automations.js?v=20260522a";
 
 const EXEC_PER_PAGE = 15;
 const EXPECTED_CONTRACT_PREFIX = "2026.05.";

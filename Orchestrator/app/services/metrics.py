@@ -3,9 +3,9 @@
 # pylint: disable=relative-beyond-top-level,not-callable
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, Iterable, Optional
 
-from sqlalchemy import desc, func
+from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -137,31 +137,139 @@ def get_sla_metrics_by_automation_24h(db: Session) -> dict[int, dict[str, Any]]:
     return metrics
 
 
-def get_last_execution_status_by_automation(db: Session) -> dict[int, str]:
-    """
-    Retorna o status da última execução de cada automação.
-    Evita queries N+1 (A1) ao buscar tudo de uma vez.
-    """
-    subq = (
+def _normalize_automation_ids(
+    automation_ids: Optional[Iterable[int]] = None,
+) -> list[int]:
+    """Remove nulos, duplicidades e normaliza IDs antes de aplicar filtros SQL."""
+    if automation_ids is None:
+        return []
+    return sorted({int(item) for item in automation_ids if item is not None})
+
+
+def get_automation_metrics_24h(
+    db: Session, automation_ids: Optional[Iterable[int]] = None
+) -> dict[int, dict[str, Any]]:
+    """Retorna métricas operacionais das últimas 24h agrupadas por automação."""
+    window_start = get_now_local() - timedelta(hours=24)
+    ids = _normalize_automation_ids(automation_ids)
+
+    query = (
         db.query(
-            models.Execution.automation_id,
-            models.Execution.status,
-            func.row_number().over(
-                partition_by=models.Execution.automation_id,
-                order_by=models.Execution.started_at.desc(),
-            ).label("rn"),
+            models.Execution.automation_id.label("automation_id"),
+            func.sum(case((models.Execution.status == "SUCCESS", 1), else_=0)).label(
+                "success_24h"
+            ),
+            func.sum(
+                case(
+                    (
+                        models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("failures_24h"),
+            func.sum(case((models.Execution.status == "TIMEOUT", 1), else_=0)).label(
+                "timeouts_24h"
+            ),
+            func.avg(models.Execution.duration_seconds).label("avg_duration_24h_seconds"),
         )
-        .subquery()
+        .filter(models.Execution.started_at >= window_start)
+        .group_by(models.Execution.automation_id)
     )
 
+    if ids:
+        query = query.filter(models.Execution.automation_id.in_(ids))
+
+    rows = query.all()
+    return {
+        int(row.automation_id): {
+            "success_24h": int(row.success_24h or 0),
+            "failures_24h": int(row.failures_24h or 0),
+            "timeouts_24h": int(row.timeouts_24h or 0),
+            "avg_duration_24h_seconds": (
+                round(float(row.avg_duration_24h_seconds), 2)
+                if row.avg_duration_24h_seconds is not None
+                else None
+            ),
+        }
+        for row in rows
+        if row.automation_id is not None
+    }
+
+
+def get_latest_execution_snapshot_by_automation(
+    db: Session, automation_ids: Optional[Iterable[int]] = None
+) -> dict[int, dict[str, Any]]:
+    """Retorna o snapshot da execução mais recente por automação sem N+1."""
+    ids = _normalize_automation_ids(automation_ids)
+    query = db.query(
+        models.Execution.automation_id.label("automation_id"),
+        models.Execution.id.label("execution_id"),
+        models.Execution.status.label("status"),
+        models.Execution.started_at.label("started_at"),
+        models.Execution.finished_at.label("finished_at"),
+        models.Execution.duration_seconds.label("duration_seconds"),
+        models.Execution.failure_reason.label("failure_reason"),
+        models.Execution.recovery_action.label("recovery_action"),
+        models.Execution.requested_by.label("requested_by"),
+        func.row_number().over(
+            partition_by=models.Execution.automation_id,
+            order_by=(
+                models.Execution.started_at.desc(),
+                models.Execution.id.desc(),
+            ),
+        ).label("rn"),
+    )
+
+    if ids:
+        query = query.filter(models.Execution.automation_id.in_(ids))
+
+    subq = query.subquery()
     rows = (
-        db.query(subq.c.automation_id, subq.c.status)
+        db.query(
+            subq.c.automation_id,
+            subq.c.execution_id,
+            subq.c.status,
+            subq.c.started_at,
+            subq.c.finished_at,
+            subq.c.duration_seconds,
+            subq.c.failure_reason,
+            subq.c.recovery_action,
+            subq.c.requested_by,
+        )
         .filter(subq.c.rn == 1)
         .all()
     )
 
     return {
-        int(row.automation_id): str(row.status)
+        int(row.automation_id): {
+            "id": str(row.execution_id),
+            "status": str(row.status) if row.status else None,
+            "started_at": row.started_at,
+            "finished_at": row.finished_at,
+            "duration_seconds": (
+                round(float(row.duration_seconds), 2)
+                if row.duration_seconds is not None
+                else None
+            ),
+            "failure_reason": row.failure_reason,
+            "recovery_action": row.recovery_action,
+            "requested_by": row.requested_by,
+        }
         for row in rows
         if row.automation_id is not None
+    }
+
+
+def get_last_execution_status_by_automation(db: Session) -> dict[int, str]:
+    """
+    Retorna o status da última execução de cada automação.
+    Evita queries N+1 (A1) ao buscar tudo de uma vez.
+    """
+    return {
+        automation_id: str(snapshot["status"])
+        for automation_id, snapshot in get_latest_execution_snapshot_by_automation(
+            db
+        ).items()
+        if snapshot.get("status") is not None
     }
