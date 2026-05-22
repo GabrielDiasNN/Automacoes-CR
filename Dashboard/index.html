@@ -22,17 +22,19 @@
             </div>
 
             <nav class="nav-menu">
+                <span class="nav-section-label">Operação</span>
                 <button class="nav-item active" type="button" data-target="dashboard">
-                    <i data-lucide="layout-dashboard"></i><span>Comando</span>
-                </button>
-                <button class="nav-item" type="button" data-target="automations">
-                    <i data-lucide="bot"></i><span>Automações</span>
+                    <i data-lucide="layout-dashboard"></i><span>Painel operacional</span>
                 </button>
                 <button class="nav-item" type="button" data-target="executions">
                     <i data-lucide="history"></i><span>Execuções</span>
                 </button>
                 <button class="nav-item" type="button" data-target="observability">
                     <i data-lucide="activity"></i><span>Observabilidade</span>
+                </button>
+                <span class="nav-section-label">Administração</span>
+                <button class="nav-item" type="button" data-target="automations">
+                    <i data-lucide="bot"></i><span>Automações</span>
                 </button>
                 <button class="nav-item" type="button" data-target="system">
                     <i data-lucide="server-cog"></i><span>Sistema</span>
@@ -150,11 +152,20 @@
             <section id="view-automations" class="view-content" aria-labelledby="automations-title">
                 <div class="page-header">
                     <div>
-                        <span class="eyebrow">Gestão</span>
+                        <span class="eyebrow">Administração</span>
                         <h1 id="automations-title">Frota de automações</h1>
                     </div>
                     <button class="btn btn-primary" type="button" data-action="open-create-modal"><i data-lucide="plus"></i>Nova automação</button>
                 </div>
+
+                <section class="panel page-callout">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Cadastro guiado com foco operacional</h3>
+                            <p>O fluxo principal cobre identificação, agenda, execução e revisão. Edição crua de JSON e scripts continua disponível apenas como recurso avançado.</p>
+                        </div>
+                    </div>
+                </section>
 
                 <div class="filter-strip panel">
                     <div class="filter-group wide">
@@ -189,16 +200,36 @@
             <section id="view-executions" class="view-content" aria-labelledby="executions-title">
                 <div class="page-header">
                     <div>
-                        <span class="eyebrow">Histórico</span>
-                        <h1 id="executions-title">Execuções</h1>
+                        <span class="eyebrow">Operação</span>
+                        <h1 id="executions-title">Bancada de triagem</h1>
                     </div>
-                    <button class="btn btn-outline" type="button" data-action="refresh-executions"><i data-lucide="refresh-cw"></i>Atualizar</button>
+                    <div class="quick-actions">
+                        <button class="btn btn-outline" type="button" data-action="refresh-executions"><i data-lucide="refresh-cw"></i>Atualizar</button>
+                        <button class="btn btn-outline" type="button" data-action="execution-batch-stop"><i data-lucide="square-stack"></i>Parar visíveis</button>
+                        <button class="btn btn-outline" type="button" data-action="execution-batch-requeue"><i data-lucide="rotate-cw-square"></i>Requeue visível</button>
+                    </div>
                 </div>
 
                 <div class="filter-strip panel">
+                    <div class="filter-group wide">
+                        <label>Presets operacionais</label>
+                        <div class="preset-actions">
+                            <button class="btn btn-outline btn-sm" type="button" data-action="execution-preset" data-execution-preset="all">Tudo</button>
+                            <button class="btn btn-outline btn-sm" type="button" data-action="execution-preset" data-execution-preset="incident">Incidente</button>
+                            <button class="btn btn-outline btn-sm" type="button" data-action="execution-preset" data-execution-preset="running">Ativas</button>
+                            <button class="btn btn-outline btn-sm" type="button" data-action="execution-preset" data-execution-preset="errors">Falhas</button>
+                            <button class="btn btn-outline btn-sm" type="button" data-action="execution-preset" data-execution-preset="aged-queue">Fila envelhecida</button>
+                            <button class="btn btn-outline btn-sm" type="button" data-action="execution-preset" data-execution-preset="retry-pressure">Pressão retry</button>
+                            <button class="btn btn-outline btn-sm" type="button" data-action="execution-preset" data-execution-preset="requeueable">Requeue seguro</button>
+                        </div>
+                    </div>
                     <div class="filter-group">
                         <label for="filter-automation">Automação</label>
                         <select id="filter-automation" class="form-control"><option value="">TODOS OS ROBÔS</option></select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-queue-group">Grupo operacional</label>
+                        <select id="filter-queue-group" class="form-control"><option value="">TODOS OS GRUPOS</option></select>
                     </div>
                     <div class="filter-group">
                         <label for="filter-status">Status</label>
@@ -210,6 +241,15 @@
                             <option value="PENDING">Fila</option>
                             <option value="TIMEOUT">Timeout</option>
                             <option value="TERMINATED">Interrompido</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-priority">Prioridade</label>
+                        <select id="filter-priority" class="form-control">
+                            <option value="">Todas</option>
+                            <option value="HIGH">Alta</option>
+                            <option value="NORMAL">Normal</option>
+                            <option value="LOW">Baixa</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -226,6 +266,9 @@
                     </div>
                 </div>
 
+                <div id="exec-state-banner" class="state-banner info">Use os presets ou filtros para focar na fila ativa, falhas e requeues operacionais.</div>
+                <div id="exec-triage-summary" class="triage-summary"></div>
+
                 <section class="panel">
                     <div class="table-wrap">
                         <table class="data-table">
@@ -237,8 +280,8 @@
                                     <th>Solicitante</th>
                                     <th>Duração</th>
                                     <th>Início</th>
-                                    <th>Recuperação</th>
-                                    <th>Ação</th>
+                                    <th>Triagem</th>
+                                    <th>Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="exec-tbody">
@@ -365,16 +408,17 @@
             </div>
             
             <div class="modal-tabs">
-                <button class="tab-btn active" type="button" data-tab="tab-general">Geral</button>
+                <button class="tab-btn active" type="button" data-tab="tab-identification">Identificação</button>
                 <button class="tab-btn" type="button" data-tab="tab-schedule">Agenda & Gatilhos</button>
-                <button class="tab-btn" type="button" data-tab="tab-resilience">Resiliência & Canais</button>
+                <button class="tab-btn" type="button" data-tab="tab-execution">Execução & Segurança</button>
+                <button class="tab-btn" type="button" data-tab="tab-review">Revisão final</button>
             </div>
             
             <div class="modal-body">
                 <input id="f-id" type="hidden">
                 
                 <!-- ABA 1: GERAL -->
-                <div id="tab-general" class="tab-content active">
+                <div id="tab-identification" class="tab-content active">
                     <div class="form-row">
                         <div class="form-group" style="flex: 2;">
                             <label for="f-name">Nome da automação</label>
@@ -528,7 +572,7 @@
                 </div>
                 
                 <!-- ABA 3: RESILIÊNCIA & CANAIS -->
-                <div id="tab-resilience" class="tab-content">
+                <div id="tab-execution" class="tab-content">
                     <div class="form-row">
                         <div class="form-group">
                             <label for="f-max-runtime">Timeout máximo permitido (minutos)</label>
@@ -548,9 +592,37 @@
                         <input id="f-notification-channels" class="form-control" type="text" placeholder="Ex: email, whatsapp, teams">
                     </div>
                 </div>
+
+                <div id="tab-review" class="tab-content">
+                    <section class="review-grid">
+                        <article class="review-card">
+                            <span class="eyebrow">Cadastro</span>
+                            <h4>Resumo da automação</h4>
+                            <div id="automation-review-summary" class="review-list">
+                                <div class="empty-state">Preencha os campos para gerar o resumo da automação.</div>
+                            </div>
+                        </article>
+                        <article class="review-card">
+                            <span class="eyebrow">Agenda</span>
+                            <h4>Próximas execuções</h4>
+                            <div id="automation-review-preview" class="review-list">
+                                <div class="empty-state">A prévia da agenda aparecerá aqui.</div>
+                            </div>
+                        </article>
+                        <article class="review-card">
+                            <span class="eyebrow">Impacto</span>
+                            <h4>Segurança operacional</h4>
+                            <div id="automation-review-impact" class="review-list">
+                                <div class="empty-state">A análise operacional será gerada com base nas escolhas do formulário.</div>
+                            </div>
+                        </article>
+                    </section>
+                </div>
             </div>
             
             <div class="modal-footer">
+                <button class="btn btn-outline" type="button" data-action="auto-step-prev">Etapa anterior</button>
+                <button class="btn btn-outline" type="button" data-action="auto-step-next">Próxima etapa</button>
                 <button class="btn btn-outline" type="button" data-action="close-dialog" data-dialog-id="modal-auto">Cancelar</button>
                 <button class="btn btn-primary" type="submit">Salvar automação</button>
             </div>

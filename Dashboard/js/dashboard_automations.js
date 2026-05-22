@@ -23,6 +23,10 @@ export function createAutomationsModule(ctx) {
     let scheduleDays = new Set();
     let scheduleType = "manual";
     let hasInitializedEvents = false;
+    let currentTabId = "tab-identification";
+    let latestSchedulePreview = null;
+    let currentAutomationContext = null;
+    const TAB_ORDER = ["tab-identification", "tab-schedule", "tab-execution", "tab-review"];
 
     function initTabsAndEvents() {
         if (hasInitializedEvents) return;
@@ -84,6 +88,7 @@ export function createAutomationsModule(ctx) {
     }
 
     function switchTab(tabId) {
+        currentTabId = tabId;
         const tabButtons = document.querySelectorAll(".modal-tabs .tab-btn");
         tabButtons.forEach((btn) => {
             btn.classList.toggle("active", btn.dataset.tab === tabId);
@@ -93,6 +98,25 @@ export function createAutomationsModule(ctx) {
         tabContents.forEach((content) => {
             content.classList.toggle("active", content.id === tabId);
         });
+        if (tabId === "tab-review") {
+            refreshReviewPanel();
+        }
+        updateStepButtons();
+    }
+
+    function updateStepButtons() {
+        const prevBtn = document.querySelector('[data-action="auto-step-prev"]');
+        const nextBtn = document.querySelector('[data-action="auto-step-next"]');
+        const saveBtn = document.querySelector('#form-auto button[type="submit"]');
+        const currentIndex = TAB_ORDER.indexOf(currentTabId);
+        if (prevBtn) prevBtn.disabled = currentIndex <= 0;
+        if (nextBtn) {
+            nextBtn.disabled = currentIndex >= TAB_ORDER.length - 1;
+            nextBtn.style.display = currentIndex >= TAB_ORDER.length - 1 ? "none" : "inline-flex";
+        }
+        if (saveBtn) {
+            saveBtn.textContent = currentIndex >= TAB_ORDER.length - 1 ? "Salvar automação" : "Ir para revisão";
+        }
     }
 
     function updateScheduleBlocksVisibility(type) {
@@ -162,6 +186,24 @@ export function createAutomationsModule(ctx) {
         });
         select.innerHTML = options.join("");
         select.value = currentValue || "";
+
+        const queueGroupSelect = document.getElementById("filter-queue-group");
+        if (queueGroupSelect) {
+            const currentGroupValue = queueGroupSelect.value;
+            const groups = Array.from(
+                new Set(
+                    autos
+                        .map((auto) => String(auto.queue_group || "").trim())
+                        .filter((item) => item)
+                )
+            ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+            const groupOptions = ["<option value=\"\">TODOS OS GRUPOS</option>"];
+            groups.forEach((group) => {
+                groupOptions.push(`<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`);
+            });
+            queueGroupSelect.innerHTML = groupOptions.join("");
+            queueGroupSelect.value = currentGroupValue || "";
+        }
     }
 
     function renderAutomationTable(autos, jobs) {
@@ -190,6 +232,12 @@ export function createAutomationsModule(ctx) {
             const escapedName = escapeHtml(auto.name);
             const riskLabel = buildRiskLabel(auto);
             const lastLabel = auto.last_status ? `<span class="badge ${getBadgeClass(auto.last_status)}">${translateStatus(auto.last_status)}</span>` : "<span class=\"badge badge-muted\">Sem histórico</span>";
+            const lastMeta = auto.last_execution_started_at
+                ? `<span class="cell-meta">${escapeHtml(auto.last_execution_started_at)}</span>`
+                : "<span class=\"cell-meta\">Sem execução recente</span>";
+            const lastReason = auto.last_failure_reason
+                ? `<span class="cell-meta">Falha: ${escapeHtml(auto.last_failure_reason)}</span>`
+                : "";
             const pauseResumeBtn = auto.enabled
                 ? `<button class="btn-icon" data-action="pause-auto" data-automation-id="${auto.id}" title="Pausar"><i data-lucide="pause" size="14"></i></button>`
                 : `<button class="btn-icon" data-action="resume-auto" data-automation-id="${auto.id}" title="Retomar"><i data-lucide="play-circle" size="14"></i></button>`;
@@ -205,19 +253,24 @@ export function createAutomationsModule(ctx) {
                 </td>
                 <td><span class="badge badge-muted">${scheduleLabel}</span></td>
                 <td>${nextRun}</td>
-                <td>${lastLabel}</td>
+                <td>${lastLabel}${lastMeta}${lastReason}</td>
                 <td>${auto.test_mode ? "<span class=\"badge badge-warning\">TESTE</span>" : "<span class=\"badge badge-blue\">PROD</span>"}</td>
                 <td>${auto.enabled ? "<span class=\"badge badge-success\">ATIVO</span>" : "<span class=\"badge badge-danger\">PAUSADA</span>"}</td>
                 <td>${riskLabel}</td>
                 <td>
-                    <div class="inline-actions">
-                        <button class="btn-icon" data-action="run-auto" data-automation-id="${auto.id}" title="Executar"><i data-lucide="play" size="14"></i></button>
-                        ${pauseResumeBtn}
-                        <button class="btn-icon" data-action="open-edit-auto" data-automation-id="${auto.id}" title="Editar cadastro"><i data-lucide="pencil" size="14"></i></button>
-                        <button class="btn-icon" data-action="clone-auto" data-automation-id="${auto.id}" title="Clonar"><i data-lucide="copy" size="14"></i></button>
-                        <button class="btn-icon" data-action="open-automation-history" data-automation-id="${auto.id}" title="Histórico"><i data-lucide="history" size="14"></i></button>
-                        <button class="btn-icon" data-action="open-json-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar JSON"><i data-lucide="file-json" size="14"></i></button>
-                        <button class="btn-icon" data-action="open-ide-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar scripts"><i data-lucide="code" size="14"></i></button>
+                    <div class="inline-actions-stack">
+                        <div class="inline-actions">
+                            <button class="btn-icon" data-action="run-auto" data-automation-id="${auto.id}" title="Executar"><i data-lucide="play" size="14"></i></button>
+                            ${pauseResumeBtn}
+                            <button class="btn-icon" data-action="open-edit-auto" data-automation-id="${auto.id}" title="Editar cadastro"><i data-lucide="pencil" size="14"></i></button>
+                            <button class="btn-icon" data-action="clone-auto" data-automation-id="${auto.id}" title="Clonar"><i data-lucide="copy" size="14"></i></button>
+                            <button class="btn-icon" data-action="open-automation-history" data-automation-id="${auto.id}" title="Histórico"><i data-lucide="history" size="14"></i></button>
+                        </div>
+                        <div class="inline-actions inline-actions-advanced">
+                            <span class="mini-label">Avançado</span>
+                            <button class="btn-icon" data-action="open-json-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar JSON"><i data-lucide="file-json" size="14"></i></button>
+                            <button class="btn-icon" data-action="open-ide-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar scripts"><i data-lucide="code" size="14"></i></button>
+                        </div>
                     </div>
                 </td>
             </tr>
@@ -246,16 +299,19 @@ export function createAutomationsModule(ctx) {
 
         resetAutomationForm();
         initTabsAndEvents();
+        currentAutomationContext = null;
 
         if (automationId !== null) {
             const auto = await api(`/api/automations/${automationId}`);
             if (!auto) return;
             fillAutomationForm(auto);
+            currentAutomationContext = auto;
             setText("modal-title", "Editar Automação");
         } else {
             setText("modal-title", "Nova Automação");
         }
 
+        switchTab("tab-identification");
         modal.showModal();
         if (typeof lucide !== "undefined") lucide.createIcons();
     }
@@ -290,9 +346,12 @@ export function createAutomationsModule(ctx) {
         if (enabled) enabled.checked = true;
         if (test) test.checked = false;
 
-        switchTab("tab-general");
+        currentAutomationContext = null;
+        latestSchedulePreview = null;
+        switchTab("tab-identification");
         updateScheduleBlocksVisibility("manual");
         resetScheduleBuilder();
+        clearReviewPanel();
     }
 
     function fillAutomationForm(auto) {
@@ -312,6 +371,7 @@ export function createAutomationsModule(ctx) {
         if (test) test.checked = Boolean(auto.test_mode);
 
         parseScheduleToBuilder(auto.schedule);
+        refreshReviewPanel();
     }
 
     function parseScheduleToBuilder(rawSchedule) {
@@ -590,6 +650,12 @@ export function createAutomationsModule(ctx) {
         if (event) event.preventDefault();
         if (isSavingAutomation) return;
 
+        if (currentTabId !== "tab-review") {
+            switchTab("tab-review");
+            showToast("Revise o cadastro na etapa final antes de salvar.", "warning");
+            return;
+        }
+
         const automationId = getValue("f-id");
         const name = getValue("f-name");
         const scriptPath = getValue("f-path");
@@ -618,6 +684,8 @@ export function createAutomationsModule(ctx) {
             showToast((preview?.errors || ["Agenda inválida."])[0], "error");
             return;
         }
+        latestSchedulePreview = preview;
+        refreshReviewPanel();
 
         const submitBtn = document.querySelector("#form-auto button[type=\"submit\"]");
         isSavingAutomation = true;
@@ -701,16 +769,107 @@ export function createAutomationsModule(ctx) {
         const schedule = buildSchedulePayload();
         if (!schedule) {
             box.innerHTML = "";
+            latestSchedulePreview = null;
             return;
         }
         const preview = await api("/api/system/schedule/preview", "POST", { schedule, limit: 5 }, { silentErrorToast: true });
         if (!preview || !preview.valid) {
             box.innerHTML = "<span>Prévia indisponível.</span>";
+            latestSchedulePreview = null;
             return;
         }
+        latestSchedulePreview = preview;
         const nextRuns = (preview.next_runs_preview || []).slice(0, 5);
         box.innerHTML = `<i data-lucide="clock-3" size="14"></i><span>Próximas: ${nextRuns.length ? nextRuns.join(" | ") : "sem execução futura"}</span>`;
         if (typeof lucide !== "undefined") lucide.createIcons();
+        if (currentTabId === "tab-review") {
+            refreshReviewPanel();
+        }
+    }
+
+    function clearReviewPanel() {
+        ["automation-review-summary", "automation-review-preview", "automation-review-impact"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<div class="empty-state">Preencha os campos para gerar o conteúdo desta etapa.</div>';
+        });
+    }
+
+    function refreshReviewPanel() {
+        renderReviewSummary();
+        renderReviewPreview();
+        renderReviewImpact();
+    }
+
+    function renderReviewSummary() {
+        const container = document.getElementById("automation-review-summary");
+        if (!container) return;
+        const name = getValue("f-name") || "Automação sem nome";
+        const path = getValue("f-path") || "Caminho ainda não informado";
+        const queueGroup = getValue("f-queue-group") || "Sem grupo operacional";
+        const mode = document.getElementById("f-test")?.checked ? "Modo teste" : "Modo produtivo";
+        const enabled = document.getElementById("f-enabled")?.checked ? "Ativa" : "Pausada";
+        const lastContext = currentAutomationContext?.last_execution_started_at
+            ? `<small>Última execução: ${escapeHtml(currentAutomationContext.last_execution_started_at)}${currentAutomationContext.last_status ? ` · ${escapeHtml(translateStatus(currentAutomationContext.last_status))}` : ""}</small>`
+            : "<small>Sem histórico carregado para esta automação.</small>";
+
+        container.innerHTML = `
+            <div class="review-item">
+                <strong>${escapeHtml(name)}</strong>
+                <p>${escapeHtml(path)}</p>
+                <small>Fila: ${escapeHtml(queueGroup)} · ${escapeHtml(mode)} · ${escapeHtml(enabled)}</small>
+                ${lastContext}
+            </div>
+            <div class="review-item">
+                <strong>Resiliência e canais</strong>
+                <p>Timeout ${escapeHtml(getValue("f-max-runtime") || "30")} min · Retry ${escapeHtml(getValue("f-max-retries") || "0")} · Cooldown ${escapeHtml(getValue("f-cooldown") || "0")} min</p>
+                <small>Canais: ${escapeHtml(getValue("f-notification-channels") || "não informados")}</small>
+            </div>
+        `;
+    }
+
+    function renderReviewPreview() {
+        const container = document.getElementById("automation-review-preview");
+        if (!container) return;
+        const preview = latestSchedulePreview;
+        const summaryLabel = preview?.schedule_summary || document.getElementById("schedule-summary")?.innerText || "Agenda ainda não validada.";
+        const nextRuns = Array.isArray(preview?.next_runs_preview) ? preview.next_runs_preview : [];
+        container.innerHTML = `
+            <div class="review-item">
+                <strong>${escapeHtml(summaryLabel)}</strong>
+                <p>${nextRuns.length ? escapeHtml(nextRuns.join(" | ")) : "Sem execução futura ou sem agenda configurada."}</p>
+                <small>Tipo: ${escapeHtml((preview?.schedule_type || scheduleType || "manual").toUpperCase())}</small>
+            </div>
+        `;
+    }
+
+    function renderReviewImpact() {
+        const container = document.getElementById("automation-review-impact");
+        if (!container) return;
+        const retries = Number(getValue("f-max-retries") || 0);
+        const cooldown = Number(getValue("f-cooldown") || 0);
+        const queueGroup = getValue("f-queue-group") || "sem grupo";
+        const mode = document.getElementById("f-test")?.checked ? "O fluxo será executado em modo teste." : "O fluxo poderá atuar em ambiente produtivo.";
+        const retryNote = retries > 0
+            ? `Permitirá ${retries} tentativa(s) automática(s) com cooldown de ${cooldown} minuto(s).`
+            : "Não haverá retry automático; a recuperação dependerá de ação operacional.";
+        container.innerHTML = `
+            <div class="review-item">
+                <strong>Impacto operacional</strong>
+                <p>${escapeHtml(mode)}</p>
+                <small>Grupo operacional: ${escapeHtml(queueGroup)}. ${escapeHtml(retryNote)}</small>
+            </div>
+            <div class="review-item">
+                <strong>Validação antes do save</strong>
+                <p>A agenda foi validada pelo backend e a prévia de próximas execuções foi recalculada.</p>
+                <small>Se a configuração estiver incorreta, o save permanece bloqueado.</small>
+            </div>
+        `;
+    }
+
+    function goStep(direction) {
+        const currentIndex = TAB_ORDER.indexOf(currentTabId);
+        const nextIndex = Math.max(0, Math.min(TAB_ORDER.length - 1, currentIndex + Number(direction || 0)));
+        switchTab(TAB_ORDER[nextIndex]);
     }
 
     async function pauseAuto(id) {
@@ -748,6 +907,7 @@ export function createAutomationsModule(ctx) {
         handleSearch,
         openAutomationModal,
         saveAutomation,
+        goStep,
         addScheduleTimeFromInput,
         removeScheduleTime,
         pauseAuto,

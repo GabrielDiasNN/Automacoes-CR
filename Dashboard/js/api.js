@@ -4,7 +4,7 @@
  */
 
 // Detecta o host automaticamente
-export const API_URL = ""; 
+export const API_URL = "";
 export const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
 export let API_KEY = localStorage.getItem("orchestrator_api_key");
 let latestCorrelationId = "SYSTEM";
@@ -299,14 +299,56 @@ export class LogStream {
         this.ws = null;
         this.onMessage = null;
         this.onClose = null;
+        this.reconnectTimeout = null;
+        this.attempt = 0;
+        this.forceClose = false;
     }
     connect() {
         if (this.ws) return;
-        this.ws = new WebSocket(`${WS_URL}/ws/logs/${this.execId}`);
-        this.ws.onmessage = (evt) => { if (this.onMessage) this.onMessage(evt.data); };
-        this.ws.onclose = () => { if (this.onClose) this.onClose(); };
+        this.forceClose = false;
+        const keyParam = API_KEY ? `?key=${encodeURIComponent(API_KEY)}` : "";
+        this.ws = new WebSocket(`${WS_URL}/ws/logs/${this.execId}${keyParam}`);
+
+        this.ws.onopen = () => {
+            this.attempt = 0; // Reset reconnection attempt counter on success
+        };
+
+        this.ws.onmessage = (evt) => {
+            if (this.onMessage) this.onMessage(evt.data);
+        };
+
+        this.ws.onclose = (evt) => {
+            if (this.onClose) this.onClose(evt);
+            this.ws = null;
+            if (!this.forceClose) {
+                this._reconnect();
+            }
+        };
+
+        this.ws.onerror = (err) => {
+            console.warn("[WS] Erro na conexão LogStream:", err);
+        };
+    }
+    _reconnect() {
+        if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+        this.attempt++;
+        const delay = Math.min(2000 * Math.pow(1.5, this.attempt - 1), 30000);
+        console.log(`[WS] Tentando reconexão em ${Math.round(delay)}ms (tentativa ${this.attempt})...`);
+        this.reconnectTimeout = setTimeout(() => {
+            if (!this.forceClose) {
+                this.connect();
+            }
+        }, delay);
     }
     disconnect() {
-        if (this.ws) { this.ws.close(); this.ws = null; }
+        this.forceClose = true;
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+        if (this.ws) {
+            this.ws.close(1000, "Fechamento intencional");
+            this.ws = null;
+        }
     }
 }

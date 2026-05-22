@@ -136,6 +136,12 @@ export function createSystemModule(ctx) {
         const actionsHtml = operatorActions.length
             ? `
             <div class="operator-actions">
+                <button class="btn btn-outline btn-sm" type="button" data-action="system-action" data-system-action="show_running">
+                    Ver ativas
+                </button>
+                <button class="btn btn-outline btn-sm" type="button" data-action="system-action" data-system-action="show_errors">
+                    Ver falhas
+                </button>
                 ${operatorActions.map((item) => `
                     <button class="btn btn-outline btn-sm" type="button" data-action="system-action" data-system-action="${escapeHtml(item.action_code)}">
                         ${escapeHtml(item.action_label || item.action_code)}
@@ -178,6 +184,8 @@ export function createSystemModule(ctx) {
         const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
         const recovery = diagnostics.recovery || {};
         const trace = diagnostics.trace || {};
+        const failureHotspots = Array.isArray(diagnostics.failure_hotspots) ? diagnostics.failure_hotspots : [];
+        const activeByGroup = diagnostics.queue?.active_by_group || {};
         const lightActions = Array.isArray(recovery.light_actions) ? recovery.light_actions : [];
         const strongActions = Array.isArray(recovery.strong_actions) ? recovery.strong_actions : [];
 
@@ -194,6 +202,36 @@ export function createSystemModule(ctx) {
 
         const recommended = recovery.recommended_action
             ? `<small>Ação recomendada: ${escapeHtml(recovery.recommended_action)}</small>`
+            : "";
+
+        const groupEntries = Object.entries(activeByGroup).slice(0, 5);
+        const groupsHtml = groupEntries.length
+            ? `<article class="contract-card">
+                <h4>Grupos ativos</h4>
+                <p>Atalhos para abrir a bancada de triagem já filtrada por grupo operacional.</p>
+                <div class="triage-groups">
+                    ${groupEntries.map(([group, count]) => `
+                        <button class="triage-chip" type="button" data-action="execution-filter-group" data-queue-group="${escapeHtml(group)}">
+                            ${escapeHtml(group)} · ${escapeHtml(String(count))}
+                        </button>
+                    `).join("")}
+                </div>
+            </article>`
+            : "";
+
+        const hotspotsHtml = failureHotspots.length
+            ? `<article class="contract-card">
+                <h4>Hotspots de falha</h4>
+                <p>Atalhos para abrir a bancada diretamente nas automações com mais falhas nas últimas 24h.</p>
+                <div class="triage-groups">
+                    ${failureHotspots.slice(0, 5).map((item) => `
+                        <button class="triage-chip" type="button" data-action="execution-open-hotspot" data-automation-id="${escapeHtml(String(item.automation_id))}">
+                            ${escapeHtml(item.automation_name)} · ${escapeHtml(String(item.failures_24h))}
+                        </button>
+                    `).join("")}
+                </div>
+                <small>O atalho aplica recorte por automação e status de falha para acelerar a análise.</small>
+            </article>`
             : "";
 
         container.innerHTML = `
@@ -214,6 +252,8 @@ export function createSystemModule(ctx) {
                 <p>${escapeHtml(strongActions.join(", ") || "Nenhuma ação sugerida")}</p>
                 <small>Ações para recuperação canônica e proteção operacional antes de mudanças maiores.</small>
             </article>
+            ${groupsHtml}
+            ${hotspotsHtml}
             ${checksHtml}
         `;
         bindActionElements(container);

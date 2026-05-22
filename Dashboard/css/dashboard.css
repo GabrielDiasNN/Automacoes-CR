@@ -141,6 +141,15 @@ textarea:focus-visible {
     gap: var(--space-1);
 }
 
+.nav-section-label {
+    margin: 10px 10px 4px;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
 .nav-item {
     width: 100%;
     border: 1px solid transparent;
@@ -268,7 +277,9 @@ textarea:focus-visible {
 .actions-area,
 .quick-actions,
 .inline-actions,
-.operator-actions {
+.operator-actions,
+.preset-actions,
+.triage-groups {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -392,6 +403,10 @@ textarea:focus-visible {
     margin-top: var(--space-3);
 }
 
+.page-callout {
+    margin-bottom: var(--space-3);
+}
+
 .panel-header {
     min-height: 56px;
     padding: var(--space-4);
@@ -495,7 +510,7 @@ textarea:focus-visible {
 
 .data-table th,
 .data-table td {
-    padding: 11px 14px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     text-align: left;
     vertical-align: middle;
@@ -514,13 +529,21 @@ textarea:focus-visible {
 
 .data-table td {
     color: var(--text-secondary);
-    font-size: 0.86rem;
+    font-size: 0.82rem;
 }
 
 .data-table td strong,
 .auto-name {
     color: var(--text-primary);
     font-weight: 800;
+}
+
+.cell-meta,
+.review-list small {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
 }
 
 .data-table tbody tr:hover {
@@ -637,6 +660,23 @@ textarea:focus-visible {
     padding: 0;
 }
 
+.inline-actions-stack {
+    display: grid;
+    gap: 6px;
+}
+
+.inline-actions-advanced {
+    font-size: 0.72rem;
+}
+
+.mini-label {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
 .filter-strip {
     padding: var(--space-4);
     display: grid;
@@ -647,6 +687,83 @@ textarea:focus-visible {
 
 .filter-group.wide {
     grid-column: 1 / -1;
+}
+
+.state-banner {
+    margin-bottom: var(--space-3);
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    background: rgba(47, 111, 237, 0.08);
+}
+
+.state-banner.warning {
+    background: var(--accent-warning-soft);
+    border-color: rgba(217, 154, 43, 0.36);
+    color: #f3c56f;
+}
+
+.state-banner.success {
+    background: var(--accent-success-soft);
+    border-color: rgba(50, 177, 120, 0.36);
+    color: #8de1ba;
+}
+
+.triage-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(210px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.triage-card {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, rgba(18, 26, 38, 0.98), rgba(15, 23, 34, 0.98));
+    box-shadow: var(--shadow-card);
+}
+
+.triage-card h4,
+.triage-card p {
+    margin: 0;
+}
+
+.triage-card h4 {
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+}
+
+.triage-card p {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.triage-card strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 1.15rem;
+    color: var(--text-primary);
+}
+
+.triage-groups {
+    margin-top: 12px;
+}
+
+.triage-chip {
+    border: 1px solid rgba(47, 111, 237, 0.35);
+    background: rgba(47, 111, 237, 0.1);
+    color: #9bbdff;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.triage-chip:hover {
+    background: rgba(47, 111, 237, 0.18);
 }
 
 .filter-group label,
@@ -858,13 +975,30 @@ textarea:focus-visible {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
-    min-width: 130px;
+    gap: 3px;
+    min-width: 112px;
+    line-height: 1.1;
+}
+
+.recovery-cell.compact {
+    gap: 2px;
 }
 
 .recovery-cell small {
     color: var(--text-muted);
-    line-height: 1.25;
+    line-height: 1.15;
+    font-size: 0.72rem;
+}
+
+.recovery-cell .recovery-primary {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 0.78rem;
+}
+
+.triage-quiet {
+    color: var(--text-muted);
+    font-size: 0.78rem;
 }
 
 .modal {
@@ -969,6 +1103,46 @@ dialog::backdrop {
 
 .tab-content.active {
     display: block;
+}
+
+.review-grid {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.review-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.02);
+    padding: var(--space-4);
+}
+
+.review-card h4 {
+    margin: 8px 0 10px;
+    font-size: 0.96rem;
+}
+
+.review-list {
+    display: grid;
+    gap: 8px;
+}
+
+.review-item {
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.review-item strong {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--text-primary);
+}
+
+.review-item p {
+    margin: 0;
+    color: var(--text-secondary);
 }
 
 @keyframes fadeInTab {

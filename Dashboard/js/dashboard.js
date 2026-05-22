@@ -49,6 +49,7 @@ const executionsModule = createExecutionsModule({
     loadOverview,
     bindActionElements,
     safePrompt,
+    getLatestSystemDiagnostics: () => latestSystemDiagnostics,
 });
 
 const systemModule = createSystemModule({
@@ -135,6 +136,12 @@ window.cloneAuto = (id) => cloneAuto(id);
 window.openAutomationHistory = (id) => openAutomationHistory(id);
 window.loadExecutions = () => loadExecutions(1);
 window.requeueExec = (id) => requeueExec(id);
+window.goAutoStepNext = () => goAutoStepNext();
+window.goAutoStepPrev = () => goAutoStepPrev();
+window.applyExecutionPreset = (preset) => applyExecutionPreset(preset);
+window.applyExecutionQueueGroup = (group) => applyExecutionQueueGroup(group);
+window.applyExecutionPriority = (priority) => applyExecutionPriority(priority);
+window.openExecutionHotspot = (automationId) => openExecutionHotspot(automationId);
 
 function bindStaticEvents() {
     const globalTestToggle = document.getElementById("global-test-toggle");
@@ -149,7 +156,7 @@ function bindStaticEvents() {
         autoSearch.addEventListener("input", () => handleSearch());
     }
 
-    ["filter-automation", "filter-status", "filter-requested-by", "filter-date-from", "filter-date-to"].forEach((id) => {
+    ["filter-automation", "filter-queue-group", "filter-status", "filter-priority", "filter-requested-by", "filter-date-from", "filter-date-to"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener("change", () => loadExecutions(1));
@@ -189,9 +196,21 @@ function registerStaticActions() {
     registerAction("refresh-page", () => location.reload());
     registerAction("open-create-modal", () => openAutomationModal());
     registerAction("refresh-executions", () => loadExecutions(1));
+    registerAction("execution-preset", (_event, element) => applyExecutionPreset(element?.dataset?.executionPreset || "all"));
+    registerAction("execution-filter-group", (_event, element) => applyExecutionQueueGroup(element?.dataset?.queueGroup || ""));
+    registerAction("execution-filter-priority", (_event, element) => applyExecutionPriority(element?.dataset?.priority || ""));
+    registerAction("execution-open-hotspot", (_event, element) => openExecutionHotspot(Number(element?.dataset?.automationId || 0)));
+    registerAction("execution-apply-pressure", (_event, element) => executionsModule.applyPressure(element?.dataset?.queueGroup || "", element?.dataset?.priority || ""));
+    registerAction("execution-batch-stop", () => executionsModule.stopVisibleExecutions());
+    registerAction("execution-batch-requeue", () => executionsModule.requeueVisibleExecutions());
     registerAction("system-action", (_event, element) => callSystemAction(element?.dataset?.systemAction || ""));
     registerAction("save-env", () => ide.saveEnv());
-    registerAction("run-auto", (_event, element) => runAuto(Number(element?.dataset?.automationId || 0)));
+    registerAction("run-auto", async (_event, element) => {
+        const execId = await runAuto(Number(element?.dataset?.automationId || 0));
+        if (execId) {
+            await Promise.all([loadOverview(), loadConfig(), loadExecutions(execPage)]);
+        }
+    });
     registerAction("open-log", (_event, element) => {
         const executionId = element?.dataset?.executionId;
         if (!executionId) {
@@ -214,13 +233,16 @@ function registerStaticActions() {
             openLogModal(executionId);
         }
     });
-    registerAction("stop-exec", (event, element) => {
+    registerAction("stop-exec", async (event, element) => {
         event.stopPropagation();
-        stopExec(element?.dataset?.executionId || "");
+        const stopped = await stopExec(element?.dataset?.executionId || "");
+        if (stopped) {
+            await Promise.all([loadOverview(), loadExecutions(execPage), loadSystem()]);
+        }
     });
-    registerAction("requeue-exec", (event, element) => {
+    registerAction("requeue-exec", async (event, element) => {
         event.stopPropagation();
-        requeueExec(element?.dataset?.executionId || "");
+        await requeueExec(element?.dataset?.executionId || "");
     });
     registerAction("close-log-modal", () => closeLogModal());
     registerAction("close-dialog", (_event, element) => {
@@ -233,6 +255,8 @@ function registerStaticActions() {
     registerAction("save-json-file", () => ide.saveJsonFile());
     registerAction("load-selected-ide-file", () => ide.loadSelectedIdeFile());
     registerAction("save-ide-file", () => ide.saveIdeFile());
+    registerAction("auto-step-next", () => goAutoStepNext());
+    registerAction("auto-step-prev", () => goAutoStepPrev());
 }
 
 async function loadOverview() {
@@ -437,19 +461,31 @@ async function populateControlTable(overview) {
 
     tbody.innerHTML = autos.map((auto) => {
         const last = latestByAutomation.get(auto.id);
-        const lastExecLabel = last ? formatDate(last.started_at) : "-";
-        const lastStatus = last
-            ? `<span class="badge ${getBadgeClass(last.status)}">${translateStatus(last.status)}</span>`
+        const lastStatusCode = auto.last_status || last?.status;
+        const lastExecLabel = auto.last_execution_started_at || (last ? formatDate(last.started_at) : "-");
+        const lastStatus = lastStatusCode
+            ? `<span class="badge ${getBadgeClass(lastStatusCode)}">${translateStatus(lastStatusCode)}</span>`
             : "<span class=\"badge badge-muted\">Sem histórico</span>";
         const nextRun = auto.next_run || "-";
-        const executionIdAttr = last?.id ? `data-execution-id="${escapeHtml(last.id)}"` : "";
+        const executionId = auto.last_execution_id || last?.id || "";
+        const executionIdAttr = executionId ? `data-execution-id="${escapeHtml(executionId)}"` : "";
+        const operationalState = renderOperationalStateBadge(auto.operational_state);
+        const scheduleSummary = auto.schedule_summary ? `<span class="cell-meta">${escapeHtml(auto.schedule_summary)}</span>` : "";
+        const lastDetails = auto.last_failure_reason
+            ? `<span class="cell-meta">Falha: ${escapeHtml(auto.last_failure_reason)}</span>`
+            : auto.last_execution_duration_seconds
+                ? `<span class="cell-meta">Duração: ${formatSeconds(auto.last_execution_duration_seconds)}</span>`
+                : "";
+        const nextDetails = auto.next_runs_preview?.length
+            ? `<span class="cell-meta">${escapeHtml(auto.next_runs_preview.join(" | "))}</span>`
+            : "";
 
         return `
             <tr>
-                <td><strong>${escapeHtml(auto.name)}</strong></td>
-                <td>${lastStatus}</td>
-                <td>${lastExecLabel}</td>
-                <td>${nextRun}</td>
+                <td><strong>${escapeHtml(auto.name)}</strong>${scheduleSummary}</td>
+                <td>${lastStatus}${operationalState}</td>
+                <td>${lastExecLabel}${lastDetails}</td>
+                <td>${nextRun}${nextDetails}</td>
                 <td>
                     <div class="inline-actions">
                         <button class="btn-icon" data-action="run-auto" data-automation-id="${auto.id}" title="Executar agora"><i data-lucide="play"></i></button>
@@ -546,6 +582,30 @@ function requeueExec(id) {
     return executionsModule.requeueExec(id);
 }
 
+function goAutoStepNext() {
+    return automationsModule.goStep(1);
+}
+
+function goAutoStepPrev() {
+    return automationsModule.goStep(-1);
+}
+
+function applyExecutionPreset(preset) {
+    return executionsModule.applyPreset(preset);
+}
+
+function applyExecutionQueueGroup(group) {
+    return executionsModule.applyQueueGroup(group);
+}
+
+function applyExecutionPriority(priority) {
+    return executionsModule.applyPriority(priority);
+}
+
+function openExecutionHotspot(automationId) {
+    return executionsModule.openHotspot(automationId);
+}
+
 function formatSeconds(value) {
     const sec = Number(value || 0);
     if (!Number.isFinite(sec) || sec <= 0) return "0s";
@@ -553,6 +613,23 @@ function formatSeconds(value) {
     const minutes = Math.floor(sec / 60);
     const remain = Math.round(sec % 60);
     return `${minutes}m ${remain}s`;
+}
+
+function renderOperationalStateBadge(state) {
+    const normalized = String(state || "").toLowerCase();
+    if (normalized === "in_progress") {
+        return `<span class="cell-meta"><span class="badge badge-warning">Em execução</span></span>`;
+    }
+    if (normalized === "attention") {
+        return `<span class="cell-meta"><span class="badge badge-danger">Atenção</span></span>`;
+    }
+    if (normalized === "healthy") {
+        return `<span class="cell-meta"><span class="badge badge-success">Saudável</span></span>`;
+    }
+    if (normalized === "paused") {
+        return `<span class="cell-meta"><span class="badge badge-muted">Pausada</span></span>`;
+    }
+    return "";
 }
 
 function isRenderable(element) {
