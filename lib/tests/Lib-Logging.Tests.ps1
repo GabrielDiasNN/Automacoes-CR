@@ -10,7 +10,7 @@ Import-Module $sut -Force
 Describe "Lib-Logging Tests" {
     Context "Write-AutomacaoLog" {
         It "Should execute without errors" {
-            $tempLog = Join-Path $here "test.log"
+            $tempLog = Join-Path $TestDrive "test.log"
             { Write-AutomacaoLog -Message "Test message" -Level "INFO" -LogPath $tempLog } | Should Not Throw
             if (Test-Path $tempLog) { Remove-Item $tempLog -Force }
         }
