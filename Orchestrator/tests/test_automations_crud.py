@@ -54,6 +54,20 @@ def test_preflight_automation_normalizes_channels(client):
     assert data["schedule_summary"] == "Manual"
 
 
+def test_preflight_rejects_reserved_cleanup_script():
+    from app.services.automation_preflight import build_automation_preflight
+
+    with pytest.raises(ValueError, match="rotina reservada do sistema"):
+        build_automation_preflight(
+            {
+                "name": "Cleanup Legacy",
+                "script_path": "./Tools/AplicarPoliticaRetencao.ps1",
+                "enabled": True,
+            },
+            "C:\\Automacoes",
+        )
+
+
 def test_create_duplicate_name_rejected(client):
     client.post(
         "/api/automations",
@@ -142,6 +156,43 @@ def test_update_automation_reloads_scheduler(client, monkeypatch):
 
     assert res.status_code == 200
     assert calls == ["reload"]
+
+
+def test_reload_scheduler_neutralizes_reserved_cleanup_automation(db_session, monkeypatch):
+    from app import models
+    from app.runtime import scheduler
+    from app.services import scheduler_runtime
+    from sqlalchemy.orm import sessionmaker
+
+    for job in list(scheduler.get_jobs()):
+        scheduler.remove_job(job.id)
+
+    test_session_local = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=db_session.get_bind(),
+    )
+    monkeypatch.setattr(scheduler_runtime, "SessionLocal", test_session_local)
+
+    cleanup_auto = models.Automation(
+        name="Retenção de Arquivos",
+        script_path="./Tools/AplicarPoliticaRetencao.ps1",
+        schedule='{"schedule_version":2,"schedule_type":"weekly","timezone":"America/Sao_Paulo","times":[{"h":2,"m":20}],"days_of_week":[0,1,2,3,4,5,6]}',
+        enabled=True,
+    )
+    db_session.add(cleanup_auto)
+    db_session.commit()
+
+    try:
+        scheduler_runtime.reload_scheduled_tasks()
+
+        db_session.refresh(cleanup_auto)
+        assert cleanup_auto.enabled is False
+        assert cleanup_auto.schedule is None
+        assert not any(job.id.startswith("job_") for job in scheduler.get_jobs())
+    finally:
+        for job in list(scheduler.get_jobs()):
+            scheduler.remove_job(job.id)
 
 
 def test_update_automation_rejects_path_escape(client):

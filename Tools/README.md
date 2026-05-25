@@ -26,5 +26,6 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 ## 🧹 Política Atual de Limpeza
 
 - O modo padrão da limpeza é conservador: remove resíduos Python, Playwright, artefatos E2E do Orchestrator, logs/backups expirados e temporários operacionais elegíveis.
+- A agenda canônica dessa limpeza é o job interno `enterprise_file_cleanup` do Orchestrator; `Tools/AplicarPoliticaRetencao.ps1` não deve ser cadastrado como automação recorrente comum no painel.
 - Itens de ambiente local e autenticação são preservados por contrato, incluindo `.env`, `.venv`, `.gemini/` e sessões em `.wwebjs_auth/`.
 - Nenhum item rastreado pelo Git pode ser removido pelo script, mesmo que coincida com um padrão de limpeza.

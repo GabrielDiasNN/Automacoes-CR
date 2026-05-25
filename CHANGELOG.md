@@ -1,5 +1,12 @@
 # Changelog
 
+## [9.3.1] - 2026-05-25
+### Corrigido
+- **Rotina de Limpeza Duplicada no Orchestrator**: corrigida a falha recorrente da automação `Retenção de Arquivos` quando executada pelo worker com `ExecId` posicional. `Tools/AplicarPoliticaRetencao.ps1` agora infere a raiz do repositório quando `-RootPath` não é informado e deixa de interpretar `CRON_*` como caminho inválido.
+
+### Alterado
+- **Limpeza de Arquivos como Job Reservado**: `Tools/AplicarPoliticaRetencao.ps1` passa a ser tratado como rotina reservada do sistema. O preflight bloqueia novo cadastro desse script como automação comum e o `reload_scheduled_tasks()` neutraliza o registro legado persistido no banco para manter apenas o job interno `enterprise_file_cleanup`.
+
 ## [9.3.0] - 2026-05-24
 ### Adicionado
 - **Catálogo Governado de Automações**: cada automação ativa passa a possuir `automation.manifest.json` como fonte canônica de criticidade, SLA, owner, dependências, smoke tests e caminho operacional do Orchestrator.

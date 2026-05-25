@@ -24,6 +24,34 @@ from .execution_runtime import build_queued_execution, get_group_active_executio
 logger = logging.getLogger("orchestrator")
 
 
+def _get_reserved_cleanup_script_path() -> str:
+    return os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "../../../Tools/AplicarPoliticaRetencao.ps1",
+        )
+    )
+
+
+def _is_reserved_cleanup_automation(script_path: str | None) -> bool:
+    if not script_path:
+        return False
+
+    resolved = script_path
+    if script_path.startswith("./") or script_path.startswith(".\\"):
+        resolved = os.path.join(
+            os.path.dirname(__file__),
+            "../../../",
+            script_path[2:],
+        )
+    elif not os.path.isabs(script_path):
+        resolved = os.path.join(os.path.dirname(__file__), "../../../", script_path)
+
+    return os.path.normcase(os.path.abspath(resolved)) == os.path.normcase(
+        _get_reserved_cleanup_script_path()
+    )
+
+
 def extract_automation_id_from_job(job_id: str) -> int | None:
     if not job_id.startswith("job_"):
         return None
@@ -45,6 +73,12 @@ def scheduled_task_wrapper(automation_id: int) -> None:
             .first()
         )
         if not db_auto or not db_auto.enabled:
+            return
+        if _is_reserved_cleanup_automation(db_auto.script_path):
+            logger.warning(
+                "Agendamento ignorado para rotina reservada do sistema: %s.",
+                db_auto.name,
+            )
             return
 
         # Validação de janela operacional restrita para cadência de intervalo
@@ -135,6 +169,17 @@ def reload_scheduled_tasks() -> None:
             len(automations_db),
         )
         for auto in automations_db:
+            if _is_reserved_cleanup_automation(auto.script_path):
+                auto.enabled = False
+                auto.schedule = None
+                auto.updated_at = get_now_local()
+                db.commit()
+                logger.warning(
+                    "Automação legada neutralizada por duplicar a rotina reservada de limpeza: %s (ID: %s).",
+                    auto.name,
+                    auto.id,
+                )
+                continue
             if not auto.schedule:
                 continue
             try:
@@ -272,7 +317,7 @@ def register_enterprise_jobs(retention_days: int) -> None:
 
 
 def run_file_cleanup() -> None:
-    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../Tools/AplicarPoliticaRetencao.ps1"))
+    script_path = _get_reserved_cleanup_script_path()
     try:
         logger.info("Iniciando limpeza de arquivos (Self-Cleaning)...")
         subprocess.run(["pwsh.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path], check=True)

@@ -8,6 +8,13 @@ from .. import schemas
 from ..utils import validate_script_path
 
 
+def _is_reserved_cleanup_script(resolved_script_path: str, project_root: str) -> bool:
+    reserved_path = os.path.abspath(
+        os.path.join(project_root, "Tools", "AplicarPoliticaRetencao.ps1")
+    )
+    return os.path.normcase(resolved_script_path) == os.path.normcase(reserved_path)
+
+
 def build_automation_preflight(
     payload: dict[str, Any],
     project_root: str,
@@ -24,6 +31,12 @@ def build_automation_preflight(
     parsed_schedule = (
         schemas.parse_schedule(validated.schedule) if validated.schedule else None
     )
+
+    if _is_reserved_cleanup_script(resolved_script_path, project_root):
+        raise ValueError(
+            "Validação do script: Tools/AplicarPoliticaRetencao.ps1 é uma rotina reservada do sistema e não pode ser cadastrada como automação comum."
+        )
+
     warnings: list[str] = []
 
     if not validated.notification_channels:

@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$RootPath = ".",
+    [string]$ExecId = "",
+    [string]$RootPath = "",
     [switch]$DryRun,
     [int]$LogRetentionDays = 14,
     [int]$BackupRetentionDays = 30,
@@ -10,6 +11,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = Split-Path -Parent $PSScriptRoot
+}
 
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
 $rootWithSeparator = $resolvedRoot.TrimEnd('\') + '\'
