@@ -81,6 +81,9 @@ class Execution(Base):
     exit_code = Column(Integer, nullable=True)
     requested_by = Column(String(100), default="SYSTEM")
     started_at = Column(DateTime, default=get_now_local)
+    claimed_at = Column(DateTime, nullable=True)
+    worker_instance_id = Column(String(100), nullable=True)
+    worker_pid = Column(Integer, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     artifacts = Column(Text, nullable=True)  # JSON list de nomes de arquivo
@@ -104,12 +107,35 @@ class WorkerHeartbeat(Base):
 
     id = Column(Integer, primary_key=True, default=1)
     pid = Column(Integer, nullable=True)
+    instance_id = Column(String(100), nullable=True)
+    host = Column(String(200), nullable=True)
     last_ping = Column(DateTime, default=get_now_local, onupdate=get_now_local)
     uptime_seconds = Column(Float, default=0)
     tasks_completed = Column(Integer, default=0)
     tasks_failed = Column(Integer, default=0)
     active_tasks = Column(Integer, default=0)
     version = Column(String(20), default="4.0.0")
+
+
+class SystemHealthSnapshot(Base):
+    """Histórico leve da saúde operacional para tendência e triagem."""
+
+    __tablename__ = "system_health_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=get_now_local, index=True)
+    overall_status = Column(String(20), nullable=False)
+    pending_count = Column(Integer, default=0, nullable=False)
+    running_count = Column(Integer, default=0, nullable=False)
+    oldest_pending_age_seconds = Column(Float, default=0, nullable=False)
+    oldest_running_age_seconds = Column(Float, default=0, nullable=False)
+    wal_size_mb = Column(Float, default=0, nullable=False)
+    worker_last_ping_age_seconds = Column(Float, nullable=True)
+    running_over_runtime_count = Column(Integer, default=0, nullable=False)
+    orphaned_running_count = Column(Integer, default=0, nullable=False)
+    failure_hotspots = Column(Text, nullable=True)
+    active_queue_groups = Column(Text, nullable=True)
+    slo_breaches = Column(Text, nullable=True)
 
 
 class AuditLog(Base):

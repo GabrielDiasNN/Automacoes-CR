@@ -16,6 +16,35 @@ from .common import (
 )
 
 
+def _normalize_queue_group(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalize_notification_channels(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    allowed_order = ["email", "whatsapp"]
+    seen: list[str] = []
+    for raw in value.split(","):
+        channel = raw.strip().lower()
+        if not channel:
+            continue
+        if channel not in allowed_order:
+            raise ValueError(
+                "notification_channels aceita apenas: email, whatsapp."
+            )
+        if channel not in seen:
+            seen.append(channel)
+    if not seen:
+        return None
+    return ",".join(
+        [channel for channel in allowed_order if channel in seen]
+    )
+
+
 class AutomationBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
@@ -45,8 +74,22 @@ class AutomationBase(BaseModel):
     def v_sched(cls, v: Optional[str]) -> Optional[str]:
         return _validate_schedule(v)
 
+    @field_validator("queue_group")
+    @classmethod
+    def v_queue_group(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_queue_group(v)
+
+    @field_validator("notification_channels")
+    @classmethod
+    def v_notification_channels(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_notification_channels(v)
+
 
 class AutomationCreate(AutomationBase):
+    pass
+
+
+class AutomationPreflightRequest(AutomationBase):
     pass
 
 
@@ -94,6 +137,28 @@ class AutomationUpdate(BaseModel):
             raise ValueError("cooldown_minutes deve estar entre 0 e 1440.")
         return v
 
+    @field_validator("queue_group")
+    @classmethod
+    def v_queue_group(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_queue_group(v)
+
+    @field_validator("notification_channels")
+    @classmethod
+    def v_notification_channels(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_notification_channels(v)
+
+
+class AutomationPreflightResponse(BaseModel):
+    valid: bool = True
+    validated: bool = True
+    normalized_payload: dict[str, Any]
+    resolved_script_path: str
+    automation_dir: str
+    normalized_notification_channels: Optional[str] = None
+    schedule_summary: str
+    next_runs_preview: List[str] = []
+    warnings: List[str] = []
+
 
 class AutomationResponse(AutomationBase):
     id: int
@@ -118,6 +183,9 @@ class AutomationResponse(AutomationBase):
     error_24h: int = 0
     pending_count: int = 0
     operational_state: str = "idle"
+    validated: bool = True
+    backup_path: Optional[str] = None
+    audit_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("schedule")

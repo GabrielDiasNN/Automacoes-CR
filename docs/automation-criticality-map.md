@@ -27,8 +27,8 @@ A tabela abaixo consolida a governança, cadência e prazos operacionais de todo
 | Código / ID | Automação | Criticidade | SLA de Recuperação | Cadência / Disparo | Área de Negócio Impactada | Consequência da Parada |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`RB-01`** | **[Receitas Bloqueadas](runbooks/receitas-bloqueadas-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sex às 07:30, 10:00 e 14:00 | Laboratório de Receitas, PCP e Tinturaria | Atraso no tingimento de Ordens de Beneficiamento (OBs) liberadas, ociosidade em teares e perda de visibilidade de receitas retidas. |
-| **`MT-02`** | **Montagem de Terceirizados** | **⚠️ ALTA** | **3 horas** | Seg-Sex às 08:00 e 15:00 | Faturamento, Controladoria e Expedição de Terceirizados | Risco de divergências fiscais na entrada de NFs de parceiros/facções, atraso na liberação de estoque de produtos acabados. |
-| **`RE-03`** | **Receitas Emitidas** | **💡 MÉDIA** | **6 horas** | Seg-Sex às 17:00 | Planejamento, Tinturaria e PCP | Perda de visibilidade das receitas expedidas para a produção no dia, afetando a acurácia do planejamento produtivo do dia seguinte. |
+| **`MT-02`** | **[Montagem de Terceirizados](runbooks/montagem-de-terceirizados-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sex às 08:00 e 15:00 | Faturamento, Controladoria e Expedição de Terceirizados | Risco de divergências fiscais na entrada de NFs de parceiros/facções, atraso na liberação de estoque de produtos acabados. |
+| **`RE-03`** | **[Receitas Emitidas](runbooks/receitas-emitidas-runbook.md)** | **💡 MÉDIA** | **6 horas** | Seg-Sex às 17:00 | Planejamento, Tinturaria e PCP | Perda de visibilidade das receitas expedidas para a produção no dia, afetando a acurácia do planejamento produtivo do dia seguinte. |
 
 ---
 

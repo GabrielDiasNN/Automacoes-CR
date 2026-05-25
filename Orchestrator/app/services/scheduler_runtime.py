@@ -19,7 +19,7 @@ from ..database import SessionLocal, purge_old_executions, run_wal_checkpoint
 from ..runtime import scheduler
 from ..schemas.schedule_rules import first_interval_candidate, ui_day_to_python_weekday
 from ..timezone import get_now_local
-from .execution_runtime import build_queued_execution
+from .execution_runtime import build_queued_execution, get_group_active_execution
 
 logger = logging.getLogger("orchestrator")
 
@@ -88,6 +88,20 @@ def scheduled_task_wrapper(automation_id: int) -> None:
         )
         if existing:
             logger.info("Agendamento ignorado: %s já tem execução ativa.", db_auto.name)
+            return
+
+        group_active = get_group_active_execution(
+            db,
+            db_auto.queue_group,
+            exclude_automation_id=automation_id,
+        )
+        if group_active:
+            logger.info(
+                "Agendamento ignorado: %s bloqueada por queue_group=%s em uso por %s.",
+                db_auto.name,
+                db_auto.queue_group,
+                group_active.id,
+            )
             return
 
         exec_id = f"CRON_{automation_id}_{int(get_now_local().timestamp())}"
@@ -241,6 +255,14 @@ def register_enterprise_jobs(retention_days: int) -> None:
         misfire_grace_time=60,
     )
     scheduler.add_job(
+        capture_system_history_snapshot_job,
+        "interval",
+        minutes=5,
+        id="enterprise_system_health_snapshot",
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+    scheduler.add_job(
         run_file_cleanup,
         CronTrigger(hour=2, minute=0),
         id="enterprise_file_cleanup",
@@ -264,6 +286,26 @@ def safe_scheduler_heartbeat() -> None:
         logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
     except Exception:
         pass
+
+
+def capture_system_history_snapshot_job() -> None:
+    db = SessionLocal()
+    try:
+        from .system_diagnostics import build_diagnostics_payload
+        from .system_history import capture_system_health_snapshot
+        from .system_runtime import get_worker_status
+
+        payload = build_diagnostics_payload(
+            db,
+            scheduler,
+            get_worker_status,
+            include_history=False,
+        )
+        capture_system_health_snapshot(db, payload, retention_days=30)
+    except Exception as exc:
+        logger.error("Falha ao capturar snapshot operacional: %s", exc)
+    finally:
+        db.close()
 
 
 def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:

@@ -41,6 +41,7 @@ from ..database import (
 )
 from ..timezone import get_now_local
 from .scheduler_runtime import extract_automation_id_from_job
+from .system_history import build_trend_summary
 from . import metrics  # pylint: disable=no-name-in-module
 
 def add_finding(
@@ -173,9 +174,50 @@ def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
                 "automation_name": item.automation.name if item.automation else None,
                 "age_seconds": age_seconds,
                 "max_runtime_minutes": int(max_runtime_minutes),
+                "claimed_at": schemas.format_dt_br(item.claimed_at),
+                "worker_instance_id": item.worker_instance_id,
+                "worker_pid": item.worker_pid,
             }
         )
     return sorted(stale, key=lambda entry: entry["age_seconds"], reverse=True)
+
+
+def collect_orphaned_running(
+    db: Session,
+    worker_status: Any,
+) -> list[dict[str, Any]]:
+    running = (
+        db.query(models.Execution)
+        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
+        .all()
+    )
+    orphaned: list[dict[str, Any]] = []
+    for item in running:
+        reason = None
+        if not worker_status.is_alive:
+            reason = "worker_offline"
+        elif item.worker_instance_id and worker_status.instance_id:
+            if item.worker_instance_id != worker_status.instance_id:
+                reason = "worker_instance_mismatch"
+        if not reason:
+            continue
+        orphaned.append(
+            {
+                "exec_id": item.id,
+                "automation_id": item.automation_id,
+                "automation_name": item.automation.name if item.automation else None,
+                "priority": item.priority,
+                "queue_group": item.queue_group,
+                "claimed_at": schemas.format_dt_br(item.claimed_at),
+                "worker_instance_id": item.worker_instance_id,
+                "worker_pid": item.worker_pid,
+                "age_seconds": seconds_since(coerce_datetime(item.started_at)),
+                "reason": reason,
+                "orphaned": True,
+            }
+        )
+    return sorted(orphaned, key=lambda entry: entry["age_seconds"], reverse=True)
 
 # --- ANALISADORES FOCADOS (C1) ---
 
@@ -400,6 +442,30 @@ def check_failure_hotspots(failure_hotspots: list[dict[str, Any]]) -> list[dict[
         )
     return findings
 
+
+def check_orphaned_running(orphaned_running: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    if not orphaned_running:
+        return findings
+    top = orphaned_running[0]
+    add_finding(
+        findings,
+        SEVERITY_ERROR,
+        "queue",
+        (
+            "Execução RUNNING sem ownership válido detectada: "
+            f"{top['exec_id']} ({top.get('automation_name') or 'automação desconhecida'})."
+        ),
+        {
+            "action_hint": "Executar recovery do worker e revisar logs antes de novo requeue.",
+            "action_code": ACTION_CODE_WORKER_RECOVER,
+            "action_label": "Recuperar worker",
+            "impact": "Execução pode ter ficado órfã após falha de worker ou troca de instância.",
+            "priority": 1,
+        },
+    )
+    return findings
+
 # --- ORQUESTRADOR CENTRAL (C1) ---
 
 def build_diagnostics_payload(
@@ -407,6 +473,7 @@ def build_diagnostics_payload(
     scheduler: Any,
     worker_status_fn: Callable[[Session], Any],
     wal_size_fn: Callable[[], float] | None = None,
+    include_history: bool = True,
 ) -> dict[str, Any]:
     """Monta diagnostico acionavel delegando para sub-funções focadas (C1)."""
     findings: list[dict[str, Any]] = []
@@ -430,6 +497,7 @@ def build_diagnostics_payload(
     failure_hotspots = metrics.get_failure_hotspots_24h(db)
 
     running_over_runtime = collect_running_over_runtime(db)
+    orphaned_running = collect_orphaned_running(db, worker_status)
 
     # Retry pressure (métrica complementar de diagnóstico)
     retry_pressure_rows = (
@@ -516,6 +584,7 @@ def build_diagnostics_payload(
     findings.extend(check_worker_health(worker_status, active_count, last_ping_age_seconds))
     findings.extend(check_queue_health(pending_age_seconds, running_age_seconds))
     findings.extend(check_running_over_runtime(running_over_runtime))
+    findings.extend(check_orphaned_running(orphaned_running))
     findings.extend(check_failure_hotspots(failure_hotspots))
 
     # 4. Consolidar o status geral e ações recomendadas
@@ -628,6 +697,23 @@ def build_diagnostics_payload(
         if operator_actions
         else ACTION_CODE_WORKER_WAKEUP
     )
+    slo_breaches = {
+        "pending_stalled": pending_age_seconds
+        >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
+        "running_stalled": running_age_seconds
+        >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
+        "running_over_runtime": bool(running_over_runtime),
+        "worker_offline": not worker_status.is_alive
+        and (last_ping_age_seconds or 0) >= DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
+        "wal_elevated": wal_size_mb >= DIAGNOSTIC_WAL_ELEVATED_MB,
+        "wal_critical": wal_size_mb >= DIAGNOSTIC_WAL_CRITICAL_MB,
+        "orphaned_running": bool(orphaned_running),
+    }
+    trend_summary = (
+        build_trend_summary(db, 24)
+        if include_history
+        else schemas.DiagnosticsTrendSummary().model_dump()
+    )
 
     return {
         "version": ORCHESTRATOR_VERSION,
@@ -656,6 +742,7 @@ def build_diagnostics_payload(
             "active_by_priority": active_by_priority,
             "active_by_group": active_by_group,
             "running_over_runtime": running_over_runtime,
+            "orphaned_running": orphaned_running,
             "retry_pressure": retry_pressure,
             "timeouts_24h_by_group": timeouts_24h_by_group,
             "oldest_pending": {
@@ -668,6 +755,10 @@ def build_diagnostics_payload(
                 ),
                 "priority": oldest_pending.priority if oldest_pending else None,
                 "queue_group": oldest_pending.queue_group if oldest_pending else None,
+                "claimed_at": oldest_pending.claimed_at if oldest_pending else None,
+                "worker_instance_id": oldest_pending.worker_instance_id if oldest_pending else None,
+                "worker_pid": oldest_pending.worker_pid if oldest_pending else None,
+                "orphaned": False,
                 "age_seconds": pending_age_seconds,
             },
             "oldest_running": {
@@ -680,6 +771,13 @@ def build_diagnostics_payload(
                 ),
                 "priority": oldest_running.priority if oldest_running else None,
                 "queue_group": oldest_running.queue_group if oldest_running else None,
+                "claimed_at": oldest_running.claimed_at if oldest_running else None,
+                "worker_instance_id": oldest_running.worker_instance_id if oldest_running else None,
+                "worker_pid": oldest_running.worker_pid if oldest_running else None,
+                "orphaned": bool(
+                    oldest_running
+                    and any(item["exec_id"] == oldest_running.id for item in orphaned_running)
+                ),
                 "age_seconds": running_age_seconds,
             },
         },
@@ -710,17 +808,9 @@ def build_diagnostics_payload(
                 "wal_elevated_mb": DIAGNOSTIC_WAL_ELEVATED_MB,
                 "wal_critical_mb": DIAGNOSTIC_WAL_CRITICAL_MB,
             },
-            "breaches": {
-                "pending_stalled": pending_age_seconds
-                >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
-                "running_stalled": running_age_seconds
-                >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
-                "running_over_runtime": bool(running_over_runtime),
-                "worker_offline": not worker_status.is_alive
-                and (last_ping_age_seconds or 0) >= DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
-                "wal_elevated": wal_size_mb >= DIAGNOSTIC_WAL_ELEVATED_MB,
-                "wal_critical": wal_size_mb >= DIAGNOSTIC_WAL_CRITICAL_MB,
-            },
+            "breaches": slo_breaches,
         },
+        "slo_breaches": slo_breaches,
+        "trend_summary": trend_summary,
         "schema_version": schema_version,
     }

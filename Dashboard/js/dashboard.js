@@ -13,9 +13,12 @@ import {
     getLastCorrelationId,
     setContractCompatibility,
     safePrompt,
-} from "./api.js?v=20260521c";
+} from "./api.js?v=20260524a";
 import { bindActionElements, registerAction } from "./action_registry.js";
-import { normalizeOverviewPayload } from "./contracts.js";
+import {
+    normalizeOverviewPayload,
+    normalizePortfolioHealthPayload,
+} from "./contracts.js";
 import * as ui from "./ui_manager.js?v=20260521c";
 import * as ide from "./ide_service.js?v=20260521c";
 import * as engine from "./execution_engine.js?v=20260521c";
@@ -224,6 +227,7 @@ function registerStaticActions() {
     registerAction("open-edit-auto", (_event, element) => openAutomationModal(Number(element?.dataset?.automationId || 0)));
     registerAction("clone-auto", (_event, element) => cloneAuto(Number(element?.dataset?.automationId || 0)));
     registerAction("open-automation-history", (_event, element) => openAutomationHistory(Number(element?.dataset?.automationId || 0)));
+    registerAction("open-portfolio-runbook", (_event, element) => openPortfolioRunbook(element?.dataset?.catalogId || ""));
     registerAction("open-json-modal", (_event, element) => ide.openJsonModal(Number(element?.dataset?.automationId || 0), element?.dataset?.automationName || ""));
     registerAction("open-ide-modal", (_event, element) => ide.openIdeModal(Number(element?.dataset?.automationId || 0), element?.dataset?.automationName || ""));
     registerAction("remove-schedule-time", (_event, element) => removeScheduleTime(element?.dataset?.hhmm || ""));
@@ -260,12 +264,16 @@ function registerStaticActions() {
 }
 
 async function loadOverview() {
-    const rawOverview = await api("/api/system/overview");
+    const [rawOverview, rawPortfolio] = await Promise.all([
+        api("/api/system/overview"),
+        api("/api/portfolio/health"),
+    ]);
     if (!rawOverview) {
         ui.updateConnectionStatus(false);
         return;
     }
     const overview = normalizeOverviewPayload(rawOverview);
+    const portfolio = normalizePortfolioHealthPayload(rawPortfolio || {});
     applyContractCompatibility(overview.contract_version || "legacy");
     ui.updateConnectionStatus(true);
 
@@ -273,6 +281,7 @@ async function loadOverview() {
     renderOverviewInsights(overview);
     renderOverviewCharts(overview);
     await populateControlTable(overview);
+    renderPortfolioTable(portfolio);
     syncGlobalTestToggle(overview.automations || []);
     document.body.dataset.contractVersion = overview.contract_version || "legacy";
     if (typeof lucide !== "undefined") lucide.createIcons();
@@ -498,6 +507,68 @@ async function populateControlTable(overview) {
     bindActionElements(tbody);
 }
 
+function renderPortfolioTable(portfolio) {
+    const tbody = document.getElementById("portfolio-tbody");
+    if (!tbody) return;
+
+    const items = Array.isArray(portfolio?.items) ? portfolio.items : [];
+    if (!items.length) {
+        tbody.innerHTML = "<tr><td colspan=\"6\">Nenhuma automação governada encontrada.</td></tr>";
+        return;
+    }
+
+    tbody.innerHTML = items.map((item) => {
+        const successLabel = item.last_success_at || "Sem sucesso recente";
+        const successMeta = item.last_success_age_minutes !== null && item.last_success_age_minutes !== undefined
+            ? `<span class="cell-meta">Há ${escapeHtml(String(item.last_success_age_minutes))} min</span>`
+            : (item.last_failure_at ? `<span class="cell-meta">Última falha: ${escapeHtml(item.last_failure_at)}</span>` : "<span class=\"cell-meta\">Sem histórico operacional</span>");
+        const lagMeta = item.schedule_lag_minutes
+            ? `<span class="cell-meta">Atraso de agenda: ${escapeHtml(String(item.schedule_lag_minutes))} min</span>`
+            : "";
+        const dependencyMeta = buildDependencySummary(item.dependency_status || {});
+        const governanceMeta = [
+            item.docs_status === "complete" ? "Docs completos" : "Docs pendentes",
+            item.drift_count ? `${item.drift_count} drift(s)` : "Sem drift",
+        ].join(" • ");
+        const canOpenRunbook = item.runbook_path && item.docs_status === "complete";
+
+        return `
+            <tr>
+                <td>
+                    <strong>${escapeHtml(item.name)}</strong>
+                    <span class="cell-meta">${escapeHtml(item.owner_area || "Owner não definido")}</span>
+                </td>
+                <td>
+                    ${renderCriticalityBadge(item.criticality)}
+                    ${renderSlaStateBadge(item.sla_state, item.sla_minutes)}
+                </td>
+                <td>
+                    ${renderPortfolioHealthBadge(item.health_status)}
+                    <span class="cell-meta">${escapeHtml(dependencyMeta)}</span>
+                </td>
+                <td>
+                    ${escapeHtml(successLabel)}
+                    ${successMeta}
+                    ${lagMeta}
+                </td>
+                <td>
+                    ${renderDocsStatusBadge(item.docs_status)}
+                    ${renderDriftStatusBadge(item.drift_count)}
+                    <span class="cell-meta">${escapeHtml(governanceMeta)}</span>
+                </td>
+                <td>
+                    <div class="inline-actions">
+                        <button class="btn-icon" data-action="open-portfolio-runbook" data-catalog-id="${escapeHtml(item.catalog_id)}" title="Abrir runbook" ${canOpenRunbook ? "" : "disabled"}>
+                            <i data-lucide="book-open"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join("");
+    bindActionElements(tbody);
+}
+
 async function loadExecutions(page = execPage) {
     return executionsModule.loadExecutions(page);
 }
@@ -630,6 +701,110 @@ function renderOperationalStateBadge(state) {
         return `<span class="cell-meta"><span class="badge badge-muted">Pausada</span></span>`;
     }
     return "";
+}
+
+function renderCriticalityBadge(criticality) {
+    const normalized = String(criticality || "unclassified").toLowerCase();
+    const labelMap = {
+        critical: "Crítica",
+        high: "Alta",
+        medium: "Média",
+        low: "Baixa",
+        unclassified: "Sem classe",
+    };
+    const classMap = {
+        critical: "badge-danger",
+        high: "badge-warning",
+        medium: "badge-info",
+        low: "badge-muted",
+        unclassified: "badge-muted",
+    };
+    return `<span class="badge ${classMap[normalized] || "badge-muted"}">${escapeHtml(labelMap[normalized] || "Sem classe")}</span>`;
+}
+
+function renderSlaStateBadge(state, slaMinutes) {
+    const normalized = String(state || "unknown").toLowerCase();
+    const labelBase = Number.isFinite(Number(slaMinutes)) ? `SLA ${slaMinutes} min` : "SLA n/d";
+    if (normalized === "breached") {
+        return `<span class="badge badge-danger">${escapeHtml(labelBase)} estourado</span>`;
+    }
+    if (normalized === "recovering") {
+        return `<span class="badge badge-warning">${escapeHtml(labelBase)} em recuperação</span>`;
+    }
+    if (normalized === "ok") {
+        return `<span class="badge badge-success">${escapeHtml(labelBase)}</span>`;
+    }
+    return `<span class="badge badge-muted">${escapeHtml(labelBase)}</span>`;
+}
+
+function renderPortfolioHealthBadge(status) {
+    const normalized = String(status || "unknown").toLowerCase();
+    const labelMap = {
+        healthy: "Saudável",
+        attention: "Atenção",
+        breached: "SLA estourado",
+        in_progress: "Em execução",
+        paused: "Pausada",
+        idle: "Sem atividade",
+        not_registered: "Sem cadastro",
+        not_governed: "Sem manifesto",
+    };
+    const classMap = {
+        healthy: "badge-success",
+        attention: "badge-warning",
+        breached: "badge-danger",
+        in_progress: "badge-info",
+        paused: "badge-muted",
+        idle: "badge-muted",
+        not_registered: "badge-danger",
+        not_governed: "badge-danger",
+    };
+    return `<span class="badge ${classMap[normalized] || "badge-muted"}">${escapeHtml(labelMap[normalized] || "Desconhecido")}</span>`;
+}
+
+function renderDocsStatusBadge(status) {
+    return `<span class="badge ${status === "complete" ? "badge-success" : "badge-warning"}">${status === "complete" ? "Docs OK" : "Docs pendentes"}</span>`;
+}
+
+function renderDriftStatusBadge(driftCount) {
+    const count = Number(driftCount || 0);
+    if (count <= 0) {
+        return "<span class=\"badge badge-success\">Sem drift</span>";
+    }
+    return `<span class="badge badge-warning">${escapeHtml(String(count))} drift(s)</span>`;
+}
+
+function buildDependencySummary(status) {
+    const labels = [];
+    if (status.oracle && status.oracle !== "not_used") labels.push(`Oracle ${translateDependencyStatus(status.oracle)}`);
+    if (status.outlook && status.outlook !== "not_used") labels.push(`Outlook ${translateDependencyStatus(status.outlook)}`);
+    if (status.whatsapp && status.whatsapp !== "not_used") labels.push(`WhatsApp ${translateDependencyStatus(status.whatsapp)}`);
+    return labels.length ? labels.join(" • ") : "Sem dependência mapeada";
+}
+
+function translateDependencyStatus(status) {
+    switch (String(status || "").toLowerCase()) {
+        case "healthy": return "OK";
+        case "degraded": return "degradado";
+        case "unknown": return "indefinido";
+        default: return "n/a";
+    }
+}
+
+async function openPortfolioRunbook(catalogId) {
+    if (!catalogId) {
+        showToast("Runbook indisponível para esta automação.", "warning");
+        return;
+    }
+    const content = await api(`/api/portfolio/runbook/${encodeURIComponent(catalogId)}`, "GET", null, { responseType: "text" });
+    if (!content) return;
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const child = window.open(url, "_blank", "noopener");
+    if (!child) {
+        showToast("Não foi possível abrir o runbook em nova janela.", "warning");
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function isRenderable(element) {

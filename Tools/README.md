@@ -12,6 +12,7 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Test-PortablePaths.ps1:** Impede o uso de caminhos absolutos (`C:\...`).
 - **Test-SourceEncoding.ps1:** Valida encoding por extensão: `.md/.py/.js/.json/.txt/.sql/.html/.css` em UTF-8 sem BOM e `.ps1/.psm1` em UTF-8 with BOM, com detecção de mojibake em Markdown.
 - **Test-PlaywrightEvidence.ps1:** Valida se o padrão, template e evidências Playwright registram URL real, ordem final, console limpo e resultado aprovado.
+- **Test-AutomationCatalog.ps1:** Valida `automation.manifest.json`, runbooks, smoke tests e coerência mínima do catálogo governado das automações.
 - **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
 
 ### Operação e Utilitários

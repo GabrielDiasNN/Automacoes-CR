@@ -29,7 +29,15 @@ from . import models
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
 from .database import SessionLocal, engine
 from .middleware import RateLimitMiddleware, RequestIdMiddleware, TimingMiddleware
-from .routers import automations, executions, system, websocket, automation_config, automation_ide
+from .routers import (
+    automation_config,
+    automation_ide,
+    automations,
+    executions,
+    portfolio,
+    system,
+    websocket,
+)
 from .runtime import get_allowed_origins, get_dashboard_path, get_lib_path, scheduler
 from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
 from .services.scheduler_runtime import register_enterprise_jobs, reload_scheduled_tasks
@@ -280,6 +288,7 @@ app.include_router(automations.router)
 app.include_router(automation_config.router)
 app.include_router(automation_ide.router)
 app.include_router(executions.router)
+app.include_router(portfolio.router)
 app.include_router(system.router)
 app.include_router(websocket.router)
 

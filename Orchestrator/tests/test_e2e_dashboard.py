@@ -72,7 +72,7 @@ def setup_test_database() -> Generator[None, None, None]:
     auto1 = models.Automation(
         name="Receitas Bloqueadas",
         description="Filtra pedidos bloqueados no Oracle",
-        script_path="./Receitas Bloqueadas/processar_receitas.py",
+        script_path="./Receitas Bloqueadas/run.ps1",
         enabled=True,
         max_retries=2,
         queue_group="oracle",
@@ -81,7 +81,7 @@ def setup_test_database() -> Generator[None, None, None]:
     auto2 = models.Automation(
         name="Montagem de Terceirizados",
         description="Extrai e valida NFs da Montagem",
-        script_path="./Montagem de Terceirizados/validate_and_generate_html.py",
+        script_path="./Montagem de Terceirizados/run.ps1",
         enabled=True,
         max_retries=1,
         queue_group="oracle",
@@ -343,7 +343,7 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
         f"{uvicorn_server}/api/automations",
         json={
             "name": "Timezone E2E Auto",
-            "script_path": "./Receitas Bloqueadas/processar_receitas.py",
+            "script_path": "./Receitas Bloqueadas/run.ps1",
             "schedule": f'{{"schedule_type":"once","run_at":"{scheduled_run_at}","timezone":"America/Sao_Paulo"}}',
             "enabled": True,
         },
@@ -403,6 +403,21 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
         assert_br_datetime(value)
 
 
+def test_e2e_dashboard_portfolio_panel_exposes_governed_catalog(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Valida se o painel operacional mostra o catálogo governado do portfólio."""
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector("#portfolio-tbody")
+
+    portfolio_text = page.locator("#portfolio-tbody").text_content() or ""
+    assert "Receitas Bloqueadas" in portfolio_text
+    assert "Montagem de Terceirizados" in portfolio_text
+    assert "Docs OK" in portfolio_text
+
+
 def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -> None:
     """Valida diretamente o módulo JS de datas do dashboard no navegador."""
     page.on("dialog", lambda dialog: dialog.accept(API_KEY))
@@ -449,13 +464,13 @@ def test_e2e_dashboard_executions_filters_all_controls(uvicorn_server: str, page
     try:
         auto_match = models.Automation(
             name="Filtro Match Auto",
-            script_path="./Receitas Bloqueadas/processar_receitas.py",
+            script_path="./Receitas Bloqueadas/run.ps1",
             enabled=True,
             queue_group="financeiro",
         )
         auto_other = models.Automation(
             name="Filtro Other Auto",
-            script_path="./Montagem de Terceirizados/validate_and_generate_html.py",
+            script_path="./Montagem de Terceirizados/run.ps1",
             enabled=True,
             queue_group="operacional",
         )
@@ -608,13 +623,13 @@ def test_e2e_dashboard_automations_search_filters_visible_grid(uvicorn_server: s
                 models.Automation(
                     name="Auto Busca Financeiro",
                     description="Consolidação financeira diária",
-                    script_path="./Receitas Bloqueadas/processar_receitas.py",
+                    script_path="./Receitas Bloqueadas/run.ps1",
                     enabled=True,
                 ),
                 models.Automation(
                     name="Auto Busca Operacional",
                     description="Rotina de expedição",
-                    script_path="./Montagem de Terceirizados/validate_and_generate_html.py",
+                    script_path="./Montagem de Terceirizados/run.ps1",
                     enabled=True,
                 ),
                 models.Automation(
@@ -828,13 +843,13 @@ def test_e2e_dashboard_system_shortcuts_open_execution_triage(uvicorn_server: st
     try:
         auto_group = models.Automation(
             name="Atalho Grupo Ativo",
-            script_path="./Receitas Bloqueadas/processar_receitas.py",
+            script_path="./Receitas Bloqueadas/run.ps1",
             enabled=True,
             queue_group="grupo_sistema",
         )
         auto_hotspot = models.Automation(
             name="Atalho Hotspot",
-            script_path="./Montagem de Terceirizados/validate_and_generate_html.py",
+            script_path="./Montagem de Terceirizados/run.ps1",
             enabled=True,
             queue_group="hotspot_ops",
         )

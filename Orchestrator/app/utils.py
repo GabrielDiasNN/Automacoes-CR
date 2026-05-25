@@ -30,7 +30,7 @@ def log_audit(
     entity_id,
     actor: str,
     details: str = None,
-) -> None:
+) -> models.AuditLog:
     """Registra uma entrada no AuditLog de forma centralizada com protecao de tamanho."""
     correlation_id = request_id_var.get("SYSTEM")
     # Truncar detalhes excessivos para evitar inchaco do DB (max 20k chars)
@@ -65,6 +65,7 @@ def log_audit(
         details=safe_details,
     )
     db.add(entry)
+    return entry
 
 
 # ---------------------------------------------------------------------------

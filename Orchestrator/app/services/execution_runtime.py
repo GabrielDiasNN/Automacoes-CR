@@ -110,39 +110,70 @@ def get_group_active_execution(
     return query.order_by(models.Execution.started_at.desc()).first()
 
 
-def claim_next_task(db: Session) -> Optional[str]:
+def _has_running_execution_for_group(
+    db: Session,
+    queue_group: Optional[str],
+) -> bool:
+    if not queue_group:
+        return False
+    return (
+        db.query(models.Execution.id)
+        .filter(
+            models.Execution.status == EXECUTION_STATUS_RUNNING,
+            models.Execution.queue_group == queue_group,
+        )
+        .first()
+        is not None
+    )
+
+
+def claim_next_task(
+    db: Session,
+    worker_instance_id: Optional[str] = None,
+    worker_pid: Optional[int] = None,
+) -> Optional[str]:
     priority_rank = case(
         (models.Execution.priority == PRIORITY_HIGH, 0),
         (models.Execution.priority == PRIORITY_NORMAL, 1),
         (models.Execution.priority == PRIORITY_LOW, 2),
         else_=1,
     )
-    candidate = (
-        db.query(models.Execution.id)
+    candidates = (
+        db.query(models.Execution)
         .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
         .order_by(priority_rank.asc(), models.Execution.started_at.asc())
-        .first()
+        .limit(25)
+        .all()
     )
-    if not candidate:
+    if not candidates:
         return None
 
-    exec_id = candidate.id
-    updated = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.id == exec_id,
-            models.Execution.status == EXECUTION_STATUS_PENDING,
+    for candidate in candidates:
+        if _has_running_execution_for_group(db, candidate.queue_group):
+            continue
+
+        claimed_at = get_now_local()
+        updated = (
+            db.query(models.Execution)
+            .filter(
+                models.Execution.id == candidate.id,
+                models.Execution.status == EXECUTION_STATUS_PENDING,
+            )
+            .update(
+                {
+                    models.Execution.status: EXECUTION_STATUS_RUNNING,
+                    models.Execution.started_at: claimed_at,
+                    models.Execution.claimed_at: claimed_at,
+                    models.Execution.worker_instance_id: worker_instance_id,
+                    models.Execution.worker_pid: worker_pid,
+                },
+                synchronize_session=False,
+            )
         )
-        .update(
-            {
-                models.Execution.status: EXECUTION_STATUS_RUNNING,
-                models.Execution.started_at: get_now_local(),
-            },
-            synchronize_session=False,
-        )
-    )
-    db.commit()
-    return exec_id if updated == 1 else None
+        db.commit()
+        if updated == 1:
+            return candidate.id
+    return None
 
 
 def classify_process_result(

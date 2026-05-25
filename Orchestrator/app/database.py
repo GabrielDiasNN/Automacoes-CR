@@ -84,6 +84,9 @@ EXPECTED_SCHEMA = {
         "exit_code",
         "requested_by",
         "started_at",
+        "claimed_at",
+        "worker_instance_id",
+        "worker_pid",
         "finished_at",
         "duration_seconds",
         "artifacts",
@@ -92,12 +95,30 @@ EXPECTED_SCHEMA = {
     "worker_heartbeat": {
         "id",
         "pid",
+        "instance_id",
+        "host",
         "last_ping",
         "uptime_seconds",
         "tasks_completed",
         "tasks_failed",
         "active_tasks",
         "version",
+    },
+    "system_health_snapshots": {
+        "id",
+        "timestamp",
+        "overall_status",
+        "pending_count",
+        "running_count",
+        "oldest_pending_age_seconds",
+        "oldest_running_age_seconds",
+        "wal_size_mb",
+        "worker_last_ping_age_seconds",
+        "running_over_runtime_count",
+        "orphaned_running_count",
+        "failure_hotspots",
+        "active_queue_groups",
+        "slo_breaches",
     },
     "audit_log": {
         "id",
@@ -207,8 +228,6 @@ def run_schema_migrations() -> dict:
         "applied": ["alembic_upgrade_head"],
         "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
     }
-
-
 
 def get_db_size_mb() -> float:
     """Retorna o tamanho atual do banco em MB."""

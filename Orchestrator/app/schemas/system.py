@@ -21,6 +21,8 @@ from .executions import ExecutionSummary
 class WorkerStatus(BaseModel):
     is_alive: bool
     pid: Optional[int] = None
+    instance_id: Optional[str] = None
+    host: Optional[str] = None
     last_ping: Any = None
     uptime_seconds: Optional[float] = None
     tasks_completed: int = 0
@@ -144,7 +146,16 @@ class DiagnosticsQueueItem(BaseModel):
     automation_name: Optional[str] = None
     priority: Optional[str] = None
     queue_group: Optional[str] = None
+    claimed_at: Optional[Any] = None
+    worker_instance_id: Optional[str] = None
+    worker_pid: Optional[int] = None
+    orphaned: bool = False
     age_seconds: float = 0.0
+
+    @model_validator(mode="after")
+    def apply_br_format(self) -> "DiagnosticsQueueItem":
+        self.claimed_at = format_dt_br(self.claimed_at)
+        return self
 
 
 class DiagnosticsQueue(BaseModel):
@@ -153,6 +164,7 @@ class DiagnosticsQueue(BaseModel):
     active_by_priority: dict[str, int] = {}
     active_by_group: dict[str, int] = {}
     running_over_runtime: List[dict] = []
+    orphaned_running: List[dict] = []
     retry_pressure: List[dict] = []
     timeouts_24h_by_group: List[dict] = []
     oldest_pending: DiagnosticsQueueItem
@@ -203,6 +215,25 @@ class DiagnosticsTrace(BaseModel):
     correlation_id: Optional[str] = None
 
 
+class DiagnosticsTrendSummary(BaseModel):
+    window_hours: int = 24
+    points: int = 0
+    latest_status: Optional[str] = None
+    status_counts: dict[str, int] = {}
+    max_pending_age_seconds: float = 0.0
+    max_running_age_seconds: float = 0.0
+    max_wal_size_mb: float = 0.0
+    worker_offline_events: int = 0
+    stale_pending_events: int = 0
+    orphaned_running_events: int = 0
+    last_snapshot_at: Optional[Any] = None
+
+    @model_validator(mode="after")
+    def apply_br_format(self) -> "DiagnosticsTrendSummary":
+        self.last_snapshot_at = format_dt_br(self.last_snapshot_at)
+        return self
+
+
 class DiagnosticsPayload(BaseModel):
     version: str = ORCHESTRATOR_VERSION
     schema_version: str = ORCHESTRATOR_SCHEMA_VERSION
@@ -220,6 +251,8 @@ class DiagnosticsPayload(BaseModel):
     checks: List[RuntimeCheckItem] = []
     recovery: RecoveryPlan = Field(default_factory=RecoveryPlan)
     slo: DiagnosticsSlo = Field(default_factory=DiagnosticsSlo)
+    slo_breaches: dict[str, bool] = {}
+    trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
     trace: DiagnosticsTrace = Field(default_factory=DiagnosticsTrace)
 
 
@@ -259,6 +292,14 @@ class EnvValidationResponse(BaseModel):
     issue_count: int
     normalized_line_count: int
     issues: List[EnvValidationIssue]
+
+
+class ManagedMutationResponse(BaseModel):
+    message: str
+    validated: bool = True
+    backup: Optional[str] = None
+    backup_path: Optional[str] = None
+    audit_id: Optional[int] = None
 
 
 class SystemOverviewKpis(BaseModel):
@@ -335,7 +376,125 @@ class SystemOverviewResponse(BaseModel):
     top_failures: List[SystemOverviewFailure]
     scheduler: SystemOverviewScheduler
     queue: SystemOverviewQueue
+    trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
     diagnostics: DiagnosticsPayload
+
+
+class SystemHistoryPoint(BaseModel):
+    timestamp: Any
+    overall_status: str
+    pending_count: int = 0
+    running_count: int = 0
+    oldest_pending_age_seconds: float = 0.0
+    oldest_running_age_seconds: float = 0.0
+    wal_size_mb: float = 0.0
+    worker_last_ping_age_seconds: Optional[float] = None
+    running_over_runtime_count: int = 0
+    orphaned_running_count: int = 0
+    active_queue_groups: List[str] = []
+    failure_hotspots: List[str] = []
+    slo_breaches: dict[str, bool] = {}
+
+    @model_validator(mode="after")
+    def apply_br_format(self) -> "SystemHistoryPoint":
+        self.timestamp = format_dt_br(self.timestamp)
+        return self
+
+
+class SystemHistoryResponse(BaseModel):
+    generated_at: str
+    hours: int
+    points: int
+    trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
+    items: List[SystemHistoryPoint] = []
+
+
+class PortfolioDependencyStatus(BaseModel):
+    oracle: str = "not_used"
+    outlook: str = "not_used"
+    whatsapp: str = "not_used"
+
+
+class PortfolioHealthItem(BaseModel):
+    catalog_id: str
+    automation_id: Optional[int] = None
+    name: str
+    slug: str
+    criticality: str
+    owner_area: Optional[str] = None
+    runtime: str
+    enabled: bool = False
+    queue_group: Optional[str] = None
+    sla_minutes: Optional[int] = None
+    health_status: str = "unknown"
+    sla_state: str = "unknown"
+    docs_status: str = "missing"
+    drift_status: str = "ok"
+    drift_count: int = 0
+    runbook_path: Optional[str] = None
+    readme_path: Optional[str] = None
+    context_path: Optional[str] = None
+    next_run: Any = None
+    schedule_summary: Optional[str] = None
+    schedule_lag_minutes: Optional[int] = None
+    last_status: Optional[str] = None
+    last_success_at: Any = None
+    last_failure_at: Any = None
+    last_success_age_minutes: Optional[int] = None
+    last_failure_age_minutes: Optional[int] = None
+    dependency_status: PortfolioDependencyStatus = Field(
+        default_factory=PortfolioDependencyStatus
+    )
+
+    @model_validator(mode="after")
+    def apply_br_format(self) -> "PortfolioHealthItem":
+        self.next_run = format_dt_br(self.next_run)
+        self.last_success_at = format_dt_br(self.last_success_at)
+        self.last_failure_at = format_dt_br(self.last_failure_at)
+        return self
+
+
+class PortfolioHealthSummary(BaseModel):
+    total_items: int
+    governed_items: int
+    enabled_items: int
+    drift_items: int
+    docs_missing_items: int
+    sla_breached_items: int
+    not_registered_items: int
+
+
+class PortfolioHealthResponse(BaseModel):
+    generated_at: str
+    summary: PortfolioHealthSummary
+    items: List[PortfolioHealthItem]
+
+
+class PortfolioDriftIssue(BaseModel):
+    code: str
+    message: str
+    severity: str = "WARN"
+    manifest_value: Optional[str] = None
+    runtime_value: Optional[str] = None
+
+
+class PortfolioDriftItem(BaseModel):
+    catalog_id: str
+    automation_id: Optional[int] = None
+    name: str
+    slug: str
+    issues: List[PortfolioDriftIssue] = []
+
+
+class PortfolioDriftSummary(BaseModel):
+    items_with_drift: int
+    total_issues: int
+
+
+class PortfolioDriftResponse(BaseModel):
+    generated_at: str
+    summary: PortfolioDriftSummary
+    items: List[PortfolioDriftItem] = []
 
 
 class AuditEntry(BaseModel):

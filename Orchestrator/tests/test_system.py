@@ -140,6 +140,38 @@ def test_system_version_exposes_contract_version(client):
     assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
 
+def test_system_history_endpoint_returns_snapshots(client, db_session):
+    from app import models
+    from app.timezone import get_now_local
+
+    db_session.add(
+        models.SystemHealthSnapshot(
+            timestamp=get_now_local(),
+            overall_status="degraded",
+            pending_count=2,
+            running_count=1,
+            oldest_pending_age_seconds=120.0,
+            oldest_running_age_seconds=30.0,
+            wal_size_mb=12.5,
+            worker_last_ping_age_seconds=20.0,
+            running_over_runtime_count=0,
+            orphaned_running_count=0,
+            failure_hotspots='["Auto A"]',
+            active_queue_groups='["financeiro"]',
+            slo_breaches='{"pending_stalled": false}',
+        )
+    )
+    db_session.commit()
+
+    res = client.get("/api/system/history?hours=24", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["points"] >= 1
+    assert data["trend_summary"]["points"] >= 1
+    assert data["items"][0]["overall_status"] == "degraded"
+    assert data["items"][0]["active_queue_groups"] == ["financeiro"]
+
+
 def test_diagnostics_offline_worker_prefers_recovery_action(
     client, db_session, monkeypatch
 ):
@@ -277,6 +309,8 @@ def test_update_env_creates_backup(client, monkeypatch, tmp_path):
     assert backup_path.exists()
     assert backup_path.read_text(encoding="utf-8") == "ORCHESTRATOR_API_KEY=old\n"
     assert env_path.read_text(encoding="utf-8") == "ORCHESTRATOR_API_KEY=new\n"
+    assert res.json()["validated"] is True
+    assert res.json()["audit_id"] is not None
 
 
 def test_system_router_project_root_points_to_repo_root():

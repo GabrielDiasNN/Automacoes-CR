@@ -59,7 +59,10 @@ def get_automation_scripts(
     return scripts
 
 
-@router.put("/{auto_id}/scripts/{filename}")
+@router.put(
+    "/{auto_id}/scripts/{filename}",
+    response_model=schemas.ManagedMutationResponse,
+)
 def update_automation_script(
     auto_id: int,
     filename: str,
@@ -89,7 +92,7 @@ def update_automation_script(
             with open(target_path, "w", encoding="utf-8") as f:
                 f.write(payload.content)
 
-        log_audit(
+        audit_entry = log_audit(
             db,
             "UPDATE_SCRIPT",
             "AUTOMATION",
@@ -97,7 +100,14 @@ def update_automation_script(
             get_client_ip(request),
             json.dumps({"filename": filename, "backup": backup_relpath}),
         )
+        db.flush()
         db.commit()
-        return {"message": "Código-fonte salvo com sucesso!", "backup": backup_relpath}
+        return {
+            "message": "Código-fonte salvo com sucesso!",
+            "validated": True,
+            "backup": backup_relpath,
+            "backup_path": backup_relpath,
+            "audit_id": audit_entry.id,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

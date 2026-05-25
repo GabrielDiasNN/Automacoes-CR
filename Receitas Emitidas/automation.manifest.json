@@ -1,0 +1,31 @@
+{
+  "id": "RE-03",
+  "name": "Receitas Emitidas",
+  "slug": "receitas-emitidas",
+  "criticality": "medium",
+  "sla_minutes": 360,
+  "owner_area": "Planejamento / Tinturaria / PCP",
+  "entrypoint": "run.ps1",
+  "runtime": "powershell",
+  "channels": [
+    "email"
+  ],
+  "queue_group": "oracle",
+  "max_runtime_minutes": 30,
+  "max_retries": 0,
+  "schedule_summary": "Seg-Sex às 17:00",
+  "runbook_path": "docs/runbooks/receitas-emitidas-runbook.md",
+  "context_path": "Receitas Emitidas/CONTEXT.md",
+  "readme_path": "Receitas Emitidas/README.md",
+  "orchestrator": {
+    "script_path": "./Receitas Emitidas/run.ps1"
+  },
+  "dependencies": {
+    "oracle": true,
+    "outlook": true,
+    "whatsapp": false
+  },
+  "smoke_tests": [
+    "Orchestrator/tests/test_receitas_emitidas.py"
+  ]
+}

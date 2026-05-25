@@ -193,6 +193,9 @@ export async function api(path, method = "GET", body = null, options = {}) {
             throw new Error(`${baseMessage}${correlationSuffix}`);
         }
         if (res.status === 204) return {};
+        if (options.responseType === "text") {
+            return await res.text();
+        }
         const payload = await res.json().catch(() => ({}));
         if (payload?.trace?.correlation_id) latestCorrelationId = payload.trace.correlation_id;
         return payload;

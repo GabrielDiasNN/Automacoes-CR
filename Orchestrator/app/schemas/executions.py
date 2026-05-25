@@ -24,6 +24,9 @@ class ExecutionBase(BaseModel):
     exit_code: Optional[int] = None
     requested_by: Optional[str] = "SYSTEM"
     started_at: Any
+    claimed_at: Optional[Any] = None
+    worker_instance_id: Optional[str] = None
+    worker_pid: Optional[int] = None
     finished_at: Optional[Any] = None
     duration_seconds: Optional[float] = None
 
@@ -46,6 +49,7 @@ class ExecutionBase(BaseModel):
     @model_validator(mode="after")
     def apply_br_format(self) -> "ExecutionBase":
         self.started_at = format_dt_br(self.started_at)
+        self.claimed_at = format_dt_br(self.claimed_at)
         self.finished_at = format_dt_br(self.finished_at)
         return self
 

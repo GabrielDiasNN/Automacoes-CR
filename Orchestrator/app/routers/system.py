@@ -46,6 +46,7 @@ from ..services.env_admin import write_env_content
 from ..services.scheduler_runtime import list_scheduled_jobs as build_scheduled_jobs
 from ..services.scheduler_runtime import reload_scheduled_tasks
 from ..services.system_diagnostics import build_diagnostics_payload
+from ..services.system_history import build_system_history_response
 from ..services.system_overview import build_system_overview_payload
 from ..services.system_runtime import build_health_payload, build_version_payload
 from ..services.system_runtime import get_worker_status as get_worker_status_service
@@ -484,6 +485,16 @@ def get_diagnostics(
     return payload
 
 
+@router.get("/history", response_model=schemas.SystemHistoryResponse)
+def get_system_history(
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Retorna histórico recente de snapshots operacionais do Orchestrator."""
+    return build_system_history_response(db, hours)
+
+
 @router.post("/schedule/validate", response_model=schemas.ScheduleValidationResponse)
 def validate_schedule_payload(
     payload: schemas.ScheduleValidationRequest,
@@ -641,7 +652,7 @@ def validate_env_content(
     return validate_env_payload(payload.content)
 
 
-@router.put("/env")
+@router.put("/env", response_model=schemas.ManagedMutationResponse)
 def update_env_content(
     payload: schemas.EnvContent,
     db: Session = Depends(get_db),
@@ -665,7 +676,7 @@ def update_env_content(
 
         logger.info("Arquivo .env global atualizado via API.")
 
-        log_audit(
+        audit_entry = log_audit(
             db,
             "UPDATE_ENV",
             "SYSTEM",
@@ -678,12 +689,18 @@ def update_env_content(
                 }
             ),
         )
+        db.flush()
         db.commit()
 
         return {
             "message": "Arquivo .env salvo com sucesso. Reinicie o Orchestrator para aplicar certas mudanças.",
             "backup": backup_relpath,
+            "backup_path": backup_relpath,
+            "validated": True,
+            "audit_id": audit_entry.id,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Erro ao salvar .env: {e}")
         raise HTTPException(

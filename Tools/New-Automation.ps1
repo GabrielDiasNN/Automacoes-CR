@@ -25,6 +25,7 @@ if ([string]::IsNullOrWhiteSpace($BasePath)) {
 
 $resolvedBasePath = (Resolve-Path -LiteralPath $BasePath).Path
 $templateDir = Join-Path $resolvedBasePath "_Template"
+$runbookTemplatePath = Join-Path $resolvedBasePath "docs\templates\automation-runbook-template.md"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 function Write-Step {
@@ -143,7 +144,9 @@ if ($legacyArgsUsed.Count -gt 0) {
 
 $automationDir = Join-Path $resolvedBasePath $Name
 $logsDir = Join-Path $automationDir "Logs"
+$runbookDir = Join-Path $resolvedBasePath "docs\runbooks"
 $slug = Get-AutomationSlug -AutomationName $Name
+$runbookPath = Join-Path $runbookDir "$slug-runbook.md"
 
 if (Test-Path -LiteralPath $automationDir) {
     Write-Step "Diretorio ja existe: $automationDir" -Type "ERRO"
@@ -158,6 +161,22 @@ $replacements = @{
 $readmeContent = Convert-Template -Content (Get-TemplateContent -TemplateName "README.md") -Replacements $replacements
 $contextContent = Convert-Template -Content (Get-TemplateContent -TemplateName "CONTEXT.md") -Replacements $replacements
 $runContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run.ps1") -Replacements $replacements
+$manifestContent = Convert-Template -Content (Get-TemplateContent -TemplateName "automation.manifest.json") -Replacements $replacements
+
+if (-not (Test-Path -LiteralPath $runbookTemplatePath -PathType Leaf)) {
+    Write-Step "Template de runbook nao encontrado em: $runbookTemplatePath" -Type "ERRO"
+    exit 1
+}
+
+$runbookContent = Get-Content -LiteralPath $runbookTemplatePath -Raw
+$runbookContent = $runbookContent.Replace("[Nome da Automação]", $Name)
+$runbookContent = $runbookContent.Replace("[Caminho do Diretório, ex: Receitas Bloqueadas]", $Name)
+$runbookContent = $runbookContent.Replace("[CRÍTICA / ALTA / MÉDIA / BAIXA]", "MÉDIA")
+$runbookContent = $runbookContent.Replace("[Tempo de recuperação tolerado, ex: 2 horas]", "6 horas")
+$runbookContent = $runbookContent.Replace("[Horários cron, ex: Seg-Sex às 07:30, 10:00, 14:00]", "Definir no cadastro operacional")
+$runbookContent = $runbookContent.Replace("[Nome / Setor, ex: Laboratório de Receitas / PCP]", "Definir owner do negócio")
+$runbookContent = $runbookContent.Replace("[Contato TI, ex: suporte.automacoes@empresa.com]", "Definir suporte técnico")
+$runbookContent = $runbookContent.Replace("C:\\Automacoes\\NomeDaAutomacao", "C:\\Automacoes\\$Name")
 
 $readmeContent += @"
 
@@ -166,12 +185,15 @@ Esta automação usa o fluxo atual do Hub: primeiro faça o scaffold local, depo
 
 - **Script principal sugerido:** `run.ps1`
 - **Logs esperados:** `Logs/`
+- **Manifesto canônico:** `automation.manifest.json`
+- **Runbook inicial:** `docs/runbooks/$slug-runbook.md`
 - **Cadastro no Orchestrator:** informe `script_path` apontando para o `run.ps1` desta pasta
 "@
 
 $contextContent += @"
 
 - **Registro no Orchestrator:** esta pasta nasce desacoplada de `config.json` legado; o cadastro operacional deve ser feito pelo Dashboard ou API.
+- **Catálogo governado:** preencha `automation.manifest.json` antes de promover a automação para operação recorrente.
 "@
 
 $runBatContent = @"
@@ -195,11 +217,14 @@ if (-not $DryRun) {
 else {
     Write-Step "Criaria diretorio: $automationDir"
     Write-Step "Criaria diretorio: $logsDir"
+    Write-Step "Criaria diretorio: $runbookDir"
 }
 
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "README.md") -Content $readmeContent -Operation "Gerar README da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "CONTEXT.md") -Content $contextContent -Operation "Gerar CONTEXT da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "run.ps1") -Content $runContent -Operation "Gerar run.ps1 da automacao"
+Invoke-SafeWrite -FilePath (Join-Path $automationDir "automation.manifest.json") -Content $manifestContent -Operation "Gerar automation.manifest.json"
+Invoke-SafeWrite -FilePath $runbookPath -Content $runbookContent -Operation "Gerar runbook operacional"
 
 if ($WithWhatsApp) {
     Invoke-SafeWrite -FilePath (Join-Path $automationDir "RunWhatsApp.bat") -Content $runBatContent -Operation "Gerar RunWhatsApp.bat"

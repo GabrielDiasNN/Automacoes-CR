@@ -1,0 +1,27 @@
+{
+  "id": "TMP-00",
+  "name": "[Nome da Automação]",
+  "slug": "TEMPLATE_SLUG",
+  "criticality": "medium",
+  "sla_minutes": 360,
+  "owner_area": "[Área dona do processo]",
+  "entrypoint": "run.ps1",
+  "runtime": "powershell",
+  "channels": [],
+  "queue_group": null,
+  "max_runtime_minutes": 30,
+  "max_retries": 0,
+  "schedule_summary": "Manual",
+  "runbook_path": "docs/runbooks/TEMPLATE_SLUG-runbook.md",
+  "context_path": "[Nome da Automação]/CONTEXT.md",
+  "readme_path": "[Nome da Automação]/README.md",
+  "orchestrator": {
+    "script_path": "./[Nome da Automação]/run.ps1"
+  },
+  "dependencies": {
+    "oracle": false,
+    "outlook": false,
+    "whatsapp": false
+  },
+  "smoke_tests": []
+}

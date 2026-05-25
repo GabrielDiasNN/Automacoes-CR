@@ -145,5 +145,6 @@ def build_system_overview_payload(
                 diagnostics_payload.get("queue", {}).get("active_by_priority", {})
             ),
         },
+        "trend_summary": diagnostics_payload.get("trend_summary", {}),
         "diagnostics": diagnostics_payload,
     }

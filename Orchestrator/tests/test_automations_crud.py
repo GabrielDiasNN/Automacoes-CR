@@ -31,6 +31,27 @@ def test_create_automation(client):
     assert data["schedule_summary"] == "Manual"
     assert data["operational_state"] == "idle"
     assert data["active_execution_count"] == 0
+    assert data["validated"] is True
+    assert data["audit_id"] is not None
+
+
+def test_preflight_automation_normalizes_channels(client):
+    res = client.post(
+        "/api/automations/preflight",
+        json={
+            "name": "Preflight Task",
+            "script_path": "./test/run.ps1",
+            "notification_channels": " whatsapp , email,whatsapp ",
+            "enabled": True,
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["valid"] is True
+    assert data["normalized_notification_channels"] == "email,whatsapp"
+    assert data["resolved_script_path"].endswith("test\\run.ps1")
+    assert data["schedule_summary"] == "Manual"
 
 
 def test_create_duplicate_name_rejected(client):
@@ -91,6 +112,8 @@ def test_update_automation(client):
     assert res.status_code == 200
     assert res.json()["description"] == "Atualizado"
     assert "last_execution_id" in res.json()
+    assert res.json()["validated"] is True
+    assert res.json()["audit_id"] is not None
 
 
 def test_update_automation_reloads_scheduler(client, monkeypatch):

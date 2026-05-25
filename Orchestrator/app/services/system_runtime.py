@@ -30,6 +30,8 @@ def get_worker_status(db: Session) -> schemas.WorkerStatus:
     return schemas.WorkerStatus(
         is_alive=is_alive,
         pid=hb.pid,
+        instance_id=hb.instance_id,
+        host=hb.host,
         last_ping=hb.last_ping,
         uptime_seconds=hb.uptime_seconds,
         tasks_completed=hb.tasks_completed,

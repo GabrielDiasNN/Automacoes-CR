@@ -11,6 +11,7 @@ import logging
 import logging.handlers
 import os
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -71,6 +72,10 @@ POLL_INTERVAL: float = 2.0
 MAX_POLL_INTERVAL: float = 15.0
 _port = os.environ.get("HUB_API_PORT", "8000")
 API_BASE: str = f"http://127.0.0.1:{_port}"
+WORKER_HOST: str = socket.gethostname()
+WORKER_INSTANCE_ID: str = os.environ.get("WORKER_INSTANCE_ID") or (
+    f"{WORKER_HOST}-{os.getpid()}-{int(time.time())}"
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -203,6 +208,8 @@ def heartbeat_loop() -> None:
                 hb = models.WorkerHeartbeat(
                     id=1,
                     pid=os.getpid(),
+                    instance_id=WORKER_INSTANCE_ID,
+                    host=WORKER_HOST,
                     last_ping=now,
                     uptime_seconds=time.time() - start_time,
                     tasks_completed=completed,
@@ -213,6 +220,8 @@ def heartbeat_loop() -> None:
                 db.add(hb)
             else:
                 hb.pid = os.getpid()
+                hb.instance_id = WORKER_INSTANCE_ID
+                hb.host = WORKER_HOST
                 hb.last_ping = now
                 hb.uptime_seconds = round(time.time() - start_time, 2)
                 hb.tasks_completed = completed
@@ -337,6 +346,9 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
         if db_exec.status == EXECUTION_STATUS_PENDING:
             db_exec.status = EXECUTION_STATUS_RUNNING
             db_exec.started_at = get_now_local()
+            db_exec.claimed_at = db_exec.started_at
+            db_exec.worker_instance_id = WORKER_INSTANCE_ID
+            db_exec.worker_pid = os.getpid()
             db.commit()
         elif db_exec.status != EXECUTION_STATUS_RUNNING:
             logger.warning(
@@ -580,7 +592,11 @@ def main_loop() -> None:
 
         db = SessionLocal()
         try:
-            exec_id = claim_next_task(db)
+            exec_id = claim_next_task(
+                db,
+                worker_instance_id=WORKER_INSTANCE_ID,
+                worker_pid=os.getpid(),
+            )
 
             if exec_id:
                 current_poll_interval = POLL_INTERVAL  # Reset do polling

@@ -17,6 +17,14 @@ export function normalizeOverviewPayload(payload) {
     };
 }
 
+export function normalizePortfolioHealthPayload(payload) {
+    return {
+        generated_at: payload?.generated_at || null,
+        summary: payload?.summary || {},
+        items: Array.isArray(payload?.items) ? payload.items : [],
+    };
+}
+
 export function normalizeDiagnosticsPayload(payload) {
     return {
         contract_version: payload?.contract_version || "legacy",

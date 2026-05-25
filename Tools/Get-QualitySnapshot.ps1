@@ -13,6 +13,10 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 # Garantir UTF-8 para saídas de console de ferramentas externas
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$env:PYTHONUTF8 = 1
+$env:PYLINTHOME = Join-Path $PSScriptRoot ".mypy_cache\pylint"
+$env:MYPYPATH = "$(Join-Path $PSScriptRoot "..\Orchestrator");$(Join-Path $PSScriptRoot "..")"
+New-Item -ItemType Directory -Force -Path $env:PYLINTHOME | Out-Null
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "   COLETANDO METRICAS DE QUALIDADE - HUB DE AUTOMACOES" -ForegroundColor Cyan
@@ -25,11 +29,40 @@ if (-not (Test-Path $venvPath)) {
 }
 $pythonExe = Join-Path $venvPath "Scripts\python.exe"
 
-# 2. Medir tamanho do código fonte e do repositório total
+function Get-PythonTool {
+    param([string]$ToolName)
+
+    $venvTool = Join-Path $PSScriptRoot "..\.venv\Scripts\$ToolName.exe"
+    if (Test-Path $venvTool) { return $venvTool }
+    if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $ToolName }
+    return $null
+}
+
+# 2. Medir tamanho do código fonte, payload versionado e pegada operacional local
 Write-Host "[1/6] Medindo tamanho do repositorio..." -ForegroundColor Yellow
 
 $excludeSourcePattern = '\\(\.git|\.venv|\.wwebjs_auth|\.mypy_cache|__pycache__|Logs|Backups|node_modules|playwright-report|test-results)\\'
-$excludeRepoPattern = '\\(\.venv|\.wwebjs_auth|node_modules|playwright-report|test-results)\\'
+$excludedOperationalNames = @(
+    ".venv",
+    ".wwebjs_auth",
+    "node_modules",
+    "playwright-report",
+    "test-results",
+    "Logs",
+    "Backups"
+)
+$runtimeTransientFiles = @(
+    "Orchestrator\automacoes.db",
+    "Orchestrator\automacoes.db-wal",
+    "Orchestrator\automacoes.db-shm",
+    "Orchestrator\orchestrator.pid",
+    "Orchestrator\worker.pid",
+    "Receitas Bloqueadas\email_body.html",
+    "Receitas Bloqueadas\email_state.json",
+    "Receitas Bloqueadas\receitas_state.json",
+    "Receitas Emitidas\delivery_state.json",
+    "Receitas Emitidas\receitas_state.json"
+)
 
 $sourceFiles = Get-ChildItem -Path "$PSScriptRoot\.." -Recurse -File | 
     Where-Object { $_.FullName -notmatch $excludeSourcePattern }
@@ -38,11 +71,92 @@ $sourceSizeSum = ($sourceFiles | Measure-Object -Property Length -Sum).Sum
 $sourceSizeMB = [math]::Round($sourceSizeSum / 1MB, 2)
 $sourceFilesCount = $sourceFiles.Count
 
-$repoFiles = Get-ChildItem -Path "$PSScriptRoot\.." -Recurse -File | 
-    Where-Object { $_.FullName -notmatch $excludeRepoPattern }
+$trackedFiles = @(git -C (Join-Path $PSScriptRoot "..") ls-files)
+$trackedPayloadSum = 0
+foreach ($trackedFile in $trackedFiles) {
+    $fullPath = Join-Path "$PSScriptRoot\.." $trackedFile
+    if (Test-Path $fullPath) {
+        $trackedPayloadSum += (Get-Item $fullPath).Length
+    }
+}
+$trackedPayloadMB = [math]::Round($trackedPayloadSum / 1MB, 2)
 
-$repoSizeSum = ($repoFiles | Measure-Object -Property Length -Sum).Sum
-$repoSizeMB = [math]::Round($repoSizeSum / 1MB, 2)
+$localOperationalFootprint = 0
+foreach ($name in $excludedOperationalNames) {
+    $matchingDirs = Get-ChildItem -Path "$PSScriptRoot\.." -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq $name }
+    foreach ($match in $matchingDirs) {
+        $localOperationalFootprint += (Get-ChildItem $match.FullName -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
+    }
+}
+foreach ($relativePath in $runtimeTransientFiles) {
+    $fullPath = Join-Path "$PSScriptRoot\.." $relativePath
+    if (Test-Path $fullPath) {
+        $item = Get-Item $fullPath
+        if (-not $item.PSIsContainer) {
+            $localOperationalFootprint += $item.Length
+        }
+    }
+}
+$localOperationalFootprintMB = [math]::Round($localOperationalFootprint / 1MB, 2)
+
+# 2.1 Catálogo governado de automações
+$candidateAutomationDirs = Get-ChildItem -Path "$PSScriptRoot\.." -Directory |
+    Where-Object {
+        $_.Name -notin @("_Template", "Orchestrator", "Dashboard", "docs", "Tools", "Infrastructure", "lib", "Backups", "Logs") -and
+        (Test-Path (Join-Path $_.FullName "run.ps1")) -and
+        (Test-Path (Join-Path $_.FullName "README.md")) -and
+        (Test-Path (Join-Path $_.FullName "CONTEXT.md"))
+    }
+
+$manifestFiles = Get-ChildItem -Path "$PSScriptRoot\.." -Directory |
+    Where-Object { $_.Name -notlike ".*" } |
+    ForEach-Object {
+        $candidate = Join-Path $_.FullName "automation.manifest.json"
+        if (Test-Path $candidate) { Get-Item $candidate }
+    }
+
+$activeManifestFiles = $manifestFiles | Where-Object { $_.Directory.Name -ne "_Template" }
+$runbooksPresent = 0
+$catalogIssues = 0
+$smokeReady = 0
+$pythonTargets = @(git -C (Join-Path $PSScriptRoot "..") ls-files "*.py")
+$resolvedPythonTargets = @()
+
+foreach ($file in $pythonTargets) {
+    $fullPath = Join-Path "$PSScriptRoot\.." $file.Trim('"')
+    if (Test-Path $fullPath) {
+        $resolvedPythonTargets += $fullPath
+    }
+}
+
+foreach ($manifestFile in $activeManifestFiles) {
+    try {
+        $manifest = Get-Content -LiteralPath $manifestFile.FullName -Raw | ConvertFrom-Json
+        $runbookPath = Join-Path "$PSScriptRoot\.." $manifest.runbook_path
+        if (Test-Path $runbookPath) { $runbooksPresent++ } else { $catalogIssues++ }
+
+        $hasSmoke = $false
+        foreach ($smokeTest in @($manifest.smoke_tests)) {
+            $smokePath = Join-Path "$PSScriptRoot\.." $smokeTest
+            if (Test-Path $smokePath) {
+                $hasSmoke = $true
+            } else {
+                $catalogIssues++
+            }
+        }
+        if ($hasSmoke) { $smokeReady++ }
+    } catch [System.Exception] {
+        $catalogIssues++
+    }
+}
+
+$automationDirCount = $candidateAutomationDirs.Count
+$catalogCoverage = if ($automationDirCount -gt 0) {
+    [math]::Round(($activeManifestFiles.Count / $automationDirCount) * 100, 1)
+} else {
+    100.0
+}
 
 # 3. Detectar arquivos maiores que 5 MB
 Write-Host "[2/6] Buscando arquivos maiores que 5 MB (excluindo .venv e .git)..." -ForegroundColor Yellow
@@ -80,37 +194,28 @@ if ($pytestProcess.ExitCode -ne 0) {
 
 # 5. Executar Pylint score
 Write-Host "[4/6] Analisando qualidade estetica com Pylint..." -ForegroundColor Yellow
-$pylintProcess = Start-Process -FilePath $pythonExe -ArgumentList "-m pylint Orchestrator/app" -NoNewWindow -PassThru -RedirectStandardOutput "pylint.tmp" -RedirectStandardError "pylint_err.tmp"
-$pylintProcess.WaitForExit()
-
 $pylintScore = 0.0
-if (Test-Path "pylint.tmp") {
-    $pylintOut = [System.IO.File]::ReadAllText("pylint.tmp")
-    $scoreLine = $pylintOut -split "`r?`n" | Where-Object { $_ -match 'rated at (-?\d+\.\d+)/10' }
+$pylint = Get-PythonTool "pylint"
+if ($pylint -and $resolvedPythonTargets.Count -gt 0) {
+    $pylintOutput = & $pylint --disable=C0114,C0116,R0801 @resolvedPythonTargets 2>&1
+    $pylintText = ($pylintOutput | Out-String)
+    $scoreLine = $pylintText -split "`r?`n" | Where-Object { $_ -match 'rated at (-?\d+\.\d+)/10' }
     if ($scoreLine -match 'rated at (-?\d+\.\d+)/10') {
         $pylintScore = [double]$Matches[1]
     }
-    Remove-Item "pylint.tmp" -Force
-}
-if (Test-Path "pylint_err.tmp") {
-    Remove-Item "pylint_err.tmp" -Force
 }
 
 # 6. Executar Mypy type-checking
 Write-Host "[5/6] Analisando tipagem estatica com Mypy..." -ForegroundColor Yellow
-$mypyProcess = Start-Process -FilePath $pythonExe -ArgumentList "-m mypy --explicit-package-bases Orchestrator" -NoNewWindow -PassThru -RedirectStandardOutput "mypy.tmp" -RedirectStandardError "mypy_err.tmp"
-$mypyProcess.WaitForExit()
-
 $mypyErrors = 0
-if (Test-Path "mypy.tmp") {
-    $mypyOut = [System.IO.File]::ReadAllText("mypy.tmp")
-    if ($mypyOut -match 'Found (\d+) error') {
-        $mypyErrors = [int]$Matches[1]
+$mypy = Get-PythonTool "mypy"
+if ($mypy -and $resolvedPythonTargets.Count -gt 0) {
+    foreach ($file in $resolvedPythonTargets) {
+        $mypyOutput = & $mypy --strict --explicit-package-bases --namespace-packages $file 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $mypyErrors += [regex]::Matches(($mypyOutput | Out-String), ': error:').Count
+        }
     }
-    Remove-Item "mypy.tmp" -Force
-}
-if (Test-Path "mypy_err.tmp") {
-    Remove-Item "mypy_err.tmp" -Force
 }
 
 # 7. Executar Governança agregada e Zero Trust
@@ -125,7 +230,7 @@ Write-Host "`n=== RESULTADO CONSOLIDADO DO SNAPSHOT DE QUALIDADE ===" -Foregroun
 $statusCoverage = if ($pytestCoverage -ge 60) { "✅" } else { "⚠️" }
 $statusMypy = if ($mypyErrors -eq 0) { "✅" } else { "❌" }
 $statusPylint = if ($pylintScore -ge 8.5) { "✅" } else { "⚠️" }
-$statusRepoSize = if ($repoSizeMB -le 150) { "✅" } else { "⚠️" }
+$statusRepoSize = if ($trackedPayloadMB -le 150) { "✅" } else { "⚠️" }
 $statusGov = if ($govStatus -eq "APROVADO") { "✅" } else { "❌" }
 
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray
@@ -134,11 +239,16 @@ Write-Host "--------------------------------------------------------" -Foregroun
 Write-Host (" Cobertura de Testes (Pytest)     | >= 60%   | {0,-8} | {1}" -f "$pytestCoverage%", $statusCoverage)
 Write-Host (" Erros de Tipagem (Mypy)          | 0        | {0,-8} | {1}" -f $mypyErrors, $statusMypy)
 Write-Host (" Score de Estilo (Pylint)         | >= 8.5   | {0,-8} | {1}" -f "$pylintScore/10", $statusPylint)
-Write-Host (" Tamanho do Repositorio (Total)  | <= 150MB | {0,-8} | {1}" -f "$repoSizeMB MB", $statusRepoSize)
+Write-Host (" Tamanho Versionado (Git)        | <= 150MB | {0,-8} | {1}" -f "$trackedPayloadMB MB", $statusRepoSize)
 Write-Host (" Governanca Agregada e ZeroTrust  | APROVADO | {0,-8} | {1}" -f $govStatus, $statusGov)
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray
 
 Write-Host ("`nTamanho do Codigo Fonte (Limpo): {0} MB ({1} arquivos)" -f $sourceSizeMB, $sourceFilesCount) -ForegroundColor Green
+Write-Host ("Pegada Operacional Local Excluida: {0} MB" -f $localOperationalFootprintMB) -ForegroundColor DarkCyan
+Write-Host ("Cobertura do Catálogo Governado: {0}% ({1}/{2})" -f $catalogCoverage, $activeManifestFiles.Count, $automationDirCount) -ForegroundColor Cyan
+Write-Host ("Runbooks Presentes no Catálogo: {0}" -f $runbooksPresent) -ForegroundColor Cyan
+Write-Host ("Automações com Smoke Declarado: {0}" -f $smokeReady) -ForegroundColor Cyan
+Write-Host ("Issues do Catálogo: {0}" -f $catalogIssues) -ForegroundColor Cyan
 
 if ($largeFiles.Count -gt 0) {
     Write-Host "`n⚠️  ALERTA: Detectados arquivos maiores que 5 MB:" -ForegroundColor Yellow

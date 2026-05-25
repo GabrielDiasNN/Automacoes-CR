@@ -61,7 +61,10 @@ def get_automation_configs(
     return configs
 
 
-@router.put("/{auto_id}/configs/{filename}")
+@router.put(
+    "/{auto_id}/configs/{filename}",
+    response_model=schemas.ManagedMutationResponse,
+)
 def update_automation_config(
     auto_id: int,
     filename: str,
@@ -89,7 +92,7 @@ def update_automation_config(
         with open(target_path, "w", encoding="utf-8") as f:
             f.write(payload.content)
 
-        log_audit(
+        audit_entry = log_audit(
             db,
             "UPDATE_CONFIG",
             "AUTOMATION",
@@ -97,8 +100,15 @@ def update_automation_config(
             get_client_ip(request),
             json.dumps({"filename": filename, "backup": backup_relpath}),
         )
+        db.flush()
         db.commit()
-        return {"message": "Configuração salva com sucesso!", "backup": backup_relpath}
+        return {
+            "message": "Configuração salva com sucesso!",
+            "validated": True,
+            "backup": backup_relpath,
+            "backup_path": backup_relpath,
+            "audit_id": audit_entry.id,
+        }
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=400, detail="O conteúdo fornecido não é um JSON válido."

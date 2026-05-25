@@ -24,6 +24,7 @@ from app.constants import (
     RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
 )
 from app.services.execution_runtime import classify_process_result
+from app.services.execution_runtime import claim_next_task
 from tests.conftest import AUTH_HEADERS
 
 
@@ -136,3 +137,72 @@ def test_requeue_enforces_max_retries(client: TestClient, db_session: Session):
     )
     assert response.status_code == 409
     assert "Limite de retry excedido" in response.json()["detail"]
+
+
+def test_claim_next_task_skips_blocked_queue_group(db_session: Session):
+    auto_blocked = models.Automation(
+        id=910,
+        name="Automacao Bloqueada",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        queue_group="grupo_claim",
+        enabled=True,
+    )
+    auto_free = models.Automation(
+        id=911,
+        name="Automacao Livre",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        queue_group="grupo_livre",
+        enabled=True,
+    )
+    db_session.add_all([auto_blocked, auto_free])
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="RUNNING_GROUP",
+            automation_id=910,
+            status=EXECUTION_STATUS_RUNNING,
+            queue_group="grupo_claim",
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="PENDING_BLOCKED",
+            automation_id=910,
+            status=EXECUTION_STATUS_PENDING,
+            priority="HIGH",
+            queue_group="grupo_claim",
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="PENDING_FREE",
+            automation_id=911,
+            status=EXECUTION_STATUS_PENDING,
+            priority="NORMAL",
+            queue_group="grupo_livre",
+        )
+    )
+    db_session.commit()
+
+    claimed = claim_next_task(
+        db_session,
+        worker_instance_id="worker-test",
+        worker_pid=4321,
+    )
+    assert claimed == "PENDING_FREE"
+
+    claimed_row = (
+        db_session.query(models.Execution)
+        .filter(models.Execution.id == "PENDING_FREE")
+        .first()
+    )
+    assert claimed_row.status == EXECUTION_STATUS_RUNNING
+    assert claimed_row.worker_instance_id == "worker-test"
+    assert claimed_row.worker_pid == 4321
+
+    blocked_row = (
+        db_session.query(models.Execution)
+        .filter(models.Execution.id == "PENDING_BLOCKED")
+        .first()
+    )
+    assert blocked_row.status == EXECUTION_STATUS_PENDING

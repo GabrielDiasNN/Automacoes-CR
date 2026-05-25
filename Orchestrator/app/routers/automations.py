@@ -22,6 +22,7 @@ from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
+from ..services.automation_preflight import build_automation_preflight
 from ..services.automation_snapshot import (
     build_automation_response as build_operational_automation_response,
     build_automation_response_batch,
@@ -42,7 +43,7 @@ from ..services.metrics import (
     get_latest_execution_snapshot_by_automation,
 )
 from ..timezone import get_now_local
-from ..utils import get_client_ip, log_audit, validate_script_path
+from ..utils import get_client_ip, log_audit
 
 logger = logging.getLogger("orchestrator")
 
@@ -144,6 +145,24 @@ def _backup_file_before_write(target_path: str, auto_dir: str) -> str:
     return os.path.relpath(backup_path, auto_dir)
 
 
+def _build_mutation_response(
+    db: Session,
+    auto: models.Automation,
+    audit_id: int | None = None,
+) -> schemas.AutomationResponse:
+    response = _build_automation_response(db, auto)
+    response.validated = True
+    response.audit_id = audit_id
+    return response
+
+
+def _preflight_payload_or_422(payload: dict) -> schemas.AutomationPreflightResponse:
+    try:
+        return build_automation_preflight(payload, PROJECT_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 
 # LISTAGEM com paginacao e ordenacao
@@ -231,6 +250,15 @@ def list_all_automations(
     return result
 
 
+@router.post("/preflight", response_model=schemas.AutomationPreflightResponse)
+def preflight_automation(
+    payload: schemas.AutomationPreflightRequest,
+    api_key: str = Depends(get_api_key),
+):
+    """Valida uma automação sem persistir alteração."""
+    return _preflight_payload_or_422(payload.model_dump())
+
+
 # ---------------------------------------------------------------------------
 
 # GET por ID
@@ -256,6 +284,7 @@ def get_automation(
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     return _build_automation_response(db, db_auto)
+
 
 
 # ---------------------------------------------------------------------------
@@ -285,28 +314,30 @@ def create_automation(
             status_code=409, detail="Automação com este nome já existe."
         )
 
-    # --- Pilar V: Pre-flight de existencia do script ---
-
-    ok, result = validate_script_path(automation.script_path, PROJECT_ROOT)
-
-    if not ok:
-
-        raise HTTPException(status_code=422, detail=f"Validação do script: {result}")
-
-    db_auto = models.Automation(**automation.model_dump())
+    preflight = _preflight_payload_or_422(automation.model_dump())
+    db_auto = models.Automation(**preflight.normalized_payload)
 
     db.add(db_auto)
 
     db.flush()
 
-    log_audit(
+    audit_entry = log_audit(
         db,
         "CREATE",
         "AUTOMATION",
         db_auto.id,
         get_client_ip(request),
-        json.dumps(automation.model_dump()),
+        json.dumps(
+            {
+                **preflight.normalized_payload,
+                "preflight": {
+                    "resolved_script_path": preflight.resolved_script_path,
+                    "warnings": preflight.warnings,
+                },
+            }
+        ),
     )
+    db.flush()
 
     db.commit()
 
@@ -315,7 +346,7 @@ def create_automation(
     logger.info(f"Automacao criada: {db_auto.name} (ID: {db_auto.id})")
     _reload_scheduler_safe()
 
-    return _build_automation_response(db, db_auto)
+    return _build_mutation_response(db, db_auto, audit_entry.id)
 
 
 # ---------------------------------------------------------------------------
@@ -345,22 +376,38 @@ def update_automation(
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     update_data = automation_update.model_dump(exclude_unset=True)
+    merged_payload = {
+        "name": db_auto.name,
+        "description": db_auto.description,
+        "script_path": db_auto.script_path,
+        "schedule": db_auto.schedule,
+        "max_runtime_minutes": db_auto.max_runtime_minutes,
+        "max_retries": db_auto.max_retries,
+        "cooldown_minutes": db_auto.cooldown_minutes,
+        "queue_group": db_auto.queue_group,
+        "sla_minutes": db_auto.sla_minutes,
+        "enabled": db_auto.enabled,
+        "test_mode": db_auto.test_mode,
+        "notification_channels": db_auto.notification_channels,
+    }
+    merged_payload.update(update_data)
+    preflight = _preflight_payload_or_422(merged_payload)
 
-    for key, value in update_data.items():
-        if key == "script_path":
-            ok, result = validate_script_path(value, PROJECT_ROOT)
-            if not ok:
-                raise HTTPException(
-                    status_code=422, detail=f"Validação do script: {result}"
-                )
-
+    for key, value in preflight.normalized_payload.items():
         setattr(db_auto, key, value)
 
-    _log_data = json.dumps(update_data)
+    _log_data = json.dumps(
+        {
+            "changes": update_data,
+            "normalized_payload": preflight.normalized_payload,
+            "warnings": preflight.warnings,
+        }
+    )
 
-    log_audit(
+    audit_entry = log_audit(
         db, "UPDATE", "AUTOMATION", automation_id, get_client_ip(request), _log_data
     )
+    db.flush()
 
     db.commit()
 
@@ -369,7 +416,7 @@ def update_automation(
     logger.info(f"Automacao atualizada: {db_auto.name} (ID: {automation_id})")
     _reload_scheduler_safe()
 
-    return _build_automation_response(db, db_auto)
+    return _build_mutation_response(db, db_auto, audit_entry.id)
 
 
 @router.get("/{automation_id}/overview")
@@ -820,4 +867,4 @@ def clone_automation(
     db.commit()
     db.refresh(clone)
     _reload_scheduler_safe()
-    return _build_automation_response(db, clone)
+    return _build_mutation_response(db, clone)
