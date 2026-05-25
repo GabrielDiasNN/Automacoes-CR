@@ -7,17 +7,17 @@ Gera de forma automática as evidências do Quality Gate.
 
 import os
 import re
+import subprocess
 import sys
 import time
-import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any, Generator, cast
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import sessionmaker
-from typing import Any, Generator, cast
+from sqlalchemy.pool import NullPool
 
 # Adicionar pasta do app ao PYTHONPATH
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -49,12 +49,14 @@ def setup_test_database() -> Generator[None, None, None]:
 
     # Aplica as migrações do Alembic para estruturar o banco dinamicamente
     # pylint: disable=import-outside-toplevel
-    from alembic.config import Config
     from alembic import command
+    from alembic.config import Config
 
     ini_path = os.path.abspath(os.path.join(TESTS_DIR, "..", "alembic.ini"))
     alembic_cfg = Config(ini_path)
-    alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{TEST_DB_PATH.as_posix()}")
+    alembic_cfg.set_main_option(
+        "sqlalchemy.url", f"sqlite:///{TEST_DB_PATH.as_posix()}"
+    )
 
     command.upgrade(alembic_cfg, "head")
 
@@ -62,7 +64,7 @@ def setup_test_database() -> Generator[None, None, None]:
     engine = create_engine(
         f"sqlite:///{TEST_DB_PATH.as_posix()}",
         connect_args={"check_same_thread": False},
-        poolclass=NullPool
+        poolclass=NullPool,
     )
 
     db_session_factory = sessionmaker(bind=engine)
@@ -116,6 +118,7 @@ def setup_test_database() -> Generator[None, None, None]:
 
     # Cleanup robusto pós-testes com retentativas para contornar latência de I/O do Windows
     import time
+
     for suffix in ["", "-shm", "-wal"]:
         fp = Path(str(TEST_DB_PATH) + suffix)
         for _ in range(5):
@@ -183,8 +186,16 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
         proc.terminate()
         stdout_file.close()
         stderr_file.close()
-        stdout_content = stdout_log_path.read_text(encoding="utf-8", errors="ignore") if stdout_log_path.exists() else ""
-        stderr_content = stderr_log_path.read_text(encoding="utf-8", errors="ignore") if stderr_log_path.exists() else ""
+        stdout_content = (
+            stdout_log_path.read_text(encoding="utf-8", errors="ignore")
+            if stdout_log_path.exists()
+            else ""
+        )
+        stderr_content = (
+            stderr_log_path.read_text(encoding="utf-8", errors="ignore")
+            if stderr_log_path.exists()
+            else ""
+        )
         for _ in range(5):
             try:
                 if stdout_log_path.exists():
@@ -194,7 +205,9 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
                 break
             except OSError:
                 time.sleep(0.5)
-        raise RuntimeError(f"Servidor de teste falhou ao iniciar.\nStdout: {stdout_content}\nStderr: {stderr_content}")
+        raise RuntimeError(
+            f"Servidor de teste falhou ao iniciar.\nStdout: {stdout_content}\nStderr: {stderr_content}"
+        )
 
     yield f"http://{TEST_HOST}:{TEST_PORT}"
 
@@ -222,8 +235,11 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
             time.sleep(0.5)
 
 
-def test_e2e_dashboard_navigation(uvicorn_server: str, page: Any, tmp_path: Path) -> None:
+def test_e2e_dashboard_navigation(
+    uvicorn_server: str, page: Any, tmp_path: Path
+) -> None:
     """Valida a navegação e o Quality Gate de conformidade JS no Dashboard."""
+
     # Escutar logs do console
     def handle_console(msg: Any) -> None:
         global CONSOLE_ERRORS, CONSOLE_WARNINGS
@@ -277,7 +293,9 @@ def test_e2e_dashboard_navigation(uvicorn_server: str, page: Any, tmp_path: Path
     page.wait_for_selector('tr[data-action="open-log-row"]')
     page.click('tr[data-action="open-log-row"]')
     page.wait_for_selector("#modal-logs")
-    page.wait_for_selector("text=[E2E-TEST]")  # Confirma que os logs mockados abriram no modal
+    page.wait_for_selector(
+        "text=[E2E-TEST]"
+    )  # Confirma que os logs mockados abriram no modal
 
     # Tira um screenshot de alta qualidade com o modal de logs aberto para evidência
     screenshot_path = tmp_path / f"playwright-e2e-generated-{os.getpid()}.png"
@@ -326,8 +344,12 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
     evidence_path.write_text(report_content, encoding="utf-8")
 
     # Asserções do Quality Gate do teste
-    assert CONSOLE_ERRORS == 0, f"Erros de console detectados no navegador: {CONSOLE_MESSAGES}"
-    assert screenshot_path.exists(), "O screenshot de evidência não foi salvo corretamente."
+    assert (
+        CONSOLE_ERRORS == 0
+    ), f"Erros de console detectados no navegador: {CONSOLE_MESSAGES}"
+    assert (
+        screenshot_path.exists()
+    ), "O screenshot de evidência não foi salvo corretamente."
     assert evidence_path.exists(), "O arquivo de evidência gerada não foi criado."
 
 
@@ -338,7 +360,9 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
     import requests
     from app.timezone import get_now_local
 
-    scheduled_run_at = (get_now_local() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    scheduled_run_at = (get_now_local() + timedelta(hours=1)).strftime(
+        "%Y-%m-%dT%H:%M:%S"
+    )
     create_response = requests.post(
         f"{uvicorn_server}/api/automations",
         json={
@@ -376,7 +400,11 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
             return (cells[5]?.innerText || '').trim();
         })"""
     )
-    valid_executions = [value for value in executions if re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value)]
+    valid_executions = [
+        value
+        for value in executions
+        if re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value)
+    ]
     assert valid_executions
     for value in valid_executions:
         assert_br_datetime(value)
@@ -393,7 +421,11 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
             return (cells[0]?.innerText || '').trim();
         })"""
     )
-    valid_audit_rows = [value for value in audit_rows if re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value)]
+    valid_audit_rows = [
+        value
+        for value in audit_rows
+        if re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value)
+    ]
     assert valid_audit_rows
     for value in valid_audit_rows:
         assert_br_datetime(value)
@@ -420,8 +452,7 @@ def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -
     page.goto(f"{uvicorn_server}/dashboard/")
     page.wait_for_load_state("networkidle")
 
-    result = page.evaluate(
-        f"""async () => {{
+    result = page.evaluate(f"""async () => {{
             localStorage.setItem('orchestrator_api_key', {API_KEY!r});
             const mod = await import('/dashboard/js/api.js?v=' + Date.now());
             const utcFormatted = mod.formatDate('2026-05-21T14:00:00Z');
@@ -436,8 +467,7 @@ def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -
                 parsedUtcIso: parsedUtc ? parsedUtc.toISOString() : null,
                 parsedBrIso: parsedBr ? parsedBr.toISOString() : null,
             }};
-        }}"""
-    )
+        }}""")
 
     assert result["utcFormatted"] == "21/05/2026 11:00:00"
     assert result["brFormatted"] == "21/05/2026 11:05:42"
@@ -446,14 +476,16 @@ def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -
     assert result["parsedBrIso"] == "2026-05-21T14:05:42.000Z"
 
 
-def test_e2e_dashboard_executions_filters_all_controls(uvicorn_server: str, page: Any) -> None:
+def test_e2e_dashboard_executions_filters_all_controls(
+    uvicorn_server: str, page: Any
+) -> None:
     """Valida o encadeamento de todos os filtros visíveis da bancada de execuções."""
     page.on("dialog", lambda dialog: dialog.accept(API_KEY))
 
     engine = create_engine(
         f"sqlite:///{TEST_DB_PATH.as_posix()}",
         connect_args={"check_same_thread": False},
-        poolclass=NullPool
+        poolclass=NullPool,
     )
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
@@ -603,7 +635,9 @@ def test_e2e_dashboard_executions_filters_all_controls(uvicorn_server: str, page
     assert payload["requestedBy"] == ["Operador QA"]
 
 
-def test_e2e_dashboard_automations_search_filters_visible_grid(uvicorn_server: str, page: Any) -> None:
+def test_e2e_dashboard_automations_search_filters_visible_grid(
+    uvicorn_server: str, page: Any
+) -> None:
     """Valida a busca textual da tela administrativa de automações na grade visível."""
     page.on("dialog", lambda dialog: dialog.accept(API_KEY))
 
@@ -650,16 +684,14 @@ def test_e2e_dashboard_automations_search_filters_visible_grid(uvicorn_server: s
     page.locator("#auto-search").dispatch_event("input")
     page.wait_for_timeout(300)
 
-    rows = page.locator("#fleet-tbody tr").evaluate_all(
-        """rows => rows.map((row) => {
+    rows = page.locator("#fleet-tbody tr").evaluate_all("""rows => rows.map((row) => {
             const cells = Array.from(row.querySelectorAll('td'));
             return {
                 automation: (cells[0]?.innerText || '').trim(),
                 cadence: (cells[1]?.innerText || '').trim(),
                 state: (cells[5]?.innerText || '').trim(),
             };
-        })"""
-    )
+        })""")
 
     assert len(rows) == 1
     assert "Auto Busca Financeiro" in rows[0]["automation"]
@@ -669,8 +701,7 @@ def test_e2e_dashboard_automations_search_filters_visible_grid(uvicorn_server: s
 def _read_automation_history_row(page: Any) -> dict[str, Any]:
     return cast(
         dict[str, Any],
-        page.locator("#fleet-tbody tr").evaluate_all(
-        """rows => rows.map((row) => {
+        page.locator("#fleet-tbody tr").evaluate_all("""rows => rows.map((row) => {
             const cells = Array.from(row.querySelectorAll('td'));
             const scheduleBadge = cells[1]?.querySelector('.fleet-schedule-badge');
             const riskBadge = cells[6]?.querySelector('.fleet-risk-badge');
@@ -687,18 +718,16 @@ def _read_automation_history_row(page: Any) -> dict[str, Any]:
                 riskWrapsCleanly: riskBadge ? riskBadge.scrollWidth <= riskBadge.clientWidth + 2 : false,
                 actionsOverflow: actionsWrapper ? actionsWrapper.scrollWidth > actionsWrapper.clientWidth + 2 : true,
             };
-        })"""
-        )[0],
+        })""")[0],
     )
 
 
 def _open_more_actions_and_read_state(page: Any) -> dict[str, Any]:
-    page.click('#fleet-tbody tr [data-action-menu-toggle]')
-    page.wait_for_selector('.fleet-actions-menu-panel:not([hidden])')
+    page.click("#fleet-tbody tr [data-action-menu-toggle]")
+    page.wait_for_selector(".fleet-actions-menu-panel:not([hidden])")
     return cast(
         dict[str, Any],
-        page.evaluate(
-        """() => {
+        page.evaluate("""() => {
             const panel = document.querySelector('.fleet-actions-menu-panel:not([hidden])');
             const labels = panel
                 ? Array.from(panel.querySelectorAll('.fleet-actions-menu-item span')).map((item) => (item.textContent || '').trim())
@@ -710,8 +739,7 @@ def _open_more_actions_and_read_state(page: Any) -> dict[str, Any]:
                 menuOpenCount: document.querySelectorAll('.fleet-actions-menu-panel:not([hidden])').length,
                 actionsOverflow: host ? host.scrollWidth > host.clientWidth + 2 : true,
             };
-        }"""
-        ),
+        }"""),
     )
 
 
@@ -723,15 +751,21 @@ def _assert_menu_closes_on_outside_click(page: Any) -> None:
 
 
 def _assert_menu_action_closes_and_opens_json_modal(page: Any) -> None:
-    page.click('#fleet-tbody tr [data-action-menu-toggle]')
-    page.wait_for_selector('.fleet-actions-menu-panel:not([hidden])')
-    page.click('.fleet-actions-menu-panel:not([hidden]) [data-action="open-json-modal"]')
-    page.wait_for_function("""() => document.getElementById('modal-json')?.open === true""")
+    page.click("#fleet-tbody tr [data-action-menu-toggle]")
+    page.wait_for_selector(".fleet-actions-menu-panel:not([hidden])")
+    page.click(
+        '.fleet-actions-menu-panel:not([hidden]) [data-action="open-json-modal"]'
+    )
+    page.wait_for_function(
+        """() => document.getElementById('modal-json')?.open === true"""
+    )
     page.wait_for_function(
         """() => document.querySelectorAll('.fleet-actions-menu-panel:not([hidden])').length === 0"""
     )
     page.click('button[data-action="close-dialog"][data-dialog-id="modal-json"]')
-    page.wait_for_function("""() => document.getElementById('modal-json')?.open === false""")
+    page.wait_for_function(
+        """() => document.getElementById('modal-json')?.open === false"""
+    )
 
 
 def test_e2e_dashboard_automations_last_execution_snapshot_visible(
@@ -743,7 +777,7 @@ def test_e2e_dashboard_automations_last_execution_snapshot_visible(
     engine = create_engine(
         f"sqlite:///{TEST_DB_PATH.as_posix()}",
         connect_args={"check_same_thread": False},
-        poolclass=NullPool
+        poolclass=NullPool,
     )
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
@@ -826,7 +860,9 @@ def test_e2e_dashboard_automations_last_execution_snapshot_visible(
     _assert_menu_action_closes_and_opens_json_modal(page)
 
 
-def test_e2e_dashboard_system_shortcuts_open_execution_triage(uvicorn_server: str, page: Any) -> None:
+def test_e2e_dashboard_system_shortcuts_open_execution_triage(
+    uvicorn_server: str, page: Any
+) -> None:
     """Valida atalhos da aba Sistema para abrir recortes operacionais em Execuções."""
     page.on("dialog", lambda dialog: dialog.accept(API_KEY))
 
@@ -897,16 +933,18 @@ def test_e2e_dashboard_system_shortcuts_open_execution_triage(uvicorn_server: st
     page.click('button[data-target="system"]')
     page.wait_for_selector("#diagnostic-contract")
 
-    page.wait_for_selector('button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]')
-    page.click('button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]')
+    page.wait_for_selector(
+        'button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]'
+    )
+    page.click(
+        'button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]'
+    )
     page.wait_for_timeout(500)
 
-    after_group = page.evaluate(
-        """() => ({
+    after_group = page.evaluate("""() => ({
             executionsActive: document.getElementById('view-executions')?.classList.contains('active') || false,
             queueGroup: document.getElementById('filter-queue-group')?.value || '',
-        })"""
-    )
+        })""")
     assert after_group["executionsActive"] is True
     assert after_group["queueGroup"] == "grupo_sistema"
 
@@ -914,18 +952,18 @@ def test_e2e_dashboard_system_shortcuts_open_execution_triage(uvicorn_server: st
     page.wait_for_function(
         """() => document.getElementById('view-system')?.classList.contains('active') || false"""
     )
-    hotspot_button = page.locator('#view-system button[data-action="execution-open-hotspot"]').first
+    hotspot_button = page.locator(
+        '#view-system button[data-action="execution-open-hotspot"]'
+    ).first
     hotspot_button.wait_for(state="visible")
     hotspot_button.click()
     page.wait_for_timeout(500)
 
-    after_hotspot = page.evaluate(
-        """() => ({
+    after_hotspot = page.evaluate("""() => ({
             executionsActive: document.getElementById('view-executions')?.classList.contains('active') || false,
             automationId: document.getElementById('filter-automation')?.value || '',
             status: document.getElementById('filter-status')?.value || '',
-        })"""
-    )
+        })""")
     assert after_hotspot["executionsActive"] is True
     assert after_hotspot["status"] == "ERROR"
     assert after_hotspot["automationId"] != ""
