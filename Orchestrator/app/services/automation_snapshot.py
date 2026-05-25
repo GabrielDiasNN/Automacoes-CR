@@ -81,6 +81,15 @@ def build_automation_response(
     auto_resp.next_run = (
         schemas.format_dt_br(next_run_lookup.get(auto_id)) if next_run_lookup else None
     )
+    if auto_resp.next_run is None:
+        try:
+            parsed_schedule = schemas.parse_schedule(auto_resp.schedule)
+        except (TypeError, ValueError):
+            parsed_schedule = None
+        if parsed_schedule:
+            next_runs_preview = schemas.preview_next_runs(parsed_schedule, 1)
+            if next_runs_preview:
+                auto_resp.next_run = next_runs_preview[0]
     auto_resp.success_24h = success_24h
     auto_resp.failures_24h = failures_24h
     auto_resp.timeouts_24h = timeouts_24h
