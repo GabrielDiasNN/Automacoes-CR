@@ -12,5 +12,6 @@ aiosqlite
 sqlalchemy
 pytz
 pybreaker
+psutil
 pydantic
 alembic
