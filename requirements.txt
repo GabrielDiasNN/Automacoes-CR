@@ -52,6 +52,8 @@ oracledb==2.5.1
     # via -r requirements.in
 pandas==3.0.3
     # via -r requirements.in
+pybreaker==1.4.1
+    # via -r requirements.in
 pycparser==3.0
     # via cffi
 pytz==2026.2
