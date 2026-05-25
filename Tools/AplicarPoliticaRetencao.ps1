@@ -199,8 +199,8 @@ function Get-ItemAgeDays {
 
 function Test-OrchestratorRuntimeActive {
     $pidFiles = @(
-        Join-Path $resolvedRoot "Orchestrator\orchestrator.pid",
-        Join-Path $resolvedRoot "Orchestrator\worker.pid"
+        (Join-Path $resolvedRoot "Orchestrator\orchestrator.pid"),
+        (Join-Path $resolvedRoot "Orchestrator\worker.pid")
     )
 
     foreach ($pidFile in $pidFiles) {
@@ -388,12 +388,14 @@ function Invoke-CleanupRule {
             $items = Get-CandidateFilesByName -Names $Rule.Names
         }
         "Pattern" {
-            $relativeDirectories = @()
+            [string[]]$relativeDirectories = @()
             if ($Rule.ContainsKey("RelativeDirectory")) {
-                $relativeDirectories += $Rule.RelativeDirectory
+                $relativeDirectories += [string]$Rule.RelativeDirectory
             }
             if ($Rule.ContainsKey("RelativeDirectories")) {
-                $relativeDirectories += $Rule.RelativeDirectories
+                foreach ($dir in $Rule.RelativeDirectories) {
+                    $relativeDirectories += [string]$dir
+                }
             }
             $recurse = $true
             if ($Rule.ContainsKey("Recurse")) {

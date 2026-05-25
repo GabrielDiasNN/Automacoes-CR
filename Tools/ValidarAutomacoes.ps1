@@ -77,7 +77,16 @@ if (-not $SkipGovernance) {
     Write-Host "`n=== Testes Automatizados (pytest + Playwright E2E) ===" -ForegroundColor Cyan
     $env:PYTHONPATH = "Orchestrator"
     & .venv\Scripts\pytest -v | Out-Host
-    if ($LASTEXITCODE -ne 0) {
+    $pytestExitCode = $LASTEXITCODE
+
+    # Executa a limpeza pós-testes para expurgar temporários (Fase E/G do V.A.L.E.G.)
+    $cleanupScript = Join-Path $BasePath "Tools\AplicarPoliticaRetencao.ps1"
+    if (Test-Path $cleanupScript) {
+        Write-Host "`n=== Limpeza Segura pós-testes ===" -ForegroundColor Cyan
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $cleanupScript -RootPath $BasePath | Out-Host
+    }
+
+    if ($pytestExitCode -ne 0) {
         Write-Host "[FALHA] Suite de testes pytest falhou ou retornou erros de integridade." -ForegroundColor Red
         $globalResult = 1
     } else {

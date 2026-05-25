@@ -1,4 +1,4 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, import-outside-toplevel, consider-using-with, global-statement, wrong-import-order
+# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, import-outside-toplevel, consider-using-with, global-statement, wrong-import-order, too-many-branches, too-many-statements
 """
 Teste de Ponta a Ponta (E2E) com Playwright: Dashboard Operacional
 Valida a navegação pelas guias e interações críticas na tela real do Orchestrator.
@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import sessionmaker
 from typing import Any, Generator, cast
 
@@ -58,7 +59,11 @@ def setup_test_database() -> Generator[None, None, None]:
     command.upgrade(alembic_cfg, "head")
 
     # Inicializa engine no banco de teste dinâmico para cadastrar dados Mock
-    engine = create_engine(f"sqlite:///{TEST_DB_PATH.as_posix()}", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+        poolclass=NullPool
+    )
 
     db_session_factory = sessionmaker(bind=engine)
     session = db_session_factory()
@@ -109,14 +114,17 @@ def setup_test_database() -> Generator[None, None, None]:
     # Descartar conexões e engine do SQLAlchemy para permitir deleção física no Windows (Fase B10)
     engine.dispose()
 
-    # Cleanup após todos os testes
+    # Cleanup robusto pós-testes com retentativas para contornar latência de I/O do Windows
+    import time
     for suffix in ["", "-shm", "-wal"]:
         fp = Path(str(TEST_DB_PATH) + suffix)
-        if fp.exists():
-            try:
-                fp.unlink()
-            except OSError:
-                pass
+        for _ in range(5):
+            if fp.exists():
+                try:
+                    fp.unlink()
+                    break
+                except OSError:
+                    time.sleep(0.5)
 
 
 @pytest.fixture(scope="session")
@@ -177,11 +185,15 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
         stderr_file.close()
         stdout_content = stdout_log_path.read_text(encoding="utf-8", errors="ignore") if stdout_log_path.exists() else ""
         stderr_content = stderr_log_path.read_text(encoding="utf-8", errors="ignore") if stderr_log_path.exists() else ""
-        try:
-            stdout_log_path.unlink()
-            stderr_log_path.unlink()
-        except OSError:
-            pass
+        for _ in range(5):
+            try:
+                if stdout_log_path.exists():
+                    stdout_log_path.unlink()
+                if stderr_log_path.exists():
+                    stderr_log_path.unlink()
+                break
+            except OSError:
+                time.sleep(0.5)
         raise RuntimeError(f"Servidor de teste falhou ao iniciar.\nStdout: {stdout_content}\nStderr: {stderr_content}")
 
     yield f"http://{TEST_HOST}:{TEST_PORT}"
@@ -189,20 +201,25 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
     # Encerra o processo uvicorn limpo
     proc.terminate()
     try:
-        proc.wait(timeout=2)
+        proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         proc.kill()
+        proc.wait()
 
     # Fecha e remove os arquivos de log físicos
     stdout_file.close()
     stderr_file.close()
-    try:
-        if stdout_log_path.exists():
-            stdout_log_path.unlink()
-        if stderr_log_path.exists():
-            stderr_log_path.unlink()
-    except OSError:
-        pass
+
+    # Deleção resiliente com retentativas para evitar bloqueio temporário do Windows
+    for _ in range(5):
+        try:
+            if stdout_log_path.exists():
+                stdout_log_path.unlink()
+            if stderr_log_path.exists():
+                stderr_log_path.unlink()
+            break
+        except OSError:
+            time.sleep(0.5)
 
 
 def test_e2e_dashboard_navigation(uvicorn_server: str, page: Any, tmp_path: Path) -> None:
@@ -425,6 +442,7 @@ def test_e2e_dashboard_executions_filters_all_controls(uvicorn_server: str, page
     engine = create_engine(
         f"sqlite:///{TEST_DB_PATH.as_posix()}",
         connect_args={"check_same_thread": False},
+        poolclass=NullPool
     )
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
@@ -714,6 +732,7 @@ def test_e2e_dashboard_automations_last_execution_snapshot_visible(
     engine = create_engine(
         f"sqlite:///{TEST_DB_PATH.as_posix()}",
         connect_args={"check_same_thread": False},
+        poolclass=NullPool
     )
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
