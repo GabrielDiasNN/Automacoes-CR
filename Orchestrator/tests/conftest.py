@@ -12,6 +12,7 @@ import os
 
 os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
 os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
+os.environ["RATE_LIMIT_RPM"] = "10000"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -51,6 +52,7 @@ def force_env_vars():
     """Garante que as variaveis de ambiente de teste prevalecam sobre qualquer override de imports."""
     os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
     os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
+    os.environ["RATE_LIMIT_RPM"] = "10000"
 
 
 @pytest.fixture(scope="function")
@@ -104,7 +106,7 @@ def client(db_session):
     db_module.SessionLocal = original_session_local
     db_module.engine = original_engine
 
-    # Excluir fisicamente os arquivos de banco de teste temporários criados
+    # Excluir fisicamente os arquivos de banco de teste temporarios criados
     for suffix in ["", "-shm", "-wal"]:
         fp = os.path.join(TESTS_DIR, "test-automacoes.db" + suffix)
         if os.path.exists(fp):
