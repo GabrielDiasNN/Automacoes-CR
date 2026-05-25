@@ -15,12 +15,26 @@ def _is_reserved_cleanup_script(resolved_script_path: str, project_root: str) ->
     return os.path.normcase(resolved_script_path) == os.path.normcase(reserved_path)
 
 
+def _resolve_script_candidate(script_path: str, project_root: str) -> str:
+    if script_path.startswith("./") or script_path.startswith(".\\"):
+        return os.path.abspath(os.path.join(project_root, script_path[2:]))
+    if not os.path.isabs(script_path):
+        return os.path.abspath(os.path.join(project_root, script_path))
+    return os.path.abspath(script_path)
+
+
 def build_automation_preflight(
     payload: dict[str, Any],
     project_root: str,
 ) -> schemas.AutomationPreflightResponse:
     validated = schemas.AutomationCreate.model_validate(payload)
     normalized_payload = validated.model_dump()
+
+    resolved_candidate = _resolve_script_candidate(validated.script_path, project_root)
+    if _is_reserved_cleanup_script(resolved_candidate, project_root):
+        raise ValueError(
+            "Validação do script: Tools/AplicarPoliticaRetencao.ps1 é uma rotina reservada do sistema e não pode ser cadastrada como automação comum."
+        )
 
     ok, result = validate_script_path(validated.script_path, project_root)
     if not ok:
@@ -31,11 +45,6 @@ def build_automation_preflight(
     parsed_schedule = (
         schemas.parse_schedule(validated.schedule) if validated.schedule else None
     )
-
-    if _is_reserved_cleanup_script(resolved_script_path, project_root):
-        raise ValueError(
-            "Validação do script: Tools/AplicarPoliticaRetencao.ps1 é uma rotina reservada do sistema e não pode ser cadastrada como automação comum."
-        )
 
     warnings: list[str] = []
 

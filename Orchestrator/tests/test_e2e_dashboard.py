@@ -360,17 +360,13 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
         assert re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", value), value
 
     page.click('button[data-target="automations"]')
-    page.wait_for_selector("#fleet-tbody tr")
-    automations = page.locator("#fleet-tbody tr").evaluate_all(
-        """rows => rows.slice(0, 3).map((row) => {
-            const cells = Array.from(row.querySelectorAll('td'));
-            return (cells[2]?.innerText || '').trim();
-        })"""
-    )
-    assert any(value != "-" for value in automations)
-    for value in automations:
-        if value != "-":
-            assert_br_datetime(value)
+    page.wait_for_selector('#fleet-tbody tr:has-text("Timezone E2E Auto")')
+    target_automation_row = page.locator(
+        '#fleet-tbody tr:has-text("Timezone E2E Auto")'
+    ).first
+    next_run = target_automation_row.locator("td").nth(2).inner_text().strip()
+    assert next_run != "-"
+    assert_br_datetime(next_run)
 
     page.click('button[data-target="executions"]')
     page.wait_for_selector("#exec-tbody tr")
