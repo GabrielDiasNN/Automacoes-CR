@@ -11,5 +11,6 @@ apscheduler
 aiosqlite
 sqlalchemy
 pytz
+pybreaker
 pydantic
 alembic
