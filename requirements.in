@@ -10,5 +10,6 @@ uvicorn[standard]
 apscheduler
 aiosqlite
 sqlalchemy
+pytz
 pydantic
 alembic
