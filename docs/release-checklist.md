@@ -1,6 +1,6 @@
 # Checklist de Release — Hub de Automações
 
-> **Versão:** v9.1.1 | **Atualizado:** 2026-05-21
+> **Versão:** v9.3.0 | **Atualizado:** 2026-05-25
 
 ---
 
@@ -25,12 +25,14 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
 - [ ] `isort Orchestrator/app/ --check-only` — imports ordenados
 - [ ] `pylint Orchestrator/app/ --fail-under=7.5` — score acima do mínimo
 - [ ] `mypy Orchestrator/app/ --ignore-missing-imports` — sem erros de tipo críticos
+- [ ] `Tools/Get-QualitySnapshot.ps1 -BasePath .` — snapshot consolidado sem alerta estrutural inesperado
 
 ### 1.3 Governança e Encoding
 
 - [ ] `Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` — **0 erros**
 - [ ] `Tools/Test-SourceEncoding.ps1 -RootPath .` — **0 violações de encoding**
 - [ ] `Tools/Test-SkillsGovernance.ps1 -BasePath .` — skills consistentes
+- [ ] `Tools/Test-AutomationCatalog.ps1 -RootPath .` — catálogo governado consistente
 - [ ] Nenhum caminho absoluto hardcoded em scripts de automação
 
 ### 1.4 Segurança
@@ -49,6 +51,7 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
 - [ ] `README.md` reflete o estado atual (versão, features, links)
 - [ ] `CONTEXT.md` atualizado com novas regras de negócio (se aplicável)
 - [ ] `docs/ai-native-context-monitor.md` atualizado quando a mudança alterar estado operacional, arquitetura, governança ou contratos relevantes para agentes
+- [ ] Runbooks e `automation.manifest.json` atualizados quando a mudança tocar automações de negócio
 - [ ] `GEMINI.md` revisado apenas quando a mudança alterar regra local estável de bootstrap, encoding, skills ou validação
 
 ---
@@ -98,6 +101,10 @@ Após publicar a nova versão:
 - [ ] `GET /api/system/health` retorna `status: "ok"`
 - [ ] `GET /api/system/version` confirma a nova versão
 - [ ] `GET /api/system/diagnostics` sem findings críticos novos
+- [ ] `GET /api/system/history?hours=1` retorna snapshots recentes e `trend_summary` coerente
+- [ ] `GET /api/portfolio/health` retorna resumo coerente do catálogo governado
+- [ ] `GET /api/portfolio/drift` sem divergências inesperadas para automações promovidas
+- [ ] `GET /api/portfolio/runbook/{catalog_id}` responde para automações com runbook cadastrado
 - [ ] Dashboard renderiza sem erros de console
 - [ ] Worker heartbeat ativo: `GET /api/system/worker/status` → `is_alive: true`
 - [ ] APScheduler com jobs carregados: `GET /api/system/scheduler/jobs`
@@ -139,6 +146,6 @@ Preencha após a conclusão bem-sucedida:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este checklist cobre o processo de release do Hub de Automações em `v9.1.1`.
+- Este checklist cobre o processo de release do Hub de Automações em `v9.3.0`.
 - Atualize este checklist quando novos gates de qualidade forem adicionados ao pipeline.
 - Registre estado operacional relevante para agentes em `docs/ai-native-context-monitor.md`, não em seções longas dentro de `GEMINI.md`.

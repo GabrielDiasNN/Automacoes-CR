@@ -1,21 +1,21 @@
 # Painel de Controle de Qualidade (Quality Dashboard)
 
-> **Versão:** v7.0.0 | **Atualizado:** 2026-05-20
+> **Versão:** v9.3.0 | **Atualizado:** 2026-05-25
 
-Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v7.0.0). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
+Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v9.3.0). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
 
 ---
 
-## 📈 Status Atual das Métricas (Snapshot 20/05/2026)
+## 📈 Status Atual das Métricas (Snapshot 25/05/2026)
 
 O quadro abaixo resume a conformidade da codebase do projeto em relação às metas estabelecidas na governança técnica:
 
 | Métrica | Meta estabelecida | Valor Atual (Snapshot) | Status |
 |---|---|---|---|
-| **Cobertura de Testes (Pytest)** | `>= 60%` | **75%** | ✅ Meta Atingida |
+| **Cobertura de Testes (Pytest)** | `>= 60%` | **79%** | ✅ Meta Atingida |
 | **Erros de Tipagem (Mypy)** | `0` | **0** | ✅ Meta Atingida |
-| **Score de Estilo (Pylint)** | `>= 8.5/10` | **8.51/10** | ✅ Meta Atingida |
-| **Tamanho do Repositório (Total)** | `<= 150 MB` | **96.97 MB** | ✅ Meta Atingida |
+| **Score de Estilo (Pylint)** | `>= 8.5/10` | **10/10** | ✅ Meta Atingida |
+| **Tamanho Versionado (Git)** | `<= 150 MB` | **2.54 MB** | ✅ Meta Atingida |
 | **Governança Agregada e ZeroTrust** | `APROVADO` | **APROVADO** | ✅ Meta Atingida |
 | **Arquivos Grandes (> 5 MB)** | `0` (fora do `.gitignore`) | **0** | ✅ Meta Atingida |
 
@@ -23,11 +23,11 @@ O quadro abaixo resume a conformidade da codebase do projeto em relação às me
 
 ## 🗃️ Detalhes e Métricas Auxiliares
 
-*   **Tamanho do Código Fonte Limpo:** **26.14 MB** (totalizando **241 arquivos** de código-fonte dinâmico e rastreado no git, excluindo `.git`, `.venv`, `.wwebjs_auth` e arquivos de logs).
-*   **Arquivos Grandes Excluídos Legitimamente (Ignorados no Git):**
-    *   Arquivos de persistência de sessão do WhatsApp (`lib/.wwebjs_auth/`): Caches grandes do motor Chromium (~200+ MB), devidamente protegidos no `.gitignore`.
-    *   Banco de dados operacional local (`Orchestrator/automacoes.db`): Armazenamento relacional dinâmico de execuções (~22 MB), protegido no `.gitignore`.
+*   **Tamanho do Código Fonte Limpo:** **9.83 MB** (totalizando **257 arquivos** de código-fonte úteis, excluindo `.git`, `.venv`, `.wwebjs_auth`, caches e logs).
+*   **Pegada Operacional Local Excluída:** o snapshot separa explicitamente sessão local do WhatsApp em `lib/.wwebjs_auth/`, logs, banco SQLite/WAL e estados transitórios das automações para não contaminar a meta do payload versionado.
+*   **Payload Versionado no Git:** a meta de tamanho passa a medir apenas o conteúdo efetivamente rastreado pelo Git, que é o artefato portátil e auditável do projeto.
 *   **Zero Trust Scan:** O escaneamento local de chaves secretas e credenciais retornou 0 vulnerabilidades ativas em toda a base de código.
+*   **Catálogo Governado:** O snapshot local agora também reporta cobertura de `automation.manifest.json`, runbooks presentes, automações com smoke declarado e issues abertas no catálogo.
 
 ---
 

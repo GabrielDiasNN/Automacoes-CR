@@ -1,6 +1,6 @@
 # Fluxo de Desenvolvimento — Hub de Automações
 
-> **Versão:** v9.1.1 | **Atualizado:** 2026-05-21
+> **Versão:** v9.3.0 | **Atualizado:** 2026-05-25
 
 ---
 
@@ -152,5 +152,5 @@ Para qualquer mudança em `Dashboard/` ou nas rotas FastAPI consumidas pela UI:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este documento reflete o fluxo de desenvolvimento do Hub de Automações em `v9.1.1`.
+- Este documento reflete o fluxo de desenvolvimento do Hub de Automações em `v9.3.0`.
 - Atualize quando houver mudança de convenção de commit, de pipeline CI ou de gates obrigatórios.

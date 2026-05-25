@@ -4,7 +4,7 @@
 .DESCRIPTION
     Realiza tres checagens essenciais:
     1. Verifica se os processos Python (API e Worker) estao ativos.
-    2. Valida a conectividade da API local.
+    2. Valida a conectividade da API local e dos contratos operacionais principais.
     3. Executa a suite de testes unitarios (PyTest).
 #>
 
@@ -15,6 +15,25 @@ $ProjectRoot = (Get-Item $ScriptDir).Parent.FullName
 Write-Host "=== Teste de Integridade: Control Tower ===" -ForegroundColor Cyan
 
 $hasErrors = $false
+$apiKey = $null
+$envPath = Join-Path $ProjectRoot ".env"
+if (Test-Path $envPath) {
+
+    $keyLine = Get-Content $envPath | Where-Object { $_ -match '^ORCHESTRATOR_API_KEY=' } | Select-Object -First 1
+
+    if ($keyLine) {
+
+        $apiKey = ($keyLine -split '=', 2)[1].Trim()
+
+    }
+
+}
+$headers = @{}
+if ($apiKey) {
+
+    $headers["X-API-Key"] = $apiKey
+
+}
 
 # 1. Checagem de Processos
 Write-Host "1. Verificando processos ativos..." -NoNewline
@@ -41,6 +60,40 @@ try {
     $hasErrors = $true
     }
 
+Write-Host "2.1 Verificando contratos operacionais..." -NoNewline
+
+try {
+
+    $diag = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/system/diagnostics" -Headers $headers -TimeoutSec 5
+
+    $history = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/system/history?hours=1" -Headers $headers -TimeoutSec 5
+
+    $portfolioHealth = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/portfolio/health" -Headers $headers -TimeoutSec 5
+
+    $portfolioDrift = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/portfolio/drift" -Headers $headers -TimeoutSec 5
+
+    if ($diag.contract_version -and $history.trend_summary -and $portfolioHealth.summary -and $portfolioDrift.summary) {
+
+        Write-Host " [OK] (diagnostics + history + portfolio disponiveis)" -ForegroundColor Green
+
+    } else {
+
+        Write-Host " [AVISO] Contratos de diagnostics/history/portfolio incompletos." -ForegroundColor Yellow
+
+        $hasErrors = $true
+
+    }
+
+    } catch [System.Exception] {
+
+    Write-Host " [FALHA] diagnostics/history/portfolio indisponiveis." -ForegroundColor Red
+
+    $hasErrors = $true
+
+    }
+
+
+
 # 3. Execucao de Testes Unitarios (PyTest)
 Write-Host "3. Executando suite PyTest..." -ForegroundColor Cyan
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
@@ -48,7 +101,7 @@ $PyTest = Join-Path $ProjectRoot ".venv\Scripts\pytest.exe"
 
 if (Test-Path $PyTest) {
     $env:PYTHONPATH = Join-Path $ProjectRoot "Orchestrator"
-    $pytestOutput = & $PyTest (Join-Path $ProjectRoot "Orchestrator\tests") 2>&1
+    $pytestOutput = & $PyTest (Join-Path $ProjectRoot "Orchestrator\tests") -q 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] Todos os testes unitarios passaram." -ForegroundColor Green
     } else {

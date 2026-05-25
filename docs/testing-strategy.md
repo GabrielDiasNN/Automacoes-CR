@@ -1,6 +1,6 @@
 # Estratégia de Testes — Hub de Automações
 
-> **Versão:** v9.1.1 | **Atualizado:** 2026-05-21
+> **Versão:** v9.3.0 | **Atualizado:** 2026-05-24
 
 ---
 
@@ -28,15 +28,17 @@ O ecossistema de testes do Hub de Automações é organizado em três camadas:
 | `tests/test_api_smoke_critical.py` | Integração | Endpoints de sistema críticos e erros operacionais |
 | `tests/test_filters.py` | Integração | Matriz de filtros do backend: automações, execuções, auditoria, paginação e inválidos |
 | `tests/test_database_schema.py` | Unitário | Valida colunas do schema contra `EXPECTED_SCHEMA` |
-| `tests/test_diagnostics.py` | Integração | Cenários de diagnóstico: worker offline, fila parada, WAL risk |
-| `tests/test_queue_rules.py` | Integração | Regras de requeue: queue_group, max_retries, prioridade |
+| `tests/test_diagnostics.py` | Integração | Cenários de diagnóstico: worker offline, fila parada, WAL risk, ownership órfão |
+| `tests/test_queue_rules.py` | Integração | Regras de requeue, claim por `queue_group`, max_retries e prioridade |
 | `tests/test_sanitization.py` | Unitário | `sanitize_log_payload`: mascaramento de segredos |
 | `tests/test_schedule_advanced.py` | Unitário | Normalização avançada de agenda, cron, intervalos, `anchor_time` e previews |
 | `tests/test_timezone_contract.py` | Unitário | Contrato de datas/horários em BRT nos endpoints e no preview |
 | `tests/test_e2e_dashboard.py` | E2E | Navegação real do dashboard, busca/filtros visíveis, atalhos operacionais, logs e evidência Playwright |
-| `tests/test_validation.py` | Integração | Validação de schedule e `.env` via API |
+| `tests/test_portfolio.py` | Integração | Catálogo governado, drift entre manifesto e runtime e leitura segura de runbook |
+| `tests/test_receitas_emitidas.py` | Unitário | Smoke da geração HTML e sanitização básica de Receitas Emitidas |
+| `tests/test_validation.py` | Integração | Validação de schedule, `.env` e preflight administrativo |
 
-> **Total atual:** 128 testes coletados | Meta de cobertura: ≥ 60% (`pytest-cov`)
+> **Total atual:** 140 testes coletados | Meta de cobertura: ≥ 60% (`pytest-cov`)
 
 ---
 
@@ -48,6 +50,9 @@ cd Orchestrator
 
 # Suite completa
 .venv\Scripts\python.exe -m pytest tests/ -v
+
+# Catálogo governado + automações
+.venv\Scripts\python.exe -m pytest tests/test_portfolio.py tests/test_receitas_emitidas.py -q
 
 # Apenas unitários (sem banco real)
 .venv\Scripts\python.exe -m pytest tests/ -v -m "not integration"
@@ -146,5 +151,5 @@ Ao implementar uma nova feature:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este documento descreve a estratégia de testes em `v9.1.1`.
+- Este documento descreve a estratégia de testes em `v9.3.0`.
 - Atualize quando novas suítes forem criadas ou quando a meta de cobertura mudar.

@@ -1,5 +1,36 @@
 # Changelog
 
+## [9.3.0] - 2026-05-24
+### Adicionado
+- **Catálogo Governado de Automações**: cada automação ativa passa a possuir `automation.manifest.json` como fonte canônica de criticidade, SLA, owner, dependências, smoke tests e caminho operacional do Orchestrator.
+- **Portfólio Operacional na API**: novos endpoints `GET /api/portfolio/health` e `GET /api/portfolio/drift` cruzam catálogo versionado, documentação e runtime; `GET /api/portfolio/runbook/{catalog_id}` fornece leitura segura do runbook para a UI.
+- **Runbooks Oficiais do Hub**: adicionados os runbooks de `Montagem de Terceirizados` e `Receitas Emitidas`.
+- **Smoke de Receitas Emitidas**: criada a suíte `tests/test_receitas_emitidas.py` cobrindo geração HTML mínima da automação.
+- **Governança do Catálogo**: criado `Tools/Test-AutomationCatalog.ps1` e integrado ao quality gate agregado.
+
+### Alterado
+- **Dashboard Operacional**: o painel principal agora mostra a grade de portfólio governado com criticidade, SLA, docs e drift.
+- **Scaffold Oficial**: `Tools/New-Automation.ps1` passa a gerar manifesto canônico e runbook inicial junto do pacote base da automação.
+- **Snapshot de Qualidade**: `Tools/Get-QualitySnapshot.ps1` passa a relatar cobertura do catálogo, runbooks presentes, smoke declarado e issues do catálogo.
+- **Snapshot de Qualidade Refinado**: a métrica de tamanho agora mede o payload efetivamente versionado no Git e expõe a pegada operacional local como dado auxiliar, evitando falso alerta causado por sessão do WhatsApp, logs e SQLite/WAL locais.
+- **Versionamento do Runtime**: `ORCHESTRATOR_VERSION`/`WORKER_VERSION` avançaram para `9.3.0` e `ORCHESTRATOR_CONTRACT_VERSION` para `2026.05.24.2`.
+
+## [9.2.7] - 2026-05-24
+### Adicionado
+- **Histórico Operacional do Orchestrator**: criada a tabela `system_health_snapshots`, o job `enterprise_system_health_snapshot` com coleta a cada 5 minutos e o endpoint `GET /api/system/history`, permitindo tendência operacional de fila, WAL, heartbeat e violações recentes sem depender apenas de logs.
+- **Ownership de Execução no Worker**: execuções `RUNNING` passam a registrar `claimed_at`, `worker_instance_id` e `worker_pid`; o diagnóstico agora identifica `queue.orphaned_running` e diferencia backlog legítimo de execução órfã.
+- **Preflight Administrativo de Automações**: novo endpoint `POST /api/automations/preflight` centraliza a validação de `script_path`, agenda, diretório resolvido, `queue_group` e `notification_channels` antes de `create/update`.
+
+### Alterado
+- **Contrato de Diagnóstico**: `/api/system/diagnostics` e `/api/system/overview` passam a expor `trend_summary` e `slo_breaches` de forma aditiva, preservando compatibilidade com o Dashboard atual.
+- **Mutações Administrativas**: gravações de `.env`, scripts e configs agora retornam `validated`, `backup_path` e `audit_id`, mantendo `backup` por compatibilidade.
+- **Scheduler Runtime**: disparos agendados e claims do worker passaram a respeitar concorrência por `queue_group` também no caminho normal de despacho, não apenas no requeue manual.
+- **Versionamento do Runtime**: `ORCHESTRATOR_VERSION`/`WORKER_VERSION` avançaram para `9.2.7`, `ORCHESTRATOR_CONTRACT_VERSION` para `2026.05.24.1` e `ORCHESTRATOR_SCHEMA_VERSION` para `20260524_01`.
+
+### Testado
+- **Suite completa do Orchestrator**: `pytest tests -q` → `140 passed`.
+- **Regressão focada**: `pytest tests/test_automations_crud.py tests/test_queue_rules.py tests/test_system.py tests/test_validation.py -q` e `pytest tests/test_diagnostics.py tests/test_recovery.py tests/test_executions.py tests/test_worker_queue.py tests/test_worker_loop.py -q` → `62 passed`.
+
 ## [9.2.6] - 2026-05-22
 ### Alterado
 - **Governança dos Versionados e `.gitignore`**: removido o papel canônico do artefato gerado `docs/playwright-e2e-evidence-generated.md`, mantendo no repositório apenas o padrão e o template de evidência Playwright. O `.gitignore` passa a cobrir explicitamente a evidência gerada e capturas `Logs/playwright-*.png`.

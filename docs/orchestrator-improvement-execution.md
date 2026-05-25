@@ -1,14 +1,20 @@
 # Execução do Plano de Melhoria do Orchestrator
 
-> **Versão:** v9.1.0 | **Atualizado:** 2026-05-21
+> **Versão:** v9.3.0 | **Atualizado:** 2026-05-25
 
 ## Resumo
 
-Este documento registra a execução incremental do plano de melhoria do Orchestrator com prioridade em estabilidade, fases pequenas e manutenção da arquitetura SQLite + Alembic.
+Este documento registra a execução incremental do plano de melhoria do Orchestrator com prioridade em estabilidade, fases pequenas e manutenção da arquitetura SQLite + Alembic, agora expandido com catálogo governado e visão de portfólio operacional.
 
 ## Baseline Estabilizado
 
-- `constants.py` alinhado ao baseline `9.1.0`, contrato `2026.05.20.1` e revisão Alembic `a5b212d4418f`.
+- `constants.py` alinhado ao baseline `9.3.0`, contrato `2026.05.24.2` e revisão Alembic `20260524_01`.
+- O worker agora grava ownership em `executions` com `claimed_at`, `worker_instance_id` e `worker_pid`.
+- O Orchestrator mantém snapshots operacionais em `system_health_snapshots`, com coleta a cada 5 minutos e retenção de 30 dias.
+- O diagnóstico operacional agora expõe `trend_summary`, `slo_breaches` e `queue.orphaned_running`.
+- `POST /api/automations/preflight` passou a ser a validação única de cadastro antes de `create/update`, normalizando canais e confirmando o entrypoint real.
+- O portfólio governado cruza `automation.manifest.json`, documentação e cadastro runtime em `GET /api/portfolio/health` e `GET /api/portfolio/drift`.
+- O dashboard principal agora expõe criticidade, SLA, drift, documentação e dependências do catálogo governado.
 - Artefatos runtime de banco de teste e scripts temporários de correção foram adicionados ao `.gitignore`.
 - A regra de `anchor_time` foi centralizada em `Orchestrator/app/schemas/schedule_rules.py`, usada tanto pelo preview quanto pelo APScheduler.
 - O diagnóstico operacional agora expõe execuções `RUNNING` acima de `max_runtime_minutes` em `queue.running_over_runtime`.
@@ -18,6 +24,9 @@ Este documento registra a execução incremental do plano de melhoria do Orchest
 - A evolução preserva os contratos públicos existentes; os novos campos são aditivos.
 - O `schema_version` operacional passa a representar a revisão Alembic ativa, evitando drift entre banco e aplicação.
 - O Dashboard mostra a contagem de execuções ativas acima do limite na aba Sistema, reduzindo investigação manual em incidentes de fila.
+- Ownership do worker permite distinguir execução longa legítima de execução órfã após falha de processo ou troca de instância.
+- O histórico operacional reduz dependência de logs para detectar recorrência de backlog, pressão de WAL e heartbeat instável.
+- O catálogo governado reduz drift entre diretório de automação, documentação obrigatória e cadastro operacional no Orchestrator.
 
 ## Limites Para Manter SQLite
 
@@ -33,6 +42,10 @@ Preparar avaliação de PostgreSQL apenas se dois ou mais indicadores acima vira
 ## Validação Esperada
 
 - `pytest` do Orchestrator para agenda, diagnósticos, contratos e fluxos críticos.
+- `pytest tests/test_portfolio.py -q` para validar saúde e drift do catálogo governado.
+- `GET /api/system/history?hours=24` para confirmar persistência dos snapshots operacionais.
+- `POST /api/automations/preflight` para validar `script_path`, agenda e canais antes de mutações administrativas.
+- `GET /api/portfolio/health` e `GET /api/portfolio/drift` para confirmar leitura do portfólio governado.
 - `Tools/Test-SourceEncoding.ps1 -RootPath .`
 - `Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance`
 - Playwright por último quando houver mudança front-back servida em `/dashboard/`.

@@ -6,7 +6,7 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = "." }
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $OrchestratorDir = Join-Path $ProjectRoot "Orchestrator"
 $LogDir = Join-Path $OrchestratorDir "Logs"
-$RuntimeVersion = "v9.1.0"
+$RuntimeVersion = "v9.3.0"
 
 # Garantir diretorio de logs
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force }

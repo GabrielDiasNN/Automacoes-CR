@@ -4,16 +4,20 @@ Este arquivo é o snapshot curado para bootstrap de agentes no Hub de Automaçõ
 
 ## Estado Atual
 
-- **Versão operacional de referência**: Hub em linha `v9.2.x`, com Orchestrator/Dashboard em evolução sobre o baseline Alembic e governança compartilhada entre Codex, Gemini CLI e Antigravity.
+- **Versão operacional de referência**: Hub em linha `v9.3.0`, com Orchestrator/Dashboard operando sobre baseline Alembic, ownership do worker e governança compartilhada entre Codex, Gemini CLI e Antigravity.
 - **Stack ativa**: Python/FastAPI, PowerShell corporativo, Node.js para comunicações, Dashboard SPA estático e SQLite em WAL com Alembic.
 - **Skills do workspace**: `.github/skills/` é a fonte canônica; `.gemini/skills/` é apenas mirror por junction/symlink.
 - **Skills globais obrigatórias**: `ai-engineering-discipline`, `protocolo-valeg` e `git-ide-governance-skill`.
 - **Contratos críticos**: Zero Trust, encoding governado, documentação viva, validação de skills, governança agregada, Playwright como última validação para UI/front-back.
-- **Validação de referência mais recente**: em 22/05/2026, `ValidarAutomacoes.ps1 -OnlyGovernance` executou governança agregada e suite pytest/Playwright com `134 passed`.
+- **Validação de referência mais recente**: em 25/05/2026, a suíte completa do Orchestrator executou com `146 passed`, e o dashboard fechou `8 passed` na rodada E2E após catálogo governado, histórico operacional e preflight administrativo.
+- **Catálogo governado do hub (24/05/2026)**: automações ativas agora carregam `automation.manifest.json` versionado, com criticidade, SLA, dependências, smoke tests e vínculo para runbook. O dashboard consome `/api/portfolio/health` para expor esse cruzamento operacional.
 
 ## Mudanças Recentes Relevantes
 
 - **Disciplina global de engenharia com IA (22/05/2026)**: adicionada `ai-engineering-discipline` como skill global canônica e obrigatória para alinhar Codex, Gemini CLI e Antigravity. Ver `CHANGELOG.md`.
+- **Observabilidade histórica e ownership do worker (24/05/2026)**: o Orchestrator passou a registrar `claimed_at`, `worker_instance_id` e `worker_pid` nas execuções, identificar `RUNNING` órfão no diagnóstico e persistir snapshots em `system_health_snapshots`, expostos por `GET /api/system/history`. Ver `CHANGELOG.md`.
+- **Preflight administrativo de automações (24/05/2026)**: `POST /api/automations/preflight` torna-se a etapa única de validação antes de `create/update`, normalizando canais e validando o entrypoint real. Ver `CHANGELOG.md`.
+- **Governança de catálogo (24/05/2026)**: `Tools/Test-AutomationCatalog.ps1` passa a validar manifesto, runbook, smoke tests e entrypoint; `Tools/New-Automation.ps1` cria manifesto e runbook inicial por padrão.
 - **Reorganização do contexto AI-Native (22/05/2026)**: `GEMINI.md` passa a ser contrato local estável; este monitor concentra o snapshot curado para agentes. Ver `CHANGELOG.md`.
 - **Receitas Bloqueadas v2.3.2 (22/05/2026)**: diff de estado passou a classificar alteração somente quando a coluna "Data Bloqueio" muda, reduzindo alertas redundantes. Ver `CHANGELOG.md`.
 - **Refatoração e estabilização de testes v9.2.0 (22/05/2026)**: suíte monolítica foi decomposta, testes de notificações/worker foram adicionados e fixtures E2E ficaram mais resilientes. Ver `CHANGELOG.md`.
