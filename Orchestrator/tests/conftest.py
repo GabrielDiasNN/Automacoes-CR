@@ -15,13 +15,12 @@ os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
 os.environ["RATE_LIMIT_RPM"] = "10000"
 
 import pytest
+from app import models
+from app.database import Base, get_db
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from app import models
-from app.database import Base, get_db
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
@@ -70,8 +69,8 @@ def client(db_session):
     import app.database as db_module
     import app.main as main_module
     import app.routers.automations as auto_router
-    import app.services.scheduler_runtime as scheduler_runtime
     import app.routers.websocket as websocket_router
+    import app.services.scheduler_runtime as scheduler_runtime
 
     original_session_local = db_module.SessionLocal
     original_engine = db_module.engine
