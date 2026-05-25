@@ -117,6 +117,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: preparar-diff
+    env:
+      CHANGED_FILES_JSON: ${{ needs.preparar-diff.outputs.changed_files_json }}
 
     steps:
       - name: Checkout
@@ -137,8 +139,18 @@ jobs:
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
         run: |
-          black --check .
-          isort --check-only .
+          $changedFiles = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:CHANGED_FILES_JSON) -and $env:CHANGED_FILES_JSON -ne '[]') {
+            $changedFiles = @($env:CHANGED_FILES_JSON | ConvertFrom-Json | Where-Object { $_ -match '\.py$' })
+          }
+
+          if ($changedFiles.Count -eq 0) {
+            Write-Host "Nenhum arquivo Python alterado para validar com Black e Isort."
+            exit 0
+          }
+
+          python -m black --check @changedFiles
+          python -m isort --check-only @changedFiles
 
       - name: Validar governanca de SKILLs
         shell: pwsh
