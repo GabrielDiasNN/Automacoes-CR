@@ -66,19 +66,21 @@ try {
 
     $diag = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/system/diagnostics" -Headers $headers -TimeoutSec 5
 
+    $baseline = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/system/baseline" -Headers $headers -TimeoutSec 5
+
     $history = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/system/history?hours=1" -Headers $headers -TimeoutSec 5
 
     $portfolioHealth = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/portfolio/health" -Headers $headers -TimeoutSec 5
 
     $portfolioDrift = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/portfolio/drift" -Headers $headers -TimeoutSec 5
 
-    if ($diag.contract_version -and $history.trend_summary -and $portfolioHealth.summary -and $portfolioDrift.summary) {
+    if ($diag.contract_version -and $baseline.status -and $history.trend_summary -and $portfolioHealth.summary -and $portfolioDrift.summary) {
 
-        Write-Host " [OK] (diagnostics + history + portfolio disponiveis)" -ForegroundColor Green
+        Write-Host " [OK] (diagnostics + baseline + history + portfolio disponiveis)" -ForegroundColor Green
 
     } else {
 
-        Write-Host " [AVISO] Contratos de diagnostics/history/portfolio incompletos." -ForegroundColor Yellow
+        Write-Host " [AVISO] Contratos de diagnostics/baseline/history/portfolio incompletos." -ForegroundColor Yellow
 
         $hasErrors = $true
 
@@ -86,7 +88,7 @@ try {
 
     } catch [System.Exception] {
 
-    Write-Host " [FALHA] diagnostics/history/portfolio indisponiveis." -ForegroundColor Red
+    Write-Host " [FALHA] diagnostics/baseline/history/portfolio indisponiveis." -ForegroundColor Red
 
     $hasErrors = $true
 

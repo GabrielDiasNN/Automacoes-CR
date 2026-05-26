@@ -118,6 +118,10 @@ def test_portfolio_health_endpoint_reports_manifest_and_runtime_state(
 
     assert payload["summary"]["governed_items"] == 1
     assert payload["summary"]["drift_items"] == 0
+    assert payload["summary"]["status"] == "healthy"
+    assert payload["summary"]["healthy_items"] == 1
+    assert payload["summary"]["incident_items"] == 0
+    assert payload["summary"]["recommended_action"] is None
     item = payload["items"][0]
     assert item["catalog_id"] == "AG-01"
     assert item["criticality"] == "high"
@@ -170,6 +174,47 @@ def test_portfolio_drift_endpoint_reports_runtime_mismatch_and_missing_docs(
     assert "sla_mismatch" in issue_codes
     assert "notification_channels_mismatch" in issue_codes
     assert "runbook_missing" in issue_codes
+
+
+def test_portfolio_health_summary_escalates_catalog_drift_for_high_criticality(
+    client, db_session, monkeypatch, tmp_path
+):
+    import app.routers.portfolio as portfolio_router
+    from app import models
+
+    manifest = _create_catalog_automation(
+        tmp_path,
+        folder_name="Auto Critica",
+        catalog_id="AC-04",
+        slug="auto-critica",
+        criticality="high",
+        queue_group="oracle",
+        runbook=False,
+    )
+    monkeypatch.setattr(portfolio_router, "PROJECT_ROOT", str(tmp_path))
+
+    auto = models.Automation(
+        name=manifest["name"],
+        script_path=manifest["orchestrator"]["script_path"],
+        queue_group="financeiro",
+        max_runtime_minutes=15,
+        max_retries=0,
+        sla_minutes=60,
+        notification_channels="whatsapp",
+        enabled=True,
+    )
+    db_session.add(auto)
+    db_session.commit()
+
+    response = client.get("/api/portfolio/health", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["status"] == "incident"
+    assert payload["summary"]["incident_items"] >= 1
+    assert payload["summary"]["drift_items"] >= 1
+    assert payload["summary"]["docs_missing_items"] >= 1
+    assert payload["summary"]["recommended_action"] is not None
+    assert payload["summary"]["top_issue"] is not None
 
 
 def test_portfolio_runbook_endpoint_returns_markdown(

@@ -278,7 +278,7 @@ async function loadOverview() {
     ui.updateConnectionStatus(true);
 
     applyOverviewKpis(overview);
-    renderOverviewInsights(overview);
+    renderOverviewInsights(overview, portfolio.summary || overview.portfolio || {});
     renderOverviewCharts(overview);
     await populateControlTable(overview);
     renderPortfolioTable(portfolio);
@@ -349,11 +349,57 @@ function estimateAverageDuration(overview) {
     return values.reduce((acc, item) => acc + item, 0) / values.length;
 }
 
-function renderOverviewInsights(overview) {
+function renderOverviewInsights(overview, portfolioSummary) {
     const topFail = (overview.top_failures || [])[0];
-    setText("insight-top-fail", topFail ? `${topFail.automation_name} (${topFail.failures})` : "Nenhuma falha registrada em 24h");
+    setText("insight-top-fail", describePrimaryOperationalRisk(overview, portfolioSummary, topFail));
     setText("insight-time-saved", `${((overview.kpis?.success_24h || 0) * 0.2).toFixed(1)}h estimadas no dia`);
     setText("insight-next-window", overview.kpis?.next_window || "Sem janela agendada");
+    setText("insight-portfolio-health", describePortfolioSummary(portfolioSummary));
+}
+
+function describePrimaryOperationalRisk(overview, portfolioSummary, topFail) {
+    const baseline = overview?.diagnostics?.operational_baseline || {};
+    const baselineStatus = String(baseline.status || "healthy").toLowerCase();
+    if (baselineStatus === "incident") {
+        return `Baseline INCIDENTE${baseline.recommended_action ? ` • ${baseline.recommended_action}` : ""}`;
+    }
+    const portfolioStatus = String(portfolioSummary?.status || "").toLowerCase();
+    if (portfolioStatus === "incident") {
+        return `Portfólio INCIDENTE${portfolioSummary?.top_issue ? ` • ${portfolioSummary.top_issue}` : ""}`;
+    }
+    if (topFail) {
+        return `${topFail.automation_name} (${topFail.failures})`;
+    }
+    if (baselineStatus === "attention") {
+        return `Baseline em atenção${baseline.recommended_action ? ` • ${baseline.recommended_action}` : ""}`;
+    }
+    if (portfolioStatus === "attention") {
+        return `Portfólio em atenção${portfolioSummary?.top_issue ? ` • ${portfolioSummary.top_issue}` : ""}`;
+    }
+    return "Nenhum risco operacional crítico no momento";
+}
+
+function describePortfolioSummary(portfolioSummary) {
+    const status = String(portfolioSummary?.status || "healthy").toUpperCase();
+    const incidents = Number(portfolioSummary?.incident_items || 0);
+    const attention = Number(portfolioSummary?.attention_items || 0);
+    const drift = Number(portfolioSummary?.drift_items || 0);
+    const ungoverned = Number(portfolioSummary?.not_registered_items || 0);
+
+    if (status === "INCIDENT") {
+        const parts = [];
+        if (incidents > 0) parts.push(`${incidents} incidente(s)`);
+        if (ungoverned > 0) parts.push(`${ungoverned} fora do catálogo`);
+        if (drift > 0) parts.push(`${drift} drift(s)`);
+        return `INCIDENTE • ${parts.join(" • ") || "Ação imediata"}`;
+    }
+    if (status === "ATTENTION") {
+        const parts = [];
+        if (attention > 0) parts.push(`${attention} em atenção`);
+        if (drift > 0) parts.push(`${drift} drift(s)`);
+        return `ATENÇÃO • ${parts.join(" • ") || "Governança pendente"}`;
+    }
+    return "SAUDÁVEL • Catálogo reconciliado com o runtime";
 }
 
 function renderOverviewCharts(overview) {

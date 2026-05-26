@@ -13,6 +13,7 @@ export function normalizeOverviewPayload(payload) {
         top_failures: Array.isArray(payload?.top_failures) ? payload.top_failures : [],
         scheduler: payload?.scheduler || {},
         queue: payload?.queue || {},
+        portfolio: payload?.portfolio || {},
         diagnostics: normalizeDiagnosticsPayload(payload?.diagnostics || {}),
     };
 }
@@ -41,6 +42,13 @@ export function normalizeDiagnosticsPayload(payload) {
         failure_hotspots: Array.isArray(payload?.failure_hotspots) ? payload.failure_hotspots : [],
         trace: payload?.trace || {},
         slo: payload?.slo || { thresholds: {}, breaches: {} },
+        operational_baseline: payload?.operational_baseline || {
+            status: "healthy",
+            attention_count: 0,
+            incident_count: 0,
+            recommended_action: null,
+            metrics: [],
+        },
     };
 }
 

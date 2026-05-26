@@ -93,6 +93,23 @@ class AutomationPreflightRequest(AutomationBase):
     pass
 
 
+class AutomationPreflightIssue(BaseModel):
+    code: str
+    message: str
+    severity: str = "WARN"
+
+
+class AutomationPreflightGovernance(BaseModel):
+    manifest_present: bool = False
+    manifest_path: Optional[str] = None
+    catalog_id: Optional[str] = None
+    status: str = "healthy"
+    top_issue: Optional[str] = None
+    recommended_action: Optional[str] = None
+    blocking_issues: List[AutomationPreflightIssue] = []
+    warnings: List[AutomationPreflightIssue] = []
+
+
 class AutomationUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -158,6 +175,9 @@ class AutomationPreflightResponse(BaseModel):
     schedule_summary: str
     next_runs_preview: List[str] = []
     warnings: List[str] = []
+    governance: AutomationPreflightGovernance = Field(
+        default_factory=AutomationPreflightGovernance
+    )
 
 
 class AutomationResponse(AutomationBase):

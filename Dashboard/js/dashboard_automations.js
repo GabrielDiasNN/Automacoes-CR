@@ -27,7 +27,9 @@ export function createAutomationsModule(ctx) {
     let currentTabId = "tab-identification";
     let latestSchedulePreview = null;
     let currentAutomationContext = null;
+    let latestAutomationPreflight = null;
     let openActionMenuAutomationId = null;
+    let cachedPortfolioByAutomation = new Map();
     const TAB_ORDER = ["tab-identification", "tab-schedule", "tab-execution", "tab-review"];
 
     function initTabsAndEvents() {
@@ -160,19 +162,21 @@ export function createAutomationsModule(ctx) {
 
     async function loadConfig() {
         initActionMenuEvents();
-        const [autos, jobs] = await Promise.all([
+        const [autos, jobs, portfolio] = await Promise.all([
             api("/api/automations/all"),
             api("/api/system/scheduler/jobs"),
+            api("/api/portfolio/health"),
         ]);
 
         if (!autos) return;
 
         cachedAutomations = autos;
         cachedJobs = jobs || [];
+        cachedPortfolioByAutomation = buildPortfolioLookup(portfolio);
         window.automations = autos;
 
         refreshAutomationFilterOptions(autos);
-        renderAutomationTable(autos, jobs || []);
+        renderAutomationTable(getFilteredAutomations(), jobs || []);
         syncGlobalTestToggle(autos);
 
         if (typeof lucide !== "undefined") lucide.createIcons();
@@ -234,7 +238,7 @@ export function createAutomationsModule(ctx) {
             const scheduleLabel = auto.schedule_summary || describeSchedule(auto.schedule);
             const nextRun = auto.next_run || formatDate(nextRunByAuto.get(auto.id)) || "-";
             const escapedName = escapeHtml(auto.name);
-            const riskLabel = buildRiskLabel(auto);
+            const riskLabel = buildRiskLabel(auto, cachedPortfolioByAutomation.get(auto.id));
             const lastLabel = auto.last_status ? `<span class="badge ${getBadgeClass(auto.last_status)}">${translateStatus(auto.last_status)}</span>` : "<span class=\"badge badge-muted\">Sem histórico</span>";
             const lastMeta = auto.last_execution_started_at
                 ? `<span class="cell-meta">${escapeHtml(auto.last_execution_started_at)}</span>`
@@ -393,16 +397,7 @@ export function createAutomationsModule(ctx) {
     }
 
     function handleSearch() {
-        const query = (document.getElementById("auto-search")?.value || "").toLowerCase().trim();
-        const filtered = cachedAutomations.filter((auto) => {
-            return (
-                auto.name.toLowerCase().includes(query) ||
-                (auto.description || "").toLowerCase().includes(query) ||
-                auto.script_path.toLowerCase().includes(query)
-            );
-        });
-
-        renderAutomationTable(filtered, cachedJobs);
+        renderAutomationTable(getFilteredAutomations(), cachedJobs);
         if (typeof lucide !== "undefined") lucide.createIcons();
     }
 
@@ -413,6 +408,7 @@ export function createAutomationsModule(ctx) {
         resetAutomationForm();
         initTabsAndEvents();
         currentAutomationContext = null;
+        latestAutomationPreflight = null;
 
         if (automationId !== null) {
             const auto = await api(`/api/automations/${automationId}`);
@@ -461,6 +457,7 @@ export function createAutomationsModule(ctx) {
 
         currentAutomationContext = null;
         latestSchedulePreview = null;
+        latestAutomationPreflight = null;
         switchTab("tab-identification");
         updateScheduleBlocksVisibility("manual");
         resetScheduleBuilder();
@@ -798,7 +795,21 @@ export function createAutomationsModule(ctx) {
             return;
         }
         latestSchedulePreview = preview;
+        const preflight = await api("/api/automations/preflight", "POST", payload, { silentErrorToast: true });
+        if (!preflight) {
+            showToast("Falha ao validar governança da automação.", "error");
+            return;
+        }
+        latestAutomationPreflight = preflight;
         refreshReviewPanel();
+
+        if (preflight.valid === false) {
+            const blockingIssue = Array.isArray(preflight.governance?.blocking_issues)
+                ? preflight.governance.blocking_issues[0]
+                : null;
+            showToast(blockingIssue?.message || "Pré-validação governada reprovada.", "error");
+            return;
+        }
 
         const submitBtn = document.querySelector("#form-auto button[type=\"submit\"]");
         isSavingAutomation = true;
@@ -859,11 +870,17 @@ export function createAutomationsModule(ctx) {
         return "manual";
     }
 
-    function buildRiskLabel(auto) {
+    function buildRiskLabel(auto, governance) {
         const flags = [];
         if (Number(auto.cooldown_minutes || 0) > 0) flags.push(`CD ${auto.cooldown_minutes}m`);
         if (Number(auto.max_retries || 0) > 0) flags.push(`RT ${auto.max_retries}`);
         if (auto.queue_group) flags.push("GRP");
+        const governanceStatus = String(governance?.health_status || "").toLowerCase();
+        const governanceDrift = Number(governance?.drift_count || 0);
+        const docsStatus = String(governance?.docs_status || "").toLowerCase();
+        if (governanceStatus === "not_governed" || governanceStatus === "not_registered") flags.push("CAT");
+        if (governanceDrift > 0) flags.push(`DRIFT ${governanceDrift}`);
+        if (docsStatus && docsStatus !== "complete") flags.push("DOCS");
         const failures24h = Number(auto.failures_24h || 0);
         const timeouts24h = Number(auto.timeouts_24h || 0);
         const success24h = Number(auto.success_24h || 0);
@@ -872,7 +889,7 @@ export function createAutomationsModule(ctx) {
         if (success24h > 0 && failures24h === 0 && timeouts24h === 0) flags.push(`OK ${success24h}/24h`);
 
         if (!flags.length) return "<span class=\"badge badge-success badge-wrap fleet-risk-badge\">OK</span>";
-        const hasFailure = failures24h > 0 || timeouts24h > 0;
+        const hasFailure = failures24h > 0 || timeouts24h > 0 || governanceDrift > 0 || governanceStatus === "not_governed" || governanceStatus === "not_registered";
         return `<span class="badge ${hasFailure ? "badge-danger" : "badge-warning"} badge-wrap fleet-risk-badge">${flags.join(" • ")}</span>`;
     }
 
@@ -883,12 +900,14 @@ export function createAutomationsModule(ctx) {
         if (!schedule) {
             box.innerHTML = "";
             latestSchedulePreview = null;
+            latestAutomationPreflight = null;
             return;
         }
         const preview = await api("/api/system/schedule/preview", "POST", { schedule, limit: 5 }, { silentErrorToast: true });
         if (!preview || !preview.valid) {
             box.innerHTML = "<span>Prévia indisponível.</span>";
             latestSchedulePreview = null;
+            latestAutomationPreflight = null;
             return;
         }
         latestSchedulePreview = preview;
@@ -905,12 +924,15 @@ export function createAutomationsModule(ctx) {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<div class="empty-state">Preencha os campos para gerar o conteúdo desta etapa.</div>';
         });
+        const governance = document.getElementById("automation-review-governance");
+        if (governance) governance.innerHTML = '<div class="empty-state">A validação governada será exibida antes do save.</div>';
     }
 
     function refreshReviewPanel() {
         renderReviewSummary();
         renderReviewPreview();
         renderReviewImpact();
+        renderReviewGovernance();
     }
 
     function renderReviewSummary() {
@@ -977,6 +999,72 @@ export function createAutomationsModule(ctx) {
                 <small>Se a configuração estiver incorreta, o save permanece bloqueado.</small>
             </div>
         `;
+    }
+
+    function renderReviewGovernance() {
+        const container = document.getElementById("automation-review-governance");
+        if (!container) return;
+        const preflight = latestAutomationPreflight;
+        if (!preflight) {
+            container.innerHTML = '<div class="empty-state">A pré-validação governada aparecerá após a revisão da agenda.</div>';
+            return;
+        }
+
+        const governance = preflight.governance || {};
+        const blockingIssues = Array.isArray(governance.blocking_issues) ? governance.blocking_issues : [];
+        const warnings = Array.isArray(governance.warnings) ? governance.warnings : [];
+        const status = String(governance.status || "healthy").toLowerCase();
+
+        if (status === "incident") {
+            container.innerHTML = `
+                <div class="review-item danger">
+                    <strong>Save bloqueado pelo manifesto governado</strong>
+                    <p>${escapeHtml(governance.top_issue || "Há inconsistências entre cadastro e manifesto.")}</p>
+                    <small>${escapeHtml(blockingIssues[0]?.message || governance.recommended_action || "Alinhe o automation.manifest.json antes de salvar.")}</small>
+                </div>
+            `;
+            return;
+        }
+
+        if (status === "attention") {
+            container.innerHTML = `
+                <div class="review-item warning">
+                    <strong>Governança em atenção</strong>
+                    <p>${escapeHtml(governance.top_issue || "Há avisos operacionais para esta automação.")}</p>
+                    <small>${escapeHtml(warnings[0]?.message || governance.recommended_action || "Revise os avisos antes da promoção.")}</small>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="review-item success">
+                <strong>Governança validada</strong>
+                <p>${escapeHtml(governance.top_issue || "Cadastro alinhado ao manifesto governado.")}</p>
+                <small>${escapeHtml(governance.catalog_id ? `Catálogo ${governance.catalog_id}` : "Manifesto validado.")}</small>
+            </div>
+        `;
+    }
+
+    function buildPortfolioLookup(portfolio) {
+        const lookup = new Map();
+        const items = Array.isArray(portfolio?.items) ? portfolio.items : [];
+        items.forEach((item) => {
+            if (item?.automation_id) {
+                lookup.set(Number(item.automation_id), item);
+            }
+        });
+        return lookup;
+    }
+
+    function getFilteredAutomations() {
+        const query = (document.getElementById("auto-search")?.value || "").toLowerCase().trim();
+        if (!query) return cachedAutomations;
+        return cachedAutomations.filter((auto) => (
+            auto.name.toLowerCase().includes(query) ||
+            (auto.description || "").toLowerCase().includes(query) ||
+            auto.script_path.toLowerCase().includes(query)
+        ));
     }
 
     function goStep(direction) {

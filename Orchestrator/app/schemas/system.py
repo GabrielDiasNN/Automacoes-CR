@@ -8,7 +8,11 @@ from typing import Any, Generic, List, Optional, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..constants import (
+    BASELINE_STATUS_ATTENTION,
+    BASELINE_STATUS_HEALTHY,
+    BASELINE_STATUS_INCIDENT,
     DIAGNOSTIC_SEVERITIES,
+    OPERATIONAL_BASELINE_STATUSES,
     ORCHESTRATOR_CONTRACT_VERSION,
     ORCHESTRATOR_SCHEMA_VERSION,
     ORCHESTRATOR_VERSION,
@@ -226,11 +230,54 @@ class DiagnosticsTrendSummary(BaseModel):
     worker_offline_events: int = 0
     stale_pending_events: int = 0
     orphaned_running_events: int = 0
+    baseline_attention_points: int = 0
+    baseline_incident_points: int = 0
     last_snapshot_at: Optional[Any] = None
 
     @model_validator(mode="after")
     def apply_br_format(self) -> "DiagnosticsTrendSummary":
         self.last_snapshot_at = format_dt_br(self.last_snapshot_at)
+        return self
+
+
+class OperationalBaselineMetric(BaseModel):
+    code: str
+    label: str
+    status: str
+    current_value: Optional[str] = None
+    attention_threshold: Optional[str] = None
+    incident_threshold: Optional[str] = None
+    detail: str
+    action_code: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def v_status(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in OPERATIONAL_BASELINE_STATUSES:
+            raise ValueError("Status do baseline operacional inválido.")
+        return normalized
+
+
+class OperationalBaselineSummary(BaseModel):
+    evaluated_at: Optional[Any] = None
+    status: str = BASELINE_STATUS_HEALTHY
+    attention_count: int = 0
+    incident_count: int = 0
+    recommended_action: Optional[str] = None
+    metrics: List[OperationalBaselineMetric] = []
+
+    @field_validator("status")
+    @classmethod
+    def v_status(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in OPERATIONAL_BASELINE_STATUSES:
+            raise ValueError("Status do baseline operacional inválido.")
+        return normalized
+
+    @model_validator(mode="after")
+    def apply_br_format(self) -> "OperationalBaselineSummary":
+        self.evaluated_at = format_dt_br(self.evaluated_at)
         return self
 
 
@@ -253,6 +300,9 @@ class DiagnosticsPayload(BaseModel):
     slo: DiagnosticsSlo = Field(default_factory=DiagnosticsSlo)
     slo_breaches: dict[str, bool] = {}
     trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
+    operational_baseline: OperationalBaselineSummary = Field(
+        default_factory=OperationalBaselineSummary
+    )
     trace: DiagnosticsTrace = Field(default_factory=DiagnosticsTrace)
 
 
@@ -362,6 +412,30 @@ class SystemOverviewFailure(BaseModel):
     failures: int
 
 
+class SystemOverviewPortfolio(BaseModel):
+    total_items: int = 0
+    governed_items: int = 0
+    enabled_items: int = 0
+    drift_items: int = 0
+    docs_missing_items: int = 0
+    sla_breached_items: int = 0
+    not_registered_items: int = 0
+    healthy_items: int = 0
+    attention_items: int = 0
+    incident_items: int = 0
+    status: str = BASELINE_STATUS_HEALTHY
+    top_issue: Optional[str] = None
+    recommended_action: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def v_status(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in OPERATIONAL_BASELINE_STATUSES:
+            raise ValueError("Status do resumo operacional do portfólio inválido.")
+        return normalized
+
+
 class SystemOverviewResponse(BaseModel):
     generated_at: str
     version: str = ORCHESTRATOR_VERSION
@@ -377,6 +451,7 @@ class SystemOverviewResponse(BaseModel):
     scheduler: SystemOverviewScheduler
     queue: SystemOverviewQueue
     trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
+    portfolio: Optional[SystemOverviewPortfolio] = None
     diagnostics: DiagnosticsPayload
 
 
@@ -394,6 +469,17 @@ class SystemHistoryPoint(BaseModel):
     active_queue_groups: List[str] = []
     failure_hotspots: List[str] = []
     slo_breaches: dict[str, bool] = {}
+    baseline_status: str = BASELINE_STATUS_HEALTHY
+    baseline_attention_count: int = 0
+    baseline_incident_count: int = 0
+
+    @field_validator("baseline_status")
+    @classmethod
+    def v_baseline_status(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in OPERATIONAL_BASELINE_STATUSES:
+            raise ValueError("Status do baseline operacional inválido.")
+        return normalized
 
     @model_validator(mode="after")
     def apply_br_format(self) -> "SystemHistoryPoint":
@@ -454,14 +540,8 @@ class PortfolioHealthItem(BaseModel):
         return self
 
 
-class PortfolioHealthSummary(BaseModel):
-    total_items: int
-    governed_items: int
-    enabled_items: int
-    drift_items: int
-    docs_missing_items: int
-    sla_breached_items: int
-    not_registered_items: int
+class PortfolioHealthSummary(SystemOverviewPortfolio):
+    pass
 
 
 class PortfolioHealthResponse(BaseModel):

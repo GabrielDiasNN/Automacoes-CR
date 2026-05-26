@@ -63,6 +63,22 @@ function Test-ManifestShape {
             throw "criticality inválido em $ManifestPath"
         }
 
+        if ([string]::IsNullOrWhiteSpace([string]$Manifest.owner_area) -or [string]$Manifest.owner_area -match "^\[.+\]$") {
+            throw "owner_area ausente ou com placeholder em $ManifestPath"
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$Manifest.queue_group)) {
+            throw "queue_group obrigatório ausente em $ManifestPath"
+        }
+
+        if (-not [string]$Manifest.runbook_path.StartsWith("docs/runbooks/", [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "runbook_path deve apontar para docs/runbooks/ em $ManifestPath"
+        }
+
+        if (@($Manifest.smoke_tests).Count -lt 1) {
+            throw "smoke_tests deve declarar ao menos um teste em $ManifestPath"
+        }
+
         foreach ($channel in @($Manifest.channels)) {
             if ($channel -notin @("email", "whatsapp")) {
                 throw "Canal inválido '$channel' em $ManifestPath"

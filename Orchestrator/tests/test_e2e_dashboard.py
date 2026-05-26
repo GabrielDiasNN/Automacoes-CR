@@ -367,7 +367,7 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
         f"{uvicorn_server}/api/automations",
         json={
             "name": "Timezone E2E Auto",
-            "script_path": "./Receitas Bloqueadas/run.ps1",
+            "script_path": "./Orchestrator/tests/test/run.ps1",
             "schedule": f'{{"schedule_type":"once","run_at":"{scheduled_run_at}","timezone":"America/Sao_Paulo"}}',
             "enabled": True,
         },
@@ -450,11 +450,14 @@ def test_e2e_dashboard_portfolio_panel_exposes_governed_catalog(
     page.goto(f"{uvicorn_server}/dashboard/")
     page.wait_for_load_state("networkidle")
     page.wait_for_selector("#portfolio-tbody")
+    page.wait_for_selector("#insight-portfolio-health")
 
     portfolio_text = page.locator("#portfolio-tbody").text_content() or ""
+    portfolio_insight = page.locator("#insight-portfolio-health").text_content() or ""
     assert "Receitas Bloqueadas" in portfolio_text
     assert "Montagem de Terceirizados" in portfolio_text
     assert "Docs OK" in portfolio_text
+    assert portfolio_insight.strip() != ""
 
 
 def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -> None:
@@ -950,6 +953,7 @@ def test_e2e_dashboard_system_shortcuts_open_execution_triage(
     page.wait_for_load_state("networkidle")
     page.click('button[data-target="system"]')
     page.wait_for_selector("#diagnostic-contract")
+    page.wait_for_selector("text=Baseline operacional")
 
     page.wait_for_selector(
         'button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]'

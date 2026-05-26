@@ -1,6 +1,6 @@
 # Checklist de Release — Hub de Automações
 
-> **Versão:** v9.3.0 | **Atualizado:** 2026-05-25
+> **Versão:** v9.3.2 | **Atualizado:** 2026-05-25
 
 ---
 
@@ -101,6 +101,7 @@ Após publicar a nova versão:
 - [ ] `GET /api/system/health` retorna `status: "ok"`
 - [ ] `GET /api/system/version` confirma a nova versão
 - [ ] `GET /api/system/diagnostics` sem findings críticos novos
+- [ ] `GET /api/system/baseline` retorna `healthy`, `attention` ou `incident` coerente com o estado real
 - [ ] `GET /api/system/history?hours=1` retorna snapshots recentes e `trend_summary` coerente
 - [ ] `GET /api/portfolio/health` retorna resumo coerente do catálogo governado
 - [ ] `GET /api/portfolio/drift` sem divergências inesperadas para automações promovidas
@@ -146,6 +147,6 @@ Preencha após a conclusão bem-sucedida:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este checklist cobre o processo de release do Hub de Automações em `v9.3.0`.
+- Este checklist cobre o processo de release do Hub de Automações em `v9.3.2`.
 - Atualize este checklist quando novos gates de qualidade forem adicionados ao pipeline.
 - Registre estado operacional relevante para agentes em `docs/ai-native-context-monitor.md`, não em seções longas dentro de `GEMINI.md`.

@@ -43,6 +43,7 @@ from ..runtime import (
 from ..services.env_admin import backup_env_file, read_env_content
 from ..services.env_admin import validate_env_content as validate_env_payload
 from ..services.env_admin import write_env_content
+from ..services.portfolio_catalog import build_portfolio_health_response
 from ..services.scheduler_runtime import list_scheduled_jobs as build_scheduled_jobs
 from ..services.scheduler_runtime import reload_scheduled_tasks
 from ..services.system_diagnostics import build_diagnostics_payload
@@ -446,12 +447,14 @@ def get_system_overview(
     diagnostics["trace"] = {
         "correlation_id": getattr(request.state, "request_id", "SYSTEM")
     }
+    portfolio_health = build_portfolio_health_response(db, PROJECT_ROOT)
     return build_system_overview_payload(
         db=db,
         scheduler=scheduler,
         health_payload=health_payload,
         jobs=jobs,
         diagnostics_payload=diagnostics,
+        portfolio_summary=portfolio_health.summary,
     )
 
 
@@ -483,6 +486,21 @@ def get_diagnostics(
     )
     payload["trace"] = {"correlation_id": getattr(request.state, "request_id", "SYSTEM")}
     return payload
+
+
+@router.get("/baseline", response_model=schemas.OperationalBaselineSummary)
+def get_operational_baseline(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Retorna o baseline operacional resumido para triagem rápida."""
+    payload = build_diagnostics_payload(
+        db,
+        scheduler,
+        _get_worker_status,
+        wal_size_fn=get_wal_size_mb,
+    )
+    return payload["operational_baseline"]
 
 
 @router.get("/history", response_model=schemas.SystemHistoryResponse)

@@ -1,6 +1,6 @@
 """Serviços de visão agregada do painel operacional (C3, C4)."""
 
-# pylint: disable=relative-beyond-top-level,too-many-locals,not-callable
+# pylint: disable=relative-beyond-top-level,too-many-locals,not-callable,too-many-arguments,too-many-positional-arguments
 
 from typing import Any
 
@@ -23,6 +23,7 @@ def build_system_overview_payload(
     health_payload: dict[str, Any],
     jobs: list[schemas.ScheduledJob],
     diagnostics_payload: dict[str, Any],
+    portfolio_summary: schemas.PortfolioHealthSummary | None = None,
 ) -> dict[str, Any]:
     """Agrega métricas, estado operacional e diagnósticos para o dashboard (C3, C4)."""
     next_run_lookup = build_next_run_lookup(jobs)
@@ -146,5 +147,8 @@ def build_system_overview_payload(
             ),
         },
         "trend_summary": diagnostics_payload.get("trend_summary", {}),
+        "portfolio": (
+            portfolio_summary.model_dump() if portfolio_summary is not None else None
+        ),
         "diagnostics": diagnostics_payload,
     }

@@ -5,6 +5,7 @@ Testes focados nas operações de CRUD de Automações.
 """
 
 from datetime import timedelta
+import json
 
 import pytest
 from app.constants import ORCHESTRATOR_VERSION
@@ -52,6 +53,7 @@ def test_preflight_automation_normalizes_channels(client):
     assert data["normalized_notification_channels"] == "email,whatsapp"
     assert data["resolved_script_path"].endswith("test\\run.ps1")
     assert data["schedule_summary"] == "Manual"
+    assert data["governance"]["status"] in ["healthy", "attention"]
 
 
 def test_preflight_rejects_reserved_cleanup_script():
@@ -66,6 +68,124 @@ def test_preflight_rejects_reserved_cleanup_script():
             },
             "C:\\Automacoes",
         )
+
+
+def test_preflight_reports_manifest_drift_without_persisting(client, monkeypatch, tmp_path):
+    import app.routers.automations as auto_router
+
+    auto_dir = tmp_path / "Auto Governada"
+    docs_dir = tmp_path / "docs" / "runbooks"
+    auto_dir.mkdir(parents=True, exist_ok=True)
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    (auto_dir / "README.md").write_text("# Auto Governada\n", encoding="utf-8")
+    (auto_dir / "CONTEXT.md").write_text("# Contexto\n", encoding="utf-8")
+    (auto_dir / "run.ps1").write_text("Write-Host 'ok'\n", encoding="utf-8")
+    (docs_dir / "auto-governada-runbook.md").write_text("# Runbook\n", encoding="utf-8")
+    (auto_dir / "automation.manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "AG-10",
+                "name": "Auto Governada",
+                "slug": "auto-governada",
+                "criticality": "high",
+                "owner_area": "Operação",
+                "entrypoint": "run.ps1",
+                "runtime": "powershell",
+                "channels": ["email"],
+                "queue_group": "oracle",
+                "max_runtime_minutes": 30,
+                "max_retries": 2,
+                "schedule_summary": "Manual",
+                "runbook_path": "docs/runbooks/auto-governada-runbook.md",
+                "context_path": "Auto Governada/CONTEXT.md",
+                "readme_path": "Auto Governada/README.md",
+                "orchestrator": {"script_path": "./Auto Governada/run.ps1"},
+                "dependencies": {"oracle": True, "outlook": False, "whatsapp": False},
+                "smoke_tests": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+
+    res = client.post(
+        "/api/automations/preflight",
+        json={
+            "name": "Auto Governada",
+            "script_path": "./Auto Governada/run.ps1",
+            "queue_group": "financeiro",
+            "max_runtime_minutes": 15,
+            "max_retries": 0,
+            "notification_channels": "whatsapp",
+            "enabled": True,
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["valid"] is False
+    assert data["governance"]["status"] == "incident"
+    issue_codes = {item["code"] for item in data["governance"]["blocking_issues"]}
+    assert "queue_group_mismatch" in issue_codes
+    assert "max_runtime_mismatch" in issue_codes
+    assert "max_retries_mismatch" in issue_codes
+    assert "notification_channels_mismatch" in issue_codes
+
+
+def test_create_automation_rejects_manifest_drift(client, monkeypatch, tmp_path):
+    import app.routers.automations as auto_router
+
+    auto_dir = tmp_path / "Auto Bloqueada"
+    docs_dir = tmp_path / "docs" / "runbooks"
+    auto_dir.mkdir(parents=True, exist_ok=True)
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    (auto_dir / "README.md").write_text("# Auto Bloqueada\n", encoding="utf-8")
+    (auto_dir / "CONTEXT.md").write_text("# Contexto\n", encoding="utf-8")
+    (auto_dir / "run.ps1").write_text("Write-Host 'ok'\n", encoding="utf-8")
+    (docs_dir / "auto-bloqueada-runbook.md").write_text("# Runbook\n", encoding="utf-8")
+    (auto_dir / "automation.manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "AB-11",
+                "name": "Auto Bloqueada",
+                "slug": "auto-bloqueada",
+                "criticality": "high",
+                "owner_area": "Operação",
+                "entrypoint": "run.ps1",
+                "runtime": "powershell",
+                "channels": ["email"],
+                "queue_group": "oracle",
+                "max_runtime_minutes": 30,
+                "max_retries": 1,
+                "schedule_summary": "Manual",
+                "runbook_path": "docs/runbooks/auto-bloqueada-runbook.md",
+                "context_path": "Auto Bloqueada/CONTEXT.md",
+                "readme_path": "Auto Bloqueada/README.md",
+                "orchestrator": {"script_path": "./Auto Bloqueada/run.ps1"},
+                "dependencies": {"oracle": True, "outlook": False, "whatsapp": False},
+                "smoke_tests": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+
+    res = client.post(
+        "/api/automations",
+        json={
+            "name": "Auto Bloqueada",
+            "script_path": "./Auto Bloqueada/run.ps1",
+            "queue_group": "financeiro",
+            "enabled": True,
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 422
+    assert "queue_group" in res.json()["detail"]
 
 
 def test_create_duplicate_name_rejected(client):

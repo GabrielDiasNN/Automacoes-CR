@@ -499,6 +499,91 @@ def _health_status(
     return operational_state or "idle"
 
 
+def _portfolio_operational_status(item: schemas.PortfolioHealthItem) -> str:
+    critical_governance_drift = (
+        item.criticality in {"critical", "high"}
+        and (item.docs_status != "complete" or item.drift_count > 0)
+    )
+    if item.health_status in {"not_registered", "not_governed", "breached"}:
+        return "incident"
+    if critical_governance_drift:
+        return "incident"
+    if item.docs_status != "complete" or item.drift_count > 0:
+        return "attention"
+    if item.sla_state == "recovering" or item.health_status == "attention":
+        return "attention"
+    return "healthy"
+
+
+def _build_portfolio_summary(
+    health_items: list[schemas.PortfolioHealthItem],
+) -> schemas.PortfolioHealthSummary:
+    incident_items = 0
+    attention_items = 0
+    healthy_items = 0
+    for item in health_items:
+        signal = _portfolio_operational_status(item)
+        if signal == "incident":
+            incident_items += 1
+        elif signal == "attention":
+            attention_items += 1
+        else:
+            healthy_items += 1
+
+    status = "healthy"
+    if incident_items > 0:
+        status = "incident"
+    elif attention_items > 0:
+        status = "attention"
+
+    governed_items = sum(
+        1 for item in health_items if not item.catalog_id.startswith("runtime-")
+    )
+    enabled_items = sum(1 for item in health_items if item.enabled)
+    drift_items = sum(1 for item in health_items if item.drift_count > 0)
+    docs_missing_items = sum(
+        1 for item in health_items if item.docs_status != "complete"
+    )
+    sla_breached_items = sum(1 for item in health_items if item.sla_state == "breached")
+    not_registered_items = sum(
+        1
+        for item in health_items
+        if item.health_status in {"not_registered", "not_governed"}
+    )
+
+    if not_registered_items > 0:
+        top_issue = "Há automações ativas fora do catálogo governado ou sem cadastro reconciliado."
+        recommended_action = "Reconcilie manifesto e cadastro runtime antes de expandir o portfólio."
+    elif docs_missing_items > 0:
+        top_issue = "Há automações com runbook, README ou CONTEXT pendentes no catálogo."
+        recommended_action = "Complete a documentação obrigatória das automações governadas."
+    elif drift_items > 0:
+        top_issue = "Há drift entre manifesto e parâmetros efetivos do runtime."
+        recommended_action = "Alinhe script_path, fila, SLA, retries e canais com o manifesto canônico."
+    elif sla_breached_items > 0:
+        top_issue = "Há automações governadas com SLA violado."
+        recommended_action = "Priorize a recuperação das automações com atraso acima do SLA."
+    else:
+        top_issue = "Catálogo governado consistente com o runtime."
+        recommended_action = None
+
+    return schemas.PortfolioHealthSummary(
+        total_items=len(health_items),
+        governed_items=governed_items,
+        enabled_items=enabled_items,
+        drift_items=drift_items,
+        docs_missing_items=docs_missing_items,
+        sla_breached_items=sla_breached_items,
+        not_registered_items=not_registered_items,
+        healthy_items=healthy_items,
+        attention_items=attention_items,
+        incident_items=incident_items,
+        status=status,
+        top_issue=top_issue,
+        recommended_action=recommended_action,
+    )
+
+
 def _sort_health_item(item: schemas.PortfolioHealthItem) -> tuple[int, str]:
     return (CRITICALITY_RANK.get(item.criticality, 99), item.name.lower())
 
@@ -619,7 +704,7 @@ def _collect_portfolio_rows(
         health_items.append(
             schemas.PortfolioHealthItem(
                 catalog_id=manifest.id,
-                automation_id=int(auto.id) if auto else None,
+                automation_id=int(matched_auto.id) if matched_auto else None,
                 name=manifest.name,
                 slug=manifest.slug,
                 criticality=manifest.criticality,
@@ -742,15 +827,7 @@ def build_portfolio_health_response(
     project_root: str | Path,
 ) -> schemas.PortfolioHealthResponse:
     health_items, _ = _collect_portfolio_rows(db, project_root)
-    summary = schemas.PortfolioHealthSummary(
-        total_items=len(health_items),
-        governed_items=sum(1 for item in health_items if not item.catalog_id.startswith("runtime-")),
-        enabled_items=sum(1 for item in health_items if item.enabled),
-        drift_items=sum(1 for item in health_items if item.drift_count > 0),
-        docs_missing_items=sum(1 for item in health_items if item.docs_status != "complete"),
-        sla_breached_items=sum(1 for item in health_items if item.sla_state == "breached"),
-        not_registered_items=sum(1 for item in health_items if item.health_status in {"not_registered", "not_governed"}),
-    )
+    summary = _build_portfolio_summary(health_items)
     return schemas.PortfolioHealthResponse(
         generated_at=schemas.format_dt_br(get_now_local()),
         summary=summary,

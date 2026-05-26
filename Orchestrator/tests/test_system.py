@@ -90,6 +90,8 @@ def test_diagnostics_endpoint(client):
     assert "failure_hotspots" in data
     assert "checks" in data
     assert "recovery" in data
+    assert "operational_baseline" in data
+    assert data["operational_baseline"]["status"] in ["healthy", "attention", "incident"]
 
 
 def test_diagnostics_reports_actionable_queue_and_wal_findings(
@@ -126,6 +128,10 @@ def test_diagnostics_reports_actionable_queue_and_wal_findings(
     components = {item["component"] for item in data["findings"]}
     assert {"database", "queue"}.issubset(components)
     assert any(item["action_code"] == "checkpoint" for item in data["findings"])
+    assert data["operational_baseline"]["status"] in ["attention", "incident"]
+    metrics = {item["code"]: item for item in data["operational_baseline"]["metrics"]}
+    assert metrics["wal_size"]["status"] == "attention"
+    assert metrics["pending_queue_age"]["status"] in ["attention", "incident"]
 
 
 def test_system_overview_exposes_contract_version(client):
@@ -170,6 +176,19 @@ def test_system_history_endpoint_returns_snapshots(client, db_session):
     assert data["trend_summary"]["points"] >= 1
     assert data["items"][0]["overall_status"] == "degraded"
     assert data["items"][0]["active_queue_groups"] == ["financeiro"]
+    assert data["items"][0]["baseline_status"] in ["healthy", "attention", "incident"]
+    assert "baseline_attention_points" in data["trend_summary"]
+    assert "baseline_incident_points" in data["trend_summary"]
+
+
+def test_operational_baseline_endpoint_returns_summary(client):
+    res = client.get("/api/system/baseline", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] in ["healthy", "attention", "incident"]
+    assert "metrics" in data
+    assert any(item["code"] == "wal_size" for item in data["metrics"])
+    assert "recommended_action" in data
 
 
 def test_diagnostics_offline_worker_prefers_recovery_action(
@@ -235,6 +254,8 @@ def test_system_overview_includes_diagnostics_summary(client):
     res = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
+    assert "portfolio" in data
+    assert data["portfolio"]["status"] in ["healthy", "attention", "incident"]
     assert "diagnostics" in data
     assert data["diagnostics"]["overall_status"] in ["healthy", "degraded", "unhealthy"]
     assert "findings" in data["diagnostics"]

@@ -158,9 +158,14 @@ def _build_mutation_response(
 
 def _preflight_payload_or_422(payload: dict) -> schemas.AutomationPreflightResponse:
     try:
-        return build_automation_preflight(payload, PROJECT_ROOT)
+        preflight = build_automation_preflight(payload, PROJECT_ROOT)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not preflight.valid:
+        issue = next(iter(preflight.governance.blocking_issues), None)
+        detail = issue.message if issue else "Pré-validação governada reprovada."
+        raise HTTPException(status_code=422, detail=detail)
+    return preflight
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +261,10 @@ def preflight_automation(
     api_key: str = Depends(get_api_key),
 ):
     """Valida uma automação sem persistir alteração."""
-    return _preflight_payload_or_422(payload.model_dump())
+    try:
+        return build_automation_preflight(payload.model_dump(), PROJECT_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,25 @@
 # Changelog
 
+## [9.3.2] - 2026-05-25
+### Adicionado
+- **Baseline Operacional Unificado**: criado `GET /api/system/baseline`, com resumo objetivo `healthy`, `attention` ou `incident`, ação recomendada e métricas normalizadas para heartbeat do worker, idade da fila, execuções acima do `max_runtime`, ownership órfão e pressão do WAL.
+- **Baseline no Histórico Operacional**: `GET /api/system/history` agora expõe `baseline_status`, `baseline_attention_count` e `baseline_incident_count` por snapshot, enquanto `trend_summary` passa a acumular quantos pontos recentes ficaram em atenção ou incidente.
+- **Resumo Operacional do Portfólio**: `GET /api/portfolio/health` passa a expor `summary.status`, `healthy_items`, `attention_items`, `incident_items`, `top_issue` e `recommended_action`, elevando drift, documentação obrigatória e runtime sem reconciliação a um sinal operacional consumível.
+- **Preflight Governado de Automações**: `POST /api/automations/preflight` passa a retornar `governance` com manifesto detectado, bloqueios, avisos e ação recomendada antes do save administrativo.
+- **Smoke Test Inicial no Scaffold**: `Tools/New-Automation.ps1` passa a gerar `Orchestrator/tests/test_<slug>.py` como prova mínima dos artefatos obrigatórios da nova automação.
+
+### Alterado
+- **Contrato de Diagnóstico**: `GET /api/system/diagnostics` passa a incluir `operational_baseline` de forma aditiva, mantendo compatibilidade com os consumidores atuais.
+- **Overview Principal do Dashboard**: `GET /api/system/overview` agora replica `portfolio` com o resumo governado do catálogo, e o painel principal passa a destacar o risco operacional prioritário combinando baseline e governança do portfólio.
+- **Administração de Automações**: a aba `Automações` passa a consumir o catálogo governado para enriquecer o risco da frota com `CAT`, `DRIFT` e `DOCS`, e o modal de revisão exibe quando o save foi bloqueado pelo manifesto canônico.
+- **Governança do Catálogo**: `Tools/Test-AutomationCatalog.ps1` agora exige `queue_group`, `smoke_tests`, `owner_area` sem placeholder e `runbook_path` dentro de `docs/runbooks/` para automações ativas.
+- **Scaffold Oficial**: `Tools/New-Automation.ps1` agora aceita parâmetros de owner, criticidade, fila, SLA, runtime e dependências básicas, gerando manifesto mais pronto para o contrato governado do Orchestrator.
+- **Ferramentas Operacionais**: `Tools/Get-QualitySnapshot.ps1` passou a consultar o baseline live quando a API local estiver disponível, e `Tools/Test-OrchestratorIntegrity.ps1` agora valida explicitamente o contrato `diagnostics + baseline + history + portfolio`.
+- **Versionamento do Runtime**: `ORCHESTRATOR_VERSION`/`WORKER_VERSION` avançaram para `9.3.2` e `ORCHESTRATOR_CONTRACT_VERSION` para `2026.05.25.1`.
+
+### Corrigido
+- **Vínculo de Automação no Portfólio**: corrigido o preenchimento de `automation_id` nos itens governados do catálogo para sempre refletir a automação reconciliada, eliminando associação residual incorreta durante a leitura agregada do portfólio.
+
 ## [9.3.1] - 2026-05-25
 ### Corrigido
 - **Rotina de Limpeza Duplicada no Orchestrator**: corrigida a falha recorrente da automação `Retenção de Arquivos` quando executada pelo worker com `ExecId` posicional. `Tools/AplicarPoliticaRetencao.ps1` agora infere a raiz do repositório quando `-RootPath` não é informado e deixa de interpretar `CRON_*` como caminho inválido.

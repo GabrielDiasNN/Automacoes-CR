@@ -41,6 +41,7 @@ from ..database import (
 )
 from ..timezone import get_now_local
 from .scheduler_runtime import extract_automation_id_from_job
+from .operational_baseline import build_operational_baseline_summary
 from .system_history import build_trend_summary
 from . import metrics  # pylint: disable=no-name-in-module
 
@@ -714,6 +715,17 @@ def build_diagnostics_payload(
         if include_history
         else schemas.DiagnosticsTrendSummary().model_dump()
     )
+    operational_baseline = build_operational_baseline_summary(
+        evaluated_at=get_now_local(),
+        worker_is_alive=worker_status.is_alive,
+        worker_last_ping_age_seconds=last_ping_age_seconds,
+        active_count=active_count,
+        pending_age_seconds=pending_age_seconds,
+        running_age_seconds=running_age_seconds,
+        running_over_runtime_count=len(running_over_runtime),
+        orphaned_running_count=len(orphaned_running),
+        wal_size_mb=wal_size_mb,
+    ).model_dump()
 
     return {
         "version": ORCHESTRATOR_VERSION,
@@ -812,5 +824,6 @@ def build_diagnostics_payload(
         },
         "slo_breaches": slo_breaches,
         "trend_summary": trend_summary,
+        "operational_baseline": operational_baseline,
         "schema_version": schema_version,
     }

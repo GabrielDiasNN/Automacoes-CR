@@ -1,13 +1,13 @@
-# Central de Automações — v7.0.0 Dashboard Operacional e Governança
+# Central de Automações — v9.3.2 Baseline Operacional e Governança
 
-Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v7.0.0**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
+Este repositório é o núcleo soberano para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v9.3.2**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
 
-## 🏗️ Arquitetura Técnica (Enterprise Control Tower v7.0.0)
+## 🏗️ Arquitetura Técnica (Enterprise Control Tower v9.3.2)
 
 ```mermaid
 graph TD
     subgraph "FRONTEND — Dashboard SPA"
-        UI["Dashboard v9.3.0<br/>Zero-Trust + UTF-8 Nativo"]
+        UI["Dashboard v9.3.2<br/>Zero-Trust + UTF-8 Nativo"]
         WS_CLIENT["WebSocket Client<br/>Logs + Events Replay"]
         UI --> WS_CLIENT
     end
@@ -21,7 +21,7 @@ graph TD
     end
 
     subgraph "CORE — Motor de Execução v5"
-        WORKER["Worker v9.3.0<br/>Graceful Shutdown + JSON Logs"]
+        WORKER["Worker v9.3.2<br/>Graceful Shutdown + JSON Logs"]
         PRIORITY["Priority Queue<br/>HIGH/NORMAL/LOW"]
         SCHEDULER["APScheduler<br/>WAL Checkpoint + Purge"]
         WORKER --- PRIORITY
@@ -37,7 +37,11 @@ graph TD
 - **Zero-Trust Auth**: O Dashboard solicita a API Key dinamicamente, eliminando segredos no código.
 - **Observabilidade Acionável**: `/api/system/diagnostics` consolida saúde, fila, worker, scheduler, banco/WAL e achados com ação sugerida.
 - **Histórico Operacional**: `/api/system/history` mantém snapshots leves de saúde para tendência de fila, heartbeat, WAL e violações recentes sem depender apenas de leitura manual de log.
+- **Baseline Operacional Formalizado**: `GET /api/system/baseline` e `diagnostics.operational_baseline` resumem worker, fila, WAL e ownership em status `healthy`, `attention` ou `incident`, com ação recomendada e thresholds explícitos.
 - **Portfólio Governado**: `automation.manifest.json` passa a ser o catálogo canônico das automações do hub, e a API expõe `/api/portfolio/health` e `/api/portfolio/drift` para cruzar manifesto, documentação e cadastro runtime.
+- **Resumo Operacional do Portfólio**: `/api/portfolio/health.summary` e `/api/system/overview.portfolio` agora sintetizam status `healthy`, `attention` ou `incident`, top issue e ação recomendada para drift, documentação obrigatória, registro runtime e SLA.
+- **Preflight Governado de Cadastro**: `POST /api/automations/preflight` agora confronta o payload com `automation.manifest.json` quando presente, retornando bloqueios de manifesto, docs obrigatórias e smoke tests antes do save administrativo.
+- **Scaffold Governado de Automação**: `Tools/New-Automation.ps1` agora gera manifesto parametrizado, `queue_group` inicial, runbook preenchido com metadados básicos e smoke test mínimo em `Orchestrator/tests/`.
 - **Contrato Operacional Versionado**: `overview`, `diagnostics` e `version` agora expõem `contract_version`, checks mínimos de runtime e recovery em camadas para evolução controlada do front-back.
 - **Ownership de Execução**: Execuções `RUNNING` passam a registrar `claimed_at`, `worker_instance_id` e `worker_pid`, permitindo diferenciar backlog legítimo de execução órfã.
 - **Console Operacional de Recovery**: Diagnósticos agora expõem impacto, prioridade, ação estruturada e atalhos para checkpoint, sincronização de agenda, wake-up/recovery e triagem de execuções.

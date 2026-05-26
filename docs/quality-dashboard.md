@@ -1,8 +1,8 @@
 # Painel de Controle de Qualidade (Quality Dashboard)
 
-> **Versão:** v9.3.0 | **Atualizado:** 2026-05-25
+> **Versão:** v9.3.2 | **Atualizado:** 2026-05-25
 
-Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v9.3.0). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
+Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v9.3.2). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
 
 ---
 
@@ -28,6 +28,7 @@ O quadro abaixo resume a conformidade da codebase do projeto em relação às me
 *   **Payload Versionado no Git:** a meta de tamanho passa a medir apenas o conteúdo efetivamente rastreado pelo Git, que é o artefato portátil e auditável do projeto.
 *   **Zero Trust Scan:** O escaneamento local de chaves secretas e credenciais retornou 0 vulnerabilidades ativas em toda a base de código.
 *   **Catálogo Governado:** O snapshot local agora também reporta cobertura de `automation.manifest.json`, runbooks presentes, automações com smoke declarado e issues abertas no catálogo.
+*   **Baseline Operacional Live:** Quando a API local está online, o snapshot também consulta `GET /api/system/baseline` e informa o status consolidado `healthy`, `attention` ou `incident`, junto da ação recomendada.
 
 ---
 
@@ -45,4 +46,5 @@ O script fará de forma totalmente idempotente e segura:
 3. O cálculo da cobertura de código com `pytest-cov`;
 4. A análise estática de conformidade e score do `Pylint`;
 5. O type-checking do `Mypy` em todos os módulos ativos do Orquestrador;
-6. A execução de toda a suite nativa de conformidade de governança local (`ValidarAutomacoes.ps1`).
+6. A execução de toda a suite nativa de conformidade de governança local (`ValidarAutomacoes.ps1`);
+7. A leitura opcional do baseline operacional live quando o Orchestrator está disponível na porta `8000`.

@@ -148,6 +148,10 @@ def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Se
         == DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS
     )
     assert data["slo"]["breaches"]["running_over_runtime"] is True
+    baseline_metrics = {
+        item["code"]: item for item in data["operational_baseline"]["metrics"]
+    }
+    assert baseline_metrics["running_over_runtime"]["status"] in ["attention", "incident"]
 
 
 def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session):
@@ -190,3 +194,50 @@ def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session)
     data = response.json()
     assert data["queue"]["retry_pressure"]
     assert data["queue"]["timeouts_24h_by_group"]
+
+
+def test_diagnostics_operational_baseline_marks_orphaned_running_as_incident(
+    client: TestClient, db_session: Session, monkeypatch
+):
+    from app import models
+    from app.schemas import WorkerStatus
+
+    auto = models.Automation(
+        id=906,
+        name="Ownership Quebrado",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        enabled=True,
+    )
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="RUNNING_ORPHAN_001",
+            automation_id=906,
+            status=EXECUTION_STATUS_RUNNING,
+            started_at=get_now_local() - timedelta(minutes=10),
+            worker_instance_id="worker-antigo",
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.routers.system._get_worker_status",
+        lambda db: WorkerStatus(
+            is_alive=False,
+            pid=4040,
+            instance_id="worker-atual",
+            last_ping=None,
+            tasks_completed=0,
+            tasks_failed=0,
+            active_tasks=0,
+            version="9.3.0",
+        ),
+    )
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+    metrics = {item["code"]: item for item in data["operational_baseline"]["metrics"]}
+    assert metrics["orphaned_running"]["status"] == "incident"
+    assert data["operational_baseline"]["status"] == "incident"

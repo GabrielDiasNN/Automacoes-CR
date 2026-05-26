@@ -182,12 +182,20 @@ export function createSystemModule(ctx) {
         if (!container) return;
 
         const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
+        const baseline = diagnostics.operational_baseline || {};
+        const baselineMetrics = Array.isArray(baseline.metrics) ? baseline.metrics : [];
         const recovery = diagnostics.recovery || {};
         const trace = diagnostics.trace || {};
         const failureHotspots = Array.isArray(diagnostics.failure_hotspots) ? diagnostics.failure_hotspots : [];
         const activeByGroup = diagnostics.queue?.active_by_group || {};
         const lightActions = Array.isArray(recovery.light_actions) ? recovery.light_actions : [];
         const strongActions = Array.isArray(recovery.strong_actions) ? recovery.strong_actions : [];
+        const baselineStatus = String(baseline.status || "healthy").toUpperCase();
+        const baselineSummary = baselineMetrics
+            .filter((item) => item.status && item.status !== "healthy")
+            .slice(0, 2)
+            .map((item) => `${item.label}: ${String(item.status).toUpperCase()}`)
+            .join(" | ");
 
         const checksHtml = checks.length
             ? checks.map((item) => `
@@ -241,6 +249,13 @@ export function createSystemModule(ctx) {
                 <small>O dashboard consome este contrato para overview, diagnósticos e ações operacionais.</small>
                 <small>Correlation: ${escapeHtml(trace.correlation_id || getLastCorrelationId() || "SYSTEM")}</small>
                 ${recommended}
+            </article>
+            <article class="contract-card">
+                <h4>Baseline operacional</h4>
+                <p>Status: <strong>${escapeHtml(baselineStatus)}</strong></p>
+                <small>Attention: ${escapeHtml(String(baseline.attention_count || 0))} · Incident: ${escapeHtml(String(baseline.incident_count || 0))}</small>
+                <small>${escapeHtml(baselineSummary || "Sem desvios relevantes no baseline atual.")}</small>
+                ${baseline.recommended_action ? `<small>Ação recomendada: ${escapeHtml(String(baseline.recommended_action))}</small>` : ""}
             </article>
             <article class="contract-card">
                 <h4>Recovery leve</h4>

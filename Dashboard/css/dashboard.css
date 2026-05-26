@@ -1274,6 +1274,21 @@ dialog::backdrop {
     color: var(--text-secondary);
 }
 
+.review-item.warning {
+    border-left: 3px solid var(--accent-warning);
+    background: var(--accent-warning-soft);
+}
+
+.review-item.danger {
+    border-left: 3px solid var(--accent-danger);
+    background: var(--accent-danger-soft);
+}
+
+.review-item.success {
+    border-left: 3px solid var(--accent-success);
+    background: var(--accent-success-soft);
+}
+
 @keyframes fadeInTab {
     from {
         opacity: 0;

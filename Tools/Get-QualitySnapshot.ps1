@@ -38,6 +38,14 @@ function Get-PythonTool {
     return $null
 }
 
+function Get-OrchestratorApiKey {
+    $envPath = Join-Path $PSScriptRoot "..\.env"
+    if (-not (Test-Path $envPath)) { return $null }
+    $keyLine = Get-Content $envPath | Where-Object { $_ -match '^ORCHESTRATOR_API_KEY=' } | Select-Object -First 1
+    if (-not $keyLine) { return $null }
+    return ($keyLine -split '=', 2)[1].Trim()
+}
+
 # 2. Medir tamanho do código fonte, payload versionado e pegada operacional local
 Write-Host "[1/6] Medindo tamanho do repositorio..." -ForegroundColor Yellow
 
@@ -224,6 +232,21 @@ $null = powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\V
 $govExitCode = $LASTEXITCODE
 $govStatus = if ($govExitCode -eq 0) { "APROVADO" } else { "REJEITADO" }
 
+$liveBaselineStatus = "N/D"
+$liveBaselineRecommendedAction = $null
+try {
+    $apiKey = Get-OrchestratorApiKey
+    $headers = @{}
+    if ($apiKey) { $headers["X-API-Key"] = $apiKey }
+    $baseline = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/system/baseline" -Headers $headers -TimeoutSec 3
+    if ($baseline.status) {
+        $liveBaselineStatus = [string]$baseline.status
+        $liveBaselineRecommendedAction = [string]$baseline.recommended_action
+    }
+} catch [System.Exception] {
+    $liveBaselineStatus = "INDISPONIVEL"
+}
+
 Write-Host "`n=== RESULTADO CONSOLIDADO DO SNAPSHOT DE QUALIDADE ===" -ForegroundColor Cyan
 
 # Formatar status visual para as métricas
@@ -232,6 +255,12 @@ $statusMypy = if ($mypyErrors -eq 0) { "✅" } else { "❌" }
 $statusPylint = if ($pylintScore -ge 8.5) { "✅" } else { "⚠️" }
 $statusRepoSize = if ($trackedPayloadMB -le 150) { "✅" } else { "⚠️" }
 $statusGov = if ($govStatus -eq "APROVADO") { "✅" } else { "❌" }
+$statusBaseline = switch ($liveBaselineStatus.ToLowerInvariant()) {
+    "healthy" { "✅" }
+    "attention" { "⚠️" }
+    "incident" { "❌" }
+    default { "ℹ️" }
+}
 
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray
 Write-Host " Metrica                          | Meta     | Atual    | Status" -ForegroundColor Gray
@@ -241,6 +270,7 @@ Write-Host (" Erros de Tipagem (Mypy)          | 0        | {0,-8} | {1}" -f $my
 Write-Host (" Score de Estilo (Pylint)         | >= 8.5   | {0,-8} | {1}" -f "$pylintScore/10", $statusPylint)
 Write-Host (" Tamanho Versionado (Git)        | <= 150MB | {0,-8} | {1}" -f "$trackedPayloadMB MB", $statusRepoSize)
 Write-Host (" Governanca Agregada e ZeroTrust  | APROVADO | {0,-8} | {1}" -f $govStatus, $statusGov)
+Write-Host (" Baseline Operacional (Live)      | healthy  | {0,-12} | {1}" -f $liveBaselineStatus, $statusBaseline)
 Write-Host "--------------------------------------------------------" -ForegroundColor Gray
 
 Write-Host ("`nTamanho do Codigo Fonte (Limpo): {0} MB ({1} arquivos)" -f $sourceSizeMB, $sourceFilesCount) -ForegroundColor Green
@@ -249,6 +279,9 @@ Write-Host ("Cobertura do Catálogo Governado: {0}% ({1}/{2})" -f $catalogCovera
 Write-Host ("Runbooks Presentes no Catálogo: {0}" -f $runbooksPresent) -ForegroundColor Cyan
 Write-Host ("Automações com Smoke Declarado: {0}" -f $smokeReady) -ForegroundColor Cyan
 Write-Host ("Issues do Catálogo: {0}" -f $catalogIssues) -ForegroundColor Cyan
+if ($liveBaselineRecommendedAction) {
+    Write-Host ("Ação Recomendada do Baseline: {0}" -f $liveBaselineRecommendedAction) -ForegroundColor Cyan
+}
 
 if ($largeFiles.Count -gt 0) {
     Write-Host "`n⚠️  ALERTA: Detectados arquivos maiores que 5 MB:" -ForegroundColor Yellow

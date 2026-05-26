@@ -2,7 +2,7 @@
 """Histórico operacional leve para tendência, triagem e SLOs."""
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..constants import DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
 from ..timezone import get_now_local
+from .operational_baseline import build_snapshot_operational_baseline
 
 
 def _loads_json_array(raw_value: str | None) -> list[Any]:
@@ -98,6 +99,8 @@ def build_trend_summary(
     worker_offline_events = 0
     stale_pending_events = 0
     orphaned_running_events = 0
+    baseline_attention_points = 0
+    baseline_incident_points = 0
 
     for row in rows:
         status = str(row.overall_status or "unknown")
@@ -108,6 +111,23 @@ def build_trend_summary(
             stale_pending_events += 1
         if int(row.orphaned_running_count or 0) > 0:
             orphaned_running_events += 1
+        baseline = build_snapshot_operational_baseline(
+            evaluated_at=cast(datetime | None, row.timestamp),
+            pending_count=int(row.pending_count or 0),
+            running_count=int(row.running_count or 0),
+            pending_age_seconds=float(row.oldest_pending_age_seconds or 0.0),
+            running_age_seconds=float(row.oldest_running_age_seconds or 0.0),
+            running_over_runtime_count=int(row.running_over_runtime_count or 0),
+            orphaned_running_count=int(row.orphaned_running_count or 0),
+            wal_size_mb=float(row.wal_size_mb or 0.0),
+            worker_last_ping_age_seconds=cast(
+                float | None, row.worker_last_ping_age_seconds
+            ),
+        )
+        if baseline.status == "attention":
+            baseline_attention_points += 1
+        elif baseline.status == "incident":
+            baseline_incident_points += 1
 
     latest = rows[-1] if rows else None
     return schemas.DiagnosticsTrendSummary(
@@ -130,6 +150,8 @@ def build_trend_summary(
         worker_offline_events=worker_offline_events,
         stale_pending_events=stale_pending_events,
         orphaned_running_events=orphaned_running_events,
+        baseline_attention_points=baseline_attention_points,
+        baseline_incident_points=baseline_incident_points,
         last_snapshot_at=(latest.timestamp if latest else None),
     ).model_dump()
 
@@ -147,33 +169,7 @@ def build_system_history_response(
         .all()
     )
     items = [
-        schemas.SystemHistoryPoint(
-            timestamp=row.timestamp,
-            overall_status=str(row.overall_status),
-            pending_count=int(row.pending_count or 0),
-            running_count=int(row.running_count or 0),
-            oldest_pending_age_seconds=float(row.oldest_pending_age_seconds or 0.0),
-            oldest_running_age_seconds=float(row.oldest_running_age_seconds or 0.0),
-            wal_size_mb=float(row.wal_size_mb or 0.0),
-            worker_last_ping_age_seconds=cast(
-                float | None, row.worker_last_ping_age_seconds
-            ),
-            running_over_runtime_count=int(row.running_over_runtime_count or 0),
-            orphaned_running_count=int(row.orphaned_running_count or 0),
-            active_queue_groups=[
-                str(item)
-                for item in _loads_json_array(
-                    cast(str | None, row.active_queue_groups)
-                )
-            ],
-            failure_hotspots=[
-                str(item)
-                for item in _loads_json_array(
-                    cast(str | None, row.failure_hotspots)
-                )
-            ],
-            slo_breaches=_loads_json_object(cast(str | None, row.slo_breaches)),
-        )
+        _build_history_point(row)
         for row in rows
     ]
     return schemas.SystemHistoryResponse(
@@ -184,4 +180,44 @@ def build_system_history_response(
             build_trend_summary(db, hours)
         ),
         items=items,
+    )
+
+
+def _build_history_point(row: models.SystemHealthSnapshot) -> schemas.SystemHistoryPoint:
+    baseline = build_snapshot_operational_baseline(
+        evaluated_at=cast(datetime | None, row.timestamp),
+        pending_count=int(row.pending_count or 0),
+        running_count=int(row.running_count or 0),
+        pending_age_seconds=float(row.oldest_pending_age_seconds or 0.0),
+        running_age_seconds=float(row.oldest_running_age_seconds or 0.0),
+        running_over_runtime_count=int(row.running_over_runtime_count or 0),
+        orphaned_running_count=int(row.orphaned_running_count or 0),
+        wal_size_mb=float(row.wal_size_mb or 0.0),
+        worker_last_ping_age_seconds=cast(float | None, row.worker_last_ping_age_seconds),
+    )
+    return schemas.SystemHistoryPoint(
+        timestamp=row.timestamp,
+        overall_status=str(row.overall_status),
+        pending_count=int(row.pending_count or 0),
+        running_count=int(row.running_count or 0),
+        oldest_pending_age_seconds=float(row.oldest_pending_age_seconds or 0.0),
+        oldest_running_age_seconds=float(row.oldest_running_age_seconds or 0.0),
+        wal_size_mb=float(row.wal_size_mb or 0.0),
+        worker_last_ping_age_seconds=cast(
+            float | None, row.worker_last_ping_age_seconds
+        ),
+        running_over_runtime_count=int(row.running_over_runtime_count or 0),
+        orphaned_running_count=int(row.orphaned_running_count or 0),
+        active_queue_groups=[
+            str(item)
+            for item in _loads_json_array(cast(str | None, row.active_queue_groups))
+        ],
+        failure_hotspots=[
+            str(item)
+            for item in _loads_json_array(cast(str | None, row.failure_hotspots))
+        ],
+        slo_breaches=_loads_json_object(cast(str | None, row.slo_breaches)),
+        baseline_status=baseline.status,
+        baseline_attention_count=baseline.attention_count,
+        baseline_incident_count=baseline.incident_count,
     )
