@@ -2,15 +2,15 @@
   "id": "TMP-00",
   "name": "[Nome da Automação]",
   "slug": "TEMPLATE_SLUG",
-  "criticality": "medium",
-  "sla_minutes": 360,
-  "owner_area": "[Área dona do processo]",
+  "criticality": "TEMPLATE_CRITICALITY",
+  "sla_minutes": "__TEMPLATE_SLA_MINUTES__",
+  "owner_area": "TEMPLATE_OWNER_AREA",
   "entrypoint": "run.ps1",
-  "runtime": "powershell",
-  "channels": [],
-  "queue_group": null,
-  "max_runtime_minutes": 30,
-  "max_retries": 0,
+  "runtime": "TEMPLATE_RUNTIME",
+  "channels": "__TEMPLATE_CHANNELS_JSON__",
+  "queue_group": "TEMPLATE_QUEUE_GROUP",
+  "max_runtime_minutes": "__TEMPLATE_MAX_RUNTIME__",
+  "max_retries": "__TEMPLATE_MAX_RETRIES__",
   "schedule_summary": "Manual",
   "runbook_path": "docs/runbooks/TEMPLATE_SLUG-runbook.md",
   "context_path": "[Nome da Automação]/CONTEXT.md",
@@ -19,9 +19,11 @@
     "script_path": "./[Nome da Automação]/run.ps1"
   },
   "dependencies": {
-    "oracle": false,
-    "outlook": false,
-    "whatsapp": false
+    "oracle": "__TEMPLATE_DEP_ORACLE__",
+    "outlook": "__TEMPLATE_DEP_OUTLOOK__",
+    "whatsapp": "__TEMPLATE_DEP_WHATSAPP__"
   },
-  "smoke_tests": []
+  "smoke_tests": [
+    "Orchestrator/tests/test_TEMPLATE_SLUG.py"
+  ]
 }

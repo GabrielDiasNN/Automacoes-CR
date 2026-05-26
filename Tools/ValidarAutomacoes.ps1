@@ -75,15 +75,22 @@ if (-not $SkipGovernance) {
 
     # Executa a suite de testes Python de forma integrada ao Quality Gate
     Write-Host "`n=== Testes Automatizados (pytest + Playwright E2E) ===" -ForegroundColor Cyan
-    $env:PYTHONPATH = "Orchestrator"
-    $localPython = Join-Path $BasePath ".venv\Scripts\python.exe"
-    if (Test-Path -LiteralPath $localPython) {
-        & $localPython -m pytest -v | Out-Host
+    $rootPath = (Get-Item -LiteralPath $BasePath).FullName
+    $localPython = Join-Path $rootPath ".venv\Scripts\python.exe"
+    $orchestratorPath = Join-Path $rootPath "Orchestrator"
+    Push-Location $orchestratorPath
+    try {
+        if (Test-Path -LiteralPath $localPython) {
+            & $localPython -m pytest -v | Out-Host
+        }
+        else {
+            python -m pytest -v | Out-Host
+        }
+        $pytestExitCode = $LASTEXITCODE
     }
-    else {
-        python -m pytest -v | Out-Host
+    finally {
+        Pop-Location
     }
-    $pytestExitCode = $LASTEXITCODE
 
     # Executa a limpeza pós-testes para expurgar temporários (Fase E/G do V.A.L.E.G.)
     $cleanupScript = Join-Path $BasePath "Tools\AplicarPoliticaRetencao.ps1"

@@ -16,7 +16,7 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
 
 ### Operação e Utilitários
-- **New-Automation.ps1:** Scaffold mínimo e atual para criar pasta de automação com `README.md`, `CONTEXT.md`, `run.ps1` e `Logs/`, deixando o cadastro operacional para o Dashboard/API do Orchestrator.
+- **New-Automation.ps1:** Scaffold governado para criar pasta de automação com `README.md`, `CONTEXT.md`, `run.ps1`, `automation.manifest.json`, runbook inicial e smoke test mínimo em `Orchestrator/tests/`, com parâmetros para owner, criticidade, fila e dependências básicas.
 - **Open-LatestLog.ps1:** Atalho rápido para o log da última execução.
 - **AplicarPoliticaRetencao.ps1:** Limpeza segura e auditável do workspace com modo `-DryRun`, retenção por idade e bloqueio contra remoção de itens rastreados pelo Git.
 - **ValidarAutomacoes.ps1:** Health check completo de todo o hub.

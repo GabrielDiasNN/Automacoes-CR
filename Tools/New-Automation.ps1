@@ -4,8 +4,23 @@ param(
     [string]$Name,
 
     [switch]$WithWhatsApp,
+    [switch]$WithOracle,
+    [switch]$WithoutEmail,
     [switch]$DryRun,
     [string]$BasePath = "",
+    [string]$OwnerArea = "Owner de negócio pendente",
+    [ValidateSet("critical", "high", "medium", "low")]
+    [string]$Criticality = "medium",
+    [string]$QueueGroup = "",
+    [ValidateRange(1, 10080)]
+    [int]$SlaMinutes = 360,
+    [ValidateRange(1, 480)]
+    [int]$MaxRuntimeMinutes = 30,
+    [ValidateRange(0, 10)]
+    [int]$MaxRetries = 0,
+    [ValidateSet("powershell", "python", "node")]
+    [string]$Runtime = "powershell",
+    [string]$SupportContact = "Definir suporte técnico",
 
     # Parametros legados preservados apenas para compatibilidade de chamada.
     [string]$MacroName = "",
@@ -26,6 +41,7 @@ if ([string]::IsNullOrWhiteSpace($BasePath)) {
 $resolvedBasePath = (Resolve-Path -LiteralPath $BasePath).Path
 $templateDir = Join-Path $resolvedBasePath "_Template"
 $runbookTemplatePath = Join-Path $resolvedBasePath "docs\templates\automation-runbook-template.md"
+$smokeTestTemplatePath = Join-Path $resolvedBasePath "docs\templates\automation-smoke-test-template.py"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 function Write-Step {
@@ -145,8 +161,23 @@ if ($legacyArgsUsed.Count -gt 0) {
 $automationDir = Join-Path $resolvedBasePath $Name
 $logsDir = Join-Path $automationDir "Logs"
 $runbookDir = Join-Path $resolvedBasePath "docs\runbooks"
+$orchestratorTestsDir = Join-Path $resolvedBasePath "Orchestrator\tests"
 $slug = Get-AutomationSlug -AutomationName $Name
+$testId = $slug.Replace("-", "_")
 $runbookPath = Join-Path $runbookDir "$slug-runbook.md"
+$smokeTestPath = Join-Path $orchestratorTestsDir "test_$slug.py"
+$effectiveQueueGroup = if ([string]::IsNullOrWhiteSpace($QueueGroup)) { $slug.Replace("-", "_") } else { $QueueGroup.Trim() }
+$channels = New-Object System.Collections.Generic.List[string]
+if (-not $WithoutEmail) { $channels.Add("email") }
+if ($WithWhatsApp) { $channels.Add("whatsapp") }
+$channelsJson = if ($channels.Count -gt 0) {
+    ($channels | ConvertTo-Json -Compress)
+} else {
+    "[]"
+}
+$dependencyOracle = if ($WithOracle) { "true" } else { "false" }
+$dependencyOutlook = if (-not $WithoutEmail) { "true" } else { "false" }
+$dependencyWhatsApp = if ($WithWhatsApp) { "true" } else { "false" }
 
 if (Test-Path -LiteralPath $automationDir) {
     Write-Step "Diretorio ja existe: $automationDir" -Type "ERRO"
@@ -156,27 +187,49 @@ if (Test-Path -LiteralPath $automationDir) {
 $replacements = @{
     "[Nome da Automação]" = $Name
     "TEMPLATE_SLUG" = $slug
+    "TEMPLATE_TEST_ID" = $testId
+    "TEMPLATE_CRITICALITY" = $Criticality
+    "TEMPLATE_OWNER_AREA" = $OwnerArea
+    "TEMPLATE_RUNTIME" = $Runtime
+    "TEMPLATE_QUEUE_GROUP" = $effectiveQueueGroup
 }
 
 $readmeContent = Convert-Template -Content (Get-TemplateContent -TemplateName "README.md") -Replacements $replacements
 $contextContent = Convert-Template -Content (Get-TemplateContent -TemplateName "CONTEXT.md") -Replacements $replacements
 $runContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run.ps1") -Replacements $replacements
 $manifestContent = Convert-Template -Content (Get-TemplateContent -TemplateName "automation.manifest.json") -Replacements $replacements
+$smokeTestContent = ""
+
+$manifestContent = $manifestContent.Replace('"__TEMPLATE_SLA_MINUTES__"', [string]$SlaMinutes)
+$manifestContent = $manifestContent.Replace('"__TEMPLATE_CHANNELS_JSON__"', $channelsJson)
+$manifestContent = $manifestContent.Replace('"__TEMPLATE_MAX_RUNTIME__"', [string]$MaxRuntimeMinutes)
+$manifestContent = $manifestContent.Replace('"__TEMPLATE_MAX_RETRIES__"', [string]$MaxRetries)
+$manifestContent = $manifestContent.Replace('"__TEMPLATE_DEP_ORACLE__"', $dependencyOracle)
+$manifestContent = $manifestContent.Replace('"__TEMPLATE_DEP_OUTLOOK__"', $dependencyOutlook)
+$manifestContent = $manifestContent.Replace('"__TEMPLATE_DEP_WHATSAPP__"', $dependencyWhatsApp)
 
 if (-not (Test-Path -LiteralPath $runbookTemplatePath -PathType Leaf)) {
     Write-Step "Template de runbook nao encontrado em: $runbookTemplatePath" -Type "ERRO"
     exit 1
 }
 
+if (-not (Test-Path -LiteralPath $smokeTestTemplatePath -PathType Leaf)) {
+    Write-Step "Template de smoke test nao encontrado em: $smokeTestTemplatePath" -Type "ERRO"
+    exit 1
+}
+
 $runbookContent = Get-Content -LiteralPath $runbookTemplatePath -Raw
+$smokeTestContent = Get-Content -LiteralPath $smokeTestTemplatePath -Raw
 $runbookContent = $runbookContent.Replace("[Nome da Automação]", $Name)
 $runbookContent = $runbookContent.Replace("[Caminho do Diretório, ex: Receitas Bloqueadas]", $Name)
-$runbookContent = $runbookContent.Replace("[CRÍTICA / ALTA / MÉDIA / BAIXA]", "MÉDIA")
-$runbookContent = $runbookContent.Replace("[Tempo de recuperação tolerado, ex: 2 horas]", "6 horas")
+$runbookContent = $runbookContent.Replace("[CRÍTICA / ALTA / MÉDIA / BAIXA]", $Criticality.ToUpperInvariant())
+$runbookContent = $runbookContent.Replace("[Tempo de recuperação tolerado, ex: 2 horas]", "$SlaMinutes minutos")
 $runbookContent = $runbookContent.Replace("[Horários cron, ex: Seg-Sex às 07:30, 10:00, 14:00]", "Definir no cadastro operacional")
-$runbookContent = $runbookContent.Replace("[Nome / Setor, ex: Laboratório de Receitas / PCP]", "Definir owner do negócio")
-$runbookContent = $runbookContent.Replace("[Contato TI, ex: suporte.automacoes@empresa.com]", "Definir suporte técnico")
+$runbookContent = $runbookContent.Replace("[Nome / Setor, ex: Laboratório de Receitas / PCP]", $OwnerArea)
+$runbookContent = $runbookContent.Replace("[Contato TI, ex: suporte.automacoes@empresa.com]", $SupportContact)
 $runbookContent = $runbookContent.Replace("C:\\Automacoes\\NomeDaAutomacao", "C:\\Automacoes\\$Name")
+$runbookContent = $runbookContent.Replace("[Versão]", "0.1.0")
+$smokeTestContent = Convert-Template -Content $smokeTestContent -Replacements $replacements
 
 $readmeContent += @"
 
@@ -187,6 +240,8 @@ Esta automação usa o fluxo atual do Hub: primeiro faça o scaffold local, depo
 - **Logs esperados:** `Logs/`
 - **Manifesto canônico:** `automation.manifest.json`
 - **Runbook inicial:** `docs/runbooks/$slug-runbook.md`
+- **Smoke test inicial:** `Orchestrator/tests/test_$slug.py`
+- **Queue group inicial:** `$effectiveQueueGroup`
 - **Cadastro no Orchestrator:** informe `script_path` apontando para o `run.ps1` desta pasta
 "@
 
@@ -194,6 +249,7 @@ $contextContent += @"
 
 - **Registro no Orchestrator:** esta pasta nasce desacoplada de `config.json` legado; o cadastro operacional deve ser feito pelo Dashboard ou API.
 - **Catálogo governado:** preencha `automation.manifest.json` antes de promover a automação para operação recorrente.
+- **Smoke inicial:** o scaffold já cria `Orchestrator/tests/test_$slug.py` como prova mínima de existência dos artefatos obrigatórios.
 "@
 
 $runBatContent = @"
@@ -218,6 +274,7 @@ else {
     Write-Step "Criaria diretorio: $automationDir"
     Write-Step "Criaria diretorio: $logsDir"
     Write-Step "Criaria diretorio: $runbookDir"
+    Write-Step "Criaria diretorio: $orchestratorTestsDir"
 }
 
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "README.md") -Content $readmeContent -Operation "Gerar README da automacao"
@@ -225,12 +282,14 @@ Invoke-SafeWrite -FilePath (Join-Path $automationDir "CONTEXT.md") -Content $con
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "run.ps1") -Content $runContent -Operation "Gerar run.ps1 da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "automation.manifest.json") -Content $manifestContent -Operation "Gerar automation.manifest.json"
 Invoke-SafeWrite -FilePath $runbookPath -Content $runbookContent -Operation "Gerar runbook operacional"
+Invoke-SafeWrite -FilePath $smokeTestPath -Content $smokeTestContent -Operation "Gerar smoke test inicial"
 
 if ($WithWhatsApp) {
     Invoke-SafeWrite -FilePath (Join-Path $automationDir "RunWhatsApp.bat") -Content $runBatContent -Operation "Gerar RunWhatsApp.bat"
 }
 
 Write-Step "Scaffold concluido para '$Name'."
+Write-Step "Manifesto inicial: criticidade=$Criticality, queue_group=$effectiveQueueGroup, smoke_test=test_$slug.py"
 Write-Step "Registro no Orchestrator deve ser feito separadamente via Dashboard/API." -Type "WARN"
 
 if ($DryRun) {
