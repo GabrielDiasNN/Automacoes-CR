@@ -43,12 +43,15 @@ Para evitar redundância e "fadiga de alertas", o sistema só dispara notificaç
 ### Logs e Auditoria
 - **Log Central**: `Logs/ReceitasBloqueadas.log` (formato padronizado).
 - **Log WhatsApp**: `Logs/WhatsApp_Global.log` (detalhamento do bootstrap, envio e protocolo de Ack).
+- **Orchestrator Online**: o detalhamento do bridge WhatsApp agora tambem deve aparecer em tempo real no modal de execucao do Orchestrator; o arquivo global continua sendo a trilha canônica do canal.
 
 ### Hardening do WhatsApp
 - O bridge ativo é `lib/WhatsApp-Core.js`, chamado pelo wrapper PowerShell global.
 - O bootstrap do cliente usa `protocolTimeout` ampliado para reduzir falhas de inicialização do Puppeteer em sessões lentas.
 - A inicialização agora registra bootstrap, autenticação, desconexão e ACK para facilitar a triagem sem reenviar o e-mail.
 - Falhas transitórias de inicialização fazem uma retentativa curta antes do erro definitivo.
+- Erros de inicialização agora registram payload serializado e preview de stack, evitando diagnósticos vazios como `undefined`.
+- Quando o e-mail conclui e o WhatsApp falha, a execução fecha com falha parcial do canal, preservando a idempotência do e-mail já entregue.
 
 ### Matriz de Exit Codes
 | Código | Significado |

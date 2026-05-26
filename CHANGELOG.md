@@ -1,5 +1,13 @@
 # Changelog
 
+## [9.3.3] - 2026-05-26
+### Alterado
+- **Receitas Bloqueadas / Observabilidade do WhatsApp**: a etapa `Send-WhatsApp.ps1` passou a ser acompanhada pelo orquestrador PowerShell com repasse contínuo do `stdout`, permitindo que bootstrap, ACK e falhas do bridge apareçam online no modal de execução do Orchestrator.
+
+### Corrigido
+- **Diagnóstico do Bridge WhatsApp**: `lib/WhatsApp-Core.js` agora serializa melhor falhas de inicialização e protocolo, evitando logs vazios como `undefined` quando o runtime rejeita com payload não padrão.
+- **Status Final de Receitas Bloqueadas**: a automação deixa de encerrar com sucesso limpo quando o e-mail conclui, mas o WhatsApp retorna falha de canal; a idempotência parcial do e-mail permanece preservada.
+
 ## [9.3.2] - 2026-05-25
 ### Adicionado
 - **Baseline Operacional Unificado**: criado `GET /api/system/baseline`, com resumo objetivo `healthy`, `attention` ou `incident`, ação recomendada e métricas normalizadas para heartbeat do worker, idade da fila, execuções acima do `max_runtime`, ownership órfão e pressão do WAL.

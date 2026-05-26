@@ -123,6 +123,28 @@ function Write-Log {
 
 }
 
+function Get-ForwardedLogLevel {
+
+    param(
+        [string]$Msg,
+        [string]$Fallback = "INFO"
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Msg)) { return $Fallback }
+
+    $detected = [regex]::Match($Msg, '\[(INFO|WARN|ERROR|ERRO|DEBUG)\]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $detected.Success) { return $Fallback }
+
+    switch ($detected.Groups[1].Value.ToUpperInvariant()) {
+        "ERROR" { return "ERRO" }
+        "ERRO"  { return "ERRO" }
+        "WARN"  { return "WARN" }
+        "DEBUG" { return "DEBUG" }
+        default { return "INFO" }
+    }
+
+}
+
 function Exit-WithCode {
 
     param([int]$Code, [string]$Msg = "")
@@ -168,6 +190,9 @@ if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
 Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$ExecId"
 
     try {
+
+        $channelFailureExitCode = 0
+        $channelFailureMessage = ""
 
         # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
 
@@ -412,15 +437,14 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                         try {
 
-                            $waInfo = New-Object System.Diagnostics.ProcessStartInfo
-                            $waInfo.FileName = "powershell.exe"
-                            $waInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO -ConfigPath `"$WhatsAppConfig`""
-                            $waInfo.UseShellExecute = $false
-                            $waInfo.CreateNoWindow = $true
-                            $waProc = [System.Diagnostics.Process]::Start($waInfo)
-                            $waProc.WaitForExit()
-                            $whatsAppExit = $waProc.ExitCode
-                            $waProc.Dispose()
+                            $waArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO -ConfigPath `"$WhatsAppConfig`""
+                            $waResult = Invoke-NativeProcess -FilePath "powershell.exe" -Arguments $waArgs -WorkingDirectory $BasePath -LogAction {
+                                param($msg, $lvl)
+                                if (-not [string]::IsNullOrWhiteSpace($msg)) {
+                                    Write-AutomacaoLog -Message $msg -Level (Get-ForwardedLogLevel -Msg $msg -Fallback $lvl) -ExecId $ExecId -LogPath $LogFile
+                                }
+                            }
+                            $whatsAppExit = $waResult.ExitCode
 
                             Write-Log "Send-WhatsApp.ps1 finalizado. ExitCode=$whatsAppExit"
 
@@ -439,10 +463,14 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                             } elseif ($whatsAppExit -eq 21) {
 
                                 Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN"
+                                $channelFailureExitCode = 21
+                                $channelFailureMessage = "Execucao concluida com falha parcial: WhatsApp requer reautenticacao antes de nova tentativa."
 
                             } else {
 
                                 Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit. Notificacao incompleta." -Lvl "WARN"
+                                $channelFailureExitCode = if ($whatsAppExit -gt 0) { $whatsAppExit } else { 24 }
+                                $channelFailureMessage = "Execucao concluida com falha parcial no canal WhatsApp. Revise os logs do canal antes de novo requeue."
 
                             }
 
@@ -461,6 +489,9 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                         } catch [System.Exception] {
 
                             Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
+                            $deliveryState.delivery_status.whatsapp.exit_code = 24
+                            $channelFailureExitCode = 24
+                            $channelFailureMessage = "Execucao concluida com falha parcial no canal WhatsApp. O wrapper nao conseguiu completar a notificacao."
 
                         }
 
@@ -483,6 +514,14 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                 }
 
             }
+
+            if ($channelFailureExitCode -ne 0) {
+
+                Exit-WithCode $channelFailureExitCode $channelFailureMessage
+
+            }
+
+            Exit-WithCode 0 "Execucao concluida com sucesso."
 
         } finally {
 
