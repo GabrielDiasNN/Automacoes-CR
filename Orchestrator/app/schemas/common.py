@@ -301,6 +301,22 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
         anchor_t = normalize_hhmm(obj.get("anchor_time"), "anchor_time", strict, logger)
         base["anchor_time"] = anchor_t
 
+        if start_t and end_t:
+            start_h, start_m = parse_hhmm(start_t)
+            end_h, end_m = parse_hhmm(end_t)
+            if (start_h, start_m) > (end_h, end_m):
+                if strict:
+                    raise ValueError("start_time não pode ser maior que end_time.")
+                logger.warning(
+                    "Janela de intervalo inválida (%s > %s). Removendo end_time.",
+                    start_t,
+                    end_t,
+                )
+                base["end_time"] = None
+
+        if base["start_time"] and not base["anchor_time"]:
+            base["anchor_time"] = base["start_time"]
+
         return base
     if schedule_type == "once":
         run_at = obj.get("run_at")
@@ -427,17 +443,19 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
         end_t = schedule.get("end_time")
         days = schedule.get("days_of_week")
         anchor_t = schedule.get("anchor_time")
-        
-        anchor_suffix = f", a partir das {anchor_t}" if anchor_t else ""
-        
+
+        anchor_suffix = f", início da cadência às {anchor_t}" if anchor_t else ""
+
         if start_t or end_t or days:
             day_names = {0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb"}
             day_lbl = ", ".join(day_names.get(d, str(d)) for d in days) if days else "Todos"
-            time_lbl = f"{start_t or '00:00'} às {end_t or '23:59'}"
+            time_lbl = f"início {start_t or '00:00'}"
+            if end_t:
+                time_lbl += f", fim {end_t}"
             return f"{min_lbl} ({day_lbl}, {time_lbl}{anchor_suffix})"
-            
+
         if anchor_t:
-            return f"{min_lbl} (a partir das {anchor_t})"
+            return f"{min_lbl} (início da cadência às {anchor_t})"
         return min_lbl
     if stype == "once":
         return f"Execução única em {schedule.get('run_at', '-')}"

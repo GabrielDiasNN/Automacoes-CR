@@ -238,7 +238,9 @@ export function createAutomationsModule(ctx) {
             const scheduleLabel = auto.schedule_summary || describeSchedule(auto.schedule);
             const nextRun = auto.next_run || formatDate(nextRunByAuto.get(auto.id)) || "-";
             const escapedName = escapeHtml(auto.name);
-            const riskLabel = buildRiskLabel(auto, cachedPortfolioByAutomation.get(auto.id));
+            const governance = cachedPortfolioByAutomation.get(auto.id);
+            const riskLabel = buildRiskLabel(auto, governance);
+            const reviewBadge = renderReviewStatusBadge(governance);
             const lastLabel = auto.last_status ? `<span class="badge ${getBadgeClass(auto.last_status)}">${translateStatus(auto.last_status)}</span>` : "<span class=\"badge badge-muted\">Sem histórico</span>";
             const lastMeta = auto.last_execution_started_at
                 ? `<span class="cell-meta">${escapeHtml(auto.last_execution_started_at)}</span>`
@@ -257,6 +259,7 @@ export function createAutomationsModule(ctx) {
                     <div class="auto-info">
                         <span class="auto-name">${escapedName}</span>
                         <span class="auto-path">${escapeHtml(auto.script_path || "")}</span>
+                        ${reviewBadge}
                     </div>
                 </td>
                 <td class="fleet-cell-schedule"><span class="badge badge-muted badge-wrap fleet-schedule-badge">${scheduleLabel}</span></td>
@@ -302,6 +305,10 @@ export function createAutomationsModule(ctx) {
                                 <button class="fleet-actions-menu-item" type="button" role="menuitem" data-action="open-ide-modal" data-automation-id="${auto.id}" data-automation-name="${escapedNameAttr}" title="Editar scripts">
                                     <i data-lucide="code" size="14"></i>
                                     <span>Editar scripts</span>
+                                </button>
+                                <button class="fleet-actions-menu-item" type="button" role="menuitem" data-action="delete-auto" data-automation-id="${auto.id}" title="Excluir cadastro">
+                                    <i data-lucide="trash-2" size="14"></i>
+                                    <span>Excluir cadastro</span>
                                 </button>
                             </div>
                         </div>
@@ -663,7 +670,7 @@ export function createAutomationsModule(ctx) {
         } else if (scheduleType === "interval") {
             const intervalVal = getValue("f-interval-minutes") || 0;
             const anchorVal = getValue("f-interval-anchor-time");
-            const anchorSuffix = anchorVal ? `, a partir das ${anchorVal}` : "";
+            const anchorSuffix = anchorVal ? `, início da cadência às ${anchorVal}` : "";
             
             const restrictedCheckbox = document.getElementById("f-interval-restricted");
             if (restrictedCheckbox && restrictedCheckbox.checked) {
@@ -672,7 +679,7 @@ export function createAutomationsModule(ctx) {
                     : "Qualquer dia";
                 const start = getValue("f-interval-start-time") || "08:00";
                 const end = getValue("f-interval-end-time") || "18:00";
-                label = `Intervalo: a cada ${intervalVal} min (${days}, das ${start} às ${end}${anchorSuffix})`;
+                label = `Intervalo: a cada ${intervalVal} min (${days}, início ${start}, fim ${end}${anchorSuffix})`;
             } else {
                 label = `Intervalo: a cada ${intervalVal} min${anchorSuffix ? ` (${anchorSuffix.slice(2)})` : ""}`;
             }
@@ -846,7 +853,7 @@ export function createAutomationsModule(ctx) {
             }
             if (parsed.schedule_type === "interval") {
                 const hasRestriction = Boolean(parsed.start_time || parsed.end_time || (Array.isArray(parsed.days_of_week) && parsed.days_of_week.length > 0));
-                return hasRestriction ? `A cada ${parsed.interval_minutes || 0} min (Janela)` : `A cada ${parsed.interval_minutes || 0} min`;
+                return hasRestriction ? `A cada ${parsed.interval_minutes || 0} min (Janela operacional)` : `A cada ${parsed.interval_minutes || 0} min`;
             }
             if (parsed.schedule_type === "once") return "Execução única";
             if (parsed.schedule_type === "daily") return `Diária (${(parsed.times || []).length} horário(s))`;
@@ -878,9 +885,11 @@ export function createAutomationsModule(ctx) {
         const governanceStatus = String(governance?.health_status || "").toLowerCase();
         const governanceDrift = Number(governance?.drift_count || 0);
         const docsStatus = String(governance?.docs_status || "").toLowerCase();
+        const reviewStatus = String(governance?.review_status || "").toLowerCase();
         if (governanceStatus === "not_governed" || governanceStatus === "not_registered") flags.push("CAT");
         if (governanceDrift > 0) flags.push(`DRIFT ${governanceDrift}`);
         if (docsStatus && docsStatus !== "complete") flags.push("DOCS");
+        if (reviewStatus === "delete_candidate") flags.push("DEL");
         const failures24h = Number(auto.failures_24h || 0);
         const timeouts24h = Number(auto.timeouts_24h || 0);
         const success24h = Number(auto.success_24h || 0);
@@ -891,6 +900,18 @@ export function createAutomationsModule(ctx) {
         if (!flags.length) return "<span class=\"badge badge-success badge-wrap fleet-risk-badge\">OK</span>";
         const hasFailure = failures24h > 0 || timeouts24h > 0 || governanceDrift > 0 || governanceStatus === "not_governed" || governanceStatus === "not_registered";
         return `<span class="badge ${hasFailure ? "badge-danger" : "badge-warning"} badge-wrap fleet-risk-badge">${flags.join(" • ")}</span>`;
+    }
+
+    function renderReviewStatusBadge(governance) {
+        const status = String(governance?.review_status || "active").toLowerCase();
+        const reasons = Array.isArray(governance?.review_reasons) ? governance.review_reasons : [];
+        if (status === "delete_candidate") {
+            return `<span class="cell-meta"><span class="badge badge-danger" title="${escapeHtml(reasons[0] || "Candidata à exclusão do cadastro.")}">Revisar exclusão</span></span>`;
+        }
+        if (status === "attention") {
+            return `<span class="cell-meta"><span class="badge badge-warning" title="${escapeHtml(reasons[0] || "Cadastro em atenção operacional.")}">Em revisão</span></span>`;
+        }
+        return "";
     }
 
     async function renderSchedulePreview() {
@@ -1059,12 +1080,18 @@ export function createAutomationsModule(ctx) {
 
     function getFilteredAutomations() {
         const query = (document.getElementById("auto-search")?.value || "").toLowerCase().trim();
-        if (!query) return cachedAutomations;
-        return cachedAutomations.filter((auto) => (
-            auto.name.toLowerCase().includes(query) ||
-            (auto.description || "").toLowerCase().includes(query) ||
-            auto.script_path.toLowerCase().includes(query)
-        ));
+        return cachedAutomations.filter((auto) => {
+            const matchesQuery = !query || (
+                auto.name.toLowerCase().includes(query) ||
+                (auto.description || "").toLowerCase().includes(query) ||
+                auto.script_path.toLowerCase().includes(query)
+            );
+            if (!matchesQuery) return false;
+            const reviewFilter = String(document.getElementById("auto-review-filter")?.value || "").trim();
+            if (!reviewFilter) return true;
+            const governance = cachedPortfolioByAutomation.get(auto.id);
+            return String(governance?.review_status || "active") === reviewFilter;
+        });
     }
 
     function goStep(direction) {
@@ -1097,6 +1124,20 @@ export function createAutomationsModule(ctx) {
         }
     }
 
+    async function deleteAuto(id) {
+        const automation = cachedAutomations.find((item) => Number(item.id) === Number(id));
+        const confirmed = window.confirm(
+            `Excluir o cadastro da automação "${automation?.name || id}"? O histórico permanece auditável, mas a agenda e o ambiente operacional serão removidos.`
+        );
+        if (!confirmed) return;
+
+        const res = await api(`/api/automations/${id}`, "DELETE");
+        if (res) {
+            showToast(res.message || "Cadastro removido com sucesso.", "success");
+            await Promise.all([loadConfig(), loadOverview(), loadExecutions(1)]);
+        }
+    }
+
     function onScheduleTypeChanged(nextType) {
         scheduleType = nextType || "manual";
         updateScheduleBlocksVisibility(scheduleType);
@@ -1114,6 +1155,7 @@ export function createAutomationsModule(ctx) {
         pauseAuto,
         resumeAuto,
         cloneAuto,
+        deleteAuto,
         toggleScheduleDay,
         renderScheduleSummary,
         resetScheduleBuilder,

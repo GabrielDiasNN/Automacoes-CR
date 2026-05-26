@@ -156,7 +156,7 @@
                     <div class="panel-header">
                         <div>
                             <h3 id="portfolio-title">Portfólio governado</h3>
-                            <p>Criticidade, SLA, documentação e drift entre catálogo e runtime.</p>
+                            <p>Criticidade, SLA, documentação e divergência entre catálogo e ambiente operacional.</p>
                         </div>
                     </div>
                     <div class="table-wrap">
@@ -201,6 +201,15 @@
                     <div class="filter-group wide">
                         <label for="auto-search">Buscar automação</label>
                         <input id="auto-search" type="search" class="form-control" placeholder="Nome, descrição ou caminho">
+                    </div>
+                    <div class="filter-group">
+                        <label for="auto-review-filter">Revisão do cadastro</label>
+                        <select id="auto-review-filter" class="form-control">
+                            <option value="">Todas</option>
+                            <option value="delete_candidate">Candidatas à exclusão</option>
+                            <option value="attention">Em atenção</option>
+                            <option value="active">Ativas estáveis</option>
+                        </select>
                     </div>
                 </div>
 
@@ -327,13 +336,71 @@
                 <div class="page-header">
                     <div>
                         <span class="eyebrow">Observabilidade</span>
-                        <h1 id="observability-title">Sinais operacionais</h1>
+                        <h1 id="observability-title">Pulso operacional vivo</h1>
                     </div>
+                </div>
+
+                <div class="metrics-row">
+                    <article class="metric-card">
+                        <div class="metric-head"><span>Heartbeat</span><i data-lucide="heart-pulse"></i></div>
+                        <strong id="obs-heartbeat-age">-</strong>
+                        <small id="obs-heartbeat-state">Aguardando diagnóstico</small>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-head"><span>Fila pendente</span><i data-lucide="list-todo"></i></div>
+                        <strong id="obs-pending-age">-</strong>
+                        <small id="obs-pending-state">Sem leitura</small>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-head"><span>Execução mais longa</span><i data-lucide="timer-reset"></i></div>
+                        <strong id="obs-running-age">-</strong>
+                        <small id="obs-running-state">Sem leitura</small>
+                    </article>
+                    <article class="metric-card">
+                        <div class="metric-head"><span>Portfólio em revisão</span><i data-lucide="folder-search-2"></i></div>
+                        <strong id="obs-review-count">-</strong>
+                        <small id="obs-review-state">Sem leitura</small>
+                    </article>
+                </div>
+
+                <div class="sys-details-grid" style="margin-top: 18px;">
+                    <section class="panel">
+                        <div class="panel-header"><h3>Achados em aberto</h3></div>
+                        <div id="obs-findings" class="findings-list">
+                            <div class="empty-state">Carregando diagnóstico operacional...</div>
+                        </div>
+                    </section>
+                    <section class="panel">
+                        <div class="panel-header"><h3>Focos de falha e grupos</h3></div>
+                        <div id="obs-hotspots" class="contract-list">
+                            <div class="empty-state">Carregando focos de falha...</div>
+                        </div>
+                    </section>
+                    <section class="panel panel-span-all">
+                        <div class="panel-header"><h3>Linha do tempo recente</h3></div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Momento</th>
+                                        <th>Fila</th>
+                                        <th>Heartbeat</th>
+                                        <th>WAL</th>
+                                        <th>Base operacional</th>
+                                        <th>Focos de falha</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="obs-history-tbody">
+                                    <tr><td colspan="6">Carregando histórico operacional...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
                 </div>
 
                 <div class="charts-container">
                     <section class="panel">
-                        <div class="panel-header"><h3>Performance por automação</h3></div>
+                        <div class="panel-header"><h3>Duração média por automação</h3></div>
                         <div class="chart-panel-body" id="chart-performance"></div>
                     </section>
                     <section class="panel">
@@ -351,7 +418,7 @@
                     </div>
                     <div class="quick-actions">
                         <button class="btn btn-outline" type="button" data-action="system-action" data-system-action="scheduler_reload"><i data-lucide="refresh-cw"></i>Sincronizar agenda</button>
-                        <button id="system-worker-action" class="btn btn-outline" type="button" data-action="system-action" data-system-action="worker_wakeup"><i data-lucide="activity"></i>Acordar worker</button>
+                        <button id="system-worker-action" class="btn btn-outline" type="button" data-action="system-action" data-system-action="worker_wakeup"><i data-lucide="activity"></i>Ativar processador</button>
                         <button class="btn btn-outline" type="button" data-action="system-action" data-system-action="backup"><i data-lucide="database-backup"></i>Backup</button>
                         <button class="btn btn-danger" type="button" data-action="system-action" data-system-action="purge"><i data-lucide="trash-2"></i>Purge</button>
                     </div>
@@ -360,13 +427,13 @@
                 <div class="health-overview">
                     <article id="health-db" class="health-card"><span class="health-title">Banco</span><strong class="health-value">-</strong></article>
                     <article id="health-sched" class="health-card"><span class="health-title">Scheduler</span><strong class="health-value">-</strong></article>
-                    <article id="health-worker" class="health-card"><span class="health-title">Worker</span><strong class="health-value">-</strong></article>
+                    <article id="health-worker" class="health-card"><span class="health-title">Processador</span><strong class="health-value">-</strong></article>
                     <article id="health-disk" class="health-card"><span class="health-title">Disco/WAL</span><strong class="health-value">-</strong></article>
                 </div>
 
                 <div class="sys-details-grid">
                     <section class="panel">
-                        <div class="panel-header"><h3>Worker e fila</h3></div>
+                        <div class="panel-header"><h3>Processador e fila</h3></div>
                         <div id="worker-details" class="worker-info-list"></div>
                     </section>
                     <section class="panel">
@@ -376,7 +443,7 @@
                         </div>
                     </section>
                     <section class="panel">
-                        <div class="panel-header"><h3>Contrato e recovery</h3></div>
+                        <div class="panel-header"><h3>Contrato e recuperação</h3></div>
                         <div id="diagnostic-contract" class="contract-list">
                             <div class="empty-state">Carregando contrato operacional...</div>
                         </div>
@@ -543,7 +610,7 @@
                                     <input id="f-interval-minutes" class="form-control" type="number" min="1" max="1440" value="30">
                                 </div>
                                 <div class="form-group" style="flex: 1;">
-                                    <label for="f-interval-anchor-time">Horário de início/âncora (Opcional)</label>
+                                    <label for="f-interval-anchor-time">Início da cadência (opcional)</label>
                                     <input id="f-interval-anchor-time" class="form-control" type="time">
                                 </div>
                             </div>
@@ -568,11 +635,11 @@
                                 </div>
                                 <div class="form-row" style="margin-top: 15px;">
                                     <div class="form-group">
-                                        <label for="f-interval-start-time">Horário de início da janela</label>
+                                        <label for="f-interval-start-time">Início da janela operacional</label>
                                         <input id="f-interval-start-time" class="form-control" type="time" value="08:00">
                                     </div>
                                     <div class="form-group">
-                                        <label for="f-interval-end-time">Horário de término da janela</label>
+                                        <label for="f-interval-end-time">Fim da janela operacional</label>
                                         <input id="f-interval-end-time" class="form-control" type="time" value="18:00">
                                     </div>
                                 </div>
@@ -605,7 +672,7 @@
                 <div id="tab-execution" class="tab-content">
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="f-max-runtime">Timeout máximo permitido (minutos)</label>
+                            <label for="f-max-runtime">Tempo máximo permitido (minutos)</label>
                             <input id="f-max-runtime" class="form-control" type="number" min="1" max="480" value="30">
                         </div>
                         <div class="form-group">

@@ -13,7 +13,7 @@
   "queue_group": "oracle",
   "max_runtime_minutes": 30,
   "max_retries": 0,
-  "schedule_summary": "Seg-Sex às 17:00",
+  "schedule_summary": "Sex às 07:05",
   "runbook_path": "docs/runbooks/receitas-emitidas-runbook.md",
   "context_path": "Receitas Emitidas/CONTEXT.md",
   "readme_path": "Receitas Emitidas/README.md",

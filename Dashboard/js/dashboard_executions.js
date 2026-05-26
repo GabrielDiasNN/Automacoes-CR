@@ -216,18 +216,18 @@ export function createExecutionsModule(ctx) {
                 <h4>Mais antigos do diagnóstico</h4>
                 <div class="triage-groups">
                     ${oldestPending.exec_id ? `<button class="triage-chip" type="button" data-action="execution-preset" data-execution-preset="aged-queue">PENDENTE · ${escapeHtml(formatAgeLabel(oldestPending.age_seconds || 0))}</button>` : ""}
-                    ${oldestRunning.exec_id ? `<button class="triage-chip" type="button" data-action="execution-preset" data-execution-preset="incident">RUNNING · ${escapeHtml(formatAgeLabel(oldestRunning.age_seconds || 0))}</button>` : ""}
+                    ${oldestRunning.exec_id ? `<button class="triage-chip" type="button" data-action="execution-preset" data-execution-preset="incident">EM EXECUÇÃO · ${escapeHtml(formatAgeLabel(oldestRunning.age_seconds || 0))}</button>` : ""}
                     ${!oldestPending.exec_id && !oldestRunning.exec_id ? '<span class="cell-meta">Sem envelhecimento relevante.</span>' : ""}
                 </div>
                 <p>${blocked ? `${blocked} bloqueio(s) operacional(is) no recorte atual.` : "Sem bloqueios no recorte atual."}</p>
             </article>
             <article class="triage-card">
                 <span class="eyebrow">Contexto</span>
-                <h4>Hotspots e pressão</h4>
+                <h4>Focos de falha e pressão</h4>
                 <div class="triage-groups">
                     ${hotspots.length
                         ? hotspots.slice(0, 2).map((item) => `<button class="triage-chip" type="button" data-action="execution-open-hotspot" data-automation-id="${escapeHtml(String(item.automation_id))}">${escapeHtml(item.automation_name)} · ${escapeHtml(String(item.failures_24h))}</button>`).join("")
-                        : '<span class="cell-meta">Sem hotspot ativo.</span>'}
+                        : '<span class="cell-meta">Sem foco de falha ativo.</span>'}
                 </div>
                 <div class="triage-groups" style="margin-top:8px">
                     ${retryPressure.length

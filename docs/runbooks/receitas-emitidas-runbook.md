@@ -7,7 +7,7 @@
 - Componente: `Receitas Emitidas`
 - Criticidade: `MÉDIA`
 - SLA de recuperação: `6 horas`
-- Horário de disparo: `Seg-Sex às 17:00`
+- Horário de disparo: `Sex às 07:05`
 - Área de negócio: `Planejamento / Tinturaria / PCP`
 - Entrypoint operacional: `Receitas Emitidas/run.ps1`
 

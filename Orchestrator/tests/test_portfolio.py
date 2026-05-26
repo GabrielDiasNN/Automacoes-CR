@@ -130,6 +130,10 @@ def test_portfolio_health_endpoint_reports_manifest_and_runtime_state(
     assert item["enabled"] is True
     assert item["dependency_status"]["oracle"] == "healthy"
     assert item["runbook_path"] == "docs/runbooks/auto-governada-runbook.md"
+    assert item["review_status"] == "active"
+    assert item["schedule_lag_seconds"] is None
+    assert item["last_success_age_seconds"] is not None
+    assert item["last_failure_age_seconds"] is None
 
 
 def test_portfolio_drift_endpoint_reports_runtime_mismatch_and_missing_docs(
@@ -233,3 +237,26 @@ def test_portfolio_runbook_endpoint_returns_markdown(
     response = client.get("/api/portfolio/runbook/AR-03", headers=AUTH_HEADERS)
     assert response.status_code == 200
     assert "# Runbook Auto Runbook" in response.text
+
+
+def test_portfolio_marks_runtime_only_disabled_automation_as_delete_candidate(
+    client, db_session
+):
+    from app import models
+
+    auto = models.Automation(
+        name="Cadastro Orfao",
+        script_path="./test/run.ps1",
+        enabled=False,
+    )
+    db_session.add(auto)
+    db_session.commit()
+
+    response = client.get("/api/portfolio/health", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    payload = response.json()
+
+    item = next(entry for entry in payload["items"] if entry["name"] == "Cadastro Orfao")
+    assert item["review_status"] == "delete_candidate"
+    assert any("sem manifesto" in reason.lower() for reason in item["review_reasons"])
+    assert payload["summary"]["delete_candidate_items"] >= 1

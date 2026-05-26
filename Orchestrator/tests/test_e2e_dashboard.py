@@ -456,7 +456,7 @@ def test_e2e_dashboard_portfolio_panel_exposes_governed_catalog(
     portfolio_insight = page.locator("#insight-portfolio-health").text_content() or ""
     assert "Receitas Bloqueadas" in portfolio_text
     assert "Montagem de Terceirizados" in portfolio_text
-    assert "Docs OK" in portfolio_text
+    assert "Documentação OK" in portfolio_text
     assert portfolio_insight.strip() != ""
 
 
@@ -874,7 +874,7 @@ def test_e2e_dashboard_automations_last_execution_snapshot_visible(
     menu_state = _open_more_actions_and_read_state(page)
     assert menu_state["menuVisible"] is True
     assert menu_state["menuOpenCount"] == 1
-    assert menu_state["labels"] == ["Clonar", "Editar JSON", "Editar scripts"]
+    assert menu_state["labels"] == ["Clonar", "Editar JSON", "Editar scripts", "Excluir cadastro"]
     assert menu_state["actionsOverflow"] is False
 
     _assert_menu_closes_on_outside_click(page)
@@ -953,7 +953,7 @@ def test_e2e_dashboard_system_shortcuts_open_execution_triage(
     page.wait_for_load_state("networkidle")
     page.click('button[data-target="system"]')
     page.wait_for_selector("#diagnostic-contract")
-    page.wait_for_selector("text=Baseline operacional")
+    page.wait_for_selector("#diagnostic-contract h4:text-is('Base operacional')")
 
     page.wait_for_selector(
         'button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]'

@@ -369,7 +369,7 @@ def check_queue_health(pending_age_seconds: float, running_age_seconds: float) -
             findings,
             SEVERITY_WARN,
             "queue",
-            f"Execução pendente há {round(pending_age_seconds / 60, 1)} minutos.",
+            f"Execução pendente há {round(pending_age_seconds, 1)} segundos.",
             {
                 "action_hint": "Verificar worker, concorrência e bloqueios antes de reenfileirar.",
                 "action_code": "worker_wakeup",
@@ -384,7 +384,7 @@ def check_queue_health(pending_age_seconds: float, running_age_seconds: float) -
             findings,
             SEVERITY_WARN,
             "queue",
-            f"Execução em RUNNING há {round(running_age_seconds / 60, 1)} minutos.",
+            f"Execução em RUNNING há {round(running_age_seconds, 1)} segundos.",
             {
                 "action_hint": "Consultar logs da execução e avaliar parada controlada se houver hang.",
                 "action_code": "show_running",

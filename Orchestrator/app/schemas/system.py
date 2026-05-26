@@ -420,6 +420,7 @@ class SystemOverviewPortfolio(BaseModel):
     docs_missing_items: int = 0
     sla_breached_items: int = 0
     not_registered_items: int = 0
+    delete_candidate_items: int = 0
     healthy_items: int = 0
     attention_items: int = 0
     incident_items: int = 0
@@ -523,11 +524,16 @@ class PortfolioHealthItem(BaseModel):
     next_run: Any = None
     schedule_summary: Optional[str] = None
     schedule_lag_minutes: Optional[int] = None
+    schedule_lag_seconds: Optional[float] = None
     last_status: Optional[str] = None
     last_success_at: Any = None
     last_failure_at: Any = None
     last_success_age_minutes: Optional[int] = None
     last_failure_age_minutes: Optional[int] = None
+    last_success_age_seconds: Optional[float] = None
+    last_failure_age_seconds: Optional[float] = None
+    review_status: str = "active"
+    review_reasons: List[str] = []
     dependency_status: PortfolioDependencyStatus = Field(
         default_factory=PortfolioDependencyStatus
     )

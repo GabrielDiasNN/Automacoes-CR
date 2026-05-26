@@ -13,7 +13,7 @@
   "queue_group": "oracle",
   "max_runtime_minutes": 30,
   "max_retries": 1,
-  "schedule_summary": "Seg-Sex às 08:00 e 15:00",
+  "schedule_summary": "Seg-Sáb, a cada 30 min, 05:00 às 22:00, em horários redondos",
   "runbook_path": "docs/runbooks/montagem-de-terceirizados-runbook.md",
   "context_path": "Montagem de Terceirizados/CONTEXT.md",
   "readme_path": "Montagem de Terceirizados/README.md",

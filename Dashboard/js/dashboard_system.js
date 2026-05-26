@@ -85,7 +85,7 @@ export function createSystemModule(ctx) {
         <div class="info-row"><span>Ativas:</span><b>${worker.active_tasks || 0}</b></div>
         <div class="info-row"><span>Fila Ativa:</span><b>${queue.active_count || 0}</b></div>
         <div class="info-row"><span>Pendente mais antigo:</span><b>${formatQueueAge(queue.oldest_pending)}</b></div>
-        <div class="info-row"><span>RUNNING mais antigo:</span><b>${formatQueueAge(queue.oldest_running)}</b></div>
+        <div class="info-row"><span>Em execução mais antiga:</span><b>${formatQueueAge(queue.oldest_running)}</b></div>
         <div class="info-row"><span>Acima do limite:</span><b>${escapeHtml(overRuntimeLabel)}</b></div>
         <div class="info-row"><span>Pressão de retry:</span><b>${escapeHtml(retryLabel)}</b></div>
         <div class="info-row"><span>Timeout por grupo (24h):</span><b>${escapeHtml(timeoutLabel)}</b></div>
@@ -112,7 +112,7 @@ export function createSystemModule(ctx) {
                 <span class="badge badge-success">OK</span>
                 <div>
                     <strong>Sem achados críticos</strong>
-                    <p>Diagnóstico atual: ${escapeHtml(diagnostics.overall_status || "healthy")}.</p>
+                    <p>Diagnóstico atual: ${escapeHtml(translateOverviewStatus(diagnostics.overall_status || "healthy"))}.</p>
                 </div>
             </div>
         `;
@@ -194,7 +194,7 @@ export function createSystemModule(ctx) {
         const baselineSummary = baselineMetrics
             .filter((item) => item.status && item.status !== "healthy")
             .slice(0, 2)
-            .map((item) => `${item.label}: ${String(item.status).toUpperCase()}`)
+            .map((item) => `${item.label}: ${translateOverviewStatus(item.status)}`)
             .join(" | ");
 
         const checksHtml = checks.length
@@ -206,7 +206,7 @@ export function createSystemModule(ctx) {
                     ${item.value ? `<small>Valor: ${escapeHtml(String(item.value))}</small>` : ""}
                 </article>
             `).join("")
-            : `<article class="contract-card"><h4>Checks indisponíveis</h4><p>O diagnóstico ainda não retornou checks de runtime.</p></article>`;
+            : `<article class="contract-card"><h4>Verificações indisponíveis</h4><p>O diagnóstico ainda não retornou verificações do ambiente operacional.</p></article>`;
 
         const recommended = recovery.recommended_action
             ? `<small>Ação recomendada: ${escapeHtml(recovery.recommended_action)}</small>`
@@ -229,7 +229,7 @@ export function createSystemModule(ctx) {
 
         const hotspotsHtml = failureHotspots.length
             ? `<article class="contract-card">
-                <h4>Hotspots de falha</h4>
+                <h4>Focos de falha</h4>
                 <p>Atalhos para abrir a bancada diretamente nas automações com mais falhas nas últimas 24h.</p>
                 <div class="triage-groups">
                     ${failureHotspots.slice(0, 5).map((item) => `
@@ -244,26 +244,26 @@ export function createSystemModule(ctx) {
 
         container.innerHTML = `
             <article class="contract-card">
-                <h4>Contrato de payload</h4>
+                <h4>Contrato de dados</h4>
                 <p>Versão ativa: <strong>${escapeHtml(diagnostics.contract_version || "legacy")}</strong></p>
-                <small>O dashboard consome este contrato para overview, diagnósticos e ações operacionais.</small>
-                <small>Correlation: ${escapeHtml(trace.correlation_id || getLastCorrelationId() || "SYSTEM")}</small>
+                <small>O dashboard consome este contrato para visão geral, diagnósticos e ações operacionais.</small>
+                <small>Correlação: ${escapeHtml(trace.correlation_id || getLastCorrelationId() || "SYSTEM")}</small>
                 ${recommended}
             </article>
             <article class="contract-card">
-                <h4>Baseline operacional</h4>
-                <p>Status: <strong>${escapeHtml(baselineStatus)}</strong></p>
-                <small>Attention: ${escapeHtml(String(baseline.attention_count || 0))} · Incident: ${escapeHtml(String(baseline.incident_count || 0))}</small>
-                <small>${escapeHtml(baselineSummary || "Sem desvios relevantes no baseline atual.")}</small>
+                <h4>Base operacional</h4>
+                <p>Status: <strong>${escapeHtml(translateOverviewStatus(baselineStatus))}</strong></p>
+                <small>Atenção: ${escapeHtml(String(baseline.attention_count || 0))} · Incidente: ${escapeHtml(String(baseline.incident_count || 0))}</small>
+                <small>${escapeHtml(baselineSummary || "Sem desvios relevantes na base operacional atual.")}</small>
                 ${baseline.recommended_action ? `<small>Ação recomendada: ${escapeHtml(String(baseline.recommended_action))}</small>` : ""}
             </article>
             <article class="contract-card">
-                <h4>Recovery leve</h4>
+                <h4>Recuperação leve</h4>
                 <p>${escapeHtml(lightActions.join(", ") || "Nenhuma ação sugerida")}</p>
-                <small>Ações para wake-up, reload, checkpoint e triagem sem restart forte.</small>
+                <small>Ações para ativação do processador, recarga da agenda, checkpoint e triagem sem reinício forte.</small>
             </article>
             <article class="contract-card">
-                <h4>Recovery forte</h4>
+                <h4>Recuperação forte</h4>
                 <p>${escapeHtml(strongActions.join(", ") || "Nenhuma ação sugerida")}</p>
                 <small>Ações para recuperação canônica e proteção operacional antes de mudanças maiores.</small>
             </article>
@@ -277,9 +277,9 @@ export function createSystemModule(ctx) {
     function getWorkerSystemAction(diagnostics) {
         const worker = diagnostics?.worker || {};
         if (!worker.is_alive) {
-            return { action: "worker_recover", label: "Recuperar worker", icon: "refresh-cw" };
+            return { action: "worker_recover", label: "Recuperar processador", icon: "refresh-cw" };
         }
-        return { action: "worker_wakeup", label: "Acordar worker", icon: "activity" };
+        return { action: "worker_wakeup", label: "Ativar processador", icon: "activity" };
     }
 
     function updateWorkerActionButton(diagnostics, override = null) {
@@ -287,7 +287,7 @@ export function createSystemModule(ctx) {
         if (!button) return;
 
         const descriptor = override || getWorkerSystemAction(diagnostics);
-        button.innerHTML = `<i data-lucide="${descriptor.icon || "activity"}"></i>${escapeHtml(descriptor.label || "Acordar worker")}`;
+        button.innerHTML = `<i data-lucide="${descriptor.icon || "activity"}"></i>${escapeHtml(descriptor.label || "Ativar processador")}`;
         button.disabled = Boolean(descriptor.disabled);
         button.dataset.systemAction = descriptor.action || "";
         if (typeof lucide !== "undefined") lucide.createIcons();
@@ -369,15 +369,20 @@ export function createSystemModule(ctx) {
     function formatDuration(value) {
         const sec = Number(value || 0);
         if (!Number.isFinite(sec) || sec < 0) return "-";
-        if (sec < 60) return `${Math.round(sec)}s`;
-        if (sec < 3600) {
-            const minutes = Math.floor(sec / 60);
-            const remain = Math.round(sec % 60);
-            return remain > 0 ? `${minutes}m ${remain}s` : `${minutes}m`;
+        return `${sec.toFixed(1)}s`;
+    }
+
+    function translateOverviewStatus(status) {
+        switch (String(status || "").toLowerCase()) {
+            case "healthy": return "saudável";
+            case "attention": return "atenção";
+            case "incident": return "incidente";
+            case "unhealthy": return "não saudável";
+            case "warn": return "atenção";
+            case "ok": return "ok";
+            case "error": return "erro";
+            default: return String(status || "-");
         }
-        const hours = Math.floor(sec / 3600);
-        const minutes = Math.floor((sec % 3600) / 60);
-        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
     }
 
     return {

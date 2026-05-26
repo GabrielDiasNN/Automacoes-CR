@@ -7,7 +7,7 @@
 - Componente: `Montagem de Terceirizados`
 - Criticidade: `ALTA`
 - SLA de recuperação: `3 horas`
-- Horários de disparo: `Seg-Sex às 08:00 e 15:00`
+- Horários de disparo: `Seg-Sáb, a cada 30 min, 05:00 às 22:00, em horários redondos`
 - Área de negócio: `Faturamento / Controladoria / Expedição de Terceirizados`
 - Entrypoint operacional: `Montagem de Terceirizados/run.ps1`
 

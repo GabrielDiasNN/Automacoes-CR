@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -452,12 +453,27 @@ def _minutes_since(timestamp: Any) -> int | None:
     return max(0, int(delta.total_seconds() // 60))
 
 
+def _seconds_since(timestamp: Any) -> float | None:
+    if timestamp is None:
+        return None
+    delta = get_now_local() - cast(datetime, timestamp)
+    return max(0.0, round(delta.total_seconds(), 2))
+
+
 def _schedule_lag_minutes(next_run: Any, active_execution_count: int) -> int | None:
     if next_run is None or active_execution_count > 0:
         return None
     delay = get_now_local() - next_run
     minutes = int(delay.total_seconds() // 60)
     return minutes if minutes > 0 else 0
+
+
+def _schedule_lag_seconds(next_run: Any, active_execution_count: int) -> float | None:
+    if next_run is None or active_execution_count > 0:
+        return None
+    delay = get_now_local() - next_run
+    seconds = round(delay.total_seconds(), 2)
+    return seconds if seconds > 0 else 0.0
 
 
 def _sla_state(
@@ -504,6 +520,8 @@ def _portfolio_operational_status(item: schemas.PortfolioHealthItem) -> str:
         item.criticality in {"critical", "high"}
         and (item.docs_status != "complete" or item.drift_count > 0)
     )
+    if item.review_status == "delete_candidate":
+        return "attention"
     if item.health_status in {"not_registered", "not_governed", "breached"}:
         return "incident"
     if critical_governance_drift:
@@ -550,8 +568,14 @@ def _build_portfolio_summary(
         for item in health_items
         if item.health_status in {"not_registered", "not_governed"}
     )
+    delete_candidate_items = sum(
+        1 for item in health_items if item.review_status == "delete_candidate"
+    )
 
-    if not_registered_items > 0:
+    if delete_candidate_items > 0:
+        top_issue = "Há automações candidatas à exclusão do cadastro por inatividade, ausência de manifesto ou cadastro órfão."
+        recommended_action = "Revise as candidatas na aba Automações e exclua apenas os registros confirmadamente sem utilidade."
+    elif not_registered_items > 0:
         top_issue = "Há automações ativas fora do catálogo governado ou sem cadastro reconciliado."
         recommended_action = "Reconcilie manifesto e cadastro runtime antes de expandir o portfólio."
     elif docs_missing_items > 0:
@@ -575,6 +599,7 @@ def _build_portfolio_summary(
         docs_missing_items=docs_missing_items,
         sla_breached_items=sla_breached_items,
         not_registered_items=not_registered_items,
+        delete_candidate_items=delete_candidate_items,
         healthy_items=healthy_items,
         attention_items=attention_items,
         incident_items=incident_items,
@@ -586,6 +611,56 @@ def _build_portfolio_summary(
 
 def _sort_health_item(item: schemas.PortfolioHealthItem) -> tuple[int, str]:
     return (CRITICALITY_RANK.get(item.criticality, 99), item.name.lower())
+
+
+def _build_review_status(
+    *,
+    catalog_id: str,
+    enabled: bool,
+    next_run: Any,
+    last_success_age_seconds: float | None,
+    last_failure_age_seconds: float | None,
+    drift_count: int,
+    docs_status: str,
+    health_status: str,
+) -> tuple[str, list[str]]:
+    review_reasons: list[str] = []
+    inactivity_cutoff_seconds = 30 * 24 * 60 * 60
+
+    if catalog_id.startswith("runtime-"):
+        review_reasons.append("Cadastro runtime sem manifesto governado correspondente.")
+
+    if not enabled and next_run is None:
+        review_reasons.append("Automação desabilitada e sem próxima execução agendada.")
+
+    last_activity_age_seconds = min(
+        [
+            value
+            for value in [last_success_age_seconds, last_failure_age_seconds]
+            if value is not None
+        ],
+        default=None,
+    )
+    if last_activity_age_seconds is None:
+        review_reasons.append("Sem execução registrada no histórico disponível.")
+    elif last_activity_age_seconds >= inactivity_cutoff_seconds:
+        review_reasons.append("Sem atividade operacional nos últimos 30 dias.")
+
+    if health_status in {"not_registered", "not_governed"}:
+        review_reasons.append("Cadastro sem reconciliação com o catálogo governado.")
+    elif drift_count > 0:
+        review_reasons.append("Cadastro com drift em relação ao manifesto canônico.")
+    elif docs_status != "complete":
+        review_reasons.append("Documentação obrigatória incompleta para revisão segura.")
+
+    if review_reasons and (
+        catalog_id.startswith("runtime-")
+        or (not enabled and next_run is None)
+    ):
+        return "delete_candidate", review_reasons
+    if review_reasons:
+        return "attention", review_reasons
+    return "active", []
 
 
 def _collect_portfolio_rows(
@@ -682,8 +757,14 @@ def _collect_portfolio_rows(
             if last_failure
             else None
         )
+        last_success_age_seconds = _seconds_since(last_success_at)
+        last_failure_age_seconds = _seconds_since(last_failure_at)
         last_failure_age_minutes = _minutes_since(last_failure_at)
         lag_minutes = _schedule_lag_minutes(
+            next_run_dt,
+            response.active_execution_count if response else 0,
+        )
+        lag_seconds = _schedule_lag_seconds(
             next_run_dt,
             response.active_execution_count if response else 0,
         )
@@ -700,6 +781,29 @@ def _collect_portfolio_rows(
 
         dependency_status = _dependency_status(manifest, latest_snapshot)
         operational_state = response.operational_state if response else "not_registered"
+        review_status, review_reasons = _build_review_status(
+            catalog_id=manifest.id,
+            enabled=bool(matched_auto.enabled) if matched_auto else False,
+            next_run=next_run_dt,
+            last_success_age_seconds=last_success_age_seconds,
+            last_failure_age_seconds=last_failure_age_seconds,
+            drift_count=len(issues),
+            docs_status=docs_status,
+            health_status=_health_status(
+                automation_registered=matched_auto is not None,
+                docs_status=docs_status,
+                drift_count=len(issues),
+                sla_state=sla_state,
+                operational_state=operational_state,
+            ),
+        )
+        health_status = _health_status(
+            automation_registered=matched_auto is not None,
+            docs_status=docs_status,
+            drift_count=len(issues),
+            sla_state=sla_state,
+            operational_state=operational_state,
+        )
 
         health_items.append(
             schemas.PortfolioHealthItem(
@@ -713,13 +817,7 @@ def _collect_portfolio_rows(
                 enabled=bool(matched_auto.enabled) if matched_auto else False,
                 queue_group=manifest.queue_group if manifest.queue_group else (cast(str | None, matched_auto.queue_group) if matched_auto else None),
                 sla_minutes=manifest.sla_minutes,
-                health_status=_health_status(
-                    automation_registered=matched_auto is not None,
-                    docs_status=docs_status,
-                    drift_count=len(issues),
-                    sla_state=sla_state,
-                    operational_state=operational_state,
-                ),
+                health_status=health_status,
                 sla_state=sla_state,
                 docs_status=docs_status,
                 drift_status="drift" if issues else "ok",
@@ -730,11 +828,16 @@ def _collect_portfolio_rows(
                 next_run=next_run_dt,
                 schedule_summary=response.schedule_summary if response else manifest.schedule_summary,
                 schedule_lag_minutes=lag_minutes,
+                schedule_lag_seconds=lag_seconds,
                 last_status=last_status,
                 last_success_at=last_success_at,
                 last_failure_at=last_failure_at,
                 last_success_age_minutes=_minutes_since(last_success_at),
                 last_failure_age_minutes=last_failure_age_minutes,
+                last_success_age_seconds=last_success_age_seconds,
+                last_failure_age_seconds=last_failure_age_seconds,
+                review_status=review_status,
+                review_reasons=review_reasons,
                 dependency_status=schemas.PortfolioDependencyStatus(**dependency_status),
             )
         )
@@ -765,6 +868,7 @@ def _collect_portfolio_rows(
         )
         next_run_dt = schemas.parse_dt_br(response.next_run) if response.next_run else None
         lag_minutes = _schedule_lag_minutes(next_run_dt, response.active_execution_count)
+        lag_seconds = _schedule_lag_seconds(next_run_dt, response.active_execution_count)
         last_success_at = (
             last_success.get("finished_at") or last_success.get("started_at")
             if last_success
@@ -774,6 +878,18 @@ def _collect_portfolio_rows(
             last_failure.get("finished_at") or last_failure.get("started_at")
             if last_failure
             else None
+        )
+        last_success_age_seconds = _seconds_since(last_success_at)
+        last_failure_age_seconds = _seconds_since(last_failure_at)
+        review_status, review_reasons = _build_review_status(
+            catalog_id=f"runtime-{int(auto.id)}",
+            enabled=bool(auto.enabled),
+            next_run=next_run_dt,
+            last_success_age_seconds=last_success_age_seconds,
+            last_failure_age_seconds=last_failure_age_seconds,
+            drift_count=1,
+            docs_status="missing",
+            health_status="not_governed",
         )
         health_items.append(
             schemas.PortfolioHealthItem(
@@ -803,11 +919,16 @@ def _collect_portfolio_rows(
                 next_run=next_run_dt,
                 schedule_summary=response.schedule_summary,
                 schedule_lag_minutes=lag_minutes,
+                schedule_lag_seconds=lag_seconds,
                 last_status=response.last_status,
                 last_success_at=last_success_at,
                 last_failure_at=last_failure_at,
                 last_success_age_minutes=_minutes_since(last_success_at),
                 last_failure_age_minutes=_minutes_since(last_failure_at),
+                last_success_age_seconds=last_success_age_seconds,
+                last_failure_age_seconds=last_failure_age_seconds,
+                review_status=review_status,
+                review_reasons=review_reasons,
                 dependency_status=schemas.PortfolioDependencyStatus(
                     oracle="unknown"
                     if latest_snapshot.get("status") in FAILURE_STATUSES

@@ -18,6 +18,7 @@ import { bindActionElements, registerAction } from "./action_registry.js";
 import {
     normalizeOverviewPayload,
     normalizePortfolioHealthPayload,
+    normalizeSystemHistoryPayload,
 } from "./contracts.js";
 import * as ui from "./ui_manager.js?v=20260521c";
 import * as ide from "./ide_service.js?v=20260521c";
@@ -98,7 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (target === "dashboard") loadOverview();
         if (target === "executions") loadExecutions(1);
         if (target === "automations") loadConfig();
-        if (target === "observability") loadOverview();
+        if (target === "observability") loadObservability();
         if (target === "system") loadSystem();
         if (target === "env") ide.loadEnv();
     });
@@ -136,6 +137,7 @@ window.removeScheduleTime = (hhmm) => removeScheduleTime(hhmm);
 window.pauseAuto = (id) => pauseAuto(id);
 window.resumeAuto = (id) => resumeAuto(id);
 window.cloneAuto = (id) => cloneAuto(id);
+window.deleteAuto = (id) => deleteAuto(id);
 window.openAutomationHistory = (id) => openAutomationHistory(id);
 window.loadExecutions = () => loadExecutions(1);
 window.requeueExec = (id) => requeueExec(id);
@@ -159,10 +161,16 @@ function bindStaticEvents() {
         autoSearch.addEventListener("input", () => handleSearch());
     }
 
-    ["filter-automation", "filter-queue-group", "filter-status", "filter-priority", "filter-requested-by", "filter-date-from", "filter-date-to"].forEach((id) => {
+    ["filter-automation", "filter-queue-group", "filter-status", "filter-priority", "filter-requested-by", "filter-date-from", "filter-date-to", "auto-review-filter"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) {
-            el.addEventListener("change", () => loadExecutions(1));
+            el.addEventListener("change", () => {
+                if (id === "auto-review-filter") {
+                    handleSearch();
+                    return;
+                }
+                loadExecutions(1);
+            });
         }
     });
 
@@ -226,6 +234,7 @@ function registerStaticActions() {
     registerAction("resume-auto", (_event, element) => resumeAuto(Number(element?.dataset?.automationId || 0)));
     registerAction("open-edit-auto", (_event, element) => openAutomationModal(Number(element?.dataset?.automationId || 0)));
     registerAction("clone-auto", (_event, element) => cloneAuto(Number(element?.dataset?.automationId || 0)));
+    registerAction("delete-auto", (_event, element) => deleteAuto(Number(element?.dataset?.automationId || 0)));
     registerAction("open-automation-history", (_event, element) => openAutomationHistory(Number(element?.dataset?.automationId || 0)));
     registerAction("open-portfolio-runbook", (_event, element) => openPortfolioRunbook(element?.dataset?.catalogId || ""));
     registerAction("open-json-modal", (_event, element) => ide.openJsonModal(Number(element?.dataset?.automationId || 0), element?.dataset?.automationName || ""));
@@ -284,6 +293,31 @@ async function loadOverview() {
     renderPortfolioTable(portfolio);
     syncGlobalTestToggle(overview.automations || []);
     document.body.dataset.contractVersion = overview.contract_version || "legacy";
+    if (typeof lucide !== "undefined") lucide.createIcons();
+}
+
+async function loadObservability() {
+    const [rawOverview, rawPortfolio, rawHistory] = await Promise.all([
+        api("/api/system/overview"),
+        api("/api/portfolio/health"),
+        api("/api/system/history?hours=6"),
+    ]);
+    if (!rawOverview) {
+        ui.updateConnectionStatus(false);
+        return;
+    }
+
+    const overview = normalizeOverviewPayload(rawOverview);
+    const portfolio = normalizePortfolioHealthPayload(rawPortfolio || {});
+    const history = normalizeSystemHistoryPayload(rawHistory || {});
+    ui.updateConnectionStatus(true);
+
+    applyContractCompatibility(overview.contract_version || "legacy");
+    renderOverviewCharts(overview);
+    renderObservabilityPulse(overview, portfolio.summary || {});
+    renderObservabilityFindings(overview.diagnostics || {});
+    renderObservabilityHotspots(overview, portfolio);
+    renderObservabilityHistory(history);
     if (typeof lucide !== "undefined") lucide.createIcons();
 }
 
@@ -361,7 +395,7 @@ function describePrimaryOperationalRisk(overview, portfolioSummary, topFail) {
     const baseline = overview?.diagnostics?.operational_baseline || {};
     const baselineStatus = String(baseline.status || "healthy").toLowerCase();
     if (baselineStatus === "incident") {
-        return `Baseline INCIDENTE${baseline.recommended_action ? ` • ${baseline.recommended_action}` : ""}`;
+        return `Base operacional em INCIDENTE${baseline.recommended_action ? ` • ${baseline.recommended_action}` : ""}`;
     }
     const portfolioStatus = String(portfolioSummary?.status || "").toLowerCase();
     if (portfolioStatus === "incident") {
@@ -371,7 +405,7 @@ function describePrimaryOperationalRisk(overview, portfolioSummary, topFail) {
         return `${topFail.automation_name} (${topFail.failures})`;
     }
     if (baselineStatus === "attention") {
-        return `Baseline em atenção${baseline.recommended_action ? ` • ${baseline.recommended_action}` : ""}`;
+        return `Base operacional em atenção${baseline.recommended_action ? ` • ${baseline.recommended_action}` : ""}`;
     }
     if (portfolioStatus === "attention") {
         return `Portfólio em atenção${portfolioSummary?.top_issue ? ` • ${portfolioSummary.top_issue}` : ""}`;
@@ -390,16 +424,16 @@ function describePortfolioSummary(portfolioSummary) {
         const parts = [];
         if (incidents > 0) parts.push(`${incidents} incidente(s)`);
         if (ungoverned > 0) parts.push(`${ungoverned} fora do catálogo`);
-        if (drift > 0) parts.push(`${drift} drift(s)`);
+        if (drift > 0) parts.push(`${drift} divergência(s)`);
         return `INCIDENTE • ${parts.join(" • ") || "Ação imediata"}`;
     }
     if (status === "ATTENTION") {
         const parts = [];
         if (attention > 0) parts.push(`${attention} em atenção`);
-        if (drift > 0) parts.push(`${drift} drift(s)`);
+        if (drift > 0) parts.push(`${drift} divergência(s)`);
         return `ATENÇÃO • ${parts.join(" • ") || "Governança pendente"}`;
     }
-    return "SAUDÁVEL • Catálogo reconciliado com o runtime";
+    return "SAUDÁVEL • Catálogo reconciliado com o ambiente operacional";
 }
 
 function renderOverviewCharts(overview) {
@@ -425,7 +459,7 @@ function renderPerformanceChart(overview) {
     Array.from(byAutomation.entries()).slice(0, 8).forEach(([name, durations]) => {
         const avg = durations.reduce((acc, d) => acc + d, 0) / durations.length;
         labels.push(name);
-        values.push(Number((avg / 60).toFixed(2)));
+        values.push(Number(avg.toFixed(2)));
     });
 
     if (!labels.length) {
@@ -439,14 +473,14 @@ function renderPerformanceChart(overview) {
 
     const options = {
         chart: { type: "bar", height: 280, toolbar: { show: false } },
-        series: [{ name: "Tempo médio (min)", data: values }],
+        series: [{ name: "Tempo médio (s)", data: values }],
         xaxis: { categories: labels },
         colors: ["#2f6fed"],
         dataLabels: { enabled: false },
         theme: { mode: "dark" },
         tooltip: { theme: "dark" },
         legend: { labels: { colors: "#aab7c7" } },
-        yaxis: { labels: { formatter: (v) => `${v.toFixed(1)}m` } },
+        yaxis: { labels: { formatter: (v) => `${Number(v).toFixed(1)}s` } },
         grid: { borderColor: "#263345" },
     };
 
@@ -565,24 +599,25 @@ function renderPortfolioTable(portfolio) {
 
     tbody.innerHTML = items.map((item) => {
         const successLabel = item.last_success_at || "Sem sucesso recente";
-        const successMeta = item.last_success_age_minutes !== null && item.last_success_age_minutes !== undefined
-            ? `<span class="cell-meta">Há ${escapeHtml(String(item.last_success_age_minutes))} min</span>`
+        const successMeta = item.last_success_age_seconds !== null && item.last_success_age_seconds !== undefined
+            ? `<span class="cell-meta">Há ${escapeHtml(formatSeconds(item.last_success_age_seconds))}</span>`
             : (item.last_failure_at ? `<span class="cell-meta">Última falha: ${escapeHtml(item.last_failure_at)}</span>` : "<span class=\"cell-meta\">Sem histórico operacional</span>");
-        const lagMeta = item.schedule_lag_minutes
-            ? `<span class="cell-meta">Atraso de agenda: ${escapeHtml(String(item.schedule_lag_minutes))} min</span>`
+        const lagMeta = item.schedule_lag_seconds
+            ? `<span class="cell-meta">Atraso de agenda: ${escapeHtml(formatSeconds(item.schedule_lag_seconds))}</span>`
             : "";
         const dependencyMeta = buildDependencySummary(item.dependency_status || {});
         const governanceMeta = [
             item.docs_status === "complete" ? "Docs completos" : "Docs pendentes",
-            item.drift_count ? `${item.drift_count} drift(s)` : "Sem drift",
-        ].join(" • ");
+            item.drift_count ? `${item.drift_count} divergência(s)` : "Sem divergência",
+            item.review_status === "delete_candidate" ? "Rever exclusão" : null,
+        ].filter(Boolean).join(" • ");
         const canOpenRunbook = item.runbook_path && item.docs_status === "complete";
 
         return `
             <tr>
                 <td>
                     <strong>${escapeHtml(item.name)}</strong>
-                    <span class="cell-meta">${escapeHtml(item.owner_area || "Owner não definido")}</span>
+                    <span class="cell-meta">${escapeHtml(item.owner_area || "Responsável não definido")}</span>
                 </td>
                 <td>
                     ${renderCriticalityBadge(item.criticality)}
@@ -613,6 +648,98 @@ function renderPortfolioTable(portfolio) {
         `;
     }).join("");
     bindActionElements(tbody);
+}
+
+function renderObservabilityPulse(overview, portfolioSummary) {
+    const diagnostics = overview?.diagnostics || {};
+    const heartbeatAge = diagnostics?.heartbeat?.last_ping_age_seconds;
+    const oldestPending = diagnostics?.queue?.oldest_pending || {};
+    const oldestRunning = diagnostics?.queue?.oldest_running || {};
+
+    setText("obs-heartbeat-age", heartbeatAge == null ? "-" : formatSeconds(heartbeatAge));
+    setText("obs-heartbeat-state", diagnostics?.worker?.is_alive ? "Processador online" : "Processador sem heartbeat");
+    setText("obs-pending-age", oldestPending?.exec_id ? formatSeconds(oldestPending.age_seconds || 0) : "-");
+    setText("obs-pending-state", oldestPending?.automation_name ? `${oldestPending.automation_name}` : "Sem pendências envelhecidas");
+    setText("obs-running-age", oldestRunning?.exec_id ? formatSeconds(oldestRunning.age_seconds || 0) : "-");
+    setText("obs-running-state", oldestRunning?.automation_name ? `${oldestRunning.automation_name}` : "Sem execução longa");
+    setText("obs-review-count", Number(portfolioSummary?.delete_candidate_items || 0));
+    setText("obs-review-state", `${Number(portfolioSummary?.attention_items || 0)} item(ns) em atenção`);
+}
+
+function renderObservabilityFindings(diagnostics) {
+    const container = document.getElementById("obs-findings");
+    if (!container) return;
+    const findings = Array.isArray(diagnostics?.findings) ? diagnostics.findings : [];
+    if (!findings.length) {
+        container.innerHTML = `<div class="finding-card info"><span class="badge badge-success">OK</span><div><strong>Sem achados críticos</strong><p>O ambiente operacional está sem alertas ativos relevantes.</p></div></div>`;
+        return;
+    }
+
+    container.innerHTML = findings.slice(0, 6).map((item) => `
+        <article class="finding-card ${escapeHtml(String(item.severity || "info").toLowerCase())}">
+            <span class="badge ${String(item.severity || "").toUpperCase() === "ERROR" ? "badge-danger" : "badge-warning"}">${escapeHtml(item.severity || "WARN")}</span>
+            <div>
+                <strong>${escapeHtml(item.component || "sistema")}</strong>
+                <p>${escapeHtml(item.message || "-")}</p>
+                <small>${escapeHtml(item.action_hint || "Revisar investigação operacional.")}</small>
+            </div>
+        </article>
+    `).join("");
+}
+
+function renderObservabilityHotspots(overview, portfolio) {
+    const container = document.getElementById("obs-hotspots");
+    if (!container) return;
+    const hotspots = Array.isArray(overview?.diagnostics?.failure_hotspots) ? overview.diagnostics.failure_hotspots : [];
+    const queueGroups = overview?.diagnostics?.queue?.active_by_group || {};
+    const reviewItems = (Array.isArray(portfolio?.items) ? portfolio.items : []).filter((item) => item.review_status === "delete_candidate").slice(0, 3);
+
+    const hotspotHtml = hotspots.length
+        ? hotspots.slice(0, 4).map((item) => `<small>${escapeHtml(item.automation_name || "Automação")} · ${escapeHtml(String(item.failures_24h || 0))} falha(s)/24h</small>`).join("")
+        : "<small>Sem foco de falha no período recente.</small>";
+    const groupEntries = Object.entries(queueGroups).slice(0, 4);
+    const groupHtml = groupEntries.length
+        ? groupEntries.map(([group, count]) => `<small>${escapeHtml(group)} · ${escapeHtml(String(count))} ativa(s)</small>`).join("")
+        : "<small>Sem grupos operacionais sob pressão.</small>";
+    const reviewHtml = reviewItems.length
+        ? reviewItems.map((item) => `<small>${escapeHtml(item.name)} · ${escapeHtml((item.review_reasons || [])[0] || "Revisar cadastro.")}</small>`).join("")
+        : "<small>Sem candidatas imediatas à exclusão.</small>";
+
+    container.innerHTML = `
+        <article class="contract-card">
+            <h4>Focos de falha</h4>
+            ${hotspotHtml}
+        </article>
+        <article class="contract-card">
+            <h4>Grupos ativos</h4>
+            ${groupHtml}
+        </article>
+        <article class="contract-card">
+            <h4>Revisão de cadastro</h4>
+            ${reviewHtml}
+        </article>
+    `;
+}
+
+function renderObservabilityHistory(history) {
+    const tbody = document.getElementById("obs-history-tbody");
+    if (!tbody) return;
+    const items = Array.isArray(history?.items) ? history.items : [];
+    if (!items.length) {
+        tbody.innerHTML = "<tr><td colspan=\"6\">Sem histórico operacional disponível.</td></tr>";
+        return;
+    }
+
+    tbody.innerHTML = items.slice(0, 8).map((item) => `
+        <tr>
+            <td>${escapeHtml(item.timestamp || "-")}</td>
+            <td>P ${escapeHtml(formatSeconds(item.oldest_pending_age_seconds || 0))} · R ${escapeHtml(formatSeconds(item.oldest_running_age_seconds || 0))}</td>
+            <td>${item.worker_last_ping_age_seconds == null ? "-" : escapeHtml(formatSeconds(item.worker_last_ping_age_seconds))}</td>
+            <td>${escapeHtml(String(item.wal_size_mb || 0))} MB</td>
+            <td><span class="badge ${item.baseline_status === "incident" ? "badge-danger" : item.baseline_status === "attention" ? "badge-warning" : "badge-success"}">${escapeHtml(translateOperationalSummaryStatus(item.baseline_status || "healthy"))}</span></td>
+            <td>${Array.isArray(item.failure_hotspots) && item.failure_hotspots.length ? escapeHtml(item.failure_hotspots.join(" | ")) : "-"}</td>
+        </tr>
+    `).join("");
 }
 
 async function loadExecutions(page = execPage) {
@@ -691,6 +818,10 @@ async function cloneAuto(id) {
     return automationsModule.cloneAuto(id);
 }
 
+async function deleteAuto(id) {
+    return automationsModule.deleteAuto(id);
+}
+
 function openAutomationHistory(id) {
     return executionsModule.openAutomationHistory(id);
 }
@@ -726,10 +857,7 @@ function openExecutionHotspot(automationId) {
 function formatSeconds(value) {
     const sec = Number(value || 0);
     if (!Number.isFinite(sec) || sec <= 0) return "0s";
-    if (sec < 60) return `${sec.toFixed(1)}s`;
-    const minutes = Math.floor(sec / 60);
-    const remain = Math.round(sec % 60);
-    return `${minutes}m ${remain}s`;
+    return `${sec.toFixed(1)}s`;
 }
 
 function renderOperationalStateBadge(state) {
@@ -783,6 +911,15 @@ function renderSlaStateBadge(state, slaMinutes) {
     return `<span class="badge badge-muted">${escapeHtml(labelBase)}</span>`;
 }
 
+function translateOperationalSummaryStatus(status) {
+    switch (String(status || "").toLowerCase()) {
+        case "incident": return "INCIDENTE";
+        case "attention": return "ATENÇÃO";
+        case "healthy": return "SAUDÁVEL";
+        default: return String(status || "DESCONHECIDO").toUpperCase();
+    }
+}
+
 function renderPortfolioHealthBadge(status) {
     const normalized = String(status || "unknown").toLowerCase();
     const labelMap = {
@@ -809,15 +946,15 @@ function renderPortfolioHealthBadge(status) {
 }
 
 function renderDocsStatusBadge(status) {
-    return `<span class="badge ${status === "complete" ? "badge-success" : "badge-warning"}">${status === "complete" ? "Docs OK" : "Docs pendentes"}</span>`;
+    return `<span class="badge ${status === "complete" ? "badge-success" : "badge-warning"}">${status === "complete" ? "Documentação OK" : "Docs pendentes"}</span>`;
 }
 
 function renderDriftStatusBadge(driftCount) {
     const count = Number(driftCount || 0);
     if (count <= 0) {
-        return "<span class=\"badge badge-success\">Sem drift</span>";
+        return "<span class=\"badge badge-success\">Sem divergência</span>";
     }
-    return `<span class="badge badge-warning">${escapeHtml(String(count))} drift(s)</span>`;
+    return `<span class="badge badge-warning">${escapeHtml(String(count))} divergência(s)</span>`;
 }
 
 function buildDependencySummary(status) {

@@ -52,6 +52,16 @@ export function normalizeDiagnosticsPayload(payload) {
     };
 }
 
+export function normalizeSystemHistoryPayload(payload) {
+    return {
+        generated_at: payload?.generated_at || null,
+        hours: Number(payload?.hours || 0),
+        points: Number(payload?.points || 0),
+        trend_summary: payload?.trend_summary || {},
+        items: Array.isArray(payload?.items) ? payload.items : [],
+    };
+}
+
 export function normalizeExecutionsPayload(payload) {
     return {
         items: Array.isArray(payload?.items) ? payload.items : [],

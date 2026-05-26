@@ -13,7 +13,7 @@
 * **Componente / Diretório:** `Receitas Bloqueadas` ([ir para pasta](../../Receitas%20Bloqueadas))
 * **Criticidade:** ALTA / OPERACIONAL (Impacto no fluxo de produção da fiação e tecelagem)
 * **SLA de Recuperação:** 3 horas
-* **Horários de Disparo:** Segunda a Sexta-feira às **07:30**, **10:00** e **14:00**
+* **Horários de Disparo:** Segunda a Sexta-feira às **07:00**, **11:00**, **14:00** e **17:00**
 * **Dono do Negócio (Product Owner):** Laboratório de Receitas e PCP (Planejamento e Controle de Produção)
 * **Suporte Técnico / TI:** `suporte.automacoes@empresa.com`
 
@@ -43,7 +43,7 @@ A automação segue a seguinte estrutura de processamento resiliente:
 
 ```mermaid
 graph TD
-    A[Orchestrator Central] -->|Dispara run.ps1 às 07:30/10:00/14:00| B(run.ps1 - PowerShell)
+    A[Orchestrator Central] -->|Dispara run.ps1 às 07:00/11:00/14:00/17:00| B(run.ps1 - PowerShell)
     B -->|Executa com Python da .venv| C[processar_receitas.py]
     C -->|Carrega Consulta Externa| D[SQL-ReceitasBloqueadas.sql]
     C -->|Query Oracle Thick Mode| E[(Oracle Database)]
@@ -124,7 +124,7 @@ graph TD
 
 ## 🔄 Fluxo de Recuperação (Requeue e Reexecução)
 
-Se o robô falhar no disparo agendado (por exemplo, às 07:30 por oscilação no Oracle) e você precisar dispará-lo manualmente de forma segura:
+Se o robô falhar no disparo agendado (por exemplo, às 07:00 por oscilação no Oracle) e você precisar dispará-lo manualmente de forma segura:
 
 ### 1. Reexecução via Dashboard (Método Oficial)
 1. Acesse o painel web da Control Tower: `http://localhost:8000/dashboard/`.

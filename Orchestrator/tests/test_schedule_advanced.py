@@ -104,6 +104,7 @@ class TestIntervalWithWindow:
         assert result["start_time"] == "08:00"
         assert result["end_time"] == "18:00"
         assert result["days_of_week"] == [1, 2, 3, 4, 5]
+        assert result["anchor_time"] == "08:00"
 
     def test_interval_without_window_has_null_fields(self):
         """Intervalo simples (sem janela) deve ter start_time/end_time/days_of_week nulos."""
@@ -136,6 +137,17 @@ class TestIntervalWithWindow:
         }
         result = normalize_schedule_payload(payload, strict=False)
         assert result["start_time"] is None
+
+    def test_interval_window_start_after_end_strict_raises(self):
+        """Janela invertida deve ser rejeitada em modo estrito."""
+        payload = {
+            "schedule_type": "interval",
+            "interval_minutes": 10,
+            "start_time": "18:00",
+            "end_time": "12:00",
+        }
+        with pytest.raises(ValueError, match="start_time"):
+            normalize_schedule_payload(payload, strict=True)
 
     def test_interval_preview_with_window(self):
         """Preview de intervalo com janela deve retornar datas dentro da faixa esperada."""
@@ -371,7 +383,7 @@ class TestAnchorTime:
             normalize_schedule_payload(payload, strict=True)
 
     def test_describe_interval_with_anchor_simple(self):
-        """Descrição de intervalo simples com âncora deve exibir 'a partir das HH:MM'."""
+        """Descrição de intervalo simples com âncora deve exibir o início da cadência."""
         schedule = {
             "schedule_type": "interval",
             "interval_minutes": 45,
@@ -379,10 +391,10 @@ class TestAnchorTime:
         }
         desc = describe_schedule_payload(schedule)
         assert "A cada 45 min" in desc
-        assert "a partir das 08:30" in desc
+        assert "início da cadência às 08:30" in desc
 
     def test_describe_interval_with_anchor_and_window(self):
-        """Descrição de intervalo com janela e âncora deve concatenar corretamente no sufixo."""
+        """Descrição de intervalo com janela e âncora deve refletir início/fim e cadência."""
         schedule = {
             "schedule_type": "interval",
             "interval_minutes": 30,
@@ -394,8 +406,8 @@ class TestAnchorTime:
         desc = describe_schedule_payload(schedule)
         assert "A cada 30 min" in desc
         assert "Seg, Ter, Qua, Qui, Sex" in desc
-        assert "08:00 às 18:00" in desc
-        assert "a partir das 08:30" in desc
+        assert "início 08:00, fim 18:00" in desc
+        assert "início da cadência às 08:30" in desc
 
     def test_anchor_time_preview_future(self, monkeypatch):
         """Se a âncora estiver no futuro hoje, os disparos subsequentes devem começar exatamente nela."""

@@ -25,10 +25,6 @@ from app.constants import (  # pylint: disable=import-error
 # genérico do lint.
 # pylint: disable=too-many-arguments,too-many-locals
 
-def _format_minutes(seconds: float) -> str:
-    return f"{round(float(seconds or 0.0) / 60, 1)} min"
-
-
 def _format_seconds(seconds: float | None) -> str:
     if seconds is None:
         return "n/d"
@@ -73,15 +69,15 @@ def build_operational_baseline_summary(
     metrics: list[schemas.OperationalBaselineMetric] = []
 
     worker_status = BASELINE_STATUS_HEALTHY
-    worker_detail = "Worker com heartbeat compatível com a operação."
+    worker_detail = "Processador com heartbeat compatível com a operação."
     if not worker_is_alive:
         worker_status = (
             BASELINE_STATUS_INCIDENT if active_count > 0 else BASELINE_STATUS_ATTENTION
         )
         worker_detail = (
-            "Worker offline com fila ativa; recovery forte é recomendado."
+            "Processador offline com fila ativa; recuperação forte é recomendada."
             if active_count > 0
-            else "Worker offline sem fila ativa; a operação está vulnerável a novo backlog."
+            else "Processador offline sem fila ativa; a operação está vulnerável a novo acúmulo."
         )
     elif (
         worker_last_ping_age_seconds is not None
@@ -89,13 +85,13 @@ def build_operational_baseline_summary(
     ):
         worker_status = BASELINE_STATUS_ATTENTION
         worker_detail = (
-            "Heartbeat envelhecido; monitore antes de o worker entrar em "
+            "Heartbeat envelhecido; monitore antes de o processador entrar em "
             "estado offline."
         )
     metrics.append(
         _metric(
             "worker_heartbeat",
-            "Heartbeat do worker",
+            "Heartbeat do processador",
             worker_status,
             (
                 "offline"
@@ -123,21 +119,17 @@ def build_operational_baseline_summary(
             "pending_queue_age",
             "Idade da fila pendente",
             pending_status,
-            _format_minutes(pending_age_seconds),
+            _format_seconds(pending_age_seconds),
             (
                 "Execuções pendentes dentro da faixa operacional."
                 if pending_status == BASELINE_STATUS_HEALTHY
                 else (
-                    "Fila pendente envelhecida; revisar worker, "
+                    "Fila pendente envelhecida; revisar processador, "
                     "concorrência e bloqueios antes de reenfileirar."
                 )
             ),
-            attention_threshold=(
-                f">= {int(DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS / 60)} min"
-            ),
-            incident_threshold=(
-                f">= {int((DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS * 2) / 60)} min"
-            ),
+            attention_threshold=f">= {DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS}s",
+            incident_threshold=f">= {DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS * 2}s",
             action_code=ACTION_CODE_WORKER_WAKEUP,
         )
     )
@@ -152,21 +144,17 @@ def build_operational_baseline_summary(
             "running_queue_age",
             "Idade da execução mais antiga",
             running_status,
-            _format_minutes(running_age_seconds),
+            _format_seconds(running_age_seconds),
             (
-                "Execuções RUNNING dentro da faixa operacional."
+                "Execuções em andamento dentro da faixa operacional."
                 if running_status == BASELINE_STATUS_HEALTHY
                 else (
-                    "Há execução antiga em RUNNING; validar progresso real "
+                    "Há execução antiga em andamento; validar progresso real "
                     "e considerar parada controlada."
                 )
             ),
-            attention_threshold=(
-                f">= {int(DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS / 60)} min"
-            ),
-            incident_threshold=(
-                f">= {int((DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2) / 60)} min"
-            ),
+            attention_threshold=f">= {DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS}s",
+            incident_threshold=f">= {DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2}s",
             action_code="show_running",
         )
     )
@@ -179,14 +167,14 @@ def build_operational_baseline_summary(
     metrics.append(
         _metric(
             "running_over_runtime",
-            "Execuções acima do max_runtime",
+            "Execuções acima do tempo máximo",
             over_runtime_status,
             str(int(running_over_runtime_count or 0)),
             (
                 "Nenhuma execução ativa acima do limite cadastrado."
                 if over_runtime_status == BASELINE_STATUS_HEALTHY
                 else (
-                    "Há execução acima do max_runtime; revisar logs e "
+                    "Há execução acima do tempo máximo; revisar logs e "
                     "heartbeat operacional da automação."
                 )
             ),
@@ -204,14 +192,14 @@ def build_operational_baseline_summary(
     metrics.append(
         _metric(
             "orphaned_running",
-            "Ownership de execuções RUNNING",
+            "Responsável por execuções em andamento",
             orphaned_status,
             str(int(orphaned_running_count or 0)),
             (
                 "Sem execuções órfãs detectadas."
                 if orphaned_status == BASELINE_STATUS_HEALTHY
                 else (
-                    "Há execução RUNNING sem ownership válido; tratar como "
+                    "Há execução em andamento sem responsável válido; tratar como "
                     "incidente operacional."
                 )
             ),
