@@ -3,7 +3,7 @@
 Preencha este bloco ao final de cada entrega que exija validação E2E Playwright.
 
 ## Evidência E2E Final
-- Data/Hora (BRT): `<YYYY-MM-DD HH:mm:ss>`
+- Data/Hora (BRT): `<DD-MM-YYYY HH:mm:ss>`
 - URL validada: `http://127.0.0.1:8000/dashboard/`
 - Ordem de execução: `Governança -> Testes de contrato/backend -> Playwright E2E (último)`
 - Módulos navegados:

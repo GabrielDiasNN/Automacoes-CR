@@ -1,6 +1,10 @@
 # Changelog
 
 ## [9.3.3] - 2026-05-26
+### Adicionado
+- **Governança de Datas e Contrato de Não Regressão**: criado o validador especializado `Tools/Test-DateConformidade.ps1` e integrado diretamente no Quality Gate soberano (`Tools/ValidarAutomacoes.ps1`). Ele audita e proíbe de forma automatizada regressões de datas ISO-8601 (`YYYY-MM-DD`) no corpo de textos de documentações Markdown (`.md`) e chamadas de formatação de exibição/logs em arquivos de código (`.py`, `.js`, `.ps1`), garantindo a preservação eterna do formato brasileiro `DD/MM/YYYY`.
+- **Padronização de Documentações**: saneamento geral e promoção de 11 arquivos de documentação operacional ativos na pasta `docs/` para o padrão de data brasileira `DD/MM/YYYY`, eliminando referências a formatos legados ISO-8601.
+
 ### Alterado
 - **Receitas Bloqueadas / Observabilidade do WhatsApp**: a etapa `Send-WhatsApp.ps1` passou a ser acompanhada pelo orquestrador PowerShell com repasse contínuo do `stdout`, permitindo que bootstrap, ACK e falhas do bridge apareçam online no modal de execução do Orchestrator.
 

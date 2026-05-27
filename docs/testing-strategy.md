@@ -1,6 +1,6 @@
 # Estratégia de Testes — Hub de Automações
 
-> **Versão:** v9.3.0 | **Atualizado:** 2026-05-24
+> **Versão:** v9.3.0 | **Atualizado:** 24/05/2026
 
 ---
 

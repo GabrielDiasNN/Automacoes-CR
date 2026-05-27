@@ -1,6 +1,6 @@
 # Checklist de Release — Hub de Automações
 
-> **Versão:** v9.3.2 | **Atualizado:** 2026-05-25
+> **Versão:** v9.3.2 | **Atualizado:** 25/05/2026
 
 ---
 
@@ -68,7 +68,7 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
   - [ ] Screenshots das seções críticas alteradas
   - [ ] Console do browser sem erros JavaScript
   - [ ] Resultado `APROVADO` explícito
-- [ ] Evidência salva em `docs/` com data: `playwright-e2e-<feature>-<YYYY-MM-DD>.md`
+- [ ] Evidência salva em `docs/` com data: `playwright-e2e-<feature>-<DD-MM-YYYY>.md`
 
 ---
 
@@ -136,7 +136,7 @@ Preencha após a conclusão bem-sucedida:
 | Campo | Valor |
 |---|---|
 | Versão | `vX.Y.Z` |
-| Data | `YYYY-MM-DD` |
+| Data | `DD/MM/YYYY` |
 | Executor | `<nome>` |
 | Testes | ✅ `X passed` |
 | Governança | ✅ `0 erros` |

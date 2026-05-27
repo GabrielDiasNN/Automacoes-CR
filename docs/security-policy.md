@@ -1,6 +1,6 @@
 # Política de Segurança — Hub de Automações
 
-> **Versão:** v7.0.0 | **Atualizado:** 2026-05-19
+> **Versão:** v7.0.0 | **Atualizado:** 19/05/2026
 > **Referência complementar:** [`SECURITY.md`](../SECURITY.md)
 
 ---

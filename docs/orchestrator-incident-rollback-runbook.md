@@ -1,7 +1,7 @@
 # Runbook Operacional: Incidente e Rollback do Orchestrator
 
 > **Escopo:** Incidentes de operação no Orchestrator (`/api/system/*`, fila, worker, scheduler e dashboard).
-> **Última revisão:** 2026-05-24
+> **Última revisão:** 24/05/2026
 
 ## 1. Critérios de Abertura de Incidente
 
