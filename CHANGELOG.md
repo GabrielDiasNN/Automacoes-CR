@@ -1,5 +1,16 @@
 # Changelog
 
+## [9.3.4] - 2026-05-27
+### Adicionado
+- **Agente de Revisão de Código (Declarativo estruturado)**: migrado o Agente de Revisão de Código de um markdown solto na raiz para uma pasta estruturada autocontida de agente de verdade declarativo em [.agents/agents/code-review-agent/agent.json](.agents/agents/code-review-agent/agent.json), consolidando regras de qualidade de encoding, Zero Trust, V.A.L.E.G., prompt completo e formato de data brasileira (`DD/MM/YYYY`).
+- **Ferramenta de Auditoria Local**: criada a ferramenta utilitária `Tools/Review-Code.ps1` (UTF-8 com BOM) para execução rápida e cirúrgica de validação estática de staged files diretamente pelo terminal, gerando pareceres Markdown formatados de feedback por gravidade (`INCIDENTE`, `ATENÇÃO`, `MELHORIA`).
+
+### Alterado
+- **Otimização Extrema de Pre-commit (DX)**: o orquestrador `Tools/ValidarAutomacoes.ps1` foi inteiramente reestruturado e otimizado. Adicionado o switch `-StagedOnly` para auto-resolução nativa em PowerShell de arquivos staged, eliminando dependências externas UNIX no hook do Git. O Pytest pesados de homologação e Playwright E2E agora são pulados sob o switch `-OnlyGovernance` do pre-commit. O tempo total de commit local foi reduzido de dezenas de segundos para menos de 2 segundos.
+- **Detecção de Dependências em Cadeia**: implementada inteligência de fallback global em `ValidarAutomacoes.ps1`. Modificações que afetam arquivos críticos de infraestrutura ou governança (`lib/`, `Tools/`, contratos) revertem automaticamente para scan completo do repositório para evitar quebras em cadeia.
+- **Portabilidade do Git Hook**: o hook `.githooks/pre-commit` foi simplificado e reconfigurado para delegar nativamente a resolução de staged files para o PowerShell via `-StagedOnly`, removendo comandos Unix de manipulação de string (`tr`, `sed`) incompatíveis com IDEs em ambiente Windows.
+- **Governança do Catálogo Direcionada**: `Tools/Test-AutomationCatalog.ps1` foi atualizado para aceitar o parâmetro `-Paths`, permitindo auditar estaticamente apenas os manifestos e runbooks que sofreram modificações.
+
 ## [9.3.3] - 2026-05-26
 ### Adicionado
 - **Governança de Datas e Contrato de Não Regressão**: criado o validador especializado `Tools/Test-DateConformidade.ps1` e integrado diretamente no Quality Gate soberano (`Tools/ValidarAutomacoes.ps1`). Ele audita e proíbe de forma automatizada regressões de datas ISO-8601 (`YYYY-MM-DD`) no corpo de textos de documentações Markdown (`.md`) e chamadas de formatação de exibição/logs em arquivos de código (`.py`, `.js`, `.ps1`), garantindo a preservação eterna do formato brasileiro `DD/MM/YYYY`.

@@ -4,12 +4,12 @@ Este arquivo é o snapshot curado para bootstrap de agentes no Hub de Automaçõ
 
 ## Estado Atual
 
-- **Versão operacional de referência**: Hub em linha `v9.3.2`, com Orchestrator/Dashboard operando sobre baseline Alembic, ownership do worker, baseline operacional formalizado e governança compartilhada entre Codex, Gemini CLI e Antigravity.
+- **Versão operacional de referência**: Hub em linha `v9.3.4`, com Orchestrator/Dashboard operando sobre baseline Alembic, governança e otimização cirúrgica de pre-commit e o novo Agente de Revisão de Código declarativo estruturado ativo.
 - **Stack ativa**: Python/FastAPI, PowerShell corporativo, Node.js para comunicações, Dashboard SPA estático e SQLite em WAL com Alembic.
 - **Skills do workspace**: `.github/skills/` é a fonte canônica; `.gemini/skills/` é apenas mirror por junction/symlink.
 - **Skills globais obrigatórias**: `ai-engineering-discipline`, `protocolo-valeg` e `git-ide-governance-skill`.
-- **Contratos críticos**: Zero Trust, encoding governado, documentação viva, validação de skills, governança agregada, Playwright como última validação para UI/front-back, governança e conformidade estrita de datas DD/MM/YYYY no novo Test-DateConformidade.ps1.
-- **Validação de referência mais recente**: em 26/05/2026, a suíte completa do Orchestrator executou com `151 passed`, a governança agregada fechou sem erros e o dashboard permaneceu com `8 passed` na rodada E2E final após elevar o resumo do portfólio para o overview principal.
+- **Contratos críticos**: Zero Trust, encoding governado, documentação viva, validação de skills, governança de catálogo de automações, Playwright como última validação para UI/front-back, conformidade estrita de datas DD/MM/YYYY e o novo Agente de Revisão de Código declarativo estruturado (`.agents/agents/code-review-agent/agent.json` e `Tools/Review-Code.ps1`).
+- **Validação de referência mais recente**: em 27/05/2026, a governança foi reestruturada para validação direcionada de caminhos staged no pre-commit, reduzindo o tempo de commit para menos de 2 segundos.
 - **Catálogo governado do hub (24/05/2026)**: automações ativas agora carregam `automation.manifest.json` versionado, com criticidade, SLA, dependências, smoke tests e vínculo para runbook. O dashboard consome `/api/portfolio/health` para expor esse cruzamento operacional.
 - **Baseline operacional do hub (25/05/2026)**: `GET /api/system/baseline`, `diagnostics.operational_baseline` e `history.baseline_status` compartilham thresholds únicos para worker, fila, WAL, execuções acima do limite e ownership órfão.
 - **Governança do portfólio no overview (26/05/2026)**: `/api/portfolio/health.summary` e `/api/system/overview.portfolio` agora publicam `status`, `top_issue`, `recommended_action` e contagem de itens em incidente/atenção para o painel principal.
@@ -19,6 +19,7 @@ Este arquivo é o snapshot curado para bootstrap de agentes no Hub de Automaçõ
 
 ## Mudanças Recentes Relevantes
 
+- **Agente de Revisão de Código e Otimização do Pre-commit (27/05/2026)**: criação do Agente de Revisão de Código declarativo estruturado (`.agents/agents/code-review-agent/agent.json` e `Tools/Review-Code.ps1`) com reestruturação e otimização cirúrgica de pre-commit no `ValidarAutomacoes.ps1`. O tempo de commit foi reduzido a menos de 2 segundos. Ver `CHANGELOG.md`.
 - **Disciplina global de engenharia com IA (22/05/2026)**: adicionada `ai-engineering-discipline` como skill global canônica e obrigatória para alinhar Codex, Gemini CLI e Antigravity. Ver `CHANGELOG.md`.
 - **Baseline operacional formalizado (25/05/2026)**: o Orchestrator agora expõe um resumo único `healthy` / `attention` / `incident` em `GET /api/system/baseline`, reaproveitado em `diagnostics`, `history` e no snapshot de qualidade local. Ver `CHANGELOG.md`.
 - **Resumo operacional do portfólio (26/05/2026)**: a saúde governada do catálogo passou a ser sintetizada no backend e replicada em `/api/system/overview`, permitindo ao dashboard principal tratar drift, docs pendentes e runtime não reconciliado como risco operacional de primeira classe. Ver `CHANGELOG.md`.

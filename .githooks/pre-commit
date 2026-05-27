@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 # {
-#   "version": "4.0.0",
+#   "version": "9.3.3",
 #   "skill": "automation-runtime-safety",
-#   "description": "Pre-commit hook focado em stack 100% Nativa com orquestrador de validacao e otimizacao em staged files"
+#   "description": "Pre-commit hook simplificado com delegacao soberana para auto-resolucao no PowerShell"
 # }
 set -eu
 
@@ -18,30 +18,19 @@ else
   exit 1
 fi
 
-echo "=== INICIANDO ORQUESTRADOR DE GOVERNANCA NATIVA (PRE-COMMIT) ==="
-
-# Pegamos apenas arquivos adicionados, copiados ou modificados na staged area
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
-
-if [ -z "$STAGED_FILES" ]; then
-  echo "[OK] Nenhum arquivo alterado na staged area para validar."
-  exit 0
-fi
-
-# Transforma as quebras de linha em virgulas para passar como array no powershell
-STAGED_FILES_CSV=$(echo "$STAGED_FILES" | tr '\n' ',' | sed 's/,$//')
+echo "=== INICIANDO GOVERNANCA NATIVA AUTOMATIZADA (PRE-COMMIT) ==="
 
 if [ -f "$VALIDAR_AUTO_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -Command "& '$VALIDAR_AUTO_PATH' -BasePath '$REPO_ROOT' -OnlyGovernance -Paths ('$STAGED_FILES_CSV' -split ',')"
+  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VALIDAR_AUTO_PATH" -BasePath "$REPO_ROOT" -OnlyGovernance -StagedOnly
   
   if [ $? -ne 0 ]; then
     echo ""
-    echo "[ERRO] Falha na validacao de Governanca. Verifique os logs acima."
+    echo "[ERRO] Falha na validacao de Governanca. Commit abortado."
     exit 1
   fi
 else
   echo "[AVISO] Orquestrador de governanca nao encontrado em $VALIDAR_AUTO_PATH."
 fi
 
-echo "[OK] Governanca aprovada e pronta para commit."
+echo "[OK] Governanca aprovada. Pronta para commit."
 exit 0

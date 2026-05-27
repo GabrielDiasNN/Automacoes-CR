@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$RootPath = "."
+    [string]$RootPath = ".",
+    [string[]]$Paths = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -101,6 +102,26 @@ $manifestPaths = Get-ChildItem -LiteralPath $base -Directory |
             Get-Item -LiteralPath $candidate
         }
     }
+
+if ($Paths.Count -gt 0) {
+    $manifestPaths = $manifestPaths | Where-Object {
+        $manifestDir = $_.Directory.FullName
+        $match = $false
+        foreach ($p in $Paths) {
+            $pFullPath = Join-Path $base $p
+            if ($pFullPath.StartsWith($manifestDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $match = $true
+                break
+            }
+        }
+        $match
+    }
+
+    if ($null -eq $manifestPaths -or $manifestPaths.Count -eq 0) {
+        Write-Host "Nenhum manifesto de automacao alterado na staged area. Pulando checagem estatica de catalogo." -ForegroundColor Gray
+        exit 0
+    }
+}
 
 foreach ($manifestFile in $manifestPaths) {
     $isTemplate = $manifestFile.Directory.Name -eq "_Template"
