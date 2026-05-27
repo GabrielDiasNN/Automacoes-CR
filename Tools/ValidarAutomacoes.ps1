@@ -44,6 +44,29 @@ function Invoke-DashboardTemplateCheck {
     return $LASTEXITCODE
 }
 
+function Get-GovernanceTargetSummary {
+    param(
+        [string]$RootPath,
+        [switch]$UseStagedFiles,
+        [string[]]$InputPaths = @()
+    )
+
+    $helperPath = Join-Path $RootPath "Tools\Get-GovernanceTargetSummary.ps1"
+    if (-not (Test-Path $helperPath)) {
+        throw "Classificador de diff governado nao encontrado em $helperPath"
+    }
+
+    if ($UseStagedFiles) {
+        return & $helperPath -BasePath $RootPath -StagedOnly
+    }
+
+    if ($InputPaths.Count -gt 0) {
+        return & $helperPath -BasePath $RootPath -Paths $InputPaths
+    }
+
+    return & $helperPath -BasePath $RootPath
+}
+
 function Invoke-NativeGovernanceCheck {
     param(
         [string]$RootPath,
@@ -74,61 +97,79 @@ function Invoke-NativeGovernanceCheck {
     if ($allOk) { return 0 } else { return 1 }
 }
 
+function Invoke-LogConformidadeCheck {
+    param(
+        [string]$RootPath,
+        [string[]]$TargetPaths = @()
+    )
+
+    if ($TargetPaths.Count -eq 0) {
+        Write-Host "`n=== Conformidade de Log ===" -ForegroundColor Cyan
+        Write-Host "[SKIP] Nenhum arquivo PowerShell operacional elegivel no diff atual." -ForegroundColor DarkYellow
+        return 0
+    }
+
+    $checkerPath = Join-Path $RootPath "Tools\Test-LogConformidade.ps1"
+    if (-not (Test-Path $checkerPath)) { return 0 }
+
+    Write-Host "`n=== Conformidade de Log ===" -ForegroundColor Cyan
+    $psArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $checkerPath, "-RootPath", $RootPath, "-Paths")
+    $psArgs += $TargetPaths
+    & powershell @psArgs | Out-Host
+    return $LASTEXITCODE
+}
+
 # --- FLUXO PRINCIPAL ---
 $globalResult = 0
+$logTargetPaths = @()
 
 # Auto-resolução de arquivos staged para pre-commit
 if ($StagedOnly) {
     Write-Host "`n--- [Git pre-commit] Resolvendo arquivos staged automaticamente ---" -ForegroundColor Gray
     try {
-        $gitStaged = git diff --cached --name-only --diff-filter=ACM
-        if ([string]::IsNullOrWhiteSpace($gitStaged)) {
+        $targetSummary = Get-GovernanceTargetSummary -RootPath $BasePath -UseStagedFiles
+        if ($targetSummary.ChangedFileCount -eq 0) {
             Write-Host "[OK] Nenhum arquivo staged na staged area para validar." -ForegroundColor Green
             exit 0
         }
-        $stagedPaths = $gitStaged -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-        $Paths += $stagedPaths
-        Write-Host ("Arquivos staged encontrados para analise: " + $Paths.Count) -ForegroundColor Gray
+
+        $Paths = @($targetSummary.GovernancePaths)
+        $logTargetPaths = @($targetSummary.LogTargetPaths)
+
+        Write-Host ("Arquivos staged encontrados para analise: " + $targetSummary.ChangedFileCount) -ForegroundColor Gray
+        Write-Host ("Modo de selecao governada: " + $targetSummary.SelectionMode) -ForegroundColor Gray
+        if ($targetSummary.HasCriticalPaths) {
+            Write-Host "[AVISO] Alteracoes em arquivos centrais de infraestrutura/governanca detectadas." -ForegroundColor Yellow
+            Write-Host "Forcando scan completo de governanca estatica no repositorio para seguranca de integridade." -ForegroundColor Yellow
+        }
+        if ($targetSummary.HasLogTargets) {
+            Write-Host ("Arquivos elegiveis para conformidade de log: " + $targetSummary.LogTargetCount) -ForegroundColor Gray
+        }
     }
     catch [System.Exception] {
-        Write-Host "[AVISO] Falha ao rodar git diff. Certifique-se de que o Git esta instalado e o path esta correto." -ForegroundColor Yellow
+        Write-Host "[AVISO] Falha ao classificar arquivos staged. Certifique-se de que o Git esta instalado e o path esta correto." -ForegroundColor Yellow
     }
 }
 
-# Tratamento e normalização de caminhos híbridos e detecção de fallback global
-if ($Paths.Count -gt 0) {
-    $Paths = $Paths | ForEach-Object {
-        $_.Trim().Trim('"').Replace('/', '\')
-    } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+if (-not $StagedOnly -and $Paths.Count -gt 0) {
+    $targetSummary = Get-GovernanceTargetSummary -RootPath $BasePath -InputPaths $Paths
+    $Paths = @($targetSummary.GovernancePaths)
+    $logTargetPaths = @($targetSummary.LogTargetPaths)
 
-    $forceFullScan = $false
-    $criticalPatterns = @(
-        "^lib\\",
-        "^Tools\\",
-        "^AGENTS\.md$",
-        "^GEMINI\.md$",
-        "^CONTEXT\.md$",
-        "^SECURITY\.md$",
-        "^\.gitleaks\.toml$",
-        "^\.github\\skills\\"
-    )
-    foreach ($pattern in $criticalPatterns) {
-        if ($Paths | Where-Object { $_ -match $pattern }) {
-            $forceFullScan = $true
-            break
-        }
-    }
-
-    if ($forceFullScan) {
+    if ($targetSummary.HasCriticalPaths) {
         Write-Host "[AVISO] Alteracoes em arquivos centrais de infraestrutura/governanca detectadas." -ForegroundColor Yellow
         Write-Host "Forcando scan completo de governanca estatica no repositorio para seguranca de integridade." -ForegroundColor Yellow
-        $Paths = @()
     }
 }
 
 if (-not $SkipGovernance) {
     $res = Invoke-NativeGovernanceCheck -RootPath $BasePath -TargetPaths $Paths
     if ($res -ne 0) { $globalResult = 1 }
+
+    if ($StagedOnly -or $logTargetPaths.Count -gt 0) {
+        $res = Invoke-LogConformidadeCheck -RootPath $BasePath -TargetPaths $logTargetPaths
+        if ($res -ne 0) { $globalResult = 1 }
+    }
 
     $pytestExitCode = 0
     # Só executa pytest e testes pesados de Playwright se NÃO for OnlyGovernance

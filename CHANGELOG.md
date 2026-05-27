@@ -1,5 +1,17 @@
 # Changelog
 
+## [9.3.5] - 2026-05-27
+### Adicionado
+- **Classificador Compartilhado de Diff Governado**: criado `Tools/Get-GovernanceTargetSummary.ps1` como fonte única para classificar caminhos alterados, detectar escalonamento para scan completo e identificar alvos elegíveis de conformidade de log no hook local e no GitHub Actions.
+
+### Alterado
+- **Contrato do Pre-commit Reposicionado**: `Tools/ValidarAutomacoes.ps1` agora consome o classificador compartilhado, mantém o gate local focado em staged files, preserva o fallback para scan completo em caminhos críticos e roda `Test-LogConformidade.ps1` apenas quando o diff realmente altera scripts PowerShell operacionais elegíveis.
+- **Workflow Governanca Alinhado ao Hook**: `.github/workflows/governanca.yml` passa a publicar o resumo do diff governado, expondo `selection_mode`, quantidade de caminhos críticos e o motivo operacional para execução ou skip de `conformidade-log`.
+- **Documentação Viva Corrigida**: monitor AI-Native, política de segurança e diretrizes de governança foram alinhados ao estado real do pipeline, removendo a leitura incorreta de que o hook espelha todo o CI ou de que `conformidade-log` estaria desativado quando aparece em branco.
+
+### Corrigido
+- **Catálogo Direcionado com Caminho Unitário**: `Tools/Test-AutomationCatalog.ps1` passa a normalizar o conjunto de manifestos como coleção mesmo quando o diff contém apenas um caminho, evitando falha espúria no modo `-Paths` usado pelo gate staged.
+
 ## [9.3.4] - 2026-05-27
 ### Adicionado
 - **Agente de Revisão de Código (Declarativo estruturado)**: migrado o Agente de Revisão de Código de um markdown solto na raiz para uma pasta estruturada autocontida de agente de verdade declarativo em [.agents/agents/code-review-agent/agent.json](.agents/agents/code-review-agent/agent.json), consolidando regras de qualidade de encoding, Zero Trust, V.A.L.E.G., prompt completo e formato de data brasileira (`DD/MM/YYYY`).

@@ -47,12 +47,31 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PythonGovernance.ps1 -R
 
 ---
 
-## 4. Pipeline de CI/CD (GitHub Actions)
+## 4. Topologia de Governança Local e Remota
 
-O pipeline configurado em `.github/workflows/governanca.yml` é executado a cada push e pull request direcionados às ramificações protegidas, garantindo um "Quality Gate" implacável:
+### Pre-commit local
 
-1.  **Gitleaks Security Scan:** Execução paralela da action oficial do Gitleaks para bloquear qualquer commit que contenha senhas, tokens ou chaves secretas (Zero Trust).
-2.  **Configuração de Python e Cache:** Setup automatizado de Python 3.12 com cache de dependências `pip` ativado para otimizar o tempo de build.
-3.  **Instalação de Lockfiles:** O pipeline instala as dependências estritas a partir de `requirements.txt`, `requirements-dev.txt` e `requirements-test.txt`.
-4.  **Static Analysis & Style Checks:** Execução automática do Black, Isort, Mypy e Pylint. Qualquer aviso crítico ou erro quebra o pipeline.
-5.  **Testes Automatizados (Pytest & Pester):** Execução obrigatória das suites de testes unitários para Python e PowerShell.
+O hook `.githooks/pre-commit` não tenta espelhar todo o CI. Ele atua como barreira local rápida e seletiva, delegando a orquestração para `Tools/ValidarAutomacoes.ps1 -OnlyGovernance -StagedOnly`.
+
+Contrato atual do hook:
+
+1.  **Diff staged como entrada:** o classificador compartilhado `Tools/Get-GovernanceTargetSummary.ps1` decide se o commit pode ser validado por caminhos staged ou se precisa escalar para varredura completa.
+2.  **Escalonamento por criticidade:** alterações em `Tools/`, `lib/`, contratos centrais, workflow, hook, skills ou `.gitleaks.toml` forçam scan completo de governança estática para evitar regressão em cadeia.
+3.  **Conformidade de log seletiva:** quando o diff staged altera `.ps1`/`.psm1` operacionais fora de `Tools/` e `Audit/`, a verificação de `Test-LogConformidade.ps1` roda localmente apenas nesses alvos.
+4.  **Objetivo:** bloquear regressões óbvias cedo, sem transformar todo commit em réplica do pipeline remoto.
+
+### GitHub Actions
+
+O workflow `.github/workflows/governanca.yml` continua sendo o gate autoritativo e observável do repositório:
+
+1.  **Gitleaks Security Scan:** execução paralela da action oficial do Gitleaks para bloquear qualquer commit que contenha senhas, tokens ou chaves secretas (Zero Trust).
+2.  **Preparação do diff governado:** o job `preparar-diff` usa o mesmo classificador compartilhado do hook para publicar `selection_mode`, caminhos críticos e alvos de `conformidade-log`.
+3.  **Governança completa:** o job `governanca` instala dependências, valida formatação e análise estática, roda a governança agregada e executa suites Python e PowerShell.
+4.  **Conformidade de log condicional:** o job `conformidade-log` só roda quando o diff contém scripts PowerShell operacionais elegíveis; quando não houver alvo, ele será pulado por contrato.
+5.  **Markdown:** o job `markdown` mantém observabilidade separada para o padrão documental.
+
+### Leitura correta do estado
+
+- `pre-commit` verde significa que o diff local passou pela barreira rápida adequada ao seu escopo.
+- `governanca.yml` verde significa que o repositório passou pelo gate completo.
+- `conformidade-log` em branco não significa desativação; significa que o diff não continha alvos elegíveis para esse check.

@@ -94,28 +94,32 @@ $base = (Resolve-Path -LiteralPath $RootPath).Path
 $issues = 0
 $validated = 0
 
-$manifestPaths = Get-ChildItem -LiteralPath $base -Directory |
-    Where-Object { $_.Name -notlike ".*" } |
-    ForEach-Object {
-        $candidate = Join-Path $_.FullName "automation.manifest.json"
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            Get-Item -LiteralPath $candidate
-        }
-    }
-
-if ($Paths.Count -gt 0) {
-    $manifestPaths = $manifestPaths | Where-Object {
-        $manifestDir = $_.Directory.FullName
-        $match = $false
-        foreach ($p in $Paths) {
-            $pFullPath = Join-Path $base $p
-            if ($pFullPath.StartsWith($manifestDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-                $match = $true
-                break
+$manifestPaths = @(
+    Get-ChildItem -LiteralPath $base -Directory |
+        Where-Object { $_.Name -notlike ".*" } |
+        ForEach-Object {
+            $candidate = Join-Path $_.FullName "automation.manifest.json"
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                Get-Item -LiteralPath $candidate
             }
         }
-        $match
-    }
+)
+
+if ($Paths.Count -gt 0) {
+    $manifestPaths = @(
+        $manifestPaths | Where-Object {
+            $manifestDir = $_.Directory.FullName
+            $match = $false
+            foreach ($p in $Paths) {
+                $pFullPath = Join-Path $base $p
+                if ($pFullPath.StartsWith($manifestDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $match = $true
+                    break
+                }
+            }
+            $match
+        }
+    )
 
     if ($null -eq $manifestPaths -or $manifestPaths.Count -eq 0) {
         Write-Host "Nenhum manifesto de automacao alterado na staged area. Pulando checagem estatica de catalogo." -ForegroundColor Gray

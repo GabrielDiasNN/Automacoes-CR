@@ -73,7 +73,7 @@ O repositório usa **Gitleaks** via GitHub Actions para detectar segredos commit
 
 ### Configuração
 
-O workflow `.github/workflows/gitleaks.yml` executa em todo `push` e `pull_request`.
+O scan roda dentro do workflow `.github/workflows/governanca.yml`, em todo `push` e `pull_request` coberto pelo gate de governança.
 
 ### O que fazer quando um segredo for detectado
 

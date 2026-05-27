@@ -67,6 +67,9 @@ jobs:
     outputs:
       changed_files_json: ${{ steps.changed-files.outputs.changed_files_json }}
       has_log_targets: ${{ steps.changed-files.outputs.has_log_targets }}
+      log_target_count: ${{ steps.changed-files.outputs.log_target_count }}
+      critical_path_count: ${{ steps.changed-files.outputs.critical_path_count }}
+      selection_mode: ${{ steps.changed-files.outputs.selection_mode }}
 
     steps:
       - name: Checkout
@@ -96,6 +99,7 @@ jobs:
           }
 
           $changedFiles = @($changedFiles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          $summary = ./Tools/Get-GovernanceTargetSummary.ps1 -BasePath "${{ github.workspace }}" -Paths $changedFiles
           $changedFilesJson = if ($changedFiles.Count -gt 0) {
             ConvertTo-Json -InputObject @($changedFiles) -Compress
           }
@@ -103,17 +107,39 @@ jobs:
             '[]'
           }
 
-          $hasLogTargets = if ($changedFiles | Where-Object { $_ -match '\.(ps1|psm1)$' -and $_ -notmatch '^(Audit/|Tools/)' }) { 'true' } else { 'false' }
+          $hasLogTargets = if ($summary.HasLogTargets) { 'true' } else { 'false' }
 
           "changed_files_json<<EOF" >> $env:GITHUB_OUTPUT
           $changedFilesJson >> $env:GITHUB_OUTPUT
           "EOF" >> $env:GITHUB_OUTPUT
           "has_log_targets=$hasLogTargets" >> $env:GITHUB_OUTPUT
+          "log_target_count=$($summary.LogTargetCount)" >> $env:GITHUB_OUTPUT
+          "critical_path_count=$($summary.CriticalPathCount)" >> $env:GITHUB_OUTPUT
+          "selection_mode=$($summary.SelectionMode)" >> $env:GITHUB_OUTPUT
 
           Write-Host ("Arquivos alterados detectados: " + $changedFiles.Count)
+          Write-Host ("Modo de selecao governada: " + $summary.SelectionMode)
+          Write-Host ("Caminhos criticos detectados: " + $summary.CriticalPathCount)
+          Write-Host ("Alvos de conformidade de log: " + $summary.LogTargetCount)
           foreach ($file in $changedFiles) {
             Write-Host (" - " + $file)
           }
+
+          if ($summary.HasLogTargets) {
+            Write-Host "Job conformidade-log: EXECUTAR"
+          }
+          else {
+            Write-Host "Job conformidade-log: PULAR (sem scripts PowerShell operacionais elegiveis no diff)"
+          }
+
+          @"
+          ## Resumo da governanca por diff
+          - Arquivos alterados: $($changedFiles.Count)
+          - Modo de selecao: $($summary.SelectionMode)
+          - Caminhos criticos: $($summary.CriticalPathCount)
+          - Alvos de conformidade de log: $($summary.LogTargetCount)
+          - `conformidade-log`: $(if ($summary.HasLogTargets) { 'executa' } else { 'pulado por falta de alvo elegivel' })
+          "@ >> $env:GITHUB_STEP_SUMMARY
 
   governanca:
     runs-on: windows-latest
@@ -230,6 +256,7 @@ jobs:
             $changedFiles = @($env:CHANGED_FILES_JSON | ConvertFrom-Json)
           }
 
+          Write-Host ("Alvos elegiveis recebidos do diff: " + $changedFiles.Count)
           ./Tools/Test-LogConformidade.ps1 -RootPath "${{ github.workspace }}" -Paths $changedFiles
 
   markdown:
