@@ -9,3 +9,12 @@ paths = [
   '''(^|/)Receitas Bloqueadas/\.wwebjs_auth/''',
   '''(^|/)Receitas Bloqueadas/\.wwebjs_cache/'''
 ]
+
+[[allowlists]]
+description = "Ignora fixtures e historico legado de API key de teste"
+paths = [
+  '''(^|/)CHANGELOG\.md$''',
+  '''(^|/)Orchestrator/tests/conftest\.py$''',
+  '''(^|/)Orchestrator/tests/test_api_contracts\.py$''',
+  '''(^|/)Orchestrator/tests/test_e2e_dashboard\.py$'''
+]

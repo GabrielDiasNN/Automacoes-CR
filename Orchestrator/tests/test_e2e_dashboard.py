@@ -28,7 +28,7 @@ from app import models
 TEST_DB_PATH = Path(TESTS_DIR) / f"test-e2e-automacoes-{os.getpid()}.db"
 TEST_PORT = 8002
 TEST_HOST = "127.0.0.1"
-API_KEY = os.environ.get("ORCHESTRATOR_API_KEY", "hub-secret" + "-token")
+API_KEY = os.environ.get("ORCHESTRATOR_API_KEY", "fixture-qa-001")
 
 # Contadores globais de logs do console do navegador
 CONSOLE_ERRORS = 0

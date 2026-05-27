@@ -63,7 +63,7 @@ def test_diagnostics_and_overview_contract_version(client: TestClient, db_sessio
     # Garantir que dados sensíveis de banco/arquivos não sejam vazados
     # diagnostics expõe informações de saúde e caminhos, mas não chaves do .env
     assert "DB_PASSWORD" not in str(data)
-    assert "hub-secret-token" not in str(data)
+    assert AUTH_HEADERS["X-API-Key"] not in str(data)
 
     # Executar chamada do overview
     response = client.get("/api/system/overview", headers=AUTH_HEADERS)

@@ -11,7 +11,6 @@ Patch do PROJECT_ROOT para validacao de script_path (Pilar V) funcionar em teste
 import os
 
 os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
-os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
 os.environ["RATE_LIMIT_RPM"] = "10000"
 
 import pytest
@@ -23,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+TEST_AUTH_VALUE = "fixture-qa-001"
 
 test_engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
@@ -43,13 +43,13 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-AUTH_HEADERS = {"X-API-Key": "hub-secret-token"}
+AUTH_HEADERS = {"X-API-Key": TEST_AUTH_VALUE}
 
 
 @pytest.fixture(autouse=True)
 def force_env_vars():
     """Garante que as variaveis de ambiente de teste prevalecam sobre qualquer override de imports."""
-    os.environ["ORCHESTRATOR_API_KEY"] = "hub-secret-token"
+    os.environ["ORCHESTRATOR_API_KEY"] = TEST_AUTH_VALUE
     os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
     os.environ["RATE_LIMIT_RPM"] = "10000"
 
