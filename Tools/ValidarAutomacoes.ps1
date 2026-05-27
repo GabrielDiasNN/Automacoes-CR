@@ -109,6 +109,7 @@ if ($Paths.Count -gt 0) {
         "^GEMINI\.md$",
         "^CONTEXT\.md$",
         "^SECURITY\.md$",
+        "^\.gitleaks\.toml$",
         "^\.github\\skills\\"
     )
     foreach ($pattern in $criticalPatterns) {

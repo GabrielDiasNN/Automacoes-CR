@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignora artefatos de runtime e historico legado que nao devem bloquear o CI"
+paths = [
+  '''(^|/)\.venv/''',
+  '''(^|/)Logs/''',
+  '''(^|/)Receitas Bloqueadas/\.wwebjs_auth/''',
+  '''(^|/)Receitas Bloqueadas/\.wwebjs_cache/'''
+]
