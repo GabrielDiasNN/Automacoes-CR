@@ -1,6 +1,6 @@
 # Estratégia de Testes — Hub de Automações
 
-> **Versão:** v9.3.0 | **Atualizado:** 24/05/2026
+> **Versão:** v9.3.6 | **Atualizado:** 27/05/2026
 
 ---
 
@@ -38,7 +38,7 @@ O ecossistema de testes do Hub de Automações é organizado em três camadas:
 | `tests/test_receitas_emitidas.py` | Unitário | Smoke da geração HTML e sanitização básica de Receitas Emitidas |
 | `tests/test_validation.py` | Integração | Validação de schedule, `.env` e preflight administrativo |
 
-> **Total atual:** 140 testes coletados | Meta de cobertura: ≥ 60% (`pytest-cov`)
+> **Total atual:** 165 testes coletados | Cobertura atual: 81% | Meta de cobertura: ≥ 60% (`pytest-cov`)
 
 ---
 
@@ -151,5 +151,5 @@ Ao implementar uma nova feature:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este documento descreve a estratégia de testes em `v9.3.0`.
+- Este documento descreve a estratégia de testes em `v9.3.6`.
 - Atualize quando novas suítes forem criadas ou quando a meta de cobertura mudar.

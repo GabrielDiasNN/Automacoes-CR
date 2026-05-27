@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Módulo de segurança e sanitização do Orchestrator Central de Automações.
 
@@ -8,24 +6,30 @@ Fornece higienização central de logs e payloads para evitar o vazamento de seg
 Pilar de Segurança (Fase 6).
 """
 
+# pylint: disable=relative-beyond-top-level
+
 import re
 from typing import Any
+
 from .constants import MAX_DB_LOGS_CHARS
 
 # Regexes compiladas para performance
 _URL_CREDENTIALS_RE = re.compile(r"\b([a-zA-Z]+://)([^/:\s@]+):([^/:\s@]+)(@[^/:\s@]+)")
 
-# Suporta chave com ou sem aspas, e valor com ou sem aspas (e.g. "api_key": "segredo" ou api_key=segredo)
+# Suporta chave/valor com ou sem aspas.
 _SECRET_KEY_VALUE_RE = re.compile(
-    r"(?i)(['\"]?)\b(api[_-]?key|password|senha|token|jwt|client[_-]?secret|private[_-]?key|conn[_-]?str|connection[_-]?string)\b\1(\s*[:=]+\s*)(['\"]?)([^'\"\s&,;]{3,})\4"
+    r"(?i)(['\"]?)\b(api[_-]?key|password|senha|token|jwt|client[_-]?secret|"
+    r"private[_-]?key|conn[_-]?str|connection[_-]?string)\b\1(\s*[:=]+\s*)"
+    r"(['\"]?)([^'\"\s&,;]{3,})\4"
 )
 
 _CPF_RE = re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b")
 _CNPJ_RE = re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b")
 
-# Filtro estrito para chaves confidenciais no dicionário (evita falsos positivos como normal_key ou db_connection)
+# Filtro estrito para chaves confidenciais no dicionário.
 _SENSITIVE_KEY_RE = re.compile(
-    r"(?i)^(api[_-]?key|password|senha|token|jwt|client[_-]?secret|private[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token)$"
+    r"(?i)^(api[_-]?key|password|senha|token|jwt|client[_-]?secret|"
+    r"private[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token)$"
 )
 
 
@@ -41,7 +45,10 @@ def sanitize_string(text: str) -> str:
 
     # 2. Pares chave-valor de segredos (e.g. api_key com atribuicao)
     text = _SECRET_KEY_VALUE_RE.sub(
-        lambda m: f"{m.group(1)}{m.group(2)}{m.group(1)}{m.group(3)}{m.group(4)}********{m.group(4)}",
+        lambda m: (
+            f"{m.group(1)}{m.group(2)}{m.group(1)}"
+            f"{m.group(3)}{m.group(4)}********{m.group(4)}"
+        ),
         text,
     )
 
@@ -83,6 +90,7 @@ def sanitize_log_payload(payload: Any) -> Any:
 
     return payload
 
+
 def truncate_log_payload(text: str) -> str:
     """
     Trunca uma string de log caso ela exceda o limite MAX_DB_LOGS_CHARS.
@@ -92,6 +100,9 @@ def truncate_log_payload(text: str) -> str:
         return text
 
     half_limit = MAX_DB_LOGS_CHARS // 2
-    trunc_msg = f"\n... [LOGS TRUNCADOS PELO SISTEMA (EXCEDEU {MAX_DB_LOGS_CHARS} CARACTERES)] ...\n"
+    trunc_msg = (
+        "\n... [LOGS TRUNCADOS PELO SISTEMA "
+        f"(EXCEDEU {MAX_DB_LOGS_CHARS} CARACTERES)] ...\n"
+    )
 
     return text[:half_limit] + trunc_msg + text[-half_limit:]

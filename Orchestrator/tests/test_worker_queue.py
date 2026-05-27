@@ -5,6 +5,13 @@
 import time
 
 from app import models
+from app.services.execution_runtime import (
+    apply_internal_worker_error,
+    apply_timeout_result,
+    complete_process_execution,
+    mark_running_tasks_as_failed_by_reboot,
+    mark_task_as_failed,
+)
 from app.timezone import get_now_local
 from worker import _finalize_terminated_task, claim_next_task, classify_process_result
 
@@ -109,3 +116,122 @@ def test_classify_process_result_identifies_channel_recovery_actions():
         "EXIT_CODE_99",
         "REVIEW_LOGS_AND_OPTIONALLY_REQUEUE",
     )
+
+
+def test_execution_runtime_marks_missing_automation_failure(db_session):
+    auto = models.Automation(name="Missing Script", script_path="./missing.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    _add_execution(db_session, "EXEC_MISSING", auto.id)
+    db_session.commit()
+
+    mark_task_as_failed(db_session, "EXEC_MISSING", "api_key=super-secret")
+
+    failed = db_session.query(models.Execution).filter_by(id="EXEC_MISSING").first()
+    assert failed.status == "ERROR"
+    assert failed.exit_code == -1
+    assert failed.failure_reason == "AUTOMATION_NOT_FOUND"
+    assert failed.recovery_action == "REVIEW_AUTOMATION_REGISTRY"
+    assert "api_key=********" in failed.logs
+    assert failed.finished_at is not None
+
+
+def test_execution_runtime_applies_timeout_result(db_session):
+    auto = models.Automation(name="Timeout Script", script_path="./timeout.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    _add_execution(db_session, "EXEC_TIMEOUT", auto.id)
+    db_session.commit()
+
+    result = apply_timeout_result(
+        db_session,
+        "EXEC_TIMEOUT",
+        ["partial log"],
+        time.time() - 2,
+    )
+
+    assert result is not None
+    assert result.status == "TIMEOUT"
+    assert result.failure_reason == "MAX_RUNTIME_EXCEEDED"
+    assert result.recovery_action == "REVIEW_TIMEOUT_AND_REQUEUE"
+    assert "Tarefa excedeu" in result.logs
+
+
+def test_execution_runtime_completes_process_execution(db_session):
+    auto = models.Automation(name="Complete Script", script_path="./complete.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    _add_execution(db_session, "EXEC_COMPLETE", auto.id)
+    db_session.commit()
+
+    result = complete_process_execution(
+        db_session,
+        "EXEC_COMPLETE",
+        24,
+        ["token=abc12345"],
+        '{"file":"out.txt"}',
+        3.5,
+    )
+
+    assert result is not None
+    assert result.status == "ERROR"
+    assert result.failure_reason == "CHANNEL_DELIVERY_FAILED"
+    assert result.recovery_action == "REVIEW_CHANNEL_STATE_BEFORE_REQUEUE"
+    assert result.artifacts == '{"file":"out.txt"}'
+    assert "token=********" in result.logs
+
+
+def test_execution_runtime_internal_error_skips_terminal_execution(db_session):
+    auto = models.Automation(name="Terminal Script", script_path="./terminal.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_TERMINAL",
+            automation_id=auto.id,
+            status="TIMEOUT",
+            requested_by="TEST",
+            started_at=get_now_local(),
+            logs="already terminal",
+        )
+    )
+    db_session.commit()
+
+    apply_internal_worker_error(
+        db_session,
+        "EXEC_TERMINAL",
+        "password=should-not-append",
+        time.time() - 1,
+    )
+
+    terminal = db_session.query(models.Execution).filter_by(id="EXEC_TERMINAL").first()
+    assert terminal.status == "TIMEOUT"
+    assert terminal.logs == "already terminal"
+
+
+def test_execution_runtime_marks_running_tasks_failed_by_reboot(db_session):
+    auto = models.Automation(name="Running Script", script_path="./running.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_RUNNING_REBOOT",
+            automation_id=auto.id,
+            status="RUNNING",
+            requested_by="TEST",
+            started_at=get_now_local(),
+            logs="before reboot",
+        )
+    )
+    db_session.commit()
+
+    count = mark_running_tasks_as_failed_by_reboot(db_session)
+
+    rebooted = (
+        db_session.query(models.Execution).filter_by(id="EXEC_RUNNING_REBOOT").first()
+    )
+    assert count >= 1
+    assert rebooted.status == "FAILED_BY_REBOOT"
+    assert rebooted.failure_reason == "ORCHESTRATOR_REBOOT"
+    assert rebooted.recovery_action == "REQUEUE_IF_SAFE"
+    assert "[RECOVERY_AUDIT]" in rebooted.logs

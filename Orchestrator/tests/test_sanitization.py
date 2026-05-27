@@ -4,7 +4,8 @@
 Testes unitários para o módulo de segurança e higienização de logs e payloads.
 """
 
-from app.security import sanitize_log_payload, sanitize_string
+from app.constants import MAX_DB_LOGS_CHARS
+from app.security import sanitize_log_payload, sanitize_string, truncate_log_payload
 
 
 def test_sanitize_string_oracle_credentials():
@@ -16,7 +17,9 @@ def test_sanitize_string_oracle_credentials():
 
 def test_sanitize_string_http_credentials():
     # Testa mascaramento em URLs http normais
-    text = "Acesso negado para http://usuario_teste:senha_super_secreta@localhost:8000/api"
+    text = (
+        "Acesso negado para http://usuario_teste:senha_super_secreta@localhost:8000/api"
+    )
     expected = "Acesso negado para http://usuario_teste:********@localhost:8000/api"
     assert sanitize_string(text) == expected
 
@@ -29,8 +32,8 @@ def test_sanitize_string_api_key_query_and_equals():
     text2 = '{"api-key": "secret-value-here"}'
     assert '"api-key": "********"' in sanitize_string(text2)
 
-    text3 = 'password' + ' : "minha-senha-super-secreta"'
-    assert ('password' + ' : "********"') in sanitize_string(text3)
+    text3 = "password" + ' : "minha-senha-super-secreta"'
+    assert ("password" + ' : "********"') in sanitize_string(text3)
 
     text4 = "token=WhatsAppToken123456"
     assert "token=********" in sanitize_string(text4)
@@ -86,3 +89,39 @@ def test_sanitize_log_payload_non_string_non_dict():
     assert sanitize_log_payload(12345) == 12345
     assert sanitize_log_payload(True) is True
     assert sanitize_log_payload(None) is None
+
+
+def test_sanitize_log_payload_masks_nested_sensitive_collections():
+    payload = {
+        "client_secret": {"token": "abc12345"},
+        "private_key": ["not-primitive-but-sensitive"],
+        "access_token": b"secret-bytes",
+        "auth_token": None,
+    }
+
+    sanitized = sanitize_log_payload(payload)
+
+    assert sanitized["client_secret"] == {"token": "********"}
+    assert sanitized["private_key"] == ["not-primitive-but-sensitive"]
+    assert sanitized["access_token"] == "********"
+    assert sanitized["auth_token"] is None
+
+
+def test_sanitize_string_keeps_empty_text_unchanged():
+    assert sanitize_string("") == ""
+
+
+def test_truncate_log_payload_keeps_small_payload_unchanged():
+    assert truncate_log_payload("linha curta") == "linha curta"
+    assert truncate_log_payload("") == ""
+
+
+def test_truncate_log_payload_marks_large_payload():
+    text = "A" * (MAX_DB_LOGS_CHARS + 10)
+
+    truncated = truncate_log_payload(text)
+
+    assert len(truncated) > MAX_DB_LOGS_CHARS
+    assert "[LOGS TRUNCADOS PELO SISTEMA" in truncated
+    assert truncated.startswith("A" * 100)
+    assert truncated.endswith("A" * 100)

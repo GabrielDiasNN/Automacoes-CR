@@ -1,5 +1,20 @@
 # Changelog
 
+## [9.3.6] - 2026-05-27
+### Adicionado
+- **Governança Semântica**: criado `Tools/Test-SemanticGovernance.ps1` para bloquear drift entre monitor AI-Native, constantes do runtime, documentação viva, taxonomia de skills, mapa de criticidade e dependências Node versionadas.
+- **Teste Offline de Node/WhatsApp**: criado `Tools/Test-NodeCommunications.ps1` e `Receitas Bloqueadas/tests/whatsapp-offline.test.js`, permitindo validar o contrato do canal WhatsApp sem depender de sessão real, Puppeteer, internet ou credenciais.
+- **Cobertura de Runtime e Bibliotecas**: adicionados testes de sanitização/truncamento, finalização de execuções e contratos de `Lib-Config`/`Lib-Retry`, elevando a suíte do Orchestrator para 165 testes e a cobertura para 81%.
+
+### Alterado
+- **Documentação Viva Alinhada**: README, CONTEXT, quality dashboard, estratégia de testes, mapa de cobertura, segurança, release checklist e mapa de criticidade passam a refletir o baseline atual e os manifestos como fonte operacional.
+- **Runtime Versionado**: `ORCHESTRATOR_VERSION` e `WORKER_VERSION` avançam para `9.3.6`.
+- **Governança Python Mais Real**: removidos ignores globais de `pylint`/`mypy` em `constants.py` e `security.py`.
+
+### Corrigido
+- **Drift do Catálogo Operacional**: cadências do mapa de criticidade foram sincronizadas com os `automation.manifest.json`.
+- **Higiene Node na Raiz**: removido `package-lock.json` órfão da raiz sem `package.json` correspondente.
+
 ## [9.3.5] - 2026-05-27
 ### Adicionado
 - **Classificador Compartilhado de Diff Governado**: criado `Tools/Get-GovernanceTargetSummary.ps1` como fonte única para classificar caminhos alterados, detectar escalonamento para scan completo e identificar alvos elegíveis de conformidade de log no hook local e no GitHub Actions.

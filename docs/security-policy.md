@@ -1,6 +1,6 @@
 # Política de Segurança — Hub de Automações
 
-> **Versão:** v7.0.0 | **Atualizado:** 19/05/2026
+> **Versão:** v9.3.6 | **Atualizado:** 27/05/2026
 > **Referência complementar:** [`SECURITY.md`](../SECURITY.md)
 
 ---
@@ -148,5 +148,5 @@ paths = ["docs/security-policy.md"]
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este documento formaliza a política de segurança do Hub de Automações em `v7.0.0`.
+- Este documento formaliza a política de segurança do Hub de Automações em `v9.3.6`.
 - Atualize quando houver mudança na política de rotação, novos mecanismos de autenticação ou novos tipos de segredos gerenciados.

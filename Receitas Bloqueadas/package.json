@@ -4,7 +4,7 @@
   "description": "Projeto para automacao de receitas bloqueadas e envio de notificacoes via WhatsApp.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Nenhum teste especificado para este projeto. Considere adicionar testes unitarios ou de integracao.\" && exit 1"
+    "test": "node tests/whatsapp-offline.test.js"
   },
   "keywords": [
     "whatsapp",

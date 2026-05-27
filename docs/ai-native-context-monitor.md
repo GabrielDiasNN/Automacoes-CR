@@ -4,12 +4,12 @@ Este arquivo é o snapshot curado para bootstrap de agentes no Hub de Automaçõ
 
 ## Estado Atual
 
-- **Versão operacional de referência**: Hub em linha `v9.3.4`, com Orchestrator/Dashboard operando sobre baseline Alembic, governança e otimização cirúrgica de pre-commit e o novo Agente de Revisão de Código declarativo estruturado ativo.
+- **Versão operacional de referência**: Hub em linha `v9.3.6`, com Orchestrator/Dashboard operando sobre baseline Alembic, governança semântica, testes offline de Node/WhatsApp, cobertura ampliada de runtime e o Agente de Revisão de Código declarativo estruturado ativo.
 - **Stack ativa**: Python/FastAPI, PowerShell corporativo, Node.js para comunicações, Dashboard SPA estático e SQLite em WAL com Alembic.
 - **Skills do workspace**: `.github/skills/` é a fonte canônica; `.gemini/skills/` é apenas mirror por junction/symlink.
 - **Skills globais obrigatórias**: `ai-engineering-discipline`, `protocolo-valeg` e `git-ide-governance-skill`.
 - **Contratos críticos**: Zero Trust, encoding governado, documentação viva, validação de skills, governança de catálogo de automações, Playwright como última validação para UI/front-back, conformidade estrita de datas DD/MM/YYYY e o novo Agente de Revisão de Código declarativo estruturado (`.agents/agents/code-review-agent/agent.json` e `Tools/Review-Code.ps1`).
-- **Validação de referência mais recente**: em 27/05/2026, a governança passou a usar classificação compartilhada de diff entre `pre-commit` e GitHub Actions. O hook local permanece rápido para diffs comuns, mas alterações em caminhos críticos ainda escalam para varredura completa por contrato.
+- **Validação de referência mais recente**: em 27/05/2026, a governança passou a usar classificação compartilhada de diff entre `pre-commit` e GitHub Actions, adicionou validação semântica de versões/catálogo/dependências e passou a executar teste offline de Node/WhatsApp no quality gate.
 - **Catálogo governado do hub (24/05/2026)**: automações ativas agora carregam `automation.manifest.json` versionado, com criticidade, SLA, dependências, smoke tests e vínculo para runbook. O dashboard consome `/api/portfolio/health` para expor esse cruzamento operacional.
 - **Baseline operacional do hub (25/05/2026)**: `GET /api/system/baseline`, `diagnostics.operational_baseline` e `history.baseline_status` compartilham thresholds únicos para worker, fila, WAL, execuções acima do limite e ownership órfão.
 - **Governança do portfólio no overview (26/05/2026)**: `/api/portfolio/health.summary` e `/api/system/overview.portfolio` agora publicam `status`, `top_issue`, `recommended_action` e contagem de itens em incidente/atenção para o painel principal.
@@ -20,6 +20,7 @@ Este arquivo é o snapshot curado para bootstrap de agentes no Hub de Automaçõ
 ## Mudanças Recentes Relevantes
 
 - **Agente de Revisão de Código e Reposicionamento do Pre-commit (27/05/2026)**: criação do Agente de Revisão de Código declarativo estruturado (`.agents/agents/code-review-agent/agent.json` e `Tools/Review-Code.ps1`) com reestruturação do `ValidarAutomacoes.ps1`. O contrato correto agora é: hook local rápido para diffs comuns, escalonamento para scan completo em caminhos críticos e CI completo como fonte final de verdade. Ver `CHANGELOG.md`.
+- **Governança semântica e testes offline (27/05/2026)**: criado `Tools/Test-SemanticGovernance.ps1` para bloquear drift entre monitor, constantes, docs, skills, catálogo e dependências Node; `Tools/Test-NodeCommunications.ps1` passa a validar o contrato offline de WhatsApp sem sessão real. Ver `CHANGELOG.md`.
 - **Disciplina global de engenharia com IA (22/05/2026)**: adicionada `ai-engineering-discipline` como skill global canônica e obrigatória para alinhar Codex, Gemini CLI e Antigravity. Ver `CHANGELOG.md`.
 - **Baseline operacional formalizado (25/05/2026)**: o Orchestrator agora expõe um resumo único `healthy` / `attention` / `incident` em `GET /api/system/baseline`, reaproveitado em `diagnostics`, `history` e no snapshot de qualidade local. Ver `CHANGELOG.md`.
 - **Resumo operacional do portfólio (26/05/2026)**: a saúde governada do catálogo passou a ser sintetizada no backend e replicada em `/api/system/overview`, permitindo ao dashboard principal tratar drift, docs pendentes e runtime não reconciliado como risco operacional de primeira classe. Ver `CHANGELOG.md`.

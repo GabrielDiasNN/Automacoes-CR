@@ -1,18 +1,18 @@
 # Painel de Controle de Qualidade (Quality Dashboard)
 
-> **Versão:** v9.3.2 | **Atualizado:** 25/05/2026
+> **Versão:** v9.3.6 | **Atualizado:** 27/05/2026
 
-Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v9.3.2). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
+Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v9.3.6). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
 
 ---
 
-## 📈 Status Atual das Métricas (Snapshot 25/05/2026)
+## 📈 Status Atual das Métricas (Snapshot 27/05/2026)
 
 O quadro abaixo resume a conformidade da codebase do projeto em relação às metas estabelecidas na governança técnica:
 
 | Métrica | Meta estabelecida | Valor Atual (Snapshot) | Status |
 |---|---|---|---|
-| **Cobertura de Testes (Pytest)** | `>= 60%` | **79%** | ✅ Meta Atingida |
+| **Cobertura de Testes (Pytest)** | `>= 60%` | **81%** | ✅ Meta Atingida |
 | **Erros de Tipagem (Mypy)** | `0` | **0** | ✅ Meta Atingida |
 | **Score de Estilo (Pylint)** | `>= 8.5/10` | **10/10** | ✅ Meta Atingida |
 | **Tamanho Versionado (Git)** | `<= 150 MB` | **2.54 MB** | ✅ Meta Atingida |

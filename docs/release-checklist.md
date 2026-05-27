@@ -1,6 +1,6 @@
 # Checklist de Release — Hub de Automações
 
-> **Versão:** v9.3.2 | **Atualizado:** 25/05/2026
+> **Versão:** v9.3.6 | **Atualizado:** 27/05/2026
 
 ---
 
@@ -33,6 +33,8 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
 - [ ] `Tools/Test-SourceEncoding.ps1 -RootPath .` — **0 violações de encoding**
 - [ ] `Tools/Test-SkillsGovernance.ps1 -BasePath .` — skills consistentes
 - [ ] `Tools/Test-AutomationCatalog.ps1 -RootPath .` — catálogo governado consistente
+- [ ] `Tools/Test-SemanticGovernance.ps1 -RootPath .` — documentação viva, catálogo e dependências sem drift semântico
+- [ ] `Tools/Test-NodeCommunications.ps1 -RootPath .` — contrato offline de WhatsApp/Node validado
 - [ ] Nenhum caminho absoluto hardcoded em scripts de automação
 
 ### 1.4 Segurança
@@ -147,6 +149,6 @@ Preencha após a conclusão bem-sucedida:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este checklist cobre o processo de release do Hub de Automações em `v9.3.2`.
+- Este checklist cobre o processo de release do Hub de Automações em `v9.3.6`.
 - Atualize este checklist quando novos gates de qualidade forem adicionados ao pipeline.
 - Registre estado operacional relevante para agentes em `docs/ai-native-context-monitor.md`, não em seções longas dentro de `GEMINI.md`.

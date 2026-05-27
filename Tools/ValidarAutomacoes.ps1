@@ -73,7 +73,7 @@ function Invoke-NativeGovernanceCheck {
         [string[]]$TargetPaths = @()
     )
     Write-Host "`n=== Governanca Nativa (Seguranca, SQL, Python, PS, JSON) ===" -ForegroundColor Cyan
-    $checks = @("Test-ZeroTrust.ps1", "Test-SqlPerformance.ps1", "Test-PythonGovernance.ps1", "Test-PowerShellGovernance.ps1", "Test-PowerShellApprovedVerbs.ps1", "Test-PortablePaths.ps1", "Test-SourceEncoding.ps1", "Test-JsonConfig.ps1", "Test-PlaywrightEvidence.ps1", "Test-AutomationCatalog.ps1", "Test-DateConformidade.ps1")
+    $checks = @("Test-ZeroTrust.ps1", "Test-SqlPerformance.ps1", "Test-PythonGovernance.ps1", "Test-PowerShellGovernance.ps1", "Test-PowerShellApprovedVerbs.ps1", "Test-PortablePaths.ps1", "Test-SourceEncoding.ps1", "Test-JsonConfig.ps1", "Test-PlaywrightEvidence.ps1", "Test-AutomationCatalog.ps1", "Test-DateConformidade.ps1", "Test-SemanticGovernance.ps1", "Test-NodeCommunications.ps1")
     $allOk = $true
     
     foreach ($script in $checks) {
@@ -113,9 +113,7 @@ function Invoke-LogConformidadeCheck {
     if (-not (Test-Path $checkerPath)) { return 0 }
 
     Write-Host "`n=== Conformidade de Log ===" -ForegroundColor Cyan
-    $psArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $checkerPath, "-RootPath", $RootPath, "-Paths")
-    $psArgs += $TargetPaths
-    & powershell @psArgs | Out-Host
+    & $checkerPath -RootPath $RootPath -Paths $TargetPaths | Out-Host
     return $LASTEXITCODE
 }
 

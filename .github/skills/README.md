@@ -92,7 +92,7 @@ Crie uma nova skill apenas quando houver:
 
 - fluxo recorrente e especializado;
 - fronteira clara de ownership;
-- dificuldade real de encaixar o conteúdo em uma das 6 skills atuais ou em `references/` associadas.
+- dificuldade real de encaixar o conteúdo em uma das 7 skills atuais ou em `references/` associadas.
 
 Não crie nova skill quando:
 

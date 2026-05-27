@@ -3,7 +3,7 @@
 [⬅️ Voltar para o Hub Central](../README.md)
 
 > [!NOTE]
-> Este documento estabelece formalmente a classificação de criticidade, os Acordos de Nível de Serviço (SLAs) para resposta/resolução de falhas e o impacto operacional de cada robô integrado ao Hub de Automações.
+> Este documento estabelece formalmente a classificação de criticidade, os Acordos de Nível de Serviço (SLAs) para resposta/resolução de falhas e o impacto operacional de cada automação integrada ao Hub de Automações.
 
 ---
 
@@ -22,13 +22,13 @@ Classificamos nossas automações de negócio em quatro níveis com base no impa
 
 ## 🗺️ Matriz Geral de Automações do Hub
 
-A tabela abaixo consolida a governança, cadência e prazos operacionais de todos os robôs activos no ecossistema:
+A tabela abaixo consolida a governança, cadência e prazos operacionais das automações ativas no ecossistema. Os dados de criticidade, SLA e cadência devem refletir os `automation.manifest.json`.
 
 | Código / ID | Automação | Criticidade | SLA de Recuperação | Cadência / Disparo | Área de Negócio Impactada | Consequência da Parada |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`RB-01`** | **[Receitas Bloqueadas](runbooks/receitas-bloqueadas-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sex às 07:30, 10:00 e 14:00 | Laboratório de Receitas, PCP e Tinturaria | Atraso no tingimento de Ordens de Beneficiamento (OBs) liberadas, ociosidade em teares e perda de visibilidade de receitas retidas. |
-| **`MT-02`** | **[Montagem de Terceirizados](runbooks/montagem-de-terceirizados-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sex às 08:00 e 15:00 | Faturamento, Controladoria e Expedição de Terceirizados | Risco de divergências fiscais na entrada de NFs de parceiros/facções, atraso na liberação de estoque de produtos acabados. |
-| **`RE-03`** | **[Receitas Emitidas](runbooks/receitas-emitidas-runbook.md)** | **💡 MÉDIA** | **6 horas** | Seg-Sex às 17:00 | Planejamento, Tinturaria e PCP | Perda de visibilidade das receitas expedidas para a produção no dia, afetando a acurácia do planejamento produtivo do dia seguinte. |
+| **`RB-01`** | **[Receitas Bloqueadas](runbooks/receitas-bloqueadas-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sex às 07:00, 11:00, 14:00 e 17:00 | Laboratório de Receitas, PCP e Tinturaria | Atraso no tingimento de Ordens de Beneficiamento (OBs) liberadas, ociosidade em teares e perda de visibilidade de receitas retidas. |
+| **`MT-02`** | **[Montagem de Terceirizados](runbooks/montagem-de-terceirizados-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sáb, a cada 30 min, 05:00 às 22:00, em horários redondos | Faturamento, Controladoria e Expedição de Terceirizados | Risco de divergências fiscais na entrada de NFs de parceiros/facções, atraso na liberação de estoque de produtos acabados. |
+| **`RE-03`** | **[Receitas Emitidas](runbooks/receitas-emitidas-runbook.md)** | **💡 MÉDIA** | **6 horas** | Sex às 07:05 | Planejamento, Tinturaria e PCP | Perda de visibilidade das receitas expedidas para a produção no dia, afetando a acurácia do planejamento produtivo do dia seguinte. |
 
 ---
 

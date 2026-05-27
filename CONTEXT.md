@@ -1,9 +1,9 @@
-# Cognitive Context: Automações Hub v9.3.2 (Operational Baseline)
+# Cognitive Context: Automações Hub v9.3.6 (Operational Baseline)
 
 ## Repository Philosophy
-Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v9.3.2 (Operational Baseline)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
+Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v9.3.6 (Operational Baseline)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
 
-## System Architecture (v9.3.2 Operational Baseline)
+## System Architecture (v9.3.6 Operational Baseline)
 
 - **ADR-019 (20/05/2026):** Governança de Banco de Dados com Alembic. Transição de migrações manuais inline para controle de versão formal de schema com Alembic. Suporte a SQLite via Modo Batch (`render_as_batch=True`), inicialização dinâmica via startup programático (`upgrade head`) no FastAPI, e infraestrutura de testes em memória isolada e resiliente.
 - **ADR-018 (17/05/2026):** Observabilidade Acionável. `/api/system/diagnostics` passa a emitir `overall_status`, `findings`, risco do WAL, idade do heartbeat e idade das execuções mais antigas em fila/execução. O Dashboard exibe achados com severidade e ação sugerida para reduzir tempo de diagnóstico operacional.
@@ -15,14 +15,14 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Graceful Worker**: Worker monitora processos ativos e garante o `taskkill` de toda a árvore de processos no shutdown.
 - **SQLite Hardened**: WAL mode com `synchronous=NORMAL` e `temp_store=MEMORY` para máxima performance de I/O.
 - **Unified JSON Logging**: Loggers do Orchestrator e Worker unificados para rastreabilidade via `correlation_id`.
-- **Runtime v9.3.2 alinhado:** `ORCHESTRATOR_VERSION`, `WORKER_VERSION`, `ORCHESTRATOR_CONTRACT_VERSION` e `ORCHESTRATOR_SCHEMA_VERSION` refletem o baseline atual com ownership do worker, histórico operacional, baseline operacional formalizado e catálogo governado versionado.
+- **Runtime v9.3.6 alinhado:** `ORCHESTRATOR_VERSION`, `WORKER_VERSION`, `ORCHESTRATOR_CONTRACT_VERSION` e `ORCHESTRATOR_SCHEMA_VERSION` refletem o baseline atual com ownership do worker, histórico operacional, baseline operacional formalizado, catálogo governado versionado, governança de datas, governança semântica e agente declarativo de revisão de código.
 - **Baseline Operacional compartilhado:** `GET /api/system/baseline`, `diagnostics.operational_baseline` e `history.baseline_status` usam os mesmos thresholds para worker, fila, WAL, execuções acima do limite e ownership órfão.
 - **Ownership + Histórico v9.2.7 alinhados:** execuções agora registram `claimed_at`, `worker_instance_id` e `worker_pid`; o runtime passa a persistir snapshots em `system_health_snapshots` e expor tendência em `/api/system/history` e `trend_summary` no diagnóstico.
 - **Portfólio Governado v9.3.0 alinhado:** cada automação ativa passa a possuir `automation.manifest.json` como fonte canônica de criticidade, SLA, owner, dependências e smoke tests; o Orchestrator cruza catálogo, docs e banco em `/api/portfolio/health` e `/api/portfolio/drift`.
 - **Resumo operacional do portfólio no overview:** `GET /api/portfolio/health.summary` e `GET /api/system/overview.portfolio` agora publicam um status operacional único para drift, docs obrigatórias, runtime não reconciliado e violações de SLA, permitindo que o dashboard principal priorize governança sem heurística distribuída no front-end.
 - **Preflight governado no cadastro administrativo:** quando `automation.manifest.json` existe na pasta alvo, `POST /api/automations/preflight` valida nome, `script_path`, `queue_group`, SLA, retries, canais, runbook, README, CONTEXT, entrypoint e smoke tests antes de permitir `create/update`.
 - **Scaffold governado para onboarding:** `Tools/New-Automation.ps1` agora aceita owner, criticidade, fila, SLA, runtime e dependências básicas, gerando `automation.manifest.json` já coerente com o catálogo e um smoke test inicial em `Orchestrator/tests/`.
-- **Shared Skills Model**: `.github/skills/` e a fonte canonica das 6 skills ativas; `.gemini/skills/` existe apenas como espelho por junction/symlink para compatibilidade com Gemini CLI e Antigravity.
+- **Shared Skills Model**: `.github/skills/` é a fonte canônica das 7 skills ativas; `.gemini/skills/` existe apenas como espelho por junction/symlink para compatibilidade com Gemini CLI e Antigravity.
 
 ## 🧠 Gestão de Contexto (AI-Native)
 - **Migração de Banco de Dados com Alembic v9.0.0 (20/05/2026):** Transição de migrações manuais inline para o ecossistema robusto e estruturado do Alembic. As migrações são aplicadas de forma dinâmica no startup (`upgrade head` programático). Ativamos o **Modo Batch** no `env.py` para compatibilidade com SQLite, blindamos os testes em memória com desvio resiliente de runner, e ajustamos a fixture do Playwright E2E para preparar o banco de homologação físico via Alembic, eliminando colisões. **73/73 testes verdes** e **100% aprovado** no Quality Gate (`Tools/ValidarAutomacoes.ps1`).
