@@ -35,6 +35,7 @@ graph TD
 ## 🎯 Estado Atual do Hub
 - **UTF-8 Nativo Governado**: Código-fonte e logs operam em UTF-8, com PowerShell `.ps1`/`.psm1` em UTF-8 com BOM e demais arquivos textuais em UTF-8 sem BOM, conforme `GEMINI.md`.
 - **Zero-Trust Auth**: O Dashboard solicita a API Key dinamicamente, eliminando segredos no código.
+- **Beneficiamento Snapshot-First**: `/api/beneficiamento/*` consome snapshots locais em `Produção Beneficimento/snapshots/latest`, mantendo leitura de Dashboard sem consulta Oracle em tempo real.
 - **Observabilidade Acionável**: `/api/system/diagnostics` consolida saúde, fila, worker, scheduler, banco/WAL e achados com ação sugerida.
 - **Histórico Operacional**: `/api/system/history` mantém snapshots leves de saúde para tendência de fila, heartbeat, WAL e violações recentes sem depender apenas de leitura manual de log.
 - **Baseline Operacional Formalizado**: `GET /api/system/baseline` e `diagnostics.operational_baseline` resumem worker, fila, WAL e ownership em status `healthy`, `attention` ou `incident`, com ação recomendada e thresholds explícitos.

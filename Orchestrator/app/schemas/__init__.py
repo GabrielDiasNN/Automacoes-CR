@@ -41,6 +41,22 @@ from .executions import (
     ExecutionQueueActionResponse,
 )
 
+from .beneficiamento import (
+    BeneficiamentoDashboardPayload,
+    BeneficiamentoHealthPeriod,
+    BeneficiamentoHealthResponse,
+    BeneficiamentoPeriodPayload,
+    BeneficiamentoPeriodsResponse,
+    BeneficiamentoSourceFiles,
+    BeneficiamentoHistoricoResponse,
+    BeneficiamentoAnalyticsGeral,
+    BeneficiamentoAnalyticsOperador,
+    BeneficiamentoAnalyticsMaquina,
+    BeneficiamentoAnalyticsProduto,
+    BeneficiamentoAnalyticsTurno,
+    BeneficiamentoAnalyticsResponse,
+)
+
 from .system import (
     WorkerStatus,
     EnvContent,
@@ -121,6 +137,20 @@ __all__ = [
     "ExecutionTelemetryEnd",
     "ExecutionQueueActionRequest",
     "ExecutionQueueActionResponse",
+    # Beneficiamento
+    "BeneficiamentoDashboardPayload",
+    "BeneficiamentoHealthPeriod",
+    "BeneficiamentoHealthResponse",
+    "BeneficiamentoPeriodPayload",
+    "BeneficiamentoPeriodsResponse",
+    "BeneficiamentoSourceFiles",
+    "BeneficiamentoHistoricoResponse",
+    "BeneficiamentoAnalyticsGeral",
+    "BeneficiamentoAnalyticsOperador",
+    "BeneficiamentoAnalyticsMaquina",
+    "BeneficiamentoAnalyticsProduto",
+    "BeneficiamentoAnalyticsTurno",
+    "BeneficiamentoAnalyticsResponse",
     # System
     "WorkerStatus",
     "EnvContent",

@@ -26,6 +26,7 @@ import * as engine from "./execution_engine.js?v=20260521c";
 import { createExecutionsModule } from "./dashboard_executions.js";
 import { createSystemModule } from "./dashboard_system.js";
 import { createAutomationsModule } from "./dashboard_automations.js?v=20260522a";
+import { createBeneficiamentoModule } from "./dashboard_beneficiamento.js?v=20260531a";
 
 const EXEC_PER_PAGE = 15;
 const EXPECTED_CONTRACT_PREFIX = "2026.05.";
@@ -87,6 +88,13 @@ const automationsModule = createAutomationsModule({
     bindActionElements,
 });
 
+const beneficiamentoModule = createBeneficiamentoModule({
+    api,
+    showToast,
+    escapeHtml,
+    bindActionElements,
+});
+
 document.addEventListener("DOMContentLoaded", () => {
     registerStaticActions();
     bindActionElements();
@@ -98,6 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const target = e.detail.target;
         if (target === "dashboard") loadOverview();
         if (target === "executions") loadExecutions(1);
+        if (target === "beneficiamento") beneficiamentoModule.loadBeneficiamento();
         if (target === "automations") loadConfig();
         if (target === "observability") loadObservability();
         if (target === "system") loadSystem();
@@ -205,8 +214,10 @@ function bindStaticEvents() {
 
 function registerStaticActions() {
     registerAction("refresh-page", () => location.reload());
+    registerAction("refresh-beneficiamento", () => beneficiamentoModule.loadBeneficiamento());
     registerAction("open-create-modal", () => openAutomationModal());
     registerAction("refresh-executions", () => loadExecutions(1));
+    registerAction("benef-period", (_event, element) => beneficiamentoModule.selectPeriod(element?.dataset?.benefPeriod || ""));
     registerAction("execution-preset", (_event, element) => applyExecutionPreset(element?.dataset?.executionPreset || "all"));
     registerAction("execution-filter-group", (_event, element) => applyExecutionQueueGroup(element?.dataset?.queueGroup || ""));
     registerAction("execution-filter-priority", (_event, element) => applyExecutionPriority(element?.dataset?.priority || ""));

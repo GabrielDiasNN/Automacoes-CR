@@ -106,7 +106,6 @@ Todos os agentes devem operar com estas regras não negociáveis:
 - `README.md` deve refletir objetivo, setup e estado geral.
 - `CONTEXT.md` deve refletir regras de negócio, fluxos, contratos e integrações.
 - `SECURITY.md` deve refletir guardrails e tratamento de dados sensíveis.
-- `GEMINI.md` do repositório deve refletir políticas locais de contexto AI-Native, encoding e sincronismo documental.
 - `CHANGELOG.md` deve ser atualizado quando a mudança alterar comportamento, governança, arquitetura ou contrato operacional.
 
 ## Descoberta Recomendada

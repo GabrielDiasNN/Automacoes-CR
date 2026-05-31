@@ -1,5 +1,39 @@
 # Changelog
 
+## [9.3.9] - 31/05/2026
+### Adicionado
+- **Análise Dinâmica de Produtos e Artigos**: criada a tabela dinâmica de produtos na tela (`index.html`) e o painel lateral de top artigos e cores de maior representatividade.
+- **Filtros Cruzados Avançados**: adicionada a barra de filtros cruzados no frontend (busca textual de produtos/artigos e dropdowns dinâmicos de Máquina, Fase e Turno).
+- **Agregação Multidimensional `fato_producao`**: implementada função `build_fato_producao` no backend (`analytics.py`) e integrada na montagem de payloads (`beneficiamento_dashboard.py`), pré-agregando dados brutos do Oracle em chaves combinadas compactas para máximo desempenho de filtros locais no navegador.
+
+### Alterado
+- **Métricas e Rankings Vivos**: ao interagir com os filtros dinâmicos, o dashboard agora recalcula e atualiza instantaneamente os 8 KPIs principais (linhas, volumes, rendimento, eficiência) com animações de contagem, além de re-renderizar e reordenar as tabelas de ranking de máquinas e fases baseando-se no recorte selecionado.
+- **Evidências de Homologação**: criados scripts de simulação para injeção de dados ricos em snapshots locais de DX, com validação de 100% de sucesso na suite de testes E2E do Playwright (`8 passed`) e conformidade estrita de encoding.
+
+## [9.3.8] - 31/05/2026
+### Alterado
+- **Refatoração Premium do Beneficiamento**: unificação completa e revitalização visual do dashboard de beneficiamento em `index.html`, `dashboard.css` e `dashboard_beneficiamento.js`.
+- **KPIs e Insights Unificados**: os 8 slots numéricos (Linhas, KG, MT, Turnos, Rendimento, Eficiência, Desvio e Qualidade) foram integrados em uma única fileira de cards premium, com estilo moderno (glassmorphism sutil, bordas de acento por categoria), animações sequenciais de stagger de entrada e contagem progressiva (`count-up`) de 0 até o valor formatado.
+- **Micro-interações e Visualização ApexCharts**: os gráficos ApexCharts foram atualizados para usar bordas arredondadas nas colunas, preenchimentos gradientes com curvas suaves nas linhas e legendas refinadas integradas à paleta escura do orquestrador.
+- **Rankings Interativos**: as tabelas de ranking de máquinas e fases ganharam medalhas estilizadas no pódio top 3 (🥇, 🥈, 🥉) e barras de progresso horizontais inline com o percentual de share de volume.
+- **Limpeza de Informações Técnicas (Accordions)**: o painel detalhado de integridade/qualidade de dados e o profiling técnico de snapshot (estruturas e colunas) foram movidos para painéis expansíveis (accordions) inteligentes e discretos no final da view, mantendo o foco operacional limpo.
+
+### Corrigido
+- **Conformidade de Qualidade e Testes**: validação de integridade do console e comportamento do dashboard realizada por meio da suíte completa de testes E2E do Playwright (`8 passed`) e verificação estática de encoding sem ocorrência de erros.
+
+## [9.3.7] - 31/05/2026
+### Adicionado
+- **Beneficiamento Snapshot-First**: estruturado o domínio `Produção Beneficimento/` com pacote Python modular, SQLs parametrizadas, snapshots promovidos e documentação operacional própria.
+- **API de Produção do Beneficiamento**: adicionados contratos Pydantic e endpoints `/api/beneficiamento/health`, `/api/beneficiamento/periods` e `/api/beneficiamento/periods/{period}`, mantendo `/dashboard` compatível.
+- **Testes de Contrato**: criada cobertura para leitura de snapshots, health com `call_timeout` não aplicado e validação de período inválido.
+
+### Alterado
+- **Dashboard Beneficiamento**: a aba passa a exibir status operacional e idade do snapshot por período.
+- **Segurança Oracle**: leituras `GET` do Beneficiamento não abrem conexão Oracle; refresh fica restrito a runner controlado com orçamento abaixo de 20 segundos.
+
+### Removido
+- **Artefatos Temporários do Beneficiamento**: planejada limpeza direta de `analysis_tmp/`, `__pycache__/`, outputs locais e JSONs exploratórios após promoção dos snapshots finais.
+
 ## [9.3.6] - 2026-05-27
 ### Adicionado
 - **Governança Semântica**: criado `Tools/Test-SemanticGovernance.ps1` para bloquear drift entre monitor AI-Native, constantes do runtime, documentação viva, taxonomia de skills, mapa de criticidade e dependências Node versionadas.

@@ -20,6 +20,8 @@
 - **Histórico Operacional Sanitizado**: Snapshots de `system_health_snapshots` devem registrar somente sinais agregados de saúde, filas, WAL e SLOs, sem payloads de negócio ou conteúdo sensível.
 - **Evidência E2E Auditável**: Evidências Playwright devem registrar apenas metadados operacionais, sem API keys, credenciais, payloads sensíveis ou conteúdo bruto de logs.
 - **Catálogo e Runbook Sem Path Arbitrário**: `/api/portfolio/health` e `/api/portfolio/drift` expõem apenas metadados sanitizados do catálogo; a leitura de runbook ocorre por `catalog_id` validado, nunca por caminho arbitrário fornecido pelo cliente.
+- **Beneficiamento Sem Oracle em GET**: endpoints `/api/beneficiamento/*` devem ler apenas snapshots locais sanitizados. Conexões Oracle, credenciais e DSN permanecem restritos ao runner de refresh e nunca devem aparecer em respostas, logs de Dashboard ou arquivos versionados.
+- **Timeout Oracle como Guardrail de Segurança Operacional**: se o `call_timeout` não for aplicado pelo client Oracle, o health do Beneficiamento deve sinalizar `attention`; isso não deve ser mascarado como sucesso pleno.
 
 ---
 Mantido pela equipe de Automações & Antigravity AI

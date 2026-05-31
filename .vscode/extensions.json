@@ -8,7 +8,6 @@
         "GrapeCity.gc-excelviewer",
         "local-smart.excel-live-server",
         "powerquery.vscode-powerquery",
-        "davidanson.vscode-markdownlint",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.black-formatter",

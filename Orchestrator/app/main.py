@@ -33,6 +33,7 @@ from .routers import (
     automation_config,
     automation_ide,
     automations,
+    beneficiamento,
     executions,
     portfolio,
     system,
@@ -288,6 +289,7 @@ app.include_router(automations.router)
 app.include_router(automation_config.router)
 app.include_router(automation_ide.router)
 app.include_router(executions.router)
+app.include_router(beneficiamento.router)
 app.include_router(portfolio.router)
 app.include_router(system.router)
 app.include_router(websocket.router)

@@ -26,6 +26,41 @@ export function normalizePortfolioHealthPayload(payload) {
     };
 }
 
+export function normalizeBeneficiamentoPayload(payload) {
+    const periods = payload?.periods || {};
+    const normalizedPeriods = {};
+
+    for (const key of ["diario", "semanal", "mensal", "anual"]) {
+        const period = periods?.[key] || {};
+        normalizedPeriods[key] = {
+            key,
+            label: period?.label || key,
+            available: Boolean(period?.available),
+            status: period?.status || period?.quality?.status || "missing",
+            updated_at: period?.updated_at || null,
+            age_seconds: Number.isFinite(Number(period?.age_seconds)) ? Number(period.age_seconds) : null,
+            stale: Boolean(period?.stale),
+            source_files: period?.source_files || {},
+            metrics: period?.metrics || {},
+            quality: period?.quality || {},
+            profile: period?.profile || {},
+            rankings: period?.rankings || {},
+            highlights: period?.highlights || {},
+            oracle: period?.oracle || {},
+            snapshot: period?.snapshot || {},
+        };
+    }
+
+    return {
+        generated_at: payload?.generated_at || null,
+        default_period: payload?.default_period || "mensal",
+        overall: payload?.overall || {},
+        comparison: Array.isArray(payload?.comparison) ? payload.comparison : [],
+        periods: normalizedPeriods,
+        health: payload?.health || {},
+    };
+}
+
 export function normalizeDiagnosticsPayload(payload) {
     return {
         contract_version: payload?.contract_version || "legacy",

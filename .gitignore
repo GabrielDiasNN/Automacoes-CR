@@ -15,6 +15,7 @@ test-results/
 *.7z
 *.rar
 artifacts/
+output/
 
 # pip-tools
 requirements*.txt
@@ -98,9 +99,20 @@ Backups/
 # Scratch local de investigação
 scratch/
 
+# Beneficiamento - artefatos exploratórios e arquivos de refresh local
+Produção Beneficimento/analysis_tmp/
+Produção Beneficimento/tmp/
+Produção Beneficimento/snapshots/archive/
+Produção Beneficimento/snapshots/*.db
+Produção Beneficimento/snapshots/*.db-shm
+Produção Beneficimento/snapshots/*.db-wal
+
 # Estados runtime por automacao (nao versionar)
 Montagem de Terceirizados/delivery_state.json
 Receitas Bloqueadas/email_state.json
 Receitas Bloqueadas/receitas_state.json
 Receitas Emitidas/delivery_state.json
 Receitas Emitidas/receitas_state.json
+
+# Caches locais adicionais
+.npm-cache-codex/

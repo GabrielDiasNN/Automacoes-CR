@@ -1,0 +1,684 @@
+{
+  "total_rows": 1687,
+  "total_columns": 44,
+  "duplicate_source_names": {},
+  "constant_columns": [
+    "TPUNIDADEMEDIDA",
+    "FILIAL"
+  ],
+  "mostly_null_columns": [],
+  "high_cardinality_columns": [
+    "QT_KG",
+    "QT_MT",
+    "MIN_REAL",
+    "MIN_PREV",
+    "EFIC_TEMPO_MEDIA"
+  ],
+  "columns": [
+    {
+      "column": "ANO_MES",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 6,
+      "sample_values": [
+        "202601",
+        "202601",
+        "202601"
+      ],
+      "min": "202601",
+      "max": "202606"
+    },
+    {
+      "column": "CD_DS_FASE",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 12,
+      "sample_values": [
+        "09 - ABRIDOR",
+        "04 - HIDRO",
+        "05 - SECADOR"
+      ],
+      "min": "01 - MONTAGEM",
+      "max": "99 - NAO DEFINIDO"
+    },
+    {
+      "column": "NUMERO_MAQUINA",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 49,
+      "sample_values": [
+        "AB01",
+        "HD02",
+        "SC01"
+      ],
+      "min": "AB01",
+      "max": "VM01"
+    },
+    {
+      "column": "TURNO_PROD",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3,
+      "sample_values": [
+        "2",
+        "3",
+        "3"
+      ],
+      "min": "1",
+      "max": "3"
+    },
+    {
+      "column": "TURNO_DESC",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3,
+      "sample_values": [
+        "TURNO 2",
+        "TURNO 3",
+        "TURNO 3"
+      ],
+      "min": "TURNO 1",
+      "max": "TURNO 3"
+    },
+    {
+      "column": "STATUS_UP",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "3"
+    },
+    {
+      "column": "DS_STATUS_UP",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "CONFIRMADA",
+        "CONFIRMADA",
+        "CONFIRMADA"
+      ],
+      "min": "CONFIRMADA",
+      "max": "PROGRAMADA"
+    },
+    {
+      "column": "STATUS_FASE",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 5,
+      "sample_values": [
+        "4",
+        "4",
+        "4"
+      ],
+      "min": "0",
+      "max": "4"
+    },
+    {
+      "column": "DS_STATUS_FASE",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 5,
+      "sample_values": [
+        "CONFIRMADA",
+        "CONFIRMADA",
+        "CONFIRMADA"
+      ],
+      "min": "CONFIRMADA",
+      "max": "PROGRAMADA"
+    },
+    {
+      "column": "DESTINO_RECEITA",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "1",
+        "4",
+        "4"
+      ],
+      "min": "0",
+      "max": "4"
+    },
+    {
+      "column": "REDUZ",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 282,
+      "sample_values": [
+        "23308",
+        "21647",
+        "21647"
+      ],
+      "min": "199",
+      "max": "24836"
+    },
+    {
+      "column": "DESCR_ITEM",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 211,
+      "sample_values": [
+        "VISCOLYCRA VORTEX VINHO",
+        "RIBANA 2X1 24/1 PA PRETO",
+        "RIBANA 2X1 24/1 PA PRETO"
+      ],
+      "min": "COTTON 4% OE PINK",
+      "max": "VISCOLYCRA VORTEX VINHO"
+    },
+    {
+      "column": "TIPO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3,
+      "sample_values": [
+        "BNF",
+        "BNF",
+        "BNF"
+      ],
+      "min": "BNF",
+      "max": "BNT"
+    },
+    {
+      "column": "ARTIGO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 46,
+      "sample_values": [
+        "00489",
+        "00184",
+        "00184"
+      ],
+      "min": "00010",
+      "max": "0A229"
+    },
+    {
+      "column": "DESCR_ARTIGO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 38,
+      "sample_values": [
+        "VISCOLYCRA VORTEX MESCLA",
+        "RIBANA 2X1 24/1 PA",
+        "RIBANA 2X1 24/1 PA"
+      ],
+      "min": "COTTON 4% OE",
+      "max": "VISCOLYCRA VORTEX MESCLA"
+    },
+    {
+      "column": "LARGURA",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 13,
+      "sample_values": [
+        "1.9",
+        "1.2",
+        "1.2"
+      ],
+      "min": "0.42",
+      "max": "2.4"
+    },
+    {
+      "column": "RENDIMENTO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1266,
+      "sample_values": [
+        "2.8801432176726007",
+        "2.6062104279868716",
+        "2.404190056629606"
+      ],
+      "min": "1.6666666666666667",
+      "max": "4.385964912280702"
+    },
+    {
+      "column": "COR",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 47,
+      "sample_values": [
+        "99998",
+        "00051",
+        "00051"
+      ],
+      "min": "00001",
+      "max": "CG051"
+    },
+    {
+      "column": "DESCR_COR",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 38,
+      "sample_values": [
+        "VINHO",
+        "PRETO",
+        "PRETO"
+      ],
+      "min": "AMARELO CANÁRIO",
+      "max": "VINHO"
+    },
+    {
+      "column": "ACABAMENTO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 9,
+      "sample_values": [
+        "FE",
+        "NF",
+        "NF"
+      ],
+      "min": "00",
+      "max": "ZM"
+    },
+    {
+      "column": "DESENHO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "000000",
+        "000000",
+        "000000"
+      ],
+      "min": "000000",
+      "max": "999999"
+    },
+    {
+      "column": "VARIANTE",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "00",
+        "00",
+        "00"
+      ],
+      "min": "00",
+      "max": "99"
+    },
+    {
+      "column": "CODIND",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 246,
+      "sample_values": [
+        "BNF.00489.R.180.99998.000000.00.00",
+        "BNF.00184.T.120.00051.000000.00.00",
+        "BNF.00184.T.120.00051.000000.00.00"
+      ],
+      "min": "BNF.00010.T.080.00001.000000.00.00",
+      "max": "BNT.0A229.T.120.00069.000000.00.00"
+    },
+    {
+      "column": "CODIGO_ALTERNATIVO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 219,
+      "sample_values": [
+        "48982",
+        "18451",
+        "18451"
+      ],
+      "min": "01001",
+      "max": "A22900069"
+    },
+    {
+      "column": "DESCR_CLASSIFICACAO_COR",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 9,
+      "sample_values": [
+        "PRETO",
+        "PRETO",
+        "PRETO"
+      ],
+      "min": "BRANCO",
+      "max": "PRETO 2 FIBRAS"
+    },
+    {
+      "column": "TPUNIDADEMEDIDA",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "1",
+        "1",
+        "1"
+      ],
+      "min": "1",
+      "max": "1"
+    },
+    {
+      "column": "CODIGO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 246,
+      "sample_values": [
+        "BNF00489R180999980000000000",
+        "BNF00184T120000510000000000",
+        "BNF00184T120000510000000000"
+      ],
+      "min": "BNF00010T080000010000000000",
+      "max": "BNT0A229T120000690000000000"
+    },
+    {
+      "column": "NOME_MAQUINA",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 25,
+      "sample_values": [
+        "ABRIDOR",
+        "HIDRO EXTRATOR",
+        "SECADOR (ÓLEO TÉRMICO)"
+      ],
+      "min": "ABRIDOR",
+      "max": "VIRADOR DE MALHA"
+    },
+    {
+      "column": "TIPO_MAQUINA",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 14,
+      "sample_values": [
+        "23",
+        "22",
+        "1"
+      ],
+      "min": "1",
+      "max": "61"
+    },
+    {
+      "column": "FILIAL",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "1",
+        "1",
+        "1"
+      ],
+      "min": "1",
+      "max": "1"
+    },
+    {
+      "column": "QT_LINHAS",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 250,
+      "sample_values": [
+        "108",
+        "29",
+        "13"
+      ],
+      "min": "1",
+      "max": "982"
+    },
+    {
+      "column": "QT_KG",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1504,
+      "sample_values": [
+        "87975.32",
+        "3580.9",
+        "1539.63"
+      ],
+      "min": "0",
+      "max": "730382.858"
+    },
+    {
+      "column": "QT_MT",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1470,
+      "sample_values": [
+        "216686.23",
+        "8114.787983",
+        "3083.90906"
+      ],
+      "min": "0",
+      "max": "1358122.87"
+    },
+    {
+      "column": "RENDIMENTO_MEDIO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1173,
+      "sample_values": [
+        "2.8801",
+        "2.6062",
+        "2.4042"
+      ],
+      "min": "1.6667",
+      "max": "4.386"
+    },
+    {
+      "column": "CARGA_PREV_GRUPO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 969,
+      "sample_values": [
+        "0",
+        "3580.9",
+        "1539.63"
+      ],
+      "min": "0",
+      "max": "1299987"
+    },
+    {
+      "column": "EFIC_CARGA_MEDIA",
+      "non_null": 1598,
+      "null": 89,
+      "null_ratio": 0.0528,
+      "non_null_ratio": 0.9472,
+      "distinct_count": 348,
+      "sample_values": [
+        "0",
+        "100",
+        "100"
+      ],
+      "min": "0",
+      "max": "109.41"
+    },
+    {
+      "column": "MIN_REAL",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1475,
+      "sample_values": [
+        "6932.00000016",
+        "184.000000592",
+        "361.000000192"
+      ],
+      "min": "1",
+      "max": "528791.000000336"
+    },
+    {
+      "column": "MIN_PREV",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1443,
+      "sample_values": [
+        "2727.9999999999995",
+        "285.9999999999999",
+        "148.00000000000003"
+      ],
+      "min": "0.9999999999999993",
+      "max": "58432.999999999985"
+    },
+    {
+      "column": "DESVIO_MIN",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1036,
+      "sample_values": [
+        "4204",
+        "-102",
+        "213"
+      ],
+      "min": "-49643",
+      "max": "526927"
+    },
+    {
+      "column": "DESVIO_MIN_ABS",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 925,
+      "sample_values": [
+        "4204",
+        "102",
+        "213"
+      ],
+      "min": "0",
+      "max": "526927"
+    },
+    {
+      "column": "EFIC_TEMPO_MEDIA",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1360,
+      "sample_values": [
+        "39.35",
+        "155.43",
+        "41"
+      ],
+      "min": "0.06",
+      "max": "24784.09"
+    },
+    {
+      "column": "QT_KG_REPROCESSO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 749,
+      "sample_values": [
+        "0",
+        "3580.9",
+        "1539.63"
+      ],
+      "min": "0",
+      "max": "16550.51"
+    },
+    {
+      "column": "QT_MT_REPROCESSO",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 739,
+      "sample_values": [
+        "0",
+        "8114.787983",
+        "3083.90906"
+      ],
+      "min": "0",
+      "max": "45294.554997"
+    },
+    {
+      "column": "REPROCESSO_QTDE",
+      "non_null": 1687,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 68,
+      "sample_values": [
+        "0",
+        "29",
+        "13"
+      ],
+      "min": "0",
+      "max": "163"
+    }
+  ],
+  "sql_file": "template:anual",
+  "window": {
+    "dt_inicio": "2026-01-01",
+    "dt_fim": "2027-01-01"
+  }
+}

@@ -7,7 +7,7 @@
     <title>Central de Automações | Orquestrador</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/lib/assets/css/fonts.css">
-    <link rel="stylesheet" href="/dashboard/css/dashboard.css?v=20260522a">
+    <link rel="stylesheet" href="/dashboard/css/dashboard.css?v=20260531a">
 </head>
 
 <body>
@@ -31,6 +31,10 @@
                 </button>
                 <button class="nav-item" type="button" data-target="observability">
                     <i data-lucide="activity"></i><span>Observabilidade</span>
+                </button>
+                <span class="nav-section-label">Análise</span>
+                <button class="nav-item" type="button" data-target="beneficiamento">
+                    <i data-lucide="factory"></i><span>Beneficiamento</span>
                 </button>
                 <span class="nav-section-label">Administração</span>
                 <button class="nav-item" type="button" data-target="automations">
@@ -177,6 +181,399 @@
                         </table>
                     </div>
                 </section>
+            </section>
+
+            <section id="view-beneficiamento" class="view-content" aria-labelledby="beneficiamento-title">
+                <div class="page-header">
+                    <div>
+                        <span class="eyebrow">Cockpit PCP & OEE Têxtil</span>
+                        <h1 id="beneficiamento-title">Controle de Produção de Beneficiamento</h1>
+                        <p id="benef-selected-meta">BaseSQLite indexada real (81.354 registros) · Filtro e Rastreabilidade</p>
+                    </div>
+                    <div class="quick-actions">
+                        <button class="btn btn-outline" type="button" data-action="refresh-beneficiamento"><i data-lucide="refresh-cw"></i>Atualizar Cockpit</button>
+                    </div>
+                </div>
+
+                <div id="benef-banner" class="state-banner" style="display: none;">Carregando dados históricos...</div>
+                <div id="benef-period-grid" class="benef-period-grid" style="display: none;"></div>
+
+                <!-- Painel de Filtros Dinâmicos Cruzados no SQLite Histórico -->
+                <div class="panel filter-strip" style="margin-bottom: var(--space-4); background: rgba(18, 26, 38, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); padding: var(--space-4); display: block;">
+                    <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; width: 100%; align-items: flex-end;">
+                        <div class="filter-group" style="width: 140px; display: flex; flex-direction: column;">
+                            <label for="benef-filter-dt-inicio" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Data Inicial</label>
+                            <input id="benef-filter-dt-inicio" type="date" class="form-control" value="2026-01-01" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary);">
+                        </div>
+                        <div class="filter-group" style="width: 140px; display: flex; flex-direction: column;">
+                            <label for="benef-filter-dt-fim" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Data Final</label>
+                            <input id="benef-filter-dt-fim" type="date" class="form-control" value="2026-12-31" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary);">
+                        </div>
+                        <div class="filter-group" style="flex: 1; min-width: 180px; display: flex; flex-direction: column;">
+                            <label for="benef-filter-search" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Buscar Produto / Artigo</label>
+                            <input id="benef-filter-search" type="search" class="form-control" placeholder="Buscar por código, descrição ou artigo..." style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px;">
+                        </div>
+                        <div class="filter-group" style="width: 150px; display: flex; flex-direction: column;">
+                            <label for="benef-filter-machine" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Filtrar Máquina</label>
+                            <select id="benef-filter-machine" class="form-control" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary);">
+                                <option value="">Todas as máquinas</option>
+                            </select>
+                        </div>
+                        <div class="filter-group" style="width: 150px; display: flex; flex-direction: column;">
+                            <label for="benef-filter-phase" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Filtrar Fase</label>
+                            <select id="benef-filter-phase" class="form-control" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary);">
+                                <option value="">Todas as fases</option>
+                            </select>
+                        </div>
+                        <div class="filter-group" style="width: 120px; display: flex; flex-direction: column;">
+                            <label for="benef-filter-turn" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Filtrar Turno</label>
+                            <select id="benef-filter-turn" class="form-control" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary);">
+                                <option value="">Todos os turnos</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-outline" type="button" id="benef-filter-clear" style="height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 var(--space-3);">
+                            <i data-lucide="x-circle" size="14"></i> Limpar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="benef-kpis-container">
+                    <article class="benef-kpi-card type-blue" style="--i: 0;">
+                        <div class="kpi-icon-wrap"><i data-lucide="layers"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">OBs Distintas</span>
+                            <strong id="benef-kpi-lines" class="kpi-value">-</strong>
+                            <small id="benef-kpi-lines-sub" class="kpi-sub">Ordens de produção</small>
+                        </div>
+                    </article>
+                    <article class="benef-kpi-card type-blue" style="--i: 1;">
+                        <div class="kpi-icon-wrap"><i data-lucide="activity"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Fases Produtivas</span>
+                            <strong id="benef-insight-turnos" class="kpi-value">-</strong>
+                            <small id="benef-insight-turnos-sub" class="kpi-sub">Operações de Jet</small>
+                        </div>
+                    </article>
+                    <article class="benef-kpi-card type-cyan" style="--i: 2;">
+                        <div class="kpi-icon-wrap"><i data-lucide="scale"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Volume (KG)</span>
+                            <strong id="benef-kpi-kg" class="kpi-value">-</strong>
+                            <small id="benef-kpi-kg-sub" class="kpi-sub">Quilometragem real</small>
+                        </div>
+                    </article>
+                    <article class="benef-kpi-card type-cyan" style="--i: 3;">
+                        <div class="kpi-icon-wrap"><i data-lucide="weight"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Volume (MT)</span>
+                            <strong id="benef-insight-mt" class="kpi-value">-</strong>
+                            <small id="benef-insight-mt-sub" class="kpi-sub">Metragem real</small>
+                        </div>
+                    </article>
+                    <article class="benef-kpi-card type-purple" style="--i: 4;">
+                        <div class="kpi-icon-wrap"><i data-lucide="rotate-ccw"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Reprocesso Têxtil</span>
+                            <strong id="benef-kpi-rendimento" class="kpi-value">-</strong>
+                            <small id="benef-kpi-rendimento-sub" class="kpi-sub">% tingimentos extras</small>
+                        </div>
+                    </article>
+                    <article class="benef-kpi-card type-green" style="--i: 5;">
+                        <div class="kpi-icon-wrap"><i data-lucide="percent"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Eficiência OEE</span>
+                            <strong id="benef-kpi-efic" class="kpi-value">-</strong>
+                            <small id="benef-kpi-efic-sub" class="kpi-sub">OEE previsto vs real</small>
+                        </div>
+                    </article>
+                    <article class="benef-kpi-card type-yellow" style="--i: 6;">
+                        <div class="kpi-icon-wrap"><i data-lucide="alert-triangle"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Desvio Absoluto</span>
+                            <strong id="benef-insight-desvio" class="kpi-value">-</strong>
+                            <small id="benef-insight-desvio-sub" class="kpi-sub">Tempo real - previsto</small>
+                        </div>
+                    </article>
+                    <article class="benef-kpi-card type-purple" style="--i: 7;">
+                        <div class="kpi-icon-wrap"><i data-lucide="users"></i></div>
+                        <div class="kpi-info">
+                            <span class="kpi-label">Operadores Jet</span>
+                            <strong id="benef-insight-qualidade" class="kpi-value">-</strong>
+                            <small id="benef-insight-qualidade-sub" class="kpi-sub">Colaboradores ativos</small>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="benef-chart-grid">
+                    <article class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Eficiência OEE por Máquina</h3>
+                                <p>OEE ponderado (%) das máquinas de beneficiamento mais produtivas.</p>
+                            </div>
+                        </div>
+                        <div id="benef-comparison-chart" class="chart-panel-body"></div>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Tempo de Setup vs Processamento</h3>
+                                <p>Distribuição do tempo total em preparação vs execução nas máquinas.</p>
+                            </div>
+                        </div>
+                        <div id="benef-ratio-chart" class="chart-panel-body"></div>
+                    </article>
+                </div>
+
+                <div class="benef-chart-grid">
+                    <article class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Distribuição por Turno</h3>
+                                <p>Volume de KG processado por turno no período selecionado.</p>
+                            </div>
+                        </div>
+                        <div id="benef-turn-chart" class="chart-panel-body"></div>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Operadores em Destaque (Pódio)</h3>
+                                <p>Ranking de performance e eficiência de tempo no chão de fábrica.</p>
+                            </div>
+                        </div>
+                        <div id="benef-operadores-podio" style="padding: var(--space-4); max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+                            <div style="color: var(--text-muted); font-style: italic;">Carregando ranking de operadores...</div>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Painel de Análise Dinâmica de Produtos e Artigos -->
+                <div class="benef-chart-grid" style="grid-template-columns: 2fr 1fr; margin-bottom: var(--space-3);">
+                    <!-- Tabela de Produtos Dinâmica -->
+                    <article class="panel">
+                        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3>Produção por Produto e Artigo</h3>
+                                <p>Lista de produtos refinada de acordo com os filtros cruzados selecionados.</p>
+                            </div>
+                            <span class="badge badge-blue" id="benef-product-count-badge">0 produtos</span>
+                        </div>
+                        <div class="table-wrap" style="max-height: 480px; overflow-y: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Reduzido</th>
+                                        <th>Descrição do Produto</th>
+                                        <th>Artigo</th>
+                                        <th style="text-align: right;">KG Total</th>
+                                        <th style="text-align: right;">MT Total</th>
+                                        <th style="text-align: right;">Reprocesso %</th>
+                                        <th style="text-align: right;">Prod. (KG/h)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="benef-product-tbody">
+                                    <tr><td colspan="7">Informe o range de datas acima para carregar a produção consolidada.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+
+                    <!-- Artigos e Cores Mais Produzidos -->
+                    <article class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Destaques de Artigos e Cores</h3>
+                                <p>Artigos e tons de maior peso no recorte filtrado.</p>
+                            </div>
+                        </div>
+                        <div style="padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4);">
+                            <div>
+                                <h4 style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: var(--space-2); letter-spacing: 0.05em;">Top Artigos</h4>
+                                <div id="benef-top-articles-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                            </div>
+                            <div style="border-top: 1px solid rgba(148, 163, 184, 0.08); padding-top: var(--space-3);">
+                                <h4 style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: var(--space-2); letter-spacing: 0.05em;">Top Cores</h4>
+                                <div id="benef-top-colors-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="benef-chart-grid">
+                    <article class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Top máquinas</h3>
+                                <p>Ranking por KG do período selecionado.</p>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Máquina</th>
+                                        <th>KG total</th>
+                                        <th>MT total</th>
+                                        <th>Rendimento</th>
+                                        <th>Eficiência</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="benef-machine-tbody"></tbody>
+                            </table>
+                        </div>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Top fases</h3>
+                                <p>Ranking por KG do período selecionado.</p>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Fase</th>
+                                        <th>KG total</th>
+                                        <th>MT total</th>
+                                        <th>Rendimento</th>
+                                        <th>Eficiência</th>
+                                    </tr>
+                                </thead>
+                                 <tbody id="benef-phase-tbody"></tbody>
+                            </table>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Seção de Rastreabilidade & Histórico SQLite -->
+                <div class="panel" style="margin-top: var(--space-4); margin-bottom: var(--space-4); background: rgba(18, 26, 38, 0.6); backdrop-filter: blur(16px); border: 1px solid rgba(148, 163, 184, 0.12); padding: var(--space-4);">
+                    <div class="panel-header" style="border-bottom: 1px solid rgba(148, 163, 184, 0.08); padding-bottom: var(--space-3); margin-bottom: var(--space-4);">
+                        <div>
+                            <span class="eyebrow" style="color: var(--accent-cyan); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Rastreabilidade & Consulta Histórica</span>
+                            <h3 style="font-size: 1.25rem; margin-top: 4px;">Rastreamento Completo de Ordens de Beneficiamento</h3>
+                            <p style="color: var(--text-muted); font-size: 0.85rem;">Pesquisa ultra rápida na base SQLite histórica para auditoria de processos, tempos de máquinas e operadores.</p>
+                        </div>
+                    </div>
+
+                    <!-- Formulário de Filtros de Histórico -->
+                    <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end; margin-bottom: var(--space-4);">
+                        <div class="filter-group" style="width: 160px; display: flex; flex-direction: column;">
+                            <label for="benef-hist-ob" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Número da OB</label>
+                            <input id="benef-hist-ob" type="text" class="form-control" placeholder="Ex: 240125..." style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary); border-radius: var(--radius-sm); padding: 0 var(--space-3);">
+                        </div>
+                        <div class="filter-group" style="width: 160px; display: flex; flex-direction: column;">
+                            <label for="benef-hist-alt" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Alternativo / Reduz</label>
+                            <input id="benef-hist-alt" type="text" class="form-control" placeholder="Ex: 005391..." style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary); border-radius: var(--radius-sm); padding: 0 var(--space-3);">
+                        </div>
+                        <div class="filter-group" style="width: 160px; display: flex; flex-direction: column;">
+                            <label for="benef-hist-inicio" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Data Inicial</label>
+                            <input id="benef-hist-inicio" type="date" class="form-control" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary); border-radius: var(--radius-sm); padding: 0 var(--space-3);">
+                        </div>
+                        <div class="filter-group" style="width: 160px; display: flex; flex-direction: column;">
+                            <label for="benef-hist-fim" style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Data Final</label>
+                            <input id="benef-hist-fim" type="date" class="form-control" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); height: 38px; color: var(--text-primary); border-radius: var(--radius-sm); padding: 0 var(--space-3);">
+                        </div>
+                        <button class="btn btn-primary" type="button" id="benef-hist-search-btn" style="height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 var(--space-4); border-radius: var(--radius-sm);">
+                            <i data-lucide="search" size="14"></i> Pesquisar
+                        </button>
+                        <button class="btn btn-outline" type="button" id="benef-hist-clear-btn" style="height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 var(--space-3); border-radius: var(--radius-sm);">
+                            <i data-lucide="x-circle" size="14"></i> Limpar
+                        </button>
+                    </div>
+
+                    <!-- Painel de Resultados de Histórico -->
+                    <div id="benef-hist-results-panel" style="display: none; flex-direction: column; gap: var(--space-4);">
+                        
+                        <!-- Mini KPIs da Pesquisa -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3);">
+                            <div style="background: rgba(15, 23, 42, 0.35); border: 1px solid rgba(148, 163, 184, 0.08); padding: var(--space-3); border-radius: var(--radius-md); display: flex; align-items: center; gap: var(--space-3);">
+                                <div style="background: rgba(56, 189, 248, 0.1); color: var(--accent-blue); padding: 8px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;"><i data-lucide="layers" style="width: 18px; height: 18px;"></i></div>
+                                <div>
+                                    <span style="font-size: 0.68rem; color: var(--text-muted); display: block; text-transform: uppercase; font-weight: 600;">Total Fases</span>
+                                    <strong id="benef-hist-kpi-fases" style="font-size: 1.25rem; color: var(--text-primary);">0</strong>
+                                </div>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.35); border: 1px solid rgba(148, 163, 184, 0.08); padding: var(--space-3); border-radius: var(--radius-md); display: flex; align-items: center; gap: var(--space-3);">
+                                <div style="background: rgba(34, 197, 94, 0.1); color: var(--success); padding: 8px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;"><i data-lucide="scale" style="width: 18px; height: 18px;"></i></div>
+                                <div>
+                                    <span style="font-size: 0.68rem; color: var(--text-muted); display: block; text-transform: uppercase; font-weight: 600;">KG Produzido</span>
+                                    <strong id="benef-hist-kpi-kg" style="font-size: 1.25rem; color: var(--text-primary);">0</strong>
+                                </div>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.35); border: 1px solid rgba(148, 163, 184, 0.08); padding: var(--space-3); border-radius: var(--radius-md); display: flex; align-items: center; gap: var(--space-3);">
+                                <div style="background: rgba(6, 182, 212, 0.1); color: var(--accent-cyan); padding: 8px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;"><i data-lucide="weight" style="width: 18px; height: 18px;"></i></div>
+                                <div>
+                                    <span style="font-size: 0.68rem; color: var(--text-muted); display: block; text-transform: uppercase; font-weight: 600;">MT Produzido</span>
+                                    <strong id="benef-hist-kpi-mt" style="font-size: 1.25rem; color: var(--text-primary);">0</strong>
+                                </div>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.35); border: 1px solid rgba(148, 163, 184, 0.08); padding: var(--space-3); border-radius: var(--radius-md); display: flex; align-items: center; gap: var(--space-3);">
+                                <div style="background: rgba(168, 85, 247, 0.1); color: var(--accent-purple); padding: 8px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;"><i data-lucide="clock" style="width: 18px; height: 18px;"></i></div>
+                                <div>
+                                    <span style="font-size: 0.68rem; color: var(--text-muted); display: block; text-transform: uppercase; font-weight: 600;">Tempo Real</span>
+                                    <strong id="benef-hist-kpi-tempo" style="font-size: 1.25rem; color: var(--text-primary);">0 min</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Grid de Visualizações: Timeline Rastreamento (Esquerda) e Tabela Dados (Direita) -->
+                        <div class="benef-chart-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: 0;">
+                            
+                            <!-- Timeline de Fases da OB -->
+                            <article class="panel" style="background: rgba(15, 23, 42, 0.2); border: 1px solid rgba(148, 163, 184, 0.06); padding: var(--space-4); margin-bottom: 0;">
+                                <div class="panel-header" style="margin-bottom: var(--space-3);">
+                                    <div>
+                                        <h4 style="font-size: 0.95rem; font-weight: 600;">Timeline de Rastreamento</h4>
+                                        <p style="font-size: 0.8rem;">Fluxo cronológico de processamento desta ordem nas máquinas.</p>
+                                    </div>
+                                </div>
+                                <div id="benef-hist-timeline" style="margin-top: 15px; padding-left: 20px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; border-left: 2px dashed rgba(148, 163, 184, 0.2); position: relative;">
+                                    <div style="color: var(--text-muted); font-style: italic; padding-left: 10px;">Nenhuma OB selecionada para exibir timeline.</div>
+                                </div>
+                            </article>
+
+                            <!-- Tabela Completa dos Resultados Históricos -->
+                            <article class="panel" style="background: rgba(15, 23, 42, 0.2); border: 1px solid rgba(148, 163, 184, 0.06); padding: var(--space-4); margin-bottom: 0;">
+                                <div class="panel-header" style="margin-bottom: var(--space-3); display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <h4 style="font-size: 0.95rem; font-weight: 600;">Registros Históricos Encontrados</h4>
+                                        <p style="font-size: 0.8rem;">Lista detalhada das fases e movimentações filtradas.</p>
+                                    </div>
+                                    <span class="badge badge-muted" id="benef-hist-count-badge">0 registros</span>
+                                </div>
+                                <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>OB</th>
+                                                <th>Fase</th>
+                                                <th>Máquina</th>
+                                                <th style="text-align: right;">KG</th>
+                                                <th style="text-align: right;">Minutos</th>
+                                                <th>Operador</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="benef-hist-tbody">
+                                            <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: var(--space-4);">Use os filtros acima para pesquisar.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </article>
+
+                        </div>
+                    </div>
+                    
+                    <div id="benef-hist-empty-state" style="padding: var(--space-5); text-align: center; color: var(--text-muted); background: rgba(15, 23, 42, 0.2); border-radius: var(--radius-md); border: 1px dashed rgba(148, 163, 184, 0.08);">
+                        <i data-lucide="database" style="margin: 0 auto var(--space-2) auto; color: rgba(148, 163, 184, 0.3); width: 36px; height: 36px; display: block;"></i>
+                        <p style="font-size: 0.9rem;">Nenhuma busca realizada. Informe uma OB ou filtros para carregar a rastreabilidade histórica.</p>
+                    </div>
+                </div>
+
+
             </section>
 
             <section id="view-automations" class="view-content" aria-labelledby="automations-title">
@@ -757,7 +1154,7 @@
 
     <script src="/lib/assets/js/apexcharts.min.js"></script>
     <script src="/lib/assets/js/lucide.min.js"></script>
-    <script type="module" src="/dashboard/js/dashboard.js?v=20260524a"></script>
+    <script type="module" src="/dashboard/js/dashboard.js?v=20260531a"></script>
 </body>
 
 </html>

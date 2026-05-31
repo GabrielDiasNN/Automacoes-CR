@@ -839,6 +839,73 @@ textarea:focus-visible {
     color: #8de1ba;
 }
 
+.state-banner.danger {
+    background: var(--accent-danger-soft);
+    border-color: rgba(224, 82, 82, 0.38);
+    color: #ff9f9f;
+}
+
+.benef-period-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(180px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.benef-period-card {
+    width: 100%;
+    text-align: left;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(18, 26, 38, 0.98), rgba(15, 23, 34, 0.98));
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    display: grid;
+    gap: 6px;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.benef-period-card:hover {
+    transform: translateY(-1px);
+    background: var(--bg-hover);
+}
+
+.benef-period-card.active {
+    border-color: rgba(47, 111, 237, 0.55);
+    background: var(--accent-blue-soft);
+}
+
+.benef-period-card strong {
+    display: block;
+    margin: 4px 0 0;
+    font-size: 1.45rem;
+    line-height: 1.05;
+}
+
+.benef-period-card small {
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+}
+
+.benef-period-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.benef-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.benef-chart-grid .panel {
+    min-width: 0;
+}
+
 .triage-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(210px, 1fr));
@@ -1502,15 +1569,248 @@ dialog::backdrop {
     to { opacity: 0; transform: translateY(6px); }
 }
 
+/* ==========================================================================
+   REFATORAÇÃO PREMIUM DO BENEFICIAMENTO
+   ========================================================================== */
+
+/* Banner Refinado */
+.state-banner.success {
+    background: rgba(50, 177, 120, 0.08);
+    border: 1px solid rgba(50, 177, 120, 0.25);
+    color: #a7f3d0;
+}
+.state-banner.warning {
+    background: rgba(243, 197, 111, 0.08);
+    border: 1px solid rgba(243, 197, 111, 0.25);
+    color: #fde68a;
+}
+.state-banner.danger {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+}
+
+/* Tabs de Período */
+.benef-period-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(180px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.benef-period-card {
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    background: rgba(18, 26, 38, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.benef-period-card:hover {
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(47, 111, 237, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(47, 111, 237, 0.1);
+}
+
+.benef-period-card.active {
+    border-color: #2f6fed;
+    background: linear-gradient(180deg, rgba(47, 111, 237, 0.12), rgba(15, 23, 34, 0.8));
+    box-shadow: 0 0 20px rgba(47, 111, 237, 0.2), inset 0 0 12px rgba(47, 111, 237, 0.05);
+}
+
+.benef-period-card strong {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+/* Container de KPIs Premium */
+.benef-kpis-container {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(220px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.benef-kpi-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: rgba(18, 26, 38, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(148, 163, 184, 0.08);
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: fadeSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--i) * 60ms);
+}
+
+.benef-kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: transparent;
+    transition: background-color 0.3s;
+}
+
+.benef-kpi-card.type-blue::before { background: var(--accent-blue); }
+.benef-kpi-card.type-purple::before { background: #9061f9; }
+.benef-kpi-card.type-cyan::before { background: #06b6d4; }
+.benef-kpi-card.type-green::before { background: var(--accent-success); }
+.benef-kpi-card.type-yellow::before { background: var(--accent-warning); }
+
+.benef-kpi-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(148, 163, 184, 0.15);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    background: rgba(22, 32, 47, 0.55);
+}
+
+.kpi-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(148, 163, 184, 0.06);
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.benef-kpi-card.type-blue:hover .kpi-icon-wrap { background: rgba(47, 111, 237, 0.15); color: #60a5fa; animation: iconPulse 1s infinite; }
+.benef-kpi-card.type-purple:hover .kpi-icon-wrap { background: rgba(144, 97, 249, 0.15); color: #c084fc; animation: iconPulse 1s infinite; }
+.benef-kpi-card.type-cyan:hover .kpi-icon-wrap { background: rgba(6, 182, 212, 0.15); color: #22d3ee; animation: iconPulse 1s infinite; }
+.benef-kpi-card.type-green:hover .kpi-icon-wrap { background: rgba(50, 177, 120, 0.15); color: #34d399; animation: iconPulse 1s infinite; }
+.benef-kpi-card.type-yellow:hover .kpi-icon-wrap { background: rgba(243, 197, 111, 0.15); color: #fbbf24; animation: iconPulse 1s infinite; }
+
+.kpi-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.kpi-label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.kpi-value {
+    font-size: 1.85rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.kpi-sub {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+
+/* Accordions e Elementos Colapsáveis */
+.collapsible-header {
+    transition: background-color 0.2s ease;
+}
+.collapsible-header:hover {
+    background-color: rgba(148, 163, 184, 0.04);
+}
+.collapse-icon {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-muted);
+}
+.collapsible-header.open .collapse-icon {
+    transform: rotate(180deg);
+}
+
+.collapsible-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.collapsible-body.open {
+    grid-template-rows: 1fr;
+}
+.collapsible-body > div {
+    overflow: hidden;
+}
+
+/* Estilo Premium das tabelas de Ranking */
+.kg-value-wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+}
+.share-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(47, 111, 237, 0.1);
+    color: #60a5fa;
+    font-weight: 600;
+}
+.rank-bar-container {
+    width: 100%;
+    height: 5px;
+    background: rgba(148, 163, 184, 0.06);
+    border-radius: 3px;
+    margin-top: 5px;
+    overflow: hidden;
+}
+.rank-bar {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #2f6fed, #32b178);
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Animações e Efeitos */
+@keyframes fadeSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes iconPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
 @media (max-width: 1220px) {
     .metrics-row,
-    .health-overview {
+    .health-overview,
+    .benef-kpis-container {
         grid-template-columns: repeat(2, minmax(180px, 1fr));
     }
 
     .charts-container,
+    .benef-chart-grid,
     .sys-details-grid {
         grid-template-columns: 1fr;
+    }
+
+    .benef-period-grid {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
     }
 
     .filter-strip {
@@ -1606,6 +1906,9 @@ dialog::backdrop {
     .metrics-row,
     .health-overview,
     .insights-grid,
+    .benef-kpis-container,
+    .benef-period-grid,
+    .benef-chart-grid,
     .form-row,
     .filter-strip {
         grid-template-columns: 1fr;

@@ -1,0 +1,37 @@
+{
+  "domain": "beneficiamento",
+  "architecture": "snapshot-first",
+  "generated_from": "quality snapshots promoted on 31/05/2026",
+  "oracle_limit_seconds": 20,
+  "oracle_call_timeout_ms": 18000,
+  "wall_clock_budget_seconds": 19,
+  "refresh_policy": {
+    "diario_minutes": 30,
+    "semanal_minutes": 720,
+    "mensal_minutes": 720,
+    "anual_minutes": 1440
+  },
+  "period_files": {
+    "diario": {
+      "analytics": "diario.analytics.json",
+      "profile": "diario.profile.json"
+    },
+    "semanal": {
+      "analytics": "semanal.analytics.json",
+      "profile": "semanal.profile.json"
+    },
+    "mensal": {
+      "analytics": "mensal.analytics.json",
+      "profile": "mensal.profile.json"
+    },
+    "anual": {
+      "analytics": "anual.analytics.json",
+      "profile": "anual.profile.json"
+    }
+  },
+  "notes": [
+    "Endpoints GET do Orchestrator leem apenas snapshots locais.",
+    "call_timeout depende de Oracle Client compativel; se nao aplicar, health fica em attention.",
+    "SQLs operacionais usam binds :dt_inicio e :dt_fim para janelas temporais."
+  ]
+}

@@ -1,7 +1,11 @@
-﻿param(
-    [string]$RootPath = $PSScriptRoot,
+param(
+    [string]$RootPath = $null,
     [string[]]$Paths = @()
 )
+
+if ([string]::IsNullOrEmpty($RootPath)) {
+    $RootPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+}
 
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = 1

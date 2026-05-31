@@ -1,0 +1,1228 @@
+{
+  "total_rows": 5193,
+  "total_columns": 80,
+  "duplicate_source_names": {},
+  "constant_columns": [
+    "FILIAL",
+    "TPUNIDADEMEDIDA",
+    "ANO_MES",
+    "ANO_SEM",
+    "FASE_CORTE_LONGITUDINAL",
+    "EXPORTACAO",
+    "PRIM_LOTE_COR",
+    "PRIM_LOTE_PROC",
+    "AJUSTE"
+  ],
+  "mostly_null_columns": [],
+  "high_cardinality_columns": [
+    "NUMEROUP",
+    "DOCUMENTO"
+  ],
+  "columns": [
+    {
+      "column": "NUMEROUP",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4989,
+      "sample_values": [
+        "1487005",
+        "1487016",
+        "1487968"
+      ],
+      "min": "1473122",
+      "max": "1497366"
+    },
+    {
+      "column": "FILIAL",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "1",
+        "1",
+        "1"
+      ],
+      "min": "1",
+      "max": "1"
+    },
+    {
+      "column": "DATA_PROD",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 7,
+      "sample_values": [
+        "2026-05-25T00:00:00",
+        "2026-05-25T00:00:00",
+        "2026-05-25T00:00:00"
+      ],
+      "min": "2026-05-25T00:00:00",
+      "max": "2026-05-31T00:00:00"
+    },
+    {
+      "column": "TURNO_PROD",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3,
+      "sample_values": [
+        "3",
+        "1",
+        "1"
+      ],
+      "min": "1",
+      "max": "3"
+    },
+    {
+      "column": "TURNO_DESC",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3,
+      "sample_values": [
+        "TURNO 3",
+        "TURNO 1",
+        "TURNO 1"
+      ],
+      "min": "TURNO 1",
+      "max": "TURNO 3"
+    },
+    {
+      "column": "NUMERO_MAQUINA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 45,
+      "sample_values": [
+        "MQ08",
+        "EB04",
+        "MQ01"
+      ],
+      "min": "AB01",
+      "max": "VM01"
+    },
+    {
+      "column": "NOME_MAQUINA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 21,
+      "sample_values": [
+        "CANLAR MEKATRONIK",
+        "EMBALADEIRA AUTOMÁTICA 2",
+        "CANLAR MEKATRONIK"
+      ],
+      "min": "ABRIDOR",
+      "max": "VIRADOR DE MALHA"
+    },
+    {
+      "column": "DATA_HORA_INI",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3406,
+      "sample_values": [
+        "2026-05-25T18:15:00",
+        "2026-05-25T08:05:00",
+        "2026-05-25T04:35:00"
+      ],
+      "min": "2026-05-22T07:38:00",
+      "max": "2026-06-01T04:53:00"
+    },
+    {
+      "column": "DATA_HORA_FIM",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3421,
+      "sample_values": [
+        "2026-05-25T22:13:00",
+        "2026-05-25T08:18:00",
+        "2026-05-25T10:35:00"
+      ],
+      "min": "2026-05-25T05:01:00",
+      "max": "2026-06-01T04:58:00"
+    },
+    {
+      "column": "TIPO_MAQUINA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 12,
+      "sample_values": [
+        "19",
+        "8",
+        "19"
+      ],
+      "min": "1",
+      "max": "29"
+    },
+    {
+      "column": "STATUS_UP",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "3"
+    },
+    {
+      "column": "DS_STATUS_UP",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "CONFIRMADA",
+        "CONFIRMADA",
+        "CONFIRMADA"
+      ],
+      "min": "CONFIRMADA",
+      "max": "PROGRAMADA"
+    },
+    {
+      "column": "NUMERO_OB",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 943,
+      "sample_values": [
+        "176846",
+        "176847",
+        "176126"
+      ],
+      "min": "175319",
+      "max": "178046"
+    },
+    {
+      "column": "DOCUMENTO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4997,
+      "sample_values": [
+        "176846-30",
+        "176847-100",
+        "186398-30"
+      ],
+      "min": "175319-20",
+      "max": "186569-30"
+    },
+    {
+      "column": "CODIGO_FASE",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 20,
+      "sample_values": [
+        "40",
+        "150",
+        "40"
+      ],
+      "min": "10",
+      "max": "165"
+    },
+    {
+      "column": "STATUS_FASE",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 5,
+      "sample_values": [
+        "4",
+        "4",
+        "4"
+      ],
+      "min": "0",
+      "max": "4"
+    },
+    {
+      "column": "DS_STATUS_FASE",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 5,
+      "sample_values": [
+        "CONFIRMADA",
+        "CONFIRMADA",
+        "CONFIRMADA"
+      ],
+      "min": "CONFIRMADA",
+      "max": "PROGRAMADA"
+    },
+    {
+      "column": "DESTINO_RECEITA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "1",
+        "1",
+        "1"
+      ],
+      "min": "0",
+      "max": "4"
+    },
+    {
+      "column": "CD_DS_FASE",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 12,
+      "sample_values": [
+        "03 - TINGIMENTO",
+        "11 - EMBALADEIRA",
+        "03 - TINGIMENTO"
+      ],
+      "min": "01 - MONTAGEM",
+      "max": "99 - NAO DEFINIDO"
+    },
+    {
+      "column": "REDUZ",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 289,
+      "sample_values": [
+        "1489",
+        "1489",
+        "24740"
+      ],
+      "min": "25",
+      "max": "24836"
+    },
+    {
+      "column": "TPUNIDADEMEDIDA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "1",
+        "1",
+        "1"
+      ],
+      "min": "1",
+      "max": "1"
+    },
+    {
+      "column": "DESCR_ITEM",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 282,
+      "sample_values": [
+        "M/M 24/1 18 TRAMAS MARROM",
+        "M/M 24/1 18 TRAMAS MARROM",
+        "POLIAMIDA FITNESS MARROM"
+      ],
+      "min": "COTTON 4% OE AZUL BEBÊ",
+      "max": "VISCOLYCRA VORTEX VINHO"
+    },
+    {
+      "column": "TIPO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "BNF",
+        "BNF",
+        "BNF"
+      ],
+      "min": "BNF",
+      "max": "BNR"
+    },
+    {
+      "column": "ARTIGO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 34,
+      "sample_values": [
+        "00024",
+        "00024",
+        "00204"
+      ],
+      "min": "00010",
+      "max": "00489"
+    },
+    {
+      "column": "DESCR_ARTIGO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 34,
+      "sample_values": [
+        "M/M 24/1 18 TRAMAS",
+        "M/M 24/1 18 TRAMAS",
+        "POLIAMIDA FITNESS"
+      ],
+      "min": "COTTON 4% OE",
+      "max": "VISCOLYCRA VORTEX MESCLA"
+    },
+    {
+      "column": "LARGURA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 12,
+      "sample_values": [
+        "0.9",
+        "0.9",
+        "1.7"
+      ],
+      "min": "0.4",
+      "max": "1.9"
+    },
+    {
+      "column": "COR",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 44,
+      "sample_values": [
+        "00073",
+        "00073",
+        "00B73"
+      ],
+      "min": "00001",
+      "max": "99998"
+    },
+    {
+      "column": "DESCR_COR",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 44,
+      "sample_values": [
+        "MARROM",
+        "MARROM",
+        "MARROM (MARISA)"
+      ],
+      "min": "AMARELO BEBÊ",
+      "max": "VINHO"
+    },
+    {
+      "column": "ACABAMENTO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 5,
+      "sample_values": [
+        "00",
+        "00",
+        "00"
+      ],
+      "min": "00",
+      "max": "MN"
+    },
+    {
+      "column": "DESENHO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "000000",
+        "000000",
+        "000000"
+      ],
+      "min": "000000",
+      "max": "999999"
+    },
+    {
+      "column": "VARIANTE",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "00",
+        "00",
+        "00"
+      ],
+      "min": "00",
+      "max": "98"
+    },
+    {
+      "column": "CODIND",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 289,
+      "sample_values": [
+        "BNF.00024.T.090.00073.000000.00.00",
+        "BNF.00024.T.090.00073.000000.00.00",
+        "BNF.00204.R.170.00B73.000000.00.00"
+      ],
+      "min": "BNF.00010.T.080.00001.000000.00.00",
+      "max": "BNR.00017.T.040.00052.000000.00.2F"
+    },
+    {
+      "column": "CODIGO_ALTERNATIVO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 277,
+      "sample_values": [
+        "02473",
+        "02473",
+        "20473"
+      ],
+      "min": "01001",
+      "max": "48982"
+    },
+    {
+      "column": "DESCR_CLASSIFICACAO_COR",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 8,
+      "sample_values": [
+        "ESCURA",
+        "ESCURA",
+        "ESCURA"
+      ],
+      "min": "BRANCO",
+      "max": "PRETO"
+    },
+    {
+      "column": "CODIGO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 289,
+      "sample_values": [
+        "BNF00024T090000730000000000",
+        "BNF00024T090000730000000000",
+        "BNF00204R17000B730000000000"
+      ],
+      "min": "BNF00010T080000010000000000",
+      "max": "BNR00017T04000052000000002F"
+    },
+    {
+      "column": "DESCR_DESTINO",
+      "non_null": 5061,
+      "null": 132,
+      "null_ratio": 0.0254,
+      "non_null_ratio": 0.9746,
+      "distinct_count": 3,
+      "sample_values": [
+        "PRODUCAO",
+        "PRODUCAO",
+        "PRODUCAO"
+      ],
+      "min": "PRODUCAO",
+      "max": "REPROCESSOS PARA RECLASSIFICACAO"
+    },
+    {
+      "column": "DESCR_TIPO_DESTINO",
+      "non_null": 5061,
+      "null": 132,
+      "null_ratio": 0.0254,
+      "non_null_ratio": 0.9746,
+      "distinct_count": 2,
+      "sample_values": [
+        "Produção",
+        "Produção",
+        "Produção"
+      ],
+      "min": "Produção",
+      "max": "Reprocesso"
+    },
+    {
+      "column": "DIA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 7,
+      "sample_values": [
+        "25",
+        "25",
+        "25"
+      ],
+      "min": "25",
+      "max": "31"
+    },
+    {
+      "column": "ANO_MES",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "202605",
+        "202605",
+        "202605"
+      ],
+      "min": "202605",
+      "max": "202605"
+    },
+    {
+      "column": "ANO_SEM",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "202622",
+        "202622",
+        "202622"
+      ],
+      "min": "202622",
+      "max": "202622"
+    },
+    {
+      "column": "NUMERO_GRUPO_PROGRAM",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 66,
+      "sample_values": [
+        "10",
+        "10",
+        "329"
+      ],
+      "min": "3",
+      "max": "1770"
+    },
+    {
+      "column": "FLUXO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 7,
+      "sample_values": [
+        "102",
+        "102",
+        "201"
+      ],
+      "min": "102",
+      "max": "204"
+    },
+    {
+      "column": "SECAO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 36,
+      "sample_values": [
+        "0010500043",
+        "0010500030",
+        "0010500036"
+      ],
+      "min": "0010500001",
+      "max": "0010500069"
+    },
+    {
+      "column": "TIPO_ORDEM",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "6"
+    },
+    {
+      "column": "FASE_CORTE_LONGITUDINAL",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "0"
+    },
+    {
+      "column": "ID_LIGA_CADREC_ITEMR",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 182,
+      "sample_values": [
+        "6313",
+        "0",
+        "7072"
+      ],
+      "min": "0",
+      "max": "7100"
+    },
+    {
+      "column": "UNIDADE_FABRIL",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "00010",
+        "00010",
+        "00010"
+      ],
+      "min": "00010",
+      "max": "MN001"
+    },
+    {
+      "column": "NOME_UNIDADE_FABRIL",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "BENEFICIAMENTO",
+        "BENEFICIAMENTO",
+        "BENEFICIAMENTO"
+      ],
+      "min": "BENEFICIAMENTO",
+      "max": "MANNRICH"
+    },
+    {
+      "column": "EXPORTACAO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "0"
+    },
+    {
+      "column": "PRIM_LOTE_COR",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "0"
+    },
+    {
+      "column": "PRIM_LOTE_PROC",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "0"
+    },
+    {
+      "column": "PI",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 20,
+      "sample_values": [
+        "401",
+        "1501",
+        "401"
+      ],
+      "min": "101",
+      "max": "1651"
+    },
+    {
+      "column": "DESCR_PI",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 20,
+      "sample_values": [
+        "TINGIMENTO",
+        "EXPEDICAO ACABADO",
+        "TINGIMENTO"
+      ],
+      "min": "ABRIDOR",
+      "max": "UMEDECIMENTO DE MALHA"
+    },
+    {
+      "column": "TIPO_PROCESSO_INDUST",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 4,
+      "sample_values": [
+        "2",
+        "5",
+        "2"
+      ],
+      "min": "1",
+      "max": "11"
+    },
+    {
+      "column": "QT_KG",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1222,
+      "sample_values": [
+        "627.75",
+        "401.46",
+        "845.02"
+      ],
+      "min": "0",
+      "max": "1314.94"
+    },
+    {
+      "column": "QT_MT",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1209,
+      "sample_values": [
+        "1874.97",
+        "1393.95",
+        "1409.85"
+      ],
+      "min": "0",
+      "max": "3989.41"
+    },
+    {
+      "column": "CARGA_MAXIMA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 17,
+      "sample_values": [
+        "600",
+        "0",
+        "800"
+      ],
+      "min": "0",
+      "max": "99999"
+    },
+    {
+      "column": "RENDIMENTO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 23,
+      "sample_values": [
+        "3.4722222222222223",
+        "3.4722222222222223",
+        "1.838235294117647"
+      ],
+      "min": "1.6666666666666667",
+      "max": "5.555555555555555"
+    },
+    {
+      "column": "CARGA_PREV_GRUPO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 471,
+      "sample_values": [
+        "600",
+        "0",
+        "780.6261489713531"
+      ],
+      "min": "0",
+      "max": "99999"
+    },
+    {
+      "column": "GRUPO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 17,
+      "sample_values": [
+        "TG002",
+        "EX001",
+        "TG001"
+      ],
+      "min": "00018",
+      "max": "VM001"
+    },
+    {
+      "column": "CODIGO_GRUPO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 124,
+      "sample_values": [
+        "0",
+        "0",
+        "186398"
+      ],
+      "min": "0",
+      "max": "186569"
+    },
+    {
+      "column": "REPROCESSO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "1"
+    },
+    {
+      "column": "PERC_GRUPO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 309,
+      "sample_values": [
+        "100",
+        "100",
+        "97.57826862141914"
+      ],
+      "min": "1.1628230192630205",
+      "max": "100"
+    },
+    {
+      "column": "EFIC_CARGA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 382,
+      "sample_values": [
+        "104.625",
+        "0",
+        "108.249"
+      ],
+      "min": "0",
+      "max": "144.735625"
+    },
+    {
+      "column": "VELOCIDADE",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 118,
+      "sample_values": [
+        "362",
+        "208",
+        "284"
+      ],
+      "min": "0",
+      "max": "1000"
+    },
+    {
+      "column": "MIN_SETUP",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 314,
+      "sample_values": [
+        "10",
+        "3",
+        "9.757826862141913"
+      ],
+      "min": "0",
+      "max": "20"
+    },
+    {
+      "column": "MIN_PROCESSO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 626,
+      "sample_values": [
+        "352.00000000000017",
+        "3.9999999999999982",
+        "285.90432706075853"
+      ],
+      "min": "-4.000000000000001",
+      "max": "476"
+    },
+    {
+      "column": "EFIC_TEMPO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2346,
+      "sample_values": [
+        "151.46443521742273",
+        "50.00000039999999",
+        "83.9335180055403"
+      ],
+      "min": "0.11415525113946741",
+      "max": "27200.000000000015"
+    },
+    {
+      "column": "AJUSTE",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1,
+      "sample_values": [
+        "0",
+        "0",
+        "0"
+      ],
+      "min": "0",
+      "max": "0"
+    },
+    {
+      "column": "DTTEMPOINIPROGRAMADO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2423,
+      "sample_values": [
+        "2026-05-25T18:23:00",
+        "2026-05-25T22:16:00",
+        "2026-05-25T04:43:00"
+      ],
+      "min": "1899-12-30T00:00:00",
+      "max": "2026-06-01T09:41:00"
+    },
+    {
+      "column": "DTTEMPOFINALPROGRAMA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 2651,
+      "sample_values": [
+        "2026-05-26T00:24:00",
+        "2026-05-25T22:32:00",
+        "2026-05-25T09:45:00"
+      ],
+      "min": "1899-12-30T00:00:00",
+      "max": "2026-06-01T13:50:00"
+    },
+    {
+      "column": "DTTEMPOINIPLANEJADO",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3446,
+      "sample_values": [
+        "2026-05-28T07:25:00",
+        "2026-05-25T22:36:00",
+        "2026-05-26T16:03:00"
+      ],
+      "min": "1899-12-30T00:00:00",
+      "max": "2026-06-23T10:15:00"
+    },
+    {
+      "column": "DTTEMPOFINALPLANEJAD",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3701,
+      "sample_values": [
+        "2026-05-28T13:26:00",
+        "2026-05-25T22:52:00",
+        "2026-05-26T21:05:00"
+      ],
+      "min": "1899-12-30T00:00:00",
+      "max": "2026-06-23T11:41:00"
+    },
+    {
+      "column": "MIN_REAL",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 830,
+      "sample_values": [
+        "238.999999888",
+        "13.999999888",
+        "352.25754972332305"
+      ],
+      "min": "1",
+      "max": "4447"
+    },
+    {
+      "column": "MIN_PREV",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 524,
+      "sample_values": [
+        "362.00000000000017",
+        "6.999999999999998",
+        "295.6621539229005"
+      ],
+      "min": "0.9999999999999993",
+      "max": "486"
+    },
+    {
+      "column": "DESVIO_MIN",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 624,
+      "sample_values": [
+        "-123",
+        "7",
+        "56.6"
+      ],
+      "min": "-271",
+      "max": "4431"
+    },
+    {
+      "column": "DESVIO_MIN_ABS",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 473,
+      "sample_values": [
+        "123",
+        "7",
+        "56.6"
+      ],
+      "min": "0",
+      "max": "4431"
+    },
+    {
+      "column": "QT_KG_HR",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3489,
+      "sample_values": [
+        "157.59",
+        "1720.54",
+        "143.93"
+      ],
+      "min": "0",
+      "max": "78896.4"
+    },
+    {
+      "column": "QT_MT_HR",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 3153,
+      "sample_values": [
+        "470.7",
+        "5974.07",
+        "240.14"
+      ],
+      "min": "0",
+      "max": "239364.6"
+    },
+    {
+      "column": "EFIC_PROC_LINHA",
+      "non_null": 5193,
+      "null": 0,
+      "null_ratio": 0.0,
+      "non_null_ratio": 1.0,
+      "distinct_count": 1725,
+      "sample_values": [
+        "151.46",
+        "50",
+        "83.93"
+      ],
+      "min": "0.11",
+      "max": "27200"
+    }
+  ],
+  "sql_file": "template:semanal",
+  "window": {
+    "dt_inicio": "2026-05-25",
+    "dt_fim": "2026-06-01"
+  }
+}
