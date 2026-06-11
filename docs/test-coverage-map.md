@@ -1,6 +1,6 @@
 # Mapa de Cobertura de Testes (Test Coverage Map)
 
-> **Versão:** v9.3.6 | **Atualizado:** 27/05/2026
+> **Versão:** v9.3.6 | **Atualizado:** 11/06/2026
 
 Este documento mapeia os módulos críticos do backend do **Orquestrador (FastAPI & SQLite)**, identificando as suites de teste correspondentes, os cenários cobertos e as lacunas (gaps).
 
@@ -38,3 +38,30 @@ O quadro abaixo descreve a cobertura dos módulos prioritários de runtime do pr
 ### 4. Estabilidade de Contratos
 *   **Gap anterior:** O cabeçalho de integridade e o campo `contract_version` podiam sofrer desvios entre builds.
 *   **Mitigação:** Criada a suite `test_api_contracts.py` garantindo que os contratos expostos aos consumidores (FastAPI) sigam a risca a especificação de resposta padrão.
+
+---
+
+## 🎯 Metas de Cobertura por Camada (v9.4.x)
+
+| Camada | Módulos Representativos | Meta | Prioridade |
+|--------|------------------------|------|-----------|
+| **Segurança** | `app/security.py`, `app/middleware.py` | ≥ 85% | Alta — sanitização e rate-limit são superfícies de ataque |
+| **Serviços** | `app/services/` | ≥ 70% | Alta — contém toda a lógica de negócio crítica |
+| **Routers** | `app/routers/` | ≥ 60% | Média — contratos já cobertos; expandir edge cases |
+| **E2E** | `test_e2e_dashboard.py` | Executado em CI | Via workflow `governanca.yml` com evidências em artefato |
+
+Para inspecionar a cobertura por camada execute:
+
+```bash
+pytest --cov=app --cov-report=term-missing
+```
+
+O relatório detalha linhas descobertas por módulo. Filtrar por camada:
+
+```bash
+# Apenas services
+pytest --cov=app/services --cov-report=term-missing
+
+# Apenas routers
+pytest --cov=app/routers --cov-report=term-missing
+```

@@ -7,19 +7,36 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 ### Governança e Testes (CI/CD Local)
 - **Test-ZeroTrust.ps1:** Garante que nenhuma senha ou segredo esteja hardcoded.
 - **Test-SqlPerformance.ps1:** Bloqueia o uso de `SELECT *` e valida queries.
-- **Test-PythonGovernance.ps1:** Valida Type Hints e padrões Python.
+- **Test-PythonGovernance.ps1:** Valida Type Hints e padrões Python; bloqueia `pylint: disable=all` em arquivos novos (débito histórico congelado em `pylint-disable-all-baseline.txt`).
 - **Test-PowerShellGovernance.ps1:** Valida tipagem estrita em PS.
 - **Test-PortablePaths.ps1:** Impede o uso de caminhos absolutos (`C:\...`).
 - **Test-SourceEncoding.ps1:** Valida encoding por extensão: `.md/.py/.js/.json/.txt/.sql/.html/.css` em UTF-8 sem BOM e `.ps1/.psm1` em UTF-8 with BOM, com detecção de mojibake em Markdown.
 - **Test-PlaywrightEvidence.ps1:** Valida se o padrão, template e evidências Playwright registram URL real, ordem final, console limpo e resultado aprovado.
 - **Test-AutomationCatalog.ps1:** Valida `automation.manifest.json`, runbooks, smoke tests e coerência mínima do catálogo governado das automações.
+- **Test-ArchitectureStandard.ps1:** Valida o padrão arquitetural descrito em `docs/architecture-standard.md`, usando `Tools/architecture-standard.rules.json` para allowlists versionadas e falhando apenas violações críticas no v1.
+- **Test-SkillsGovernance.ps1:** Valida skills canônicas em `.github/skills/`.
+- **Test-SemanticGovernance.ps1:** Detecta drift entre documentação viva, catálogo, versão operacional e skills.
+- **Test-LogConformidade.ps1 / Test-DateConformidade.ps1:** Guardrails de convenção de datas BR em logs e documentação.
+- **Test-EncodingResilience.ps1:** Trava de regressão para acentuação PT-BR no ecossistema (logs, API, DB).
+- **Test-JsonConfig.ps1:** Valida sintaxe JSON de configs e arquivos de estado.
+- **Test-NodeCommunications.ps1:** Testes offline de comunicações Node.js (sem WhatsApp/internet).
+- **Test-OrchestratorIntegrity.ps1:** Valida integridade estrutural do Orchestrator.
+- **Test-DashboardTemplate.ps1:** Valida contrato HTML/CSS do template de dashboard.
+- **Test-PowerShellApprovedVerbs.ps1:** Valida verbos aprovados em funções PowerShell.
+- **Get-GovernanceTargetSummary.ps1:** Classifica o diff do CI (alvos críticos e de log) para seleção de jobs.
+- **Fix-MarkdownStyle.ps1:** Lint/correção de estilo Markdown (`-DryRun` no CI).
 - **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
 
 ### Operação e Utilitários
 - **New-Automation.ps1:** Scaffold governado para criar pasta de automação com `README.md`, `CONTEXT.md`, `run.ps1`, `automation.manifest.json`, runbook inicial e smoke test mínimo em `Orchestrator/tests/`, com parâmetros para owner, criticidade, fila e dependências básicas.
 - **Open-LatestLog.ps1:** Atalho rápido para o log da última execução.
 - **AplicarPoliticaRetencao.ps1:** Limpeza segura e auditável do workspace com modo `-DryRun`, retenção por idade e bloqueio contra remoção de itens rastreados pelo Git.
-- **ValidarAutomacoes.ps1:** Health check completo de todo o hub.
+- **ValidarAutomacoes.ps1:** Health check completo de todo o hub, com resumo de tempo por etapa, modo de seleção governada e opção de exportar um sumário JSON do ciclo local.
+- **Audit-DailyStatus.ps1:** Consolida falhas das últimas 24h para análise por IA/humano.
+- **Get-QualitySnapshot.ps1:** Snapshot agregado de qualidade do repositório.
+- **Review-Code.ps1:** Revisão estática local com relatório de governança.
+- **ConfigurarEmailTeste.ps1:** Define/remove o e-mail de redirecionamento do modo de teste.
+- **CargarHistoricoBeneficiamento.ps1:** Carga de histórico do Beneficiamento por janela de datas.
 
 ---
 

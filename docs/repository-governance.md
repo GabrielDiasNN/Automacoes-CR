@@ -49,6 +49,10 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PythonGovernance.ps1 -R
 
 ## 4. Topologia de Governança Local e Remota
 
+### Padrão arquitetural
+
+O contrato arquitetural oficial vive em `docs/architecture-standard.md` e é validado por `Tools/Test-ArchitectureStandard.ps1`. O v1 do validador falha apenas violações críticas, como quebra de snapshot-first em routers, persistência fora da camada autorizada ou automações com `run.ps1` sem manifesto governado, mantendo avisos para desvios que exigem maturação gradual.
+
 ### Pre-commit local
 
 O hook `.githooks/pre-commit` não tenta espelhar todo o CI. Ele atua como barreira local rápida e seletiva, delegando a orquestração para `Tools/ValidarAutomacoes.ps1 -OnlyGovernance -StagedOnly`.
@@ -59,6 +63,7 @@ Contrato atual do hook:
 2.  **Escalonamento por criticidade:** alterações em `Tools/`, `lib/`, contratos centrais, workflow, hook, skills ou `.gitleaks.toml` forçam scan completo de governança estática para evitar regressão em cadeia.
 3.  **Conformidade de log seletiva:** quando o diff staged altera `.ps1`/`.psm1` operacionais fora de `Tools/` e `Audit/`, a verificação de `Test-LogConformidade.ps1` roda localmente apenas nesses alvos.
 4.  **Objetivo:** bloquear regressões óbvias cedo, sem transformar todo commit em réplica do pipeline remoto.
+5.  **Resumo operacional local:** ao final de cada execução, `Tools/ValidarAutomacoes.ps1` publica o modo de seleção (`targeted_paths`, `full_scan` ou `no_paths`) e o tempo por etapa do ciclo local, facilitando a identificação de gargalos de produtividade sem relaxar a cobertura.
 
 ### GitHub Actions
 

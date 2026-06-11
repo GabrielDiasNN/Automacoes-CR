@@ -20,7 +20,8 @@ if src_dir.exists() and str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
 try:
-    from beneficiamento.historico_db import buscar_historico, obter_analytics_historico, obter_detail_historico, obter_overview_historico  # type: ignore
+    from beneficiamento.historico_db import buscar_historico  # type: ignore
+    from beneficiamento.overview_v1 import obter_analytics_historico, obter_detail_historico, obter_overview_historico  # type: ignore
     from beneficiamento.snapshot_dashboard import build_dashboard_payload, build_health_payload, build_periods_payload, load_period_payload  # type: ignore
 except ImportError:
     buscar_historico = None

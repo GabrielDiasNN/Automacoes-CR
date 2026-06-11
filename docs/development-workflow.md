@@ -131,6 +131,7 @@ O validador verifica:
 - Ausência de caminhos absolutos hardcoded.
 - Consistência das skills (`.github/skills/` vs `.gemini/skills/`).
 - Ausência de segredos expostos.
+- Tempo por etapa e modo de seleção governada do ciclo local, para triagem rápida de gargalos.
 
 **Zero erros é obrigatório.**
 

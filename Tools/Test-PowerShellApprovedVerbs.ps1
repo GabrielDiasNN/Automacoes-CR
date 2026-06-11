@@ -147,6 +147,7 @@ $repoRoot = Get-RepositoryRoot
 $approvedVerbSet = Get-ApprovedVerbSet -ExtraVerbs $AdditionalApprovedVerbs
 
 $targetFiles = @()
+$allowedExtensions = @(".ps1", ".psm1", ".psd1")
 if ($Paths.Count -gt 0) {
     foreach ($path in $Paths) {
         if ([string]::IsNullOrWhiteSpace($path)) {
@@ -158,8 +159,11 @@ if ($Paths.Count -gt 0) {
             $resolved = Join-Path $repoRoot $resolved
         }
 
-        if (Test-Path -LiteralPath $resolved) {
-            $targetFiles += (Resolve-Path -LiteralPath $resolved).Path
+        if (Test-Path -LiteralPath $resolved -PathType Leaf) {
+            $item = Get-Item -LiteralPath $resolved
+            if ($allowedExtensions -contains $item.Extension.ToLowerInvariant()) {
+                $targetFiles += $item.FullName
+            }
         }
     }
 }
@@ -190,7 +194,7 @@ if ($allNameViolations.Count -gt 0) {
     foreach ($v in $allNameViolations) {
         $relative = $v.FilePath
         if ($relative.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $relative = $relative.Substring($repoRoot.Length).TrimStart('\\', '/')
+            $relative = $relative.Substring($repoRoot.Length).TrimStart([char[]]@('\', '/'))
         }
 
         Write-Host (" - {0}:{1} -> {2}" -f $relative, $v.Line, $v.FunctionName)
@@ -202,7 +206,7 @@ if ($allVerbViolations.Count -gt 0) {
     foreach ($v in $allVerbViolations) {
         $relative = $v.FilePath
         if ($relative.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $relative = $relative.Substring($repoRoot.Length).TrimStart('\\', '/')
+            $relative = $relative.Substring($repoRoot.Length).TrimStart([char[]]@('\', '/'))
         }
 
         Write-Host (" - {0}:{1} -> {2} (verbo: {3})" -f $relative, $v.Line, $v.FunctionName, $v.InvalidVerb)
