@@ -1,6 +1,7 @@
 import { normalizeDiagnosticsPayload } from "./contracts.js";
 import { getSystemActionRequest } from "./system_actions.js";
 import { bindActionElements } from "./action_registry.js";
+import { renderTable } from "./ui_manager.js";
 
 export function createSystemModule(ctx) {
     const {
@@ -18,6 +19,7 @@ export function createSystemModule(ctx) {
     } = ctx;
 
     async function loadSystem() {
+        renderSystemLoadingState();
         const [health, diagnostics, audit] = await Promise.all([
             api("/api/system/health"),
             api("/api/system/diagnostics"),
@@ -32,10 +34,106 @@ export function createSystemModule(ctx) {
             renderWorkerDetails(normalizedDiagnostics);
             renderDiagnosticFindings(normalizedDiagnostics);
             renderRuntimeContract(normalizedDiagnostics);
+        } else {
+            renderSystemUnavailableState();
         }
         if (audit) renderAuditTable(audit);
 
         if (typeof lucide !== "undefined") lucide.createIcons();
+    }
+
+    function renderSystemLoadingState() {
+        const workerDetails = document.getElementById("worker-details");
+        const diagnosticFindings = document.getElementById("diagnostic-findings");
+        const diagnosticContract = document.getElementById("diagnostic-contract");
+        const auditTbody = document.getElementById("audit-tbody");
+
+        if (workerDetails) {
+            workerDetails.innerHTML = `
+                <div class="info-row"><span>Status:</span><b>Carregando...</b></div>
+                <div class="info-row"><span>PID:</span><b>-</b></div>
+                <div class="info-row"><span>Concluídas:</span><b>-</b></div>
+                <div class="info-row"><span>Falhas:</span><b>-</b></div>
+                <div class="info-row"><span>Ativas:</span><b>-</b></div>
+                <div class="info-row"><span>Fila Ativa:</span><b>-</b></div>
+                <div class="info-row"><span>Pendente mais antigo:</span><b>-</b></div>
+                <div class="info-row"><span>Em execução mais antiga:</span><b>-</b></div>
+                <div class="info-row"><span>Acima do limite:</span><b>-</b></div>
+                <div class="info-row"><span>Pressão de retry:</span><b>-</b></div>
+                <div class="info-row"><span>Timeout por grupo (24h):</span><b>-</b></div>
+                <div class="info-row"><span>Heartbeat:</span><b>-</b></div>
+                <div class="info-row"><span>Correlação API:</span><b>-</b></div>
+                <div class="info-row"><span>Versão:</span><b>-</b></div>
+            `;
+        }
+        if (diagnosticFindings) {
+            diagnosticFindings.innerHTML = `
+                <div class="finding-card info">
+                    <span class="badge badge-muted">Carregando</span>
+                    <div>
+                        <strong>Leitura diagnóstica em andamento</strong>
+                        <p>Aguardando resposta da API para renderizar achados operacionais.</p>
+                    </div>
+                </div>
+            `;
+        }
+        if (diagnosticContract) {
+            diagnosticContract.innerHTML = `
+                <article class="contract-card">
+                    <h4>Contrato de dados</h4>
+                    <p>Leitura diagnóstica em andamento.</p>
+                    <small>A interface aguarda o payload operacional do Orchestrator.</small>
+                </article>
+                <article class="contract-card">
+                    <h4>Base operacional</h4>
+                    <p>Status: <strong>Carregando...</strong></p>
+                    <small>Atenção: - · Incidente: -</small>
+                </article>
+                <article class="contract-card">
+                    <h4>Performance da API</h4>
+                    <p>Coleta: <strong>Aguardando</strong></p>
+                    <small>Os tempos de montagem por etapa aparecerão após a resposta da API.</small>
+                </article>
+            `;
+        }
+        if (auditTbody) {
+            auditTbody.innerHTML = "<tr><td colspan=\"5\">Carregando auditoria...</td></tr>";
+        }
+    }
+
+    function renderSystemUnavailableState() {
+        const diagnosticFindings = document.getElementById("diagnostic-findings");
+        const diagnosticContract = document.getElementById("diagnostic-contract");
+        const workerDetails = document.getElementById("worker-details");
+
+        if (diagnosticFindings) {
+            diagnosticFindings.innerHTML = `
+                <div class="finding-card error">
+                    <span class="badge badge-danger">Indisponível</span>
+                    <div>
+                        <strong>Diagnóstico operacional indisponível</strong>
+                        <p>A API não respondeu com o payload esperado. Verifique a conexão ou recarregue a página.</p>
+                    </div>
+                </div>
+            `;
+        }
+        if (diagnosticContract) {
+            diagnosticContract.innerHTML = `
+                <article class="contract-card">
+                    <h4>Contrato de dados</h4>
+                    <p>Status: <strong>Indisponível</strong></p>
+                    <small>O dashboard não conseguiu ler o diagnóstico operacional agora.</small>
+                    <small>Ação recomendada: recarregar o painel ou confirmar a API.</small>
+                </article>
+            `;
+        }
+        if (workerDetails) {
+            workerDetails.innerHTML = `
+                <div class="info-row"><span>Status:</span><b>Indisponível</b></div>
+                <div class="info-row"><span>PID:</span><b>-</b></div>
+                <div class="info-row"><span>Correlação API:</span><b>-</b></div>
+            `;
+        }
     }
 
     function renderHealthCards(health) {
@@ -196,6 +294,15 @@ export function createSystemModule(ctx) {
             .slice(0, 2)
             .map((item) => `${item.label}: ${translateOverviewStatus(item.status)}`)
             .join(" | ");
+        const performance = diagnostics.performance || {};
+        const timings = performance.timings_ms || {};
+        const timingEntries = Object.entries(timings)
+            .filter(([, value]) => Number.isFinite(Number(value)))
+            .slice(0, 5)
+            .map(([key, value]) => `${key}: ${Number(value).toFixed(1)} ms`);
+        const performanceSummary = timingEntries.length
+            ? timingEntries.join(" | ")
+            : "Tempos de montagem indisponíveis";
 
         const checksHtml = checks.length
             ? checks.map((item) => `
@@ -258,6 +365,12 @@ export function createSystemModule(ctx) {
                 ${baseline.recommended_action ? `<small>Ação recomendada: ${escapeHtml(String(baseline.recommended_action))}</small>` : ""}
             </article>
             <article class="contract-card">
+                <h4>Performance da API</h4>
+                <p>Status: <strong>${escapeHtml(performanceSummary)}</strong></p>
+                <small>Tempos de montagem por etapa do diagnóstico e do overview para localizar gargalos reais.</small>
+                ${timingEntries.length ? `<small>Etapas: ${escapeHtml(timingEntries.join(" • "))}</small>` : ""}
+            </article>
+            <article class="contract-card">
                 <h4>Recuperação leve</h4>
                 <p>${escapeHtml(lightActions.join(", ") || "Nenhuma ação sugerida")}</p>
                 <small>Ações para ativação do processador, recarga da agenda, checkpoint e triagem sem reinício forte.</small>
@@ -294,15 +407,7 @@ export function createSystemModule(ctx) {
     }
 
     function renderAuditTable(items) {
-        const tbody = document.getElementById("audit-tbody");
-        if (!tbody) return;
-
-        if (!items.length) {
-            tbody.innerHTML = "<tr><td colspan=\"5\">Sem eventos de auditoria.</td></tr>";
-            return;
-        }
-
-        tbody.innerHTML = items.map((item) => `
+        renderTable(document.getElementById("audit-tbody"), items, (item) => `
         <tr>
             <td>${formatDate(item.timestamp)}</td>
             <td><span class="badge badge-muted">${escapeHtml(item.action || "-")}</span></td>
@@ -310,7 +415,7 @@ export function createSystemModule(ctx) {
             <td>${escapeHtml(item.entity_id || "-")}</td>
             <td>${escapeHtml(item.actor || "-")}</td>
         </tr>
-    `).join("");
+    `, "Sem eventos de auditoria.", 5);
     }
 
     async function callSystemAction(action) {

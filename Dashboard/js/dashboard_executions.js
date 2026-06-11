@@ -74,12 +74,7 @@ export function createExecutionsModule(ctx) {
         const tbody = document.getElementById("exec-tbody");
         if (!tbody) return;
 
-        if (!items.length) {
-            tbody.innerHTML = "<tr><td colspan=\"8\">Nenhuma execução encontrada para o recorte operacional atual.</td></tr>";
-            return;
-        }
-
-        tbody.innerHTML = items.map((ex) => `
+        ui.renderTable(tbody, items, (ex) => `
         <tr data-action="open-log-row" data-execution-id="${escapeHtml(ex.id)}" style="cursor:pointer">
             <td><strong>${escapeHtml(ex.automation_name || "?")}</strong></td>
             <td style="font-family:monospace;font-size:0.75rem;opacity:0.85">${ex.id}</td>
@@ -90,7 +85,7 @@ export function createExecutionsModule(ctx) {
             <td>${renderRecoveryCell(ex)}</td>
             <td>${renderExecutionActions(ex)}</td>
         </tr>
-    `).join("");
+    `, "Nenhuma execução encontrada para o recorte operacional atual.", 8);
         bindActionElements(tbody);
     }
 

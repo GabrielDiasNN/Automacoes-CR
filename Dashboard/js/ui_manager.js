@@ -3,8 +3,6 @@
  * Gestão de UI, Navegação e Renderização de Tabelas.
  */
 
-import { api, showToast, formatDate, getBadgeClass, translateStatus } from './api.js?v=20260521c';
-
 export function initNavigation() {
     document.querySelectorAll(".nav-item").forEach((item) => {
         item.addEventListener("click", () => {
@@ -35,6 +33,19 @@ export function updateConnectionStatus(isOnline) {
         dot.className = "dot offline";
         txt.innerText = "OFFLINE";
     }
+}
+
+/**
+ * Renderiza uma tabela genérica: aplica rowTemplate a cada item ou exibe a
+ * linha vazia padrão. rowTemplate deve devolver HTML já escapado.
+ */
+export function renderTable(tbody, items, rowTemplate, emptyMessage, colspan = 1) {
+    if (!tbody) return;
+    if (!Array.isArray(items) || !items.length) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}">${emptyMessage}</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = items.map(rowTemplate).join("");
 }
 
 export function renderPagination(total, current, pages, containerId, callback) {

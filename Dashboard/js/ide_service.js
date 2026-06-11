@@ -3,7 +3,7 @@
  * Gestão de .env, Editores JSON e Web IDE.
  */
 
-import { api, showToast } from './api.js?v=20260521c';
+import { api, showToast } from './api.js';
 
 export async function loadEnv() {
     const data = await api("/api/system/env");

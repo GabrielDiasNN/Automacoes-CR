@@ -1,4 +1,4 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, import-outside-toplevel, consider-using-with, global-statement, wrong-import-order, too-many-branches, too-many-statements
+# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, import-outside-toplevel, consider-using-with, global-statement, wrong-import-order, too-many-branches, too-many-statements, too-many-lines, import-error
 """
 Teste de Ponta a Ponta (E2E) com Playwright: Dashboard Operacional
 Valida a navegação pelas guias e interações críticas na tela real do Orchestrator.
@@ -235,6 +235,7 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
             time.sleep(0.5)
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_navigation(
     uvicorn_server: str, page: Any, tmp_path: Path
 ) -> None:
@@ -353,6 +354,7 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
     assert evidence_path.exists(), "O arquivo de evidência gerada não foi criado."
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> None:
     """Garante que o dashboard renderiza datas em BRT nas abas operacionais."""
     page.on("dialog", lambda dialog: dialog.accept(API_KEY))
@@ -442,6 +444,7 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
         assert_br_datetime(value)
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_portfolio_panel_exposes_governed_catalog(
     uvicorn_server: str, page: Any
 ) -> None:
@@ -460,6 +463,7 @@ def test_e2e_dashboard_portfolio_panel_exposes_governed_catalog(
     assert portfolio_insight.strip() != ""
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -> None:
     """Valida diretamente o módulo JS de datas do dashboard no navegador."""
     page.on("dialog", lambda dialog: dialog.accept(API_KEY))
@@ -490,6 +494,7 @@ def test_e2e_dashboard_api_time_helpers_direct(uvicorn_server: str, page: Any) -
     assert result["parsedBrIso"] == "2026-05-21T14:05:42.000Z"
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_executions_filters_all_controls(
     uvicorn_server: str, page: Any
 ) -> None:
@@ -649,6 +654,7 @@ def test_e2e_dashboard_executions_filters_all_controls(
     assert payload["requestedBy"] == ["Operador QA"]
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_automations_search_filters_visible_grid(
     uvicorn_server: str, page: Any
 ) -> None:
@@ -789,6 +795,7 @@ def _assert_menu_action_closes_and_opens_json_modal(page: Any) -> None:
     )
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_automations_last_execution_snapshot_visible(
     uvicorn_server: str, page: Any
 ) -> None:
@@ -881,6 +888,7 @@ def test_e2e_dashboard_automations_last_execution_snapshot_visible(
     _assert_menu_action_closes_and_opens_json_modal(page)
 
 
+@pytest.mark.e2e
 def test_e2e_dashboard_system_shortcuts_open_execution_triage(
     uvicorn_server: str, page: Any
 ) -> None:
@@ -954,6 +962,11 @@ def test_e2e_dashboard_system_shortcuts_open_execution_triage(
     page.click('button[data-target="system"]')
     page.wait_for_selector("#diagnostic-contract")
     page.wait_for_selector("#diagnostic-contract h4:text-is('Base operacional')")
+    page.wait_for_selector("#diagnostic-contract h4:text-is('Performance da API')")
+    contract_text = page.locator("#diagnostic-contract").text_content() or ""
+    assert "Performance da API" in contract_text
+    assert "Tempos de montagem" in contract_text
+    assert "Correlação:" in contract_text
 
     page.wait_for_selector(
         'button[data-action="execution-filter-group"][data-queue-group="grupo_sistema"]'
@@ -989,3 +1002,81 @@ def test_e2e_dashboard_system_shortcuts_open_execution_triage(
     assert after_hotspot["executionsActive"] is True
     assert after_hotspot["status"] == "ERROR"
     assert after_hotspot["automationId"] != ""
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_beneficiamento_v1_flow(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Valida a aba Beneficiamento V1, filtros, turnos, detalhe e rastreabilidade."""
+    console_errors: list[str] = []
+
+    def handle_console(msg: Any) -> None:
+        text = msg.text
+        if msg.type == "error" and "favicon" not in text.lower():
+            console_errors.append(text)
+
+    page.on("console", handle_console)
+    page.on("dialog", lambda dialog: dialog.accept(API_KEY))
+
+    page.goto(f"{uvicorn_server}/dashboard/")
+    page.wait_for_load_state("networkidle")
+    page.click('button[data-target="beneficiamento"]')
+    page.wait_for_selector("#benef-kpi-obs")
+    page.wait_for_function(
+        """() => {
+            const value = document.getElementById('benef-kpi-obs')?.textContent || '';
+            return value.trim() !== '' && value.trim() !== '-';
+        }"""
+    )
+    page.wait_for_selector("#benef-turn-tbody tr")
+    turn_text = page.locator("#benef-turn-tbody").text_content() or ""
+    assert "TURNO 1" in turn_text or "TURNO 2" in turn_text or "TURNO 3" in turn_text
+
+    page.fill("#benef-filter-dt-inicio", "2026-01-01")
+    page.locator("#benef-filter-dt-inicio").dispatch_event("change")
+    page.fill("#benef-filter-dt-fim", "2026-12-31")
+    page.locator("#benef-filter-dt-fim").dispatch_event("change")
+    page.fill("#benef-filter-alt", "02414")
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(800)
+    page.fill("#benef-filter-search", "tingimento")
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(800)
+
+    page.click('button[data-action="refresh-beneficiamento"]')
+    page.wait_for_timeout(800)
+    page.wait_for_selector("#benef-product-tbody tr")
+    product_text = page.locator("#benef-product-tbody").text_content() or ""
+    if "Sem produtos" in product_text:
+        page.fill("#benef-filter-search", "")
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(800)
+        page.click('button[data-action="refresh-beneficiamento"]')
+        page.wait_for_timeout(800)
+        product_text = page.locator("#benef-product-tbody").text_content() or ""
+    assert "Sem produtos" not in product_text
+
+    page.locator("#benef-product-tbody tr").first.click()
+    page.wait_for_selector("#modal-benef-detail")
+    detail_title = page.locator("#benef-detail-title").text_content() or ""
+    assert detail_title.strip() != ""
+    page.click('[data-benef-tab="trace"]')
+    page.wait_for_selector("#benef-detail-trace")
+    trace_detail_text = page.locator("#benef-detail-trace").text_content() or ""
+    trace_match = re.search(r"OB\s+(\d+)", trace_detail_text)
+    assert trace_match, trace_detail_text
+    hist_ob = trace_match.group(1)
+    page.click('[data-benef-tab="raw"]')
+    page.wait_for_timeout(600)
+    raw_text = page.locator("#benef-detail-raw").text_content() or ""
+    assert raw_text.strip() != ""
+    page.click('button[data-dialog-id="modal-benef-detail"]')
+
+    page.fill("#benef-hist-ob", hist_ob)
+    page.locator("#benef-hist-ob").press("Enter")
+    page.wait_for_timeout(800)
+    trace_text = page.locator("#benef-hist-tbody").text_content() or ""
+    assert "Informe uma OB ou produto para rastrear." not in trace_text
+    assert hist_ob in trace_text or "Nenhum registro encontrado." in trace_text
+    assert not console_errors

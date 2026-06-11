@@ -221,7 +221,9 @@ export function showToast(msg, type = "info") {
     if (!container) return;
     const toast = document.createElement("div");
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<span>${msg}</span>`;
+    const span = document.createElement("span");
+    span.textContent = msg;
+    toast.appendChild(span);
     container.appendChild(toast);
     setTimeout(() => {
         toast.style.animation = "toastOut 0.3s ease forwards";

@@ -3,7 +3,7 @@
  * Gestão de Execuções, Logs e Telemetria.
  */
 
-import { api, showToast, LogStream, decodeLogLine } from './api.js?v=20260521c';
+import { api, showToast, LogStream, decodeLogLine } from './api.js';
 
 let currentLogStream = null;
 

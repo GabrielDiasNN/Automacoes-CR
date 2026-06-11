@@ -13,20 +13,22 @@ import {
     getLastCorrelationId,
     setContractCompatibility,
     safePrompt,
-} from "./api.js?v=20260524a";
+} from "./api.js";
 import { bindActionElements, registerAction } from "./action_registry.js";
+import { escapeHtml } from "./formatters.js";
 import {
     normalizeOverviewPayload,
+    normalizeBeneficiamentoPayload,
     normalizePortfolioHealthPayload,
     normalizeSystemHistoryPayload,
 } from "./contracts.js";
-import * as ui from "./ui_manager.js?v=20260521c";
-import * as ide from "./ide_service.js?v=20260521c";
-import * as engine from "./execution_engine.js?v=20260521c";
+import * as ui from "./ui_manager.js";
+import * as ide from "./ide_service.js";
+import * as engine from "./execution_engine.js";
 import { createExecutionsModule } from "./dashboard_executions.js";
 import { createSystemModule } from "./dashboard_system.js";
-import { createAutomationsModule } from "./dashboard_automations.js?v=20260522a";
-import { createBeneficiamentoModule } from "./dashboard_beneficiamento.js?v=20260531a";
+import { createAutomationsModule } from "./dashboard_automations.js";
+import { createBeneficiamentoModule } from "./dashboard_beneficiamento.js";
 
 const EXEC_PER_PAGE = 15;
 const EXPECTED_CONTRACT_PREFIX = "2026.05.";
@@ -34,6 +36,11 @@ let execPage = 1;
 let charts = { performance: null, status: null };
 let latestSystemDiagnostics = null;
 let contractLockNotified = false;
+
+function _debounce(fn, wait) {
+    let timer;
+    return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); };
+}
 
 window.automations = [];
 
@@ -93,6 +100,7 @@ const beneficiamentoModule = createBeneficiamentoModule({
     showToast,
     escapeHtml,
     bindActionElements,
+    normalizeBeneficiamentoPayload,
 });
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -170,16 +178,18 @@ function bindStaticEvents() {
         autoSearch.addEventListener("input", () => handleSearch());
     }
 
+    const _debouncedLoadExec = _debounce(() => loadExecutions(1), 300);
+    const _textFilters = new Set(["filter-requested-by", "filter-date-from", "filter-date-to"]);
+
     ["filter-automation", "filter-queue-group", "filter-status", "filter-priority", "filter-requested-by", "filter-date-from", "filter-date-to", "auto-review-filter"].forEach((id) => {
         const el = document.getElementById(id);
-        if (el) {
-            el.addEventListener("change", () => {
-                if (id === "auto-review-filter") {
-                    handleSearch();
-                    return;
-                }
-                loadExecutions(1);
-            });
+        if (!el) return;
+        if (id === "auto-review-filter") {
+            el.addEventListener("change", () => handleSearch());
+        } else if (_textFilters.has(id)) {
+            el.addEventListener("input", _debouncedLoadExec);
+        } else {
+            el.addEventListener("change", () => loadExecutions(1));
         }
     });
 
@@ -217,7 +227,6 @@ function registerStaticActions() {
     registerAction("refresh-beneficiamento", () => beneficiamentoModule.loadBeneficiamento());
     registerAction("open-create-modal", () => openAutomationModal());
     registerAction("refresh-executions", () => loadExecutions(1));
-    registerAction("benef-period", (_event, element) => beneficiamentoModule.selectPeriod(element?.dataset?.benefPeriod || ""));
     registerAction("execution-preset", (_event, element) => applyExecutionPreset(element?.dataset?.executionPreset || "all"));
     registerAction("execution-filter-group", (_event, element) => applyExecutionQueueGroup(element?.dataset?.queueGroup || ""));
     registerAction("execution-filter-priority", (_event, element) => applyExecutionPriority(element?.dataset?.priority || ""));
@@ -228,7 +237,7 @@ function registerStaticActions() {
     registerAction("system-action", (_event, element) => callSystemAction(element?.dataset?.systemAction || ""));
     registerAction("save-env", () => ide.saveEnv());
     registerAction("run-auto", async (_event, element) => {
-        const execId = await runAuto(Number(element?.dataset?.automationId || 0));
+        const execId = await window.runAuto(Number(element?.dataset?.automationId || 0));
         if (execId) {
             await Promise.all([loadOverview(), loadConfig(), loadExecutions(execPage)]);
         }
@@ -239,7 +248,7 @@ function registerStaticActions() {
             showToast("Sem execução para exibir logs.", "warning");
             return;
         }
-        openLogModal(executionId);
+        engine.openLogModal(executionId);
     });
     registerAction("pause-auto", (_event, element) => pauseAuto(Number(element?.dataset?.automationId || 0)));
     registerAction("resume-auto", (_event, element) => resumeAuto(Number(element?.dataset?.automationId || 0)));
@@ -254,12 +263,12 @@ function registerStaticActions() {
     registerAction("open-log-row", (_event, element) => {
         const executionId = element?.dataset?.executionId;
         if (executionId) {
-            openLogModal(executionId);
+            engine.openLogModal(executionId);
         }
     });
     registerAction("stop-exec", async (event, element) => {
         event.stopPropagation();
-        const stopped = await stopExec(element?.dataset?.executionId || "");
+        const stopped = await window.stopExec(element?.dataset?.executionId || "");
         if (stopped) {
             await Promise.all([loadOverview(), loadExecutions(execPage), loadSystem()]);
         }
@@ -268,7 +277,7 @@ function registerStaticActions() {
         event.stopPropagation();
         await requeueExec(element?.dataset?.executionId || "");
     });
-    registerAction("close-log-modal", () => closeLogModal());
+    registerAction("close-log-modal", () => engine.closeLogModal());
     registerAction("close-dialog", (_event, element) => {
         const dialogId = element?.dataset?.dialogId;
         if (!dialogId) return;
@@ -495,7 +504,13 @@ function renderPerformanceChart(overview) {
         grid: { borderColor: "#263345" },
     };
 
-    if (charts.performance) charts.performance.destroy();
+    if (charts.performance) {
+        charts.performance.updateOptions({
+            series: options.series,
+            xaxis: options.xaxis,
+        }, false, true);
+        return;
+    }
     charts.performance = new ApexCharts(container, options);
     charts.performance.render();
 }
@@ -535,7 +550,10 @@ function renderStatusChart(overview) {
         stroke: { width: 1, colors: ["#121a26"] },
     };
 
-    if (charts.status) charts.status.destroy();
+    if (charts.status) {
+        charts.status.updateSeries(options.series, true);
+        return;
+    }
     charts.status = new ApexCharts(container, options);
     charts.status.render();
 }
@@ -1003,15 +1021,6 @@ async function openPortfolioRunbook(catalogId) {
 
 function isRenderable(element) {
     return Boolean(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
-}
-
-function escapeHtml(value) {
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
 }
 
 function setText(id, value) {
