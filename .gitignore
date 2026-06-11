@@ -106,6 +106,8 @@ Produção Beneficimento/snapshots/archive/
 Produção Beneficimento/snapshots/*.db
 Produção Beneficimento/snapshots/*.db-shm
 Produção Beneficimento/snapshots/*.db-wal
+Produção Beneficimento/snapshots/latest/*.json
+!Produção Beneficimento/snapshots/latest/manifest.json
 
 # Estados runtime por automacao (nao versionar)
 Montagem de Terceirizados/delivery_state.json
@@ -116,3 +118,7 @@ Receitas Emitidas/receitas_state.json
 
 # Caches locais adicionais
 .npm-cache-codex/
+
+# VS Code — configurações de máquina (não versionar)
+.vscode/
+!.vscode/extensions.json
