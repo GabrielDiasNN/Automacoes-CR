@@ -120,13 +120,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Sliding window rate limiter por IP de origem.
     Limite: RATE_LIMIT_RPM requisicoes por minuto (default: 120).
     Aplica-se apenas a endpoints /api (nao afeta dashboard/static).
+
+    IPs sem atividade por _STALE_TTL segundos sao removidos a cada _CLEANUP_EVERY
+    requisicoes para evitar crescimento ilimitado do dicionario em memoria.
     """
+
+    _STALE_TTL = 3600  # 1h sem atividade → elegível para poda
+    _CLEANUP_EVERY = 500  # verifica IPs inativos a cada N requisições
 
     def __init__(self, app, rpm: Optional[int] = None):
         super().__init__(app)
         self.rpm = rpm or int(os.environ.get("RATE_LIMIT_RPM", "120"))
         self._window: dict[str, collections.deque] = {}
+        self._last_seen: dict[str, float] = {}
         self._window_seconds = 60
+        self._request_count = 0
+
+    def _sweep_stale_ips(self, now: float) -> None:
+        """Remove entradas de IPs inativos além do TTL para evitar memory leak."""
+        threshold = now - self._STALE_TTL
+        stale = [ip for ip, ts in list(self._last_seen.items()) if ts < threshold]
+        for ip in stale:
+            self._window.pop(ip, None)
+            self._last_seen.pop(ip, None)
+        if stale:
+            logger.debug(f"[RATE_LIMIT] Removidas {len(stale)} entradas inativas da janela deslizante.")
 
     async def dispatch(self, request: Request, call_next):
         # Aplicar rate limit somente em rotas /api
@@ -143,6 +161,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._window[client_ip] = collections.deque()
 
         dq = self._window[client_ip]
+        self._last_seen[client_ip] = now
 
         # Remover timestamps fora da janela
         while dq and dq[0] < window_start:
@@ -160,4 +179,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
 
         dq.append(now)
+
+        # Poda periódica de IPs inativos
+        self._request_count += 1
+        if self._request_count >= self._CLEANUP_EVERY:
+            self._request_count = 0
+            self._sweep_stale_ips(now)
+
         return await call_next(request)

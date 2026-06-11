@@ -12,6 +12,8 @@ import math
 import os
 import shutil
 import subprocess
+import threading
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import desc
@@ -23,25 +25,17 @@ from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
 from ..services.automation_preflight import build_automation_preflight
-from ..services.automation_snapshot import (
-    build_automation_response as build_operational_automation_response,
-    build_automation_response_batch,
-    load_snapshot_dependencies,
-)
-from ..services.execution_runtime import (
-    build_queued_execution,
-    generate_execution_id,
-    get_group_active_execution,
-)
-from ..services.scheduler_runtime import (
-    extract_automation_id_from_job,
-    reload_scheduled_tasks,
-    scheduler,
-)
-from ..services.metrics import (
-    get_automation_metrics_24h,
-    get_latest_execution_snapshot_by_automation,
-)
+from ..services.automation_snapshot import \
+    build_automation_response as build_operational_automation_response
+from ..services.automation_snapshot import (build_automation_response_batch,
+                                            load_snapshot_dependencies)
+from ..services.execution_runtime import (build_queued_execution,
+                                          generate_execution_id,
+                                          get_group_active_execution)
+from ..services.metrics import (get_automation_metrics_24h,
+                                get_latest_execution_snapshot_by_automation)
+from ..services.scheduler_runtime import (extract_automation_id_from_job,
+                                          reload_scheduled_tasks, scheduler)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
@@ -51,9 +45,23 @@ router = APIRouter(prefix="/api/automations", tags=["Automations"])
 
 PROJECT_ROOT = get_project_root()
 
+# Cache TTL de 30s para next_run_lookup — evita re-iteração do scheduler a cada request
+_next_run_cache: dict | None = None
+_next_run_cache_at: float = 0.0
+_NEXT_RUN_CACHE_TTL = 30.0
+_next_run_cache_lock = threading.Lock()
+
+
+def _invalidate_next_run_cache() -> None:
+    global _next_run_cache, _next_run_cache_at
+    with _next_run_cache_lock:
+        _next_run_cache = None
+        _next_run_cache_at = 0.0
+
 
 def _reload_scheduler_safe() -> None:
     """Recarrega o APScheduler sem quebrar a operacao CRUD que ja foi persistida."""
+    _invalidate_next_run_cache()
     try:
         reload_scheduled_tasks()
     except Exception as e:
@@ -61,8 +69,16 @@ def _reload_scheduler_safe() -> None:
 
 
 def _load_next_run_lookup():
-    """Mapeia proxima execucao por automacao consultando o scheduler em memoria."""
-    lookup = {}
+    """Mapeia proxima execucao por automacao consultando o scheduler em memoria (com cache TTL)."""
+    global _next_run_cache, _next_run_cache_at
+    now = time.monotonic()
+    with _next_run_cache_lock:
+        if (
+            _next_run_cache is not None
+            and (now - _next_run_cache_at) < _NEXT_RUN_CACHE_TTL
+        ):
+            return _next_run_cache
+    lookup: dict = {}
     try:
         for job in scheduler.get_jobs():
             auto_id = extract_automation_id_from_job(job.id)
@@ -76,6 +92,9 @@ def _load_next_run_lookup():
                 lookup[auto_id] = candidate
     except Exception as e:
         logger.warning(f"Nao foi possivel carregar next_run do scheduler: {e}")
+    with _next_run_cache_lock:
+        _next_run_cache = lookup
+        _next_run_cache_at = now
     return lookup
 
 

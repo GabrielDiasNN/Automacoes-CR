@@ -17,9 +17,11 @@ from .. import models, schemas
 from ..constants import ACTION_CODE_SCHEDULER_RELOAD, EXECUTION_ACTIVE_STATUSES
 from ..database import SessionLocal, purge_old_executions, run_wal_checkpoint
 from ..runtime import scheduler
-from ..schemas.schedule_rules import first_interval_candidate, ui_day_to_python_weekday
+from ..schemas.schedule_rules import (first_interval_candidate,
+                                      ui_day_to_python_weekday)
 from ..timezone import get_now_local
-from .execution_runtime import build_queued_execution, get_group_active_execution
+from .execution_runtime import (build_queued_execution,
+                                get_group_active_execution)
 
 logger = logging.getLogger("orchestrator")
 
@@ -150,6 +152,10 @@ def scheduled_task_wrapper(automation_id: int) -> None:
         logger.info("Disparo agendado: %s -> %s", db_auto.name, exec_id)
     except Exception as exc:
         logger.error("Erro no disparo agendado id=%s: %s", automation_id, exc)
+        try:
+            db.rollback()
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
     finally:
         db.close()
 

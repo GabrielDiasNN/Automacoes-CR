@@ -8,7 +8,6 @@ import base64
 import glob
 import json
 import logging
-import logging.handlers
 import os
 import signal
 import socket
@@ -30,26 +29,21 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from app import models, notifications
-    from app.constants import (
-        EXECUTION_STATUS_ERROR,
-        EXECUTION_STATUS_PENDING,
-        EXECUTION_STATUS_RUNNING,
-        EXECUTION_STATUS_TERMINATED,
-        EXECUTION_STATUS_TIMEOUT,
-        WORKER_VERSION,
-    )
+    from app.constants import (EXECUTION_STATUS_ERROR,
+                               EXECUTION_STATUS_PENDING,
+                               EXECUTION_STATUS_RUNNING,
+                               EXECUTION_STATUS_TERMINATED,
+                               EXECUTION_STATUS_TIMEOUT, WORKER_VERSION)
     from app.database import SessionLocal
     from app.runtime import get_project_root
-    from app.services.execution_runtime import (
-        apply_internal_worker_error,
-        apply_timeout_result,
-        claim_next_task,
-        classify_process_result,
-        complete_process_execution,
-        finalize_terminated_task,
-        mark_task_as_failed,
-        resolve_script_path,
-    )
+    from app.services.execution_runtime import (apply_internal_worker_error,
+                                                apply_timeout_result,
+                                                claim_next_task,
+                                                classify_process_result,
+                                                complete_process_execution,
+                                                finalize_terminated_task,
+                                                mark_task_as_failed,
+                                                resolve_script_path)
     from app.timezone import get_now_local
 except ImportError as e:
     print(f"CRITICAL: Falha ao importar componentes do app: {e}")
@@ -84,54 +78,18 @@ WORKER_INSTANCE_ID: str = os.environ.get("WORKER_INSTANCE_ID") or (
 log_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logs")
 os.makedirs(log_dir, exist_ok=True)
 
-
-class _JsonFormatter(logging.Formatter):
-    """Formatter JSON estruturado identico ao Orchestrator (Pilar L)."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        from app.security import sanitize_log_payload
-        
-        doc: Dict[str, Any] = {
-            "timestamp": self.formatTime(record, self.datefmt),
-            "level": record.levelname,
-            "component": "worker",
-            "environment": os.environ.get("ENVIRONMENT", "PRD"),
-            "automation_name": getattr(record, "automation_name", ""),
-            "exec_id": getattr(record, "correlation_id", ""),
-            "request_id": getattr(record, "request_id", "SYSTEM"),
-            "message": sanitize_log_payload(record.getMessage()),
-        }
-        
-        if hasattr(record, "context"):
-            doc["context"] = sanitize_log_payload(record.context)
-            
-        if record.exc_info:
-            doc["exception"] = self.formatException(record.exc_info)
-            
-        return json.dumps(doc)
-
-
 is_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
 log_filename = "Worker_test.jsonl" if is_pytest else "Worker.jsonl"
 
-_json_handler = logging.handlers.RotatingFileHandler(
+from app.logger_setup import setup_json_logger as _setup_json_logger
+
+logger: logging.Logger = _setup_json_logger(
+    "worker",
     os.path.join(log_dir, log_filename),
-    maxBytes=5 * 1024 * 1024,
-    backupCount=5,
-    encoding="utf-8",
+    component="worker",
+    use_context_vars=False,
+    configure_root=True,
 )
-_json_handler.setFormatter(_JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%SZ"))
-
-_console_handler = logging.StreamHandler()
-_console_handler.setFormatter(
-    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-)
-
-logging.root.setLevel(logging.INFO)
-logging.root.addHandler(_json_handler)
-logging.root.addHandler(_console_handler)
-
-logger: logging.Logger = logging.getLogger("worker")
 
 # ---------------------------------------------------------------------------
 # Estado Global
@@ -160,11 +118,16 @@ def update_stat(key: str, delta: int = 1) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _api_headers() -> Dict[str, str]:
+    """Headers de autenticacao para chamadas internas a API do Orchestrator."""
+    api_key = os.environ.get("ORCHESTRATOR_API_KEY")
+    return {"X-API-Key": api_key} if api_key else {}
+
+
 def wakeup_listener_loop() -> None:
     """Escuta o sinal de wakeup do Orchestrator via Long-Polling (v6.2.0)."""
     logger.info("Wakeup listener iniciado (Zero-Latency Mode).")
-    api_key = os.environ.get("ORCHESTRATOR_API_KEY")
-    headers = {"X-API-Key": api_key} if api_key else {}
+    headers = _api_headers()
     while not shutdown_event.is_set():
         try:
             # Long polling de 30s no Orchestrator
@@ -191,49 +154,53 @@ def heartbeat_loop() -> None:
     logger.info("Heartbeat thread iniciada (intervalo: %ds)", HEARTBEAT_INTERVAL)
     while not shutdown_event.is_set():
         try:
-            db = SessionLocal()
-            hb = (
-                db.query(models.WorkerHeartbeat)
-                .filter(models.WorkerHeartbeat.id == 1)
-                .first()
-            )
-            now: datetime = get_now_local()
-
-            with cast(threading.Lock, stats["lock"]):
-                completed: int = stats["tasks_completed"]
-                failed: int = stats["tasks_failed"]
-                active: int = stats["active_tasks"]
-
-            if not hb:
-                hb = models.WorkerHeartbeat(
-                    id=1,
-                    pid=os.getpid(),
-                    instance_id=WORKER_INSTANCE_ID,
-                    host=WORKER_HOST,
-                    last_ping=now,
-                    uptime_seconds=time.time() - start_time,
-                    tasks_completed=completed,
-                    tasks_failed=failed,
-                    active_tasks=active,
-                    version=WORKER_VERSION,
-                )
-                db.add(hb)
-            else:
-                hb.pid = os.getpid()
-                hb.instance_id = WORKER_INSTANCE_ID
-                hb.host = WORKER_HOST
-                hb.last_ping = now
-                hb.uptime_seconds = round(time.time() - start_time, 2)
-                hb.tasks_completed = completed
-                hb.tasks_failed = failed
-                hb.active_tasks = active
-                hb.version = WORKER_VERSION
-
-            db.commit()
-            db.close()
+            with SessionLocal() as db:
+                _update_heartbeat(db)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("Erro no heartbeat: %s", e)
         shutdown_event.wait(HEARTBEAT_INTERVAL)
+
+
+def _update_heartbeat(db: Any) -> None:
+    """Insere ou atualiza o registro de heartbeat do worker."""
+    hb = (
+        db.query(models.WorkerHeartbeat)
+        .filter(models.WorkerHeartbeat.id == 1)
+        .first()
+    )
+    now: datetime = get_now_local()
+
+    with cast(threading.Lock, stats["lock"]):
+        completed: int = stats["tasks_completed"]
+        failed: int = stats["tasks_failed"]
+        active: int = stats["active_tasks"]
+
+    if not hb:
+        hb = models.WorkerHeartbeat(
+            id=1,
+            pid=os.getpid(),
+            instance_id=WORKER_INSTANCE_ID,
+            host=WORKER_HOST,
+            last_ping=now,
+            uptime_seconds=time.time() - start_time,
+            tasks_completed=completed,
+            tasks_failed=failed,
+            active_tasks=active,
+            version=WORKER_VERSION,
+        )
+        db.add(hb)
+    else:
+        hb.pid = os.getpid()
+        hb.instance_id = WORKER_INSTANCE_ID
+        hb.host = WORKER_HOST
+        hb.last_ping = now
+        hb.uptime_seconds = round(time.time() - start_time, 2)
+        hb.tasks_completed = completed
+        hb.tasks_failed = failed
+        hb.active_tasks = active
+        hb.version = WORKER_VERSION
+
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -272,14 +239,27 @@ def log_flusher_loop() -> None:
             payload.append({"exec_id": exec_id, "message": "".join(messages)})
 
         if payload:
-            try:
-                requests.post(
-                    f"{API_BASE}/api/broadcast_logs",
-                    json={"logs": payload},
-                    timeout=2,
-                )
-            except requests.RequestException:
-                pass  # Em caso de erro, os logs daquela janela sao perdidos no websocket, mas estarao salvos no banco.
+            # 1 retry com backoff curto; na falha final os logs daquela janela sao
+            # perdidos no websocket, mas estarao salvos no banco (por isso WARN).
+            for attempt in range(2):
+                try:
+                    requests.post(
+                        f"{API_BASE}/api/broadcast_logs",
+                        json={"logs": payload},
+                        headers=_api_headers(),
+                        timeout=2,
+                    )
+                    break
+                except requests.RequestException as exc:
+                    if attempt == 0:
+                        shutdown_event.wait(0.5)
+                        continue
+                    logger.warning(
+                        "Falha ao enviar lote de logs ao WebSocket (%d execucoes); "
+                        "logs preservados no banco. Erro: %s",
+                        len(payload),
+                        exc,
+                    )
 
 
 def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
@@ -288,6 +268,7 @@ def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
         requests.post(
             f"{API_BASE}/api/broadcast_event",
             json={"type": event_type, "data": data},
+            headers=_api_headers(),
             timeout=2,
         )
     except requests.RequestException:
@@ -297,6 +278,19 @@ def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
+
+
+def _force_kill(pid: int) -> None:
+    """Encerra a arvore de processos via taskkill, com timeout para nao travar a thread."""
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("taskkill excedeu o timeout para PID %s", pid)
 
 
 def enqueue_output(out: Any, queue: Queue[str]) -> None:
@@ -433,11 +427,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                 )
 
                 if db_status == EXECUTION_STATUS_TERMINATED:
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                        capture_output=True,
-                        check=False,
-                    )
+                    _force_kill(process.pid)
                     termination_log = "\n[INTERROMPIDO PELO USUARIO]\n"
                     broadcast_log(termination_log, exec_id)
                     finalize_terminated_task(
@@ -450,11 +440,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                     return
 
                 if (get_now_local() - task_start) > timeout_delta:
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                        capture_output=True,
-                        check=False,
-                    )
+                    _force_kill(process.pid)
                     broadcast_log(
                         f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
                     )
@@ -657,11 +643,7 @@ def main_loop() -> None:
         for eid, proc in stats["active_processes"].items():
             logger.warning("Terminando processo %s (Shutdown)", eid)
             try:
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    capture_output=True,
-                    check=False,
-                )
+                _force_kill(proc.pid)
             except Exception as e:
                 logger.warning("Falha ao encerrar processo %s: %s", eid, e)
 

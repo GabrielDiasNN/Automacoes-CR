@@ -5,17 +5,18 @@ Router: WebSocket - Gerenciador de conexoes e Event Bus para logs e eventos.
 Implementa Log Replay (v4.0.1) para garantir continuidade de visualizacao.
 """
 
+import asyncio
+import hmac
 import json
 import logging
 import os
-import hmac
-import asyncio
 from datetime import datetime
 from typing import Dict, List
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from ..database import SessionLocal
+from ..middleware import get_api_key
 from ..models import Execution
 from ..schemas import format_dt_br
 from ..timezone import get_now_local
@@ -40,25 +41,11 @@ class ConnectionManager:
     async def connect_exec(self, websocket: WebSocket, exec_id: str):
         """Conecta um cliente para receber logs de uma execucao."""
         await websocket.accept()
-
-        # --- LOG REPLAY (Fase 2) ---
-        db = SessionLocal()
-        try:
-            db_exec = db.query(Execution).filter(Execution.id == exec_id).first()
-            if db_exec and db_exec.logs:
-                # Enviar logs existentes imediatamente apos conexao
-                await websocket.send_text(db_exec.logs)
-                await websocket.send_text("\n--- Historico recuperado ---\n")
-        except Exception as e:
-            logger.warning(f"Falha ao recuperar replay de logs para {exec_id}: {e}")
-        finally:
-            db.close()
-
         async with self._lock:
             if exec_id not in self.exec_connections:
                 self.exec_connections[exec_id] = []
             self.exec_connections[exec_id].append(websocket)
-        logger.info(f"WebSocket conectado para exec_id: {exec_id} (Replay OK)")
+        logger.info(f"WebSocket conectado para exec_id: {exec_id}")
 
     async def connect_global(self, websocket: WebSocket):
         await websocket.accept()
@@ -128,21 +115,42 @@ manager = ConnectionManager()
 # ---------------------------------------------------------------------------
 
 
-@router.websocket("/ws/logs/{exec_id}")
-async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
-    # Validar API Key recebida via query parameter
+def _validate_ws_key(websocket: WebSocket) -> bool:
+    """Valida a API Key do WebSocket (query param) com comparacao timing-safe."""
     api_key = websocket.query_params.get("key")
     expected_key = os.environ.get("ORCHESTRATOR_API_KEY")
     if not expected_key:
-        from uuid import uuid4
-        expected_key = f"MISSING_ENV_{uuid4()}"
+        # Fail-closed: sem key configurada, nenhuma conexao e aceita.
+        logger.error(
+            "ORCHESTRATOR_API_KEY ausente no ambiente — conexoes WebSocket recusadas."
+        )
+        return False
+    return bool(api_key) and hmac.compare_digest(api_key, expected_key)
 
-    if not api_key or not hmac.compare_digest(api_key, expected_key):
+
+async def _send_log_replay(websocket: WebSocket, exec_id: str) -> None:
+    """LOG REPLAY: envia o historico de logs persistido ao cliente recem-conectado."""
+    db = SessionLocal()
+    try:
+        db_exec = db.query(Execution).filter(Execution.id == exec_id).first()
+        if db_exec and db_exec.logs:
+            await websocket.send_text(db_exec.logs)
+            await websocket.send_text("\n--- Historico recuperado ---\n")
+    except Exception as e:
+        logger.warning(f"Falha ao recuperar replay de logs para {exec_id}: {e}")
+    finally:
+        db.close()
+
+
+@router.websocket("/ws/logs/{exec_id}")
+async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
+    if not _validate_ws_key(websocket):
         await websocket.close(code=4003)
         logger.warning(f"WebSocket recusado por API Key inválida para exec_id: {exec_id}")
         return
 
     await manager.connect_exec(websocket, exec_id)
+    await _send_log_replay(websocket, exec_id)
     try:
         while True:
             # Manter conexao aberta e lidar com pings se necessario
@@ -153,14 +161,7 @@ async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
 
 @router.websocket("/ws/events")
 async def websocket_global_events(websocket: WebSocket):
-    # Validar API Key recebida via query parameter
-    api_key = websocket.query_params.get("key")
-    expected_key = os.environ.get("ORCHESTRATOR_API_KEY")
-    if not expected_key:
-        from uuid import uuid4
-        expected_key = f"MISSING_ENV_{uuid4()}"
-
-    if not api_key or not hmac.compare_digest(api_key, expected_key):
+    if not _validate_ws_key(websocket):
         await websocket.close(code=4003)
         logger.warning("WebSocket global recusado por API Key inválida.")
         return
@@ -179,7 +180,7 @@ async def websocket_global_events(websocket: WebSocket):
 
 
 @router.post("/api/broadcast_log")
-async def broadcast_log_endpoint(log_data: dict):
+async def broadcast_log_endpoint(log_data: dict, api_key: str = Depends(get_api_key)):
     exec_id = log_data.get("exec_id")
     message = log_data.get("message")
     if exec_id and message:
@@ -196,7 +197,7 @@ async def broadcast_log_endpoint(log_data: dict):
 
 
 @router.post("/api/broadcast_logs")
-async def broadcast_logs_endpoint(logs_data: dict):
+async def broadcast_logs_endpoint(logs_data: dict, api_key: str = Depends(get_api_key)):
     logs = logs_data.get("logs", [])
     grouped = {}
     for log_data in logs:
@@ -224,7 +225,9 @@ async def broadcast_logs_endpoint(logs_data: dict):
 
 
 @router.post("/api/broadcast_event")
-async def broadcast_event_endpoint(event_data: dict):
+async def broadcast_event_endpoint(
+    event_data: dict, api_key: str = Depends(get_api_key)
+):
     await manager.broadcast_event(
         event_data.get("type", "UNKNOWN"), event_data.get("data", {})
     )

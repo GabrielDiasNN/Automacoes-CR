@@ -14,25 +14,44 @@ from ..timezone import get_now_local
 
 
 def get_success_errors_count_24h(db: Session) -> tuple[int, int]:
-    """Retorna a contagem de sucessos e erros nas últimas 24 horas."""
+    """Retorna a contagem de sucessos e erros nas últimas 24 horas (query única)."""
     window_start = get_now_local() - timedelta(hours=24)
-    success = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.status == "SUCCESS",
-            models.Execution.started_at >= window_start,
+    row = (
+        db.query(
+            func.sum(case((models.Execution.status == "SUCCESS", 1), else_=0)).label("success"),
+            func.sum(
+                case(
+                    (models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]), 1),
+                    else_=0,
+                )
+            ).label("errors"),
         )
-        .count()
+        .filter(models.Execution.started_at >= window_start)
+        .one()
     )
-    errors = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
-            models.Execution.started_at >= window_start,
-        )
-        .count()
+    return (int(row.success or 0), int(row.errors or 0))
+
+
+def get_global_execution_counts(db: Session) -> tuple[int, int, int, int]:
+    """Retorna (total, success, errors, pending) de execuções em uma única query."""
+    row = db.query(
+        func.count(models.Execution.id).label("total"),
+        func.sum(case((models.Execution.status == "SUCCESS", 1), else_=0)).label(
+            "success"
+        ),
+        func.sum(case((models.Execution.status == "ERROR", 1), else_=0)).label(
+            "errors"
+        ),
+        func.sum(case((models.Execution.status == "PENDING", 1), else_=0)).label(
+            "pending"
+        ),
+    ).one()
+    return (
+        int(row.total or 0),
+        int(row.success or 0),
+        int(row.errors or 0),
+        int(row.pending or 0),
     )
-    return success, errors
 
 
 def get_status_breakdown(db: Session) -> dict[str, int]:

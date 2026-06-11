@@ -22,8 +22,9 @@ from app.timezone import get_now_local
 logger = logging.getLogger("orchestrator.notifications")
 
 # Throttle: {automation_id: last_alert_timestamp}
-_alert_cooldown = {}
+_alert_cooldown: dict = {}
 COOLDOWN_SECONDS = 600  # 10 minutos
+_MAX_TRACKED = 500  # máximo de entradas antes de podar a mais antiga
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,18 +32,24 @@ PROJECT_ROOT = os.path.dirname(
 
 
 def _is_throttled(automation_id: int) -> bool:
-    """Verifica se o alerta esta em cooldown."""
+    """Verifica se o alerta esta em cooldown. Remove entradas expiradas (lazy cleanup)."""
     last = _alert_cooldown.get(automation_id)
-    if last and (time.time() - last) < COOLDOWN_SECONDS:
-        logger.info(
-            f"Alerta suprimido por throttle (cooldown {COOLDOWN_SECONDS}s): automation_id={automation_id}"
-        )
-        return True
-    return False
+    if last is None:
+        return False
+    if (time.time() - last) >= COOLDOWN_SECONDS:
+        del _alert_cooldown[automation_id]
+        return False
+    logger.info(
+        f"Alerta suprimido por throttle (cooldown {COOLDOWN_SECONDS}s): automation_id={automation_id}"
+    )
+    return True
 
 
 def _mark_sent(automation_id: int):
-    """Marca o timestamp do ultimo alerta enviado."""
+    """Marca o timestamp do ultimo alerta enviado. Poda a entrada mais antiga se limite atingido."""
+    if len(_alert_cooldown) >= _MAX_TRACKED:
+        oldest = min(_alert_cooldown, key=_alert_cooldown.__getitem__)
+        del _alert_cooldown[oldest]
     _alert_cooldown[automation_id] = time.time()
 
 

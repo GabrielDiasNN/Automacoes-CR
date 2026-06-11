@@ -10,9 +10,10 @@ Modulo centralizado para eliminar duplicacao entre routers:
   - validate_script_path(): Pre-flight de existencia de script (Pilar V).
 """
 
+import json
+import logging
 import os
 import re
-import json
 from datetime import datetime
 
 import pytz
@@ -22,19 +23,13 @@ from sqlalchemy.orm import Session
 from . import models
 from .middleware import request_id_var
 
+logger = logging.getLogger("orchestrator")
 
-def log_audit(
-    db: Session,
-    action: str,
-    entity_type: str,
-    entity_id,
-    actor: str,
-    details: str = None,
-) -> models.AuditLog:
-    """Registra uma entrada no AuditLog de forma centralizada com protecao de tamanho."""
-    correlation_id = request_id_var.get("SYSTEM")
-    # Truncar detalhes excessivos para evitar inchaco do DB (max 20k chars)
-    safe_details = details
+_AUDIT_DETAILS_MAX_CHARS = 20000
+
+
+def _build_safe_details(details, correlation_id: str) -> str:
+    """Serializa os detalhes de auditoria garantindo JSON valido e tamanho limitado."""
     if details:
         try:
             parsed = json.loads(details)
@@ -52,10 +47,44 @@ def log_audit(
                 ensure_ascii=False,
             )
     else:
-        safe_details = json.dumps({"correlation_id": correlation_id}, ensure_ascii=False)
+        safe_details = json.dumps(
+            {"correlation_id": correlation_id}, ensure_ascii=False
+        )
 
-    if safe_details and len(safe_details) > 20000:
-        safe_details = safe_details[:20000] + "\n... [TRUNCATED BY SYSTEM]"
+    # Truncar detalhes excessivos preservando JSON valido (evita inchaco do DB)
+    if len(safe_details) > _AUDIT_DETAILS_MAX_CHARS:
+        safe_details = json.dumps(
+            {
+                "message": safe_details[:_AUDIT_DETAILS_MAX_CHARS],
+                "truncated": True,
+                "correlation_id": correlation_id,
+            },
+            ensure_ascii=False,
+        )
+    return safe_details
+
+
+def log_audit(
+    db: Session,
+    action: str,
+    entity_type: str,
+    entity_id,
+    actor: str,
+    details: str = None,
+) -> models.AuditLog:
+    """Registra uma entrada no AuditLog de forma centralizada com protecao de tamanho.
+
+    Best-effort: falhas na auditoria nao derrubam a operacao principal — a entry
+    e sempre retornada (persistida ou nao) para os callers que leem entry.id.
+    """
+    correlation_id = request_id_var.get("SYSTEM")
+    try:
+        safe_details = _build_safe_details(details, correlation_id)
+    except Exception as exc:
+        logger.warning("Falha ao serializar detalhes de auditoria: %s", exc)
+        safe_details = json.dumps(
+            {"correlation_id": correlation_id, "details_error": True}
+        )
 
     entry = models.AuditLog(
         action=action,
@@ -64,7 +93,15 @@ def log_audit(
         actor=actor,
         details=safe_details,
     )
-    db.add(entry)
+    try:
+        db.add(entry)
+    except Exception as exc:
+        logger.warning(
+            "Falha ao registrar auditoria action=%s entity=%s: %s",
+            action,
+            entity_type,
+            exc,
+        )
     return entry
 
 

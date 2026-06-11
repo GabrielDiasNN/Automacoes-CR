@@ -53,84 +53,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-EXPECTED_SCHEMA = {
-    "automations": {
-        "id",
-        "name",
-        "description",
-        "script_path",
-        "schedule",
-        "max_runtime_minutes",
-        "max_retries",
-        "cooldown_minutes",
-        "queue_group",
-        "sla_minutes",
-        "enabled",
-        "test_mode",
-        "notification_channels",
-        "created_at",
-        "updated_at",
-    },
-    "executions": {
-        "id",
-        "automation_id",
-        "status",
-        "priority",
-        "retry_count",
-        "max_retries",
-        "queue_group",
-        "failure_reason",
-        "recovery_action",
-        "exit_code",
-        "requested_by",
-        "started_at",
-        "claimed_at",
-        "worker_instance_id",
-        "worker_pid",
-        "finished_at",
-        "duration_seconds",
-        "artifacts",
-        "logs",
-    },
-    "worker_heartbeat": {
-        "id",
-        "pid",
-        "instance_id",
-        "host",
-        "last_ping",
-        "uptime_seconds",
-        "tasks_completed",
-        "tasks_failed",
-        "active_tasks",
-        "version",
-    },
-    "system_health_snapshots": {
-        "id",
-        "timestamp",
-        "overall_status",
-        "pending_count",
-        "running_count",
-        "oldest_pending_age_seconds",
-        "oldest_running_age_seconds",
-        "wal_size_mb",
-        "worker_last_ping_age_seconds",
-        "running_over_runtime_count",
-        "orphaned_running_count",
-        "failure_hotspots",
-        "active_queue_groups",
-        "slo_breaches",
-    },
-    "audit_log": {
-        "id",
-        "timestamp",
-        "action",
-        "entity_type",
-        "entity_id",
-        "actor",
-        "details",
-    },
-}
-
 def get_db():
     """Dependency injection do FastAPI - garante cleanup via finally."""
     db = SessionLocal()
@@ -141,13 +63,23 @@ def get_db():
 
 
 def validate_database_schema() -> dict:
-    """Valida tabelas/colunas essenciais esperadas pelo Orchestrator atual."""
+    """Valida tabelas/colunas contra o schema ORM atual (derivado de Base.metadata)."""
+    from . import models as _models  # noqa: F401 — registra tabelas no Base.metadata
+
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
-    missing_tables = sorted(set(EXPECTED_SCHEMA) - existing_tables)
-    missing_columns = {}
 
-    for table, expected_columns in EXPECTED_SCHEMA.items():
+    # Gera expected schema a partir do ORM — single source of truth, sem hardcoding
+    _skip = {"alembic_version"}
+    expected = {
+        t_name: {col.name for col in table.columns}
+        for t_name, table in Base.metadata.tables.items()
+        if t_name not in _skip
+    }
+
+    missing_tables = sorted(set(expected) - existing_tables)
+    missing_columns = {}
+    for table, expected_columns in expected.items():
         if table not in existing_tables:
             continue
         actual_columns = {column["name"] for column in inspector.get_columns(table)}
@@ -175,28 +107,26 @@ def get_schema_version() -> str:
         return "unknown"
 
 
-def run_alembic_migrations():
-    """Roda migrações do Alembic até o HEAD programaticamente de forma segura."""
+def run_alembic_migrations() -> dict:
+    """Roda migrações do Alembic até o HEAD e retorna o resultado da migração."""
     if ":memory:" in SQLALCHEMY_DATABASE_URL:
         logger.info("Banco de dados em memoria detectado. Desviando execucao do Alembic nos testes.")
-        return
+        return {"applied": ["in_memory_test_skip"], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
 
     from alembic.config import Config
     from alembic import command
 
-    # Encontra a pasta do Orchestrator para achar o alembic.ini
     current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ini_path = os.path.join(current_dir, "alembic.ini")
 
     alembic_cfg = Config(ini_path)
-    # Garante que ele use a string de conexão correta
     alembic_cfg.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
 
     schema_status = validate_database_schema()
     schema_version = get_schema_version()
     if schema_version == ORCHESTRATOR_SCHEMA_VERSION:
         logger.info("Schema Alembic ja esta no head %s.", ORCHESTRATOR_SCHEMA_VERSION)
-        return
+        return {"applied": [], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
 
     if schema_status["valid"] and schema_version in {"none", "unknown"}:
         logger.info(
@@ -209,25 +139,12 @@ def run_alembic_migrations():
                 text("INSERT INTO alembic_version (version_num) VALUES (:version)"),
                 {"version": ORCHESTRATOR_SCHEMA_VERSION},
             )
-        return
+        return {"applied": ["alembic_stamp"], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
 
     logger.info("Iniciando aplicacao programática de migracao via Alembic...")
     command.upgrade(alembic_cfg, "head")
     logger.info("Migracao do Alembic aplicada com sucesso.")
-
-
-def run_schema_migrations() -> dict:
-    """Mantido por compatibilidade - executa migrações estruturadas via Alembic."""
-    if ":memory:" in SQLALCHEMY_DATABASE_URL:
-        return {
-            "applied": ["in_memory_test_skip"],
-            "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-        }
-    run_alembic_migrations()
-    return {
-        "applied": ["alembic_upgrade_head"],
-        "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
-    }
+    return {"applied": ["alembic_upgrade_head"], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
 
 def get_db_size_mb() -> float:
     """Retorna o tamanho atual do banco em MB."""

@@ -165,10 +165,36 @@ def _load_manifest(manifest_path: Path) -> CatalogEntry:
     return CatalogEntry(manifest=manifest, manifest_path=manifest_path)
 
 
+# Cache de manifests: (mtimes_snapshot, entries) — invalidado quando algum mtime muda
+_manifests_cache: tuple[dict[str, float], list[CatalogEntry]] | None = None
+
+
+def _build_manifests_mtime_snapshot(root: Path, include_template: bool) -> dict[str, float]:
+    """Coleta os mtimes dos manifests presentes no disco."""
+    snapshot: dict[str, float] = {}
+    for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if child.name == "_Template" and not include_template:
+            continue
+        manifest_path = child / "automation.manifest.json"
+        if manifest_path.exists():
+            snapshot[str(manifest_path)] = manifest_path.stat().st_mtime
+    return snapshot
+
+
 def load_catalog_manifests(
     project_root: str | Path, include_template: bool = False
 ) -> list[CatalogEntry]:
+    global _manifests_cache
     root = Path(project_root).resolve()
+    current_mtimes = _build_manifests_mtime_snapshot(root, include_template)
+
+    if _manifests_cache is not None:
+        cached_mtimes, cached_entries = _manifests_cache
+        if cached_mtimes == current_mtimes:
+            return cached_entries
+
     manifests: list[CatalogEntry] = []
     for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
         if not child.is_dir():
@@ -181,6 +207,8 @@ def load_catalog_manifests(
         if not manifest_path.exists():
             continue
         manifests.append(_load_manifest(manifest_path))
+
+    _manifests_cache = (current_mtimes, manifests)
     return manifests
 
 

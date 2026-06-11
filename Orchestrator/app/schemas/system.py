@@ -219,6 +219,10 @@ class DiagnosticsTrace(BaseModel):
     correlation_id: Optional[str] = None
 
 
+class DiagnosticsPerformance(BaseModel):
+    timings_ms: dict[str, float] = {}
+
+
 class DiagnosticsTrendSummary(BaseModel):
     window_hours: int = 24
     points: int = 0
@@ -303,6 +307,7 @@ class DiagnosticsPayload(BaseModel):
     operational_baseline: OperationalBaselineSummary = Field(
         default_factory=OperationalBaselineSummary
     )
+    performance: DiagnosticsPerformance = Field(default_factory=DiagnosticsPerformance)
     trace: DiagnosticsTrace = Field(default_factory=DiagnosticsTrace)
 
 
@@ -453,6 +458,7 @@ class SystemOverviewResponse(BaseModel):
     queue: SystemOverviewQueue
     trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
     portfolio: Optional[SystemOverviewPortfolio] = None
+    performance: DiagnosticsPerformance = Field(default_factory=DiagnosticsPerformance)
     diagnostics: DiagnosticsPayload
 
 
