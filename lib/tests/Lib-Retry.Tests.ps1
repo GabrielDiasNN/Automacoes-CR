@@ -20,8 +20,8 @@ Describe "Lib-Retry Tests" {
                 -ExecId "TEST_RETRY_OK" `
                 -LogPath $tempLog
 
-            $result | Should -BeTrue
-            Test-Path $tempLog | Should -BeTrue
+            $result | Should -Be $true
+            Test-Path $tempLog | Should -Be $true
         }
 
         It "returns false after final failed attempt" {
@@ -35,7 +35,7 @@ Describe "Lib-Retry Tests" {
                 -ExecId "TEST_RETRY_FAIL" `
                 -LogPath $tempLog
 
-            $result | Should -BeFalse
+            $result | Should -Be $false
             $content = Get-Content -LiteralPath $tempLog -Raw
             $content | Should -Match "RETRY_ESGOTADO"
         }

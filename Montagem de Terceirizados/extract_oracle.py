@@ -1,3 +1,4 @@
+# pylint: disable=import-error
 # {
 #   "version": "1.2.1",
 #   "skill": "python-oracle-migration, protocolo-valeg",
@@ -8,9 +9,13 @@
 import json
 import os
 import sys
-import time
 from datetime import datetime
 from typing import Any
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python"))
+from automation_log import make_logger
+from oracle_retry import make_oracle_retry, CircuitBreakerError
+from oracle_client import init_oracle_thick_mode
 
 import oracledb
 from dotenv import load_dotenv
@@ -28,12 +33,31 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
-    """Envia logs para o stderr."""
-    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
-    sys.stderr.write(f"{raw_msg}\n")
-    sys.stderr.flush()
+log = make_logger("PY-EXTRACT")
+
+_oracle_retry = make_oracle_retry(attempts=3, wait_initial=30.0, wait_max=120.0, wait_jitter=0.0)
+
+
+@_oracle_retry
+def connect_and_execute(
+    user: str, password: str, dsn: str, sql: str, exec_id: str
+) -> tuple[list[str], list[Any]]:
+    log("Conectando ao Oracle via TNS Alias '" + dsn + "'...", "INFO", exec_id)
+    with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
+        cursor = connection.cursor()
+        cursor.arraysize = 100
+        log("Executando extracao nativa...", "INFO", exec_id)
+        cursor.execute(sql)
+        if not cursor.description:
+            return [], []
+        columns = [col[0] for col in cursor.description]
+        rows = []
+        while True:
+            batch = cursor.fetchmany(5000)
+            if not batch:
+                break
+            rows.extend(batch)
+        return columns, rows
 
 
 def extract() -> None:
@@ -61,11 +85,7 @@ def extract() -> None:
     os.environ["TNS_ADMIN"] = tns_admin
 
     if os.path.exists(client_lib):
-        try:
-            oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
-            log("Modo Thick ativado", "INFO", exec_id)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            log("Aviso ao iniciar modo Thick: " + str(e), "WARN", exec_id)
+        init_oracle_thick_mode(client_lib, tns_admin, lambda msg, lvl="INFO": log(msg, lvl, exec_id))
 
     sql_file = os.path.join(script_dir, "SQL-MontagemTerceirizados.sql")
     if not os.path.exists(sql_file):
@@ -75,81 +95,33 @@ def extract() -> None:
     with open(sql_file, "r", encoding="utf-8") as f:
         sql = f.read()
 
-    connection = None
-    max_retries = 3
-    retry_count = 0
+    def _clean_val(v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
-    while retry_count < max_retries:
-        connection = None
-        try:
-            if retry_count > 0:
-                wait_sec = [30, 60, 120][min(retry_count - 1, 2)]
-                log(
-                    f"Tentativa {retry_count + 1}/{max_retries} apos {wait_sec}s...",
-                    "WARN",
-                    exec_id,
-                )
-                time.sleep(wait_sec)
+    try:
+        columns, rows = connect_and_execute(user, password, dsn, sql, exec_id)
+    except CircuitBreakerError:
+        log("Circuit Breaker Aberto: Banco de dados inacessivel.", "ERROR", exec_id)
+        sys.exit(1)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        log(f"Extracao falhou: {e}", "ERROR", exec_id)
+        sys.exit(1)
 
-            log("Conectando ao Oracle via TNS Alias '" + dsn + "'...", "INFO", exec_id)
-            connection = oracledb.connect(user=user, password=password, dsn=dsn)
-            cursor = connection.cursor()
-            cursor.arraysize = 100
+    if not columns:
+        log("Nenhum dado retornado da consulta.", "WARN", exec_id)
+        return
 
-            log("Executando extracao nativa...", "INFO", exec_id)
-            cursor.execute(sql)
+    data = [{col: _clean_val(val) for col, val in zip(columns, row)} for row in rows]
 
-            if not cursor.description:
-                log("Nenhum dado retornado da consulta.", "WARN", exec_id)
-                return
+    data_file = os.path.join(script_dir, f".data_{exec_id}.json")
+    with open(data_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
 
-            columns = [col[0] for col in cursor.description]
-
-            data = []
-
-            def _clean_val(v: Any) -> Any:
-                if isinstance(v, str):
-                    return v.strip()
-                if isinstance(v, datetime):
-                    return v.isoformat()
-                return v
-
-            while True:
-                batch = cursor.fetchmany(5000)
-                if not batch:
-                    break
-                for row in batch:
-                    data.append(
-                        {col: _clean_val(val) for col, val in zip(columns, row)}
-                    )
-
-            data_file = os.path.join(script_dir, f".data_{exec_id}.json")
-            with open(data_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False)
-
-            log(f"Extracao nativa concluida: {len(data)} registros.", "INFO", exec_id)
-            return  # Sucesso
-
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            retry_count += 1
-            log(
-                f"Erro na extracao (Tentativa {retry_count}/{max_retries}): {e}",
-                "ERROR",
-                exec_id,
-            )
-            if retry_count >= max_retries:
-                log(
-                    f"Extracao falhou apos {max_retries} tentativas.",
-                    "ERROR",
-                    exec_id,
-                )
-                sys.exit(1)
-        finally:
-            if connection:
-                try:
-                    connection.close()
-                except Exception:  # pylint: disable=broad-exception-caught
-                    pass
+    log(f"Extracao nativa concluida: {len(data)} registros.", "INFO", exec_id)
 
 
 if __name__ == "__main__":

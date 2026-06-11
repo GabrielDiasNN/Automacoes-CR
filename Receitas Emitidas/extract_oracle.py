@@ -1,4 +1,4 @@
-# pylint: disable=line-too-long, too-many-locals, f-string-without-interpolation, broad-exception-caught, bare-except, too-many-statements, unused-import, too-many-branches
+# pylint: disable=line-too-long, too-many-locals, f-string-without-interpolation, broad-exception-caught, bare-except, too-many-statements, unused-import, too-many-branches, import-error
 # {
 #   "version": "2.7.2",
 #   "skill": "python-oracle-migration, protocolo-valeg",
@@ -13,9 +13,12 @@ import sys
 from datetime import datetime
 from typing import Any
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python"))
+from automation_log import make_logger
+from oracle_retry import make_oracle_retry, CircuitBreakerError
+from oracle_client import init_oracle_thick_mode
+
 import oracledb
-import pybreaker
-import stamina
 
 # Forca UTF-8 para garantir interoperabilidade
 if sys.stdout.encoding != "utf-8":
@@ -23,20 +26,13 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
-
-def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
-    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    raw_msg = f"[{ts}] [PY-EXTRACT] [{level}] [ExecId:{exec_id}] {message}"
-    sys.stderr.write(f"{raw_msg}\n")
-    sys.stderr.flush()
-
+log = make_logger("PY-EXTRACT")
 
 # --- RESILIENCIA DE CONEXAO ---
-db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
+_oracle_retry = make_oracle_retry()
 
 
-@db_breaker
-@stamina.retry(on=oracledb.DatabaseError, attempts=3)
+@_oracle_retry
 def connect_and_execute(
     user: str, password: str, dsn: str, sql: str, exec_id: str
 ) -> tuple[list[str], list[Any]]:
@@ -96,16 +92,14 @@ def extract() -> None:
     if not all([user, password, dsn]):
         log("Credenciais Oracle ausentes no ambiente.", "ERROR", exec_id)
         sys.exit(1)
+    assert user is not None and password is not None
 
     if not client_lib or not os.path.exists(client_lib):
         log(f"ORACLE_CLIENT_LIB_DIR invalido.", "ERROR", exec_id)
         sys.exit(1)
+    assert client_lib is not None
 
-    try:
-        oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
-        log(f"Thick Mode ativado.", "INFO", exec_id)
-    except Exception as e:
-        log(f"Aviso Thick client: {e}", "WARN", exec_id)
+    init_oracle_thick_mode(client_lib, tns_admin, lambda msg, lvl="INFO": log(msg, lvl, exec_id))
 
     sql_file = os.path.join(os.path.dirname(__file__), "SQL-ReceitasEmitidas.sql")
     with open(sql_file, "r", encoding="utf-8") as f:
@@ -185,7 +179,7 @@ def extract() -> None:
         sys.stdout.flush()
         log(f"Extração concluída: {len(data)} registros.", "INFO", exec_id)
 
-    except pybreaker.CircuitBreakerError:
+    except CircuitBreakerError:
         log(
             "Circuit Breaker Aberto: Falhas persistentes no banco de dados.",
             "ERROR",

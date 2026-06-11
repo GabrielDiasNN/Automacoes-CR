@@ -32,6 +32,7 @@ $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
+$libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $generatePy = Join-Path $ScriptDir "generate_html_report.py"
@@ -44,7 +45,9 @@ $LogDir     = Join-Path $ScriptDir "Logs"
 Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
 Import-Module $libRetry   -Force
+Import-Module $libProcess -Force
 Import-Module $libConfig  -Force
+Import-Module $libOracle  -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
@@ -113,50 +116,34 @@ try {
     try {
         # 1. Extracao de Dados
         Write-Log "Passo 1/2: Extraindo dados via Python (Direct Oracle CTE)..."
-        $pythonOutput = $null
-        Import-Module $libProcess -Force
 
-        $extractOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(30, 60, 120) -OperationName "Extracao Oracle" -ExecId $ExecId -LogPath $LogFile -Action {
-            $res = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$extractPy`" `"$ExecId`"" -LogAction {
-                param($msg, $lvl)
-                # Filtramos logs do motor Python, nao precisamos do stdout JSON aqui
-                if ($lvl -ne "INFO" -or ($msg.Trim() -and -not $msg.StartsWith("[") -and -not $msg.StartsWith("{"))) {
-                    Write-AutomacaoLog -Message $msg.Trim() -Level $lvl -ExecId $ExecId -LogPath $LogFile
-                }
-            }
+        $extractResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $extractPy `
+            -ExecId $ExecId -LogPath $LogFile -OperationName "Extracao Oracle" `
+            -MaxAttempts 3 -BackoffSeconds @(30, 60, 120)
 
-            if ($res.ExitCode -eq 2) {
-                Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
-                Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
-            }
-
-            if ($res.ExitCode -ne 0) { throw "Python extract_oracle.py falhou com ExitCode=$($res.ExitCode)." }
-            if ([string]::IsNullOrWhiteSpace($res.StandardOutput)) { throw "Extracao retornou dados vazios." }
-
-            $script:pythonOutput = $res.StandardOutput
-            return $true
+        if ($extractResult.Idempotent) {
+            Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
+            Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
         }
 
-        if (-not $extractOk) {
+        if (-not $extractResult.Success) {
             Send-AlertaFalhaDefinitiva -TaskName "Receitas Emitidas" -ExecId $ExecId -UltimoErro "Falha na extracao Oracle." -Tentativas 3 -LogPath $LogFile
             throw "Falha definitiva na extracao Python."
         }
 
+        if ([string]::IsNullOrWhiteSpace($extractResult.Output)) { throw "Extracao retornou dados vazios." }
+
         # 2. Geracao do HTML
         Write-Log "Passo 2/2: Gerando HTML visual moderno..."
-        $htmlOutput = $null
-        $htmlOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(10, 30, 60) -OperationName "Geracao HTML" -ExecId $ExecId -LogPath $LogFile -Action {
-            $res = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$generatePy`" `"$ExecId`"" -InputData $script:pythonOutput -LogAction {
-                param($msg, $lvl)
-                if ($lvl -ne "INFO") { Write-AutomacaoLog -Message $msg.Trim() -Level $lvl -ExecId $ExecId -LogPath $LogFile }
-            }
-            if ($res.ExitCode -ne 0) { throw "Python generate_html_report.py falhou com ExitCode=$($res.ExitCode)." }
-            if ([string]::IsNullOrWhiteSpace($res.StandardOutput)) { throw "Geracao HTML retornou conteudo vazio." }
-            $script:htmlOutput = $res.StandardOutput
-            return $true
-        }
 
-        if (-not $htmlOk) { throw "Falha definitiva na geracao do HTML." }
+        $htmlResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $generatePy `
+            -ExecId $ExecId -LogPath $LogFile -OperationName "Geracao HTML" `
+            -MaxAttempts 3 -BackoffSeconds @(10, 30, 60) -InputData $extractResult.Output
+
+        if (-not $htmlResult.Success) { throw "Falha definitiva na geracao do HTML." }
+        if ([string]::IsNullOrWhiteSpace($htmlResult.Output)) { throw "Geracao HTML retornou conteudo vazio." }
+
+        $htmlOutput = $htmlResult.Output
 
         # 3. Envio de E-mail
         Write-Log "Verificando estado de notificacoes (Idempotencia Granular)..."
@@ -194,7 +181,7 @@ try {
             $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $subject = "$($config.email.subject_prefix) - $(Get-Date -Format 'dd/MM/yyyy')"
             $targetTo = $config.email.to
-            $fullHtmlBody = "<p>$($config.email.intro_text)</p>$($script:htmlOutput)"
+            $fullHtmlBody = "<p>$($config.email.intro_text)</p>$($htmlOutput)"
 
             $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -ExecId $ExecId -LogPath $LogFile -Action {
                 $sent = Send-OutlookEmail -To $targetTo -Subject $subject -HtmlBody $fullHtmlBody -ExecId $ExecId -LogPath $LogFile

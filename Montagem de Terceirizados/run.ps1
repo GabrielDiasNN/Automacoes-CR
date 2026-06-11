@@ -53,7 +53,9 @@ $projectRoot = Split-Path -Parent $ScriptDir
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
+$libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
+$libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
 # Scripts
@@ -74,6 +76,9 @@ Import-Module $libLogging -Force
 
 Import-Module $libEmail   -Force
 Import-Module $libConfig  -Force
+Import-Module $libProcess -Force
+Import-Module $libRetry   -Force
+Import-Module $libOracle  -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
@@ -130,18 +135,18 @@ try {
 
     # 1. Extração Nativa (Pure-Python via Oracle)
     Write-Log "Fase 1: Executando extração nativa direta do Oracle..."
-    Import-Module $libProcess -Force
 
-    $res = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$extractPy`" `"$ExecId`"" -LogAction {
-        param($msg, $lvl)
-        # Filtramos logs do motor Python que podem ser redundantes
-        if ($lvl -ne "INFO" -or -not $msg.Contains("[DEBUG]")) {
-            Write-Log $msg -Lvl $lvl
-        }
+    $extractResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $extractPy `
+        -ExecId $ExecId -LogPath $LogFile `
+        -OperationName "Extracao Oracle (extract_oracle.py)" `
+        -MaxAttempts 3 -BackoffSeconds @(30, 60, 120)
+
+    if (-not $extractResult.Success) {
+        throw "Falha definitiva na extracao nativa apos 3 tentativas."
     }
 
-    if ($res.ExitCode -ne 0 -or -not (Test-Path $dataFile)) {
-        throw "Falha crítica na extração nativa (ExitCode: $($res.ExitCode)). Arquivo de dados não encontrado."
+    if (-not (Test-Path $dataFile)) {
+        throw "Extracao concluiu mas arquivo de dados nao foi gerado: $dataFile"
     }
 
     $fileSize = (Get-Item $dataFile).Length
@@ -159,12 +164,12 @@ try {
     $payloadFile = Join-Path $ScriptDir ".payload_$ExecId.json"
     if (Test-Path $payloadFile) { Remove-Item $payloadFile -Force }
 
-    $resGen = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$validatePy`" `"$ExecId`"" -LogAction {
-        param($msg, $lvl)
-        Write-Log $msg -Lvl $lvl
-    }
+    $validateResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $validatePy `
+        -ExecId $ExecId -LogPath $LogFile `
+        -OperationName "Validacao e Geracao HTML (validate_and_generate_html.py)" `
+        -MaxAttempts 2 -BackoffSeconds @(15, 30)
 
-    if ($resGen.ExitCode -ne 0) { throw "Falha na validação Python (ExitCode: $($resGen.ExitCode))." }
+    if (-not $validateResult.Success) { throw "Falha definitiva na validacao Python apos 2 tentativas." }
 
     # 3. Envio do E-mail (Se houver payload)
 

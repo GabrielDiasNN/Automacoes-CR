@@ -158,6 +158,17 @@ def formatar_qtd_pecas_incorretas(erro: Dict[str, Any]) -> str:
     )
 
 
+def formatar_nr_kanban(erro: Dict[str, Any]) -> str:
+    """Renderiza a placa kanban com fallback visual quando nao existir valor."""
+    nr_kanban: str = clean_str(erro.get("NR_KANBAN"))
+    if not nr_kanban:
+        return "<span style='color:#9ca3af;'><i>N/A</i></span>"
+    return (
+        f"<span style='background:#f5f3ff; color:#5b21b6; padding:2px 6px; "
+        f"border-radius:4px; font-weight:bold; border:1px solid #ddd6fe;'>{html_escape(nr_kanban)}</span>"
+    )
+
+
 def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NFs divergentes na Montagem."""
     if not nf_montagem_str:
@@ -198,10 +209,10 @@ def gerar_tabela_categoria_html(
             + "<p style='font-size:10pt;color:#6b7280;margin:0 0 8px 0; background:#f9fafb; padding:10px; border-radius:6px;'><i>Nenhum item nesta categoria.</i></p></div>"
         )
 
-    html += "<table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;'><tr style='background:#f3f4f6; color:#374151; text-align:center; font-weight:bold; border-bottom:2px solid #e5e7eb;'><th>Categoria</th><th>Nº OB</th><th>Prog.</th><th>Facção</th><th>Alternativo</th><th>NF esperada da Facção</th><th>NF informada na montagem</th><th>Qtd. peças NF incorreta</th><th>NF informada na programação</th><th>Detalhe do Erro</th></tr>"
+    html += "<table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9.5pt;width:100%; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;'><tr style='background:#f3f4f6; color:#374151; text-align:center; font-weight:bold; border-bottom:2px solid #e5e7eb;'><th>Categoria</th><th>Nº OB</th><th>Prog.</th><th>Placa Kanban</th><th>Facção</th><th>Alternativo</th><th>NF esperada da Facção</th><th>NF informada na montagem</th><th>Qtd. peças NF incorreta</th><th>NF informada na programação</th><th>Detalhe do Erro</th></tr>"
     for idx, e in enumerate(erros):
         bg: str = "#ffffff" if idx % 2 == 0 else "#f9fafb"
-        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(titulo)}</td><td>{html_escape(e.get('NR_OB'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #bfdbfe;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{formatar_qtd_pecas_incorretas(e)}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td></tr>"
+        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(titulo)}</td><td>{html_escape(e.get('NR_OB'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{formatar_nr_kanban(e)}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #bfdbfe;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{formatar_qtd_pecas_incorretas(e)}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td></tr>"
     html += "</table></div>"
     return html
 
@@ -214,11 +225,11 @@ def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
         "<div style='margin-top: 30px;'><h3 style='font-size:14pt; margin:0 0 12px 0; color:#1f2937; text-align:center;'>Detalhamento Completo das Divergências</h3>"
     )
     html += "<div style='overflow-x:auto; border: 1px solid #e5e7eb; border-radius: 8px;'><table border='0' cellspacing='0' cellpadding='8' style='border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:9pt;width:100%; white-space:nowrap;'>"
-    html += "<tr style='background-color:#f87171; color:#ffffff; text-align:center; font-weight:bold;'><th>Sit. OB</th><th>Prog.</th><th>Facção</th><th>Nº OB</th><th>NF esperada da Facção</th><th>NF informada na montagem</th><th>Qtd. peças NF incorreta</th><th>NF informada na programação</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th></tr>"
+    html += "<tr style='background-color:#f87171; color:#ffffff; text-align:center; font-weight:bold;'><th>Sit. OB</th><th>Prog.</th><th>Placa Kanban</th><th>Facção</th><th>Nº OB</th><th>NF esperada da Facção</th><th>NF informada na montagem</th><th>Qtd. peças NF incorreta</th><th>NF informada na programação</th><th>Detalhe Do Erro</th><th>Alternativo</th><th>Data/Hora</th></tr>"
     agora: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     for idx, e in enumerate(erros):
         bg: str = "#ffffff" if idx % 2 == 0 else "#fef2f2"
-        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('ST_OB_ABERTO'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('NR_OB'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{formatar_qtd_pecas_incorretas(e)}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td style='color:#6b7280;'>{agora}</td></tr>"
+        html += f"<tr style='background:{bg}; text-align:center; border-bottom:1px solid #e5e7eb;'><td>{html_escape(e.get('ST_OB_ABERTO'))}</td><td>{html_escape(e.get('NR_PROG'))}</td><td>{formatar_nr_kanban(e)}</td><td>{html_escape(e.get('DS_ITEMPED_CLT'))}</td><td>{html_escape(e.get('NR_OB'))}</td><td><span style='background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:bold;'>{html_escape(e.get('NF_ESPERADA'))}</span></td><td>{destaque_nf_montagem(cast(str, e.get('NF_MONTAGEM')), cast(str, e.get('NF_ESPERADA')))}</td><td>{formatar_qtd_pecas_incorretas(e)}</td><td>{destaque_nf_prog(cast(str, e.get('NF_PROGRAMACAO')), cast(str, e.get('NF_ESPERADA')))}</td><td style='color:#b91c1c;'>{html_escape(e.get('DETALHE_ERRO'))}</td><td>{html_escape(e.get('CD_ALTERNATIVO'))}</td><td style='color:#6b7280;'>{agora}</td></tr>"
     html += "</table></div></div>"
     return html
 

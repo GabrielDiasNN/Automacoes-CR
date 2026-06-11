@@ -85,6 +85,7 @@ $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
+$libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
 
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
@@ -99,7 +100,9 @@ Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
 
 Import-Module $libRetry   -Force
+Import-Module $libProcess -Force
 Import-Module $libConfig  -Force
+Import-Module $libOracle  -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
@@ -221,30 +224,18 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
             }
 
             try {
-                Import-Module $libProcess -Force
 
-                $pythonOk = Invoke-WithRetry -MaxAttempts 3 -BackoffSeconds @(60, 120, 300) `
-                    -OperationName "Processamento Python (processar_receitas.py)" -ExecId $ExecId -LogPath $LogFile `
-                    -Action {
-                        $res = Invoke-NativeProcess -FilePath $pythonExe -Arguments "`"$PythonScript`" `"$ExecId`"" -LogAction {
-                            param($msg, $lvl)
-                            # Silenciamos o log de stdout se for muito grande ou redundante, 
-                            # mas aqui processar_receitas.py loga infos importantes, entao mantemos o filtro.
-                            if ($lvl -ne "INFO" -or -not $msg.StartsWith("B64:")) {
-                                Write-AutomacaoLog -Message $msg -Level $lvl -ExecId $ExecId -LogPath $LogFile
-                            }
-                        }
+                $pyResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $PythonScript `
+                    -ExecId $ExecId -LogPath $LogFile `
+                    -OperationName "Processamento Python (processar_receitas.py)" `
+                    -MaxAttempts 3 -BackoffSeconds @(60, 120, 300)
 
-                        if ($res.ExitCode -eq 2) {
-                            Write-Log "Python detectou idempotencia (ExitCode 2). Suprimindo notificacoes."
-                            Exit-WithCode 2 "Processo finalizado (Idempotencia Python)."
-                        }
+                if ($pyResult.Idempotent) {
+                    Write-Log "Python detectou idempotencia (ExitCode 2). Suprimindo notificacoes."
+                    Exit-WithCode 2 "Processo finalizado (Idempotencia Python)."
+                }
 
-                        if ($res.ExitCode -ne 0) { throw "Python retornou ExitCode=$($res.ExitCode)." }
-                        return $true
-                    }
-                
-                if (-not $pythonOk) {
+                if (-not $pyResult.Success) {
                     Send-AlertaFalhaDefinitiva -TaskName "Receitas Bloqueadas" -ExecId $ExecId -UltimoErro "Falha definitiva no processamento Python apos 3 tentativas." -Tentativas 3 -LogPath $LogFile
                     Exit-WithCode 3 "Falha definitiva no script Python. Alerta de falha enviado."
                 }

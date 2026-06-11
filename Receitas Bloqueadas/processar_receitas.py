@@ -1,4 +1,4 @@
-# pylint: disable=line-too-long, missing-class-docstring, too-many-locals, bare-except, consider-using-max-builtin, too-many-branches, broad-exception-caught, too-many-statements
+# pylint: disable=line-too-long, missing-class-docstring, too-many-locals, bare-except, consider-using-max-builtin, too-many-branches, broad-exception-caught, too-many-statements, import-error
 # {
 #   "name": "processar-receitas-bloqueadas",
 #   "version": "2.3.2",
@@ -11,10 +11,12 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python"))
+from automation_log import make_logger
+from oracle_retry import make_oracle_retry, CircuitBreakerError
+
 import oracledb
 import pandas as pd
-import pybreaker
-import stamina
 from dotenv import load_dotenv
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -29,11 +31,7 @@ if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
 
-def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
-    ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    raw_msg = f"[{ts}] [PY-PROCESS] [{level}] [ExecId:{exec_id}] {message}"
-    sys.stderr.write(f"{raw_msg}\n")
-    sys.stderr.flush()
+log = make_logger("PY-PROCESS")
 
 
 # --- CONTRATOS DE DADOS (Pydantic) ---
@@ -53,12 +51,10 @@ class StateFile(BaseModel):
 
 
 # --- RESILIENCIA DE CONEXAO ---
-# Circuit Breaker: Abre apos 3 falhas, permanece aberto por 60s
-db_breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
+_oracle_retry = make_oracle_retry()
 
 
-@db_breaker
-@stamina.retry(on=oracledb.DatabaseError, attempts=3)
+@_oracle_retry
 def fetch_data_with_retry(
     user: str, password: str, dsn: str, sql_query: str, exec_id: str
 ) -> pd.DataFrame:
@@ -295,6 +291,7 @@ def process() -> None:
     if not client_lib or not tns_admin:
         log("Caminhos Oracle ausentes no ambiente.", "ERROR", exec_id)
         sys.exit(1)
+    assert user is not None and password is not None and client_lib is not None and tns_admin is not None
 
     try:
         oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
@@ -365,7 +362,7 @@ def process() -> None:
         )
         df_last = pd.DataFrame(last_records)
         stats = {"new": 0, "mod": 0, "del": 0}
-        diff_rows: List[Dict[str, Any]] = []
+        diff_rows: List[Dict[Any, Any]] = []
 
         if df_last.empty:
             df_diff_new = df_agreg.copy()
@@ -468,7 +465,7 @@ def process() -> None:
         log("Processo concluido com alteracoes. Notificacao gerada.", "INFO", exec_id)
         sys.exit(0)
 
-    except pybreaker.CircuitBreakerError:
+    except CircuitBreakerError:
         log("Circuit Breaker Aberto: Banco de dados inacessivel.", "ERROR", exec_id)
         sys.exit(1)
     except oracledb.DatabaseError as de:
