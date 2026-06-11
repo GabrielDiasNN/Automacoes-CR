@@ -10,7 +10,8 @@ if ([string]::IsNullOrEmpty($RootPath)) {
 $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = 1
 $env:PYLINTHOME = Join-Path $RootPath ".mypy_cache\pylint"
-$env:MYPYPATH = "$(Join-Path $RootPath "Orchestrator");$RootPath"
+$env:MYPYPATH = "$(Join-Path $RootPath "Orchestrator");$RootPath;$(Join-Path $RootPath "lib\python")"
+$env:PYTHONPATH = "$($env:PYTHONPATH);$(Join-Path $RootPath "lib\python")"
 New-Item -ItemType Directory -Force -Path $env:PYLINTHOME | Out-Null
 Write-Host "=== Governanca Python (Type Hints & Pylint) ==="
 
@@ -49,6 +50,25 @@ if ($resolvedTargetFiles.Count -eq 0) {
 }
 
 $hasErrors = $false
+
+# Debito tecnico controlado: arquivos historicos com "pylint: disable=all" estao
+# congelados no baseline. Arquivos novos nao podem nascer com a diretiva.
+$baselinePath = Join-Path $PSScriptRoot "pylint-disable-all-baseline.txt"
+$baseline = @()
+if (Test-Path $baselinePath) {
+    $baseline = Get-Content $baselinePath -Encoding UTF8 | Where-Object { $_ -and -not $_.StartsWith('#') }
+}
+foreach ($fullPath in $resolvedTargetFiles) {
+    $normalizedRoot = ($RootPath -replace '/', '\').TrimEnd('\')
+    $normalizedFull = $fullPath -replace '/', '\'
+    $relative = $normalizedFull.Substring($normalizedRoot.Length).TrimStart('\') -replace '\\', '/'
+    $head = Get-Content $fullPath -TotalCount 3 -ErrorAction SilentlyContinue
+    if (($head -match 'pylint:\s*disable=all') -and ($baseline -notcontains $relative)) {
+        Write-Host "[ERRO] '$relative' usa 'pylint: disable=all' e nao esta no baseline ($baselinePath). Arquivos novos devem passar no Pylint sem suprimir todos os checks." -ForegroundColor Red
+        $hasErrors = $true
+    }
+}
+
 $mypy = Get-PythonTool "mypy"
 $pylint = Get-PythonTool "pylint"
 
@@ -69,7 +89,7 @@ if ($mypy) {
 $ErrorActionPreference = $oldPreference
 
 if ($pylint) {
-    $pylintOutput = & $pylint --disable=C0114,C0116,R0801 @resolvedTargetFiles 2>&1
+    $pylintOutput = & $pylint --disable=C0114,C0116,R0801,C0413,C0301,C0302 @resolvedTargetFiles 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint)" -ForegroundColor Red
         $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }

@@ -143,7 +143,7 @@ jobs:
 
   governanca:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: preparar-diff
     env:
       CHANGED_FILES_JSON: ${{ needs.preparar-diff.outputs.changed_files_json }}
@@ -164,7 +164,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt -r requirements-test.txt
 
+      - name: Cache Browsers Playwright
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements-test.txt') }}
+
       - name: Instalar Browsers Playwright
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           python -m playwright install chromium
@@ -210,11 +218,41 @@ jobs:
         run: |
           ./Tools/Test-PythonGovernance.ps1 -RootPath "${{ github.workspace }}"
 
+      - name: Analise Estatica de Seguranca (Bandit)
+        shell: pwsh
+        run: |
+          python -m pip install bandit
+          python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll
+
+      - name: Auditoria de Dependencias (pip-audit)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python -m pip install pip-audit
+          python -m pip_audit -r requirements.txt
+
       - name: Executar Testes Unitarios Python (Pytest)
+        timeout-minutes: 10
         shell: pwsh
         run: |
           $env:PYTHONPATH="Orchestrator"
-          pytest "Orchestrator\tests" -v
+          pytest "Orchestrator\tests" -v -m "not e2e"
+
+      - name: Executar Testes E2E Playwright (Headless)
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH="Orchestrator"
+          pytest "Orchestrator\tests\test_e2e_dashboard.py" -v -m e2e --basetemp="Orchestrator\tests\e2e-evidence"
+
+      - name: Publicar Evidencias E2E
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-evidence-${{ github.run_number }}
+          path: Orchestrator/tests/e2e-evidence/**
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Validar Performance SQL (Oracle)
         shell: pwsh
@@ -229,7 +267,9 @@ jobs:
       - name: Executar Testes Unitarios PowerShell (Pester)
         shell: pwsh
         run: |
-          Invoke-Pester "lib\tests" -EnableExit
+          Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          Invoke-Pester -Path "${{ github.workspace }}\lib\tests" -CI
 
       - name: Validar Portabilidade (Sem Caminhos Absolutos)
         shell: pwsh
@@ -258,6 +298,22 @@ jobs:
 
           Write-Host ("Alvos elegiveis recebidos do diff: " + $changedFiles.Count)
           ./Tools/Test-LogConformidade.ps1 -RootPath "${{ github.workspace }}" -Paths $changedFiles
+
+  eslint:
+    name: Lint JavaScript (Dashboard)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: ESLint
+        run: npx --yes eslint@9 "Dashboard/js/**/*.js"
 
   markdown:
     runs-on: windows-latest
