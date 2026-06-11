@@ -1,5 +1,77 @@
 # Changelog
 
+## [9.3.18] - 10/06/2026
+### Alterado
+- **Fatiamento adaptativo do refresh Oracle do Beneficiamento**: a geração de snapshots passou a dividir automaticamente períodos pesados em subfaixas mensais e, se necessário, em intervalos menores quando o Oracle retorna timeout ou `ORA-00028`, mantendo cada consulta dentro do orçamento imposto pelo DBA.
+- **Refresh mensal estabilizado**: o snapshot mensal foi regenerado com sucesso após o fatiamento adaptativo, reduzindo o risco de derrubar a sessão Oracle por excesso de tempo de execução.
+
+## [9.3.17] - 10/06/2026
+### Alterado
+- **Health do Beneficiamento mais explícito**: o bloqueio de quality agora expõe causas específicas, como `quality_missing_required_columns`, `quality_critical_nulls` e `quality_duplicate_keys`, em vez do rótulo genérico `quality_blocked`.
+- **Snapshot semanal reprocessado**: o snapshot semanal foi regenerado com o runner atual, reduzindo o bloqueio de qualidade no período semanal e alinhando o contrato ao template operacional vigente.
+
+## [9.3.16] - 10/06/2026
+### Alterado
+- **Causa primária explícita no health do Beneficiamento**: `GET /api/beneficiamento/health` agora escolhe de forma determinística o `reason_code` e a `recommended_action` a partir da issue mais grave do conjunto, evitando `attention` genérico quando já existe um motivo operacional mais forte.
+- **Cobertura de prioridade de issues**: adicionada validação de que, quando coexistem snapshot ausente e snapshot stale, o health aponta a causa mais grave primeiro e preserva a trilha de ação recomendada.
+
+## [9.3.15] - 10/06/2026
+### Alterado
+- **Resumo temporal do quality gate local**: `Tools/ValidarAutomacoes.ps1` agora publica o modo de seleção governada e a duração por etapa do ciclo local, preservando o gate atual e adicionando visibilidade objetiva para fast path, conformidade de log, governança nativa, skills e dashboard template.
+- **Exportação opcional do ciclo local**: o validador passa a aceitar `-SummaryJsonPath` para persistir um resumo JSON com contagens, seleção aplicada e tempos medidos sem depender de parsing textual do console.
+
+## [9.3.14] - 10/06/2026
+### Alterado
+- **Telemetria aditiva do Orchestrator**: `GET /api/system/diagnostics` e `GET /api/system/overview` passam a expor `performance.timings_ms` com custo de montagem por etapa, sem quebra de contrato e sem dependência nova.
+- **Hotspots internos simplificados**: a montagem de diagnósticos e overview foi decomposta em helpers menores para fila, checks de runtime, execuções recentes e cards de automação, reduzindo duplicação entre consulta, agregação e serialização.
+
+## [9.3.13] - 08/06/2026
+### Adicionado
+- **Colunas derivadas no histórico do Beneficiamento**: o SQLite local passa a manter `TURNO_ID`, `TURNO_LABEL`, `MAQUINA_KEY`, `FASE_KEY` e `CODIGO_KEY`, com backfill idempotente em `init_db` para acelerar filtros operacionais sem reabrir Oracle.
+- **Cobertura de schema do Beneficiamento**: adicionada validação automatizada para garantir colunas derivadas e índices idempotentes do histórico local.
+
+### Alterado
+- **Overview V1 otimizado**: `GET /api/beneficiamento/overview` deixa de usar `date(DATA_FIM)` no filtro principal, materializa um conjunto filtrado temporário por request e reaproveita esse recorte para KPIs, rankings, turnos, Tingimento e séries diárias.
+- **Filtro indexado do Beneficiamento**: buscas por data, turno, máquina, fase e código operacional passam a usar colunas persistidas/normalizadas compatíveis com índice, eliminando `SCAN` no recorte principal por data.
+- **Carga progressiva da aba Beneficiamento**: o frontend passa a proteger contra respostas antigas, aplicar debounce curto nos filtros e renderizar status/KPIs antes das tabelas e gráfico pesados.
+
+## [9.3.12] - 07/06/2026
+### Adicionado
+- **Padrão Arquitetural Governado**: criado `docs/architecture-standard.md` como contrato oficial de camadas, severidades e validação arquitetural do Hub.
+- **Validador de Arquitetura**: criado `Tools/Test-ArchitectureStandard.ps1`, com saída humana/JSON, suporte a `-Paths`, severidade gradual e falha apenas para violações críticas no v1.
+- **Ruleset Arquitetural Versionado**: criado `Tools/architecture-standard.rules.json` para manter allowlists e seções documentais obrigatórias fora do script executor.
+- **Cobertura Pester do Validador**: adicionados testes para cenário saudável, violação Oracle em router FastAPI, aviso de `subprocess`, contrato JSON, `-Paths` direcionado, path externo, comentário com Oracle e ruleset ausente.
+
+### Alterado
+- **Quality Gate**: `Tools/ValidarAutomacoes.ps1` passa a executar o validador arquitetural dentro da governança nativa.
+- **Escopo e Segurança do Validador**: `Test-ArchitectureStandard.ps1` passa a bloquear `-Paths` fora da raiz, respeitar validação direcionada para automações e reduzir falsos positivos de Oracle em comentários de endpoints GET.
+- **Documentação Viva**: README, CONTEXT, monitor AI-Native, diretrizes de governança e README de Tools passam a apontar para o padrão arquitetural oficial.
+
+## [9.3.11] - 31/05/2026
+### Adicionado
+- **Beneficiamento V1 com drill-down**: criado `GET /api/beneficiamento/detail` para abrir detalhe por produto, máquina/fase, fase, turno e OB, com resumo operacional, rastreabilidade por OB, paginação e `raw_records` opcional.
+- **Controle operacional por turno**: `/api/beneficiamento/overview` passa a expor a seção `turnos`, com volume, eficiência, reprocesso, produtividade e médias por turno.
+- **Bloco dedicado de Tingimento**: `/overview` agora entrega `tingimento.summary`, série diária e rankings por Alternativo e máquina, suportando análise mais elaborada da fase `03 - TINGIMENTO`.
+
+### Alterado
+- **Beneficiamento V1 operacional**: a aba passa a usar `Alternativo` como eixo principal de produto, adiciona filtro próprio de Alternativo e abre modal local ao clicar em produto, turno, gargalo, fase ou OB.
+- **Normalização de turno no SQLite**: a leitura do histórico e do overview deixa de depender de `turno`/`TURNO` legados e passa a priorizar `TURNO_DESC` e `TURNO_PROD`, eliminando o colapso indevido em `Indefinido`.
+- **Rastreabilidade enriquecida**: `/historico` continua compacto, mas agora já retorna turno normalizado para apoio operacional.
+
+## [9.3.10] - 31/05/2026
+### Adicionado
+- **Contrato V0 de Beneficiamento**: criado `GET /api/beneficiamento/overview` como contrato principal da aba, com `generated_at`, `filters.effective`, `health`, `kpis`, `rankings`, `series` e `filter_options`.
+- **Janela efetiva por SQLite**: quando datas não são informadas, `/overview` usa 30 dias encerrados em `MAX(DATA_FIM)` da base histórica local, evitando dependência da data do sistema.
+- **Testes de contrato V0**: adicionada cobertura para resposta mínima, filtros, recorte vazio com `health.status=no_data` e proteção contra dependência de runner/Oracle no endpoint de leitura.
+
+### Alterado
+- **Beneficiamento operacional enxuto**: a aba foi refeita como tela única para PCP diário, com status da base, filtros essenciais, 8 KPIs, série volume/eficiência, gargalos por máquina/fase, produtos principais, fases críticas e rastreabilidade compacta de OB.
+- **Eficiência de tempo**: a UI deixa de tratar o indicador como OEE completo e passa a exibir o proxy V0 `MIN_PREV / MIN_REAL * 100`.
+- **Documentação viva**: README, arquitetura, runbook de refresh e monitor AI-Native foram alinhados ao novo contrato `/overview` e à permanência de `/historico`.
+
+### Removido
+- **Ornamentos analíticos da aba**: removidos da experiência V0 pódio de operadores, setup estimado por regra fixa, painéis técnicos de profiling/qualidade e destaques isolados de artigos/cores.
+
 ## [9.3.9] - 31/05/2026
 ### Adicionado
 - **Análise Dinâmica de Produtos e Artigos**: criada a tabela dinâmica de produtos na tela (`index.html`) e o painel lateral de top artigos e cores de maior representatividade.

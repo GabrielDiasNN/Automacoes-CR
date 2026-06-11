@@ -15,6 +15,8 @@
 
 Validar o vínculo fiscal entre NF e OB na montagem terceirizada, destacando divergências que podem gerar erro de estoque, atraso de expedição ou inconsistência fiscal.
 
+O e-mail operacional de divergências também expõe a placa kanban por OB quando o Oracle retornar `NR_KANBAN`, para acelerar a localização física do lote na triagem.
+
 ## Dependências
 
 - Oracle para extração via `extract_oracle.py`
@@ -38,4 +40,5 @@ Validar o vínculo fiscal entre NF e OB na montagem terceirizada, destacando div
 
 - Credenciais Oracle inválidas ou ambiente local stale.
 - Divergência recorrente na quantidade de peças erradas por NF.
+- Placa kanban ausente (`N/A`) no e-mail indica ausência do valor na origem Oracle, não falha de renderização do HTML.
 - Falha de Outlook COM na entrega do e-mail.

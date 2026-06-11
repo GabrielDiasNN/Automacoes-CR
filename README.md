@@ -40,6 +40,7 @@ graph TD
 - **Histórico Operacional**: `/api/system/history` mantém snapshots leves de saúde para tendência de fila, heartbeat, WAL e violações recentes sem depender apenas de leitura manual de log.
 - **Baseline Operacional Formalizado**: `GET /api/system/baseline` e `diagnostics.operational_baseline` resumem worker, fila, WAL e ownership em status `healthy`, `attention` ou `incident`, com ação recomendada e thresholds explícitos.
 - **Portfólio Governado**: `automation.manifest.json` passa a ser o catálogo canônico das automações do hub, e a API expõe `/api/portfolio/health` e `/api/portfolio/drift` para cruzar manifesto, documentação e cadastro runtime.
+- **Padrão Arquitetural Governado**: `docs/architecture-standard.md` define as camadas e severidades oficiais do Hub, e `Tools/Test-ArchitectureStandard.ps1` integra esse contrato ao quality gate.
 - **Resumo Operacional do Portfólio**: `/api/portfolio/health.summary` e `/api/system/overview.portfolio` agora sintetizam status `healthy`, `attention` ou `incident`, top issue e ação recomendada para drift, documentação obrigatória, registro runtime e SLA.
 - **Preflight Governado de Cadastro**: `POST /api/automations/preflight` agora confronta o payload com `automation.manifest.json` quando presente, retornando bloqueios de manifesto, docs obrigatórias e smoke tests antes do save administrativo.
 - **Scaffold Governado de Automação**: `Tools/New-Automation.ps1` agora gera manifesto parametrizado, `queue_group` inicial, runbook preenchido com metadados básicos e smoke test mínimo em `Orchestrator/tests/`.

@@ -26,7 +26,18 @@ Troque `diario` por `semanal`, `mensal` ou `anual`.
 
 ## Validação Pós-Refresh
 
-1. Verificar saída JSON do runner com `status=ok`.
+1. Verificar saída JSON do runner com `status=ok`, `attention` ou `partial_failure` e checar `snapshot.historico_write_status`.
 2. Confirmar que `snapshots/latest/<period>.analytics.json` e `<period>.profile.json` foram atualizados.
-3. Abrir `/api/beneficiamento/health` e conferir `status`, idade do snapshot e metadados Oracle.
-4. Se o status ficar `attention` apenas por `call_timeout Oracle nao aplicado`, validar se o tempo ficou abaixo de 19 segundos e registrar o achado.
+3. Abrir `/api/beneficiamento/health` e conferir `status`, `reason_code`, `recommended_action`, `issues`, idade do snapshot e metadados Oracle.
+4. Abrir `/api/beneficiamento/overview` sem parâmetros e confirmar que a janela efetiva termina em `MAX(DATA_FIM)` do SQLite.
+5. Validar que `/overview` retorna `health.source=sqlite_historico`, KPIs preenchidos, `turnos` populados com `TURNO 1/2/3` e `tingimento.summary` coerente.
+6. Validar que `filter_options` inclui máquina, fase, turno e alternativo disponíveis no recorte.
+7. Abrir `/api/beneficiamento/detail?target_type=produto&alternativo=<ALT>` e conferir resumo, lista curada, rastreabilidade por OB e paginação sem erro.
+8. Abrir `/api/beneficiamento/historico?ob=<OB>` para conferir rastreabilidade compacta de uma ordem do recorte.
+9. Se o status ficar `attention`, usar `reason_code` e `issues[0].action_hint` para decidir a próxima ação sem depender de interpretação manual do payload.
+10. Se o status ficar `attention` apenas por `oracle_timeout_unapplied`, validar se o tempo ficou abaixo de 19 segundos e registrar o achado.
+11. Em diagnóstico de performance, confirmar via `EXPLAIN QUERY PLAN` que o recorte principal do overview usa `idx_producao_data` e não volta a depender de `date(DATA_FIM)` no `WHERE`.
+
+## Guardrail de Dashboard
+
+Nenhum `GET` consumido pelo Dashboard deve executar runner, template SQL ou refresh Oracle. Refresh continua sendo ação operacional separada e controlada; a aba Beneficiamento lê somente o SQLite histórico e snapshots locais.
