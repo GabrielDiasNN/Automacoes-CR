@@ -5,7 +5,8 @@ Testes unitários para o módulo de segurança e higienização de logs e payloa
 """
 
 from app.constants import MAX_DB_LOGS_CHARS
-from app.security import sanitize_log_payload, sanitize_string, truncate_log_payload
+from app.security import (sanitize_log_payload, sanitize_string,
+                          truncate_log_payload)
 
 
 def test_sanitize_string_oracle_credentials():
@@ -125,3 +126,31 @@ def test_truncate_log_payload_marks_large_payload():
     assert "[LOGS TRUNCADOS PELO SISTEMA" in truncated
     assert truncated.startswith("A" * 100)
     assert truncated.endswith("A" * 100)
+
+
+def test_json_formatter_sanitizes_exception_traceback():
+    import json
+    import logging
+    import sys
+
+    from app.logger_setup import OrchestratorJsonFormatter
+
+    formatter = OrchestratorJsonFormatter(component="QA")
+    try:
+        raise ValueError("falha com password=senha-ultra-secreta no payload")
+    except ValueError:
+        record = logging.LogRecord(
+            name="orchestrator",
+            level=logging.ERROR,
+            pathname=__file__,
+            lineno=1,
+            msg="erro de teste",
+            args=(),
+            exc_info=sys.exc_info(),
+        )
+
+    doc = json.loads(formatter.format(record))
+
+    assert "exception" in doc
+    assert "senha-ultra-secreta" not in doc["exception"]
+    assert "password=********" in doc["exception"]

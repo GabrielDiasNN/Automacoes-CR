@@ -91,6 +91,8 @@ def test_diagnostics_endpoint(client):
     assert "checks" in data
     assert "recovery" in data
     assert "operational_baseline" in data
+    assert "performance" in data
+    assert data["performance"]["timings_ms"]["total_ms"] >= 0
     assert data["operational_baseline"]["status"] in ["healthy", "attention", "incident"]
 
 
@@ -256,9 +258,12 @@ def test_system_overview_includes_diagnostics_summary(client):
     data = res.json()
     assert "portfolio" in data
     assert data["portfolio"]["status"] in ["healthy", "attention", "incident"]
+    assert "performance" in data
+    assert data["performance"]["timings_ms"]["total_ms"] >= 0
     assert "diagnostics" in data
     assert data["diagnostics"]["overall_status"] in ["healthy", "degraded", "unhealthy"]
     assert "findings" in data["diagnostics"]
+    assert data["diagnostics"]["performance"]["timings_ms"]["total_ms"] >= 0
 
 
 def test_system_overview_exposes_automation_operational_metrics(client, db_session):

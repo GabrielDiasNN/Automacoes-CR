@@ -1,4 +1,3 @@
-# pylint: disable=all
 # mypy: ignore-errors
 """Global FastAPI exception handlers (Pilar R — Resiliência)."""
 

@@ -1,4 +1,4 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, too-many-locals, wrong-import-order
+# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, too-many-locals, wrong-import-order, unused-argument, import-error
 """
 Suite de Testes Unitários: Automação de Receitas Bloqueadas
 Mapeamento de Regras de Negócio e resiliência via Pytest com Mocks.
@@ -142,6 +142,82 @@ def test_formatar_excel_estilos(tmp_path: Any) -> None:
     normal_cell = sheet2.cell(row=3, column=22)
     assert div_cell.fill.start_color.rgb in ("00FECACA", "FECACA")
     assert normal_cell.fill.start_color.rgb == "00000000" or normal_cell.fill.fill_type is None
+
+
+@patch("processar_receitas.oracledb.connect")
+@patch("processar_receitas.os.path.exists")
+@patch("processar_receitas.open")
+def test_process_sem_alteracoes_exit_2(mock_open: Any, mock_exists: Any, mock_connect: Any, tmp_path: Any) -> None:
+    """Valida que process() termina com exit(2) quando os dados do Oracle coincidem com o estado anterior (idempotência)."""
+    os.environ["ORACLE_READONLY_USER"] = "test_user"
+    os.environ["ORACLE_READONLY_PASSWORD"] = "test_pass"
+    os.environ["ORACLE_CLIENT_LIB_DIR"] = tmp_path.as_posix()
+    os.environ["TNS_ADMIN"] = tmp_path.as_posix()
+
+    state_content = json.dumps({
+        "last_hash": "abc123",
+        "updated_at": "2026-05-19T10:00:00",
+        "records": [{
+            "Key": "Azul_5_15",
+            "Cor Rec.": "Azul",
+            "EP Rec.": 5,
+            "PE Rec": 15,
+            "Data Última Prod.": "18/05/2026",
+            "Data Bloqueio": "17/05/2026",
+        }],
+    })
+
+    def side_exists(path: str) -> bool:
+        if "SQL-ReceitasBloqueadas.sql" in path:
+            return True
+        if "receitas_state.json" in path and ".tmp" not in path:
+            return True
+        return False
+
+    mock_exists.side_effect = side_exists
+
+    sql_file = MagicMock()
+    sql_file.read.return_value = "SELECT * FROM RECEITAS"
+    state_file = MagicMock()
+    state_file.read.return_value = state_content
+
+    def _ctx(obj: Any) -> Any:
+        w = MagicMock()
+        w.__enter__.return_value = obj
+        w.__exit__.return_value = None
+        return w
+
+    def side_open(path: str, mode: str = "r", encoding: Any = None) -> Any:
+        if "SQL-ReceitasBloqueadas" in path:
+            return _ctx(sql_file)
+        if "receitas_state.json" in path:
+            return _ctx(state_file)
+        return _ctx(MagicMock())
+
+    mock_open.side_effect = side_open
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_connect.return_value = mock_conn
+    mock_conn.cursor.return_value = mock_cursor
+
+    # Oracle devolve exatamente os mesmos dados que estão no estado → sem diff
+    mock_df_igual = pd.DataFrame([{
+        "COR_REC": "Azul",
+        "EP_REC": 5,
+        "PE_REC": 15,
+        "DATA_ULT_PROD": "2026-05-18",
+        "DATA_BLOQUEIO": "2026-05-17",
+    }])
+
+    with patch("processar_receitas.pd.read_sql", return_value=mock_df_igual), \
+         patch("processar_receitas.sys.argv", ["processar_receitas.py", "test_idem"]), \
+         patch("processar_receitas.sys.exit", side_effect=SystemExit(2)) as mock_exit:
+        with pytest.raises(SystemExit) as excinfo:
+            processar_receitas.process()
+
+    assert excinfo.value.code == 2
+    mock_exit.assert_called_once_with(2)
 
 
 @patch("processar_receitas.oracledb.connect")

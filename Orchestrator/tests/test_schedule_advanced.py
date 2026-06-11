@@ -118,13 +118,13 @@ class TestIntervalWithWindow:
         assert result.get("end_time") is None
         assert result.get("days_of_week") is None
 
-    def test_interval_invalid_start_time_strict_raises(self):
-        """Em modo strict, start_time fora do formato HH:MM deve lançar ValueError."""
-        payload = {
-            "schedule_type": "interval",
-            "interval_minutes": 10,
-            "start_time": "8am",
-        }
+    @pytest.mark.parametrize("extra_fields", [
+        {"start_time": "8am"},                           # formato inválido
+        {"start_time": "18:00", "end_time": "12:00"},    # janela invertida
+    ])
+    def test_interval_invalid_start_time_strict_raises(self, extra_fields):
+        """Em modo strict, start_time inválido ou janela invertida deve lançar ValueError."""
+        payload = {"schedule_type": "interval", "interval_minutes": 10, **extra_fields}
         with pytest.raises(ValueError, match="start_time"):
             normalize_schedule_payload(payload, strict=True)
 
@@ -137,17 +137,6 @@ class TestIntervalWithWindow:
         }
         result = normalize_schedule_payload(payload, strict=False)
         assert result["start_time"] is None
-
-    def test_interval_window_start_after_end_strict_raises(self):
-        """Janela invertida deve ser rejeitada em modo estrito."""
-        payload = {
-            "schedule_type": "interval",
-            "interval_minutes": 10,
-            "start_time": "18:00",
-            "end_time": "12:00",
-        }
-        with pytest.raises(ValueError, match="start_time"):
-            normalize_schedule_payload(payload, strict=True)
 
     def test_interval_preview_with_window(self):
         """Preview de intervalo com janela deve retornar datas dentro da faixa esperada."""
@@ -181,43 +170,33 @@ class TestIntervalWithWindow:
 class TestDescribeSchedulePayload:
     """Valida a descrição textual formatada para o Dashboard."""
 
-    def test_describe_cron(self):
-        """Descrição de Cron deve incluir a expressão."""
-        schedule = {
-            "schedule_type": "cron",
-            "cron_expression": "*/10 8-18 * * 1-5",
-        }
+    @pytest.mark.parametrize("schedule,expected_fragments", [
+        (
+            {"schedule_type": "cron", "cron_expression": "*/10 8-18 * * 1-5"},
+            ["Cron", "*/10 8-18 * * 1-5"],
+        ),
+        (
+            {"schedule_type": "interval", "interval_minutes": 30},
+            ["30 min"],
+        ),
+        (
+            {
+                "schedule_type": "interval",
+                "interval_minutes": 15,
+                "start_time": "08:00",
+                "end_time": "18:00",
+                "days_of_week": [1, 2, 3, 4, 5],
+            },
+            ["15 min", "08:00", "18:00"],
+        ),
+        ({"schedule_type": "manual"}, ["Manual"]),
+        (None, ["Manual"]),
+    ])
+    def test_describe_schedule_payload(self, schedule, expected_fragments):
+        """Descrição gerada deve conter os fragmentos esperados para cada tipo de schedule."""
         desc = describe_schedule_payload(schedule)
-        assert "Cron" in desc
-        assert "*/10 8-18 * * 1-5" in desc
-
-    def test_describe_interval_simple(self):
-        """Descrição de intervalo simples deve exibir apenas a periodicidade."""
-        schedule = {
-            "schedule_type": "interval",
-            "interval_minutes": 30,
-        }
-        desc = describe_schedule_payload(schedule)
-        assert "30 min" in desc
-
-    def test_describe_interval_with_window(self):
-        """Descrição de intervalo com janela deve incluir dias e horários."""
-        schedule = {
-            "schedule_type": "interval",
-            "interval_minutes": 15,
-            "start_time": "08:00",
-            "end_time": "18:00",
-            "days_of_week": [1, 2, 3, 4, 5],
-        }
-        desc = describe_schedule_payload(schedule)
-        assert "15 min" in desc
-        assert "08:00" in desc
-        assert "18:00" in desc
-
-    def test_describe_manual(self):
-        """Descrição de manual deve ser 'Manual'."""
-        assert describe_schedule_payload({"schedule_type": "manual"}) == "Manual"
-        assert describe_schedule_payload(None) == "Manual"
+        for fragment in expected_fragments:
+            assert fragment in desc
 
 
 # --------------------------------------------------------------------------- #
@@ -352,13 +331,13 @@ class TestAnchorTime:
         assert result["schedule_type"] == "interval"
         assert result["anchor_time"] == "08:15"
 
-    def test_anchor_time_invalid_strict_raises(self):
-        """Em modo estrito, anchor_time fora de formato HH:MM deve lançar ValueError."""
-        payload = {
-            "schedule_type": "interval",
-            "interval_minutes": 15,
-            "anchor_time": "9:30",  # falta zero à esquerda
-        }
+    @pytest.mark.parametrize("anchor_time", [
+        "9:30",   # falta zero à esquerda (formato inválido)
+        "99:99",  # fora de faixa (sintático mas semanticamente errado)
+    ])
+    def test_anchor_time_invalid_strict_raises(self, anchor_time):
+        """Em modo estrito, anchor_time malformado deve lançar ValueError."""
+        payload = {"schedule_type": "interval", "interval_minutes": 15, "anchor_time": anchor_time}
         with pytest.raises(ValueError, match="anchor_time"):
             normalize_schedule_payload(payload, strict=True)
 
@@ -371,16 +350,6 @@ class TestAnchorTime:
         }
         result = normalize_schedule_payload(payload, strict=False)
         assert result["anchor_time"] is None
-
-    def test_anchor_time_out_of_range_strict_raises(self):
-        """Horário com HH:MM sintático, mas fora de faixa, deve ser rejeitado."""
-        payload = {
-            "schedule_type": "interval",
-            "interval_minutes": 15,
-            "anchor_time": "99:99",
-        }
-        with pytest.raises(ValueError, match="anchor_time"):
-            normalize_schedule_payload(payload, strict=True)
 
     def test_describe_interval_with_anchor_simple(self):
         """Descrição de intervalo simples com âncora deve exibir o início da cadência."""

@@ -194,6 +194,8 @@ def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session)
     data = response.json()
     assert data["queue"]["retry_pressure"]
     assert data["queue"]["timeouts_24h_by_group"]
+    assert data["performance"]["timings_ms"]["queue_metrics_ms"] >= 0
+    assert data["performance"]["timings_ms"]["total_ms"] >= 0
 
 
 def test_diagnostics_operational_baseline_marks_orphaned_running_as_incident(
