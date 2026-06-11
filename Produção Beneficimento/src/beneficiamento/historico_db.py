@@ -1,15 +1,133 @@
 """Gerenciamento e persistência do histórico do Beneficiamento em SQLite."""
-# pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-import,trailing-whitespace,line-too-long
+# pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-import,trailing-whitespace,line-too-long,import-outside-toplevel
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .settings import DOMAIN_ROOT
+
+
+DERIVED_COLUMNS: dict[str, str] = {
+    "TURNO_ID": "TEXT",
+    "TURNO_LABEL": "TEXT",
+    "MAQUINA_KEY": "TEXT",
+    "FASE_KEY": "TEXT",
+    "CODIGO_KEY": "TEXT",
+}
+
+DERIVED_INDEXES: tuple[str, ...] = (
+    "CREATE INDEX IF NOT EXISTS idx_producao_turno_label ON fato_producao_historica(TURNO_LABEL);",
+    "CREATE INDEX IF NOT EXISTS idx_producao_maquina_key ON fato_producao_historica(MAQUINA_KEY);",
+    "CREATE INDEX IF NOT EXISTS idx_producao_fase_key ON fato_producao_historica(FASE_KEY);",
+    "CREATE INDEX IF NOT EXISTS idx_producao_codigo_key ON fato_producao_historica(CODIGO_KEY);",
+    "CREATE INDEX IF NOT EXISTS idx_producao_data_maquina_fase ON fato_producao_historica(DATA_FIM, MAQUINA_KEY, FASE_KEY);",
+)
+
+HISTORICO_SCHEMA_VERSION = 1
+
+
+def _safe_strip(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _parse_date_filter(value: Any) -> date | None:
+    if not value:
+        return None
+    raw = str(value).strip()[:10]
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _normalize_turno_fields(record: dict[str, Any]) -> tuple[str | None, str | None]:
+    turno_id = _safe_strip(record.get("TURNO_PROD") or record.get("turno") or record.get("TURNO"))
+    turno_label = _safe_strip(record.get("TURNO_DESC"))
+    if not turno_label and turno_id:
+        turno_label = f"TURNO {turno_id}"
+    return (turno_id or None, turno_label or None)
+
+
+def _derive_record_fields(record: dict[str, Any]) -> dict[str, Any]:
+    turno_id, turno_label = _normalize_turno_fields(record)
+    codigo_key = _safe_strip(record.get("CODIGO_ALTERNATIVO") or record.get("REDUZ"))
+    return {
+        "turno_id": turno_id,
+        "turno_label": turno_label or "Indefinido",
+        "maquina_key": _safe_strip(record.get("NOME_MAQUINA")),
+        "fase_key": _safe_strip(record.get("CD_DS_FASE")),
+        "codigo_key": codigo_key or None,
+    }
+
+
+def _ensure_derived_schema(conn: sqlite3.Connection) -> None:
+    current_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(fato_producao_historica);").fetchall()
+    }
+
+    for column_name, column_type in DERIVED_COLUMNS.items():
+        if column_name not in current_columns:
+            conn.execute(
+                f"ALTER TABLE fato_producao_historica ADD COLUMN {column_name} {column_type};"
+            )
+
+
+def _backfill_derived_columns(conn: sqlite3.Connection) -> None:
+    pending = conn.execute(
+        """
+        SELECT NUMERO_OB, SEQ, DADOS_COMPLETOS
+        FROM fato_producao_historica
+        WHERE TURNO_LABEL IS NULL
+           OR MAQUINA_KEY IS NULL
+           OR FASE_KEY IS NULL
+           OR CODIGO_KEY IS NULL
+        """
+    ).fetchall()
+    if not pending:
+        return
+
+    updates: list[tuple[Any, ...]] = []
+    for numero_ob, seq, raw_payload in pending:
+        if raw_payload:
+            try:
+                payload = json.loads(raw_payload)
+            except json.JSONDecodeError:
+                payload = {}
+        else:
+            payload = {}
+        derived = _derive_record_fields(payload)
+        updates.append(
+            (
+                derived["turno_id"],
+                derived["turno_label"],
+                derived["maquina_key"],
+                derived["fase_key"],
+                derived["codigo_key"],
+                numero_ob,
+                seq,
+            )
+        )
+
+    conn.executemany(
+        """
+        UPDATE fato_producao_historica
+        SET TURNO_ID = ?,
+            TURNO_LABEL = ?,
+            MAQUINA_KEY = ?,
+            FASE_KEY = ?,
+            CODIGO_KEY = ?
+        WHERE NUMERO_OB = ? AND SEQ = ?
+        """,
+        updates,
+    )
 
 
 def resolve_db_path(override: Path | str | None = None) -> Path:
@@ -30,6 +148,13 @@ def init_db(db_path: Path | str | None = None) -> Path:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA temp_store=MEMORY;")
+
+        current_version = int(conn.execute("PRAGMA user_version;").fetchone()[0] or 0)
+        table_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'fato_producao_historica';"
+        ).fetchone() is not None
+        if table_exists and current_version >= HISTORICO_SCHEMA_VERSION:
+            return path
 
         # Tabela Fato de Produção Histórica
         conn.execute(
@@ -57,11 +182,18 @@ def init_db(db_path: Path | str | None = None) -> Path:
                 MIN_REAL REAL,
                 MIN_PREV REAL,
                 DESVIO_MIN REAL,
+                TURNO_ID TEXT,
+                TURNO_LABEL TEXT,
+                MAQUINA_KEY TEXT,
+                FASE_KEY TEXT,
+                CODIGO_KEY TEXT,
                 DADOS_COMPLETOS TEXT, -- Payload completo serializado em JSON
                 PRIMARY KEY (NUMERO_OB, SEQ)
             );
             """
         )
+
+        _ensure_derived_schema(conn)
 
         # Criação de índices para pesquisas rápidas
         conn.execute(
@@ -85,6 +217,11 @@ def init_db(db_path: Path | str | None = None) -> Path:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_producao_maquina ON fato_producao_historica(NUMERO_MAQUINA);"
         )
+        for index_sql in DERIVED_INDEXES:
+            conn.execute(index_sql)
+
+        _backfill_derived_columns(conn)
+        conn.execute(f"PRAGMA user_version = {HISTORICO_SCHEMA_VERSION};")
 
         conn.commit()
 
@@ -129,8 +266,13 @@ def salvar_historico(records: list[dict[str, Any]], db_path: Path | str | None =
                 MIN_REAL,
                 MIN_PREV,
                 DESVIO_MIN,
+                TURNO_ID,
+                TURNO_LABEL,
+                MAQUINA_KEY,
+                FASE_KEY,
+                CODIGO_KEY,
                 DADOS_COMPLETOS
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
 
         for rec in records:
@@ -166,31 +308,31 @@ def salvar_historico(records: list[dict[str, Any]], db_path: Path | str | None =
                 numero_maquina = None
 
             nome_maquina = rec.get("NOME_MAQUINA")
-            nome_maquina_str = str(nome_maquina).strip() if nome_maquina else None
+            nome_maquina_str = _safe_strip(nome_maquina) or None
 
             cd_ds_fase = rec.get("CD_DS_FASE")
-            cd_ds_fase_str = str(cd_ds_fase).strip() if cd_ds_fase else None
+            cd_ds_fase_str = _safe_strip(cd_ds_fase) or None
 
             reduz = rec.get("REDUZ")
-            reduz_str = str(reduz).strip() if reduz is not None else None
+            reduz_str = _safe_strip(reduz) or None
 
             codigo_alternativo = rec.get("CODIGO_ALTERNATIVO")
-            codigo_alternativo_str = str(codigo_alternativo).strip() if codigo_alternativo else None
+            codigo_alternativo_str = _safe_strip(codigo_alternativo) or None
 
             descr_item = rec.get("DESCR_ITEM")
-            descr_item_str = str(descr_item).strip() if descr_item else None
+            descr_item_str = _safe_strip(descr_item) or None
 
             artigo = rec.get("ARTIGO")
-            artigo_str = str(artigo).strip() if artigo else None
+            artigo_str = _safe_strip(artigo) or None
 
             descr_artigo = rec.get("DESCR_ARTIGO")
-            descr_artigo_str = str(descr_artigo).strip() if descr_artigo else None
+            descr_artigo_str = _safe_strip(descr_artigo) or None
 
             cor = rec.get("COR")
-            cor_str = str(cor).strip() if cor else None
+            cor_str = _safe_strip(cor) or None
 
             descr_cor = rec.get("DESCR_COR")
-            descr_cor_str = str(descr_cor).strip() if descr_cor else None
+            descr_cor_str = _safe_strip(descr_cor) or None
 
             qt_kg = rec.get("QT_KG")
             try:
@@ -249,6 +391,7 @@ def salvar_historico(records: list[dict[str, Any]], db_path: Path | str | None =
                 else:
                     serialized_rec[k] = v
 
+            derived = _derive_record_fields(serialized_rec)
             dados_completos = json.dumps(serialized_rec, ensure_ascii=False)
 
             cursor.execute(
@@ -276,6 +419,11 @@ def salvar_historico(records: list[dict[str, Any]], db_path: Path | str | None =
                     min_real,
                     min_prev,
                     desvio_min,
+                    derived["turno_id"],
+                    derived["turno_label"],
+                    derived["maquina_key"],
+                    derived["fase_key"],
+                    derived["codigo_key"],
                     dados_completos,
                 ),
             )
@@ -314,13 +462,17 @@ def buscar_historico(
     # Filtro: Range de Datas
     dt_inicio = filtros.get("dt_inicio")
     if dt_inicio:
-        sql += " AND DATA_FIM >= ?"
-        params.append(str(dt_inicio).strip())
+        inicio = _parse_date_filter(dt_inicio)
+        if inicio:
+            sql += " AND DATA_FIM >= ?"
+            params.append(f"{inicio.isoformat()}T00:00:00")
 
     dt_fim = filtros.get("dt_fim")
     if dt_fim:
-        sql += " AND DATA_FIM <= ?"
-        params.append(str(dt_fim).strip())
+        fim = _parse_date_filter(dt_fim)
+        if fim:
+            sql += " AND DATA_FIM < ?"
+            params.append(f"{(fim + timedelta(days=1)).isoformat()}T00:00:00")
 
     # Filtro: Semanas (ex: 202622 para semana 22 de 2026)
     ano_sem = filtros.get("ano_sem")
@@ -349,226 +501,127 @@ def buscar_historico(
             raw_json = row["DADOS_COMPLETOS"]
             if raw_json:
                 try:
-                    records.append(json.loads(raw_json))
+                    item = json.loads(raw_json)
+                    turno_id = str(item.get("TURNO_PROD") or item.get("turno") or item.get("TURNO") or "").strip()
+                    turno_desc = str(item.get("TURNO_DESC") or "").strip()
+                    if not turno_desc and turno_id:
+                        turno_desc = f"TURNO {turno_id}"
+                    item["TURNO_PROD"] = turno_id or item.get("TURNO_PROD")
+                    item["TURNO_DESC"] = turno_desc or item.get("TURNO_DESC") or "Indefinido"
+                    records.append(item)
                 except json.JSONDecodeError:
                     pass
 
     return records
 
 
+def descrever_schema_historico(
+    db_path: Path | str | None = None,
+) -> dict[str, dict[str, str] | list[str]]:
+    """Expõe metadados mínimos do histórico pela camada autorizada do domínio."""
+    path = init_db(db_path)
+    with sqlite3.connect(path) as conn:
+        columns = {
+            row[1]: row[2]
+            for row in conn.execute("PRAGMA table_info(fato_producao_historica)").fetchall()
+        }
+        indexes = [
+            row[1]
+            for row in conn.execute("PRAGMA index_list(fato_producao_historica)").fetchall()
+        ]
+    return {"columns": columns, "indexes": indexes}
+
+
+def obter_overview_historico(
+    filtros: dict[str, Any],
+    db_path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Monta o contrato operacional V1 do Beneficiamento sem abrir Oracle."""
+    from .overview_v1 import obter_overview_historico as _obter_overview_historico_v1
+
+    return _obter_overview_historico_v1(filtros, db_path=db_path)
+
+
+def obter_detail_historico(
+    filtros: dict[str, Any],
+    db_path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Retorna o drill-down operacional V1 do Beneficiamento."""
+    from .overview_v1 import obter_detail_historico as _obter_detail_historico_v1
+
+    return _obter_detail_historico_v1(filtros, db_path=db_path)
+
+
 def obter_analytics_historico(
     filtros: dict[str, Any],
-    db_path: Path | str | None = None
+    db_path: Path | str | None = None,
 ) -> dict[str, Any]:
-    path = init_db(db_path)
-    
-    # 1. Construir a cláusula WHERE baseada nos filtros
-    where_clauses = ["1=1"]
-    params: list[Any] = []
-    
-    ob = filtros.get("ob")
-    if ob:
-        where_clauses.append("NUMERO_OB LIKE ?")
-        params.append(f"{str(ob).strip()}%")
-        
-    alternativo = filtros.get("alternativo")
-    if alternativo:
-        where_clauses.append("(CODIGO_ALTERNATIVO = ? OR REDUZ = ?)")
-        params.append(str(alternativo).strip())
-        params.append(str(alternativo).strip())
-        
-    dt_inicio = filtros.get("dt_inicio")
-    if dt_inicio:
-        where_clauses.append("DATA_FIM >= ?")
-        params.append(str(dt_inicio).strip())
-        
-    dt_fim = filtros.get("dt_fim")
-    if dt_fim:
-        where_clauses.append("DATA_FIM <= ?")
-        params.append(str(dt_fim).strip())
-        
-    ano_sem = filtros.get("ano_sem")
-    if ano_sem:
-        try:
-            where_clauses.append("ANO_SEM = ?")
-            params.append(int(ano_sem))
-        except ValueError:
-            pass
-            
-    ano_mes = filtros.get("ano_mes")
-    if ano_mes:
-        where_clauses.append("ANO_MES = ?")
-        params.append(str(ano_mes).strip())
-        
-    where_sql = " AND ".join(where_clauses)
-    
-    payload: dict[str, Any] = {}
-    
-    with sqlite3.connect(path) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # A. KPIs Gerais de PCP e OEE
-        kpis_sql = f"""
-            SELECT 
-                COUNT(DISTINCT NUMERO_OB) as ob_distintas,
-                COUNT(NUMERO_OB) as total_fases,
-                SUM(QT_KG) as kg_total,
-                SUM(QT_MT) as mt_total,
-                SUM(MIN_REAL) as min_real_total,
-                SUM(MIN_PREV) as min_prev_total,
-                SUM(REPROCESSO) as total_reprocesso,
-                COUNT(DISTINCT OPERADOR_FINAL) as total_operadores,
-                COUNT(DISTINCT NUMERO_MAQUINA) as maquinas_distintas
-            FROM fato_producao_historica
-            WHERE {where_sql}
-        """
-        cursor.execute(kpis_sql, params)
-        kpi_row = cursor.fetchone()
-        
-        kg_total = kpi_row["kg_total"] or 0.0
-        mt_total = kpi_row["mt_total"] or 0.0
-        total_fases = kpi_row["total_fases"] or 0
-        min_real = kpi_row["min_real_total"] or 0.0
-        min_prev = kpi_row["min_prev_total"] or 0.0
-        total_reprocesso = kpi_row["total_reprocesso"] or 0
-        
-        efic_tempo = (min_prev / min_real * 100) if min_real > 0 else 100.0
-        taxa_reprocesso = (total_reprocesso / total_fases * 100) if total_fases > 0 else 0.0
-        produtividade_kgh = (kg_total * 60.0 / min_real) if min_real > 0 else 0.0
-        
-        payload["geral"] = {
-            "ob_distintas": kpi_row["ob_distintas"] or 0,
-            "total_fases": total_fases,
-            "maquinas_distintas": kpi_row["maquinas_distintas"] or 0,
-            "total_operadores": kpi_row["total_operadores"] or 0,
-            "kg_total": round(kg_total, 2),
-            "mt_total": round(mt_total, 2),
-            "min_real_total": round(min_real, 2),
-            "min_prev_total": round(min_prev, 2),
-            "desvio_min_total": round(min_real - min_prev, 2),
-            "efic_tempo_media": round(efic_tempo, 2),
-            "taxa_reprocesso": round(taxa_reprocesso, 2),
-            "produtividade_kgh": round(produtividade_kgh, 2),
-        }
-        
-        # B. Ranking de Operadores (Chão de Fábrica)
-        operadores_sql = f"""
-            SELECT 
-                OPERADOR_FINAL as operador,
-                SUM(QT_KG) as kg_total,
-                SUM(QT_MT) as mt_total,
-                COUNT(NUMERO_OB) as total_fases,
-                SUM(MIN_REAL) as min_real,
-                SUM(MIN_PREV) as min_prev
-            FROM fato_producao_historica
-            WHERE {where_sql} AND OPERADOR_FINAL IS NOT NULL AND OPERADOR_FINAL != ''
-            GROUP BY OPERADOR_FINAL
-            ORDER BY kg_total DESC
-            LIMIT 10
-        """
-        cursor.execute(operadores_sql, params)
-        operadores = []
-        for r in cursor.fetchall():
-            o_min_real = r["min_real"] or 0.0
-            o_min_prev = r["min_prev"] or 0.0
-            o_efic = (o_min_prev / o_min_real * 100) if o_min_real > 0 else 100.0
-            operadores.append({
-                "operador": r["operador"],
-                "kg_total": round(r["kg_total"] or 0.0, 2),
-                "mt_total": round(r["mt_total"] or 0.0, 2),
-                "total_fases": r["total_fases"] or 0,
-                "efic_tempo": round(o_efic, 2),
-            })
-        payload["operadores"] = operadores
-        
-        # C. Destaques de Máquinas e Tempos (Setup vs Processo)
-        maquinas_sql = f"""
-            SELECT 
-                NOME_MAQUINA as maquina,
-                SUM(QT_KG) as kg_total,
-                SUM(QT_MT) as mt_total,
-                SUM(MIN_REAL) as min_real,
-                SUM(MIN_PREV) as min_prev,
-                COUNT(NUMERO_OB) as total_fases
-            FROM fato_producao_historica
-            WHERE {where_sql} AND NOME_MAQUINA IS NOT NULL
-            GROUP BY NOME_MAQUINA
-            ORDER BY kg_total DESC
-            LIMIT 10
-        """
-        cursor.execute(maquinas_sql, params)
-        maquinas = []
-        for r in cursor.fetchall():
-            m_min_real = r["min_real"] or 0.0
-            m_setup = round(m_min_real * 0.15, 2)
-            m_processo = round(m_min_real * 0.85, 2)
-            
-            maquinas.append({
-                "maquina": r["maquina"],
-                "kg_total": round(r["kg_total"] or 0.0, 2),
-                "mt_total": round(r["mt_total"] or 0.0, 2),
-                "total_fases": r["total_fases"] or 0,
-                "min_real": round(m_min_real, 2),
-                "min_setup": m_setup,
-                "min_processo": m_processo,
-            })
-        payload["maquinas"] = maquinas
-        
-        # D. Tabela de Produtos Dinâmica Enriquecida
-        produtos_sql = f"""
-            SELECT 
-                REDUZ as reduz,
-                DESCR_ITEM as produto,
-                ARTIGO as artigo,
-                SUM(QT_KG) as kg_total,
-                SUM(QT_MT) as mt_total,
-                SUM(REPROCESSO) as reprocessos,
-                COUNT(NUMERO_OB) as total_fases,
-                SUM(MIN_REAL) as min_real
-            FROM fato_producao_historica
-            WHERE {where_sql} AND REDUZ IS NOT NULL
-            GROUP BY REDUZ, DESCR_ITEM, ARTIGO
-            ORDER BY kg_total DESC
-            LIMIT 50
-        """
-        cursor.execute(produtos_sql, params)
-        produtos = []
-        for r in cursor.fetchall():
-            p_fases = r["total_fases"] or 0
-            p_reprocessos = r["reprocessos"] or 0
-            p_min_real = r["min_real"] or 0.0
-            p_taxa_rep = (p_reprocessos / p_fases * 100) if p_fases > 0 else 0.0
-            p_prod = (r["kg_total"] * 60.0 / p_min_real) if p_min_real > 0 else 0.0
-            
-            produtos.append({
-                "reduz": r["reduz"],
-                "produto": r["produto"] or "Sem descrição",
-                "artigo": r["artigo"] or "Sem artigo",
-                "kg_total": round(r["kg_total"] or 0.0, 2),
-                "mt_total": round(r["mt_total"] or 0.0, 2),
-                "taxa_reprocesso": round(p_taxa_rep, 2),
-                "produtividade_kgh": round(p_prod, 2),
-            })
-        payload["produtos"] = produtos
-        
-        # E. Distribuição por Turno (via JSON extract nativo do SQLite)
-        turnos_sql = f"""
-            SELECT 
-                COALESCE(json_extract(DADOS_COMPLETOS, '$.turno'), json_extract(DADOS_COMPLETOS, '$.TURNO'), 'Indefinido') as turno,
-                SUM(QT_KG) as kg_total
-            FROM fato_producao_historica
-            WHERE {where_sql}
-            GROUP BY turno
-            ORDER BY kg_total DESC
-        """
-        cursor.execute(turnos_sql, params)
-        turnos = []
-        for r in cursor.fetchall():
-            turnos.append({
-                "turno": r["turno"] or "Indefinido",
-                "kg_total": round(r["kg_total"] or 0.0, 2)
-            })
-        payload["turnos"] = turnos
+    """Compatibilidade legada: deriva o contrato antigo do overview V0."""
+    overview_filters = {
+        "dt_inicio": filtros.get("dt_inicio"),
+        "dt_fim": filtros.get("dt_fim"),
+        "maquina": filtros.get("maquina"),
+        "fase": filtros.get("fase"),
+        "turno": filtros.get("turno"),
+        "alternativo": filtros.get("alternativo"),
+        "q": filtros.get("busca") or filtros.get("ob") or filtros.get("alternativo"),
+    }
+    overview = obter_overview_historico(overview_filters, db_path=db_path)
+    kpis = overview.get("kpis", {})
+    rankings = overview.get("rankings", {})
+    filter_options = overview.get("filter_options", {})
 
-    return payload
+    maquinas = []
+    for item in rankings.get("gargalos", []):
+        maquinas.append({
+            "maquina": item.get("maquina") or "Sem máquina",
+            "kg_total": item.get("kg_total") or 0.0,
+            "mt_total": item.get("mt_total") or 0.0,
+            "total_fases": item.get("fases_concluidas") or 0,
+            "min_real": item.get("desvio_min") or 0.0,
+            "min_setup": 0.0,
+            "min_processo": item.get("desvio_min") or 0.0,
+        })
+
+    produtos = [{
+        "reduz": item.get("codigo") or "-",
+        "produto": item.get("produto") or "Sem descrição",
+        "artigo": item.get("artigo") or "Sem artigo",
+        "kg_total": item.get("kg_total") or 0.0,
+        "mt_total": item.get("mt_total") or 0.0,
+        "taxa_reprocesso": item.get("reprocesso_kg_pct") or 0.0,
+        "produtividade_kgh": item.get("produtividade_kg_h") or 0.0,
+    } for item in rankings.get("produtos_principais", [])]
+
+    fases = [{
+        "fase": item.get("fase") or "Sem fase",
+        "kg_total": item.get("kg_total") or 0.0,
+        "mt_total": 0.0,
+        "total_fases": item.get("fases_concluidas") or 0,
+        "reprocesso_percent": item.get("reprocesso_kg_pct") or 0.0,
+        "efic_tempo": item.get("eficiencia_tempo_pct") or 0.0,
+    } for item in rankings.get("fases_criticas", [])]
+
+    return {
+        "geral": {
+            "ob_distintas": kpis.get("ob_distintas") or 0,
+            "total_fases": kpis.get("fases_concluidas") or 0,
+            "maquinas_distintas": len(filter_options.get("maquinas", [])),
+            "total_operadores": 0,
+            "kg_total": kpis.get("kg_total") or 0.0,
+            "mt_total": kpis.get("mt_total") or 0.0,
+            "min_real_total": 0.0,
+            "min_prev_total": 0.0,
+            "desvio_min_total": kpis.get("desvio_tempo_min") or 0.0,
+            "efic_tempo_media": kpis.get("eficiencia_tempo_pct") or 0.0,
+            "taxa_reprocesso": kpis.get("reprocesso_kg_pct") or 0.0,
+            "produtividade_kgh": kpis.get("produtividade_kg_h") or 0.0,
+        },
+        "operadores": [],
+        "maquinas": maquinas,
+        "produtos": produtos,
+        "turnos": [{"turno": value, "kg_total": 0.0} for value in filter_options.get("turnos", [])],
+        "fases": fases,
+        "artigos": [],
+        "cores": [],
+    }
