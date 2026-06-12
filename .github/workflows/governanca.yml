@@ -218,7 +218,51 @@ jobs:
         shell: pwsh
         run: |
           $env:PYTHONPATH="Orchestrator"
-          pytest "Orchestrator\tests" -v -m "not e2e"
+          # Gate de regressao: cobertura medida em 12/06/2026 era 80% (jun/2026).
+          pytest "Orchestrator\tests" -v -m "not e2e" `
+            --cov=app --cov=worker `
+            --cov-report=xml:coverage.xml --cov-report=term `
+            --cov-fail-under=77 `
+            --junitxml=junit-unit.xml
+
+      - name: Publicar resumo de cobertura
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'coverage.xml')) {
+            Write-Host 'coverage.xml nao gerado; resumo de cobertura pulado.'
+            exit 0
+          }
+
+          [xml]$cov = Get-Content 'coverage.xml'
+          $pctTotal = [math]::Round([double]$cov.coverage.'line-rate' * 100, 1)
+
+          $linhas = @()
+          foreach ($pacote in $cov.coverage.packages.package) {
+            $pct = [math]::Round([double]$pacote.'line-rate' * 100, 1)
+            $linhas += "| $($pacote.name) | $pct% |"
+          }
+
+          @"
+          ## Cobertura de testes Python
+
+          - Total: **$pctTotal%** (gate de regressao: 77%)
+
+          | Pacote | Cobertura |
+          |--------|-----------|
+          $($linhas -join "`n")
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Publicar relatorios de teste
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: relatorios-testes-python-${{ github.run_number }}
+          path: |
+            junit-unit.xml
+            coverage.xml
+          retention-days: 14
+          if-no-files-found: warn
 
   testes-e2e:
     name: Testes E2E
@@ -265,14 +309,16 @@ jobs:
         shell: pwsh
         run: |
           $env:PYTHONPATH="Orchestrator"
-          pytest "Orchestrator\tests\test_e2e_dashboard.py" -v -m e2e --basetemp="Orchestrator\tests\e2e-evidence"
+          pytest "Orchestrator\tests\test_e2e_dashboard.py" -v -m e2e --basetemp="Orchestrator\tests\e2e-evidence" --junitxml=junit-e2e.xml
 
       - name: Publicar Evidencias E2E
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: e2e-evidence-${{ github.run_number }}
-          path: Orchestrator/tests/e2e-evidence/**
+          path: |
+            Orchestrator/tests/e2e-evidence/**
+            junit-e2e.xml
           retention-days: 14
           if-no-files-found: warn
 
@@ -340,6 +386,15 @@ jobs:
         run: |
           Import-Module Pester -RequiredVersion 5.7.1 -Force
           Invoke-Pester -Path "${{ github.workspace }}\lib\tests" -CI
+
+      - name: Publicar resultados Pester
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: relatorios-testes-pester-${{ github.run_number }}
+          path: testResults.xml
+          retention-days: 14
+          if-no-files-found: warn
 
   conformidade-log:
     name: Conformidade de log
