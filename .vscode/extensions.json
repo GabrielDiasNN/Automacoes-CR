@@ -1,34 +1,33 @@
 {
-    "recommendations": [
-        "github.copilot-chat",
-        "github.vscode-pull-request-github",
-        "eamodio.gitlens",
-        "sbroenne.excel-mcp",
-        "ms-vscode.powershell",
-        "GrapeCity.gc-excelviewer",
-        "local-smart.excel-live-server",
-        "powerquery.vscode-powerquery",
-        "ms-python.python",
-        "ms-python.vscode-pylance",
-        "ms-python.black-formatter",
-        "ms-python.isort"
-    ],
-    "unwantedRecommendations": [
-        "ms-python.vscode-python-envs",
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "editorconfig.editorconfig",
-        "ms-vscode.cpptools",
-        "golang.go",
-        "docker.docker",
-        "ms-azuretools.vscode-containers",
-        "ms-azuretools.vscode-docker",
-        "formulahendry.code-runner",
-        "ritwickdey.liveserver",
-        "google.geminicodeassist",
-        "github.remotehub",
-        "ms-vscode.remote-explorer",
-        "ms-vscode.remote-repositories",
-        "ms-vscode-remote.remote-wsl"
-    ]
+  "recommendations": [
+    "github.copilot-chat",
+    "github.vscode-pull-request-github",
+    "sbroenne.excel-mcp",
+    "ms-vscode.powershell",
+    "GrapeCity.gc-excelviewer",
+    "local-smart.excel-live-server",
+    "powerquery.vscode-powerquery",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.black-formatter",
+    "ms-python.isort"
+  ],
+  "unwantedRecommendations": [
+    "ms-python.vscode-python-envs",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "editorconfig.editorconfig",
+    "ms-vscode.cpptools",
+    "golang.go",
+    "docker.docker",
+    "ms-azuretools.vscode-containers",
+    "ms-azuretools.vscode-docker",
+    "formulahendry.code-runner",
+    "ritwickdey.liveserver",
+    "google.geminicodeassist",
+    "github.remotehub",
+    "ms-vscode.remote-explorer",
+    "ms-vscode.remote-repositories",
+    "ms-vscode-remote.remote-wsl"
+  ]
 }

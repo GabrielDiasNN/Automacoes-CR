@@ -3,18 +3,16 @@ if ([string]::IsNullOrWhiteSpace($here)) {
     $here = Split-Path -Parent $PSCommandPath
 }
 
-$repoRoot = Split-Path -Parent (Split-Path -Parent $here)
-$sut = Join-Path $repoRoot "Tools\Test-ArchitectureStandard.ps1"
+BeforeAll {
+    function New-ArchitectureFixture {
+        param([string]$BasePath)
 
-function New-ArchitectureFixture {
-    param([string]$BasePath)
+        New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "docs") | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Tools") | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Orchestrator\app\routers") | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Orchestrator\app\services") | Out-Null
 
-    New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "docs") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Tools") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Orchestrator\app\routers") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Orchestrator\app\services") | Out-Null
-
-    @"
+        @"
 # Padrao Arquitetural
 
 ## Camadas
@@ -30,11 +28,11 @@ Contrato minimo.
 Contrato minimo.
 "@ | Set-Content -LiteralPath (Join-Path $BasePath "docs\architecture-standard.md") -Encoding UTF8
 
-    "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "README.md") -Encoding UTF8
-    "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "CONTEXT.md") -Encoding UTF8
-    "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "docs\repository-governance.md") -Encoding UTF8
+        "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "README.md") -Encoding UTF8
+        "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "CONTEXT.md") -Encoding UTF8
+        "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "docs\repository-governance.md") -Encoding UTF8
 
-    @"
+        @"
 {
   "version": "1.0.0",
   "python_subprocess_allowlist": [
@@ -54,22 +52,25 @@ Contrato minimo.
   ]
 }
 "@ | Set-Content -LiteralPath (Join-Path $BasePath "Tools\architecture-standard.rules.json") -Encoding UTF8
-}
+    }
 
-function Invoke-ArchitectureStandard {
-    param(
-        [string]$BasePath,
-        [string[]]$ExtraArgs = @()
-    )
+    function Invoke-ArchitectureStandard {
+        param(
+            [string]$BasePath,
+            [string[]]$ExtraArgs = @()
+        )
 
-    $outputPath = Join-Path $BasePath "architecture-output.txt"
-    $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $sut, "-RootPath", $BasePath) + $ExtraArgs
-    $process = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Wait -PassThru -NoNewWindow -RedirectStandardOutput $outputPath
-    $output = Get-Content -LiteralPath $outputPath -Raw
+        $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $sut = Join-Path $repoRoot "Tools\Test-ArchitectureStandard.ps1"
+        $outputPath = Join-Path $BasePath "architecture-output.txt"
+        $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $sut, "-RootPath", $BasePath) + $ExtraArgs
+        $process = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Wait -PassThru -NoNewWindow -RedirectStandardOutput $outputPath
+        $output = Get-Content -LiteralPath $outputPath -Raw
 
-    return [pscustomobject]@{
-        ExitCode = $process.ExitCode
-        Output   = $output
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Output   = $output
+        }
     }
 }
 
