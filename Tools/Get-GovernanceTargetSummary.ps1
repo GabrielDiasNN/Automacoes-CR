@@ -96,6 +96,29 @@ else {
     "targeted_paths"
 }
 
+# Flags por area para selecao de jobs no CI. Em full_scan (caminho critico
+# alterado) ou diff vazio/indeterminado, todas as areas sao consideradas
+# afetadas para garantir cobertura completa.
+$forceAllAreas = $fullScanRequired -or ($normalizedPaths.Count -eq 0)
+
+function Test-AreaAffected {
+    param([string[]]$Patterns)
+
+    if ($forceAllAreas) {
+        return $true
+    }
+
+    return @(
+        $normalizedPaths |
+            Where-Object { Test-MatchAnyPattern -Path $_ -Patterns $Patterns }
+    ).Count -gt 0
+}
+
+$hasPython = Test-AreaAffected -Patterns @("\.py$", "^requirements[^\\]*\.(txt|in)$")
+$hasPowerShell = Test-AreaAffected -Patterns @("\.(ps1|psm1|psd1)$")
+$hasJs = Test-AreaAffected -Patterns @("\.(js|mjs|cjs)$", "\.(html|css)$")
+$hasMarkdown = Test-AreaAffected -Patterns @("\.md$")
+
 $summary = [PSCustomObject]@{
     BasePath          = $resolvedRoot
     NormalizedPaths   = @($normalizedPaths)
@@ -104,6 +127,10 @@ $summary = [PSCustomObject]@{
     LogTargetPaths    = @($logTargetPaths)
     HasCriticalPaths  = $fullScanRequired
     HasLogTargets     = $logTargetPaths.Count -gt 0
+    HasPython         = $hasPython
+    HasPowerShell     = $hasPowerShell
+    HasJs             = $hasJs
+    HasMarkdown       = $hasMarkdown
     SelectionMode     = $selectionMode
     ChangedFileCount  = $normalizedPaths.Count
     CriticalPathCount = $criticalPaths.Count
