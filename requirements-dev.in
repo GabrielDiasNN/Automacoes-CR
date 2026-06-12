@@ -10,3 +10,7 @@ types-setuptools
 black
 isort
 pip-tools
+
+# Seguranca (analise estatica e auditoria de dependencias no CI)
+bandit
+pip-audit
