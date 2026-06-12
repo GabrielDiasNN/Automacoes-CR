@@ -43,7 +43,9 @@ jobs:
 
   preparar-diff:
     name: Preparar diff
-    runs-on: windows-latest
+    # pwsh em ubuntu: Get-GovernanceTargetSummary.ps1 faz apenas git diff e
+    # classificacao por regex (independente de plataforma)
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
@@ -129,7 +131,8 @@ jobs:
 
   lint-python:
     name: Lint Python
-    runs-on: windows-latest
+    # black/isort/bandit/pip-audit sao puro Python e independentes de SO
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: preparar-diff
     if: needs.preparar-diff.outputs.has_python == 'true'
