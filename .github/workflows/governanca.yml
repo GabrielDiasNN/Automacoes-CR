@@ -342,11 +342,13 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
-      - name: Instalar Dependencias Python (Dev)
+      - name: Instalar Dependencias Python (Dev & Test)
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
+          # Test e necessario alem de Dev: o Mypy verifica Orchestrator/tests,
+          # que importa pytest, httpx e playwright.
+          python -m pip install -r requirements-dev.txt -r requirements-test.txt
 
       - name: Validar governanca agregada (orquestrador soberano)
         shell: pwsh
