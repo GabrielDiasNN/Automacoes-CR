@@ -353,6 +353,21 @@ jobs:
         run: |
           ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}"
 
+      - name: Validar atualizacao do CHANGELOG (somente PR)
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          CHANGED_FILES_JSON: ${{ needs.preparar-diff.outputs.changed_files_json }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          $changedFiles = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:CHANGED_FILES_JSON) -and $env:CHANGED_FILES_JSON -ne '[]') {
+            $changedFiles = @($env:CHANGED_FILES_JSON | ConvertFrom-Json)
+          }
+
+          $allowSkip = $env:PR_TITLE -match '\[skip-changelog\]'
+          ./Tools/Test-ChangelogUpdated.ps1 -Paths $changedFiles -AllowSkip:$allowSkip
+
   testes-powershell:
     name: Testes PowerShell (Pester)
     runs-on: windows-latest

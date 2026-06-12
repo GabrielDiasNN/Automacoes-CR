@@ -1,0 +1,95 @@
+name: Seguranca Agendada
+
+permissions: {}
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Toda segunda-feira as 09:00 UTC (06:00 BRT)
+    - cron: '0 9 * * 1'
+
+jobs:
+  auditoria-dependencias:
+    name: Auditoria de Dependencias (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Instalar pip-audit
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit
+
+      - name: Auditar dependencias de runtime
+        shell: pwsh
+        run: |
+          python -m pip_audit -r requirements.txt
+
+      - name: Abrir issue em caso de vulnerabilidade
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $titulo = "Seguranca: pip-audit encontrou vulnerabilidades ($(Get-Date -Format 'yyyy-MM-dd'))"
+          $corpo = @"
+          A auditoria semanal de dependencias falhou.
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Revise o log do job 'Auditoria de Dependencias (pip-audit)' e atualize
+          os pacotes afetados em requirements*.in (recompilar com pip-compile).
+          "@
+          gh issue create --repo "${{ github.repository }}" --title $titulo --body $corpo --label seguranca
+
+  gitleaks-historico:
+    name: Gitleaks (historico completo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Gitleaks Scan (historico completo)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - name: Abrir issue em caso de vazamento
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $titulo = "Seguranca: gitleaks detectou possivel segredo no historico ($(Get-Date -Format 'yyyy-MM-dd'))"
+          $corpo = @"
+          O scan semanal de segredos no historico completo falhou.
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Trate como incidente: rotacione o segredo exposto antes de qualquer
+          limpeza de historico e registre a excecao em .gitleaks.toml se for
+          falso positivo.
+          "@
+          gh issue create --repo "${{ github.repository }}" --title $titulo --body $corpo --label seguranca
