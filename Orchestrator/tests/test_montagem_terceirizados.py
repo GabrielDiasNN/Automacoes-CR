@@ -333,6 +333,7 @@ def test_extract_sucesso_oracle_mockado(
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_connect.return_value = mock_conn
+    mock_conn.__enter__.return_value = mock_conn
     mock_conn.cursor.return_value = mock_cursor
 
     # Retorna uma lista de registros mockados no fetchmany
