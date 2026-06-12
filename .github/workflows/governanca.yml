@@ -276,6 +276,39 @@ jobs:
         run: |
           ./Tools/Test-PortablePaths.ps1 -RootPath "${{ github.workspace }}"
 
+      - name: Resumo final da governanca
+        if: always()
+        shell: pwsh
+        run: |
+          $status = if (${{ job.status }} -eq 'success') { '✅ PASSOU' } else { '❌ FALHOU' }
+          @"
+          ## $status — Governanca
+
+          | Campo | Valor |
+          |-------|-------|
+          | Commit | [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
+          | Branch | ``${{ github.ref_name }}`` |
+          | Autor | ${{ github.actor }} |
+          | Executado em | ${{ runner.os }} |
+          | Run | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          ### Checklist de validacoes
+          - Estilo Python (Black & Isort)
+          - Governanca de SKILLs
+          - Governanca agregada
+          - Encoding de fontes
+          - Seguranca Zero Trust
+          - Python (Mypy & Pylint)
+          - Analise de Seguranca (Bandit)
+          - Auditoria de Dependencias (pip-audit)
+          - Testes Unitarios Python (Pytest)
+          - Testes E2E Playwright
+          - Performance SQL (Oracle)
+          - PowerShell (Analyzer & Try/Catch)
+          - Testes Unitarios PowerShell (Pester)
+          - Portabilidade (Sem Caminhos Absolutos)
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
   conformidade-log:
     runs-on: windows-latest
     timeout-minutes: 15
