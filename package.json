@@ -1,0 +1,12 @@
+{
+  "name": "automacoes-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ferramentas de qualidade do monorepo (lint do Dashboard). Dependencias de runtime Node.js vivem nos projetos (ex.: Receitas Bloqueadas).",
+  "scripts": {
+    "lint:js": "eslint \"Dashboard/js/**/*.js\""
+  },
+  "devDependencies": {
+    "eslint": "9.39.1"
+  }
+}
