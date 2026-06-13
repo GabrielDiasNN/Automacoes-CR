@@ -16,6 +16,16 @@
 
 Troque `diario` por `semanal`, `mensal` ou `anual`.
 
+## Recarga do Histórico v2
+
+Após atualizar uma base com schema anterior ao v2, execute a carga retroativa no intervalo operacional necessário:
+
+```powershell
+.\Tools\CargarHistoricoBeneficiamento.ps1 -DataInicio 2026-01-01 -DataFim 2026-06-12
+```
+
+A recriação é intencional: evita manter colunas tipadas parcialmente preenchidas a partir do blob legado. Só promova a mudança depois de confirmar `total_linhas_salvas`, ausência de erros por fatia e paridade dos KPIs principais.
+
 ## Regras Operacionais
 
 - Não executar múltiplos refreshes do mesmo período em paralelo.

@@ -16,10 +16,15 @@ Domínio dedicado para a API de produção, snapshots analíticos e histórico S
 - Se o `call_timeout` do Oracle Client não for aplicado, o snapshot continua utilizável, mas a API marca o período como `attention`.
 - O runner agora expõe o estado final do refresh como `ok`, `attention` ou `partial_failure`; falha na escrita do histórico SQLite não deve ficar silenciosa.
 - O health agora distingue explicitamente `snapshot_missing`, `snapshot_invalid`, `snapshot_stale`, `historico_partial_failure`, `quality_blocked`, `quality_attention`, `oracle_timeout_unapplied`, `snapshot_no_data` e `healthy`.
+- O histórico v2 lê colunas tipadas e índices por padrão; `DADOS_COMPLETOS` só é desserializado quando `include_raw=true`.
+- A migração para o schema v2 recria `beneficiamento_historico.db`. Após promover o código, execute a recarga retroativa descrita no runbook.
 
 ## Estrutura
 
 - `src/beneficiamento/`: código Python modular do domínio.
+- `src/beneficiamento/core/`: coerções, aliases, turnos e métricas compartilhadas.
+- `src/beneficiamento/data/`: schema SQLite, writer idempotente e consultas tipadas.
+- `src/beneficiamento/contracts/`: imports canônicos de overview, detail e analytics.
 - `sql/templates/`: SQLs operacionais com binds `:dt_inicio` e `:dt_fim`.
 - `sql/reference/`: views de referência preservadas para auditoria técnica.
 - `snapshots/latest/`: última versão aprovada dos arquivos `*.analytics.json` e `*.profile.json`.

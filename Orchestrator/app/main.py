@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401 — registers ORM tables in Base.metadata
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
-from .database import SessionLocal
+from .database import SessionLocal, session_scope
 from .error_handlers import register_exception_handlers
 from .logger_setup import setup_json_logger
 from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
@@ -54,13 +54,10 @@ logger = setup_json_logger(
 
 
 def _cleanup_zombie_tasks():
-    db = SessionLocal()
-    try:
+    with session_scope(SessionLocal) as db:
         zombie_count = mark_running_tasks_as_failed_by_reboot(db)
         if zombie_count:
             logger.info("Limpeza: %d tarefas recuperadas.", zombie_count)
-    finally:
-        db.close()
 
 
 # ---------------------------------------------------------------------------

@@ -1,12 +1,12 @@
 """Checks de qualidade e contrato dos snapshots do Beneficiamento."""
+
 # pylint: disable=too-many-locals
 
 from __future__ import annotations
 
 from typing import Any
 
-from .analytics import safe_text, to_float
-
+from .core import safe_text, to_float
 
 DETAILED_REQUIRED_COLUMNS = (
     "NUMEROUP",
@@ -78,7 +78,9 @@ def assess_quality(
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
     variant = "anual" if period == "anual" else "detalhado"
-    required_columns = ANNUAL_REQUIRED_COLUMNS if period == "anual" else DETAILED_REQUIRED_COLUMNS
+    required_columns = (
+        ANNUAL_REQUIRED_COLUMNS if period == "anual" else DETAILED_REQUIRED_COLUMNS
+    )
     duplicate_key_fields = (
         (
             "ANO_MES",
@@ -102,7 +104,9 @@ def assess_quality(
         )
     )
     column_map = {item["column"]: item for item in report.get("columns", [])}
-    missing_required = [column for column in required_columns if column not in column_map]
+    missing_required = [
+        column for column in required_columns if column not in column_map
+    ]
     critical_issues: list[str] = []
     warnings: list[str] = []
     checks: list[dict[str, Any]] = []
@@ -110,7 +114,9 @@ def assess_quality(
     if not report.get("total_rows"):
         critical_issues.append("consulta sem linhas retornadas")
     if missing_required:
-        critical_issues.append("colunas obrigatorias ausentes: " + ", ".join(missing_required))
+        critical_issues.append(
+            "colunas obrigatorias ausentes: " + ", ".join(missing_required)
+        )
     checks.append(
         {
             "name": "schema_presence",
@@ -141,7 +147,9 @@ def assess_quality(
         }
     )
 
-    duplicate_rows, distinct_key_count = _count_duplicate_keys(records, duplicate_key_fields)
+    duplicate_rows, distinct_key_count = _count_duplicate_keys(
+        records, duplicate_key_fields
+    )
     if duplicate_rows:
         critical_issues.append(
             f"chave analitica duplicada em {duplicate_rows} linha(s)"

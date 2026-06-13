@@ -1,4 +1,5 @@
 """Runner controlado para gerar snapshots e carregar histórico do Beneficiamento."""
+
 # pylint: disable=too-many-arguments,too-many-locals,broad-exception-caught,line-too-long,trailing-whitespace
 
 from __future__ import annotations
@@ -11,13 +12,15 @@ from pathlib import Path
 from typing import Any
 
 from .analytics import build_analytics
+from .data.writer import salvar_historico
 from .oracle import QueryResult, execute_query
 from .profile import profile_rows, rows_to_records, summarize_profiles
 from .quality import assess_quality
-from .settings import ORACLE_CALL_TIMEOUT_MS, PERIOD_ORDER, SNAPSHOT_DIR, WALL_CLOCK_BUDGET_SECONDS
+from .settings import (ORACLE_CALL_TIMEOUT_MS, PERIOD_ORDER, SNAPSHOT_DIR,
+                       WALL_CLOCK_BUDGET_SECONDS)
 from .snapshot_store import snapshot_path, write_json_atomic
-from .sql_repository import apply_rownum_limit, bind_parameters, load_sql_template, period_window
-from .historico_db import salvar_historico
+from .sql_repository import (apply_rownum_limit, bind_parameters,
+                             load_sql_template, period_window)
 
 
 def _load_sql_file(path: Path) -> str:
@@ -48,7 +51,9 @@ def _is_timeout_like_failure(exc: Exception) -> bool:
     )
 
 
-def _split_datetime_range(start_dt: datetime, end_dt: datetime) -> tuple[datetime, datetime] | None:
+def _split_datetime_range(
+    start_dt: datetime, end_dt: datetime
+) -> tuple[datetime, datetime] | None:
     if end_dt <= start_dt:
         return None
     midpoint = start_dt + (end_dt - start_dt) / 2
@@ -65,6 +70,16 @@ def _execute_query_in_monthly_slices(
     oracle_timeout_ms: int,
     max_rows: int | None,
 ) -> QueryResult:
+    """Executa a janela anual em fatias mensais com split adaptativo.
+
+    Estrategia: cada mes vira uma fatia em ``pending_ranges`` (FIFO). Se uma
+    fatia falha por timeout do Oracle (ver ``_is_timeout_like_failure``) e ainda
+    tem mais de 1 hora de janela, ela e dividida ao meio e as duas metades sao
+    reinseridas no inicio da fila (ordem temporal preservada). Falhas nao-timeout,
+    janelas <= 1h ou indivisiveis sao propagadas. Os metadados de timeout sao
+    consolidados ao final: ``oracle_timeout_applied`` so e True se todas as fatias
+    aplicaram ``call_timeout`` no client.
+    """
     all_rows: list[tuple[Any, ...]] = []
     columns: list[str] = []
     duplicate_columns: dict[str, list[int]] = {}
@@ -132,14 +147,20 @@ def _execute_query_in_monthly_slices(
             }
         )
 
-    total_elapsed = sum(float(item.get("elapsed_seconds") or 0) for item in slice_metadata)
-    oracle_timeout_applied = all(timeout_applied_flags) if timeout_applied_flags else False
+    total_elapsed = sum(
+        float(item.get("elapsed_seconds") or 0) for item in slice_metadata
+    )
+    oracle_timeout_applied = (
+        all(timeout_applied_flags) if timeout_applied_flags else False
+    )
     if timeout_warnings:
         oracle_timeout_warning = "; ".join(dict.fromkeys(timeout_warnings))
     elif oracle_timeout_applied:
         oracle_timeout_warning = ""
     else:
-        oracle_timeout_warning = "uma ou mais fatias anuais nao aplicaram call_timeout no cliente Oracle"
+        oracle_timeout_warning = (
+            "uma ou mais fatias anuais nao aplicaram call_timeout no cliente Oracle"
+        )
     return QueryResult(
         columns=columns,
         rows=all_rows,
@@ -176,12 +197,16 @@ def _build_snapshot_payloads_from_result(
     return profile, analytics, records
 
 
-def _classify_refresh_status(analytics: dict[str, Any], history_write_failed: bool) -> str:
+def _classify_refresh_status(
+    analytics: dict[str, Any], history_write_failed: bool
+) -> str:
     if history_write_failed:
         return "partial_failure"
 
     quality_status = str((analytics.get("qualidade") or {}).get("status") or "").lower()
-    oracle_meta = ((analytics.get("execucao_oracle") or {}).get("consulta_principal") or {})
+    oracle_meta = (analytics.get("execucao_oracle") or {}).get(
+        "consulta_principal"
+    ) or {}
     if quality_status in {"attention", "blocked"}:
         return "attention"
     if oracle_meta.get("oracle_timeout_applied") is False:
@@ -205,7 +230,9 @@ def build_snapshot_payloads(
         wall_clock_budget_seconds=WALL_CLOCK_BUDGET_SECONDS,
         max_rows=max_rows,
     )
-    return _build_snapshot_payloads_from_result(period, result, sample_limit=sample_limit)
+    return _build_snapshot_payloads_from_result(
+        period, result, sample_limit=sample_limit
+    )
 
 
 def run_period(
@@ -267,7 +294,9 @@ def run_period(
         snapshot_meta["historico_rows_saved"] = 0
         snapshot_meta["historico_write_status"] = "partial_failure"
         snapshot_meta["historico_write_error"] = history_write_error
-        print(f"Aviso: falha ao salvar dados no SQLite historico: {exc}", file=sys.stderr)
+        print(
+            f"Aviso: falha ao salvar dados no SQLite historico: {exc}", file=sys.stderr
+        )
 
     refresh_status = _classify_refresh_status(analytics, history_write_failed)
     snapshot_meta["refresh_status"] = refresh_status
@@ -294,22 +323,29 @@ def run_historical_range(
     oracle_timeout_ms: int = ORACLE_CALL_TIMEOUT_MS,
     max_rows: int | None = None,
 ) -> dict[str, Any]:
-    sql = load_sql_template("diario") # Usa o template detalhado
-    
+    """Carga retroativa fatiada por dia no historico SQLite.
+
+    Itera dia a dia no intervalo [start_date, end_date], executando o template
+    detalhado por fatia e gravando idempotentemente via ``salvar_historico``.
+    Falhas de uma fatia sao registradas em ``erros`` sem abortar as demais; o
+    status final e ``completed_with_errors`` se houver qualquer falha.
+    """
+    sql = load_sql_template("diario")  # Usa o template detalhado
+
     current = start_date
     total_inserted = 0
     fatias_processadas = 0
     erros = []
-    
+
     print(f"Iniciando carga historica de {start_date} ate {end_date}...", flush=True)
-    
+
     while current <= end_date:
         next_day = current + timedelta(days=1)
         params = {
             "dt_inicio": datetime.combine(current, time.min),
             "dt_fim": datetime.combine(next_day, time.min),
         }
-        
+
         print(f"-> Executando fatia dia {current.isoformat()}... ", end="", flush=True)
         try:
             result = execute_query(
@@ -323,18 +359,21 @@ def run_historical_range(
             inserted = salvar_historico(records)
             total_inserted += inserted
             fatias_processadas += 1
-            print(f"OK ({len(records)} linhas lidas, {inserted} salvas/atualizadas no SQLite).", flush=True)
+            print(
+                f"OK ({len(records)} linhas lidas, {inserted} salvas/atualizadas no SQLite).",
+                flush=True,
+            )
         except Exception as exc:
             erros.append({"data": current.isoformat(), "erro": str(exc)})
             print(f"FALHA: {exc}", flush=True)
-            
+
         current = next_day
-        
+
     return {
         "status": "ok" if not erros else "completed_with_errors",
         "fatias_processadas": fatias_processadas,
         "total_linhas_salvas": total_inserted,
-        "erros": erros
+        "erros": erros,
     }
 
 
@@ -351,18 +390,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sample-limit", type=int, default=3)
     parser.add_argument("--max-rows", type=int, default=0)
     parser.add_argument("--use-rownum-limit", action="store_true")
-    
+
     # Novos parametros de range historico retroativo
-    parser.add_argument("--range-start", type=str, default=None, help="Data inicial YYYY-MM-DD")
-    parser.add_argument("--range-end", type=str, default=None, help="Data final YYYY-MM-DD")
-    
+    parser.add_argument(
+        "--range-start", type=str, default=None, help="Data inicial YYYY-MM-DD"
+    )
+    parser.add_argument(
+        "--range-end", type=str, default=None, help="Data final YYYY-MM-DD"
+    )
+
     args = parser.parse_args(argv)
 
     # Fluxo 1: Carga retroativa fatiada no SQLite historico se range for informado
     if args.range_start:
         try:
             start_date = datetime.strptime(args.range_start, "%Y-%m-%d").date()
-            end_date = datetime.strptime(args.range_end, "%Y-%m-%d").date() if args.range_end else date.today()
+            end_date = (
+                datetime.strptime(args.range_end, "%Y-%m-%d").date()
+                if args.range_end
+                else date.today()
+            )
         except ValueError:
             print(
                 json.dumps(
@@ -376,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-            
+
         res = run_historical_range(
             start_date,
             end_date,

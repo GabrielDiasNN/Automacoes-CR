@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .health import HealthStatus, compute_health_status
 from .settings import PERIOD_ORDER, get_period_config
 from .snapshot_store import read_json, snapshot_path
 
@@ -536,35 +537,11 @@ def _latest_period(periods: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
-def _health_reason_code(periods: dict[str, dict[str, Any]], status: str) -> str:
-    if status == "healthy":
-        return "healthy"
-    if status == "missing":
-        return "snapshot_missing"
-    if status == "no_data":
-        return "snapshot_no_data"
-    primary_issue = _primary_health_issue(periods)
-    if primary_issue:
-        return str(primary_issue.get("code") or "snapshot_attention")
-    return "snapshot_attention"
-
-
-def _health_recommended_action(periods: dict[str, dict[str, Any]]) -> str | None:
-    primary_issue = _primary_health_issue(periods)
-    if primary_issue and primary_issue.get("action_hint"):
-        return str(primary_issue["action_hint"])
-    return None
-
-
-def _overall_status(periods: dict[str, dict[str, Any]]) -> str:
-    statuses = {item.get("status") for item in periods.values()}
-    if statuses == {"missing"}:
-        return "missing"
-    if "attention" in statuses or "missing" in statuses:
-        return "attention"
-    if "no_data" in statuses and len(statuses) == 1:
-        return "no_data"
-    return "healthy"
+def _compute_health_status(
+    periods: dict[str, dict[str, Any]],
+) -> tuple[HealthStatus, str, str | None]:
+    """Compatibilidade interna para testes e consumidores existentes."""
+    return compute_health_status(periods, _primary_health_issue)
 
 
 def _build_findings(periods: dict[str, dict[str, Any]]) -> list[str]:
@@ -580,7 +557,7 @@ def _build_findings(periods: dict[str, dict[str, Any]]) -> list[str]:
 def _build_issues(periods: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     for period in PERIOD_ORDER:
-        payload_issues = periods[period].get("issues") or []
+        payload_issues = periods.get(period, {}).get("issues") or []
         for issue in payload_issues:
             issues.append(issue)
     severity_rank = {"error": 0, "warn": 1, "info": 2}
@@ -609,14 +586,14 @@ def _build_snapshot_files(periods: dict[str, dict[str, Any]]) -> dict[str, dict[
 
 
 def _build_health_from_periods(periods: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    status = _overall_status(periods)
+    status, reason_code, recommended_action = _compute_health_status(periods)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "snapshot_root": str(snapshot_path("diario", "analytics").parent),
         "source": "snapshot_local",
-        "status": status,
-        "reason_code": _health_reason_code(periods, status),
-        "recommended_action": _health_recommended_action(periods),
+        "status": status.value,
+        "reason_code": reason_code,
+        "recommended_action": recommended_action,
         "periods_total": len(PERIOD_ORDER),
         "periods_loaded": sum(1 for item in periods.values() if item.get("available")),
         "findings": _build_findings(periods),
