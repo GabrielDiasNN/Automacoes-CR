@@ -1,0 +1,11 @@
+# Proprietarios de codigo do monorepo de Automacoes.
+# Repositorio de mantenedor unico: as entradas abaixo documentam responsabilidade
+# e passam a exigir review automaticamente caso novos colaboradores entrem.
+
+* @GabrielDiasNN
+
+# Areas criticas de governanca e CI
+/.github/workflows/ @GabrielDiasNN
+/.github/skills/ @GabrielDiasNN
+/Tools/ @GabrielDiasNN
+/lib/ @GabrielDiasNN

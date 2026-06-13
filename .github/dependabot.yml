@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Actions do GitHub (atualiza pins por SHA mantendo o comentario de versao)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencias
+      - ci
+    groups:
+      actions:
+        patterns:
+          - '*'
+
+  # Dependencias Python (pip-tools: atualiza requirements*.in)
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencias
+      - python
+    groups:
+      python-menores:
+        update-types:
+          - minor
+          - patch
+
+  # Dependencias Node.js (Receitas Bloqueadas: whatsapp-web.js)
+  - package-ecosystem: npm
+    directory: '/Receitas Bloqueadas'
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencias
+      - nodejs
