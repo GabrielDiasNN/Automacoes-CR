@@ -391,9 +391,14 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias (lockfile)
+        run: npm ci
 
       - name: ESLint
-        run: npx --yes eslint@9 "Dashboard/js/**/*.js"
+        run: npm run lint:js
 
   markdown:
     name: Markdown
