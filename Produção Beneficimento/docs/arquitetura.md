@@ -17,14 +17,16 @@ O Beneficiamento é um domínio dedicado dentro do repositório, consumido pelo 
 
 ## Otimização do Histórico
 
-O histórico SQLite mantém colunas derivadas persistidas para acelerar os filtros mais usados pela UI:
+O schema v2 separa o domínio em `core/`, `data/` e `contracts/`. A implementação de overview, detalhe e analytics vive em `contracts/`; `overview_v1.py` reexporta esses contratos somente para consumidores legados. O histórico SQLite mantém colunas tipadas e derivadas persistidas para acelerar os filtros mais usados pela UI:
 
 - `TURNO_ID` e `TURNO_LABEL`
 - `MAQUINA_KEY`
 - `FASE_KEY`
 - `CODIGO_KEY`
 
-Esses campos são preenchidos no `salvar_historico` e retroalimentados de forma idempotente em `init_db` para bases antigas. O overview usa essas colunas junto de `DATA_FIM` indexado e monta uma tabela temporária filtrada por request, evitando repetir varreduras completas da `fato_producao_historica`.
+Esses campos são preenchidos no `salvar_historico`, que usa especificações declarativas e `executemany`. Consultas regulares projetam colunas tipadas; `DADOS_COMPLETOS` é lido apenas no detalhe com `include_raw=true`.
+
+Ao detectar schema anterior ao v2, `init_db` recria a tabela para evitar backfill parcial ou dependência do blob. A base deve ser repopulada pelo runner retroativo antes da promoção operacional.
 
 ## Contrato V1 do Dashboard
 

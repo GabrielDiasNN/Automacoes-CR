@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .health import HealthStatus, compute_health_status
 from .settings import PERIOD_ORDER, get_period_config
 from .snapshot_store import read_json, snapshot_path
 
@@ -92,7 +93,11 @@ def _quality_blocked_issue(
     critical_nulls = []
     for check in checks:
         if check.get("name") == "critical_nulls" and check.get("columns"):
-            critical_nulls = [str(item.get("column")) for item in check.get("columns") or [] if item.get("column")]
+            critical_nulls = [
+                str(item.get("column"))
+                for item in check.get("columns") or []
+                if item.get("column")
+            ]
             break
     if critical_nulls:
         return _build_issue(
@@ -131,7 +136,9 @@ def _quality_blocked_issue(
 
     issue_message = "Quality gate do snapshot bloqueou o período."
     if critical_issues:
-        issue_message = f"Quality gate do snapshot bloqueou o período: {critical_issues[0]}"
+        issue_message = (
+            f"Quality gate do snapshot bloqueou o período: {critical_issues[0]}"
+        )
     return _build_issue(
         code="quality_blocked",
         period=period,
@@ -185,7 +192,10 @@ def _primary_issue_for_period(
                 action_hint="Regerar o snapshot do período e validar os arquivos analytics/profile antes de liberar a leitura operacional.",
             ),
         )
-    if historico_write_status == "partial_failure" or refresh_status == "partial_failure":
+    if (
+        historico_write_status == "partial_failure"
+        or refresh_status == "partial_failure"
+    ):
         return (
             "attention",
             "historico_partial_failure",
@@ -297,10 +307,7 @@ def _build_secondary_issues(
 ) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     quality_status = str(quality.get("status") or "").lower()
-    if (
-        stale
-        and primary_reason != "snapshot_stale"
-    ):
+    if stale and primary_reason != "snapshot_stale":
         issues.append(
             _build_issue(
                 code="snapshot_stale",
@@ -312,7 +319,8 @@ def _build_secondary_issues(
             )
         )
     if (
-        historico_write_status == "partial_failure" or refresh_status == "partial_failure"
+        historico_write_status == "partial_failure"
+        or refresh_status == "partial_failure"
     ) and primary_reason != "historico_partial_failure":
         issues.append(
             _build_issue(
@@ -420,9 +428,15 @@ def _build_period_highlights(
     metrics: dict[str, Any],
     analytics: dict[str, Any],
 ) -> dict[str, Any]:
-    top_machine = ((analytics.get("destaques") or {}).get("maquinas_por_kg") or [None])[0] or {}
-    top_phase = ((analytics.get("destaques") or {}).get("fases_por_kg") or [None])[0] or {}
-    top_turno = ((analytics.get("destaques") or {}).get("turnos_por_kg") or [None])[0] or {}
+    top_machine = ((analytics.get("destaques") or {}).get("maquinas_por_kg") or [None])[
+        0
+    ] or {}
+    top_phase = ((analytics.get("destaques") or {}).get("fases_por_kg") or [None])[
+        0
+    ] or {}
+    top_turno = ((analytics.get("destaques") or {}).get("turnos_por_kg") or [None])[
+        0
+    ] or {}
     return {
         "period": period,
         "kg_total": metrics.get("kg_total") or 0.0,
@@ -526,7 +540,9 @@ def _latest_period(periods: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
         candidates.append((sort_age, period, payload))
     if not candidates:
         return None
-    _, period, payload = min(candidates, key=lambda item: (item[0], PERIOD_ORDER.index(item[1])))
+    _, period, payload = min(
+        candidates, key=lambda item: (item[0], PERIOD_ORDER.index(item[1]))
+    )
     return {
         "period": period,
         "label": payload.get("label") or period,
@@ -536,35 +552,11 @@ def _latest_period(periods: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
-def _health_reason_code(periods: dict[str, dict[str, Any]], status: str) -> str:
-    if status == "healthy":
-        return "healthy"
-    if status == "missing":
-        return "snapshot_missing"
-    if status == "no_data":
-        return "snapshot_no_data"
-    primary_issue = _primary_health_issue(periods)
-    if primary_issue:
-        return str(primary_issue.get("code") or "snapshot_attention")
-    return "snapshot_attention"
-
-
-def _health_recommended_action(periods: dict[str, dict[str, Any]]) -> str | None:
-    primary_issue = _primary_health_issue(periods)
-    if primary_issue and primary_issue.get("action_hint"):
-        return str(primary_issue["action_hint"])
-    return None
-
-
-def _overall_status(periods: dict[str, dict[str, Any]]) -> str:
-    statuses = {item.get("status") for item in periods.values()}
-    if statuses == {"missing"}:
-        return "missing"
-    if "attention" in statuses or "missing" in statuses:
-        return "attention"
-    if "no_data" in statuses and len(statuses) == 1:
-        return "no_data"
-    return "healthy"
+def _compute_health_status(
+    periods: dict[str, dict[str, Any]],
+) -> tuple[HealthStatus, str, str | None]:
+    """Compatibilidade interna para testes e consumidores existentes."""
+    return compute_health_status(periods, _primary_health_issue)
 
 
 def _build_findings(periods: dict[str, dict[str, Any]]) -> list[str]:
@@ -580,7 +572,7 @@ def _build_findings(periods: dict[str, dict[str, Any]]) -> list[str]:
 def _build_issues(periods: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     for period in PERIOD_ORDER:
-        payload_issues = periods[period].get("issues") or []
+        payload_issues = periods.get(period, {}).get("issues") or []
         for issue in payload_issues:
             issues.append(issue)
     severity_rank = {"error": 0, "warn": 1, "info": 2}
@@ -588,9 +580,11 @@ def _build_issues(periods: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         issues,
         key=lambda item: (
             severity_rank.get(str(item.get("severity") or "info").lower(), 3),
-            PERIOD_ORDER.index(str(item.get("period") or "mensal"))
-            if str(item.get("period") or "") in PERIOD_ORDER
-            else len(PERIOD_ORDER),
+            (
+                PERIOD_ORDER.index(str(item.get("period") or "mensal"))
+                if str(item.get("period") or "") in PERIOD_ORDER
+                else len(PERIOD_ORDER)
+            ),
             str(item.get("code") or ""),
         ),
     )
@@ -601,22 +595,23 @@ def _primary_health_issue(periods: dict[str, dict[str, Any]]) -> dict[str, Any] 
     return issues[0] if issues else None
 
 
-def _build_snapshot_files(periods: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _build_snapshot_files(
+    periods: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
     return {
-        period: periods[period].get("source_files") or {}
-        for period in PERIOD_ORDER
+        period: periods[period].get("source_files") or {} for period in PERIOD_ORDER
     }
 
 
 def _build_health_from_periods(periods: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    status = _overall_status(periods)
+    status, reason_code, recommended_action = _compute_health_status(periods)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "snapshot_root": str(snapshot_path("diario", "analytics").parent),
         "source": "snapshot_local",
-        "status": status,
-        "reason_code": _health_reason_code(periods, status),
-        "recommended_action": _health_recommended_action(periods),
+        "status": status.value,
+        "reason_code": reason_code,
+        "recommended_action": recommended_action,
         "periods_total": len(PERIOD_ORDER),
         "periods_loaded": sum(1 for item in periods.values() if item.get("available")),
         "findings": _build_findings(periods),
@@ -649,7 +644,9 @@ def load_period_payload(period: str) -> dict[str, Any]:
         if value is not None
     ]
     age_seconds = max(age_candidates) if age_candidates else None
-    stale = bool(age_seconds is not None and age_seconds > (config.max_age_minutes * 60))
+    stale = bool(
+        age_seconds is not None and age_seconds > (config.max_age_minutes * 60)
+    )
     metrics = analytics.get("geral") or {}
     quality = analytics.get("qualidade") or {}
     rankings = {

@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..constants import ACTION_CODE_SCHEDULER_RELOAD, EXECUTION_ACTIVE_STATUSES
-from ..database import SessionLocal, purge_old_executions, run_wal_checkpoint
+from ..database import (SessionLocal, purge_old_executions, run_wal_checkpoint,
+                        session_scope)
 from ..runtime import scheduler
 from ..schemas.schedule_rules import (first_interval_candidate,
                                       ui_day_to_python_weekday)
@@ -67,97 +68,112 @@ def extract_automation_id_from_job(job_id: str) -> int | None:
 
 
 def scheduled_task_wrapper(automation_id: int) -> None:
-    db = SessionLocal()
     try:
-        db_auto = (
-            db.query(models.Automation)
-            .filter(models.Automation.id == automation_id)
-            .first()
-        )
-        if not db_auto or not db_auto.enabled:
-            return
-        if _is_reserved_cleanup_automation(db_auto.script_path):
-            logger.warning(
-                "Agendamento ignorado para rotina reservada do sistema: %s.",
-                db_auto.name,
+        with session_scope(SessionLocal) as db:
+            db_auto = (
+                db.query(models.Automation)
+                .filter(models.Automation.id == automation_id)
+                .first()
             )
-            return
+            if not db_auto or not db_auto.enabled:
+                return
+            if _is_reserved_cleanup_automation(db_auto.script_path):
+                logger.warning(
+                    "Agendamento ignorado para rotina reservada do sistema: %s.",
+                    db_auto.name,
+                )
+                return
 
-        # Validação de janela operacional restrita para cadência de intervalo
-        if db_auto.schedule:
-            try:
-                sched_data = schemas.parse_schedule(db_auto.schedule)
-                if sched_data and sched_data.get("schedule_type") == "interval":
-                    start_t = sched_data.get("start_time")
-                    end_t = sched_data.get("end_time")
-                    days = sched_data.get("days_of_week")
-                    
-                    if start_t or end_t or days:
-                        now = get_now_local()
-                        
-                        if days is not None:
-                            py_days = {ui_day_to_python_weekday(d) for d in days}
-                            if now.weekday() not in py_days:
-                                logger.info("Disparo de intervalo ignorado para %s: fora do dia operacional permitido.", db_auto.name)
-                                return
-                        
-                        if start_t:
-                            sh, sm = map(int, start_t.split(":"))
-                            if now.hour < sh or (now.hour == sh and now.minute < sm):
-                                logger.info("Disparo de intervalo ignorado para %s: antes do horário operacional permitido (%s).", db_auto.name, start_t)
-                                return
-                        if end_t:
-                            eh, em = map(int, end_t.split(":"))
-                            if now.hour > eh or (now.hour == eh and now.minute > em):
-                                logger.info("Disparo de intervalo ignorado para %s: após o horário operacional permitido (%s).", db_auto.name, end_t)
-                                return
-            except Exception as e:
-                logger.warning("Falha ao validar janela operacional do disparo de %s: %s", db_auto.name, str(e))
+            # Validação de janela operacional restrita para cadência de intervalo
+            if db_auto.schedule:
+                try:
+                    sched_data = schemas.parse_schedule(db_auto.schedule)
+                    if sched_data and sched_data.get("schedule_type") == "interval":
+                        start_t = sched_data.get("start_time")
+                        end_t = sched_data.get("end_time")
+                        days = sched_data.get("days_of_week")
 
-        existing = (
-            db.query(models.Execution)
-            .filter(
-                models.Execution.automation_id == automation_id,
-                models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+                        if start_t or end_t or days:
+                            now = get_now_local()
+
+                            if days is not None:
+                                py_days = {ui_day_to_python_weekday(d) for d in days}
+                                if now.weekday() not in py_days:
+                                    logger.info(
+                                        "Disparo de intervalo ignorado para %s: fora do dia operacional permitido.",
+                                        db_auto.name,
+                                    )
+                                    return
+
+                            if start_t:
+                                sh, sm = map(int, start_t.split(":"))
+                                if now.hour < sh or (
+                                    now.hour == sh and now.minute < sm
+                                ):
+                                    logger.info(
+                                        "Disparo de intervalo ignorado para %s: antes do horário operacional permitido (%s).",
+                                        db_auto.name,
+                                        start_t,
+                                    )
+                                    return
+                            if end_t:
+                                eh, em = map(int, end_t.split(":"))
+                                if now.hour > eh or (
+                                    now.hour == eh and now.minute > em
+                                ):
+                                    logger.info(
+                                        "Disparo de intervalo ignorado para %s: após o horário operacional permitido (%s).",
+                                        db_auto.name,
+                                        end_t,
+                                    )
+                                    return
+                except Exception as exc:
+                    logger.warning(
+                        "Falha ao validar janela operacional do disparo de %s: %s",
+                        db_auto.name,
+                        exc,
+                    )
+
+            existing = (
+                db.query(models.Execution)
+                .filter(
+                    models.Execution.automation_id == automation_id,
+                    models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+                )
+                .first()
             )
-            .first()
-        )
-        if existing:
-            logger.info("Agendamento ignorado: %s já tem execução ativa.", db_auto.name)
-            return
+            if existing:
+                logger.info(
+                    "Agendamento ignorado: %s já tem execução ativa.", db_auto.name
+                )
+                return
 
-        group_active = get_group_active_execution(
-            db,
-            db_auto.queue_group,
-            exclude_automation_id=automation_id,
-        )
-        if group_active:
-            logger.info(
-                "Agendamento ignorado: %s bloqueada por queue_group=%s em uso por %s.",
-                db_auto.name,
+            group_active = get_group_active_execution(
+                db,
                 db_auto.queue_group,
-                group_active.id,
+                exclude_automation_id=automation_id,
             )
-            return
+            if group_active:
+                logger.info(
+                    "Agendamento ignorado: %s bloqueada por queue_group=%s em uso por %s.",
+                    db_auto.name,
+                    db_auto.queue_group,
+                    group_active.id,
+                )
+                return
 
-        exec_id = f"CRON_{automation_id}_{int(get_now_local().timestamp())}"
-        db.add(
-            build_queued_execution(
-                automation=db_auto,
-                exec_id=exec_id,
-                requested_by="CRON",
+            exec_id = f"CRON_{automation_id}_{int(get_now_local().timestamp())}"
+            db.add(
+                build_queued_execution(
+                    automation=db_auto,
+                    exec_id=exec_id,
+                    requested_by="CRON",
+                )
             )
-        )
-        db.commit()
-        logger.info("Disparo agendado: %s -> %s", db_auto.name, exec_id)
+            db.commit()
+            logger.info("Disparo agendado: %s -> %s", db_auto.name, exec_id)
     except Exception as exc:
         logger.error("Erro no disparo agendado id=%s: %s", automation_id, exc)
-        try:
-            db.rollback()
-        except Exception:  # pylint: disable=broad-exception-caught
-            pass
-    finally:
-        db.close()
 
 
 def reload_scheduled_tasks() -> None:
@@ -165,8 +181,7 @@ def reload_scheduled_tasks() -> None:
         if job.id.startswith("job_"):
             scheduler.remove_job(job.id)
 
-    db = SessionLocal()
-    try:
+    with session_scope(SessionLocal) as db:
         automations_db = (
             db.query(models.Automation).filter(models.Automation.enabled == True).all()
         )
@@ -199,8 +214,6 @@ def reload_scheduled_tasks() -> None:
             "Agendador sincronizado: %d jobs ativos no total.",
             len(scheduler.get_jobs()),
         )
-    finally:
-        db.close()
 
 
 def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
@@ -212,7 +225,7 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
             scheduled_task_wrapper,
             CronTrigger.from_crontab(
                 sched_data["cron_expression"],
-                timezone=sched_data.get("timezone", "America/Sao_Paulo")
+                timezone=sched_data.get("timezone", "America/Sao_Paulo"),
             ),
             args=[automation_id],
             id=f"job_{automation_id}_cron",
@@ -230,9 +243,7 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
         scheduler.add_job(
             scheduled_task_wrapper,
             IntervalTrigger(
-                minutes=step_minutes,
-                start_date=start_date,
-                timezone=scheduler.timezone
+                minutes=step_minutes, start_date=start_date, timezone=scheduler.timezone
             ),
             args=[automation_id],
             id=f"job_{automation_id}_interval",
@@ -257,7 +268,8 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
             trigger = CronTrigger(hour=item.get("h", 0), minute=item.get("m", 0))
         elif schedule_type == "weekly":
             mapped_days = [
-                str(ui_day_to_python_weekday(day)) for day in sched_data.get("days_of_week", [])
+                str(ui_day_to_python_weekday(day))
+                for day in sched_data.get("days_of_week", [])
             ]
             trigger = CronTrigger(
                 day_of_week=",".join(mapped_days) if mapped_days else "*",
@@ -326,7 +338,17 @@ def run_file_cleanup() -> None:
     script_path = _get_reserved_cleanup_script_path()
     try:
         logger.info("Iniciando limpeza de arquivos (Self-Cleaning)...")
-        subprocess.run(["pwsh.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path], check=True)
+        subprocess.run(
+            [
+                "pwsh.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+            ],
+            check=True,
+        )
         logger.info("Limpeza de arquivos concluída com sucesso.")
     except Exception as e:
         logger.error("Erro ao executar limpeza de arquivos: %s", e)
@@ -340,23 +362,21 @@ def safe_scheduler_heartbeat() -> None:
 
 
 def capture_system_history_snapshot_job() -> None:
-    db = SessionLocal()
     try:
-        from .system_diagnostics import build_diagnostics_payload
-        from .system_history import capture_system_health_snapshot
-        from .system_runtime import get_worker_status
+        with session_scope(SessionLocal) as db:
+            from .system_diagnostics import build_diagnostics_payload
+            from .system_history import capture_system_health_snapshot
+            from .system_runtime import get_worker_status
 
-        payload = build_diagnostics_payload(
-            db,
-            scheduler,
-            get_worker_status,
-            include_history=False,
-        )
-        capture_system_health_snapshot(db, payload, retention_days=30)
+            payload = build_diagnostics_payload(
+                db,
+                scheduler,
+                get_worker_status,
+                include_history=False,
+            )
+            capture_system_health_snapshot(db, payload, retention_days=30)
     except Exception as exc:
         logger.error("Falha ao capturar snapshot operacional: %s", exc)
-    finally:
-        db.close()
 
 
 def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:

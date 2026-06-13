@@ -1,5 +1,22 @@
 # Changelog
 
+## [9.3.19] - 12/06/2026
+### Adicionado
+- **Núcleo compartilhado do Beneficiamento**: criado `beneficiamento/core` para coerções, aliases de campos, normalização de turnos e métricas reutilizáveis.
+- **Camada tipada de histórico**: criado `beneficiamento/data` com schema declarativo, escrita idempotente por `executemany` e consultas que leem colunas SQLite sem reabrir o blob JSON por padrão.
+- **Contratos históricos canônicos**: `beneficiamento/contracts` contém a implementação SQLite de overview, detalhe e analytics; `overview_v1.py` permanece apenas como fachada de compatibilidade.
+- **Health testável**: adicionada máquina de estado explícita para precedência de saúde dos snapshots, com cobertura unitária.
+- **Sessão segura do Orchestrator**: adicionado `session_scope()` para rollback e fechamento garantidos em worker, scheduler e jobs internos.
+- **Serviço de broadcast**: criado `LogBroadcaster` como implementação única de agrupamento, emissão e preview de logs WebSocket.
+
+### Alterado
+- **Schema v2 do histórico**: bases antigas são recriadas deterministicamente e devem ser recarregadas pelo runner retroativo; `DADOS_COMPLETOS` permanece apenas para auditoria e `include_raw=true`.
+- **Hot path do worker**: `run_task()` foi dividido em início, monitoramento e finalização sem alterar estados, exit codes, alertas ou eventos WebSocket.
+- **WAL periódico não bloqueante**: checkpoints agendados usam `PASSIVE`; `TRUNCATE` permanece restrito ao startup/recovery.
+- **Broadcast de logs consolidado**: endpoints unitário e em lote compartilham a mesma rotina de emissão para WebSocket.
+- **Governança arquitetural do histórico**: a allowlist de SQLite reconhece explicitamente os três módulos autorizados de `beneficiamento/data`, mantendo acesso direto bloqueado fora da camada.
+- **Teste Oracle determinístico**: o mock de extração de Montagem de Terceirizados configura corretamente o context manager da conexão, eliminando loop infinito em `fetchmany`.
+
 ## [9.3.18] - 10/06/2026
 ### Alterado
 - **Fatiamento adaptativo do refresh Oracle do Beneficiamento**: a geração de snapshots passou a dividir automaticamente períodos pesados em subfaixas mensais e, se necessário, em intervalos menores quando o Oracle retorna timeout ou `ORA-00028`, mantendo cada consulta dentro do orçamento imposto pelo DBA.

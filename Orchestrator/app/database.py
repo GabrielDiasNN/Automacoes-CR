@@ -14,6 +14,7 @@ Configuracoes hardened de SQLite:
 
 import logging
 import os
+from contextlib import contextmanager
 from datetime import timedelta
 
 from sqlalchemy import create_engine, event, inspect, text
@@ -26,7 +27,9 @@ logger = logging.getLogger("orchestrator")
 
 # O banco de dados sera criado no diretorio Orchestrator
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.environ.get("ORCHESTRATOR_DB_PATH") or os.path.join(BASE_DIR, "automacoes.db")
+DB_PATH = os.environ.get("ORCHESTRATOR_DB_PATH") or os.path.join(
+    BASE_DIR, "automacoes.db"
+)
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(
@@ -53,6 +56,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+
 def get_db():
     """Dependency injection do FastAPI - garante cleanup via finally."""
     db = SessionLocal()
@@ -62,9 +66,29 @@ def get_db():
         db.close()
 
 
+@contextmanager
+def session_scope(session_factory=None):
+    """Context manager para uso fora do FastAPI (worker, scheduler, jobs).
+
+    Garante ``rollback`` em caso de excecao e ``close`` sempre, eliminando o
+    risco de conexoes orfas do padrao manual ``db = SessionLocal(); try/finally``.
+    Nao faz commit automatico: o chamador decide quando persistir, preservando a
+    semantica de sessoes somente-leitura e dos commits explicitos existentes.
+    """
+    factory = session_factory or SessionLocal
+    db = factory()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def validate_database_schema() -> dict:
     """Valida tabelas/colunas contra o schema ORM atual (derivado de Base.metadata)."""
-    from . import models as _models  # noqa: F401 — registra tabelas no Base.metadata
+    from . import models as _models  # noqa: F401
 
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
@@ -110,11 +134,16 @@ def get_schema_version() -> str:
 def run_alembic_migrations() -> dict:
     """Roda migrações do Alembic até o HEAD e retorna o resultado da migração."""
     if ":memory:" in SQLALCHEMY_DATABASE_URL:
-        logger.info("Banco de dados em memoria detectado. Desviando execucao do Alembic nos testes.")
-        return {"applied": ["in_memory_test_skip"], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
+        logger.info(
+            "Banco de dados em memoria detectado. Desviando execucao do Alembic nos testes."
+        )
+        return {
+            "applied": ["in_memory_test_skip"],
+            "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+        }
 
-    from alembic.config import Config
     from alembic import command
+    from alembic.config import Config
 
     current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ini_path = os.path.join(current_dir, "alembic.ini")
@@ -139,12 +168,19 @@ def run_alembic_migrations() -> dict:
                 text("INSERT INTO alembic_version (version_num) VALUES (:version)"),
                 {"version": ORCHESTRATOR_SCHEMA_VERSION},
             )
-        return {"applied": ["alembic_stamp"], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
+        return {
+            "applied": ["alembic_stamp"],
+            "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+        }
 
     logger.info("Iniciando aplicacao programática de migracao via Alembic...")
     command.upgrade(alembic_cfg, "head")
     logger.info("Migracao do Alembic aplicada com sucesso.")
-    return {"applied": ["alembic_upgrade_head"], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
+    return {
+        "applied": ["alembic_upgrade_head"],
+        "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+    }
+
 
 def get_db_size_mb() -> float:
     """Retorna o tamanho atual do banco em MB."""
@@ -220,23 +256,20 @@ def purge_old_executions(retention_days: int = 90) -> int:
         "FAILED_BY_REBOOT",
     ]
 
-    db = SessionLocal()
     try:
-        # Delete em massa via query direta para performance (Pilar E)
-        query = db.query(_models.Execution).filter(
-            _models.Execution.status.in_(terminal_statuses),
-            _models.Execution.finished_at < cutoff,
-        )
-        removed = query.delete(synchronize_session=False)
-        db.commit()
+        with session_scope() as db:
+            # Delete em massa via query direta para performance (Pilar E)
+            query = db.query(_models.Execution).filter(
+                _models.Execution.status.in_(terminal_statuses),
+                _models.Execution.finished_at < cutoff,
+            )
+            removed = query.delete(synchronize_session=False)
+            db.commit()
         if removed:
             logger.info(
                 f"Purge concluído: {removed} execuções removidas (>{retention_days} dias)."
             )
         return removed
     except Exception as e:
-        db.rollback()
         logger.error(f"Falha no purge de execuções: {e}")
         return 0
-    finally:
-        db.close()

@@ -9,9 +9,21 @@ Patch do PROJECT_ROOT para validacao de script_path (Pilar V) funcionar em teste
 """
 
 import os
+import sys
+import tempfile
+from datetime import datetime, timedelta
+from pathlib import Path
 
 os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
 os.environ["RATE_LIMIT_RPM"] = "10000"
+
+# Historico de beneficiamento isolado em arquivo temporario da sessao.
+# O banco default (snapshots/beneficiamento_historico.db) nao e versionado,
+# entao os contratos precisam de um seed deterministico para rodar no CI.
+_BENEF_DB_DIR = tempfile.mkdtemp(prefix="benef-historico-")
+os.environ["BENEFICIAMENTO_HISTORICO_DB"] = os.path.join(
+    _BENEF_DB_DIR, "beneficiamento_historico.db"
+)
 
 import pytest
 from app import models
@@ -44,6 +56,117 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 AUTH_HEADERS = {"X-API-Key": TEST_AUTH_VALUE}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def beneficiamento_historico_seed():
+    """Semeia o historico de beneficiamento em banco temporario da sessao.
+
+    Garante dados deterministas (turnos, alternativo 03212, payload bruto)
+    para os contratos overview/detail e para o fluxo E2E do dashboard.
+    """
+    src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
+    if str(src_root) not in sys.path:
+        sys.path.insert(0, str(src_root))
+    from beneficiamento.historico_db import salvar_historico
+
+    agora = datetime.now()
+
+    def _row(ob, seq, dt, turno, fase, maquina, alternativo, kg, mt):
+        return {
+            "NUMERO_OB": ob,
+            "SEQ": seq,
+            "DATA_FIM": dt.isoformat(),
+            "NOME_MAQUINA": maquina,
+            "CD_DS_FASE": fase,
+            "CODIGO_ALTERNATIVO": alternativo,
+            "REDUZ": alternativo,
+            "DESCR_ITEM": f"Produto {alternativo}",
+            "ARTIGO": "ART-FIXTURE",
+            "DESCR_ARTIGO": "Artigo fixture",
+            "COR": "AZUL",
+            "DESCR_COR": "Azul",
+            "QT_KG": kg,
+            "QT_MT": mt,
+            "MIN_REAL": 12.0,
+            "MIN_PREV": 10.0,
+            "TURNO_PROD": turno,
+            "TURNO_DESC": f"TURNO {turno}",
+            "OPERADOR_FINAL": "QA FIXTURE",
+            "REPROCESSO": 0,
+        }
+
+    registros = [
+        _row(
+            "900001",
+            1,
+            agora - timedelta(hours=2),
+            "1",
+            "03 - TINGIMENTO",
+            "JET 01",
+            "03212",
+            120.5,
+            300.0,
+        ),
+        _row(
+            "900001",
+            2,
+            agora - timedelta(hours=1),
+            "2",
+            "05 - ACABAMENTO",
+            "RAMA 02",
+            "03212",
+            118.0,
+            295.0,
+        ),
+        _row(
+            "900002",
+            1,
+            agora - timedelta(days=1, hours=3),
+            "3",
+            "01 - PREPARACAO",
+            "PREPARADORA 01",
+            "04500",
+            80.0,
+            200.0,
+        ),
+        _row(
+            "900003",
+            1,
+            agora - timedelta(days=2, hours=5),
+            "1",
+            "03 - TINGIMENTO",
+            "JET 02",
+            "05100",
+            95.0,
+            240.0,
+        ),
+        # Alternativo 02414: usado pelo fluxo E2E do dashboard (filtro de produto).
+        _row(
+            "900004",
+            1,
+            agora - timedelta(hours=4),
+            "1",
+            "03 - TINGIMENTO",
+            "JET 03",
+            "02414",
+            150.0,
+            360.0,
+        ),
+        _row(
+            "900004",
+            2,
+            agora - timedelta(hours=3),
+            "2",
+            "05 - ACABAMENTO",
+            "RAMA 01",
+            "02414",
+            148.0,
+            355.0,
+        ),
+    ]
+    salvar_historico(registros, db_path=os.environ["BENEFICIAMENTO_HISTORICO_DB"])
+    yield
 
 
 @pytest.fixture(autouse=True)
