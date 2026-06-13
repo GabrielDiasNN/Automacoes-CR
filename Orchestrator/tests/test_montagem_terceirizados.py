@@ -11,7 +11,6 @@ import sys
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-
 # Salvar referência real antes de mockar
 real_exists = os.path.exists
 
@@ -239,17 +238,24 @@ def test_main_tipo_notif_erro_gera_payload(
     def fake_json_dump(obj: Any, fp: Any, **kwargs: Any) -> None:
         captured_dumps.append(obj)
 
-    with patch("validate_and_generate_html.json.load", return_value=data), \
-         patch("validate_and_generate_html.json.dump", side_effect=fake_json_dump), \
-         patch("validate_and_generate_html.sys.argv", ["validate_and_generate_html.py", exec_id]), \
-         patch("validate_and_generate_html.sys.exit") as mock_exit:
+    with patch("validate_and_generate_html.json.load", return_value=data), patch(
+        "validate_and_generate_html.json.dump", side_effect=fake_json_dump
+    ), patch(
+        "validate_and_generate_html.sys.argv",
+        ["validate_and_generate_html.py", exec_id],
+    ), patch(
+        "validate_and_generate_html.sys.exit"
+    ) as mock_exit:
         validate_and_generate_html.main()
 
     # Não deve terminar com erro
     mock_exit.assert_not_called()
 
     # O payload gerado deve ter tipo_notificacao=ERRO (primeira execução com erros)
-    payload = next((d for d in captured_dumps if isinstance(d, dict) and "tipo_notificacao" in d), None)
+    payload = next(
+        (d for d in captured_dumps if isinstance(d, dict) and "tipo_notificacao" in d),
+        None,
+    )
     assert payload is not None, "Payload de notificação não foi gerado"
     assert payload["tipo_notificacao"] == "ERRO"
     assert payload["total_erros"] >= 1
@@ -292,16 +298,24 @@ def test_main_sem_erros_nao_gera_payload(
 
     captured_dumps: list[Any] = []
 
-    with patch("validate_and_generate_html.json.load", return_value=data), \
-         patch("validate_and_generate_html.json.dump", side_effect=lambda o, f, **k: captured_dumps.append(o)), \
-         patch("validate_and_generate_html.sys.argv", ["validate_and_generate_html.py", exec_id]), \
-         patch("validate_and_generate_html.sys.exit") as mock_exit:
+    with patch("validate_and_generate_html.json.load", return_value=data), patch(
+        "validate_and_generate_html.json.dump",
+        side_effect=lambda o, f, **k: captured_dumps.append(o),
+    ), patch(
+        "validate_and_generate_html.sys.argv",
+        ["validate_and_generate_html.py", exec_id],
+    ), patch(
+        "validate_and_generate_html.sys.exit"
+    ) as mock_exit:
         validate_and_generate_html.main()
 
     mock_exit.assert_not_called()
 
     # Sem erros e sem cache anterior → tipo_notif = NENHUMA → nenhum payload gerado
-    payload = next((d for d in captured_dumps if isinstance(d, dict) and "tipo_notificacao" in d), None)
+    payload = next(
+        (d for d in captured_dumps if isinstance(d, dict) and "tipo_notificacao" in d),
+        None,
+    )
     assert payload is None, f"Payload não deveria ser gerado, mas foi: {payload}"
 
 
@@ -320,19 +334,24 @@ def test_extract_sucesso_oracle_mockado(
     os.environ["ORACLE_CLIENT_LIB_DIR"] = tmp_path.as_posix()
     os.environ["TNS_ADMIN"] = tmp_path.as_posix()
 
-    mock_exists.side_effect = lambda path: "SQL-MontagemTerceirizados" in path or real_exists(path)
+    mock_exists.side_effect = (
+        lambda path: "SQL-MontagemTerceirizados" in path or real_exists(path)
+    )
 
     sql_content = "SELECT * FROM MONTAGEM"
     mock_file_sql = MagicMock()
     mock_file_sql.read.return_value = sql_content
 
     # Mocks de open
-    mock_open.side_effect = lambda path, mode="r", encoding=None: mock_file_sql if "SQL-MontagemTerceirizados" in path else MagicMock()
+    mock_open.side_effect = lambda path, mode="r", encoding=None: (
+        mock_file_sql if "SQL-MontagemTerceirizados" in path else MagicMock()
+    )
 
     # Mocks de banco Oracle
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_connect.return_value = mock_conn
+    mock_conn.__enter__.return_value = mock_conn
     mock_conn.cursor.return_value = mock_cursor
 
     # Retorna uma lista de registros mockados no fetchmany
@@ -342,8 +361,9 @@ def test_extract_sucesso_oracle_mockado(
         None,  # Termina o laço
     ]
 
-    with patch("extract_oracle.sys.argv", ["extract_oracle.py", exec_id]), \
-         patch("extract_oracle.sys.exit") as mock_exit:
+    with patch("extract_oracle.sys.argv", ["extract_oracle.py", exec_id]), patch(
+        "extract_oracle.sys.exit"
+    ) as mock_exit:
 
         extract_oracle.extract()
 
