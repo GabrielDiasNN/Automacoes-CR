@@ -353,7 +353,9 @@ jobs:
       - name: Validar governanca agregada (orquestrador soberano)
         shell: pwsh
         run: |
-          ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}"
+          # -OnlyGovernance: sem o switch o orquestrador tambem roda pytest/E2E,
+          # que ja possuem jobs dedicados (testes-python, testes-e2e).
+          ./Tools/ValidarAutomacoes.ps1 -BasePath "${{ github.workspace }}" -OnlyGovernance
 
       - name: Validar atualizacao do CHANGELOG (somente PR)
         if: github.event_name == 'pull_request'
