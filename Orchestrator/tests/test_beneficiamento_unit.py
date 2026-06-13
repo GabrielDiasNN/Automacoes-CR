@@ -226,7 +226,8 @@ def test_date_range_query_plan_uses_temporal_index(tmp_path) -> None:
 
 
 def test_compute_health_status_has_explicit_precedence() -> None:
-    from beneficiamento.snapshot_dashboard import HealthStatus, _compute_health_status
+    from beneficiamento.snapshot_dashboard import (HealthStatus,
+                                                   _compute_health_status)
 
     periods = {
         "diario": {

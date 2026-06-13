@@ -88,4 +88,5 @@ def obter_analytics_historico(
         "cores": [],
     }
 
+
 __all__ = ["obter_analytics_historico"]

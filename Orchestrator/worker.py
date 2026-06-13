@@ -163,11 +163,7 @@ def heartbeat_loop() -> None:
 
 def _update_heartbeat(db: Any) -> None:
     """Insere ou atualiza o registro de heartbeat do worker."""
-    hb = (
-        db.query(models.WorkerHeartbeat)
-        .filter(models.WorkerHeartbeat.id == 1)
-        .first()
-    )
+    hb = db.query(models.WorkerHeartbeat).filter(models.WorkerHeartbeat.id == 1).first()
     now: datetime = get_now_local()
 
     with cast(threading.Lock, stats["lock"]):
@@ -319,9 +315,7 @@ def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
 def _start_process(db_exec: Any, script_path: str, exec_id: str) -> subprocess.Popen:
     """Inicia o PowerShell e registra o processo ativo para shutdown seguro."""
     env = os.environ.copy()
-    env["ORCHESTRATOR_TEST_MODE"] = (
-        "true" if db_exec.automation.test_mode else "false"
-    )
+    env["ORCHESTRATOR_TEST_MODE"] = "true" if db_exec.automation.test_mode else "false"
     process = subprocess.Popen(
         [
             "powershell.exe",
@@ -387,9 +381,7 @@ def _monitor_process(
 
             if (get_now_local() - task_start) > timeout_delta:
                 _force_kill(process.pid)
-                broadcast_log(
-                    f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
-                )
+                broadcast_log(f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id)
                 db_exec_upd = apply_timeout_result(
                     check_db, exec_id, logs, task_start_ts
                 )
@@ -417,9 +409,7 @@ def _finalize_execution(
     task_start_ts: float,
 ) -> None:
     """Persiste resultado, artefatos, alertas e evento final da execução."""
-    broadcast_log(
-        f"\n[Fim da Execução - ExitCode: {process.returncode}]\n", exec_id
-    )
+    broadcast_log(f"\n[Fim da Execução - ExitCode: {process.returncode}]\n", exec_id)
     duration = round(time.time() - task_start_ts, 2)
     artifacts_json = scan_for_artifacts(robot_dir, task_start_ts)
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
@@ -539,9 +529,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Erro fatal na tarefa %s: %s", exec_id, exc, extra=log_extra)
         with session_scope(SessionLocal) as error_db:
-            apply_internal_worker_error(
-                error_db, exec_id, str(exc), task_start_ts
-            )
+            apply_internal_worker_error(error_db, exec_id, str(exc), task_start_ts)
         update_stat("tasks_failed", 1)
         broadcast_event("TASK_FAILED", {"exec_id": exec_id, "error": str(exc)})
     finally:

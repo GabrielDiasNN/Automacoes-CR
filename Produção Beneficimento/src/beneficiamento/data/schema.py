@@ -1,8 +1,10 @@
 """Definicao declarativa e bootstrap do historico tipado do Beneficiamento."""
+
 # pylint: disable=line-too-long
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -74,9 +76,16 @@ def _create_table_sql() -> str:
 
 
 def resolve_db_path(override: Path | str | None = None) -> Path:
-    """Resolve o caminho do banco; default em ``snapshots/beneficiamento_historico.db``."""
+    """Resolve o caminho do banco; default em ``snapshots/beneficiamento_historico.db``.
+
+    A variavel de ambiente ``BENEFICIAMENTO_HISTORICO_DB`` permite redirecionar
+    o banco (usada pelos testes para isolar o historico em arquivo temporario).
+    """
     if override:
         return Path(override).expanduser().resolve()
+    env_override = os.environ.get("BENEFICIAMENTO_HISTORICO_DB")
+    if env_override:
+        return Path(env_override).expanduser().resolve()
     folder = DOMAIN_ROOT / "snapshots"
     folder.mkdir(parents=True, exist_ok=True)
     return folder / "beneficiamento_historico.db"

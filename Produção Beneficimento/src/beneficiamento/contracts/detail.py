@@ -9,16 +9,10 @@ from typing import Any
 
 from ..core import round_or_zero, safe_strip
 from ..data.schema import TABLE_NAME, init_db
-from ._queries import (
-    _DETAIL_SELECT,
-    _build_filtered_where,
-    _build_trace,
-    _detail_raw_records,
-    _detail_row_to_record,
-    _normalize_request_filters,
-    _resolve_overview_window,
-    _summary_from_records,
-)
+from ._queries import (_DETAIL_SELECT, _build_filtered_where, _build_trace,
+                       _detail_raw_records, _detail_row_to_record,
+                       _normalize_request_filters, _resolve_overview_window,
+                       _summary_from_records)
 
 
 def _target_filter(
@@ -126,5 +120,6 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
         },
         "raw_records": _detail_raw_records(records) if include_raw else [],
     }
+
 
 __all__ = ["obter_detail_historico"]

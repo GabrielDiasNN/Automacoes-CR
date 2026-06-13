@@ -39,7 +39,9 @@ from .services.scheduler_runtime import (register_enterprise_jobs,
 # Configuracao de Logs Estruturados (JSON)
 # ---------------------------------------------------------------------------
 
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logs")
+log_dir = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logs"
+)
 os.makedirs(log_dir, exist_ok=True)
 
 is_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
@@ -69,6 +71,7 @@ def _cleanup_zombie_tasks():
 async def lifespan(app: FastAPI):
     # Pilar E - Escala: Garantir integridade do banco no startup
     from .timezone import get_now_local
+
     app.state.startup_time = get_now_local()
     from .database import (run_alembic_migrations, run_wal_checkpoint,
                            validate_database_schema)

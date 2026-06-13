@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..constants import ACTION_CODE_SCHEDULER_RELOAD, EXECUTION_ACTIVE_STATUSES
-from ..database import SessionLocal, purge_old_executions, run_wal_checkpoint, session_scope
+from ..database import (SessionLocal, purge_old_executions, run_wal_checkpoint,
+                        session_scope)
 from ..runtime import scheduler
 from ..schemas.schedule_rules import (first_interval_candidate,
                                       ui_day_to_python_weekday)
@@ -224,7 +225,7 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
             scheduled_task_wrapper,
             CronTrigger.from_crontab(
                 sched_data["cron_expression"],
-                timezone=sched_data.get("timezone", "America/Sao_Paulo")
+                timezone=sched_data.get("timezone", "America/Sao_Paulo"),
             ),
             args=[automation_id],
             id=f"job_{automation_id}_cron",
@@ -242,9 +243,7 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
         scheduler.add_job(
             scheduled_task_wrapper,
             IntervalTrigger(
-                minutes=step_minutes,
-                start_date=start_date,
-                timezone=scheduler.timezone
+                minutes=step_minutes, start_date=start_date, timezone=scheduler.timezone
             ),
             args=[automation_id],
             id=f"job_{automation_id}_interval",
@@ -269,7 +268,8 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
             trigger = CronTrigger(hour=item.get("h", 0), minute=item.get("m", 0))
         elif schedule_type == "weekly":
             mapped_days = [
-                str(ui_day_to_python_weekday(day)) for day in sched_data.get("days_of_week", [])
+                str(ui_day_to_python_weekday(day))
+                for day in sched_data.get("days_of_week", [])
             ]
             trigger = CronTrigger(
                 day_of_week=",".join(mapped_days) if mapped_days else "*",
@@ -338,7 +338,17 @@ def run_file_cleanup() -> None:
     script_path = _get_reserved_cleanup_script_path()
     try:
         logger.info("Iniciando limpeza de arquivos (Self-Cleaning)...")
-        subprocess.run(["pwsh.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path], check=True)
+        subprocess.run(
+            [
+                "pwsh.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+            ],
+            check=True,
+        )
         logger.info("Limpeza de arquivos concluída com sucesso.")
     except Exception as e:
         logger.error("Erro ao executar limpeza de arquivos: %s", e)

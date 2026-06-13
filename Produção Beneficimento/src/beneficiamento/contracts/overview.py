@@ -8,20 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from ..data.schema import init_db
-from ._queries import (
-    _build_filtered_dataset,
-    _build_filtered_where,
-    _build_fases_criticas,
-    _build_gargalos,
-    _build_overview_kpis,
-    _build_overview_series,
-    _build_produtos,
-    _build_tingimento,
-    _build_turnos,
-    _fetch_filter_options,
-    _normalize_request_filters,
-    _resolve_overview_window,
-)
+from ._queries import (_build_fases_criticas, _build_filtered_dataset,
+                       _build_filtered_where, _build_gargalos,
+                       _build_overview_kpis, _build_overview_series,
+                       _build_produtos, _build_tingimento, _build_turnos,
+                       _fetch_filter_options, _normalize_request_filters,
+                       _resolve_overview_window)
 
 
 def obter_overview_historico(  # pylint: disable=too-many-locals
@@ -83,5 +75,6 @@ def obter_overview_historico(  # pylint: disable=too-many-locals
             "clickable_targets": ["produto", "maquina_fase", "fase", "turno", "ob"],
         },
     }
+
 
 __all__ = ["obter_overview_historico"]
