@@ -157,81 +157,8 @@ class BeneficiamentoDetailResponse(BaseModel):
     raw_records: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class BeneficiamentoAnalyticsGeral(BaseModel):
-    ob_distintas: int
-    total_fases: int
-    maquinas_distintas: int
-    total_operadores: int
-    kg_total: float
-    mt_total: float
-    min_real_total: float
-    min_prev_total: float
-    desvio_min_total: float
-    efic_tempo_media: float
-    taxa_reprocesso: float
-    produtividade_kgh: float
-
-
-class BeneficiamentoAnalyticsOperador(BaseModel):
-    operador: str
-    kg_total: float
-    mt_total: float
-    total_fases: int
-    efic_tempo: float
-
-
-class BeneficiamentoAnalyticsMaquina(BaseModel):
-    maquina: str
-    kg_total: float
-    mt_total: float
-    total_fases: int
-    min_real: float
-    min_setup: float
-    min_processo: float
-
-
-class BeneficiamentoAnalyticsProduto(BaseModel):
-    reduz: str
-    produto: str
-    artigo: str
-    kg_total: float
-    mt_total: float
-    taxa_reprocesso: float
-    produtividade_kgh: float
-
-
-class BeneficiamentoAnalyticsTurno(BaseModel):
-    turno: str
-    kg_total: float
-
-
-class BeneficiamentoAnalyticsFase(BaseModel):
-    fase: str
-    kg_total: float
-    mt_total: float
-    total_fases: int
-    reprocesso_percent: float
-    efic_tempo: float
-
-
-class BeneficiamentoAnalyticsArtigo(BaseModel):
-    artigo: str
-    kg_total: float
-    percent: float
-
-
-class BeneficiamentoAnalyticsCor(BaseModel):
-    cor: str
-    kg_total: float
-    percent: float
-
-
-class BeneficiamentoAnalyticsResponse(BaseModel):
-    geral: BeneficiamentoAnalyticsGeral
-    operadores: List[BeneficiamentoAnalyticsOperador] = Field(default_factory=list)
-    maquinas: List[BeneficiamentoAnalyticsMaquina] = Field(default_factory=list)
-    produtos: List[BeneficiamentoAnalyticsProduto] = Field(default_factory=list)
-    turnos: List[BeneficiamentoAnalyticsTurno] = Field(default_factory=list)
-    fases: List[BeneficiamentoAnalyticsFase] = Field(default_factory=list)
-    artigos: List[BeneficiamentoAnalyticsArtigo] = Field(default_factory=list)
-    cores: List[BeneficiamentoAnalyticsCor] = Field(default_factory=list)
+class BeneficiamentoRefreshResponse(BaseModel):
+    status: str
+    period: str
+    refresh_status: Optional[str] = None
+    detail: Optional[str] = None

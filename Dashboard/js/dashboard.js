@@ -216,6 +216,7 @@ function bindStaticEvents() {
 function registerStaticActions() {
     registerAction("refresh-page", () => location.reload());
     registerAction("refresh-beneficiamento", () => beneficiamentoModule.loadBeneficiamento());
+    registerAction("benef-refresh-live", () => beneficiamentoModule.refreshLive());
     registerAction("open-create-modal", () => openAutomationModal());
     registerAction("refresh-executions", () => loadExecutions(1));
     registerAction("execution-preset", (_event, element) => applyExecutionPreset(element?.dataset?.executionPreset || "all"));

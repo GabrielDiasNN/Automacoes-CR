@@ -3,7 +3,6 @@
 # pylint: disable=import-outside-toplevel,import-error,protected-access
 
 import json
-from datetime import date, timedelta
 from pathlib import Path
 import sys
 
@@ -38,37 +37,23 @@ def test_beneficiamento_historico_init_db_maintains_derived_columns_and_indexes(
         assert index_name in indexes
 
 
-def test_beneficiamento_historico_analytics_endpoint(client: TestClient) -> None:
-    """Valida o endpoint de analíticos de produção com todos os novos filtros cruzados."""
+def test_beneficiamento_historico_analytics_endpoint_removed(client: TestClient) -> None:
+    """O contrato analytics legado foi removido; a rota não deve mais existir."""
     response = client.get(
         "/api/beneficiamento/historico/analytics",
         headers=AUTH_HEADERS,
-        params={
-            "dt_inicio": "2026-01-01",
-            "dt_fim": "2026-12-31",
-            "busca": "tingimento",
-            "maquina": "JET 01",
-            "fase": "TINGIMENTO",
-            "turno": "Turno A",
-        }
     )
+    assert response.status_code == 404
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert "geral" in payload
-    assert "operadores" in payload
-    assert "maquinas" in payload
-    assert "produtos" in payload
-    assert "turnos" in payload
-    assert "fases" in payload
-    assert "artigos" in payload
-    assert "cores" in payload
 
-    geral = payload["geral"]
-    assert "ob_distintas" in geral
-    assert "kg_total" in geral
-    assert "efic_tempo_media" in geral
-    assert "taxa_reprocesso" in geral
+def test_beneficiamento_refresh_endpoint_rejects_invalid_period(client: TestClient) -> None:
+    """O refresh on-demand só aceita os períodos suportados (diario/mensal)."""
+    response = client.post(
+        "/api/beneficiamento/refresh",
+        headers=AUTH_HEADERS,
+        params={"period": "anual"},
+    )
+    assert response.status_code == 400
 
 
 def test_beneficiamento_overview_endpoint_contract(client: TestClient) -> None:
@@ -123,19 +108,17 @@ def test_beneficiamento_health_endpoint_contract(client: TestClient) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] in ["healthy", "attention", "missing", "no_data"]
-    assert payload["periods_total"] == 4
+    assert payload["periods_total"] == 2
     assert payload["periods_loaded"] >= 0
     assert "reason_code" in payload
     assert "recommended_action" in payload
     assert "issues" in payload
     assert "summary" in payload
     assert "snapshot_files" in payload
-    assert len(payload["periods"]) == 4
+    assert len(payload["periods"]) == 2
     assert {item["period"] for item in payload["periods"]} == {
         "diario",
-        "semanal",
         "mensal",
-        "anual",
     }
     diario = next(item for item in payload["periods"] if item["period"] == "diario")
     assert "reason_code" in diario
@@ -153,8 +136,8 @@ def test_beneficiamento_periods_endpoint_contract(client: TestClient) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["default_period"] in ["diario", "semanal", "mensal", "anual"]
-    assert len(payload["periods"]) == 4
+    assert payload["default_period"] in ["diario", "mensal"]
+    assert len(payload["periods"]) == 2
     diario = next(item for item in payload["periods"] if item["key"] == "diario")
     assert set(diario).issuperset({
         "key",
@@ -188,9 +171,7 @@ def test_beneficiamento_dashboard_endpoint_contract(client: TestClient) -> None:
     assert payload["default_period"] in payload["periods"]
     assert {item["key"] for item in payload["comparison"]} == {
         "diario",
-        "semanal",
         "mensal",
-        "anual",
     }
     assert payload["health"]["status"] in ["healthy", "attention", "missing", "no_data"]
     assert payload["periods"]["diario"]["key"] == "diario"
@@ -363,9 +344,9 @@ def test_beneficiamento_snapshot_dashboard_reuses_period_reads(monkeypatch) -> N
 
     dashboard = snapshot_dashboard.build_dashboard_payload()
 
-    assert call_count["count"] == 4
-    assert dashboard["health"]["periods_loaded"] == 4
-    assert dashboard["default_period"] in {"diario", "semanal", "mensal", "anual"}
+    assert call_count["count"] == 2
+    assert dashboard["health"]["periods_loaded"] == 2
+    assert dashboard["default_period"] in {"diario", "mensal"}
 
 
 def test_beneficiamento_health_payload_structures_attention_causes(monkeypatch) -> None:
@@ -515,7 +496,7 @@ def test_beneficiamento_health_payload_structures_attention_causes(monkeypatch) 
     assert payload["recommended_action"] == fake_periods["diario"]["recommended_action"]
     assert payload["summary"]["stale_periods"] == 1
     assert payload["summary"]["attention_periods"] == 1
-    assert payload["latest_period"]["period"] == "anual"
+    assert payload["latest_period"]["period"] == "mensal"
     assert payload["issues"][0]["code"] == "snapshot_stale"
     assert payload["snapshot_files"]["diario"]["analytics"] == "diario.analytics.json"
 
@@ -713,10 +694,7 @@ def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> N
             "historico_write_status": "ok",
             "quality_status": "ok",
             "issues": [],
-            "source_files": {
-                "analytics": "diario.analytics.json",
-                "profile": "diario.profile.json",
-            },
+            "source_files": {"analytics": "diario.analytics.json", "profile": None},
             "metrics": {"linhas": 10},
             "quality": {"status": "ok"},
             "profile": {},
@@ -725,9 +703,9 @@ def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> N
             "oracle": {"oracle_timeout_applied": True},
             "snapshot": {"generated_at": "2026-06-10T00:00:00"},
         },
-        "semanal": {
-            "key": "semanal",
-            "label": "Semanal",
+        "mensal": {
+            "key": "mensal",
+            "label": "Mensal",
             "available": True,
             "status": "attention",
             "updated_at": "2026-06-10T01:00:00+00:00",
@@ -750,8 +728,8 @@ def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> N
                 {
                     "code": "quality_missing_required_columns",
                     "severity": "error",
-                    "period": "semanal",
-                    "label": "Semanal",
+                    "period": "mensal",
+                    "label": "Mensal",
                     "message": (
                         "Quality gate bloqueou o período por colunas obrigatórias ausentes: LOCAL_PRODUCAO"
                     ),
@@ -761,10 +739,7 @@ def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> N
                     ),
                 }
             ],
-            "source_files": {
-                "analytics": "semanal.analytics.json",
-                "profile": "semanal.profile.json",
-            },
+            "source_files": {"analytics": "mensal.analytics.json", "profile": None},
             "metrics": {"linhas": 10},
             "quality": {
                 "status": "blocked",
@@ -784,64 +759,6 @@ def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> N
             "highlights": {},
             "oracle": {"oracle_timeout_applied": True},
             "snapshot": {"generated_at": "2026-06-10T01:00:00"},
-        },
-        "mensal": {
-            "key": "mensal",
-            "label": "Mensal",
-            "available": True,
-            "status": "healthy",
-            "updated_at": "2026-06-10T01:10:00+00:00",
-            "age_seconds": 1800,
-            "stale": False,
-            "source": "snapshot_local",
-            "snapshot_state": "promoted",
-            "reason_code": "healthy",
-            "reason_message": "Snapshot válido e promovido.",
-            "recommended_action": None,
-            "refresh_status": "ok",
-            "historico_write_status": "ok",
-            "quality_status": "ok",
-            "issues": [],
-            "source_files": {
-                "analytics": "mensal.analytics.json",
-                "profile": "mensal.profile.json",
-            },
-            "metrics": {"linhas": 10},
-            "quality": {"status": "ok"},
-            "profile": {},
-            "rankings": {},
-            "highlights": {},
-            "oracle": {"oracle_timeout_applied": True},
-            "snapshot": {"generated_at": "2026-06-10T01:10:00"},
-        },
-        "anual": {
-            "key": "anual",
-            "label": "Anual",
-            "available": True,
-            "status": "healthy",
-            "updated_at": "2026-06-10T01:20:00+00:00",
-            "age_seconds": 2400,
-            "stale": False,
-            "source": "snapshot_local",
-            "snapshot_state": "promoted",
-            "reason_code": "healthy",
-            "reason_message": "Snapshot válido e promovido.",
-            "recommended_action": None,
-            "refresh_status": "ok",
-            "historico_write_status": "ok",
-            "quality_status": "ok",
-            "issues": [],
-            "source_files": {
-                "analytics": "anual.analytics.json",
-                "profile": "anual.profile.json",
-            },
-            "metrics": {"linhas": 10},
-            "quality": {"status": "ok"},
-            "profile": {},
-            "rankings": {},
-            "highlights": {},
-            "oracle": {"oracle_timeout_applied": True},
-            "snapshot": {"generated_at": "2026-06-10T01:20:00"},
         },
     }
 
@@ -950,96 +867,16 @@ def test_beneficiamento_runner_marks_partial_failure_when_history_write_fails(
     sql_file = tmp_path / "dummy.sql"
     sql_file.write_text("select 1 from dual", encoding="utf-8")
 
-    profile_path, analytics_path, refresh_status = runner.run_period(
+    analytics_path, refresh_status = runner.run_period(
         "diario",
         sql_file=sql_file,
-        output_json=tmp_path / "profile.json",
         analytics_json=tmp_path / "analytics.json",
     )
 
     assert refresh_status == "partial_failure"
-    assert profile_path.exists()
     assert analytics_path.exists()
 
     analytics = json.loads(analytics_path.read_text(encoding="utf-8"))
     assert analytics["snapshot"]["refresh_status"] == "partial_failure"
     assert analytics["snapshot"]["historico_write_status"] == "partial_failure"
     assert analytics["snapshot"]["historico_rows_saved"] == 0
-
-
-def test_beneficiamento_runner_annual_slice_metadata_preserves_timeout_flag(monkeypatch) -> None:
-    """A execução anual fatiada deve preservar a metadata real do call_timeout."""
-    src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
-    if str(src_root) not in sys.path:
-        sys.path.insert(0, str(src_root))
-    from beneficiamento import runner
-
-    def fake_execute_query(*_unused_args, **_unused_kwargs):
-        return runner.QueryResult(
-            columns=[],
-            rows=[],
-            duplicate_columns={},
-            metadata={
-                "oracle_timeout_applied": False,
-                "oracle_timeout_warning": "client did not apply timeout",
-                "elapsed_seconds": 0.25,
-                "row_count": 0,
-            },
-        )
-
-    monkeypatch.setattr(runner, "execute_query", fake_execute_query)
-
-    result = runner._execute_query_in_monthly_slices(
-        "select 1 from dual",
-        date(2026, 1, 1),
-        date(2026, 3, 1),
-        oracle_timeout_ms=18000,
-        max_rows=None,
-    )
-
-    assert result.metadata["oracle_timeout_applied"] is False
-    assert result.metadata["slice_count"] == 2
-    assert "client did not apply timeout" in result.metadata["oracle_timeout_warning"]
-
-
-def test_beneficiamento_runner_splits_timeout_failures_into_smaller_slices(monkeypatch) -> None:
-    """Timeout de Oracle deve ser contornado com fatias menores sem perder os dados."""
-    src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
-    if str(src_root) not in sys.path:
-        sys.path.insert(0, str(src_root))
-    from beneficiamento import runner
-
-    calls: list[tuple[date, date]] = []
-
-    def fake_execute_query(_sql, parameters, **_kwargs):
-        start = parameters["dt_inicio"]
-        end = parameters["dt_fim"]
-        calls.append((start, end))
-        if (end - start) > timedelta(days=1):
-            raise RuntimeError("ORA-00028: sessão fechada pelo DBA")
-        return runner.QueryResult(
-            columns=["NUMERO_OB"],
-            rows=[("123456",)],
-            duplicate_columns={},
-            metadata={
-                "oracle_timeout_applied": True,
-                "oracle_timeout_warning": "",
-                "elapsed_seconds": 0.1,
-                "row_count": 1,
-            },
-        )
-
-    monkeypatch.setattr(runner, "execute_query", fake_execute_query)
-
-    result = runner._execute_query_in_monthly_slices(
-        "select 1 from dual",
-        date(2026, 1, 1),
-        date(2026, 1, 3),
-        oracle_timeout_ms=18000,
-        max_rows=None,
-    )
-
-    assert len(calls) == 3
-    assert result.metadata["slice_count"] == 2
-    assert result.metadata["row_count"] == 2
-    assert result.metadata["oracle_timeout_applied"] is True

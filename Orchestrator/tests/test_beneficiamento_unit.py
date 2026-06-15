@@ -241,13 +241,13 @@ def test_compute_health_status_has_explicit_precedence() -> None:
                 }
             ],
         },
-        "semanal": {
+        "mensal": {
             "status": "missing",
             "issues": [
                 {
                     "code": "snapshot_missing",
                     "severity": "error",
-                    "period": "semanal",
+                    "period": "mensal",
                     "action_hint": "Executar refresh.",
                 }
             ],

@@ -30,7 +30,7 @@ export function normalizeBeneficiamentoPayload(payload) {
     const periods = payload?.periods || {};
     const normalizedPeriods = {};
 
-    for (const key of ["diario", "semanal", "mensal", "anual"]) {
+    for (const key of ["diario", "mensal"]) {
         const period = periods?.[key] || {};
         normalizedPeriods[key] = {
             key,

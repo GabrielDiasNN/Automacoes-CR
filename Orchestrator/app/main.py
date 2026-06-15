@@ -17,7 +17,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401 — registers ORM tables in Base.metadata
@@ -138,17 +137,6 @@ app.include_router(beneficiamento.router)
 app.include_router(portfolio.router)
 app.include_router(system.router)
 app.include_router(websocket.router)
-
-
-# --- ROTAS DE COMPATIBILIDADE LEGADA ---
-@app.get("/api/health")
-def legacy_health():
-    return RedirectResponse(url="/api/system/health")
-
-
-@app.get("/api/metrics")
-def legacy_metrics():
-    return RedirectResponse(url="/api/system/metrics")
 
 
 # --- SERVICO DE ARQUIVOS ESTATICOS (DASHBOARD) ---

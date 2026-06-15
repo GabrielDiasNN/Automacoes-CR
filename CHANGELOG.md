@@ -1,5 +1,17 @@
 # Changelog
 
+## [9.4.0] - 15/06/2026
+### Adicionado
+- **Beneficiamento ao vivo**: refresh contínuo near-real-time substitui o batch espaçado. Jobs APScheduler `beneficiamento_live_diario` (~90s) e `beneficiamento_mensal_rollup` (~10min) reprocessam em subprocesso isolado (Oracle nunca abre no processo web), respeitando o corte de ~20s do DB. Intervalos configuráveis por `BENEFICIAMENTO_LIVE_INTERVAL_SECONDS` e `BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS`.
+- **Refresh on-demand**: endpoint `POST /api/beneficiamento/refresh?period=diario|mensal` e botão "Atualizar agora" no dashboard, com auto-refresh (~60s) na aba visível e debounce reativo nos filtros de texto.
+
+### Alterado
+- **Períodos enxutos**: Beneficiamento mantém apenas `diario` e `mensal`; `semanal` e `anual` (e o template `anual.sql` com fatiamento mensal) foram removidos.
+
+### Removido
+- **Análises sem relevância**: contrato `analytics` legado (`/api/beneficiamento/historico/analytics`, `contracts/analytics.py` e schemas `BeneficiamentoAnalytics*`); geração/serviço do artefato `*.profile.json` (profiling segue em memória apenas para o quality gate).
+- **Legado do Orquestrador**: redirects `/api/health` e `/api/metrics` (use `/api/system/*`) e o stub `services/beneficiamento_dashboard.py`.
+
 ## [9.3.20] - 13/06/2026
 ### Alterado
 - **Contratos de agentes padronizados**: `AGENTS.md`, `CLAUDE.md` e `GEMINI.md` local unificados em hierarquia coesa com referências cruzadas explícitas e sem contradições.

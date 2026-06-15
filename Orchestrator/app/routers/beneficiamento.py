@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from .. import schemas
 from ..middleware import get_api_key
 from ..runtime import get_project_root
+from ..services.beneficiamento_refresh import run_beneficiamento_refresh
 
 router = APIRouter(prefix="/api/beneficiamento", tags=["Beneficiamento"])
 
@@ -23,15 +24,13 @@ if src_dir.exists() and str(src_dir) not in sys.path:
 
 try:
     from beneficiamento.contracts import (  # type: ignore
-        obter_analytics_historico, obter_detail_historico,
-        obter_overview_historico)
+        obter_detail_historico, obter_overview_historico)
     from beneficiamento.data import buscar_historico  # type: ignore
     from beneficiamento.snapshot_dashboard import (  # type: ignore
         build_dashboard_payload, build_health_payload, build_periods_payload,
         load_period_payload)
 except ImportError:
     buscar_historico = None
-    obter_analytics_historico = None
     obter_detail_historico = None
     obter_overview_historico = None
     build_dashboard_payload = None
@@ -280,60 +279,27 @@ def get_beneficiamento_detail(
         ) from exc
 
 
-@router.get(
-    "/historico/analytics", response_model=schemas.BeneficiamentoAnalyticsResponse
-)
-# pylint: disable=too-many-arguments,too-many-positional-arguments
-def get_beneficiamento_historico_analytics(
-    ob: Optional[str] = Query(None, description="Número da OB (busca parcial)"),
-    alternativo: Optional[str] = Query(
-        None, description="Código Alternativo ou Reduzido do produto"
+@router.post("/refresh", response_model=schemas.BeneficiamentoRefreshResponse)
+def post_beneficiamento_refresh(
+    period: str = Query(
+        "diario", description="Período a atualizar ao vivo: diario ou mensal"
     ),
-    dt_inicio: Optional[str] = Query(
-        None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
-    ),
-    dt_fim: Optional[str] = Query(
-        None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
-    ),
-    ano_sem: Optional[int] = Query(
-        None, description="Código do Ano + Semana ISO (ex: 202622)"
-    ),
-    ano_mes: Optional[str] = Query(
-        None, description="Código do Ano + Mês (ex: 202605)"
-    ),
-    busca: Optional[str] = Query(
-        None, description="Termo de busca textual para produto/artigo"
-    ),
-    maquina: Optional[str] = Query(None, description="Nome da máquina para filtro"),
-    fase: Optional[str] = Query(None, description="Nome da fase para filtro"),
-    turno: Optional[str] = Query(None, description="Turno específico para filtro"),
     api_key: str = Depends(get_api_key),
-) -> schemas.BeneficiamentoAnalyticsResponse:
-    """Retorna KPIs agregados de OEE e PCP do histórico indexado do Beneficiamento."""
+) -> schemas.BeneficiamentoRefreshResponse:
+    """Dispara um refresh on-demand ("Atualizar agora") do período informado.
 
-    if obter_analytics_historico is None:
+    Executa o runner em subprocesso isolado (Oracle nunca é aberto no processo web),
+    preservando o guardrail de que GETs do Dashboard só leem SQLite/snapshots.
+    """
+    if period not in ("diario", "mensal"):
         raise HTTPException(
-            status_code=500,
-            detail="Módulo de persistência histórica do beneficiamento indisponível.",
+            status_code=400, detail="Período inválido. Use 'diario' ou 'mensal'."
         )
 
-    filtros = {
-        "ob": ob,
-        "alternativo": alternativo,
-        "dt_inicio": dt_inicio,
-        "dt_fim": dt_fim,
-        "ano_sem": ano_sem,
-        "ano_mes": ano_mes,
-        "busca": busca,
-        "maquina": maquina,
-        "fase": fase,
-        "turno": turno,
-    }
-
-    try:
-        data = obter_analytics_historico(filtros)
-        return schemas.BeneficiamentoAnalyticsResponse.model_validate(data)
-    except Exception as exc:
+    result = run_beneficiamento_refresh(period)
+    if result.get("status") == "error":
         raise HTTPException(
-            status_code=500, detail=f"Erro no cálculo de analytics SQLite: {exc}"
-        ) from exc
+            status_code=500,
+            detail=result.get("detail") or "Falha ao executar refresh do beneficiamento.",
+        )
+    return schemas.BeneficiamentoRefreshResponse.model_validate(result)

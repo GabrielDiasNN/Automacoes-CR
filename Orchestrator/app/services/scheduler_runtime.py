@@ -21,6 +21,7 @@ from ..runtime import scheduler
 from ..schemas.schedule_rules import (first_interval_candidate,
                                       ui_day_to_python_weekday)
 from ..timezone import get_now_local
+from .beneficiamento_refresh import run_beneficiamento_refresh
 from .execution_runtime import (build_queued_execution,
                                 get_group_active_execution)
 
@@ -331,6 +332,50 @@ def register_enterprise_jobs(retention_days: int) -> None:
         id="enterprise_file_cleanup",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+    register_beneficiamento_live_jobs()
+
+
+def _live_interval_seconds(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def register_beneficiamento_live_jobs() -> None:
+    """Refresh ao vivo do Beneficiamento (substitui o batch espaçado).
+
+    O diário é reprocessado em loop curto (mantém o SQLite/snapshot frescos, o que
+    torna o dashboard "ao vivo" já que /overview lê do SQLite). O mensal é
+    reprocessado em cadência mais lenta. Cada ciclo roda em subprocesso isolado,
+    respeitando o orçamento de ~20s do Oracle. ``max_instances=1`` + ``coalesce``
+    evitam refreshes sobrepostos do mesmo período.
+    """
+    diario_interval = _live_interval_seconds("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", 90)
+    mensal_interval = _live_interval_seconds("BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS", 600)
+
+    scheduler.add_job(
+        lambda: run_beneficiamento_refresh("diario"),
+        IntervalTrigger(seconds=diario_interval),
+        id="beneficiamento_live_diario",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=30,
+    )
+    scheduler.add_job(
+        lambda: run_beneficiamento_refresh("mensal"),
+        IntervalTrigger(seconds=mensal_interval),
+        id="beneficiamento_mensal_rollup",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=120,
     )
 
 

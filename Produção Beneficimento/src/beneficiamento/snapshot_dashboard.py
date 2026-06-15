@@ -154,7 +154,6 @@ def _primary_issue_for_period(
     period: str,
     label: str,
     analytics_exists: bool,
-    profile_exists: bool,
     available: bool,
     stale: bool,
     metrics: dict[str, Any],
@@ -164,7 +163,7 @@ def _primary_issue_for_period(
     historico_write_status: str,
 ) -> tuple[str, str, dict[str, Any]]:
     quality_status = str(quality.get("status") or "").lower()
-    files_present = analytics_exists or profile_exists
+    files_present = analytics_exists
     invalid_snapshot = files_present and not available
     if not files_present:
         return (
@@ -373,7 +372,6 @@ def _build_period_health_context(
     period: str,
     label: str,
     analytics_path: Path,
-    profile_path: Path,
     available: bool,
     stale: bool,
     metrics: dict[str, Any],
@@ -388,7 +386,6 @@ def _build_period_health_context(
         period=period,
         label=label,
         analytics_exists=analytics_path.exists(),
-        profile_exists=profile_path.exists(),
         available=available,
         stale=stale,
         metrics=metrics,
@@ -626,24 +623,13 @@ def _build_health_from_periods(periods: dict[str, dict[str, Any]]) -> dict[str, 
 def load_period_payload(period: str) -> dict[str, Any]:
     config = get_period_config(period)
     analytics_path = snapshot_path(period, "analytics")
-    profile_path = snapshot_path(period, "profile")
     analytics = read_json(analytics_path)
-    profile = read_json(profile_path)
-    available = bool(analytics) and bool(profile)
+    available = bool(analytics)
     updated_at = (
         ((analytics.get("snapshot") or {}).get("generated_at"))
         or _file_updated_at(analytics_path)
-        or _file_updated_at(profile_path)
     )
-    age_candidates = [
-        value
-        for value in (
-            _file_age_seconds(analytics_path),
-            _file_age_seconds(profile_path),
-        )
-        if value is not None
-    ]
-    age_seconds = max(age_candidates) if age_candidates else None
+    age_seconds = _file_age_seconds(analytics_path)
     stale = bool(
         age_seconds is not None and age_seconds > (config.max_age_minutes * 60)
     )
@@ -656,19 +642,10 @@ def load_period_payload(period: str) -> dict[str, Any]:
     }
     oracle = ((analytics.get("execucao_oracle") or {}).get("consulta_principal")) or {}
     snapshot = analytics.get("snapshot") or {}
-    profile_summary = {
-        "total_columns": profile.get("total_columns"),
-        "total_rows": profile.get("total_rows"),
-        "window": profile.get("window") or {},
-        "mostly_null_columns": profile.get("mostly_null_columns") or [],
-        "constant_columns": profile.get("constant_columns") or [],
-        "duplicate_source_names": profile.get("duplicate_source_names") or {},
-    }
     health_context = _build_period_health_context(
         period=period,
         label=config.label,
         analytics_path=analytics_path,
-        profile_path=profile_path,
         available=available,
         stale=stale,
         metrics=metrics,
@@ -695,11 +672,11 @@ def load_period_payload(period: str) -> dict[str, Any]:
         "issues": health_context["issues"],
         "source_files": {
             "analytics": str(analytics_path),
-            "profile": str(profile_path),
+            "profile": None,
         },
         "metrics": metrics,
         "quality": quality,
-        "profile": profile_summary,
+        "profile": {},
         "rankings": rankings,
         "highlights": _build_period_highlights(period, metrics, analytics),
         "oracle": oracle,

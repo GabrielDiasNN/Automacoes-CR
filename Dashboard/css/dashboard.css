@@ -857,7 +857,8 @@ textarea:focus-visible {
 /* ===== Beneficiamento — períodos & gráficos ===== */
 .benef-period-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(180px, 1fr));
+    grid-template-columns: repeat(2, minmax(180px, 320px));
+    justify-content: start;
     gap: var(--space-3);
     margin-bottom: var(--space-3);
 }

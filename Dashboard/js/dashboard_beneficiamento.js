@@ -20,8 +20,11 @@ export function createBeneficiamentoModule(ctx) {
         detailContext: null,
         loadToken: 0,
         reloadTimer: null,
+        autoRefreshTimer: null,
         selectedPeriodKey: "mensal",
     };
+
+    const AUTO_REFRESH_SECONDS = 60;
 
     function translateHealthStatus(value) {
         switch (String(value || "").toLowerCase()) {
@@ -132,7 +135,7 @@ export function createBeneficiamentoModule(ctx) {
         const container = document.getElementById("benef-period-grid");
         if (!container) return;
         const periods = dashboard?.periods || {};
-        container.innerHTML = ["diario", "semanal", "mensal", "anual"].map((key) => {
+        container.innerHTML = ["diario", "mensal"].map((key) => {
             const period = periods[key] || {};
             const metrics = period.metrics || {};
             const badgeClass = period.status === "healthy"
@@ -539,6 +542,36 @@ export function createBeneficiamentoModule(ctx) {
         }, delay);
     }
 
+    function isViewVisible() {
+        const root = document.getElementById("view-beneficiamento");
+        // offsetParent é null quando o elemento (ou um ancestral) está oculto.
+        return !!root && root.offsetParent !== null && document.visibilityState === "visible";
+    }
+
+    function startAutoRefresh() {
+        if (state.autoRefreshTimer) return;
+        state.autoRefreshTimer = window.setInterval(() => {
+            // Só repuxa quando a aba está realmente visível, para não desperdiçar requisições.
+            if (isViewVisible() && !state.reloadTimer) loadBeneficiamento();
+        }, AUTO_REFRESH_SECONDS * 1000);
+    }
+
+    async function refreshLive() {
+        // "Atualizar agora": dispara um pull Oracle on-demand do período em foco
+        // (subprocesso isolado no backend, dentro do orçamento de ~20s) e relê o SQLite.
+        const period = state.selectedPeriodKey === "diario" ? "diario" : "mensal";
+        setBannerState("info", `Disparando atualização ao vivo (${period})...`);
+        try {
+            await api(`/api/beneficiamento/refresh?period=${encodeURIComponent(period)}`, "POST");
+            if (showToast) showToast("Atualização ao vivo concluída.", "success");
+        } catch (error) {
+            console.error("Erro no refresh ao vivo do Beneficiamento:", error);
+            if (showToast) showToast("Falha ao atualizar ao vivo.", "danger");
+        } finally {
+            await loadBeneficiamento();
+        }
+    }
+
     function setup(root) {
         if (state.initialized) return;
         state.initialized = true;
@@ -547,9 +580,13 @@ export function createBeneficiamentoModule(ctx) {
             document.getElementById(id)?.addEventListener("change", reload);
         });
         ["benef-filter-search", "benef-filter-alt"].forEach((id) => {
-            document.getElementById(id)?.addEventListener("keydown", (event) => {
-                if (event.key === "Enter") reload();
+            const el = document.getElementById(id);
+            if (!el) return;
+            // Enter aplica de imediato; digitação aplica com debounce reativo.
+            el.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") scheduleReload(0);
             });
+            el.addEventListener("input", () => scheduleReload(400));
         });
         document.getElementById("benef-filter-clear")?.addEventListener("click", clearFilters);
         document.getElementById("benef-hist-search-btn")?.addEventListener("click", pesquisarHistorico);
@@ -593,9 +630,11 @@ export function createBeneficiamentoModule(ctx) {
             });
         });
         bindActionElements(root);
+        startAutoRefresh();
     }
 
     return {
         loadBeneficiamento,
+        refreshLive,
     };
 }

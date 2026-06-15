@@ -14,7 +14,7 @@ SQL_TEMPLATE_DIR = DOMAIN_ROOT / "sql" / "templates"
 SNAPSHOT_DIR = DOMAIN_ROOT / "snapshots" / "latest"
 SNAPSHOT_ARCHIVE_DIR = DOMAIN_ROOT / "snapshots" / "archive"
 
-PERIOD_ORDER = ("diario", "semanal", "mensal", "anual")
+PERIOD_ORDER = ("diario", "mensal")
 
 
 def _int_env(name: str, default: int) -> int:
@@ -44,33 +44,21 @@ class PeriodConfig:
 
 
 _PERIOD_CONFIGS = {
+    # Cadência ao vivo: o diário é reprocessado em loop curto (~90s) pelo
+    # Orquestrador, então a idade operacional aceitável é baixa.
     "diario": PeriodConfig(
         key="diario",
         label="Diario",
         sql_template="detalhado.sql",
-        refresh_minutes=30,
-        max_age_minutes=90,
-    ),
-    "semanal": PeriodConfig(
-        key="semanal",
-        label="Semanal",
-        sql_template="detalhado.sql",
-        refresh_minutes=720,
-        max_age_minutes=900,
+        refresh_minutes=2,
+        max_age_minutes=5,
     ),
     "mensal": PeriodConfig(
         key="mensal",
         label="Mensal",
         sql_template="detalhado.sql",
-        refresh_minutes=720,
-        max_age_minutes=900,
-    ),
-    "anual": PeriodConfig(
-        key="anual",
-        label="Anual",
-        sql_template="anual.sql",
-        refresh_minutes=1440,
-        max_age_minutes=1800,
+        refresh_minutes=10,
+        max_age_minutes=30,
     ),
 }
 

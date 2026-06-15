@@ -54,12 +54,7 @@ from .beneficiamento import (
     BeneficiamentoHistoricoResponse,
     BeneficiamentoOverviewResponse,
     BeneficiamentoDetailResponse,
-    BeneficiamentoAnalyticsGeral,
-    BeneficiamentoAnalyticsOperador,
-    BeneficiamentoAnalyticsMaquina,
-    BeneficiamentoAnalyticsProduto,
-    BeneficiamentoAnalyticsTurno,
-    BeneficiamentoAnalyticsResponse,
+    BeneficiamentoRefreshResponse,
 )
 
 from .system import (
@@ -155,12 +150,7 @@ __all__ = [
     "BeneficiamentoHistoricoResponse",
     "BeneficiamentoOverviewResponse",
     "BeneficiamentoDetailResponse",
-    "BeneficiamentoAnalyticsGeral",
-    "BeneficiamentoAnalyticsOperador",
-    "BeneficiamentoAnalyticsMaquina",
-    "BeneficiamentoAnalyticsProduto",
-    "BeneficiamentoAnalyticsTurno",
-    "BeneficiamentoAnalyticsResponse",
+    "BeneficiamentoRefreshResponse",
     # System
     "WorkerStatus",
     "EnvContent",
