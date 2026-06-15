@@ -2,6 +2,7 @@ import { normalizeDiagnosticsPayload } from "./contracts.js";
 import { getSystemActionRequest } from "./system_actions.js";
 import { bindActionElements } from "./action_registry.js";
 import { renderTable } from "./ui_manager.js";
+import { refreshIcons } from "./dom_utils.js";
 
 export function createSystemModule(ctx) {
     const {
@@ -39,7 +40,7 @@ export function createSystemModule(ctx) {
         }
         if (audit) renderAuditTable(audit);
 
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
     }
 
     function renderSystemLoadingState() {
@@ -403,7 +404,7 @@ export function createSystemModule(ctx) {
         button.innerHTML = `<i data-lucide="${descriptor.icon || "activity"}"></i>${escapeHtml(descriptor.label || "Ativar processador")}`;
         button.disabled = Boolean(descriptor.disabled);
         button.dataset.systemAction = descriptor.action || "";
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
     }
 
     function renderAuditTable(items) {

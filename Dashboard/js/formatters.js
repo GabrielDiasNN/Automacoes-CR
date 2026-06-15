@@ -47,6 +47,12 @@ export function escapeHtml(value) {
         .replace(/'/g, "&#39;");
 }
 
+export function formatSeconds(value) {
+    const sec = Number(value || 0);
+    if (!Number.isFinite(sec) || sec <= 0) return "0s";
+    return `${sec.toFixed(1)}s`;
+}
+
 export function formatAge(seconds) {
     const s = numberValue(seconds);
     if (!s) return "agora";

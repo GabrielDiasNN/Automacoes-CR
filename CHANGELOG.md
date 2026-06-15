@@ -1,5 +1,13 @@
 # Changelog
 
+## [9.3.20] - 13/06/2026
+### Alterado
+- **Contratos de agentes padronizados**: `AGENTS.md`, `CLAUDE.md` e `GEMINI.md` local unificados em hierarquia coesa com referências cruzadas explícitas e sem contradições.
+- **CLAUDE.md promovido a contrato de repositório**: reescrito em PT-BR, elevado ao nível 3 da ordem de precedência junto com `GEMINI.md`, incluído na sequência de bootstrap obrigatório.
+- **Princípios comportamentais canônicos**: seção "Princípios Comportamentais" adicionada em `AGENTS.md` como fonte única dos 4 princípios (Pensar Antes de Executar, Simplicidade Primeiro, Mudanças Cirúrgicas, Execução Orientada a Metas) aplicáveis a todos os agentes.
+- **Resolução de conflito formalizada**: regra explícita adicionada à ordem de precedência de `AGENTS.md` para casos em que simplicidade de código colide com governança/documentação.
+- **GEMINI.md global alinhado**: `CLAUDE.md` adicionado à lista de contratos locais na ordem de precedência; `ai-engineering-discipline` global ganhou cross-reference para os princípios canônicos de `AGENTS.md` em `C:\Automacoes`.
+
 ## [9.3.19] - 12/06/2026
 ### Adicionado
 - **Núcleo compartilhado do Beneficiamento**: criado `beneficiamento/core` para coerções, aliases de campos, normalização de turnos e métricas reutilizáveis.

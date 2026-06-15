@@ -1,4 +1,5 @@
 import { normalizeExecutionsPayload } from "./contracts.js";
+import { refreshIcons } from "./dom_utils.js";
 
 export function createExecutionsModule(ctx) {
     const {
@@ -12,8 +13,6 @@ export function createExecutionsModule(ctx) {
         setExecPage,
         getExecPage,
         execPerPage,
-        stopExec,
-        openLogModal,
         showToast,
         loadOverview,
         bindActionElements,
@@ -67,7 +66,17 @@ export function createExecutionsModule(ctx) {
             loadExecutions(nextPage);
         });
 
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
+    }
+
+    function focusExecutions(filters = {}) {
+        Object.entries(filters).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) el.value = String(value ?? "");
+        });
+        const navBtn = document.querySelector(".nav-item[data-target=\"executions\"]");
+        if (navBtn) navBtn.click();
+        loadExecutions(1);
     }
 
     function renderExecutionsTable(items) {
@@ -261,57 +270,23 @@ export function createExecutionsModule(ctx) {
     }
 
     function openAutomationHistory(id) {
-        const select = document.getElementById("filter-automation");
-        if (select) {
-            select.value = String(id);
-        }
-        const navBtn = document.querySelector(".nav-item[data-target=\"executions\"]");
-        if (navBtn) navBtn.click();
-        loadExecutions(1);
+        focusExecutions({ "filter-automation": id });
     }
 
     function applyQueueGroup(group) {
-        const select = document.getElementById("filter-queue-group");
-        if (select) {
-            select.value = String(group || "");
-        }
-        const navBtn = document.querySelector(".nav-item[data-target=\"executions\"]");
-        if (navBtn) navBtn.click();
-        loadExecutions(1);
+        focusExecutions({ "filter-queue-group": group || "" });
     }
 
     function applyPriority(priority) {
-        const select = document.getElementById("filter-priority");
-        if (select) {
-            select.value = String(priority || "");
-        }
-        const navBtn = document.querySelector(".nav-item[data-target=\"executions\"]");
-        if (navBtn) navBtn.click();
-        loadExecutions(1);
+        focusExecutions({ "filter-priority": priority || "" });
     }
 
     function openHotspot(automationId) {
-        const select = document.getElementById("filter-automation");
-        const statusInput = document.getElementById("filter-status");
-        if (select) {
-            select.value = String(automationId || "");
-        }
-        if (statusInput) {
-            statusInput.value = "ERROR";
-        }
-        const navBtn = document.querySelector(".nav-item[data-target=\"executions\"]");
-        if (navBtn) navBtn.click();
-        loadExecutions(1);
+        focusExecutions({ "filter-automation": automationId || "", "filter-status": "ERROR" });
     }
 
     function applyPressure(queueGroup, priority) {
-        const queueGroupInput = document.getElementById("filter-queue-group");
-        const priorityInput = document.getElementById("filter-priority");
-        if (queueGroupInput) queueGroupInput.value = String(queueGroup || "");
-        if (priorityInput) priorityInput.value = String(priority || "");
-        const navBtn = document.querySelector(".nav-item[data-target=\"executions\"]");
-        if (navBtn) navBtn.click();
-        loadExecutions(1);
+        focusExecutions({ "filter-queue-group": queueGroup || "", "filter-priority": priority || "" });
     }
 
     function applyPreset(preset) {

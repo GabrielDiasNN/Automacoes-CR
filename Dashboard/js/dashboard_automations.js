@@ -1,3 +1,5 @@
+import { refreshIcons } from "./dom_utils.js";
+
 export function createAutomationsModule(ctx) {
     const {
         api,
@@ -179,7 +181,7 @@ export function createAutomationsModule(ctx) {
         renderAutomationTable(getFilteredAutomations(), jobs || []);
         syncGlobalTestToggle(autos);
 
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
     }
 
     function refreshAutomationFilterOptions(autos) {
@@ -405,7 +407,7 @@ export function createAutomationsModule(ctx) {
 
     function handleSearch() {
         renderAutomationTable(getFilteredAutomations(), cachedJobs);
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
     }
 
     async function openAutomationModal(automationId = null) {
@@ -429,7 +431,7 @@ export function createAutomationsModule(ctx) {
 
         switchTab("tab-identification");
         modal.showModal();
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
     }
 
     function resetAutomationForm() {
@@ -634,25 +636,25 @@ export function createAutomationsModule(ctx) {
 
         if (scheduleType === "manual") {
             summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Disparo manual (sem agenda).</span>";
-            if (typeof lucide !== "undefined") lucide.createIcons();
+            refreshIcons();
             renderSchedulePreview();
             return;
         }
         if ((scheduleType === "weekly" || scheduleType === "monthly" || scheduleType === "daily") && !scheduleTimes.length) {
             summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Selecione ao menos um horário.</span>";
-            if (typeof lucide !== "undefined") lucide.createIcons();
+            refreshIcons();
             renderSchedulePreview();
             return;
         }
         if (scheduleType === "weekly" && !scheduleDays.size) {
             summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Selecione ao menos um dia da semana.</span>";
-            if (typeof lucide !== "undefined") lucide.createIcons();
+            refreshIcons();
             renderSchedulePreview();
             return;
         }
         if (scheduleType === "cron" && !getValue("f-cron-expression").trim()) {
             summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Insira uma expressão Cron.</span>";
-            if (typeof lucide !== "undefined") lucide.createIcons();
+            refreshIcons();
             renderSchedulePreview();
             return;
         }
@@ -690,7 +692,7 @@ export function createAutomationsModule(ctx) {
         }
         
         summary.innerHTML = `<i data-lucide="calendar-clock" size="14"></i><span>${label}</span>`;
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
         renderSchedulePreview();
     }
 
@@ -934,7 +936,7 @@ export function createAutomationsModule(ctx) {
         latestSchedulePreview = preview;
         const nextRuns = (preview.next_runs_preview || []).slice(0, 5);
         box.innerHTML = `<i data-lucide="clock-3" size="14"></i><span>Próximas: ${nextRuns.length ? nextRuns.join(" | ") : "sem execução futura"}</span>`;
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
         if (currentTabId === "tab-review") {
             refreshReviewPanel();
         }

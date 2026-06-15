@@ -1,19 +1,19 @@
-# Governança de Contexto: Projeto Automacoes
+# GEMINI.md — Instruções para Gemini
 
-## Mandatos de Encoding
+> Herda de: `AGENTS.md`. Em caso de conflito, `AGENTS.md` prevalece salvo onde este arquivo for mais restritivo.
 
-Estas regras são obrigatórias para todos os agentes e ferramentas que editam este repositório:
+Este arquivo é o contrato local de bootstrap para Gemini CLI e Antigravity dentro do Hub de Automações. Deve permanecer curto, normativo e estável.
 
-1. **PowerShell (`.ps1`, `.psm1`)**: salvar como `UTF-8 with BOM`.
-2. **Demais arquivos textuais (`.md`, `.py`, `.js`, `.json`, `.txt`, `.sql`, `.html`, `.css`)**: salvar como `UTF-8` sem BOM, salvo exceção explícita do repositório.
-3. **Markdown em PT-BR**: preservar acentuação normal; não usar ASCII empobrecido e não introduzir mojibake.
-4. **Validação**: antes de concluir mudanças documentais ou de governança, rodar os validadores aplicáveis de encoding e governança.
+## Princípios Comportamentais
 
-## Propósito do Contexto Local
+Os quatro princípios comportamentais obrigatórios estão definidos em `AGENTS.md` (seção "Princípios Comportamentais") e se aplicam integralmente a este agente: pensar antes de executar, simplicidade primeiro, mudanças cirúrgicas e execução orientada a metas.
 
-Este arquivo é o contrato local de bootstrap para Gemini CLI e Antigravity dentro do Hub de Automações. Ele deve permanecer curto, normativo e estável.
+## Regras de Encoding
 
-O histórico operacional e os marcos recentes do contexto AI-Native vivem em `docs/ai-native-context-monitor.md`. O histórico completo de versões permanece em `CHANGELOG.md`.
+As regras canônicas de encoding estão em `AGENTS.md` (seção "Regras de Encoding") e se aplicam integralmente. Resumo de referência rápida:
+- `.ps1`, `.psm1` → UTF-8 with BOM
+- `.md`, `.py`, `.js`, `.json`, `.txt`, `.sql`, `.html`, `.css` → UTF-8 sem BOM
+- Markdown em PT-BR: preservar acentuação; não introduzir mojibake
 
 ## Protocolo Específico do Projeto
 
@@ -36,5 +36,6 @@ O histórico operacional e os marcos recentes do contexto AI-Native vivem em `do
 - [ ] `README.md`, `CONTEXT.md` e `SECURITY.md` permanecem coerentes com a mudança?
 - [ ] `CHANGELOG.md` foi atualizado quando houve mudança de comportamento, governança, arquitetura ou contrato?
 - [ ] `docs/ai-native-context-monitor.md` foi atualizado quando houve mudança de estado operacional relevante para agentes?
-- [ ] A política de encoding foi preservada?
+- [ ] A política de encoding foi preservada (conforme `AGENTS.md`)?
 - [ ] O tom técnico em Português do Brasil foi mantido?
+- [ ] Os princípios comportamentais de `AGENTS.md` foram respeitados?

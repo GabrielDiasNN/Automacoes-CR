@@ -12,10 +12,11 @@ Quando houver conflito entre instruções, use esta ordem:
 2. Regras nativas do runtime do agente.
 3. Contratos locais do repositório:
    - `AGENTS.md`
+   - `CLAUDE.md`
+   - `GEMINI.md`
    - `README.md`
    - `CONTEXT.md`
    - `SECURITY.md`
-   - `GEMINI.md`
 4. Skills canônicas do workspace em `.github/skills/`.
 5. Diretrizes globais compartilhadas da máquina:
    - `%USERPROFILE%\.gemini\GEMINI.md`
@@ -27,23 +28,57 @@ Regra de resolução:
 
 - Em conflito entre regra local do repositório e regra global da máquina, vence a regra local do repositório.
 - Em conflito entre fonte canônica e mirror, vence sempre a fonte canônica.
+- Em conflito entre simplicidade de código (princípio comportamental) e exigência de governança/documentação: governança prevalece para arquivos de infraestrutura, configuração e contratos; simplicidade prevalece para código de produto e lógica de negócio.
 
 ## Bootstrap Obrigatório
 
 Antes de análise profunda, refatoração estrutural, mudança de skill ou alteração de governança:
 
 1. Ler `AGENTS.md`.
-2. Ler `README.md`, `CONTEXT.md` e `SECURITY.md`.
-3. Ler `GEMINI.md` do repositório quando a tarefa tocar contexto AI-Native, encoding, documentação ou políticas locais.
-4. Ler `.github/skills/README.md` e depois a skill aplicável quando a tarefa tocar governança, runtime, orquestração, UI ou canais.
-5. Se o agente estiver rodando fora do ecossistema Codex, tratar `.gemini/skills/` apenas como alias de `.github/skills/`.
-6. Se a tarefa envolver diretrizes globais compartilhadas entre agentes, ler também `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais aplicáveis.
+2. Ler `CLAUDE.md` quando a tarefa tocar qualidade de código, design de solução ou comportamento de agente.
+3. Ler `README.md`, `CONTEXT.md` e `SECURITY.md`.
+4. Ler `GEMINI.md` do repositório quando a tarefa tocar contexto AI-Native, encoding, documentação ou políticas locais.
+5. Ler `.github/skills/README.md` e depois a skill aplicável quando a tarefa tocar governança, runtime, orquestração, UI ou canais.
+6. Se o agente estiver rodando fora do ecossistema Codex, tratar `.gemini/skills/` apenas como alias de `.github/skills/`.
+7. Se a tarefa envolver diretrizes globais compartilhadas entre agentes, ler também `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais aplicáveis.
 
 ## Idioma e Comunicação
 
 - Toda comunicação com o usuário deve ser em Português do Brasil.
 - Mensagens de commit, ADRs, changelog técnico e instruções operacionais devem permanecer em Português do Brasil.
 - O tom deve ser técnico, direto e auditável.
+
+## Princípios Comportamentais
+
+Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de implementação.
+
+**1. Pensar Antes de Executar**
+
+Antes de implementar qualquer mudança:
+- Declare assunções explicitamente. Se incerto, pergunte.
+- Se existirem múltiplas interpretações, apresente-as — não escolha silenciosamente.
+- Se existir abordagem mais simples, diga. Questione quando pertinente.
+- Se algo não estiver claro, pare. Nomeie o que está confuso. Pergunte.
+
+**2. Simplicidade Primeiro**
+
+- Sem features além do que foi pedido.
+- Sem abstrações para código de uso único.
+- Sem tratamento de erro para cenários impossíveis.
+- Se você escrever 200 linhas e poderiam ser 50, reescreva.
+
+**3. Mudanças Cirúrgicas**
+
+- Toque apenas o necessário; não "melhore" código, comentários ou formatação adjacentes.
+- Siga o estilo existente do arquivo.
+- Se notar código morto não relacionado, mencione — não delete sem pedido.
+- Cada linha alterada deve ser rastreável diretamente ao pedido do usuário.
+
+**4. Execução Orientada a Metas**
+
+- Transforme tarefas em metas verificáveis antes de iniciar.
+- Para tarefas de múltiplos passos, declare um plano e verifique cada etapa.
+- Critérios fracos ("fazer funcionar") exigem clarificação; declare critérios de sucesso precisos.
 
 ## Regras de Encoding
 

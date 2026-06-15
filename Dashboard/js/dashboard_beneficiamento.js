@@ -5,6 +5,7 @@
 
 import { numberValue, formatNumber, formatPercent, formatDateBr, formatDateTimeBr, formatAge } from "./formatters.js";
 import { renderTable } from "./ui_manager.js";
+import { setText, refreshIcons } from "./dom_utils.js";
 
 export function createBeneficiamentoModule(ctx) {
     const { api, showToast, escapeHtml, bindActionElements, normalizeBeneficiamentoPayload } = ctx;
@@ -31,11 +32,6 @@ export function createBeneficiamentoModule(ctx) {
             case "blocked": return "Bloqueado";
             default: return value || "-";
         }
-    }
-
-    function setText(id, value) {
-        const el = document.getElementById(id);
-        if (el) el.textContent = value;
     }
 
     function setHtml(id, value) {
@@ -494,7 +490,7 @@ export function createBeneficiamentoModule(ctx) {
         renderProducts(payload.rankings?.produtos_principais || []);
         renderPhases(payload.rankings?.fases_criticas || []);
         renderTingimento(payload.tingimento || {});
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        refreshIcons();
     }
 
     function renderProgressive(dashboard, payload) {
