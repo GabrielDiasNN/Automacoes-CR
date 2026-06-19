@@ -4,6 +4,7 @@
     "^Orchestrator\\\\worker\\.py$",
     "^Orchestrator\\\\app\\\\notifications\\.py$",
     "^Orchestrator\\\\app\\\\routers\\\\automations\\.py$",
+    "^Orchestrator\\\\app\\\\services\\\\beneficiamento_refresh\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\execution_runtime\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\scheduler_runtime\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\system_runtime\\.py$"
