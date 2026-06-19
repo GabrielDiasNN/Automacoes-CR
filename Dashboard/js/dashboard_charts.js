@@ -73,9 +73,10 @@ export function createChartsModule() {
         if (!container || typeof ApexCharts === "undefined" || !isRenderable(container)) return;
 
         const breakdown = overview.status_breakdown || {};
-        const labels = ["Sucesso", "Erro", "Executando", "Pendente", "Interrompido"];
+        const labels = ["Sucesso", "Parcial", "Erro", "Executando", "Pendente", "Interrompido"];
         const series = [
             Number(breakdown.SUCCESS || 0),
+            Number(breakdown.PARTIAL || 0),
             Number(breakdown.ERROR || 0),
             Number(breakdown.RUNNING || 0),
             Number(breakdown.PENDING || 0),
@@ -95,7 +96,7 @@ export function createChartsModule() {
             chart: { type: "donut", height: 280 },
             labels,
             series,
-            colors: ["#32b178", "#e05252", "#2f6fed", "#8b98aa", "#d99a2b"],
+            colors: ["#32b178", "#e0a93b", "#e05252", "#2f6fed", "#8b98aa", "#d99a2b"],
             theme: { mode: "dark" },
             tooltip: { theme: "dark" },
             legend: { position: "bottom", labels: { colors: "#aab7c7" } },

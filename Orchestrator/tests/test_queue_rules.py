@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.constants import (
     EXECUTION_STATUS_ERROR,
+    EXECUTION_STATUS_PARTIAL,
     EXECUTION_STATUS_PENDING,
     EXECUTION_STATUS_RUNNING,
     FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
@@ -36,9 +37,11 @@ def test_classify_process_result():
     assert reason == FAILURE_REASON_WHATSAPP_SESSION_EXPIRED
     assert action == RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION
 
-    # Exit code 24 -> Channel Delivery Failed
+    # Exit code 24 -> Channel Delivery Failed (entrega parcial: e-mail OK, WhatsApp falhou).
+    # Classificado como PARTIAL para não disparar alerta crítico nem penalizar SLA,
+    # preservando o motivo e a ação de recuperação do canal.
     status, reason, action = classify_process_result(24)
-    assert status == EXECUTION_STATUS_ERROR
+    assert status == EXECUTION_STATUS_PARTIAL
     assert reason == FAILURE_REASON_CHANNEL_DELIVERY_FAILED
     assert action == RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE
 

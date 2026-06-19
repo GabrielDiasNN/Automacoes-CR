@@ -107,7 +107,7 @@ def test_classify_process_result_identifies_channel_recovery_actions():
         "REAUTHENTICATE_WHATSAPP_SESSION",
     )
     assert classify_process_result(24) == (
-        "ERROR",
+        "PARTIAL",
         "CHANNEL_DELIVERY_FAILED",
         "REVIEW_CHANNEL_STATE_BEFORE_REQUEUE",
     )
@@ -174,7 +174,7 @@ def test_execution_runtime_completes_process_execution(db_session):
     )
 
     assert result is not None
-    assert result.status == "ERROR"
+    assert result.status == "PARTIAL"
     assert result.failure_reason == "CHANNEL_DELIVERY_FAILED"
     assert result.recovery_action == "REVIEW_CHANNEL_STATE_BEFORE_REQUEUE"
     assert result.artifacts == '{"file":"out.txt"}'

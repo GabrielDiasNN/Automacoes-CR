@@ -17,7 +17,7 @@ Write-Host "[STREAM-TEST] Etapa 2/3 - progresso continuo"
 Start-Sleep -Seconds 5
 Write-Host "[STREAM-TEST] Etapa 3/3 - simulando falha parcial de canal"
 Start-Sleep -Seconds 5
-Write-Host "[STREAM-TEST] Falha simulada de canal para validar status ERROR/24."
+Write-Host "[STREAM-TEST] Falha simulada de canal para validar status PARTIAL/24."
 exit 24
 [CmdletBinding()]
 param(
@@ -41,5 +41,5 @@ Write-Host "[STREAM-TEST] Etapa 2/3 - progresso continuo"
 Start-Sleep -Seconds 5
 Write-Host "[STREAM-TEST] Etapa 3/3 - simulando falha parcial de canal"
 Start-Sleep -Seconds 5
-Write-Host "[STREAM-TEST] Falha simulada de canal para validar status ERROR/24."
+Write-Host "[STREAM-TEST] Falha simulada de canal para validar status PARTIAL/24."
 exit 24

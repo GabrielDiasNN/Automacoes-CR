@@ -18,7 +18,9 @@ def get_success_errors_count_24h(db: Session) -> tuple[int, int]:
     window_start = get_now_local() - timedelta(hours=24)
     row = (
         db.query(
-            func.sum(case((models.Execution.status == "SUCCESS", 1), else_=0)).label("success"),
+            func.sum(
+                case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1), else_=0)
+            ).label("success"),
             func.sum(
                 case(
                     (models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]), 1),
@@ -36,9 +38,9 @@ def get_global_execution_counts(db: Session) -> tuple[int, int, int, int]:
     """Retorna (total, success, errors, pending) de execuções em uma única query."""
     row = db.query(
         func.count(models.Execution.id).label("total"),
-        func.sum(case((models.Execution.status == "SUCCESS", 1), else_=0)).label(
-            "success"
-        ),
+        func.sum(
+            case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1), else_=0)
+        ).label("success"),
         func.sum(case((models.Execution.status == "ERROR", 1), else_=0)).label(
             "errors"
         ),
@@ -175,9 +177,9 @@ def get_automation_metrics_24h(
     query = (
         db.query(
             models.Execution.automation_id.label("automation_id"),
-            func.sum(case((models.Execution.status == "SUCCESS", 1), else_=0)).label(
-                "success_24h"
-            ),
+            func.sum(
+                case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1), else_=0)
+            ).label("success_24h"),
             func.sum(
                 case(
                     (

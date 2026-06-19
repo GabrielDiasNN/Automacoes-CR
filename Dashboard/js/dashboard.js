@@ -16,6 +16,7 @@ import {
 } from "./api.js";
 import { bindActionElements, registerAction } from "./action_registry.js";
 import { escapeHtml, formatSeconds } from "./formatters.js";
+import { getValue, setValue, setText } from "./dom_utils.js";
 import { normalizeBeneficiamentoPayload } from "./contracts.js";
 import * as ui from "./ui_manager.js";
 import * as ide from "./ide_service.js";

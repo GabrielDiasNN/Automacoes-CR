@@ -10,13 +10,13 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
 - **Background execution:** A automacao agora roda de forma invisivel e ultra-rapida, ideal para ambientes de servidor.
 
 ## Cognitive Map
-1.  **Trigger:** `MonitorAutomacoes.ps1` (Agendado de hora em hora).
-2.  **Fetch Layer:** `extract_oracle.py` carrega o SQL externo e extrai dados diretamente via driver `oracledb`.
-3.  **Intelligence Layer:** `validate_and_generate_html.py`.
+1. **Trigger:** `MonitorAutomacoes.ps1` (Agendado de hora em hora).
+2. **Fetch Layer:** `extract_oracle.py` carrega o SQL externo e extrai dados diretamente via driver `oracledb`.
+3. **Intelligence Layer:** `validate_and_generate_html.py`.
     -   **Validation Rule 1:** A NF na observacao da OB (`NF:\d+`) deve ser igual a Ref. Cliente.
     -   **Validation Rule 2:** A NF no campo de Montagem (`QT_PC_NF` formatado como `Qtd - NF - complemento`) deve ser igual a Ref. Cliente.
     -   **Validation Rule 3:** Quando houver NF incorreta na montagem, a automacao soma a quantidade de pecas erradas para orientar a retirada fisica pela expedicao.
-4.  **Delivery Layer:** PowerShell envia e-mail moderno via Outlook COM (Outlook-Safe).
+4. **Delivery Layer:** PowerShell envia e-mail moderno via Outlook COM (Outlook-Safe).
 
 ## Key Identifiers
 -   `ExecId`: Correlation ID para rastrear o fluxo entre Python e Logs.

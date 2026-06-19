@@ -29,7 +29,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from app import models, notifications
-    from app.constants import (EXECUTION_STATUS_ERROR,
+    from app.constants import (EXECUTION_DELIVERED_STATUSES,
+                               EXECUTION_STATUS_ERROR,
                                EXECUTION_STATUS_PENDING,
                                EXECUTION_STATUS_RUNNING,
                                EXECUTION_STATUS_TERMINATED,
@@ -139,8 +140,12 @@ def wakeup_listener_loop() -> None:
             if res.status_code == 200 and res.json().get("status") == "wakeup":
                 logger.info("Sinal de wakeup recebido!")
                 wakeup_event.set()
-        except Exception:
-            # Em caso de erro (ex: API offline), aguarda um pouco antes de tentar novamente
+        except requests.RequestException:
+            # Falha de rede esperada (API offline/reiniciando): retenta sem poluir o log.
+            shutdown_event.wait(5)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            # Erro inesperado: mantém a resiliência do loop, mas registra para diagnóstico.
+            logger.warning("Erro inesperado no wakeup listener: %s", exc)
             shutdown_event.wait(5)
 
 
@@ -425,7 +430,7 @@ def _finalize_execution(
             artifacts_json,
             duration,
         )
-        if db_exec and db_exec.status == "SUCCESS":
+        if db_exec and db_exec.status in EXECUTION_DELIVERED_STATUSES:
             update_stat("tasks_completed", 1)
         else:
             update_stat("tasks_failed", 1)

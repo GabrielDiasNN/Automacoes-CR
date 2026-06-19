@@ -8,6 +8,10 @@ ORCHESTRATOR_CONTRACT_VERSION = "2026.05.25.1"
 EXECUTION_STATUS_PENDING = "PENDING"
 EXECUTION_STATUS_RUNNING = "RUNNING"
 EXECUTION_STATUS_SUCCESS = "SUCCESS"
+# Entregue com degradação de canal secundário (ex.: e-mail OK, WhatsApp falhou).
+# Conta como entregue para SLA/disponibilidade, mas não é sucesso pleno e não
+# dispara alerta crítico.
+EXECUTION_STATUS_PARTIAL = "PARTIAL"
 EXECUTION_STATUS_ERROR = "ERROR"
 EXECUTION_STATUS_TIMEOUT = "TIMEOUT"
 EXECUTION_STATUS_TERMINATED = "TERMINATED"
@@ -21,10 +25,18 @@ EXECUTION_ACTIVE_STATUSES = {
 
 EXECUTION_TERMINAL_STATUSES = {
     EXECUTION_STATUS_SUCCESS,
+    EXECUTION_STATUS_PARTIAL,
     EXECUTION_STATUS_ERROR,
     EXECUTION_STATUS_TIMEOUT,
     EXECUTION_STATUS_TERMINATED,
     EXECUTION_STATUS_FAILED_BY_REBOOT,
+}
+
+# Status que representam entrega efetiva do resultado principal (contam como
+# disponibilidade/sucesso no SLA). PARTIAL = entregue com canal secundário degradado.
+EXECUTION_DELIVERED_STATUSES = {
+    EXECUTION_STATUS_SUCCESS,
+    EXECUTION_STATUS_PARTIAL,
 }
 
 EXECUTION_QUEUEABLE_SOURCE_STATUSES = EXECUTION_TERMINAL_STATUSES | {
@@ -109,8 +121,11 @@ EXIT_CODE_MAP = {
         FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
         RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
     ),
+    # Falha apenas no canal secundário (WhatsApp): o entregável principal
+    # (e-mail/artefatos) foi concluído. Classificado como PARTIAL para não gerar
+    # alerta crítico diário nem penalizar o SLA, preservando o motivo do canal.
     24: (
-        EXECUTION_STATUS_ERROR,
+        EXECUTION_STATUS_PARTIAL,
         FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
         RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
     ),

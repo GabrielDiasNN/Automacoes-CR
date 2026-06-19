@@ -198,9 +198,7 @@ export function createExecutionsModule(ctx) {
             if (!group) return;
             groupsMap.set(group, (groupsMap.get(group) || 0) + 1);
         });
-        const topGroups = Array.from(groupsMap.entries())
-            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"))
-            .slice(0, 5);
+
 
         container.innerHTML = `
             <article class="triage-card">

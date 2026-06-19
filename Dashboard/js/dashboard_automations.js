@@ -559,7 +559,7 @@ export function createAutomationsModule(ctx) {
             scheduleTimes = Array.from(new Set(scheduleTimes)).sort();
             updateScheduleBlocksVisibility(scheduleType);
             refreshScheduleUi();
-        } catch (_err) {
+        } catch {
             showToast("Agenda existente inválida. Ajuste os horários manualmente.", "warning");
         }
     }
@@ -864,7 +864,7 @@ export function createAutomationsModule(ctx) {
             const times = Array.isArray(parsed.times) ? parsed.times : [];
             if (!times.length) return "CONFIGURADA";
             return `${times.length} horário(s)`;
-        } catch (_err) {
+        } catch {
             return "CONFIGURADA";
         }
     }
