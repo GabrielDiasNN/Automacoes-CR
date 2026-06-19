@@ -1,5 +1,11 @@
 # Changelog
 
+## [9.4.1] - 19/06/2026
+### Alterado
+- **Limpeza de Caches e Resíduos**: Aplicação segura da política de retenção do repositório via `Tools/AplicarPoliticaRetencao.ps1`, removendo diretórios de cache locais (`__pycache__` e `.mypy_cache`) sem afetar arquivos de ambiente, dados locais ou arquivos versionados pelo Git.
+- **Validação Completa de Governança**: Executado o ciclo de validações estáticas locais (`Tools/ValidarAutomacoes.ps1`) e testes de contrato de comunicações offline (`Tools/Test-NodeCommunications.ps1`) obtendo 100% de sucesso.
+- **Ajuste de Timeout no Bridge do WhatsApp**: Aumento do limite de tempo para confirmação de recebimento (ACK) de mensagens de 60 segundos (30 tentativas) para 180 segundos (90 tentativas) em `lib/WhatsApp-Core.js` e `Receitas Bloqueadas/sendWhatsApp.js`, além do ajuste correspondente no teste de contrato offline, mitigando falhas espúrias em conexões lentas ou congestionadas.
+
 ## [9.4.0] - 15/06/2026
 ### Adicionado
 - **Beneficiamento ao vivo**: refresh contínuo near-real-time substitui o batch espaçado. Jobs APScheduler `beneficiamento_live_diario` (~90s) e `beneficiamento_mensal_rollup` (~10min) reprocessam em subprocesso isolado (Oracle nunca abre no processo web), respeitando o corte de ~20s do DB. Intervalos configuráveis por `BENEFICIAMENTO_LIVE_INTERVAL_SECONDS` e `BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS`.

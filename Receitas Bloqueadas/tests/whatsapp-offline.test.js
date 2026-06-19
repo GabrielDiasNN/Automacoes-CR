@@ -24,7 +24,7 @@ assert.ok(packageJson.scripts.test.includes('whatsapp-offline.test.js'));
 
 assert.match(sharedCore, /const PHONE = \(process\.argv\[5\] \|\| ''\)\.replace\(\/\\D\/g, ''\);/);
 assert.match(sharedCore, /INITIALIZE_MAX_ATTEMPTS = 2/);
-assert.match(sharedCore, /ACK_WAIT_ATTEMPTS = 30/);
+assert.match(sharedCore, /ACK_WAIT_ATTEMPTS = 90/);
 assert.match(sharedCore, /process\.exit\(21\)/);
 assert.match(sharedCore, /process\.exit\(24\)/);
 assert.match(sharedCore, /function describeError\(error\)/);

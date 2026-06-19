@@ -82,9 +82,9 @@ async function processar() {
                 targetMsgId = sentMsg.id._serialized;
                 log('INFO', `Mensagem em fila local: ${targetMsgId}. Aguardando Ack do servidor...`);
 
-                // 3. Keep-Alive Loop (Ate 60 segundos)
+                // 3. Keep-Alive Loop (Ate 180 segundos)
                 // Mantemos o navegador ativo e monitoramos o estado ackConfirmado via evento
-                for (let i = 1; i <= 30; i++) {
+                for (let i = 1; i <= 90; i++) {
                     if (ackConfirmado) {
                         log('INFO', 'Confirmacao de recebimento pelo servidor detectada via evento.');
                         break;
@@ -103,7 +103,7 @@ async function processar() {
                     await client.destroy();
                     resolve();
                 } else {
-                    throw new Error('Falha de transmissao: O servidor do WhatsApp nao confirmou o recebimento da mensagem em 60s.');
+                    throw new Error('Falha de transmissao: O servidor do WhatsApp nao confirmou o recebimento da mensagem em 180s.');
                 }
             } catch (e) {
                 log('ERROR', `Erro no protocolo Soberano: ${e.message}`);
