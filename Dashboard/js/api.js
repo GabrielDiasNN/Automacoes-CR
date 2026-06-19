@@ -28,7 +28,7 @@ function promptApiKey() {
     let provided = "";
     try {
         provided = prompt("Segurança Zero-Trust: Informe a API Key do Orchestrator:") || "";
-    } catch (error) {
+    } catch {
         return false;
     }
     if (!provided) return false;
@@ -43,7 +43,7 @@ export function safePrompt(message, defaultValue = "") {
     if (typeof prompt !== "function") return null;
     try {
         return prompt(message, defaultValue);
-    } catch (error) {
+    } catch {
         return null;
     }
 }
@@ -290,7 +290,7 @@ export function formatDate(val, short = false) {
         });
 
         return `${dateParts.day || "00"}/${dateParts.month || "00"}/${dateParts.year || "0000"} ${dateParts.hour || "00"}:${dateParts.minute || "00"}:${dateParts.second || "00"}`;
-    } catch (e) { return val; }
+    } catch { return val; }
 }
 
 export function getBadgeClass(status) {
@@ -328,7 +328,7 @@ export function decodeLogLine(line) {
                 const bytes = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
                 return new TextDecoder("utf-8").decode(bytes);
-            } catch (e) { return match; }
+            } catch { return match; }
         });
     }
     return line;

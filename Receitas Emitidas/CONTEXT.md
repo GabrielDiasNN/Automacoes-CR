@@ -9,10 +9,10 @@ O objetivo e fornecer uma visao clara para a equipe de producao sobre o volume d
 - **Interoperability:** Utiliza IPC via Stdio (Standard Input/Output) blindado com o protocolo `utf-8-sig` para transferencia de dados JSON/HTML.
 
 ## Cognitive Map
-1.  **Trigger:** `MonitorAutomacoes.ps1` (Agendado semanalmente).
-2.  **Extract Layer:** `extract_oracle.py` se conecta ao Oracle (`sgtprd`) e utiliza uma **Query CTE (Common Table Expressions)** otimizada para extrair dados em segundos sem timeouts.
-3.  **Intelligence Layer:** `generate_html_report.py` processa o agrupamento e aplica o layout adaptativo de colunas.
-4.  **Delivery Layer:** PowerShell coordena o fluxo e realiza o disparo via Outlook COM (Outlook-Safe).
+1. **Trigger:** `MonitorAutomacoes.ps1` (Agendado semanalmente).
+2. **Extract Layer:** `extract_oracle.py` se conecta ao Oracle (`sgtprd`) e utiliza uma **Query CTE (Common Table Expressions)** otimizada para extrair dados em segundos sem timeouts.
+3. **Intelligence Layer:** `generate_html_report.py` processa o agrupamento e aplica o layout adaptativo de colunas.
+4. **Delivery Layer:** PowerShell coordena o fluxo e realiza o disparo via Outlook COM (Outlook-Safe).
 
 ## Key Rules
 # Cognitive Context: Receitas Emitidas
@@ -26,10 +26,10 @@ O objetivo e fornecer uma visao clara para a equipe de producao sobre o volume d
 - **Interoperability:** Utiliza IPC via Stdio (Standard Input/Output) blindado com o protocolo `utf-8-sig` para transferencia de dados JSON/HTML.
 
 ## Cognitive Map
-1.  **Trigger:** `MonitorAutomacoes.ps1` (Agendado semanalmente).
-2.  **Extract Layer:** `extract_oracle.py` se conecta ao Oracle (`sgtprd`) e utiliza uma **Query CTE (Common Table Expressions)** otimizada para extrair dados em segundos sem timeouts.
-3.  **Intelligence Layer:** `generate_html_report.py` processa o agrupamento e aplica o layout adaptativo de colunas.
-4.  **Delivery Layer:** PowerShell coordena o fluxo e realiza o disparo via Outlook COM (Outlook-Safe).
+1. **Trigger:** `MonitorAutomacoes.ps1` (Agendado semanalmente).
+2. **Extract Layer:** `extract_oracle.py` se conecta ao Oracle (`sgtprd`) e utiliza uma **Query CTE (Common Table Expressions)** otimizada para extrair dados em segundos sem timeouts.
+3. **Intelligence Layer:** `generate_html_report.py` processa o agrupamento e aplica o layout adaptativo de colunas.
+4. **Delivery Layer:** PowerShell coordena o fluxo e realiza o disparo via Outlook COM (Outlook-Safe).
 
 ## Key Rules
 -   **Layout Adaptativo:** O sistema calcula um "Volume Score" para decidir o tamanho da fonte e o numero de colunas (2 ou 3).

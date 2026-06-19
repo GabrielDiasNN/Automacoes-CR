@@ -92,7 +92,7 @@ export function createBeneficiamentoModule(ctx) {
         if (!charts[key]) return;
         try {
             charts[key].destroy();
-        } catch (_error) {
+        } catch {
             // ignore
         }
         charts[key] = null;

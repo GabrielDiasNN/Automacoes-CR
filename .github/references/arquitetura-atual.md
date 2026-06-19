@@ -36,8 +36,8 @@ A arquitetura atingiu o estado **Soberano**, onde cada camada possui autonomia d
 ## Paradigma de Inteligência: Idempotência Estrita
 
 O hub implementa um controle de estado cruzado para evitar notificações redundantes (Spam):
-1.  **Cálculo de Hash:** O Python gera um hash MD5 do conteúdo consolidado.
-2.  **Trava Cross-Channel:** Tanto o orquestrador de e-mail quanto o motor de WhatsApp consultam arquivos de estado (`*_state.json`) e suprimem o disparo se a informação já tiver sido entregue com sucesso.
+1. **Cálculo de Hash:** O Python gera um hash MD5 do conteúdo consolidado.
+2. **Trava Cross-Channel:** Tanto o orquestrador de e-mail quanto o motor de WhatsApp consultam arquivos de estado (`*_state.json`) e suprimem o disparo se a informação já tiver sido entregue com sucesso.
 
 ---
 
@@ -56,7 +56,7 @@ As skills ativas vivem em `.github/skills/`. O diretório `.gemini/skills/` exis
 
 ## Regra de Mudança (AI-Native)
 
-1.  Preservar o `ExecId` para rastreabilidade universal.
-2.  Manter a portabilidade absoluta (Caminhos relativos).
-3.  Seguir o padrão de cores corporativo (#0f4c81).
-4.  Garantir blocos `catch` com exceções específicas.
+1. Preservar o `ExecId` para rastreabilidade universal.
+2. Manter a portabilidade absoluta (Caminhos relativos).
+3. Seguir o padrão de cores corporativo (#0f4c81).
+4. Garantir blocos `catch` com exceções específicas.

@@ -59,21 +59,21 @@ O hook `.githooks/pre-commit` não tenta espelhar todo o CI. Ele atua como barre
 
 Contrato atual do hook:
 
-1.  **Diff staged como entrada:** o classificador compartilhado `Tools/Get-GovernanceTargetSummary.ps1` decide se o commit pode ser validado por caminhos staged ou se precisa escalar para varredura completa.
-2.  **Escalonamento por criticidade:** alterações em `Tools/`, `lib/`, contratos centrais, workflow, hook, skills ou `.gitleaks.toml` forçam scan completo de governança estática para evitar regressão em cadeia.
-3.  **Conformidade de log seletiva:** quando o diff staged altera `.ps1`/`.psm1` operacionais fora de `Tools/` e `Audit/`, a verificação de `Test-LogConformidade.ps1` roda localmente apenas nesses alvos.
-4.  **Objetivo:** bloquear regressões óbvias cedo, sem transformar todo commit em réplica do pipeline remoto.
-5.  **Resumo operacional local:** ao final de cada execução, `Tools/ValidarAutomacoes.ps1` publica o modo de seleção (`targeted_paths`, `full_scan` ou `no_paths`) e o tempo por etapa do ciclo local, facilitando a identificação de gargalos de produtividade sem relaxar a cobertura.
+1. **Diff staged como entrada:** o classificador compartilhado `Tools/Get-GovernanceTargetSummary.ps1` decide se o commit pode ser validado por caminhos staged ou se precisa escalar para varredura completa.
+2. **Escalonamento por criticidade:** alterações em `Tools/`, `lib/`, contratos centrais, workflow, hook, skills ou `.gitleaks.toml` forçam scan completo de governança estática para evitar regressão em cadeia.
+3. **Conformidade de log seletiva:** quando o diff staged altera `.ps1`/`.psm1` operacionais fora de `Tools/` e `Audit/`, a verificação de `Test-LogConformidade.ps1` roda localmente apenas nesses alvos.
+4. **Objetivo:** bloquear regressões óbvias cedo, sem transformar todo commit em réplica do pipeline remoto.
+5. **Resumo operacional local:** ao final de cada execução, `Tools/ValidarAutomacoes.ps1` publica o modo de seleção (`targeted_paths`, `full_scan` ou `no_paths`) e o tempo por etapa do ciclo local, facilitando a identificação de gargalos de produtividade sem relaxar a cobertura.
 
 ### GitHub Actions
 
 O workflow `.github/workflows/governanca.yml` continua sendo o gate autoritativo e observável do repositório:
 
-1.  **Gitleaks Security Scan:** execução paralela da action oficial do Gitleaks para bloquear qualquer commit que contenha senhas, tokens ou chaves secretas (Zero Trust).
-2.  **Preparação do diff governado:** o job `preparar-diff` usa o mesmo classificador compartilhado do hook para publicar `selection_mode`, caminhos críticos e alvos de `conformidade-log`.
-3.  **Governança completa:** o job `governanca` instala dependências, valida formatação e análise estática, roda a governança agregada e executa suites Python e PowerShell.
-4.  **Conformidade de log condicional:** o job `conformidade-log` só roda quando o diff contém scripts PowerShell operacionais elegíveis; quando não houver alvo, ele será pulado por contrato.
-5.  **Markdown:** o job `markdown` mantém observabilidade separada para o padrão documental.
+1. **Gitleaks Security Scan:** execução paralela da action oficial do Gitleaks para bloquear qualquer commit que contenha senhas, tokens ou chaves secretas (Zero Trust).
+2. **Preparação do diff governado:** o job `preparar-diff` usa o mesmo classificador compartilhado do hook para publicar `selection_mode`, caminhos críticos e alvos de `conformidade-log`.
+3. **Governança completa:** o job `governanca` instala dependências, valida formatação e análise estática, roda a governança agregada e executa suites Python e PowerShell.
+4. **Conformidade de log condicional:** o job `conformidade-log` só roda quando o diff contém scripts PowerShell operacionais elegíveis; quando não houver alvo, ele será pulado por contrato.
+5. **Markdown:** o job `markdown` mantém observabilidade separada para o padrão documental.
 
 ### Leitura correta do estado
 
