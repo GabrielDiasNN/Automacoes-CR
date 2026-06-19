@@ -19,6 +19,10 @@ function nextRequestId() {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function promptApiKey() {
     if (typeof prompt !== "function") return false;
     let provided = "";
@@ -163,49 +167,79 @@ export async function api(path, method = "GET", body = null, options = {}) {
         return null;
     }
 
-    try {
-        const opts = {
-            method,
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": API_KEY,
-                "X-Request-Id": nextRequestId(),
-            },
-        };
-        if (body) opts.body = JSON.stringify(body);
-        const res = await fetch(path, opts);
-        const headerCorrelation = res.headers.get("x-request-id");
-        if (headerCorrelation) latestCorrelationId = headerCorrelation;
-        if (res.status === 403) {
-            clearApiKey();
-            if (!apiKeyNoticeShown) {
-                showToast("API Key inválida ou expirada. Informe novamente para continuar.", "warning");
-                apiKeyNoticeShown = true;
+    // Robustez: timeout via AbortController evita travas indefinidas; retry com
+    // backoff só para requisições idempotentes (GET) — mutações NÃO são repetidas
+    // para não arriscar duplo-envio. 4xx/403 não são retentados.
+    const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 30000;
+    const maxAttempts = isMutating ? 1 : 3;
+    let lastErrorMessage = "Falha de comunicação com a API.";
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const opts = {
+                method,
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-API-Key": API_KEY,
+                    "X-Request-Id": nextRequestId(),
+                },
+                signal: controller.signal,
+            };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(path, opts);
+            const headerCorrelation = res.headers.get("x-request-id");
+            if (headerCorrelation) latestCorrelationId = headerCorrelation;
+            if (res.status === 403) {
+                clearApiKey();
+                if (!apiKeyNoticeShown) {
+                    showToast("API Key inválida ou expirada. Informe novamente para continuar.", "warning");
+                    apiKeyNoticeShown = true;
+                }
+                promptApiKey();
+                return null;
             }
-            promptApiKey();
+            // 5xx é transitório: para GET, tenta novamente antes de desistir.
+            if (res.status >= 500 && attempt < maxAttempts) {
+                lastErrorMessage = `HTTP ${res.status}`;
+                await sleep(Math.min(2000, 300 * 2 ** (attempt - 1)));
+                continue;
+            }
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                if (err?.correlation_id) latestCorrelationId = err.correlation_id;
+                const baseMessage = err.message || err.detail || `HTTP ${res.status}`;
+                const correlationSuffix = latestCorrelationId ? ` (corr: ${latestCorrelationId})` : "";
+                throw new Error(`${baseMessage}${correlationSuffix}`);
+            }
+            if (res.status === 204) return {};
+            if (options.responseType === "text") {
+                return await res.text();
+            }
+            const payload = await res.json().catch(() => ({}));
+            if (payload?.trace?.correlation_id) latestCorrelationId = payload.trace.correlation_id;
+            return payload;
+        } catch (e) {
+            const isAbort = e.name === "AbortError";
+            lastErrorMessage = isAbort ? `Tempo limite excedido (${timeoutMs}ms)` : (e.message || lastErrorMessage);
+            // Erros de rede (TypeError) e timeout (AbortError) são transitórios:
+            // retenta apenas requisições idempotentes.
+            const retriable = !isMutating && attempt < maxAttempts && (isAbort || e.name === "TypeError");
+            if (retriable) {
+                await sleep(Math.min(2000, 300 * 2 ** (attempt - 1)));
+                continue;
+            }
+            console.warn(`[API] ${method} ${path} falhou:`, lastErrorMessage);
+            if (!options.silentErrorToast) {
+                showToast(lastErrorMessage, "error");
+            }
             return null;
+        } finally {
+            clearTimeout(timer);
         }
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            if (err?.correlation_id) latestCorrelationId = err.correlation_id;
-            const baseMessage = err.message || err.detail || `HTTP ${res.status}`;
-            const correlationSuffix = latestCorrelationId ? ` (corr: ${latestCorrelationId})` : "";
-            throw new Error(`${baseMessage}${correlationSuffix}`);
-        }
-        if (res.status === 204) return {};
-        if (options.responseType === "text") {
-            return await res.text();
-        }
-        const payload = await res.json().catch(() => ({}));
-        if (payload?.trace?.correlation_id) latestCorrelationId = payload.trace.correlation_id;
-        return payload;
-    } catch (e) {
-        console.warn(`[API] ${method} ${path} falhou:`, e.message);
-        if (!options.silentErrorToast) {
-            showToast(e.message || "Falha de comunicação com a API.", "error");
-        }
-        return null;
     }
+    return null;
 }
 
 export function getLastCorrelationId() {
@@ -262,6 +296,7 @@ export function formatDate(val, short = false) {
 export function getBadgeClass(status) {
     switch (status) {
         case "SUCCESS": return "badge-success";
+        case "PARTIAL": return "badge-warning";
         case "ERROR": return "badge-danger";
         case "RUNNING": return "badge-warning pulse";
         case "PENDING": return "badge-muted";
@@ -274,6 +309,7 @@ export function translateStatus(status) {
     if (!status) return "Sem histórico";
     const map = {
         "SUCCESS": "Sucesso",
+        "PARTIAL": "Parcial",
         "ERROR": "Falha",
         "RUNNING": "Rodando",
         "PENDING": "Fila",

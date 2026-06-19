@@ -55,8 +55,10 @@ def get_automation_configs(
             with open(jf, "r", encoding="utf-8") as f:
                 content = f.read()
             configs.append({"filename": filename, "content": content})
-        except Exception as e:
-            pass
+        except OSError as exc:
+            # Arquivo inacessível/corrompido: não derruba a listagem, mas registra
+            # para observabilidade em vez de falhar silenciosamente.
+            logger.warning("Falha ao ler config '%s': %s", filename, exc)
 
     return configs
 

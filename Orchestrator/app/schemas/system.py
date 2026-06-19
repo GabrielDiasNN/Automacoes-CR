@@ -45,7 +45,9 @@ class EnvContent(BaseModel):
 
 
 class FileContent(BaseModel):
-    content: str
+    # Limite anti-DoS: configs/código gerenciado são pequenos; 1 MB é folgado
+    # mas impede escrita de payload gigante via rotas de edição de arquivo.
+    content: str = Field(..., max_length=1_000_000)
 
 
 class SystemHealth(BaseModel):

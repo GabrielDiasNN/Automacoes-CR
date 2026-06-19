@@ -64,6 +64,7 @@ def compute_attention_score(
 
     queueable = ex.status in {
         "SUCCESS",
+        "PARTIAL",
         "ERROR",
         "TIMEOUT",
         "TERMINATED",

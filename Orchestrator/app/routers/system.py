@@ -129,9 +129,9 @@ def get_metrics(
     stats_query = (
         db.query(
             models.Execution.automation_id,
-            func.count(case((models.Execution.status == "SUCCESS", 1))).label(
-                "total_success"
-            ),
+            func.count(
+                case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1))
+            ).label("total_success"),
             func.count(case((models.Execution.status == "ERROR", 1))).label(
                 "total_errors"
             ),

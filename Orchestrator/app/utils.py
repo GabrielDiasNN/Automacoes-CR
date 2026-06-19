@@ -41,7 +41,8 @@ def _build_safe_details(details, correlation_id: str) -> str:
                     {"value": parsed, "correlation_id": correlation_id},
                     ensure_ascii=False,
                 )
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
+            # details não é JSON válido: preserva como mensagem de texto simples.
             safe_details = json.dumps(
                 {"message": str(details), "correlation_id": correlation_id},
                 ensure_ascii=False,

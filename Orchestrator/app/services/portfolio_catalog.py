@@ -14,7 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import EXECUTION_ACTIVE_STATUSES
+from ..constants import EXECUTION_ACTIVE_STATUSES, EXECUTION_DELIVERED_STATUSES
 from ..timezone import get_now_local
 from .automation_snapshot import build_automation_response, build_next_run_lookup
 from .metrics import (
@@ -278,7 +278,7 @@ def _dependency_status(
             return "not_used"
         if any(keyword in failure_reason or keyword in recovery_action for keyword in keywords):
             return "degraded"
-        if status == "SUCCESS":
+        if status in EXECUTION_DELIVERED_STATUSES:
             return "healthy"
         if status in FAILURE_STATUSES:
             return "unknown"
