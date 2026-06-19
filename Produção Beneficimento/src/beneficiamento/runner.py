@@ -104,7 +104,7 @@ def run_period(
     parameters = {} if sql_file else bind_parameters(period, reference)
     window_start, window_end = period_window(period, reference)
 
-    profile, analytics, records = build_snapshot_payloads(
+    _, analytics, records = build_snapshot_payloads(
         period,
         sql,
         parameters,
