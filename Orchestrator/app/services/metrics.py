@@ -23,7 +23,10 @@ def get_success_errors_count_24h(db: Session) -> tuple[int, int]:
             ).label("success"),
             func.sum(
                 case(
-                    (models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]), 1),
+                    (
+                        models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+                        1,
+                    ),
                     else_=0,
                 )
             ).label("errors"),
@@ -124,6 +127,7 @@ def get_failure_hotspots_24h(db: Session, limit: int = 5) -> list[dict[str, Any]
         for row in rows
     ]
 
+
 def get_sla_metrics_by_automation_24h(db: Session) -> dict[int, dict[str, Any]]:
     """
     Busca métricas de duração média de execuções SUCCESS nas últimas 24h por automação.
@@ -192,7 +196,9 @@ def get_automation_metrics_24h(
             func.sum(case((models.Execution.status == "TIMEOUT", 1), else_=0)).label(
                 "timeouts_24h"
             ),
-            func.avg(models.Execution.duration_seconds).label("avg_duration_24h_seconds"),
+            func.avg(models.Execution.duration_seconds).label(
+                "avg_duration_24h_seconds"
+            ),
         )
         .filter(models.Execution.started_at >= window_start)
         .group_by(models.Execution.automation_id)
@@ -233,13 +239,15 @@ def get_latest_execution_snapshot_by_automation(
         models.Execution.failure_reason.label("failure_reason"),
         models.Execution.recovery_action.label("recovery_action"),
         models.Execution.requested_by.label("requested_by"),
-        func.row_number().over(
+        func.row_number()
+        .over(
             partition_by=models.Execution.automation_id,
             order_by=(
                 models.Execution.started_at.desc(),
                 models.Execution.id.desc(),
             ),
-        ).label("rn"),
+        )
+        .label("rn"),
     )
 
     if ids:

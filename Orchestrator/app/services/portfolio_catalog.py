@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,11 +16,10 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..constants import EXECUTION_ACTIVE_STATUSES, EXECUTION_DELIVERED_STATUSES
 from ..timezone import get_now_local
-from .automation_snapshot import build_automation_response, build_next_run_lookup
-from .metrics import (
-    get_automation_metrics_24h,
-    get_latest_execution_snapshot_by_automation,
-)
+from .automation_snapshot import (build_automation_response,
+                                  build_next_run_lookup)
+from .metrics import (get_automation_metrics_24h,
+                      get_latest_execution_snapshot_by_automation)
 from .scheduler_runtime import list_scheduled_jobs
 
 FAILURE_STATUSES = ["ERROR", "TIMEOUT", "TERMINATED", "FAILED_BY_REBOOT"]
@@ -125,8 +124,7 @@ def _resolve_repo_path(project_root: Path, raw_path: str) -> Path:
 
 def _slugify(text: str) -> str:
     normalized = "".join(
-        char.lower() if char.isalnum() else "-"
-        for char in str(text or "").strip()
+        char.lower() if char.isalnum() else "-" for char in str(text or "").strip()
     )
     while "--" in normalized:
         normalized = normalized.replace("--", "-")
@@ -169,7 +167,9 @@ def _load_manifest(manifest_path: Path) -> CatalogEntry:
 _manifests_cache: tuple[dict[str, float], list[CatalogEntry]] | None = None
 
 
-def _build_manifests_mtime_snapshot(root: Path, include_template: bool) -> dict[str, float]:
+def _build_manifests_mtime_snapshot(
+    root: Path, include_template: bool
+) -> dict[str, float]:
     """Coleta os mtimes dos manifests presentes no disco."""
     snapshot: dict[str, float] = {}
     for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
@@ -244,11 +244,7 @@ def _get_last_execution_by_statuses(
         )
         .subquery()
     )
-    rows = (
-        db.query(ranked)
-        .filter(ranked.c.rn == 1)
-        .all()
-    )
+    rows = db.query(ranked).filter(ranked.c.rn == 1).all()
     result: dict[int, dict[str, Any]] = {}
     for row in rows:
         auto_id = row.automation_id
@@ -276,7 +272,10 @@ def _dependency_status(
     def resolve(flag: bool, keywords: tuple[str, ...]) -> str:
         if not flag:
             return "not_used"
-        if any(keyword in failure_reason or keyword in recovery_action for keyword in keywords):
+        if any(
+            keyword in failure_reason or keyword in recovery_action
+            for keyword in keywords
+        ):
             return "degraded"
         if status in EXECUTION_DELIVERED_STATUSES:
             return "healthy"
@@ -544,9 +543,8 @@ def _health_status(
 
 
 def _portfolio_operational_status(item: schemas.PortfolioHealthItem) -> str:
-    critical_governance_drift = (
-        item.criticality in {"critical", "high"}
-        and (item.docs_status != "complete" or item.drift_count > 0)
+    critical_governance_drift = item.criticality in {"critical", "high"} and (
+        item.docs_status != "complete" or item.drift_count > 0
     )
     if item.review_status == "delete_candidate":
         return "attention"
@@ -605,16 +603,26 @@ def _build_portfolio_summary(
         recommended_action = "Revise as candidatas na aba Automações e exclua apenas os registros confirmadamente sem utilidade."
     elif not_registered_items > 0:
         top_issue = "Há automações ativas fora do catálogo governado ou sem cadastro reconciliado."
-        recommended_action = "Reconcilie manifesto e cadastro runtime antes de expandir o portfólio."
+        recommended_action = (
+            "Reconcilie manifesto e cadastro runtime antes de expandir o portfólio."
+        )
     elif docs_missing_items > 0:
-        top_issue = "Há automações com runbook, README ou CONTEXT pendentes no catálogo."
-        recommended_action = "Complete a documentação obrigatória das automações governadas."
+        top_issue = (
+            "Há automações com runbook, README ou CONTEXT pendentes no catálogo."
+        )
+        recommended_action = (
+            "Complete a documentação obrigatória das automações governadas."
+        )
     elif drift_items > 0:
         top_issue = "Há drift entre manifesto e parâmetros efetivos do runtime."
-        recommended_action = "Alinhe script_path, fila, SLA, retries e canais com o manifesto canônico."
+        recommended_action = (
+            "Alinhe script_path, fila, SLA, retries e canais com o manifesto canônico."
+        )
     elif sla_breached_items > 0:
         top_issue = "Há automações governadas com SLA violado."
-        recommended_action = "Priorize a recuperação das automações com atraso acima do SLA."
+        recommended_action = (
+            "Priorize a recuperação das automações com atraso acima do SLA."
+        )
     else:
         top_issue = "Catálogo governado consistente com o runtime."
         recommended_action = None
@@ -656,7 +664,9 @@ def _build_review_status(
     inactivity_cutoff_seconds = 30 * 24 * 60 * 60
 
     if catalog_id.startswith("runtime-"):
-        review_reasons.append("Cadastro runtime sem manifesto governado correspondente.")
+        review_reasons.append(
+            "Cadastro runtime sem manifesto governado correspondente."
+        )
 
     if not enabled and next_run is None:
         review_reasons.append("Automação desabilitada e sem próxima execução agendada.")
@@ -679,11 +689,12 @@ def _build_review_status(
     elif drift_count > 0:
         review_reasons.append("Cadastro com drift em relação ao manifesto canônico.")
     elif docs_status != "complete":
-        review_reasons.append("Documentação obrigatória incompleta para revisão segura.")
+        review_reasons.append(
+            "Documentação obrigatória incompleta para revisão segura."
+        )
 
     if review_reasons and (
-        catalog_id.startswith("runtime-")
-        or (not enabled and next_run is None)
+        catalog_id.startswith("runtime-") or (not enabled and next_run is None)
     ):
         return "delete_candidate", review_reasons
     if review_reasons:
@@ -698,7 +709,9 @@ def _collect_portfolio_rows(
     root = Path(project_root).resolve()
     manifest_entries = load_catalog_manifests(root, include_template=False)
 
-    automations = db.query(models.Automation).order_by(models.Automation.name.asc()).all()
+    automations = (
+        db.query(models.Automation).order_by(models.Automation.name.asc()).all()
+    )
     automation_ids = [int(auto.id) for auto in automations]
     jobs = list_scheduled_jobs(db)
     next_run_lookup = build_next_run_lookup(jobs)
@@ -735,7 +748,9 @@ def _collect_portfolio_rows(
 
     for entry in manifest_entries:
         manifest = entry.manifest
-        matched_auto = _find_matching_automation(manifest, root, db_by_script, db_by_name)
+        matched_auto = _find_matching_automation(
+            manifest, root, db_by_script, db_by_name
+        )
         if matched_auto is not None:
             matched_automation_ids.add(int(matched_auto.id))
 
@@ -756,23 +771,19 @@ def _collect_portfolio_rows(
             else None
         )
         latest_snapshot = (
-            latest_lookup.get(int(matched_auto.id))
-            if matched_auto
-            else None
+            latest_lookup.get(int(matched_auto.id)) if matched_auto else None
         )
         last_success = (
-            last_success_lookup.get(int(matched_auto.id))
-            if matched_auto
-            else None
+            last_success_lookup.get(int(matched_auto.id)) if matched_auto else None
         )
         last_failure = (
-            last_failure_lookup.get(int(matched_auto.id))
-            if matched_auto
-            else None
+            last_failure_lookup.get(int(matched_auto.id)) if matched_auto else None
         )
 
         next_run_dt = (
-            schemas.parse_dt_br(response.next_run) if response and response.next_run else None
+            schemas.parse_dt_br(response.next_run)
+            if response and response.next_run
+            else None
         )
         last_status = response.last_status if response else None
         last_success_at = (
@@ -802,10 +813,20 @@ def _collect_portfolio_rows(
             last_status=last_status,
             last_failure_age_minutes=last_failure_age_minutes,
         )
-        docs_status = "complete" if not any(
-            issue.code in {"readme_missing", "context_missing", "runbook_missing", "entrypoint_missing"}
-            for issue in issues
-        ) else "missing"
+        docs_status = (
+            "complete"
+            if not any(
+                issue.code
+                in {
+                    "readme_missing",
+                    "context_missing",
+                    "runbook_missing",
+                    "entrypoint_missing",
+                }
+                for issue in issues
+            )
+            else "missing"
+        )
 
         dependency_status = _dependency_status(manifest, latest_snapshot)
         operational_state = response.operational_state if response else "not_registered"
@@ -843,7 +864,15 @@ def _collect_portfolio_rows(
                 owner_area=manifest.owner_area,
                 runtime=manifest.runtime,
                 enabled=bool(matched_auto.enabled) if matched_auto else False,
-                queue_group=manifest.queue_group if manifest.queue_group else (cast(str | None, matched_auto.queue_group) if matched_auto else None),
+                queue_group=(
+                    manifest.queue_group
+                    if manifest.queue_group
+                    else (
+                        cast(str | None, matched_auto.queue_group)
+                        if matched_auto
+                        else None
+                    )
+                ),
                 sla_minutes=manifest.sla_minutes,
                 health_status=health_status,
                 sla_state=sla_state,
@@ -854,7 +883,9 @@ def _collect_portfolio_rows(
                 readme_path=manifest.readme_path,
                 context_path=manifest.context_path,
                 next_run=next_run_dt,
-                schedule_summary=response.schedule_summary if response else manifest.schedule_summary,
+                schedule_summary=(
+                    response.schedule_summary if response else manifest.schedule_summary
+                ),
                 schedule_lag_minutes=lag_minutes,
                 schedule_lag_seconds=lag_seconds,
                 last_status=last_status,
@@ -866,7 +897,9 @@ def _collect_portfolio_rows(
                 last_failure_age_seconds=last_failure_age_seconds,
                 review_status=review_status,
                 review_reasons=review_reasons,
-                dependency_status=schemas.PortfolioDependencyStatus(**dependency_status),
+                dependency_status=schemas.PortfolioDependencyStatus(
+                    **dependency_status
+                ),
             )
         )
 
@@ -894,9 +927,15 @@ def _collect_portfolio_rows(
                 issues=issues,
             )
         )
-        next_run_dt = schemas.parse_dt_br(response.next_run) if response.next_run else None
-        lag_minutes = _schedule_lag_minutes(next_run_dt, response.active_execution_count)
-        lag_seconds = _schedule_lag_seconds(next_run_dt, response.active_execution_count)
+        next_run_dt = (
+            schemas.parse_dt_br(response.next_run) if response.next_run else None
+        )
+        lag_minutes = _schedule_lag_minutes(
+            next_run_dt, response.active_execution_count
+        )
+        lag_seconds = _schedule_lag_seconds(
+            next_run_dt, response.active_execution_count
+        )
         last_success_at = (
             last_success.get("finished_at") or last_success.get("started_at")
             if last_success
@@ -958,9 +997,11 @@ def _collect_portfolio_rows(
                 review_status=review_status,
                 review_reasons=review_reasons,
                 dependency_status=schemas.PortfolioDependencyStatus(
-                    oracle="unknown"
-                    if latest_snapshot.get("status") in FAILURE_STATUSES
-                    else "not_used"
+                    oracle=(
+                        "unknown"
+                        if latest_snapshot.get("status") in FAILURE_STATUSES
+                        else "not_used"
+                    )
                 ),
             )
         )

@@ -4,10 +4,11 @@
 Router: Automation Config - Gestão de arquivos JSON de configuração das automações.
 """
 
+import glob
 import json
 import logging
 import os
-import glob
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -15,11 +16,8 @@ from .. import models, schemas
 from ..database import get_db
 from ..middleware import get_api_key
 from ..utils import get_client_ip, log_audit
-from .automations import (
-    _resolve_automation_dir,
-    _resolve_managed_file,
-    _backup_file_before_write,
-)
+from .automations import (_backup_file_before_write, _resolve_automation_dir,
+                          _resolve_managed_file)
 
 logger = logging.getLogger("orchestrator")
 

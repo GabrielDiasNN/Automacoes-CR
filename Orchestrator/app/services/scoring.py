@@ -56,9 +56,7 @@ def compute_attention_score(
     active_for_group = active_by_group.get(group_str) if group_str else None
 
     max_retries = int(
-        ex.max_retries
-        or (ex.automation.max_retries if ex.automation else 0)
-        or 0
+        ex.max_retries or (ex.automation.max_retries if ex.automation else 0) or 0
     )
     retry_count = int(ex.retry_count or 0)
 

@@ -5,19 +5,16 @@ Módulo contendo schemas Pydantic relacionados ao Sistema, Telemetria, Diagnóst
 """
 
 from typing import Any, Generic, List, Optional, TypeVar
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..constants import (
-    BASELINE_STATUS_ATTENTION,
-    BASELINE_STATUS_HEALTHY,
-    BASELINE_STATUS_INCIDENT,
-    DIAGNOSTIC_SEVERITIES,
-    OPERATIONAL_BASELINE_STATUSES,
-    ORCHESTRATOR_CONTRACT_VERSION,
-    ORCHESTRATOR_SCHEMA_VERSION,
-    ORCHESTRATOR_VERSION,
-    WORKER_VERSION,
-)
+from pydantic import (BaseModel, ConfigDict, Field, field_validator,
+                      model_validator)
+
+from ..constants import (BASELINE_STATUS_ATTENTION, BASELINE_STATUS_HEALTHY,
+                         BASELINE_STATUS_INCIDENT, DIAGNOSTIC_SEVERITIES,
+                         OPERATIONAL_BASELINE_STATUSES,
+                         ORCHESTRATOR_CONTRACT_VERSION,
+                         ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION,
+                         WORKER_VERSION)
 from .common import format_dt_br
 from .executions import ExecutionSummary
 
@@ -305,7 +302,9 @@ class DiagnosticsPayload(BaseModel):
     recovery: RecoveryPlan = Field(default_factory=RecoveryPlan)
     slo: DiagnosticsSlo = Field(default_factory=DiagnosticsSlo)
     slo_breaches: dict[str, bool] = {}
-    trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
+    trend_summary: DiagnosticsTrendSummary = Field(
+        default_factory=DiagnosticsTrendSummary
+    )
     operational_baseline: OperationalBaselineSummary = Field(
         default_factory=OperationalBaselineSummary
     )
@@ -458,7 +457,9 @@ class SystemOverviewResponse(BaseModel):
     top_failures: List[SystemOverviewFailure]
     scheduler: SystemOverviewScheduler
     queue: SystemOverviewQueue
-    trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
+    trend_summary: DiagnosticsTrendSummary = Field(
+        default_factory=DiagnosticsTrendSummary
+    )
     portfolio: Optional[SystemOverviewPortfolio] = None
     performance: DiagnosticsPerformance = Field(default_factory=DiagnosticsPerformance)
     diagnostics: DiagnosticsPayload
@@ -500,7 +501,9 @@ class SystemHistoryResponse(BaseModel):
     generated_at: str
     hours: int
     points: int
-    trend_summary: DiagnosticsTrendSummary = Field(default_factory=DiagnosticsTrendSummary)
+    trend_summary: DiagnosticsTrendSummary = Field(
+        default_factory=DiagnosticsTrendSummary
+    )
     items: List[SystemHistoryPoint] = []
 
 

@@ -6,14 +6,12 @@ import time
 
 from app import models
 from app.services.execution_runtime import (
-    apply_internal_worker_error,
-    apply_timeout_result,
-    complete_process_execution,
-    mark_running_tasks_as_failed_by_reboot,
-    mark_task_as_failed,
-)
+    apply_internal_worker_error, apply_timeout_result,
+    complete_process_execution, mark_running_tasks_as_failed_by_reboot,
+    mark_task_as_failed)
 from app.timezone import get_now_local
-from worker import _finalize_terminated_task, claim_next_task, classify_process_result
+from worker import (_finalize_terminated_task, claim_next_task,
+                    classify_process_result)
 
 
 def _add_execution(db_session, exec_id, automation_id, priority="NORMAL"):

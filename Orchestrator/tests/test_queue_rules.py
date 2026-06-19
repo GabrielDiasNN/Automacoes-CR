@@ -10,22 +10,17 @@ Valida:
 """
 
 import pytest
+from app import models
+from app.constants import (EXECUTION_STATUS_ERROR, EXECUTION_STATUS_PARTIAL,
+                           EXECUTION_STATUS_PENDING, EXECUTION_STATUS_RUNNING,
+                           FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
+                           FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
+                           RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
+                           RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE)
+from app.services.execution_runtime import (claim_next_task,
+                                            classify_process_result)
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-
-from app import models
-from app.constants import (
-    EXECUTION_STATUS_ERROR,
-    EXECUTION_STATUS_PARTIAL,
-    EXECUTION_STATUS_PENDING,
-    EXECUTION_STATUS_RUNNING,
-    FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
-    FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
-    RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
-    RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
-)
-from app.services.execution_runtime import classify_process_result
-from app.services.execution_runtime import claim_next_task
 from tests.conftest import AUTH_HEADERS
 
 
@@ -105,7 +100,10 @@ def test_requeue_respects_queue_group(client: TestClient, db_session: Session):
         json={"requested_by": "TestOperator", "reason": "Teste de concorrência"},
     )
     assert response.status_code == 409
-    assert "Já existe uma execução ativa no mesmo grupo operacional" in response.json()["detail"]
+    assert (
+        "Já existe uma execução ativa no mesmo grupo operacional"
+        in response.json()["detail"]
+    )
 
 
 def test_requeue_enforces_max_retries(client: TestClient, db_session: Session):

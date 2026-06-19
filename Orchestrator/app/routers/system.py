@@ -461,7 +461,9 @@ def get_diagnostics(
         _get_worker_status,
         wal_size_fn=get_wal_size_mb,
     )
-    payload["trace"] = {"correlation_id": getattr(request.state, "request_id", "SYSTEM")}
+    payload["trace"] = {
+        "correlation_id": getattr(request.state, "request_id", "SYSTEM")
+    }
     return payload
 
 
