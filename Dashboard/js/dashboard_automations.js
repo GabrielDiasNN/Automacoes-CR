@@ -1,4 +1,12 @@
 import { refreshIcons } from "./dom_utils.js";
+import {
+    buildPortfolioLookup,
+    buildRiskLabel,
+    describeSchedule,
+    renderReviewStatusBadge,
+} from "./automations-helpers.js";
+import { createReviewModule } from "./automations-review.js";
+import { createScheduleModule } from "./automations-schedule.js";
 
 export function createAutomationsModule(ctx) {
     const {
@@ -18,25 +26,34 @@ export function createAutomationsModule(ctx) {
         bindActionElements,
     } = ctx;
 
-    let cachedAutomations = [];
-    let cachedJobs = [];
-    let isSavingAutomation = false;
-    let scheduleTimes = [];
-    let scheduleDays = new Set();
-    let scheduleType = "manual";
-    let hasInitializedEvents = false;
-    let hasInitializedActionMenuEvents = false;
-    let currentTabId = "tab-identification";
-    let latestSchedulePreview = null;
-    let currentAutomationContext = null;
-    let latestAutomationPreflight = null;
-    let openActionMenuAutomationId = null;
-    let cachedPortfolioByAutomation = new Map();
+    const state = {
+        cachedAutomations: [],
+        cachedJobs: [],
+        isSavingAutomation: false,
+        scheduleTimes: [],
+        scheduleDays: new Set(),
+        scheduleType: "manual",
+        hasInitializedEvents: false,
+        hasInitializedActionMenuEvents: false,
+        currentTabId: "tab-identification",
+        latestSchedulePreview: null,
+        currentAutomationContext: null,
+        latestAutomationPreflight: null,
+        openActionMenuAutomationId: null,
+        cachedPortfolioByAutomation: new Map(),
+    };
+
     const TAB_ORDER = ["tab-identification", "tab-schedule", "tab-execution", "tab-review"];
 
+    const reviewCtx = { escapeHtml, translateStatus, getValue };
+    const review = createReviewModule(reviewCtx, state);
+
+    const scheduleCtx = { api, showToast, getValue, setValue, refreshIcons, bindActionElements };
+    const schedule = createScheduleModule(scheduleCtx, state, review.refreshReviewPanel);
+
     function initTabsAndEvents() {
-        if (hasInitializedEvents) return;
-        hasInitializedEvents = true;
+        if (state.hasInitializedEvents) return;
+        state.hasInitializedEvents = true;
 
         // Abas do modal (exclusivo: dashboard.js não gerencia abas internas do modal)
         const tabButtons = document.querySelectorAll(".modal-tabs .tab-btn");
@@ -53,7 +70,7 @@ export function createAutomationsModule(ctx) {
             preset.addEventListener("click", () => {
                 const cronVal = preset.dataset.cron;
                 setValue("f-cron-expression", cronVal);
-                renderScheduleSummary();
+                schedule.renderScheduleSummary();
             });
         });
 
@@ -63,29 +80,29 @@ export function createAutomationsModule(ctx) {
         if (restrictedCheckbox && restrictionPanel) {
             restrictedCheckbox.addEventListener("change", (e) => {
                 restrictionPanel.style.display = e.target.checked ? "block" : "none";
-                renderScheduleSummary();
+                schedule.renderScheduleSummary();
             });
         }
 
         // Campos novos que dashboard.js não cobre (f-cron-expression, horários da janela)
         const cronInput = document.getElementById("f-cron-expression");
         if (cronInput) {
-            cronInput.addEventListener("input", () => renderScheduleSummary());
+            cronInput.addEventListener("input", () => schedule.renderScheduleSummary());
         }
 
         const intervalStartInput = document.getElementById("f-interval-start-time");
         if (intervalStartInput) {
-            intervalStartInput.addEventListener("change", () => renderScheduleSummary());
+            intervalStartInput.addEventListener("change", () => schedule.renderScheduleSummary());
         }
 
         const intervalEndInput = document.getElementById("f-interval-end-time");
         if (intervalEndInput) {
-            intervalEndInput.addEventListener("change", () => renderScheduleSummary());
+            intervalEndInput.addEventListener("change", () => schedule.renderScheduleSummary());
         }
 
         const intervalAnchorInput = document.getElementById("f-interval-anchor-time");
         if (intervalAnchorInput) {
-            intervalAnchorInput.addEventListener("change", () => renderScheduleSummary());
+            intervalAnchorInput.addEventListener("change", () => schedule.renderScheduleSummary());
         }
 
         // NOTA: .day-btn, f-schedule-type, f-interval-minutes, f-days-of-month e
@@ -94,7 +111,7 @@ export function createAutomationsModule(ctx) {
     }
 
     function switchTab(tabId) {
-        currentTabId = tabId;
+        state.currentTabId = tabId;
         const tabButtons = document.querySelectorAll(".modal-tabs .tab-btn");
         tabButtons.forEach((btn) => {
             btn.classList.toggle("active", btn.dataset.tab === tabId);
@@ -105,7 +122,7 @@ export function createAutomationsModule(ctx) {
             content.classList.toggle("active", content.id === tabId);
         });
         if (tabId === "tab-review") {
-            refreshReviewPanel();
+            review.refreshReviewPanel();
         }
         updateStepButtons();
     }
@@ -114,7 +131,7 @@ export function createAutomationsModule(ctx) {
         const prevBtn = document.querySelector('[data-action="auto-step-prev"]');
         const nextBtn = document.querySelector('[data-action="auto-step-next"]');
         const saveBtn = document.querySelector('#form-auto button[type="submit"]');
-        const currentIndex = TAB_ORDER.indexOf(currentTabId);
+        const currentIndex = TAB_ORDER.indexOf(state.currentTabId);
         if (prevBtn) prevBtn.disabled = currentIndex <= 0;
         if (nextBtn) {
             nextBtn.disabled = currentIndex >= TAB_ORDER.length - 1;
@@ -122,43 +139,6 @@ export function createAutomationsModule(ctx) {
         }
         if (saveBtn) {
             saveBtn.textContent = currentIndex >= TAB_ORDER.length - 1 ? "Salvar automação" : "Ir para revisão";
-        }
-    }
-
-    function updateScheduleBlocksVisibility(type) {
-        const blocks = document.querySelectorAll(".schedule-block");
-        blocks.forEach((block) => {
-            block.style.display = "none";
-        });
-
-        if (type === "daily") {
-            const blockTimes = document.getElementById("schedule-block-times");
-            if (blockTimes) blockTimes.style.display = "block";
-        } else if (type === "weekly") {
-            const blockWeekly = document.getElementById("schedule-block-weekly");
-            const blockTimes = document.getElementById("schedule-block-times");
-            if (blockWeekly) blockWeekly.style.display = "block";
-            if (blockTimes) blockTimes.style.display = "block";
-        } else if (type === "monthly") {
-            const blockMonthly = document.getElementById("schedule-block-monthly");
-            const blockTimes = document.getElementById("schedule-block-times");
-            if (blockMonthly) blockMonthly.style.display = "block";
-            if (blockTimes) blockTimes.style.display = "block";
-        } else if (type === "interval") {
-            const blockInterval = document.getElementById("schedule-block-interval");
-            if (blockInterval) blockInterval.style.display = "block";
-            
-            const restrictedCheckbox = document.getElementById("f-interval-restricted");
-            const restrictionPanel = document.getElementById("interval-restriction-panel");
-            if (restrictedCheckbox && restrictionPanel) {
-                restrictionPanel.style.display = restrictedCheckbox.checked ? "block" : "none";
-            }
-        } else if (type === "once") {
-            const blockOnce = document.getElementById("schedule-block-once");
-            if (blockOnce) blockOnce.style.display = "block";
-        } else if (type === "cron") {
-            const blockCron = document.getElementById("schedule-block-cron");
-            if (blockCron) blockCron.style.display = "block";
         }
     }
 
@@ -172,9 +152,9 @@ export function createAutomationsModule(ctx) {
 
         if (!autos) return;
 
-        cachedAutomations = autos;
-        cachedJobs = jobs || [];
-        cachedPortfolioByAutomation = buildPortfolioLookup(portfolio);
+        state.cachedAutomations = autos;
+        state.cachedJobs = jobs || [];
+        state.cachedPortfolioByAutomation = buildPortfolioLookup(portfolio);
         window.automations = autos;
 
         refreshAutomationFilterOptions(autos);
@@ -240,9 +220,9 @@ export function createAutomationsModule(ctx) {
             const scheduleLabel = auto.schedule_summary || describeSchedule(auto.schedule);
             const nextRun = auto.next_run || formatDate(nextRunByAuto.get(auto.id)) || "-";
             const escapedName = escapeHtml(auto.name);
-            const governance = cachedPortfolioByAutomation.get(auto.id);
-            const riskLabel = buildRiskLabel(auto, governance);
-            const reviewBadge = renderReviewStatusBadge(governance);
+            const governance = state.cachedPortfolioByAutomation.get(auto.id);
+            const riskLabel = buildRiskLabel(auto, governance, escapeHtml);
+            const reviewBadge = renderReviewStatusBadge(governance, escapeHtml);
             const lastLabel = auto.last_status ? `<span class="badge ${getBadgeClass(auto.last_status)}">${translateStatus(auto.last_status)}</span>` : "<span class=\"badge badge-muted\">Sem histórico</span>";
             const lastMeta = auto.last_execution_started_at
                 ? `<span class="cell-meta">${escapeHtml(auto.last_execution_started_at)}</span>`
@@ -323,8 +303,8 @@ export function createAutomationsModule(ctx) {
     }
 
     function initActionMenuEvents() {
-        if (hasInitializedActionMenuEvents) return;
-        hasInitializedActionMenuEvents = true;
+        if (state.hasInitializedActionMenuEvents) return;
+        state.hasInitializedActionMenuEvents = true;
 
         document.addEventListener("click", handleActionMenuClick);
         document.addEventListener("keydown", handleActionMenuKeydown);
@@ -350,20 +330,20 @@ export function createAutomationsModule(ctx) {
             return;
         }
 
-        if (openActionMenuAutomationId && !event.target.closest(".fleet-actions-menu")) {
+        if (state.openActionMenuAutomationId && !event.target.closest(".fleet-actions-menu")) {
             closeActionMenu();
         }
     }
 
     function handleActionMenuKeydown(event) {
-        if (event.key !== "Escape" || !openActionMenuAutomationId) return;
+        if (event.key !== "Escape" || !state.openActionMenuAutomationId) return;
         event.preventDefault();
         closeActionMenu({ restoreFocus: true });
     }
 
     function toggleActionMenu(automationId) {
         if (!automationId) return;
-        if (openActionMenuAutomationId === automationId) {
+        if (state.openActionMenuAutomationId === automationId) {
             closeActionMenu({ restoreFocus: true });
             return;
         }
@@ -377,7 +357,7 @@ export function createAutomationsModule(ctx) {
         const toggleButton = document.querySelector(`[data-action-menu-toggle="${automationId}"]`);
         if (!menuPanel || !toggleButton) return;
 
-        openActionMenuAutomationId = automationId;
+        state.openActionMenuAutomationId = automationId;
         menuPanel.hidden = false;
         menuPanel.setAttribute("aria-hidden", "false");
         toggleButton.setAttribute("aria-expanded", "true");
@@ -386,10 +366,10 @@ export function createAutomationsModule(ctx) {
     }
 
     function closeActionMenu(options = {}) {
-        if (!openActionMenuAutomationId) return;
+        if (!state.openActionMenuAutomationId) return;
 
         const { restoreFocus = false } = options;
-        const automationId = openActionMenuAutomationId;
+        const automationId = state.openActionMenuAutomationId;
         const menuPanel = document.getElementById(`fleet-actions-menu-${automationId}`);
         const toggleButton = document.querySelector(`[data-action-menu-toggle="${automationId}"]`);
 
@@ -402,11 +382,11 @@ export function createAutomationsModule(ctx) {
             if (restoreFocus) toggleButton.focus();
         }
 
-        openActionMenuAutomationId = null;
+        state.openActionMenuAutomationId = null;
     }
 
     function handleSearch() {
-        renderAutomationTable(getFilteredAutomations(), cachedJobs);
+        renderAutomationTable(getFilteredAutomations(), state.cachedJobs);
         refreshIcons();
     }
 
@@ -416,14 +396,14 @@ export function createAutomationsModule(ctx) {
 
         resetAutomationForm();
         initTabsAndEvents();
-        currentAutomationContext = null;
-        latestAutomationPreflight = null;
+        state.currentAutomationContext = null;
+        state.latestAutomationPreflight = null;
 
         if (automationId !== null) {
             const auto = await api(`/api/automations/${automationId}`);
             if (!auto) return;
             fillAutomationForm(auto);
-            currentAutomationContext = auto;
+            state.currentAutomationContext = auto;
             setText("modal-title", "Editar Automação");
         } else {
             setText("modal-title", "Nova Automação");
@@ -464,13 +444,13 @@ export function createAutomationsModule(ctx) {
         if (enabled) enabled.checked = true;
         if (test) test.checked = false;
 
-        currentAutomationContext = null;
-        latestSchedulePreview = null;
-        latestAutomationPreflight = null;
+        state.currentAutomationContext = null;
+        state.latestSchedulePreview = null;
+        state.latestAutomationPreflight = null;
         switchTab("tab-identification");
-        updateScheduleBlocksVisibility("manual");
-        resetScheduleBuilder();
-        clearReviewPanel();
+        schedule.updateScheduleBlocksVisibility("manual");
+        schedule.resetScheduleBuilder();
+        review.clearReviewPanel();
     }
 
     function fillAutomationForm(auto) {
@@ -489,287 +469,15 @@ export function createAutomationsModule(ctx) {
         if (enabled) enabled.checked = Boolean(auto.enabled);
         if (test) test.checked = Boolean(auto.test_mode);
 
-        parseScheduleToBuilder(auto.schedule);
-        refreshReviewPanel();
-    }
-
-    function parseScheduleToBuilder(rawSchedule) {
-        resetScheduleBuilder();
-        if (!rawSchedule) return;
-
-        try {
-            const schedule = typeof rawSchedule === "string" ? JSON.parse(rawSchedule.replace(/'/g, "\"")) : rawSchedule;
-            scheduleType = schedule.schedule_type || inferLegacyType(schedule);
-            setValue("f-schedule-type", scheduleType);
-
-            if (scheduleType === "cron") {
-                setValue("f-cron-expression", schedule.cron_expression || "");
-            } else if (scheduleType === "interval") {
-                setValue("f-interval-minutes", String(schedule.interval_minutes || 30));
-                setValue("f-interval-anchor-time", schedule.anchor_time || "");
-                const hasRestriction = Boolean(schedule.start_time || schedule.end_time || (Array.isArray(schedule.days_of_week) && schedule.days_of_week.length > 0));
-                const restrictedCheckbox = document.getElementById("f-interval-restricted");
-                if (restrictedCheckbox) {
-                    restrictedCheckbox.checked = hasRestriction;
-                }
-                setValue("f-interval-start-time", schedule.start_time || "08:00");
-                setValue("f-interval-end-time", schedule.end_time || "18:00");
-
-                const days = Array.isArray(schedule.days_of_week) ? schedule.days_of_week : [];
-                days.forEach((day) => {
-                    const d = Number(day);
-                    if (Number.isInteger(d) && d >= 0 && d <= 6) scheduleDays.add(d);
-                });
-            } else {
-                const days = Array.isArray(schedule.days_of_week) ? schedule.days_of_week : (Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : []);
-                days.forEach((day) => {
-                    const d = Number(day);
-                    if (Number.isInteger(d) && d >= 0 && d <= 6) scheduleDays.add(d);
-                });
-
-                if (Array.isArray(schedule.times)) {
-                    schedule.times.forEach((t) => {
-                        const hh = String(Number(t.h || 0)).padStart(2, "0");
-                        const mm = String(Number(t.m || 0)).padStart(2, "0");
-                        scheduleTimes.push(`${hh}:${mm}`);
-                    });
-                } else {
-                    const hours = Array.isArray(schedule.hours) ? schedule.hours : [];
-                    const minutes = Array.isArray(schedule.minutes) ? schedule.minutes : [0];
-                    hours.forEach((h) => {
-                        minutes.forEach((m) => {
-                            const hh = String(Number(h || 0)).padStart(2, "0");
-                            const mm = String(Number(m || 0)).padStart(2, "0");
-                            scheduleTimes.push(`${hh}:${mm}`);
-                        });
-                    });
-                }
-                if (Array.isArray(schedule.days_of_month)) {
-                    setValue("f-days-of-month", schedule.days_of_month.join(","));
-                }
-                if (schedule.interval_minutes) {
-                    setValue("f-interval-minutes", String(schedule.interval_minutes));
-                }
-                if (schedule.run_at) {
-                    const iso = String(schedule.run_at).replace(" ", "T");
-                    setValue("f-once-run-at", iso.slice(0, 16));
-                }
-            }
-
-            scheduleTimes = Array.from(new Set(scheduleTimes)).sort();
-            updateScheduleBlocksVisibility(scheduleType);
-            refreshScheduleUi();
-        } catch {
-            showToast("Agenda existente inválida. Ajuste os horários manualmente.", "warning");
-        }
-    }
-
-    function addScheduleTimeFromInput() {
-        const input = document.getElementById("f-time-input");
-        if (!input || !input.value) {
-            showToast("Selecione um horário para adicionar.", "warning");
-            return;
-        }
-
-        const hhmm = input.value;
-        if (scheduleTimes.includes(hhmm)) {
-            showToast("Horário já adicionado.", "warning");
-            return;
-        }
-
-        scheduleTimes.push(hhmm);
-        scheduleTimes.sort();
-        input.value = "";
-        refreshScheduleUi();
-    }
-
-    function removeScheduleTime(hhmm) {
-        scheduleTimes = scheduleTimes.filter((item) => item !== hhmm);
-        refreshScheduleUi();
-    }
-
-    function toggleScheduleDay(day) {
-        const normalized = Number(day);
-        if (!Number.isInteger(normalized) || normalized < 0 || normalized > 6) return;
-        if (scheduleDays.has(normalized)) {
-            scheduleDays.delete(normalized);
-        } else {
-            scheduleDays.add(normalized);
-        }
-        refreshScheduleUi();
-    }
-
-    function refreshScheduleUi() {
-        renderScheduleTimes();
-        renderScheduleDays();
-        renderScheduleSummary();
-    }
-
-    function renderScheduleTimes() {
-        const list = document.getElementById("f-time-list");
-        if (!list) return;
-
-        if (!scheduleTimes.length) {
-            list.innerHTML = "<span class=\"time-placeholder\">Nenhum horário selecionado.</span>";
-            return;
-        }
-
-        list.innerHTML = scheduleTimes.map((hhmm) => `
-        <span class="time-tag">
-            ${hhmm}
-            <span class="remove-time" data-action="remove-schedule-time" data-hhmm="${hhmm}">✕</span>
-        </span>
-    `).join("");
-        bindActionElements(list);
-    }
-
-    function renderScheduleDays() {
-        document.querySelectorAll(".day-btn").forEach((btn) => {
-            const day = Number(btn.dataset.day);
-            btn.classList.toggle("active", scheduleDays.has(day));
-        });
-    }
-
-    function renderScheduleSummary() {
-        const summary = document.getElementById("schedule-summary");
-        if (!summary) return;
-
-        if (scheduleType === "manual") {
-            summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Disparo manual (sem agenda).</span>";
-            refreshIcons();
-            renderSchedulePreview();
-            return;
-        }
-        if ((scheduleType === "weekly" || scheduleType === "monthly" || scheduleType === "daily") && !scheduleTimes.length) {
-            summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Selecione ao menos um horário.</span>";
-            refreshIcons();
-            renderSchedulePreview();
-            return;
-        }
-        if (scheduleType === "weekly" && !scheduleDays.size) {
-            summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Selecione ao menos um dia da semana.</span>";
-            refreshIcons();
-            renderSchedulePreview();
-            return;
-        }
-        if (scheduleType === "cron" && !getValue("f-cron-expression").trim()) {
-            summary.innerHTML = "<i data-lucide=\"info\" size=\"14\"></i><span>Insira uma expressão Cron.</span>";
-            refreshIcons();
-            renderSchedulePreview();
-            return;
-        }
-
-        const dayNames = { 0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb" };
-        let label = "Agenda configurada.";
-        if (scheduleType === "daily") {
-            label = `Diária às ${scheduleTimes.join(", ")}`;
-        } else if (scheduleType === "weekly") {
-            const days = Array.from(scheduleDays).sort((a, b) => a - b).map((d) => dayNames[d]).join(", ");
-            label = `Semanal: ${days} às ${scheduleTimes.join(", ")}`;
-        } else if (scheduleType === "monthly") {
-            const dom = (getValue("f-days-of-month") || "").trim();
-            label = `Mensal: dia(s) ${dom || "?"} às ${scheduleTimes.join(", ")}`;
-        } else if (scheduleType === "interval") {
-            const intervalVal = getValue("f-interval-minutes") || 0;
-            const anchorVal = getValue("f-interval-anchor-time");
-            const anchorSuffix = anchorVal ? `, início da cadência às ${anchorVal}` : "";
-            
-            const restrictedCheckbox = document.getElementById("f-interval-restricted");
-            if (restrictedCheckbox && restrictedCheckbox.checked) {
-                const days = scheduleDays.size > 0 
-                    ? Array.from(scheduleDays).sort((a, b) => a - b).map((d) => dayNames[d]).join(", ") 
-                    : "Qualquer dia";
-                const start = getValue("f-interval-start-time") || "08:00";
-                const end = getValue("f-interval-end-time") || "18:00";
-                label = `Intervalo: a cada ${intervalVal} min (${days}, início ${start}, fim ${end}${anchorSuffix})`;
-            } else {
-                label = `Intervalo: a cada ${intervalVal} min${anchorSuffix ? ` (${anchorSuffix.slice(2)})` : ""}`;
-            }
-        } else if (scheduleType === "once") {
-            label = `Execução única em ${getValue("f-once-run-at") || "-"}`;
-        } else if (scheduleType === "cron") {
-            label = `Cron: ${getValue("f-cron-expression")}`;
-        }
-        
-        summary.innerHTML = `<i data-lucide="calendar-clock" size="14"></i><span>${label}</span>`;
-        refreshIcons();
-        renderSchedulePreview();
-    }
-
-    function resetScheduleBuilder() {
-        scheduleTimes = [];
-        scheduleDays = new Set();
-        scheduleType = "manual";
-        refreshScheduleUi();
-    }
-
-    function buildSchedulePayload() {
-        if (scheduleType === "manual") return JSON.stringify({ schedule_type: "manual", schedule_version: 2, timezone: "America/Sao_Paulo" });
-        const times = scheduleTimes.map((item) => {
-            const [h, m] = item.split(":");
-            return { h: Number(h), m: Number(m) };
-        });
-        if (scheduleType === "daily") {
-            return JSON.stringify({ schedule_type: "daily", schedule_version: 2, timezone: "America/Sao_Paulo", times });
-        }
-        if (scheduleType === "weekly") {
-            return JSON.stringify({
-                schedule_type: "weekly",
-                schedule_version: 2,
-                timezone: "America/Sao_Paulo",
-                days_of_week: Array.from(scheduleDays).sort((a, b) => a - b),
-                times,
-            });
-        }
-        if (scheduleType === "monthly") {
-            const days = (getValue("f-days-of-month") || "")
-                .split(",")
-                .map((item) => Number(item.trim()))
-                .filter((item) => Number.isInteger(item) && item >= 1 && item <= 31);
-            return JSON.stringify({ schedule_type: "monthly", schedule_version: 2, timezone: "America/Sao_Paulo", days_of_month: days, times });
-        }
-        if (scheduleType === "interval") {
-            const intervalPayload = {
-                schedule_type: "interval",
-                schedule_version: 2,
-                timezone: "America/Sao_Paulo",
-                interval_minutes: Number(getValue("f-interval-minutes") || 30),
-            };
-
-            const anchorVal = getValue("f-interval-anchor-time");
-            if (anchorVal) {
-                intervalPayload.anchor_time = anchorVal;
-            }
-
-            const restrictedCheckbox = document.getElementById("f-interval-restricted");
-            if (restrictedCheckbox && restrictedCheckbox.checked) {
-                intervalPayload.start_time = getValue("f-interval-start-time") || "08:00";
-                intervalPayload.end_time = getValue("f-interval-end-time") || "18:00";
-                intervalPayload.days_of_week = Array.from(scheduleDays).sort((a, b) => a - b);
-            }
-
-            return JSON.stringify(intervalPayload);
-        }
-        if (scheduleType === "once") {
-            const dt = getValue("f-once-run-at");
-            return JSON.stringify({ schedule_type: "once", schedule_version: 2, timezone: "America/Sao_Paulo", run_at: dt ? `${dt}:00` : null });
-        }
-        if (scheduleType === "cron") {
-            return JSON.stringify({
-                schedule_type: "cron",
-                schedule_version: 2,
-                timezone: "America/Sao_Paulo",
-                cron_expression: (getValue("f-cron-expression") || "").trim(),
-            });
-        }
-        return null;
+        schedule.parseScheduleToBuilder(auto.schedule);
+        review.refreshReviewPanel();
     }
 
     async function saveAutomation(event) {
         if (event) event.preventDefault();
-        if (isSavingAutomation) return;
+        if (state.isSavingAutomation) return;
 
-        if (currentTabId !== "tab-review") {
+        if (state.currentTabId !== "tab-review") {
             switchTab("tab-review");
             showToast("Revise o cadastro na etapa final antes de salvar.", "warning");
             return;
@@ -788,7 +496,7 @@ export function createAutomationsModule(ctx) {
             name,
             description: getValue("f-description") || null,
             script_path: scriptPath,
-            schedule: buildSchedulePayload(),
+            schedule: schedule.buildSchedulePayload(),
             max_runtime_minutes: Number(getValue("f-max-runtime") || 30),
             max_retries: Number(getValue("f-max-retries") || 0),
             cooldown_minutes: Number(getValue("f-cooldown") || 0),
@@ -803,14 +511,14 @@ export function createAutomationsModule(ctx) {
             showToast((preview?.errors || ["Agenda inválida."])[0], "error");
             return;
         }
-        latestSchedulePreview = preview;
+        state.latestSchedulePreview = preview;
         const preflight = await api("/api/automations/preflight", "POST", payload, { silentErrorToast: true });
         if (!preflight) {
             showToast("Falha ao validar governança da automação.", "error");
             return;
         }
-        latestAutomationPreflight = preflight;
-        refreshReviewPanel();
+        state.latestAutomationPreflight = preflight;
+        review.refreshReviewPanel();
 
         if (preflight.valid === false) {
             const blockingIssue = Array.isArray(preflight.governance?.blocking_issues)
@@ -821,7 +529,7 @@ export function createAutomationsModule(ctx) {
         }
 
         const submitBtn = document.querySelector("#form-auto button[type=\"submit\"]");
-        isSavingAutomation = true;
+        state.isSavingAutomation = true;
         if (submitBtn) submitBtn.disabled = true;
 
         try {
@@ -841,248 +549,14 @@ export function createAutomationsModule(ctx) {
             document.getElementById("modal-auto")?.close();
             await Promise.all([loadConfig(), loadOverview(), loadExecutions(1)]);
         } finally {
-            isSavingAutomation = false;
+            state.isSavingAutomation = false;
             if (submitBtn) submitBtn.disabled = false;
         }
     }
 
-    function describeSchedule(rawSchedule) {
-        if (!rawSchedule) return "MANUAL";
-        try {
-            const parsed = typeof rawSchedule === "string" ? JSON.parse(rawSchedule.replace(/'/g, "\"")) : rawSchedule;
-            if (parsed.schedule_type === "cron") {
-                return `Cron: ${parsed.cron_expression || ""}`;
-            }
-            if (parsed.schedule_type === "interval") {
-                const hasRestriction = Boolean(parsed.start_time || parsed.end_time || (Array.isArray(parsed.days_of_week) && parsed.days_of_week.length > 0));
-                return hasRestriction ? `A cada ${parsed.interval_minutes || 0} min (Janela operacional)` : `A cada ${parsed.interval_minutes || 0} min`;
-            }
-            if (parsed.schedule_type === "once") return "Execução única";
-            if (parsed.schedule_type === "daily") return `Diária (${(parsed.times || []).length} horário(s))`;
-            if (parsed.schedule_type === "weekly") return `Semanal (${(parsed.times || []).length} horário(s))`;
-            if (parsed.schedule_type === "monthly") return `Mensal (${(parsed.days_of_month || []).length} dia(s))`;
-            const times = Array.isArray(parsed.times) ? parsed.times : [];
-            if (!times.length) return "CONFIGURADA";
-            return `${times.length} horário(s)`;
-        } catch {
-            return "CONFIGURADA";
-        }
-    }
-
-    function inferLegacyType(schedule) {
-        if (!schedule) return "manual";
-        if (schedule.interval_minutes) return "interval";
-        if (schedule.run_at) return "once";
-        if (Array.isArray(schedule.days_of_month)) return "monthly";
-        if (Array.isArray(schedule.days_of_week) || Array.isArray(schedule.daysOfWeek)) return "weekly";
-        if (Array.isArray(schedule.times)) return "daily";
-        return "manual";
-    }
-
-    function buildRiskLabel(auto, governance) {
-        const flags = [];
-        if (Number(auto.cooldown_minutes || 0) > 0) flags.push(`CD ${auto.cooldown_minutes}m`);
-        if (Number(auto.max_retries || 0) > 0) flags.push(`RT ${auto.max_retries}`);
-        if (auto.queue_group) flags.push("GRP");
-        const governanceStatus = String(governance?.health_status || "").toLowerCase();
-        const governanceDrift = Number(governance?.drift_count || 0);
-        const docsStatus = String(governance?.docs_status || "").toLowerCase();
-        const reviewStatus = String(governance?.review_status || "").toLowerCase();
-        if (governanceStatus === "not_governed" || governanceStatus === "not_registered") flags.push("CAT");
-        if (governanceDrift > 0) flags.push(`DRIFT ${governanceDrift}`);
-        if (docsStatus && docsStatus !== "complete") flags.push("DOCS");
-        if (reviewStatus === "delete_candidate") flags.push("DEL");
-        const failures24h = Number(auto.failures_24h || 0);
-        const timeouts24h = Number(auto.timeouts_24h || 0);
-        const success24h = Number(auto.success_24h || 0);
-        if (timeouts24h > 0) flags.push(`TO ${timeouts24h}/24h`);
-        if (failures24h > 0) flags.push(`ER ${failures24h}/24h`);
-        if (success24h > 0 && failures24h === 0 && timeouts24h === 0) flags.push(`OK ${success24h}/24h`);
-
-        if (!flags.length) return "<span class=\"badge badge-success badge-wrap fleet-risk-badge\">OK</span>";
-        const hasFailure = failures24h > 0 || timeouts24h > 0 || governanceDrift > 0 || governanceStatus === "not_governed" || governanceStatus === "not_registered";
-        return `<span class="badge ${hasFailure ? "badge-danger" : "badge-warning"} badge-wrap fleet-risk-badge">${flags.join(" • ")}</span>`;
-    }
-
-    function renderReviewStatusBadge(governance) {
-        const status = String(governance?.review_status || "active").toLowerCase();
-        const reasons = Array.isArray(governance?.review_reasons) ? governance.review_reasons : [];
-        if (status === "delete_candidate") {
-            return `<span class="cell-meta"><span class="badge badge-danger" title="${escapeHtml(reasons[0] || "Candidata à exclusão do cadastro.")}">Revisar exclusão</span></span>`;
-        }
-        if (status === "attention") {
-            return `<span class="cell-meta"><span class="badge badge-warning" title="${escapeHtml(reasons[0] || "Cadastro em atenção operacional.")}">Em revisão</span></span>`;
-        }
-        return "";
-    }
-
-    async function renderSchedulePreview() {
-        const box = document.getElementById("schedule-preview");
-        if (!box) return;
-        const schedule = buildSchedulePayload();
-        if (!schedule) {
-            box.innerHTML = "";
-            latestSchedulePreview = null;
-            latestAutomationPreflight = null;
-            return;
-        }
-        const preview = await api("/api/system/schedule/preview", "POST", { schedule, limit: 5 }, { silentErrorToast: true });
-        if (!preview || !preview.valid) {
-            box.innerHTML = "<span>Prévia indisponível.</span>";
-            latestSchedulePreview = null;
-            latestAutomationPreflight = null;
-            return;
-        }
-        latestSchedulePreview = preview;
-        const nextRuns = (preview.next_runs_preview || []).slice(0, 5);
-        box.innerHTML = `<i data-lucide="clock-3" size="14"></i><span>Próximas: ${nextRuns.length ? nextRuns.join(" | ") : "sem execução futura"}</span>`;
-        refreshIcons();
-        if (currentTabId === "tab-review") {
-            refreshReviewPanel();
-        }
-    }
-
-    function clearReviewPanel() {
-        ["automation-review-summary", "automation-review-preview", "automation-review-impact"].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = '<div class="empty-state">Preencha os campos para gerar o conteúdo desta etapa.</div>';
-        });
-        const governance = document.getElementById("automation-review-governance");
-        if (governance) governance.innerHTML = '<div class="empty-state">A validação governada será exibida antes do save.</div>';
-    }
-
-    function refreshReviewPanel() {
-        renderReviewSummary();
-        renderReviewPreview();
-        renderReviewImpact();
-        renderReviewGovernance();
-    }
-
-    function renderReviewSummary() {
-        const container = document.getElementById("automation-review-summary");
-        if (!container) return;
-        const name = getValue("f-name") || "Automação sem nome";
-        const path = getValue("f-path") || "Caminho ainda não informado";
-        const queueGroup = getValue("f-queue-group") || "Sem grupo operacional";
-        const mode = document.getElementById("f-test")?.checked ? "Modo teste" : "Modo produtivo";
-        const enabled = document.getElementById("f-enabled")?.checked ? "Ativa" : "Pausada";
-        const lastContext = currentAutomationContext?.last_execution_started_at
-            ? `<small>Última execução: ${escapeHtml(currentAutomationContext.last_execution_started_at)}${currentAutomationContext.last_status ? ` · ${escapeHtml(translateStatus(currentAutomationContext.last_status))}` : ""}</small>`
-            : "<small>Sem histórico carregado para esta automação.</small>";
-
-        container.innerHTML = `
-            <div class="review-item">
-                <strong>${escapeHtml(name)}</strong>
-                <p>${escapeHtml(path)}</p>
-                <small>Fila: ${escapeHtml(queueGroup)} · ${escapeHtml(mode)} · ${escapeHtml(enabled)}</small>
-                ${lastContext}
-            </div>
-            <div class="review-item">
-                <strong>Resiliência e canais</strong>
-                <p>Timeout ${escapeHtml(getValue("f-max-runtime") || "30")} min · Retry ${escapeHtml(getValue("f-max-retries") || "0")} · Cooldown ${escapeHtml(getValue("f-cooldown") || "0")} min</p>
-                <small>Canais: ${escapeHtml(getValue("f-notification-channels") || "não informados")}</small>
-            </div>
-        `;
-    }
-
-    function renderReviewPreview() {
-        const container = document.getElementById("automation-review-preview");
-        if (!container) return;
-        const preview = latestSchedulePreview;
-        const summaryLabel = preview?.schedule_summary || document.getElementById("schedule-summary")?.innerText || "Agenda ainda não validada.";
-        const nextRuns = Array.isArray(preview?.next_runs_preview) ? preview.next_runs_preview : [];
-        container.innerHTML = `
-            <div class="review-item">
-                <strong>${escapeHtml(summaryLabel)}</strong>
-                <p>${nextRuns.length ? escapeHtml(nextRuns.join(" | ")) : "Sem execução futura ou sem agenda configurada."}</p>
-                <small>Tipo: ${escapeHtml((preview?.schedule_type || scheduleType || "manual").toUpperCase())}</small>
-            </div>
-        `;
-    }
-
-    function renderReviewImpact() {
-        const container = document.getElementById("automation-review-impact");
-        if (!container) return;
-        const retries = Number(getValue("f-max-retries") || 0);
-        const cooldown = Number(getValue("f-cooldown") || 0);
-        const queueGroup = getValue("f-queue-group") || "sem grupo";
-        const mode = document.getElementById("f-test")?.checked ? "O fluxo será executado em modo teste." : "O fluxo poderá atuar em ambiente produtivo.";
-        const retryNote = retries > 0
-            ? `Permitirá ${retries} tentativa(s) automática(s) com cooldown de ${cooldown} minuto(s).`
-            : "Não haverá retry automático; a recuperação dependerá de ação operacional.";
-        container.innerHTML = `
-            <div class="review-item">
-                <strong>Impacto operacional</strong>
-                <p>${escapeHtml(mode)}</p>
-                <small>Grupo operacional: ${escapeHtml(queueGroup)}. ${escapeHtml(retryNote)}</small>
-            </div>
-            <div class="review-item">
-                <strong>Validação antes do save</strong>
-                <p>A agenda foi validada pelo backend e a prévia de próximas execuções foi recalculada.</p>
-                <small>Se a configuração estiver incorreta, o save permanece bloqueado.</small>
-            </div>
-        `;
-    }
-
-    function renderReviewGovernance() {
-        const container = document.getElementById("automation-review-governance");
-        if (!container) return;
-        const preflight = latestAutomationPreflight;
-        if (!preflight) {
-            container.innerHTML = '<div class="empty-state">A pré-validação governada aparecerá após a revisão da agenda.</div>';
-            return;
-        }
-
-        const governance = preflight.governance || {};
-        const blockingIssues = Array.isArray(governance.blocking_issues) ? governance.blocking_issues : [];
-        const warnings = Array.isArray(governance.warnings) ? governance.warnings : [];
-        const status = String(governance.status || "healthy").toLowerCase();
-
-        if (status === "incident") {
-            container.innerHTML = `
-                <div class="review-item danger">
-                    <strong>Save bloqueado pelo manifesto governado</strong>
-                    <p>${escapeHtml(governance.top_issue || "Há inconsistências entre cadastro e manifesto.")}</p>
-                    <small>${escapeHtml(blockingIssues[0]?.message || governance.recommended_action || "Alinhe o automation.manifest.json antes de salvar.")}</small>
-                </div>
-            `;
-            return;
-        }
-
-        if (status === "attention") {
-            container.innerHTML = `
-                <div class="review-item warning">
-                    <strong>Governança em atenção</strong>
-                    <p>${escapeHtml(governance.top_issue || "Há avisos operacionais para esta automação.")}</p>
-                    <small>${escapeHtml(warnings[0]?.message || governance.recommended_action || "Revise os avisos antes da promoção.")}</small>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = `
-            <div class="review-item success">
-                <strong>Governança validada</strong>
-                <p>${escapeHtml(governance.top_issue || "Cadastro alinhado ao manifesto governado.")}</p>
-                <small>${escapeHtml(governance.catalog_id ? `Catálogo ${governance.catalog_id}` : "Manifesto validado.")}</small>
-            </div>
-        `;
-    }
-
-    function buildPortfolioLookup(portfolio) {
-        const lookup = new Map();
-        const items = Array.isArray(portfolio?.items) ? portfolio.items : [];
-        items.forEach((item) => {
-            if (item?.automation_id) {
-                lookup.set(Number(item.automation_id), item);
-            }
-        });
-        return lookup;
-    }
-
     function getFilteredAutomations() {
         const query = (document.getElementById("auto-search")?.value || "").toLowerCase().trim();
-        return cachedAutomations.filter((auto) => {
+        return state.cachedAutomations.filter((auto) => {
             const matchesQuery = !query || (
                 auto.name.toLowerCase().includes(query) ||
                 (auto.description || "").toLowerCase().includes(query) ||
@@ -1091,13 +565,13 @@ export function createAutomationsModule(ctx) {
             if (!matchesQuery) return false;
             const reviewFilter = String(document.getElementById("auto-review-filter")?.value || "").trim();
             if (!reviewFilter) return true;
-            const governance = cachedPortfolioByAutomation.get(auto.id);
+            const governance = state.cachedPortfolioByAutomation.get(auto.id);
             return String(governance?.review_status || "active") === reviewFilter;
         });
     }
 
     function goStep(direction) {
-        const currentIndex = TAB_ORDER.indexOf(currentTabId);
+        const currentIndex = TAB_ORDER.indexOf(state.currentTabId);
         const nextIndex = Math.max(0, Math.min(TAB_ORDER.length - 1, currentIndex + Number(direction || 0)));
         switchTab(TAB_ORDER[nextIndex]);
     }
@@ -1127,7 +601,7 @@ export function createAutomationsModule(ctx) {
     }
 
     async function deleteAuto(id) {
-        const automation = cachedAutomations.find((item) => Number(item.id) === Number(id));
+        const automation = state.cachedAutomations.find((item) => Number(item.id) === Number(id));
         const confirmed = window.confirm(
             `Excluir o cadastro da automação "${automation?.name || id}"? O histórico permanece auditável, mas a agenda e o ambiente operacional serão removidos.`
         );
@@ -1140,27 +614,21 @@ export function createAutomationsModule(ctx) {
         }
     }
 
-    function onScheduleTypeChanged(nextType) {
-        scheduleType = nextType || "manual";
-        updateScheduleBlocksVisibility(scheduleType);
-        refreshScheduleUi();
-    }
-
     return {
         loadConfig,
         handleSearch,
         openAutomationModal,
         saveAutomation,
         goStep,
-        addScheduleTimeFromInput,
-        removeScheduleTime,
+        addScheduleTimeFromInput: schedule.addScheduleTimeFromInput,
+        removeScheduleTime: schedule.removeScheduleTime,
         pauseAuto,
         resumeAuto,
         cloneAuto,
         deleteAuto,
-        toggleScheduleDay,
-        renderScheduleSummary,
-        resetScheduleBuilder,
-        onScheduleTypeChanged,
+        toggleScheduleDay: schedule.toggleScheduleDay,
+        renderScheduleSummary: schedule.renderScheduleSummary,
+        resetScheduleBuilder: schedule.resetScheduleBuilder,
+        onScheduleTypeChanged: schedule.onScheduleTypeChanged,
     };
 }
