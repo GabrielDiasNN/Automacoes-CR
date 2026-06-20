@@ -166,7 +166,8 @@ def check_worker_health(
             (
                 SEVERITY_ERROR
                 if active_count
-                or (last_ping_age_seconds or 0) >= DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS
+                or (last_ping_age_seconds or 0)
+                >= DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS
                 else SEVERITY_WARN
             ),
             "worker",
