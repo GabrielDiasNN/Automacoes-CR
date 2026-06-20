@@ -1,12 +1,10 @@
 """Serviços de diagnóstico operacional do Orchestrator (C1, C4)."""
 
-# pylint: disable=relative-beyond-top-level,too-many-locals,not-callable,too-many-branches,too-many-statements,line-too-long,too-many-arguments,too-many-positional-arguments
+# pylint: disable=relative-beyond-top-level,too-many-locals,too-many-statements
 
-from datetime import datetime, timedelta
 from time import perf_counter
 from typing import Any, Callable
 
-from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -16,22 +14,15 @@ from ..constants import (
     ACTION_CODE_SCHEDULER_RELOAD,
     ACTION_CODE_WORKER_RECOVER,
     ACTION_CODE_WORKER_WAKEUP,
-    EXECUTION_ACTIVE_STATUSES,
-    EXECUTION_STATUS_PENDING,
-    EXECUTION_STATUS_RUNNING,
-    ORCHESTRATOR_CONTRACT_VERSION,
-    ORCHESTRATOR_SCHEMA_VERSION,
-    ORCHESTRATOR_VERSION,
     DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
-    DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
     DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS,
+    DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
     DIAGNOSTIC_WAL_CRITICAL_MB,
     DIAGNOSTIC_WAL_ELEVATED_MB,
     DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
-    DIAGNOSTIC_FAILURE_HOTSPOT_THRESHOLD,
-    DIAGNOSTIC_DEFAULT_MAX_RUNTIME_MINUTES,
-    SEVERITY_ERROR,
-    SEVERITY_WARN,
+    EXECUTION_ACTIVE_STATUSES,
+    ORCHESTRATOR_CONTRACT_VERSION,
+    ORCHESTRATOR_VERSION,
 )
 from ..database import (
     DB_PATH,
@@ -41,33 +32,30 @@ from ..database import (
     validate_database_schema,
 )
 from ..timezone import get_now_local
-from .scheduler_runtime import extract_automation_id_from_job
+from . import metrics  # pylint: disable=no-name-in-module
+from .diagnostic_checks import (
+    check_failure_hotspots,
+    check_orphaned_running,
+    check_queue_health,
+    check_running_over_runtime,
+    check_scheduler_health,
+    check_schema_integrity,
+    check_wal_health,
+    check_worker_health,
+)
+from .diagnostic_collectors import (
+    collect_oldest_queue_items,
+    collect_orphaned_running,
+    collect_retry_pressure,
+    collect_running_over_runtime,
+    collect_scheduler_inconsistencies,
+    collect_timeouts_24h_by_group,
+    seconds_since,
+    coerce_datetime,
+)
 from .operational_baseline import build_operational_baseline_summary
 from .system_history import build_trend_summary
-from . import metrics  # pylint: disable=no-name-in-module
 
-def add_finding(
-    findings: list[dict[str, Any]],
-    severity: str,
-    component: str,
-    message: str,
-    details: dict[str, Any],
-) -> None:
-    findings.append(
-        {
-            "severity": severity,
-            "component": component,
-            "message": message,
-            "action_hint": details["action_hint"],
-            "action_code": details.get("action_code"),
-            "action_label": details.get("action_label"),
-            "impact": details.get(
-                "impact",
-                "Monitorar o componente e validar a operação antes de novas ações.",
-            ),
-            "priority": int(details.get("priority", 3)),
-        }
-    )
 
 def build_operator_actions(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Agrupa ações sugeridas para o operador sem duplicar botões na UI."""
@@ -109,197 +97,8 @@ def build_operator_actions(findings: list[dict[str, Any]]) -> list[dict[str, Any
         ),
     )
 
-def seconds_since(value: datetime | None) -> float:
-    if not value:
-        return 0.0
-    return round((get_now_local() - value).total_seconds(), 2)
 
-def coerce_datetime(value: Any) -> datetime | None:
-    return value if isinstance(value, datetime) else None
-
-def collect_scheduler_inconsistencies(db: Session, scheduler: Any) -> list[str]:
-    inconsistencies = []
-    scheduled_automations = (
-        db.query(models.Automation)
-        .filter(
-            models.Automation.enabled.is_(True), models.Automation.schedule.isnot(None)
-        )
-        .all()
-    )
-    expected_ids = {auto.id for auto in scheduled_automations}
-    loaded_ids = {
-        auto_id
-        for auto_id in (
-            extract_automation_id_from_job(job.id) for job in scheduler.get_jobs()
-        )
-        if auto_id is not None
-    }
-
-    missing_jobs = sorted(expected_ids - loaded_ids)
-    orphan_jobs = sorted(loaded_ids - expected_ids)
-
-    if missing_jobs:
-        inconsistencies.append(
-            "Automacoes habilitadas com agenda sem job carregado: "
-            + ", ".join(map(str, missing_jobs[:10]))
-        )
-    if orphan_jobs:
-        inconsistencies.append(
-            "Jobs carregados sem automacao habilitada correspondente: "
-            + ", ".join(map(str, orphan_jobs[:10]))
-        )
-    return inconsistencies
-
-def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
-    """Lista execuções RUNNING que passaram do limite operacional cadastrado."""
-    now = get_now_local()
-    running = (
-        db.query(models.Execution)
-        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
-        .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
-        .all()
-    )
-    stale: list[dict[str, Any]] = []
-    for item in running:
-        started_at = coerce_datetime(item.started_at)
-        if not started_at:
-            continue
-        max_runtime_minutes = item.automation.max_runtime_minutes or DIAGNOSTIC_DEFAULT_MAX_RUNTIME_MINUTES
-        age_seconds = round((now - started_at).total_seconds(), 2)
-        limit_seconds = int(max_runtime_minutes) * 60
-        if age_seconds <= limit_seconds + DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS:
-            continue
-        stale.append(
-            {
-                "exec_id": item.id,
-                "automation_id": item.automation_id,
-                "automation_name": item.automation.name if item.automation else None,
-                "age_seconds": age_seconds,
-                "max_runtime_minutes": int(max_runtime_minutes),
-                "claimed_at": schemas.format_dt_br(item.claimed_at),
-                "worker_instance_id": item.worker_instance_id,
-                "worker_pid": item.worker_pid,
-            }
-        )
-    return sorted(stale, key=lambda entry: entry["age_seconds"], reverse=True)
-
-
-def collect_orphaned_running(
-    db: Session,
-    worker_status: Any,
-) -> list[dict[str, Any]]:
-    running = (
-        db.query(models.Execution)
-        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
-        .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
-        .all()
-    )
-    orphaned: list[dict[str, Any]] = []
-    for item in running:
-        reason = None
-        if not worker_status.is_alive:
-            reason = "worker_offline"
-        elif item.worker_instance_id and worker_status.instance_id:
-            if item.worker_instance_id != worker_status.instance_id:
-                reason = "worker_instance_mismatch"
-        if not reason:
-            continue
-        orphaned.append(
-            {
-                "exec_id": item.id,
-                "automation_id": item.automation_id,
-                "automation_name": item.automation.name if item.automation else None,
-                "priority": item.priority,
-                "queue_group": item.queue_group,
-                "claimed_at": schemas.format_dt_br(item.claimed_at),
-                "worker_instance_id": item.worker_instance_id,
-                "worker_pid": item.worker_pid,
-                "age_seconds": seconds_since(coerce_datetime(item.started_at)),
-                "reason": reason,
-                "orphaned": True,
-            }
-        )
-    return sorted(orphaned, key=lambda entry: entry["age_seconds"], reverse=True)
-
-
-def collect_retry_pressure(db: Session) -> list[dict[str, Any]]:
-    rows = (
-        db.query(
-            models.Execution.queue_group,
-            models.Execution.priority,
-            func.count(models.Execution.id).label("active_count"),
-        )
-        .filter(
-            models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES),
-            models.Execution.retry_count > 0,
-        )
-        .group_by(models.Execution.queue_group, models.Execution.priority)
-        .order_by(desc(func.count(models.Execution.id)))
-        .limit(10)
-        .all()
-    )
-    return [
-        {
-            "queue_group": str(row.queue_group or "default"),
-            "priority": str(row.priority or "NORMAL"),
-            "active_count": int(row.active_count or 0),
-        }
-        for row in rows
-    ]
-
-
-def collect_timeouts_24h_by_group(
-    db: Session,
-    reference_now: datetime,
-) -> list[dict[str, Any]]:
-    rows = (
-        db.query(
-            models.Execution.queue_group,
-            func.count(models.Execution.id).label("timeouts_24h"),
-        )
-        .filter(
-            models.Execution.status == "TIMEOUT",
-            models.Execution.started_at >= reference_now - timedelta(hours=24),
-        )
-        .group_by(models.Execution.queue_group)
-        .order_by(desc(func.count(models.Execution.id)))
-        .limit(10)
-        .all()
-    )
-    return [
-        {
-            "queue_group": str(row.queue_group or "default"),
-            "timeouts_24h": int(row.timeouts_24h or 0),
-        }
-        for row in rows
-    ]
-
-
-def collect_oldest_queue_items(
-    db: Session,
-) -> tuple[models.Execution | None, models.Execution | None, float, float]:
-    oldest_pending = (
-        db.query(models.Execution)
-        .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
-        .order_by(models.Execution.started_at.asc())
-        .first()
-    )
-    oldest_running = (
-        db.query(models.Execution)
-        .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
-        .order_by(models.Execution.started_at.asc())
-        .first()
-    )
-    pending_age_seconds = seconds_since(
-        coerce_datetime(oldest_pending.started_at) if oldest_pending else None
-    )
-    running_age_seconds = seconds_since(
-        coerce_datetime(oldest_running.started_at) if oldest_running else None
-    )
-    return oldest_pending, oldest_running, pending_age_seconds, running_age_seconds
-
-
-def build_runtime_checks(
+def build_runtime_checks(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     worker_status: Any,
     scheduler: Any,
     jobs: list[Any],
@@ -312,6 +111,7 @@ def build_runtime_checks(
     schema_status: dict[str, Any],
     schema_version: str,
 ) -> list[dict[str, Any]]:
+    """Monta lista de checks de runtime para o payload de diagnóstico."""
     return [
         {
             "code": "contract_version",
@@ -403,7 +203,7 @@ def build_runtime_checks(
     ]
 
 
-def build_queue_payload(
+def build_queue_payload(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     queue: dict[str, int],
     active_count: int,
     active_by_priority: dict[str, int],
@@ -417,6 +217,7 @@ def build_queue_payload(
     pending_age_seconds: float,
     running_age_seconds: float,
 ) -> dict[str, Any]:
+    """Monta o bloco ``queue`` do payload de diagnóstico."""
     return {
         "active_count": active_count,
         "by_status": queue,
@@ -467,254 +268,6 @@ def build_queue_payload(
         },
     }
 
-# --- ANALISADORES FOCADOS (C1) ---
-
-def check_schema_integrity(schema_status: dict[str, Any], schema_version: str) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    if not schema_status["valid"]:
-        add_finding(
-            findings,
-            "ERROR",
-            "database",
-            "Schema SQLite diverge do contrato esperado.",
-            {
-                "action_hint": "Executar diagnóstico de schema e revisar migração/backup antes de operar.",
-                "action_code": ACTION_CODE_BACKUP,
-                "action_label": "Gerar backup antes de corrigir schema",
-                "impact": "Risco de erro em leitura/escrita e de decisões operacionais baseadas em estrutura divergente.",
-                "priority": 1,
-            },
-        )
-
-    if schema_version != ORCHESTRATOR_SCHEMA_VERSION:
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "database",
-            f"Schema version divergente: banco={schema_version}, app={ORCHESTRATOR_SCHEMA_VERSION}.",
-            {
-                "action_hint": "Reiniciar o Orchestrator para reaplicar migracoes leves e validar o banco.",
-                "action_code": ACTION_CODE_WORKER_RECOVER,
-                "action_label": "Reiniciar Orchestrator",
-                "impact": "Pode indicar migração leve pendente ou instância desatualizada servindo a operação.",
-                "priority": 2,
-            },
-        )
-    return findings
-
-def check_wal_health(wal_size_mb: float) -> tuple[list[dict[str, Any]], str]:
-    findings: list[dict[str, Any]] = []
-    wal_risk = "normal"
-    if wal_size_mb >= DIAGNOSTIC_WAL_CRITICAL_MB:
-        wal_risk = "critical"
-        add_finding(
-            findings,
-            SEVERITY_ERROR,
-            "database",
-            f"WAL elevado ({wal_size_mb} MB).",
-            {
-                "action_hint": "Executar checkpoint e verificar contenção de escrita no SQLite.",
-                "action_code": ACTION_CODE_CHECKPOINT,
-                "action_label": "Executar checkpoint",
-                "impact": "Risco de degradação de I/O, crescimento de disco e lentidão no dashboard.",
-                "priority": 1,
-            },
-        )
-    elif wal_size_mb >= DIAGNOSTIC_WAL_ELEVATED_MB:
-        wal_risk = "elevated"
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "database",
-            f"WAL acima do normal ({wal_size_mb} MB).",
-            {
-                "action_hint": "Agendar checkpoint operacional se o valor continuar crescendo.",
-                "action_code": ACTION_CODE_CHECKPOINT,
-                "action_label": "Executar checkpoint",
-                "impact": "Indica acúmulo de escrita; se crescer, pode virar incidente de banco.",
-                "priority": 2,
-            },
-        )
-    return findings, wal_risk
-
-def check_scheduler_health(scheduler: Any, inconsistencies: list[str]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    if not scheduler.running:
-        add_finding(
-            findings,
-            SEVERITY_ERROR,
-            "scheduler",
-            "Scheduler está parado.",
-            {
-                "action_hint": "Reiniciar Orchestrator e confirmar carregamento dos jobs.",
-                "action_code": ACTION_CODE_WORKER_RECOVER,
-                "action_label": "Recuperar Orchestrator",
-                "impact": "Automações agendadas podem deixar de disparar.",
-                "priority": 1,
-            },
-        )
-    elif len(scheduler.get_jobs()) == 0:
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "scheduler",
-            "Scheduler está ativo, mas sem jobs carregados.",
-            {
-                "action_hint": "Verificar automações habilitadas com agenda configurada.",
-                "action_code": ACTION_CODE_SCHEDULER_RELOAD,
-                "action_label": "Sincronizar agenda",
-                "impact": "Agenda vazia pode ser legítima, mas também pode indicar sincronismo quebrado.",
-                "priority": 3,
-            },
-        )
-
-    for item in inconsistencies:
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "scheduler",
-            item,
-            {
-                "action_hint": "Sincronizar scheduler com o banco e revisar automações habilitadas.",
-                "action_code": ACTION_CODE_SCHEDULER_RELOAD,
-                "action_label": "Sincronizar agenda",
-                "impact": "Banco e memória divergem; disparos podem ser omitidos ou ficar órfãos.",
-                "priority": 2,
-            },
-        )
-    return findings
-
-def check_worker_health(worker_status: Any, active_count: int, last_ping_age_seconds: float | None) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    if not worker_status.is_alive:
-        add_finding(
-            findings,
-            (
-                SEVERITY_ERROR
-                if active_count
-                or (last_ping_age_seconds or 0) >= DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS
-                else SEVERITY_WARN
-            ),
-            "worker",
-            "Worker sem heartbeat recente.",
-            {
-                "action_hint": "Recuperar o Orchestrator para reativar o worker e retomar a fila.",
-                "action_code": "worker_recover" if active_count else "worker_wakeup",
-                "action_label": (
-                    "Recuperar worker" if active_count else "Acordar worker"
-                ),
-                "impact": "Execuções pendentes ou em andamento podem ficar sem processamento.",
-                "priority": 1 if active_count else 2,
-            },
-        )
-    return findings
-
-def check_queue_health(pending_age_seconds: float, running_age_seconds: float) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS:
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "queue",
-            f"Execução pendente há {round(pending_age_seconds, 1)} segundos.",
-            {
-                "action_hint": "Verificar worker, concorrência e bloqueios antes de reenfileirar.",
-                "action_code": "worker_wakeup",
-                "action_label": "Acordar worker",
-                "impact": "Fila parada aumenta atraso operacional e pode esconder automação bloqueada.",
-                "priority": 2,
-            },
-        )
-
-    if running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS:
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "queue",
-            f"Execução em RUNNING há {round(running_age_seconds, 1)} segundos.",
-            {
-                "action_hint": "Consultar logs da execução e avaliar parada controlada se houver hang.",
-                "action_code": "show_running",
-                "action_label": "Ver execuções em andamento",
-                "impact": "Pode representar processamento longo legítimo ou automação travada segurando recursos.",
-                "priority": 2,
-            },
-        )
-    return findings
-
-def check_running_over_runtime(running_over_runtime: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    if running_over_runtime:
-        first_stale = running_over_runtime[0]
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "queue",
-            (
-                f"{first_stale['automation_name'] or first_stale['exec_id']} excedeu "
-                f"o max_runtime cadastrado ({first_stale['max_runtime_minutes']} min)."
-            ),
-            {
-                "action_hint": "Abrir logs da execução, confirmar se há progresso real e avaliar parada controlada.",
-                "action_code": "show_running",
-                "action_label": "Ver execuções em andamento",
-                "impact": "Execução acima do limite pode indicar subprocesso travado, timeout não aplicado ou automação sem heartbeat operacional.",
-                "priority": 1,
-            },
-        )
-    return findings
-
-def check_failure_hotspots(failure_hotspots: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    for hotspot in failure_hotspots:
-        if hotspot["failures_24h"] < DIAGNOSTIC_FAILURE_HOTSPOT_THRESHOLD:
-            continue
-        channels = str(hotspot.get("notification_channels") or "").lower()
-        channel_hint = (
-            " e canais de notificação"
-            if ("whatsapp" in channels or "email" in channels)
-            else ""
-        )
-        add_finding(
-            findings,
-            SEVERITY_WARN,
-            "automation",
-            f"{hotspot['automation_name']} falhou {hotspot['failures_24h']} vez(es) nas últimas 24h.",
-            {
-                "action_hint": f"Abrir histórico da automação e revisar logs{channel_hint} antes de nova tentativa.",
-                "action_code": "show_errors",
-                "action_label": "Ver falhas recentes",
-                "impact": "Falha recorrente tende a virar ruído operacional e pode exigir correção de causa raiz.",
-                "priority": 2,
-            },
-        )
-    return findings
-
-
-def check_orphaned_running(orphaned_running: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    if not orphaned_running:
-        return findings
-    top = orphaned_running[0]
-    add_finding(
-        findings,
-        SEVERITY_ERROR,
-        "queue",
-        (
-            "Execução RUNNING sem ownership válido detectada: "
-            f"{top['exec_id']} ({top.get('automation_name') or 'automação desconhecida'})."
-        ),
-        {
-            "action_hint": "Executar recovery do worker e revisar logs antes de novo requeue.",
-            "action_code": ACTION_CODE_WORKER_RECOVER,
-            "action_label": "Recuperar worker",
-            "impact": "Execução pode ter ficado órfã após falha de worker ou troca de instância.",
-            "priority": 1,
-        },
-    )
-    return findings
-
-# --- ORQUESTRADOR CENTRAL (C1) ---
 
 def build_diagnostics_payload(
     db: Session,

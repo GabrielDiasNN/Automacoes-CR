@@ -17,9 +17,10 @@ from .automation_snapshot import (build_automation_response,
                                   build_next_run_lookup)
 from .metrics import (get_automation_metrics_24h,
                       get_latest_execution_snapshot_by_automation)
-from .portfolio_manifest import (CatalogManifest, _channels_to_csv,
-                                 _format_value, _normalize_repo_relative,
-                                 _path_exists, _resolve_repo_path, _slugify,
+from .portfolio_manifest import (CatalogManifest as CatalogManifest,
+                                 _channels_to_csv, _format_value,
+                                 _normalize_repo_relative, _path_exists,
+                                 _resolve_repo_path, _slugify,
                                  load_catalog_manifests)
 from .scheduler_runtime import list_scheduled_jobs
 
