@@ -78,6 +78,10 @@ Audit/
 *.key
 .aider*
 
+# Claude Code — estado local e segredos (não versionar)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # Banco de Dados SQLite (runtime — nao versionar)
 Orchestrator/automacoes.db
 Orchestrator/automacoes.db-shm
