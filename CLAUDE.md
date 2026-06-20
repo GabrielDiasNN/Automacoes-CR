@@ -26,10 +26,12 @@ cd Orchestrator && .venv\Scripts\pytest tests/test_foo.py::test_bar -v
 # Rodar testes por marcador (unitario | integracao | e2e)
 cd Orchestrator && .venv\Scripts\pytest -m integracao -v
 
-# Lint Python (black, isort, bandit) — ferramentas via requirements-dev.txt
+# Lint Python (black, isort, bandit, mypy, pylint) — ferramentas via requirements-dev.txt
 python -m black --check Orchestrator
 python -m isort --check-only Orchestrator
 python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll
+# mypy + pylint: usar o script de governança (aplica flags corretas por arquivo)
+pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 
 # Recompilar dependências pinadas (pip-tools)
 pip-compile requirements.in -o requirements.txt
@@ -115,9 +117,15 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - Nenhuma credencial hardcoded. Tudo via `.env` (lido por `lib/Lib-Config.psm1` em PowerShell, `python-dotenv` em Python).
 - Dashboard solicita API Key via prompt; persiste em `localStorage`.
 
+### Commits e Documentação Viva
+- Mensagens de commit em **Português do Brasil** (mesmo padrão de `CHANGELOG.md` e ADRs).
+- Atualizar `CHANGELOG.md` quando a mudança alterar comportamento, contrato operacional, governança ou arquitetura.
+- Atualizar `docs/ai-native-context-monitor.md` quando a mudança alterar estado que futuros agentes precisam conhecer para decidir corretamente.
+
 ### Validação E2E
 - Para mudanças em rotas FastAPI consumidas pelo Dashboard ou em `Dashboard/js/`, a validação final obrigatória é Playwright contra `http://127.0.0.1:8000/dashboard/`.
 - Registrar evidência com `Tools/Test-PlaywrightEvidence.ps1`.
+- Padrão completo (critérios, evidência mínima): `docs/playwright-e2e-standard.md`.
 
 ### Manifesto de automação
 - Toda automação registrada no Orchestrator deve ter `automation.manifest.json` na sua pasta.

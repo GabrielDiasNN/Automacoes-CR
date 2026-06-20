@@ -1,10 +1,10 @@
 ---
 name: python-enterprise-standard
-description: Use when developing or reviewing Python code, including FastAPI, Pandas, Pydantic, strict typing with Mypy, Pylint checks, and ensuring adherence to the repository's Python governance and UTF-8 encoding.
+description: Use when developing or reviewing Python code, including FastAPI, Pandas, Pydantic, strict typing with Mypy, Pylint and Bandit quality checks, and ensuring adherence to the repository's Python governance and UTF-8 encoding.
 ---
 
 ## Purpose
-Padronizar o desenvolvimento Python no hub, garantindo que regras de negócio, endpoints FastAPI, processamento de dados (Pandas) e validações estruturais sigam o mesmo nível de tipagem estrita, qualidade e segurança exigidos pelo protocolo V.A.L.E.G.
+Padronizar o desenvolvimento Python no hub, garantindo que regras de negócio, endpoints FastAPI, processamento de dados (Pandas) e validações estruturais sigam o mesmo nível de tipagem estrita (Mypy `--strict`), qualidade (Pylint, Bandit) e segurança exigidos pelo repositório.
 
 ## When to Use
 - Use ao alterar módulos Python em `Orchestrator/app/` ou scripts em `.py` como `worker.py`, `extract_oracle.py`, e `processar_receitas.py`.
