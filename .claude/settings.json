@@ -2,5 +2,33 @@
   "enabledPlugins": {
     "claude-code-setup@claude-plugins-official": true,
     "context7@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; if ($f -and $f.EndsWith('.py')) { python -m black $f 2>&1; python -m isort $f 2>&1 }",
+            "statusMessage": "Formatando Python (black + isort)...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; $blocked = @('.env', 'automacoes.db', 'orchestrator.db', 'orchestrator.pid', 'worker.pid'); foreach ($b in $blocked) { if ($f -and $f.EndsWith($b)) { Write-Error \"BLOQUEADO: arquivo sensivel nao pode ser editado pelo agente: $f\"; exit 1 } }"
+          }
+        ]
+      }
+    ]
   }
 }
