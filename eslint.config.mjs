@@ -49,6 +49,9 @@ export default [
             "no-constant-condition": ["error", { checkLoops: false }],
             "valid-typeof": "error",
             "no-unused-vars": ["warn", { args: "none" }],
+            "no-var": "error",
+            "prefer-const": ["warn", { destructuring: "all" }],
+            "eqeqeq": ["error", "always", { null: "ignore" }],
         },
     },
 ];

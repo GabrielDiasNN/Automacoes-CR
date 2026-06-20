@@ -15,6 +15,9 @@
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\historico_db\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\overview_v1\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries\\.py$",
+    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_common\\.py$",
+    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_overview\\.py$",
+    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_detail\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\overview\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\detail\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\data\\\\(?:schema|writer|queries)\\.py$"
