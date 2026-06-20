@@ -13,15 +13,21 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..constants import EXECUTION_ACTIVE_STATUSES, EXECUTION_DELIVERED_STATUSES
 from ..timezone import get_now_local
-from .automation_snapshot import (build_automation_response,
-                                  build_next_run_lookup)
-from .metrics import (get_automation_metrics_24h,
-                      get_latest_execution_snapshot_by_automation)
-from .portfolio_manifest import (CatalogManifest as CatalogManifest,
-                                 _channels_to_csv, _format_value,
-                                 _normalize_repo_relative, _path_exists,
-                                 _resolve_repo_path, _slugify,
-                                 load_catalog_manifests)
+from .automation_snapshot import build_automation_response, build_next_run_lookup
+from .metrics import (
+    get_automation_metrics_24h,
+    get_latest_execution_snapshot_by_automation,
+)
+from .portfolio_manifest import CatalogManifest as CatalogManifest
+from .portfolio_manifest import (
+    _channels_to_csv,
+    _format_value,
+    _normalize_repo_relative,
+    _path_exists,
+    _resolve_repo_path,
+    _slugify,
+    load_catalog_manifests,
+)
 from .scheduler_runtime import list_scheduled_jobs
 
 FAILURE_STATUSES = ["ERROR", "TIMEOUT", "TERMINATED", "FAILED_BY_REBOOT"]

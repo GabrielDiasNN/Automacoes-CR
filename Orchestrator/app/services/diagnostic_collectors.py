@@ -113,7 +113,8 @@ def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
         if not started_at:
             continue
         max_runtime_minutes = (
-            item.automation.max_runtime_minutes or DIAGNOSTIC_DEFAULT_MAX_RUNTIME_MINUTES
+            item.automation.max_runtime_minutes
+            or DIAGNOSTIC_DEFAULT_MAX_RUNTIME_MINUTES
         )
         age_seconds = round((now - started_at).total_seconds(), 2)
         limit_seconds = int(max_runtime_minutes) * 60

@@ -44,6 +44,7 @@ from .diagnostic_checks import (
     check_worker_health,
 )
 from .diagnostic_collectors import (
+    coerce_datetime,
     collect_oldest_queue_items,
     collect_orphaned_running,
     collect_retry_pressure,
@@ -51,7 +52,6 @@ from .diagnostic_collectors import (
     collect_scheduler_inconsistencies,
     collect_timeouts_24h_by_group,
     seconds_since,
-    coerce_datetime,
 )
 from .operational_baseline import build_operational_baseline_summary
 from .system_history import build_trend_summary
@@ -262,7 +262,9 @@ def build_queue_payload(  # pylint: disable=too-many-arguments,too-many-position
             "worker_pid": oldest_running.worker_pid if oldest_running else None,
             "orphaned": bool(
                 oldest_running
-                and any(item["exec_id"] == oldest_running.id for item in orphaned_running)
+                and any(
+                    item["exec_id"] == oldest_running.id for item in orphaned_running
+                )
             ),
             "age_seconds": running_age_seconds,
         },
@@ -327,7 +329,9 @@ def build_diagnostics_payload(
     if heartbeat and heartbeat.last_ping:
         last_ping_age_seconds = seconds_since(coerce_datetime(heartbeat.last_ping))
 
-    findings.extend(check_worker_health(worker_status, active_count, last_ping_age_seconds))
+    findings.extend(
+        check_worker_health(worker_status, active_count, last_ping_age_seconds)
+    )
     findings.extend(check_queue_health(pending_age_seconds, running_age_seconds))
     findings.extend(check_running_over_runtime(running_over_runtime))
     findings.extend(check_orphaned_running(orphaned_running))
