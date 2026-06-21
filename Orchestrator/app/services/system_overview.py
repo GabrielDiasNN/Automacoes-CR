@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session, joinedload
 from .. import models, schemas
 from ..constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from ..timezone import get_now_local
+from . import metrics  # pylint: disable=no-name-in-module
 from .automation_snapshot import (
     build_automation_response,
     build_next_run_lookup,
 )
-from . import metrics  # pylint: disable=no-name-in-module
 
 
 def build_recent_payload(db: Session) -> list[schemas.ExecutionSummary]:
@@ -99,7 +99,9 @@ def build_system_overview_payload(
     success_24h, errors_24h = metrics.get_success_errors_count_24h(db)
 
     status_breakdown = metrics.get_status_breakdown(db)
-    pending_now = status_breakdown.get("PENDING", 0) + status_breakdown.get("RUNNING", 0)
+    pending_now = status_breakdown.get("PENDING", 0) + status_breakdown.get(
+        "RUNNING", 0
+    )
 
     top_failures = [
         {
@@ -109,9 +111,7 @@ def build_system_overview_payload(
         }
         for item in metrics.get_failure_hotspots_24h(db)
     ]
-    timings_ms["kpis_catalog_ms"] = round(
-        (perf_counter() - stage_started_at) * 1000, 2
-    )
+    timings_ms["kpis_catalog_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
 
     stage_started_at = perf_counter()
     recent_payload = build_recent_payload(db)
@@ -125,8 +125,8 @@ def build_system_overview_payload(
     )
     automation_ids = [int(auto.id) for auto in automations]
     metrics_by_automation = metrics.get_automation_metrics_24h(db, automation_ids)
-    latest_execution_by_automation = metrics.get_latest_execution_snapshot_by_automation(
-        db, automation_ids
+    latest_execution_by_automation = (
+        metrics.get_latest_execution_snapshot_by_automation(db, automation_ids)
     )
 
     # 2. Buscar duração média SUCCESS para cálculo do SLA sem N+1 (C3)

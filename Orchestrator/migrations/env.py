@@ -3,10 +3,8 @@ import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # 1. Configurar sys.path para importar o backend do Orchestrator
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +14,7 @@ sys.path.insert(0, orchestrator_dir)
 
 # 2. Carregar variáveis de ambiente do arquivo .env
 from dotenv import load_dotenv
+
 dotenv_path = os.path.join(project_root, ".env")
 load_dotenv(dotenv_path)
 
@@ -31,9 +30,10 @@ if not db_url or db_url == "sqlite:///orchestrator.db":
         db_path = os.path.abspath(os.path.join(project_root, db_path))
     db_url = f"sqlite:///{db_path}"
 
+import app.models  # noqa: F401 (força o carregamento dos modelos)
+
 # 3. Importar os modelos SQLAlchemy do Hub para suporte ao autogenerate
 from app.database import Base
-import app.models  # noqa: F401 (força o carregamento dos modelos)
 
 target_metadata = Base.metadata
 

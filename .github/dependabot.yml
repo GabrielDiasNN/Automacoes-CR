@@ -23,6 +23,8 @@ updates:
     labels:
       - dependencias
       - python
+    ignore:
+      - dependency-name: oracledb  # controlar manualmente por compatibilidade OCI
     groups:
       python-menores:
         update-types:

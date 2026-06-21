@@ -10,6 +10,9 @@ Tabelas:
   - AuditLog: Trilha de auditoria de toda acao administrativa.
 """
 
+import base64
+import zlib
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -22,9 +25,36 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy.types import TypeDecorator
 
 from .database import Base
 from .timezone import get_now_local
+
+
+class CompressedText(TypeDecorator):
+    """Armazena texto comprimido com zlib+base64; transparente para o ORM (B1/2.3).
+
+    Redução típica em logs de texto: 60–80%. Dados legados (não comprimidos)
+    são lidos corretamente pelo fallback em process_result_value.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        compressed = zlib.compress(value.encode("utf-8"), level=6)
+        return base64.b64encode(compressed).decode("ascii")
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        try:
+            compressed = base64.b64decode(value.encode("ascii"))
+            return zlib.decompress(compressed).decode("utf-8")
+        except Exception:
+            return value  # fallback: dado legado não comprimido
 
 
 class Automation(Base):
@@ -40,7 +70,9 @@ class Automation(Base):
     max_runtime_minutes = Column(Integer, default=30)
     max_retries = Column(Integer, default=0)
     cooldown_minutes = Column(Integer, default=0)
-    sla_minutes = Column(Integer, nullable=True)  # SLA de recuperação esperado em minutos
+    sla_minutes = Column(
+        Integer, nullable=True
+    )  # SLA de recuperação esperado em minutos
     queue_group = Column(String(100), nullable=True)
     enabled = Column(Boolean, default=True)
     test_mode = Column(Boolean, default=False)
@@ -87,7 +119,7 @@ class Execution(Base):
     finished_at = Column(DateTime, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     artifacts = Column(Text, nullable=True)  # JSON list de nomes de arquivo
-    logs = Column(Text, nullable=True)
+    logs = Column(CompressedText, nullable=True)
 
     # Relationship bidirecional
     automation = relationship("Automation", back_populates="executions")

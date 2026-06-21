@@ -12,21 +12,21 @@ Valida:
 """
 
 import json
-import pytest
-from fastapi.testclient import TestClient
 
+import pytest
 from app.schemas.common import (
+    describe_schedule_payload,
     normalize_schedule_payload,
     parse_schedule,
-    describe_schedule_payload,
     preview_next_runs,
 )
+from fastapi.testclient import TestClient
 from tests.conftest import AUTH_HEADERS
-
 
 # --------------------------------------------------------------------------- #
 # 1. Normalização de Cron                                                     #
 # --------------------------------------------------------------------------- #
+
 
 class TestCronNormalization:
     """Valida normalização do payload schedule_type=cron."""
@@ -86,6 +86,7 @@ class TestCronNormalization:
 # 2. Normalização de Intervalo com Janela Operacional                         #
 # --------------------------------------------------------------------------- #
 
+
 class TestIntervalWithWindow:
     """Valida normalização de schedule_type=interval com restrição de janela."""
 
@@ -118,10 +119,13 @@ class TestIntervalWithWindow:
         assert result.get("end_time") is None
         assert result.get("days_of_week") is None
 
-    @pytest.mark.parametrize("extra_fields", [
-        {"start_time": "8am"},                           # formato inválido
-        {"start_time": "18:00", "end_time": "12:00"},    # janela invertida
-    ])
+    @pytest.mark.parametrize(
+        "extra_fields",
+        [
+            {"start_time": "8am"},  # formato inválido
+            {"start_time": "18:00", "end_time": "12:00"},  # janela invertida
+        ],
+    )
     def test_interval_invalid_start_time_strict_raises(self, extra_fields):
         """Em modo strict, start_time inválido ou janela invertida deve lançar ValueError."""
         payload = {"schedule_type": "interval", "interval_minutes": 10, **extra_fields}
@@ -167,31 +171,35 @@ class TestIntervalWithWindow:
 # 3. Descrição Textual Enriquecida                                            #
 # --------------------------------------------------------------------------- #
 
+
 class TestDescribeSchedulePayload:
     """Valida a descrição textual formatada para o Dashboard."""
 
-    @pytest.mark.parametrize("schedule,expected_fragments", [
-        (
-            {"schedule_type": "cron", "cron_expression": "*/10 8-18 * * 1-5"},
-            ["Cron", "*/10 8-18 * * 1-5"],
-        ),
-        (
-            {"schedule_type": "interval", "interval_minutes": 30},
-            ["30 min"],
-        ),
-        (
-            {
-                "schedule_type": "interval",
-                "interval_minutes": 15,
-                "start_time": "08:00",
-                "end_time": "18:00",
-                "days_of_week": [1, 2, 3, 4, 5],
-            },
-            ["15 min", "08:00", "18:00"],
-        ),
-        ({"schedule_type": "manual"}, ["Manual"]),
-        (None, ["Manual"]),
-    ])
+    @pytest.mark.parametrize(
+        "schedule,expected_fragments",
+        [
+            (
+                {"schedule_type": "cron", "cron_expression": "*/10 8-18 * * 1-5"},
+                ["Cron", "*/10 8-18 * * 1-5"],
+            ),
+            (
+                {"schedule_type": "interval", "interval_minutes": 30},
+                ["30 min"],
+            ),
+            (
+                {
+                    "schedule_type": "interval",
+                    "interval_minutes": 15,
+                    "start_time": "08:00",
+                    "end_time": "18:00",
+                    "days_of_week": [1, 2, 3, 4, 5],
+                },
+                ["15 min", "08:00", "18:00"],
+            ),
+            ({"schedule_type": "manual"}, ["Manual"]),
+            (None, ["Manual"]),
+        ],
+    )
     def test_describe_schedule_payload(self, schedule, expected_fragments):
         """Descrição gerada deve conter os fragmentos esperados para cada tipo de schedule."""
         desc = describe_schedule_payload(schedule)
@@ -203,15 +211,18 @@ class TestDescribeSchedulePayload:
 # 4. Integração via API (Validate e Preview)                                  #
 # --------------------------------------------------------------------------- #
 
+
 class TestScheduleApiIntegration:
     """Valida endpoints de validação e preview de schedule com os novos tipos."""
 
     def test_api_validate_cron_valid(self, client: TestClient):
         """API de validação deve aceitar expressão Cron válida."""
-        schedule = json.dumps({
-            "schedule_type": "cron",
-            "cron_expression": "0 8,12,18 * * 1-5",
-        })
+        schedule = json.dumps(
+            {
+                "schedule_type": "cron",
+                "cron_expression": "0 8,12,18 * * 1-5",
+            }
+        )
         response = client.post(
             "/api/system/schedule/validate",
             headers=AUTH_HEADERS,
@@ -235,10 +246,12 @@ class TestScheduleApiIntegration:
 
     def test_api_preview_cron(self, client: TestClient):
         """Preview de Cron deve retornar lista de próximas execuções."""
-        schedule = json.dumps({
-            "schedule_type": "cron",
-            "cron_expression": "0 9 * * 1-5",
-        })
+        schedule = json.dumps(
+            {
+                "schedule_type": "cron",
+                "cron_expression": "0 9 * * 1-5",
+            }
+        )
         response = client.post(
             "/api/system/schedule/preview",
             headers=AUTH_HEADERS,
@@ -251,13 +264,15 @@ class TestScheduleApiIntegration:
 
     def test_api_preview_interval_with_window(self, client: TestClient):
         """Preview de intervalo com janela operacional deve funcionar."""
-        schedule = json.dumps({
-            "schedule_type": "interval",
-            "interval_minutes": 30,
-            "start_time": "08:00",
-            "end_time": "18:00",
-            "days_of_week": [1, 2, 3, 4, 5],
-        })
+        schedule = json.dumps(
+            {
+                "schedule_type": "interval",
+                "interval_minutes": 30,
+                "start_time": "08:00",
+                "end_time": "18:00",
+                "days_of_week": [1, 2, 3, 4, 5],
+            }
+        )
         response = client.post(
             "/api/system/schedule/preview",
             headers=AUTH_HEADERS,
@@ -269,11 +284,13 @@ class TestScheduleApiIntegration:
 
     def test_api_validate_interval_invalid_start_time(self, client: TestClient):
         """API de validação deve rejeitar start_time mal-formatado em modo estrito."""
-        schedule = json.dumps({
-            "schedule_type": "interval",
-            "interval_minutes": 10,
-            "start_time": "INVALIDO",
-        })
+        schedule = json.dumps(
+            {
+                "schedule_type": "interval",
+                "interval_minutes": 10,
+                "start_time": "INVALIDO",
+            }
+        )
         response = client.post(
             "/api/system/schedule/validate",
             headers=AUTH_HEADERS,
@@ -287,6 +304,7 @@ class TestScheduleApiIntegration:
 # --------------------------------------------------------------------------- #
 # 5. Compatibilidade Retroativa (parse_schedule de strings legadas)           #
 # --------------------------------------------------------------------------- #
+
 
 class TestLegacyCompatibility:
     """Valida que payloads legados continuam sendo interpretados corretamente."""
@@ -317,6 +335,7 @@ class TestLegacyCompatibility:
 # 6. Testes para Horário de Âncora (anchor_time)                              #
 # --------------------------------------------------------------------------- #
 
+
 class TestAnchorTime:
     """Valida normalização, descrição e cálculo de preview de anchor_time."""
 
@@ -331,13 +350,20 @@ class TestAnchorTime:
         assert result["schedule_type"] == "interval"
         assert result["anchor_time"] == "08:15"
 
-    @pytest.mark.parametrize("anchor_time", [
-        "9:30",   # falta zero à esquerda (formato inválido)
-        "99:99",  # fora de faixa (sintático mas semanticamente errado)
-    ])
+    @pytest.mark.parametrize(
+        "anchor_time",
+        [
+            "9:30",  # falta zero à esquerda (formato inválido)
+            "99:99",  # fora de faixa (sintático mas semanticamente errado)
+        ],
+    )
     def test_anchor_time_invalid_strict_raises(self, anchor_time):
         """Em modo estrito, anchor_time malformado deve lançar ValueError."""
-        payload = {"schedule_type": "interval", "interval_minutes": 15, "anchor_time": anchor_time}
+        payload = {
+            "schedule_type": "interval",
+            "interval_minutes": 15,
+            "anchor_time": anchor_time,
+        }
         with pytest.raises(ValueError, match="anchor_time"):
             normalize_schedule_payload(payload, strict=True)
 
@@ -381,6 +407,7 @@ class TestAnchorTime:
     def test_anchor_time_preview_future(self, monkeypatch):
         """Se a âncora estiver no futuro hoje, os disparos subsequentes devem começar exatamente nela."""
         from datetime import datetime
+
         # Simula agora sendo 10:00
         simulated_now = datetime(2026, 5, 20, 10, 0, 0)
         monkeypatch.setattr("app.timezone.get_now_local", lambda: simulated_now)
@@ -401,6 +428,7 @@ class TestAnchorTime:
     def test_anchor_time_preview_past(self, monkeypatch):
         """Se a âncora estiver no passado hoje, os disparos subsequentes devem alinhar com os múltiplos futuros dela."""
         from datetime import datetime
+
         # Simula agora sendo 15:10
         simulated_now = datetime(2026, 5, 20, 15, 10, 0)
         monkeypatch.setattr("app.timezone.get_now_local", lambda: simulated_now)

@@ -88,7 +88,7 @@ ao lado. Atualizacoes chegam exclusivamente via Dependabot (ecosistema
 - YAML: `python -c "import yaml,io; yaml.safe_load(io.open('.github/workflows/governanca.yml',encoding='utf-8'))"` (ou `actionlint`, se instalado).
 - Governanca completa: `./Tools/ValidarAutomacoes.ps1 -BasePath .`
 - Pester: `Invoke-Pester -Path .\lib\tests -CI`
-- Lint JS: `npm ci && npm run lint:js`
+- Frontend (Dashboard React): `cd Dashboard; npm ci; npm run lint; npm run build`
 - Cobertura: `$env:PYTHONPATH='Orchestrator'; pytest Orchestrator\tests -m "not e2e" --cov=app --cov=worker`
 
 ### Monitoramento de runs

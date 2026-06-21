@@ -4,26 +4,27 @@
 Módulo contendo schemas Pydantic de Automações.
 """
 
-from typing import Any, List, Optional
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .common import (
     _validate_safe_name,
-    _validate_script_path,
     _validate_schedule,
     _validate_schedule_tolerant,
+    _validate_script_path,
     format_dt_br,
 )
 
 
-def _normalize_queue_group(value: Optional[str]) -> Optional[str]:
+def _normalize_queue_group(value: str | None) -> str | None:
     if value is None:
         return None
     normalized = value.strip()
     return normalized or None
 
 
-def _normalize_notification_channels(value: Optional[str]) -> Optional[str]:
+def _normalize_notification_channels(value: str | None) -> str | None:
     if value is None:
         return None
     allowed_order = ["email", "whatsapp"]
@@ -33,31 +34,32 @@ def _normalize_notification_channels(value: Optional[str]) -> Optional[str]:
         if not channel:
             continue
         if channel not in allowed_order:
-            raise ValueError(
-                "notification_channels aceita apenas: email, whatsapp."
-            )
+            raise ValueError("notification_channels aceita apenas: email, whatsapp.")
         if channel not in seen:
             seen.append(channel)
     if not seen:
         return None
-    return ",".join(
-        [channel for channel in allowed_order if channel in seen]
-    )
+    return ",".join([channel for channel in allowed_order if channel in seen])
 
 
 class AutomationBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
     script_path: str = Field(..., min_length=3, max_length=500)
-    schedule: Optional[str] = None
+    schedule: str | None = None
     max_runtime_minutes: int = Field(30, ge=1, le=480)
     max_retries: int = Field(0, ge=0, le=10)
     cooldown_minutes: int = Field(0, ge=0, le=1440)
-    queue_group: Optional[str] = Field(None, max_length=100)
-    sla_minutes: Optional[int] = Field(None, ge=1, le=10080, description="SLA de recuperação em minutos (1 minuto a 7 dias).")
+    queue_group: str | None = Field(None, max_length=100)
+    sla_minutes: int | None = Field(
+        None,
+        ge=1,
+        le=10080,
+        description="SLA de recuperação em minutos (1 minuto a 7 dias).",
+    )
     enabled: bool = True
     test_mode: bool = False
-    notification_channels: Optional[str] = None
+    notification_channels: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -71,17 +73,17 @@ class AutomationBase(BaseModel):
 
     @field_validator("schedule")
     @classmethod
-    def v_sched(cls, v: Optional[str]) -> Optional[str]:
+    def v_sched(cls, v: str | None) -> str | None:
         return _validate_schedule(v)
 
     @field_validator("queue_group")
     @classmethod
-    def v_queue_group(cls, v: Optional[str]) -> Optional[str]:
+    def v_queue_group(cls, v: str | None) -> str | None:
         return _normalize_queue_group(v)
 
     @field_validator("notification_channels")
     @classmethod
-    def v_notification_channels(cls, v: Optional[str]) -> Optional[str]:
+    def v_notification_channels(cls, v: str | None) -> str | None:
         return _normalize_notification_channels(v)
 
 
@@ -101,44 +103,44 @@ class AutomationPreflightIssue(BaseModel):
 
 class AutomationPreflightGovernance(BaseModel):
     manifest_present: bool = False
-    manifest_path: Optional[str] = None
-    catalog_id: Optional[str] = None
+    manifest_path: str | None = None
+    catalog_id: str | None = None
     status: str = "healthy"
-    top_issue: Optional[str] = None
-    recommended_action: Optional[str] = None
-    blocking_issues: List[AutomationPreflightIssue] = []
-    warnings: List[AutomationPreflightIssue] = []
+    top_issue: str | None = None
+    recommended_action: str | None = None
+    blocking_issues: list[AutomationPreflightIssue] = []
+    warnings: list[AutomationPreflightIssue] = []
 
 
 class AutomationUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    script_path: Optional[str] = None
-    schedule: Optional[str] = None
-    max_runtime_minutes: Optional[int] = None
-    max_retries: Optional[int] = None
-    cooldown_minutes: Optional[int] = None
-    queue_group: Optional[str] = None
-    sla_minutes: Optional[int] = None
-    enabled: Optional[bool] = None
-    test_mode: Optional[bool] = None
-    notification_channels: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
+    script_path: str | None = None
+    schedule: str | None = None
+    max_runtime_minutes: int | None = None
+    max_retries: int | None = None
+    cooldown_minutes: int | None = None
+    queue_group: str | None = None
+    sla_minutes: int | None = None
+    enabled: bool | None = None
+    test_mode: bool | None = None
+    notification_channels: str | None = None
 
     @field_validator("script_path")
     @classmethod
-    def v_path(cls, v: Optional[str]) -> Optional[str]:
+    def v_path(cls, v: str | None) -> str | None:
         if v is None:
             return v
         return _validate_script_path(v)
 
     @field_validator("schedule")
     @classmethod
-    def v_sched(cls, v: Optional[str]) -> Optional[str]:
+    def v_sched(cls, v: str | None) -> str | None:
         return _validate_schedule(v)
 
     @field_validator("max_retries")
     @classmethod
-    def v_max_retries(cls, v: Optional[int]) -> Optional[int]:
+    def v_max_retries(cls, v: int | None) -> int | None:
         if v is None:
             return v
         if v < 0 or v > 10:
@@ -147,7 +149,7 @@ class AutomationUpdate(BaseModel):
 
     @field_validator("cooldown_minutes")
     @classmethod
-    def v_cooldown_minutes(cls, v: Optional[int]) -> Optional[int]:
+    def v_cooldown_minutes(cls, v: int | None) -> int | None:
         if v is None:
             return v
         if v < 0 or v > 1440:
@@ -156,12 +158,12 @@ class AutomationUpdate(BaseModel):
 
     @field_validator("queue_group")
     @classmethod
-    def v_queue_group(cls, v: Optional[str]) -> Optional[str]:
+    def v_queue_group(cls, v: str | None) -> str | None:
         return _normalize_queue_group(v)
 
     @field_validator("notification_channels")
     @classmethod
-    def v_notification_channels(cls, v: Optional[str]) -> Optional[str]:
+    def v_notification_channels(cls, v: str | None) -> str | None:
         return _normalize_notification_channels(v)
 
 
@@ -171,10 +173,10 @@ class AutomationPreflightResponse(BaseModel):
     normalized_payload: dict[str, Any]
     resolved_script_path: str
     automation_dir: str
-    normalized_notification_channels: Optional[str] = None
+    normalized_notification_channels: str | None = None
     schedule_summary: str
-    next_runs_preview: List[str] = []
-    warnings: List[str] = []
+    next_runs_preview: list[str] = []
+    warnings: list[str] = []
     governance: AutomationPreflightGovernance = Field(
         default_factory=AutomationPreflightGovernance
     )
@@ -183,19 +185,19 @@ class AutomationPreflightResponse(BaseModel):
 class AutomationResponse(AutomationBase):
     id: int
     created_at: Any
-    updated_at: Optional[Any] = None
-    next_run: Optional[str] = None
-    last_status: Optional[str] = None
-    last_execution_id: Optional[str] = None
-    last_execution_started_at: Optional[Any] = None
-    last_execution_finished_at: Optional[Any] = None
-    last_execution_duration_seconds: Optional[float] = None
-    last_failure_reason: Optional[str] = None
-    last_recovery_action: Optional[str] = None
-    last_requested_by: Optional[str] = None
-    schedule_type: Optional[str] = None
-    schedule_summary: Optional[str] = None
-    next_runs_preview: List[str] = []
+    updated_at: Any | None = None
+    next_run: str | None = None
+    last_status: str | None = None
+    last_execution_id: str | None = None
+    last_execution_started_at: Any | None = None
+    last_execution_finished_at: Any | None = None
+    last_execution_duration_seconds: float | None = None
+    last_failure_reason: str | None = None
+    last_recovery_action: str | None = None
+    last_requested_by: str | None = None
+    schedule_type: str | None = None
+    schedule_summary: str | None = None
+    next_runs_preview: list[str] = []
     active_execution_count: int = 0
     success_24h: int = 0
     failures_24h: int = 0
@@ -204,13 +206,13 @@ class AutomationResponse(AutomationBase):
     pending_count: int = 0
     operational_state: str = "idle"
     validated: bool = True
-    backup_path: Optional[str] = None
-    audit_id: Optional[int] = None
+    backup_path: str | None = None
+    audit_id: int | None = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("schedule")
     @classmethod
-    def v_sched(cls, v: Optional[str]) -> Optional[str]:
+    def v_sched(cls, v: str | None) -> str | None:
         return _validate_schedule_tolerant(v)
 
     @model_validator(mode="after")

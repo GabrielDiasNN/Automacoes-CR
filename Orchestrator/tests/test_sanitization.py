@@ -5,8 +5,7 @@ Testes unitários para o módulo de segurança e higienização de logs e payloa
 """
 
 from app.constants import MAX_DB_LOGS_CHARS
-from app.security import (sanitize_log_payload, sanitize_string,
-                          truncate_log_payload)
+from app.security import sanitize_log_payload, sanitize_string, truncate_log_payload
 
 
 def test_sanitize_string_oracle_credentials():

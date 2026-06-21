@@ -11,14 +11,17 @@ Valida:
 
 import pytest
 from app import models
-from app.constants import (EXECUTION_STATUS_ERROR, EXECUTION_STATUS_PARTIAL,
-                           EXECUTION_STATUS_PENDING, EXECUTION_STATUS_RUNNING,
-                           FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
-                           FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
-                           RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
-                           RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE)
-from app.services.execution_runtime import (claim_next_task,
-                                            classify_process_result)
+from app.constants import (
+    EXECUTION_STATUS_ERROR,
+    EXECUTION_STATUS_PARTIAL,
+    EXECUTION_STATUS_PENDING,
+    EXECUTION_STATUS_RUNNING,
+    FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
+    FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
+    RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
+    RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
+)
+from app.services.execution_runtime import claim_next_task, classify_process_result
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS

@@ -55,8 +55,12 @@ def test_system_endpoints_return_brazilian_date_contract(client):
     overview = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert overview.status_code == 200
     overview_data = overview.json()
-    assert re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", overview_data["generated_at"])
-    assert re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", overview_data["kpis"]["next_window"])
+    assert re.match(
+        r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", overview_data["generated_at"]
+    )
+    assert re.match(
+        r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", overview_data["kpis"]["next_window"]
+    )
     for item in overview_data["recent"]:
         assert re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", item["started_at"])
 
@@ -68,10 +72,14 @@ def test_system_endpoints_return_brazilian_date_contract(client):
     version = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert version.status_code == 200
     version_data = version.json()
-    assert re.match(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", version_data["started_at"])
+    assert re.match(
+        r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", version_data["started_at"]
+    )
 
 
-def test_system_scheduler_jobs_and_automation_overview_are_br_formatted(client, db_session):
+def test_system_scheduler_jobs_and_automation_overview_are_br_formatted(
+    client, db_session
+):
     auto = models.Automation(name="Timezone Auto", script_path="./test/run.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -91,7 +99,9 @@ def test_system_scheduler_jobs_and_automation_overview_are_br_formatted(client, 
     assert overview.status_code == 200
     data = overview.json()
 
-    target = next(item for item in data["automations"] if item["name"] == "Timezone Auto")
+    target = next(
+        item for item in data["automations"] if item["name"] == "Timezone Auto"
+    )
     assert target["next_run"] is None or re.match(
         r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$", target["next_run"]
     )

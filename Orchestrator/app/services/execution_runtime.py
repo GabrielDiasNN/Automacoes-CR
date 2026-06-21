@@ -3,11 +3,8 @@
 """Contrato operacional compartilhado de execução."""
 
 import os
-import subprocess
 import time
 import uuid
-from datetime import timedelta
-from typing import Any, Optional
 
 from sqlalchemy import case
 from sqlalchemy.orm import Session
@@ -20,32 +17,26 @@ from ..constants import (
     EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TERMINATED,
     EXECUTION_STATUS_TIMEOUT,
+    EXIT_CODE_MAP,
     FAILURE_REASON_AUTOMATION_NOT_FOUND,
-    FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
     FAILURE_REASON_INTERNAL_WORKER_ERROR,
     FAILURE_REASON_MAX_RUNTIME_EXCEEDED,
     FAILURE_REASON_ORCHESTRATOR_REBOOT,
     FAILURE_REASON_USER_TERMINATED,
-    FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
     PRIORITY_HIGH,
     PRIORITY_LOW,
     PRIORITY_NORMAL,
     RECOVERY_ACTION_NONE,
-    RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
     RECOVERY_ACTION_REQUEUE_IF_SAFE,
-    RECOVERY_ACTION_REQUEUE_MANUAL,
-    RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION,
     RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY,
-    RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
     RECOVERY_ACTION_REVIEW_LOGS_AND_OPTIONALLY_REQUEUE,
     RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
     RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE,
     RECOVERY_ACTION_REVIEW_WORKER_LOGS,
-    EXIT_CODE_MAP,
 )
-from ..timezone import get_now_local
-from ..security import sanitize_log_payload, truncate_log_payload
 from ..middleware import request_id_var
+from ..security import sanitize_log_payload, truncate_log_payload
+from ..timezone import get_now_local
 
 
 def generate_execution_id(prefix: str) -> str:
@@ -58,8 +49,8 @@ def build_queued_execution(
     requested_by: str,
     priority: str = PRIORITY_NORMAL,
     retry_count: int = 0,
-    max_retries: Optional[int] = None,
-    failure_reason: Optional[str] = None,
+    max_retries: int | None = None,
+    failure_reason: str | None = None,
     recovery_action: str = RECOVERY_ACTION_NONE,
 ) -> models.Execution:
     correlation_id = request_id_var.get("SYSTEM")
@@ -91,9 +82,9 @@ def resolve_script_path(project_root: str, script_path: str) -> str:
 
 def get_group_active_execution(
     db: Session,
-    queue_group: Optional[str],
-    exclude_automation_id: Optional[int] = None,
-) -> Optional[models.Execution]:
+    queue_group: str | None,
+    exclude_automation_id: int | None = None,
+) -> models.Execution | None:
     if not queue_group:
         return None
 
@@ -112,7 +103,7 @@ def get_group_active_execution(
 
 def _has_running_execution_for_group(
     db: Session,
-    queue_group: Optional[str],
+    queue_group: str | None,
 ) -> bool:
     if not queue_group:
         return False
@@ -129,9 +120,9 @@ def _has_running_execution_for_group(
 
 def claim_next_task(
     db: Session,
-    worker_instance_id: Optional[str] = None,
-    worker_pid: Optional[int] = None,
-) -> Optional[str]:
+    worker_instance_id: str | None = None,
+    worker_pid: int | None = None,
+) -> str | None:
     priority_rank = case(
         (models.Execution.priority == PRIORITY_HIGH, 0),
         (models.Execution.priority == PRIORITY_NORMAL, 1),
@@ -177,8 +168,8 @@ def claim_next_task(
 
 
 def classify_process_result(
-    return_code: Optional[int],
-) -> tuple[str, Optional[str], str]:
+    return_code: int | None,
+) -> tuple[str, str | None, str]:
     if return_code in EXIT_CODE_MAP:
         return EXIT_CODE_MAP[return_code]
     return (
@@ -198,7 +189,9 @@ def mark_task_as_failed(
     if not db_exec:
         return
     db_exec.status = EXECUTION_STATUS_ERROR
-    db_exec.logs = truncate_log_payload((db_exec.logs or "") + sanitize_log_payload(message))
+    db_exec.logs = truncate_log_payload(
+        (db_exec.logs or "") + sanitize_log_payload(message)
+    )
     db_exec.exit_code = exit_code
     db_exec.failure_reason = FAILURE_REASON_AUTOMATION_NOT_FOUND
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY
@@ -237,7 +230,7 @@ def apply_timeout_result(
     exec_id: str,
     logs: list[str],
     task_start_ts: float,
-) -> Optional[models.Execution]:
+) -> models.Execution | None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         return None
@@ -256,11 +249,11 @@ def apply_timeout_result(
 def complete_process_execution(
     db: Session,
     exec_id: str,
-    return_code: Optional[int],
+    return_code: int | None,
     logs: list[str],
-    artifacts_json: Optional[str],
+    artifacts_json: str | None,
     duration_seconds: float,
-) -> Optional[models.Execution]:
+) -> models.Execution | None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec or db_exec.status in [
         EXECUTION_STATUS_TERMINATED,
@@ -295,7 +288,8 @@ def apply_internal_worker_error(
         return
     db_exec.status = EXECUTION_STATUS_ERROR
     db_exec.logs = truncate_log_payload(
-        (db_exec.logs or "") + f"\nInternal Worker Error: {sanitize_log_payload(message)}"
+        (db_exec.logs or "")
+        + f"\nInternal Worker Error: {sanitize_log_payload(message)}"
     )
     db_exec.exit_code = -1
     db_exec.failure_reason = FAILURE_REASON_INTERNAL_WORKER_ERROR
@@ -322,9 +316,7 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
             f"action=MARK_FAILED_BY_REBOOT timestamp={now.strftime('%d/%m/%Y %H:%M:%S')}"
         )
         task.logs = (
-            (task.logs or "")
-            + "\n[REBOOT] Interrompida."
-            + f"\n{reboot_audit_line}"
+            (task.logs or "") + "\n[REBOOT] Interrompida." + f"\n{reboot_audit_line}"
         )
     db.commit()
     return len(zombies)

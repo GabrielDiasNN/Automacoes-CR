@@ -151,9 +151,12 @@ def collect_orphaned_running(
         reason = None
         if not worker_status.is_alive:
             reason = "worker_offline"
-        elif item.worker_instance_id and worker_status.instance_id:
-            if item.worker_instance_id != worker_status.instance_id:
-                reason = "worker_instance_mismatch"
+        elif (
+            item.worker_instance_id
+            and worker_status.instance_id
+            and item.worker_instance_id != worker_status.instance_id
+        ):
+            reason = "worker_instance_mismatch"
         if not reason:
             continue
         orphaned.append(

@@ -14,16 +14,19 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import ACTION_CODE_SCHEDULER_RELOAD, EXECUTION_ACTIVE_STATUSES
-from ..database import (SessionLocal, purge_old_executions, run_wal_checkpoint,
-                        session_scope)
+from ..constants import EXECUTION_ACTIVE_STATUSES
+from ..database import (
+    SessionLocal,
+    purge_old_executions,
+    purge_old_snapshots,
+    run_wal_checkpoint,
+    session_scope,
+)
 from ..runtime import scheduler
-from ..schemas.schedule_rules import (first_interval_candidate,
-                                      ui_day_to_python_weekday)
+from ..schemas.schedule_rules import first_interval_candidate, ui_day_to_python_weekday
 from ..timezone import get_now_local
 from .beneficiamento_refresh import run_beneficiamento_refresh
-from .execution_runtime import (build_queued_execution,
-                                get_group_active_execution)
+from .execution_runtime import build_queued_execution, get_group_active_execution
 
 logger = logging.getLogger("orchestrator")
 
@@ -184,7 +187,9 @@ def reload_scheduled_tasks() -> None:
 
     with session_scope(SessionLocal) as db:
         automations_db = (
-            db.query(models.Automation).filter(models.Automation.enabled == True).all()
+            db.query(models.Automation)
+            .filter(models.Automation.enabled.is_(True))
+            .all()
         )
         logger.info(
             "Recarregando agendamentos para %d automações habilitadas.",
@@ -311,6 +316,13 @@ def register_enterprise_jobs(retention_days: int) -> None:
         misfire_grace_time=3600,
     )
     scheduler.add_job(
+        purge_old_snapshots,
+        CronTrigger(hour=3, minute=30),
+        id="enterprise_snapshot_purge",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
         safe_scheduler_heartbeat,
         "interval",
         minutes=15,
@@ -357,7 +369,9 @@ def register_beneficiamento_live_jobs() -> None:
     evitam refreshes sobrepostos do mesmo período.
     """
     diario_interval = _live_interval_seconds("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", 90)
-    mensal_interval = _live_interval_seconds("BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS", 600)
+    mensal_interval = _live_interval_seconds(
+        "BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS", 600
+    )
 
     scheduler.add_job(
         lambda: run_beneficiamento_refresh("diario"),
@@ -400,10 +414,10 @@ def run_file_cleanup() -> None:
 
 
 def safe_scheduler_heartbeat() -> None:
-    try:
+    import contextlib
+
+    with contextlib.suppress(Exception):
         logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
-    except Exception:
-        pass
 
 
 def capture_system_history_snapshot_job() -> None:

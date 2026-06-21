@@ -4,6 +4,7 @@
 Router: Executions - Histórico de execuções com decorações operacionais (A2, A3), filtros avançados, logs, artefatos e controle de fila. v9.2.0
 """
 
+import contextlib
 import json
 import logging
 import math
@@ -11,7 +12,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -71,9 +72,7 @@ def _build_active_execution_maps(
     by_group: dict[str, models.Execution] = {}
     for item in active_execs:
         by_automation.setdefault(int(item.automation_id), item)
-        queue_group = item.queue_group or getattr(
-            item.automation, "queue_group", None
-        )
+        queue_group = item.queue_group or getattr(item.automation, "queue_group", None)
         if queue_group:
             by_group.setdefault(str(queue_group), item)
     return by_automation, by_group
@@ -84,14 +83,12 @@ def _determine_operational_actions(
     ex: models.Execution,
     active_by_automation: dict[int, models.Execution],
     active_by_group: dict[str, models.Execution],
-    queue_group: Optional[str],
+    queue_group: str | None,
 ) -> None:
     """Determina as ações do operador disponíveis para a execução e condições de reenfileiramento (A2)."""
     queueable = ex.status in EXECUTION_QUEUEABLE_SOURCE_STATUSES
     max_retries = int(
-        ex.max_retries
-        or (ex.automation.max_retries if ex.automation else 0)
-        or 0
+        ex.max_retries or (ex.automation.max_retries if ex.automation else 0) or 0
     )
     retry_count = int(ex.retry_count or 0)
     active_for_automation = active_by_automation.get(int(ex.automation_id))
@@ -125,14 +122,14 @@ def _determine_operational_actions(
             summary.requeue_allowed = True
             summary.operator_action_code = "REQUEUE"
             summary.operator_action_label = "Reenfileirar"
-            summary.operator_action_hint = "Execução pode ser enviada novamente para a fila de processamento."
+            summary.operator_action_hint = (
+                "Execução pode ser enviada novamente para a fila de processamento."
+            )
 
     elif ex.status in EXECUTION_ACTIVE_STATUSES:
         summary.operator_action_code = "STOP"
         summary.operator_action_label = "Parar execução"
-        summary.operator_action_hint = (
-            "Solicita a interrupção imediata do processo."
-        )
+        summary.operator_action_hint = "Solicita a interrupção imediata do processo."
 
     # Sobrescrever ações para linhas de sucesso saudáveis
     if ex.status == "SUCCESS":
@@ -223,13 +220,13 @@ def _decorate_execution_summary(
 def list_executions(
     page: int = 1,
     per_page: int = 20,
-    status: Optional[str] = None,
-    automation_id: Optional[int] = None,
-    queue_group: Optional[str] = None,
-    priority: Optional[str] = None,
-    requested_by: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    status: str | None = None,
+    automation_id: int | None = None,
+    queue_group: str | None = None,
+    priority: str | None = None,
+    requested_by: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ) -> schemas.PaginatedResponse[schemas.ExecutionSummary]:
@@ -461,10 +458,8 @@ def list_artifacts(
 
     artifacts = []
     if db_exec.artifacts:
-        try:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
             artifacts = json.loads(str(db_exec.artifacts))
-        except (json.JSONDecodeError, TypeError):
-            pass
 
     return {"exec_id": exec_id, "artifacts": artifacts}
 

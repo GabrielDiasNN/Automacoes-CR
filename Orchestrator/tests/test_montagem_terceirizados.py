@@ -20,8 +20,8 @@ AUTOMATION_PATH = os.path.abspath(
 )
 sys.path.append(AUTOMATION_PATH)
 
-import extract_oracle  # type: ignore
-import validate_and_generate_html  # type: ignore
+import extract_oracle
+import validate_and_generate_html
 
 
 def test_parse_qt_pc_nf_formats() -> None:
@@ -238,14 +238,15 @@ def test_main_tipo_notif_erro_gera_payload(
     def fake_json_dump(obj: Any, fp: Any, **kwargs: Any) -> None:
         captured_dumps.append(obj)
 
-    with patch("validate_and_generate_html.json.load", return_value=data), patch(
-        "validate_and_generate_html.json.dump", side_effect=fake_json_dump
-    ), patch(
-        "validate_and_generate_html.sys.argv",
-        ["validate_and_generate_html.py", exec_id],
-    ), patch(
-        "validate_and_generate_html.sys.exit"
-    ) as mock_exit:
+    with (
+        patch("validate_and_generate_html.json.load", return_value=data),
+        patch("validate_and_generate_html.json.dump", side_effect=fake_json_dump),
+        patch(
+            "validate_and_generate_html.sys.argv",
+            ["validate_and_generate_html.py", exec_id],
+        ),
+        patch("validate_and_generate_html.sys.exit") as mock_exit,
+    ):
         validate_and_generate_html.main()
 
     # Não deve terminar com erro
@@ -298,15 +299,18 @@ def test_main_sem_erros_nao_gera_payload(
 
     captured_dumps: list[Any] = []
 
-    with patch("validate_and_generate_html.json.load", return_value=data), patch(
-        "validate_and_generate_html.json.dump",
-        side_effect=lambda o, f, **k: captured_dumps.append(o),
-    ), patch(
-        "validate_and_generate_html.sys.argv",
-        ["validate_and_generate_html.py", exec_id],
-    ), patch(
-        "validate_and_generate_html.sys.exit"
-    ) as mock_exit:
+    with (
+        patch("validate_and_generate_html.json.load", return_value=data),
+        patch(
+            "validate_and_generate_html.json.dump",
+            side_effect=lambda o, f, **k: captured_dumps.append(o),
+        ),
+        patch(
+            "validate_and_generate_html.sys.argv",
+            ["validate_and_generate_html.py", exec_id],
+        ),
+        patch("validate_and_generate_html.sys.exit") as mock_exit,
+    ):
         validate_and_generate_html.main()
 
     mock_exit.assert_not_called()
@@ -361,9 +365,10 @@ def test_extract_sucesso_oracle_mockado(
         None,  # Termina o laço
     ]
 
-    with patch("extract_oracle.sys.argv", ["extract_oracle.py", exec_id]), patch(
-        "extract_oracle.sys.exit"
-    ) as mock_exit:
+    with (
+        patch("extract_oracle.sys.argv", ["extract_oracle.py", exec_id]),
+        patch("extract_oracle.sys.exit") as mock_exit,
+    ):
 
         extract_oracle.extract()
 

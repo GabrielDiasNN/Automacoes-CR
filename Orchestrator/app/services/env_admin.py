@@ -78,7 +78,7 @@ def validate_env_content(content: str) -> schemas.EnvValidationResponse:
 def read_env_content(env_path: str) -> str:
     if not os.path.exists(env_path):
         return ""
-    with open(env_path, "r", encoding="utf-8") as handle:
+    with open(env_path, encoding="utf-8") as handle:
         return handle.read()
 
 

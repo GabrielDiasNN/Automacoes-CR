@@ -10,10 +10,8 @@ Valida:
 """
 
 from datetime import datetime, timedelta
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
+import pytest
 from app import models
 from app.constants import (
     ACTION_CODE_CHECKPOINT,
@@ -23,6 +21,8 @@ from app.constants import (
     EXECUTION_STATUS_RUNNING,
 )
 from app.timezone import get_now_local
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS
 
 
@@ -44,7 +44,7 @@ def test_diagnostics_worker_offline(client: TestClient, db_session: Session):
 
     # overall_status deve ser degraded ou unhealthy
     assert data["overall_status"] in ["degraded", "unhealthy"]
-    
+
     # Encontrar a descoberta sobre o worker sem heartbeat
     findings = [f for f in data["findings"] if f["component"] == "worker"]
     assert len(findings) > 0
@@ -88,7 +88,7 @@ def test_diagnostics_wal_risk(client: TestClient, db_session: Session):
     """Garante que um arquivo WAL do SQLite excessivamente grande seja sinalizado com risco crítico."""
     # Fazer mock do get_wal_size_mb no router de system
     import app.routers.system as system_router
-    
+
     original_get_wal = system_router.get_wal_size_mb
     # Simular WAL gigante com 300 MB (limite para erro é 256 MB)
     system_router.get_wal_size_mb = lambda: 300.0
@@ -102,7 +102,11 @@ def test_diagnostics_wal_risk(client: TestClient, db_session: Session):
         assert data["overall_status"] in ["degraded", "unhealthy"]
 
         # Procurar o achado do WAL elevado
-        db_findings = [f for f in data["findings"] if f["component"] == "database" and "WAL" in f["message"]]
+        db_findings = [
+            f
+            for f in data["findings"]
+            if f["component"] == "database" and "WAL" in f["message"]
+        ]
         assert len(db_findings) > 0
         assert db_findings[0]["severity"] == "ERROR"
         assert db_findings[0]["action_code"] == ACTION_CODE_CHECKPOINT
@@ -142,7 +146,10 @@ def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Se
     assert checks["running_over_runtime"]["status"] == "warn"
     queue_findings = [f for f in data["findings"] if f["component"] == "queue"]
     assert any("max_runtime" in finding["message"] for finding in queue_findings)
-    assert data["slo"]["thresholds"]["pending_stalled_warn_seconds"] == DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
+    assert (
+        data["slo"]["thresholds"]["pending_stalled_warn_seconds"]
+        == DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
+    )
     assert (
         data["slo"]["thresholds"]["running_over_runtime_grace_seconds"]
         == DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS
@@ -151,7 +158,10 @@ def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Se
     baseline_metrics = {
         item["code"]: item for item in data["operational_baseline"]["metrics"]
     }
-    assert baseline_metrics["running_over_runtime"]["status"] in ["attention", "incident"]
+    assert baseline_metrics["running_over_runtime"]["status"] in [
+        "attention",
+        "incident",
+    ]
 
 
 def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session):

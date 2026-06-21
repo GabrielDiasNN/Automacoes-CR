@@ -10,10 +10,9 @@ Valida:
 """
 
 import pytest
+from app import models
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-
-from app import models
 from tests.conftest import AUTH_HEADERS
 
 
@@ -34,9 +33,7 @@ def test_validate_invalid_schedules(client: TestClient):
     response = client.post(
         "/api/system/schedule/validate",
         headers=AUTH_HEADERS,
-        json={
-            "schedule": '{"schedule_type": "weekly", "times": [{"h": 12, "m": 30}]}'
-        },
+        json={"schedule": '{"schedule_type": "weekly", "times": [{"h": 12, "m": 30}]}'},
     )
     assert response.status_code == 200
     data = response.json()
@@ -47,9 +44,7 @@ def test_validate_invalid_schedules(client: TestClient):
     response = client.post(
         "/api/system/schedule/validate",
         headers=AUTH_HEADERS,
-        json={
-            "schedule": '{"schedule_type": "daily", "times": [{"h": 25, "m": 30}]}'
-        },
+        json={"schedule": '{"schedule_type": "daily", "times": [{"h": 25, "m": 30}]}'},
     )
     assert response.status_code == 200
     data = response.json()

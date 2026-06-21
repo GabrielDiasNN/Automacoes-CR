@@ -7,6 +7,7 @@ Router: Automation IDE - Gestão de scripts e código-fonte via Web IDE das auto
 import json
 import logging
 import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -15,9 +16,9 @@ from ..database import get_db
 from ..middleware import get_api_key
 from ..utils import get_client_ip, log_audit
 from .automations import (
+    _backup_file_before_write,
     _resolve_automation_dir,
     _resolve_managed_file,
-    _backup_file_before_write,
 )
 
 logger = logging.getLogger("orchestrator")
@@ -50,7 +51,7 @@ def get_automation_scripts(
             continue
 
         try:
-            with open(jf, "r", encoding="utf-8") as f:
+            with open(jf, encoding="utf-8") as f:
                 content = f.read()
             scripts.append({"filename": filename, "content": content})
         except Exception:

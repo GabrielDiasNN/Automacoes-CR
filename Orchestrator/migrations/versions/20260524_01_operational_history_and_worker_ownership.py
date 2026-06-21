@@ -6,9 +6,8 @@ Revises: a5b212d4418f
 Create Date: 2026-05-24 00:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260524_01"
 down_revision = "a5b212d4418f"
@@ -19,11 +18,15 @@ depends_on = None
 def upgrade() -> None:
     with op.batch_alter_table("executions", schema=None) as batch_op:
         batch_op.add_column(sa.Column("claimed_at", sa.DateTime(), nullable=True))
-        batch_op.add_column(sa.Column("worker_instance_id", sa.String(length=100), nullable=True))
+        batch_op.add_column(
+            sa.Column("worker_instance_id", sa.String(length=100), nullable=True)
+        )
         batch_op.add_column(sa.Column("worker_pid", sa.Integer(), nullable=True))
 
     with op.batch_alter_table("worker_heartbeat", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("instance_id", sa.String(length=100), nullable=True))
+        batch_op.add_column(
+            sa.Column("instance_id", sa.String(length=100), nullable=True)
+        )
         batch_op.add_column(sa.Column("host", sa.String(length=200), nullable=True))
 
     op.create_table(
@@ -33,12 +36,23 @@ def upgrade() -> None:
         sa.Column("overall_status", sa.String(length=20), nullable=False),
         sa.Column("pending_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("running_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("oldest_pending_age_seconds", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("oldest_running_age_seconds", sa.Float(), nullable=False, server_default="0"),
+        sa.Column(
+            "oldest_pending_age_seconds", sa.Float(), nullable=False, server_default="0"
+        ),
+        sa.Column(
+            "oldest_running_age_seconds", sa.Float(), nullable=False, server_default="0"
+        ),
         sa.Column("wal_size_mb", sa.Float(), nullable=False, server_default="0"),
         sa.Column("worker_last_ping_age_seconds", sa.Float(), nullable=True),
-        sa.Column("running_over_runtime_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("orphaned_running_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "running_over_runtime_count",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
+        ),
+        sa.Column(
+            "orphaned_running_count", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("failure_hotspots", sa.Text(), nullable=True),
         sa.Column("active_queue_groups", sa.Text(), nullable=True),
         sa.Column("slo_breaches", sa.Text(), nullable=True),
@@ -53,7 +67,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_system_health_snapshots_timestamp", table_name="system_health_snapshots")
+    op.drop_index(
+        "ix_system_health_snapshots_timestamp", table_name="system_health_snapshots"
+    )
     op.drop_table("system_health_snapshots")
 
     with op.batch_alter_table("worker_heartbeat", schema=None) as batch_op:

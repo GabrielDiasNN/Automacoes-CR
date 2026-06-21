@@ -15,3 +15,4 @@ pybreaker
 psutil
 pydantic
 alembic
+prometheus-client

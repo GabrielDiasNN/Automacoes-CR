@@ -73,13 +73,17 @@ def run_beneficiamento_refresh(period: str) -> dict:
             "detail": f"Refresh excedeu {_SUBPROCESS_TIMEOUT_SECONDS}s.",
         }
     except Exception as exc:
-        logger.error("Falha ao disparar refresh do beneficiamento (%s): %s", period, exc)
+        logger.error(
+            "Falha ao disparar refresh do beneficiamento (%s): %s", period, exc
+        )
         return {"status": "error", "period": period, "detail": str(exc)}
 
     payload = _parse_runner_output(proc.stdout) or _parse_runner_output(proc.stderr)
     if payload is None:
         detail = (proc.stderr or proc.stdout or "Saída vazia do runner.").strip()[:500]
-        logger.error("Refresh do beneficiamento (%s) sem JSON válido: %s", period, detail)
+        logger.error(
+            "Refresh do beneficiamento (%s) sem JSON válido: %s", period, detail
+        )
         return {"status": "error", "period": period, "detail": detail}
 
     logger.info(

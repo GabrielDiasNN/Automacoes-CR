@@ -36,6 +36,7 @@ htmlcov/
 
 # Dashboard gerado/exportado (nao confundir com SPA fonte em Dashboard/)
 Dashboard/dashboard.html
+Dashboard/dist/
 
 # Evidencias geradas localmente (nao versionar)
 docs/playwright-e2e-evidence-generated.md
@@ -126,3 +127,6 @@ Receitas Emitidas/receitas_state.json
 # VS Code — configurações de máquina (não versionar)
 .vscode/
 !.vscode/extensions.json
+
+# Saída de testes Pester (-CI)
+testResults.xml

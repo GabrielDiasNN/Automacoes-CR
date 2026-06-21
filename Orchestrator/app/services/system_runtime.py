@@ -2,14 +2,12 @@
 # mypy: ignore-errors
 """Serviços operacionais de runtime do Orchestrator."""
 
-import json
 import os
-import shutil
 import subprocess
 import sys
-import psutil
 from datetime import datetime
 
+import psutil
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -87,9 +85,10 @@ def launch_orchestrator_recovery(project_root: str) -> str:
         base_name = os.path.splitext(script_name)[0].lower()
         stdout_log = os.path.join(log_dir, f"{base_name}_stdout.log")
         stderr_log = os.path.join(log_dir, f"{base_name}_stderr.log")
-        with open(stdout_log, "a", encoding="utf-8") as stdout, open(
-            stderr_log, "a", encoding="utf-8"
-        ) as stderr:
+        with (
+            open(stdout_log, "a", encoding="utf-8") as stdout,
+            open(stderr_log, "a", encoding="utf-8") as stderr,
+        ):
             subprocess.Popen(
                 [
                     "powershell.exe",

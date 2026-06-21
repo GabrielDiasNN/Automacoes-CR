@@ -110,14 +110,19 @@ def test_smoke_executions_filters_and_errors(client):
         headers=AUTH_HEADERS,
     )
     assert filtered_by_group.status_code == 200
-    assert any(item["related_queue_group"] == "smoke-group" for item in filtered_by_group.json()["items"])
+    assert any(
+        item["related_queue_group"] == "smoke-group"
+        for item in filtered_by_group.json()["items"]
+    )
 
     filtered_by_priority = client.get(
         "/api/executions?priority=NORMAL",
         headers=AUTH_HEADERS,
     )
     assert filtered_by_priority.status_code == 200
-    assert any(item["priority"] == "NORMAL" for item in filtered_by_priority.json()["items"])
+    assert any(
+        item["priority"] == "NORMAL" for item in filtered_by_priority.json()["items"]
+    )
 
     invalid_status = client.get(
         "/api/executions?status=NOT_A_STATUS",

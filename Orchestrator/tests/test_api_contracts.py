@@ -10,10 +10,9 @@ Valida:
 """
 
 import pytest
+from app import models
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-
-from app import models
 from tests.conftest import AUTH_HEADERS
 
 
@@ -27,7 +26,9 @@ def test_api_unauthorized_access(client: TestClient):
     assert response.json()["correlation_id"]
 
     # Rota protegida com API Key errada
-    response = client.get("/api/system/diagnostics", headers={"X-API-Key": "wrong-token"})
+    response = client.get(
+        "/api/system/diagnostics", headers={"X-API-Key": "wrong-token"}
+    )
     assert response.status_code == 403
     assert "API Key" in response.json()["detail"]
     assert response.json()["code"] == "access_denied"
@@ -47,19 +48,21 @@ def test_api_not_found(client: TestClient):
     assert response.json()["code"] == "resource_not_found"
 
 
-def test_diagnostics_and_overview_contract_version(client: TestClient, db_session: Session):
+def test_diagnostics_and_overview_contract_version(
+    client: TestClient, db_session: Session
+):
     """Valida a presença de contract_version e a ausência de vazamento de segredos nos payloads principais."""
     # Executar chamada do diagnostics
     response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
-    
+
     # Validar campos de contrato
     assert "contract_version" in data
     assert "schema_version" in data
     assert "version" in data
     assert data["trace"]["correlation_id"]
-    
+
     # Garantir que dados sensíveis de banco/arquivos não sejam vazados
     # diagnostics expõe informações de saúde e caminhos, mas não chaves do .env
     assert "DB_PASSWORD" not in str(data)

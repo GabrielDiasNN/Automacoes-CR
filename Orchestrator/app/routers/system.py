@@ -9,39 +9,48 @@ Router: System - Health check, metricas, backup, status do worker, audit log e e
 import json
 import logging
 import os
-from datetime import timedelta
-from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
+from .. import metrics as _metrics
 from .. import models, schemas
-from ..constants import (EXECUTION_ACTIVE_STATUSES, EXECUTION_STATUS_PENDING,
-                         EXECUTION_STATUS_RUNNING, ORCHESTRATOR_SCHEMA_VERSION,
-                         ORCHESTRATOR_VERSION, SEVERITY_ERROR, SEVERITY_WARN)
-from ..database import (get_db, get_wal_size_mb, purge_old_executions,
-                        run_wal_checkpoint, validate_database_schema)
+from ..constants import (
+    EXECUTION_ACTIVE_STATUSES,
+)
+from ..database import (
+    get_db,
+    get_wal_size_mb,
+    purge_old_executions,
+    run_wal_checkpoint,
+)
 from ..middleware import get_api_key
-from ..runtime import (get_project_root, scheduler, trigger_worker_wakeup,
-                       wait_for_task_signal)
+from ..runtime import (
+    get_project_root,
+    scheduler,
+    trigger_worker_wakeup,
+    wait_for_task_signal,
+)
 from ..services.env_admin import backup_env_file, read_env_content
 from ..services.env_admin import validate_env_content as validate_env_payload
 from ..services.env_admin import write_env_content
 from ..services.metrics import get_global_execution_counts
 from ..services.portfolio_catalog import build_portfolio_health_response
-from ..services.scheduler_runtime import \
-    list_scheduled_jobs as build_scheduled_jobs
+from ..services.scheduler_runtime import list_scheduled_jobs as build_scheduled_jobs
 from ..services.scheduler_runtime import reload_scheduled_tasks
 from ..services.system_diagnostics import build_diagnostics_payload
 from ..services.system_history import build_system_history_response
 from ..services.system_overview import build_system_overview_payload
-from ..services.system_runtime import (build_health_payload,
-                                       build_version_payload)
-from ..services.system_runtime import \
-    get_worker_status as get_worker_status_service
-from ..services.system_runtime import (launch_orchestrator_recovery,
-                                       perform_manual_backup)
+from ..services.system_runtime import (
+    build_health_payload,
+    build_version_payload,
+)
+from ..services.system_runtime import get_worker_status as get_worker_status_service
+from ..services.system_runtime import (
+    launch_orchestrator_recovery,
+    perform_manual_backup,
+)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
@@ -397,7 +406,7 @@ def get_uptime(request: Request, api_key: str = Depends(get_api_key)):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/scheduler/jobs", response_model=List[schemas.ScheduledJob])
+@router.get("/scheduler/jobs", response_model=list[schemas.ScheduledJob])
 def list_scheduled_jobs(
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key),
@@ -703,3 +712,15 @@ def update_env_content(
         raise HTTPException(
             status_code=500, detail=f"Erro ao salvar o arquivo: {str(e)}"
         )
+
+
+@router.get("/metrics", include_in_schema=False)
+def prometheus_metrics():
+    """Endpoint Prometheus — texto plain com todas as métricas do sistema (3.4/Fase 3)."""
+    body, content_type = _metrics.get_metrics_response()
+    if body is None:
+        raise HTTPException(
+            status_code=503,
+            detail="prometheus_client não instalado. Adicione 'prometheus-client' ao requirements.in.",
+        )
+    return Response(content=body, media_type=content_type)

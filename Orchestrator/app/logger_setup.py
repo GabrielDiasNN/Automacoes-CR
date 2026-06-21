@@ -21,11 +21,18 @@ class OrchestratorJsonFormatter(logging.Formatter):
         self._use_context_vars = use_context_vars
 
     def format(self, record: logging.LogRecord) -> str:
-        from .security import sanitize_log_payload  # pylint: disable=import-outside-toplevel,relative-beyond-top-level
+        # pylint: disable=import-outside-toplevel,relative-beyond-top-level
+        from .security import (
+            sanitize_log_payload,
+        )
 
         if self._use_context_vars:
-            from .middleware import (automation_name_var, exec_id_var,  # pylint: disable=import-outside-toplevel,relative-beyond-top-level
-                                     request_id_var)
+            from .middleware import (
+                automation_name_var,
+                exec_id_var,
+                request_id_var,
+            )
+
             automation_name = automation_name_var.get("")
             exec_id = exec_id_var.get("")
             request_id = getattr(record, "request_id", request_id_var.get("SYSTEM"))
@@ -73,7 +80,7 @@ def setup_json_logger(
         configure_root: If True, also apply handlers to the root logger (Worker pattern).
     """
     json_handler = RotatingFileHandler(
-        log_file, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        log_file, maxBytes=50 * 1024 * 1024, backupCount=7, encoding="utf-8"
     )
     json_handler.setFormatter(
         OrchestratorJsonFormatter(

@@ -5,6 +5,7 @@ Testes focados nas operações de Web IDE de Automações (Scripts e Configs).
 """
 
 import json
+
 import pytest
 from conftest import AUTH_HEADERS
 

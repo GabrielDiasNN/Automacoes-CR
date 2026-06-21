@@ -67,7 +67,9 @@ def register_exception_handlers(app: FastAPI, logger: logging.Logger) -> None:
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ):
         errors = []
         for item in exc.errors():
             ctx = item.get("ctx")

@@ -6,6 +6,7 @@ Testes focados nas operações e endpoints de diagnóstico/informações do Sist
 
 from datetime import timedelta
 from pathlib import Path
+
 import pytest
 from app.constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from conftest import AUTH_HEADERS
@@ -93,7 +94,11 @@ def test_diagnostics_endpoint(client):
     assert "operational_baseline" in data
     assert "performance" in data
     assert data["performance"]["timings_ms"]["total_ms"] >= 0
-    assert data["operational_baseline"]["status"] in ["healthy", "attention", "incident"]
+    assert data["operational_baseline"]["status"] in [
+        "healthy",
+        "attention",
+        "incident",
+    ]
 
 
 def test_diagnostics_reports_actionable_queue_and_wal_findings(
@@ -308,7 +313,13 @@ def test_system_overview_exposes_automation_operational_metrics(client, db_sessi
     assert target["avg_duration_24h_seconds"] is not None
     assert target["schedule_summary"] == "Manual"
     assert target["last_execution_id"] is not None
-    assert target["operational_state"] in ["attention", "healthy", "in_progress", "idle", "paused"]
+    assert target["operational_state"] in [
+        "attention",
+        "healthy",
+        "in_progress",
+        "idle",
+        "paused",
+    ]
 
 
 def test_wait_for_task_requires_api_key(client):

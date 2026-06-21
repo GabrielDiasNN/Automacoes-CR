@@ -1,16 +1,19 @@
 """Testes de integração do módulo analítico SQLite de Beneficiamento."""
+
 # mypy: ignore-errors
 # pylint: disable=import-outside-toplevel,import-error,protected-access
 
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
-from fastapi.testclient import TestClient
 from conftest import AUTH_HEADERS
+from fastapi.testclient import TestClient
 
 
-def test_beneficiamento_historico_init_db_maintains_derived_columns_and_indexes(tmp_path) -> None:
+def test_beneficiamento_historico_init_db_maintains_derived_columns_and_indexes(
+    tmp_path,
+) -> None:
     """Schema local deve garantir colunas derivadas e índices idempotentes do overview."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
@@ -37,7 +40,9 @@ def test_beneficiamento_historico_init_db_maintains_derived_columns_and_indexes(
         assert index_name in indexes
 
 
-def test_beneficiamento_historico_analytics_endpoint_removed(client: TestClient) -> None:
+def test_beneficiamento_historico_analytics_endpoint_removed(
+    client: TestClient,
+) -> None:
     """O contrato analytics legado foi removido; a rota não deve mais existir."""
     response = client.get(
         "/api/beneficiamento/historico/analytics",
@@ -46,7 +51,9 @@ def test_beneficiamento_historico_analytics_endpoint_removed(client: TestClient)
     assert response.status_code == 404
 
 
-def test_beneficiamento_refresh_endpoint_rejects_invalid_period(client: TestClient) -> None:
+def test_beneficiamento_refresh_endpoint_rejects_invalid_period(
+    client: TestClient,
+) -> None:
     """O refresh on-demand só aceita os períodos suportados (diario/mensal)."""
     response = client.post(
         "/api/beneficiamento/refresh",
@@ -65,18 +72,20 @@ def test_beneficiamento_overview_endpoint_contract(client: TestClient) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload).issuperset({
-        "generated_at",
-        "filters",
-        "health",
-        "kpis",
-        "rankings",
-        "series",
-        "filter_options",
-        "turnos",
-        "tingimento",
-        "interaction",
-    })
+    assert set(payload).issuperset(
+        {
+            "generated_at",
+            "filters",
+            "health",
+            "kpis",
+            "rankings",
+            "series",
+            "filter_options",
+            "turnos",
+            "tingimento",
+            "interaction",
+        }
+    )
     assert payload["health"]["source"] == "sqlite_historico"
     assert payload["filters"]["effective"]["dt_inicio"]
     assert payload["filters"]["effective"]["dt_fim"]
@@ -139,16 +148,18 @@ def test_beneficiamento_periods_endpoint_contract(client: TestClient) -> None:
     assert payload["default_period"] in ["diario", "mensal"]
     assert len(payload["periods"]) == 2
     diario = next(item for item in payload["periods"] if item["key"] == "diario")
-    assert set(diario).issuperset({
-        "key",
-        "label",
-        "available",
-        "status",
-        "metrics",
-        "quality",
-        "oracle",
-        "snapshot",
-    })
+    assert set(diario).issuperset(
+        {
+            "key",
+            "label",
+            "available",
+            "status",
+            "metrics",
+            "quality",
+            "oracle",
+            "snapshot",
+        }
+    )
 
 
 def test_beneficiamento_dashboard_endpoint_contract(client: TestClient) -> None:
@@ -160,14 +171,16 @@ def test_beneficiamento_dashboard_endpoint_contract(client: TestClient) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload).issuperset({
-        "generated_at",
-        "default_period",
-        "overall",
-        "comparison",
-        "periods",
-        "health",
-    })
+    assert set(payload).issuperset(
+        {
+            "generated_at",
+            "default_period",
+            "overall",
+            "comparison",
+            "periods",
+            "health",
+        }
+    )
     assert payload["default_period"] in payload["periods"]
     assert {item["key"] for item in payload["comparison"]} == {
         "diario",
@@ -244,10 +257,7 @@ def test_beneficiamento_historico_search_endpoint(client: TestClient) -> None:
     response = client.get(
         "/api/beneficiamento/historico",
         headers=AUTH_HEADERS,
-        params={
-            "ob": "2401",
-            "limit": 10
-        }
+        params={"ob": "2401", "limit": 10},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -276,7 +286,9 @@ def test_beneficiamento_detail_endpoint_for_product(client: TestClient) -> None:
     assert payload["pagination"]["limit"] == 10
 
 
-def test_beneficiamento_detail_endpoint_returns_raw_payload_on_demand(client: TestClient) -> None:
+def test_beneficiamento_detail_endpoint_returns_raw_payload_on_demand(
+    client: TestClient,
+) -> None:
     """Payload bruto só deve aparecer quando o detalhe o solicitar explicitamente."""
     response = client.get(
         "/api/beneficiamento/detail",
@@ -340,7 +352,9 @@ def test_beneficiamento_snapshot_dashboard_reuses_period_reads(monkeypatch) -> N
             "snapshot": {"generated_at": "2026-06-10T00:00:00"},
         }
 
-    monkeypatch.setattr(snapshot_dashboard, "load_period_payload", fake_load_period_payload)
+    monkeypatch.setattr(
+        snapshot_dashboard, "load_period_payload", fake_load_period_payload
+    )
 
     dashboard = snapshot_dashboard.build_dashboard_payload()
 
@@ -476,7 +490,10 @@ def test_beneficiamento_health_payload_structures_attention_causes(monkeypatch) 
             "historico_write_status": "ok",
             "quality_status": "ok",
             "issues": [],
-            "source_files": {"analytics": "anual.analytics.json", "profile": "anual.profile.json"},
+            "source_files": {
+                "analytics": "anual.analytics.json",
+                "profile": "anual.profile.json",
+            },
             "metrics": {"linhas": 10},
             "quality": {"status": "ok"},
             "profile": {},
@@ -487,7 +504,9 @@ def test_beneficiamento_health_payload_structures_attention_causes(monkeypatch) 
         },
     }
 
-    monkeypatch.setattr(snapshot_dashboard, "_load_periods_payload", lambda: fake_periods)
+    monkeypatch.setattr(
+        snapshot_dashboard, "_load_periods_payload", lambda: fake_periods
+    )
 
     payload = snapshot_dashboard.build_health_payload()
 
@@ -657,7 +676,9 @@ def test_beneficiamento_health_prefers_most_severe_issue_as_reason(monkeypatch) 
         },
     }
 
-    monkeypatch.setattr(snapshot_dashboard, "_load_periods_payload", lambda: fake_periods)
+    monkeypatch.setattr(
+        snapshot_dashboard, "_load_periods_payload", lambda: fake_periods
+    )
 
     payload = snapshot_dashboard.build_health_payload()
 
@@ -762,7 +783,9 @@ def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> N
         },
     }
 
-    monkeypatch.setattr(snapshot_dashboard, "_load_periods_payload", lambda: fake_periods)
+    monkeypatch.setattr(
+        snapshot_dashboard, "_load_periods_payload", lambda: fake_periods
+    )
 
     payload = snapshot_dashboard.build_health_payload()
 

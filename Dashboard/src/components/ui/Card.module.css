@@ -1,0 +1,38 @@
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.alert {
+  border-color: rgba(232, 163, 23, 0.45);
+}
+.hazardBar {
+  height: 3px;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--engraved);
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+  letter-spacing: var(--track-mid);
+  text-transform: uppercase;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.body {
+  padding: var(--sp-4);
+}

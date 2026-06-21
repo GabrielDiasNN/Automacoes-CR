@@ -17,7 +17,6 @@ import logging
 import os
 import time
 import uuid
-from typing import Optional
 from contextvars import ContextVar
 
 from fastapi import Depends, HTTPException, Request, Response
@@ -74,7 +73,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request_id = request.headers.get("X-Request-Id", str(uuid.uuid4())[:12])
         request.state.request_id = request_id
-        
+
         token = request_id_var.set(request_id)
         try:
             response: Response = await call_next(request)
@@ -128,7 +127,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     _STALE_TTL = 3600  # 1h sem atividade → elegível para poda
     _CLEANUP_EVERY = 500  # verifica IPs inativos a cada N requisições
 
-    def __init__(self, app, rpm: Optional[int] = None):
+    def __init__(self, app, rpm: int | None = None):
         super().__init__(app)
         self.rpm = rpm or int(os.environ.get("RATE_LIMIT_RPM", "120"))
         self._window: dict[str, collections.deque] = {}
@@ -144,7 +143,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._window.pop(ip, None)
             self._last_seen.pop(ip, None)
         if stale:
-            logger.debug(f"[RATE_LIMIT] Removidas {len(stale)} entradas inativas da janela deslizante.")
+            logger.debug(
+                f"[RATE_LIMIT] Removidas {len(stale)} entradas inativas da janela deslizante."
+            )
 
     async def dispatch(self, request: Request, call_next):
         # Aplicar rate limit somente em rotas /api

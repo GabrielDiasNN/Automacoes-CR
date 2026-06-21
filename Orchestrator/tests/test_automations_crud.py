@@ -4,8 +4,8 @@
 Testes focados nas operações de CRUD de Automações.
 """
 
-from datetime import timedelta
 import json
+from datetime import timedelta
 
 import pytest
 from app.constants import ORCHESTRATOR_VERSION
@@ -70,7 +70,9 @@ def test_preflight_rejects_reserved_cleanup_script():
         )
 
 
-def test_preflight_reports_manifest_drift_without_persisting(client, monkeypatch, tmp_path):
+def test_preflight_reports_manifest_drift_without_persisting(
+    client, monkeypatch, tmp_path
+):
     import app.routers.automations as auto_router
 
     auto_dir = tmp_path / "Auto Governada"
@@ -278,7 +280,9 @@ def test_update_automation_reloads_scheduler(client, monkeypatch):
     assert calls == ["reload"]
 
 
-def test_reload_scheduler_neutralizes_reserved_cleanup_automation(db_session, monkeypatch):
+def test_reload_scheduler_neutralizes_reserved_cleanup_automation(
+    db_session, monkeypatch
+):
     from app import models
     from app.runtime import scheduler
     from app.services import scheduler_runtime

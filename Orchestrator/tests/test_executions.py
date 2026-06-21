@@ -5,6 +5,7 @@ Testes focados nas operações e controle de Execuções do Orchestrator.
 """
 
 from datetime import timedelta
+
 import pytest
 from conftest import AUTH_HEADERS
 
@@ -109,7 +110,9 @@ def test_execution_summary_exposes_operator_triage_fields(client, db_session):
 
     res = client.get("/api/executions?page=1&per_page=10", headers=AUTH_HEADERS)
     assert res.status_code == 200
-    item = next(entry for entry in res.json()["items"] if entry["id"] == "EXEC_TRIAGE_SUMMARY")
+    item = next(
+        entry for entry in res.json()["items"] if entry["id"] == "EXEC_TRIAGE_SUMMARY"
+    )
     assert item["operator_action_label"] == "Reenfileirar"
     assert item["requeue_allowed"] is True
     assert item["operator_attention_required"] is True
@@ -150,7 +153,9 @@ def test_execution_summary_keeps_success_rows_compact_when_healthy(client, db_se
 
     res = client.get("/api/executions?page=1&per_page=10", headers=AUTH_HEADERS)
     assert res.status_code == 200
-    item = next(entry for entry in res.json()["items"] if entry["id"] == "EXEC_HEALTHY_SUCCESS")
+    item = next(
+        entry for entry in res.json()["items"] if entry["id"] == "EXEC_HEALTHY_SUCCESS"
+    )
     assert item["requeue_allowed"] is True
     assert item["operator_attention_required"] is False
     assert item["operator_action_code"] == "REQUEUE"
@@ -164,8 +169,12 @@ def test_list_executions_filters_by_queue_group(client, db_session):
     from app import models
     from app.timezone import get_now_local
 
-    auto_a = models.Automation(name="Grupo A", script_path="./test/run.ps1", queue_group="grupo_a")
-    auto_b = models.Automation(name="Grupo B", script_path="./test/run2.ps1", queue_group="grupo_b")
+    auto_a = models.Automation(
+        name="Grupo A", script_path="./test/run.ps1", queue_group="grupo_a"
+    )
+    auto_b = models.Automation(
+        name="Grupo B", script_path="./test/run2.ps1", queue_group="grupo_b"
+    )
     db_session.add_all([auto_a, auto_b])
     db_session.flush()
     db_session.add_all(

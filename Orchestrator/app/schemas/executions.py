@@ -4,7 +4,8 @@
 Módulo contendo schemas Pydantic de Execuções.
 """
 
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..constants import EXECUTION_ALLOWED_PRIORITIES, EXECUTION_ALLOWED_STATUSES
@@ -18,17 +19,17 @@ class ExecutionBase(BaseModel):
     priority: str = "NORMAL"
     retry_count: int = 0
     max_retries: int = 0
-    queue_group: Optional[str] = None
-    failure_reason: Optional[str] = None
-    recovery_action: Optional[str] = None
-    exit_code: Optional[int] = None
-    requested_by: Optional[str] = "SYSTEM"
+    queue_group: str | None = None
+    failure_reason: str | None = None
+    recovery_action: str | None = None
+    exit_code: int | None = None
+    requested_by: str | None = "SYSTEM"
     started_at: Any
-    claimed_at: Optional[Any] = None
-    worker_instance_id: Optional[str] = None
-    worker_pid: Optional[int] = None
-    finished_at: Optional[Any] = None
-    duration_seconds: Optional[float] = None
+    claimed_at: Any | None = None
+    worker_instance_id: str | None = None
+    worker_pid: int | None = None
+    finished_at: Any | None = None
+    duration_seconds: float | None = None
 
     @field_validator("status")
     @classmethod
@@ -55,55 +56,55 @@ class ExecutionBase(BaseModel):
 
 
 class ExecutionResponse(ExecutionBase):
-    logs: Optional[str] = None
-    artifacts: Optional[str] = None
-    automation_name: Optional[str] = None
+    logs: str | None = None
+    artifacts: str | None = None
+    automation_name: str | None = None
     operator_attention_required: bool = False
-    operator_severity: Optional[str] = None
+    operator_severity: str | None = None
     operator_score: int = 0
-    operator_reason_summary: Optional[str] = None
-    operator_action_code: Optional[str] = None
-    operator_action_label: Optional[str] = None
-    operator_action_hint: Optional[str] = None
+    operator_reason_summary: str | None = None
+    operator_action_code: str | None = None
+    operator_action_label: str | None = None
+    operator_action_hint: str | None = None
     requeue_allowed: bool = False
-    requeue_block_reason: Optional[str] = None
+    requeue_block_reason: str | None = None
     stop_allowed: bool = False
-    related_execution_id: Optional[str] = None
-    related_execution_status: Optional[str] = None
-    related_queue_group: Optional[str] = None
+    related_execution_id: str | None = None
+    related_execution_status: str | None = None
+    related_queue_group: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
 class ExecutionSummary(BaseModel):
     id: str
     automation_id: int
-    automation_name: Optional[str] = None
+    automation_name: str | None = None
     status: str
     priority: str = "NORMAL"
     retry_count: int = 0
     max_retries: int = 0
-    queue_group: Optional[str] = None
-    failure_reason: Optional[str] = None
-    recovery_action: Optional[str] = None
-    exit_code: Optional[int] = None
-    requested_by: Optional[str] = None
+    queue_group: str | None = None
+    failure_reason: str | None = None
+    recovery_action: str | None = None
+    exit_code: int | None = None
+    requested_by: str | None = None
     started_at: Any
-    finished_at: Optional[Any] = None
-    duration_seconds: Optional[float] = None
-    artifacts: Optional[str] = None
+    finished_at: Any | None = None
+    duration_seconds: float | None = None
+    artifacts: str | None = None
     operator_attention_required: bool = False
-    operator_severity: Optional[str] = None
+    operator_severity: str | None = None
     operator_score: int = 0
-    operator_reason_summary: Optional[str] = None
-    operator_action_code: Optional[str] = None
-    operator_action_label: Optional[str] = None
-    operator_action_hint: Optional[str] = None
+    operator_reason_summary: str | None = None
+    operator_action_code: str | None = None
+    operator_action_label: str | None = None
+    operator_action_hint: str | None = None
     requeue_allowed: bool = False
-    requeue_block_reason: Optional[str] = None
+    requeue_block_reason: str | None = None
     stop_allowed: bool = False
-    related_execution_id: Optional[str] = None
-    related_execution_status: Optional[str] = None
-    related_queue_group: Optional[str] = None
+    related_execution_id: str | None = None
+    related_execution_status: str | None = None
+    related_queue_group: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
     @model_validator(mode="after")
@@ -119,19 +120,19 @@ class ExecutionTelemetryStart(BaseModel):
 
 class ExecutionTelemetryEnd(BaseModel):
     status: str
-    exit_code: Optional[int] = None
-    logs: Optional[str] = None
-    artifacts: Optional[str] = None
+    exit_code: int | None = None
+    logs: str | None = None
+    artifacts: str | None = None
 
 
 class ExecutionQueueActionRequest(BaseModel):
-    reason: Optional[str] = Field(None, max_length=200)
-    requested_by: Optional[str] = Field(None, max_length=100)
-    priority: Optional[str] = None
+    reason: str | None = Field(None, max_length=200)
+    requested_by: str | None = Field(None, max_length=100)
+    priority: str | None = None
 
     @field_validator("priority")
     @classmethod
-    def v_priority(cls, v: Optional[str]) -> Optional[str]:
+    def v_priority(cls, v: str | None) -> str | None:
         if v is None:
             return v
         value = v.upper()

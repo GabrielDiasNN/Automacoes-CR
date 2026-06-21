@@ -288,11 +288,15 @@ def test_list_executions_rejects_invalid_status_priority_and_dates(client):
     assert invalid_status.status_code == 422
     assert "status inválido" in invalid_status.json()["detail"]
 
-    invalid_priority = client.get("/api/executions?priority=URGENT", headers=AUTH_HEADERS)
+    invalid_priority = client.get(
+        "/api/executions?priority=URGENT", headers=AUTH_HEADERS
+    )
     assert invalid_priority.status_code == 422
     assert "priority inválida" in invalid_priority.json()["detail"]
 
-    invalid_date = client.get("/api/executions?date_from=2026/05/21", headers=AUTH_HEADERS)
+    invalid_date = client.get(
+        "/api/executions?date_from=2026/05/21", headers=AUTH_HEADERS
+    )
     assert invalid_date.status_code == 422
     assert "date_from inválido" in invalid_date.json()["detail"]
 

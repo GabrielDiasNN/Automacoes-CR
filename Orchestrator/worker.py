@@ -4,7 +4,6 @@
 Worker Central de Automacoes v5.3 - Motor de Execucao Concorrente com Tipagem Estrita e Log Batching.
 """
 
-import base64
 import glob
 import json
 import logging
@@ -19,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from queue import Empty, Queue
 from types import FrameType
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 import requests
 from dotenv import load_dotenv
@@ -29,22 +28,32 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from app import models, notifications
-    from app.constants import (EXECUTION_DELIVERED_STATUSES,
-                               EXECUTION_STATUS_ERROR,
-                               EXECUTION_STATUS_PENDING,
-                               EXECUTION_STATUS_RUNNING,
-                               EXECUTION_STATUS_TERMINATED,
-                               EXECUTION_STATUS_TIMEOUT, WORKER_VERSION)
+    from app.constants import (
+        EXECUTION_DELIVERED_STATUSES,
+        EXECUTION_STATUS_ERROR,
+        EXECUTION_STATUS_PENDING,
+        EXECUTION_STATUS_RUNNING,
+        EXECUTION_STATUS_TERMINATED,
+        EXECUTION_STATUS_TIMEOUT,
+        WORKER_VERSION,
+    )
     from app.database import SessionLocal, session_scope
+    from app.logger_setup import setup_json_logger as _setup_json_logger
     from app.runtime import get_project_root
-    from app.services.execution_runtime import (apply_internal_worker_error,
-                                                apply_timeout_result,
-                                                claim_next_task,
-                                                classify_process_result,
-                                                complete_process_execution,
-                                                finalize_terminated_task,
-                                                mark_task_as_failed,
-                                                resolve_script_path)
+    from app.services.execution_runtime import (
+        apply_internal_worker_error,
+        apply_timeout_result,
+        claim_next_task,
+    )
+    from app.services.execution_runtime import (
+        classify_process_result as classify_process_result,
+    )
+    from app.services.execution_runtime import (
+        complete_process_execution,
+        finalize_terminated_task,
+        mark_task_as_failed,
+        resolve_script_path,
+    )
     from app.timezone import get_now_local
 except ImportError as e:
     print(f"CRITICAL: Falha ao importar componentes do app: {e}")
@@ -82,7 +91,6 @@ os.makedirs(log_dir, exist_ok=True)
 is_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
 log_filename = "Worker_test.jsonl" if is_pytest else "Worker.jsonl"
 
-from app.logger_setup import setup_json_logger as _setup_json_logger
 
 logger: logging.Logger = _setup_json_logger(
     "worker",
@@ -99,7 +107,7 @@ logger: logging.Logger = _setup_json_logger(
 shutdown_event: threading.Event = threading.Event()
 wakeup_event: threading.Event = threading.Event()  # Novo: Evento de Wakeup (v6.2.0)
 start_time: float = time.time()
-stats: Dict[str, Any] = {
+stats: dict[str, Any] = {
     "tasks_completed": 0,
     "tasks_failed": 0,
     "active_tasks": 0,
@@ -119,19 +127,21 @@ def update_stat(key: str, delta: int = 1) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _api_headers() -> Dict[str, str]:
+def _api_headers() -> dict[str, str]:
     """Headers de autenticacao para chamadas internas a API do Orchestrator."""
     api_key = os.environ.get("ORCHESTRATOR_API_KEY")
     return {"X-API-Key": api_key} if api_key else {}
 
 
 def wakeup_listener_loop() -> None:
-    """Escuta o sinal de wakeup do Orchestrator via Long-Polling (v6.2.0)."""
+    """Escuta o sinal de wakeup do Orchestrator via Long-Polling com backoff exponencial (A5/2.2)."""
     logger.info("Wakeup listener iniciado (Zero-Latency Mode).")
     headers = _api_headers()
+    backoff = 5
+    MAX_BACKOFF = 60
+
     while not shutdown_event.is_set():
         try:
-            # Long polling de 30s no Orchestrator
             res = requests.get(
                 f"{API_BASE}/api/system/wait-for-task",
                 headers=headers,
@@ -140,13 +150,15 @@ def wakeup_listener_loop() -> None:
             if res.status_code == 200 and res.json().get("status") == "wakeup":
                 logger.info("Sinal de wakeup recebido!")
                 wakeup_event.set()
+            backoff = 5  # reset em sucesso
         except requests.RequestException:
-            # Falha de rede esperada (API offline/reiniciando): retenta sem poluir o log.
-            shutdown_event.wait(5)
+            # Falha de rede esperada (API offline/reiniciando)
+            shutdown_event.wait(backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            # Erro inesperado: mantém a resiliência do loop, mas registra para diagnóstico.
             logger.warning("Erro inesperado no wakeup listener: %s", exc)
-            shutdown_event.wait(5)
+            shutdown_event.wait(backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF)
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +220,7 @@ def _update_heartbeat(db: Any) -> None:
 # Broadcast de Logs
 # ---------------------------------------------------------------------------
 
-log_buffer: Dict[str, List[str]] = {}
+log_buffer: dict[str, list[str]] = {}
 log_buffer_lock: threading.Lock = threading.Lock()
 
 
@@ -263,17 +275,17 @@ def log_flusher_loop() -> None:
                     )
 
 
-def broadcast_event(event_type: str, data: Dict[str, Any]) -> None:
+def broadcast_event(event_type: str, data: dict[str, Any]) -> None:
     """Envia evento de sistema para o WebSocket global."""
-    try:
+    import contextlib
+
+    with contextlib.suppress(requests.RequestException):
         requests.post(
             f"{API_BASE}/api/broadcast_event",
             json={"type": event_type, "data": data},
             headers=_api_headers(),
             timeout=2,
         )
-    except requests.RequestException:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -301,10 +313,10 @@ def enqueue_output(out: Any, queue: Queue[str]) -> None:
     out.close()
 
 
-def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
+def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> str | None:
     """Busca arquivos gerados durante esta execucao."""
-    patterns: List[str] = ["*.xlsx", "*.html", "*.pdf", "*.csv"]
-    found: List[str] = []
+    patterns: list[str] = ["*.xlsx", "*.html", "*.pdf", "*.csv"]
+    found: list[str] = []
     for pattern in patterns:
         for fp in glob.glob(os.path.join(robot_dir, pattern)):
             if os.path.getmtime(fp) >= start_time_ts:
@@ -317,10 +329,39 @@ def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
+# Variáveis de ambiente permitidas nos subprocessos PowerShell (D3/1.5)
+_ALLOWED_ENV_KEYS = {
+    "PATH",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "COMPUTERNAME",
+    "USERNAME",
+    "ORACLE_CLIENT_LIB_DIR",
+    "ORACLE_CLIENT_PATH",
+    "HUB_API_PORT",
+    "PYTHONUTF8",
+    "PYTHONIOENCODING",
+}
+
+
+def _build_subprocess_env(db_exec: Any, exec_id: str) -> dict:
+    """Ambiente mínimo para subprocesso — exclui secrets sensíveis (D3/1.5)."""
+    env = {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
+    env["ORCHESTRATOR_TEST_MODE"] = "true" if db_exec.automation.test_mode else "false"
+    env["EXEC_ID"] = exec_id
+    env["CORRELATION_ID"] = exec_id  # propaga correlation_id (E1)
+    return env
+
+
 def _start_process(db_exec: Any, script_path: str, exec_id: str) -> subprocess.Popen:
     """Inicia o PowerShell e registra o processo ativo para shutdown seguro."""
-    env = os.environ.copy()
-    env["ORCHESTRATOR_TEST_MODE"] = "true" if db_exec.automation.test_mode else "false"
+    env = _build_subprocess_env(db_exec, exec_id)
     process = subprocess.Popen(
         [
             "powershell.exe",
@@ -344,20 +385,35 @@ def _start_process(db_exec: Any, script_path: str, exec_id: str) -> subprocess.P
     return process
 
 
+MAX_LOG_LINES = 10_000  # ~10 MB para linhas de 1KB
+MAX_LOG_CHARS = 5_000_000  # 5 MB hard cap por execução (HF-3/A1)
+
+
 def _drain_process_output(
-    output_queue: Queue[str], logs: List[str], exec_id: str
+    output_queue: Queue[str], logs: list[str], exec_id: str
 ) -> None:
-    """Transfere toda a saída disponível para memória e broadcast em lote."""
+    """Transfere saída disponível para memória com cap de tamanho (HF-3/A1)."""
+    total_chars = sum(len(line) for line in logs)
     while not output_queue.empty():
-        line = output_queue.get_nowait()
-        logs.append(line)
+        try:
+            line = output_queue.get_nowait()
+        except Empty:
+            break
         broadcast_log(line, exec_id)
+        if len(logs) >= MAX_LOG_LINES or total_chars >= MAX_LOG_CHARS:
+            # Cap atingido: continua transmitindo ao WS mas não acumula em memória
+            continue
+        logs.append(line)
+        total_chars += len(line)
+
+
+_DB_CHECK_INTERVAL = 5.0  # verifica banco a cada 5s em vez de 1s (A4/2.1)
 
 
 def _monitor_process(
     process: subprocess.Popen,
     output_queue: Queue[str],
-    logs: List[str],
+    logs: list[str],
     exec_id: str,
     task_start: datetime,
     task_start_ts: float,
@@ -365,42 +421,50 @@ def _monitor_process(
 ) -> bool:
     """Monitora saída, interrupção e timeout; retorna True para finalização normal."""
     timeout_delta = timedelta(minutes=max_runtime)
+    last_db_check = 0.0
+
     while not shutdown_event.is_set():
         _drain_process_output(output_queue, logs, exec_id)
         if process.poll() is not None:
             _drain_process_output(output_queue, logs, exec_id)
             return True
 
-        with session_scope(SessionLocal) as check_db:
-            db_status: Any = (
-                check_db.query(models.Execution.status)
-                .filter(models.Execution.id == exec_id)
-                .scalar()
-            )
-            if db_status == EXECUTION_STATUS_TERMINATED:
-                _force_kill(process.pid)
-                broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
-                finalize_terminated_task(check_db, exec_id, logs, task_start_ts)
-                broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
-                return False
-
-            if (get_now_local() - task_start) > timeout_delta:
-                _force_kill(process.pid)
-                broadcast_log(f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id)
-                db_exec_upd = apply_timeout_result(
-                    check_db, exec_id, logs, task_start_ts
+        now_ts = time.time()
+        if (now_ts - last_db_check) >= _DB_CHECK_INTERVAL:
+            last_db_check = now_ts
+            with session_scope(SessionLocal) as check_db:
+                db_status: Any = (
+                    check_db.query(models.Execution.status)
+                    .filter(models.Execution.id == exec_id)
+                    .scalar()
                 )
-                if db_exec_upd:
-                    auto = (
-                        check_db.query(models.Automation)
-                        .filter(models.Automation.id == db_exec_upd.automation_id)
-                        .first()
+                if db_status == EXECUTION_STATUS_TERMINATED:
+                    _force_kill(process.pid)
+                    broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
+                    finalize_terminated_task(check_db, exec_id, logs, task_start_ts)
+                    broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
+                    return False
+
+                if (get_now_local() - task_start) > timeout_delta:
+                    _force_kill(process.pid)
+                    broadcast_log(
+                        f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
                     )
-                    if auto:
-                        notifications.dispatch_alerts(auto, db_exec_upd)
-                update_stat("tasks_failed", 1)
-                broadcast_event("TASK_TIMEOUT", {"exec_id": exec_id})
-                return False
+                    db_exec_upd = apply_timeout_result(
+                        check_db, exec_id, logs, task_start_ts
+                    )
+                    if db_exec_upd:
+                        auto = (
+                            check_db.query(models.Automation)
+                            .filter(models.Automation.id == db_exec_upd.automation_id)
+                            .first()
+                        )
+                        if auto:
+                            notifications.dispatch_alerts_async(auto, db_exec_upd)
+                    update_stat("tasks_failed", 1)
+                    broadcast_event("TASK_TIMEOUT", {"exec_id": exec_id})
+                    return False
+
         time.sleep(1)
     return False
 
@@ -410,7 +474,7 @@ def _finalize_execution(
     process: subprocess.Popen,
     exec_id: str,
     robot_dir: str,
-    logs: List[str],
+    logs: list[str],
     task_start_ts: float,
 ) -> None:
     """Persiste resultado, artefatos, alertas e evento final da execução."""
@@ -442,7 +506,7 @@ def _finalize_execution(
                 .first()
             )
             if auto:
-                notifications.dispatch_alerts(auto, db_exec)
+                notifications.dispatch_alerts_async(auto, db_exec)
 
         if db_exec:
             broadcast_event(
@@ -469,7 +533,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
     """Orquestra as fases de início, monitoramento e finalização da tarefa."""
     update_stat("active_tasks", 1)
     task_start_ts = time.time()
-    log_extra: Dict[str, str] = {"correlation_id": exec_id}
+    log_extra: dict[str, str] = {"correlation_id": exec_id}
     try:
         with session_scope(SessionLocal) as db:
             db_exec = (
@@ -512,7 +576,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                 target=enqueue_output, args=(process.stdout, output_queue), daemon=True
             )
             reader_thread.start()
-            logs: List[str] = []
+            logs: list[str] = []
             should_finalize = _monitor_process(
                 process,
                 output_queue,
@@ -664,7 +728,7 @@ def main_loop() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _signal_handler(signum: int, frame: Optional[FrameType]) -> None:
+def _signal_handler(signum: int, frame: FrameType | None) -> None:
     logger.info("Sinal recebido: %d. Iniciando graceful shutdown...", signum)
     shutdown_event.set()
 

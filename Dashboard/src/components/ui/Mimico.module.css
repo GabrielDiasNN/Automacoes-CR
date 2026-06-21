@@ -1,0 +1,138 @@
+.synoptic {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--graphite-850);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+}
+
+.node {
+  flex: 1 1 0;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--graphite-900);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--engraved);
+}
+.nodeWide {
+  flex: 1.6 1 0;
+  min-width: 180px;
+}
+.nodeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: var(--track-mid);
+  text-transform: uppercase;
+  color: var(--text-lo);
+}
+.reading {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-data-xl);
+  font-weight: 500;
+  color: var(--text-hi);
+  line-height: 1;
+}
+.unit {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+}
+
+/* pipes (conexões) */
+.pipe {
+  align-self: center;
+  flex: 0 0 28px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--graphite-600);
+  background-image: linear-gradient(90deg, transparent 0%, var(--cyan) 50%, transparent 100%);
+  background-size: 200% 100%;
+  background-position: 0 center;
+}
+.flowing {
+  animation: sweep 1.6s linear infinite;
+}
+
+/* lanes */
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lane {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.laneLamp {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.laneName {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-mid);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.laneCount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  color: var(--amber);
+}
+.lanePending {
+  color: var(--text-lo);
+}
+.laneEmpty {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-lo);
+}
+
+/* worker */
+.workerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.workerLamp {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pulse {
+  animation: pulse-ring 2s var(--ease) infinite;
+}
+
+/* resultado */
+.outcome {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-display-l);
+  font-weight: 500;
+}
+.slash {
+  color: var(--text-lo);
+  margin: 0 4px;
+}
+.ratio {
+  margin-top: 2px;
+}

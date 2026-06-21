@@ -5,16 +5,14 @@ import io
 import json
 import os
 import sys
-
 from typing import Any
-
 
 AUTOMATION_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "Receitas Emitidas")
 )
 sys.path.append(AUTOMATION_PATH)
 
-import generate_html_report  # type: ignore
+import generate_html_report
 
 
 def test_html_escape_converts_portuguese_entities() -> None:

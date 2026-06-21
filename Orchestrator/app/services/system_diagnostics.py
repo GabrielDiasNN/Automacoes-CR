@@ -2,8 +2,9 @@
 
 # pylint: disable=relative-beyond-top-level,too-many-locals,too-many-statements
 
+from collections.abc import Callable
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -351,7 +352,7 @@ def build_diagnostics_payload(
         overall_status = "degraded"
 
     jobs = scheduler.get_jobs()
-    next_runs = sorted((job.next_run_time for job in jobs if job.next_run_time))[:5]
+    next_runs = sorted(job.next_run_time for job in jobs if job.next_run_time)[:5]
     operator_actions = build_operator_actions(findings)
     checks = build_runtime_checks(
         worker_status=worker_status,

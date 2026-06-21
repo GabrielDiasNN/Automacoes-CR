@@ -2,7 +2,7 @@
 
 # pylint: disable=relative-beyond-top-level,no-name-in-module
 
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -28,7 +28,7 @@ def build_next_run_lookup(jobs: list[schemas.ScheduledJob]) -> dict[int, Any]:
 
 def _resolve_operational_state(
     auto: models.Automation,
-    last_status: Optional[str],
+    last_status: str | None,
     failures_24h: int,
     success_24h: int,
 ) -> str:
@@ -46,9 +46,9 @@ def _resolve_operational_state(
 
 def build_automation_response(
     auto: models.Automation,
-    next_run_lookup: Optional[dict[int, Any]] = None,
-    latest_execution_lookup: Optional[dict[int, dict[str, Any]]] = None,
-    metrics_24h_lookup: Optional[dict[int, dict[str, Any]]] = None,
+    next_run_lookup: dict[int, Any] | None = None,
+    latest_execution_lookup: dict[int, dict[str, Any]] | None = None,
+    metrics_24h_lookup: dict[int, dict[str, Any]] | None = None,
 ) -> schemas.AutomationResponse:
     """Monta o contrato completo consumido pela aba de automações."""
     auto_id = int(auto.id)
@@ -62,9 +62,7 @@ def build_automation_response(
     failures_24h = int(metrics_row.get("failures_24h", 0) or 0)
     timeouts_24h = int(metrics_row.get("timeouts_24h", 0) or 0)
     last_status = latest_exec.get("status")
-    active_execution_count = (
-        1 if last_status in EXECUTION_ACTIVE_STATUSES else 0
-    )
+    active_execution_count = 1 if last_status in EXECUTION_ACTIVE_STATUSES else 0
 
     auto_resp.last_status = str(last_status) if last_status else None
     auto_resp.last_execution_id = latest_exec.get("id")
@@ -114,9 +112,9 @@ def build_automation_response(
 
 def build_automation_response_batch(
     automations: list[models.Automation],
-    next_run_lookup: Optional[dict[int, Any]] = None,
-    latest_execution_lookup: Optional[dict[int, dict[str, Any]]] = None,
-    metrics_24h_lookup: Optional[dict[int, dict[str, Any]]] = None,
+    next_run_lookup: dict[int, Any] | None = None,
+    latest_execution_lookup: dict[int, dict[str, Any]] | None = None,
+    metrics_24h_lookup: dict[int, dict[str, Any]] | None = None,
 ) -> list[schemas.AutomationResponse]:
     """Aplica o helper em lote mantendo o contrato consistente entre endpoints."""
     return [

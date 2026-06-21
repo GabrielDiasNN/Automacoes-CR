@@ -4,28 +4,30 @@
 Módulo contendo schemas Pydantic relacionados ao Sistema, Telemetria, Diagnósticos e Utilitários.
 """
 
-from typing import Any, Generic, List, Optional, TypeVar
+from typing import Any, Generic, TypeVar
 
-from pydantic import (BaseModel, ConfigDict, Field, field_validator,
-                      model_validator)
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..constants import (BASELINE_STATUS_ATTENTION, BASELINE_STATUS_HEALTHY,
-                         BASELINE_STATUS_INCIDENT, DIAGNOSTIC_SEVERITIES,
-                         OPERATIONAL_BASELINE_STATUSES,
-                         ORCHESTRATOR_CONTRACT_VERSION,
-                         ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION,
-                         WORKER_VERSION)
+from ..constants import (
+    BASELINE_STATUS_HEALTHY,
+    DIAGNOSTIC_SEVERITIES,
+    OPERATIONAL_BASELINE_STATUSES,
+    ORCHESTRATOR_CONTRACT_VERSION,
+    ORCHESTRATOR_SCHEMA_VERSION,
+    ORCHESTRATOR_VERSION,
+    WORKER_VERSION,
+)
 from .common import format_dt_br
 from .executions import ExecutionSummary
 
 
 class WorkerStatus(BaseModel):
     is_alive: bool
-    pid: Optional[int] = None
-    instance_id: Optional[str] = None
-    host: Optional[str] = None
+    pid: int | None = None
+    instance_id: str | None = None
+    host: str | None = None
     last_ping: Any = None
-    uptime_seconds: Optional[float] = None
+    uptime_seconds: float | None = None
     tasks_completed: int = 0
     tasks_failed: int = 0
     active_tasks: int = 0
@@ -54,10 +56,10 @@ class SystemHealth(BaseModel):
     scheduler: str
     worker: WorkerStatus
     pending_tasks: int = 0
-    disk_usage_mb: Optional[float] = None
-    wal_size_mb: Optional[float] = None
-    cpu_usage: Optional[float] = None
-    ram_usage_percent: Optional[float] = None
+    disk_usage_mb: float | None = None
+    wal_size_mb: float | None = None
+    cpu_usage: float | None = None
+    ram_usage_percent: float | None = None
 
     @model_validator(mode="after")
     def apply_br_format(self) -> "SystemHealth":
@@ -67,8 +69,8 @@ class SystemHealth(BaseModel):
 
 class ScheduledJob(BaseModel):
     id: str
-    automation_id: Optional[int] = None
-    automation_name: Optional[str] = None
+    automation_id: int | None = None
+    automation_name: str | None = None
     next_run_time: Any = None
     trigger: str
 
@@ -83,7 +85,7 @@ class AutomationMetric(BaseModel):
     total_success: int
     total_errors: int
     avg_duration_sec: float
-    last_status: Optional[str] = None
+    last_status: str | None = None
     last_run: Any = None
     test_mode: bool = False
 
@@ -104,7 +106,7 @@ class MetricsSummary(BaseModel):
 
 class MetricsResponse(BaseModel):
     summary: MetricsSummary
-    automations: List[AutomationMetric]
+    automations: list[AutomationMetric]
 
 
 class DiagnosticFinding(BaseModel):
@@ -112,9 +114,9 @@ class DiagnosticFinding(BaseModel):
     component: str
     message: str
     action_hint: str
-    action_code: Optional[str] = None
-    action_label: Optional[str] = None
-    impact: Optional[str] = None
+    action_code: str | None = None
+    action_label: str | None = None
+    impact: str | None = None
     priority: int = 3
 
     @field_validator("severity")
@@ -139,19 +141,19 @@ class DiagnosticsDatabase(BaseModel):
 class DiagnosticsScheduler(BaseModel):
     running: bool
     jobs_loaded: int
-    next_runs: List[str]
-    inconsistencies: List[str] = []
+    next_runs: list[str]
+    inconsistencies: list[str] = []
 
 
 class DiagnosticsQueueItem(BaseModel):
-    exec_id: Optional[str] = None
-    automation_id: Optional[int] = None
-    automation_name: Optional[str] = None
-    priority: Optional[str] = None
-    queue_group: Optional[str] = None
-    claimed_at: Optional[Any] = None
-    worker_instance_id: Optional[str] = None
-    worker_pid: Optional[int] = None
+    exec_id: str | None = None
+    automation_id: int | None = None
+    automation_name: str | None = None
+    priority: str | None = None
+    queue_group: str | None = None
+    claimed_at: Any | None = None
+    worker_instance_id: str | None = None
+    worker_pid: int | None = None
     orphaned: bool = False
     age_seconds: float = 0.0
 
@@ -166,24 +168,24 @@ class DiagnosticsQueue(BaseModel):
     by_status: dict[str, int]
     active_by_priority: dict[str, int] = {}
     active_by_group: dict[str, int] = {}
-    running_over_runtime: List[dict] = []
-    orphaned_running: List[dict] = []
-    retry_pressure: List[dict] = []
-    timeouts_24h_by_group: List[dict] = []
+    running_over_runtime: list[dict] = []
+    orphaned_running: list[dict] = []
+    retry_pressure: list[dict] = []
+    timeouts_24h_by_group: list[dict] = []
     oldest_pending: DiagnosticsQueueItem
     oldest_running: DiagnosticsQueueItem
 
 
 class DiagnosticsHeartbeat(BaseModel):
-    last_ping_age_seconds: Optional[float] = None
+    last_ping_age_seconds: float | None = None
 
 
 class DiagnosticsFailureHotspot(BaseModel):
     automation_id: int
     automation_name: str
     failures_24h: int
-    last_failure_at: Optional[str] = None
-    notification_channels: Optional[str] = None
+    last_failure_at: str | None = None
+    notification_channels: str | None = None
 
 
 class DiagnosticsOperatorAction(BaseModel):
@@ -200,13 +202,13 @@ class RuntimeCheckItem(BaseModel):
     label: str
     status: str
     detail: str
-    value: Optional[str] = None
+    value: str | None = None
 
 
 class RecoveryPlan(BaseModel):
-    light_actions: List[str] = []
-    strong_actions: List[str] = []
-    recommended_action: Optional[str] = None
+    light_actions: list[str] = []
+    strong_actions: list[str] = []
+    recommended_action: str | None = None
 
 
 class DiagnosticsSlo(BaseModel):
@@ -215,7 +217,7 @@ class DiagnosticsSlo(BaseModel):
 
 
 class DiagnosticsTrace(BaseModel):
-    correlation_id: Optional[str] = None
+    correlation_id: str | None = None
 
 
 class DiagnosticsPerformance(BaseModel):
@@ -225,7 +227,7 @@ class DiagnosticsPerformance(BaseModel):
 class DiagnosticsTrendSummary(BaseModel):
     window_hours: int = 24
     points: int = 0
-    latest_status: Optional[str] = None
+    latest_status: str | None = None
     status_counts: dict[str, int] = {}
     max_pending_age_seconds: float = 0.0
     max_running_age_seconds: float = 0.0
@@ -235,7 +237,7 @@ class DiagnosticsTrendSummary(BaseModel):
     orphaned_running_events: int = 0
     baseline_attention_points: int = 0
     baseline_incident_points: int = 0
-    last_snapshot_at: Optional[Any] = None
+    last_snapshot_at: Any | None = None
 
     @model_validator(mode="after")
     def apply_br_format(self) -> "DiagnosticsTrendSummary":
@@ -247,11 +249,11 @@ class OperationalBaselineMetric(BaseModel):
     code: str
     label: str
     status: str
-    current_value: Optional[str] = None
-    attention_threshold: Optional[str] = None
-    incident_threshold: Optional[str] = None
+    current_value: str | None = None
+    attention_threshold: str | None = None
+    incident_threshold: str | None = None
     detail: str
-    action_code: Optional[str] = None
+    action_code: str | None = None
 
     @field_validator("status")
     @classmethod
@@ -263,12 +265,12 @@ class OperationalBaselineMetric(BaseModel):
 
 
 class OperationalBaselineSummary(BaseModel):
-    evaluated_at: Optional[Any] = None
+    evaluated_at: Any | None = None
     status: str = BASELINE_STATUS_HEALTHY
     attention_count: int = 0
     incident_count: int = 0
-    recommended_action: Optional[str] = None
-    metrics: List[OperationalBaselineMetric] = []
+    recommended_action: str | None = None
+    metrics: list[OperationalBaselineMetric] = []
 
     @field_validator("status")
     @classmethod
@@ -290,15 +292,15 @@ class DiagnosticsPayload(BaseModel):
     contract_version: str = ORCHESTRATOR_CONTRACT_VERSION
     timestamp: str
     overall_status: str
-    findings: List[DiagnosticFinding]
+    findings: list[DiagnosticFinding]
     database: DiagnosticsDatabase
     scheduler: DiagnosticsScheduler
     worker: WorkerStatus
     queue: DiagnosticsQueue
     heartbeat: DiagnosticsHeartbeat
-    failure_hotspots: List[DiagnosticsFailureHotspot] = []
-    operator_actions: List[DiagnosticsOperatorAction] = []
-    checks: List[RuntimeCheckItem] = []
+    failure_hotspots: list[DiagnosticsFailureHotspot] = []
+    operator_actions: list[DiagnosticsOperatorAction] = []
+    checks: list[RuntimeCheckItem] = []
     recovery: RecoveryPlan = Field(default_factory=RecoveryPlan)
     slo: DiagnosticsSlo = Field(default_factory=DiagnosticsSlo)
     slo_breaches: dict[str, bool] = {}
@@ -313,28 +315,28 @@ class DiagnosticsPayload(BaseModel):
 
 
 class ScheduleValidationRequest(BaseModel):
-    schedule: Optional[str] = None
+    schedule: str | None = None
 
 
 class ScheduleValidationResponse(BaseModel):
     valid: bool
-    normalized_schedule: Optional[str] = None
+    normalized_schedule: str | None = None
     summary: str
-    errors: List[str] = []
+    errors: list[str] = []
 
 
 class SchedulePreviewRequest(BaseModel):
-    schedule: Optional[str] = None
+    schedule: str | None = None
     limit: int = Field(5, ge=1, le=20)
 
 
 class SchedulePreviewResponse(BaseModel):
     valid: bool
-    normalized_schedule: Optional[str] = None
-    schedule_type: Optional[str] = None
-    schedule_summary: Optional[str] = None
-    next_runs_preview: List[str] = []
-    errors: List[str] = []
+    normalized_schedule: str | None = None
+    schedule_type: str | None = None
+    schedule_summary: str | None = None
+    next_runs_preview: list[str] = []
+    errors: list[str] = []
 
 
 class EnvValidationIssue(BaseModel):
@@ -347,15 +349,15 @@ class EnvValidationResponse(BaseModel):
     valid: bool
     issue_count: int
     normalized_line_count: int
-    issues: List[EnvValidationIssue]
+    issues: list[EnvValidationIssue]
 
 
 class ManagedMutationResponse(BaseModel):
     message: str
     validated: bool = True
-    backup: Optional[str] = None
-    backup_path: Optional[str] = None
-    audit_id: Optional[int] = None
+    backup: str | None = None
+    backup_path: str | None = None
+    audit_id: int | None = None
 
 
 class SystemOverviewKpis(BaseModel):
@@ -363,7 +365,7 @@ class SystemOverviewKpis(BaseModel):
     success_24h: int
     errors_24h: int
     pending_now: int
-    next_window: Optional[str] = None
+    next_window: str | None = None
 
 
 class SystemOverviewScheduler(BaseModel):
@@ -380,33 +382,33 @@ class SystemOverviewQueue(BaseModel):
 class SystemOverviewAutomationCard(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
-    script_path: Optional[str] = None
+    description: str | None = None
+    script_path: str | None = None
     enabled: bool
     test_mode: bool
-    queue_group: Optional[str] = None
-    max_runtime_minutes: Optional[int] = None
-    max_retries: Optional[int] = None
-    cooldown_minutes: Optional[int] = None
-    notification_channels: Optional[str] = None
-    sla_minutes: Optional[int] = None
+    queue_group: str | None = None
+    max_runtime_minutes: int | None = None
+    max_retries: int | None = None
+    cooldown_minutes: int | None = None
+    notification_channels: str | None = None
+    sla_minutes: int | None = None
     sla_status: str = "unknown"  # ok | at_risk | violated | unknown
-    sla_avg_duration_minutes: Optional[float] = None
+    sla_avg_duration_minutes: float | None = None
     success_24h: int = 0
     failures_24h: int = 0
     timeouts_24h: int = 0
-    avg_duration_24h_seconds: Optional[float] = None
-    last_status: Optional[str] = None
-    last_execution_id: Optional[str] = None
-    last_execution_started_at: Optional[str] = None
-    last_execution_finished_at: Optional[str] = None
-    last_execution_duration_seconds: Optional[float] = None
-    last_failure_reason: Optional[str] = None
-    last_recovery_action: Optional[str] = None
-    last_requested_by: Optional[str] = None
-    next_run: Optional[str] = None
-    schedule_summary: Optional[str] = None
-    next_runs_preview: List[str] = []
+    avg_duration_24h_seconds: float | None = None
+    last_status: str | None = None
+    last_execution_id: str | None = None
+    last_execution_started_at: str | None = None
+    last_execution_finished_at: str | None = None
+    last_execution_duration_seconds: float | None = None
+    last_failure_reason: str | None = None
+    last_recovery_action: str | None = None
+    last_requested_by: str | None = None
+    next_run: str | None = None
+    schedule_summary: str | None = None
+    next_runs_preview: list[str] = []
     active_execution_count: int = 0
     pending_count: int = 0
     operational_state: str = "idle"
@@ -431,8 +433,8 @@ class SystemOverviewPortfolio(BaseModel):
     attention_items: int = 0
     incident_items: int = 0
     status: str = BASELINE_STATUS_HEALTHY
-    top_issue: Optional[str] = None
-    recommended_action: Optional[str] = None
+    top_issue: str | None = None
+    recommended_action: str | None = None
 
     @field_validator("status")
     @classmethod
@@ -451,16 +453,16 @@ class SystemOverviewResponse(BaseModel):
     kpis: SystemOverviewKpis
     health: SystemHealth
     status_breakdown: dict[str, int]
-    jobs: List[ScheduledJob]
-    recent: List[ExecutionSummary]
-    automations: List[SystemOverviewAutomationCard]
-    top_failures: List[SystemOverviewFailure]
+    jobs: list[ScheduledJob]
+    recent: list[ExecutionSummary]
+    automations: list[SystemOverviewAutomationCard]
+    top_failures: list[SystemOverviewFailure]
     scheduler: SystemOverviewScheduler
     queue: SystemOverviewQueue
     trend_summary: DiagnosticsTrendSummary = Field(
         default_factory=DiagnosticsTrendSummary
     )
-    portfolio: Optional[SystemOverviewPortfolio] = None
+    portfolio: SystemOverviewPortfolio | None = None
     performance: DiagnosticsPerformance = Field(default_factory=DiagnosticsPerformance)
     diagnostics: DiagnosticsPayload
 
@@ -473,11 +475,11 @@ class SystemHistoryPoint(BaseModel):
     oldest_pending_age_seconds: float = 0.0
     oldest_running_age_seconds: float = 0.0
     wal_size_mb: float = 0.0
-    worker_last_ping_age_seconds: Optional[float] = None
+    worker_last_ping_age_seconds: float | None = None
     running_over_runtime_count: int = 0
     orphaned_running_count: int = 0
-    active_queue_groups: List[str] = []
-    failure_hotspots: List[str] = []
+    active_queue_groups: list[str] = []
+    failure_hotspots: list[str] = []
     slo_breaches: dict[str, bool] = {}
     baseline_status: str = BASELINE_STATUS_HEALTHY
     baseline_attention_count: int = 0
@@ -504,7 +506,7 @@ class SystemHistoryResponse(BaseModel):
     trend_summary: DiagnosticsTrendSummary = Field(
         default_factory=DiagnosticsTrendSummary
     )
-    items: List[SystemHistoryPoint] = []
+    items: list[SystemHistoryPoint] = []
 
 
 class PortfolioDependencyStatus(BaseModel):
@@ -515,36 +517,36 @@ class PortfolioDependencyStatus(BaseModel):
 
 class PortfolioHealthItem(BaseModel):
     catalog_id: str
-    automation_id: Optional[int] = None
+    automation_id: int | None = None
     name: str
     slug: str
     criticality: str
-    owner_area: Optional[str] = None
+    owner_area: str | None = None
     runtime: str
     enabled: bool = False
-    queue_group: Optional[str] = None
-    sla_minutes: Optional[int] = None
+    queue_group: str | None = None
+    sla_minutes: int | None = None
     health_status: str = "unknown"
     sla_state: str = "unknown"
     docs_status: str = "missing"
     drift_status: str = "ok"
     drift_count: int = 0
-    runbook_path: Optional[str] = None
-    readme_path: Optional[str] = None
-    context_path: Optional[str] = None
+    runbook_path: str | None = None
+    readme_path: str | None = None
+    context_path: str | None = None
     next_run: Any = None
-    schedule_summary: Optional[str] = None
-    schedule_lag_minutes: Optional[int] = None
-    schedule_lag_seconds: Optional[float] = None
-    last_status: Optional[str] = None
+    schedule_summary: str | None = None
+    schedule_lag_minutes: int | None = None
+    schedule_lag_seconds: float | None = None
+    last_status: str | None = None
     last_success_at: Any = None
     last_failure_at: Any = None
-    last_success_age_minutes: Optional[int] = None
-    last_failure_age_minutes: Optional[int] = None
-    last_success_age_seconds: Optional[float] = None
-    last_failure_age_seconds: Optional[float] = None
+    last_success_age_minutes: int | None = None
+    last_failure_age_minutes: int | None = None
+    last_success_age_seconds: float | None = None
+    last_failure_age_seconds: float | None = None
     review_status: str = "active"
-    review_reasons: List[str] = []
+    review_reasons: list[str] = []
     dependency_status: PortfolioDependencyStatus = Field(
         default_factory=PortfolioDependencyStatus
     )
@@ -564,23 +566,23 @@ class PortfolioHealthSummary(SystemOverviewPortfolio):
 class PortfolioHealthResponse(BaseModel):
     generated_at: str
     summary: PortfolioHealthSummary
-    items: List[PortfolioHealthItem]
+    items: list[PortfolioHealthItem]
 
 
 class PortfolioDriftIssue(BaseModel):
     code: str
     message: str
     severity: str = "WARN"
-    manifest_value: Optional[str] = None
-    runtime_value: Optional[str] = None
+    manifest_value: str | None = None
+    runtime_value: str | None = None
 
 
 class PortfolioDriftItem(BaseModel):
     catalog_id: str
-    automation_id: Optional[int] = None
+    automation_id: int | None = None
     name: str
     slug: str
-    issues: List[PortfolioDriftIssue] = []
+    issues: list[PortfolioDriftIssue] = []
 
 
 class PortfolioDriftSummary(BaseModel):
@@ -591,7 +593,7 @@ class PortfolioDriftSummary(BaseModel):
 class PortfolioDriftResponse(BaseModel):
     generated_at: str
     summary: PortfolioDriftSummary
-    items: List[PortfolioDriftItem] = []
+    items: list[PortfolioDriftItem] = []
 
 
 class AuditEntry(BaseModel):
@@ -599,9 +601,9 @@ class AuditEntry(BaseModel):
     timestamp: Any
     action: str
     entity_type: str
-    entity_id: Optional[str] = None
-    actor: Optional[str] = None
-    details: Optional[str] = None
+    entity_id: str | None = None
+    actor: str | None = None
+    details: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
     @model_validator(mode="after")
@@ -618,7 +620,7 @@ class SystemVersion(BaseModel):
     started_at: str
     uptime_seconds: float
     max_workers: int
-    allowed_origins: List[str]
+    allowed_origins: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -629,7 +631,7 @@ T = TypeVar("T")
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
-    items: List[T]
+    items: list[T]
     total: int
     page: int
     per_page: int

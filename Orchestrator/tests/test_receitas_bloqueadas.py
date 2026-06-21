@@ -7,12 +7,12 @@ Mapeamento de Regras de Negócio e resiliência via Pytest com Mocks.
 import json
 import os
 import sys
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import openpyxl
 import pandas as pd
 import pytest
-from typing import Any
 
 # Adicionar pasta da automacao ao PYTHONPATH dinamicamente
 AUTOMATION_PATH = os.path.abspath(
@@ -20,7 +20,7 @@ AUTOMATION_PATH = os.path.abspath(
 )
 sys.path.append(AUTOMATION_PATH)
 
-import processar_receitas  # type: ignore
+import processar_receitas
 
 
 @pytest.fixture
@@ -92,7 +92,9 @@ def test_gerar_html_artistico_formata_numeros_inteiros(mock_df_receitas: Any) ->
     df_float.loc[1, "EP Rec."] = 22.0
     df_float.loc[1, "PE Rec"] = 1.0
 
-    html = processar_receitas.gerar_html_artistico(df_float, {"new": 1, "mod": 1, "del": 1})
+    html = processar_receitas.gerar_html_artistico(
+        df_float, {"new": 1, "mod": 1, "del": 1}
+    )
 
     assert "56.0" not in html
     assert "1.0" not in html
@@ -141,31 +143,40 @@ def test_formatar_excel_estilos(tmp_path: Any) -> None:
     div_cell = sheet2.cell(row=2, column=22)  # Coluna 22 (V)
     normal_cell = sheet2.cell(row=3, column=22)
     assert div_cell.fill.start_color.rgb in ("00FECACA", "FECACA")
-    assert normal_cell.fill.start_color.rgb == "00000000" or normal_cell.fill.fill_type is None
+    assert (
+        normal_cell.fill.start_color.rgb == "00000000"
+        or normal_cell.fill.fill_type is None
+    )
 
 
 @patch("processar_receitas.oracledb.connect")
 @patch("processar_receitas.os.path.exists")
 @patch("processar_receitas.open")
-def test_process_sem_alteracoes_exit_2(mock_open: Any, mock_exists: Any, mock_connect: Any, tmp_path: Any) -> None:
+def test_process_sem_alteracoes_exit_2(
+    mock_open: Any, mock_exists: Any, mock_connect: Any, tmp_path: Any
+) -> None:
     """Valida que process() termina com exit(2) quando os dados do Oracle coincidem com o estado anterior (idempotência)."""
     os.environ["ORACLE_READONLY_USER"] = "test_user"
     os.environ["ORACLE_READONLY_PASSWORD"] = "test_pass"
     os.environ["ORACLE_CLIENT_LIB_DIR"] = tmp_path.as_posix()
     os.environ["TNS_ADMIN"] = tmp_path.as_posix()
 
-    state_content = json.dumps({
-        "last_hash": "abc123",
-        "updated_at": "2026-05-19T10:00:00",
-        "records": [{
-            "Key": "Azul_5_15",
-            "Cor Rec.": "Azul",
-            "EP Rec.": 5,
-            "PE Rec": 15,
-            "Data Última Prod.": "18/05/2026",
-            "Data Bloqueio": "17/05/2026",
-        }],
-    })
+    state_content = json.dumps(
+        {
+            "last_hash": "abc123",
+            "updated_at": "2026-05-19T10:00:00",
+            "records": [
+                {
+                    "Key": "Azul_5_15",
+                    "Cor Rec.": "Azul",
+                    "EP Rec.": 5,
+                    "PE Rec": 15,
+                    "Data Última Prod.": "18/05/2026",
+                    "Data Bloqueio": "17/05/2026",
+                }
+            ],
+        }
+    )
 
     def side_exists(path: str) -> bool:
         if "SQL-ReceitasBloqueadas.sql" in path:
@@ -202,17 +213,23 @@ def test_process_sem_alteracoes_exit_2(mock_open: Any, mock_exists: Any, mock_co
     mock_conn.cursor.return_value = mock_cursor
 
     # Oracle devolve exatamente os mesmos dados que estão no estado → sem diff
-    mock_df_igual = pd.DataFrame([{
-        "COR_REC": "Azul",
-        "EP_REC": 5,
-        "PE_REC": 15,
-        "DATA_ULT_PROD": "2026-05-18",
-        "DATA_BLOQUEIO": "2026-05-17",
-    }])
+    mock_df_igual = pd.DataFrame(
+        [
+            {
+                "COR_REC": "Azul",
+                "EP_REC": 5,
+                "PE_REC": 15,
+                "DATA_ULT_PROD": "2026-05-18",
+                "DATA_BLOQUEIO": "2026-05-17",
+            }
+        ]
+    )
 
-    with patch("processar_receitas.pd.read_sql", return_value=mock_df_igual), \
-         patch("processar_receitas.sys.argv", ["processar_receitas.py", "test_idem"]), \
-         patch("processar_receitas.sys.exit", side_effect=SystemExit(2)) as mock_exit:
+    with (
+        patch("processar_receitas.pd.read_sql", return_value=mock_df_igual),
+        patch("processar_receitas.sys.argv", ["processar_receitas.py", "test_idem"]),
+        patch("processar_receitas.sys.exit", side_effect=SystemExit(2)) as mock_exit,
+    ):
         with pytest.raises(SystemExit) as excinfo:
             processar_receitas.process()
 
@@ -223,7 +240,9 @@ def test_process_sem_alteracoes_exit_2(mock_open: Any, mock_exists: Any, mock_co
 @patch("processar_receitas.oracledb.connect")
 @patch("processar_receitas.os.path.exists")
 @patch("processar_receitas.open")
-def test_process_sucesso_com_novos_bloqueios(mock_open: Any, mock_exists: Any, mock_connect: Any, tmp_path: Any) -> None:
+def test_process_sucesso_com_novos_bloqueios(
+    mock_open: Any, mock_exists: Any, mock_connect: Any, tmp_path: Any
+) -> None:
     """
     Valida o fluxo process() quando ha novos bloqueios, garantindo a geracao
     de html, xlsx e estado tmp.
@@ -324,11 +343,13 @@ def test_process_sucesso_com_novos_bloqueios(mock_open: Any, mock_exists: Any, m
     excel_writer.__enter__.return_value = MagicMock()
     excel_writer.__exit__.return_value = None
 
-    with patch("processar_receitas.pd.read_sql", return_value=mock_df_db), \
-         patch("processar_receitas.pd.ExcelWriter", return_value=excel_writer), \
-         patch("processar_receitas.pd.DataFrame.to_excel"), \
-         patch("processar_receitas.formatar_excel") as mock_format, \
-         patch("processar_receitas.sys.exit") as mock_exit:
+    with (
+        patch("processar_receitas.pd.read_sql", return_value=mock_df_db),
+        patch("processar_receitas.pd.ExcelWriter", return_value=excel_writer),
+        patch("processar_receitas.pd.DataFrame.to_excel"),
+        patch("processar_receitas.formatar_excel") as mock_format,
+        patch("processar_receitas.sys.exit") as mock_exit,
+    ):
 
         # Executa o processador
         processar_receitas.process()

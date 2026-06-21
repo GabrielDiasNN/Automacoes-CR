@@ -16,8 +16,11 @@ from .. import models, schemas
 from ..database import get_db
 from ..middleware import get_api_key
 from ..utils import get_client_ip, log_audit
-from .automations import (_backup_file_before_write, _resolve_automation_dir,
-                          _resolve_managed_file)
+from .automations import (
+    _backup_file_before_write,
+    _resolve_automation_dir,
+    _resolve_managed_file,
+)
 
 logger = logging.getLogger("orchestrator")
 
@@ -50,7 +53,7 @@ def get_automation_configs(
         ):
             continue
         try:
-            with open(jf, "r", encoding="utf-8") as f:
+            with open(jf, encoding="utf-8") as f:
                 content = f.read()
             configs.append({"filename": filename, "content": content})
         except OSError as exc:

@@ -4,7 +4,6 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -23,12 +22,17 @@ if src_dir.exists() and str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
 try:
-    from beneficiamento.contracts import (  # type: ignore
-        obter_detail_historico, obter_overview_historico)
-    from beneficiamento.data import buscar_historico  # type: ignore
-    from beneficiamento.snapshot_dashboard import (  # type: ignore
-        build_dashboard_payload, build_health_payload, build_periods_payload,
-        load_period_payload)
+    from beneficiamento.contracts import (
+        obter_detail_historico,
+        obter_overview_historico,
+    )
+    from beneficiamento.data import buscar_historico
+    from beneficiamento.snapshot_dashboard import (
+        build_dashboard_payload,
+        build_health_payload,
+        build_periods_payload,
+        load_period_payload,
+    )
 except ImportError:
     buscar_historico = None
     obter_detail_historico = None
@@ -54,22 +58,20 @@ def _ensure_snapshot_dashboard() -> None:
 
 @router.get("/historico", response_model=schemas.BeneficiamentoHistoricoResponse)
 def get_beneficiamento_historico(
-    ob: Optional[str] = Query(None, description="Número da OB (busca parcial)"),
-    alternativo: Optional[str] = Query(
+    ob: str | None = Query(None, description="Número da OB (busca parcial)"),
+    alternativo: str | None = Query(
         None, description="Código Alternativo ou Reduzido do produto"
     ),
-    dt_inicio: Optional[str] = Query(
+    dt_inicio: str | None = Query(
         None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
     ),
-    dt_fim: Optional[str] = Query(
+    dt_fim: str | None = Query(
         None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
     ),
-    ano_sem: Optional[int] = Query(
+    ano_sem: int | None = Query(
         None, description="Código do Ano + Semana ISO (ex: 202622)"
     ),
-    ano_mes: Optional[str] = Query(
-        None, description="Código do Ano + Mês (ex: 202605)"
-    ),
+    ano_mes: str | None = Query(None, description="Código do Ano + Mês (ex: 202605)"),
     limit: int = Query(500, description="Limite máximo de registros retornados"),
     api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoHistoricoResponse:
@@ -103,19 +105,19 @@ def get_beneficiamento_historico(
 
 @router.get("/overview", response_model=schemas.BeneficiamentoOverviewResponse)
 def get_beneficiamento_overview(
-    dt_inicio: Optional[str] = Query(
+    dt_inicio: str | None = Query(
         None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
     ),
-    dt_fim: Optional[str] = Query(
+    dt_fim: str | None = Query(
         None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
     ),
-    maquina: Optional[str] = Query(None, description="Nome da máquina para filtro"),
-    fase: Optional[str] = Query(None, description="Nome da fase para filtro"),
-    turno: Optional[str] = Query(None, description="Turno específico para filtro"),
-    alternativo: Optional[str] = Query(
+    maquina: str | None = Query(None, description="Nome da máquina para filtro"),
+    fase: str | None = Query(None, description="Nome da fase para filtro"),
+    turno: str | None = Query(None, description="Turno específico para filtro"),
+    alternativo: str | None = Query(
         None, description="Código Alternativo principal do produto"
     ),
-    q: Optional[str] = Query(
+    q: str | None = Query(
         None, description="Busca por OB, produto, artigo, cor ou código"
     ),
     api_key: str = Depends(get_api_key),
@@ -224,20 +226,20 @@ def get_beneficiamento_detail(
     target_type: str = Query(
         ..., description="Tipo do detalhe: produto, maquina_fase, fase, turno ou ob"
     ),
-    dt_inicio: Optional[str] = Query(
+    dt_inicio: str | None = Query(
         None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
     ),
-    dt_fim: Optional[str] = Query(
+    dt_fim: str | None = Query(
         None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
     ),
-    maquina: Optional[str] = Query(None, description="Nome da máquina para filtro"),
-    fase: Optional[str] = Query(None, description="Nome da fase para filtro"),
-    turno: Optional[str] = Query(None, description="Turno específico para filtro"),
-    alternativo: Optional[str] = Query(
+    maquina: str | None = Query(None, description="Nome da máquina para filtro"),
+    fase: str | None = Query(None, description="Nome da fase para filtro"),
+    turno: str | None = Query(None, description="Turno específico para filtro"),
+    alternativo: str | None = Query(
         None, description="Código Alternativo principal do produto"
     ),
-    ob: Optional[str] = Query(None, description="Número da OB"),
-    q: Optional[str] = Query(
+    ob: str | None = Query(None, description="Número da OB"),
+    q: str | None = Query(
         None, description="Busca por OB, produto, artigo, cor ou código"
     ),
     page: int = Query(1, description="Página do detalhe"),
@@ -300,6 +302,7 @@ def post_beneficiamento_refresh(
     if result.get("status") == "error":
         raise HTTPException(
             status_code=500,
-            detail=result.get("detail") or "Falha ao executar refresh do beneficiamento.",
+            detail=result.get("detail")
+            or "Falha ao executar refresh do beneficiamento.",
         )
     return schemas.BeneficiamentoRefreshResponse.model_validate(result)

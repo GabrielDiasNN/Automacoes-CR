@@ -291,6 +291,21 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-test.txt
 
+      - name: Configurar Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Dashboard/package-lock.json
+
+      - name: Instalar dependencias do Dashboard (lockfile)
+        run: npm ci
+        working-directory: Dashboard
+
+      - name: Build do Dashboard React (tsc + vite)
+        run: npm run build
+        working-directory: Dashboard
+
       - name: Cache Browsers Playwright
         id: playwright-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -444,13 +459,16 @@ jobs:
           ./Tools/Test-LogConformidade.ps1 -RootPath "${{ github.workspace }}" -Paths $changedFiles
 
   frontend:
-    name: Lint JavaScript (Dashboard)
+    name: Qualidade Frontend (Dashboard React)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     needs: preparar-diff
     if: needs.preparar-diff.outputs.has_js == 'true'
     permissions:
       contents: read
+    defaults:
+      run:
+        working-directory: Dashboard
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -462,13 +480,16 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: Dashboard/package-lock.json
 
       - name: Instalar dependencias (lockfile)
         run: npm ci
 
       - name: ESLint
-        run: npm run lint:js
+        run: npm run lint
+
+      - name: Build (tsc + vite)
+        run: npm run build
 
   markdown:
     name: Markdown

@@ -23,6 +23,10 @@ def get_project_root() -> str:
 
 
 def get_dashboard_path() -> str:
+    """Retorna Dashboard/dist/ se o build React existir, senão Dashboard/ (vanilla fallback)."""
+    dist = os.path.join(PROJECT_ROOT, "Dashboard", "dist")
+    if os.path.isdir(dist):
+        return dist
     return os.path.join(PROJECT_ROOT, "Dashboard")
 
 
@@ -47,5 +51,5 @@ async def wait_for_task_signal(timeout_seconds: int = 30) -> str:
         await asyncio.wait_for(task_queued_event.wait(), timeout=timeout_seconds)
         task_queued_event.clear()
         return "wakeup"
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return "timeout"

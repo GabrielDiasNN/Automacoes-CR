@@ -1,8 +1,4 @@
 {
-  "enabledPlugins": {
-    "claude-code-setup@claude-plugins-official": true,
-    "context7@claude-plugins-official": true
-  },
   "hooks": {
     "PostToolUse": [
       {
@@ -10,9 +6,23 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "powershell",
             "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; if ($f -and $f.EndsWith('.py')) { python -m black $f 2>&1; python -m isort $f 2>&1 }",
+            "shell": "powershell",
             "statusMessage": "Formatando Python (black + isort)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; if ($f -and $f.EndsWith('.ps1')) { $bytes = [System.IO.File]::ReadAllBytes($f); if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) { Write-Output '{\"systemMessage\":\"AVISO: ' + $f + ' nao tem UTF-8 BOM obrigatorio para .ps1 — corrija antes do PR\"}' } }",
+            "shell": "powershell",
+            "statusMessage": "Verificando UTF-8 BOM (.ps1)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; if ($f -and $f -match 'Dashboard[/\\\\]src') { npm run lint:js 2>&1 }",
+            "shell": "powershell",
+            "statusMessage": "ESLint Dashboard/src...",
             "async": true
           }
         ]
@@ -24,11 +34,16 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "powershell",
-            "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; $blocked = @('.env', 'automacoes.db', 'orchestrator.db', 'orchestrator.pid', 'worker.pid'); foreach ($b in $blocked) { if ($f -and $f.EndsWith($b)) { Write-Error \"BLOQUEADO: arquivo sensivel nao pode ser editado pelo agente: $f\"; exit 1 } }"
+            "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; $blocked = @('.env', 'automacoes.db', 'orchestrator.db', 'orchestrator.pid', 'worker.pid'); foreach ($b in $blocked) { if ($f -and $f.EndsWith($b)) { Write-Error \"BLOQUEADO: arquivo sensivel nao pode ser editado pelo agente: $f\"; exit 1 } }",
+            "shell": "powershell"
           }
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "claude-code-setup@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true
   }
 }

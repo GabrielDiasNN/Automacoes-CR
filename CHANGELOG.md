@@ -1,5 +1,25 @@
 # Changelog
 
+## [9.5.0] - 21/06/2026
+### Alterado
+- **Nova identidade visual do Dashboard — "Sala de Instrumentação"**: redesign completo do frontend React com identidade industrial (grafite + sistema de sinais ciano/âmbar/verde/vermelho onde cor codifica significado), família tipográfica IBM Plex (Sans Condensed / Sans / Mono) e cantos de instrumento. Substitui a antiga "Sala de Controle" âmbar-sobre-preto.
+- **Design system de componentes** (`Dashboard/src/components/ui/`): primitivos reutilizáveis (Button, Card, Nameplate, StatusTag, StatTile, DataTable, Drawer, ConfirmModal, Toast, Feedback) e componentes de assinatura (Mímico Operacional, Anunciador, Gauge SVG, Sparkline, TimeSeries via uPlot) com CSS Modules e tokens centralizados (`styles/tokens.css`) — fim dos inline styles dispersos.
+- **Roteamento por URL real** (`react-router-dom`): rotas `/painel /execucoes /observabilidade /beneficiamento /automacoes /sistema` com deep-link e histórico; barra de status global ao vivo no topo (estado do sistema, fila, worker, sinal WebSocket).
+- **Inteligência operacional à frente**: scoring de atenção do operador (severidade/score), status de SLA, lanes de fila e criticidade passam a ser exibidos; Execuções com ações contextuais (Reenfileirar/Parar) e drawer de detalhe com visor de logs.
+- **Beneficiamento real**: página deixa de despejar JSON cru e passa a mostrar saúde do snapshot, seletor de período, KPIs e rankings.
+- **Camada de dados reconciliada** (`Dashboard/src/api/orchestrator.ts`): cliente tipado alinhado às rotas reais do Orchestrator (`/start`, `/pause`, `/resume`, `/stop`, `/requeue`, `system/overview|history|baseline`), corrigindo chamadas defasadas.
+- **Acessibilidade**: contraste de tokens revisado (WCAG AA), foco visível (ciano), focus-trap em modais/drawer, skip-link e layout responsivo até mobile; `prefers-reduced-motion` respeitado.
+
+### Adicionado
+- **SPA fallback no `RevalidatedStaticFiles`** (`Orchestrator/app/main.py`): requisições 404 sob `/dashboard` caem em `index.html`, habilitando deep-links do react-router em recarga de página.
+
+### Removido
+- **Frontend vanilla legado**: `Dashboard/js/**` (~4.800 LOC) e `Dashboard/css/dashboard.css` (1.976 linhas), inertes desde que `dist/` passou a ser autoritativo. Removido também o `eslint.config.mjs` da raiz (obsoleto; o Dashboard tem o seu próprio).
+
+### CI/Governança
+- **Gate de frontend renovado**: jobs `js-quality` (`ci.yml`) e `frontend` (`governanca.yml`) passam a instalar, lintar e **buildar** o projeto React em `Dashboard/` (tsc + vite), em vez do antigo `eslint` sobre `Dashboard/js`. O `lint:js` da raiz delega para o lint do Dashboard.
+- **Detecção de alvos**: `Tools/Get-GovernanceTargetSummary.ps1` e `Tools/Test-SourceEncoding.ps1` passam a reconhecer `.ts`/`.tsx` (e `.mjs`/`.cjs`), garantindo que mudanças no Dashboard acionem o gate e a checagem de encoding (UTF-8 sem BOM).
+
 ## [9.4.1] - 19/06/2026
 ### Alterado
 - **Limpeza de Caches e Resíduos**: Aplicação segura da política de retenção do repositório via `Tools/AplicarPoliticaRetencao.ps1`, removendo diretórios de cache locais (`__pycache__` e `.mypy_cache`) sem afetar arquivos de ambiente, dados locais ou arquivos versionados pelo Git.

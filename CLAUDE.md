@@ -37,9 +37,12 @@ pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 pip-compile requirements.in -o requirements.txt
 ```
 
-### Dashboard (JS)
+### Dashboard (React + TypeScript + Vite)
 ```powershell
-npm run lint:js          # eslint em Dashboard/js/**
+cd Dashboard; npm ci            # instalar dependências
+cd Dashboard; npm run lint      # ESLint (src/**/*.ts,tsx)
+cd Dashboard; npm run build     # tsc + vite build → Dashboard/dist/
+npm run lint:js                 # atalho na raiz: delega ao lint do Dashboard
 ```
 
 ### Governança e Quality Gate
@@ -71,7 +74,7 @@ pwsh -File Tools\New-Automation.ps1 -Name "NomeAutomacao" -Owner "equipe" -Criti
 Monorepo com três camadas principais:
 
 1. **Orchestrator** (`Orchestrator/`) — FastAPI v5 + APScheduler + SQLite WAL. Motor de execução central.
-2. **Dashboard** (`Dashboard/`) — SPA estático (HTML/CSS/JS puro) servido pelo próprio FastAPI via `StaticFiles`. Roda em `http://127.0.0.1:8000/dashboard/`.
+2. **Dashboard** (`Dashboard/`) — SPA React + TypeScript + Vite (fontes em `Dashboard/src/`, build em `Dashboard/dist/`) servido pelo próprio FastAPI via `StaticFiles` com fallback SPA para rotas client-side. Roda em `http://127.0.0.1:8000/dashboard/`.
 3. **Automações de domínio** — diretórios independentes. As automações registradas com manifesto (`Receitas Bloqueadas/`, `Receitas Emitidas/`, `Montagem de Terceirizados/`) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo).
 
 ### Orchestrator (`Orchestrator/app/`)
@@ -123,7 +126,7 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - Atualizar `docs/ai-native-context-monitor.md` quando a mudança alterar estado que futuros agentes precisam conhecer para decidir corretamente.
 
 ### Validação E2E
-- Para mudanças em rotas FastAPI consumidas pelo Dashboard ou em `Dashboard/js/`, a validação final obrigatória é Playwright contra `http://127.0.0.1:8000/dashboard/`.
+- Para mudanças em rotas FastAPI consumidas pelo Dashboard ou em `Dashboard/src/`, a validação final obrigatória é Playwright contra `http://127.0.0.1:8000/dashboard/`.
 - Registrar evidência com `Tools/Test-PlaywrightEvidence.ps1`.
 - Padrão completo (critérios, evidência mínima): `docs/playwright-e2e-standard.md`.
 

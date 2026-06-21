@@ -116,7 +116,7 @@ function Test-AreaAffected {
 
 $hasPython = Test-AreaAffected -Patterns @("\.py$", "^requirements[^\\]*\.(txt|in)$")
 $hasPowerShell = Test-AreaAffected -Patterns @("\.(ps1|psm1|psd1)$")
-$hasJs = Test-AreaAffected -Patterns @("\.(js|mjs|cjs)$", "\.(html|css)$")
+$hasJs = Test-AreaAffected -Patterns @("\.(js|mjs|cjs|ts|tsx)$", "\.(html|css)$")
 $hasMarkdown = Test-AreaAffected -Patterns @("\.md$")
 
 $summary = [PSCustomObject]@{

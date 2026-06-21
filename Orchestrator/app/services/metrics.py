@@ -2,8 +2,9 @@
 
 # pylint: disable=relative-beyond-top-level,not-callable
 
+from collections.abc import Iterable
 from datetime import timedelta
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
@@ -163,7 +164,7 @@ def get_sla_metrics_by_automation_24h(db: Session) -> dict[int, dict[str, Any]]:
 
 
 def _normalize_automation_ids(
-    automation_ids: Optional[Iterable[int]] = None,
+    automation_ids: Iterable[int] | None = None,
 ) -> list[int]:
     """Remove nulos, duplicidades e normaliza IDs antes de aplicar filtros SQL."""
     if automation_ids is None:
@@ -172,7 +173,7 @@ def _normalize_automation_ids(
 
 
 def get_automation_metrics_24h(
-    db: Session, automation_ids: Optional[Iterable[int]] = None
+    db: Session, automation_ids: Iterable[int] | None = None
 ) -> dict[int, dict[str, Any]]:
     """Retorna métricas operacionais das últimas 24h agrupadas por automação."""
     window_start = get_now_local() - timedelta(hours=24)
@@ -225,7 +226,7 @@ def get_automation_metrics_24h(
 
 
 def get_latest_execution_snapshot_by_automation(
-    db: Session, automation_ids: Optional[Iterable[int]] = None
+    db: Session, automation_ids: Iterable[int] | None = None
 ) -> dict[int, dict[str, Any]]:
     """Retorna o snapshot da execução mais recente por automação sem N+1."""
     ids = _normalize_automation_ids(automation_ids)

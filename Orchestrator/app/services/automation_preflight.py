@@ -73,9 +73,8 @@ def _load_manifest_governance(
             ],
         )
 
-    manifest_payload = json.loads(
-        open(manifest_path, "r", encoding="utf-8").read()
-    )
+    with open(manifest_path, encoding="utf-8") as f:
+        manifest_payload = json.load(f)
     manifest = CatalogManifest.model_validate(manifest_payload)
     blocking_issues: list[schemas.AutomationPreflightIssue] = []
     warnings: list[schemas.AutomationPreflightIssue] = []
@@ -110,7 +109,9 @@ def _load_manifest_governance(
             )
         )
 
-    if int(payload.get("max_runtime_minutes") or 0) != int(manifest.max_runtime_minutes):
+    if int(payload.get("max_runtime_minutes") or 0) != int(
+        manifest.max_runtime_minutes
+    ):
         blocking_issues.append(
             _issue(
                 "max_runtime_mismatch",
@@ -137,7 +138,9 @@ def _load_manifest_governance(
             )
         )
 
-    if (payload.get("notification_channels") or None) != _channels_to_csv(manifest.channels):
+    if (payload.get("notification_channels") or None) != _channels_to_csv(
+        manifest.channels
+    ):
         blocking_issues.append(
             _issue(
                 "notification_channels_mismatch",

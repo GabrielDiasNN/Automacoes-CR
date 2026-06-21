@@ -53,16 +53,28 @@ def capture_system_health_snapshot(
         oldest_running_age_seconds=float(
             queue.get("oldest_running", {}).get("age_seconds", 0.0) or 0.0
         ),
-        wal_size_mb=float(diagnostics_payload.get("database", {}).get("wal_size_mb", 0.0) or 0.0),
+        wal_size_mb=float(
+            diagnostics_payload.get("database", {}).get("wal_size_mb", 0.0) or 0.0
+        ),
         worker_last_ping_age_seconds=heartbeat.get("last_ping_age_seconds"),
         running_over_runtime_count=len(queue.get("running_over_runtime", [])),
         orphaned_running_count=len(queue.get("orphaned_running", [])),
         failure_hotspots=json.dumps(
-            [item.get("automation_name") for item in failure_hotspots if item.get("automation_name")],
+            [
+                item.get("automation_name")
+                for item in failure_hotspots
+                if item.get("automation_name")
+            ],
             ensure_ascii=False,
         ),
         active_queue_groups=json.dumps(
-            sorted([str(key) for key, value in active_by_group.items() if int(value or 0) > 0]),
+            sorted(
+                [
+                    str(key)
+                    for key, value in active_by_group.items()
+                    if int(value or 0) > 0
+                ]
+            ),
             ensure_ascii=False,
         ),
         slo_breaches=json.dumps(
@@ -168,10 +180,7 @@ def build_system_history_response(
         .order_by(models.SystemHealthSnapshot.timestamp.asc())
         .all()
     )
-    items = [
-        _build_history_point(row)
-        for row in rows
-    ]
+    items = [_build_history_point(row) for row in rows]
     return schemas.SystemHistoryResponse(
         generated_at=schemas.format_dt_br(get_now_local()),
         hours=hours,
@@ -183,7 +192,9 @@ def build_system_history_response(
     )
 
 
-def _build_history_point(row: models.SystemHealthSnapshot) -> schemas.SystemHistoryPoint:
+def _build_history_point(
+    row: models.SystemHealthSnapshot,
+) -> schemas.SystemHistoryPoint:
     baseline = build_snapshot_operational_baseline(
         evaluated_at=cast(datetime | None, row.timestamp),
         pending_count=int(row.pending_count or 0),
@@ -193,7 +204,9 @@ def _build_history_point(row: models.SystemHealthSnapshot) -> schemas.SystemHist
         running_over_runtime_count=int(row.running_over_runtime_count or 0),
         orphaned_running_count=int(row.orphaned_running_count or 0),
         wal_size_mb=float(row.wal_size_mb or 0.0),
-        worker_last_ping_age_seconds=cast(float | None, row.worker_last_ping_age_seconds),
+        worker_last_ping_age_seconds=cast(
+            float | None, row.worker_last_ping_age_seconds
+        ),
     )
     return schemas.SystemHistoryPoint(
         timestamp=row.timestamp,

@@ -10,8 +10,6 @@ import hmac
 import json
 import logging
 import os
-from datetime import datetime
-from typing import Dict, List
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
@@ -35,8 +33,8 @@ class ConnectionManager:
     """Gerencia conexoes WebSocket para broadcast de logs e eventos."""
 
     def __init__(self):
-        self.exec_connections: Dict[str, List[WebSocket]] = {}
-        self.global_connections: List[WebSocket] = []
+        self.exec_connections: dict[str, list[WebSocket]] = {}
+        self.global_connections: list[WebSocket] = []
         self._lock = asyncio.Lock()
 
     async def connect_exec(self, websocket: WebSocket, exec_id: str):

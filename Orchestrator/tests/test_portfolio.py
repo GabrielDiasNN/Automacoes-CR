@@ -31,9 +31,7 @@ def _create_catalog_automation(
     (auto_dir / "CONTEXT.md").write_text(
         f"# Contexto {folder_name}\n", encoding="utf-8"
     )
-    (auto_dir / "run.ps1").write_text(
-        "Write-Host 'Teste'\n", encoding="utf-8"
-    )
+    (auto_dir / "run.ps1").write_text("Write-Host 'Teste'\n", encoding="utf-8")
 
     runbook_path = root / "docs" / "runbooks" / f"{slug}-runbook.md"
     if runbook:
@@ -221,9 +219,7 @@ def test_portfolio_health_summary_escalates_catalog_drift_for_high_criticality(
     assert payload["summary"]["top_issue"] is not None
 
 
-def test_portfolio_runbook_endpoint_returns_markdown(
-    client, monkeypatch, tmp_path
-):
+def test_portfolio_runbook_endpoint_returns_markdown(client, monkeypatch, tmp_path):
     import app.routers.portfolio as portfolio_router
 
     _create_catalog_automation(
@@ -256,7 +252,9 @@ def test_portfolio_marks_runtime_only_disabled_automation_as_delete_candidate(
     assert response.status_code == 200
     payload = response.json()
 
-    item = next(entry for entry in payload["items"] if entry["name"] == "Cadastro Orfao")
+    item = next(
+        entry for entry in payload["items"] if entry["name"] == "Cadastro Orfao"
+    )
     assert item["review_status"] == "delete_candidate"
     assert any("sem manifesto" in reason.lower() for reason in item["review_reasons"])
     assert payload["summary"]["delete_candidate_items"] >= 1

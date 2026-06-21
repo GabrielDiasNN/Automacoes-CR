@@ -1,0 +1,36 @@
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+  letter-spacing: var(--track-mid);
+  text-transform: uppercase;
+}
+.value {
+  font-size: var(--fs-heading);
+  font-weight: 600;
+  color: var(--text-hi);
+  line-height: 1;
+}
+.valueBig {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-data-xl);
+  font-weight: 500;
+  color: var(--text-hi);
+  line-height: 1;
+}
+.hint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+}

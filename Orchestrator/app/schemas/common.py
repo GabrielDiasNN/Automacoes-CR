@@ -7,9 +7,14 @@ Módulo de utilitários e validadores comuns para os schemas Pydantic.
 import json
 import re
 from datetime import datetime, timedelta
-from typing import Any, List, Optional
+from typing import Any
 
-from .schedule_rules import first_interval_candidate, normalize_hhmm, parse_hhmm, ui_day_to_python_weekday
+from .schedule_rules import (
+    first_interval_candidate,
+    normalize_hhmm,
+    parse_hhmm,
+    ui_day_to_python_weekday,
+)
 
 # ---------------------------------------------------------------------------
 # Validadores e Utilitários de Nomes e Caminhos
@@ -84,7 +89,7 @@ def _validate_script_path(v: str) -> str:
     return v
 
 
-def _validate_schedule(v: Optional[str]) -> Optional[str]:
+def _validate_schedule(v: str | None) -> str | None:
     if not v:
         return None
     try:
@@ -99,30 +104,36 @@ def _validate_schedule(v: Optional[str]) -> Optional[str]:
     return json.dumps(normalized, separators=(",", ":"))
 
 
-def _validate_schedule_tolerant(v: Optional[str]) -> Optional[str]:
+def _validate_schedule_tolerant(v: str | None) -> str | None:
     if not v:
         return None
     try:
         obj = json.loads(v.replace("'", '"'))
     except Exception:
-        return json.dumps({
-            "schedule_version": 2,
-            "schedule_type": "manual",
-            "timezone": "America/Sao_Paulo"
-        }, separators=(",", ":"))
+        return json.dumps(
+            {
+                "schedule_version": 2,
+                "schedule_type": "manual",
+                "timezone": "America/Sao_Paulo",
+            },
+            separators=(",", ":"),
+        )
 
     if not isinstance(obj, dict):
-        return json.dumps({
-            "schedule_version": 2,
-            "schedule_type": "manual",
-            "timezone": "America/Sao_Paulo"
-        }, separators=(",", ":"))
+        return json.dumps(
+            {
+                "schedule_version": 2,
+                "schedule_type": "manual",
+                "timezone": "America/Sao_Paulo",
+            },
+            separators=(",", ":"),
+        )
 
     normalized = normalize_schedule_payload(obj, strict=False)
     return json.dumps(normalized, separators=(",", ":"))
 
 
-def _normalized_time_list(times: List[dict]) -> List[dict]:
+def _normalized_time_list(times: list[dict]) -> list[dict]:
     items = []
     for item in times:
         if not isinstance(item, dict):
@@ -146,7 +157,7 @@ def _normalized_time_list(times: List[dict]) -> List[dict]:
     return uniq
 
 
-def _normalize_days(days: Optional[List]) -> List[int]:
+def _normalize_days(days: list | None) -> list[int]:
     if days is None:
         return []
     if not isinstance(days, list):
@@ -163,16 +174,20 @@ def _ui_day_to_python_weekday(day: int) -> int:
 
 def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
     import logging
+
     logger = logging.getLogger("orchestrator.schemas")
 
     if not isinstance(obj, dict):
         if strict:
             raise ValueError("Schedule deve ser um objeto JSON.")
-        logger.warning("Schedule inválido recebido (esperava dict, recebeu %s). Aplicando fallback manual.", type(obj).__name__)
+        logger.warning(
+            "Schedule inválido recebido (esperava dict, recebeu %s). Aplicando fallback manual.",
+            type(obj).__name__,
+        )
         return {
             "schedule_version": 2,
             "schedule_type": "manual",
-            "timezone": "America/Sao_Paulo"
+            "timezone": "America/Sao_Paulo",
         }
 
     # Legado: daysOfWeek + times/hours/minutes
@@ -182,7 +197,10 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
         except Exception as e:
             if strict:
                 raise
-            logger.warning("Erro na validação do daysOfWeek legado: %s. Aplicando fallback de todos os dias.", str(e))
+            logger.warning(
+                "Erro na validação do daysOfWeek legado: %s. Aplicando fallback de todos os dias.",
+                str(e),
+            )
             days = [1, 2, 3, 4, 5]
 
         times = obj.get("times")
@@ -192,22 +210,29 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
             except Exception as e:
                 if strict:
                     raise
-                logger.warning("Erro na validação do times legado: %s. Aplicando fallback de horário (08:00).", str(e))
+                logger.warning(
+                    "Erro na validação do times legado: %s. Aplicando fallback de horário (08:00).",
+                    str(e),
+                )
                 norm_times = [{"h": 8, "m": 0}]
         else:
             hours = obj.get("hours", [])
             minutes = obj.get("minutes", [0])
-            
+
             # Fallbacks preventivos se as listas vierem vazias
             if not hours:
                 if strict:
                     raise ValueError("times deve conter ao menos um horário válido.")
-                logger.warning("Lista de 'hours' vazia recebida na agenda legada. Aplicando fallback de hora 08:00.")
+                logger.warning(
+                    "Lista de 'hours' vazia recebida na agenda legada. Aplicando fallback de hora 08:00."
+                )
                 hours = [8]
             if not minutes:
                 if strict:
                     raise ValueError("times deve conter ao menos um horário válido.")
-                logger.warning("Lista de 'minutes' vazia recebida na agenda legada. Aplicando fallback de minuto 0.")
+                logger.warning(
+                    "Lista de 'minutes' vazia recebida na agenda legada. Aplicando fallback de minuto 0."
+                )
                 minutes = [0]
 
             if not isinstance(hours, list) or not isinstance(minutes, list):
@@ -225,13 +250,18 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
             except Exception as e:
                 if strict:
                     raise
-                logger.warning("Erro ao normalizar horários legados: %s. Usando fallback de horário 08:00.", str(e))
+                logger.warning(
+                    "Erro ao normalizar horários legados: %s. Usando fallback de horário 08:00.",
+                    str(e),
+                )
                 norm_times = [{"h": 8, "m": 0}]
 
         if not norm_times:
             if strict:
                 raise ValueError("times deve conter ao menos um horário válido.")
-            logger.warning("Nenhum horário válido gerado na agenda legada. Aplicando fallback de horário 08:00.")
+            logger.warning(
+                "Nenhum horário válido gerado na agenda legada. Aplicando fallback de horário 08:00."
+            )
             norm_times = [{"h": 8, "m": 0}]
 
         return {
@@ -249,7 +279,10 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
     if schedule_type not in valid_types:
         if strict:
             raise ValueError("schedule_type inválido.")
-        logger.warning("schedule_type '%s' inválido. Aplicando fallback para 'manual'.", schedule_type)
+        logger.warning(
+            "schedule_type '%s' inválido. Aplicando fallback para 'manual'.",
+            schedule_type,
+        )
         schedule_type = "manual"
 
     timezone_name = str(obj.get("timezone") or "America/Sao_Paulo")
@@ -265,8 +298,12 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
         expr = obj.get("cron_expression")
         if not isinstance(expr, str) or not expr.strip():
             if strict:
-                raise ValueError("cron_expression é obrigatório para schedule_type=cron.")
-            logger.warning("cron_expression ausente ou inválida para cadência cron. Usando fallback.")
+                raise ValueError(
+                    "cron_expression é obrigatório para schedule_type=cron."
+                )
+            logger.warning(
+                "cron_expression ausente ou inválida para cadência cron. Usando fallback."
+            )
             expr = "0 8 * * 1-5"
         base["cron_expression"] = expr.strip()
         return base
@@ -275,7 +312,9 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
         if not isinstance(val, int) or val < 1 or val > 1440:
             if strict:
                 raise ValueError("interval_minutes deve estar entre 1 e 1440.")
-            logger.warning("interval_minutes '%s' inválido. Usando fallback de 60 minutos.", val)
+            logger.warning(
+                "interval_minutes '%s' inválido. Usando fallback de 60 minutos.", val
+            )
             val = 60
         base["interval_minutes"] = val
 
@@ -293,7 +332,10 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
             except Exception as e:
                 if strict:
                     raise
-                logger.warning("Erro na validação de days_of_week de intervalo restrito: %s", str(e))
+                logger.warning(
+                    "Erro na validação de days_of_week de intervalo restrito: %s",
+                    str(e),
+                )
                 base["days_of_week"] = None
         else:
             base["days_of_week"] = None
@@ -326,7 +368,10 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
             from ..timezone import get_now_local
 
             fallback_time = (get_now_local() + timedelta(hours=1)).isoformat()
-            logger.warning("run_at ausente para cadência única. Aplicando fallback para daqui 1 hora: %s", fallback_time)
+            logger.warning(
+                "run_at ausente para cadência única. Aplicando fallback para daqui 1 hora: %s",
+                fallback_time,
+            )
             run_at = fallback_time
         base["run_at"] = run_at.strip()
         return base
@@ -337,13 +382,18 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
     except Exception as e:
         if strict:
             raise
-        logger.warning("Erro ao ler lista 'times' moderna: %s. Aplicando fallback de horário (08:00).", str(e))
+        logger.warning(
+            "Erro ao ler lista 'times' moderna: %s. Aplicando fallback de horário (08:00).",
+            str(e),
+        )
         times = []
-        
+
     if not times:
         if strict:
             raise ValueError("times deve conter ao menos um horário.")
-        logger.warning("Nenhum horário definido no campo 'times'. Aplicando fallback preventivo de 08:00.")
+        logger.warning(
+            "Nenhum horário definido no campo 'times'. Aplicando fallback preventivo de 08:00."
+        )
         times = [{"h": 8, "m": 0}]
     base["times"] = times
 
@@ -355,12 +405,19 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
         except Exception as e:
             if strict:
                 raise
-            logger.warning("Erro na validação do days_of_week semanal: %s. Aplicando fallback Segunda a Sexta.", str(e))
+            logger.warning(
+                "Erro na validação do days_of_week semanal: %s. Aplicando fallback Segunda a Sexta.",
+                str(e),
+            )
             days = []
         if not days:
             if strict:
-                raise ValueError("days_of_week é obrigatório para schedule_type=weekly.")
-            logger.warning("days_of_week ausente ou vazio para weekly. Usando fallback de Segunda a Sexta.")
+                raise ValueError(
+                    "days_of_week é obrigatório para schedule_type=weekly."
+                )
+            logger.warning(
+                "days_of_week ausente ou vazio para weekly. Usando fallback de Segunda a Sexta."
+            )
             days = [1, 2, 3, 4, 5]
         base["days_of_week"] = days
         return base
@@ -370,24 +427,31 @@ def normalize_schedule_payload(obj: dict, strict: bool = True) -> dict:
     if not isinstance(days_of_month, list) or not days_of_month:
         if strict:
             raise ValueError("days_of_month é obrigatório para schedule_type=monthly.")
-        logger.warning("days_of_month ausente ou vazio para monthly. Usando fallback de dia 1.")
+        logger.warning(
+            "days_of_month ausente ou vazio para monthly. Usando fallback de dia 1."
+        )
         norm_month = [1]
     else:
         try:
             norm_month = sorted(set(days_of_month))
-            if any(not isinstance(day, int) or day < 1 or day > 31 for day in norm_month):
+            if any(
+                not isinstance(day, int) or day < 1 or day > 31 for day in norm_month
+            ):
                 raise ValueError("Contém valores fora do intervalo 1-31.")
         except Exception as e:
             if strict:
                 raise
-            logger.warning("Erro na validação dos dias do mês: %s. Aplicando fallback de dia 1.", str(e))
+            logger.warning(
+                "Erro na validação dos dias do mês: %s. Aplicando fallback de dia 1.",
+                str(e),
+            )
             norm_month = [1]
-            
+
     base["days_of_month"] = norm_month
     return base
 
 
-def parse_schedule(v: Optional[str]) -> Optional[dict]:
+def parse_schedule(v: str | None) -> dict | None:
     if not v:
         return None
     try:
@@ -396,12 +460,12 @@ def parse_schedule(v: Optional[str]) -> Optional[dict]:
         return {
             "schedule_version": 2,
             "schedule_type": "manual",
-            "timezone": "America/Sao_Paulo"
+            "timezone": "America/Sao_Paulo",
         }
     return normalize_schedule_payload(obj, strict=False)
 
 
-def describe_schedule_payload(schedule: Optional[dict]) -> str:
+def describe_schedule_payload(schedule: dict | None) -> str:
     if not schedule:
         return "Manual"
     stype = schedule.get("schedule_type")
@@ -447,8 +511,18 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
         anchor_suffix = f", início da cadência às {anchor_t}" if anchor_t else ""
 
         if start_t or end_t or days:
-            day_names = {0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb"}
-            day_lbl = ", ".join(day_names.get(d, str(d)) for d in days) if days else "Todos"
+            day_names = {
+                0: "Dom",
+                1: "Seg",
+                2: "Ter",
+                3: "Qua",
+                4: "Qui",
+                5: "Sex",
+                6: "Sáb",
+            }
+            day_lbl = (
+                ", ".join(day_names.get(d, str(d)) for d in days) if days else "Todos"
+            )
             time_lbl = f"início {start_t or '00:00'}"
             if end_t:
                 time_lbl += f", fim {end_t}"
@@ -462,7 +536,7 @@ def describe_schedule_payload(schedule: Optional[dict]) -> str:
     return "Configurada"
 
 
-def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
+def preview_next_runs(schedule: dict | None, count: int = 5) -> list[str]:
     if not schedule:
         return []
     from ..timezone import get_now_local
@@ -472,10 +546,11 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
     stype = schedule.get("schedule_type")
     if stype == "cron":
         from apscheduler.triggers.cron import CronTrigger
+
         try:
             trigger = CronTrigger.from_crontab(
                 schedule.get("cron_expression"),
-                timezone=schedule.get("timezone", "America/Sao_Paulo")
+                timezone=schedule.get("timezone", "America/Sao_Paulo"),
             )
             curr = now
             for _ in range(count):
@@ -493,12 +568,14 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
         end_t = schedule.get("end_time")
         days = schedule.get("days_of_week")
         anchor_t = schedule.get("anchor_time")
-        
+
         initial_candidate = first_interval_candidate(now, step, anchor_t)
-        
+
         if start_t or end_t or days:
-            py_days = {_ui_day_to_python_weekday(int(day)) for day in days} if days else None
-            
+            py_days = (
+                {_ui_day_to_python_weekday(int(day)) for day in days} if days else None
+            )
+
             def is_valid_time(dt):
                 if py_days is not None and dt.weekday() not in py_days:
                     return False
@@ -511,11 +588,11 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
                     if dt.hour > eh or (dt.hour == eh and dt.minute > em):
                         return False
                 return True
-            
+
             candidate = initial_candidate
             limit_days = 90
             cutoff = now + timedelta(days=limit_days)
-            
+
             while len(out) < count and candidate < cutoff:
                 if is_valid_time(candidate):
                     out.append(format_dt_br(candidate))
@@ -523,7 +600,9 @@ def preview_next_runs(schedule: Optional[dict], count: int = 5) -> List[str]:
             return out
         else:
             for idx in range(count):
-                out.append(format_dt_br(initial_candidate + timedelta(minutes=idx * step)))
+                out.append(
+                    format_dt_br(initial_candidate + timedelta(minutes=idx * step))
+                )
             return out
     if stype == "once":
         run_at = schedule.get("run_at")

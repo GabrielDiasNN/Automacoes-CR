@@ -1,0 +1,59 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-2);
+}
+.tile {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--graphite-850);
+  box-shadow: var(--engraved);
+  text-align: left;
+  font: inherit;
+  width: 100%;
+}
+.clickable {
+  cursor: pointer;
+}
+.off {
+  opacity: 0.7;
+}
+.on {
+  border-color: var(--tile-color);
+  background: color-mix(in srgb, var(--tile-color) 12%, var(--graphite-850));
+  box-shadow: var(--engraved), 0 0 0 1px color-mix(in srgb, var(--tile-color) 30%, transparent);
+}
+.lamp {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.blink {
+  animation: blink-alarm 1s steps(1, end) infinite;
+}
+.legend {
+  font-family: var(--font-display);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  letter-spacing: var(--track-mid);
+  text-transform: uppercase;
+  color: var(--text-mid);
+  flex: 1;
+  min-width: 0;
+}
+.on .legend {
+  color: var(--text-hi);
+}
+.value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: var(--tile-color, var(--text-lo));
+}

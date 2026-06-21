@@ -44,8 +44,11 @@ Describe "Get-GovernanceTargetSummary - flags por area" {
             $summary.HasJs | Should -BeFalse
         }
 
-        It "Detecta JavaScript e frontend para .js, .html e .css" {
-            $summary = Invoke-Summary -Paths @("Dashboard/js/app.js")
+        It "Detecta JavaScript e frontend para .ts/.tsx, .html e .css" {
+            $summary = Invoke-Summary -Paths @("Dashboard/src/main.tsx")
+            $summary.HasJs | Should -BeTrue
+
+            $summary = Invoke-Summary -Paths @("Dashboard/src/api/client.ts")
             $summary.HasJs | Should -BeTrue
 
             $summary = Invoke-Summary -Paths @("Dashboard/index.html")

@@ -1,0 +1,204 @@
+/* ============================================================================
+   Sala de Instrumentação — fundação de design
+   Identidade industrial: grafite + sistema de sinais (cor = significado).
+   Família tipográfica IBM Plex (engenheirada, coesa).
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ── Grafite (base — gunmetal quente, não preto puro) ── */
+  --graphite-950: #0B0E12;
+  --graphite-900: #0F1318; /* fundo base */
+  --graphite-850: #151A21; /* painel / surface */
+  --graphite-800: #1B222B; /* surface elevada */
+  --graphite-750: #212B36;
+  --graphite-700: #29333E; /* hairline / borda */
+  --graphite-600: #3A4757; /* divisória forte */
+
+  /* aliases semânticos de superfície */
+  --bg:            var(--graphite-900);
+  --surface:       var(--graphite-850);
+  --surface-up:    var(--graphite-800);
+  --border:        var(--graphite-700);
+  --border-strong: var(--graphite-600);
+
+  /* ── Texto (contraste verificado ≥ WCAG AA sobre grafite) ── */
+  --text-hi:  #E8EDF2; /* primário */
+  --text-mid: #A4B0BE; /* secundário ~7:1 */
+  --text-lo:  #7C8A9C; /* muted ≥4.5:1 */
+
+  /* ── Sinais — cor codifica significado, não decora ──
+     ciano = instrumento/leitura · âmbar = cautela/movimento
+     verde = normal · vermelho = alarme · azul = info/teste */
+  --cyan:        #38C5C9;
+  --cyan-bright: #5FE3E6;
+  --cyan-tint:   rgba(56, 197, 201, 0.12);
+  --cyan-glow:   rgba(56, 197, 201, 0.30);
+
+  --amber:       #E8A317;
+  --amber-tint:  rgba(232, 163, 23, 0.12);
+  --amber-glow:  rgba(232, 163, 23, 0.30);
+
+  --green:       #3FB950;
+  --green-tint:  rgba(63, 185, 80, 0.12);
+
+  --red:         #F0524D;
+  --red-tint:    rgba(240, 82, 77, 0.12);
+  --red-glow:    rgba(240, 82, 77, 0.32);
+
+  --blue:        #4C8DF6;
+  --blue-tint:   rgba(76, 141, 246, 0.12);
+
+  --grey:        #7C8A9C;
+  --grey-tint:   rgba(124, 138, 156, 0.12);
+
+  /* ── Tipografia ── */
+  --font-display: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
+  --font-sans:    'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:    'IBM Plex Mono', 'Consolas', monospace;
+
+  --fs-display-xl: 1.75rem;   /* hero nameplate */
+  --fs-display-l:  1.25rem;
+  --fs-heading:    1rem;
+  --fs-body:       0.875rem;
+  --fs-small:      0.8125rem;
+  --fs-label:      0.6875rem;  /* piso legível p/ labels mono */
+  --fs-data-xl:    1.875rem;   /* leitura grande de instrumento */
+
+  --lh-tight:  1.15;
+  --lh-snug:   1.35;
+  --lh-normal: 1.5;
+
+  --track-wide: 0.06em;  /* tracking de nameplate */
+  --track-mid:  0.04em;
+
+  /* ── Espaçamento ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* ── Raios (instrumento = cantos duros) ── */
+  --radius-sm: 2px;
+  --radius:    4px;
+  --radius-lg: 6px;
+
+  /* ── Elevação ── */
+  --shadow-1:   0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-2:   0 4px 16px rgba(0, 0, 0, 0.50);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.60);
+  --engraved:   inset 0 1px 0 rgba(255, 255, 255, 0.03), inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+
+  /* ── Layout ── */
+  --rail-w:        232px;
+  --topbar-h:      52px;
+  --brand-rail-h:  3px;
+
+  /* ── Motion ── */
+  --ease:     cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 0.12s;
+  --dur:      0.2s;
+}
+
+/* ── Reset / base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-hi);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+button { font-family: inherit; }
+a { color: inherit; }
+
+/* números tabulares por padrão em mono — telemetria alinhada */
+.tnum, [class*="mono"] { font-variant-numeric: tabular-nums; }
+
+/* ── Scrollbar instrumento ── */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--graphite-700); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--graphite-600); }
+
+/* ── Foco visível (ciano) ── */
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Texturas de assinatura ── */
+
+/* grade blueprint de baixíssima opacidade — usar com parcimônia no shell */
+.blueprint-grid {
+  background-image:
+    linear-gradient(var(--graphite-700) 1px, transparent 1px),
+    linear-gradient(90deg, var(--graphite-700) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: -1px -1px;
+  opacity: 0.18;
+}
+
+/* faixa de risco — SÓ em zonas que exigem atenção do operador */
+.hazard {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--amber) 0, var(--amber) 8px,
+    var(--graphite-900) 8px, var(--graphite-900) 16px
+  );
+}
+
+/* ── Tipografia utilitária ── */
+.nameplate {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: var(--track-wide);
+  font-weight: 600;
+}
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: var(--track-mid);
+  text-transform: uppercase;
+  color: var(--text-lo);
+}
+
+/* ── Keyframes ── */
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 var(--amber-glow); }
+  50%      { box-shadow: 0 0 0 5px transparent; }
+}
+@keyframes sweep {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+@keyframes blink-alarm {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0.35; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fade-in var(--dur) var(--ease) forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

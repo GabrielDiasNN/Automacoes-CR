@@ -10,7 +10,9 @@ import subprocess
 from pathlib import Path
 
 
-def test_new_automation_scaffold_generates_governed_manifest_and_smoke(tmp_path: Path) -> None:
+def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
+    tmp_path: Path,
+) -> None:
     repo_root = Path(__file__).resolve().parents[2]
 
     for relative in [
@@ -56,17 +58,24 @@ def test_new_automation_scaffold_generates_governed_manifest_and_smoke(tmp_path:
     assert "Scaffold concluido" in result.stdout
 
     automation_dir = tmp_path / "Auto Scaffold Governado"
-    manifest = json.loads((automation_dir / "automation.manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (automation_dir / "automation.manifest.json").read_text(encoding="utf-8")
+    )
 
     assert manifest["owner_area"] == "Operação Fiscal"
     assert manifest["criticality"] == "high"
     assert manifest["queue_group"] == "oracle"
     assert manifest["sla_minutes"] == 180
     assert manifest["dependencies"]["oracle"] is True
-    assert manifest["smoke_tests"] == ["Orchestrator/tests/test_auto-scaffold-governado.py"]
+    assert manifest["smoke_tests"] == [
+        "Orchestrator/tests/test_auto-scaffold-governado.py"
+    ]
 
     smoke_test = tmp_path / "Orchestrator" / "tests" / "test_auto-scaffold-governado.py"
     assert smoke_test.exists()
     smoke_content = smoke_test.read_text(encoding="utf-8")
-    assert "def test_auto_scaffold_governado_scaffold_contract_files_exist()" in smoke_content
+    assert (
+        "def test_auto_scaffold_governado_scaffold_contract_files_exist()"
+        in smoke_content
+    )
     assert 'automation_dir = root / "Auto Scaffold Governado"' in smoke_content

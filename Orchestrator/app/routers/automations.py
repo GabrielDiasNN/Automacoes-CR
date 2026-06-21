@@ -20,22 +20,32 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .. import models, schemas  # type: ignore
-from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
+from ..constants import PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
 from ..services.automation_preflight import build_automation_preflight
-from ..services.automation_snapshot import \
-    build_automation_response as build_operational_automation_response
-from ..services.automation_snapshot import (build_automation_response_batch,
-                                            load_snapshot_dependencies)
-from ..services.execution_runtime import (build_queued_execution,
-                                          generate_execution_id,
-                                          get_group_active_execution)
-from ..services.metrics import (get_automation_metrics_24h,
-                                get_latest_execution_snapshot_by_automation)
-from ..services.scheduler_runtime import (extract_automation_id_from_job,
-                                          reload_scheduled_tasks, scheduler)
+from ..services.automation_snapshot import (
+    build_automation_response as build_operational_automation_response,
+)
+from ..services.automation_snapshot import (
+    build_automation_response_batch,
+    load_snapshot_dependencies,
+)
+from ..services.execution_runtime import (
+    build_queued_execution,
+    generate_execution_id,
+    get_group_active_execution,
+)
+from ..services.metrics import (
+    get_automation_metrics_24h,
+    get_latest_execution_snapshot_by_automation,
+)
+from ..services.scheduler_runtime import (
+    extract_automation_id_from_job,
+    reload_scheduled_tasks,
+    scheduler,
+)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
@@ -311,7 +321,6 @@ def get_automation(
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     return _build_automation_response(db, db_auto)
-
 
 
 # ---------------------------------------------------------------------------

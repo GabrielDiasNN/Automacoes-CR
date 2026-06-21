@@ -1,6 +1,6 @@
 from datetime import datetime
 
-import pytz  # type: ignore
+import pytz
 
 
 def get_now_local() -> datetime:

@@ -162,11 +162,17 @@ def run_alembic_migrations() -> dict:
             "Schema legado valido sem revisao Alembic. Aplicando stamp para %s.",
             ORCHESTRATOR_SCHEMA_VERSION,
         )
-        with engine.begin() as conn:
+        with engine.begin() as conn:  # transacao atomica (HF-5/B3)
             conn.execute(text("DELETE FROM alembic_version"))
             conn.execute(
                 text("INSERT INTO alembic_version (version_num) VALUES (:version)"),
                 {"version": ORCHESTRATOR_SCHEMA_VERSION},
+            )
+        # Verificacao pos-stamp: garante que o registro foi gravado corretamente
+        actual = get_schema_version()
+        if actual != ORCHESTRATOR_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Stamp Alembic falhou: esperado {ORCHESTRATOR_SCHEMA_VERSION}, obtido {actual}"
             )
         return {
             "applied": ["alembic_stamp"],
@@ -180,6 +186,30 @@ def run_alembic_migrations() -> dict:
         "applied": ["alembic_upgrade_head"],
         "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
     }
+
+
+def purge_old_snapshots(retention_days: int = 30) -> int:
+    """Remove SystemHealthSnapshots mais antigos que retention_days (B5/2.4).
+
+    Padrão 30 dias = ~8.640 registros retidos (snapshot a cada 5min).
+    """
+    from . import models as _models
+
+    cutoff = get_now_local() - timedelta(days=retention_days)
+    try:
+        with session_scope() as db:
+            removed = (
+                db.query(_models.SystemHealthSnapshot)
+                .filter(_models.SystemHealthSnapshot.timestamp < cutoff)
+                .delete(synchronize_session=False)
+            )
+            db.commit()
+        if removed:
+            logger.info("Purge de snapshots: %d registros removidos.", removed)
+        return removed
+    except Exception as e:
+        logger.error("Falha no purge de snapshots: %s", e)
+        return 0
 
 
 def get_db_size_mb() -> float:

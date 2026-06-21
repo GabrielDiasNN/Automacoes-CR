@@ -19,11 +19,11 @@ from app.constants import (  # pylint: disable=import-error
     DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
 )
 
-
 # O contrato do baseline exige um resumo sintético de várias métricas operacionais
 # ao mesmo tempo; por isso os builders recebem mais argumentos do que o limite
 # genérico do lint.
 # pylint: disable=too-many-arguments,too-many-locals
+
 
 def _format_seconds(seconds: float | None) -> str:
     if seconds is None:
@@ -233,8 +233,12 @@ def build_operational_baseline_summary(
         )
     )
 
-    incident_count = sum(1 for item in metrics if item.status == BASELINE_STATUS_INCIDENT)
-    attention_count = sum(1 for item in metrics if item.status == BASELINE_STATUS_ATTENTION)
+    incident_count = sum(
+        1 for item in metrics if item.status == BASELINE_STATUS_INCIDENT
+    )
+    attention_count = sum(
+        1 for item in metrics if item.status == BASELINE_STATUS_ATTENTION
+    )
     status = BASELINE_STATUS_HEALTHY
     if incident_count:
         status = BASELINE_STATUS_INCIDENT

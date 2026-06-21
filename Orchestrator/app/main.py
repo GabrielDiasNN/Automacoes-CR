@@ -18,21 +18,30 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 from . import models  # noqa: F401 — registers ORM tables in Base.metadata
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
 from .database import SessionLocal, session_scope
 from .error_handlers import register_exception_handlers
 from .logger_setup import setup_json_logger
-from .middleware import (RateLimitMiddleware, RequestIdMiddleware,
-                         TimingMiddleware)
-from .routers import (automation_config, automation_ide, automations,
-                      beneficiamento, executions, portfolio, system, websocket)
-from .runtime import (get_allowed_origins, get_dashboard_path, get_lib_path,
-                      scheduler)
+from .middleware import RateLimitMiddleware, RequestIdMiddleware, TimingMiddleware
+from .routers import (
+    automation_config,
+    automation_ide,
+    automations,
+    beneficiamento,
+    executions,
+    portfolio,
+    system,
+    websocket,
+)
+from .runtime import get_allowed_origins, get_dashboard_path, get_lib_path, scheduler
 from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
-from .services.scheduler_runtime import (register_enterprise_jobs,
-                                         reload_scheduled_tasks)
+from .services.scheduler_runtime import register_enterprise_jobs, reload_scheduled_tasks
+from .telemetry import setup_telemetry
 
 # ---------------------------------------------------------------------------
 # Configuracao de Logs Estruturados (JSON)
@@ -72,8 +81,11 @@ async def lifespan(app: FastAPI):
     from .timezone import get_now_local
 
     app.state.startup_time = get_now_local()
-    from .database import (run_alembic_migrations, run_wal_checkpoint,
-                           validate_database_schema)
+    from .database import (
+        run_alembic_migrations,
+        run_wal_checkpoint,
+        validate_database_schema,
+    )
 
     run_wal_checkpoint("TRUNCATE")
 
@@ -109,6 +121,27 @@ async def lifespan(app: FastAPI):
 # Aplicativo FastAPI
 # ---------------------------------------------------------------------------
 
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Injeta Content-Security-Policy e headers de segurança em todas as respostas (F1/1.6)."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self' ws: wss:; "
+            "frame-ancestors 'none';"
+        )
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
 app = FastAPI(
     title="Central de Automações", version=ORCHESTRATOR_VERSION, lifespan=lifespan
 )
@@ -118,6 +151,8 @@ register_exception_handlers(app, logger)
 # --- CORS Hardened: restrito a origens configuradas via .env ---
 _allowed_origins = get_allowed_origins()
 
+setup_telemetry(app)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(TimingMiddleware)
 app.add_middleware(RequestIdMiddleware)
@@ -153,7 +188,16 @@ class RevalidatedStaticFiles(StaticFiles):
     """
 
     async def get_response(self, path, scope):
-        response = await super().get_response(path, scope)
+        # SPA fallback: rotas client-side (react-router, ex.: /dashboard/execucoes)
+        # nao existem como arquivo; ao recarregar a pagina caem em index.html.
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            response = await super().get_response("index.html", scope)
+        if response.status_code == 404:
+            response = await super().get_response("index.html", scope)
         response.headers["Cache-Control"] = "no-cache"
         return response
 
