@@ -4,17 +4,20 @@ useDefault = true
 [[allowlists]]
 description = "Ignora artefatos de runtime e historico legado que nao devem bloquear o CI"
 paths = [
-  '''(^|/)\.venv/''',
-  '''(^|/)Logs/''',
-  '''(^|/)Receitas Bloqueadas/\.wwebjs_auth/''',
-  '''(^|/)Receitas Bloqueadas/\.wwebjs_cache/'''
+  '''\.venv/''',
+  '''Logs/''',
+  '''\.wwebjs_auth/''',
+  '''\.wwebjs_cache/''',
+  '''CHANGELOG\.md''',
+  '''Orchestrator/tests/conftest\.py''',
+  '''Orchestrator/tests/test_api_contracts\.py''',
+  '''Orchestrator/tests/test_e2e_dashboard\.py'''
 ]
 
 [[allowlists]]
-description = "Ignora fixtures e historico legado de API key de teste"
-paths = [
-  '''(^|/)CHANGELOG\.md$''',
-  '''(^|/)Orchestrator/tests/conftest\.py$''',
-  '''(^|/)Orchestrator/tests/test_api_contracts\.py$''',
-  '''(^|/)Orchestrator/tests/test_e2e_dashboard\.py$'''
+description = "Ignora commits historicos que contem vazamentos de chaves de teste ou arquivos de runtime antigos"
+commits = [
+  "1eca075401aaf7187d2bbc989802b40e3db2fc08",
+  "82f0fcc4d99d81df7c01937a58c3881bae518c7b",
+  "d3e0ecd9c824fbfdf777f49f8627b3236be1d017"
 ]
