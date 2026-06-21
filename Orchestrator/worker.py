@@ -44,15 +44,13 @@ try:
         apply_internal_worker_error,
         apply_timeout_result,
         claim_next_task,
-    )
-    from app.services.execution_runtime import (
-        classify_process_result as classify_process_result,
-    )
-    from app.services.execution_runtime import (
         complete_process_execution,
         finalize_terminated_task,
         mark_task_as_failed,
         resolve_script_path,
+    )
+    from app.services.execution_runtime import (
+        classify_process_result as classify_process_result,
     )
     from app.timezone import get_now_local
 except ImportError as e:
