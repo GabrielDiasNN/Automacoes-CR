@@ -1,8 +1,8 @@
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "Ignora artefatos de runtime e historico legado que nao devem bloquear o CI"
+[allowlist]
+description = "Allowlist global para ignorar falso-positivos e historico legado"
 paths = [
   '''\.venv/''',
   '''Logs/''',
@@ -13,9 +13,6 @@ paths = [
   '''Orchestrator/tests/test_api_contracts\.py''',
   '''Orchestrator/tests/test_e2e_dashboard\.py'''
 ]
-
-[[allowlists]]
-description = "Ignora commits historicos que contem vazamentos de chaves de teste ou arquivos de runtime antigos"
 commits = [
   "1eca075401aaf7187d2bbc989802b40e3db2fc08",
   "82f0fcc4d99d81df7c01937a58c3881bae518c7b",
