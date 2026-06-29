@@ -128,6 +128,8 @@ OBs Paradas Fase/delivery_state.json
 OBs Paradas Fase/.wwebjs_cache/
 OBs Paradas Fase/images/
 OBs Paradas Fase/phase_cards.json
+OBs Paradas Fase/batch_input.json
+OBs Paradas Fase/batch_result.json
 
 # Caches locais adicionais
 .npm-cache-codex/

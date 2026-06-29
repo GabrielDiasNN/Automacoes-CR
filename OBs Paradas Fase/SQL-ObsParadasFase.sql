@@ -1,0 +1,91 @@
+-- ============================================================
+-- OBs PARADAS NA FASE — Automação OBP-04
+-- Derivado de: SQL Reference/POSICAO-ATUAL-OBS-EM-ABERTO.sql
+-- Filtro adicional: DIAS_PARADO >= 1 (corte mínimo; threshold por fase é feito em Python)
+-- ============================================================
+
+WITH
+
+    OB_ATIVA AS (
+        SELECT /*+ MATERIALIZE */
+            OB.NUMERO_OB,
+            OB.CODIGO_REDUZIDO,
+            OB.CODIGO_FLUXO,
+            OB.TIPO_ORDEM,
+            SGTPRD.PKGBENF0001.FNC_RETORNA_SEQUENCIA_OB(OB.NUMERO_OB, 0)       AS SEQ_ATUAL,
+            SYSDATE - SGTPRD.PKGBENF0001.FNC_RETORNA_ULT_CONF_OB(OB.NUMERO_OB) AS DIAS_PARADO
+        FROM SGTPRD.OB           OB
+        JOIN SGTPRD.PEDPRODUCAOOB PPO ON PPO.NUMEROOB  = OB.NUMERO_OB
+                                     AND PPO.SETOR     = 5
+                                     AND PPO.OBMONTADA = 1
+        WHERE OB.STATUS <> 0
+    ),
+
+    ITEM_OB AS (
+        SELECT
+            OBA.NUMERO_OB,
+            OBA.CODIGO_REDUZIDO                AS REDUZ_ACABADO,
+            TRIM(MAX(ITE.CODIGO_ALTERNATIVO))  AS ALTERNATIVO,
+            TRIM(MAX(ITE.DESCRICAO))           AS DS_ITEM,
+            TRIM(MAX(ART.CDARTIGOCRU))         AS CD_ARTIGO,
+            MIN(EIC.CDCOR)                     AS CD_COR_ITEM,
+            MAX(ITC.LARGURA)                   AS LARGURA,
+            MAX(ITC.GRAMATURA)                 AS GRAMATURA
+        FROM OB_ATIVA                  OBA
+        JOIN SGTPRD.ITENS_ESTOQUE      ITE ON ITE.CODIGO_REDUZIDO = OBA.CODIGO_REDUZIDO
+        JOIN SGTPRD.ENGEITEMESTOARTCRU ART ON ART.CDREDUZIDO      = ITE.CODIGO_REDUZIDO
+        JOIN SGTPRD.ENGEITEMESTOCOR    EIC ON EIC.CDREDUZIDO      = ITE.CODIGO_REDUZIDO
+        JOIN SGTPRD.ITENS_COMPLEMENTO  ITC ON ITC.CODIGO_REDUZIDO = ITE.CODIGO_REDUZIDO
+        GROUP BY OBA.NUMERO_OB, OBA.CODIGO_REDUZIDO
+    ),
+
+    INFO_FASES AS (
+        SELECT
+            OBF.NUMERO_OB,
+            TRIM(MAX(OBF.CODIGO_PLACA))                                   AS PLACA_KANBAN,
+            MAX(CASE WHEN OBF.CODIGO_FASE = 40 THEN OBF.CODIGO_COR_DESENHO END)
+                KEEP (DENSE_RANK LAST ORDER BY
+                      CASE WHEN OBF.CODIGO_FASE = 40 THEN OBF.SEQUENCIA ELSE NULL END
+                      NULLS FIRST)                                        AS CD_COR_TINGIMENTO
+        FROM SGTPRD.OB_FASES OBF
+        JOIN OB_ATIVA         OBA ON OBA.NUMERO_OB = OBF.NUMERO_OB
+        GROUP BY OBF.NUMERO_OB
+    ),
+
+    QT_OB AS (
+        SELECT
+            GPO.NUMERO_OB,
+            COUNT(GPP.IDPECASPRODUTO) AS QT_PECAS,
+            SUM(GPP.QTLIQUIDA)        AS QT_KILOS_REAL
+        FROM SGTPRD.GERAPECAORIGEMOB GPO
+        JOIN SGTPRD.GERAPECASPRODUTO  GPP ON GPP.IDPECASPRODUTO = GPO.IDPECASPRODUTO
+        JOIN OB_ATIVA                 OBA ON OBA.NUMERO_OB      = GPO.NUMERO_OB
+        GROUP BY GPO.NUMERO_OB
+    )
+
+SELECT
+    OBA.NUMERO_OB,
+    NVL(INF.PLACA_KANBAN, 'SEM KANBAN')              AS PLACA_KANBAN,
+    ITM.ALTERNATIVO,
+    ITM.CD_ARTIGO,
+    NVL(INF.CD_COR_TINGIMENTO, ITM.CD_COR_ITEM)      AS CD_COR,
+    ITM.REDUZ_ACABADO,
+    ITM.DS_ITEM,
+    ITM.LARGURA,
+    ITM.GRAMATURA,
+    TRIM(FFL.DESCRICAO_FASE)                          AS FASE_ATUAL,
+    UPPER(ENS.DESCRICAO)                              AS STATUS_FASE_ATUAL,
+    TRUNC(OBA.DIAS_PARADO, 1)                         AS DIAS_PARADO,
+    OBA.CODIGO_FLUXO,
+    QT.QT_PECAS,
+    QT.QT_KILOS_REAL
+FROM       OB_ATIVA                    OBA
+JOIN SGTPRD.OB_FASES                   OBF ON OBF.NUMERO_OB  = OBA.NUMERO_OB
+                                          AND OBF.SEQUENCIA   = OBA.SEQ_ATUAL
+JOIN SGTPRD.FASES_FLUXO                FFL ON FFL.CODIGO_FASE = OBF.CODIGO_FASE
+JOIN SGTPRD.VW_ENU_STATUS_OB_FASES     ENS ON ENS.STATUS      = OBF.STATUS
+LEFT JOIN INFO_FASES                   INF ON INF.NUMERO_OB   = OBA.NUMERO_OB
+JOIN ITEM_OB                           ITM ON ITM.NUMERO_OB   = OBA.NUMERO_OB
+JOIN QT_OB                             QT  ON QT.NUMERO_OB    = OBA.NUMERO_OB
+WHERE (OBA.TIPO_ORDEM = 0 OR OBF.CODIGO_FASE <> 10)
+ORDER BY OBA.DIAS_PARADO DESC NULLS LAST
