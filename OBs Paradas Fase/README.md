@@ -28,7 +28,7 @@ C:\Automacoes\lib\Authenticate-WhatsApp.bat
 
 ## Agendamento
 
-Seg–Sex às 07:30 e 13:00 (America/Sao_Paulo)
+Seg–Sex às 07:00 e 14:00 (America/Sao_Paulo)
 
 ## Exit Codes
 

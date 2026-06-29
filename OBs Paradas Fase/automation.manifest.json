@@ -13,7 +13,7 @@
   "queue_group": "oracle",
   "max_runtime_minutes": 15,
   "max_retries": 0,
-  "schedule_summary": "Seg-Sex às 07:30 e 13:00",
+  "schedule_summary": "Seg-Sex às 07:00 e 14:00",
   "runbook_path": "docs/runbooks/obs-paradas-fase-runbook.md",
   "context_path": "OBs Paradas Fase/CONTEXT.md",
   "readme_path": "OBs Paradas Fase/README.md",
