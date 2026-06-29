@@ -22,6 +22,16 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 - Pillow — geração de cards PNG
 - `whatsapp-web.js` via `node_modules` em `Receitas Bloqueadas/`
 
+## Utilitários de debug
+
+- `format_message.py` — **utilitário legado de depuração**. Não é executado pelo `run.ps1` nem pelo Orchestrator. Serve apenas para inspecionar o layout da mensagem de texto em desenvolvimento local. Não remover sem avaliar uso manual.
+
+## Padrão de logging
+
+- `run.ps1` usa `Write-AutomacaoLog` (via `Lib-Logging.psm1`) para todas as mensagens estruturadas com nível (`INFO`/`WARN`/`ERRO`/`DEBUG`) e `ExecId`.
+- `extract_obs.py` usa `make_logger` (logger Python padrão) com output para stderr; o output é capturado pelo PowerShell via `Invoke-OraclePythonScript`.
+- `generate_phase_cards.py` usa `print()` direto para stdout/stderr — deliberado para simplicidade, já que o script não roda em contexto de longa duração e toda saída é capturada pelo caller PowerShell via `Invoke-NativeProcess`.
+
 ## Histórico de decisões
 
 - BATCH mode adotado para envio (sessão Chrome única para todas as fases)

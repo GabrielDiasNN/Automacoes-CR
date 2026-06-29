@@ -30,6 +30,18 @@ Depois re-autenticar.
 ### ExitCode=3 — Oracle indisponível
 Verificar conectividade com `SRVDB02`. Aguardar recovery automático (3 tentativas com backoff 30/60/120s).
 
+### Resetar delivery_state.json (forçar reenvio de todas as fases)
+
+Use quando o lote foi alterado externamente ou quando as fases precisam ser reenviadas independente do hash salvo:
+
+```powershell
+Remove-Item "OBs Paradas Fase\delivery_state.json" -Force -ErrorAction SilentlyContinue
+Remove-Item "OBs Paradas Fase\obs_state.json"      -Force -ErrorAction SilentlyContinue
+Remove-Item "OBs Paradas Fase\obs_state.json.tmp"  -Force -ErrorAction SilentlyContinue
+```
+
+Na próxima execução, o script tratará todas as fases como não entregues e realizará um novo envio completo.
+
 ### Mensagens na fila (ACK não confirmado)
 Abrir Chrome virtual com sessão hub-global para drenar a fila:
 ```powershell

@@ -16,6 +16,10 @@ Monitora Ordens de Beneficiamento paradas por fase no processo produtivo e envia
 | `whatsapp-config.json` | chatId do grupo e clientId da sessão |
 | `config.json` | threshold de dias parados por fase |
 
+## Pré-requisitos Python
+
+- **Pillow** — geração de cards PNG (`pip install pillow`)
+
 ## Autenticação WhatsApp
 
 ```
@@ -36,3 +40,4 @@ Seg–Sex às 07:30 e 13:00 (America/Sao_Paulo)
 | 4 | Falha no envio WhatsApp |
 | 9 | Falha no pre-flight |
 | 21 | Sessão WhatsApp expirada — reautenticar |
+| 24 | Chrome não inicializa — verificar processos zumbi e reautenticar |

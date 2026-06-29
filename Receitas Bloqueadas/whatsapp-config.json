@@ -48,7 +48,7 @@
     "showQr": true
   },
   "auth": {
-    "clientId": "receitas-bloqueadas"
+    "clientId": "hub-global"
   },
   "runtime": {
     "headless": true

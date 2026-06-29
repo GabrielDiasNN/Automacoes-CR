@@ -272,7 +272,8 @@ try {
             Write-Log "Fase $phaseKey — $(if ($phaseSuccess) { 'OK' } else { 'FALHA' })"
         }
 
-        $state | ConvertTo-Json -Depth 5 | Out-File $DeliveryState -Encoding UTF8
+        $utf8NoBOMDel = [System.Text.UTF8Encoding]::new($false)
+        [System.IO.File]::WriteAllText($DeliveryState, ($state | ConvertTo-Json -Depth 5), $utf8NoBOMDel)
 
         # Commit Oracle state apenas quando TODAS as fases entregues
         $allSent = -not ($state.phases | Where-Object { -not $_.success })
@@ -287,6 +288,10 @@ try {
         Exit-WithCode 0 "Execucao concluida com sucesso."
 
     } finally {
+        if (Test-Path $ObsStateTmp) {
+            Remove-Item $ObsStateTmp -Force -ErrorAction SilentlyContinue
+            Write-Log "Limpeza finally: $ObsStateTmp removido." -Lvl "DEBUG"
+        }
         Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
     }
 

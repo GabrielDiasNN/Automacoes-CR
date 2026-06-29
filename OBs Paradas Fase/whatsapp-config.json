@@ -10,13 +10,6 @@
     "type": "group",
     "contactId": "120363000000000000@g.us"
   },
-  "message": {
-    "sendAttachment": false,
-    "textFile": "message.txt"
-  },
-  "paths": {
-    "logFile": "Logs\\ObsParadasFase.log"
-  },
   "idempotency": {
     "enabled": true
   },

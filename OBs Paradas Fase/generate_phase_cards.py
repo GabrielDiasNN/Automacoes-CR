@@ -109,7 +109,7 @@ def _phase_sort_key(fase_norm: str, ordem: list[str]) -> tuple[int, str]:
     return (len(ordem), fase_norm)
 
 
-def _wrap_text(text: str, font: Any, max_width: int, draw: Any) -> list[str]:
+def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.ImageDraw) -> list[str]:
     """Quebra texto em linhas que cabem em max_width."""
     words = text.split()
     lines: list[str] = []
@@ -130,7 +130,7 @@ def _wrap_text(text: str, font: Any, max_width: int, draw: Any) -> list[str]:
 
 # ── Helpers de desenho ────────────────────────────────────────────────────────
 
-def _draw_header(draw: Any, phase_display: str, n_obs: int, font: Any) -> None:
+def _draw_header(draw: ImageDraw.ImageDraw, phase_display: str, n_obs: int, font: ImageFont.FreeTypeFont) -> None:
     draw.rectangle([(0, 0), (CARD_W, HEADER_H)], fill=HEADER_COLOR)
     label = f"  {phase_display}  —  {n_obs} {'OB' if n_obs == 1 else 'OBs'} paradas"
     draw.text((PAD, (HEADER_H - 22) // 2), label, font=font, fill=HEADER_TEXT)
@@ -147,7 +147,7 @@ def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool,
     return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").title()
 
 
-def _draw_ob_row(draw: Any, ob: dict[str, Any], i: int, threshold: float, fonts: dict[str, Any]) -> None:
+def _draw_ob_row(draw: ImageDraw.ImageDraw, ob: dict[str, Any], i: int, threshold: float, fonts: dict[str, ImageFont.FreeTypeFont]) -> None:
     y0 = HEADER_H + i * OB_ROW_H
     if i > 0:
         draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
@@ -172,11 +172,11 @@ def _draw_ob_row(draw: Any, ob: dict[str, Any], i: int, threshold: float, fonts:
 
 
 def _draw_footer(
-    draw: Any,
+    draw: ImageDraw.ImageDraw,
     obs_fase: list[dict[str, Any]],
     threshold: float,
     n_obs: int,
-    font: Any,
+    font: ImageFont.FreeTypeFont,
 ) -> None:
     footer_y = HEADER_H + n_obs * OB_ROW_H
     draw.rectangle([(0, footer_y), (CARD_W, footer_y + FOOTER_H)], fill=FOOTER_BG)
@@ -195,8 +195,8 @@ def build_phase_image(
     n_obs  = len(obs_fase)
     img_h  = HEADER_H + OB_ROW_H * n_obs + FOOTER_H + PAD
     img    = Image.new("RGB", (CARD_W, img_h), BG_COLOR)
-    draw   = ImageDraw.Draw(img)
-    fonts  = {
+    draw: ImageDraw.ImageDraw = ImageDraw.Draw(img)
+    fonts: dict[str, ImageFont.FreeTypeFont] = {
         "header":  _load_font(22, bold=True),
         "ob":      _load_font(17, bold=True),
         "produto": _load_font(15, bold=False),
