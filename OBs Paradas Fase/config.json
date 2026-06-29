@@ -1,0 +1,22 @@
+{
+  "threshold_por_fase": {
+    "HIDRO":       1,
+    "SECADOR":     1,
+    "ABRIDOR":     1,
+    "RAMA":        1,
+    "COMPACTA":    1,
+    "BRILHO":      1,
+    "FELPAGEM":    1,
+    "CONFERENCIA": 0.5,
+    "AMACIANTE":   0.25,
+    "REVIS":       3,
+    "EXPEDICAO":   1,
+    "CQ":          1
+  },
+  "threshold_default": 99,
+  "max_obs_por_mensagem": 10,
+  "filtros_por_fase": {
+    "REVIS": { "CODIGO_FLUXO": 204 }
+  },
+  "ordem_fases": ["REVIS", "AMACIANTE", "HIDRO", "SECADOR", "ABRIDOR", "RAMA", "FELPAGEM", "CONFERENCIA", "COMPACTA", "BRILHO", "CQ", "EXPEDICAO"]
+}

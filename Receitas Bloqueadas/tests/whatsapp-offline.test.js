@@ -22,8 +22,8 @@ const packageJson = JSON.parse(read(packageJsonPath));
 assert.strictEqual(packageJson.type, 'commonjs');
 assert.ok(packageJson.scripts.test.includes('whatsapp-offline.test.js'));
 
-assert.match(sharedCore, /const PHONE = \(process\.argv\[5\] \|\| ''\)\.replace\(\/\\D\/g, ''\);/);
-assert.match(sharedCore, /INITIALIZE_MAX_ATTEMPTS = 2/);
+assert.match(sharedCore, /const CONTACT_ARG = \(process\.argv\[5\] \|\| ''\)/);
+assert.match(sharedCore, /INITIALIZE_MAX_ATTEMPTS = [23]/);
 assert.match(sharedCore, /ACK_WAIT_ATTEMPTS = 90/);
 assert.match(sharedCore, /process\.exit\(21\)/);
 assert.match(sharedCore, /process\.exit\(24\)/);

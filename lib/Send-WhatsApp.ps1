@@ -39,14 +39,23 @@ $finalClientId = $ClientId
 
 if ($ConfigPath -and (Test-Path $ConfigPath)) {
     $json = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $finalPhone = $json.target.contactPhone
-    $finalMessage = "*$($json.message.caption.title.text)*`n$($json.message.caption.body.text)"
+    $resolvedConfig = Convert-Path $ConfigPath
+    $base = Split-Path -Parent $resolvedConfig
+
+    # Suporte a contactId completo (grupos @g.us) com fallback para contactPhone
+    $finalPhone = if ($json.target.contactId) { $json.target.contactId } else { $json.target.contactPhone }
     $finalClientId = $json.auth.clientId
+
+    # Suporte a mensagem via arquivo externo (textFile) com fallback para caption inline
+    if ($json.message.textFile) {
+        $txtPath = Join-Path $base $json.message.textFile
+        $finalMessage = Get-Content $txtPath -Raw -Encoding UTF8
+    } else {
+        $finalMessage = "*$($json.message.caption.title.text)*`n$($json.message.caption.body.text)"
+    }
 
     # Resolve anexo (assume relativo ao config.json se nao for absoluto)
     if ($json.message.sendAttachment -and $json.paths.attachmentPath) {
-        $resolvedConfig = Convert-Path $ConfigPath
-        $base = Split-Path -Parent $resolvedConfig
         $finalAttachment = Join-Path $base $json.paths.attachmentPath
     }
 }
@@ -137,7 +146,10 @@ $WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
 } else {
     (Get-Location).Path
 }
-$env:NODE_PATH = Join-Path $WorkDir "node_modules"
+# Resolve node_modules: usa WorkDir quando existe, senão fallback para Receitas Bloqueadas
+$candidateNodePath = Join-Path $WorkDir "node_modules"
+$fallbackNodePath  = Join-Path $LibDir "..\Receitas Bloqueadas\node_modules"
+$env:NODE_PATH = if (Test-Path $candidateNodePath) { $candidateNodePath } else { $fallbackNodePath }
 
 $result = Invoke-NativeProcess -FilePath $NodeExe -Arguments ($nodeArgs -join " ") -WorkingDirectory $WorkDir -LogAction {
     param($msg, $lvl)

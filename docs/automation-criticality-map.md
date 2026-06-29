@@ -29,6 +29,7 @@ A tabela abaixo consolida a governança, cadência e prazos operacionais das aut
 | **`RB-01`** | **[Receitas Bloqueadas](runbooks/receitas-bloqueadas-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sex às 07:00, 11:00, 14:00 e 17:00 | Laboratório de Receitas, PCP e Tinturaria | Atraso no tingimento de Ordens de Beneficiamento (OBs) liberadas, ociosidade em teares e perda de visibilidade de receitas retidas. |
 | **`MT-02`** | **[Montagem de Terceirizados](runbooks/montagem-de-terceirizados-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sáb, a cada 30 min, 05:00 às 22:00, em horários redondos | Faturamento, Controladoria e Expedição de Terceirizados | Risco de divergências fiscais na entrada de NFs de parceiros/facções, atraso na liberação de estoque de produtos acabados. |
 | **`RE-03`** | **[Receitas Emitidas](runbooks/receitas-emitidas-runbook.md)** | **💡 MÉDIA** | **6 horas** | Sex às 07:05 | Planejamento, Tinturaria e PCP | Perda de visibilidade das receitas expedidas para a produção no dia, afetando a acurácia do planejamento produtivo do dia seguinte. |
+| **`OBP-04`** | **[OBs Paradas Fase](runbooks/obs-paradas-fase-runbook.md)** | **⚠️ ALTA** | **20 min** | Seg-Sex às 07:30 e 13:00 | PCP / Producao Beneficiamento | Falta de visibilidade de OBs paradas por fase no Beneficiamento, risco de atraso na producao e acumulo de estoque intermediario. |
 
 ---
 

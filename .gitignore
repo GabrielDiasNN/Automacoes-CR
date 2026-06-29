@@ -120,6 +120,14 @@ Receitas Bloqueadas/email_state.json
 Receitas Bloqueadas/receitas_state.json
 Receitas Emitidas/delivery_state.json
 Receitas Emitidas/receitas_state.json
+OBs Paradas Fase/obs_result.json
+OBs Paradas Fase/obs_state.json
+OBs Paradas Fase/obs_state.json.tmp
+OBs Paradas Fase/message.txt
+OBs Paradas Fase/delivery_state.json
+OBs Paradas Fase/.wwebjs_cache/
+OBs Paradas Fase/images/
+OBs Paradas Fase/phase_cards.json
 
 # Caches locais adicionais
 .npm-cache-codex/
