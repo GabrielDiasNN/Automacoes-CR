@@ -1,6 +1,6 @@
 # pylint: disable=broad-exception-caught
 # {
-#   "version": "1.1.0",
+#   "version": "1.2.0",
 #   "description": "Le obs_result.json + config.json, gera images PNG por fase e phase_cards.json"
 # }
 import json
@@ -49,6 +49,7 @@ HEADER_TEXT   = (30,  30,  46)
 TEXT_MAIN     = (236, 234, 228)
 TEXT_DIM      = (160, 160, 180)
 ACCENT_URGENT = (239,  68,  68)
+ACCENT_WARN   = (245, 158,  11)
 DIVIDER_COLOR = (60,  60,  80)
 FOOTER_BG     = (20,  20,  36)
 
@@ -154,11 +155,11 @@ def _draw_ob_row(draw: ImageDraw.ImageDraw, ob: dict[str, Any], i: int, threshol
 
     dias, urgente, kanban, alternativo, produto = _ob_display_data(ob, threshold)
     dias_color = ACCENT_URGENT if urgente else TEXT_MAIN
-    draw.text(
-        (PAD, y0 + 10),
-        f"OB {ob.get('NUMERO_OB', '—')}  ·  {kanban}  ·  {fmt_dias(dias)} dias{'  [!]' if urgente else ''}",
-        font=fonts["ob"], fill=dias_color,
-    )
+    ob_label = f"OB {ob.get('NUMERO_OB', '—')}  ·  {kanban}  ·  {fmt_dias(dias)} dias"
+    draw.text((PAD, y0 + 10), ob_label, font=fonts["ob"], fill=dias_color)
+    if urgente:
+        label_w = draw.textbbox((0, 0), ob_label, font=fonts["ob"])[2]
+        draw.text((PAD + label_w + 6, y0 + 10), "⚠", font=fonts["ob"], fill=ACCENT_WARN)
     prod_lines = _wrap_text(
         f"{alternativo} · {produto}" if alternativo else produto,
         fonts["produto"], CARD_W - PAD * 2, draw,

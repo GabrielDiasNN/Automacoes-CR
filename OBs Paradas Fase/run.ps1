@@ -269,7 +269,8 @@ try {
                     sent_at = if ($phaseSuccess) { Get-Date -Format 'dd/MM/yyyy HH:mm:ss' } else { $null }
                 }
             }
-            Write-Log "Fase $phaseKey — $(if ($phaseSuccess) { 'OK' } else { 'FALHA' })"
+            $phaseDisplay = if ($card.phase_display) { $card.phase_display } else { $phaseKey }
+            Write-Log "Fase '$phaseDisplay' — $(if ($phaseSuccess) { 'OK' } else { 'FALHA' })"
         }
 
         $utf8NoBOMDel = [System.Text.UTF8Encoding]::new($false)
