@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sqlite-local": {
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "Orchestrator/automacoes.db"]
+    }
+  }
+}

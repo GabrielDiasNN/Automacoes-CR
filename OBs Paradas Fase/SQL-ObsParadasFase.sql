@@ -1,7 +1,6 @@
 -- ============================================================
 -- OBs PARADAS NA FASE — Automação OBP-04
 -- Derivado de: SQL Reference/POSICAO-ATUAL-OBS-EM-ABERTO.sql
--- Filtro adicional: DIAS_PARADO >= 1 (corte mínimo; threshold por fase é feito em Python)
 -- ============================================================
 
 WITH
