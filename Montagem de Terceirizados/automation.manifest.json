@@ -14,6 +14,7 @@
   "max_runtime_minutes": 30,
   "max_retries": 1,
   "schedule_summary": "Seg-Sáb, a cada 30 min, 05:00 às 22:00, em horários redondos",
+  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":\"0,30 5-21 * * 1-6\",\"timezone\":\"America/Sao_Paulo\"}",
   "runbook_path": "docs/runbooks/montagem-de-terceirizados-runbook.md",
   "context_path": "Montagem de Terceirizados/CONTEXT.md",
   "readme_path": "Montagem de Terceirizados/README.md",

@@ -3,7 +3,6 @@
   "name": "OBs Paradas Fase",
   "slug": "obs-paradas-fase",
   "criticality": "high",
-  "script_path": "OBs Paradas Fase/run.ps1",
   "entrypoint": "run.ps1",
   "runtime": "powershell",
   "channels": [

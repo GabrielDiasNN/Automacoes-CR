@@ -109,7 +109,7 @@ Se precisar disparar de forma independente fora do Orquestrador:
 1. Abra um terminal do PowerShell como Administrador.
 2. Navegue até o diretório da automação:
    ```powershell
-   cd "C:\Automacoes\NomeDaAutomacao"
+   cd "<CAMINHO_AUTOMACAO>"
    ```
 3. Execute o wrapper operacional:
    ```powershell

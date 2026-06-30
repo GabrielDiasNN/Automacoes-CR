@@ -14,7 +14,7 @@ def get_now_local() -> datetime:
     return datetime.now(tz_br).replace(tzinfo=None)
 
 
-def to_br_timezone(dt: datetime) -> datetime:
+def to_br_timezone(dt: datetime | None) -> datetime | None:
     """
     Garante que o datetime seja naive e em Brasilia.
     """

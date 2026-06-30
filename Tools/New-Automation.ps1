@@ -227,7 +227,7 @@ $runbookContent = $runbookContent.Replace("[Tempo de recuperação tolerado, ex:
 $runbookContent = $runbookContent.Replace("[Horários cron, ex: Seg-Sex às 07:30, 10:00, 14:00]", "Definir no cadastro operacional")
 $runbookContent = $runbookContent.Replace("[Nome / Setor, ex: Laboratório de Receitas / PCP]", $OwnerArea)
 $runbookContent = $runbookContent.Replace("[Contato TI, ex: suporte.automacoes@empresa.com]", $SupportContact)
-$runbookContent = $runbookContent.Replace("C:\\Automacoes\\NomeDaAutomacao", "C:\\Automacoes\\$Name")
+$runbookContent = $runbookContent.Replace("<CAMINHO_AUTOMACAO>", "$BasePath\$Name")
 $runbookContent = $runbookContent.Replace("[Versão]", "0.1.0")
 $smokeTestContent = Convert-Template -Content $smokeTestContent -Replacements $replacements
 
