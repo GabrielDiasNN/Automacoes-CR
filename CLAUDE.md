@@ -258,17 +258,35 @@ Campos obrigatórios para `preflight` aceitar:
 {
   "id": "XXX-00",
   "name": "Nome Legível",
+  "slug": "nome-automacao",
+  "criticality": "high",
   "script_path": "Nome Dir/run.ps1",
+  "entrypoint": "run.ps1",
   "runtime": "powershell",
   "channels": ["whatsapp"],
-  "criticidade": "high",
+  "owner_area": "Equipe / Area",
+  "max_runtime_minutes": 15,
+  "max_retries": 0,
+  "schedule_summary": "Seg-Sex às 07:00 e 13:30",
+  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":\"30 7,13 * * 1-5\",\"timezone\":\"America/Sao_Paulo\"}",
   "runbook_path": "docs/runbooks/nome-runbook.md",
   "context_path": "Nome Dir/CONTEXT.md",
   "readme_path": "Nome Dir/README.md",
-  "smoke_tests": ["Orchestrator/tests/test_nome.py"],
-  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":\"30 7,13 * * 1-5\",\"timezone\":\"America/Sao_Paulo\"}"
+  "orchestrator": {
+    "script_path": "./Nome Dir/run.ps1"
+  },
+  "dependencies": {
+    "oracle": false,
+    "outlook": false,
+    "whatsapp": true
+  },
+  "smoke_tests": ["Orchestrator/tests/test_nome.py"]
 }
 ```
+
+**Campos obrigatórios validados por `Test-AutomationCatalog.ps1`:** `id`, `name`, `slug`, `criticality`, `owner_area`, `entrypoint`, `runtime`, `channels`, `max_runtime_minutes`, `max_retries`, `schedule_summary`, `runbook_path`, `context_path`, `readme_path`, `orchestrator` (com `orchestrator.script_path`), `dependencies`, `smoke_tests`.
+
+Atenção: o campo é **`criticality`** (inglês), não `criticidade`. `schedule` e `script_path` no nível raiz são adicionais para o preflight, mas `orchestrator.script_path` e `entrypoint` são exigidos pelo catalogador.
 
 `schedule` é uma **string JSON** (não objeto). Sem trailing comma. Sem comentários.
 
@@ -290,8 +308,9 @@ def test_algo():                  # ❌ mypy reprova (missing return type)
 ### Verificação rápida antes do commit
 
 ```powershell
-# Python — verificar um arquivo específico
-python -m mypy "Pasta\arquivo.py" --ignore-missing-imports
+# Python — verificar um arquivo específico (usar as mesmas flags do hook de governança)
+$env:MYPYPATH = "Orchestrator;.;lib\python"
+.venv\Scripts\mypy "Pasta\arquivo.py" --strict --explicit-package-bases --namespace-packages
 python -m pylint "Pasta\arquivo.py" 2>&1 | Where-Object { $_ -match "R0[0-9]|C0415" }
 
 # PowerShell — verificar catch genérico
