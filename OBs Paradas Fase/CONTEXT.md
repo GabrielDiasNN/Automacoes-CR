@@ -18,7 +18,7 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 
 ## Dependências críticas
 
-- Oracle `SRVDB02:1521/dbprd` — query em `extract_obs.py`
+- Oracle — string de conexão via `ORACLE_CONNECT_STRING` no `.env`
 - Pillow — geração de cards PNG
 - `whatsapp-web.js` via `node_modules` em `Receitas Bloqueadas/`
 
@@ -35,5 +35,5 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 ## Histórico de decisões
 
 - BATCH mode adotado para envio (sessão Chrome única para todas as fases)
-- 20s de settle após `ready` para garantir WhatsApp Web totalmente carregado antes do envio
+- 40s de settle (`BATCH_SETTLE_MS_NORMAL`) após `ready` para garantir WhatsApp Web totalmente carregado antes do envio; dreno ativo com `mouse.move` a cada 3s para manter Chrome acordado durante uploads de mídia
 - `cleanProfileForRetry` remove apenas LOCK files — `.log` contêm tokens de sessão válidos

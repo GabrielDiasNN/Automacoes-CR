@@ -107,7 +107,9 @@ try {
         if ($chromeZombies) {
             Write-Log "Limpando $(@($chromeZombies).Count) processo(s) Chrome zumbi do motor WhatsApp..."
             foreach ($proc in $chromeZombies) {
-                try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop } catch [System.Exception] {}
+                try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop } catch [System.Exception] {
+                    Write-Log "Aviso: nao foi possivel encerrar Chrome PID=$($proc.ProcessId): $_" -Lvl "WARN"
+                }
             }
         }
 
@@ -150,7 +152,7 @@ try {
             Exit-WithCode 4 "phase_cards.json nao foi gerado."
         }
 
-        $cards = Get-Content $PhaseCardsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        $cards = @(Get-Content $PhaseCardsFile -Raw -Encoding UTF8 | ConvertFrom-Json)
         if (-not $cards -or $cards.Count -eq 0) {
             Exit-WithCode 2 "phase_cards.json vazio — nenhuma fase para enviar."
         }
@@ -202,6 +204,9 @@ try {
 
         # Preparar lote: caminhos absolutos para o motor Node.js
         $batchInput = $pendentes | ForEach-Object {
+            if (-not $_.image_path) {
+                Exit-WithCode 4 "Card '$($_.phase_key)' sem image_path — phase_cards.json corrompido."
+            }
             @{
                 phase_key  = $_.phase_key
                 image_path = (Join-Path $ScriptDir $_.image_path.Replace("/", "\"))
@@ -254,7 +259,8 @@ try {
         $anyFailure = $false
         foreach ($card in $pendentes) {
             $phaseKey = $card.phase_key
-            $res = $batchResults | Where-Object { $_.phase_key -eq $phaseKey }
+            $resMatches = @($batchResults | Where-Object { $_.phase_key -eq $phaseKey })
+            $res = if ($resMatches.Count -gt 0) { $resMatches[0] } else { $null }
             $phaseSuccess = if ($res) { [bool]$res.success } else { $false }
             if (-not $phaseSuccess) { $anyFailure = $true }
 
@@ -297,6 +303,7 @@ try {
     }
 
 } catch [System.Exception] {
-    if ($_.Exception.Message -match "Processo finalizado") { throw }
+    if ($_.Exception -is [System.Management.Automation.RuntimeException] -and
+        $null -ne $_.Exception.InnerException) { throw }
     Exit-WithCode 4 "Falha critica na orquestracao: $_"
 }

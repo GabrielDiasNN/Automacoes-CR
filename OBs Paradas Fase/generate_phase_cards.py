@@ -39,6 +39,8 @@ DEFAULT_KEYWORDS = {
     "EXPEDICAO":   1,
 }
 DEFAULT_MAX_OBS = 10
+MAX_OBS_PER_PHASE = 15   # limite por fase para evitar cards com altura > 5000px (WhatsApp)
+MAX_CARD_HEIGHT   = 4800
 
 _PREFIX_RE = re.compile(r"^[A-Z0-9]{2,5}-")
 
@@ -279,11 +281,13 @@ def _group_obs(
     max_obs: int,
     phase_order: list[str],
 ) -> list[tuple[str, list[dict[str, Any]]]]:
+    # Agrupa por fase antes de limitar, para não excluir fases inteiras por saturação global.
+    # max_obs controla o teto por fase (não o total), garantindo que todas as fases
+    # com OBs acima do threshold apareçam no relatório.
     filtradas.sort(key=lambda x: x["_dias_float"], reverse=True)
-    exibidas: list[dict[str, Any]] = filtradas[:max_obs]
 
     grupos: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for ob in exibidas:
+    for ob in filtradas:
         fase_norm = normalize_fase(ob.get("FASE_ATUAL") or "Indefinida")
         grupos[fase_norm].append(ob)
 
@@ -296,6 +300,10 @@ def _group_obs(
     )
     for _, obs_fase in grupos_ordenados:
         obs_fase.sort(key=lambda o: o["_dias_float"], reverse=True)
+        # Limita por fase; também aplica teto de altura de card para WhatsApp (~5000px)
+        max_por_fase = min(max_obs, MAX_OBS_PER_PHASE,
+                          max(1, (MAX_CARD_HEIGHT - HEADER_H - FOOTER_H - PAD) // OB_ROW_H))
+        del obs_fase[max_por_fase:]
     return grupos_ordenados
 
 

@@ -60,7 +60,7 @@ def _serialize_rows(columns: list[str], rows: list[Any]) -> tuple[list[dict[str,
             elif isinstance(value, str) and value:
                 record[key] = value.strip()
         data.append(record)
-    data.sort(key=lambda x: (str(x.get("NUMERO_OB", "")), str(x.get("FASE_ATUAL", ""))))
+    data.sort(key=lambda x: (x.get("NUMERO_OB") or "", x.get("FASE_ATUAL") or ""))
     payload_str = json.dumps({"rows": data}, ensure_ascii=False, sort_keys=True)
     return data, hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
 
@@ -83,17 +83,20 @@ def extract() -> None:
     client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
     tns_admin  = os.environ.get("TNS_ADMIN")
 
-    if not all([user, password, dsn]):
+    if not user or not password or not dsn:
         log("Credenciais Oracle ausentes.", "ERROR", exec_id)
         sys.exit(1)
     if not client_lib or not os.path.exists(client_lib):
         log("ORACLE_CLIENT_LIB_DIR invalido.", "ERROR", exec_id)
         sys.exit(1)
 
-    assert user is not None and password is not None
+    # Apos os checks acima, mypy sabe que user e password sao str (nao None/vazio)
     init_oracle_thick_mode(client_lib, tns_admin, lambda msg, lvl="INFO": log(msg, lvl, exec_id))
 
     sql_file = os.path.join(SCRIPT_DIR, "SQL-ObsParadasFase.sql")
+    if not os.path.exists(sql_file):
+        log(f"Arquivo SQL nao encontrado: {sql_file}", "ERROR", exec_id)
+        sys.exit(1)
     with open(sql_file, "r", encoding="utf-8") as f:
         sql = f.read()
 

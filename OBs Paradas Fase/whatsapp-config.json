@@ -12,11 +12,5 @@
   },
   "idempotency": {
     "enabled": true
-  },
-  "retry": {
-    "enabled": true,
-    "maxAttempts": 2,
-    "attemptDelayMs": 2000,
-    "sendSettleMs": 5000
   }
 }

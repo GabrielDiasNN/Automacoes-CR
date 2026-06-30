@@ -28,7 +28,7 @@ Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
 Depois re-autenticar.
 
 ### ExitCode=3 — Oracle indisponível
-Verificar conectividade com `SRVDB02`. Aguardar recovery automático (3 tentativas com backoff 30/60/120s).
+Verificar conectividade Oracle (string em `ORACLE_CONNECT_STRING` no `.env`). Aguardar recovery automático (3 tentativas com backoff 30/60/120s).
 
 ### Resetar delivery_state.json (forçar reenvio de todas as fases)
 
@@ -42,10 +42,28 @@ Remove-Item "OBs Paradas Fase\obs_state.json.tmp"  -Force -ErrorAction SilentlyC
 
 Na próxima execução, o script tratará todas as fases como não entregues e realizará um novo envio completo.
 
+### ExitCode=4 — Falha parcial de fases (algumas entregues, outras não)
+
+Verificar quais fases falharam:
+```powershell
+Get-Content "OBs Paradas Fase\delivery_state.json" | ConvertFrom-Json | Select-Object -ExpandProperty phases
+```
+
+As fases com `success=false` serão reenviadas automaticamente na próxima execução agendada (sem intervenção). Para forçar reenvio imediato:
+```powershell
+# Opção 1: aguardar próximo cron (07:00 ou 14:00)
+# Opção 2: acionar manualmente via Orchestrator API
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/automations/OBP-04/trigger" -Method POST -Headers @{"X-API-Key"="<api_key>"}
+```
+
+Para forçar reenvio de TODAS as fases (ignorar estado):
+```powershell
+Remove-Item "OBs Paradas Fase\delivery_state.json" -Force -ErrorAction SilentlyContinue
+Remove-Item "OBs Paradas Fase\obs_state.json"      -Force -ErrorAction SilentlyContinue
+```
+
 ### Mensagens na fila (ACK não confirmado)
 Abrir Chrome virtual com sessão hub-global para drenar a fila:
 ```powershell
-cd "C:\Automacoes\lib"
-$env:NODE_PATH = "C:\Automacoes\Receitas Bloqueadas\node_modules"
-node -e "const {Client,LocalAuth}=require('whatsapp-web.js');const c=new Client({authStrategy:new LocalAuth({dataPath:'.wwebjs_auth',clientId:'hub-global'}),puppeteer:{headless:false,args:['--no-sandbox']}});c.on('ready',()=>{console.log('Pronto');setTimeout(async()=>{await c.destroy();process.exit(0)},90000)});c.initialize()"
+pwsh -File lib\Keep-WhatsApp-Open.ps1
 ```
