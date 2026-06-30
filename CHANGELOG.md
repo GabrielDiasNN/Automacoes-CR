@@ -1,5 +1,18 @@
 # Changelog
 
+## [9.5.1] - 30/06/2026
+### Corrigido
+- **Bug de tipo em `timezone.py`**: `to_br_timezone()` declarava `-> datetime` mas retornava `None`; corrigido para `-> datetime | None`.
+- **Caminho absoluto em `New-Automation.ps1`**: placeholder hardcoded no template de runbook substituído por `$BasePath` portável.
+- **Manifest OBP-04 redundante**: removido `script_path` duplicado no nível raiz (já existia em `orchestrator.script_path`).
+
+### Adicionado
+- **Campo `schedule` nos manifests**: MT-02, RB-01 e RE-03 agora incluem cron JSON estruturado (mesmo formato do OBP-04), eliminando inconsistência entre automações.
+- **`Produção Beneficimento/CONTEXT.md`**: documentação da arquitetura snapshot-first, última automação que faltava CONTEXT.
+
+### Alterado
+- **Version bump v9.3.6 → v9.5.0**: README, CONTEXT, constants.py, ai-native-context-monitor e 6 docs de governança atualizados para refletir a versão operacional corrente.
+
 ## [9.5.0] - 21/06/2026
 ### Alterado
 - **Nova identidade visual do Dashboard — "Sala de Instrumentação"**: redesign completo do frontend React com identidade industrial (grafite + sistema de sinais ciano/âmbar/verde/vermelho onde cor codifica significado), família tipográfica IBM Plex (Sans Condensed / Sans / Mono) e cantos de instrumento. Substitui a antiga "Sala de Controle" âmbar-sobre-preto.
