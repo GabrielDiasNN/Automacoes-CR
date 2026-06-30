@@ -4,8 +4,8 @@ Este arquivo é o snapshot curado para bootstrap de agentes no Hub de Automaçõ
 
 ## Estado Atual
 
-- **Versão operacional de referência**: Hub em linha `v9.3.6`, com Orchestrator/Dashboard operando sobre baseline Alembic, governança semântica, testes offline de Node/WhatsApp, cobertura ampliada de runtime e o Agente de Revisão de Código declarativo estruturado ativo.
-- **Stack ativa**: Python/FastAPI, PowerShell corporativo, Node.js para comunicações, Dashboard SPA estático e SQLite em WAL com Alembic.
+- **Versão operacional de referência**: Hub em linha `v9.5.0`, com Orchestrator/Dashboard React "Sala de Instrumentação" operando sobre baseline Alembic, governança semântica, testes offline de Node/WhatsApp, cobertura ampliada de runtime, OBP-04 em produção e design system industrial.
+- **Stack ativa**: Python/FastAPI, PowerShell corporativo, Node.js para comunicações, Dashboard React (TypeScript + Vite) e SQLite em WAL com Alembic.
 - **Padrão arquitetural governado**: `docs/architecture-standard.md` registra camadas e severidades oficiais, e `Tools/Test-ArchitectureStandard.ps1` valida o contrato no quality gate falhando apenas violações críticas no v1.
 - **Skills do workspace**: `.github/skills/` é a fonte canônica; `.gemini/skills/` é apenas mirror por junction/symlink.
 - **Skills globais obrigatórias**: `ai-engineering-discipline`, `protocolo-valeg` e `git-ide-governance-skill`.

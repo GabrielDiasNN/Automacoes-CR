@@ -1,8 +1,8 @@
 # Painel de Controle de Qualidade (Quality Dashboard)
 
-> **Versão:** v9.3.6 | **Atualizado:** 27/05/2026
+> **Versão:** v9.5.0 | **Atualizado:** 27/05/2026
 
-Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v9.3.6). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
+Este painel consolida as métricas de qualidade de software do **Hub de Automações** (v9.5.0). Ele é atualizado dinamicamente pelo script local de snapshot e auditado no pipeline de integração contínua (CI).
 
 ---
 

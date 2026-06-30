@@ -1,13 +1,13 @@
-# Central de Automações — v9.3.6 Baseline Operacional e Governança
+# Central de Automações — v9.5.0
 
-Este repositório é o núcleo governado para orquestração de automações corporativas. O projeto opera no **Estado de Excelência v9.3.6**, com stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e um conjunto compartilhado de skills para ChatGPT/Codex, Gemini CLI e Antigravity.
+Este repositório é o núcleo governado para orquestração de automações corporativas. Stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e Dashboard React "Sala de Instrumentação".
 
-## 🏗️ Arquitetura Técnica (Enterprise Control Tower v9.3.6)
+## 🏗️ Arquitetura Técnica (Enterprise Control Tower v9.5.0)
 
 ```mermaid
 graph TD
     subgraph "FRONTEND — Dashboard SPA"
-        UI["Dashboard v9.3.6<br/>Zero-Trust + UTF-8 Nativo"]
+        UI["Dashboard React v9.5.0<br/>Sala de Instrumentação"]
         WS_CLIENT["WebSocket Client<br/>Logs + Events Replay"]
         UI --> WS_CLIENT
     end
@@ -21,7 +21,7 @@ graph TD
     end
 
     subgraph "CORE — Motor de Execução v5"
-        WORKER["Worker v9.3.6<br/>Graceful Shutdown + JSON Logs"]
+        WORKER["Worker v9.5.0<br/>Graceful Shutdown + JSON Logs"]
         PRIORITY["Priority Queue<br/>HIGH/NORMAL/LOW"]
         SCHEDULER["APScheduler<br/>WAL Checkpoint + Purge"]
         WORKER --- PRIORITY
@@ -62,6 +62,8 @@ graph TD
 - **Worker Resilience**: Encerramento limpo de processos PowerShell para evitar consumo de recursos zumbi.
 - **Performance SQLite**: Pragmas otimizados para operação em RAM (`temp_store=MEMORY`).
 - **Skills Compartilhadas**: `.github/skills/` é a fonte canônica das 7 skills ativas; `.gemini/skills/` é apenas o espelho de compatibilidade para Gemini CLI e Antigravity.
+- **Dashboard React "Sala de Instrumentação"**: identidade visual industrial (grafite + ciano/âmbar), IBM Plex, react-router com deep-links, design system em `Dashboard/src/components/ui/`, uPlot para time series.
+- **OBs Paradas Fase (OBP-04)**: automação de visibilidade de OBs paradas por fase, cards PNG via WhatsApp, cron Seg-Sex 07:00/14:00.
 
 ---
-Mantido pela equipe de Automações & Antigravity AI
+Mantido pela equipe de Automações

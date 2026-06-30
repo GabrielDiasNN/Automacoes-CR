@@ -1,9 +1,9 @@
-# Cognitive Context: Automações Hub v9.3.6 (Operational Baseline)
+# Cognitive Context: Automações Hub v9.5.0 (Operational Baseline)
 
 ## Repository Philosophy
-Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v9.3.6 (Operational Baseline)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
+Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v9.5.0 (Operational Baseline)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
 
-## System Architecture (v9.3.6 Operational Baseline)
+## System Architecture (v9.5.0 Operational Baseline)
 
 - **ADR-019 (20/05/2026):** Governança de Banco de Dados com Alembic. Transição de migrações manuais inline para controle de versão formal de schema com Alembic. Suporte a SQLite via Modo Batch (`render_as_batch=True`), inicialização dinâmica via startup programático (`upgrade head`) no FastAPI, e infraestrutura de testes em memória isolada e resiliente.
 - **ADR-018 (17/05/2026):** Observabilidade Acionável. `/api/system/diagnostics` passa a emitir `overall_status`, `findings`, risco do WAL, idade do heartbeat e idade das execuções mais antigas em fila/execução. O Dashboard exibe achados com severidade e ação sugerida para reduzir tempo de diagnóstico operacional.
@@ -19,7 +19,7 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Graceful Worker**: Worker monitora processos ativos e garante o `taskkill` de toda a árvore de processos no shutdown.
 - **SQLite Hardened**: WAL mode com `synchronous=NORMAL` e `temp_store=MEMORY` para máxima performance de I/O.
 - **Unified JSON Logging**: Loggers do Orchestrator e Worker unificados para rastreabilidade via `correlation_id`.
-- **Runtime v9.3.6 alinhado:** `ORCHESTRATOR_VERSION`, `WORKER_VERSION`, `ORCHESTRATOR_CONTRACT_VERSION` e `ORCHESTRATOR_SCHEMA_VERSION` refletem o baseline atual com ownership do worker, histórico operacional, baseline operacional formalizado, catálogo governado versionado, governança de datas, governança semântica e agente declarativo de revisão de código.
+- **Runtime v9.5.0 alinhado:** `ORCHESTRATOR_VERSION`, `WORKER_VERSION`, `ORCHESTRATOR_CONTRACT_VERSION` e `ORCHESTRATOR_SCHEMA_VERSION` refletem o baseline atual com ownership do worker, histórico operacional, baseline operacional formalizado, catálogo governado versionado, governança de datas, governança semântica e agente declarativo de revisão de código.
 - **Baseline Operacional compartilhado:** `GET /api/system/baseline`, `diagnostics.operational_baseline` e `history.baseline_status` usam os mesmos thresholds para worker, fila, WAL, execuções acima do limite e ownership órfão.
 - **Ownership + Histórico v9.2.7 alinhados:** execuções agora registram `claimed_at`, `worker_instance_id` e `worker_pid`; o runtime passa a persistir snapshots em `system_health_snapshots` e expor tendência em `/api/system/history` e `trend_summary` no diagnóstico.
 - **Portfólio Governado v9.3.0 alinhado:** cada automação ativa passa a possuir `automation.manifest.json` como fonte canônica de criticidade, SLA, owner, dependências e smoke tests; o Orchestrator cruza catálogo, docs e banco em `/api/portfolio/health` e `/api/portfolio/drift`.
