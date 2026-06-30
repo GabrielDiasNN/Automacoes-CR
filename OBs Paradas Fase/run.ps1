@@ -255,7 +255,7 @@ try {
         foreach ($card in $pendentes) {
             $phaseKey = $card.phase_key
             $res = $batchResults | Where-Object { $_.phase_key -eq $phaseKey }
-            $phaseSuccess = if ($res) { [bool]$res.success } else { $waExit -eq 0 }
+            $phaseSuccess = if ($res) { [bool]$res.success } else { $false }
             if (-not $phaseSuccess) { $anyFailure = $true }
 
             $entry = $state.phases | Where-Object { $_.key -eq $phaseKey }
