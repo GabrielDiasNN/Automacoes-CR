@@ -103,6 +103,7 @@ Backups/
 
 # Scratch local de investigação
 scratch/
+SQL Reference/
 
 # Beneficiamento - artefatos exploratórios e arquivos de refresh local
 Produção Beneficimento/analysis_tmp/
