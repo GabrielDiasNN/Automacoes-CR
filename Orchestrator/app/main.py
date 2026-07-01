@@ -46,10 +46,10 @@ from .routers import (
     websocket,
 )
 from .runtime import get_allowed_origins, get_dashboard_path, get_lib_path, scheduler
-from .timezone import get_now_local
 from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
 from .services.scheduler_runtime import register_enterprise_jobs, reload_scheduled_tasks
 from .telemetry import setup_telemetry
+from .timezone import get_now_local
 
 # ---------------------------------------------------------------------------
 # Configuracao de Logs Estruturados (JSON)

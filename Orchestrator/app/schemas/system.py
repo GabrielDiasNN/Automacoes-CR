@@ -34,7 +34,7 @@ class WorkerStatus(BaseModel):
     version: str = WORKER_VERSION
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "WorkerStatus":
+    def apply_br_format(self) -> WorkerStatus:
         self.last_ping = format_dt_br(self.last_ping)
         return self
 
@@ -62,7 +62,7 @@ class SystemHealth(BaseModel):
     ram_usage_percent: float | None = None
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "SystemHealth":
+    def apply_br_format(self) -> SystemHealth:
         self.timestamp = format_dt_br(self.timestamp)
         return self
 
@@ -75,7 +75,7 @@ class ScheduledJob(BaseModel):
     trigger: str
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "ScheduledJob":
+    def apply_br_format(self) -> ScheduledJob:
         self.next_run_time = format_dt_br(self.next_run_time)
         return self
 
@@ -90,7 +90,7 @@ class AutomationMetric(BaseModel):
     test_mode: bool = False
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "AutomationMetric":
+    def apply_br_format(self) -> AutomationMetric:
         self.last_run = format_dt_br(self.last_run)
         return self
 
@@ -158,7 +158,7 @@ class DiagnosticsQueueItem(BaseModel):
     age_seconds: float = 0.0
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "DiagnosticsQueueItem":
+    def apply_br_format(self) -> DiagnosticsQueueItem:
         self.claimed_at = format_dt_br(self.claimed_at)
         return self
 
@@ -240,7 +240,7 @@ class DiagnosticsTrendSummary(BaseModel):
     last_snapshot_at: Any | None = None
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "DiagnosticsTrendSummary":
+    def apply_br_format(self) -> DiagnosticsTrendSummary:
         self.last_snapshot_at = format_dt_br(self.last_snapshot_at)
         return self
 
@@ -281,7 +281,7 @@ class OperationalBaselineSummary(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "OperationalBaselineSummary":
+    def apply_br_format(self) -> OperationalBaselineSummary:
         self.evaluated_at = format_dt_br(self.evaluated_at)
         return self
 
@@ -494,7 +494,7 @@ class SystemHistoryPoint(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "SystemHistoryPoint":
+    def apply_br_format(self) -> SystemHistoryPoint:
         self.timestamp = format_dt_br(self.timestamp)
         return self
 
@@ -552,7 +552,7 @@ class PortfolioHealthItem(BaseModel):
     )
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "PortfolioHealthItem":
+    def apply_br_format(self) -> PortfolioHealthItem:
         self.next_run = format_dt_br(self.next_run)
         self.last_success_at = format_dt_br(self.last_success_at)
         self.last_failure_at = format_dt_br(self.last_failure_at)
@@ -607,7 +607,7 @@ class AuditEntry(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     @model_validator(mode="after")
-    def apply_br_format(self) -> "AuditEntry":
+    def apply_br_format(self) -> AuditEntry:
         self.timestamp = format_dt_br(self.timestamp)
         return self
 

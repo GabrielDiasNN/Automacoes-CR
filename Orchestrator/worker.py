@@ -47,11 +47,11 @@ try:
         mark_task_as_failed,
         resolve_script_path,
     )
-    from app.services.execution_runtime import (  # pylint: disable=useless-import-alias,unused-import
-        classify_process_result as classify_process_result,
-    )
     from app.services.execution_runtime import (  # pylint: disable=useless-import-alias
         claim_next_task as claim_next_task,
+    )
+    from app.services.execution_runtime import (  # pylint: disable=useless-import-alias,unused-import
+        classify_process_result as classify_process_result,
     )
     from app.timezone import get_now_local
 except ImportError as e:

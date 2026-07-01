@@ -9,7 +9,6 @@ Contadores e gauges refletem o estado do sistema em tempo real via callbacks.
 """
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger("orchestrator")
 
@@ -105,7 +104,7 @@ def update_throttle_gauge() -> None:
     ALERT_THROTTLE_ACTIVE.set(active)
 
 
-def get_metrics_response() -> tuple[Optional[bytes], Optional[str]]:
+def get_metrics_response() -> tuple[bytes | None, str | None]:
     """Retorna (body_bytes, content_type) para o endpoint /metrics."""
     if not _PROMETHEUS_AVAILABLE:
         return None, None

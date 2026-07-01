@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import timedelta
-from typing import Any, Generator
+from typing import Any
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
@@ -97,7 +98,7 @@ def session_scope(session_factory: Any = None) -> Generator[Session, None, None]
 def validate_database_schema() -> dict[str, Any]:
     """Valida tabelas/colunas contra o schema ORM atual (derivado de Base.metadata)."""
     # Importacao local para evitar circular import (models depende de Base)
-    from . import models as _models  # noqa: F401  # pylint: disable=import-outside-toplevel,cyclic-import
+    from . import models as _models  # noqa: F401, I001  # pylint: disable=import-outside-toplevel,cyclic-import
 
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())

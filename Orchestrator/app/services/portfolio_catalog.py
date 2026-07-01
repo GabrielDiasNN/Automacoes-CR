@@ -17,7 +17,9 @@ from .metrics import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
 )
-from .portfolio_manifest import CatalogManifest as CatalogManifest  # noqa: F401  # pylint: disable=useless-import-alias
+from .portfolio_manifest import (  # pylint: disable=useless-import-alias
+    CatalogManifest as CatalogManifest,  # noqa: F401
+)
 from .portfolio_manifest import (
     _channels_to_csv,
     _format_value,

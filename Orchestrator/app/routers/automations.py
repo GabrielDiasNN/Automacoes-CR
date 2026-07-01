@@ -23,7 +23,7 @@ from .. import models, schemas
 from ..constants import PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
-from ..runtime import get_project_root, trigger_worker_wakeup
+from ..runtime import get_project_root, scheduler, trigger_worker_wakeup
 from ..services.automation_preflight import build_automation_preflight
 from ..services.automation_snapshot import (
     build_automation_response as build_operational_automation_response,
@@ -41,7 +41,6 @@ from ..services.metrics import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
 )
-from ..runtime import scheduler
 from ..services.scheduler_runtime import (
     extract_automation_id_from_job,
     reload_scheduled_tasks,
