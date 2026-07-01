@@ -120,6 +120,15 @@ def fmt_kg(kilos: Any) -> str:
         return str(kilos)
 
 
+def fmt_entrega(dt_entrega: Any) -> str:
+    if not dt_entrega:
+        return "—"
+    try:
+        return datetime.fromisoformat(str(dt_entrega)).strftime("%d/%m")
+    except ValueError:
+        return "—"
+
+
 def _phase_sort_key(fase_norm: str, ordem: list[str]) -> tuple[int, str]:
     upper = fase_norm.upper()
     for i, kw in enumerate(ordem):
@@ -155,15 +164,16 @@ def _draw_header(draw: ImageDraw.ImageDraw, phase_display: str, n_obs: int, font
     draw.text((PAD, (HEADER_H - 22) // 2), label, font=font, fill=HEADER_TEXT)
 
 
-def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool, str, str, str]:
-    """Extrai (dias, urgente, kanban, alternativo, produto) de um OB."""
+def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool, str, str, str, str]:
+    """Extrai (dias, urgente, kanban, alternativo, produto, entrega) de um OB."""
     dias    = float(ob.get("_dias_float", 0))
     thr     = float(ob.get("_threshold", threshold))
     urgente = dias >= thr * 2
     kanban  = ob.get("PLACA_KANBAN") or "S/Kanban"
     if kanban == "SEM KANBAN":
         kanban = "S/Kanban"
-    return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").upper()
+    entrega = fmt_entrega(ob.get("DT_ENTREGA"))
+    return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").upper(), entrega
 
 
 def _draw_ob_row(  # pylint: disable=too-many-locals
@@ -177,13 +187,13 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
     if i > 0:
         draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
 
-    dias, urgente, kanban, alternativo, produto = _ob_display_data(ob, threshold)
+    dias, urgente, kanban, alternativo, produto, entrega = _ob_display_data(ob, threshold)
     dias_color = ACCENT_URGENT if urgente else TEXT_MAIN
 
     # 1. Preparar partes de texto
     part1 = f"OB {ob.get('NUMERO_OB', '—')}  ·  {kanban}  ·  {fmt_dias(dias)} dias"
     part2 = " ⚠" if urgente else ""
-    part4 = f"  ·  {ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg"
+    part4 = f"  ·  {ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg  ·  Entrega: {entrega}"
 
     # 2. Medir larguras para calcular o espaço disponível para o produto
     w1 = draw.textbbox((0, 0), part1, font=fonts["ob"])[2]

@@ -58,3 +58,4 @@ def test_sql_nao_vazio() -> None:
     content = sql_path.read_text(encoding="utf-8").strip()
     assert len(content) > 0, "SQL-ObsParadasFase.sql está vazio"
     assert "SELECT" in content.upper(), "SQL-ObsParadasFase.sql não contém SELECT"
+    assert "DT_ENTREGA" in content.upper(), "SQL-ObsParadasFase.sql não contém DT_ENTREGA"

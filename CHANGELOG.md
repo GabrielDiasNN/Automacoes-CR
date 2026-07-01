@@ -1,5 +1,12 @@
 # Changelog
 
+## [9.5.3] - 01/07/2026
+### Alterado
+- **Agendamento OBP-04 (OBs Paradas Fase)**: cron alterado de "Seg-Sex às 07:00 e 14:00" para "Todos os dias às 05:30, 14:30 e 22:30" (`0 7,14 * * 1-5` → `30 5,14,22 * * *`), passando a rodar também nos finais de semana.
+
+### Adicionado
+- **Data Entrega no card OBP-04**: `SQL-ObsParadasFase.sql` agora traz `DT_ENTREGA` (via novo CTE `ENTREGA_OB`, agregando a maior data de expedição entre os itens de pedido vinculados à OB) e o card de imagem exibe "Entrega: dd/mm" ao lado de peças/kg em cada linha de OB.
+
 ## [9.5.2] - 30/06/2026
 ### Adicionado
 - **Resiliência do Motor WhatsApp (v2.7.0)**:
