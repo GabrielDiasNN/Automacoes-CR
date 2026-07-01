@@ -35,6 +35,9 @@ pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 
 # Recompilar dependências pinadas (pip-tools)
 pip-compile requirements.in -o requirements.txt
+
+# Lint que roda no CI (bloqueante) — reproduzir localmente antes do push
+python -m ruff check Orchestrator/app Orchestrator/worker.py
 ```
 
 ### Dashboard (React + TypeScript + Vite)
@@ -75,7 +78,7 @@ Monorepo com três camadas principais:
 
 1. **Orchestrator** (`Orchestrator/`) — FastAPI v5 + APScheduler + SQLite WAL. Motor de execução central.
 2. **Dashboard** (`Dashboard/`) — SPA React + TypeScript + Vite (fontes em `Dashboard/src/`, build em `Dashboard/dist/`) servido pelo próprio FastAPI via `StaticFiles` com fallback SPA para rotas client-side. Roda em `http://127.0.0.1:8000/dashboard/`.
-3. **Automações de domínio** — diretórios independentes. As automações registradas com manifesto (`Receitas Bloqueadas/`, `Receitas Emitidas/`, `Montagem de Terceirizados/`) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo).
+3. **Automações de domínio** — diretórios independentes. As automações registradas com manifesto (`Receitas Bloqueadas/`, `Receitas Emitidas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo).
 
 ### Orchestrator (`Orchestrator/app/`)
 - `main.py` — startup FastAPI: registra routers, monta SPA, inicializa Alembic e jobs APScheduler.
@@ -133,6 +136,9 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 ### Manifesto de automação
 - Toda automação registrada no Orchestrator deve ter `automation.manifest.json` na sua pasta.
 - `POST /api/automations/preflight` valida manifesto, docs obrigatórias e smoke tests antes de `create/update`.
+
+### CI (GitHub Actions — `.github/workflows/ci.yml`)
+Roda em push para `main`/`develop` e PRs para `main`. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py`, pytest (excluindo `tests/test_e2e_dashboard.py`, com `ORCHESTRATOR_DB_PATH=:memory:`), Gitleaks e lint+build do Dashboard. O mypy no CI é apenas informativo (`continue-on-error`) — o mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`).
 
 ## Contratos de Governança (Pre-Commit Hook)
 
