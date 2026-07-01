@@ -1,5 +1,4 @@
-# pylint: disable=all
-# mypy: ignore-errors
+# pylint: disable=invalid-name
 """Smoke mínimo gerado pelo scaffold da automação."""
 
 from pathlib import Path

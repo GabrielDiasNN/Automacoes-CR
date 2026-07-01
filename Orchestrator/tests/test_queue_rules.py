@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Suite de testes focado em regras de fila, retry e concorrência (Fase 5.2).
 
@@ -9,7 +7,6 @@ Valida:
 3. Classificação operacional de falhas através de exit codes conhecidos.
 """
 
-import pytest
 from app import models
 from app.constants import (
     EXECUTION_STATUS_ERROR,
@@ -22,12 +19,12 @@ from app.constants import (
     RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
 )
 from app.services.execution_runtime import claim_next_task, classify_process_result
+from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from tests.conftest import AUTH_HEADERS
 
 
-def test_classify_process_result():
+def test_classify_process_result() -> None:
     """Valida que exit codes conhecidos são classificados com precisão técnica."""
     # Exit code 21 -> WhatsApp Session Expired
     status, reason, action = classify_process_result(21)
@@ -49,7 +46,7 @@ def test_classify_process_result():
     assert reason == "EXIT_CODE_5"
 
 
-def test_requeue_respects_queue_group(client: TestClient, db_session: Session):
+def test_requeue_respects_queue_group(client: TestClient, db_session: Session) -> None:
     """Garante que requeue manual falha (409) se já existir execução ativa no mesmo grupo."""
     # Criar automação A de teste com queue_group 'grupo_a'
     auto1 = models.Automation(
@@ -109,7 +106,7 @@ def test_requeue_respects_queue_group(client: TestClient, db_session: Session):
     )
 
 
-def test_requeue_enforces_max_retries(client: TestClient, db_session: Session):
+def test_requeue_enforces_max_retries(client: TestClient, db_session: Session) -> None:
     """Garante que o requeue falha (409) se a contagem de retry atingir o limite max_retries."""
     # Criar automação de teste com limite de 2 retries
     auto = models.Automation(
@@ -143,7 +140,7 @@ def test_requeue_enforces_max_retries(client: TestClient, db_session: Session):
     assert "Limite de retry excedido" in response.json()["detail"]
 
 
-def test_claim_next_task_skips_blocked_queue_group(db_session: Session):
+def test_claim_next_task_skips_blocked_queue_group(db_session: Session) -> None:
     auto_blocked = models.Automation(
         id=910,
         name="Automacao Bloqueada",
@@ -200,6 +197,7 @@ def test_claim_next_task_skips_blocked_queue_group(db_session: Session):
         .filter(models.Execution.id == "PENDING_FREE")
         .first()
     )
+    assert claimed_row is not None
     assert claimed_row.status == EXECUTION_STATUS_RUNNING
     assert claimed_row.worker_instance_id == "worker-test"
     assert claimed_row.worker_pid == 4321
@@ -209,4 +207,5 @@ def test_claim_next_task_skips_blocked_queue_group(db_session: Session):
         .filter(models.Execution.id == "PENDING_BLOCKED")
         .first()
     )
+    assert blocked_row is not None
     assert blocked_row.status == EXECUTION_STATUS_PENDING

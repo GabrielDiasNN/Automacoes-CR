@@ -1,5 +1,17 @@
 # Changelog
 
+## [9.5.2] - 30/06/2026
+### Adicionado
+- **Resiliência do Motor WhatsApp (v2.7.0)**:
+  - **Health-Check Pré-Envio**: Probe de texto de 30s (`⏳ _Verificando canal..._`) que aborta execuções em canais degradados antes de acumular timeouts de mídias pesadas.
+  - **Retry por Fase**: Reenvio automático de mídias uma vez na mesma sessão em caso de timeout de ACK.
+  - **Circuit-Breaker de Proteção**: Aborta imediatamente o lote se ocorrerem 2 falhas consecutivas de ACK (após retries), reduzindo tempo de espera em sessões quebradas.
+  - **Soma de Peças no Rodapé (OBP-04)**: Inclusão do somatório do campo `QT_PECAS` à esquerda do total de quilos parados no rodapé do card da automação (ex: `64 pcs · 1.050 kg parados`).
+  - **Layout Compacto de Linha Única (OBP-04 v1.3.0)**: Condensação de todas as informações de cada OB (número, kanban, dias, alternativo, produto, peças e kg) em uma única linha contínua, reduzindo a altura do card à metade com truncamento inteligente com reticências para produtos longos.
+
+### Alterado
+- **Limpeza de Zumbis Segura**: Substituída a limpeza indiscriminada no `Send-WhatsApp.ps1` por `Clear-StaleWhatsAppLocksAndProcesses`, que mata apenas processos zumbis do diretório `Automacoes` com mais de 10 segundos de idade e limpa arquivos LOCK residuais, garantindo integridade de concorrência.
+
 ## [9.5.1] - 30/06/2026
 ### Corrigido
 - **Bug de tipo em `timezone.py`**: `to_br_timezone()` declarava `-> datetime` mas retornava `None`; corrigido para `-> datetime | None`.

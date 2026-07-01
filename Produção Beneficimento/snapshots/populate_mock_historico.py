@@ -1,12 +1,11 @@
 """Popula o SQLite beneficiamento_historico.db com dados ricos de mock para testes e DX."""
-# pylint: disable=all
-# mypy: ignore-errors
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Any
 
 # Adicionar src ao path
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -14,10 +13,10 @@ SRC_DIR = BASE_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from beneficiamento.historico_db import salvar_historico, init_db
+from beneficiamento.historico_db import salvar_historico, init_db  # noqa: E402
 
 
-def populate():
+def populate() -> None:
     # Garantir que o banco esteja inicializado
     db_path = init_db()
     print(f"Banco SQLite inicializado em: {db_path}")
@@ -26,7 +25,7 @@ def populate():
     ontem = hoje - timedelta(days=1)
     anteontem = hoje - timedelta(days=2)
 
-    records = [
+    records: list[dict[str, Any]] = [
         # OB 240125 - Percurso Completo Estável (3 Fases)
         {
             "NUMERO_OB": "240125",

@@ -1,14 +1,15 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 
 Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.2.0
 
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import case, desc, func
@@ -65,7 +66,7 @@ PROJECT_ROOT = get_project_root()
 
 
 @router.get("/health", response_model=schemas.SystemHealth)
-def health_check(db: Session = Depends(get_db)):
+def health_check(db: Session = Depends(get_db)) -> schemas.SystemHealth:
     """Health check completo: DB, Scheduler, Worker, Disco."""
     return build_health_payload(db, _get_worker_status(db))
 
@@ -90,8 +91,8 @@ def _launch_orchestrator_recovery() -> str:
 @router.get("/worker/status", response_model=schemas.WorkerStatus)
 def get_worker_status(
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.WorkerStatus:
     """Retorna status detalhado do Worker."""
 
     return _get_worker_status(db)
@@ -107,8 +108,8 @@ def get_worker_status(
 @router.get("/metrics", response_model=schemas.MetricsResponse)
 def get_metrics(
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.MetricsResponse:
     """Metricas completas do sistema (Otimizado sem N+1)."""
 
     total_execs, success_count, error_count, pending_count = (
@@ -132,13 +133,14 @@ def get_metrics(
     )
 
     # Agregacao de metricas por automacao em uma unica query
-    stats_query = (
-        db.query(
+    stats_map = {
+        row.automation_id: row
+        for row in db.query(
             models.Execution.automation_id,
-            func.count(
+            func.count(  # pylint: disable=not-callable
                 case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1))
             ).label("total_success"),
-            func.count(case((models.Execution.status == "ERROR", 1))).label(
+            func.count(case((models.Execution.status == "ERROR", 1))).label(  # pylint: disable=not-callable
                 "total_errors"
             ),
             func.avg(
@@ -152,9 +154,7 @@ def get_metrics(
         )
         .group_by(models.Execution.automation_id)
         .all()
-    )
-
-    stats_map = {row.automation_id: row for row in stats_query}
+    }
 
     # Subquery para ultima execucao
     subq = (
@@ -166,8 +166,9 @@ def get_metrics(
         .subquery()
     )
 
-    last_execs = (
-        db.query(
+    last_execs_map = {
+        row.automation_id: row
+        for row in db.query(
             models.Execution.automation_id,
             models.Execution.status,
             models.Execution.started_at,
@@ -178,20 +179,17 @@ def get_metrics(
             & (models.Execution.started_at == subq.c.max_started_at),
         )
         .all()
-    )
-
-    last_execs_map = {row.automation_id: row for row in last_execs}
+    }
 
     automation_stats = []
-    automations = db.query(models.Automation).all()
 
-    for auto in automations:
+    for auto in db.query(models.Automation).all():
         stat = stats_map.get(auto.id)
         last_ex = last_execs_map.get(auto.id)
 
         automation_stats.append(
             schemas.AutomationMetric(
-                name=auto.name,
+                name=str(auto.name),
                 total_success=stat.total_success if stat else 0,
                 total_errors=stat.total_errors if stat else 0,
                 avg_duration_sec=(
@@ -199,7 +197,7 @@ def get_metrics(
                 ),
                 last_status=last_ex.status if last_ex else None,
                 last_run=last_ex.started_at if last_ex else None,
-                test_mode=auto.test_mode,
+                test_mode=bool(auto.test_mode),
             )
         )
 
@@ -227,11 +225,11 @@ def get_metrics(
 def manual_backup(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Realiza backup atomico do banco de dados SQLite."""
     try:
-        result = perform_manual_backup(db, PROJECT_ROOT)
+        result: dict[str, Any] = perform_manual_backup(db, PROJECT_ROOT)
         logger.info(
             "Backup manual concluido: %s (%sMB)", result["path"], result["size_mb"]
         )
@@ -250,17 +248,19 @@ def manual_backup(
 
     except Exception as e:
 
-        logger.error(f"Falha no backup manual: {e}")
+        logger.error("Falha no backup manual: %s", e)
 
-        raise HTTPException(status_code=500, detail=f"Falha no backup: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Falha no backup: {str(e)}"
+        ) from e
 
 
 @router.post("/scheduler/reload")
 def reload_scheduler_jobs(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Forca sincronizacao do APScheduler com automacoes habilitadas."""
     reload_scheduled_tasks()
     jobs_loaded = len(scheduler.get_jobs())
@@ -285,8 +285,8 @@ def reload_scheduler_jobs(
 def wakeup_worker(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Dispara wake-up para o worker verificar a fila imediatamente."""
     trigger_worker_wakeup()
 
@@ -307,12 +307,12 @@ def wakeup_worker(
 def recover_worker(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Aciona a recuperação canônica do Orchestrator quando o worker está offline."""
     worker_status = _get_worker_status(db)
     active_count = (
-        db.query(func.count(models.Execution.id))
+        db.query(func.count(models.Execution.id))  # pylint: disable=not-callable
         .filter(models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES))
         .scalar()
         or 0
@@ -359,10 +359,10 @@ def recover_worker(
 @router.get("/audit", response_model=list[schemas.AuditEntry])
 def list_audit_log(
     limit: int = 50,
-    action: str = None,
+    action: str | None = None,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> list[models.AuditLog]:
     """Retorna as entradas mais recentes do log de auditoria."""
 
     query = db.query(models.AuditLog)
@@ -371,7 +371,7 @@ def list_audit_log(
 
         query = query.filter(models.AuditLog.action == action.upper())
 
-    entries = query.order_by(desc(models.AuditLog.timestamp)).limit(limit).all()
+    entries: list[models.AuditLog] = query.order_by(desc(models.AuditLog.timestamp)).limit(limit).all()
 
     return entries
 
@@ -384,7 +384,7 @@ def list_audit_log(
 
 
 @router.get("/uptime")
-def get_uptime(request: Request, api_key: str = Depends(get_api_key)):
+def get_uptime(request: Request, _api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     """Retorna o tempo de atividade do Orchestrator."""
     startup_time = request.app.state.startup_time
     uptime = get_now_local() - startup_time
@@ -392,7 +392,7 @@ def get_uptime(request: Request, api_key: str = Depends(get_api_key)):
     return {
         "started_at": schemas.format_dt_br(startup_time),
         "uptime_seconds": round(uptime.total_seconds(), 2),
-        "uptime_human": str(uptime).split(".")[0],
+        "uptime_human": str(uptime).split(".", maxsplit=1)[0],
     }
 
 
@@ -406,8 +406,8 @@ def get_uptime(request: Request, api_key: str = Depends(get_api_key)):
 @router.get("/scheduler/jobs", response_model=list[schemas.ScheduledJob])
 def list_scheduled_jobs(
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> list[schemas.ScheduledJob]:
     """Retorna a lista de tarefas agendadas no APScheduler."""
     return build_scheduled_jobs(db)
 
@@ -416,11 +416,11 @@ def list_scheduled_jobs(
 def get_system_overview(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Agrega métricas, saúde, jobs e eventos recentes para o dashboard operacional."""
     health_payload = health_check(db).model_dump()
-    jobs = list_scheduled_jobs(db, api_key)
+    jobs = list_scheduled_jobs(db, _api_key)
     diagnostics = build_diagnostics_payload(
         db,
         scheduler,
@@ -449,7 +449,7 @@ def get_system_overview(
 
 
 @router.get("/version", response_model=schemas.SystemVersion)
-def get_version(request: Request):
+def get_version(request: Request) -> schemas.SystemVersion:
     """Retorna informacoes detalhadas de versao e build do Orchestrator."""
     return build_version_payload(request.app.state.startup_time)
 
@@ -458,10 +458,10 @@ def get_version(request: Request):
 def get_diagnostics(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Retorna diagnostico operacional consolidado do Orchestrator."""
-    payload = build_diagnostics_payload(
+    payload: dict[str, Any] = build_diagnostics_payload(
         db,
         scheduler,
         _get_worker_status,
@@ -476,10 +476,10 @@ def get_diagnostics(
 @router.get("/baseline", response_model=schemas.OperationalBaselineSummary)
 def get_operational_baseline(
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> Any:
     """Retorna o baseline operacional resumido para triagem rápida."""
-    payload = build_diagnostics_payload(
+    payload: dict[str, Any] = build_diagnostics_payload(
         db,
         scheduler,
         _get_worker_status,
@@ -492,8 +492,8 @@ def get_operational_baseline(
 def get_system_history(
     hours: int = 24,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.SystemHistoryResponse:
     """Retorna histórico recente de snapshots operacionais do Orchestrator."""
     return build_system_history_response(db, hours)
 
@@ -501,11 +501,13 @@ def get_system_history(
 @router.post("/schedule/validate", response_model=schemas.ScheduleValidationResponse)
 def validate_schedule_payload(
     payload: schemas.ScheduleValidationRequest,
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.ScheduleValidationResponse:
     """Valida um schedule sem persistir alteracoes."""
     try:
-        normalized = schemas._validate_schedule(payload.schedule)  # type: ignore[attr-defined]
+        normalized = schemas._validate_schedule(  # pylint: disable=protected-access
+            payload.schedule
+        )
         parsed = schemas.parse_schedule(normalized) if normalized else None
         summary = schemas.describe_schedule_payload(parsed)
         return schemas.ScheduleValidationResponse(
@@ -526,11 +528,13 @@ def validate_schedule_payload(
 @router.post("/schedule/preview", response_model=schemas.SchedulePreviewResponse)
 def preview_schedule_payload(
     payload: schemas.SchedulePreviewRequest,
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.SchedulePreviewResponse:
     """Simula próximas execuções para uma agenda sem persistir alteração."""
     try:
-        normalized = schemas._validate_schedule(payload.schedule)  # type: ignore[attr-defined]
+        normalized = schemas._validate_schedule(  # pylint: disable=protected-access
+            payload.schedule
+        )
         parsed = schemas.parse_schedule(normalized) if normalized else None
         return schemas.SchedulePreviewResponse(
             valid=True,
@@ -562,13 +566,13 @@ def preview_schedule_payload(
 def manual_checkpoint(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Executa WAL checkpoint manual no banco SQLite."""
 
-    result = run_wal_checkpoint()
+    result: dict[str, Any] = run_wal_checkpoint()
 
-    logger.info(f"Checkpoint manual executado: {result}")
+    logger.info("Checkpoint manual executado: %s", result)
 
     log_audit(
         db,
@@ -596,8 +600,8 @@ def manual_purge(
     request: Request,
     retention_days: int = 90,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Remove execucoes finalizadas mais antigas que retention_days (default: 90)."""
 
     if retention_days < 7:
@@ -607,7 +611,7 @@ def manual_purge(
     removed = purge_old_executions(retention_days)
 
     logger.info(
-        f"Purge manual: {removed} execucoes removidas (>{retention_days} dias)."
+        "Purge manual: %s execucoes removidas (>%s dias).", removed, retention_days
     )
 
     log_audit(
@@ -634,13 +638,13 @@ def manual_purge(
 
 
 @router.get("/wait-for-task")
-async def wait_for_task(api_key: str = Depends(get_api_key)):
+async def wait_for_task(_api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     """Endpoint de long-polling para wake-up do Worker (v6.2.0)."""
     return {"status": await wait_for_task_signal(timeout_seconds=30)}
 
 
 @router.get("/env", response_model=schemas.EnvContent)
-def get_env_content(api_key: str = Depends(get_api_key)):
+def get_env_content(_api_key: str = Depends(get_api_key)) -> schemas.EnvContent:
     """Lê o conteúdo do arquivo .env global."""
     env_path = os.path.join(PROJECT_ROOT, ".env")
     return schemas.EnvContent(content=read_env_content(env_path))
@@ -649,8 +653,8 @@ def get_env_content(api_key: str = Depends(get_api_key)):
 @router.post("/env/validate", response_model=schemas.EnvValidationResponse)
 def validate_env_content(
     payload: schemas.EnvContent,
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.EnvValidationResponse:
     """Valida o conteúdo do .env sem persistir alterações."""
     return validate_env_payload(payload.content)
 
@@ -659,8 +663,8 @@ def validate_env_content(
 def update_env_content(
     payload: schemas.EnvContent,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Atualiza o arquivo .env global de forma segura."""
     env_path = os.path.join(PROJECT_ROOT, ".env")
 
@@ -705,14 +709,14 @@ def update_env_content(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Erro ao salvar .env: {e}")
+        logger.error("Erro ao salvar .env: %s", e)
         raise HTTPException(
             status_code=500, detail=f"Erro ao salvar o arquivo: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/metrics", include_in_schema=False)
-def prometheus_metrics():
+def prometheus_metrics() -> Response:
     """Endpoint Prometheus — texto plain com todas as métricas do sistema (3.4/Fase 3)."""
     body, content_type = _metrics.get_metrics_response()
     if body is None:

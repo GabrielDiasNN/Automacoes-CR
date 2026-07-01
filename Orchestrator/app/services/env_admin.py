@@ -1,6 +1,6 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Serviços de administração segura do arquivo .env."""
+
+from __future__ import annotations
 
 import os
 import shutil
@@ -21,8 +21,8 @@ def backup_env_file(project_root: str, env_path: str) -> str:
 
 
 def validate_env_content(content: str) -> schemas.EnvValidationResponse:
-    issues = []
-    seen_keys = set()
+    issues: list[schemas.EnvValidationIssue] = []
+    seen_keys: set[str] = set()
     lines = content.splitlines()
 
     for idx, raw_line in enumerate(lines, start=1):

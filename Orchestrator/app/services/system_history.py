@@ -1,5 +1,6 @@
-# pylint: disable=all
 """Histórico operacional leve para tendência, triagem e SLOs."""
+
+from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
@@ -18,7 +19,7 @@ def _loads_json_array(raw_value: str | None) -> list[Any]:
         return []
     try:
         value = json.loads(raw_value)
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return []
     return value if isinstance(value, list) else []
 
@@ -28,7 +29,7 @@ def _loads_json_object(raw_value: str | None) -> dict[str, Any]:
         return {}
     try:
         value = json.loads(raw_value)
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
     return value if isinstance(value, dict) else {}
 

@@ -1,20 +1,23 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Regressoes de integridade de schema do Orchestrator."""
 
-from app import models  # noqa: F401 — registra tabelas no Base.metadata
+from app import models as _models  # pylint: disable=unused-import
 from app.database import Base, validate_database_schema
+from fastapi.testclient import TestClient
+
+assert _models  # registra tabelas no Base.metadata antes da validacao de schema
 
 
-def test_validate_database_schema_passes_for_current_models(client):
+def test_validate_database_schema_passes_for_current_models(
+    client: TestClient,  # pylint: disable=unused-argument
+) -> None:
     result = validate_database_schema()
 
     assert result["valid"] is True
-    assert result["missing_tables"] == []
-    assert result["missing_columns"] == {}
+    assert not result["missing_tables"]
+    assert not result["missing_columns"]
 
 
-def test_orm_schema_covers_execution_queue_contract():
+def test_orm_schema_covers_execution_queue_contract() -> None:
     # Deriva o schema do ORM (mesma fonte que validate_database_schema)
     schema = {
         t_name: {col.name for col in table.columns}

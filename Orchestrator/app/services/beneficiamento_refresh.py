@@ -1,5 +1,4 @@
 # pylint: disable=broad-exception-caught
-# mypy: ignore-errors
 """Disparo isolado do refresh do Beneficiamento.
 
 Executa o runner do domínio em subprocesso (Oracle nunca é aberto no processo
@@ -7,11 +6,14 @@ web do Orquestrador), reaproveitando o entrypoint testado. Usado tanto pelos
 jobs de refresh ao vivo do scheduler quanto pelo endpoint POST /refresh.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 import subprocess
 import sys
+from typing import Any
 
 from ..runtime import get_project_root  # pylint: disable=relative-beyond-top-level
 
@@ -30,21 +32,23 @@ def _runner_python() -> str:
     return os.environ.get("BENEFICIAMENTO_PYTHON") or sys.executable
 
 
-def _parse_runner_output(text: str | None) -> dict | None:
-    text = (text or "").strip()
-    if not text:
+def _parse_runner_output(raw_text: str | None) -> dict[str, Any] | None:
+    raw_text = (raw_text or "").strip()
+    if not raw_text:
         return None
-    for line in reversed(text.splitlines()):
+    for line in reversed(raw_text.splitlines()):
         candidate = line.strip()
         if candidate.startswith("{"):
             try:
-                return json.loads(candidate)
+                parsed: Any = json.loads(candidate)
             except json.JSONDecodeError:
                 continue
+            if isinstance(parsed, dict):
+                return parsed
     return None
 
 
-def run_beneficiamento_refresh(period: str) -> dict:
+def run_beneficiamento_refresh(period: str) -> dict[str, Any]:
     """Roda o runner para o período e devolve o payload JSON do runner.
 
     Em falha, devolve ``{"status": "error", "period": ..., "detail": ...}``.

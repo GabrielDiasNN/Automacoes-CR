@@ -1,17 +1,20 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Smoke critico de API (fluxo E2E): automacoes, execucoes e sistema.
 """
 
 import re
 from pathlib import Path
+from typing import Any
 
+import app.routers.system as system_router
+import pytest
 from app.constants import ORCHESTRATOR_CONTRACT_VERSION
 from conftest import AUTH_HEADERS
+from fastapi.testclient import TestClient
+from sqlalchemy.orm.session import Session as SqlAlchemySession
 
 
-def _create_default_automation(client, name="Smoke Auto"):
+def _create_default_automation(client: TestClient, name: str = "Smoke Auto") -> Any:
     return client.post(
         "/api/automations",
         json={
@@ -27,7 +30,7 @@ def _create_default_automation(client, name="Smoke Auto"):
     )
 
 
-def test_smoke_automations_flow_and_controls(client):
+def test_smoke_automations_flow_and_controls(client: TestClient) -> None:
     created = _create_default_automation(client)
     assert created.status_code == 201
     auto_id = created.json()["id"]
@@ -88,12 +91,7 @@ def test_smoke_automations_flow_and_controls(client):
     assert payload["recent_executions"][0]["id"] == exec_id
 
 
-def test_smoke_executions_filters_and_errors(client):
-    created = _create_default_automation(client, name="Exec Filter Auto")
-    auto_id = created.json()["id"]
-    started = client.post(f"/api/automations/{auto_id}/start", headers=AUTH_HEADERS)
-    exec_id = started.json()["exec_id"]
-
+def _assert_execution_filters(client: TestClient, auto_id: str, exec_id: str) -> None:
     filtered = client.get(
         f"/api/executions?page=1&per_page=10&status=PENDING&automation_id={auto_id}&requested_by=test",
         headers=AUTH_HEADERS,
@@ -124,6 +122,8 @@ def test_smoke_executions_filters_and_errors(client):
         item["priority"] == "NORMAL" for item in filtered_by_priority.json()["items"]
     )
 
+
+def _assert_execution_filter_errors(client: TestClient) -> None:
     invalid_status = client.get(
         "/api/executions?status=NOT_A_STATUS",
         headers=AUTH_HEADERS,
@@ -147,6 +147,16 @@ def test_smoke_executions_filters_and_errors(client):
         headers=AUTH_HEADERS,
     )
     assert inverted_range.status_code == 422
+
+
+def test_smoke_executions_filters_and_errors(client: TestClient) -> None:
+    created = _create_default_automation(client, name="Exec Filter Auto")
+    auto_id = created.json()["id"]
+    started = client.post(f"/api/automations/{auto_id}/start", headers=AUTH_HEADERS)
+    exec_id = started.json()["exec_id"]
+
+    _assert_execution_filters(client, auto_id, exec_id)
+    _assert_execution_filter_errors(client)
 
     logs = client.get(f"/api/executions/{exec_id}/logs", headers=AUTH_HEADERS)
     assert logs.status_code == 200
@@ -176,20 +186,10 @@ def test_smoke_executions_filters_and_errors(client):
     assert missing_exec.status_code == 404
 
 
-def test_smoke_system_endpoints_success_and_operational_errors(
-    client, monkeypatch, tmp_path
-):
-    import app.routers.system as system_router
-
-    env_path = tmp_path / ".env"
-    env_path.write_text("ORCHESTRATOR_API_KEY=old\n", encoding="utf-8")
-    monkeypatch.setattr(system_router, "PROJECT_ROOT", str(tmp_path))
-
-    from sqlalchemy.orm.session import Session as SqlAlchemySession
-
+def _patch_vacuum_into(monkeypatch: pytest.MonkeyPatch) -> None:
     original_execute = SqlAlchemySession.execute
 
-    def fake_execute(self, stmt, *args, **kwargs):
+    def fake_execute(self: Any, stmt: Any, *args: Any, **kwargs: Any) -> Any:
         sql = str(stmt)
         match = re.search(r"VACUUM INTO '(.+)'", sql)
         if match:
@@ -201,6 +201,8 @@ def test_smoke_system_endpoints_success_and_operational_errors(
         "sqlalchemy.orm.session.Session.execute", fake_execute, raising=False
     )
 
+
+def _assert_system_overview_and_diagnostics(client: TestClient) -> None:
     health = client.get("/api/system/health")
     assert health.status_code == 200
 
@@ -221,6 +223,8 @@ def test_smoke_system_endpoints_success_and_operational_errors(
     assert "schema_version" in diagnostics.json()
     assert diagnostics.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
+
+def _assert_system_schedule_validate_and_preview(client: TestClient) -> None:
     schedule_validate = client.post(
         "/api/system/schedule/validate",
         json={
@@ -246,6 +250,8 @@ def test_smoke_system_endpoints_success_and_operational_errors(
     assert preview_payload["schedule_type"] == "interval"
     assert len(preview_payload["next_runs_preview"]) == 3
 
+
+def _assert_system_env_and_backup(client: TestClient) -> None:
     env_get = client.get("/api/system/env", headers=AUTH_HEADERS)
     assert env_get.status_code == 200
 
@@ -269,6 +275,8 @@ def test_smoke_system_endpoints_success_and_operational_errors(
     assert backup.status_code == 200
     assert backup.json()["size_mb"] >= 0
 
+
+def _assert_system_scheduler_worker_and_purge(client: TestClient) -> None:
     scheduler_reload = client.post("/api/system/scheduler/reload", headers=AUTH_HEADERS)
     assert scheduler_reload.status_code == 200
     assert "jobs_loaded" in scheduler_reload.json()
@@ -281,3 +289,17 @@ def test_smoke_system_endpoints_success_and_operational_errors(
 
     purge_bad = client.post("/api/system/purge?retention_days=6", headers=AUTH_HEADERS)
     assert purge_bad.status_code == 400
+
+
+def test_smoke_system_endpoints_success_and_operational_errors(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("ORCHESTRATOR_API_KEY=old\n", encoding="utf-8")
+    monkeypatch.setattr(system_router, "PROJECT_ROOT", str(tmp_path))
+    _patch_vacuum_into(monkeypatch)
+
+    _assert_system_overview_and_diagnostics(client)
+    _assert_system_schedule_validate_and_preview(client)
+    _assert_system_env_and_backup(client)
+    _assert_system_scheduler_worker_and_purge(client)

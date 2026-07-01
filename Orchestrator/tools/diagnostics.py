@@ -1,5 +1,4 @@
 # pylint: disable=broad-exception-caught
-# mypy: ignore-errors
 """
 Ferramenta de Diagnóstico - Hub de Automações.
 Valida saúde do banco de Dados, API do agendador e integridade de logs.

@@ -1,24 +1,23 @@
 """Testes de integração do módulo analítico SQLite de Beneficiamento."""
 
-# mypy: ignore-errors
-# pylint: disable=import-outside-toplevel,import-error,protected-access
-
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
+import pytest
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 
 
 def test_beneficiamento_historico_init_db_maintains_derived_columns_and_indexes(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     """Schema local deve garantir colunas derivadas e índices idempotentes do overview."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento.historico_db import descrever_schema_historico, init_db
+    from beneficiamento.historico_db import descrever_schema_historico, init_db  # pylint: disable=import-outside-toplevel
 
     db_path = tmp_path / "beneficiamento_historico.db"
     resolved = init_db(db_path)
@@ -236,7 +235,7 @@ def test_beneficiamento_overview_empty_cut_returns_no_data(client: TestClient) -
 
 def test_beneficiamento_get_endpoints_do_not_import_oracle_runner() -> None:
     """GETs do Dashboard devem permanecer restritos ao SQLite local."""
-    import app.routers.beneficiamento as router
+    import app.routers.beneficiamento as router  # pylint: disable=import-outside-toplevel
 
     source_names = set(router.get_beneficiamento_overview.__code__.co_names)
     assert "runner" not in source_names
@@ -306,12 +305,14 @@ def test_beneficiamento_detail_endpoint_returns_raw_payload_on_demand(
     assert payload["raw_records"]
 
 
-def test_beneficiamento_snapshot_dashboard_reuses_period_reads(monkeypatch) -> None:
+def test_beneficiamento_snapshot_dashboard_reuses_period_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """O dashboard de snapshots não deve reler os períodos ao montar health e overview."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard
+    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
 
     call_count = {"count": 0}
 
@@ -363,12 +364,14 @@ def test_beneficiamento_snapshot_dashboard_reuses_period_reads(monkeypatch) -> N
     assert dashboard["default_period"] in {"diario", "mensal"}
 
 
-def test_beneficiamento_health_payload_structures_attention_causes(monkeypatch) -> None:
+def test_beneficiamento_health_payload_structures_attention_causes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Health deve expor causa estruturada e ação recomendada quando um período entra em atenção."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard
+    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
 
     fake_periods = {
         "diario": {
@@ -520,12 +523,14 @@ def test_beneficiamento_health_payload_structures_attention_causes(monkeypatch) 
     assert payload["snapshot_files"]["diario"]["analytics"] == "diario.analytics.json"
 
 
-def test_beneficiamento_health_prefers_most_severe_issue_as_reason(monkeypatch) -> None:
+def test_beneficiamento_health_prefers_most_severe_issue_as_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Quando houver mais de um desvio, o health deve expor a causa principal mais grave."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard
+    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
 
     fake_periods = {
         "diario": {
@@ -690,12 +695,14 @@ def test_beneficiamento_health_prefers_most_severe_issue_as_reason(monkeypatch) 
     assert payload["summary"]["stale_periods"] == 1
 
 
-def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> None:
+def test_beneficiamento_health_expands_quality_blocked_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Quality blocked deve descrever o tipo de bloqueio operacional com detalhe."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard
+    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
 
     fake_periods = {
         "diario": {
@@ -799,12 +806,14 @@ def test_beneficiamento_health_expands_quality_blocked_details(monkeypatch) -> N
     assert "LOCAL_PRODUCAO" in payload["issues"][0]["message"]
 
 
-def test_beneficiamento_historico_date_filter_includes_end_of_day(tmp_path) -> None:
+def test_beneficiamento_historico_date_filter_includes_end_of_day(
+    tmp_path: Path,
+) -> None:
     """A busca histórica deve considerar o fim do dia quando o filtro recebe só a data."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento.historico_db import buscar_historico, salvar_historico
+    from beneficiamento.historico_db import buscar_historico, salvar_historico  # pylint: disable=import-outside-toplevel
 
     db_path = tmp_path / "beneficiamento_historico.db"
     salvar_historico(
@@ -839,15 +848,17 @@ def test_beneficiamento_historico_date_filter_includes_end_of_day(tmp_path) -> N
 
 
 def test_beneficiamento_runner_marks_partial_failure_when_history_write_fails(
-    tmp_path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Falha ao persistir o histórico deve ser refletida no status final do refresh."""
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import runner
+    from beneficiamento import runner  # pylint: disable=import-outside-toplevel
 
-    def fake_build_snapshot_payloads(*_unused_args, **_unused_kwargs):
+    def fake_build_snapshot_payloads(
+        *_unused_args: Any, **_unused_kwargs: Any
+    ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
         profile = {
             "total_rows": 1,
             "total_columns": 1,
@@ -881,7 +892,7 @@ def test_beneficiamento_runner_marks_partial_failure_when_history_write_fails(
         ]
         return profile, analytics, records
 
-    def fake_salvar_historico(*args, **kwargs):
+    def fake_salvar_historico(*args: Any, **kwargs: Any) -> int:
         raise RuntimeError("SQLite indisponivel")
 
     monkeypatch.setattr(runner, "build_snapshot_payloads", fake_build_snapshot_payloads)

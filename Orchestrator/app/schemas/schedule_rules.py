@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Regras compartilhadas para horários de agenda."""
 
 from datetime import datetime, timedelta
@@ -31,8 +29,8 @@ def normalize_hhmm(
         return None
     try:
         parse_hhmm(value)
-        return value
-    except Exception as exc:
+        return str(value)
+    except (ValueError, TypeError) as exc:
         if strict:
             raise ValueError(f"{field_name} deve estar no formato HH:MM.") from exc
         logger.warning("%s inválido (%s). Ignorando campo.", field_name, value)
@@ -45,15 +43,14 @@ def first_interval_candidate(
     anchor_time: str | None = None,
 ) -> datetime:
     """Calcula o primeiro disparo futuro para agenda de intervalo."""
-    if step_minutes < 1:
-        step_minutes = 1
+    step_minutes = max(step_minutes, 1)
 
     if not anchor_time:
         return now + timedelta(minutes=step_minutes)
 
     try:
         hour, minute = parse_hhmm(anchor_time)
-    except Exception:
+    except (ValueError, TypeError):
         return now + timedelta(minutes=step_minutes)
 
     anchor_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)

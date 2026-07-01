@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Utilitarios compartilhados do Orchestrator Central de Automacoes v5.0.
 
@@ -14,6 +12,7 @@ import json
 import logging
 import os
 import re
+from typing import Any
 
 from fastapi import Request
 from sqlalchemy.orm import Session
@@ -26,7 +25,7 @@ logger = logging.getLogger("orchestrator")
 _AUDIT_DETAILS_MAX_CHARS = 20000
 
 
-def _build_safe_details(details, correlation_id: str) -> str:
+def _build_safe_details(details: Any, correlation_id: str) -> str:
     """Serializa os detalhes de auditoria garantindo JSON valido e tamanho limitado."""
     if details:
         try:
@@ -63,13 +62,13 @@ def _build_safe_details(details, correlation_id: str) -> str:
     return safe_details
 
 
-def log_audit(
+def log_audit(  # pylint: disable=R0913,R0917
     db: Session,
     action: str,
     entity_type: str,
-    entity_id,
+    entity_id: Any,
     actor: str,
-    details: str = None,
+    details: str | None = None,
 ) -> models.AuditLog:
     """Registra uma entrada no AuditLog de forma centralizada com protecao de tamanho.
 
@@ -79,7 +78,7 @@ def log_audit(
     correlation_id = request_id_var.get("SYSTEM")
     try:
         safe_details = _build_safe_details(details, correlation_id)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.warning("Falha ao serializar detalhes de auditoria: %s", exc)
         safe_details = json.dumps(
             {"correlation_id": correlation_id, "details_error": True}
@@ -94,7 +93,7 @@ def log_audit(
     )
     try:
         db.add(entry)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.warning(
             "Falha ao registrar auditoria action=%s entity=%s: %s",
             action,

@@ -1,18 +1,20 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Testes focados nas operações e endpoints de diagnóstico/informações do Sistema.
 """
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
-import pytest
+import app.routers.system as system_router
+from app import models
 from app.constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
+from app.schemas import WorkerStatus
+from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 
 
-def test_read_root(client):
+def test_read_root(client: Any) -> None:
     res = client.get("/")
     assert res.status_code == 200
     data = res.json()
@@ -20,17 +22,17 @@ def test_read_root(client):
     assert "dashboard_url" in data
 
 
-def test_reject_without_api_key(client):
+def test_reject_without_api_key(client: Any) -> None:
     res = client.get("/api/automations/all")
     assert res.status_code == 403
 
 
-def test_reject_wrong_api_key(client):
+def test_reject_wrong_api_key(client: Any) -> None:
     res = client.get("/api/automations/all", headers={"X-API-Key": "wrong-key"})
     assert res.status_code == 403
 
 
-def test_health_check(client):
+def test_health_check(client: Any) -> None:
     res = client.get("/api/system/health")
     assert res.status_code == 200
     data = res.json()
@@ -38,26 +40,26 @@ def test_health_check(client):
     assert data["status"] in ["healthy", "degraded", "unhealthy"]
 
 
-def test_metrics(client):
+def test_metrics(client: Any) -> None:
     res = client.get("/api/system/metrics", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert "summary" in res.json()
     assert "automations" in res.json()
 
 
-def test_uptime(client):
+def test_uptime(client: Any) -> None:
     res = client.get("/api/system/uptime", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert "uptime_seconds" in res.json()
 
 
-def test_health_includes_wal_size(client):
+def test_health_includes_wal_size(client: Any) -> None:
     res = client.get("/api/system/health")
     assert res.status_code == 200
     assert "wal_size_mb" in res.json()
 
 
-def test_version_endpoint(client):
+def test_version_endpoint(client: Any) -> None:
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
@@ -67,7 +69,7 @@ def test_version_endpoint(client):
     assert "max_workers" in data
 
 
-def test_diagnostics_endpoint(client):
+def test_diagnostics_endpoint(client: Any) -> None:
     res = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
@@ -101,12 +103,7 @@ def test_diagnostics_endpoint(client):
     ]
 
 
-def test_diagnostics_reports_actionable_queue_and_wal_findings(
-    client, db_session, monkeypatch
-):
-    import app.routers.system as system_router
-    from app import models
-    from app.timezone import get_now_local
+def test_diagnostics_reports_actionable_queue_and_wal_findings(client: Any, db_session: Any, monkeypatch: Any) -> None:
 
     auto = models.Automation(name="Diag Queue", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -141,21 +138,19 @@ def test_diagnostics_reports_actionable_queue_and_wal_findings(
     assert metrics["pending_queue_age"]["status"] in ["attention", "incident"]
 
 
-def test_system_overview_exposes_contract_version(client):
+def test_system_overview_exposes_contract_version(client: Any) -> None:
     res = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
 
-def test_system_version_exposes_contract_version(client):
+def test_system_version_exposes_contract_version(client: Any) -> None:
     res = client.get("/api/system/version", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
 
-def test_system_history_endpoint_returns_snapshots(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_system_history_endpoint_returns_snapshots(client: Any, db_session: Any) -> None:
 
     db_session.add(
         models.SystemHealthSnapshot(
@@ -188,7 +183,7 @@ def test_system_history_endpoint_returns_snapshots(client, db_session):
     assert "baseline_incident_points" in data["trend_summary"]
 
 
-def test_operational_baseline_endpoint_returns_summary(client):
+def test_operational_baseline_endpoint_returns_summary(client: Any) -> None:
     res = client.get("/api/system/baseline", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
@@ -198,13 +193,7 @@ def test_operational_baseline_endpoint_returns_summary(client):
     assert "recommended_action" in data
 
 
-def test_diagnostics_offline_worker_prefers_recovery_action(
-    client, db_session, monkeypatch
-):
-    import app.routers.system as system_router
-    from app import models
-    from app.schemas import WorkerStatus
-    from app.timezone import get_now_local
+def test_diagnostics_offline_worker_prefers_recovery_action(client: Any, db_session: Any, monkeypatch: Any) -> None:
 
     auto = models.Automation(name="Recover Worker", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -257,7 +246,7 @@ def test_diagnostics_offline_worker_prefers_recovery_action(
     assert recover_payload["queue_active_count"] == 1
 
 
-def test_system_overview_includes_diagnostics_summary(client):
+def test_system_overview_includes_diagnostics_summary(client: Any) -> None:
     res = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
@@ -271,9 +260,7 @@ def test_system_overview_includes_diagnostics_summary(client):
     assert data["diagnostics"]["performance"]["timings_ms"]["total_ms"] >= 0
 
 
-def test_system_overview_exposes_automation_operational_metrics(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_system_overview_exposes_automation_operational_metrics(client: Any, db_session: Any) -> None:
 
     auto = models.Automation(name="Metrics Auto", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -322,13 +309,12 @@ def test_system_overview_exposes_automation_operational_metrics(client, db_sessi
     ]
 
 
-def test_wait_for_task_requires_api_key(client):
+def test_wait_for_task_requires_api_key(client: Any) -> None:
     res = client.get("/api/system/wait-for-task")
     assert res.status_code == 403
 
 
-def test_update_env_creates_backup(client, monkeypatch, tmp_path):
-    import app.routers.system as system_router
+def test_update_env_creates_backup(client: Any, monkeypatch: Any, tmp_path: Path) -> None:
 
     env_path = tmp_path / ".env"
     env_path.write_text("ORCHESTRATOR_API_KEY=old\n", encoding="utf-8")
@@ -350,8 +336,7 @@ def test_update_env_creates_backup(client, monkeypatch, tmp_path):
     assert res.json()["audit_id"] is not None
 
 
-def test_system_router_project_root_points_to_repo_root():
-    import app.routers.system as system_router
+def test_system_router_project_root_points_to_repo_root() -> None:
 
     expected_root = Path(__file__).resolve().parents[2]
     assert Path(system_router.PROJECT_ROOT).resolve() == expected_root.resolve()

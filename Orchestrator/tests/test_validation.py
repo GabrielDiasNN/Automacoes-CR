@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Suite de testes focado em sanidade operacional, validações de input e segurança (Fase 5.4).
 
@@ -9,14 +7,11 @@ Valida:
 3. Proteção contra gravação de dados inseguros e prevenção de vazamento de segredos.
 """
 
-import pytest
-from app import models
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS
 
 
-def test_validate_invalid_schedules(client: TestClient):
+def test_validate_invalid_schedules(client: TestClient) -> None:
     """Garante que a API e o validador de schedules rejeitam payloads malformados ou inválidos."""
     # Cenário 1: Schedule sem ser JSON
     response = client.post(
@@ -65,7 +60,7 @@ def test_validate_invalid_schedules(client: TestClient):
     assert response.status_code == 422
 
 
-def test_validate_env_rules(client: TestClient):
+def test_validate_env_rules(client: TestClient) -> None:
     """Valida as regras de negócio de saneamento e integridade aplicadas ao arquivo .env."""
     # Cenário 1: Linha mal-formatada (sem =)
     payload = {"content": "LINHA_SEM_IGUAL\nTEST_KEY=123"}

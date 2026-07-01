@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Suite de testes focado em integridade de payloads e contratos de API (Fase 5.5).
 
@@ -9,14 +7,12 @@ Valida:
 3. Segurança Zero Trust (bloqueio sem X-API-Key e não exposição de chaves privadas).
 """
 
-import pytest
-from app import models
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS
 
 
-def test_api_unauthorized_access(client: TestClient):
+def test_api_unauthorized_access(client: TestClient) -> None:
     """Garante que requisições sem API Key válida recebam 403 Forbidden."""
     # Rota protegida sem headers
     response = client.get("/api/system/diagnostics")
@@ -35,7 +31,7 @@ def test_api_unauthorized_access(client: TestClient):
     assert response.json()["correlation_id"]
 
 
-def test_api_not_found(client: TestClient):
+def test_api_not_found(client: TestClient) -> None:
     """Garante que IDs inexistentes recebam status HTTP 404 apropriado."""
     response = client.get("/api/automations/99999", headers=AUTH_HEADERS)
     assert response.status_code == 404
@@ -49,8 +45,8 @@ def test_api_not_found(client: TestClient):
 
 
 def test_diagnostics_and_overview_contract_version(
-    client: TestClient, db_session: Session
-):
+    client: TestClient, db_session: Session  # pylint: disable=unused-argument
+) -> None:
     """Valida a presença de contract_version e a ausência de vazamento de segredos nos payloads principais."""
     # Executar chamada do diagnostics
     response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)

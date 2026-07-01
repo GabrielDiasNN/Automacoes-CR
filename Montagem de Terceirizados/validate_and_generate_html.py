@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 # -*- coding: utf-8 -*-
 # {
 #   "version": "1.2.0",
@@ -13,15 +11,14 @@ import json
 import os
 import re
 import sys
-import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
 # Forca UTF-8 para garantir interoperabilidade
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # ==========================================
 # CONSTANTES DE DESIGN / UI
@@ -99,7 +96,9 @@ def parse_qt_pc_nf(qt_pc_nf: str) -> List[Dict[str, Any]]:
     return itens
 
 
-def processar_validacao(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def processar_validacao(  # pylint: disable=too-many-locals
+    data: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     """Executa a logica de negocio: compara Montagem com Programacao."""
     erros: List[Dict[str, Any]] = []
     for row in data:
@@ -234,9 +233,9 @@ def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
     return html
 
 
-def montar_template_email(
+def montar_template_email(  # pylint: disable=too-many-arguments,too-many-locals
     tipo_notificacao: str,
-    total_linhas: int,
+    *,
     total_erros: int,
     total_pecas_nf_incorreta: int,
     novos_count: int,
@@ -360,9 +359,8 @@ def gerar_assinatura(erro: Dict[str, Any]) -> str:
     return hashlib.md5(base.encode("utf-8")).hexdigest()
 
 
-def main() -> None:
+def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Orquestrador principal da validacao."""
-    start_time: float = time.time()
     exec_id: str = sys.argv[1] if len(sys.argv) > 1 else "manual"
     script_dir: str = os.path.dirname(os.path.abspath(__file__))
     cache_file: str = os.path.join(script_dir, ".cache_erros.json")
@@ -432,7 +430,7 @@ def main() -> None:
             ts_lembrete = datetime.fromisoformat(lembrete_enviado_em)
             minutos = (datetime.now() - ts_lembrete).total_seconds() / 60.0
             pode_enviar_lembrete = minutos >= LEMBRETE_INTERVALO_MINUTOS
-        except Exception:
+        except (ValueError, TypeError):
             pode_enviar_lembrete = True
     else:
         pode_enviar_lembrete = True
@@ -474,7 +472,7 @@ def main() -> None:
                     ensure_ascii=False,
                     indent=2,
                 )
-        except Exception as e:
+        except OSError as e:
             log(f"Falha ao gravar cache temporario: {e}", "WARN", exec_id)
 
         detalhes_html: str = ""
@@ -514,13 +512,12 @@ def main() -> None:
 
         html_final: str = montar_template_email(
             tipo_notif,
-            total_linhas,
-            total_erros,
-            total_pecas_nf_incorreta,
-            len(novos),
-            len(corrigidos),
-            len(permanentes),
-            detalhes_html,
+            total_erros=total_erros,
+            total_pecas_nf_incorreta=total_pecas_nf_incorreta,
+            novos_count=len(novos),
+            corrigidos_count=len(corrigidos),
+            permanentes_count=len(permanentes),
+            detalhes_html=detalhes_html,
         )
         result_payload: Dict[str, Any] = {
             "subject": subject,

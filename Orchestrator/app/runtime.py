@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Estado de runtime compartilhado do Orchestrator."""
 
 import asyncio

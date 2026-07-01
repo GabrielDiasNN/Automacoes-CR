@@ -1,15 +1,16 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Router: WebSocket - Gerenciador de conexoes e Event Bus para logs e eventos.
 Implementa Log Replay (v4.0.1) para garantir continuidade de visualizacao.
 """
+
+from __future__ import annotations
 
 import asyncio
 import hmac
 import json
 import logging
 import os
+from typing import Any
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
@@ -32,29 +33,29 @@ router = APIRouter(tags=["WebSocket"])
 class ConnectionManager:
     """Gerencia conexoes WebSocket para broadcast de logs e eventos."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.exec_connections: dict[str, list[WebSocket]] = {}
         self.global_connections: list[WebSocket] = []
         self._lock = asyncio.Lock()
 
-    async def connect_exec(self, websocket: WebSocket, exec_id: str):
+    async def connect_exec(self, websocket: WebSocket, exec_id: str) -> None:
         """Conecta um cliente para receber logs de uma execucao."""
         await websocket.accept()
         async with self._lock:
             if exec_id not in self.exec_connections:
                 self.exec_connections[exec_id] = []
             self.exec_connections[exec_id].append(websocket)
-        logger.info(f"WebSocket conectado para exec_id: {exec_id}")
+        logger.info("WebSocket conectado para exec_id: %s", exec_id)
 
-    async def connect_global(self, websocket: WebSocket):
+    async def connect_global(self, websocket: WebSocket) -> None:
         await websocket.accept()
         async with self._lock:
             self.global_connections.append(websocket)
         logger.info(
-            f"WebSocket global conectado. Total: {len(self.global_connections)}"
+            "WebSocket global conectado. Total: %s", len(self.global_connections)
         )
 
-    async def disconnect_exec(self, websocket: WebSocket, exec_id: str):
+    async def disconnect_exec(self, websocket: WebSocket, exec_id: str) -> None:
         async with self._lock:
             if exec_id in self.exec_connections:
                 if websocket in self.exec_connections[exec_id]:
@@ -62,12 +63,12 @@ class ConnectionManager:
                 if not self.exec_connections[exec_id]:
                     del self.exec_connections[exec_id]
 
-    async def disconnect_global(self, websocket: WebSocket):
+    async def disconnect_global(self, websocket: WebSocket) -> None:
         async with self._lock:
             if websocket in self.global_connections:
                 self.global_connections.remove(websocket)
 
-    async def broadcast_log(self, message: str, exec_id: str):
+    async def broadcast_log(self, message: str, exec_id: str) -> None:
         # Pilar E: Limitar tamanho da mensagem individual para evitar OOM em logs massivos
         if len(message) > 50000:
             message = message[:50000] + "\n... [TRUNCATED FOR WS PERFORMANCE]"
@@ -79,13 +80,13 @@ class ConnectionManager:
         for ws in targets:
             try:
                 await ws.send_text(message)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 dead.append(ws)
         if dead:
             for ws in dead:
                 await self.disconnect_exec(ws, exec_id)
 
-    async def broadcast_event(self, event_type: str, data: dict):
+    async def broadcast_event(self, event_type: str, data: dict[str, Any]) -> None:
         payload = json.dumps(
             {
                 "type": event_type,
@@ -100,7 +101,7 @@ class ConnectionManager:
         for ws in targets:
             try:
                 await ws.send_text(payload)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 dead.append(ws)
         if dead:
             for ws in dead:
@@ -125,7 +126,9 @@ def _validate_ws_key(websocket: WebSocket) -> bool:
             "ORCHESTRATOR_API_KEY ausente no ambiente — conexoes WebSocket recusadas."
         )
         return False
-    return bool(api_key) and hmac.compare_digest(api_key, expected_key)
+    if not api_key:
+        return False
+    return hmac.compare_digest(api_key, expected_key)
 
 
 async def _send_log_replay(websocket: WebSocket, exec_id: str) -> None:
@@ -134,18 +137,18 @@ async def _send_log_replay(websocket: WebSocket, exec_id: str) -> None:
         with session_scope(SessionLocal) as db:
             db_exec = db.query(Execution).filter(Execution.id == exec_id).first()
             if db_exec and db_exec.logs:
-                await websocket.send_text(db_exec.logs)
+                await websocket.send_text(str(db_exec.logs))
                 await websocket.send_text("\n--- Historico recuperado ---\n")
-    except Exception as e:
-        logger.warning(f"Falha ao recuperar replay de logs para {exec_id}: {e}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("Falha ao recuperar replay de logs para %s: %s", exec_id, e)
 
 
 @router.websocket("/ws/logs/{exec_id}")
-async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
+async def websocket_exec_logs(websocket: WebSocket, exec_id: str) -> None:
     if not _validate_ws_key(websocket):
         await websocket.close(code=4003)
         logger.warning(
-            f"WebSocket recusado por API Key inválida para exec_id: {exec_id}"
+            "WebSocket recusado por API Key inválida para exec_id: %s", exec_id
         )
         return
 
@@ -160,7 +163,7 @@ async def websocket_exec_logs(websocket: WebSocket, exec_id: str):
 
 
 @router.websocket("/ws/events")
-async def websocket_global_events(websocket: WebSocket):
+async def websocket_global_events(websocket: WebSocket) -> None:
     if not _validate_ws_key(websocket):
         await websocket.close(code=4003)
         logger.warning("WebSocket global recusado por API Key inválida.")
@@ -180,13 +183,13 @@ async def websocket_global_events(websocket: WebSocket):
 
 
 @router.post("/api/broadcast_log")
-async def broadcast_log_endpoint(log_data: dict, api_key: str = Depends(get_api_key)):
+async def broadcast_log_endpoint(log_data: dict[str, Any], _api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     await log_broadcaster.emit_entries([log_data])
     return {"status": "ok"}
 
 
 @router.post("/api/broadcast_logs")
-async def broadcast_logs_endpoint(logs_data: dict, api_key: str = Depends(get_api_key)):
+async def broadcast_logs_endpoint(logs_data: dict[str, Any], _api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     logs = logs_data.get("logs", [])
     processed = await log_broadcaster.emit_entries(logs)
     return {"status": "ok", "processed": processed}
@@ -194,8 +197,8 @@ async def broadcast_logs_endpoint(logs_data: dict, api_key: str = Depends(get_ap
 
 @router.post("/api/broadcast_event")
 async def broadcast_event_endpoint(
-    event_data: dict, api_key: str = Depends(get_api_key)
-):
+    event_data: dict[str, Any], _api_key: str = Depends(get_api_key)
+) -> dict[str, Any]:
     await manager.broadcast_event(
         event_data.get("type", "UNKNOWN"), event_data.get("data", {})
     )

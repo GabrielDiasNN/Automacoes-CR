@@ -1,16 +1,17 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Testes focados nas operações e controle de Execuções do Orchestrator.
 """
 
 from datetime import timedelta
 
-import pytest
+from app import models
+from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 
-def test_start_automation_creates_pending(client):
+def test_start_automation_creates_pending(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -27,7 +28,7 @@ def test_start_automation_creates_pending(client):
     assert res2.json()["status"] == "PENDING"
 
 
-def test_reject_duplicate_execution(client):
+def test_reject_duplicate_execution(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -41,7 +42,7 @@ def test_reject_duplicate_execution(client):
     assert res.status_code == 409
 
 
-def test_stop_execution(client):
+def test_stop_execution(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -62,7 +63,7 @@ def test_stop_execution(client):
     assert check.json()["duration_seconds"] is not None
 
 
-def test_list_recent_executions(client):
+def test_list_recent_executions(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -81,9 +82,7 @@ def test_list_recent_executions(client):
     assert "requeue_allowed" in payload[0]
 
 
-def test_execution_summary_exposes_operator_triage_fields(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_execution_summary_exposes_operator_triage_fields(client: TestClient, db_session: Session) -> None:
 
     auto = models.Automation(
         name="Operator Summary",
@@ -122,9 +121,7 @@ def test_execution_summary_exposes_operator_triage_fields(client, db_session):
     assert item["operator_reason_summary"]
 
 
-def test_execution_summary_keeps_success_rows_compact_when_healthy(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_execution_summary_keeps_success_rows_compact_when_healthy(client: TestClient, db_session: Session) -> None:
 
     auto = models.Automation(
         name="Healthy Success",
@@ -165,9 +162,7 @@ def test_execution_summary_keeps_success_rows_compact_when_healthy(client, db_se
     assert item["operator_severity"] == "NORMAL"
 
 
-def test_list_executions_filters_by_queue_group(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_list_executions_filters_by_queue_group(client: TestClient, db_session: Session) -> None:
 
     auto_a = models.Automation(
         name="Grupo A", script_path="./test/run.ps1", queue_group="grupo_a"
@@ -206,9 +201,7 @@ def test_list_executions_filters_by_queue_group(client, db_session):
     assert all(item["related_queue_group"] == "grupo_a" for item in items)
 
 
-def test_list_executions_filters_by_priority(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_list_executions_filters_by_priority(client: TestClient, db_session: Session) -> None:
 
     auto = models.Automation(name="Filtro Prioridade", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -242,9 +235,7 @@ def test_list_executions_filters_by_priority(client, db_session):
     assert all(item["priority"] == "HIGH" for item in items)
 
 
-def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_execution_requeue_creates_auditable_pending_retry(client: TestClient, db_session: Session) -> None:
 
     auto = models.Automation(
         name="Retry Source",
@@ -291,6 +282,8 @@ def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
         .filter(models.Execution.id == payload["queued_exec_id"])
         .first()
     )
+    assert source is not None
+    assert queued is not None
     assert source.status == "REQUEUED"
     assert source.recovery_action == "REQUEUED_TO_NEW_EXECUTION"
     assert queued.status == "PENDING"
@@ -300,9 +293,7 @@ def test_execution_requeue_creates_auditable_pending_retry(client, db_session):
     assert queued.recovery_action == "REQUEUE_MANUAL"
 
 
-def test_execution_requeue_blocks_retry_limit(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_execution_requeue_blocks_retry_limit(client: TestClient, db_session: Session) -> None:
 
     auto = models.Automation(
         name="Retry Limit", script_path="./test/run.ps1", max_retries=1
@@ -330,9 +321,7 @@ def test_execution_requeue_blocks_retry_limit(client, db_session):
     assert res.status_code == 409
 
 
-def test_execution_requeue_blocks_active_queue_group(client, db_session):
-    from app import models
-    from app.timezone import get_now_local
+def test_execution_requeue_blocks_active_queue_group(client: TestClient, db_session: Session) -> None:
 
     source_auto = models.Automation(
         name="Retry Group Source",

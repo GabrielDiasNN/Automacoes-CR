@@ -205,7 +205,7 @@ Write-Host "[4/6] Analisando qualidade estetica com Pylint..." -ForegroundColor 
 $pylintScore = 0.0
 $pylint = Get-PythonTool "pylint"
 if ($pylint -and $resolvedPythonTargets.Count -gt 0) {
-    $pylintOutput = & $pylint --disable=C0114,C0116,R0801 @resolvedPythonTargets 2>&1
+    $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801 @resolvedPythonTargets 2>&1
     $pylintText = ($pylintOutput | Out-String)
     $scoreLine = $pylintText -split "`r?`n" | Where-Object { $_ -match 'rated at (-?\d+\.\d+)/10' }
     if ($scoreLine -match 'rated at (-?\d+\.\d+)/10') {

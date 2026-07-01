@@ -1,6 +1,6 @@
 # pylint: disable=broad-exception-caught
 # {
-#   "version": "1.2.0",
+#   "version": "1.3.0",
 #   "description": "Le obs_result.json + config.json, gera images PNG por fase e phase_cards.json"
 # }
 import json
@@ -58,7 +58,7 @@ FOOTER_BG     = (20,  20,  36)
 CARD_W        = 800
 PAD           = 28
 HEADER_H      = 72
-OB_ROW_H      = 84
+OB_ROW_H      = 42
 FOOTER_H      = 52
 
 
@@ -73,13 +73,29 @@ def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     for path in candidates:
         try:
             return ImageFont.truetype(path, size)
-        except Exception:
+        except OSError:
             continue
     return ImageFont.load_default()  # type: ignore[return-value]
 
 
 def normalize_fase(fase: str) -> str:
-    return _PREFIX_RE.sub("", fase.strip()).title()
+    clean = _PREFIX_RE.sub("", fase.strip()).upper().strip()
+
+    mapeamentos = {
+        "EXPEDICAO ACABADO": "Expedição Acabado",
+        "RAMAR UMIDO": "Ramar Úmido",
+        "CALANDRA DE COMPACTACAO": "Calandra de Compactação",
+        "CONFERENCIA": "Conferência",
+        "REVISAO MALHA CRUA": "Revisão Malha Crua",
+        "REVISAO": "Revisão",
+        "PRODUCAO": "Produção",
+        "COMPACTACAO": "Compactação",
+    }
+
+    if clean in mapeamentos:
+        return mapeamentos[clean]
+
+    return clean.title()
 
 
 def get_threshold(fase: str, thresholds: dict[str, float]) -> float | None:
@@ -147,31 +163,66 @@ def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool,
     kanban  = ob.get("PLACA_KANBAN") or "S/Kanban"
     if kanban == "SEM KANBAN":
         kanban = "S/Kanban"
-    return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").title()
+    return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").upper()
 
 
-def _draw_ob_row(draw: ImageDraw.ImageDraw, ob: dict[str, Any], i: int, threshold: float, fonts: dict[str, ImageFont.FreeTypeFont]) -> None:
+def _draw_ob_row(  # pylint: disable=too-many-locals
+    draw: ImageDraw.ImageDraw,
+    ob: dict[str, Any],
+    i: int,
+    threshold: float,
+    fonts: dict[str, ImageFont.FreeTypeFont],
+) -> None:
     y0 = HEADER_H + i * OB_ROW_H
     if i > 0:
         draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
 
     dias, urgente, kanban, alternativo, produto = _ob_display_data(ob, threshold)
     dias_color = ACCENT_URGENT if urgente else TEXT_MAIN
-    ob_label = f"OB {ob.get('NUMERO_OB', '—')}  ·  {kanban}  ·  {fmt_dias(dias)} dias"
-    draw.text((PAD, y0 + 10), ob_label, font=fonts["ob"], fill=dias_color)
-    if urgente:
-        label_w = draw.textbbox((0, 0), ob_label, font=fonts["ob"])[2]
-        draw.text((PAD + label_w + 6, y0 + 10), "⚠", font=fonts["ob"], fill=ACCENT_WARN)
-    prod_lines = _wrap_text(
-        f"{alternativo} · {produto}" if alternativo else produto,
-        fonts["produto"], CARD_W - PAD * 2, draw,
-    )
-    draw.text((PAD, y0 + 35), prod_lines[0], font=fonts["produto"], fill=TEXT_MAIN)
-    draw.text(
-        (PAD, y0 + 58),
-        f"{ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg",
-        font=fonts["detalhe"], fill=TEXT_DIM,
-    )
+
+    # 1. Preparar partes de texto
+    part1 = f"OB {ob.get('NUMERO_OB', '—')}  ·  {kanban}  ·  {fmt_dias(dias)} dias"
+    part2 = " ⚠" if urgente else ""
+    part4 = f"  ·  {ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg"
+
+    # 2. Medir larguras para calcular o espaço disponível para o produto
+    w1 = draw.textbbox((0, 0), part1, font=fonts["ob"])[2]
+    w2 = draw.textbbox((0, 0), part2, font=fonts["ob"])[2] if part2 else 0
+    w4 = draw.textbbox((0, 0), part4, font=fonts["detalhe"])[2]
+
+    w_max = CARD_W - PAD * 2
+    w_prod_max = w_max - w1 - w2 - w4 - 10
+
+    # 3. Formatar texto do produto e truncar se exceder o limite
+    prod_text = f"  ·  {alternativo} · {produto}" if alternativo else f"  ·  {produto}"
+    w3 = draw.textbbox((0, 0), prod_text, font=fonts["produto"])[2]
+    if w3 > w_prod_max:
+        base_sep = f"  ·  {alternativo} · " if alternativo else "  ·  "
+        prod_name = produto
+        while len(prod_name) > 0:
+            prod_name = prod_name[:-1]
+            test_text = base_sep + prod_name + "..."
+            test_w = draw.textbbox((0, 0), test_text, font=fonts["produto"])[2]
+            if test_w <= w_prod_max:
+                prod_text = test_text
+                break
+
+    # 4. Desenhar sequencialmente na mesma linha (centralizado verticalmente)
+    x: float = PAD
+    y = y0 + 12
+
+    draw.text((x, y), part1, font=fonts["ob"], fill=dias_color)
+    x += w1
+
+    if part2:
+        draw.text((x, y), part2, font=fonts["ob"], fill=ACCENT_WARN)
+        x += w2
+
+    draw.text((x, y), prod_text, font=fonts["produto"], fill=TEXT_MAIN)
+    w3_real = draw.textbbox((0, 0), prod_text, font=fonts["produto"])[2]
+    x += w3_real
+
+    draw.text((x, y), part4, font=fonts["detalhe"], fill=TEXT_DIM)
 
 
 def _draw_footer(
@@ -183,9 +234,10 @@ def _draw_footer(
 ) -> None:
     footer_y = HEADER_H + n_obs * OB_ROW_H
     draw.rectangle([(0, footer_y), (CARD_W, footer_y + FOOTER_H)], fill=FOOTER_BG)
+    pcs_total = sum(int(float(o.get("QT_PECAS") or 0)) for o in obs_fase)
     kg_total = sum(float(o.get("QT_KILOS_REAL") or 0) for o in obs_fase)
     agora    = datetime.now().strftime("%d/%m/%Y às %H:%M")
-    text     = f"  {fmt_kg(kg_total)} kg parados  ·  limite ≥ {fmt_dias(threshold)} dia  ·  {agora}"
+    text     = f"  {pcs_total} pcs  ·  {fmt_kg(kg_total)} kg parados  ·  limite ≥ {fmt_dias(threshold)} dia  ·  {agora}"
     draw.text((PAD, footer_y + (FOOTER_H - 13) // 2), text, font=font, fill=TEXT_DIM)
 
 
@@ -201,9 +253,9 @@ def build_phase_image(
     draw: ImageDraw.ImageDraw = ImageDraw.Draw(img)
     fonts: dict[str, ImageFont.FreeTypeFont] = {
         "header":  _load_font(22, bold=True),
-        "ob":      _load_font(17, bold=True),
-        "produto": _load_font(15, bold=False),
-        "detalhe": _load_font(14, bold=False),
+        "ob":      _load_font(14, bold=True),
+        "produto": _load_font(13, bold=False),
+        "detalhe": _load_font(13, bold=False),
         "footer":  _load_font(13, bold=False),
     }
 

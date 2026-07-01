@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Schemas Pydantic da API de Beneficiamento."""
 
 from typing import Any

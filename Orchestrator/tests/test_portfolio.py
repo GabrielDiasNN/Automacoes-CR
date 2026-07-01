@@ -1,15 +1,17 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Testes dos endpoints de catálogo governado do portfólio."""
 
 import json
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
+import app.routers.portfolio as portfolio_router
+from app import models
+from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 
 
-def _create_catalog_automation(
+def _create_catalog_automation(  # pylint: disable=too-many-arguments
     root: Path,
     *,
     folder_name: str,
@@ -19,7 +21,7 @@ def _create_catalog_automation(
     queue_group: str = "oracle",
     runbook: bool = True,
     smoke_tests: list[str] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     auto_dir = root / folder_name
     docs_dir = root / "docs" / "runbooks"
     auto_dir.mkdir(parents=True, exist_ok=True)
@@ -71,11 +73,8 @@ def _create_catalog_automation(
 
 
 def test_portfolio_health_endpoint_reports_manifest_and_runtime_state(
-    client, db_session, monkeypatch, tmp_path
-):
-    import app.routers.portfolio as portfolio_router
-    from app import models
-    from app.timezone import get_now_local
+    client: Any, db_session: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
 
     manifest = _create_catalog_automation(
         tmp_path,
@@ -135,10 +134,8 @@ def test_portfolio_health_endpoint_reports_manifest_and_runtime_state(
 
 
 def test_portfolio_drift_endpoint_reports_runtime_mismatch_and_missing_docs(
-    client, db_session, monkeypatch, tmp_path
-):
-    import app.routers.portfolio as portfolio_router
-    from app import models
+    client: Any, db_session: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
 
     manifest = _create_catalog_automation(
         tmp_path,
@@ -179,10 +176,8 @@ def test_portfolio_drift_endpoint_reports_runtime_mismatch_and_missing_docs(
 
 
 def test_portfolio_health_summary_escalates_catalog_drift_for_high_criticality(
-    client, db_session, monkeypatch, tmp_path
-):
-    import app.routers.portfolio as portfolio_router
-    from app import models
+    client: Any, db_session: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
 
     manifest = _create_catalog_automation(
         tmp_path,
@@ -219,8 +214,9 @@ def test_portfolio_health_summary_escalates_catalog_drift_for_high_criticality(
     assert payload["summary"]["top_issue"] is not None
 
 
-def test_portfolio_runbook_endpoint_returns_markdown(client, monkeypatch, tmp_path):
-    import app.routers.portfolio as portfolio_router
+def test_portfolio_runbook_endpoint_returns_markdown(
+    client: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
 
     _create_catalog_automation(
         tmp_path,
@@ -236,9 +232,8 @@ def test_portfolio_runbook_endpoint_returns_markdown(client, monkeypatch, tmp_pa
 
 
 def test_portfolio_marks_runtime_only_disabled_automation_as_delete_candidate(
-    client, db_session
-):
-    from app import models
+    client: Any, db_session: Any
+) -> None:
 
     auto = models.Automation(
         name="Cadastro Orfao",

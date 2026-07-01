@@ -1,5 +1,4 @@
-# pylint: disable=all
-# mypy: ignore-errors
+# pylint: disable=R0903,R0901,W0718,W0223,E0402
 """
 Modelos SQLAlchemy do Orchestrator Central de Automacoes v5.0.
 
@@ -12,6 +11,7 @@ Tabelas:
 
 import base64
 import zlib
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -31,7 +31,7 @@ from .database import Base
 from .timezone import get_now_local
 
 
-class CompressedText(TypeDecorator):
+class CompressedText(TypeDecorator[str]):
     """Armazena texto comprimido com zlib+base64; transparente para o ORM (B1/2.3).
 
     Redução típica em logs de texto: 60–80%. Dados legados (não comprimidos)
@@ -41,13 +41,13 @@ class CompressedText(TypeDecorator):
     impl = Text
     cache_ok = True
 
-    def process_bind_param(self, value, dialect):
+    def process_bind_param(self, value: Any, dialect: Any) -> Any | None:
         if value is None:
             return None
         compressed = zlib.compress(value.encode("utf-8"), level=6)
         return base64.b64encode(compressed).decode("ascii")
 
-    def process_result_value(self, value, dialect):
+    def process_result_value(self, value: Any, dialect: Any) -> Any | None:
         if value is None:
             return None
         try:
@@ -57,7 +57,7 @@ class CompressedText(TypeDecorator):
             return value  # fallback: dado legado não comprimido
 
 
-class Automation(Base):
+class Automation(Base):  # type: ignore[misc,valid-type]
     """Cadastro de automacoes registradas no Hub."""
 
     __tablename__ = "automations"
@@ -89,7 +89,7 @@ class Automation(Base):
     )
 
 
-class Execution(Base):
+class Execution(Base):  # type: ignore[misc,valid-type]
     """Historico de execucoes de automacoes."""
 
     __tablename__ = "executions"
@@ -132,7 +132,7 @@ class Execution(Base):
     )
 
 
-class WorkerHeartbeat(Base):
+class WorkerHeartbeat(Base):  # type: ignore[misc,valid-type]
     """Registro de saude do Worker - atualizado a cada ciclo."""
 
     __tablename__ = "worker_heartbeat"
@@ -149,7 +149,7 @@ class WorkerHeartbeat(Base):
     version = Column(String(20), default="4.0.0")
 
 
-class SystemHealthSnapshot(Base):
+class SystemHealthSnapshot(Base):  # type: ignore[misc,valid-type]
     """Histórico leve da saúde operacional para tendência e triagem."""
 
     __tablename__ = "system_health_snapshots"
@@ -170,7 +170,7 @@ class SystemHealthSnapshot(Base):
     slo_breaches = Column(Text, nullable=True)
 
 
-class AuditLog(Base):
+class AuditLog(Base):  # type: ignore[misc,valid-type]
     """Trilha de auditoria para toda acao administrativa no Hub."""
 
     __tablename__ = "audit_log"

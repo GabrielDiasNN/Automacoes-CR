@@ -1,4 +1,3 @@
-# pylint: disable=all
 """Endpoints de portfólio governado e drift entre catálogo e runtime."""
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,7 +22,7 @@ PROJECT_ROOT = get_project_root()
 @router.get("/health", response_model=schemas.PortfolioHealthResponse)
 def get_portfolio_health(
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.PortfolioHealthResponse:
     """Cruza catálogo versionado, cadastro do Orchestrator e execução recente."""
     return build_portfolio_health_response(db, PROJECT_ROOT)
@@ -32,7 +31,7 @@ def get_portfolio_health(
 @router.get("/drift", response_model=schemas.PortfolioDriftResponse)
 def get_portfolio_drift(
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.PortfolioDriftResponse:
     """Expõe divergências objetivas entre manifesto, documentação e runtime."""
     return build_portfolio_drift_response(db, PROJECT_ROOT)
@@ -41,7 +40,7 @@ def get_portfolio_drift(
 @router.get("/runbook/{catalog_id}", response_class=PlainTextResponse)
 def open_portfolio_runbook(
     catalog_id: str,
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> str:
     """Retorna o Markdown bruto do runbook para visualização rápida na UI."""
     try:

@@ -1,5 +1,4 @@
-# pylint: disable=all
-# mypy: ignore-errors
+# pylint: disable=R0903,W1203
 """
 Middleware Stack do Orchestrator Central de Automacoes v5.0.
 
@@ -18,10 +17,11 @@ import os
 import time
 import uuid
 from contextvars import ContextVar
+from typing import Any
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import APIKeyHeader
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 logger = logging.getLogger("orchestrator")
 
@@ -42,7 +42,7 @@ API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 
-def get_api_key(request: Request, api_key: str = Depends(api_key_header)):
+def get_api_key(request: Request, api_key: str = Depends(api_key_header)) -> str:
     """Valida API Key com comparacao timing-safe (anti timing-attack)."""
     # Secure-by-Default: Se a key nao estiver no ENV, gera um valor aleatorio impossivel de usar.
     expected_key = os.environ.get("ORCHESTRATOR_API_KEY")
@@ -70,7 +70,7 @@ def get_api_key(request: Request, api_key: str = Depends(api_key_header)):
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Injeta um X-Request-Id unico em toda requisicao para rastreabilidade."""
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = request.headers.get("X-Request-Id", str(uuid.uuid4())[:12])
         request.state.request_id = request_id
 
@@ -91,7 +91,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 class TimingMiddleware(BaseHTTPMiddleware):
     """Loga o tempo de resposta e adiciona header X-Process-Time."""
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         start = time.perf_counter()
         response: Response = await call_next(request)
         elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
@@ -127,10 +127,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     _STALE_TTL = 3600  # 1h sem atividade → elegível para poda
     _CLEANUP_EVERY = 500  # verifica IPs inativos a cada N requisições
 
-    def __init__(self, app, rpm: int | None = None):
+    def __init__(self, app: Any, rpm: int | None = None) -> None:
         super().__init__(app)
         self.rpm = rpm or int(os.environ.get("RATE_LIMIT_RPM", "120"))
-        self._window: dict[str, collections.deque] = {}
+        self._window: dict[str, collections.deque[float]] = {}
         self._last_seen: dict[str, float] = {}
         self._window_seconds = 60
         self._request_count = 0
@@ -147,7 +147,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 f"[RATE_LIMIT] Removidas {len(stale)} entradas inativas da janela deslizante."
             )
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Aplicar rate limit somente em rotas /api
         if not request.url.path.startswith("/api"):
             return await call_next(request)

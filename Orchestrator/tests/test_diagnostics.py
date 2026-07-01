@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Suite de testes focado em diagnósticos de sistema e saúde da fila (Fase 5.3).
 
@@ -9,7 +7,7 @@ Valida:
 3. Alerta de risco do WAL elevado do banco SQLite.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from app import models
@@ -20,13 +18,14 @@ from app.constants import (
     EXECUTION_STATUS_PENDING,
     EXECUTION_STATUS_RUNNING,
 )
+from app.schemas import WorkerStatus
 from app.timezone import get_now_local
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS
 
 
-def test_diagnostics_worker_offline(client: TestClient, db_session: Session):
+def test_diagnostics_worker_offline(client: TestClient, db_session: Session) -> None:
     """Garante que um worker sem ping recente seja classificado como offline no diagnóstico."""
     # Criar um heartbeat muito antigo (ex: 2 minutos atrás, limite é 30s)
     old_ping = get_now_local() - timedelta(minutes=2)
@@ -51,7 +50,7 @@ def test_diagnostics_worker_offline(client: TestClient, db_session: Session):
     assert "Worker sem heartbeat recente" in findings[0]["message"]
 
 
-def test_diagnostics_stalled_queue(client: TestClient, db_session: Session):
+def test_diagnostics_stalled_queue(client: TestClient, db_session: Session) -> None:
     """Verifica se execuções pendentes ou em execução há muito tempo ativam alertas de fila parada."""
     # Criar automação de teste
     auto = models.Automation(
@@ -84,14 +83,14 @@ def test_diagnostics_stalled_queue(client: TestClient, db_session: Session):
     assert "Execução pendente há" in queue_findings[0]["message"]
 
 
-def test_diagnostics_wal_risk(client: TestClient, db_session: Session):
+def test_diagnostics_wal_risk(client: TestClient, db_session: Session) -> None:  # pylint: disable=unused-argument
     """Garante que um arquivo WAL do SQLite excessivamente grande seja sinalizado com risco crítico."""
     # Fazer mock do get_wal_size_mb no router de system
-    import app.routers.system as system_router
+    import app.routers.system as system_router  # pylint: disable=import-outside-toplevel
 
-    original_get_wal = system_router.get_wal_size_mb
+    original_get_wal = getattr(system_router, "get_wal_size_mb")
     # Simular WAL gigante com 300 MB (limite para erro é 256 MB)
-    system_router.get_wal_size_mb = lambda: 300.0
+    setattr(system_router, "get_wal_size_mb", lambda: 300.0)
 
     try:
         response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
@@ -112,10 +111,10 @@ def test_diagnostics_wal_risk(client: TestClient, db_session: Session):
         assert db_findings[0]["action_code"] == ACTION_CODE_CHECKPOINT
     finally:
         # Restaurar a função original
-        system_router.get_wal_size_mb = original_get_wal
+        setattr(system_router, "get_wal_size_mb", original_get_wal)
 
 
-def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Session):
+def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Session) -> None:
     """Diagnóstico deve diferenciar execução longa legítima de RUNNING acima do max_runtime."""
     auto = models.Automation(
         id=904,
@@ -164,7 +163,7 @@ def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Se
     ]
 
 
-def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session):
+def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session) -> None:
     auto = models.Automation(
         id=905,
         name="Fila Pressionada",
@@ -209,11 +208,8 @@ def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session)
 
 
 def test_diagnostics_operational_baseline_marks_orphaned_running_as_incident(
-    client: TestClient, db_session: Session, monkeypatch
-):
-    from app import models
-    from app.schemas import WorkerStatus
-
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     auto = models.Automation(
         id=906,
         name="Ownership Quebrado",

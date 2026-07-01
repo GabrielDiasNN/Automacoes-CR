@@ -1,28 +1,25 @@
-# pylint: disable=all
-# mypy: ignore-errors
 # -*- coding: utf-8 -*-
-import base64
 import json
-import math
 import os
 import sys
 from datetime import datetime
+from typing import Any
 
 # Forca UTF-8 para garantir interoperabilidade
-if sys.stdout.encoding != "utf-8":
+if sys.stdout.encoding != "utf-8" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
-if sys.stderr.encoding != "utf-8":
+if sys.stderr.encoding != "utf-8" and hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 # Configura o stdin para ler UTF-8-SIG do PowerShell (limpando o BOM automaticamente)
 if hasattr(sys.stdin, "encoding") and sys.stdin.encoding != "utf-8-sig":
     try:
-        sys.stdin.reconfigure(encoding="utf-8-sig")
+        sys.stdin.reconfigure(encoding="utf-8-sig")  # type: ignore[union-attr]
     except AttributeError:
         pass  # Evita falha durante testes (ex: pytest mock de stdin)
 
 
-def log(message, level="INFO", exec_id="manual"):
+def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     """Envia logs para o stderr."""
     ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     raw_msg = f"[{ts}] [PY-HTML] [{level}] [ExecId:{exec_id}] {message}"
@@ -30,7 +27,7 @@ def log(message, level="INFO", exec_id="manual"):
     sys.stderr.flush()
 
 
-def html_escape(text):
+def html_escape(text: Any) -> str:
     if not text:
         return "&nbsp;"
     s = (
@@ -72,20 +69,20 @@ def html_escape(text):
     return s
 
 
-def generate_html():
-    exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "receitas_config.json")
+def generate_html() -> str:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    exec_id: str = sys.argv[1] if len(sys.argv) > 1 else "manual"
+    script_dir: str = os.path.dirname(os.path.abspath(__file__))
+    config_path: str = os.path.join(script_dir, "receitas_config.json")
 
     # 1. Carregar Dados via STDIN (IPC)
     try:
         log("Lendo dados do stdin...", "INFO", exec_id)
-        input_data = sys.stdin.read()
+        input_data: str = sys.stdin.read()
         if not input_data:
             log("Nenhum dado recebido via stdin.", "ERROR", exec_id)
             sys.exit(1)
-        data = json.loads(input_data)
-    except Exception as e:
+        data: list[dict[str, Any]] = json.loads(input_data)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
         log(f"Falha ao decodificar JSON do stdin: {e}", "ERROR", exec_id)
         sys.exit(1)
 
@@ -95,8 +92,8 @@ def generate_html():
             log(f"Configuracao nao encontrada: {config_path}", "ERROR", exec_id)
             sys.exit(1)
         with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except Exception as e:
+            config: dict[str, Any] = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
         log(f"Erro ao carregar configuracoes: {e}", "ERROR", exec_id)
         sys.exit(1)
 
@@ -114,10 +111,10 @@ def generate_html():
         ),
     )
 
-    machines = {}
-    total_weight = 0
-    max_machine_weight = 0
-    recipe_count = 0
+    machines: dict[str, dict[str, Any]] = {}
+    total_weight: int = 0
+    max_machine_weight: int = 0
+    recipe_count: int = 0
 
     for row in data_sorted:
         mq = str(row.get("MQ_TING") or "SEM MAQ").strip()
@@ -129,7 +126,7 @@ def generate_html():
             try:
                 dt = datetime.fromisoformat(inicio)
                 inicio = dt.strftime("%d/%m/%Y %H:%M:%S")
-            except:
+            except ValueError:
                 pass
 
         if mq not in machines:
@@ -147,11 +144,11 @@ def generate_html():
             machines[mq]["recipes"] += 1
 
     machine_count = len(machines)
-    for mq in machines:
-        total_weight += machines[mq]["weight"]
-        recipe_count += machines[mq]["recipes"]
-        if machines[mq]["weight"] > max_machine_weight:
-            max_machine_weight = machines[mq]["weight"]
+    for mq, machine_data in machines.items():
+        total_weight += machine_data["weight"]
+        recipe_count += machine_data["recipes"]
+        if machine_data["weight"] > max_machine_weight:
+            max_machine_weight = machine_data["weight"]
 
     # 4. Logica de Layout Adaptativo
     volume_score = (
@@ -247,6 +244,7 @@ def generate_html():
     sys.stdout.write(full_html)
     sys.stdout.flush()
     log("Relatório HTML gerado com sucesso para stdout.", "INFO", exec_id)
+    return full_html
 
 
 if __name__ == "__main__":

@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Camada de Banco de Dados do Orchestrator Central de Automacoes v5.0.
 
@@ -12,13 +10,16 @@ Configuracoes hardened de SQLite:
   - Purge automatico de execucoes antigas (Pilar G - Governanca)
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from contextlib import contextmanager
 from datetime import timedelta
+from typing import Any, Generator
 
 from sqlalchemy import create_engine, event, inspect, text
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from .constants import ORCHESTRATOR_SCHEMA_VERSION
 from .timezone import get_now_local
@@ -40,8 +41,13 @@ engine = create_engine(
 
 
 @event.listens_for(engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Configura pragmas de seguranca e performance em cada conexao."""
+def set_sqlite_pragma(
+    dbapi_connection: Any, connection_record: Any  # pylint: disable=unused-argument
+) -> None:
+    """Configura pragmas de seguranca e performance em cada conexao.
+
+    connection_record e exigido pela assinatura do evento SQLAlchemy "connect".
+    """
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
@@ -52,12 +58,14 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.close()
 
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(  # pylint: disable=invalid-name
+    autocommit=False, autoflush=False, bind=engine
+)
 
 Base = declarative_base()
 
 
-def get_db():
+def get_db() -> Generator[Session, None, None]:
     """Dependency injection do FastAPI - garante cleanup via finally."""
     db = SessionLocal()
     try:
@@ -67,7 +75,7 @@ def get_db():
 
 
 @contextmanager
-def session_scope(session_factory=None):
+def session_scope(session_factory: Any = None) -> Generator[Session, None, None]:
     """Context manager para uso fora do FastAPI (worker, scheduler, jobs).
 
     Garante ``rollback`` em caso de excecao e ``close`` sempre, eliminando o
@@ -86,9 +94,10 @@ def session_scope(session_factory=None):
         db.close()
 
 
-def validate_database_schema() -> dict:
+def validate_database_schema() -> dict[str, Any]:
     """Valida tabelas/colunas contra o schema ORM atual (derivado de Base.metadata)."""
-    from . import models as _models  # noqa: F401
+    # Importacao local para evitar circular import (models depende de Base)
+    from . import models as _models  # noqa: F401  # pylint: disable=import-outside-toplevel,cyclic-import
 
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
@@ -102,7 +111,7 @@ def validate_database_schema() -> dict:
     }
 
     missing_tables = sorted(set(expected) - existing_tables)
-    missing_columns = {}
+    missing_columns: dict[str, list[str]] = {}
     for table, expected_columns in expected.items():
         if table not in existing_tables:
             continue
@@ -126,12 +135,12 @@ def get_schema_version() -> str:
             row = conn.execute(
                 text("SELECT version_num FROM alembic_version")
             ).fetchone()
-            return row[0] if row else "none"
-    except Exception:
+            return str(row[0]) if row else "none"
+    except Exception:  # pylint: disable=broad-exception-caught
         return "unknown"
 
 
-def run_alembic_migrations() -> dict:
+def run_alembic_migrations() -> dict[str, Any]:
     """Roda migrações do Alembic até o HEAD e retorna o resultado da migração."""
     if ":memory:" in SQLALCHEMY_DATABASE_URL:
         logger.info(
@@ -142,8 +151,9 @@ def run_alembic_migrations() -> dict:
             "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
         }
 
-    from alembic import command
-    from alembic.config import Config
+    # Importacao local: alembic e pesado e so e necessario neste caminho de codigo
+    from alembic import command  # pylint: disable=import-outside-toplevel
+    from alembic.config import Config  # pylint: disable=import-outside-toplevel
 
     current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ini_path = os.path.join(current_dir, "alembic.ini")
@@ -193,7 +203,8 @@ def purge_old_snapshots(retention_days: int = 30) -> int:
 
     Padrão 30 dias = ~8.640 registros retidos (snapshot a cada 5min).
     """
-    from . import models as _models
+    # Importacao local para evitar circular import (models depende de Base)
+    from . import models as _models  # pylint: disable=import-outside-toplevel,cyclic-import
 
     cutoff = get_now_local() - timedelta(days=retention_days)
     try:
@@ -206,8 +217,8 @@ def purge_old_snapshots(retention_days: int = 30) -> int:
             db.commit()
         if removed:
             logger.info("Purge de snapshots: %d registros removidos.", removed)
-        return removed
-    except Exception as e:
+        return int(removed)
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Falha no purge de snapshots: %s", e)
         return 0
 
@@ -232,7 +243,7 @@ def get_wal_size_mb() -> float:
 # ---------------------------------------------------------------------------
 
 
-def run_wal_checkpoint(mode: str = "PASSIVE") -> dict:
+def run_wal_checkpoint(mode: str = "PASSIVE") -> dict[str, Any]:
     """
     Executa WAL checkpoint para consolidar logs no banco principal.
     Modos:
@@ -245,18 +256,23 @@ def run_wal_checkpoint(mode: str = "PASSIVE") -> dict:
             result = conn.execute(text(f"PRAGMA wal_checkpoint({mode})"))
             row = result.fetchone()
             wal_size = get_wal_size_mb()
+            log_val: Any = row[1] if row is not None else -1
+            checkpointed_val: Any = row[2] if row is not None else -1
             logger.info(
-                f"WAL Checkpoint ({mode}) executado: log={row[1]}, checkpointed={row[2]}, "
-                f"wal_size={wal_size}MB"
+                "WAL Checkpoint (%s) executado: log=%s, checkpointed=%s, wal_size=%sMB",
+                mode,
+                log_val,
+                checkpointed_val,
+                wal_size,
             )
             return {
                 "mode": mode,
-                "log": row[1],
-                "checkpointed": row[2],
+                "log": log_val,
+                "checkpointed": checkpointed_val,
                 "wal_size_mb": wal_size,
             }
-    except Exception as e:
-        logger.error(f"Falha no WAL checkpoint ({mode}): {e}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Falha no WAL checkpoint (%s): %s", mode, e)
         return {"mode": mode, "log": -1, "checkpointed": -1, "error": str(e)}
 
 
@@ -274,8 +290,7 @@ def purge_old_executions(retention_days: int = 90) -> int:
     Retorna: quantidade de registros removidos.
     """
     # Importacao local para evitar circular import (models depende de Base)
-    from . import models as _models
-    from .timezone import get_now_local
+    from . import models as _models  # pylint: disable=import-outside-toplevel,cyclic-import
 
     cutoff = get_now_local() - timedelta(days=retention_days)
     terminal_statuses = [
@@ -297,9 +312,11 @@ def purge_old_executions(retention_days: int = 90) -> int:
             db.commit()
         if removed:
             logger.info(
-                f"Purge concluído: {removed} execuções removidas (>{retention_days} dias)."
+                "Purge concluído: %d execuções removidas (>%d dias).",
+                removed,
+                retention_days,
             )
-        return removed
-    except Exception as e:
-        logger.error(f"Falha no purge de execuções: {e}")
+        return int(removed)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Falha no purge de execuções: %s", e)
         return 0

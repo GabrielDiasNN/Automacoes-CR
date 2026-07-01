@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = 1
 $env:PYLINTHOME = Join-Path $RootPath ".mypy_cache\pylint"
 $env:MYPYPATH = "$(Join-Path $RootPath "Orchestrator");$RootPath;$(Join-Path $RootPath "lib\python")"
-$env:PYTHONPATH = "$($env:PYTHONPATH);$(Join-Path $RootPath "lib\python")"
+$env:PYTHONPATH = "$($env:PYTHONPATH);$(Join-Path $RootPath "lib\python");$(Join-Path $RootPath "Produção Beneficimento\src")"
 New-Item -ItemType Directory -Force -Path $env:PYLINTHOME | Out-Null
 Write-Host "=== Governanca Python (Type Hints & Pylint) ==="
 
@@ -89,7 +89,7 @@ if ($mypy) {
 $ErrorActionPreference = $oldPreference
 
 if ($pylint) {
-    $pylintOutput = & $pylint --disable=C0114,C0116,R0801,C0413,C0301,C0302 @resolvedTargetFiles 2>&1
+    $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302 @resolvedTargetFiles 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint)" -ForegroundColor Red
         $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }

@@ -1,12 +1,15 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Regressoes de recovery do Orchestrator no startup."""
+
+from typing import Any
+
+import app.main as main_module
+import pytest
 
 from app import models
 from app.timezone import get_now_local
 
 
-def _execution(exec_id, automation_id, status):
+def _execution(exec_id: str, automation_id: Any, status: str) -> models.Execution:
     return models.Execution(
         id=exec_id,
         automation_id=automation_id,
@@ -17,11 +20,9 @@ def _execution(exec_id, automation_id, status):
 
 
 def test_startup_recovery_preserves_pending_and_fails_running(
-    db_session,
-    monkeypatch,
-):
-    import app.main as main_module
-
+    db_session: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     auto = models.Automation(name="Recovery Task", script_path="./test/run.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -31,7 +32,7 @@ def test_startup_recovery_preserves_pending_and_fails_running(
 
     monkeypatch.setattr(main_module, "SessionLocal", lambda: db_session)
 
-    main_module._cleanup_zombie_tasks()
+    main_module._cleanup_zombie_tasks()  # pylint: disable=protected-access
 
     statuses = {
         row.id: row.status

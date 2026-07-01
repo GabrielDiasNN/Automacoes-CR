@@ -1,8 +1,7 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Regressoes do contrato de fila entre Orchestrator e Worker."""
 
 import time
+from typing import Any
 
 from app import models
 from app.services.execution_runtime import (
@@ -12,11 +11,14 @@ from app.services.execution_runtime import (
     mark_running_tasks_as_failed_by_reboot,
     mark_task_as_failed,
 )
+from app.middleware import RATE_LIMIT_EXEMPT_PATHS
 from app.timezone import get_now_local
 from worker import _finalize_terminated_task, claim_next_task, classify_process_result
 
 
-def _add_execution(db_session, exec_id, automation_id, priority="NORMAL"):
+def _add_execution(
+    db_session: Any, exec_id: str, automation_id: Any, priority: str = "NORMAL"
+) -> None:
     db_session.add(
         models.Execution(
             id=exec_id,
@@ -29,7 +31,7 @@ def _add_execution(db_session, exec_id, automation_id, priority="NORMAL"):
     )
 
 
-def test_claim_next_task_marks_only_one_pending_execution(db_session):
+def test_claim_next_task_marks_only_one_pending_execution(db_session: Any) -> None:
     auto = models.Automation(name="Worker Claim", script_path="./test/run.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -55,13 +57,11 @@ def test_claim_next_task_marks_only_one_pending_execution(db_session):
     }
 
 
-def test_worker_long_poll_endpoint_is_not_rate_limit_exempt():
-    from app.middleware import RATE_LIMIT_EXEMPT_PATHS
-
+def test_worker_long_poll_endpoint_is_not_rate_limit_exempt() -> None:
     assert "/api/system/wait-for-task" not in RATE_LIMIT_EXEMPT_PATHS
 
 
-def test_finalize_terminated_task_persists_terminal_metadata(db_session):
+def test_finalize_terminated_task_persists_terminal_metadata(db_session: Any) -> None:
     auto = models.Automation(name="Worker Stop", script_path="./test/run.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -98,7 +98,7 @@ def test_finalize_terminated_task_persists_terminal_metadata(db_session):
     assert "[INTERROMPIDO PELO USUARIO]" in stopped.logs
 
 
-def test_classify_process_result_identifies_channel_recovery_actions():
+def test_classify_process_result_identifies_channel_recovery_actions() -> None:
     assert classify_process_result(0) == ("SUCCESS", None, "NONE")
     assert classify_process_result(2) == ("SUCCESS", None, "NONE")
     assert classify_process_result(21) == (
@@ -118,7 +118,7 @@ def test_classify_process_result_identifies_channel_recovery_actions():
     )
 
 
-def test_execution_runtime_marks_missing_automation_failure(db_session):
+def test_execution_runtime_marks_missing_automation_failure(db_session: Any) -> None:
     auto = models.Automation(name="Missing Script", script_path="./missing.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -136,7 +136,7 @@ def test_execution_runtime_marks_missing_automation_failure(db_session):
     assert failed.finished_at is not None
 
 
-def test_execution_runtime_applies_timeout_result(db_session):
+def test_execution_runtime_applies_timeout_result(db_session: Any) -> None:
     auto = models.Automation(name="Timeout Script", script_path="./timeout.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -157,7 +157,7 @@ def test_execution_runtime_applies_timeout_result(db_session):
     assert "Tarefa excedeu" in result.logs
 
 
-def test_execution_runtime_completes_process_execution(db_session):
+def test_execution_runtime_completes_process_execution(db_session: Any) -> None:
     auto = models.Automation(name="Complete Script", script_path="./complete.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -167,10 +167,10 @@ def test_execution_runtime_completes_process_execution(db_session):
     result = complete_process_execution(
         db_session,
         "EXEC_COMPLETE",
-        24,
-        ["token=abc12345"],
-        '{"file":"out.txt"}',
-        3.5,
+        return_code=24,
+        logs=["token=abc12345"],
+        artifacts_json='{"file":"out.txt"}',
+        duration_seconds=3.5,
     )
 
     assert result is not None
@@ -181,7 +181,7 @@ def test_execution_runtime_completes_process_execution(db_session):
     assert "token=********" in result.logs
 
 
-def test_execution_runtime_internal_error_skips_terminal_execution(db_session):
+def test_execution_runtime_internal_error_skips_terminal_execution(db_session: Any) -> None:
     auto = models.Automation(name="Terminal Script", script_path="./terminal.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -209,7 +209,7 @@ def test_execution_runtime_internal_error_skips_terminal_execution(db_session):
     assert terminal.logs == "already terminal"
 
 
-def test_execution_runtime_marks_running_tasks_failed_by_reboot(db_session):
+def test_execution_runtime_marks_running_tasks_failed_by_reboot(db_session: Any) -> None:
     auto = models.Automation(name="Running Script", script_path="./running.ps1")
     db_session.add(auto)
     db_session.flush()

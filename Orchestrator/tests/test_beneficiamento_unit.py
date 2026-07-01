@@ -1,10 +1,8 @@
 """Testes unitarios da logica isolada do dominio Beneficiamento (core/ e data/)."""
 
-# mypy: ignore-errors
-# pylint: disable=import-outside-toplevel,import-error,protected-access,missing-function-docstring
-
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -17,7 +15,7 @@ if str(_SRC_ROOT) not in sys.path:
 # core.coercion
 # ---------------------------------------------------------------------------
 def test_to_float_handles_comma_none_and_garbage() -> None:
-    from beneficiamento.core import to_float
+    from beneficiamento.core import to_float  # pylint: disable=import-outside-toplevel
 
     assert to_float("120,5") == 120.5
     assert to_float(None) == 0.0
@@ -26,7 +24,7 @@ def test_to_float_handles_comma_none_and_garbage() -> None:
 
 
 def test_safe_text_and_safe_strip_defaults() -> None:
-    from beneficiamento.core import safe_strip, safe_text
+    from beneficiamento.core import safe_strip, safe_text  # pylint: disable=import-outside-toplevel
 
     assert safe_text(None) == "SEM_VALOR"
     assert safe_text("  ") == "SEM_VALOR"
@@ -36,9 +34,9 @@ def test_safe_text_and_safe_strip_defaults() -> None:
 
 
 def test_parse_iso_date_valid_and_invalid() -> None:
-    from datetime import date
+    from datetime import date  # pylint: disable=import-outside-toplevel
 
-    from beneficiamento.core import parse_iso_date
+    from beneficiamento.core import parse_iso_date  # pylint: disable=import-outside-toplevel
 
     assert parse_iso_date("2026-06-12T08:00:00") == date(2026, 6, 12)
     assert parse_iso_date("nao-data") is None
@@ -49,7 +47,7 @@ def test_parse_iso_date_valid_and_invalid() -> None:
 # core.shifts
 # ---------------------------------------------------------------------------
 def test_normalize_shift_prefers_desc_then_falls_back() -> None:
-    from beneficiamento.core import normalize_shift
+    from beneficiamento.core import normalize_shift  # pylint: disable=import-outside-toplevel
 
     assert normalize_shift({"TURNO_PROD": "1", "TURNO_DESC": "TURNO A"}) == (
         "1",
@@ -64,14 +62,14 @@ def test_normalize_shift_prefers_desc_then_falls_back() -> None:
 # core.metrics
 # ---------------------------------------------------------------------------
 def test_time_efficiency_guards_division_by_zero() -> None:
-    from beneficiamento.core import time_efficiency
+    from beneficiamento.core import time_efficiency  # pylint: disable=import-outside-toplevel
 
     assert time_efficiency(90, 0) == 0.0
     assert time_efficiency(90, 100) == 90.0
 
 
 def test_weighted_average_ignores_none_and_empty() -> None:
-    from beneficiamento.core import weighted_average
+    from beneficiamento.core import weighted_average  # pylint: disable=import-outside-toplevel
 
     assert weighted_average([], 2) is None
     assert weighted_average([None, None], 2) is None
@@ -79,7 +77,7 @@ def test_weighted_average_ignores_none_and_empty() -> None:
 
 
 def test_deviation_minutes() -> None:
-    from beneficiamento.core import deviation_minutes
+    from beneficiamento.core import deviation_minutes  # pylint: disable=import-outside-toplevel
 
     assert deviation_minutes(90, 100) == 10.0
     assert deviation_minutes(100, 90) == -10.0
@@ -89,7 +87,7 @@ def test_deviation_minutes() -> None:
 # core.schema
 # ---------------------------------------------------------------------------
 def test_resolve_alias_first_present_wins() -> None:
-    from beneficiamento.core import first_present, resolve_alias
+    from beneficiamento.core import first_present, resolve_alias  # pylint: disable=import-outside-toplevel
 
     assert resolve_alias({"QUANT_PROD": 5, "QT_KG": 9}, "volume_kg") == 5
     assert resolve_alias({"QT_KG": 9}, "volume_kg") == 9
@@ -98,7 +96,7 @@ def test_resolve_alias_first_present_wins() -> None:
 
 
 def test_resolve_alias_unknown_raises() -> None:
-    from beneficiamento.core import resolve_alias
+    from beneficiamento.core import resolve_alias  # pylint: disable=import-outside-toplevel
 
     with pytest.raises(KeyError):
         resolve_alias({}, "alias_inexistente")
@@ -107,7 +105,7 @@ def test_resolve_alias_unknown_raises() -> None:
 # ---------------------------------------------------------------------------
 # data.writer / data.queries
 # ---------------------------------------------------------------------------
-def _sample_records() -> list[dict]:
+def _sample_records() -> list[dict[str, Any]]:
     return [
         {
             "NUMERO_OB": "1001",
@@ -136,8 +134,8 @@ def _sample_records() -> list[dict]:
     ]
 
 
-def test_salvar_historico_skips_empty_ob_and_is_idempotent(tmp_path) -> None:
-    from beneficiamento.data import salvar_historico
+def test_salvar_historico_skips_empty_ob_and_is_idempotent(tmp_path: Path) -> None:
+    from beneficiamento.data import salvar_historico  # pylint: disable=import-outside-toplevel
 
     db = tmp_path / "h.db"
     assert salvar_historico(_sample_records(), db_path=db) == 2
@@ -145,8 +143,8 @@ def test_salvar_historico_skips_empty_ob_and_is_idempotent(tmp_path) -> None:
     assert salvar_historico([], db_path=db) == 0
 
 
-def test_salvar_historico_coerces_typed_columns_and_derives_keys(tmp_path) -> None:
-    from beneficiamento.data import buscar_historico, salvar_historico
+def test_salvar_historico_coerces_typed_columns_and_derives_keys(tmp_path: Path) -> None:
+    from beneficiamento.data import buscar_historico, salvar_historico  # pylint: disable=import-outside-toplevel
 
     db = tmp_path / "h.db"
     salvar_historico(_sample_records(), db_path=db)
@@ -161,10 +159,8 @@ def test_salvar_historico_coerces_typed_columns_and_derives_keys(tmp_path) -> No
     assert by_ob["1002"]["TURNO_DESC"] == "TURNO 2"  # rotulo derivado
 
 
-def test_buscar_historico_typed_projection_omits_blob_unless_requested(
-    tmp_path,
-) -> None:
-    from beneficiamento.data import buscar_historico, salvar_historico
+def test_buscar_historico_typed_projection_omits_blob_unless_requested(tmp_path: Path) -> None:
+    from beneficiamento.data import buscar_historico, salvar_historico  # pylint: disable=import-outside-toplevel
 
     db = tmp_path / "h.db"
     salvar_historico(_sample_records(), db_path=db)
@@ -176,8 +172,8 @@ def test_buscar_historico_typed_projection_omits_blob_unless_requested(
     assert raw["DADOS_COMPLETOS"]["EXTRA_ORACLE"] == "apenas no blob"
 
 
-def test_buscar_historico_filters_by_ob_prefix_and_date_range(tmp_path) -> None:
-    from beneficiamento.data import buscar_historico, salvar_historico
+def test_buscar_historico_filters_by_ob_prefix_and_date_range(tmp_path: Path) -> None:
+    from beneficiamento.data import buscar_historico, salvar_historico  # pylint: disable=import-outside-toplevel
 
     db = tmp_path / "h.db"
     salvar_historico(_sample_records(), db_path=db)
@@ -191,9 +187,9 @@ def test_buscar_historico_filters_by_ob_prefix_and_date_range(tmp_path) -> None:
     assert {r["NUMERO_OB"] for r in janela} == {"1001"}
 
 
-def test_sql_aggregation_matches_typed_records(tmp_path) -> None:
-    from beneficiamento.contracts import obter_overview_historico
-    from beneficiamento.data import buscar_historico, salvar_historico
+def test_sql_aggregation_matches_typed_records(tmp_path: Path) -> None:
+    from beneficiamento.contracts import obter_overview_historico  # pylint: disable=import-outside-toplevel
+    from beneficiamento.data import buscar_historico, salvar_historico  # pylint: disable=import-outside-toplevel
 
     db = tmp_path / "h.db"
     salvar_historico(_sample_records(), db_path=db)
@@ -211,8 +207,8 @@ def test_sql_aggregation_matches_typed_records(tmp_path) -> None:
     assert overview["kpis"]["kg_total"] == python_total == 120.5
 
 
-def test_date_range_query_plan_uses_temporal_index(tmp_path) -> None:
-    from beneficiamento.data import explicar_busca_historico, salvar_historico
+def test_date_range_query_plan_uses_temporal_index(tmp_path: Path) -> None:
+    from beneficiamento.data import explicar_busca_historico, salvar_historico  # pylint: disable=import-outside-toplevel
 
     db = tmp_path / "h.db"
     salvar_historico(_sample_records(), db_path=db)
@@ -226,7 +222,7 @@ def test_date_range_query_plan_uses_temporal_index(tmp_path) -> None:
 
 
 def test_compute_health_status_has_explicit_precedence() -> None:
-    from beneficiamento.snapshot_dashboard import HealthStatus, _compute_health_status
+    from beneficiamento.snapshot_dashboard import HealthStatus, _compute_health_status  # pylint: disable=import-outside-toplevel
 
     periods = {
         "diario": {

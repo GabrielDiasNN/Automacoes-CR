@@ -1,9 +1,8 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Worker Central de Automacoes v5.3 - Motor de Execucao Concorrente com Tipagem Estrita e Log Batching.
 """
 
+import contextlib
 import glob
 import json
 import logging
@@ -14,7 +13,7 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from queue import Empty, Queue
 from types import FrameType
@@ -43,14 +42,16 @@ try:
     from app.services.execution_runtime import (
         apply_internal_worker_error,
         apply_timeout_result,
-        claim_next_task,
         complete_process_execution,
         finalize_terminated_task,
         mark_task_as_failed,
         resolve_script_path,
     )
-    from app.services.execution_runtime import (
+    from app.services.execution_runtime import (  # pylint: disable=useless-import-alias,unused-import
         classify_process_result as classify_process_result,
+    )
+    from app.services.execution_runtime import (  # pylint: disable=useless-import-alias
+        claim_next_task as claim_next_task,
     )
     from app.timezone import get_now_local
 except ImportError as e:
@@ -87,12 +88,12 @@ log_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logs")
 os.makedirs(log_dir, exist_ok=True)
 
 is_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
-log_filename = "Worker_test.jsonl" if is_pytest else "Worker.jsonl"
+LOG_FILENAME = "Worker_test.jsonl" if is_pytest else "Worker.jsonl"
 
 
 logger: logging.Logger = _setup_json_logger(
     "worker",
-    os.path.join(log_dir, log_filename),
+    os.path.join(log_dir, LOG_FILENAME),
     component="worker",
     use_context_vars=False,
     configure_root=True,
@@ -136,7 +137,7 @@ def wakeup_listener_loop() -> None:
     logger.info("Wakeup listener iniciado (Zero-Latency Mode).")
     headers = _api_headers()
     backoff = 5
-    MAX_BACKOFF = 60
+    max_backoff = 60
 
     while not shutdown_event.is_set():
         try:
@@ -152,11 +153,11 @@ def wakeup_listener_loop() -> None:
         except requests.RequestException:
             # Falha de rede esperada (API offline/reiniciando)
             shutdown_event.wait(backoff)
-            backoff = min(backoff * 2, MAX_BACKOFF)
+            backoff = min(backoff * 2, max_backoff)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.warning("Erro inesperado no wakeup listener: %s", exc)
             shutdown_event.wait(backoff)
-            backoff = min(backoff * 2, MAX_BACKOFF)
+            backoff = min(backoff * 2, max_backoff)
 
 
 # ---------------------------------------------------------------------------
@@ -275,8 +276,6 @@ def log_flusher_loop() -> None:
 
 def broadcast_event(event_type: str, data: dict[str, Any]) -> None:
     """Envia evento de sistema para o WebSocket global."""
-    import contextlib
-
     with contextlib.suppress(requests.RequestException):
         requests.post(
             f"{API_BASE}/api/broadcast_event",
@@ -348,7 +347,7 @@ _ALLOWED_ENV_KEYS = {
 }
 
 
-def _build_subprocess_env(db_exec: Any, exec_id: str) -> dict:
+def _build_subprocess_env(db_exec: Any, exec_id: str) -> dict[str, str]:
     """Ambiente mínimo para subprocesso — exclui secrets sensíveis (D3/1.5)."""
     env = {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
     env["ORCHESTRATOR_TEST_MODE"] = "true" if db_exec.automation.test_mode else "false"
@@ -357,10 +356,10 @@ def _build_subprocess_env(db_exec: Any, exec_id: str) -> dict:
     return env
 
 
-def _start_process(db_exec: Any, script_path: str, exec_id: str) -> subprocess.Popen:
+def _start_process(db_exec: Any, script_path: str, exec_id: str) -> "subprocess.Popen[str]":
     """Inicia o PowerShell e registra o processo ativo para shutdown seguro."""
     env = _build_subprocess_env(db_exec, exec_id)
-    process = subprocess.Popen(
+    process = subprocess.Popen(  # pylint: disable=consider-using-with
         [
             "powershell.exe",
             "-NoProfile",
@@ -409,15 +408,16 @@ _DB_CHECK_INTERVAL = 5.0  # verifica banco a cada 5s em vez de 1s (A4/2.1)
 
 
 def _monitor_process(
-    process: subprocess.Popen,
+    process: "subprocess.Popen[str]",
     output_queue: Queue[str],
     logs: list[str],
-    exec_id: str,
-    task_start: datetime,
-    task_start_ts: float,
-    max_runtime: int,
+    task_ctx: dict[str, Any],
 ) -> bool:
     """Monitora saída, interrupção e timeout; retorna True para finalização normal."""
+    exec_id: str = task_ctx["exec_id"]
+    task_start: datetime = task_ctx["task_start"]
+    task_start_ts: float = task_ctx["task_start_ts"]
+    max_runtime: int = task_ctx["max_runtime"]
     timeout_delta = timedelta(minutes=max_runtime)
     last_db_check = 0.0
 
@@ -469,13 +469,14 @@ def _monitor_process(
 
 def _finalize_execution(
     db: Any,
-    process: subprocess.Popen,
-    exec_id: str,
-    robot_dir: str,
+    process: "subprocess.Popen[str]",
     logs: list[str],
-    task_start_ts: float,
+    task_ctx: dict[str, Any],
 ) -> None:
     """Persiste resultado, artefatos, alertas e evento final da execução."""
+    exec_id: str = task_ctx["exec_id"]
+    robot_dir: str = task_ctx["robot_dir"]
+    task_start_ts: float = task_ctx["task_start_ts"]
     broadcast_log(f"\n[Fim da Execução - ExitCode: {process.returncode}]\n", exec_id)
     duration = round(time.time() - task_start_ts, 2)
     artifacts_json = scan_for_artifacts(robot_dir, task_start_ts)
@@ -487,10 +488,10 @@ def _finalize_execution(
         db_exec = complete_process_execution(
             db,
             exec_id,
-            process.returncode,
-            logs,
-            artifacts_json,
-            duration,
+            return_code=process.returncode,
+            logs=logs,
+            artifacts_json=artifacts_json,
+            duration_seconds=duration,
         )
         if db_exec and db_exec.status in EXECUTION_DELIVERED_STATUSES:
             update_stat("tasks_completed", 1)
@@ -549,11 +550,11 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                 extra=log_extra,
             )
             if db_exec.status == EXECUTION_STATUS_PENDING:
-                db_exec.status = EXECUTION_STATUS_RUNNING
-                db_exec.started_at = get_now_local()
+                db_exec.status = EXECUTION_STATUS_RUNNING  # type: ignore[assignment]
+                db_exec.started_at = get_now_local()  # type: ignore[assignment]
                 db_exec.claimed_at = db_exec.started_at
-                db_exec.worker_instance_id = WORKER_INSTANCE_ID
-                db_exec.worker_pid = os.getpid()
+                db_exec.worker_instance_id = WORKER_INSTANCE_ID  # type: ignore[assignment]
+                db_exec.worker_pid = os.getpid()  # type: ignore[assignment]
                 db.commit()
             elif db_exec.status != EXECUTION_STATUS_RUNNING:
                 logger.warning(
@@ -575,23 +576,25 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
             )
             reader_thread.start()
             logs: list[str] = []
+            task_ctx: dict[str, Any] = {
+                "exec_id": exec_id,
+                "task_start": get_now_local(),
+                "task_start_ts": task_start_ts,
+                "max_runtime": max_runtime,
+                "robot_dir": os.path.dirname(script_path),
+            }
             should_finalize = _monitor_process(
                 process,
                 output_queue,
                 logs,
-                exec_id,
-                get_now_local(),
-                task_start_ts,
-                max_runtime,
+                task_ctx,
             )
             if should_finalize:
                 _finalize_execution(
                     db,
                     process,
-                    exec_id,
-                    os.path.dirname(script_path),
                     logs,
-                    task_start_ts,
+                    task_ctx,
                 )
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Erro fatal na tarefa %s: %s", exec_id, exc, extra=log_extra)
@@ -608,6 +611,17 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
 # ---------------------------------------------------------------------------
 # Loop Principal
 # ---------------------------------------------------------------------------
+
+
+def _terminate_active_processes() -> None:
+    """Encerra forçadamente todos os processos filhos registrados (Pillar G)."""
+    with cast(threading.Lock, stats["lock"]):
+        for eid, proc in stats["active_processes"].items():
+            logger.warning("Terminando processo %s (Shutdown)", eid)
+            try:
+                _force_kill(proc.pid)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.warning("Falha ao encerrar processo %s: %s", eid, e)
 
 
 def main_loop() -> None:
@@ -638,7 +652,7 @@ def main_loop() -> None:
     )
 
     current_poll_interval = POLL_INTERVAL
-    active_futures: set[Any] = set()
+    active_futures: set[Future[None]] = set()
 
     while not shutdown_event.is_set():
         active_futures = {future for future in active_futures if not future.done()}
@@ -676,9 +690,9 @@ def main_loop() -> None:
 
                     if automation:
                         script_path: str = resolve_script_path(
-                            project_root, automation.script_path
+                            project_root, str(automation.script_path)
                         )
-                        max_rt: int = automation.max_runtime_minutes or 30
+                        max_rt: int = int(automation.max_runtime_minutes or 30)
 
                         future = executor.submit(run_task, exec_id, script_path, max_rt)
                         active_futures.add(future)
@@ -701,22 +715,12 @@ def main_loop() -> None:
             logger.error("Erro no loop do worker: %s", e)
 
         # Espera pelo intervalo OU pelo sinal de wakeup (v6.2.0)
-        interrupted = wakeup_event.wait(current_poll_interval)
-        if interrupted:
+        if wakeup_event.wait(current_poll_interval):
             logger.info("Worker acordado por sinal de wakeup.")
             wakeup_event.clear()
 
     logger.info("Shutdown solicitado. Encerrando tarefas ativas...")
-
-    # Pillar G: Terminacao forcada de processos filhos para evitar orfaos
-    with cast(threading.Lock, stats["lock"]):
-        for eid, proc in stats["active_processes"].items():
-            logger.warning("Terminando processo %s (Shutdown)", eid)
-            try:
-                _force_kill(proc.pid)
-            except Exception as e:
-                logger.warning("Falha ao encerrar processo %s: %s", eid, e)
-
+    _terminate_active_processes()
     executor.shutdown(wait=True, cancel_futures=False)
     logger.info("Worker encerrado de forma controlada.")
 
@@ -726,7 +730,9 @@ def main_loop() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _signal_handler(signum: int, frame: FrameType | None) -> None:
+def _signal_handler(
+    signum: int, frame: FrameType | None  # pylint: disable=unused-argument
+) -> None:
     logger.info("Sinal recebido: %d. Iniciando graceful shutdown...", signum)
     shutdown_event.set()
 

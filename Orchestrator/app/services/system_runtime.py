@@ -1,11 +1,12 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Serviços operacionais de runtime do Orchestrator."""
+
+from __future__ import annotations
 
 import os
 import subprocess
 import sys
 from datetime import datetime
+from typing import Any, cast
 
 import psutil
 from sqlalchemy import text
@@ -27,15 +28,15 @@ def get_worker_status(db: Session) -> schemas.WorkerStatus:
     is_alive = (now - hb.last_ping).total_seconds() < 60
     return schemas.WorkerStatus(
         is_alive=is_alive,
-        pid=hb.pid,
-        instance_id=hb.instance_id,
-        host=hb.host,
+        pid=cast(int | None, hb.pid),
+        instance_id=cast(str | None, hb.instance_id),
+        host=cast(str | None, hb.host),
         last_ping=hb.last_ping,
-        uptime_seconds=hb.uptime_seconds,
-        tasks_completed=hb.tasks_completed,
-        tasks_failed=hb.tasks_failed,
-        active_tasks=hb.active_tasks,
-        version=hb.version or "unknown",
+        uptime_seconds=cast(float | None, hb.uptime_seconds),
+        tasks_completed=cast(int, hb.tasks_completed),
+        tasks_failed=cast(int, hb.tasks_failed),
+        active_tasks=cast(int, hb.active_tasks),
+        version=str(hb.version or "unknown"),
     )
 
 
@@ -45,7 +46,7 @@ def build_health_payload(
     db_status = "online"
     try:
         db.execute(text("SELECT 1"))
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         db_status = f"erro: {str(exc)}"
 
     sched_status = "executando" if scheduler.running else "parado"
@@ -89,7 +90,7 @@ def launch_orchestrator_recovery(project_root: str) -> str:
             open(stdout_log, "a", encoding="utf-8") as stdout,
             open(stderr_log, "a", encoding="utf-8") as stderr,
         ):
-            subprocess.Popen(
+            subprocess.Popen(  # pylint: disable=consider-using-with
                 [
                     "powershell.exe",
                     "-NoProfile",
@@ -108,7 +109,7 @@ def launch_orchestrator_recovery(project_root: str) -> str:
     raise FileNotFoundError("Script canônico de recuperação não encontrado.")
 
 
-def perform_manual_backup(db: Session, project_root: str) -> dict:
+def perform_manual_backup(db: Session, project_root: str) -> dict[str, Any]:
     backup_dir = os.path.join(project_root, "Backups")
     os.makedirs(backup_dir, exist_ok=True)
     ts = get_now_local().strftime("%Y%m%d_%H%M%S")

@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Módulo contendo schemas Pydantic de Execuções.
 """

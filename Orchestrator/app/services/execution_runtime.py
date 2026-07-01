@@ -1,10 +1,11 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Contrato operacional compartilhado de execução."""
+
+from __future__ import annotations
 
 import os
 import time
 import uuid
+from typing import Any, cast
 
 from sqlalchemy import case
 from sqlalchemy.orm import Session
@@ -43,10 +44,11 @@ def generate_execution_id(prefix: str) -> str:
     return f"{prefix}_{int(time.time())}_{uuid.uuid4().hex[:4].upper()}"
 
 
-def build_queued_execution(
+def build_queued_execution(  # pylint: disable=too-many-arguments
     automation: models.Automation,
     exec_id: str,
     requested_by: str,
+    *,
     priority: str = PRIORITY_NORMAL,
     retry_count: int = 0,
     max_retries: int | None = None,
@@ -140,7 +142,9 @@ def claim_next_task(
         return None
 
     for candidate in candidates:
-        if _has_running_execution_for_group(db, candidate.queue_group):
+        if _has_running_execution_for_group(
+            db, cast(str | None, candidate.queue_group)
+        ):
             continue
 
         claimed_at = get_now_local()
@@ -163,7 +167,7 @@ def claim_next_task(
         )
         db.commit()
         if updated == 1:
-            return candidate.id
+            return cast(str, candidate.id)
     return None
 
 
@@ -188,17 +192,17 @@ def mark_task_as_failed(
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         return
-    db_exec.status = EXECUTION_STATUS_ERROR
-    db_exec.logs = truncate_log_payload(
-        (db_exec.logs or "") + sanitize_log_payload(message)
+    db_exec.status = EXECUTION_STATUS_ERROR  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+        str(db_exec.logs or "") + sanitize_log_payload(message)
     )
-    db_exec.exit_code = exit_code
-    db_exec.failure_reason = FAILURE_REASON_AUTOMATION_NOT_FOUND
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY
-    db_exec.finished_at = get_now_local()
+    db_exec.exit_code = exit_code  # type: ignore[assignment]
+    db_exec.failure_reason = FAILURE_REASON_AUTOMATION_NOT_FOUND  # type: ignore[assignment]
+    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY  # type: ignore[assignment]
+    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
     if db_exec.started_at and db_exec.finished_at:
         db_exec.duration_seconds = round(
-            (db_exec.finished_at - db_exec.started_at).total_seconds(), 2
+            (cast(Any, db_exec.finished_at) - cast(Any, db_exec.started_at)).total_seconds(), 2
         )
     db.commit()
 
@@ -213,14 +217,14 @@ def finalize_terminated_task(
     if not db_exec:
         return
     termination_log = "\n[INTERROMPIDO PELO USUARIO]\n"
-    db_exec.status = EXECUTION_STATUS_TERMINATED
-    db_exec.exit_code = -15
-    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
-    db_exec.finished_at = get_now_local()
-    db_exec.failure_reason = FAILURE_REASON_USER_TERMINATED
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE
-    db_exec.logs = truncate_log_payload(
-        sanitize_log_payload((db_exec.logs or "") + "".join(logs) + termination_log)
+    db_exec.status = EXECUTION_STATUS_TERMINATED  # type: ignore[assignment]
+    db_exec.exit_code = -15  # type: ignore[assignment]
+    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)  # type: ignore[arg-type]
+    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_exec.failure_reason = FAILURE_REASON_USER_TERMINATED  # type: ignore[assignment]
+    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+        sanitize_log_payload(str(db_exec.logs or "") + "".join(logs) + termination_log)
     )
     db.commit()
 
@@ -234,21 +238,22 @@ def apply_timeout_result(
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         return None
-    db_exec.status = EXECUTION_STATUS_TIMEOUT
-    db_exec.finished_at = get_now_local()
-    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
-    db_exec.failure_reason = FAILURE_REASON_MAX_RUNTIME_EXCEEDED
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE
-    db_exec.logs = truncate_log_payload(
+    db_exec.status = EXECUTION_STATUS_TIMEOUT  # type: ignore[assignment]
+    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)  # type: ignore[arg-type]
+    db_exec.failure_reason = FAILURE_REASON_MAX_RUNTIME_EXCEEDED  # type: ignore[assignment]
+    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
         sanitize_log_payload("".join(logs) + "\n[ERRO] Tarefa excedeu o tempo máximo.")
     )
     db.commit()
     return db_exec
 
 
-def complete_process_execution(
+def complete_process_execution(  # pylint: disable=too-many-arguments
     db: Session,
     exec_id: str,
+    *,
     return_code: int | None,
     logs: list[str],
     artifacts_json: str | None,
@@ -262,14 +267,14 @@ def complete_process_execution(
         return db_exec
 
     status, failure_reason, recovery_action = classify_process_result(return_code)
-    db_exec.exit_code = return_code
-    db_exec.duration_seconds = duration_seconds
-    db_exec.status = status
-    db_exec.failure_reason = failure_reason
-    db_exec.recovery_action = recovery_action
-    db_exec.logs = truncate_log_payload(sanitize_log_payload("".join(logs)))
-    db_exec.artifacts = artifacts_json
-    db_exec.finished_at = get_now_local()
+    db_exec.exit_code = return_code  # type: ignore[assignment]
+    db_exec.duration_seconds = duration_seconds  # type: ignore[assignment]
+    db_exec.status = status  # type: ignore[assignment]
+    db_exec.failure_reason = failure_reason  # type: ignore[assignment]
+    db_exec.recovery_action = recovery_action  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(sanitize_log_payload("".join(logs)))  # type: ignore[assignment]
+    db_exec.artifacts = artifacts_json  # type: ignore[assignment]
+    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
     db.commit()
     return db_exec
 
@@ -286,16 +291,16 @@ def apply_internal_worker_error(
         EXECUTION_STATUS_TIMEOUT,
     ]:
         return
-    db_exec.status = EXECUTION_STATUS_ERROR
-    db_exec.logs = truncate_log_payload(
-        (db_exec.logs or "")
+    db_exec.status = EXECUTION_STATUS_ERROR  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+        str(db_exec.logs or "")
         + f"\nInternal Worker Error: {sanitize_log_payload(message)}"
     )
-    db_exec.exit_code = -1
-    db_exec.failure_reason = FAILURE_REASON_INTERNAL_WORKER_ERROR
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_WORKER_LOGS
-    db_exec.finished_at = get_now_local()
-    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)
+    db_exec.exit_code = -1  # type: ignore[assignment]
+    db_exec.failure_reason = FAILURE_REASON_INTERNAL_WORKER_ERROR  # type: ignore[assignment]
+    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_WORKER_LOGS  # type: ignore[assignment]
+    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)  # type: ignore[arg-type]
     db.commit()
 
 
@@ -307,16 +312,14 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
     )
     for task in zombies:
         now = get_now_local()
-        task.status = "FAILED_BY_REBOOT"
-        task.finished_at = now
-        task.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT
-        task.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE
+        task.status = "FAILED_BY_REBOOT"  # type: ignore[assignment]
+        task.finished_at = now  # type: ignore[assignment]
+        task.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT  # type: ignore[assignment]
+        task.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE  # type: ignore[assignment]
         reboot_audit_line = (
             f"[RECOVERY_AUDIT] actor=SYSTEM_STARTUP "
             f"action=MARK_FAILED_BY_REBOOT timestamp={now.strftime('%d/%m/%Y %H:%M:%S')}"
         )
-        task.logs = (
-            (task.logs or "") + "\n[REBOOT] Interrompida." + f"\n{reboot_audit_line}"
-        )
+        task.logs = str(task.logs or "") + "\n[REBOOT] Interrompida." + f"\n{reboot_audit_line}"  # type: ignore[assignment]
     db.commit()
     return len(zombies)

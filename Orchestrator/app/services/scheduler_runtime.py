@@ -1,12 +1,13 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Serviços compartilhados de agendamento e jobs do Orchestrator."""
 
+from __future__ import annotations
+
+import contextlib
 import logging
 import os
 import subprocess
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -71,6 +72,60 @@ def extract_automation_id_from_job(job_id: str) -> int | None:
         return None
 
 
+def _interval_window_blocks_trigger(  # pylint: disable=too-many-return-statements
+    db_auto: models.Automation,
+) -> bool:
+    if not db_auto.schedule:
+        return False
+    try:
+        sched_data = schemas.parse_schedule(cast(str | None, db_auto.schedule))
+        if not sched_data or sched_data.get("schedule_type") != "interval":
+            return False
+
+        start_t = sched_data.get("start_time")
+        end_t = sched_data.get("end_time")
+        days = sched_data.get("days_of_week")
+        if not (start_t or end_t or days):
+            return False
+
+        now = get_now_local()
+
+        if days is not None:
+            py_days = {ui_day_to_python_weekday(d) for d in days}
+            if now.weekday() not in py_days:
+                logger.info(
+                    "Disparo de intervalo ignorado para %s: fora do dia operacional permitido.",
+                    db_auto.name,
+                )
+                return True
+
+        if start_t:
+            sh, sm = map(int, start_t.split(":"))
+            if now.hour < sh or (now.hour == sh and now.minute < sm):
+                logger.info(
+                    "Disparo de intervalo ignorado para %s: antes do horário operacional permitido (%s).",
+                    db_auto.name,
+                    start_t,
+                )
+                return True
+        if end_t:
+            eh, em = map(int, end_t.split(":"))
+            if now.hour > eh or (now.hour == eh and now.minute > em):
+                logger.info(
+                    "Disparo de intervalo ignorado para %s: após o horário operacional permitido (%s).",
+                    db_auto.name,
+                    end_t,
+                )
+                return True
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(
+            "Falha ao validar janela operacional do disparo de %s: %s",
+            db_auto.name,
+            exc,
+        )
+    return False
+
+
 def scheduled_task_wrapper(automation_id: int) -> None:
     try:
         with session_scope(SessionLocal) as db:
@@ -81,62 +136,15 @@ def scheduled_task_wrapper(automation_id: int) -> None:
             )
             if not db_auto or not db_auto.enabled:
                 return
-            if _is_reserved_cleanup_automation(db_auto.script_path):
+            if _is_reserved_cleanup_automation(cast(str | None, db_auto.script_path)):
                 logger.warning(
                     "Agendamento ignorado para rotina reservada do sistema: %s.",
                     db_auto.name,
                 )
                 return
 
-            # Validação de janela operacional restrita para cadência de intervalo
-            if db_auto.schedule:
-                try:
-                    sched_data = schemas.parse_schedule(db_auto.schedule)
-                    if sched_data and sched_data.get("schedule_type") == "interval":
-                        start_t = sched_data.get("start_time")
-                        end_t = sched_data.get("end_time")
-                        days = sched_data.get("days_of_week")
-
-                        if start_t or end_t or days:
-                            now = get_now_local()
-
-                            if days is not None:
-                                py_days = {ui_day_to_python_weekday(d) for d in days}
-                                if now.weekday() not in py_days:
-                                    logger.info(
-                                        "Disparo de intervalo ignorado para %s: fora do dia operacional permitido.",
-                                        db_auto.name,
-                                    )
-                                    return
-
-                            if start_t:
-                                sh, sm = map(int, start_t.split(":"))
-                                if now.hour < sh or (
-                                    now.hour == sh and now.minute < sm
-                                ):
-                                    logger.info(
-                                        "Disparo de intervalo ignorado para %s: antes do horário operacional permitido (%s).",
-                                        db_auto.name,
-                                        start_t,
-                                    )
-                                    return
-                            if end_t:
-                                eh, em = map(int, end_t.split(":"))
-                                if now.hour > eh or (
-                                    now.hour == eh and now.minute > em
-                                ):
-                                    logger.info(
-                                        "Disparo de intervalo ignorado para %s: após o horário operacional permitido (%s).",
-                                        db_auto.name,
-                                        end_t,
-                                    )
-                                    return
-                except Exception as exc:
-                    logger.warning(
-                        "Falha ao validar janela operacional do disparo de %s: %s",
-                        db_auto.name,
-                        exc,
-                    )
+            if _interval_window_blocks_trigger(db_auto):
+                return
 
             existing = (
                 db.query(models.Execution)
@@ -154,7 +162,7 @@ def scheduled_task_wrapper(automation_id: int) -> None:
 
             group_active = get_group_active_execution(
                 db,
-                db_auto.queue_group,
+                cast(str | None, db_auto.queue_group),
                 exclude_automation_id=automation_id,
             )
             if group_active:
@@ -176,7 +184,7 @@ def scheduled_task_wrapper(automation_id: int) -> None:
             )
             db.commit()
             logger.info("Disparo agendado: %s -> %s", db_auto.name, exec_id)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Erro no disparo agendado id=%s: %s", automation_id, exc)
 
 
@@ -196,10 +204,10 @@ def reload_scheduled_tasks() -> None:
             len(automations_db),
         )
         for auto in automations_db:
-            if _is_reserved_cleanup_automation(auto.script_path):
-                auto.enabled = False
-                auto.schedule = None
-                auto.updated_at = get_now_local()
+            if _is_reserved_cleanup_automation(cast(str | None, auto.script_path)):
+                auto.enabled = False  # type: ignore[assignment]
+                auto.schedule = None  # type: ignore[assignment]
+                auto.updated_at = get_now_local()  # type: ignore[assignment]
                 db.commit()
                 logger.warning(
                     "Automação legada neutralizada por duplicar a rotina reservada de limpeza: %s (ID: %s).",
@@ -210,11 +218,11 @@ def reload_scheduled_tasks() -> None:
             if not auto.schedule:
                 continue
             try:
-                sched_data = schemas.parse_schedule(auto.schedule)
+                sched_data = schemas.parse_schedule(cast(str | None, auto.schedule))
                 if not sched_data:
                     continue
-                _register_schedule(auto.id, sched_data)
-            except Exception as exc:
+                _register_schedule(cast(int, auto.id), sched_data)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.error("Erro ao agendar %s: %s", auto.name, exc)
         logger.info(
             "Agendador sincronizado: %d jobs ativos no total.",
@@ -409,13 +417,11 @@ def run_file_cleanup() -> None:
             check=True,
         )
         logger.info("Limpeza de arquivos concluída com sucesso.")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Erro ao executar limpeza de arquivos: %s", e)
 
 
 def safe_scheduler_heartbeat() -> None:
-    import contextlib
-
     with contextlib.suppress(Exception):
         logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
 
@@ -423,6 +429,7 @@ def safe_scheduler_heartbeat() -> None:
 def capture_system_history_snapshot_job() -> None:
     try:
         with session_scope(SessionLocal) as db:
+            # pylint: disable=import-outside-toplevel,cyclic-import
             from .system_diagnostics import build_diagnostics_payload
             from .system_history import capture_system_health_snapshot
             from .system_runtime import get_worker_status
@@ -434,22 +441,22 @@ def capture_system_history_snapshot_job() -> None:
                 include_history=False,
             )
             capture_system_health_snapshot(db, payload, retention_days=30)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Falha ao capturar snapshot operacional: %s", exc)
 
 
 def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
-    jobs = []
+    jobs: list[schemas.ScheduledJob] = []
     for job in scheduler.get_jobs():
         auto_id = extract_automation_id_from_job(job.id)
-        auto_name = None
+        auto_name: str | None = None
         if auto_id is not None:
             auto = (
                 db.query(models.Automation)
                 .filter(models.Automation.id == auto_id)
                 .first()
             )
-            auto_name = auto.name if auto else None
+            auto_name = cast(str | None, auto.name) if auto else None
         elif job.id.startswith("enterprise_"):
             auto_name = (
                 f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"

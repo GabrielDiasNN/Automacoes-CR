@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Suite de testes avançados para agendamento Cron e Intervalo com Janela Operacional Restrita.
 
@@ -12,6 +10,8 @@ Valida:
 """
 
 import json
+from datetime import datetime
+from typing import Any
 
 import pytest
 from app.schemas.common import (
@@ -31,7 +31,7 @@ from tests.conftest import AUTH_HEADERS
 class TestCronNormalization:
     """Valida normalização do payload schedule_type=cron."""
 
-    def test_cron_valid_expression_normalizes(self):
+    def test_cron_valid_expression_normalizes(self) -> None:
         """Expressão Cron válida deve ser preservada integralmente."""
         payload = {
             "schedule_type": "cron",
@@ -44,7 +44,7 @@ class TestCronNormalization:
         assert result["schedule_version"] == 2
         assert result["timezone"] == "America/Sao_Paulo"
 
-    def test_cron_strips_whitespace(self):
+    def test_cron_strips_whitespace(self) -> None:
         """Espaços nas bordas da expressão Cron devem ser removidos."""
         payload = {
             "schedule_type": "cron",
@@ -53,20 +53,20 @@ class TestCronNormalization:
         result = normalize_schedule_payload(payload, strict=False)
         assert result["cron_expression"] == "0 22 * * 1-5"
 
-    def test_cron_missing_expression_strict_raises(self):
+    def test_cron_missing_expression_strict_raises(self) -> None:
         """Em modo strict, cron sem expressão deve lançar ValueError."""
         payload = {"schedule_type": "cron"}
         with pytest.raises(ValueError, match="cron_expression"):
             normalize_schedule_payload(payload, strict=True)
 
-    def test_cron_missing_expression_fallback(self):
+    def test_cron_missing_expression_fallback(self) -> None:
         """Em modo tolerante, cron sem expressão deve aplicar fallback."""
         payload = {"schedule_type": "cron"}
         result = normalize_schedule_payload(payload, strict=False)
         assert result["schedule_type"] == "cron"
         assert result["cron_expression"]  # deve ter algum fallback não vazio
 
-    def test_cron_preview_returns_dates(self):
+    def test_cron_preview_returns_dates(self) -> None:
         """Preview de Cron deve retornar lista não-vazia de datas formatadas."""
         schedule = {
             "schedule_type": "cron",
@@ -90,7 +90,7 @@ class TestCronNormalization:
 class TestIntervalWithWindow:
     """Valida normalização de schedule_type=interval com restrição de janela."""
 
-    def test_interval_with_window_normalizes(self):
+    def test_interval_with_window_normalizes(self) -> None:
         """Intervalo com janela operacional deve preservar start_time, end_time e days_of_week."""
         payload = {
             "schedule_type": "interval",
@@ -107,7 +107,7 @@ class TestIntervalWithWindow:
         assert result["days_of_week"] == [1, 2, 3, 4, 5]
         assert result["anchor_time"] == "08:00"
 
-    def test_interval_without_window_has_null_fields(self):
+    def test_interval_without_window_has_null_fields(self) -> None:
         """Intervalo simples (sem janela) deve ter start_time/end_time/days_of_week nulos."""
         payload = {
             "schedule_type": "interval",
@@ -126,13 +126,13 @@ class TestIntervalWithWindow:
             {"start_time": "18:00", "end_time": "12:00"},  # janela invertida
         ],
     )
-    def test_interval_invalid_start_time_strict_raises(self, extra_fields):
+    def test_interval_invalid_start_time_strict_raises(self, extra_fields: dict[str, str]) -> None:
         """Em modo strict, start_time inválido ou janela invertida deve lançar ValueError."""
         payload = {"schedule_type": "interval", "interval_minutes": 10, **extra_fields}
         with pytest.raises(ValueError, match="start_time"):
             normalize_schedule_payload(payload, strict=True)
 
-    def test_interval_invalid_start_time_fallback(self):
+    def test_interval_invalid_start_time_fallback(self) -> None:
         """Em modo tolerante, start_time inválido deve ser ignorado (None)."""
         payload = {
             "schedule_type": "interval",
@@ -142,7 +142,7 @@ class TestIntervalWithWindow:
         result = normalize_schedule_payload(payload, strict=False)
         assert result["start_time"] is None
 
-    def test_interval_preview_with_window(self):
+    def test_interval_preview_with_window(self) -> None:
         """Preview de intervalo com janela deve retornar datas dentro da faixa esperada."""
         schedule = {
             "schedule_type": "interval",
@@ -157,7 +157,7 @@ class TestIntervalWithWindow:
         # Pode retornar 0 se estiver fora da janela, mas não deve quebrar
         assert len(runs) <= 5
 
-    def test_interval_invalid_minutes_strict_raises(self):
+    def test_interval_invalid_minutes_strict_raises(self) -> None:
         """Em modo strict, interval_minutes=0 deve lançar ValueError."""
         payload = {
             "schedule_type": "interval",
@@ -172,8 +172,8 @@ class TestIntervalWithWindow:
 # --------------------------------------------------------------------------- #
 
 
-class TestDescribeSchedulePayload:
-    """Valida a descrição textual formatada para o Dashboard."""
+class TestDescribeSchedulePayload:  # pylint: disable=too-few-public-methods
+    """Valida a descrição textual formatada para o Dashboard (metodo unico parametrizado)."""
 
     @pytest.mark.parametrize(
         "schedule,expected_fragments",
@@ -200,7 +200,7 @@ class TestDescribeSchedulePayload:
             (None, ["Manual"]),
         ],
     )
-    def test_describe_schedule_payload(self, schedule, expected_fragments):
+    def test_describe_schedule_payload(self, schedule: dict[str, Any] | None, expected_fragments: list[str]) -> None:
         """Descrição gerada deve conter os fragmentos esperados para cada tipo de schedule."""
         desc = describe_schedule_payload(schedule)
         for fragment in expected_fragments:
@@ -215,7 +215,7 @@ class TestDescribeSchedulePayload:
 class TestScheduleApiIntegration:
     """Valida endpoints de validação e preview de schedule com os novos tipos."""
 
-    def test_api_validate_cron_valid(self, client: TestClient):
+    def test_api_validate_cron_valid(self, client: TestClient) -> None:
         """API de validação deve aceitar expressão Cron válida."""
         schedule = json.dumps(
             {
@@ -232,7 +232,7 @@ class TestScheduleApiIntegration:
         data = response.json()
         assert data["valid"] is True
 
-    def test_api_validate_cron_missing_expression(self, client: TestClient):
+    def test_api_validate_cron_missing_expression(self, client: TestClient) -> None:
         """API de validação deve rejeitar Cron sem expressão."""
         schedule = json.dumps({"schedule_type": "cron"})
         response = client.post(
@@ -244,7 +244,7 @@ class TestScheduleApiIntegration:
         data = response.json()
         assert data["valid"] is False
 
-    def test_api_preview_cron(self, client: TestClient):
+    def test_api_preview_cron(self, client: TestClient) -> None:
         """Preview de Cron deve retornar lista de próximas execuções."""
         schedule = json.dumps(
             {
@@ -262,7 +262,7 @@ class TestScheduleApiIntegration:
         assert data["valid"] is True
         assert len(data.get("next_runs_preview", [])) <= 3
 
-    def test_api_preview_interval_with_window(self, client: TestClient):
+    def test_api_preview_interval_with_window(self, client: TestClient) -> None:
         """Preview de intervalo com janela operacional deve funcionar."""
         schedule = json.dumps(
             {
@@ -282,7 +282,7 @@ class TestScheduleApiIntegration:
         data = response.json()
         assert data["valid"] is True
 
-    def test_api_validate_interval_invalid_start_time(self, client: TestClient):
+    def test_api_validate_interval_invalid_start_time(self, client: TestClient) -> None:
         """API de validação deve rejeitar start_time mal-formatado em modo estrito."""
         schedule = json.dumps(
             {
@@ -309,7 +309,7 @@ class TestScheduleApiIntegration:
 class TestLegacyCompatibility:
     """Valida que payloads legados continuam sendo interpretados corretamente."""
 
-    def test_parse_legacy_interval_without_window(self):
+    def test_parse_legacy_interval_without_window(self) -> None:
         """Intervalo legado sem janela deve gerar payload válido."""
         raw = json.dumps({"schedule_type": "interval", "interval_minutes": 45})
         result = parse_schedule(raw)
@@ -317,7 +317,7 @@ class TestLegacyCompatibility:
         assert result["schedule_type"] == "interval"
         assert result["interval_minutes"] == 45
 
-    def test_parse_legacy_daily_with_hours_format(self):
+    def test_parse_legacy_daily_with_hours_format(self) -> None:
         """Payload legado com 'hours' ao invés de 'times' deve ser normalizado."""
         raw = json.dumps({"hours": [8, 12], "minutes": [0]})
         result = parse_schedule(raw)
@@ -325,7 +325,7 @@ class TestLegacyCompatibility:
         # Deve ter sido inferido como daily ou similar
         assert "times" in result or result.get("schedule_type") == "manual"
 
-    def test_parse_empty_string_returns_none(self):
+    def test_parse_empty_string_returns_none(self) -> None:
         """String vazia deve retornar None."""
         assert parse_schedule("") is None
         assert parse_schedule(None) is None
@@ -339,7 +339,7 @@ class TestLegacyCompatibility:
 class TestAnchorTime:
     """Valida normalização, descrição e cálculo de preview de anchor_time."""
 
-    def test_anchor_time_normalizes_valid(self):
+    def test_anchor_time_normalizes_valid(self) -> None:
         """Horário de âncora válido deve ser preservado no payload normalizado."""
         payload = {
             "schedule_type": "interval",
@@ -357,7 +357,7 @@ class TestAnchorTime:
             "99:99",  # fora de faixa (sintático mas semanticamente errado)
         ],
     )
-    def test_anchor_time_invalid_strict_raises(self, anchor_time):
+    def test_anchor_time_invalid_strict_raises(self, anchor_time: str) -> None:
         """Em modo estrito, anchor_time malformado deve lançar ValueError."""
         payload = {
             "schedule_type": "interval",
@@ -367,7 +367,7 @@ class TestAnchorTime:
         with pytest.raises(ValueError, match="anchor_time"):
             normalize_schedule_payload(payload, strict=True)
 
-    def test_anchor_time_invalid_tolerant_fallback(self):
+    def test_anchor_time_invalid_tolerant_fallback(self) -> None:
         """Em modo tolerante, anchor_time inválido deve ser ignorado (None)."""
         payload = {
             "schedule_type": "interval",
@@ -377,7 +377,7 @@ class TestAnchorTime:
         result = normalize_schedule_payload(payload, strict=False)
         assert result["anchor_time"] is None
 
-    def test_describe_interval_with_anchor_simple(self):
+    def test_describe_interval_with_anchor_simple(self) -> None:
         """Descrição de intervalo simples com âncora deve exibir o início da cadência."""
         schedule = {
             "schedule_type": "interval",
@@ -388,7 +388,7 @@ class TestAnchorTime:
         assert "A cada 45 min" in desc
         assert "início da cadência às 08:30" in desc
 
-    def test_describe_interval_with_anchor_and_window(self):
+    def test_describe_interval_with_anchor_and_window(self) -> None:
         """Descrição de intervalo com janela e âncora deve refletir início/fim e cadência."""
         schedule = {
             "schedule_type": "interval",
@@ -404,10 +404,8 @@ class TestAnchorTime:
         assert "início 08:00, fim 18:00" in desc
         assert "início da cadência às 08:30" in desc
 
-    def test_anchor_time_preview_future(self, monkeypatch):
+    def test_anchor_time_preview_future(self, monkeypatch: Any) -> None:
         """Se a âncora estiver no futuro hoje, os disparos subsequentes devem começar exatamente nela."""
-        from datetime import datetime
-
         # Simula agora sendo 10:00
         simulated_now = datetime(2026, 5, 20, 10, 0, 0)
         monkeypatch.setattr("app.timezone.get_now_local", lambda: simulated_now)
@@ -425,10 +423,8 @@ class TestAnchorTime:
         assert runs[1] == "20/05/2026 12:30:00"
         assert runs[2] == "20/05/2026 13:00:00"
 
-    def test_anchor_time_preview_past(self, monkeypatch):
+    def test_anchor_time_preview_past(self, monkeypatch: Any) -> None:
         """Se a âncora estiver no passado hoje, os disparos subsequentes devem alinhar com os múltiplos futuros dela."""
-        from datetime import datetime
-
         # Simula agora sendo 15:10
         simulated_now = datetime(2026, 5, 20, 15, 10, 0)
         monkeypatch.setattr("app.timezone.get_now_local", lambda: simulated_now)

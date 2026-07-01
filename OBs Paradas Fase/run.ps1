@@ -152,7 +152,7 @@ try {
             Exit-WithCode 4 "phase_cards.json nao foi gerado."
         }
 
-        $cards = @(Get-Content $PhaseCardsFile -Raw -Encoding UTF8 | ConvertFrom-Json)
+        [array]$cards = Get-Content $PhaseCardsFile -Raw -Encoding UTF8 | ConvertFrom-Json
         if (-not $cards -or $cards.Count -eq 0) {
             Exit-WithCode 2 "phase_cards.json vazio — nenhuma fase para enviar."
         }
@@ -250,7 +250,7 @@ try {
         # Parsear resultados por fase
         $batchResults = @()
         if (Test-Path $BatchResultFile) {
-            try { $batchResults = @(Get-Content $BatchResultFile -Raw -Encoding UTF8 | ConvertFrom-Json) }
+            try { [array]$batchResults = Get-Content $BatchResultFile -Raw -Encoding UTF8 | ConvertFrom-Json }
             catch [System.Exception] { Write-Log "Aviso: falha ao ler batch_result.json: $_" -Lvl "WARN" }
             Remove-Item $BatchResultFile -Force -ErrorAction SilentlyContinue
         }

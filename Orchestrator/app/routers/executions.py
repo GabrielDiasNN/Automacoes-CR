@@ -1,8 +1,7 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Router: Executions - Histórico de execuções com decorações operacionais (A2, A3), filtros avançados, logs, artefatos e controle de fila. v9.2.0
 """
+from __future__ import annotations
 
 import contextlib
 import json
@@ -17,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import desc
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Query, Session, joinedload
 
 from .. import models, schemas
 from ..constants import (
@@ -184,7 +183,7 @@ def _decorate_execution_summary(
 
     summary.related_queue_group = (
         str(queue_group) if queue_group else None
-    )  # type: ignore[assignment]
+    )
     summary.stop_allowed = ex.status in EXECUTION_ACTIVE_STATUSES
     summary.requeue_allowed = False
     summary.requeue_block_reason = None
@@ -216,8 +215,66 @@ def _decorate_execution_summary(
 # ---------------------------------------------------------------------------
 
 
+def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
+    query: Query[models.Execution],
+    status: str | None,
+    automation_id: int | None,
+    queue_group: str | None,
+    priority: str | None,
+    requested_by: str | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> Query[models.Execution]:
+    """Aplica filtros opcionais à query de execuções e valida entradas."""
+    if status:
+        normalized_status = status.upper()
+        if normalized_status not in EXECUTION_ALLOWED_STATUSES:
+            allowed = ", ".join(sorted(EXECUTION_ALLOWED_STATUSES))
+            raise HTTPException(
+                status_code=422, detail=f"status inválido. Use: {allowed}."
+            )
+        query = query.filter(models.Execution.status == normalized_status)
+    if priority:
+        normalized_priority = priority.upper()
+        if normalized_priority not in EXECUTION_ALLOWED_PRIORITIES:
+            allowed = ", ".join(sorted(EXECUTION_ALLOWED_PRIORITIES))
+            raise HTTPException(
+                status_code=422, detail=f"priority inválida. Use: {allowed}."
+            )
+        query = query.filter(models.Execution.priority == normalized_priority)
+    if automation_id:
+        query = query.filter(models.Execution.automation_id == automation_id)
+    if queue_group:
+        query = query.filter(models.Execution.queue_group == queue_group)
+    if requested_by:
+        query = query.filter(models.Execution.requested_by.ilike(f"%{requested_by}%"))
+    dt_from: datetime | None = None
+    dt_to: datetime | None = None
+    if date_from:
+        try:
+            dt_from = datetime.fromisoformat(date_from)
+            query = query.filter(models.Execution.started_at >= dt_from)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="date_from inválido. Use formato ISO-8601."
+            ) from exc
+    if date_to:
+        try:
+            dt_to = datetime.fromisoformat(date_to)
+            query = query.filter(models.Execution.started_at <= dt_to)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="date_to inválido. Use formato ISO-8601."
+            ) from exc
+    if dt_from and dt_to and dt_from > dt_to:
+        raise HTTPException(
+            status_code=422, detail="date_from não pode ser maior que date_to."
+        )
+    return query
+
+
 @router.get("", response_model=schemas.PaginatedResponse[schemas.ExecutionSummary])
-def list_executions(
+def list_executions(  # pylint: disable=R0913,R0914,R0917
     page: int = 1,
     per_page: int = 20,
     status: str | None = None,
@@ -228,7 +285,7 @@ def list_executions(
     date_from: str | None = None,
     date_to: str | None = None,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.PaginatedResponse[schemas.ExecutionSummary]:
     """Lista execuções com filtros avançados e paginação. Otimizado com joinedload."""
     if page < 1:
@@ -239,65 +296,17 @@ def list_executions(
         )
 
     query = db.query(models.Execution).options(joinedload(models.Execution.automation))
-
-    if status:
-        normalized_status = status.upper()
-        if normalized_status not in EXECUTION_ALLOWED_STATUSES:
-            allowed = ", ".join(sorted(EXECUTION_ALLOWED_STATUSES))
-            raise HTTPException(
-                status_code=422, detail=f"status inválido. Use: {allowed}."
-            )
-        query = query.filter(models.Execution.status == normalized_status)
-
-    if priority:
-        normalized_priority = priority.upper()
-        if normalized_priority not in EXECUTION_ALLOWED_PRIORITIES:
-            allowed = ", ".join(sorted(EXECUTION_ALLOWED_PRIORITIES))
-            raise HTTPException(
-                status_code=422, detail=f"priority inválida. Use: {allowed}."
-            )
-        query = query.filter(models.Execution.priority == normalized_priority)
-
-    if automation_id:
-        query = query.filter(models.Execution.automation_id == automation_id)
-    if queue_group:
-        query = query.filter(models.Execution.queue_group == queue_group)
-    if requested_by:
-        query = query.filter(models.Execution.requested_by.ilike(f"%{requested_by}%"))
-
-    dt_from = None
-    dt_to = None
-    if date_from:
-        try:
-            dt_from = datetime.fromisoformat(date_from)
-            query = query.filter(models.Execution.started_at >= dt_from)
-        except ValueError:
-            raise HTTPException(
-                status_code=422, detail="date_from inválido. Use formato ISO-8601."
-            )
-    if date_to:
-        try:
-            dt_to = datetime.fromisoformat(date_to)
-            query = query.filter(models.Execution.started_at <= dt_to)
-        except ValueError:
-            raise HTTPException(
-                status_code=422, detail="date_to inválido. Use formato ISO-8601."
-            )
-    if dt_from and dt_to and dt_from > dt_to:
-        raise HTTPException(
-            status_code=422, detail="date_from não pode ser maior que date_to."
-        )
-
+    query = _apply_execution_filters(
+        query, status, automation_id, queue_group, priority, requested_by, date_from, date_to
+    )
     query = query.order_by(desc(models.Execution.started_at))
 
     total = query.count()
     pages = math.ceil(total / per_page) if per_page > 0 else 1
     items_raw = query.offset((page - 1) * per_page).limit(per_page).all()
 
-    # Mapear execuções ativas em memória para evitar N+1 queries na decoração
     active_by_auto, active_by_group = _build_active_execution_maps(db)
 
-    # Enriquecer com nome da automação e pipeline de decoração
     items = []
     for ex in items_raw:
         summary = schemas.ExecutionSummary.model_validate(ex)
@@ -324,7 +333,7 @@ def list_by_automation(
     automation_id: int,
     limit: int = 10,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> list[schemas.ExecutionSummary]:
     """Retorna execuções de uma automação específica com decoração."""
     execs = (
@@ -356,7 +365,7 @@ def list_by_automation(
 def list_recent(
     limit: int = 10,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> list[schemas.ExecutionSummary]:
     """Retorna as execuções mais recentes de todas as automações com decoração."""
     execs = (
@@ -387,7 +396,7 @@ def list_recent(
 def get_execution(
     exec_id: str,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.ExecutionResponse:
     db_exec = (
         db.query(models.Execution)
@@ -420,7 +429,7 @@ def get_execution_logs(
     offset: int = 0,
     limit: int = 500,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Retorna logs de uma execução com paginação por linhas."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
@@ -449,7 +458,7 @@ def get_execution_logs(
 def list_artifacts(
     exec_id: str,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Lista artefatos gerados por uma execução."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
@@ -469,7 +478,7 @@ def download_artifact(
     exec_id: str,
     filename: str,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> FileResponse:
     """Download de um artefato específico."""
     db_exec = (
@@ -522,7 +531,7 @@ def stop_execution(
     exec_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
@@ -537,18 +546,16 @@ def stop_execution(
     if db_exec.started_at and db_exec.finished_at:
         try:
             delta = db_exec.finished_at - db_exec.started_at
-            db_exec.duration_seconds = round(delta.total_seconds(), 2)  # type: ignore[assignment]
-        except Exception:
+            db_exec.duration_seconds = round(delta.total_seconds(), 2)
+        except (TypeError, ValueError):
             pass
-    db_exec.logs = (  # type: ignore[assignment]
-        (db_exec.logs or "")
-        + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
-    )
+    _stop_log: str = str(db_exec.logs or "") + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
+    db_exec.logs = _stop_log  # type: ignore[assignment]
 
     log_audit(db, "STOP", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
 
-    logger.info(f"Execucao interrompida: {exec_id}")
+    logger.info("Execucao interrompida: %s", exec_id)
     return {"message": "Sinal de parada registrado.", "exec_id": exec_id}
 
 
@@ -563,7 +570,7 @@ def requeue_execution(
     payload: schemas.ExecutionQueueActionRequest,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.ExecutionQueueActionResponse:
     """Reenfileira uma execução terminal mantendo rastreabilidade de retry."""
     db_exec = (
@@ -582,18 +589,13 @@ def requeue_execution(
     if not db_exec.automation:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    active = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.automation_id == db_exec.automation_id,
-            models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
-        )
-        .first()
-    )
-    if active:
+    if db.query(models.Execution).filter(
+        models.Execution.automation_id == db_exec.automation_id,
+        models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+    ).first():
         raise HTTPException(
             status_code=409,
-            detail=f"Já existe uma execução ativa para esta automação ({active.id}).",
+            detail="Já existe uma execução ativa para esta automação.",
         )
 
     queue_group = (
@@ -651,10 +653,7 @@ def requeue_execution(
 
     db_exec.status = EXECUTION_STATUS_REQUEUED  # type: ignore[assignment]
     db_exec.recovery_action = RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION  # type: ignore[assignment]
-    db_exec.logs = (  # type: ignore[assignment]
-        (db_exec.logs or "")
-        + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"
-    )
+    db_exec.logs = str(db_exec.logs or "") + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"  # type: ignore[assignment]
 
     log_audit(
         db,
@@ -698,7 +697,7 @@ def telemetry_start(
     payload: schemas.ExecutionTelemetryStart,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Inicia o registro de uma execução disparada externamente (ex: terminal)."""
     db_auto = (
@@ -718,11 +717,11 @@ def telemetry_start(
     new_exec = models.Execution(
         id=exec_id,
         automation_id=db_auto.id,
-        status=EXECUTION_STATUS_RUNNING,  # type: ignore[assignment]
+        status=EXECUTION_STATUS_RUNNING,
         requested_by="TERMINAL",
-        started_at=get_now_local(),  # type: ignore[assignment]
+        started_at=get_now_local(),
         max_retries=db_auto.max_retries or 0,
-        queue_group=db_auto.queue_group,  # type: ignore[assignment]
+        queue_group=db_auto.queue_group,
     )
     db.add(new_exec)
 
@@ -730,7 +729,7 @@ def telemetry_start(
     db.commit()
 
     logger.info(
-        f"Telemetria iniciada: {exec_id} para automacao {payload.automation_name}"
+        "Telemetria iniciada: %s para automacao %s", exec_id, payload.automation_name
     )
     return {"exec_id": exec_id}
 
@@ -741,7 +740,7 @@ def telemetry_end(
     payload: schemas.ExecutionTelemetryEnd,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Finaliza o registro de uma execução disparada externamente."""
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
@@ -752,7 +751,7 @@ def telemetry_end(
     if payload.exit_code is not None:
         db_exec.exit_code = int(payload.exit_code)  # type: ignore[assignment]
     if payload.logs is not None:
-        db_exec.logs = sanitize_log_payload(payload.logs)  # type: ignore[assignment]
+        db_exec.logs = sanitize_log_payload(payload.logs)
     if payload.artifacts is not None:
         db_exec.artifacts = payload.artifacts  # type: ignore[assignment]
 
@@ -762,12 +761,12 @@ def telemetry_end(
     if db_exec.started_at and db_exec.finished_at:
         try:
             delta = db_exec.finished_at - db_exec.started_at
-            db_exec.duration_seconds = round(delta.total_seconds(), 2)  # type: ignore[assignment]
-        except Exception:
+            db_exec.duration_seconds = round(delta.total_seconds(), 2)
+        except (TypeError, ValueError):
             pass
 
     log_audit(db, "END_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
 
-    logger.info(f"Telemetria finalizada: {exec_id} com status {payload.status}")
+    logger.info("Telemetria finalizada: %s com status %s", exec_id, payload.status)
     return {"message": "Telemetria registrada com sucesso.", "exec_id": exec_id}

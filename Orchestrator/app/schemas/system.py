@@ -1,8 +1,8 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Módulo contendo schemas Pydantic relacionados ao Sistema, Telemetria, Diagnósticos e Utilitários.
 """
+
+from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 
@@ -133,7 +133,7 @@ class DiagnosticsDatabase(BaseModel):
     size_mb: float
     wal_size_mb: float
     wal_risk: str
-    schema_details: dict = Field(..., alias="schema")
+    schema_details: dict[str, Any] = Field(..., alias="schema")
     schema_version: str
     model_config = ConfigDict(populate_by_name=True)
 
@@ -168,10 +168,10 @@ class DiagnosticsQueue(BaseModel):
     by_status: dict[str, int]
     active_by_priority: dict[str, int] = {}
     active_by_group: dict[str, int] = {}
-    running_over_runtime: list[dict] = []
-    orphaned_running: list[dict] = []
-    retry_pressure: list[dict] = []
-    timeouts_24h_by_group: list[dict] = []
+    running_over_runtime: list[dict[str, Any]] = []
+    orphaned_running: list[dict[str, Any]] = []
+    retry_pressure: list[dict[str, Any]] = []
+    timeouts_24h_by_group: list[dict[str, Any]] = []
     oldest_pending: DiagnosticsQueueItem
     oldest_running: DiagnosticsQueueItem
 

@@ -1,10 +1,9 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 
 Router: Automations - CRUD completo com paginacao, validacao e auditoria. v5.1.0
 
 """
+from __future__ import annotations
 
 import json
 import logging
@@ -14,12 +13,13 @@ import shutil
 import subprocess
 import threading
 import time
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from .. import models, schemas  # type: ignore
+from .. import models, schemas
 from ..constants import PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
@@ -41,10 +41,10 @@ from ..services.metrics import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
 )
+from ..runtime import scheduler
 from ..services.scheduler_runtime import (
     extract_automation_id_from_job,
     reload_scheduled_tasks,
-    scheduler,
 )
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
@@ -56,17 +56,17 @@ router = APIRouter(prefix="/api/automations", tags=["Automations"])
 PROJECT_ROOT = get_project_root()
 
 # Cache TTL de 30s para next_run_lookup — evita re-iteração do scheduler a cada request
-_next_run_cache: dict | None = None
-_next_run_cache_at: float = 0.0
+_NEXT_RUN_CACHE: dict[int, Any] | None = None
+_NEXT_RUN_CACHE_AT: float = 0.0
 _NEXT_RUN_CACHE_TTL = 30.0
 _next_run_cache_lock = threading.Lock()
 
 
 def _invalidate_next_run_cache() -> None:
-    global _next_run_cache, _next_run_cache_at
+    global _NEXT_RUN_CACHE, _NEXT_RUN_CACHE_AT  # pylint: disable=global-statement
     with _next_run_cache_lock:
-        _next_run_cache = None
-        _next_run_cache_at = 0.0
+        _NEXT_RUN_CACHE = None
+        _NEXT_RUN_CACHE_AT = 0.0
 
 
 def _reload_scheduler_safe() -> None:
@@ -74,21 +74,21 @@ def _reload_scheduler_safe() -> None:
     _invalidate_next_run_cache()
     try:
         reload_scheduled_tasks()
-    except Exception as e:
-        logger.error(f"Falha ao recarregar agendador apos alteracao: {e}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Falha ao recarregar agendador apos alteracao: %s", e)
 
 
-def _load_next_run_lookup():
+def _load_next_run_lookup() -> dict[int, Any]:
     """Mapeia proxima execucao por automacao consultando o scheduler em memoria (com cache TTL)."""
-    global _next_run_cache, _next_run_cache_at
+    global _NEXT_RUN_CACHE, _NEXT_RUN_CACHE_AT  # pylint: disable=global-statement
     now = time.monotonic()
     with _next_run_cache_lock:
         if (
-            _next_run_cache is not None
-            and (now - _next_run_cache_at) < _NEXT_RUN_CACHE_TTL
+            _NEXT_RUN_CACHE is not None
+            and (now - _NEXT_RUN_CACHE_AT) < _NEXT_RUN_CACHE_TTL
         ):
-            return _next_run_cache
-    lookup: dict = {}
+            return _NEXT_RUN_CACHE
+    lookup: dict[int, Any] = {}
     try:
         for job in scheduler.get_jobs():
             auto_id = extract_automation_id_from_job(job.id)
@@ -100,21 +100,21 @@ def _load_next_run_lookup():
             current = lookup.get(auto_id)
             if current is None or candidate < current:
                 lookup[auto_id] = candidate
-    except Exception as e:
-        logger.warning(f"Nao foi possivel carregar next_run do scheduler: {e}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("Nao foi possivel carregar next_run do scheduler: %s", e)
     with _next_run_cache_lock:
-        _next_run_cache = lookup
-        _next_run_cache_at = now
+        _NEXT_RUN_CACHE = lookup
+        _NEXT_RUN_CACHE_AT = now
     return lookup
 
 
 def _build_automation_response(
     db: Session,
     auto: models.Automation,
-    next_run_lookup=None,
-    latest_execution_lookup=None,
-    metrics_24h_lookup=None,
-):
+    next_run_lookup: dict[int, Any] | None = None,
+    latest_execution_lookup: dict[int, dict[str, Any]] | None = None,
+    metrics_24h_lookup: dict[int, dict[str, Any]] | None = None,
+) -> schemas.AutomationResponse:
     if next_run_lookup is None:
         next_run_lookup = _load_next_run_lookup()
     if latest_execution_lookup is None:
@@ -185,7 +185,7 @@ def _build_mutation_response(
     return response
 
 
-def _preflight_payload_or_422(payload: dict) -> schemas.AutomationPreflightResponse:
+def _preflight_payload_or_422(payload: dict[str, Any]) -> schemas.AutomationPreflightResponse:
     try:
         preflight = build_automation_preflight(payload, PROJECT_ROOT)
     except ValueError as exc:
@@ -205,15 +205,15 @@ def _preflight_payload_or_422(payload: dict) -> schemas.AutomationPreflightRespo
 
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.AutomationResponse])
-def list_automations(
+def list_automations(  # pylint: disable=R0913,R0917
     page: int = 1,
     per_page: int = 20,
     sort: str = "name",
     order: str = "asc",
-    search: str = None,
+    search: str | None = None,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.PaginatedResponse[schemas.AutomationResponse]:
     """Lista automacoes com paginacao, ordenacao e busca."""
 
     query = db.query(models.Automation)
@@ -266,8 +266,8 @@ def list_automations(
 @router.get("/all", response_model=list[schemas.AutomationResponse])
 def list_all_automations(
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> list[schemas.AutomationResponse]:
     """Retorna todas as automacoes sem paginacao (uso interno do Dashboard)."""
 
     automations = db.query(models.Automation).order_by(models.Automation.name).all()
@@ -287,8 +287,8 @@ def list_all_automations(
 @router.post("/preflight", response_model=schemas.AutomationPreflightResponse)
 def preflight_automation(
     payload: schemas.AutomationPreflightRequest,
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.AutomationPreflightResponse:
     """Valida uma automação sem persistir alteração."""
     try:
         return build_automation_preflight(payload.model_dump(), PROJECT_ROOT)
@@ -307,8 +307,8 @@ def preflight_automation(
 def get_automation(
     automation_id: int,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.AutomationResponse:
 
     db_auto = (
         db.query(models.Automation)
@@ -335,8 +335,8 @@ def create_automation(
     automation: schemas.AutomationCreate,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.AutomationResponse:
 
     existing = (
         db.query(models.Automation)
@@ -379,10 +379,10 @@ def create_automation(
 
     db.refresh(db_auto)
 
-    logger.info(f"Automacao criada: {db_auto.name} (ID: {db_auto.id})")
+    logger.info("Automacao criada: %s (ID: %s)", db_auto.name, db_auto.id)
     _reload_scheduler_safe()
 
-    return _build_mutation_response(db, db_auto, audit_entry.id)
+    return _build_mutation_response(db, db_auto, int(audit_entry.id))
 
 
 # ---------------------------------------------------------------------------
@@ -398,8 +398,8 @@ def update_automation(
     automation_update: schemas.AutomationUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.AutomationResponse:
 
     db_auto = (
         db.query(models.Automation)
@@ -449,18 +449,18 @@ def update_automation(
 
     db.refresh(db_auto)
 
-    logger.info(f"Automacao atualizada: {db_auto.name} (ID: {automation_id})")
+    logger.info("Automacao atualizada: %s (ID: %s)", db_auto.name, automation_id)
     _reload_scheduler_safe()
 
-    return _build_mutation_response(db, db_auto, audit_entry.id)
+    return _build_mutation_response(db, db_auto, int(audit_entry.id))
 
 
 @router.get("/{automation_id}/overview")
 def get_automation_overview(
     automation_id: int,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     """Retorna payload consolidado da automacao para telas operacionais."""
     db_auto = (
         db.query(models.Automation)
@@ -491,7 +491,7 @@ def get_automation_overview(
     recent_payload = []
     for item in recent_execs:
         summary = schemas.ExecutionSummary.model_validate(item)
-        summary.automation_name = db_auto.name
+        summary.automation_name = str(db_auto.name)
         recent_payload.append(summary)
 
     return {
@@ -517,8 +517,8 @@ def delete_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
 
     db_auto = (
         db.query(models.Automation)
@@ -545,7 +545,7 @@ def delete_automation(
 
     db.commit()
 
-    logger.info(f"Automacao removida: {auto_name} (ID: {automation_id})")
+    logger.info("Automacao removida: %s (ID: %s)", auto_name, automation_id)
     _reload_scheduler_safe()
 
     return {"message": f"Automacao '{auto_name}' removida com sucesso."}
@@ -563,8 +563,8 @@ async def start_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
 
     db_auto = (
         db.query(models.Automation)
@@ -596,7 +596,7 @@ async def start_automation(
 
     group_running = get_group_active_execution(
         db,
-        db_auto.queue_group,
+        str(db_auto.queue_group) if db_auto.queue_group else None,
         exclude_automation_id=automation_id,
     )
     if group_running:
@@ -658,8 +658,8 @@ def set_global_test_mode(
     enabled: bool,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
     """Ativa ou desativa o Modo Teste para TODAS as automacoes cadastradas."""
 
     db.query(models.Automation).update(
@@ -698,8 +698,8 @@ def set_global_test_mode(
                     ],
                     check=True,
                 )
-        except Exception as e:
-            logger.error(f"Erro ao sincronizar variavel AUTOMACAO_TEST_EMAIL: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Erro ao sincronizar variavel AUTOMACAO_TEST_EMAIL: %s", e)
 
     log_audit(
         db,
@@ -723,8 +723,8 @@ def set_automation_test_mode(
     enabled: bool,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
     """Ativa ou desativa o Modo Teste para uma automacao especifica."""
 
     db_auto = (
@@ -737,7 +737,7 @@ def set_automation_test_mode(
 
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    db_auto.test_mode = enabled
+    db_auto.test_mode = enabled  # type: ignore[assignment]
 
     log_audit(
         db,
@@ -766,8 +766,8 @@ def set_automation_test_mode(
 def pause_all(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
 
     db.query(models.Automation).update({models.Automation.enabled: False})
 
@@ -783,8 +783,8 @@ def pause_all(
 def resume_all(
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
 
     db.query(models.Automation).update({models.Automation.enabled: True})
 
@@ -801,8 +801,8 @@ def pause_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
     db_auto = (
         db.query(models.Automation)
         .filter(models.Automation.id == automation_id)
@@ -810,14 +810,14 @@ def pause_automation(
     )
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
-    db_auto.enabled = False
+    db_auto.enabled = False  # type: ignore[assignment]
     log_audit(
         db,
         "PAUSE",
         "AUTOMATION",
         str(automation_id),
         get_client_ip(request),
-        db_auto.name,
+        str(db_auto.name),
     )
     db.commit()
     _reload_scheduler_safe()
@@ -829,8 +829,8 @@ def resume_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, str]:
     db_auto = (
         db.query(models.Automation)
         .filter(models.Automation.id == automation_id)
@@ -838,14 +838,14 @@ def resume_automation(
     )
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
-    db_auto.enabled = True
+    db_auto.enabled = True  # type: ignore[assignment]
     log_audit(
         db,
         "RESUME",
         "AUTOMATION",
         str(automation_id),
         get_client_ip(request),
-        db_auto.name,
+        str(db_auto.name),
     )
     db.commit()
     _reload_scheduler_safe()
@@ -859,8 +859,8 @@ def clone_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
+    _api_key: str = Depends(get_api_key),
+) -> schemas.AutomationResponse:
     db_auto = (
         db.query(models.Automation)
         .filter(models.Automation.id == automation_id)

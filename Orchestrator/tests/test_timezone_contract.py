@@ -1,18 +1,18 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Regressoes de fuso horario e formato de datas do Orchestrator."""
 
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 from app import models
+from app import timezone as tz_module
 from app.schemas import format_dt_br, parse_dt_br
 from app.schemas.common import preview_next_runs
 from app.timezone import get_now_local
-from tests.conftest import AUTH_HEADERS
+from conftest import AUTH_HEADERS
 
 
-def test_parse_and_format_dt_br_handles_iso_and_brazil_strings():
+def test_parse_and_format_dt_br_handles_iso_and_brazil_strings() -> None:
     utc_dt = datetime(2026, 5, 21, 14, 0, 0, tzinfo=timezone.utc)
     parsed_utc = parse_dt_br(utc_dt)
     assert parsed_utc is not None
@@ -33,9 +33,7 @@ def test_parse_and_format_dt_br_handles_iso_and_brazil_strings():
     assert format_dt_br("21/05/2026 11:05:42") == "21/05/2026 11:05:42"
 
 
-def test_preview_next_runs_keeps_once_schedule_in_brazil_time(monkeypatch):
-    from app import timezone as tz_module
-
+def test_preview_next_runs_keeps_once_schedule_in_brazil_time(monkeypatch: Any) -> None:
     fixed_now = datetime(2026, 5, 21, 10, 0, 0)
     monkeypatch.setattr(tz_module, "get_now_local", lambda: fixed_now)
 
@@ -51,7 +49,7 @@ def test_preview_next_runs_keeps_once_schedule_in_brazil_time(monkeypatch):
     assert preview == ["21/05/2026 11:30:00"]
 
 
-def test_system_endpoints_return_brazilian_date_contract(client):
+def test_system_endpoints_return_brazilian_date_contract(client: Any) -> None:
     overview = client.get("/api/system/overview", headers=AUTH_HEADERS)
     assert overview.status_code == 200
     overview_data = overview.json()
@@ -77,9 +75,7 @@ def test_system_endpoints_return_brazilian_date_contract(client):
     )
 
 
-def test_system_scheduler_jobs_and_automation_overview_are_br_formatted(
-    client, db_session
-):
+def test_system_scheduler_jobs_and_automation_overview_are_br_formatted(client: Any, db_session: Any) -> None:
     auto = models.Automation(name="Timezone Auto", script_path="./test/run.ps1")
     db_session.add(auto)
     db_session.flush()

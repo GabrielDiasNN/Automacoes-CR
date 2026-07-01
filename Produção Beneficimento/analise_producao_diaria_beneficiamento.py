@@ -1,5 +1,4 @@
 from __future__ import annotations
-# mypy: ignore-errors
 # pylint: disable=wrong-import-position
 
 import sys

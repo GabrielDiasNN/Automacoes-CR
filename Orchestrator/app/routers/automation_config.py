@@ -1,13 +1,13 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Router: Automation Config - Gestão de arquivos JSON de configuração das automações.
 """
+from __future__ import annotations
 
 import glob
 import json
 import logging
 import os
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -31,21 +31,19 @@ router = APIRouter(prefix="/api/automations", tags=["Automation Config"])
 def get_automation_configs(
     auto_id: int,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Busca arquivos JSON na pasta da automação."""
+    _api_key: str = Depends(get_api_key),
+) -> list[dict[str, Any]]:
     auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_dir = _resolve_automation_dir(auto.script_path)
+    auto_dir = _resolve_automation_dir(str(auto.script_path))
 
     json_files = glob.glob(os.path.join(auto_dir, "*.json"))
-    configs = []
+    configs: list[dict[str, Any]] = []
 
     for jf in json_files:
         filename = os.path.basename(jf)
-        # Ignora arquivos de lock e estado
         if (
             "wwebjs" in filename
             or filename.startswith(".")
@@ -57,8 +55,6 @@ def get_automation_configs(
                 content = f.read()
             configs.append({"filename": filename, "content": content})
         except OSError as exc:
-            # Arquivo inacessível/corrompido: não derruba a listagem, mas registra
-            # para observabilidade em vez de falhar silenciosamente.
             logger.warning("Falha ao ler config '%s': %s", filename, exc)
 
     return configs
@@ -68,20 +64,19 @@ def get_automation_configs(
     "/{auto_id}/configs/{filename}",
     response_model=schemas.ManagedMutationResponse,
 )
-def update_automation_config(
+def update_automation_config(  # pylint: disable=R0913,R0917
     auto_id: int,
     filename: str,
     payload: schemas.FileContent,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Atualiza um arquivo JSON específico da automação."""
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_dir = _resolve_automation_dir(auto.script_path)
+    auto_dir = _resolve_automation_dir(str(auto.script_path))
     target_path = _resolve_managed_file(auto_dir, filename)
     if not filename.endswith(".json"):
         raise HTTPException(
@@ -101,7 +96,7 @@ def update_automation_config(
             "AUTOMATION",
             str(auto_id),
             get_client_ip(request),
-            json.dumps({"filename": filename, "backup": backup_relpath}),
+            details=json.dumps({"filename": filename, "backup": backup_relpath}),
         )
         db.flush()
         db.commit()
@@ -112,9 +107,9 @@ def update_automation_config(
             "backup_path": backup_relpath,
             "audit_id": audit_entry.id,
         }
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         raise HTTPException(
             status_code=400, detail="O conteúdo fornecido não é um JSON válido."
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        ) from exc
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -1,12 +1,12 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Router: Automation IDE - Gestão de scripts e código-fonte via Web IDE das automações.
 """
+from __future__ import annotations
 
 import json
 import logging
 import os
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -30,17 +30,16 @@ router = APIRouter(prefix="/api/automations", tags=["Automation IDE"])
 def get_automation_scripts(
     auto_id: int,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Busca arquivos de script (.ps1, .py, .sql, .bat) na pasta da automação."""
+    _api_key: str = Depends(get_api_key),
+) -> list[dict[str, Any]]:
     auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_dir = _resolve_automation_dir(auto.script_path)
+    auto_dir = _resolve_automation_dir(str(auto.script_path))
 
     allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
-    scripts = []
+    scripts: list[dict[str, Any]] = []
 
     for filename in os.listdir(auto_dir):
         if not filename.endswith(allowed_exts) or filename.startswith("."):
@@ -54,7 +53,7 @@ def get_automation_scripts(
             with open(jf, encoding="utf-8") as f:
                 content = f.read()
             scripts.append({"filename": filename, "content": content})
-        except Exception:
+        except OSError:
             pass
 
     return scripts
@@ -64,20 +63,19 @@ def get_automation_scripts(
     "/{auto_id}/scripts/{filename}",
     response_model=schemas.ManagedMutationResponse,
 )
-def update_automation_script(
+def update_automation_script(  # pylint: disable=R0913,R0917
     auto_id: int,
     filename: str,
     payload: schemas.FileContent,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key),
-):
-    """Atualiza um arquivo de script garantindo o encoding correto."""
+    _api_key: str = Depends(get_api_key),
+) -> dict[str, Any]:
     auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_dir = _resolve_automation_dir(auto.script_path)
+    auto_dir = _resolve_automation_dir(str(auto.script_path))
     allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
     if not filename.endswith(allowed_exts):
         raise HTTPException(status_code=400, detail="Extensão de script não permitida.")
@@ -85,7 +83,6 @@ def update_automation_script(
 
     try:
         backup_relpath = _backup_file_before_write(target_path, auto_dir)
-        # Forçar UTF-8 with BOM para .ps1 e .psm1 (Soberania PT-BR)
         if filename.endswith(".ps1") or filename.endswith(".psm1"):
             with open(target_path, "w", encoding="utf-8-sig") as f:
                 f.write(payload.content)
@@ -99,7 +96,7 @@ def update_automation_script(
             "AUTOMATION",
             str(auto_id),
             get_client_ip(request),
-            json.dumps({"filename": filename, "backup": backup_relpath}),
+            details=json.dumps({"filename": filename, "backup": backup_relpath}),
         )
         db.flush()
         db.commit()
@@ -110,5 +107,5 @@ def update_automation_script(
             "backup_path": backup_relpath,
             "audit_id": audit_entry.id,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -1,10 +1,8 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Testes unitários focados no loop principal e comportamento de backoff do Worker (worker.py).
 """
 
-import time
+from typing import Any, Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,7 +10,7 @@ import worker
 
 
 @pytest.fixture
-def reset_worker_state():
+def reset_worker_state() -> Iterator[None]:
     """Garante que o estado de shutdown e wakeup do worker seja limpo."""
     worker.shutdown_event.clear()
     worker.wakeup_event.clear()
@@ -28,14 +26,14 @@ def reset_worker_state():
 @patch("worker.wakeup_listener_loop")
 @patch("worker.POLL_INTERVAL", 2.0)
 @patch("worker.MAX_POLL_INTERVAL", 15.0)
-def test_worker_backoff_exponential(
-    mock_wakeup_listener,
-    mock_flusher,
-    mock_heartbeat,
-    mock_claim,
-    mock_session_local,
-    reset_worker_state,
-):
+def test_worker_backoff_exponential(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    mock_wakeup_listener: Any,  # pylint: disable=unused-argument
+    mock_flusher: Any,  # pylint: disable=unused-argument
+    mock_heartbeat: Any,  # pylint: disable=unused-argument
+    mock_claim: Any,
+    mock_session_local: Any,
+    reset_worker_state: None,  # pylint: disable=unused-argument,redefined-outer-name
+) -> None:
     """Garante que o intervalo de polling do worker cresce exponencialmente (backoff) quando não há tarefas."""
     mock_db = MagicMock()
     mock_session_local.return_value = mock_db
@@ -45,9 +43,8 @@ def test_worker_backoff_exponential(
 
     # Queremos rodar o loop exatamente 3 vezes e depois parar para auditar o backoff.
     call_count = 0
-    original_wait = worker.wakeup_event.wait
 
-    def side_effect_wait(timeout):
+    def side_effect_wait(timeout: float) -> bool:
         nonlocal call_count
         call_count += 1
 
@@ -79,27 +76,27 @@ def test_worker_backoff_exponential(
 @patch("worker.log_flusher_loop")
 @patch("worker.wakeup_listener_loop")
 @patch("worker.POLL_INTERVAL", 2.0)
-def test_worker_consumes_task_and_resets_backoff(
-    mock_wakeup_listener,
-    mock_flusher,
-    mock_heartbeat,
-    mock_resolve_path,
-    mock_run_task,
-    mock_claim,
-    mock_session_local,
-    reset_worker_state,
-):
+def test_worker_consumes_task_and_resets_backoff(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+    mock_wakeup_listener: Any,  # pylint: disable=unused-argument
+    mock_flusher: Any,  # pylint: disable=unused-argument
+    mock_heartbeat: Any,  # pylint: disable=unused-argument
+    mock_resolve_path: Any,
+    mock_run_task: Any,  # pylint: disable=unused-argument
+    mock_claim: Any,
+    mock_session_local: Any,
+    reset_worker_state: None,  # pylint: disable=unused-argument,redefined-outer-name
+) -> None:
     """Garante que quando uma tarefa é encontrada, o backoff de polling é resetado para o valor inicial."""
     mock_db = MagicMock()
     mock_session_local.return_value = mock_db
 
     # Mock das entidades no banco
-    class MockAutomation:
+    class MockAutomation:  # pylint: disable=too-few-public-methods
         name = "Robo Teste"
         script_path = "./run.ps1"
         max_runtime_minutes = 10
 
-    class MockExecution:
+    class MockExecution:  # pylint: disable=too-few-public-methods
         automation_id = 1
 
     mock_automation = MockAutomation()
@@ -114,7 +111,7 @@ def test_worker_consumes_task_and_resets_backoff(
 
     call_count = 0
 
-    def side_effect_wait(timeout):
+    def side_effect_wait(timeout: float) -> bool:
         nonlocal call_count
         call_count += 1
 
@@ -129,7 +126,7 @@ def test_worker_consumes_task_and_resets_backoff(
         return False
 
     with patch.object(worker.wakeup_event, "wait", side_effect_wait):
-        with patch("worker.ThreadPoolExecutor") as mock_executor:
+        with patch("worker.ThreadPoolExecutor"):
             # Mock do executor para rodar de forma síncrona/mockada
             worker.main_loop()
 

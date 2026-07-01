@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Orchestrator Central de Automacoes v5.0.0 - Ponto de Entrada.
 
@@ -13,7 +11,9 @@ Responsabilidades:
 
 import os
 import sys
+from collections.abc import AsyncGenerator, Awaitable, Callable, MutableMapping
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,10 +21,17 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
 
-from . import models  # noqa: F401 — registers ORM tables in Base.metadata
+from . import models  # noqa: F401 pylint: disable=unused-import
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
-from .database import SessionLocal, session_scope
+from .database import (
+    SessionLocal,
+    run_alembic_migrations,
+    run_wal_checkpoint,
+    session_scope,
+    validate_database_schema,
+)
 from .error_handlers import register_exception_handlers
 from .logger_setup import setup_json_logger
 from .middleware import RateLimitMiddleware, RequestIdMiddleware, TimingMiddleware
@@ -39,6 +46,7 @@ from .routers import (
     websocket,
 )
 from .runtime import get_allowed_origins, get_dashboard_path, get_lib_path, scheduler
+from .timezone import get_now_local
 from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
 from .services.scheduler_runtime import register_enterprise_jobs, reload_scheduled_tasks
 from .telemetry import setup_telemetry
@@ -53,17 +61,17 @@ log_dir = os.path.join(
 os.makedirs(log_dir, exist_ok=True)
 
 is_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
-log_filename = "orchestrator_test.jsonl" if is_pytest else "orchestrator.jsonl"
+LOG_FILENAME = "orchestrator_test.jsonl" if is_pytest else "orchestrator.jsonl"
 
 logger = setup_json_logger(
     "orchestrator",
-    os.path.join(log_dir, log_filename),
+    os.path.join(log_dir, LOG_FILENAME),
     component="orchestrator",
     use_context_vars=True,
 )
 
 
-def _cleanup_zombie_tasks():
+def _cleanup_zombie_tasks() -> None:
     with session_scope(SessionLocal) as db:
         zombie_count = mark_running_tasks_as_failed_by_reboot(db)
         if zombie_count:
@@ -76,17 +84,9 @@ def _cleanup_zombie_tasks():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     # Pilar E - Escala: Garantir integridade do banco no startup
-    from .timezone import get_now_local
-
-    app.state.startup_time = get_now_local()
-    from .database import (
-        run_alembic_migrations,
-        run_wal_checkpoint,
-        validate_database_schema,
-    )
-
+    fastapi_app.state.startup_time = get_now_local()
     run_wal_checkpoint("TRUNCATE")
 
     migration_result = run_alembic_migrations()
@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
         )
     schema_status = validate_database_schema()
     if not schema_status["valid"]:
-        logger.error(f"Schema do banco incompleto: {schema_status}")
+        logger.error("Schema do banco incompleto: %s", schema_status)
         raise RuntimeError(f"Schema do banco incompleto: {schema_status}")
     _cleanup_zombie_tasks()
     reload_scheduled_tasks()
@@ -122,11 +122,15 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-methods
     """Injeta Content-Security-Policy e headers de segurança em todas as respostas (F1/1.6)."""
 
-    async def dispatch(self, request: StarletteRequest, call_next):
-        response = await call_next(request)
+    async def dispatch(
+        self,
+        request: StarletteRequest,
+        call_next: Callable[[StarletteRequest], Awaitable[StarletteResponse]],
+    ) -> StarletteResponse:
+        response: StarletteResponse = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
@@ -187,7 +191,7 @@ class RevalidatedStaticFiles(StaticFiles):
     Dashboard sempre sirva a versao atual sem depender de ?v= nos imports ES.
     """
 
-    async def get_response(self, path, scope):
+    async def get_response(self, path: str, scope: MutableMapping[str, Any]) -> StarletteResponse:
         # SPA fallback: rotas client-side (react-router, ex.: /dashboard/execucoes)
         # nao existem como arquivo; ao recarregar a pagina caem em index.html.
         try:
@@ -208,16 +212,16 @@ if os.path.exists(dashboard_path):
         RevalidatedStaticFiles(directory=dashboard_path, html=True),
         name="dashboard",
     )
-    logger.info(f"Dashboard montado em: {dashboard_path}")
+    logger.info("Dashboard montado em: %s", dashboard_path)
 else:
-    logger.error(f"ERRO: Pasta Dashboard não encontrada em: {dashboard_path}")
+    logger.error("ERRO: Pasta Dashboard não encontrada em: %s", dashboard_path)
 
 if os.path.exists(lib_path):
     app.mount("/lib", StaticFiles(directory=lib_path), name="lib")
 
 
 @app.get("/")
-def read_root():
+def read_root() -> dict[str, Any]:
     return {
         "status": "online",
         "version": ORCHESTRATOR_VERSION,

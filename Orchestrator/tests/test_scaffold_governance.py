@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """Validação do scaffold governado de novas automações."""
 
 from __future__ import annotations

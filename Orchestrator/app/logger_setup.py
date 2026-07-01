@@ -1,10 +1,10 @@
-# mypy: ignore-errors
 """Shared structured JSON logging factory for Orchestrator and Worker (Pilar L)."""
 
 import json
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from typing import Any
 
 
 class OrchestratorJsonFormatter(logging.Formatter):
@@ -15,7 +15,7 @@ class OrchestratorJsonFormatter(logging.Formatter):
     When False (Worker process), reads the same fields from LogRecord attributes.
     """
 
-    def __init__(self, component: str, use_context_vars: bool = False, **kwargs):
+    def __init__(self, component: str, use_context_vars: bool = False, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._component = component
         self._use_context_vars = use_context_vars

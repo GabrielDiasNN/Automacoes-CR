@@ -1,18 +1,19 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Testes focados nas operações de Web IDE de Automações (Scripts e Configs).
 """
 
 import json
+from pathlib import Path
 
+import app.routers.automations as auto_router
 import pytest
 from conftest import AUTH_HEADERS
+from fastapi.testclient import TestClient
 
 
-def test_update_automation_config_creates_backup(client, monkeypatch, tmp_path):
-    import app.routers.automations as auto_router
-
+def test_update_automation_config_creates_backup(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     bot_dir = tmp_path / "Bot"
     bot_dir.mkdir()
     script_path = bot_dir / "run.ps1"
@@ -42,12 +43,8 @@ def test_update_automation_config_creates_backup(client, monkeypatch, tmp_path):
 
 
 def test_update_automation_script_creates_backup_and_preserves_ps_bom(
-    client,
-    monkeypatch,
-    tmp_path,
-):
-    import app.routers.automations as auto_router
-
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     bot_dir = tmp_path / "Bot"
     bot_dir.mkdir()
     script_path = bot_dir / "run.ps1"
@@ -74,9 +71,9 @@ def test_update_automation_script_creates_backup_and_preserves_ps_bom(
     assert "new" in script_path.read_text(encoding="utf-8-sig")
 
 
-def test_update_automation_script_rejects_path_escape(client, monkeypatch, tmp_path):
-    import app.routers.automations as auto_router
-
+def test_update_automation_script_rejects_path_escape(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     bot_dir = tmp_path / "Bot"
     bot_dir.mkdir()
     (bot_dir / "run.ps1").write_text("Write-Host 'ok'", encoding="utf-8")

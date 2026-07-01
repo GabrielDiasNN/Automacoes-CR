@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 # pylint: disable=possibly-used-before-assignment,import-outside-toplevel,relative-beyond-top-level
 """
 Métricas Prometheus do Orchestrator (3.4/Fase 3).
@@ -10,6 +9,7 @@ Contadores e gauges refletem o estado do sistema em tempo real via callbacks.
 """
 
 import logging
+from typing import Optional
 
 logger = logging.getLogger("orchestrator")
 
@@ -62,7 +62,7 @@ if _PROMETHEUS_AVAILABLE:
 
 def record_execution_complete(
     status: str, automation_name: str, duration_seconds: float
-):
+) -> None:
     """Registra conclusão de execução nos contadores Prometheus."""
     if not _PROMETHEUS_AVAILABLE:
         return
@@ -70,7 +70,7 @@ def record_execution_complete(
     EXEC_DURATION.observe(duration_seconds)
 
 
-def update_system_gauges(pending: int, active: int):
+def update_system_gauges(pending: int, active: int) -> None:
     """Atualiza gauges de fila e workers ativos (chamado pelo health snapshot)."""
     if not _PROMETHEUS_AVAILABLE:
         return
@@ -78,7 +78,7 @@ def update_system_gauges(pending: int, active: int):
     WORKER_ACTIVE.set(active)
 
 
-def update_db_gauges():
+def update_db_gauges() -> None:
     """Atualiza gauges de tamanho do banco e WAL."""
     if not _PROMETHEUS_AVAILABLE:
         return
@@ -88,7 +88,7 @@ def update_db_gauges():
     WAL_SIZE_MB.set(get_wal_size_mb())
 
 
-def update_throttle_gauge():
+def update_throttle_gauge() -> None:
     """Atualiza gauge de alertas em throttle ativo."""
     if not _PROMETHEUS_AVAILABLE:
         return
@@ -105,7 +105,7 @@ def update_throttle_gauge():
     ALERT_THROTTLE_ACTIVE.set(active)
 
 
-def get_metrics_response():
+def get_metrics_response() -> tuple[Optional[bytes], Optional[str]]:
     """Retorna (body_bytes, content_type) para o endpoint /metrics."""
     if not _PROMETHEUS_AVAILABLE:
         return None, None

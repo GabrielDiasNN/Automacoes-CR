@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Hub de Notificacoes do Orchestrator v4.1.
 
@@ -19,6 +17,7 @@ import os
 import subprocess
 import threading
 import time
+from typing import Any
 
 from app.timezone import get_now_local
 
@@ -37,7 +36,7 @@ COOLDOWN_TIERS = [
 _MAX_TRACKED = 500
 
 # Estado: {automation_id: {"count": int, "last_sent": float}}
-_alert_state: dict = {}
+_alert_state: dict[int, dict[str, Any]] = {}
 _state_lock = threading.Lock()
 
 PROJECT_ROOT = os.path.dirname(
@@ -75,7 +74,7 @@ def _is_throttled(automation_id: int) -> bool:
         return False
 
 
-def _mark_sent(automation_id: int):
+def _mark_sent(automation_id: int) -> None:
     """Registra envio e incrementa contador de falhas consecutivas. Thread-safe."""
     with _state_lock:
         if len(_alert_state) >= _MAX_TRACKED:
@@ -88,15 +87,17 @@ def _mark_sent(automation_id: int):
         }
 
 
-def reset_alert_state(automation_id: int):
+def reset_alert_state(automation_id: int) -> None:
     """Reseta o contador de falhas consecutivas (chamar em execucao bem-sucedida)."""
     with _state_lock:
         _alert_state.pop(automation_id, None)
 
 
-def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = ""):
+def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = "") -> bool:
     """Dispara alerta via script nativo de WhatsApp do projeto."""
     logger.info("Enviando alerta WhatsApp para %s", task_name)
+    if error_msg:
+        logger.debug("Detalhe do erro (nao enviado ao WhatsApp): %s", error_msg)
 
     wa_script = os.path.join(PROJECT_ROOT, "lib", "Send-WhatsApp.ps1")
     if not os.path.exists(wa_script):
@@ -124,24 +125,26 @@ def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = ""):
             ],
             capture_output=True,
             timeout=60,
+            check=False,
         )
         if result.returncode == 0:
             logger.info("Alerta WhatsApp enviado: %s", task_name)
             return True
-        else:
-            logger.warning("WhatsApp retornou code %d", result.returncode)
-            return False
+        logger.warning("WhatsApp retornou code %d", result.returncode)
+        return False
     except subprocess.TimeoutExpired:
         logger.error("Timeout ao enviar alerta WhatsApp para %s", task_name)
         return False
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Erro ao enviar alerta WhatsApp: %s", e)
         return False
 
 
-def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
+def send_email_alert(task_name: str, exec_id: str, error_msg: str = "") -> bool:
     """Dispara alerta via Outlook COM (reusa Lib-Email.psm1)."""
     logger.info("Enviando alerta E-mail para %s", task_name)
+    if error_msg:
+        logger.debug("Detalhe do erro (nao enviado ao e-mail): %s", error_msg)
 
     alert_email = os.environ.get("AUTOMACAO_ALERT_EMAIL", "")
     if not alert_email:
@@ -190,22 +193,22 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = ""):
             env=env,
             capture_output=True,
             timeout=30,
+            check=False,
         )
         if result.returncode == 0:
             logger.info("Alerta e-mail enviado para %s", alert_email)
             return True
-        else:
-            stderr_decoded = result.stderr.decode("utf-8", errors="replace")
-            logger.warning(
-                "E-mail retornou code %d. Stderr: %s", result.returncode, stderr_decoded
-            )
-            return False
-    except Exception as e:
+        stderr_decoded = result.stderr.decode("utf-8", errors="replace")
+        logger.warning(
+            "E-mail retornou code %d. Stderr: %s", result.returncode, stderr_decoded
+        )
+        return False
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Erro ao enviar alerta e-mail: %s", e)
         return False
 
 
-def dispatch_alerts(automation, execution):
+def dispatch_alerts(automation: Any, execution: Any) -> None:
     """Analisa os canais configurados e dispara os alertas necessarios (com throttling)."""
     if not automation.notification_channels:
         return
@@ -224,6 +227,6 @@ def dispatch_alerts(automation, execution):
     _mark_sent(automation.id)
 
 
-def dispatch_alerts_async(automation, execution):
+def dispatch_alerts_async(automation: Any, execution: Any) -> None:
     """Submete dispatch para thread pool dedicada, liberando a thread do worker imediatamente (HF-4/C1)."""
     _notification_executor.submit(dispatch_alerts, automation, execution)

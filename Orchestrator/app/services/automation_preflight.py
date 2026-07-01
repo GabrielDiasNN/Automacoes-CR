@@ -1,4 +1,3 @@
-# pylint: disable=all
 """Validação consolidada de automações antes de persistir alterações."""
 
 import json
@@ -51,33 +50,14 @@ def _project_file_exists(project_root: str, relative_path: str) -> bool:
     return os.path.isfile(target)
 
 
-def _load_manifest_governance(
+def _manifest_field_mismatches(
     *,
-    automation_dir: str,
     payload: dict[str, Any],
+    manifest: CatalogManifest,
     resolved_script_path: str,
     project_root: str,
-) -> schemas.AutomationPreflightGovernance:
-    manifest_path = os.path.join(automation_dir, "automation.manifest.json")
-    if not os.path.isfile(manifest_path):
-        return schemas.AutomationPreflightGovernance(
-            manifest_present=False,
-            status="attention",
-            top_issue="A pasta da automação não possui automation.manifest.json.",
-            recommended_action="Crie ou complete o manifesto canônico antes de promover a automação.",
-            warnings=[
-                _issue(
-                    "manifest_missing",
-                    "Nenhum automation.manifest.json foi encontrado na pasta da automação.",
-                )
-            ],
-        )
-
-    with open(manifest_path, encoding="utf-8") as f:
-        manifest_payload = json.load(f)
-    manifest = CatalogManifest.model_validate(manifest_payload)
+) -> list[schemas.AutomationPreflightIssue]:
     blocking_issues: list[schemas.AutomationPreflightIssue] = []
-    warnings: list[schemas.AutomationPreflightIssue] = []
 
     manifest_script = os.path.abspath(
         os.path.join(project_root, manifest.orchestrator.script_path.lstrip("./\\"))
@@ -149,6 +129,17 @@ def _load_manifest_governance(
             )
         )
 
+    return blocking_issues
+
+
+def _manifest_docs_issues(
+    *,
+    automation_dir: str,
+    manifest: CatalogManifest,
+    project_root: str,
+) -> list[schemas.AutomationPreflightIssue]:
+    blocking_issues: list[schemas.AutomationPreflightIssue] = []
+
     if not _project_file_exists(project_root, manifest.readme_path):
         blocking_issues.append(
             _issue(
@@ -193,6 +184,47 @@ def _load_manifest_governance(
                     severity="ERROR",
                 )
             )
+
+    return blocking_issues
+
+
+def _load_manifest_governance(
+    *,
+    automation_dir: str,
+    payload: dict[str, Any],
+    resolved_script_path: str,
+    project_root: str,
+) -> schemas.AutomationPreflightGovernance:
+    manifest_path = os.path.join(automation_dir, "automation.manifest.json")
+    if not os.path.isfile(manifest_path):
+        return schemas.AutomationPreflightGovernance(
+            manifest_present=False,
+            status="attention",
+            top_issue="A pasta da automação não possui automation.manifest.json.",
+            recommended_action="Crie ou complete o manifesto canônico antes de promover a automação.",
+            warnings=[
+                _issue(
+                    "manifest_missing",
+                    "Nenhum automation.manifest.json foi encontrado na pasta da automação.",
+                )
+            ],
+        )
+
+    with open(manifest_path, encoding="utf-8") as f:
+        manifest_payload = json.load(f)
+    manifest = CatalogManifest.model_validate(manifest_payload)
+
+    blocking_issues = _manifest_field_mismatches(
+        payload=payload,
+        manifest=manifest,
+        resolved_script_path=resolved_script_path,
+        project_root=project_root,
+    ) + _manifest_docs_issues(
+        automation_dir=automation_dir,
+        manifest=manifest,
+        project_root=project_root,
+    )
+    warnings: list[schemas.AutomationPreflightIssue] = []
 
     if not payload.get("enabled"):
         warnings.append(

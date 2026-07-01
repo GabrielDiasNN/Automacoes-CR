@@ -60,38 +60,39 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
     }
 }
 
-# --- Limpeza de Processos Zumbis e Locks de Sessão (Mitigação de timeouts do Puppeteer) ---
-function Clear-StaleWhatsAppProcesses {
-    Write-Host "Iniciando verificação de processos zumbis do WhatsApp..." -ForegroundColor Gray
+# --- Limpeza de Locks de Sessão e Processos Zumbis (Mitigação de travamentos de Puppeteer) ---
+function Clear-StaleWhatsAppLocksAndProcesses {
+    $now = [DateTime]::Now
+    $authSessionDir = Join-Path $LibDir ".wwebjs_auth"
     
-    # 1. Encerramento direcionado de processos do Chromium e Node vinculados ao repositório
+    # 1. Limpeza direcionada de processos zumbis do Chromium e Node vinculados ao repositório
     try {
         $processes = Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'node.exe'" -ErrorAction SilentlyContinue
         foreach ($proc in $processes) {
             $cmd = $proc.CommandLine
             $path = $proc.ExecutablePath
             
-            # Filtro seguro: encerra apenas se a execução originar do diretório 'Automacoes'
+            # Filtro seguro: encerra apenas se originar de 'Automacoes' e tiver mais de 10 segundos
             if (($cmd -and $cmd -like "*Automacoes*") -or ($path -and $path -like "*Automacoes*")) {
-                Write-Host "Detectado processo zumbi ativo: Name=$($proc.Name), Id=$($proc.ProcessId)" -ForegroundColor Yellow
-                try {
-                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
-                    Write-Host "Processo $($proc.ProcessId) encerrado com sucesso." -ForegroundColor Green
-                } catch [System.Exception] {
-                    Write-Warning "Não foi possível encerrar o processo $($proc.ProcessId) (zumbi): $($_.Exception.Message)"
+                $creationDate = $proc.CreationDate
+                if ($creationDate) {
+                    $age = $now - $creationDate
+                    if ($age.TotalSeconds -lt 10) {
+                        continue
+                    }
                 }
+                try {
+                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+                } catch [System.Exception] {}
             }
         }
-    } catch [System.Exception] {
-        Write-Warning "Falha ao consultar processos ativos via WMI/CIM: $($_.Exception.Message)"
-    }
-    
-    # 2. Remoção de arquivos de lock temporários na pasta do perfil da sessão
-    $authSessionDir = Join-Path $LibDir ".wwebjs_auth"
+    } catch [System.Exception] {}
+
+    # 2. Remoção de arquivos LOCK residuais do perfil
     if ($finalClientId) {
         $sessionPath = Join-Path $authSessionDir "session-$finalClientId"
         if (Test-Path $sessionPath) {
-            Write-Host "Verificando arquivos de lock temporários no perfil: $sessionPath" -ForegroundColor Gray
+            Write-Host "Limpando arquivos de lock residuais no perfil: $sessionPath" -ForegroundColor Gray
             $lockFiles = Get-ChildItem -Path $sessionPath -Recurse -Filter "*lock*" -ErrorAction SilentlyContinue
             $mainLock = Join-Path $sessionPath "Default\Lock"
             if (Test-Path $mainLock) {
@@ -102,10 +103,7 @@ function Clear-StaleWhatsAppProcesses {
                 if (Test-Path $file.FullName) {
                     try {
                         Remove-Item -Path $file.FullName -Force -ErrorAction Stop
-                        Write-Host "Arquivo de lock residual removido: $($file.FullName)" -ForegroundColor Green
-                    } catch [System.Exception] {
-                        Write-Warning "Não foi possível remover o arquivo de lock $($file.FullName): $($_.Exception.Message)"
-                    }
+                    } catch [System.Exception] {}
                 }
             }
         }
@@ -113,7 +111,7 @@ function Clear-StaleWhatsAppProcesses {
 }
 
 # Executar a limpeza antes do início da inicialização do canal
-Clear-StaleWhatsAppProcesses
+Clear-StaleWhatsAppLocksAndProcesses
 
 # --- Validacao ---
 if ([string]::IsNullOrWhiteSpace($finalPhone)) { Write-Error "Telefone de destino ausente."; exit 1 }

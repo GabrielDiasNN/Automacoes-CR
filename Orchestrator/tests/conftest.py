@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Fixtures de teste do Orchestrator Central de Automacoes v5.0.
 
@@ -13,6 +11,7 @@ import sys
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any, Generator
 
 os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
 os.environ["RATE_LIMIT_RPM"] = "10000"
@@ -26,11 +25,11 @@ os.environ["BENEFICIAMENTO_HISTORICO_DB"] = os.path.join(
 )
 
 import pytest
-from app import models
+from app import models  # pylint: disable=unused-import  # registra tabelas no Base.metadata
 from app.database import Base, get_db
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -47,19 +46,19 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 @event.listens_for(test_engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
+def set_sqlite_pragma(dbapi_connection: Any, _connection_record: Any) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
 
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+testing_session_local = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 AUTH_HEADERS = {"X-API-Key": TEST_AUTH_VALUE}
 
 
 @pytest.fixture(scope="session", autouse=True)
-def beneficiamento_historico_seed():
+def beneficiamento_historico_seed() -> Generator[None, None, None]:
     """Semeia o historico de beneficiamento em banco temporario da sessao.
 
     Garante dados deterministas (turnos, alternativo 03212, payload bruto)
@@ -68,11 +67,23 @@ def beneficiamento_historico_seed():
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento.historico_db import salvar_historico
+    from beneficiamento.historico_db import (  # pylint: disable=import-outside-toplevel
+        salvar_historico,
+    )
 
     agora = datetime.now()
 
-    def _row(ob, seq, dt, turno, fase, maquina, alternativo, kg, mt):
+    def _row(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        ob: str,
+        seq: int,
+        dt: datetime,
+        turno: str,
+        fase: str,
+        maquina: str,
+        alternativo: str,
+        kg: float,
+        mt: float,
+    ) -> dict[str, Any]:
         return {
             "NUMERO_OB": ob,
             "SEQ": seq,
@@ -170,7 +181,7 @@ def beneficiamento_historico_seed():
 
 
 @pytest.fixture(autouse=True)
-def force_env_vars():
+def force_env_vars() -> None:
     """Garante que as variaveis de ambiente de teste prevalecam sobre qualquer override de imports."""
     os.environ["ORCHESTRATOR_API_KEY"] = TEST_AUTH_VALUE
     os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
@@ -178,46 +189,50 @@ def force_env_vars():
 
 
 @pytest.fixture(scope="function")
-def db_session():
+def db_session() -> Generator[Session, None, None]:
     Base.metadata.create_all(bind=test_engine)
-    session = TestingSessionLocal()
+    session = testing_session_local()
     yield session
     session.close()
     Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture(scope="function")
-def client(db_session):
+# pylint: disable=too-many-locals,redefined-outer-name
+# (db_session e o nome exigido pelo pytest para injetar a fixture homonima)
+def client(db_session: Session) -> Generator[TestClient, None, None]:
     # Patch do SessionLocal no main e nos routers para usar o test engine
-    import app.database as db_module
-    import app.main as main_module
-    import app.routers.automations as auto_router
-    import app.routers.websocket as websocket_router
-    import app.services.scheduler_runtime as scheduler_runtime
+    import app.database as db_module  # pylint: disable=import-outside-toplevel
+    import app.main as main_module  # pylint: disable=import-outside-toplevel
+    import app.routers.automations as auto_router  # pylint: disable=import-outside-toplevel
+    import app.routers.websocket as websocket_router  # pylint: disable=import-outside-toplevel
+    from app.services import (  # pylint: disable=import-outside-toplevel
+        scheduler_runtime,
+    )
 
     original_session_local = db_module.SessionLocal
     original_engine = db_module.engine
     original_db_path = db_module.DB_PATH
     original_project_root = auto_router.PROJECT_ROOT
-    original_scheduler_session = scheduler_runtime.SessionLocal
-    original_websocket_session = websocket_router.SessionLocal
+    original_scheduler_session = getattr(scheduler_runtime, "SessionLocal")
+    original_websocket_session = getattr(websocket_router, "SessionLocal")
 
-    db_module.SessionLocal = TestingSessionLocal
+    db_module.SessionLocal = testing_session_local
     db_module.engine = test_engine
     db_module.DB_PATH = os.path.join(TESTS_DIR, "test-automacoes.db")
-    main_module.SessionLocal = TestingSessionLocal
-    scheduler_runtime.SessionLocal = TestingSessionLocal
-    websocket_router.SessionLocal = TestingSessionLocal
+    setattr(main_module, "SessionLocal", testing_session_local)
+    setattr(scheduler_runtime, "SessionLocal", testing_session_local)
+    setattr(websocket_router, "SessionLocal", testing_session_local)
     # Redirecionar PROJECT_ROOT para o diretorio de testes (contem /test/*.ps1)
     auto_router.PROJECT_ROOT = TESTS_DIR
 
-    def override_get_db():
+    def override_get_db() -> Generator[Session, None, None]:
         try:
             yield db_session
         finally:
             pass
 
-    from app.main import app
+    from app.main import app  # pylint: disable=import-outside-toplevel
 
     app.dependency_overrides[get_db] = override_get_db
 
@@ -238,7 +253,7 @@ def client(db_session):
                 pass
 
     db_module.DB_PATH = original_db_path
-    main_module.SessionLocal = original_session_local
+    setattr(main_module, "SessionLocal", original_session_local)
     auto_router.PROJECT_ROOT = original_project_root
-    scheduler_runtime.SessionLocal = original_scheduler_session
-    websocket_router.SessionLocal = original_websocket_session
+    setattr(scheduler_runtime, "SessionLocal", original_scheduler_session)
+    setattr(websocket_router, "SessionLocal", original_websocket_session)

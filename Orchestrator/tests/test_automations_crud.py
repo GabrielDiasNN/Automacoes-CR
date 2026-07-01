@@ -1,18 +1,23 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Testes focados nas operações de CRUD de Automações.
 """
 
 import json
 from datetime import timedelta
+from pathlib import Path
 
+import app.routers.automations as auto_router
 import pytest
-from app.constants import ORCHESTRATOR_VERSION
+from app import models, schemas
+from app.runtime import scheduler
+from app.services import scheduler_runtime
+from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session, sessionmaker
 
 
-def test_create_automation(client):
+def test_create_automation(client: TestClient) -> None:
     res = client.post(
         "/api/automations",
         json={
@@ -36,7 +41,7 @@ def test_create_automation(client):
     assert data["audit_id"] is not None
 
 
-def test_preflight_automation_normalizes_channels(client):
+def test_preflight_automation_normalizes_channels(client: TestClient) -> None:
     res = client.post(
         "/api/automations/preflight",
         json={
@@ -56,8 +61,10 @@ def test_preflight_automation_normalizes_channels(client):
     assert data["governance"]["status"] in ["healthy", "attention"]
 
 
-def test_preflight_rejects_reserved_cleanup_script():
-    from app.services.automation_preflight import build_automation_preflight
+def test_preflight_rejects_reserved_cleanup_script() -> None:
+    from app.services.automation_preflight import (  # pylint: disable=import-outside-toplevel
+        build_automation_preflight,
+    )
 
     with pytest.raises(ValueError, match="rotina reservada do sistema"):
         build_automation_preflight(
@@ -71,9 +78,8 @@ def test_preflight_rejects_reserved_cleanup_script():
 
 
 def test_preflight_reports_manifest_drift_without_persisting(
-    client, monkeypatch, tmp_path
-):
-    import app.routers.automations as auto_router
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
 
     auto_dir = tmp_path / "Auto Governada"
     docs_dir = tmp_path / "docs" / "runbooks"
@@ -136,8 +142,9 @@ def test_preflight_reports_manifest_drift_without_persisting(
     assert "notification_channels_mismatch" in issue_codes
 
 
-def test_create_automation_rejects_manifest_drift(client, monkeypatch, tmp_path):
-    import app.routers.automations as auto_router
+def test_create_automation_rejects_manifest_drift(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
 
     auto_dir = tmp_path / "Auto Bloqueada"
     docs_dir = tmp_path / "docs" / "runbooks"
@@ -190,7 +197,7 @@ def test_create_automation_rejects_manifest_drift(client, monkeypatch, tmp_path)
     assert "queue_group" in res.json()["detail"]
 
 
-def test_create_duplicate_name_rejected(client):
+def test_create_duplicate_name_rejected(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -210,7 +217,7 @@ def test_create_duplicate_name_rejected(client):
     assert res.status_code == 409
 
 
-def test_list_automations_paginated(client):
+def test_list_automations_paginated(client: TestClient) -> None:
     for i in range(5):
         client.post(
             "/api/automations",
@@ -229,7 +236,7 @@ def test_list_automations_paginated(client):
     assert data["pages"] == 2
 
 
-def test_update_automation(client):
+def test_update_automation(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -252,8 +259,9 @@ def test_update_automation(client):
     assert res.json()["audit_id"] is not None
 
 
-def test_update_automation_reloads_scheduler(client, monkeypatch):
-    import app.routers.automations as auto_router
+def test_update_automation_reloads_scheduler(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
 
     client.post(
         "/api/automations",
@@ -263,7 +271,7 @@ def test_update_automation_reloads_scheduler(client, monkeypatch):
         },
         headers=AUTH_HEADERS,
     )
-    calls = []
+    calls: list[str] = []
     monkeypatch.setattr(
         auto_router, "_reload_scheduler_safe", lambda: calls.append("reload")
     )
@@ -281,13 +289,8 @@ def test_update_automation_reloads_scheduler(client, monkeypatch):
 
 
 def test_reload_scheduler_neutralizes_reserved_cleanup_automation(
-    db_session, monkeypatch
-):
-    from app import models
-    from app.runtime import scheduler
-    from app.services import scheduler_runtime
-    from sqlalchemy.orm import sessionmaker
-
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     for job in list(scheduler.get_jobs()):
         scheduler.remove_job(job.id)
 
@@ -311,7 +314,7 @@ def test_reload_scheduler_neutralizes_reserved_cleanup_automation(
         scheduler_runtime.reload_scheduled_tasks()
 
         db_session.refresh(cleanup_auto)
-        assert cleanup_auto.enabled is False
+        assert bool(cleanup_auto.enabled) is False
         assert cleanup_auto.schedule is None
         assert not any(job.id.startswith("job_") for job in scheduler.get_jobs())
     finally:
@@ -319,7 +322,7 @@ def test_reload_scheduler_neutralizes_reserved_cleanup_automation(
             scheduler.remove_job(job.id)
 
 
-def test_update_automation_rejects_path_escape(client):
+def test_update_automation_rejects_path_escape(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -338,7 +341,7 @@ def test_update_automation_rejects_path_escape(client):
     assert res.status_code == 422
 
 
-def test_delete_automation(client):
+def test_delete_automation(client: TestClient) -> None:
     client.post(
         "/api/automations",
         json={
@@ -351,7 +354,7 @@ def test_delete_automation(client):
     assert res.status_code == 200
 
 
-def test_reject_path_traversal(client):
+def test_reject_path_traversal(client: TestClient) -> None:
     res = client.post(
         "/api/automations",
         json={
@@ -363,7 +366,7 @@ def test_reject_path_traversal(client):
     assert res.status_code == 422
 
 
-def test_reject_dangerous_name(client):
+def test_reject_dangerous_name(client: TestClient) -> None:
     res = client.post(
         "/api/automations",
         json={
@@ -375,7 +378,7 @@ def test_reject_dangerous_name(client):
     assert res.status_code == 422
 
 
-def test_reject_invalid_schedule(client):
+def test_reject_invalid_schedule(client: TestClient) -> None:
     res = client.post(
         "/api/automations",
         json={
@@ -388,7 +391,7 @@ def test_reject_invalid_schedule(client):
     assert res.status_code == 422
 
 
-def test_reject_schedule_with_invalid_time(client):
+def test_reject_schedule_with_invalid_time(client: TestClient) -> None:
     res = client.post(
         "/api/automations",
         json={
@@ -401,9 +404,9 @@ def test_reject_schedule_with_invalid_time(client):
     assert res.status_code == 422
 
 
-def test_list_all_automations_includes_operational_snapshot(client, db_session):
-    from app import models, schemas
-    from app.timezone import get_now_local
+def test_list_all_automations_includes_operational_snapshot(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto = models.Automation(
         name="Snapshot Auto",
@@ -468,9 +471,9 @@ def test_list_all_automations_includes_operational_snapshot(client, db_session):
     assert payload["operational_state"] == "attention"
 
 
-def test_get_automation_returns_latest_execution_context_for_modal(client, db_session):
-    from app import models, schemas
-    from app.timezone import get_now_local
+def test_get_automation_returns_latest_execution_context_for_modal(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto = models.Automation(
         name="Modal Auto",

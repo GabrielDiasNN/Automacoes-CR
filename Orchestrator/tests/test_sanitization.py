@@ -1,5 +1,3 @@
-# pylint: disable=all
-# mypy: ignore-errors
 """
 Testes unitários para o módulo de segurança e higienização de logs e payloads.
 """
@@ -8,14 +6,14 @@ from app.constants import MAX_DB_LOGS_CHARS
 from app.security import sanitize_log_payload, sanitize_string, truncate_log_payload
 
 
-def test_sanitize_string_oracle_credentials():
+def test_sanitize_string_oracle_credentials() -> None:
     # Testa mascaramento de credenciais em URLs do Oracle e conexões
     text = "Erro ao conectar: oracle://system:minhasenha123@192.168.1.100:1521/XE"
     expected = "Erro ao conectar: oracle://system:********@192.168.1.100:1521/XE"
     assert sanitize_string(text) == expected
 
 
-def test_sanitize_string_http_credentials():
+def test_sanitize_string_http_credentials() -> None:
     # Testa mascaramento em URLs http normais
     text = (
         "Acesso negado para http://usuario_teste:senha_super_secreta@localhost:8000/api"
@@ -24,7 +22,7 @@ def test_sanitize_string_http_credentials():
     assert sanitize_string(text) == expected
 
 
-def test_sanitize_string_api_key_query_and_equals():
+def test_sanitize_string_api_key_query_and_equals() -> None:
     # Vários formatos de atribuição de api_key, password, token
     text1 = "api_key=xyz12345&outro_param=1"
     assert "api_key=********" in sanitize_string(text1)
@@ -33,13 +31,13 @@ def test_sanitize_string_api_key_query_and_equals():
     assert '"api-key": "********"' in sanitize_string(text2)
 
     text3 = "password" + ' : "minha-senha-super-secreta"'
-    assert ("password" + ' : "********"') in sanitize_string(text3)
+    assert "password" + ' : "********"' in sanitize_string(text3)
 
     text4 = "token=WhatsAppToken123456"
     assert "token=********" in sanitize_string(text4)
 
 
-def test_sanitize_string_cpf_cnpj():
+def test_sanitize_string_cpf_cnpj() -> None:
     # CPF formatado
     text_cpf = "O cliente CPF 123.456.789-00 foi consultado."
     assert "123.456.789-00" not in sanitize_string(text_cpf)
@@ -51,7 +49,7 @@ def test_sanitize_string_cpf_cnpj():
     assert "**.***.***/****-**" in sanitize_string(text_cnpj)
 
 
-def test_sanitize_dictionary_recursive():
+def test_sanitize_dictionary_recursive() -> None:
     # Testa sanitização recursiva de dicionário
     payload = {
         "api_key": "chave-secreta-123",
@@ -84,14 +82,14 @@ def test_sanitize_dictionary_recursive():
     assert sanitize_log_payload(payload) == expected
 
 
-def test_sanitize_log_payload_non_string_non_dict():
+def test_sanitize_log_payload_non_string_non_dict() -> None:
     # Testa que outros tipos (como ints, bools, None) passam intocados
     assert sanitize_log_payload(12345) == 12345
     assert sanitize_log_payload(True) is True
     assert sanitize_log_payload(None) is None
 
 
-def test_sanitize_log_payload_masks_nested_sensitive_collections():
+def test_sanitize_log_payload_masks_nested_sensitive_collections() -> None:
     payload = {
         "client_secret": {"token": "abc12345"},
         "private_key": ["not-primitive-but-sensitive"],
@@ -107,16 +105,16 @@ def test_sanitize_log_payload_masks_nested_sensitive_collections():
     assert sanitized["auth_token"] is None
 
 
-def test_sanitize_string_keeps_empty_text_unchanged():
+def test_sanitize_string_keeps_empty_text_unchanged() -> None:
     assert sanitize_string("") == ""
 
 
-def test_truncate_log_payload_keeps_small_payload_unchanged():
+def test_truncate_log_payload_keeps_small_payload_unchanged() -> None:
     assert truncate_log_payload("linha curta") == "linha curta"
     assert truncate_log_payload("") == ""
 
 
-def test_truncate_log_payload_marks_large_payload():
+def test_truncate_log_payload_marks_large_payload() -> None:
     text = "A" * (MAX_DB_LOGS_CHARS + 10)
 
     truncated = truncate_log_payload(text)
@@ -127,12 +125,12 @@ def test_truncate_log_payload_marks_large_payload():
     assert truncated.endswith("A" * 100)
 
 
-def test_json_formatter_sanitizes_exception_traceback():
-    import json
-    import logging
-    import sys
+def test_json_formatter_sanitizes_exception_traceback() -> None:
+    import json  # pylint: disable=import-outside-toplevel
+    import logging  # pylint: disable=import-outside-toplevel
+    import sys  # pylint: disable=import-outside-toplevel
 
-    from app.logger_setup import OrchestratorJsonFormatter
+    from app.logger_setup import OrchestratorJsonFormatter  # pylint: disable=import-outside-toplevel
 
     formatter = OrchestratorJsonFormatter(component="QA")
     try:
@@ -148,8 +146,8 @@ def test_json_formatter_sanitizes_exception_traceback():
             exc_info=sys.exc_info(),
         )
 
-    doc = json.loads(formatter.format(record))
+        doc = json.loads(formatter.format(record))
 
-    assert "exception" in doc
-    assert "senha-ultra-secreta" not in doc["exception"]
-    assert "password=********" in doc["exception"]
+        assert "exception" in doc
+        assert "senha-ultra-secreta" not in doc["exception"]
+        assert "password=********" in doc["exception"]

@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 # pylint: disable=import-outside-toplevel,import-error,broad-exception-caught
 """
 OpenTelemetry — setup opt-in do Orchestrator (3.3/Fase 3).
@@ -13,6 +12,7 @@ correlation_id (exec_id) como trace ID nos logs de subprocessos
 
 import logging
 import os
+from typing import Any
 
 logger = logging.getLogger("orchestrator")
 
@@ -28,7 +28,7 @@ except ImportError:
     pass
 
 
-def setup_telemetry(app) -> bool:
+def setup_telemetry(app: Any) -> bool:
     """Instrumenta o app FastAPI com OpenTelemetry se OTEL_ENABLED=true.
 
     Retorna True se a instrumentação foi ativada, False se foi ignorada.
@@ -97,7 +97,7 @@ def setup_telemetry(app) -> bool:
         return False
 
 
-def get_tracer(name: str = "orchestrator"):
+def get_tracer(name: str = "orchestrator") -> Any:
     """Retorna um tracer OpenTelemetry (no-op se OTEL não ativo)."""
     if not _otel_available:
         return None
