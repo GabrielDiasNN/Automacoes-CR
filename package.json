@@ -7,6 +7,6 @@
     "lint:js": "npm --prefix Dashboard run lint"
   },
   "devDependencies": {
-    "eslint": "9.39.1"
+    "eslint": "10.6.0"
   }
 }
