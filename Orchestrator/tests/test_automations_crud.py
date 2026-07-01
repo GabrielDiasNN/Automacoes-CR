@@ -3,6 +3,7 @@ Testes focados nas operações de CRUD de Automações.
 """
 
 import json
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -56,7 +57,7 @@ def test_preflight_automation_normalizes_channels(client: TestClient) -> None:
     data = res.json()
     assert data["valid"] is True
     assert data["normalized_notification_channels"] == "email,whatsapp"
-    assert data["resolved_script_path"].endswith("test\\run.ps1")
+    assert data["resolved_script_path"].endswith(os.path.join("test", "run.ps1"))
     assert data["schedule_summary"] == "Manual"
     assert data["governance"]["status"] in ["healthy", "attention"]
 

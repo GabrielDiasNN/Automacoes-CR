@@ -41,7 +41,7 @@ jobs:
           cd Orchestrator
           pytest tests/ -v --tb=short --junitxml=../test-results.xml \
             --cov=app --cov-report=xml:../coverage.xml \
-            --ignore=tests/e2e
+            --ignore=tests/test_e2e_dashboard.py
         env:
           PYTHONUTF8: "1"
           ORCHESTRATOR_DB_PATH: ":memory:"
