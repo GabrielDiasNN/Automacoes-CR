@@ -52,7 +52,6 @@ HEADER_TEXT   = (30,  30,  46)
 TEXT_MAIN     = (236, 234, 228)
 TEXT_DIM      = (160, 160, 180)
 ACCENT_URGENT = (239,  68,  68)
-ACCENT_WARN   = (245, 158,  11)
 DIVIDER_COLOR = (60,  60,  80)
 FOOTER_BG     = (20,  20,  36)
 DOT_NEW       = (34, 197,  94)
@@ -65,6 +64,8 @@ OB_ROW_H      = 42
 FOOTER_H      = 52
 DOT_RADIUS    = 4
 DOT_GAP       = 8
+URGENCY_ICON_SIZE = 7
+URGENCY_ICON_W    = 20
 
 
 def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -169,6 +170,27 @@ def _draw_header(draw: ImageDraw.ImageDraw, phase_display: str, n_obs: int, font
     draw.text((PAD, (HEADER_H - 22) // 2), label, font=font, fill=HEADER_TEXT)
 
 
+def _draw_urgency_icon(draw: ImageDraw.ImageDraw, x: float, y_center: float) -> None:
+    """Desenha um triangulo de alerta com primitivas do PIL.
+
+    Evita depender do glifo Unicode "⚠", ausente na fonte usada para o texto
+    (renderiza como retangulo vazio). Mesma logica da bolinha nova/permanente.
+    """
+    size = URGENCY_ICON_SIZE
+    top = (x + size, y_center - size)
+    left = (x, y_center + size * 0.8)
+    right = (x + size * 2, y_center + size * 0.8)
+    draw.polygon([top, left, right], fill=ACCENT_URGENT)
+    draw.rectangle(
+        [x + size - 1, y_center - size * 0.55, x + size + 1, y_center + size * 0.15],
+        fill=BG_COLOR,
+    )
+    draw.ellipse(
+        [x + size - 1, y_center + size * 0.35, x + size + 1, y_center + size * 0.55],
+        fill=BG_COLOR,
+    )
+
+
 def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool, str, str, str, str, str]:
     """Extrai (dias, urgente, kanban, alternativo, produto, cliente, entrega) de um OB."""
     dias    = float(ob.get("_dias_float", 0))
@@ -220,18 +242,17 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
     dot_color = DOT_NEW if ob.get("_is_new") else DOT_PERM
     text_x0 = PAD + DOT_RADIUS * 2 + DOT_GAP
 
-    # 1. Preparar partes de texto
+    # 1. Preparar partes de texto (linha 1: OB/kanban/dias + pcs/kg + produto completo)
     part1 = f"OB {ob.get('NUMERO_OB', '—')}  ·  {kanban}  ·  {fmt_dias(dias)} dias"
-    part2 = " ⚠" if urgente else ""
-    part4 = f"  ·  {ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg  ·  {cliente}  ·  Entrega: {entrega}"
+    part_meta = f"  ·  {ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg"
+    icon_w = URGENCY_ICON_W if urgente else 0
 
     # 2. Medir larguras para calcular o espaço disponível para o produto
     w1 = draw.textbbox((0, 0), part1, font=fonts["ob"])[2]
-    w2 = draw.textbbox((0, 0), part2, font=fonts["ob"])[2] if part2 else 0
-    w4 = draw.textbbox((0, 0), part4, font=fonts["detalhe"])[2]
+    w_meta = draw.textbbox((0, 0), part_meta, font=fonts["detalhe"])[2]
 
     w_max = CARD_W - PAD - text_x0
-    w_prod_max = w_max - w1 - w2 - w4 - 10
+    w_prod_max = w_max - w1 - icon_w - w_meta - 10
 
     # 3. Formatar texto do produto e truncar se exceder o limite
     prod_text = f"  ·  {alternativo} · {produto}" if alternativo else f"  ·  {produto}"
@@ -248,9 +269,9 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
                 prod_text = test_text
                 break
 
-    # 4. Desenhar sequencialmente na mesma linha (centralizado verticalmente)
+    # 4. Desenhar linha 1 (mesma posicao/tamanho de sempre)
     x: float = text_x0
-    y = y0 + 12
+    y1 = y0 + 12
 
     dot_cy = y0 + OB_ROW_H // 2
     draw.ellipse(
@@ -258,18 +279,23 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
         fill=dot_color,
     )
 
-    draw.text((x, y), part1, font=fonts["ob"], fill=dias_color)
+    draw.text((x, y1), part1, font=fonts["ob"], fill=dias_color)
     x += w1
 
-    if part2:
-        draw.text((x, y), part2, font=fonts["ob"], fill=ACCENT_WARN)
-        x += w2
+    if urgente:
+        _draw_urgency_icon(draw, x + 4, y1 + 7)
+        x += icon_w
 
-    draw.text((x, y), prod_text, font=fonts["produto"], fill=TEXT_MAIN)
-    w3_real = draw.textbbox((0, 0), prod_text, font=fonts["produto"])[2]
-    x += w3_real
+    draw.text((x, y1), part_meta, font=fonts["detalhe"], fill=TEXT_DIM)
+    x += w_meta
 
-    draw.text((x, y), part4, font=fonts["detalhe"], fill=TEXT_DIM)
+    draw.text((x, y1), prod_text, font=fonts["produto"], fill=TEXT_MAIN)
+
+    # 5. Desenhar sublinha (linha 2: cliente + entrega, fonte menor, encaixada
+    # no espaco ocioso que ja existe dentro dos mesmos OB_ROW_H px da linha 1)
+    y2 = y0 + OB_ROW_H - 13
+    sub_text = f"{cliente}  ·  Entrega: {entrega}"
+    draw.text((text_x0, y2), sub_text, font=fonts["secundaria"], fill=TEXT_DIM)
 
 
 def _draw_footer(
@@ -304,11 +330,12 @@ def build_phase_image(
     img    = Image.new("RGB", (CARD_W, img_h), BG_COLOR)
     draw: ImageDraw.ImageDraw = ImageDraw.Draw(img)
     fonts: dict[str, ImageFont.FreeTypeFont] = {
-        "header":  _load_font(22, bold=True),
-        "ob":      _load_font(13, bold=True),
-        "produto": _load_font(12, bold=False),
-        "detalhe": _load_font(12, bold=False),
-        "footer":  _load_font(13, bold=False),
+        "header":     _load_font(22, bold=True),
+        "ob":         _load_font(13, bold=True),
+        "produto":    _load_font(12, bold=False),
+        "detalhe":    _load_font(12, bold=False),
+        "secundaria": _load_font(10, bold=False),
+        "footer":     _load_font(13, bold=False),
     }
 
     _draw_header(draw, phase_display, n_obs, fonts["header"])
