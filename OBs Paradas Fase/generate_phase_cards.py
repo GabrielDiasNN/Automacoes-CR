@@ -286,10 +286,11 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
         _draw_urgency_icon(draw, x + 4, y1 + 7)
         x += icon_w
 
-    draw.text((x, y1), part_meta, font=fonts["detalhe"], fill=TEXT_DIM)
-    x += w_meta
-
     draw.text((x, y1), prod_text, font=fonts["produto"], fill=TEXT_MAIN)
+    w3_real = draw.textbbox((0, 0), prod_text, font=fonts["produto"])[2]
+    x += w3_real
+
+    draw.text((x, y1), part_meta, font=fonts["detalhe"], fill=TEXT_DIM)
 
     # 5. Desenhar sublinha (linha 2: cliente + entrega, fonte menor, encaixada
     # no espaco ocioso que ja existe dentro dos mesmos OB_ROW_H px da linha 1)
