@@ -230,21 +230,30 @@ def reload_scheduled_tasks() -> None:
         )
 
 
+def _register_cron_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
+    exprs = sched_data["cron_expression"]
+    expr_list = exprs if isinstance(exprs, list) else [exprs]
+    single = len(expr_list) == 1
+    for idx, expr in enumerate(expr_list):
+        job_id = f"job_{automation_id}_cron" if single else f"job_{automation_id}_cron_{idx}"
+        scheduler.add_job(
+            scheduled_task_wrapper,
+            CronTrigger.from_crontab(
+                expr,
+                timezone=sched_data.get("timezone", "America/Sao_Paulo"),
+            ),
+            args=[automation_id],
+            id=job_id,
+            misfire_grace_time=60,
+        )
+
+
 def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
     schedule_type = sched_data.get("schedule_type")
     if schedule_type == "manual":
         return
     if schedule_type == "cron":
-        scheduler.add_job(
-            scheduled_task_wrapper,
-            CronTrigger.from_crontab(
-                sched_data["cron_expression"],
-                timezone=sched_data.get("timezone", "America/Sao_Paulo"),
-            ),
-            args=[automation_id],
-            id=f"job_{automation_id}_cron",
-            misfire_grace_time=60,
-        )
+        _register_cron_schedule(automation_id, sched_data)
         return
     if schedule_type == "interval":
         step_minutes = int(sched_data["interval_minutes"])

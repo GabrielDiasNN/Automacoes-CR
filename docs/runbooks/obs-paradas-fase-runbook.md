@@ -51,7 +51,7 @@ Get-Content "OBs Paradas Fase\delivery_state.json" | ConvertFrom-Json | Select-O
 
 As fases com `success=false` serão reenviadas automaticamente na próxima execução agendada (sem intervenção). Para forçar reenvio imediato:
 ```powershell
-# Opção 1: aguardar próximo cron (05:30, 14:30 ou 22:30)
+# Opção 1: aguardar próximo cron (05:30, 14:00 e 22:30 [Seg-Sáb] ou 23:00 [Dom])
 # Opção 2: acionar manualmente via Orchestrator API
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/automations/OBP-04/trigger" -Method POST -Headers @{"X-API-Key"="<api_key>"}
 ```

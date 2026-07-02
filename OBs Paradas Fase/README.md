@@ -28,7 +28,7 @@ C:\Automacoes\lib\Authenticate-WhatsApp.bat
 
 ## Agendamento
 
-Todos os dias às 05:30, 14:30 e 22:30 (America/Sao_Paulo)
+Todos os dias às 05:30 e 14:00; terceiro disparo às 22:30 (Segunda a Sábado) ou 23:00 (Domingo) — America/Sao_Paulo
 
 ## Exit Codes
 
