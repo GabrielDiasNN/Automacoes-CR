@@ -25,19 +25,22 @@ Padronizar o desenvolvimento Python no hub, garantindo que regras de negócio, e
 ## Non-Negotiable Rules
 - Todo código Python deve passar nas validações estritas do Mypy (`--strict`).
 - Todo código deve passar no check de qualidade do Pylint conforme configuração local.
-- Utilize abordagens vetorizadas (ex: Pandas `fetchmany`, sem loops `iterrows`) para scripts de alta volumetria.
+- Todo código em `Orchestrator/app/` e `Orchestrator/worker.py` deve passar no lint bloqueante do CI: `python -m ruff check Orchestrator/app Orchestrator/worker.py`.
+- Utilize abordagens vetorizadas no Pandas (sem loops `iterrows`) para scripts de alta volumetria.
 - O encoding de todos os arquivos `.py` deve ser, obrigatoriamente, UTF-8 sem BOM (conforme `GEMINI.md`).
 - A aplicação deve modularizar contratos (ex: schemas Pydantic separados por domínio) ao invés de usar monolitos.
 
 ## Repo-Specific Constraints
 - Utilize a `venv` oficial do repositório, garantindo que o ambiente isolado seja mantido (`.venv/`).
 - Importações devem respeitar namespaces explícitos e usar os módulos comuns configurados em `Orchestrator/app/`.
-- Aplique migrações leves de schema se o banco de dados (SQLite) precisar de novos campos, preservando o `schema_version`.
+- Migrações de schema do banco do Orchestrator são feitas exclusivamente via Alembic (`alembic upgrade head`); não altere schema manualmente.
+- Sessões SQLAlchemy fora do contexto FastAPI devem usar `session_scope` (não `SessionLocal()` diretamente), conforme `Tools/Test-ArchitectureStandard.ps1`.
 - Scripts de negócio em Python (como `.env` binding e caminhos) devem se valer da estratégia robusta descrita no `GEMINI.md`.
 
 ## Validation
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PythonGovernance.ps1 -RootPath .`
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SourceEncoding.ps1 -RootPath .` para garantir a ausência de BOM.
+- Rode `python -m ruff check Orchestrator/app Orchestrator/worker.py` para reproduzir localmente o gate bloqueante do CI.
 - Execute os testes automatizados da suíte: `pytest` no diretório raiz do `Orchestrator/`.
 
 ## Troubleshooting

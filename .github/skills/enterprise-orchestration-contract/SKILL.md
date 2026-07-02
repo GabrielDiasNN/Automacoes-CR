@@ -32,7 +32,7 @@ Definir o contrato transversal de execucao do hub para que automacoes possam ser
 ## Repo-Specific Constraints
 - Trate `Infrastructure/Start-Orchestrator.ps1`, `Infrastructure/MonitorAutomacoes.ps1` e `Infrastructure/Recover-Orchestrator.ps1` como pontos canonicos da camada de controle.
 - Trate `Orchestrator/app/` e `Orchestrator/worker.py` como a fonte de verdade da API, persistencia e execucao assistida.
-- Use os `run.ps1` de `Receitas Bloqueadas/`, `Receitas Emitidas/` e `Montagem de Terceirizados/` como padrao de entrypoint por automacao.
+- Use os `run.ps1` de `Receitas Bloqueadas/`, `Receitas Emitidas/`, `Montagem de Terceirizados/` e `OBs Paradas Fase/` como padrao de entrypoint por automacao.
 - Preserve a estrategia de idempotencia via arquivos como `receitas_state.json`, `delivery_state.json` e similares existentes em cada dominio.
 
 ## Validation

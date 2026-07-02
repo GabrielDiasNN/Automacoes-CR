@@ -1,5 +1,9 @@
 # Changelog
 
+## [9.5.4] - 01/07/2026
+### Alterado
+- **Revisão das skills (drift)**: `python-enterprise-standard` passa a exigir o lint bloqueante do CI (`ruff check`), migrações exclusivamente via Alembic e `session_scope` fora do FastAPI; `enterprise-orchestration-contract` inclui `OBs Paradas Fase/` como padrão de entrypoint; `html-css-enterprise-standard` reconhece a SPA React+TS+Vite (`Dashboard/src/`) como UI ativa, mantendo o template legado validado; skill `/preflight` ganha etapa de ruff antes do black.
+
 ## [9.5.3] - 01/07/2026
 ### Alterado
 - **Agendamento OBP-04 (OBs Paradas Fase)**: cron alterado de "Seg-Sex às 07:00 e 14:00" para "Todos os dias às 05:30, 14:30 e 22:30" (`0 7,14 * * 1-5` → `30 5,14,22 * * *`), passando a rodar também nos finais de semana.

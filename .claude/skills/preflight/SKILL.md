@@ -1,6 +1,6 @@
 ---
 name: preflight
-description: Checklist completo pré-PR — encoding, skills governance, lint Python (black/isort/bandit), governance Python. Reporte os resultados e bloqueie se qualquer etapa falhar.
+description: Checklist completo pré-PR — encoding, skills governance, lint Python (ruff/black/isort/bandit), governance Python. Reporte os resultados e bloqueie se qualquer etapa falhar.
 disable-model-invocation: true
 ---
 
@@ -16,22 +16,27 @@ pwsh -File Tools\Test-SourceEncoding.ps1 -RootPath .
 pwsh -File Tools\Test-SkillsGovernance.ps1 -BasePath .
 ```
 
-**Etapa 3 — Formatação Python (black)**
+**Etapa 3 — Lint bloqueante do CI (ruff)**
+```
+python -m ruff check Orchestrator/app Orchestrator/worker.py
+```
+
+**Etapa 4 — Formatação Python (black)**
 ```
 python -m black --check Orchestrator
 ```
 
-**Etapa 4 — Ordenação de imports (isort)**
+**Etapa 5 — Ordenação de imports (isort)**
 ```
 python -m isort --check-only Orchestrator
 ```
 
-**Etapa 5 — Segurança estática (bandit)**
+**Etapa 6 — Segurança estática (bandit)**
 ```
 python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll
 ```
 
-**Etapa 6 — Governança Python (mypy + pylint)**
+**Etapa 7 — Governança Python (mypy + pylint)**
 ```
 pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 ```

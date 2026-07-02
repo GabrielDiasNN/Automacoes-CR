@@ -29,13 +29,14 @@ Definir o contrato visual do hub para dashboards e saidas HTML, mantendo separac
 - Evite acoplamento visual com strings ou estruturas que so existam em uma automacao especifica sem necessidade clara.
 
 ## Repo-Specific Constraints
-- Trate `.github/templates/dashboard-modern.html` como template canonico do dashboard moderno.
-- Reutilize `lib/assets/css/fonts.css`, `lib/assets/js/apexcharts.min.js` e `lib/assets/js/lucide.min.js` quando o requisito ja estiver coberto por esses assets.
-- Considere `Dashboard/index.html` a shell SPA real servida ao operador; a fonte canônica do template continua em `.github/templates/dashboard-modern.html`.
+- A UI ativa do operador e a SPA React + TypeScript + Vite: fontes em `Dashboard/src/`, build em `Dashboard/dist/`, servida pelo FastAPI em `http://127.0.0.1:8000/dashboard/`. Mudancas novas de UI acontecem em `Dashboard/src/`.
+- Trate `.github/templates/dashboard-modern.html` como template legado canonico, mantido de proposito e ainda validado por `Tools/Test-DashboardTemplate.ps1`; nao remova nem quebre seu contrato.
+- Reutilize `lib/assets/css/fonts.css`, `lib/assets/js/apexcharts.min.js` e `lib/assets/js/lucide.min.js` quando o requisito ja estiver coberto por esses assets (aplicavel a relatorios HTML e ao template legado).
 - Preserve placeholders e funcoes obrigatorias exigidos por `Tools/Test-DashboardTemplate.ps1`, incluindo `__DASHBOARD_JSON__`, `__REFRESH_SECONDS__` e funcoes de renderizacao.
 
 ## Validation
-- Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-DashboardTemplate.ps1 -BasePath .`.
+- Para mudancas na SPA, rode `npm run lint` e `npm run build` dentro de `Dashboard/` antes da validacao E2E.
+- Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-DashboardTemplate.ps1 -BasePath .` quando a mudanca tocar o template legado.
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` se a mudanca tocar padroes globais de UI.
 - Execute validacao E2E final com Playwright na interface servida em `http://127.0.0.1:8000/dashboard/`.
 - A validacao Playwright deve ocorrer por ultimo e cobrir, no minimo:
