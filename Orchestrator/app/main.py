@@ -122,7 +122,9 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
 # ---------------------------------------------------------------------------
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-methods
+class SecurityHeadersMiddleware(
+    BaseHTTPMiddleware
+):  # pylint: disable=too-few-public-methods
     """Injeta Content-Security-Policy e headers de segurança em todas as respostas (F1/1.6)."""
 
     async def dispatch(
@@ -191,7 +193,9 @@ class RevalidatedStaticFiles(StaticFiles):
     Dashboard sempre sirva a versao atual sem depender de ?v= nos imports ES.
     """
 
-    async def get_response(self, path: str, scope: MutableMapping[str, Any]) -> StarletteResponse:
+    async def get_response(
+        self, path: str, scope: MutableMapping[str, Any]
+    ) -> StarletteResponse:
         # SPA fallback: rotas client-side (react-router, ex.: /dashboard/execucoes)
         # nao existem como arquivo; ao recarregar a pagina caem em index.html.
         try:

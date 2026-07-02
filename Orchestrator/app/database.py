@@ -98,7 +98,9 @@ def session_scope(session_factory: Any = None) -> Generator[Session, None, None]
 def validate_database_schema() -> dict[str, Any]:
     """Valida tabelas/colunas contra o schema ORM atual (derivado de Base.metadata)."""
     # Importacao local para evitar circular import (models depende de Base)
-    from . import models as _models  # noqa: F401, I001  # pylint: disable=import-outside-toplevel,cyclic-import
+    from . import (  # noqa: F401, I001  # pylint: disable=import-outside-toplevel,cyclic-import
+        models as _models,
+    )
 
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
@@ -205,7 +207,7 @@ def purge_old_snapshots(retention_days: int = 30) -> int:
     Padrão 30 dias = ~8.640 registros retidos (snapshot a cada 5min).
     """
     # Importacao local para evitar circular import (models depende de Base)
-    from . import models as _models  # pylint: disable=import-outside-toplevel,cyclic-import
+    from . import models as _models  # pylint: disable=C0415,cyclic-import
 
     cutoff = get_now_local() - timedelta(days=retention_days)
     try:
@@ -291,7 +293,7 @@ def purge_old_executions(retention_days: int = 90) -> int:
     Retorna: quantidade de registros removidos.
     """
     # Importacao local para evitar circular import (models depende de Base)
-    from . import models as _models  # pylint: disable=import-outside-toplevel,cyclic-import
+    from . import models as _models  # pylint: disable=C0415,cyclic-import
 
     cutoff = get_now_local() - timedelta(days=retention_days)
     terminal_statuses = [

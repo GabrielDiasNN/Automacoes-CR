@@ -1,5 +1,12 @@
 # Changelog
 
+## [9.5.5] - 02/07/2026
+### Corrigido
+- **Dívida de `black`/`isort` sanada em `main.py` e `database.py`**: não passavam no job `Lint Python` do CI (`black --check`/`isort --check-only`), embora nenhum teste/mypy/pylint/ruff fosse afetado. Reformatados com o mínimo de ruído: comentários `# pylint: disable=...` que ficaram desalinhados da linha reportada após o rewrap do `black` foram reposicionados manualmente para preservar a supressão `import-outside-toplevel`. 219 testes seguem verdes.
+
+### Fora de escopo (decisão de política pendente)
+- **`Orchestrator/app/routers/system.py` excluído desta PR**: `isort` e `ruff` (regra I001) discordam de forma irreconciliável sobre a ordenação de um bloco de imports com aliasing misto (`from ..services.env_admin import a, b, c` vs `from ..services.env_admin import d as e`). Testadas múltiplas variações (merge, split total por nome, `--combine-as`) — nenhuma satisfaz os dois simultaneamente. Requer decisão de qual ferramenta é autoritativa (ou refatoração maior removendo o aliasing) antes de reformatar este arquivo.
+
 ## [9.5.4] - 01/07/2026
 ### Alterado
 - **Revisão das skills (drift)**: `python-enterprise-standard` passa a exigir o lint bloqueante do CI (`ruff check`), migrações exclusivamente via Alembic e `session_scope` fora do FastAPI; `enterprise-orchestration-contract` inclui `OBs Paradas Fase/` como padrão de entrypoint; `html-css-enterprise-standard` reconhece a SPA React+TS+Vite (`Dashboard/src/`) como UI ativa, mantendo o template legado validado; skill `/preflight` ganha etapa de ruff antes do black.
