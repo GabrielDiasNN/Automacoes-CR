@@ -1,5 +1,13 @@
 # Changelog
 
+## [9.5.17] - 02/07/2026
+### Adicionado
+- **Menção automática do responsável por fase no WhatsApp (OBP-04)**: `config.json` ganhou o mapa `responsaveis_por_fase` (número ou lista de números por fase); `generate_phase_cards.py` (`get_responsavel`, mesmo padrão de matching por substring de `get_threshold`) acrescenta `Responsável: @<numero>` à legenda de cada card. `lib/WhatsApp-Core.js` ganhou `extrairOpcoesMensagem()`, que extrai os números `@digitos` da legenda e monta o array `mentions` do whatsapp-web.js (`<numero>@c.us`), aplicado nos três pontos de envio (single, batch, retry). Fases com múltiplos responsáveis (`CONFERENCIA`, `CQ`) unem os números com `" @"` para gerar múltiplas menções na mesma mensagem.
+
+### Corrigido
+- **`contactId` do grupo de destino do OBP-04 corrigido** em `whatsapp-config.json` (grupo antigo estava incorreto); teste `test_whatsapp_config_valido` (`Orchestrator/tests/test_obs_paradas_fase.py`) ajustado para aceitar também o formato `<telefone>-<timestamp>@g.us` usado por esse grupo, além do formato numérico puro já suportado.
+- **Tipagem estrita (mypy `--strict`) na cadeia de `_load_config`**: `_load_config`/`_build_card_entry` em `generate_phase_cards.py` agora propagam `responsaveis: dict[str, str]` explicitamente.
+
 ## [9.5.16] - 02/07/2026
 ### Corrigido
 - **Ícone de alerta do card OBP-04 não renderizava**: o caractere Unicode `⚠` usado em `generate_phase_cards.py` para OBs urgentes não existe na fonte Arial Bold usada para desenhá-lo, aparecendo como um retângulo vazio ("tofu") — visível em produção. Substituído por um triângulo de alerta desenhado com primitivas do PIL (`_draw_urgency_icon`, mesmo padrão já usado para a bolinha nova/permanente), sem depender de cobertura de glifo de fonte alguma.

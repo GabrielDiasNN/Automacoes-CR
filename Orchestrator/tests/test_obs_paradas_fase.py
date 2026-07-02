@@ -31,8 +31,8 @@ def test_whatsapp_config_valido() -> None:
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     assert cfg["auth"]["clientId"] == "hub-global"
     assert cfg["target"]["type"] == "group"
-    assert re.match(r"^\d+@g\.us$", cfg["target"]["contactId"]), (
-        f"contactId inválido: {cfg['target']['contactId']!r} — esperado formato <digitos>@g.us"
+    assert re.match(r"^[\d\-]+@g\.us$", cfg["target"]["contactId"]), (
+        f"contactId inválido: {cfg['target']['contactId']!r} — esperado formato <digitos>@g.us ou <digitos-timestamp>@g.us"
     )
 
 

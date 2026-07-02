@@ -112,6 +112,14 @@ def get_threshold(fase: str, thresholds: dict[str, float]) -> float | None:
     return None
 
 
+def get_responsavel(fase: str, responsaveis: dict[str, str]) -> str | None:
+    fase_upper = fase.upper()
+    for kw, resp in responsaveis.items():
+        if kw.upper() in fase_upper:
+            return resp
+    return None
+
+
 def fmt_dias(dias: Any) -> str:
     try:
         return f"{float(dias):.1f}".replace(".", ",")
@@ -349,13 +357,14 @@ def build_phase_image(
 
 # ── Helpers de main ───────────────────────────────────────────────────────────
 
-def _load_config(config_file: str) -> tuple[dict[str, float], int, dict[str, Any], list[str]]:
+def _load_config(config_file: str) -> tuple[dict[str, float], int, dict[str, Any], list[str], dict[str, str]]:
     thresholds: dict[str, float] = DEFAULT_KEYWORDS.copy()
     max_obs    = DEFAULT_MAX_OBS
     phase_filters: dict[str, Any] = {}
     phase_order: list[str] = []
+    responsaveis: dict[str, str] = {}
     if not os.path.exists(config_file):
-        return thresholds, max_obs, phase_filters, phase_order
+        return thresholds, max_obs, phase_filters, phase_order, responsaveis
     try:
         with open(config_file, "r", encoding="utf-8") as f:
             cfg = json.load(f)
@@ -363,9 +372,14 @@ def _load_config(config_file: str) -> tuple[dict[str, float], int, dict[str, Any
         max_obs       = int(cfg.get("max_obs_por_mensagem", DEFAULT_MAX_OBS))
         phase_filters = {k.upper(): v for k, v in cfg.get("filtros_por_fase", {}).items()}
         phase_order   = [k.upper() for k in cfg.get("ordem_fases", [])]
+        for k, v in cfg.get("responsaveis_por_fase", {}).items():
+            if isinstance(v, list):
+                responsaveis[k.upper()] = " @".join(str(x).strip() for x in v if str(x).strip())
+            else:
+                responsaveis[k.upper()] = str(v).strip()
     except Exception as e:
         print(f"[WARN] Falha ao ler config.json, usando defaults: {e}", file=sys.stderr)
-    return thresholds, max_obs, phase_filters, phase_order
+    return thresholds, max_obs, phase_filters, phase_order, responsaveis
 
 
 def _apply_phase_filter(ob: dict[str, Any], fase_upper: str, phase_filters: dict[str, Any]) -> bool:
@@ -444,6 +458,7 @@ def _build_card_entry(
     obs_fase: list[dict[str, Any]],
     images_dir: str,
     script_dir: str,
+    responsaveis: dict[str, str],
 ) -> dict[str, Any]:
     phase_key  = re.sub(r"[^A-Z0-9]+", "_", fase_norm.upper()).strip("_")
     thr_val    = float(obs_fase[0]["_threshold"])
@@ -461,6 +476,11 @@ def _build_card_entry(
         f"Máx: {fmt_dias(max_dias)} dias\n"
         f"\U0001f4ca {fmt_kg(kg_total)} kg  ·  {agora}"
     )
+
+    responsavel = get_responsavel(fase_norm, responsaveis)
+    if responsavel:
+        caption += f"\n\nResponsável: @{responsavel}"
+
     rel_image = os.path.relpath(image_path, script_dir).replace("\\", "/")
     print(f"[OK] {fase_norm}: {n} OBs → {rel_image}")
     return {
@@ -479,7 +499,7 @@ def main() -> None:
     with open(RESULT_FILE, "r", encoding="utf-8") as f:
         result = json.load(f)
 
-    thresholds, max_obs, phase_filters, phase_order = _load_config(CONFIG_FILE)
+    thresholds, max_obs, phase_filters, phase_order, responsaveis = _load_config(CONFIG_FILE)
     obs_all   = result.get("rows", [])
     filtradas = _filter_obs(obs_all, thresholds, phase_filters)
 
@@ -495,7 +515,7 @@ def main() -> None:
 
     os.makedirs(IMAGES_DIR, exist_ok=True)
     manifest = [
-        _build_card_entry(fase_norm, obs_fase, IMAGES_DIR, SCRIPT_DIR)
+        _build_card_entry(fase_norm, obs_fase, IMAGES_DIR, SCRIPT_DIR, responsaveis)
         for fase_norm, obs_fase in grupos_ordenados
     ]
 

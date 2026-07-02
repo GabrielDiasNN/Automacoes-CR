@@ -1,22 +1,59 @@
 {
   "threshold_por_fase": {
-    "HIDRO":       1,
-    "SECADOR":     1,
-    "ABRIDOR":     1,
-    "RAMA":        1,
-    "COMPACTA":    1,
-    "BRILHO":      1,
-    "FELPAGEM":    1,
+    "HIDRO": 1,
+    "SECADOR": 1,
+    "ABRIDOR": 1,
+    "RAMA": 1,
+    "COMPACTA": 1,
+    "BRILHO": 1,
+    "FELPAGEM": 1,
     "CONFERENCIA": 0.5,
-    "AMACIANTE":   0.25,
-    "REVIS":       3,
-    "EXPEDICAO":   1,
-    "CQ":          1
+    "AMACIANTE": 0.25,
+    "REVIS": 3,
+    "EXPEDICAO": 1,
+    "CQ": 1
   },
   "threshold_default": 99,
   "max_obs_por_mensagem": 10,
-  "filtros_por_fase": {
-    "REVIS": { "CODIGO_FLUXO": 204 }
+  "responsaveis_por_fase": {
+    "HIDRO": "554784856137",
+    "SECADOR": "554784856137",
+    "ABRIDOR": "554797750596",
+    "RAMA": "554797750596",
+    "COMPACTA": "554791591816",
+    "BRILHO": "554791591816",
+    "FELPAGEM": "554791591816",
+    "CONFERENCIA": [
+      "554898221241",
+      "554799188695",
+      "554197575631"
+    ],
+    "AMACIANTE": "554784856137",
+    "REVIS": "554899894828",
+    "EXPEDICAO": "554796608441",
+    "CQ": [
+      "554898221241",
+      "554799188695",
+      "554197575631"
+    ]
   },
-  "ordem_fases": ["REVIS", "AMACIANTE", "HIDRO", "SECADOR", "ABRIDOR", "RAMA", "FELPAGEM", "CONFERENCIA", "COMPACTA", "BRILHO", "CQ", "EXPEDICAO"]
+  "filtros_por_fase": {
+    "REVIS": {
+      "CODIGO_FLUXO": 204
+    }
+  },
+  "ordem_fases": [
+    "REVIS",
+    "AMACIANTE",
+    "HIDRO",
+    "SECADOR",
+    "ABRIDOR",
+    "RAMA",
+    "FELPAGEM",
+    "CONFERENCIA",
+    "COMPACTA",
+    "BRILHO",
+    "CQ",
+    "EXPEDICAO"
+  ]
 }
