@@ -81,13 +81,13 @@ Monorepo com três camadas principais:
 3. **Automações de domínio** — diretórios independentes. As automações registradas com manifesto (`Receitas Bloqueadas/`, `Receitas Emitidas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo).
 
 ### Orchestrator (`Orchestrator/app/`)
-- `main.py` — startup FastAPI: registra routers, monta SPA, inicializa Alembic e jobs APScheduler.
+- `main.py` — startup FastAPI: registra routers, monta SPA, inicializa Alembic e jobs APScheduler. Chama `register_event_loop(asyncio.get_running_loop())` no lifespan para viabilizar wake-up thread-safe do worker.
 - `worker.py` (em `Orchestrator/`, fora de `app/`) — loop de execução: consome fila, spawn de processos PowerShell, graceful shutdown.
-- `runtime.py` — estado compartilhado entre `main.py`, routers e worker (scheduler, wake-up, helpers de execução).
-- `database.py` — engine SQLite WAL, `SessionLocal`, `session_scope` (context manager para sessões fora do FastAPI).
+- `runtime.py` — estado compartilhado entre `main.py`, routers e worker. Inclui `register_event_loop` + `trigger_worker_wakeup` (usa `loop.call_soon_threadsafe` — **nunca** chamar `task_queued_event.set()` diretamente de endpoint sync, pois endpoints FastAPI sync rodam em threadpool separada do event loop).
+- `database.py` — engine SQLite WAL, `SessionLocal`, `session_scope` (context manager para sessões fora do FastAPI). `purge_old_executions` preserva as últimas 50 execuções por automação via subquery com `ROW_NUMBER() OVER (PARTITION BY automation_id)`.
 - `models.py` — ORM SQLAlchemy: `Automation`, `Execution`, `WorkerHeartbeat`, `SystemHealthSnapshot`, `AuditLog`.
 - `routers/` — um arquivo por domínio de API (`automations`, `executions`, `system`, `beneficiamento`, `portfolio`, `websocket`, `automation_config`, `automation_ide`).
-- `services/` — lógica desacoplada dos routers: `system_diagnostics`, `system_history`, `operational_baseline`, `portfolio_catalog`, `scheduler_runtime`, `scoring`, etc.
+- `services/` — lógica desacoplada dos routers: `system_diagnostics`, `system_history`, `operational_baseline`, `portfolio_catalog`, `scheduler_runtime`, `scoring`, `execution_decoration` (decoração de execuções com ações do operador), `execution_runtime` (requeue e validação), etc.
 - `migrations/` (em `Orchestrator/`, fora de `app/`) — Alembic; `env.py` usa `render_as_batch=True` para compatibilidade SQLite.
 
 ### Domínio Beneficiamento (`Produção Beneficimento/src/beneficiamento/`)
@@ -98,8 +98,17 @@ Monorepo com três camadas principais:
 - `runner.py` — orquestra snapshot Oracle → SQLite histórico; orçamento de 20 s.
 - `snapshot_store.py` — lê/escreve `Produção Beneficimento/snapshots/latest/`. A API **nunca** consulta Oracle diretamente; consome apenas esses snapshots.
 
+### Biblioteca compartilhada Python (`lib/python/`)
+- `oracle_extract.py` — núcleo compartilhado de extração Oracle: `resolve_oracle_credentials`, `init_thick_mode`, `fetch_all` (lotes), `serialize_rows` (datetime→isoformat, strip), `compute_hash`, `read_last_hash`, `write_state_tmp`. **Todos os 4 scripts de extração de domínio (`Receitas Emitidas/`, `Receitas Bloqueadas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`) usam este módulo** — não duplicar o padrão fetch/serialize/hash em novos scripts. Para DSN fixo (ignorar `.env`), passe `force_dsn="dbprd"` em `resolve_oracle_credentials`.
+- `oracle_client.py` — `init_oracle_thick_mode` (ativa Thick Mode do oracledb).
+- `oracle_retry.py` — `make_oracle_retry()` (pybreaker + stamina) e `CircuitBreakerError`.
+
+### Biblioteca compartilhada PowerShell (`lib/`)
+- `Lib-OrchestratorRuntime.psm1` — fonte única para scripts de Infrastructure: `Get-OrchestratorRuntimeVersion` (lê `ORCHESTRATOR_VERSION` de `constants.py`), `Get-OrchestratorEnvValue` (parser de `.env`), `Stop-OrchestratorProcesses` (usa `Get-CimInstance Win32_Process` — **nunca** `Get-Process`, que não expõe `CommandLine` no PS 5.1). Todos os scripts de `Infrastructure/` devem importar este módulo.
+- `Lib-Config.psm1` — leitura de `.env` para scripts de automação de domínio.
+
 ### Infrastructure (`Infrastructure/`)
-Scripts PowerShell para ciclo de vida do Orchestrator: `Start-Orchestrator.ps1`, `Recover-Orchestrator.ps1`, `Diagnose-Orchestrator.ps1`, `MonitorAutomacoes.ps1`.
+Scripts PowerShell para ciclo de vida do Orchestrator: `Start-Orchestrator.ps1`, `Recover-Orchestrator.ps1`, `Diagnose-Orchestrator.ps1`, `MonitorAutomacoes.ps1`. Todos importam `Lib-OrchestratorRuntime.psm1`.
 
 ### Skills canônicas (`.github/skills/`)
 Sete skills governam decisões de implementação. `.gemini/skills/` é apenas mirror. Edite sempre a fonte canônica.
@@ -221,6 +230,39 @@ with open(PATH, "w") as f:
 # ✅ Extrair extração de dados em helper
 def _extrair_dados(row: dict[str, Any]) -> tuple[float, bool, str]:
     ...  # remove 3+ locais da função chamadora
+```
+
+---
+
+### Conflito isort vs ruff I001 em imports com alias
+
+Quando um módulo tem imports **mistos** (aliased + não-aliased) na mesma instrução `from x import`, isort e ruff I001 entram em conflito irresolvível. A solução é converter para **import de namespace**:
+
+```python
+# ❌ CONFLITO IRRESOLVÍVEL — isort e ruff discordam na ordenação
+from ..services.system_runtime import build_health_payload, get_worker_status
+from ..services.system_runtime import get_worker_status as get_worker_status_service
+
+# ✅ CORRETO — elimina o conflito usando namespace import
+from ..services import system_runtime
+
+# chamadas: system_runtime.build_health_payload(...), system_runtime.get_worker_status(...)
+```
+
+---
+
+### PowerShell 5.1 — inspeção de processos
+
+`Get-Process` **não expõe `CommandLine`** no Windows PowerShell 5.1. A propriedade existe no objeto mas é sempre `$null`. Use `Get-CimInstance Win32_Process` para filtrar processos por linha de comando:
+
+```powershell
+# ❌ NUNCA funciona no PS 5.1
+Get-Process python | Where-Object { $_.CommandLine -match "worker" }
+
+# ✅ CORRETO
+Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -match "python" -and $_.CommandLine -match "worker"
+}
 ```
 
 ---
