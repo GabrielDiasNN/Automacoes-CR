@@ -2,20 +2,14 @@
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 
+Import-Module (Join-Path $ProjectRoot "lib\Lib-OrchestratorRuntime.psm1") -Force
+$RuntimeVersion = Get-OrchestratorRuntimeVersion -ProjectRoot $ProjectRoot
+
 # Carregar porta do .env para diagnostico dinamico
 $envPath = Join-Path $ProjectRoot ".env"
-$HubPort = "8000"
-if (Test-Path $envPath) {
-    $envContent = Get-Content $envPath
-    foreach ($line in $envContent) {
-        if ($line -match "^HUB_API_PORT\s*=\s*(.*)") {
-            $HubPort = $matches[1].Trim().Trim('"').Trim("'")
-            break
-        }
-    }
-}
+$HubPort = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "HUB_API_PORT" -Default "8000"
 
-Write-Host "--- [CHECKUP ORQUESTRADOR v6.2.0] ---" -ForegroundColor Cyan
+Write-Host "--- [CHECKUP ORQUESTRADOR $RuntimeVersion] ---" -ForegroundColor Cyan
 Write-Host "Target Port: $HubPort" -ForegroundColor Gray
 
 # 1. Verificar .env
@@ -63,4 +57,4 @@ if (Test-Path $dbPath) {
     }
 }
 
-Write-Host "`nCheckup v6.2.0 concluido." -ForegroundColor Cyan
+Write-Host "`nCheckup $RuntimeVersion concluido." -ForegroundColor Cyan

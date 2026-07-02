@@ -323,7 +323,7 @@ def test_main_sem_erros_nao_gera_payload(
     assert payload is None, f"Payload não deveria ser gerado, mas foi: {payload}"
 
 
-@patch("extract_oracle.oracledb.connect")
+@patch("oracle_extract.oracledb.connect")
 @patch("extract_oracle.os.path.exists")
 @patch("extract_oracle.open")
 def test_extract_sucesso_oracle_mockado(

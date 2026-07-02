@@ -137,8 +137,8 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - Toda automação registrada no Orchestrator deve ter `automation.manifest.json` na sua pasta.
 - `POST /api/automations/preflight` valida manifesto, docs obrigatórias e smoke tests antes de `create/update`.
 
-### CI (GitHub Actions — `.github/workflows/ci.yml`)
-Roda em push para `main`/`develop` e PRs para `main`. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py`, pytest (excluindo `tests/test_e2e_dashboard.py`, com `ORCHESTRATOR_DB_PATH=:memory:`), Gitleaks e lint+build do Dashboard. O mypy no CI é apenas informativo (`continue-on-error`) — o mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`).
+### CI (GitHub Actions — `.github/workflows/governanca.yml`)
+Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py`, black/isort/bandit (job `lint-python`), pytest com `--cov-fail-under=77` (job `testes-python`), E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
 
 ## Contratos de Governança (Pre-Commit Hook)
 

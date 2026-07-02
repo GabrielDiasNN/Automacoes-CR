@@ -11,15 +11,17 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python"))
-from automation_log import make_logger
-from oracle_retry import make_oracle_retry, CircuitBreakerError
-
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
+)
 import oracledb
 import pandas as pd
+from automation_log import make_logger
 from dotenv import load_dotenv
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from oracle_client import init_oracle_thick_mode
+from oracle_retry import CircuitBreakerError, make_oracle_retry
 from pydantic import BaseModel, Field, ValidationError
 
 # Carregar ambiente (.env) do projeto raiz
@@ -291,13 +293,16 @@ def process() -> None:
     if not client_lib or not tns_admin:
         log("Caminhos Oracle ausentes no ambiente.", "ERROR", exec_id)
         sys.exit(1)
-    assert user is not None and password is not None and client_lib is not None and tns_admin is not None
+    assert (
+        user is not None
+        and password is not None
+        and client_lib is not None
+        and tns_admin is not None
+    )
 
-    try:
-        oracledb.init_oracle_client(lib_dir=client_lib, config_dir=tns_admin)
-        log("Oracle Thick Mode ativado.", "INFO", exec_id)
-    except Exception as e:
-        log(f"Aviso Thick client: {e}", "WARN", exec_id)
+    init_oracle_thick_mode(
+        client_lib, tns_admin, lambda msg, lvl="INFO": log(msg, lvl, exec_id)
+    )
 
     try:
         sql_path = os.path.join(os.path.dirname(__file__), "SQL-ReceitasBloqueadas.sql")

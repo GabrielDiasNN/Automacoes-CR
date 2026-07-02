@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import create_engine, event, func, inspect, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from .constants import ORCHESTRATOR_SCHEMA_VERSION
@@ -306,10 +306,24 @@ def purge_old_executions(retention_days: int = 90) -> int:
 
     try:
         with session_scope() as db:
+            # Últimas 50 execuções de cada automação são preservadas mesmo
+            # além da retenção (contrato operacional do purge).
+            rank = (
+                func.row_number()
+                .over(
+                    partition_by=_models.Execution.automation_id,
+                    order_by=_models.Execution.started_at.desc(),
+                )
+                .label("rank")
+            )
+            ranked = db.query(_models.Execution.id.label("exec_id"), rank).subquery()
+            keep_ids = db.query(ranked.c.exec_id).filter(ranked.c.rank <= 50)
+
             # Delete em massa via query direta para performance (Pilar E)
             query = db.query(_models.Execution).filter(
                 _models.Execution.status.in_(terminal_statuses),
                 _models.Execution.finished_at < cutoff,
+                ~_models.Execution.id.in_(keep_ids),
             )
             removed = query.delete(synchronize_session=False)
             db.commit()

@@ -15,6 +15,15 @@ load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 task_queued_event = asyncio.Event()
 scheduler = BackgroundScheduler(timezone=pytz.timezone("America/Sao_Paulo"))
 
+# Loop do servidor, registrado no lifespan. Necessário porque endpoints sync
+# rodam em threadpool e asyncio.Event.set() não é thread-safe.
+_event_loop: asyncio.AbstractEventLoop | None = None  # pylint: disable=invalid-name
+
+
+def register_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    global _event_loop  # pylint: disable=global-statement
+    _event_loop = loop
+
 
 def get_project_root() -> str:
     return PROJECT_ROOT
@@ -41,7 +50,10 @@ def get_allowed_origins() -> list[str]:
 
 
 def trigger_worker_wakeup() -> None:
-    task_queued_event.set()
+    if _event_loop is not None and not _event_loop.is_closed():
+        _event_loop.call_soon_threadsafe(task_queued_event.set)
+    else:
+        task_queued_event.set()
 
 
 async def wait_for_task_signal(timeout_seconds: int = 30) -> str:

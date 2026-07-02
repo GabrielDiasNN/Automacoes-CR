@@ -9,6 +9,7 @@ Responsabilidades:
   5. Jobs enterprise: WAL checkpoint + purge automatico (Pilares E + G)
 """
 
+import asyncio
 import os
 import sys
 from collections.abc import AsyncGenerator, Awaitable, Callable, MutableMapping
@@ -45,7 +46,13 @@ from .routers import (
     system,
     websocket,
 )
-from .runtime import get_allowed_origins, get_dashboard_path, get_lib_path, scheduler
+from .runtime import (
+    get_allowed_origins,
+    get_dashboard_path,
+    get_lib_path,
+    register_event_loop,
+    scheduler,
+)
 from .services.execution_runtime import mark_running_tasks_as_failed_by_reboot
 from .services.scheduler_runtime import register_enterprise_jobs, reload_scheduled_tasks
 from .telemetry import setup_telemetry
@@ -87,6 +94,7 @@ def _cleanup_zombie_tasks() -> None:
 async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     # Pilar E - Escala: Garantir integridade do banco no startup
     fastapi_app.state.startup_time = get_now_local()
+    register_event_loop(asyncio.get_running_loop())
     run_wal_checkpoint("TRUNCATE")
 
     migration_result = run_alembic_migrations()

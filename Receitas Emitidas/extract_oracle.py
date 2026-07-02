@@ -1,24 +1,32 @@
-# pylint: disable=line-too-long, too-many-locals, f-string-without-interpolation, broad-exception-caught, bare-except, too-many-statements, unused-import, too-many-branches, import-error
+# pylint: disable=line-too-long, too-many-locals, broad-exception-caught, import-error, wrong-import-position
 # {
-#   "version": "2.7.2",
+#   "version": "2.8.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
 #   "contract": "ipc-stdio, thick-mode-padronizado",
 #   "description": "Extrai receitas emitidas via Direct Oracle (Query CTE Nativa) com Thick Mode garantido",
 #   "reliability": "Base64-Bridge-Logs, SQL-Correlation-DNA, Retry-On-Failure, Circuit-Breaker"
 # }
-import hashlib
 import json
 import os
 import sys
-from datetime import datetime
 from typing import Any
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python"))
-from automation_log import make_logger
-from oracle_retry import make_oracle_retry, CircuitBreakerError
-from oracle_client import init_oracle_thick_mode
-
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
+)
 import oracledb
+from automation_log import make_logger
+from oracle_extract import (
+    OracleCredentials,
+    compute_hash,
+    fetch_all,
+    init_thick_mode,
+    read_last_hash,
+    resolve_oracle_credentials,
+    serialize_rows,
+    write_state_tmp,
+)
+from oracle_retry import CircuitBreakerError, make_oracle_retry
 
 # Forca UTF-8 para garantir interoperabilidade
 if sys.stdout.encoding != "utf-8":
@@ -33,73 +41,42 @@ _oracle_retry = make_oracle_retry()
 
 
 @_oracle_retry
-def connect_and_execute(
-    user: str, password: str, dsn: str, sql: str, exec_id: str
+def _fetch(
+    creds: OracleCredentials, sql: str, exec_id: str
 ) -> tuple[list[str], list[Any]]:
-    log(
-        f"Conectando ao Oracle (DSN: {dsn}) para extração Nativa (com Circuit Breaker)...",
-        "INFO",
-        exec_id,
-    )
     try:
-        with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
-            cursor = connection.cursor()
-            log("Executando extração oficial otimizada...", "INFO", exec_id)
-            try:
-                cursor.execute(sql)
-                columns = [col[0] for col in cursor.description]
-                rows = []
-                while True:
-                    batch = cursor.fetchmany(5000)
-                    if not batch:
-                        break
-                    rows.extend(batch)
-                log(
-                    f"Query executada com sucesso. Linhas retornadas: {len(rows)}",
-                    "INFO",
-                    exec_id,
-                )
-                return columns, rows
-            except oracledb.Error as e:
-                if e.args:
-                    error_obj = e.args[0]
-                    log(
-                        f"Erro SQL Oracle (ORA-{error_obj.code}): {error_obj.message}",
-                        "ERROR",
-                        exec_id,
-                    )
-                else:
-                    log(f"Erro SQL Oracle desconhecido: {e}", "ERROR", exec_id)
-                # Log da query (parcial para seguranca)
-                log(f"DNA da Query: {sql[:200]}...", "DEBUG", exec_id)
-                raise
+        return fetch_all(creds, sql, exec_id, log)
     except oracledb.Error as e:
-        log(f"Erro de Conexao Oracle: {e}", "ERROR", exec_id)
+        if e.args:
+            error_obj = e.args[0]
+            log(
+                f"Erro SQL Oracle (ORA-{error_obj.code}): {error_obj.message}",
+                "ERROR",
+                exec_id,
+            )
+        else:
+            log(f"Erro SQL Oracle desconhecido: {e}", "ERROR", exec_id)
+        log(f"DNA da Query: {sql[:200]}...", "DEBUG", exec_id)
         raise
+
+
+def _receitas_sort_key(record: dict[str, Any]) -> Any:
+    return (
+        str(record.get("NUMERO_OB", "")),
+        str(record.get("REDUZIDO", "")),
+        str(record.get("GRUPO", "")),
+        str(record.get("INICIO_TING", "")),
+    )
 
 
 def extract() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
 
-    user = os.environ.get("ORACLE_READONLY_USER")
-    password = os.environ.get("ORACLE_READONLY_PASSWORD")
-    dsn = os.environ.get("ORACLE_CONNECT_STRING", "dbprd")
-    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get(
-        "ORACLE_CLIENT_PATH"
-    )
-    tns_admin = os.environ.get("TNS_ADMIN")
-
-    if not all([user, password, dsn]):
-        log("Credenciais Oracle ausentes no ambiente.", "ERROR", exec_id)
+    creds = resolve_oracle_credentials(log, exec_id)
+    if creds is None:
         sys.exit(1)
-    assert user is not None and password is not None
 
-    if not client_lib or not os.path.exists(client_lib):
-        log(f"ORACLE_CLIENT_LIB_DIR invalido.", "ERROR", exec_id)
-        sys.exit(1)
-    assert client_lib is not None
-
-    init_oracle_thick_mode(client_lib, tns_admin, lambda msg, lvl="INFO": log(msg, lvl, exec_id))
+    init_thick_mode(creds, log, exec_id)
 
     sql_file = os.path.join(os.path.dirname(__file__), "SQL-ReceitasEmitidas.sql")
     with open(sql_file, "r", encoding="utf-8") as f:
@@ -110,30 +87,10 @@ def extract() -> None:
     )
 
     try:
-        columns, rows = connect_and_execute(user, password, dsn, sql, exec_id)
+        columns, rows = _fetch(creds, sql, exec_id)
+        data = serialize_rows(columns, rows, sort_key=_receitas_sort_key)
 
-        data = []
-        for row in rows:
-            record = dict(zip(columns, row))
-            for key, value in record.items():
-                if isinstance(value, datetime):
-                    record[key] = value.isoformat()
-                elif isinstance(value, str) and value:
-                    record[key] = value.strip()
-            data.append(record)
-
-        # Ordenacao deterministica multi-coluna para garantir estabilidade absoluta do hash
-        data.sort(
-            key=lambda x: (
-                str(x.get("NUMERO_OB", "")),
-                str(x.get("REDUZIDO", "")),
-                str(x.get("GRUPO", "")),
-                str(x.get("INICIO_TING", "")),
-            )
-        )
-
-        json_payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
-        current_hash = hashlib.sha256(json_payload.encode("utf-8")).hexdigest()
+        current_hash = compute_hash(data)
         log(
             f"Hash calculado para {len(data)} registros: {current_hash}",
             "DEBUG",
@@ -141,17 +98,9 @@ def extract() -> None:
         )
 
         state_path = os.path.join(os.path.dirname(__file__), "receitas_state.json")
-        last_state_data = {}
-        if os.path.exists(state_path):
-            try:
-                with open(state_path, "r", encoding="utf-8") as f:
-                    last_state_data = json.load(f)
-            except:
-                pass
-
-        last_hash = last_state_data.get("last_hash")
-
+        last_hash = read_last_hash(state_path)
         state_tmp_path = state_path + ".tmp"
+
         if last_hash and current_hash == last_hash:
             if os.path.exists(state_tmp_path):
                 log(
@@ -167,14 +116,9 @@ def extract() -> None:
                 )
                 sys.exit(2)
 
-        state_data = {
-            "last_hash": current_hash,
-            "updated_at": datetime.now().isoformat(),
-        }
-        # Salva apenas no temporario. O commit oficial ocorre no run.ps1 apos sucesso.
-        with open(state_tmp_path, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, ensure_ascii=False, indent=4, sort_keys=True)
+        write_state_tmp(state_path, current_hash)
 
+        json_payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
         sys.stdout.write(json_payload)
         sys.stdout.flush()
         log(f"Extração concluída: {len(data)} registros.", "INFO", exec_id)

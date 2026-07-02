@@ -6,7 +6,9 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = "." }
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $OrchestratorDir = Join-Path $ProjectRoot "Orchestrator"
 $LogDir = Join-Path $OrchestratorDir "Logs"
-$RuntimeVersion = "v9.3.0"
+
+Import-Module (Join-Path $ProjectRoot "lib\Lib-OrchestratorRuntime.psm1") -Force
+$RuntimeVersion = Get-OrchestratorRuntimeVersion -ProjectRoot $ProjectRoot
 
 # Garantir diretorio de logs
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force }
@@ -28,21 +30,7 @@ if (Test-Path $envPath) {
 Write-Host "[RESET] Realizando limpeza segura do ambiente ($RuntimeVersion)..." -ForegroundColor Gray
 
 # Matar apenas processos Python ligados ao projeto para nao afetar outros sistemas no servidor
-$CurrentPid = $PID
-$procToKill = Get-Process | Where-Object {
-    $_.Id -ne $CurrentPid -and (
-        ($_.ProcessName -match "python" -and ($_.Path -match "Automacoes" -or $_.CommandLine -match "uvicorn" -or $_.CommandLine -match "worker.py")) -or
-        ($_.ProcessName -match "powershell" -and ($_.CommandLine -match "MonitorAutomacoes.ps1"))
-    )
-}
-
-foreach ($p in $procToKill) {
-    try {
-        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-    } catch [System.InvalidOperationException] {
-        Write-Verbose ("Processo {0} ja finalizado durante a limpeza." -f $p.Id)
-    }
-}
+Stop-OrchestratorProcesses -ProjectRoot $ProjectRoot | Out-Null
 
 # Liberar porta dinamica configurada
 $portInUse = Get-NetTCPConnection -LocalPort $HubPort -ErrorAction SilentlyContinue

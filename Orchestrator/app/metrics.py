@@ -2,7 +2,7 @@
 """
 Métricas Prometheus do Orchestrator (3.4/Fase 3).
 
-Expostas em GET /metrics (texto plain Prometheus).
+Expostas em GET /api/system/metrics/prometheus (texto plain Prometheus).
 Opt-in: sempre ativo; consumo é zero se nenhum scraper conectar.
 
 Contadores e gauges refletem o estado do sistema em tempo real via callbacks.
@@ -24,7 +24,9 @@ try:
     _PROMETHEUS_AVAILABLE = True
 except ImportError:
     _PROMETHEUS_AVAILABLE = False
-    logger.info("prometheus_client não instalado — endpoint /metrics desabilitado.")
+    logger.info(
+        "prometheus_client não instalado — endpoint /metrics/prometheus desabilitado."
+    )
 
 if _PROMETHEUS_AVAILABLE:
     EXEC_TOTAL = Counter(

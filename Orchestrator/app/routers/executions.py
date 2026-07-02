@@ -1,6 +1,7 @@
 """
 Router: Executions - Histórico de execuções com decorações operacionais (A2, A3), filtros avançados, logs, artefatos e controle de fila. v9.2.0
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -23,23 +24,21 @@ from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
     EXECUTION_ALLOWED_PRIORITIES,
     EXECUTION_ALLOWED_STATUSES,
-    EXECUTION_QUEUEABLE_SOURCE_STATUSES,
-    EXECUTION_STATUS_REQUEUED,
     EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TERMINATED,
-    RECOVERY_ACTION_REQUEUE_MANUAL,
-    RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION,
 )
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
 from ..security import sanitize_log_payload
-from ..services.execution_runtime import (
-    build_queued_execution,
-    generate_execution_id,
-    get_group_active_execution,
+from ..services.execution_decoration import (
+    build_active_execution_maps,
+    decorate_execution_summary,
 )
-from ..services.scoring import compute_attention_score
+from ..services.execution_runtime import (
+    RequeueValidationError,
+    prepare_requeue,
+)
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
@@ -49,165 +48,6 @@ router = APIRouter(prefix="/api/executions", tags=["Executions"])
 
 # Raiz do projeto para resolver caminhos
 PROJECT_ROOT = get_project_root()
-
-
-# ---------------------------------------------------------------------------
-# PIPELINE DE DECORAÇÃO OPERACIONAL (A2, A3)
-# ---------------------------------------------------------------------------
-
-
-def _build_active_execution_maps(
-    db: Session,
-) -> tuple[dict[int, models.Execution], dict[str, models.Execution]]:
-    """Mapeia execuções ativas em memória para evitar N+1 queries na decoração."""
-    active_execs = (
-        db.query(models.Execution)
-        .options(joinedload(models.Execution.automation))
-        .filter(models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)))
-        .order_by(desc(models.Execution.started_at))
-        .all()
-    )
-    by_automation: dict[int, models.Execution] = {}
-    by_group: dict[str, models.Execution] = {}
-    for item in active_execs:
-        by_automation.setdefault(int(item.automation_id), item)
-        queue_group = item.queue_group or getattr(item.automation, "queue_group", None)
-        if queue_group:
-            by_group.setdefault(str(queue_group), item)
-    return by_automation, by_group
-
-
-def _determine_operational_actions(
-    summary: schemas.ExecutionSummary | schemas.ExecutionResponse,
-    ex: models.Execution,
-    active_by_automation: dict[int, models.Execution],
-    active_by_group: dict[str, models.Execution],
-    queue_group: str | None,
-) -> None:
-    """Determina as ações do operador disponíveis para a execução e condições de reenfileiramento (A2)."""
-    queueable = ex.status in EXECUTION_QUEUEABLE_SOURCE_STATUSES
-    max_retries = int(
-        ex.max_retries or (ex.automation.max_retries if ex.automation else 0) or 0
-    )
-    retry_count = int(ex.retry_count or 0)
-    active_for_automation = active_by_automation.get(int(ex.automation_id))
-    active_for_group = active_by_group.get(queue_group) if queue_group else None
-
-    # Inicializar campos padrão
-    summary.requeue_allowed = False
-    summary.requeue_block_reason = None
-    summary.related_execution_id = None
-    summary.related_execution_status = None
-    summary.operator_action_code = "VIEW_LOGS"
-    summary.operator_action_label = "Revisar logs"
-    summary.operator_action_hint = (
-        "Revise logs e contexto operacional antes de uma nova tentativa."
-    )
-
-    if queueable:
-        if active_for_automation and active_for_automation.id != ex.id:
-            summary.requeue_block_reason = f"Já existe execução ativa para esta automação ({active_for_automation.id})."
-            summary.related_execution_id = str(active_for_automation.id)
-            summary.related_execution_status = str(active_for_automation.status)
-        elif active_for_group and active_for_group.id != ex.id:
-            summary.requeue_block_reason = f"Grupo operacional '{queue_group}' já está em uso por {active_for_group.id}."
-            summary.related_execution_id = str(active_for_group.id)
-            summary.related_execution_status = str(active_for_group.status)
-        elif retry_count >= max_retries:
-            summary.requeue_block_reason = (
-                f"Limite de retry já foi atingido ({retry_count}/{max_retries})."
-            )
-        else:
-            summary.requeue_allowed = True
-            summary.operator_action_code = "REQUEUE"
-            summary.operator_action_label = "Reenfileirar"
-            summary.operator_action_hint = (
-                "Execução pode ser enviada novamente para a fila de processamento."
-            )
-
-    elif ex.status in EXECUTION_ACTIVE_STATUSES:
-        summary.operator_action_code = "STOP"
-        summary.operator_action_label = "Parar execução"
-        summary.operator_action_hint = "Solicita a interrupção imediata do processo."
-
-    # Sobrescrever ações para linhas de sucesso saudáveis
-    if ex.status == "SUCCESS":
-        summary.requeue_allowed = True
-        summary.operator_action_code = "REQUEUE"
-        summary.operator_action_label = None
-        summary.operator_action_hint = None
-
-
-def _set_operator_attention(
-    summary: schemas.ExecutionSummary | schemas.ExecutionResponse,
-    ex: models.Execution,
-    score: int,
-    reasons: list[str],
-) -> None:
-    """Calcula a gravidade da atenção e monta a resposta operacional consolidada (A2)."""
-    summary.operator_score = score
-    summary.operator_attention_required = score >= 20
-
-    if score >= 80:
-        summary.operator_severity = "CRITICAL"
-    elif score >= 50:
-        summary.operator_severity = "HIGH"
-    elif score >= 20:
-        summary.operator_severity = "MODERATE"
-    else:
-        summary.operator_severity = "NORMAL"
-
-    if reasons:
-        summary.operator_reason_summary = " | ".join(reasons)
-    else:
-        summary.operator_reason_summary = None
-
-    # Sobrescrever campos para manter linhas de sucesso saudáveis compactas
-    if ex.status == "SUCCESS" and score < 20:
-        summary.operator_attention_required = False
-        summary.operator_action_label = None
-        summary.operator_reason_summary = None
-        summary.operator_score = 0
-        summary.operator_severity = "NORMAL"
-
-
-def _decorate_execution_summary(
-    summary: schemas.ExecutionSummary | schemas.ExecutionResponse,
-    ex: models.Execution,
-    active_by_automation: dict[int, models.Execution],
-    active_by_group: dict[str, models.Execution],
-) -> schemas.ExecutionSummary | schemas.ExecutionResponse:
-    """Decora o resumo de execução em pipeline usando scoring centralizado (A2, A3)."""
-    queue_group = ex.queue_group or getattr(ex.automation, "queue_group", None)
-    now = get_now_local()
-
-    summary.related_queue_group = (
-        str(queue_group) if queue_group else None
-    )
-    summary.stop_allowed = ex.status in EXECUTION_ACTIVE_STATUSES
-    summary.requeue_allowed = False
-    summary.requeue_block_reason = None
-    summary.related_execution_id = None
-    summary.related_execution_status = None
-    summary.operator_attention_required = False
-    summary.operator_score = 0
-    summary.operator_reason_summary = None
-    summary.operator_severity = "NORMAL"
-
-    # Pipeline de execução dos decoradores
-    _determine_operational_actions(
-        summary,
-        ex,
-        active_by_automation,
-        active_by_group,
-        str(queue_group) if queue_group else None,
-    )
-    score, reasons = compute_attention_score(
-        ex, now, active_by_automation, active_by_group
-    )
-    _set_operator_attention(summary, ex, score, reasons)
-
-    return summary
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +137,14 @@ def list_executions(  # pylint: disable=R0913,R0914,R0917
 
     query = db.query(models.Execution).options(joinedload(models.Execution.automation))
     query = _apply_execution_filters(
-        query, status, automation_id, queue_group, priority, requested_by, date_from, date_to
+        query,
+        status,
+        automation_id,
+        queue_group,
+        priority,
+        requested_by,
+        date_from,
+        date_to,
     )
     query = query.order_by(desc(models.Execution.started_at))
 
@@ -305,7 +152,7 @@ def list_executions(  # pylint: disable=R0913,R0914,R0917
     pages = math.ceil(total / per_page) if per_page > 0 else 1
     items_raw = query.offset((page - 1) * per_page).limit(per_page).all()
 
-    active_by_auto, active_by_group = _build_active_execution_maps(db)
+    active_by_auto, active_by_group = build_active_execution_maps(db)
 
     items = []
     for ex in items_raw:
@@ -313,7 +160,7 @@ def list_executions(  # pylint: disable=R0913,R0914,R0917
         summary.automation_name = (
             ex.automation.name if ex.automation else "Desconhecido"
         )
-        _decorate_execution_summary(summary, ex, active_by_auto, active_by_group)
+        decorate_execution_summary(summary, ex, active_by_auto, active_by_group)
         items.append(summary)
 
     return schemas.PaginatedResponse(
@@ -345,13 +192,13 @@ def list_by_automation(
         .all()
     )
 
-    active_by_auto, active_by_group = _build_active_execution_maps(db)
+    active_by_auto, active_by_group = build_active_execution_maps(db)
 
     result = []
     for ex in execs:
         s = schemas.ExecutionSummary.model_validate(ex)
         s.automation_name = ex.automation.name if ex.automation else "Desconhecido"
-        _decorate_execution_summary(s, ex, active_by_auto, active_by_group)
+        decorate_execution_summary(s, ex, active_by_auto, active_by_group)
         result.append(s)
     return result
 
@@ -376,13 +223,13 @@ def list_recent(
         .all()
     )
 
-    active_by_auto, active_by_group = _build_active_execution_maps(db)
+    active_by_auto, active_by_group = build_active_execution_maps(db)
 
     result = []
     for ex in execs:
         s = schemas.ExecutionSummary.model_validate(ex)
         s.automation_name = ex.automation.name if ex.automation else "Desconhecido"
-        _decorate_execution_summary(s, ex, active_by_auto, active_by_group)
+        decorate_execution_summary(s, ex, active_by_auto, active_by_group)
         result.append(s)
     return result
 
@@ -412,8 +259,8 @@ def get_execution(
         db_exec.automation.name if db_exec.automation else "Desconhecido"
     )
 
-    active_by_auto, active_by_group = _build_active_execution_maps(db)
-    _decorate_execution_summary(resp, db_exec, active_by_auto, active_by_group)
+    active_by_auto, active_by_group = build_active_execution_maps(db)
+    decorate_execution_summary(resp, db_exec, active_by_auto, active_by_group)
 
     return resp
 
@@ -549,7 +396,10 @@ def stop_execution(
             db_exec.duration_seconds = round(delta.total_seconds(), 2)
         except (TypeError, ValueError):
             pass
-    _stop_log: str = str(db_exec.logs or "") + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
+    _stop_log: str = (
+        str(db_exec.logs or "")
+        + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
+    )
     db_exec.logs = _stop_log  # type: ignore[assignment]
 
     log_audit(db, "STOP", "EXECUTION", exec_id, get_client_ip(request))
@@ -581,96 +431,27 @@ def requeue_execution(
     )
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
-    if db_exec.status not in EXECUTION_QUEUEABLE_SOURCE_STATUSES:
-        raise HTTPException(
-            status_code=400,
-            detail="Somente execuções terminais ou já reenfileiradas podem ser reabertas.",
-        )
-    if not db_exec.automation:
-        raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    if db.query(models.Execution).filter(
-        models.Execution.automation_id == db_exec.automation_id,
-        models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
-    ).first():
-        raise HTTPException(
-            status_code=409,
-            detail="Já existe uma execução ativa para esta automação.",
+    try:
+        new_exec, audit_payload = prepare_requeue(
+            db,
+            db_exec,
+            payload_reason=payload.reason,
+            payload_requested_by=payload.requested_by,
+            payload_priority=payload.priority,
+            fallback_requested_by=get_client_ip(request),
         )
+    except RequeueValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    queue_group = (
-        str(db_exec.queue_group or db_exec.automation.queue_group)
-        if (
-            db_exec.queue_group
-            or (db_exec.automation and db_exec.automation.queue_group)
-        )
-        else None
-    )
-    group_active = get_group_active_execution(db, queue_group)
-    if group_active:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Já existe uma execução ativa no mesmo grupo operacional "
-                f"({group_active.id}, Grupo: {queue_group})."
-            ),
-        )
-
-    next_retry_count = int(db_exec.retry_count or 0) + 1
-    max_retries = int(
-        db_exec.max_retries
-        or (db_exec.automation.max_retries if db_exec.automation else 0)
-        or 0
-    )
-    if next_retry_count > max_retries:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Limite de retry excedido para esta execução: "
-                f"{next_retry_count - 1}/{max_retries}."
-            ),
-        )
-
-    new_exec_id = generate_execution_id("REQ")
-    requested_by = str(payload.requested_by or get_client_ip(request))
-    priority = str(payload.priority or db_exec.priority or "NORMAL").upper()
-    if priority not in EXECUTION_ALLOWED_PRIORITIES:
-        raise HTTPException(status_code=422, detail="Prioridade inválida para requeue.")
-
-    reason = payload.reason or f"Requeue manual originado de {exec_id}."
-    new_exec = build_queued_execution(
-        automation=db_exec.automation,
-        exec_id=new_exec_id,
-        requested_by=requested_by,
-        priority=priority,
-        retry_count=int(next_retry_count),
-        max_retries=int(max_retries),
-        failure_reason=str(db_exec.failure_reason or db_exec.status),
-        recovery_action=RECOVERY_ACTION_REQUEUE_MANUAL,
-    )
-    new_exec.queue_group = queue_group  # type: ignore[assignment]
     db.add(new_exec)
-
-    db_exec.status = EXECUTION_STATUS_REQUEUED  # type: ignore[assignment]
-    db_exec.recovery_action = RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION  # type: ignore[assignment]
-    db_exec.logs = str(db_exec.logs or "") + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"  # type: ignore[assignment]
-
     log_audit(
         db,
         "REQUEUE",
         "EXECUTION",
         exec_id,
         get_client_ip(request),
-        json.dumps(
-            {
-                "source_exec_id": exec_id,
-                "queued_exec_id": new_exec_id,
-                "reason": reason,
-                "retry_count": next_retry_count,
-                "max_retries": max_retries,
-                "priority": priority,
-            }
-        ),
+        json.dumps(audit_payload),
     )
     db.commit()
 
@@ -679,10 +460,10 @@ def requeue_execution(
     return schemas.ExecutionQueueActionResponse(
         message="Execução reenfileirada com sucesso.",
         source_exec_id=exec_id,
-        queued_exec_id=new_exec_id,
+        queued_exec_id=str(new_exec.id),
         automation_id=int(db_exec.automation_id),
-        retry_count=int(next_retry_count),
-        max_retries=int(max_retries),
+        retry_count=int(audit_payload["retry_count"]),
+        max_retries=int(audit_payload["max_retries"]),
         recovery_action="REQUEUE_MANUAL",
     )
 

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Watchdog do Orquestrador FastAPI v6.2.0.
+    Watchdog do Orquestrador FastAPI (versão lida de Orchestrator/app/constants.py).
 .DESCRIPTION
     Script responsavel por garantir que a API e o Worker estejam sempre online.
     Utiliza a porta dinamica do .env para monitoramento.
@@ -15,6 +15,8 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = "." }
 # Bibliotecas (apenas logging basico)
 $libLogging = Join-Path $ProjectRoot "lib\Lib-Logging.psm1"
 if (Test-Path $libLogging) { Import-Module $libLogging -Force }
+Import-Module (Join-Path $ProjectRoot "lib\Lib-OrchestratorRuntime.psm1") -Force
+$RuntimeVersion = Get-OrchestratorRuntimeVersion -ProjectRoot $ProjectRoot
 
 function Write-Log {
     param([string]$Msg, [string]$Type = "INFO")
@@ -28,19 +30,8 @@ function Write-Log {
 }
 
 # --- CARREGAR CONFIGURACOES (.env) ---
-$envPath = Join-Path $ProjectRoot ".env"
-$HubPort = "8000"
-$ApiKey  = ""
-
-if (Test-Path $envPath) {
-    Get-Content $envPath | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
-        $parts = $_.Split('=', 2)
-        $k = $parts[0].Trim()
-        $v = $parts[1].Trim().Trim('"').Trim("'")
-        if ($k -eq "HUB_API_PORT") { $HubPort = $v }
-        if ($k -eq "ORCHESTRATOR_API_KEY") { $ApiKey = $v }
-    }
-}
+$HubPort = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "HUB_API_PORT" -Default "8000"
+$ApiKey  = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "ORCHESTRATOR_API_KEY"
 
 # Endpoint de Health real
 $HealthUrl = "http://127.0.0.1:$HubPort/api/system/health"
@@ -54,11 +45,11 @@ try {
 } catch [System.Exception] { $script:MutexAcquired = $true }
 
 if (-not $script:MutexAcquired) {
-    Write-Host "AVISO: Watchdog v6.2.0 ja esta rodando." -ForegroundColor Yellow
+    Write-Host "AVISO: Watchdog $RuntimeVersion ja esta rodando." -ForegroundColor Yellow
     Exit 0
 }
 
-Write-Log "Watchdog v6.2.0 iniciado. Monitorando porta $HubPort"
+Write-Log "Watchdog $RuntimeVersion iniciado. Monitorando porta $HubPort"
 Start-Sleep -Seconds 15 # Aguardar startup inicial
 $script:LastOrchestratorRestart = $null
 

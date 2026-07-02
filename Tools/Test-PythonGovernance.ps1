@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = 1
 $env:PYLINTHOME = Join-Path $RootPath ".mypy_cache\pylint"
 $env:MYPYPATH = "$(Join-Path $RootPath "Orchestrator");$RootPath;$(Join-Path $RootPath "lib\python")"
-$env:PYTHONPATH = "$($env:PYTHONPATH);$(Join-Path $RootPath "lib\python");$(Join-Path $RootPath "Produção Beneficimento\src")"
+$env:PYTHONPATH = "$($env:PYTHONPATH);$(Join-Path $RootPath "Orchestrator");$(Join-Path $RootPath "lib\python");$(Join-Path $RootPath "Produção Beneficimento\src")"
 New-Item -ItemType Directory -Force -Path $env:PYLINTHOME | Out-Null
 Write-Host "=== Governanca Python (Type Hints & Pylint) ==="
 

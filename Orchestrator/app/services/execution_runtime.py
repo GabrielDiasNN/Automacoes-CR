@@ -13,8 +13,11 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
+    EXECUTION_ALLOWED_PRIORITIES,
+    EXECUTION_QUEUEABLE_SOURCE_STATUSES,
     EXECUTION_STATUS_ERROR,
     EXECUTION_STATUS_PENDING,
+    EXECUTION_STATUS_REQUEUED,
     EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TERMINATED,
     EXECUTION_STATUS_TIMEOUT,
@@ -29,6 +32,8 @@ from ..constants import (
     PRIORITY_NORMAL,
     RECOVERY_ACTION_NONE,
     RECOVERY_ACTION_REQUEUE_IF_SAFE,
+    RECOVERY_ACTION_REQUEUE_MANUAL,
+    RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION,
     RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY,
     RECOVERY_ACTION_REVIEW_LOGS_AND_OPTIONALLY_REQUEUE,
     RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
@@ -202,7 +207,10 @@ def mark_task_as_failed(
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
     if db_exec.started_at and db_exec.finished_at:
         db_exec.duration_seconds = round(
-            (cast(Any, db_exec.finished_at) - cast(Any, db_exec.started_at)).total_seconds(), 2
+            (
+                cast(Any, db_exec.finished_at) - cast(Any, db_exec.started_at)
+            ).total_seconds(),
+            2,
         )
     db.commit()
 
@@ -323,3 +331,110 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
         task.logs = str(task.logs or "") + "\n[REBOOT] Interrompida." + f"\n{reboot_audit_line}"  # type: ignore[assignment]
     db.commit()
     return len(zombies)
+
+
+class RequeueValidationError(Exception):
+    """Erro de validacao de negocio do requeue, com status HTTP correspondente."""
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
+    db: Session,
+    db_exec: models.Execution,
+    *,
+    payload_reason: str | None,
+    payload_requested_by: str | None,
+    payload_priority: str | None,
+    fallback_requested_by: str,
+) -> tuple[models.Execution, dict[str, Any]]:
+    """Valida as regras de negocio do requeue e monta a nova execucao (nao commitada).
+
+    Levanta RequeueValidationError com o status HTTP e a mensagem apropriados
+    quando alguma regra de concorrencia/retry/prioridade e violada. O chamador
+    (router) permanece responsavel por commit, audit log e wake-up do worker.
+    """
+    if db_exec.status not in EXECUTION_QUEUEABLE_SOURCE_STATUSES:
+        raise RequeueValidationError(
+            400,
+            "Somente execuções terminais ou já reenfileiradas podem ser reabertas.",
+        )
+    if not db_exec.automation:
+        raise RequeueValidationError(404, "Automação não encontrada.")
+
+    if (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.automation_id == db_exec.automation_id,
+            models.Execution.status.in_(list(EXECUTION_ACTIVE_STATUSES)),
+        )
+        .first()
+    ):
+        raise RequeueValidationError(
+            409, "Já existe uma execução ativa para esta automação."
+        )
+
+    queue_group = (
+        str(db_exec.queue_group or db_exec.automation.queue_group)
+        if (
+            db_exec.queue_group
+            or (db_exec.automation and db_exec.automation.queue_group)
+        )
+        else None
+    )
+    group_active = get_group_active_execution(db, queue_group)
+    if group_active:
+        raise RequeueValidationError(
+            409,
+            "Já existe uma execução ativa no mesmo grupo operacional "
+            f"({group_active.id}, Grupo: {queue_group}).",
+        )
+
+    next_retry_count = int(db_exec.retry_count or 0) + 1
+    max_retries = int(
+        db_exec.max_retries
+        or (db_exec.automation.max_retries if db_exec.automation else 0)
+        or 0
+    )
+    if next_retry_count > max_retries:
+        raise RequeueValidationError(
+            409,
+            "Limite de retry excedido para esta execução: "
+            f"{next_retry_count - 1}/{max_retries}.",
+        )
+
+    new_exec_id = generate_execution_id("REQ")
+    requested_by = str(payload_requested_by or fallback_requested_by)
+    priority = str(payload_priority or db_exec.priority or PRIORITY_NORMAL).upper()
+    if priority not in EXECUTION_ALLOWED_PRIORITIES:
+        raise RequeueValidationError(422, "Prioridade inválida para requeue.")
+
+    reason = payload_reason or f"Requeue manual originado de {db_exec.id}."
+    new_exec = build_queued_execution(
+        automation=db_exec.automation,
+        exec_id=new_exec_id,
+        requested_by=requested_by,
+        priority=priority,
+        retry_count=int(next_retry_count),
+        max_retries=int(max_retries),
+        failure_reason=str(db_exec.failure_reason or db_exec.status),
+        recovery_action=RECOVERY_ACTION_REQUEUE_MANUAL,
+    )
+    new_exec.queue_group = queue_group  # type: ignore[assignment]
+
+    db_exec.status = EXECUTION_STATUS_REQUEUED  # type: ignore[assignment]
+    db_exec.recovery_action = RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION  # type: ignore[assignment]
+    db_exec.logs = str(db_exec.logs or "") + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"  # type: ignore[assignment]
+
+    audit_payload = {
+        "source_exec_id": str(db_exec.id),
+        "queued_exec_id": new_exec_id,
+        "reason": reason,
+        "retry_count": next_retry_count,
+        "max_retries": max_retries,
+        "priority": priority,
+    }
+    return new_exec, audit_payload

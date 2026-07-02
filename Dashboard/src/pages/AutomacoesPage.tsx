@@ -1,46 +1,39 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Pause, Play, RefreshCw, Zap } from "lucide-react";
 import { orchestratorApi, type Automation } from "../api/orchestrator";
 import { Button, Card, ErrorState, Loading, Nameplate, RatioBar, StatusTag, useToast } from "../components/ui";
+import { usePolling } from "../hooks/usePolling";
 import { criticalityTone, executionTone } from "../lib/status";
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
 import styles from "./AutomacoesPage.module.css";
 
+interface AutomacoesData {
+  items: Automation[];
+  crit: Record<number, string>;
+}
+
+async function fetchAutomacoesData(): Promise<AutomacoesData> {
+  const items = await orchestratorApi.listAllAutomations();
+  let crit: Record<number, string> = {};
+  try {
+    // criticidade é do catálogo (portfólio) — best-effort
+    const p = await orchestratorApi.getPortfolioHealth();
+    crit = Object.fromEntries(
+      p.items.filter((it) => it.automation_id != null).map((it) => [it.automation_id as number, it.criticality]),
+    );
+  } catch {
+    /* best-effort: mantém items mesmo se o portfólio falhar */
+  }
+  return { items, crit };
+}
+
 export function AutomacoesPage() {
   const toast = useToast();
-  const [items, setItems] = useState<Automation[]>([]);
-  const [crit, setCrit] = useState<Record<number, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const { data, loading, error: err, refresh: load } = usePolling(fetchAutomacoesData, 15_000);
+  const items = data?.items ?? [];
+  const crit = data?.crit ?? {};
   const [busy, setBusy] = useState<number | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const list = await orchestratorApi.listAllAutomations();
-      setItems(list);
-      setErr(null);
-      // criticidade é do catálogo (portfólio) — best-effort
-      orchestratorApi
-        .getPortfolioHealth()
-        .then((p) => {
-          const m: Record<number, string> = {};
-          for (const it of p.items) if (it.automation_id != null) m[it.automation_id] = it.criticality;
-          setCrit(m);
-        })
-        .catch(() => {});
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 15_000);
-    return () => clearInterval(id);
-  }, [load]);
 
   const act = useCallback(
     async (id: number, fn: () => Promise<{ message: string }>, okMsg: string) => {

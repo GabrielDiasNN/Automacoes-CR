@@ -9,8 +9,14 @@ export interface PollingState<T> {
 }
 
 /** Faz polling de um endpoint com intervalo configurável.
- *  Mantém o último dado válido durante refresh (sem flicker). */
-export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): PollingState<T> {
+ *  Mantém o último dado válido durante refresh (sem flicker).
+ *  `deps` força um refresh imediato (reiniciando o intervalo) quando muda —
+ *  use para parâmetros do fetcher como página/filtro. */
+export function usePolling<T>(
+  fetcher: () => Promise<T>,
+  intervalMs = 15_000,
+  deps: unknown[] = [],
+): PollingState<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +43,8 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): P
     if (intervalMs <= 0) return;
     const id = setInterval(refresh, intervalMs);
     return () => clearInterval(id);
-  }, [refresh, intervalMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, intervalMs, ...deps]);
 
   return { data, loading, error, lastUpdated, refresh };
 }

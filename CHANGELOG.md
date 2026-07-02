@@ -1,6 +1,56 @@
 # Changelog
 
-## [9.5.5] - 02/07/2026
+## [9.5.14] - 02/07/2026
+### Corrigido
+- **Conflito `isort`/`ruff` em `routers/system.py` resolvido na raiz**: o bloco de imports de `env_admin`, `scheduler_runtime` e `system_runtime` misturava nomes aliasados (`as`) com não-aliasados do mesmo módulo — `isort` e `ruff` (regra I001) discordavam de forma irreconciliável sobre a ordenação (testadas 4 variações anteriormente, nenhuma satisfazia as duas). Substituído por import de namespace (`from ..services import env_admin, scheduler_runtime, system_runtime`) e chamadas qualificadas (`system_runtime.get_worker_status(...)`, `env_admin.validate_env_content(...)`, etc.) nos 11 call sites afetados. Elimina o aliasing por completo — sem colisão de nome possível, os dois linters convergem. Os aliases eram necessários porque o router tem funções locais com o mesmo nome semântico do serviço (ex.: rota `get_worker_status` vs serviço `get_worker_status`); a qualificação por módulo resolve isso sem precisar de alias. 221 testes seguem verdes (cobrem `/health`, `/metrics`, `/worker/status`, `/scheduler/jobs`, `/env`, `/backup`); `black`/`isort`/`ruff`/mypy `--strict`/pylint 100% limpos.
+
+## [9.5.12] - 02/07/2026
+### Corrigido
+- **`metrics.py` reclassificado**: a falha de `black` neste arquivo **não** era dívida pré-existente (confirmado: limpo em `main`) — era a minha própria edição da Onda 1 (renomear a rota para `/metrics/prometheus`), cuja linha de log ficou longa demais. Corrigido quebrando a chamada em múltiplas linhas, sem tocar mais nada do arquivo. `database.py`, `main.py` e `routers/system.py` permanecem com a dívida pré-existente, tratada separadamente em PR dedicada (`chore/lint-debt-black-isort`).
+
+## [9.5.11] - 02/07/2026
+### Corrigido
+- **`black`/`isort` do job `Lint Python` (CI)**: os 10 arquivos Python autorados nesta sessão (novos ou majoritariamente reescritos: `lib/python/oracle_extract.py`, os 3 scripts de extração migrados, `processar_receitas.py`, `services/execution_decoration.py`, `services/execution_runtime.py`, `routers/executions.py`, `conftest.py`, `test_purge_retention.py`) foram formatados com `black`/`isort` para satisfazer o gate do CI, que checa o arquivo inteiro (não só as linhas alteradas). `database.py`, `main.py`, `metrics.py` e `routers/system.py` — onde a mudança real foi de 1-2 linhas — foram deliberadamente **revertidos** para a formatação original: rodar `black` neles reformatava dezenas de linhas pré-existentes não relacionadas (dívida de lint já conhecida no `main`, ver `feedback_governance_contracts`/`project_lint_format_debt`); `Lint Python` segue vermelho nesses 4 arquivos por essa dívida pré-existente, não por regressão desta PR.
+
+## [9.5.10] - 02/07/2026
+### Alterado
+- **Extração Oracle deduplicada em `lib/python/oracle_extract.py`**: o núcleo repetido nos 4 scripts de extração (resolver credenciais/thick mode, `fetchmany` em lotes, normalizar datetime/strings, hash sha256 para idempotência) foi extraído para um módulo compartilhado (`resolve_oracle_credentials`, `init_thick_mode`, `fetch_all`, `serialize_rows`, `compute_hash`, `read_last_hash`, `write_state_tmp`). `Receitas Emitidas/extract_oracle.py`, `OBs Paradas Fase/extract_obs.py` e `Montagem de Terceirizados/extract_oracle.py` migrados; cada script mantém seu próprio perfil de retry, ordenação e contrato de idempotência (MT continua sem idempotência, por exemplo).
+- **`Receitas Bloqueadas/processar_receitas.py` alinhado ao `init_oracle_thick_mode` de `lib/python/oracle_client.py`**: eliminada a duplicação de `oracledb.init_oracle_client(...)` inline (achado da revisão de arquitetura).
+
+Validação: comparação byte-a-byte da serialização nova vs. antiga sobre o **mesmo** dataset em memória (evitando falso-negativo por dados de produção mudarem entre execuções) para RE, OBP e MT — hash e `dict` idênticos nos três. Os 3 scripts fetchmany-based e o `processar_receitas.py` rodados de ponta a ponta contra o Oracle de produção (readonly, autorizado pelo usuário). Corrigido durante a migração: MT usava `dsn` fixo `"dbprd"` ignorando `ORACLE_CONNECT_STRING` — preservado via novo parâmetro `force_dsn` em `resolve_oracle_credentials` (sem essa correção o DSN teria mudado silenciosamente). `tests/test_montagem_terceirizados.py` atualizado (mock de `oracledb.connect` migrou para `oracle_extract.oracledb.connect`).
+
+## [9.5.9] - 02/07/2026
+### Alterado
+- **Polling do Dashboard unificado em `usePolling`**: `AutomacoesPage.tsx` e `ExecucoesPage.tsx` reimplementavam `setInterval`/`useEffect` manualmente em vez de usar o hook já existente. `usePolling` ganhou um parâmetro opcional `deps` que força refresh imediato (reinicia o intervalo) quando muda — necessário para refiltrar/paginar sem esperar o próximo tick. Validado via Playwright contra a API real: listagem, filtro por status, drawer de detalhe, paginação e cards de automação com badges de criticidade.
+- **`ExecucoesPage.tsx` reduzido de 382 para ~270 linhas**: `ExecDetailBody`/`KV` (drawer de detalhe da execução) extraídos para `ExecucoesPage.ExecDetailBody.tsx`.
+
+## [9.5.8] - 01/07/2026
+### Alterado
+- **Lógica de negócio extraída de `routers/executions.py`**: o pipeline de decoração operacional (ações do operador, atenção) mudou para `app/services/execution_decoration.py`; as regras de validação/concorrência do requeue (execução ativa, grupo operacional, limite de retry, prioridade) mudaram para `prepare_requeue()` em `app/services/execution_runtime.py`, que levanta `RequeueValidationError` (status HTTP + mensagem) e o router só converte para `HTTPException`. Router reduzido de ~772 para ~620 linhas; nenhuma rota, contrato de resposta ou comportamento mudou (221 testes permanecem verdes).
+
+## [9.5.7] - 01/07/2026
+### Adicionado
+- **Marcadores pytest aplicados**: `Orchestrator/tests/conftest.py` ganhou `pytest_collection_modifyitems` que classifica automaticamente cada teste como `unitario` ou `integracao` conforme o uso das fixtures `client`/`db_session` (já declaradas em `pytest.ini`, mas nunca aplicadas). Agora `pytest -m unitario`/`-m integracao` funcionam para rodar subconjuntos.
+
+### Corrigido
+- **`PYTHONPATH` do `Test-PythonGovernance.ps1` não incluía `Orchestrator/`**: pylint falhava com `E0401: Unable to import 'app'` ao lintar qualquer arquivo de `Orchestrator/tests/` isoladamente (ex.: hook `-StagedOnly` com um único arquivo de teste no diff), pois `Orchestrator/tests/` não tem `__init__.py` e o pacote `app` só era resolvido quando outro arquivo de `Orchestrator/app/` estava no mesmo lote do pylint. `Orchestrator/` foi adicionado ao `PYTHONPATH` do script (já constava no `MYPYPATH`).
+
+## [9.5.6] - 01/07/2026
+### Alterado
+- **CI consolidado em pipeline único**: `.github/workflows/ci.yml` removido; suas responsabilidades foram absorvidas por `governanca.yml` (que já rodava nos mesmos eventos com actions pinadas por SHA e permissões mínimas). O `ruff check` bloqueante agora roda no job `lint-python` (Python 3.12). Elimina execução duplicada de Gitleaks, pytest e build do Dashboard e a divergência Python 3.11 vs 3.12; o gate de cobertura (77%) passa a valer para todo push/PR. Docs atualizadas (`CLAUDE.md`, `docs/testing-strategy.md`).
+
+## [9.5.5] - 01/07/2026
+### Corrigido
+- **Rota Prometheus inacessível**: `GET /api/system/metrics` estava duplicada (JSON + Prometheus no mesmo path); o endpoint Prometheus movido para `GET /api/system/metrics/prometheus`.
+- **Wake-up do worker não thread-safe**: `trigger_worker_wakeup()` setava `asyncio.Event` a partir de endpoints sync (threadpool); agora usa `loop.call_soon_threadsafe` com o loop registrado no lifespan (`register_event_loop`).
+- **Purge não cumpria contrato**: `purge_old_executions` agora preserva as últimas 50 execuções por automação (janela `ROW_NUMBER`), como o docstring e o contrato operacional de `POST /api/system/purge` prometiam; coberto por `tests/test_purge_retention.py`.
+- **Kill cirúrgico quebrado na Infrastructure**: `Start-Orchestrator.ps1` e `Recover-Orchestrator.ps1` filtravam `Get-Process` por `CommandLine` (propriedade inexistente no PS 5.1); a limpeza agora usa `Get-CimInstance Win32_Process` via novo módulo `lib/Lib-OrchestratorRuntime.psm1`.
+
+### Alterado
+- **Versão de runtime unificada na Infrastructure**: strings hardcoded (v9.3.0/v5.2/v6.2.0) substituídas por `Get-OrchestratorRuntimeVersion`, que lê `ORCHESTRATOR_VERSION` de `Orchestrator/app/constants.py`.
+- **Parser de `.env` deduplicado**: `MonitorAutomacoes.ps1` e `Diagnose-Orchestrator.ps1` passam a usar `Get-OrchestratorEnvValue` do módulo compartilhado.
+
+## [9.5.13] - 02/07/2026
 ### Corrigido
 - **Dívida de `black`/`isort` sanada em `main.py` e `database.py`**: não passavam no job `Lint Python` do CI (`black --check`/`isort --check-only`), embora nenhum teste/mypy/pylint/ruff fosse afetado. Reformatados com o mínimo de ruído: comentários `# pylint: disable=...` que ficaram desalinhados da linha reportada após o rewrap do `black` foram reposicionados manualmente para preservar a supressão `import-outside-toplevel`. 219 testes seguem verdes.
 

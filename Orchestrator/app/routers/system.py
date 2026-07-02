@@ -33,22 +33,12 @@ from ..runtime import (
     trigger_worker_wakeup,
     wait_for_task_signal,
 )
-from ..services.env_admin import backup_env_file, read_env_content, write_env_content
-from ..services.env_admin import validate_env_content as validate_env_payload
+from ..services import env_admin, scheduler_runtime, system_runtime
 from ..services.metrics import get_global_execution_counts
 from ..services.portfolio_catalog import build_portfolio_health_response
-from ..services.scheduler_runtime import list_scheduled_jobs as build_scheduled_jobs
-from ..services.scheduler_runtime import reload_scheduled_tasks
 from ..services.system_diagnostics import build_diagnostics_payload
 from ..services.system_history import build_system_history_response
 from ..services.system_overview import build_system_overview_payload
-from ..services.system_runtime import (
-    build_health_payload,
-    build_version_payload,
-    launch_orchestrator_recovery,
-    perform_manual_backup,
-)
-from ..services.system_runtime import get_worker_status as get_worker_status_service
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
@@ -68,7 +58,7 @@ PROJECT_ROOT = get_project_root()
 @router.get("/health", response_model=schemas.SystemHealth)
 def health_check(db: Session = Depends(get_db)) -> schemas.SystemHealth:
     """Health check completo: DB, Scheduler, Worker, Disco."""
-    return build_health_payload(db, _get_worker_status(db))
+    return system_runtime.build_health_payload(db, _get_worker_status(db))
 
 
 # ---------------------------------------------------------------------------
@@ -80,12 +70,12 @@ def health_check(db: Session = Depends(get_db)) -> schemas.SystemHealth:
 
 def _get_worker_status(db: Session) -> schemas.WorkerStatus:
     """Le o heartbeat do worker do banco."""
-    return get_worker_status_service(db)
+    return system_runtime.get_worker_status(db)
 
 
 def _launch_orchestrator_recovery() -> str:
     """Dispara o fluxo canônico de recuperação do Orchestrator em background."""
-    return launch_orchestrator_recovery(PROJECT_ROOT)
+    return system_runtime.launch_orchestrator_recovery(PROJECT_ROOT)
 
 
 @router.get("/worker/status", response_model=schemas.WorkerStatus)
@@ -140,9 +130,9 @@ def get_metrics(
             func.count(  # pylint: disable=not-callable
                 case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1))
             ).label("total_success"),
-            func.count(case((models.Execution.status == "ERROR", 1))).label(  # pylint: disable=not-callable
-                "total_errors"
-            ),
+            func.count(  # pylint: disable=not-callable
+                case((models.Execution.status == "ERROR", 1))
+            ).label("total_errors"),
             func.avg(
                 case(
                     (
@@ -229,7 +219,7 @@ def manual_backup(
 ) -> dict[str, Any]:
     """Realiza backup atomico do banco de dados SQLite."""
     try:
-        result: dict[str, Any] = perform_manual_backup(db, PROJECT_ROOT)
+        result: dict[str, Any] = system_runtime.perform_manual_backup(db, PROJECT_ROOT)
         logger.info(
             "Backup manual concluido: %s (%sMB)", result["path"], result["size_mb"]
         )
@@ -250,9 +240,7 @@ def manual_backup(
 
         logger.error("Falha no backup manual: %s", e)
 
-        raise HTTPException(
-            status_code=500, detail=f"Falha no backup: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Falha no backup: {str(e)}") from e
 
 
 @router.post("/scheduler/reload")
@@ -262,7 +250,7 @@ def reload_scheduler_jobs(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Forca sincronizacao do APScheduler com automacoes habilitadas."""
-    reload_scheduled_tasks()
+    scheduler_runtime.reload_scheduled_tasks()
     jobs_loaded = len(scheduler.get_jobs())
 
     log_audit(
@@ -371,7 +359,9 @@ def list_audit_log(
 
         query = query.filter(models.AuditLog.action == action.upper())
 
-    entries: list[models.AuditLog] = query.order_by(desc(models.AuditLog.timestamp)).limit(limit).all()
+    entries: list[models.AuditLog] = (
+        query.order_by(desc(models.AuditLog.timestamp)).limit(limit).all()
+    )
 
     return entries
 
@@ -384,7 +374,9 @@ def list_audit_log(
 
 
 @router.get("/uptime")
-def get_uptime(request: Request, _api_key: str = Depends(get_api_key)) -> dict[str, Any]:
+def get_uptime(
+    request: Request, _api_key: str = Depends(get_api_key)
+) -> dict[str, Any]:
     """Retorna o tempo de atividade do Orchestrator."""
     startup_time = request.app.state.startup_time
     uptime = get_now_local() - startup_time
@@ -409,7 +401,7 @@ def list_scheduled_jobs(
     _api_key: str = Depends(get_api_key),
 ) -> list[schemas.ScheduledJob]:
     """Retorna a lista de tarefas agendadas no APScheduler."""
-    return build_scheduled_jobs(db)
+    return scheduler_runtime.list_scheduled_jobs(db)
 
 
 @router.get("/overview", response_model=schemas.SystemOverviewResponse)
@@ -451,7 +443,7 @@ def get_system_overview(
 @router.get("/version", response_model=schemas.SystemVersion)
 def get_version(request: Request) -> schemas.SystemVersion:
     """Retorna informacoes detalhadas de versao e build do Orchestrator."""
-    return build_version_payload(request.app.state.startup_time)
+    return system_runtime.build_version_payload(request.app.state.startup_time)
 
 
 @router.get("/diagnostics", response_model=schemas.DiagnosticsPayload)
@@ -647,7 +639,7 @@ async def wait_for_task(_api_key: str = Depends(get_api_key)) -> dict[str, Any]:
 def get_env_content(_api_key: str = Depends(get_api_key)) -> schemas.EnvContent:
     """Lê o conteúdo do arquivo .env global."""
     env_path = os.path.join(PROJECT_ROOT, ".env")
-    return schemas.EnvContent(content=read_env_content(env_path))
+    return schemas.EnvContent(content=env_admin.read_env_content(env_path))
 
 
 @router.post("/env/validate", response_model=schemas.EnvValidationResponse)
@@ -656,7 +648,7 @@ def validate_env_content(
     _api_key: str = Depends(get_api_key),
 ) -> schemas.EnvValidationResponse:
     """Valida o conteúdo do .env sem persistir alterações."""
-    return validate_env_payload(payload.content)
+    return env_admin.validate_env_content(payload.content)
 
 
 @router.put("/env", response_model=schemas.ManagedMutationResponse)
@@ -669,7 +661,7 @@ def update_env_content(
     env_path = os.path.join(PROJECT_ROOT, ".env")
 
     try:
-        validation = validate_env_payload(payload.content)
+        validation = env_admin.validate_env_content(payload.content)
         if not validation.valid:
             raise HTTPException(
                 status_code=422,
@@ -678,8 +670,8 @@ def update_env_content(
                     "issues": [item.model_dump() for item in validation.issues],
                 },
             )
-        backup_relpath = backup_env_file(PROJECT_ROOT, env_path)
-        write_env_content(env_path, payload.content)
+        backup_relpath = env_admin.backup_env_file(PROJECT_ROOT, env_path)
+        env_admin.write_env_content(env_path, payload.content)
 
         logger.info("Arquivo .env global atualizado via API.")
 
@@ -715,7 +707,7 @@ def update_env_content(
         ) from e
 
 
-@router.get("/metrics", include_in_schema=False)
+@router.get("/metrics/prometheus", include_in_schema=False)
 def prometheus_metrics() -> Response:
     """Endpoint Prometheus — texto plain com todas as métricas do sistema (3.4/Fase 3)."""
     body, content_type = _metrics.get_metrics_response()

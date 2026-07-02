@@ -25,12 +25,37 @@ os.environ["BENEFICIAMENTO_HISTORICO_DB"] = os.path.join(
 )
 
 import pytest
-from app import models  # pylint: disable=unused-import  # registra tabelas no Base.metadata
+from _pytest.config import Config
+from _pytest.nodes import Item
+
+# Import necessario para registrar as tabelas no Base.metadata.
+from app import models  # pylint: disable=unused-import
 from app.database import Base, get_db
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+_INTEGRATION_FIXTURES = {"client", "db_session"}
+
+
+def pytest_collection_modifyitems(config: Config, items: list[Item]) -> None:
+    """Marca automaticamente unitario/integracao conforme as fixtures usadas.
+
+    Testes que dependem de client/db_session tocam o SQLite em memoria via
+    TestClient (integracao, por definicao em pytest.ini); os demais sao
+    unitarios. e2e permanece explicito via @pytest.mark.e2e no proprio teste.
+    """
+    del config
+    for item in items:
+        if "e2e" in item.keywords:
+            continue
+        fixture_names = getattr(item, "fixturenames", [])
+        if _INTEGRATION_FIXTURES.intersection(fixture_names):
+            item.add_marker(pytest.mark.integracao)
+        else:
+            item.add_marker(pytest.mark.unitario)
+
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 TEST_AUTH_VALUE = "fixture-qa-001"
@@ -52,7 +77,9 @@ def set_sqlite_pragma(dbapi_connection: Any, _connection_record: Any) -> None:
     cursor.close()
 
 
-testing_session_local = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+testing_session_local = sessionmaker(
+    autocommit=False, autoflush=False, bind=test_engine
+)
 
 AUTH_HEADERS = {"X-API-Key": TEST_AUTH_VALUE}
 

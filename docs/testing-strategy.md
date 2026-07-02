@@ -68,15 +68,13 @@ cd Orchestrator
 
 ## 4. Como Rodar no CI (GitHub Actions)
 
-O pipeline `.github/workflows/ci.yml` executa automaticamente em `push` e `pull_request`:
+O pipeline `.github/workflows/governanca.yml` executa automaticamente em `push` e `pull_request`:
 
-1. Instala dependências do `requirements.txt`
-2. Aplica migrações de schema (`run_schema_migrations()`)
-3. Roda `pytest tests/ -q --tb=short`
-4. Falha o PR se qualquer teste quebrar
-
-> Para mudanças de UI, o Playwright E2E **não é executado no CI** (requer servidor ativo).
-> A evidência E2E deve ser gerada e anexada manualmente ao PR.
+1. Instala dependências (`requirements.txt` + `requirements-test.txt`)
+2. Roda ruff/black/isort/bandit no job `lint-python`
+3. Roda `pytest Orchestrator\tests -m "not e2e"` com gate de cobertura (`--cov-fail-under=77`)
+4. Roda os testes E2E Playwright headless no job `testes-e2e` (Windows runner)
+5. Falha o PR se qualquer job obrigatório quebrar (consolidação no job `resumo-final`)
 
 ---
 

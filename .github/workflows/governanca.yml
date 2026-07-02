@@ -159,6 +159,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
+      - name: Lint Bloqueante (Ruff)
+        shell: pwsh
+        run: |
+          python -m pip install ruff
+          python -m ruff check Orchestrator/app Orchestrator/worker.py
+
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
         run: |
@@ -218,7 +224,8 @@ jobs:
         shell: pwsh
         run: |
           $env:PYTHONPATH="Orchestrator"
-          # Gate de regressao: cobertura medida em 12/06/2026 era 80% (jun/2026).
+          # Gate de regressao: cobertura medida em 12/06/2026 era 80%;
+          # o gate fica em 77% para dar margem a flutuacoes de plataforma.
           pytest "Orchestrator\tests" -v -m "not e2e" `
             --cov=app --cov=worker `
             --cov-report=xml:coverage.xml --cov-report=term `
