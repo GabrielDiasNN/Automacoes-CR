@@ -423,6 +423,39 @@ def _normalize_monthly_schedule(
     return base
 
 
+def _normalize_cron_expression(
+    value: Any, strict: bool, logger: Any
+) -> str | list[str]:
+    """Aceita uma expressão Cron única (str) ou várias (list[str]).
+
+    Múltiplas expressões viram jobs independentes em ``_register_schedule``,
+    permitindo cadências que um único cron 5-campos não expressa (ex.: horários
+    distintos por dia da semana).
+
+    Atenção ao campo dia-da-semana: ``CronTrigger.from_crontab`` (APScheduler)
+    usa 0=Segunda...6=Domingo, e não a convenção Vixie/cron tradicional
+    (0=Domingo...6=Sábado). Ex.: "Segunda a Sábado" é ``0-5``, "Domingo" é ``6``.
+    """
+    if isinstance(value, list):
+        exprs = [v.strip() for v in value if isinstance(v, str) and v.strip()]
+        if exprs:
+            return exprs
+        if strict:
+            raise ValueError("cron_expression é obrigatório para schedule_type=cron.")
+        logger.warning(
+            "cron_expression (lista) vazia ou inválida. Usando fallback."
+        )
+        return "0 8 * * 1-5"
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if strict:
+        raise ValueError("cron_expression é obrigatório para schedule_type=cron.")
+    logger.warning(
+        "cron_expression ausente ou inválida para cadência cron. Usando fallback."
+    )
+    return "0 8 * * 1-5"
+
+
 def _normalize_periodic_schedule(
     obj: dict[str, Any],
     base: dict[str, Any],
@@ -485,17 +518,9 @@ def normalize_schedule_payload(  # pylint: disable=too-many-return-statements
     if schedule_type == "manual":
         return base
     if schedule_type == "cron":
-        expr = obj.get("cron_expression")
-        if not isinstance(expr, str) or not expr.strip():
-            if strict:
-                raise ValueError(
-                    "cron_expression é obrigatório para schedule_type=cron."
-                )
-            logger.warning(
-                "cron_expression ausente ou inválida para cadência cron. Usando fallback."
-            )
-            expr = "0 8 * * 1-5"
-        base["cron_expression"] = expr.strip()
+        base["cron_expression"] = _normalize_cron_expression(
+            obj.get("cron_expression"), strict, logger
+        )
         return base
     if schedule_type == "interval":
         return _normalize_interval_schedule(obj, base, strict, logger)
@@ -528,7 +553,10 @@ def describe_schedule_payload(  # pylint: disable=too-many-return-statements
     if stype == "manual":
         return "Manual"
     if stype == "cron":
-        return f"Cron: {schedule.get('cron_expression', '')}"
+        expr = schedule.get("cron_expression", "")
+        if isinstance(expr, list):
+            return "Cron: " + "; ".join(expr)
+        return f"Cron: {expr}"
     if stype == "daily":
         times = schedule.get("times", [])
         return "Diário às " + ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
@@ -595,22 +623,28 @@ def describe_schedule_payload(  # pylint: disable=too-many-return-statements
 def _preview_cron_runs(
     schedule: dict[str, Any], now: datetime, count: int
 ) -> list[str]:
-    out: list[str] = []
-    try:
-        trigger = CronTrigger.from_crontab(
-            schedule.get("cron_expression"),
-            timezone=schedule.get("timezone", "America/Sao_Paulo"),
-        )
-        curr = now
-        for _ in range(count):
-            nxt = trigger.get_next_fire_time(None, curr)
-            if not nxt:
-                break
-            out.append(format_dt_br(nxt))
-            curr = nxt
-    except (ValueError, TypeError, KeyError):
-        pass
-    return out
+    exprs = schedule.get("cron_expression")
+    expr_list = exprs if isinstance(exprs, list) else [exprs]
+    candidates: list[datetime] = []
+    for expr in expr_list:
+        try:
+            trigger = CronTrigger.from_crontab(
+                expr,
+                timezone=schedule.get("timezone", "America/Sao_Paulo"),
+            )
+            prev = None
+            curr = now
+            for _ in range(count):
+                nxt = trigger.get_next_fire_time(prev, curr)
+                if not nxt:
+                    break
+                candidates.append(nxt)
+                prev = nxt
+                curr = nxt
+        except (ValueError, TypeError, KeyError):
+            continue
+    candidates.sort()
+    return [format_dt_br(dt) for dt in candidates[:count]]
 
 
 def _interval_window_runs(

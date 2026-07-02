@@ -18,11 +18,12 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
-SCRIPT_DIR    = os.path.dirname(os.path.abspath(__file__))
-RESULT_FILE   = os.path.join(SCRIPT_DIR, "obs_result.json")
-CONFIG_FILE   = os.path.join(SCRIPT_DIR, "config.json")
-IMAGES_DIR    = os.path.join(SCRIPT_DIR, "images")
-MANIFEST_FILE = os.path.join(SCRIPT_DIR, "phase_cards.json")
+SCRIPT_DIR      = os.path.dirname(os.path.abspath(__file__))
+RESULT_FILE     = os.path.join(SCRIPT_DIR, "obs_result.json")
+CONFIG_FILE     = os.path.join(SCRIPT_DIR, "config.json")
+IMAGES_DIR      = os.path.join(SCRIPT_DIR, "images")
+MANIFEST_FILE   = os.path.join(SCRIPT_DIR, "phase_cards.json")
+SEEN_STATE_FILE = os.path.join(SCRIPT_DIR, "obs_seen_state.json")
 
 DEFAULT_KEYWORDS = {
     "REVIS":       3,
@@ -54,12 +55,16 @@ ACCENT_URGENT = (239,  68,  68)
 ACCENT_WARN   = (245, 158,  11)
 DIVIDER_COLOR = (60,  60,  80)
 FOOTER_BG     = (20,  20,  36)
+DOT_NEW       = (34, 197,  94)
+DOT_PERM      = (110, 110, 130)
 
 CARD_W        = 800
 PAD           = 28
 HEADER_H      = 72
 OB_ROW_H      = 42
 FOOTER_H      = 52
+DOT_RADIUS    = 4
+DOT_GAP       = 8
 
 
 def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -164,16 +169,39 @@ def _draw_header(draw: ImageDraw.ImageDraw, phase_display: str, n_obs: int, font
     draw.text((PAD, (HEADER_H - 22) // 2), label, font=font, fill=HEADER_TEXT)
 
 
-def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool, str, str, str, str]:
-    """Extrai (dias, urgente, kanban, alternativo, produto, entrega) de um OB."""
+def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool, str, str, str, str, str]:
+    """Extrai (dias, urgente, kanban, alternativo, produto, cliente, entrega) de um OB."""
     dias    = float(ob.get("_dias_float", 0))
     thr     = float(ob.get("_threshold", threshold))
     urgente = dias >= thr * 2
     kanban  = ob.get("PLACA_KANBAN") or "S/Kanban"
     if kanban == "SEM KANBAN":
         kanban = "S/Kanban"
+    cliente_raw = ob.get("NOME_CLIENTE") or "—"
+    cliente = cliente_raw if len(cliente_raw) <= 40 else cliente_raw[:39] + "…"
     entrega = fmt_entrega(ob.get("DT_ENTREGA"))
-    return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").upper(), entrega
+    return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").upper(), cliente, entrega
+
+
+def _load_seen_obs(path: str) -> set[str]:
+    if not os.path.exists(path):
+        return set()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return set(str(n) for n in data.get("numero_obs", []))
+    except (OSError, json.JSONDecodeError):
+        return set()
+
+
+def _save_seen_obs(path: str, numero_obs: set[str]) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(
+            {"numero_obs": sorted(numero_obs), "updated_at": datetime.now().isoformat()},
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
 
 
 def _draw_ob_row(  # pylint: disable=too-many-locals
@@ -187,20 +215,22 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
     if i > 0:
         draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
 
-    dias, urgente, kanban, alternativo, produto, entrega = _ob_display_data(ob, threshold)
+    dias, urgente, kanban, alternativo, produto, cliente, entrega = _ob_display_data(ob, threshold)
     dias_color = ACCENT_URGENT if urgente else TEXT_MAIN
+    dot_color = DOT_NEW if ob.get("_is_new") else DOT_PERM
+    text_x0 = PAD + DOT_RADIUS * 2 + DOT_GAP
 
     # 1. Preparar partes de texto
     part1 = f"OB {ob.get('NUMERO_OB', '—')}  ·  {kanban}  ·  {fmt_dias(dias)} dias"
     part2 = " ⚠" if urgente else ""
-    part4 = f"  ·  {ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg  ·  Entrega: {entrega}"
+    part4 = f"  ·  {ob.get('QT_PECAS') or 0} pcs  ·  {fmt_kg(ob.get('QT_KILOS_REAL') or 0)} kg  ·  {cliente}  ·  Entrega: {entrega}"
 
     # 2. Medir larguras para calcular o espaço disponível para o produto
     w1 = draw.textbbox((0, 0), part1, font=fonts["ob"])[2]
     w2 = draw.textbbox((0, 0), part2, font=fonts["ob"])[2] if part2 else 0
     w4 = draw.textbbox((0, 0), part4, font=fonts["detalhe"])[2]
 
-    w_max = CARD_W - PAD * 2
+    w_max = CARD_W - PAD - text_x0
     w_prod_max = w_max - w1 - w2 - w4 - 10
 
     # 3. Formatar texto do produto e truncar se exceder o limite
@@ -209,6 +239,7 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
     if w3 > w_prod_max:
         base_sep = f"  ·  {alternativo} · " if alternativo else "  ·  "
         prod_name = produto
+        prod_text = ""
         while len(prod_name) > 0:
             prod_name = prod_name[:-1]
             test_text = base_sep + prod_name + "..."
@@ -218,8 +249,14 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
                 break
 
     # 4. Desenhar sequencialmente na mesma linha (centralizado verticalmente)
-    x: float = PAD
+    x: float = text_x0
     y = y0 + 12
+
+    dot_cy = y0 + OB_ROW_H // 2
+    draw.ellipse(
+        [(PAD, dot_cy - DOT_RADIUS), (PAD + DOT_RADIUS * 2, dot_cy + DOT_RADIUS)],
+        fill=dot_color,
+    )
 
     draw.text((x, y), part1, font=fonts["ob"], fill=dias_color)
     x += w1
@@ -244,10 +281,15 @@ def _draw_footer(
 ) -> None:
     footer_y = HEADER_H + n_obs * OB_ROW_H
     draw.rectangle([(0, footer_y), (CARD_W, footer_y + FOOTER_H)], fill=FOOTER_BG)
+    obs_distintas = len({o.get("NUMERO_OB") for o in obs_fase})
     pcs_total = sum(int(float(o.get("QT_PECAS") or 0)) for o in obs_fase)
     kg_total = sum(float(o.get("QT_KILOS_REAL") or 0) for o in obs_fase)
     agora    = datetime.now().strftime("%d/%m/%Y às %H:%M")
-    text     = f"  {pcs_total} pcs  ·  {fmt_kg(kg_total)} kg parados  ·  limite ≥ {fmt_dias(threshold)} dia  ·  {agora}"
+    ob_label = "OB" if obs_distintas == 1 else "OBs"
+    text     = (
+        f"  {obs_distintas} {ob_label}  ·  {pcs_total} pcs  ·  {fmt_kg(kg_total)} kg parados  ·  "
+        f"limite ≥ {fmt_dias(threshold)} dia  ·  {agora}"
+    )
     draw.text((PAD, footer_y + (FOOTER_H - 13) // 2), text, font=font, fill=TEXT_DIM)
 
 
@@ -263,9 +305,9 @@ def build_phase_image(
     draw: ImageDraw.ImageDraw = ImageDraw.Draw(img)
     fonts: dict[str, ImageFont.FreeTypeFont] = {
         "header":  _load_font(22, bold=True),
-        "ob":      _load_font(14, bold=True),
-        "produto": _load_font(13, bold=False),
-        "detalhe": _load_font(13, bold=False),
+        "ob":      _load_font(13, bold=True),
+        "produto": _load_font(12, bold=False),
+        "detalhe": _load_font(12, bold=False),
         "footer":  _load_font(13, bold=False),
     }
 
@@ -417,6 +459,10 @@ def main() -> None:
         print("[OK] Nenhuma OB excedeu o limite configurado — nenhum card gerado.")
         sys.exit(2)
 
+    seen = _load_seen_obs(SEEN_STATE_FILE)
+    for ob in filtradas:
+        ob["_is_new"] = str(ob.get("NUMERO_OB")) not in seen
+
     grupos_ordenados = _group_obs(filtradas, max_obs, phase_order)
 
     os.makedirs(IMAGES_DIR, exist_ok=True)
@@ -427,6 +473,8 @@ def main() -> None:
 
     with open(MANIFEST_FILE, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    _save_seen_obs(SEEN_STATE_FILE, {str(o.get("NUMERO_OB")) for o in filtradas})
 
     print(f"[OK] phase_cards.json gerado ({len(manifest)} fases).")
     sys.exit(0)
