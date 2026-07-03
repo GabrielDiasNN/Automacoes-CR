@@ -1,9 +1,10 @@
 ﻿# ==============================================================================
 # ARQUIVO: Send-WhatsApp.ps1
-# VERSAO : 2.2
+# VERSAO : 2.3
 # DESCRICAO: Wrapper Global para envio de WhatsApp. Suporta parametros explicitos
 #            ou carregamento de 'whatsapp-config.json' para retrocompatibilidade.
 #            Inclui rotina de autolimpeza direcionada de processos zumbis e locks.
+#            Suporta modo BATCH (lote), delegando a montagem dos argumentos ao chamador.
 # ==============================================================================
 
 [CmdletBinding()]
@@ -15,7 +16,9 @@ param(
     [string]$ExecId = "manual",
     [string]$Mode = "AUTO",
     [string]$ClientId = "hub-global",
-    [string]$LogFile = ""
+    [string]$LogFile = "",
+    [string]$BatchInputFile = "",  # Obrigatorio quando -Mode BATCH: JSON com itens {phase_key,image_path,caption}
+    [string]$BatchResultFile = "" # Obrigatorio quando -Mode BATCH: caminho de saida do resultado por item
 )
 
 $ErrorActionPreference = "Stop"
@@ -113,9 +116,17 @@ function Clear-StaleWhatsAppLocksAndProcesses {
 # Executar a limpeza antes do início da inicialização do canal
 Clear-StaleWhatsAppLocksAndProcesses
 
+$isBatchMode = $Mode -eq "BATCH"
+
 # --- Validacao ---
-if ([string]::IsNullOrWhiteSpace($finalPhone)) { Write-Error "Telefone de destino ausente."; exit 1 }
-if ([string]::IsNullOrWhiteSpace($finalMessage)) { Write-Error "Mensagem vazia."; exit 1 }
+if ([string]::IsNullOrWhiteSpace($finalPhone)) { Write-Error "Telefone/ChatId de destino ausente."; exit 1 }
+if ($isBatchMode) {
+    if ([string]::IsNullOrWhiteSpace($BatchInputFile)) { Write-Error "BatchInputFile ausente para -Mode BATCH."; exit 1 }
+    if ([string]::IsNullOrWhiteSpace($BatchResultFile)) { Write-Error "BatchResultFile ausente para -Mode BATCH."; exit 1 }
+} elseif ([string]::IsNullOrWhiteSpace($finalMessage)) {
+    Write-Error "Mensagem vazia."
+    exit 1
+}
 
 # --- Configurar Log padrao se vazio ---
 if ([string]::IsNullOrWhiteSpace($LogFile)) {
@@ -126,16 +137,29 @@ if ([string]::IsNullOrWhiteSpace($LogFile)) {
 # --- Execucao ---
 Write-Host "Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
 
-$nodeArgs = @(
-    "`"$NodeScript`"",
-    "`"$ExecId`"",
-    "`"$Mode`"",
-    "`"$finalClientId`"",
-    "`"$finalPhone`"",
-    $(if ($finalAttachment) { "`"$finalAttachment`"" } else { '""' }),
-    "`"$finalMessage`"",
-    "`"$LogFile`""
-)
+$nodeArgs = if ($isBatchMode) {
+    @(
+        "`"$NodeScript`"",
+        "`"$ExecId`"",
+        "`"$Mode`"",
+        "`"$finalClientId`"",
+        "`"$finalPhone`"",
+        "`"$BatchInputFile`"",
+        "`"$BatchResultFile`"",
+        "`"$LogFile`""
+    )
+} else {
+    @(
+        "`"$NodeScript`"",
+        "`"$ExecId`"",
+        "`"$Mode`"",
+        "`"$finalClientId`"",
+        "`"$finalPhone`"",
+        $(if ($finalAttachment) { "`"$finalAttachment`"" } else { '""' }),
+        "`"$finalMessage`"",
+        "`"$LogFile`""
+    )
+}
 
 $WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
     $resolvedPath = Convert-Path $ConfigPath
@@ -144,9 +168,9 @@ $WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
 } else {
     (Get-Location).Path
 }
-# Resolve node_modules: usa WorkDir quando existe, senão fallback para Receitas Bloqueadas
+# Resolve node_modules: usa WorkDir quando existe, senão fallback para o motor compartilhado em lib/
 $candidateNodePath = Join-Path $WorkDir "node_modules"
-$fallbackNodePath  = Join-Path $LibDir "..\Receitas Bloqueadas\node_modules"
+$fallbackNodePath  = Join-Path $LibDir "node_modules"
 $env:NODE_PATH = if (Test-Path $candidateNodePath) { $candidateNodePath } else { $fallbackNodePath }
 
 $result = Invoke-NativeProcess -FilePath $NodeExe -Arguments ($nodeArgs -join " ") -WorkingDirectory $WorkDir -LogAction {

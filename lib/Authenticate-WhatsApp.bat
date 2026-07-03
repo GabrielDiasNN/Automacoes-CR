@@ -4,7 +4,7 @@ REM Use este arquivo sempre que precisar re-autenticar o WhatsApp para qualquer 
 REM que utilize clientId "hub-global" (OBs Paradas Fase, Receitas Bloqueadas, etc.)
 SetLocal
 cd /d "%~dp0"
-set NODE_PATH=%~dp0..\Receitas Bloqueadas\node_modules
+set NODE_PATH=%~dp0node_modules
 echo Iniciando autenticacao WhatsApp (sessao hub-global)...
 echo Escaneie o QR code com o celular: WhatsApp ^> Aparelhos conectados ^> Conectar um aparelho
 echo.

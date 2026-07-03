@@ -30,7 +30,7 @@ if (-not (Get-Command $NodeExe -ErrorAction SilentlyContinue)) {
     }
 }
 
-$env:NODE_PATH = Join-Path $LibDir "..\Receitas Bloqueadas\node_modules"
+$env:NODE_PATH = Join-Path $LibDir "node_modules"
 
 # Verificar se ha execucao de automacao em andamento que usa hub-global
 $EnvFile = Join-Path $LibDir "..\\.env"

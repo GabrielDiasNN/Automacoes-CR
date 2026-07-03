@@ -24,7 +24,8 @@ $script:ExcludedFragments = @(
     "\node_modules\",
     "\Logs\",
     "\Backups\",
-    "\.wwebjs_auth\"
+    "\.wwebjs_auth\",
+    "\.claude\worktrees\"
 )
 
 function Convert-ToRelativePath {

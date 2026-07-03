@@ -188,6 +188,74 @@ def _manifest_docs_issues(
     return blocking_issues
 
 
+def _whatsapp_config_issues(
+    *,
+    automation_dir: str,
+    manifest: CatalogManifest,
+) -> list[schemas.AutomationPreflightIssue]:
+    if "whatsapp" not in manifest.channels:
+        return []
+
+    config_path = os.path.join(automation_dir, "whatsapp-config.json")
+    if not os.path.isfile(config_path):
+        return [
+            _issue(
+                "whatsapp_config_missing",
+                "Canal whatsapp declarado no manifesto, mas whatsapp-config.json "
+                "não foi encontrado na pasta da automação.",
+                severity="ERROR",
+            )
+        ]
+
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config_payload: dict[str, Any] = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return [
+            _issue(
+                "whatsapp_config_invalid",
+                "whatsapp-config.json não é um JSON válido.",
+                severity="ERROR",
+            )
+        ]
+
+    issues: list[schemas.AutomationPreflightIssue] = []
+    auth = config_payload.get("auth")
+    client_id = auth.get("clientId") if isinstance(auth, dict) else None
+    if not isinstance(client_id, str) or not client_id.strip():
+        issues.append(
+            _issue(
+                "whatsapp_config_client_id_missing",
+                "whatsapp-config.json precisa declarar auth.clientId (string não vazia).",
+                severity="ERROR",
+            )
+        )
+
+    target = config_payload.get("target")
+    target_type = target.get("type") if isinstance(target, dict) else None
+    contact_id = target.get("contactId") if isinstance(target, dict) else None
+    if target_type not in ("contact", "group"):
+        issues.append(
+            _issue(
+                "whatsapp_config_target_type_invalid",
+                "whatsapp-config.json precisa declarar target.type como 'contact' ou 'group'.",
+                severity="ERROR",
+            )
+        )
+    expected_suffix = "@g.us" if target_type == "group" else "@c.us"
+    if not isinstance(contact_id, str) or not contact_id.endswith(expected_suffix):
+        issues.append(
+            _issue(
+                "whatsapp_config_contact_id_invalid",
+                "whatsapp-config.json precisa declarar target.contactId "
+                f"terminado em '{expected_suffix}'.",
+                severity="ERROR",
+            )
+        )
+
+    return issues
+
+
 def _load_manifest_governance(
     *,
     automation_dir: str,
@@ -214,15 +282,22 @@ def _load_manifest_governance(
         manifest_payload = json.load(f)
     manifest = CatalogManifest.model_validate(manifest_payload)
 
-    blocking_issues = _manifest_field_mismatches(
-        payload=payload,
-        manifest=manifest,
-        resolved_script_path=resolved_script_path,
-        project_root=project_root,
-    ) + _manifest_docs_issues(
-        automation_dir=automation_dir,
-        manifest=manifest,
-        project_root=project_root,
+    blocking_issues = (
+        _manifest_field_mismatches(
+            payload=payload,
+            manifest=manifest,
+            resolved_script_path=resolved_script_path,
+            project_root=project_root,
+        )
+        + _manifest_docs_issues(
+            automation_dir=automation_dir,
+            manifest=manifest,
+            project_root=project_root,
+        )
+        + _whatsapp_config_issues(
+            automation_dir=automation_dir,
+            manifest=manifest,
+        )
     )
     warnings: list[schemas.AutomationPreflightIssue] = []
 

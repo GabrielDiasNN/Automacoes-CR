@@ -222,17 +222,13 @@ try {
         # Ler chatId do config WhatsApp
         $waCfg = Get-Content $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $chatId = $waCfg.target.contactId
+        $clientId = if ($waCfg.auth.clientId) { $waCfg.auth.clientId } else { "hub-global" }
 
-        $nodeExe  = Join-Path $projectRoot "Receitas Bloqueadas\node_modules\.bin\node.cmd"
-        if (-not (Test-Path $nodeExe)) { $nodeExe = "node" }
-        $coreJs   = Join-Path $projectRoot "lib\WhatsApp-Core.js"
-        $clientId = if ($waCfg.auth.clientId) { $waCfg.auth.clientId } elseif ($waCfg.whatsapp.clientId) { $waCfg.whatsapp.clientId } else { "hub-global" }
+        $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
+        $waArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode BATCH -ClientId `"$clientId`" -Phone `"$chatId`" -BatchInputFile `"$BatchInputFile`" -BatchResultFile `"$BatchResultFile`" -LogFile `"$LogFile`""
 
-        $nodeArgs = "`"$coreJs`" `"$ExecId`" BATCH `"$clientId`" `"$chatId`" `"$BatchInputFile`" `"$BatchResultFile`" `"$LogFile`""
-        $env:NODE_PATH = Join-Path $projectRoot "Receitas Bloqueadas\node_modules"
-
-        $waResult = Invoke-NativeProcess -FilePath $nodeExe -Arguments $nodeArgs `
-            -WorkingDirectory (Join-Path $projectRoot "lib") `
+        $waResult = Invoke-NativeProcess -FilePath "powershell.exe" -Arguments $waArgs `
+            -WorkingDirectory $ScriptDir `
             -LogAction {
                 param($msg, $lvl)
                 if (-not [string]::IsNullOrWhiteSpace($msg)) {
