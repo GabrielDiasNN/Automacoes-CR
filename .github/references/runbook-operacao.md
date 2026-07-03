@@ -6,12 +6,11 @@ O Monitor (`MonitorAutomacoes.ps1`) coordena os agendamentos via `config.json`.
 - **Log:** `Logs\YYYY-MM_Monitor.log`.
 
 ## 2. Gestão de Notificações (WhatsApp Soberano)
-O motor v1.3 utiliza **Ack Monitoring** para garantir a entrega.
+O motor `lib/WhatsApp-Core.js` utiliza **Ack Monitoring** para garantir a entrega. Todas as automações compartilham a sessão `hub-global`.
 - **Falso Positivo:** Se o log diz "Sucesso" mas a mensagem não chegou, o Motor Soberano agora detecta isso via Ack Nível 0 e encerra com **ExitCode 24**.
-- **Como Resetar Sessão:**
-    1. Apague a pasta `.wwebjs_auth` na pasta da automação.
-    2. No terminal: `node sendWhatsApp.js REAUTH VISUAL`
-    3. Escaneie o QR Code na janela que abrirá.
+- **Como Resetar Sessão (`hub-global`, compartilhada por todas as automações):**
+    1. Execute `lib\Authenticate-WhatsApp.bat`.
+    2. Escaneie o QR Code na janela que abrirá.
 
 ## 3. Troubleshooting de Banco de Dados (Oracle)
 As automações utilizam **Oracle Thick Mode**.

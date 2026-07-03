@@ -1,5 +1,17 @@
 # Changelog
 
+## [9.5.19] - 02/07/2026
+### Alterado
+- **Revisão de arquitetura do canal WhatsApp implementada por completo**: as dependências Node do motor soberano (`whatsapp-web.js`, `qrcode-terminal`) migraram de `Receitas Bloqueadas/node_modules` para `lib/package.json`/`lib/node_modules`, eliminando a dependência invertida em que a biblioteca compartilhada `lib/` dependia de uma automação de domínio específica. `Receitas Bloqueadas/package.json` perdeu as dependências do motor (mantém apenas o script de teste offline). Todos os pontos que resolviam `NODE_PATH` via `Receitas Bloqueadas/node_modules` (`lib/Send-WhatsApp.ps1`, `lib/Keep-WhatsApp-Open.ps1`, `lib/Authenticate-WhatsApp.bat`, `Tools/Get-WhatsAppGroups.ps1`) passaram a apontar para `lib/node_modules`.
+- **Caminho único de invocação do motor WhatsApp**: `lib/Send-WhatsApp.ps1` (v2.3) ganhou suporte ao modo `BATCH` (`-BatchInputFile`/`-BatchResultFile`); `OBs Paradas Fase/run.ps1` deixou de invocar `lib/WhatsApp-Core.js` diretamente via `node.exe` e passou a delegar ao wrapper, herdando a limpeza de locks/processos zumbis (`Clear-StaleWhatsAppLocksAndProcesses`) antes indisponível nesse fluxo.
+- **`docs/architecture-standard.md` ganhou a seção "Canal WhatsApp — Sessão Única e Concorrência"**, documentando que os exit codes `40` (lock ativo) e `23` (cooldown) são comportamento normal de serialização sobre a sessão compartilhada `hub-global`, não falha.
+
+### Removido
+- **`Receitas Bloqueadas/sendWhatsApp.js` (motor legado v1.3.0) removido**: não fazia parte do fluxo de produção (usava sessão/`clientId` próprios, desconectados de `hub-global`) e só era mantido vivo por `whatsapp-offline.test.js`, que agora valida exclusivamente o contrato de `lib/WhatsApp-Core.js`. Referências obsoletas atualizadas em `.github/references/runbook-operacao.md`, `.github/skills/nodejs-communications/SKILL.md` e `OBs Paradas Fase/CONTEXT.md`. (`.vscode/tasks.json` também foi corrigido localmente, mas esse arquivo é ignorado pelo git — não faz parte deste commit.)
+
+### Adicionado
+- **Validação de `whatsapp-config.json` no preflight de automações** (`Orchestrator/app/services/automation_preflight.py`, função `_whatsapp_config_issues`): quando o manifesto declara o canal `whatsapp`, o preflight passa a exigir `auth.clientId` (string não vazia) e `target.type`/`target.contactId` coerentes (`contact` → sufixo `@c.us`, `group` → sufixo `@g.us`) antes de permitir `create`/`update` da automação, em vez de falhar apenas em runtime no disparo real. Cobertura em `Orchestrator/tests/test_automations_crud.py` (`test_preflight_blocks_missing_whatsapp_config`, `test_preflight_blocks_invalid_whatsapp_config_schema`).
+
 ## [9.5.18] - 02/07/2026
 ### Corrigido
 - **Falso-negativo silencioso em `Test-PythonGovernance.ps1` quando invocado com `-Paths` externo**: chamar o script como processo separado via `pwsh -File Test-PythonGovernance.ps1 -Paths @("a.py","b.py")` fazia o parser de CLI do próprio `pwsh.exe` (modo `-File`) descartar silenciosamente todos os elementos do array após o primeiro, validando apenas `a.py` e reportando sucesso sem sequer mencionar `b.py`. O pipeline de produção (`ValidarAutomacoes.ps1`, usado pelo pre-commit hook e pelo CI) não é afetado — sempre invoca via operador `&` in-process, que faz o binding correto do array. Adicionado comentário de alerta no script documentando a limitação (nunca invocar via `-File` para múltiplos arquivos) e um split defensivo que recupera o caso em que os caminhos chegam colapsados em uma única string separada por vírgula.

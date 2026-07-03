@@ -20,7 +20,7 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 
 - Oracle — string de conexão via `ORACLE_CONNECT_STRING` no `.env`
 - Pillow — geração de cards PNG
-- `whatsapp-web.js` via `node_modules` em `Receitas Bloqueadas/`
+- `whatsapp-web.js` via `node_modules` compartilhado em `lib/` (motor `lib/WhatsApp-Core.js`, invocado sempre via `lib/Send-WhatsApp.ps1`)
 
 ## Utilitários de debug
 

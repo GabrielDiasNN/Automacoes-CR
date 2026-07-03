@@ -143,6 +143,129 @@ def test_preflight_reports_manifest_drift_without_persisting(
     assert "notification_channels_mismatch" in issue_codes
 
 
+def _write_whatsapp_manifest(
+    auto_dir: Path, docs_dir: Path, *, slug: str, name: str
+) -> None:
+    auto_dir.mkdir(parents=True, exist_ok=True)
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    (auto_dir / "README.md").write_text(f"# {name}\n", encoding="utf-8")
+    (auto_dir / "CONTEXT.md").write_text("# Contexto\n", encoding="utf-8")
+    (auto_dir / "run.ps1").write_text("Write-Host 'ok'\n", encoding="utf-8")
+    (docs_dir / f"{slug}-runbook.md").write_text("# Runbook\n", encoding="utf-8")
+    (auto_dir / "automation.manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "WA-99",
+                "name": name,
+                "slug": slug,
+                "criticality": "high",
+                "owner_area": "Operação",
+                "entrypoint": "run.ps1",
+                "runtime": "powershell",
+                "channels": ["whatsapp"],
+                "max_runtime_minutes": 30,
+                "max_retries": 0,
+                "schedule_summary": "Manual",
+                "runbook_path": f"docs/runbooks/{slug}-runbook.md",
+                "context_path": f"{name}/CONTEXT.md",
+                "readme_path": f"{name}/README.md",
+                "orchestrator": {"script_path": f"./{name}/run.ps1"},
+                "dependencies": {"oracle": False, "outlook": False, "whatsapp": True},
+                "smoke_tests": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_preflight_blocks_missing_whatsapp_config(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    name = "Auto WhatsApp Sem Config"
+    auto_dir = tmp_path / name
+    docs_dir = tmp_path / "docs" / "runbooks"
+    _write_whatsapp_manifest(
+        auto_dir, docs_dir, slug="auto-whatsapp-sem-config", name=name
+    )
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+
+    res = client.post(
+        "/api/automations/preflight",
+        json={
+            "name": name,
+            "script_path": f"./{name}/run.ps1",
+            "notification_channels": "whatsapp",
+            "enabled": True,
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["valid"] is False
+    issue_codes = {item["code"] for item in data["governance"]["blocking_issues"]}
+    assert "whatsapp_config_missing" in issue_codes
+
+
+def test_preflight_blocks_invalid_whatsapp_config_schema(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    name = "Auto WhatsApp Config Invalida"
+    auto_dir = tmp_path / name
+    docs_dir = tmp_path / "docs" / "runbooks"
+    _write_whatsapp_manifest(
+        auto_dir, docs_dir, slug="auto-whatsapp-config-invalida", name=name
+    )
+    (auto_dir / "whatsapp-config.json").write_text(
+        json.dumps({"auth": {}, "target": {"type": "broadcast", "contactId": "123"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+
+    res = client.post(
+        "/api/automations/preflight",
+        json={
+            "name": name,
+            "script_path": f"./{name}/run.ps1",
+            "notification_channels": "whatsapp",
+            "enabled": True,
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["valid"] is False
+    issue_codes = {item["code"] for item in data["governance"]["blocking_issues"]}
+    assert "whatsapp_config_client_id_missing" in issue_codes
+    assert "whatsapp_config_target_type_invalid" in issue_codes
+    assert "whatsapp_config_contact_id_invalid" in issue_codes
+
+
+@pytest.mark.parametrize(
+    "automation_dir_name", ["Receitas Bloqueadas", "OBs Paradas Fase"]
+)
+def test_whatsapp_config_issues_accepts_real_production_configs(
+    automation_dir_name: str,
+) -> None:
+    from app.runtime import get_project_root  # pylint: disable=import-outside-toplevel
+    from app.services.automation_preflight import (  # pylint: disable=import-outside-toplevel
+        _whatsapp_config_issues,
+    )
+    from app.services.portfolio_manifest import (  # pylint: disable=import-outside-toplevel
+        CatalogManifest,
+    )
+
+    automation_dir = os.path.join(get_project_root(), automation_dir_name)
+    manifest_path = os.path.join(automation_dir, "automation.manifest.json")
+    with open(manifest_path, encoding="utf-8") as f:
+        manifest = CatalogManifest.model_validate(json.load(f))
+
+    assert "whatsapp" in manifest.channels
+    issues = _whatsapp_config_issues(automation_dir=automation_dir, manifest=manifest)
+    assert not issues
+
+
 def test_create_automation_rejects_manifest_drift(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

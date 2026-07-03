@@ -30,8 +30,8 @@ if (-not (Get-Command $NodeExe -ErrorAction SilentlyContinue)) {
     }
 }
 
-# NODE_PATH aponta para node_modules compartilhados
-$env:NODE_PATH = Join-Path $PSScriptRoot "..\Receitas Bloqueadas\node_modules"
+# NODE_PATH aponta para o motor WhatsApp compartilhado em lib/
+$env:NODE_PATH = Join-Path $LibDir "node_modules"
 
 Write-Host ""
 Write-Host "=====================================================" -ForegroundColor Cyan

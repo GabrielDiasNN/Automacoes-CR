@@ -1,0 +1,14 @@
+{
+  "name": "whatsapp-core-lib",
+  "version": "1.0.0",
+  "description": "Dependencias do motor soberano de WhatsApp compartilhado (lib/WhatsApp-Core.js).",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "qrcode-terminal": "0.12.0",
+    "whatsapp-web.js": "1.34.6"
+  },
+  "overrides": {
+    "basic-ftp": "5.2.2"
+  }
+}

@@ -40,6 +40,15 @@ Se o ruleset estiver ausente ou inválido, o validador deve retornar `RULESET_MI
 - Caminhos informados via `-Paths` devem resolver dentro de `RootPath`; entradas fora da raiz são bloqueadas sem leitura do arquivo externo.
 - Documentos centrais devem apontar para este padrão para manter discovery consistente entre Codex, Gemini CLI e Antigravity.
 
+## Canal WhatsApp — Sessão Única e Concorrência
+
+Todas as automações que enviam WhatsApp (`Receitas Bloqueadas`, `OBs Paradas Fase`) e o alerta de falhas do Orchestrator (`Orchestrator/app/notifications.py`) compartilham a mesma sessão autenticada `hub-global` (`lib/.wwebjs_auth/session-hub-global/`), acionada através do motor único `lib/WhatsApp-Core.js` (invocado sempre via `lib/Send-WhatsApp.ps1`).
+
+- **Sessão única por design:** não há pool de sessões nem fila dedicada; a concorrência entre chamadores é resolvida por lock de arquivo no perfil da sessão.
+- **Exit code `40` (lock ativo)** e **exit code `23` (cooldown)** são **comportamento normal de serialização**, não falha da automação — o chamador deve reprocessar no próximo ciclo agendado, não escalar como incidente.
+- **Exit code `21`** (sessão expirada) exige reautenticação manual via `lib\Authenticate-WhatsApp.bat`; nenhuma automação deve tentar reautenticar sozinha.
+- Novos consumidores do canal WhatsApp devem invocar exclusivamente `lib/Send-WhatsApp.ps1` (nunca `lib/WhatsApp-Core.js` diretamente), para herdar a limpeza de locks/processos zumbis e a resolução de `NODE_PATH` centralizadas no wrapper.
+
 ## Validação (Validacao)
 
 Execute o validador diretamente quando alterar arquitetura, runtime, automações governadas ou documentação central:

@@ -7,7 +7,7 @@ description: Use when changing WhatsApp automation, headless communication flows
 Restringir e padronizar o uso de Node.js no hub para comunicacao automatizada, bootstrap local e fluxos headless que dependem de confirmacao real antes de encerrar a execucao.
 
 ## When to Use
-- Use ao alterar `Receitas Bloqueadas/sendWhatsApp.js`, `Receitas Bloqueadas/RunWhatsApp.bat` ou `lib/WhatsApp-Core.js`.
+- Use ao alterar `lib/WhatsApp-Core.js`, `lib/Send-WhatsApp.ps1` ou `Receitas Bloqueadas/RunWhatsApp.bat`.
 - Use ao revisar fluxo de envio por WhatsApp, confirmacao de ack, retry de canal ou inicializacao via `.bat`/`.cmd`.
 - Use ao definir como PowerShell ou Python chamam um processo Node.js que atua apenas como ponte de comunicacao.
 
@@ -29,14 +29,14 @@ Restringir e padronizar o uso de Node.js no hub para comunicacao automatizada, b
 - Nao introduza segredo hardcoded em JS, BAT ou JSON auxiliar.
 
 ## Repo-Specific Constraints
-- Use `Receitas Bloqueadas/sendWhatsApp.js` e `lib/WhatsApp-Core.js` como referencia do canal WhatsApp atual.
+- Use `lib/WhatsApp-Core.js` e `lib/Send-WhatsApp.ps1` como referencia do canal WhatsApp atual (motor soberano compartilhado por todas as automacoes).
 - Preserve a integracao com `Receitas Bloqueadas/RunWhatsApp.bat` quando houver bootstrap por shell legado de entrada.
 - Mantenha a persistencia de entrega alinhada aos arquivos de estado do dominio, em vez de criar estado paralelo apenas no Node.
 - Quando o Node for chamado por PowerShell, devolva saida e codigo de retorno que permitam correlacao com `ExecId` no fluxo superior.
 
 ## Validation
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` apos alterar contratos do canal.
-- Valide manualmente o fluxo entre `RunWhatsApp.bat`, `sendWhatsApp.js` e o chamador PowerShell para confirmar propagacao de erro e encerramento limpo.
+- Valide manualmente o fluxo entre `RunWhatsApp.bat`, `lib/Send-WhatsApp.ps1` e `lib/WhatsApp-Core.js` para confirmar propagacao de erro e encerramento limpo.
 - Revise se os arquivos alterados continuam compativeis com o controle de estado existente em `Receitas Bloqueadas/`.
 
 ## Troubleshooting
