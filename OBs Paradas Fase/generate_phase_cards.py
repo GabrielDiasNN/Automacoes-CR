@@ -1,6 +1,6 @@
 # pylint: disable=broad-exception-caught
 # {
-#   "version": "1.3.0",
+#   "version": "1.7.0",
 #   "description": "Le obs_result.json + config.json, gera images PNG por fase e phase_cards.json"
 # }
 import json
@@ -8,6 +8,7 @@ import os
 import re
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -25,20 +26,61 @@ IMAGES_DIR      = os.path.join(SCRIPT_DIR, "images")
 MANIFEST_FILE   = os.path.join(SCRIPT_DIR, "phase_cards.json")
 SEEN_STATE_FILE = os.path.join(SCRIPT_DIR, "obs_seen_state.json")
 
-DEFAULT_KEYWORDS = {
-    "REVIS":       3,
-    "AMACIANTE":   0.25,
-    "HIDRO":       1,
-    "SECADOR":     1,
-    "ABRIDOR":     1,
-    "RAMA":        1,
-    "FELPAGEM":    1,
-    "CONFERENCIA": 0.5,
-    "COMPACTA":    1,
-    "BRILHO":      1,
-    "CQ":          1,
-    "EXPEDICAO":   1,
+def _join_responsavel(numeros: list[Any]) -> str:
+    return " @".join(str(x).strip() for x in numeros if str(x).strip())
+
+
+def _resolve_contato(contato: Any) -> str:
+    """Resolve uma entrada de 'contatos': objeto {nome, numero}, lista desses, ou string legada."""
+    if isinstance(contato, list):
+        return _join_responsavel(
+            [c.get("numero", "") if isinstance(c, dict) else c for c in contato]
+        )
+    if isinstance(contato, dict):
+        return str(contato.get("numero", "")).strip()
+    return str(contato).strip()
+
+
+@dataclass
+class FaseConfig:
+    descricao: str
+    threshold_dias: float
+    responsavel: str
+    ativo: bool = True
+
+
+# Fallback usado apenas se config.json estiver ausente/corrompido — mesmos valores
+# de referencia hoje versionados em config.json (contatos/fases_monitoradas).
+_LIDER_1_TURNO         = "5547984856137"   # Adir Marques
+_LIDER_RESERVA_1_TURNO = "5547991591816"   # Anderson Koehler
+_LIDER_2_TURNO         = "5547997750596"   # Mateus Conaco
+_LIDER_RESERVA_2_TURNO = "5547996608441"   # Elisa Mendes
+_LIDER_3_TURNO         = "5548999894828"   # Cristóvão Luiz
+_LIDER_RESERVA_3_TURNO = "5548988614164"   # Lucas Pilantil
+_EQUIPE_QUALIDADE = _join_responsavel(
+    ["5548998221241", "5547999188695", "5541997575631"]  # Sidiane, Elso, Daniele
+)
+
+DEFAULT_FASES_MONITORADAS: dict[str, FaseConfig] = {
+    "20":  FaseConfig("RMC-REVISÃO MALHA CRUA", 3, _LIDER_3_TURNO),
+    "25":  FaseConfig("CDP-CONFERENCIA DE PESO", 0.5, _EQUIPE_QUALIDADE, ativo=False),
+    "26":  FaseConfig("IVF-INVERSÃO P/FELPAGEM", 1, _LIDER_3_TURNO),
+    "45":  FaseConfig("CDC-CONFERENCIA DE COR", 0.5, _LIDER_RESERVA_3_TURNO),
+    "46":  FaseConfig("PPA-PREPARAÇÃO AMACIANTE", 0.25, _LIDER_1_TURNO),
+    "50":  FaseConfig("HID-HIDRO UMIDO", 1, _LIDER_1_TURNO),
+    "55":  FaseConfig("HIS-HIDRO SECO", 1, _LIDER_1_TURNO),
+    "60":  FaseConfig("SEC-SECADOR", 1, _LIDER_1_TURNO),
+    "65":  FaseConfig("FEL-FELPAGEM", 1, _LIDER_RESERVA_1_TURNO),
+    "70":  FaseConfig("CLB-CALANDRA DE BRILHO", 1, _LIDER_RESERVA_1_TURNO),
+    "80":  FaseConfig("CLC-CALANDRA DE COMPACTACAO", 1, _LIDER_RESERVA_1_TURNO),
+    "90":  FaseConfig("ABR-ABRIDOR", 1, _LIDER_2_TURNO),
+    "100": FaseConfig("RAU-RAMAR UMIDO", 1, _LIDER_2_TURNO),
+    "110": FaseConfig("RAS-RAMAR SECO", 1, _LIDER_2_TURNO),
+    "150": FaseConfig("EXP-EXPEDICAO ACABADO", 1, _LIDER_RESERVA_2_TURNO),
+    "160": FaseConfig("CDQ-CONTROLE DE QUALIDADE", 1, _EQUIPE_QUALIDADE),
+    "165": FaseConfig("CDF-CONFERÊNCIA DE FELPA", 1, _EQUIPE_QUALIDADE),
 }
+DEFAULT_PHASE_ORDER: list[int] = [20, 46, 50, 55, 60, 90, 100, 110, 26, 65, 25, 45, 80, 70, 160, 165, 150]
 DEFAULT_MAX_OBS = 10
 MAX_OBS_PER_PHASE = 15   # limite por fase para evitar cards com altura > 5000px (WhatsApp)
 MAX_CARD_HEIGHT   = 4800
@@ -104,20 +146,23 @@ def normalize_fase(fase: str) -> str:
     return clean.title()
 
 
-def get_threshold(fase: str, thresholds: dict[str, float]) -> float | None:
-    fase_upper = fase.upper()
-    for kw, dias in thresholds.items():
-        if kw.upper() in fase_upper:
-            return dias
-    return None
+def _codigo_fase_key(ob: dict[str, Any]) -> str | None:
+    """Normaliza CODIGO_FASE (int/float/str vindos do Oracle) para a chave usada em fases_monitoradas."""
+    raw = ob.get("CODIGO_FASE")
+    if raw is None:
+        return None
+    try:
+        return str(int(float(raw)))
+    except (TypeError, ValueError):
+        return None
 
 
-def get_responsavel(fase: str, responsaveis: dict[str, str]) -> str | None:
-    fase_upper = fase.upper()
-    for kw, resp in responsaveis.items():
-        if kw.upper() in fase_upper:
-            return resp
-    return None
+def get_fase_config(
+    codigo_key: str | None, fases_monitoradas: dict[str, FaseConfig]
+) -> FaseConfig | None:
+    if codigo_key is None:
+        return None
+    return fases_monitoradas.get(codigo_key)
 
 
 def fmt_dias(dias: Any) -> str:
@@ -143,12 +188,8 @@ def fmt_entrega(dt_entrega: Any) -> str:
         return "—"
 
 
-def _phase_sort_key(fase_norm: str, ordem: list[str]) -> tuple[int, str]:
-    upper = fase_norm.upper()
-    for i, kw in enumerate(ordem):
-        if kw.upper() in upper:
-            return (i, fase_norm)
-    return (len(ordem), fase_norm)
+def _phase_sort_key(codigo_fase: int, ordem: list[int]) -> int:
+    return ordem.index(codigo_fase) if codigo_fase in ordem else len(ordem)
 
 
 def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.ImageDraw) -> list[str]:
@@ -357,90 +398,108 @@ def build_phase_image(
 
 # ── Helpers de main ───────────────────────────────────────────────────────────
 
-def _load_config(config_file: str) -> tuple[dict[str, float], int, dict[str, Any], list[str], dict[str, str]]:
-    thresholds: dict[str, float] = DEFAULT_KEYWORDS.copy()
-    max_obs    = DEFAULT_MAX_OBS
+def _load_config(
+    config_file: str,
+) -> tuple[dict[str, FaseConfig], int, dict[str, Any], list[int]]:
+    fases_monitoradas = dict(DEFAULT_FASES_MONITORADAS)
+    max_obs = DEFAULT_MAX_OBS
     phase_filters: dict[str, Any] = {}
-    phase_order: list[str] = []
-    responsaveis: dict[str, str] = {}
+    phase_order = list(DEFAULT_PHASE_ORDER)
     if not os.path.exists(config_file):
-        return thresholds, max_obs, phase_filters, phase_order, responsaveis
+        return fases_monitoradas, max_obs, phase_filters, phase_order
     try:
         with open(config_file, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-        thresholds    = {k.upper(): v for k, v in cfg.get("threshold_por_fase", {}).items()}
-        max_obs       = int(cfg.get("max_obs_por_mensagem", DEFAULT_MAX_OBS))
-        phase_filters = {k.upper(): v for k, v in cfg.get("filtros_por_fase", {}).items()}
-        phase_order   = [k.upper() for k in cfg.get("ordem_fases", [])]
-        for k, v in cfg.get("responsaveis_por_fase", {}).items():
-            if isinstance(v, list):
-                responsaveis[k.upper()] = " @".join(str(x).strip() for x in v if str(x).strip())
-            else:
-                responsaveis[k.upper()] = str(v).strip()
+        max_obs = int(cfg.get("max_obs_por_mensagem", DEFAULT_MAX_OBS))
+        phase_filters = {
+            str(k): v for k, v in cfg.get("filtros_por_codigo_fase", {}).items()
+        }
+        phase_order = [int(c) for c in cfg.get("ordem_codigos_fase", DEFAULT_PHASE_ORDER)]
+        contatos = {
+            str(nome): _resolve_contato(valor)
+            for nome, valor in cfg.get("contatos", {}).items()
+        }
+        fases_cfg = cfg.get("fases_monitoradas")
+        if fases_cfg:
+            fases_monitoradas = {}
+            for codigo, dados in fases_cfg.items():
+                resp_ref = dados.get("responsavel", "")
+                responsavel = (
+                    contatos[resp_ref]
+                    if isinstance(resp_ref, str) and resp_ref in contatos
+                    else _resolve_contato(resp_ref)
+                )
+                fases_monitoradas[str(codigo)] = FaseConfig(
+                    descricao=str(dados.get("descricao", "")),
+                    threshold_dias=float(dados.get("threshold_dias", 1)),
+                    responsavel=responsavel,
+                    ativo=bool(dados.get("ativo", True)),
+                )
     except Exception as e:
         print(f"[WARN] Falha ao ler config.json, usando defaults: {e}", file=sys.stderr)
-    return thresholds, max_obs, phase_filters, phase_order, responsaveis
+    return fases_monitoradas, max_obs, phase_filters, phase_order
 
 
-def _apply_phase_filter(ob: dict[str, Any], fase_upper: str, phase_filters: dict[str, Any]) -> bool:
+def _apply_phase_filter(
+    ob: dict[str, Any], codigo_key: str | None, phase_filters: dict[str, Any]
+) -> bool:
     """Retorna True se o OB deve ser ignorado (filtro não satisfeito)."""
-    for kw, regras in phase_filters.items():
-        if kw.upper() not in fase_upper:
-            continue
-        for campo, valor_esperado in regras.items():
-            raw = ob.get(campo)
-            try:
-                val: Any = int(raw)  # type: ignore[arg-type]
-            except (TypeError, ValueError):
-                val = raw
-            if val != valor_esperado:
-                return True
-        break
+    regras = phase_filters.get(codigo_key) if codigo_key is not None else None
+    if not regras:
+        return False
+    for campo, valor_esperado in regras.items():
+        raw = ob.get(campo)
+        try:
+            val: Any = int(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            val = raw
+        if val != valor_esperado:
+            return True
     return False
 
 
 def _filter_obs(
     obs_all: list[dict[str, Any]],
-    thresholds: dict[str, float],
+    fases_monitoradas: dict[str, FaseConfig],
     phase_filters: dict[str, Any],
 ) -> list[dict[str, Any]]:
     filtradas: list[dict[str, Any]] = []
     for ob in obs_all:
-        fase      = ob.get("FASE_ATUAL") or ""
-        threshold = get_threshold(fase, thresholds)
-        if threshold is None:
+        codigo_key = _codigo_fase_key(ob)
+        cfg = get_fase_config(codigo_key, fases_monitoradas)
+        if cfg is None or not cfg.ativo:
             continue
         try:
             dias = float(ob.get("DIAS_PARADO") or 0)
         except (TypeError, ValueError):
             continue
-        if dias < threshold:
+        if dias < cfg.threshold_dias:
             continue
-        if _apply_phase_filter(ob, fase.upper(), phase_filters):
+        if _apply_phase_filter(ob, codigo_key, phase_filters):
             continue
-        filtradas.append({**ob, "_threshold": threshold, "_dias_float": dias})
+        filtradas.append({**ob, "_threshold": cfg.threshold_dias, "_dias_float": dias})
     return filtradas
 
 
 def _group_obs(
     filtradas: list[dict[str, Any]],
     max_obs: int,
-    phase_order: list[str],
-) -> list[tuple[str, list[dict[str, Any]]]]:
-    # Agrupa por fase antes de limitar, para não excluir fases inteiras por saturação global.
-    # max_obs controla o teto por fase (não o total), garantindo que todas as fases
-    # com OBs acima do threshold apareçam no relatório.
+    phase_order: list[int],
+) -> list[tuple[int, list[dict[str, Any]]]]:
+    # Agrupa por codigo de fase antes de limitar, para não excluir fases inteiras por
+    # saturação global. max_obs controla o teto por fase (não o total), garantindo que
+    # todas as fases com OBs acima do threshold apareçam no relatório.
     filtradas.sort(key=lambda x: x["_dias_float"], reverse=True)
 
-    grupos: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    grupos: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for ob in filtradas:
-        fase_norm = normalize_fase(ob.get("FASE_ATUAL") or "Indefinida")
-        grupos[fase_norm].append(ob)
+        codigo = int(float(ob.get("CODIGO_FASE") or 0))
+        grupos[codigo].append(ob)
 
     grupos_ordenados = sorted(
         grupos.items(),
         key=lambda kv: (
-            _phase_sort_key(kv[0], phase_order)[0],
+            _phase_sort_key(kv[0], phase_order),
             -max(o["_dias_float"] for o in kv[1]),
         ),
     )
@@ -454,18 +513,18 @@ def _group_obs(
 
 
 def _build_card_entry(
-    fase_norm: str,
+    codigo_fase: int,
     obs_fase: list[dict[str, Any]],
     images_dir: str,
     script_dir: str,
-    responsaveis: dict[str, str],
+    fases_monitoradas: dict[str, FaseConfig],
 ) -> dict[str, Any]:
+    fase_norm  = normalize_fase(obs_fase[0].get("FASE_ATUAL") or "Indefinida")
     phase_key  = re.sub(r"[^A-Z0-9]+", "_", fase_norm.upper()).strip("_")
     thr_val    = float(obs_fase[0]["_threshold"])
     max_dias   = max(o["_dias_float"] for o in obs_fase)
     kg_total   = sum(float(o.get("QT_KILOS_REAL") or 0) for o in obs_fase)
     n          = len(obs_fase)
-    agora      = datetime.now().strftime("%d/%m/%Y às %H:%M")
 
     image_path = os.path.join(images_dir, f"{phase_key}.png")
     build_phase_image(fase_norm, obs_fase, thr_val, image_path)
@@ -474,12 +533,12 @@ def _build_card_entry(
         f"\U0001f538 *{fase_norm}* — {n} {'OB' if n == 1 else 'OBs'} paradas\n"
         f"Limite: ≥ {fmt_dias(thr_val)} {'dia' if thr_val == 1 else 'dias'}  |  "
         f"Máx: {fmt_dias(max_dias)} dias\n"
-        f"\U0001f4ca {fmt_kg(kg_total)} kg  ·  {agora}"
+        f"\U0001f4ca {fmt_kg(kg_total)} kg  ·  {datetime.now().strftime('%d/%m/%Y às %H:%M')}"
     )
 
-    responsavel = get_responsavel(fase_norm, responsaveis)
-    if responsavel:
-        caption += f"\n\nResponsável: @{responsavel}"
+    cfg = fases_monitoradas.get(str(codigo_fase))
+    if cfg and cfg.responsavel:
+        caption += f"\n\nResponsável: @{cfg.responsavel}"
 
     rel_image = os.path.relpath(image_path, script_dir).replace("\\", "/")
     print(f"[OK] {fase_norm}: {n} OBs → {rel_image}")
@@ -499,9 +558,9 @@ def main() -> None:
     with open(RESULT_FILE, "r", encoding="utf-8") as f:
         result = json.load(f)
 
-    thresholds, max_obs, phase_filters, phase_order, responsaveis = _load_config(CONFIG_FILE)
+    fases_monitoradas, max_obs, phase_filters, phase_order = _load_config(CONFIG_FILE)
     obs_all   = result.get("rows", [])
-    filtradas = _filter_obs(obs_all, thresholds, phase_filters)
+    filtradas = _filter_obs(obs_all, fases_monitoradas, phase_filters)
 
     if not filtradas:
         print("[OK] Nenhuma OB excedeu o limite configurado — nenhum card gerado.")
@@ -515,8 +574,8 @@ def main() -> None:
 
     os.makedirs(IMAGES_DIR, exist_ok=True)
     manifest = [
-        _build_card_entry(fase_norm, obs_fase, IMAGES_DIR, SCRIPT_DIR, responsaveis)
-        for fase_norm, obs_fase in grupos_ordenados
+        _build_card_entry(codigo_fase, obs_fase, IMAGES_DIR, SCRIPT_DIR, fases_monitoradas)
+        for codigo_fase, obs_fase in grupos_ordenados
     ]
 
     with open(MANIFEST_FILE, "w", encoding="utf-8") as f:

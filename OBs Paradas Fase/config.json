@@ -1,59 +1,144 @@
 {
-  "threshold_por_fase": {
-    "HIDRO": 1,
-    "SECADOR": 1,
-    "ABRIDOR": 1,
-    "RAMA": 1,
-    "COMPACTA": 1,
-    "BRILHO": 1,
-    "FELPAGEM": 1,
-    "CONFERENCIA": 0.5,
-    "AMACIANTE": 0.25,
-    "REVIS": 3,
-    "EXPEDICAO": 1,
-    "CQ": 1
-  },
   "threshold_default": 99,
   "max_obs_por_mensagem": 10,
-  "responsaveis_por_fase": {
-    "HIDRO": "554784856137",
-    "SECADOR": "554784856137",
-    "ABRIDOR": "554797750596",
-    "RAMA": "554797750596",
-    "COMPACTA": "554791591816",
-    "BRILHO": "554791591816",
-    "FELPAGEM": "554791591816",
-    "CONFERENCIA": [
-      "554898221241",
-      "554799188695",
-      "554197575631"
-    ],
-    "AMACIANTE": "554784856137",
-    "REVIS": "554899894828",
-    "EXPEDICAO": "554796608441",
-    "CQ": [
-      "554898221241",
-      "554799188695",
-      "554197575631"
+  "contatos": {
+    "lider_1_turno": { "nome": "Adir Marques", "numero": "5547984856137" },
+    "lider_reserva_1_turno": { "nome": "Anderson Koehler", "numero": "5547991591816" },
+    "lider_2_turno": { "nome": "Mateus Conaco", "numero": "5547997750596" },
+    "lider_reserva_2_turno": { "nome": "Elisa Mendes", "numero": "5547996608441" },
+    "lider_3_turno": { "nome": "Cristóvão Luiz", "numero": "5548999894828" },
+    "lider_reserva_3_turno": { "nome": "Lucas Pilantil", "numero": "5548988614164" },
+    "equipe_cq": [
+      { "nome": "Sidiane Klehm", "numero": "5548998221241" },
+      { "nome": "Elso Boges", "numero": "5547999188695" },
+      { "nome": "Daniele Renaud", "numero": "5541997575631" }
     ]
   },
-  "filtros_por_fase": {
-    "REVIS": {
+  "fases_monitoradas": {
+    "20": {
+      "descricao": "RMC-REVISÃO MALHA CRUA",
+      "ativo": true,
+      "threshold_dias": 3,
+      "responsavel": "lider_3_turno"
+    },
+    "25": {
+      "descricao": "CDP-CONFERENCIA DE PESO",
+      "ativo": false,
+      "threshold_dias": 0.5,
+      "responsavel": "equipe_cq"
+    },
+    "26": {
+      "descricao": "IVF-INVERSÃO P/FELPAGEM",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_3_turno"
+    },
+    "45": {
+      "descricao": "CDC-CONFERENCIA DE COR",
+      "ativo": true,
+      "threshold_dias": 0.5,
+      "responsavel": "lider_reserva_3_turno"
+    },
+    "46": {
+      "descricao": "PPA-PREPARAÇÃO AMACIANTE",
+      "ativo": true,
+      "threshold_dias": 0.25,
+      "responsavel": "lider_1_turno"
+    },
+    "50": {
+      "descricao": "HID-HIDRO UMIDO",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_1_turno"
+    },
+    "55": {
+      "descricao": "HIS-HIDRO SECO",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_1_turno"
+    },
+    "60": {
+      "descricao": "SEC-SECADOR",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_1_turno"
+    },
+    "65": {
+      "descricao": "FEL-FELPAGEM",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_reserva_1_turno"
+    },
+    "70": {
+      "descricao": "CLB-CALANDRA DE BRILHO",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_reserva_1_turno"
+    },
+    "80": {
+      "descricao": "CLC-CALANDRA DE COMPACTACAO",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_reserva_1_turno"
+    },
+    "90": {
+      "descricao": "ABR-ABRIDOR",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_2_turno"
+    },
+    "100": {
+      "descricao": "RAU-RAMAR UMIDO",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_2_turno"
+    },
+    "110": {
+      "descricao": "RAS-RAMAR SECO",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_2_turno"
+    },
+    "150": {
+      "descricao": "EXP-EXPEDICAO ACABADO",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "lider_reserva_2_turno"
+    },
+    "160": {
+      "descricao": "CDQ-CONTROLE DE QUALIDADE",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "equipe_cq"
+    },
+    "165": {
+      "descricao": "CDF-CONFERÊNCIA DE FELPA",
+      "ativo": true,
+      "threshold_dias": 1,
+      "responsavel": "equipe_cq"
+    }
+  },
+  "filtros_por_codigo_fase": {
+    "20": {
       "CODIGO_FLUXO": 204
     }
   },
-  "ordem_fases": [
-    "REVIS",
-    "AMACIANTE",
-    "HIDRO",
-    "SECADOR",
-    "ABRIDOR",
-    "RAMA",
-    "FELPAGEM",
-    "CONFERENCIA",
-    "COMPACTA",
-    "BRILHO",
-    "CQ",
-    "EXPEDICAO"
-  ]
+  "ordem_codigos_fase": {
+    "20": "RMC-REVISÃO MALHA CRUA",
+    "26": "IVF-INVERSÃO P/FELPAGEM",
+    "45": "CDC-CONFERENCIA DE COR",
+    "46": "PPA-PREPARAÇÃO AMACIANTE",
+    "50": "HID-HIDRO UMIDO",
+    "55": "HIS-HIDRO SECO",
+    "60": "SEC-SECADOR",
+    "65": "FEL-FELPAGEM",
+    "70": "CLB-CALANDRA DE BRILHO",
+    "80": "CLC-CALANDRA DE COMPACTACAO",
+    "90": "ABR-ABRIDOR",
+    "100": "RAU-RAMAR UMIDO",
+    "110": "RAS-RAMAR SECO",
+    "150": "EXP-EXPEDICAO ACABADO",
+    "160": "CDQ-CONTROLE DE QUALIDADE",
+    "165": "CDF-CONFERÊNCIA DE FELPA"
+  }
 }

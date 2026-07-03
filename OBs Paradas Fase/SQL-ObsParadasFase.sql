@@ -96,6 +96,7 @@ SELECT
     ITM.LARGURA,
     ITM.GRAMATURA,
     TRIM(FFL.DESCRICAO_FASE)                          AS FASE_ATUAL,
+    OBF.CODIGO_FASE                                   AS CODIGO_FASE,
     UPPER(ENS.DESCRICAO)                              AS STATUS_FASE_ATUAL,
     TRUNC(OBA.DIAS_PARADO, 1)                         AS DIAS_PARADO,
     OBA.CODIGO_FLUXO,
