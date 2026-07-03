@@ -3,6 +3,18 @@
     [string[]]$Paths = @()
 )
 
+# ATENCAO: ao invocar este script para validar multiplos arquivos, use sempre o
+# operador `&` in-process (ex.: `& $path -Paths $TargetPaths`), como faz
+# Tools\ValidarAutomacoes.ps1. Invocacoes via `pwsh -File Test-PythonGovernance.ps1
+# -Paths @(...)` a partir de OUTRO processo pwsh perdem elementos do array: o
+# parser de CLI do pwsh.exe (modo -File) nao faz o binding rico de array do
+# PowerShell e captura apenas o primeiro token, descartando os demais antes do
+# script executar. O split abaixo recupera apenas o caso em que os caminhos
+# chegam colapsados em uma unica string separada por virgula.
+if ($Paths.Count -eq 1 -and $Paths[0] -match ',') {
+    $Paths = $Paths[0] -split ',' | Where-Object { $_ }
+}
+
 if ([string]::IsNullOrEmpty($RootPath)) {
     $RootPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 }
