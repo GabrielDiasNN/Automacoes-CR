@@ -1,8 +1,8 @@
 # Plano de Melhoria de QA — Automações Hub v9.5.0
 
-> **Gerado em:** 02/07/2026  
-> **Versão analisada:** v9.5.0 (Operational Baseline)  
-> **Escopo:** Leitura completa do repositório — Orchestrator, Dashboard, domínios, lib compartilhada, CI, testes
+> **Gerado em:** 02/07/2026 | **Atualizado em:** 03/07/2026 (v2 — worker.py + conftest.py lidos)
+> **Versão analisada:** v9.5.0 (Operational Baseline)
+> **Escopo:** Leitura de 40+ arquivos — Orchestrator, Dashboard, domínios, lib, CI, worker.py (26 KB), conftest.py completo
 
 ---
 
@@ -20,61 +20,89 @@
 | `test_executions.py` | 11 KB | Execuções |
 | `test_filters.py` | 10 KB | Filtros de execução |
 | `test_api_smoke_critical.py` | 10 KB | Smoke crítico de API |
-| `test_portfolio.py` | 8 KB | Portfólio |
-| `test_diagnostics.py` | 8 KB | Diagnósticos |
 | `test_montagem_terceirizados.py` | 12 KB | Montagem Terceirizados |
 | `test_receitas_bloqueadas.py` | 12 KB | Receitas Bloqueadas |
-| `test_worker_queue.py` | 7 KB | Fila do Worker |
+| `test_portfolio.py` | 8 KB | Portfólio |
+| `test_diagnostics.py` | 8 KB | Diagnósticos |
 | `test_beneficiamento_unit.py` | 9 KB | Beneficiamento (unitário) |
+| `test_worker_queue.py` | 7 KB | Fila do Worker |
 | `test_queue_rules.py` | 6 KB | Regras de Fila |
 | `test_sanitization.py` | 5 KB | Sanitização |
 | `test_worker_loop.py` | 4 KB | Loop do Worker |
+| `test_notifications.py` | 4 KB | Notificações |
 | `test_api_contracts.py` | 3 KB | Contratos de API |
+| `test_timezone_contract.py` | 3 KB | Fuso Horário |
+| `test_automations_ide.py` | 3 KB | IDE de Automações |
+| `test_validation.py` | 3 KB | Validação |
+| `test_purge_retention.py` | 2 KB | Purge/Retenção |
+| `test_scaffold_governance.py` | 2 KB | Scaffold Governança |
+| `test_obs_paradas_fase.py` | 2 KB | OBs Paradas |
 | `test_audit_utils.py` | 1 KB | Auditoria |
 | `test_database_schema.py` | 1 KB | Schema do Banco |
-| `test_notifications.py` | 4 KB | Notificações |
-| `test_obs_paradas_fase.py` | 2 KB | OBs Paradas |
 | `test_receitas_emitidas.py` | 1 KB | Receitas Emitidas |
 | `test_recovery.py` | 1 KB | Recovery |
-| `test_timezone_contract.py` | 3 KB | Fuso Horário |
-| `test_validation.py` | 3 KB | Validação |
-| `test_scaffold_governance.py` | 2 KB | Scaffold Governança |
 | `test_log_broadcast.py` | 1 KB | Log Broadcast |
 | `test_websocket_broadcast_auth.py` | 1 KB | WebSocket Auth |
-| `test_purge_retention.py` | 2 KB | Purge/Retenção |
-| `test_automations_ide.py` | 3 KB | IDE de Automações |
 
-**Total estimado:** 31 arquivos de teste | ~200 KB de código de teste
+**Total:** 31 arquivos | ~200 KB de código de teste
 
-### 1.2 Métricas Atuais de Qualidade
+### 1.2 Diagnóstico do `conftest.py` (lido integralmente)
 
-| Indicador | Valor Atual | Meta Fase 1 | Meta Final |
+O `conftest.py` é sofisticado e bem construído. Fornece:
+
+- `pytest_collection_modifyitems`: marcação automática `unitario`/`integracao` por fixtures usadas ✅
+- `db_session`: SQLite in-memory + `StaticPool` + `PRAGMA foreign_keys=ON` ✅
+- `client`: patch profundo de `SessionLocal`, `engine`, `PROJECT_ROOT`, `scheduler_runtime`, `websocket_router` ✅
+- `force_env_vars` (autouse): garante `ORCHESTRATOR_API_KEY`, `ORCHESTRATOR_DB_PATH`, `RATE_LIMIT_RPM` ✅
+- `beneficiamento_historico_seed` (session-scope): semeia 6 registros deterministas para E2E ✅
+
+**Gaps confirmados no `conftest.py`:**
+
+| Gap | Descrição |
+|---|---|
+| ❌ `mock_oracle_connection` ausente | Nenhuma fixture padronizada para `oracledb.connect` — cada teste teria que reimplementar |
+| ❌ `worker_env_vars` ausente | Sem fixture para variáveis de ambiente do worker (`HUB_API_PORT`, `WORKER_MAX_CONCURRENCY`, `WORKER_INSTANCE_ID`) |
+| ❌ `mock_subprocess_popen` ausente | Sem fixture para `subprocess.Popen` — testes de worker não podem simular processo PowerShell |
+| ❌ `mock_requests` ausente | Sem fixture para `requests.get/post` — wakeup listener e log flusher não têm mock padronizado |
+| ❌ `shutdown_event` fixture ausente | `shutdown_event` é global em `worker.py`; sem reset entre testes, estado vaza entre casos |
+| ⚠️ `client` fixture faz 9 patches manuais | Frágil: qualquer novo módulo que use `SessionLocal` precisa de patch explícito ou os testes usam banco real |
+
+### 1.3 Diagnóstico do `worker.py` (lido integralmente — 26 KB)
+
+Funções e comportamentos críticos identificados que **não têm testes correspondentes**:
+
+| Função | Risco | Comportamento sem teste |
+|---|---|---|
+| `_force_kill(pid)` | 🔴 | `taskkill /F /T /PID` com `timeout=15` — e se `taskkill` exceder o timeout? |
+| `_monitor_process()` | 🔴 | Verifica DB a cada `_DB_CHECK_INTERVAL=5s`; timeout detectado via `get_now_local()` — sem teste de timezone DST |
+| `_drain_process_output()` | 🔴 | Cap de `MAX_LOG_LINES=10_000` e `MAX_LOG_CHARS=5_000_000` — logs acima do cap continuam no WS mas não em memória |
+| `_build_subprocess_env()` | 🟡 | Allowlist `_ALLOWED_ENV_KEYS` — segredo vaza se chave nova for adicionada sem revisão |
+| `wakeup_listener_loop()` | 🟡 | Backoff exponencial `5s → 60s` com reset em sucesso — sem teste de reset |
+| `log_flusher_loop()` | 🟡 | 1 retry com backoff `0.5s`; falha final = logs perdidos no WS mas preservados no banco |
+| `broadcast_log()` / buffer | 🟡 | Thread-safe via `log_buffer_lock` — sem teste de concorrência com 2 threads |
+| `update_stat()` | 🟢 | Thread-safe via `stats["lock"]` — sem teste de decremento abaixo de zero (`max(0, ...)`) |
+| `scan_for_artifacts()` | 🟢 | Glob de `*.xlsx, *.html, *.pdf, *.csv` por `mtime >= task_start_ts` — sem teste de arquivo antigo ignorado |
+| `_finalize_execution()` | 🔴 | Guard `status not in [TERMINATED, TIMEOUT]` — sem teste de execução já terminada não sendo sobrescrita |
+| `run_task()` | 🔴 | `status != PENDING and != RUNNING → return silencioso` — sem teste de task reivindicada duas vezes |
+| Env `LOG_FILENAME` | 🟢 | Detecta `pytest` em `sys.modules` → usa `Worker_test.jsonl` — sem teste deste guard |
+
+### 1.4 Métricas de Qualidade
+
+| Indicador | Valor Atual | Meta F1 | Meta Final |
 |---|---|---|---|
-| Cobertura Python (threshold CI) | **77%** mínimo | 82% | 90% |
+| Cobertura Python (threshold CI) | **77%** | 82% | 90% |
 | Cobertura Dashboard (unit) | **~0%** | 40% | 70% |
-| Marcadores enforced (`--strict-markers`) | ❌ Ausente | ✅ | ✅ |
-| Mock de Oracle nos testes unitários | ❌ Ausente | ✅ | ✅ |
-| Mutation testing | ❌ Ausente | ❌ | ✅ |
-| Property-based testing | ❌ Ausente | ❌ | ✅ |
-| Health check E2E obrigatório | ❌ Ausente | ✅ | ✅ |
-| Performance regression no CI | ❌ Ausente | ❌ | ✅ |
-| Testes de componente React | ❌ Ausente | ❌ | ✅ |
-| Circuit breaker testado | ❌ Ausente | ✅ | ✅ |
-
-### 1.3 Módulos de Alto Risco sem Cobertura Adequada
-
-| Módulo | Tamanho | Risco | Justificativa |
-|---|---|---|---|
-| `Orchestrator/worker.py` | 26 KB | 🔴 Crítico | Spawn de processos, timeout, taskkill, graceful shutdown, AbandonedMutex |
-| `services/portfolio_catalog.py` | 37 KB | 🔴 Crítico | Maior serviço do sistema; drift, docs, SLA, scoring — sem testes dedicados visíveis |
-| `services/execution_runtime.py` | 15 KB | 🔴 Crítico | Requeue, validação de concorrência por queue_group |
-| `services/scheduler_runtime.py` | 16 KB | 🔴 Crítico | APScheduler runtime, wake-up thread-safe, cron parsing |
-| `services/system_diagnostics.py` | 18 KB | 🟡 Alto | Lógica de findings, severity, action_code — usada pelo Dashboard em tempo real |
-| `lib/python/oracle_extract.py` | Compartilhado | 🔴 Crítico | Usado pelos 4 domínios de extração; falha = paralisia total |
-| `app/notifications.py` | 7 KB | 🟡 Alto | Canal WhatsApp + Email; falha silenciosa impacta SLA |
-| `app/middleware.py` | 7 KB | 🟡 Alto | Auth middleware; sem teste de injeção de header / API Key inválida |
-| `services/operational_baseline.py` | 10 KB | 🟡 Alto | Thresholds compartilhados entre diagnostics, history e baseline — regressão silenciosa |
-| `Produção Beneficimento/src/` | Domínio | 🟡 Alto | Lógica pura em `core/` (coerção, métricas, turnos) parcialmente testada |
+| `--strict-markers` enforced | ❌ | ✅ | ✅ |
+| Fixture `mock_oracle_connection` | ❌ | ✅ | ✅ |
+| Fixture `mock_subprocess_popen` | ❌ | ✅ | ✅ |
+| Fixture `mock_requests` (worker) | ❌ | ✅ | ✅ |
+| Fixture `shutdown_event` reset | ❌ | ✅ | ✅ |
+| Testes de `_monitor_process` | ❌ | ✅ | ✅ |
+| Testes de `_drain_process_output` caps | ❌ | ✅ | ✅ |
+| Testes de `_build_subprocess_env` allowlist | ❌ | ✅ | ✅ |
+| Health check E2E obrigatório | ❌ | ✅ | ✅ |
+| Mutation testing | ❌ | ❌ | ✅ |
+| Testes de componente React | ❌ | ❌ | ✅ |
 
 ---
 
@@ -82,74 +110,108 @@
 
 ### GAP-01 — Threshold de Cobertura Insuficiente
 
-O CI bloqueia com `--cov-fail-under=77`. Isso significa que **23% do código não tem cobertura garantida**. Com 31 arquivos de teste e ~200 KB de testes, a distribuição não é uniforme — módulos grandes como `portfolio_catalog.py` (37 KB) e `worker.py` (26 KB) provavelmente puxam a média para cima enquanto os caminhos críticos de falha ficam sem cobertura.
+O CI bloqueia com `--cov-fail-under=77`. Com o `conftest.py` marcando automaticamente todos os testes que usam `client`/`db_session` como `integracao`, os testes unitários puros são minoria — o que significa que **branches de erro em `worker.py` e nos serviços ficam sem cobertura real**.
 
-**Impacto:** Um bug em `worker.py` pode paralisar todas as automações sem ser detectado pelos testes.
+### GAP-02 — `--strict-markers` ausente
 
-### GAP-02 — Marcadores sem Enforcement
-
-`pytest.ini` define os marcadores `unitario`, `integracao` e `e2e`, mas **não usa `--strict-markers`**. Testes sem marcador passam silenciosamente:
+`pytest_collection_modifyitems` no `conftest.py` já faz marcação automática, mas sem `--strict-markers` no `pytest.ini`, um teste com marcador tipograficamente errado (ex: `@pytest.mark.integração`) passa sem warning.
 
 ```ini
-# ATUAL — incompleto
-[pytest]
-addopts = -p no:cacheprovider
-
-# CORRETO
-[pytest]
+# CORRIGIR em pytest.ini:
 addopts = -p no:cacheprovider --strict-markers
 ```
 
-Sem enforcement, a triagem de velocidade no CI é quebrada: testes E2E lentos podem ser executados no job de unitários sem aviso.
+### GAP-03 — `conftest.py` sem fixtures de worker
 
-### GAP-03 — Oracle sem Mock Unitário
+O `conftest.py` cobre bem o FastAPI (9 patches no `client`), mas **não tem nenhuma fixture para o worker**. As 3 fixtures críticas ausentes:
 
-`lib/python/oracle_extract.py` é o **único ponto de acesso Oracle** dos 4 domínios (Receitas Emitidas, Receitas Bloqueadas, Montagem Terceirizados, OBs Paradas Fase). Não há arquivo `test_oracle_extract_unit.py` com mock de `oracledb.connect`. Um bug neste módulo quebra todos os 4 domínios simultaneamente.
+```python
+# 1. Mock de subprocess.Popen (para _start_process)
+@pytest.fixture
+def mock_popen() -> Generator[MagicMock, None, None]:
+    with patch("worker.subprocess.Popen") as mock:
+        proc = MagicMock()
+        proc.pid = 12345
+        proc.poll.return_value = None  # processo ainda rodando
+        proc.returncode = 0
+        proc.stdout = iter(["linha 1\n", "linha 2\n"])
+        mock.return_value = proc
+        yield mock
 
-### GAP-04 — Worker sem Testes de Falha Real
+# 2. Reset do shutdown_event global
+@pytest.fixture(autouse=True)
+def reset_worker_globals() -> Generator[None, None, None]:
+    import worker
+    worker.shutdown_event.clear()
+    worker.wakeup_event.clear()
+    worker.stats["tasks_completed"] = 0
+    worker.stats["tasks_failed"] = 0
+    worker.stats["active_tasks"] = 0
+    worker.stats["active_processes"].clear()
+    yield
+    worker.shutdown_event.clear()
+    worker.wakeup_event.clear()
 
-`test_worker_loop.py` (4 KB) e `test_worker_queue.py` (7 KB) cobrem caminhos felizes. Faltam:
-- Processo PowerShell que trava além de `max_runtime_minutes`
-- `AbandonedMutexException` durante concorrência de `queue_group`
-- Worker kill com fila não vazia (graceful shutdown parcial)
-- Processo filho que ignora SIGTERM (taskkill /T obrigatório)
-- Exit codes de canal: `WHATSAPP_SESSION_EXPIRED`, `CHANNEL_DELIVERY_FAILED`
+# 3. Mock de requests (wakeup listener + log flusher)
+@pytest.fixture
+def mock_requests_worker() -> Generator[MagicMock, None, None]:
+    with patch("worker.requests.get") as mock_get, \
+         patch("worker.requests.post") as mock_post:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"status": "idle"}
+        yield {"get": mock_get, "post": mock_post}
+```
 
-### GAP-05 — Dashboard sem Testes Unitários de Componente
+### GAP-04 — `_monitor_process` não testado em cenário de timeout
 
-O React/TypeScript usa apenas: lint (ESLint) + build (tsc + vite) + Playwright E2E. **Zero testes Vitest/Jest**. Lógica crítica sem cobertura:
-- Parsing de `schedule_version=2` e tipos de agenda
-- Autenticação via `localStorage` (prompt, persistência, limpeza no 403)
-- `action_code` / `action_label` / `operator_actions` do diagnóstico
-- Exibição de risk badges: `CAT`, `DRIFT`, `DOCS`
+A lógica de timeout em `_monitor_process` usa `get_now_local()` e `timedelta(minutes=max_runtime)`. Sem mock de tempo, é impossível testar timeout sem esperar os minutos reais. Além disso, **nenhum teste verifica o guard de DST** (horário de verão pode causar falso positivo de timeout com `timedelta` ingênuo).
 
-### GAP-06 — E2E Frágil por Ausência de Health Check
+### GAP-05 — Caps de log não testados
 
-`test_e2e_dashboard.py` requer servidor ativo em `http://127.0.0.1:8000/dashboard/`. No CI (`governanca.yml`), se o Orchestrator falhar no startup, os testes E2E são silenciosamente ignorados em vez de falhar explicitamente. Sem `wait-for` ou health check obrigatório, a validação E2E é falível.
+`_drain_process_output` tem dois caps: `MAX_LOG_LINES=10_000` e `MAX_LOG_CHARS=5_000_000`. A lógica é:
+> acima do cap → continua transmitindo ao WS mas **não acumula em memória**
 
-### GAP-07 — Sem Testes de Mutation
+Sem testes para este comportamento, um bug de acumulação silenciosa (memory leak por execução) não seria detectado.
 
-Nenhuma evidência de `mutmut` ou `cosmic-ray`. Com 77% de cobertura, é possível ter `assert True` passando em módulos críticos. Módulos de lógica pura como `beneficiamento/core/` (coerção, métricas, turnos) são candidatos ideais para mutation testing — sem I/O, rápidos, alto impacto.
+### GAP-06 — `_build_subprocess_env` allowlist sem auditoria
 
-### GAP-08 — `middleware.py` sem Testes de Segurança
+`_ALLOWED_ENV_KEYS` é um `set` hardcoded. Se uma variável com segredo (ex: `ORACLE_READONLY_PASSWORD`) for adicionada acidentalmente ao set, ela vaza para todos os subprocessos PowerShell. **Não há teste que valide que segredos conhecidos estão fora da allowlist.**
 
-O middleware de autenticação (7 KB) não tem testes para:
-- API Key ausente → 401
-- API Key inválida → 403
-- API Key válida em rota pública → pass-through
-- Injeção de header `X-API-Key` com caracteres especiais
-- Tentativa de bypass via rota estática do Dashboard
+### GAP-07 — `client` fixture com 9 patches manuais — frágil
 
-### GAP-09 — Circuit Breaker Oracle sem Teste
+O `conftest.py` faz 9 patches explícitos de `SessionLocal`. Se um novo módulo usar `SessionLocal` diretamente (ex: um novo router), ele vai usar o banco real em testes de integração sem nenhum warning. **Não há teste que valide que todos os módulos estão redirecionados para o `test_engine`.**
 
-`lib/python/oracle_retry.py` implementa `pybreaker + stamina` (`make_oracle_retry()`), mas não há teste que valide a abertura do circuit breaker após N falhas consecutivas e o comportamento de half-open.
+### GAP-08 — Oracle sem mock padronizado
 
-### GAP-10 — `notifications.py` sem Teste de Canal Parcial
+`lib/python/oracle_extract.py` usa `oracledb.connect` diretamente. Não há fixture `mock_oracle_connection` no `conftest.py`. Cada teste que precisar mockar Oracle vai reimplementar o mock de formas diferentes — inconsistência garantida.
 
-O ADR-013 documenta idempotência granular (e-mail enviado, WhatsApp falha → salvar estado parcial), mas `test_notifications.py` (4 KB) provavelmente não cobre:
-- Email OK + WhatsApp falha → estado parcial salvo
-- Retry de automação com estado parcial → só WhatsApp é reenviado
-- Falha em ambos os canais → estado zerado para retry completo
+### GAP-09 — `_finalize_execution` sem teste de guard de status
+
+A função `_finalize_execution` tem o guard:
+```python
+if db_exec and db_exec.status not in [EXECUTION_STATUS_TERMINATED, EXECUTION_STATUS_TIMEOUT]:
+```
+Sem teste para esse branch, um bug que sobrescreva o status `TERMINATED` com `ERROR` não seria detectado — o histórico de execução mostraria causa de término errada.
+
+### GAP-10 — `wakeup_event` e `shutdown_event` como globais
+
+`worker.py` define `shutdown_event` e `wakeup_event` como variáveis globais de módulo. Sem o fixture `reset_worker_globals`, **o estado de um teste vaza para o próximo** — especialmente se um teste setar `shutdown_event` para testar graceful shutdown e não limpar depois.
+
+### GAP-11 — Dashboard sem testes unitários React
+
+Zero testes Vitest/Jest. Lógica crítica sem cobertura: `schedule_version=2`, autenticação `localStorage`, `action_code`/`action_label`, risk badges `CAT`/`DRIFT`/`DOCS`.
+
+### GAP-12 — E2E sem health check obrigatório no CI
+
+`test_e2e_dashboard.py` requer servidor ativo. Se o Orchestrator falhar no startup, os testes E2E passam como skipped silenciosamente.
+
+### GAP-13 — Circuit Breaker Oracle sem teste
+
+`oracle_retry.py` implementa `pybreaker + stamina`, mas nenhum teste valida a abertura do circuit breaker após N falhas, half-open e fechamento.
+
+### GAP-14 — Notificações sem teste de idempotência granular
+
+ADR-013 documenta estado parcial (email OK + WhatsApp falha → salvar parcial). Sem testes para retry com estado parcial.
 
 ---
 
@@ -157,11 +219,71 @@ O ADR-013 documenta idempotência granular (e-mail enviado, WhatsApp falha → s
 
 ### Fase 1 — Hardening Imediato (Semanas 1–2)
 
-> **Meta:** Fechar os gaps de maior risco operacional. Todos entram no pre-commit hook.
+> **Meta:** Fechar os gaps de estado global e mock de infraestrutura.
 
-#### F1-T1 — Habilitar `--strict-markers` no pytest
+#### F1-T1 — Adicionar fixtures de worker ao `conftest.py`
 
-**Arquivo:** `Orchestrator/pytest.ini`
+**Arquivo:** `Orchestrator/tests/conftest.py`
+
+Adicionar as 3 fixtures abaixo ao final do arquivo:
+
+```python
+import worker as _worker_module  # noqa: E402
+
+
+@pytest.fixture
+def mock_popen() -> Generator[MagicMock, None, None]:
+    """Mock padronizado de subprocess.Popen para testes do worker."""
+    with patch("worker.subprocess.Popen") as mock:
+        proc = MagicMock()
+        proc.pid = 12345
+        proc.poll.return_value = None
+        proc.returncode = 0
+        proc.stdout = iter([])
+        mock.return_value = proc
+        yield mock
+
+
+@pytest.fixture(autouse=False)
+def reset_worker_globals() -> Generator[None, None, None]:
+    """Reseta o estado global do worker entre testes para evitar vazamento."""
+    _worker_module.shutdown_event.clear()
+    _worker_module.wakeup_event.clear()
+    _worker_module.log_buffer.clear()
+    _worker_module.stats["tasks_completed"] = 0
+    _worker_module.stats["tasks_failed"] = 0
+    _worker_module.stats["active_tasks"] = 0
+    _worker_module.stats["active_processes"].clear()
+    yield
+    _worker_module.shutdown_event.clear()
+    _worker_module.wakeup_event.clear()
+
+
+@pytest.fixture
+def mock_requests_worker() -> Generator[dict, None, None]:
+    """Mock padronizado de requests para o wakeup listener e log flusher."""
+    with patch("worker.requests.get") as mock_get, \
+         patch("worker.requests.post") as mock_post:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"status": "idle"}
+        mock_post.return_value.status_code = 200
+        yield {"get": mock_get, "post": mock_post}
+
+
+@pytest.fixture
+def mock_oracle_connection() -> Generator[MagicMock, None, None]:
+    """Mock padronizado para oracledb.connect. Retorna cursor vazio por padrão."""
+    with patch("oracledb.connect") as mock_conn:
+        mock_cursor = MagicMock()
+        mock_cursor.description = []
+        mock_cursor.fetchmany.return_value = []
+        mock_conn.return_value.__enter__ = lambda s: s
+        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+        mock_conn.return_value.cursor.return_value = mock_cursor
+        yield mock_conn
+```
+
+#### F1-T2 — `--strict-markers` no `pytest.ini`
 
 ```ini
 [pytest]
@@ -176,52 +298,116 @@ markers =
 
 **Critério de sucesso:** `pytest --collect-only` sem warnings de marcador desconhecido.
 
-#### F1-T2 — Mock unitário de `oracle_extract.py`
+#### F1-T3 — Criar `test_worker_core_unit.py`
+
+**Arquivo a criar:** `Orchestrator/tests/test_worker_core_unit.py`
+
+```python
+# @pytest.mark.unitario — usa fixtures: reset_worker_globals, mock_popen, mock_requests_worker
+
+# _force_kill
+- test_force_kill_chama_taskkill_com_args_corretos
+- test_force_kill_timeout_expired_loga_warning
+
+# _build_subprocess_env allowlist
+- test_subprocess_env_nao_contem_oracle_readonly_password
+- test_subprocess_env_nao_contem_orchestrator_api_key
+- test_subprocess_env_contem_apenas_allowed_keys
+- test_subprocess_env_test_mode_propagado
+- test_subprocess_env_exec_id_e_correlation_id_iguais
+
+# _drain_process_output caps
+- test_drain_cap_linhas_para_em_max_log_lines
+- test_drain_cap_chars_para_em_max_log_chars
+- test_drain_acima_do_cap_continua_broadcast_mas_nao_acumula
+
+# _finalize_execution guard de status
+- test_finalize_nao_sobrescreve_status_terminated
+- test_finalize_nao_sobrescreve_status_timeout
+- test_finalize_completa_status_pending_normalmente
+
+# update_stat thread-safety
+- test_update_stat_decremento_nao_vai_abaixo_de_zero
+- test_update_stat_concorrente_nao_corrompe
+
+# scan_for_artifacts
+- test_scan_ignora_arquivo_anterior_ao_start_time
+- test_scan_inclui_arquivo_gerado_durante_execucao
+- test_scan_retorna_none_sem_artefatos
+
+# LOG_FILENAME
+- test_log_filename_usa_worker_test_em_pytest
+
+# broadcast_log buffer
+- test_broadcast_log_enfileira_por_exec_id
+- test_broadcast_log_thread_safe_dois_threads_simultaneos
+```
+
+#### F1-T4 — Criar `test_worker_monitor_unit.py`
+
+**Arquivo a criar:** `Orchestrator/tests/test_worker_monitor_unit.py`
+
+```python
+# @pytest.mark.unitario — usa: reset_worker_globals, mock_popen, db_session
+# Mockar get_now_local() para testar timeout sem esperar tempo real
+
+- test_monitor_detecta_timeout_via_mock_de_tempo
+- test_monitor_seta_status_timeout_no_banco
+- test_monitor_chama_force_kill_no_timeout
+- test_monitor_detecta_terminacao_pelo_usuario
+- test_monitor_chama_finalize_terminated_task
+- test_monitor_retorna_false_em_shutdown_event
+- test_monitor_db_check_interval_respeita_5s
+- test_monitor_retorna_true_quando_processo_finaliza_normalmente
+```
+
+#### F1-T5 — Criar `test_worker_wakeup_unit.py`
+
+**Arquivo a criar:** `Orchestrator/tests/test_worker_wakeup_unit.py`
+
+```python
+# @pytest.mark.unitario — usa: reset_worker_globals, mock_requests_worker
+
+- test_wakeup_seta_event_ao_receber_status_wakeup
+- test_wakeup_nao_seta_event_em_status_idle
+- test_wakeup_backoff_aumenta_em_falha_de_rede
+- test_wakeup_backoff_reseta_apos_sucesso
+- test_wakeup_backoff_nao_excede_max_backoff
+- test_wakeup_para_ao_shutdown_event_set
+
+- test_log_flusher_envia_lote_em_batch
+- test_log_flusher_retry_unico_em_falha_de_rede
+- test_log_flusher_loga_warning_apos_2_falhas
+- test_log_flusher_nao_envia_buffer_vazio
+```
+
+#### F1-T6 — Criar `test_oracle_extract_unit.py`
 
 **Arquivo a criar:** `Orchestrator/tests/test_oracle_extract_unit.py`
 
-Cenários obrigatórios:
-
 ```python
-# @pytest.mark.unitario
-# Usando unittest.mock.patch("oracledb.connect")
+# @pytest.mark.unitario — usa fixture mock_oracle_connection
 
-- test_fetch_all_retorna_linhas_esperadas
-- test_fetch_all_lotes_multiplos (fetch_size forçado pequeno)
+- test_fetch_all_retorna_colunas_e_linhas
+- test_fetch_all_lotes_multiplos_concatenados
+- test_fetch_all_cursor_sem_description_retorna_vazio
 - test_serialize_rows_datetime_para_isoformat
 - test_serialize_rows_strip_espacos
+- test_serialize_rows_sort_key_aplicado
 - test_compute_hash_deterministico
-- test_read_last_hash_arquivo_ausente_retorna_none
-- test_write_state_tmp_cria_arquivo_temp
-- test_resolve_oracle_credentials_le_dotenv
-- test_resolve_oracle_credentials_force_dsn_ignora_dotenv
-- test_init_thick_mode_ja_inicializado_nao_chama_novamente
+- test_compute_hash_sort_keys_garante_ordem
+- test_read_last_hash_arquivo_ausente_retorna_string_vazia
+- test_read_last_hash_json_invalido_retorna_string_vazia
+- test_write_state_tmp_cria_arquivo_com_sufixo_tmp
+- test_resolve_oracle_credentials_ausentes_retorna_none
+- test_resolve_oracle_credentials_force_dsn_ignora_env
 ```
 
-#### F1-T3 — Testes de falha do Worker
+#### F1-T7 — Health check obrigatório antes dos testes E2E
 
-**Arquivo a criar:** `Orchestrator/tests/test_worker_failure_scenarios.py`
-
-Cenários obrigatórios:
-
-```python
-# @pytest.mark.integracao
-
-- test_worker_mata_processo_apos_max_runtime_minutes
-- test_worker_graceful_shutdown_com_fila_nao_vazia
-- test_worker_requeue_bloqueado_por_queue_group_ativo
-- test_worker_classifica_exit_code_whatsapp_session_expired
-- test_worker_classifica_exit_code_channel_delivery_failed
-- test_worker_abandoned_mutex_nao_trava_fila
-- test_worker_taskkill_arvore_processo_filho
-```
-
-#### F1-T4 — Health check obrigatório antes dos testes E2E
-
-**Arquivo:** `.github/workflows/governanca.yml` — job `testes-e2e`
+**Arquivo:** `.github/workflows/governanca.yml`
 
 ```yaml
-# Adicionar step antes de `pytest -m e2e`
 - name: Aguardar Orchestrator subir
   run: |
     for i in $(seq 1 30); do
@@ -232,41 +418,44 @@ Cenários obrigatórios:
     curl -sf http://127.0.0.1:8000/health || (echo "Orchestrator não subiu" && exit 1)
 ```
 
-#### F1-T5 — Testes de segurança do middleware
+#### F1-T8 — Auditoria da allowlist `_ALLOWED_ENV_KEYS`
 
-**Arquivo a criar:** `Orchestrator/tests/test_middleware_auth.py`
+**Arquivo a criar:** `Orchestrator/tests/test_worker_security.py`
 
 ```python
-# @pytest.mark.integracao
+# @pytest.mark.unitario
 
-- test_rota_protegida_sem_api_key_retorna_401
-- test_rota_protegida_api_key_invalida_retorna_403
-- test_rota_protegida_api_key_valida_retorna_200
-- test_rota_publica_dashboard_sem_auth_retorna_200
-- test_api_key_com_caracteres_especiais_rejeitada
-- test_bypass_via_rota_estatica_bloqueado
+# Lista de variáveis que NUNCA devem estar na allowlist
+FORBIDDEN_KEYS = {
+    "ORACLE_READONLY_PASSWORD",
+    "ORACLE_READONLY_USER",
+    "ORCHESTRATOR_API_KEY",
+    "WHATSAPP_TOKEN",
+    "SMTP_PASSWORD",
+    "SECRET_KEY",
+}
+
+def test_allowed_env_keys_nao_contem_segredos() -> None:
+    from worker import _ALLOWED_ENV_KEYS
+    vazamentos = FORBIDDEN_KEYS & _ALLOWED_ENV_KEYS
+    assert not vazamentos, f"Segredos na allowlist: {vazamentos}"
 ```
 
 ---
 
 ### Fase 2 — Ampliação de Cobertura (Semanas 3–6)
 
-> **Meta:** Elevar threshold para 82%, cobrir domínios críticos e adicionar testes React.
+> **Meta:** Elevar threshold para 82%, cobrir domínios críticos, adicionar testes React.
 
-#### F2-T1 — Elevar threshold de cobertura
-
-**Arquivo:** `Orchestrator/pytest.ini` e `.github/workflows/governanca.yml`
+#### F2-T1 — Elevar threshold para 82%
 
 ```ini
-# pytest.ini
+# pytest.ini — escalonamento controlado:
+# 77 → 79 → 82 (medir delta após cada push)
 addopts = -p no:cacheprovider --strict-markers --cov-fail-under=82
 ```
 
-Subir em etapas: `77 → 79 → 82`. Medir o delta após cada push.
-
 #### F2-T2 — Testes unitários React com Vitest
-
-**Setup:** Adicionar `vitest` + `@testing-library/react` + `@testing-library/user-event` ao `Dashboard/package.json`
 
 ```bash
 npm install --save-dev vitest @testing-library/react @testing-library/user-event jsdom
@@ -275,16 +464,15 @@ npm install --save-dev vitest @testing-library/react @testing-library/user-event
 **Arquivos a criar em** `Dashboard/src/__tests__/`:
 
 ```
-schedule.parser.test.ts      — parsing schedule_version=2 (todos os tipos)
-auth.localstorage.test.ts    — prompt, persistência, limpeza no 403
+schedule.parser.test.ts     — schedule_version=2 (manual, daily, weekly, monthly, interval, once)
+auth.localstorage.test.ts   — prompt, persistência, limpeza no 403
 diagnostics.badges.test.ts  — CAT, DRIFT, DOCS risk badges
-action.codes.test.ts         — action_code → action_label → operator_actions
+action.codes.test.ts        — action_code → action_label → operator_actions
 beneficiamento.kpi.test.ts  — formatação de KPI e períodos
 ```
 
-Adicionar ao `Dashboard/package.json`:
-
 ```json
+// Dashboard/package.json — adicionar:
 "scripts": {
   "test": "vitest run",
   "test:watch": "vitest",
@@ -292,88 +480,105 @@ Adicionar ao `Dashboard/package.json`:
 }
 ```
 
-#### F2-T3 — Testes de notificação com idempotência granular
+#### F2-T3 — Testes do `run_task` e `main_loop`
 
-**Arquivo:** `Orchestrator/tests/test_notifications.py` (ampliar existente)
-
-Cenários adicionais obrigatórios:
+**Arquivo a criar:** `Orchestrator/tests/test_worker_integration.py`
 
 ```python
-# @pytest.mark.unitario
+# @pytest.mark.integracao — usa: reset_worker_globals, mock_popen, db_session, mock_requests_worker
 
+- test_run_task_status_nao_pending_retorna_silenciosamente
+- test_run_task_reivindicada_duas_vezes_nao_duplica
+- test_run_task_execucao_nao_encontrada_no_banco
+- test_run_task_exception_chama_apply_internal_worker_error
+- test_run_task_decrementa_active_tasks_no_finally
+- test_main_loop_para_ao_shutdown_event
+- test_main_loop_despacha_tarefa_para_thread_pool
+- test_main_loop_backoff_quando_sem_tarefas
+- test_main_loop_acorda_via_wakeup_event
+```
+
+#### F2-T4 — Testes de idempotência de notificações
+
+**Arquivo:** `Orchestrator/tests/test_notifications.py` (ampliar)
+
+```python
 - test_email_ok_whatsapp_falha_salva_estado_parcial
 - test_retry_com_estado_parcial_reenvia_apenas_whatsapp
 - test_falha_ambos_canais_reseta_estado_para_retry_completo
-- test_whatsapp_ok_email_falha_salva_estado_parcial_invertido
 - test_idempotencia_nao_reenvia_canal_ja_confirmado
 ```
 
-#### F2-T4 — Testes de Circuit Breaker Oracle
+#### F2-T5 — Testes de Circuit Breaker Oracle
 
 **Arquivo a criar:** `Orchestrator/tests/test_oracle_circuit_breaker.py`
 
 ```python
-# @pytest.mark.unitario
-
 - test_circuit_breaker_abre_apos_n_falhas_consecutivas
 - test_circuit_breaker_half_open_permite_tentativa
 - test_circuit_breaker_fecha_apos_sucesso_em_half_open
 - test_stamina_retry_espera_intervalo_correto
-- test_circuit_breaker_error_propaga_para_chamador
 ```
 
-#### F2-T5 — Testes do `portfolio_catalog.py`
-
-`portfolio_catalog.py` (37 KB) é o maior serviço do sistema e não tem arquivo de teste dedicado.
+#### F2-T6 — Testes do `portfolio_catalog.py`
 
 **Arquivo a criar:** `Orchestrator/tests/test_portfolio_catalog_unit.py`
 
 ```python
-# @pytest.mark.integracao
-
 - test_calcular_drift_detecta_manifesto_divergente
 - test_calcular_drift_retorna_healthy_manifesto_alinhado
 - test_docs_obrigatorias_ausentes_gera_finding
 - test_scoring_criticidade_high_peso_maior
 - test_portfolio_health_summary_status_incident
-- test_portfolio_health_summary_status_healthy
 - test_sla_violation_detectada_corretamente
 - test_ownership_orfao_detectado
 ```
 
-#### F2-T6 — Testes do `scheduler_runtime.py`
+#### F2-T7 — Testes do `scheduler_runtime.py`
 
 **Arquivo a criar:** `Orchestrator/tests/test_scheduler_runtime_unit.py`
 
 ```python
-# @pytest.mark.unitario (mock de APScheduler)
-
 - test_cron_expression_valida_aceita
 - test_cron_expression_invalida_rejeitada
-- test_schedule_version2_todos_os_tipos (manual, daily, weekly, monthly, interval, once)
+- test_schedule_version2_todos_os_tipos
 - test_schedule_preview_retorna_proximas_execucoes
 - test_timezone_america_sao_paulo_aplicada
 - test_trigger_worker_wakeup_usa_call_soon_threadsafe
 - test_wakeup_sem_event_loop_registrado_nao_lanca_excecao
 ```
 
+#### F2-T8 — Teste de auditoria do `client` fixture
+
+**Arquivo a criar:** `Orchestrator/tests/test_conftest_coverage.py`
+
+```python
+# @pytest.mark.integracao
+# Garante que todos os módulos com SessionLocal estão redirecionados para test_engine
+
+def test_todos_os_modulos_usam_test_engine(client: TestClient) -> None:
+    import app.database as db
+    import app.services.scheduler_runtime as sched
+    import app.routers.websocket as ws
+    assert db.SessionLocal is testing_session_local
+    assert getattr(sched, "SessionLocal") is testing_session_local
+    assert getattr(ws, "SessionLocal") is testing_session_local
+```
+
 ---
 
 ### Fase 3 — Qualidade Avançada (Meses 2–3)
 
-> **Meta:** Cobertura 90%, mutation testing, performance e regressão visual.
+> **Meta:** Cobertura 90%, mutation testing, performance, regressão visual.
 
 #### F3-T1 — Mutation Testing com `mutmut`
-
-**Instalação:**
 
 ```bash
 pip install mutmut
 ```
 
-**Configuração em** `pyproject.toml`:
-
 ```toml
+# pyproject.toml
 [tool.mutmut]
 paths_to_mutate = [
     "Produção Beneficimento/src/beneficiamento/core/",
@@ -384,19 +589,9 @@ paths_to_mutate = [
 tests_dir = "Orchestrator/tests/"
 ```
 
-**Executar:**
-
-```bash
-mutmut run
-mutmut results
-mutmut show <id>   # ver mutante sobrevivente
-```
-
 **Meta:** Mutation score > 80% nos módulos de lógica pura.
 
 #### F3-T2 — Property-Based Testing com `hypothesis`
-
-**Instalação:**
 
 ```bash
 pip install hypothesis
@@ -405,47 +600,33 @@ pip install hypothesis
 **Arquivo a criar:** `Orchestrator/tests/test_beneficiamento_property.py`
 
 ```python
-from hypothesis import given, strategies as st
-
-# Exemplos de propriedades a testar:
-
 @given(st.floats(min_value=0, max_value=1e9))
-def test_coercao_metrica_sempre_retorna_float_nao_negativo(valor: float) -> None:
-    ...
+def test_coercao_metrica_sempre_float_nao_negativo(valor: float) -> None: ...
 
 @given(st.text(min_size=1, max_size=50))
-def test_nome_turno_nunca_vazio_apos_normalizacao(nome: str) -> None:
-    ...
+def test_nome_turno_nunca_vazio_apos_normalizacao(nome: str) -> None: ...
 
 @given(st.datetimes())
-def test_calculo_turno_deterministico_para_qualquer_datetime(dt: datetime) -> None:
-    ...
+def test_calculo_turno_deterministico_para_qualquer_datetime(dt: datetime) -> None: ...
 ```
 
 #### F3-T3 — Performance Testing com `pytest-benchmark`
-
-**Instalação:**
 
 ```bash
 pip install pytest-benchmark
 ```
 
-**Arquivo a criar:** `Orchestrator/tests/test_performance_baseline.py`
-
 ```python
-# @pytest.mark.unitario
-
+# test_performance_baseline.py
 - bench_system_diagnostics_build_payload      (< 50ms)
 - bench_portfolio_catalog_calculate_health    (< 100ms)
 - bench_scheduler_runtime_parse_cron          (< 5ms)
-- bench_database_purge_old_executions         (< 200ms)
 - bench_oracle_extract_serialize_rows_1000    (< 20ms)
 ```
 
-Adicionar ao CI como job não-bloqueante com artefato de comparação:
-
 ```yaml
-- name: Benchmark (não bloqueante)
+# CI — job não-bloqueante:
+- name: Benchmark
   run: pytest -m benchmark --benchmark-json=benchmark-results.json || true
 - uses: actions/upload-artifact@v4
   with:
@@ -453,58 +634,71 @@ Adicionar ao CI como job não-bloqueante com artefato de comparação:
     path: benchmark-results.json
 ```
 
-#### F3-T4 — Regressão Visual do Dashboard com Playwright Screenshots
-
-**Arquivo:** `Orchestrator/tests/test_e2e_dashboard.py` (ampliar)
+#### F3-T4 — Regressão Visual com Playwright Screenshots
 
 ```python
-# Adicionar aos testes E2E existentes:
-
+# Adicionar em test_e2e_dashboard.py:
 - test_screenshot_dashboard_overview_estado_healthy
-- test_screenshot_dashboard_diagnostics_com_findings
-- test_screenshot_aba_automacoes_com_risk_badges
-- test_screenshot_modal_revisao_bloqueado_por_drift
+- test_screenshot_diagnostics_com_findings
+- test_screenshot_automacoes_com_risk_badges
 - test_screenshot_beneficiamento_kpi_carregado
 ```
 
-Referenciar screenshots base em `docs/playwright-screenshots/baseline/` e comparar via `expect(page).toHaveScreenshot()`.
+Baseline em `docs/playwright-screenshots/baseline/`.
 
-#### F3-T5 — Elevar Threshold Final para 90%
-
-```ini
-# pytest.ini — progressão final
-addopts = -p no:cacheprovider --strict-markers --cov-fail-under=90
-```
-
-Escalada controlada:
+#### F3-T5 — Elevar threshold para 90%
 
 ```
-Atual: 77% → F1 completa: 79% → F2 completa: 85% → F3 completa: 90%
+Progresso: 77% → F1: 79% → F2: 85% → F3: 90%
 ```
 
 ---
 
 ## 4. Modernização de Ferramentas
 
-### 4.1 Substituições e Adições Recomendadas
-
 | Área | Atual | Recomendado | Justificativa |
 |---|---|---|---|
-| Testes unitários React | ❌ Nenhum | **Vitest** + Testing Library | Nativo ao Vite, zero-config, 10x mais rápido que Jest |
-| Testes de componente React | ❌ Nenhum | **`@playwright/experimental-ct-react`** | Reutiliza Playwright já no stack; testa componentes isolados sem servidor |
-| Mutation testing Python | ❌ Nenhum | **`mutmut`** | Leve, integra ao pytest, relatório de sobreviventes |
-| Property-based testing | ❌ Nenhum | **`hypothesis`** | Ideal para lógica pura do `beneficiamento/core/` e `oracle_extract.py` |
-| Performance regression | ❌ Nenhum | **`pytest-benchmark`** | Detecta regressões de latência antes do deploy |
-| Cobertura diferencial | ❌ Nenhum | **`diff-cover`** | Exige cobertura apenas nas linhas modificadas no PR |
-| Load testing API | ❌ Nenhum | **`locust`** | Testar `/api/system/diagnostics` e `/api/portfolio/health` sob carga |
+| Testes unitários React | ❌ | **Vitest** + Testing Library | Nativo ao Vite, zero-config |
+| Componentes React isolados | ❌ | **`@playwright/experimental-ct-react`** | Reutiliza Playwright já no stack |
+| Mutation testing Python | ❌ | **`mutmut`** | Leve, integra ao pytest |
+| Property-based testing | ❌ | **`hypothesis`** | Ideal para lógica pura em `beneficiamento/core/` |
+| Performance regression | ❌ | **`pytest-benchmark`** | Detecta regressões de latência no CI |
+| Cobertura diferencial de PR | ❌ | **`diff-cover`** | Exige cobertura só nas linhas modificadas |
+| Mock de tempo | ❌ | **`freezegun`** ou **`time-machine`** | Indispensável para testar timeout do `_monitor_process` sem esperar |
+| Load testing API | ❌ | **`locust`** | `/api/system/diagnostics` e `/api/portfolio/health` sob carga |
 
-### 4.2 `diff-cover` para PRs (Quick Win)
+> **Adição nova (descoberta pelo `worker.py`):** `freezegun` ou `time-machine` são **essenciais** para testar o timeout do `_monitor_process` que usa `get_now_local()` — sem eles os testes de timeout seriam não-deterministas ou dependeriam de `time.sleep()`.
 
 ```bash
-pip install diff-cover
+pip install time-machine  # mais rápido que freezegun, sem monkey-patch global
 ```
 
-Adicionar ao job de PR no CI:
+```python
+import time_machine
+
+@time_machine.travel(datetime(2026, 7, 3, 10, 0, 0), tick=False)
+def test_monitor_detecta_timeout_via_mock_de_tempo() -> None:
+    # get_now_local() retornará 10:00:00; avanço de 31 min dispara timeout de 30 min
+    ...
+```
+
+---
+
+## 5. Melhorias no Processo de QA
+
+### 5.1 Separação de Jobs no CI
+
+```
+Job: lint-python (ruff, black, isort, bandit)   ← independente
+Job: lint-frontend (ESLint + tsc)                ← independente
+Job: testes-unitarios (-m unitario)             ← depende de lint-python
+Job: testes-integracao (-m integracao)          ← depende de testes-unitarios
+Job: testes-e2e (-m e2e)                        ← depende de testes-integracao + health check
+Job: governanca (ValidarAutomacoes.ps1)         ← depende de lint-python
+Job: benchmark (não bloqueante)                 ← depende de testes-unitarios
+```
+
+### 5.2 `diff-cover` para PRs
 
 ```yaml
 - name: Coverage diferencial do PR
@@ -513,66 +707,13 @@ Adicionar ao job de PR no CI:
     diff-cover coverage.xml --compare-branch=origin/main --fail-under=85
 ```
 
-Isso garante que **cada linha nova tem ≥ 85% de cobertura**, sem exigir refatoração do código legado de uma vez.
-
----
-
-## 5. Melhorias no Processo de QA
-
-### 5.1 Separação de Jobs no CI
-
-**Situação atual:** Pipeline único `governanca.yml` mistura lint, testes unitários, integração e E2E.
-
-**Proposta:** Dividir em jobs paralelos com dependências explícitas:
-
-```
-Job: lint-python (ruff, black, isort, bandit)    ← independente
-Job: lint-frontend (ESLint + tsc)                 ← independente
-Job: testes-unitarios (-m unitario)              ← depende de lint-python
-Job: testes-integracao (-m integracao)           ← depende de testes-unitarios
-Job: testes-e2e (-m e2e)                         ← depende de testes-integracao
-Job: governanca (ValidarAutomacoes.ps1)          ← depende de lint-python
-Job: benchmark (não bloqueante)                  ← depende de testes-unitarios
-```
-
-Benefício: falha rápida + feedback em paralelo.
-
-### 5.2 `conftest.py` — Fixtures Ausentes
-
-Analisar e adicionar ao `conftest.py` existente:
-
-```python
-# Fixtures recomendadas a adicionar:
-
-@pytest.fixture
-def mock_oracle_connection() -> Generator[MagicMock, None, None]:
-    """Mock padronizado para oracledb.connect em todos os testes unitários."""
-    with patch("oracledb.connect") as mock_conn:
-        mock_conn.return_value.__enter__ = lambda s: s
-        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
-        mock_conn.return_value.cursor.return_value.fetchmany.return_value = []
-        yield mock_conn
-
-@pytest.fixture
-def worker_env_vars() -> Generator[None, None, None]:
-    """Garante variáveis de ambiente mínimas para testes de worker."""
-    env = {
-        "API_HOST": "127.0.0.1",
-        "API_PORT": "8000",
-        "WORKER_MAX_CONCURRENT": "1",
-    }
-    with patch.dict(os.environ, env):
-        yield
-```
-
-### 5.3 Labels de Teste no CHANGELOG
-
-Adotar convenção nos commits de teste para rastreabilidade:
+### 5.3 Convenção de Commits para Testes
 
 ```
 tests(worker): adiciona cenários de timeout e graceful shutdown
-tests(oracle): adiciona mock unitário de oracle_extract.py
-tests(dashboard): adiciona testes Vitest para schedule parser
+tests(oracle): mock unitário de oracle_extract.py via conftest
+tests(conftest): fixtures mock_popen, reset_worker_globals, mock_oracle_connection
+tests(dashboard): Vitest para schedule parser e auth
 ```
 
 ---
@@ -581,28 +722,33 @@ tests(dashboard): adiciona testes Vitest para schedule parser
 
 ### Fase 1 — Semanas 1–2
 
-- [ ] **F1-T1** — `--strict-markers` em `pytest.ini`
-- [ ] **F1-T2** — Criar `test_oracle_extract_unit.py` (10 cenários)
-- [ ] **F1-T3** — Criar `test_worker_failure_scenarios.py` (7 cenários)
-- [ ] **F1-T4** — Health check antes do job E2E no CI
-- [ ] **F1-T5** — Criar `test_middleware_auth.py` (6 cenários)
-- [ ] Verificar que todos os testes novos passam em `--cov-fail-under=77`
+- [ ] **F1-T1** — Adicionar `mock_popen`, `reset_worker_globals`, `mock_requests_worker`, `mock_oracle_connection` ao `conftest.py`
+- [ ] **F1-T2** — `--strict-markers` em `pytest.ini`
+- [ ] **F1-T3** — Criar `test_worker_core_unit.py` (22 cenários)
+- [ ] **F1-T4** — Criar `test_worker_monitor_unit.py` (8 cenários) + instalar `time-machine`
+- [ ] **F1-T5** — Criar `test_worker_wakeup_unit.py` (10 cenários)
+- [ ] **F1-T6** — Criar `test_oracle_extract_unit.py` (13 cenários)
+- [ ] **F1-T7** — Health check obrigatório antes do job E2E no CI
+- [ ] **F1-T8** — Criar `test_worker_security.py` (1 cenário de allowlist)
+- [ ] Verificar que todos os novos testes passam em `--cov-fail-under=77`
 - [ ] Rodar `ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` ✅
 
 ### Fase 2 — Semanas 3–6
 
 - [ ] **F2-T1** — Elevar threshold para 82%
-- [ ] **F2-T2** — Setup Vitest no Dashboard + 5 arquivos de teste
-- [ ] **F2-T3** — Ampliar `test_notifications.py` (5 cenários de idempotência)
-- [ ] **F2-T4** — Criar `test_oracle_circuit_breaker.py` (5 cenários)
-- [ ] **F2-T5** — Criar `test_portfolio_catalog_unit.py` (8 cenários)
-- [ ] **F2-T6** — Criar `test_scheduler_runtime_unit.py` (7 cenários)
+- [ ] **F2-T2** — Setup Vitest + 5 arquivos de teste React
+- [ ] **F2-T3** — Criar `test_worker_integration.py` (9 cenários de `run_task`/`main_loop`)
+- [ ] **F2-T4** — Ampliar `test_notifications.py` (4 cenários de idempotência)
+- [ ] **F2-T5** — Criar `test_oracle_circuit_breaker.py` (4 cenários)
+- [ ] **F2-T6** — Criar `test_portfolio_catalog_unit.py` (7 cenários)
+- [ ] **F2-T7** — Criar `test_scheduler_runtime_unit.py` (7 cenários)
+- [ ] **F2-T8** — Criar `test_conftest_coverage.py` (auditoria de SessionLocal)
 - [ ] Adicionar `diff-cover` ao job de PR
 - [ ] Verificar cobertura acima de 82% ✅
 
 ### Fase 3 — Meses 2–3
 
-- [ ] **F3-T1** — Setup e execução de `mutmut` nos módulos de lógica pura
+- [ ] **F3-T1** — Setup `mutmut` + mutation score > 80% nos módulos de lógica pura
 - [ ] **F3-T2** — Criar `test_beneficiamento_property.py` com `hypothesis`
 - [ ] **F3-T3** — Setup `pytest-benchmark` + job não-bloqueante no CI
 - [ ] **F3-T4** — Screenshots de regressão visual no Playwright
@@ -619,8 +765,9 @@ tests(dashboard): adiciona testes Vitest para schedule parser
 - [`docs/playwright-e2e-standard.md`](playwright-e2e-standard.md) — Padrão E2E
 - [`docs/architecture-standard.md`](architecture-standard.md) — Camadas arquiteturais
 - [`Tools/ValidarAutomacoes.ps1`](../Tools/ValidarAutomacoes.ps1) — Quality gate
-- [`Tools/Test-PythonGovernance.ps1`](../Tools/Test-PythonGovernance.ps1) — mypy + pylint
+- [`Orchestrator/tests/conftest.py`](../Orchestrator/tests/conftest.py) — Fixtures base
+- [`Orchestrator/worker.py`](../Orchestrator/worker.py) — Motor de execução (26 KB)
 
 ---
 
-*Documento gerado via análise full do repositório. Atualizar ao fechar cada fase do checklist.*
+*v2 — Atualizado após leitura integral de `worker.py` (26 KB) e `conftest.py`. Fechar cada fase e marcar os checkboxes acima.*
