@@ -1,5 +1,9 @@
 # Changelog
 
+## [9.5.18] - 02/07/2026
+### Corrigido
+- **Falso-negativo silencioso em `Test-PythonGovernance.ps1` quando invocado com `-Paths` externo**: chamar o script como processo separado via `pwsh -File Test-PythonGovernance.ps1 -Paths @("a.py","b.py")` fazia o parser de CLI do próprio `pwsh.exe` (modo `-File`) descartar silenciosamente todos os elementos do array após o primeiro, validando apenas `a.py` e reportando sucesso sem sequer mencionar `b.py`. O pipeline de produção (`ValidarAutomacoes.ps1`, usado pelo pre-commit hook e pelo CI) não é afetado — sempre invoca via operador `&` in-process, que faz o binding correto do array. Adicionado comentário de alerta no script documentando a limitação (nunca invocar via `-File` para múltiplos arquivos) e um split defensivo que recupera o caso em que os caminhos chegam colapsados em uma única string separada por vírgula.
+
 ## [9.5.17] - 02/07/2026
 ### Adicionado
 - **Menção automática do responsável por fase no WhatsApp (OBP-04)**: `config.json` ganhou o mapa `responsaveis_por_fase` (número ou lista de números por fase); `generate_phase_cards.py` (`get_responsavel`, mesmo padrão de matching por substring de `get_threshold`) acrescenta `Responsável: @<numero>` à legenda de cada card. `lib/WhatsApp-Core.js` ganhou `extrairOpcoesMensagem()`, que extrai os números `@digitos` da legenda e monta o array `mentions` do whatsapp-web.js (`<numero>@c.us`), aplicado nos três pontos de envio (single, batch, retry). Fases com múltiplos responsáveis (`CONFERENCIA`, `CQ`) unem os números com `" @"` para gerar múltiplas menções na mesma mensagem.
