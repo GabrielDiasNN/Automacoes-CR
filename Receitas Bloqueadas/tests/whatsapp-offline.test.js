@@ -27,4 +27,13 @@ assert.match(sharedCore, /process\.exit\(24\)/);
 assert.match(sharedCore, /function describeError\(error\)/);
 assert.doesNotMatch(sharedCore, /\b\d{10,13}@c\.us\b/);
 
+// Regressao: mencoes via @<numero-discado>@c.us direto falham silenciosamente quando o ID
+// real registrado no WhatsApp difere do numero discado (sem o 9o digito legado, ou LID).
+// resolverMencoes() consulta client.getNumberId() para obter o wid real antes de montar
+// o array de mentions — extrairOpcoesMensagem() (o helper sincrono anterior, que so
+// concatenava "@c.us" no numero cru) nao deve mais existir.
+assert.match(sharedCore, /async function resolverMencoes\(client, caption\)/);
+assert.match(sharedCore, /client\.getNumberId\(numero\)/);
+assert.doesNotMatch(sharedCore, /function extrairOpcoesMensagem/);
+
 console.log('[OK] Contrato offline de WhatsApp validado.');
