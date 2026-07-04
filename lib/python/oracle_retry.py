@@ -13,7 +13,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 def make_oracle_retry(
     fail_max: int = 3,
-    reset_timeout: int = 60,
+    reset_timeout: float = 60,
     attempts: int = 3,
     wait_initial: float = 0.1,
     wait_max: float = 5.0,

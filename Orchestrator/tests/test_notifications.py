@@ -1,8 +1,11 @@
+# pylint: disable=protected-access
 """
 Testes unitários focados na resiliência sintática e throttling do Hub de Notificações (notifications.py).
 """
 
 import os
+import subprocess
+import time
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +16,7 @@ from app import notifications
 @pytest.fixture(autouse=True)
 def clean_cooldown() -> None:
     """Limpa o estado de throttle antes de cada teste."""
-    notifications._alert_state.clear()  # pylint: disable=protected-access
+    notifications._alert_state.clear()
 
 
 def test_is_throttled_behavior() -> None:
@@ -21,13 +24,13 @@ def test_is_throttled_behavior() -> None:
     automation_id = 42
 
     # Primeiro envio: não deve estar em cooldown
-    assert notifications._is_throttled(automation_id) is False  # pylint: disable=protected-access
+    assert notifications._is_throttled(automation_id) is False
 
     # Envia e marca
-    notifications._mark_sent(automation_id)  # pylint: disable=protected-access
+    notifications._mark_sent(automation_id)
 
     # Segundo envio imediato: deve estar sob throttling
-    assert notifications._is_throttled(automation_id) is True  # pylint: disable=protected-access
+    assert notifications._is_throttled(automation_id) is True
 
 
 @patch("app.notifications.subprocess.run")
@@ -125,3 +128,163 @@ def test_dispatch_alerts_respects_throttle(mock_exists: Any, mock_run: Any) -> N
     # Segundo disparo imediato: deve ser filtrado pelo throttle
     notifications.dispatch_alerts(auto, exec_)
     assert mock_run.call_count == 2  # Não deve ter aumentado
+
+
+def test_get_cooldown_escalation_tiers() -> None:
+    """Garante a escalada progressiva de cooldown por contagem de falhas consecutivas."""
+    assert notifications._get_cooldown(0) == 600
+    assert notifications._get_cooldown(2) == 600
+    assert notifications._get_cooldown(3) == 300
+    assert notifications._get_cooldown(4) == 300
+    assert notifications._get_cooldown(5) == 60
+    assert notifications._get_cooldown(100) == 60
+
+
+def test_mark_sent_evita_estouro_max_tracked(monkeypatch: Any) -> None:
+    """Ao atingir o limite de automações rastreadas, a mais antiga é descartada (LRU)."""
+    monkeypatch.setattr(notifications, "_MAX_TRACKED", 2)
+
+    notifications._mark_sent(1)
+    time.sleep(0.01)
+    notifications._mark_sent(2)
+    time.sleep(0.01)
+    notifications._mark_sent(3)
+
+    assert 1 not in notifications._alert_state
+    assert 2 in notifications._alert_state
+    assert 3 in notifications._alert_state
+
+
+def test_reset_alert_state_limpa_contador() -> None:
+    notifications._mark_sent(7)
+    assert 7 in notifications._alert_state
+
+    notifications.reset_alert_state(7)
+
+    assert 7 not in notifications._alert_state
+
+
+@patch("app.notifications.os.path.exists")
+def test_send_whatsapp_alert_script_ausente_retorna_false(mock_exists: Any) -> None:
+    mock_exists.return_value = False
+    assert notifications.send_whatsapp_alert("Robo", "EXEC-1") is False
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+def test_send_whatsapp_alert_timeout_retorna_false(
+    mock_exists: Any, mock_run: Any
+) -> None:
+    mock_exists.return_value = True
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd="powershell", timeout=60)
+    assert notifications.send_whatsapp_alert("Robo", "EXEC-1") is False
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+def test_send_whatsapp_alert_exit_code_nao_zero_retorna_false(
+    mock_exists: Any, mock_run: Any
+) -> None:
+    mock_exists.return_value = True
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_run.return_value = mock_proc
+    assert notifications.send_whatsapp_alert("Robo", "EXEC-1") is False
+
+
+def test_send_email_alert_sem_env_configurado_retorna_false(monkeypatch: Any) -> None:
+    monkeypatch.delenv("AUTOMACAO_ALERT_EMAIL", raising=False)
+    assert notifications.send_email_alert("Robo", "EXEC-1") is False
+
+
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@costaricamalhas.com"})
+def test_send_email_alert_lib_ausente_retorna_false(mock_exists: Any) -> None:
+    mock_exists.return_value = False
+    assert notifications.send_email_alert("Robo", "EXEC-1") is False
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@costaricamalhas.com"})
+def test_send_email_alert_exit_code_nao_zero_retorna_false(
+    mock_exists: Any, mock_run: Any
+) -> None:
+    mock_exists.return_value = True
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stderr = b"falha no outlook"
+    mock_run.return_value = mock_proc
+    assert notifications.send_email_alert("Robo", "EXEC-1") is False
+
+
+def test_dispatch_alerts_sem_canais_configurados_nao_envia() -> None:
+    class MockAutomation:  # pylint: disable=too-few-public-methods
+        id = 501
+        notification_channels = None
+
+    class MockExecution:  # pylint: disable=too-few-public-methods
+        id = "EXEC-NOCHAN"
+
+    with (
+        patch("app.notifications.send_whatsapp_alert") as mock_wa,
+        patch("app.notifications.send_email_alert") as mock_email,
+    ):
+        notifications.dispatch_alerts(MockAutomation(), MockExecution())
+
+    mock_wa.assert_not_called()
+    mock_email.assert_not_called()
+
+
+def test_dispatch_alerts_apenas_whatsapp() -> None:
+    class MockAutomation:  # pylint: disable=too-few-public-methods
+        id = 502
+        name = "Robo WA"
+        notification_channels = "whatsapp"
+
+    class MockExecution:  # pylint: disable=too-few-public-methods
+        id = "EXEC-WA-ONLY"
+
+    with (
+        patch("app.notifications.send_whatsapp_alert") as mock_wa,
+        patch("app.notifications.send_email_alert") as mock_email,
+    ):
+        notifications.dispatch_alerts(MockAutomation(), MockExecution())
+
+    mock_wa.assert_called_once()
+    mock_email.assert_not_called()
+
+
+def test_dispatch_alerts_apenas_email() -> None:
+    class MockAutomation:  # pylint: disable=too-few-public-methods
+        id = 503
+        name = "Robo Email"
+        notification_channels = "email"
+
+    class MockExecution:  # pylint: disable=too-few-public-methods
+        id = "EXEC-EMAIL-ONLY"
+
+    with (
+        patch("app.notifications.send_whatsapp_alert") as mock_wa,
+        patch("app.notifications.send_email_alert") as mock_email,
+    ):
+        notifications.dispatch_alerts(MockAutomation(), MockExecution())
+
+    mock_email.assert_called_once()
+    mock_wa.assert_not_called()
+
+
+def test_dispatch_alerts_async_submete_ao_executor() -> None:
+    class MockAutomation:  # pylint: disable=too-few-public-methods
+        id = 504
+
+    class MockExecution:  # pylint: disable=too-few-public-methods
+        id = "EXEC-ASYNC"
+
+    auto = MockAutomation()
+    exec_ = MockExecution()
+
+    with patch.object(notifications._notification_executor, "submit") as mock_submit:
+        notifications.dispatch_alerts_async(auto, exec_)
+
+    mock_submit.assert_called_once_with(notifications.dispatch_alerts, auto, exec_)

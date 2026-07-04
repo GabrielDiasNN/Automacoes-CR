@@ -12,6 +12,7 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Generator
+from unittest.mock import MagicMock, patch
 
 os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
 os.environ["RATE_LIMIT_RPM"] = "10000"
@@ -284,3 +285,59 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     auto_router.PROJECT_ROOT = original_project_root
     setattr(scheduler_runtime, "SessionLocal", original_scheduler_session)
     setattr(websocket_router, "SessionLocal", original_websocket_session)
+
+
+@pytest.fixture
+def mock_popen() -> Generator[MagicMock, None, None]:
+    """Mock padronizado de subprocess.Popen para testes do worker."""
+    with patch("worker.subprocess.Popen") as mock:
+        proc = MagicMock()
+        proc.pid = 12345
+        proc.poll.return_value = None
+        proc.returncode = 0
+        proc.stdout = iter([])
+        mock.return_value = proc
+        yield mock
+
+
+@pytest.fixture
+def reset_worker_globals() -> Generator[None, None, None]:
+    """Reseta o estado global do worker entre testes para evitar vazamento."""
+    import worker as _worker_module  # pylint: disable=import-outside-toplevel
+
+    _worker_module.shutdown_event.clear()
+    _worker_module.wakeup_event.clear()
+    _worker_module.log_buffer.clear()
+    _worker_module.stats["tasks_completed"] = 0
+    _worker_module.stats["tasks_failed"] = 0
+    _worker_module.stats["active_tasks"] = 0
+    _worker_module.stats["active_processes"].clear()
+    yield
+    _worker_module.shutdown_event.clear()
+    _worker_module.wakeup_event.clear()
+
+
+@pytest.fixture
+def mock_requests_worker() -> Generator[dict[str, MagicMock], None, None]:
+    """Mock padronizado de requests para o wakeup listener e log flusher."""
+    with (
+        patch("worker.requests.get") as mock_get,
+        patch("worker.requests.post") as mock_post,
+    ):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"status": "idle"}
+        mock_post.return_value.status_code = 200
+        yield {"get": mock_get, "post": mock_post}
+
+
+@pytest.fixture
+def mock_oracle_connection() -> Generator[MagicMock, None, None]:
+    """Mock padronizado para oracledb.connect. Retorna cursor vazio por padrão."""
+    with patch("oracledb.connect") as mock_conn:
+        mock_cursor = MagicMock()
+        mock_cursor.description = []
+        mock_cursor.fetchmany.return_value = []
+        mock_conn.return_value.__enter__ = lambda s: s
+        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+        mock_conn.return_value.cursor.return_value = mock_cursor
+        yield mock_conn

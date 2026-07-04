@@ -720,31 +720,31 @@ tests(dashboard): Vitest para schedule parser e auth
 
 ## 6. Checklist de Implementação
 
-### Fase 1 — Semanas 1–2
+### Fase 1 — Semanas 1–2 (implementada em 03/07/2026)
 
-- [ ] **F1-T1** — Adicionar `mock_popen`, `reset_worker_globals`, `mock_requests_worker`, `mock_oracle_connection` ao `conftest.py`
-- [ ] **F1-T2** — `--strict-markers` em `pytest.ini`
-- [ ] **F1-T3** — Criar `test_worker_core_unit.py` (22 cenários)
-- [ ] **F1-T4** — Criar `test_worker_monitor_unit.py` (8 cenários) + instalar `time-machine`
-- [ ] **F1-T5** — Criar `test_worker_wakeup_unit.py` (10 cenários)
-- [ ] **F1-T6** — Criar `test_oracle_extract_unit.py` (13 cenários)
-- [ ] **F1-T7** — Health check obrigatório antes do job E2E no CI
-- [ ] **F1-T8** — Criar `test_worker_security.py` (1 cenário de allowlist)
-- [ ] Verificar que todos os novos testes passam em `--cov-fail-under=77`
-- [ ] Rodar `ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` ✅
+- [x] **F1-T1** — Adicionado `mock_popen`, `reset_worker_globals`, `mock_requests_worker`, `mock_oracle_connection` ao `conftest.py`
+- [x] **F1-T2** — `--strict-markers` em `pytest.ini`
+- [x] **F1-T3** — Criado `test_worker_core_unit.py` (20 cenários; 2 a menos que a estimativa original — `update_stat` não faz clamp em zero no código real, esse comportamento pertence ao `finally` de `run_task`, fora do escopo unitário desta função)
+- [x] **F1-T4** — Criado `test_worker_monitor_unit.py` (7 cenários) + instalado `time-machine` (`requirements-test.in`/`.txt`)
+- [x] **F1-T5** — Criado `test_worker_wakeup_unit.py` (10 cenários)
+- [x] **F1-T6** — Criado `test_oracle_extract_unit.py` (14 cenários)
+- [x] ~~**F1-T7**~~ — **Não implementado.** A premissa do GAP-12 estava desatualizada: a fixture `uvicorn_server` em `test_e2e_dashboard.py` já sobe seu próprio subprocesso e levanta `RuntimeError` (com stdout/stderr) se o servidor não subir em 5s — não há skip silencioso. O job `testes-e2e` do CI também não depende de um servidor pré-existente na porta 8000; adicionar o curl proposto quebraria o job sem necessidade.
+- [x] **F1-T8** — Criado `test_worker_security.py` (1 cenário de allowlist)
+- [x] Verificado que todos os novos testes passam em `--cov-fail-under=77` (suite completa: 275 passed, cobertura 80.34%)
+- [x] Rodado `ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` ✅ (mypy --strict, pylint 10/10, black, isort, arquitetura, encoding — todos limpos)
 
-### Fase 2 — Semanas 3–6
+### Fase 2 — Semanas 3–6 (backend implementado em 03/07/2026)
 
-- [ ] **F2-T1** — Elevar threshold para 82%
-- [ ] **F2-T2** — Setup Vitest + 5 arquivos de teste React
-- [ ] **F2-T3** — Criar `test_worker_integration.py` (9 cenários de `run_task`/`main_loop`)
-- [ ] **F2-T4** — Ampliar `test_notifications.py` (4 cenários de idempotência)
-- [ ] **F2-T5** — Criar `test_oracle_circuit_breaker.py` (4 cenários)
-- [ ] **F2-T6** — Criar `test_portfolio_catalog_unit.py` (7 cenários)
-- [ ] **F2-T7** — Criar `test_scheduler_runtime_unit.py` (7 cenários)
-- [ ] **F2-T8** — Criar `test_conftest_coverage.py` (auditoria de SessionLocal)
-- [ ] Adicionar `diff-cover` ao job de PR
-- [ ] Verificar cobertura acima de 82% ✅
+- [x] **F2-T1** — Threshold elevado para 82% (`--cov-fail-under=82` em `.github/workflows/governanca.yml`; cobertura medida: 82.66%)
+- [ ] **F2-T2** — Setup Vitest + 5 arquivos de teste React — **adiado deliberadamente** para uma próxima onda (escopo de frontend, decisão do usuário em 03/07/2026)
+- [x] **F2-T3** — Criado `test_worker_integration.py` (8 cenários de `run_task`/`main_loop`; achado documentado: `run_task` não bloqueia reentrada para exec_id já RUNNING — mitigado na prática pelo UPDATE atômico de `claim_next_task`, não corrigido)
+- [x] **F2-T4** — Ampliado `test_notifications.py` (13 cenários novos). **Escopo corrigido**: a idempotência do ADR-013 (e-mail OK + WhatsApp falha → estado parcial) vive no PowerShell de `Receitas Bloqueadas`, não em `app/notifications.py` (motor de alerta interno do Orchestrator) — os testes novos cobrem os gaps reais desse módulo (escalada de cooldown, eviction LRU, dispatch por canal, paths de erro)
+- [x] **F2-T5** — Criado `test_oracle_circuit_breaker.py` (5 cenários; contagem de falhas até abrir o circuito ajustada após validar o comportamento real do `pybreaker`)
+- [x] **F2-T6** — Criado `test_portfolio_catalog_unit.py` (31 cenários das funções puras)
+- [x] **F2-T7** — Criado `test_scheduler_runtime_unit.py` (24 cenários; inclui `app/runtime.py.trigger_worker_wakeup`, que o plano atribuía erroneamente a `scheduler_runtime.py`). **Bug real corrigido**: `list_scheduled_jobs` quebrava com `TypeError` ao ordenar jobs quando havia mistura de `next_run_time` real (convertido a string BR) e `None` — corrigido com uma chave de ordenação `(has_run_time, valor)` que nunca compara tipos incompatíveis
+- [x] **F2-T8** — Criado `test_conftest_coverage.py` (auditoria dinâmica via varredura de `app/**/*.py`, não lista estática)
+- [ ] Adicionar `diff-cover` ao job de PR — não implementado nesta onda
+- [x] Verificado cobertura acima de 82% ✅ (358 testes passando, 82.66%)
 
 ### Fase 3 — Meses 2–3
 

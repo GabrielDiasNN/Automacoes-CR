@@ -224,12 +224,13 @@ jobs:
         shell: pwsh
         run: |
           $env:PYTHONPATH="Orchestrator"
-          # Gate de regressao: cobertura medida em 12/06/2026 era 80%;
-          # o gate fica em 77% para dar margem a flutuacoes de plataforma.
+          # Gate de regressao: cobertura medida em 03/07/2026 (Fase 2 do plano
+          # de QA) era 83%; o gate fica em 82% para dar margem a flutuacoes de
+          # plataforma. Escalonamento: 77% (Fase 1) -> 82% (Fase 2) -> 90% (Fase 3).
           pytest "Orchestrator\tests" -v -m "not e2e" `
             --cov=app --cov=worker `
             --cov-report=xml:coverage.xml --cov-report=term `
-            --cov-fail-under=77 `
+            --cov-fail-under=82 `
             --junitxml=junit-unit.xml
 
       - name: Publicar resumo de cobertura
@@ -253,7 +254,7 @@ jobs:
           @"
           ## Cobertura de testes Python
 
-          - Total: **$pctTotal%** (gate de regressao: 77%)
+          - Total: **$pctTotal%** (gate de regressao: 82%)
 
           | Pacote | Cobertura |
           |--------|-----------|

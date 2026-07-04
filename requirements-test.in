@@ -6,4 +6,5 @@ pytest-cov
 pytest-asyncio
 httpx
 pytest-playwright
+time-machine
 

@@ -235,7 +235,9 @@ def _register_cron_schedule(automation_id: int, sched_data: dict[str, Any]) -> N
     expr_list = exprs if isinstance(exprs, list) else [exprs]
     single = len(expr_list) == 1
     for idx, expr in enumerate(expr_list):
-        job_id = f"job_{automation_id}_cron" if single else f"job_{automation_id}_cron_{idx}"
+        job_id = (
+            f"job_{automation_id}_cron" if single else f"job_{automation_id}_cron_{idx}"
+        )
         scheduler.add_job(
             scheduled_task_wrapper,
             CronTrigger.from_crontab(
@@ -455,7 +457,11 @@ def capture_system_history_snapshot_job() -> None:
 
 
 def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
-    jobs: list[schemas.ScheduledJob] = []
+    # Ordena pelo next_run_time bruto do APScheduler (antes de ScheduledJob
+    # formatá-lo em string BR) usando uma chave (has_run_time, valor): jobs sem
+    # próxima execução (None) vão para o fim sem comparar string com datetime,
+    # nem datetime naive com aware (bug corrigido em 03/07/2026).
+    entries: list[tuple[tuple[int, datetime | int], schemas.ScheduledJob]] = []
     for job in scheduler.get_jobs():
         auto_id = extract_automation_id_from_job(job.id)
         auto_name: str | None = None
@@ -470,16 +476,18 @@ def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
             auto_name = (
                 f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"
             )
-        jobs.append(
-            schemas.ScheduledJob(
-                id=job.id,
-                automation_id=auto_id,
-                automation_name=auto_name,
-                next_run_time=job.next_run_time,
-                trigger=str(job.trigger),
+        sort_key = (0, job.next_run_time) if job.next_run_time else (1, 0)
+        entries.append(
+            (
+                sort_key,
+                schemas.ScheduledJob(
+                    id=job.id,
+                    automation_id=auto_id,
+                    automation_name=auto_name,
+                    next_run_time=job.next_run_time,
+                    trigger=str(job.trigger),
+                ),
             )
         )
-    return sorted(
-        jobs,
-        key=lambda item: item.next_run_time if item.next_run_time else datetime.max,
-    )
+    entries.sort(key=lambda entry: entry[0])
+    return [entry[1] for entry in entries]
