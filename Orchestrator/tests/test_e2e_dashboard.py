@@ -16,10 +16,12 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Generator
 
 import pytest
+from PIL import Image, ImageChops
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -437,3 +439,88 @@ def test_e2e_dashboard_beneficiamento_loads(uvicorn_server: str, page: Any) -> N
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
 
     assert not console_errors, f"Erros de console em Beneficiamento: {console_errors}"
+
+
+# ---------------------------------------------------------------------------
+# Regressão Visual (F3-T4): compara screenshot atual contra baseline em disco.
+#
+# Nota de flakiness conhecida: as páginas exibem contadores de tempo relativo
+# (idade de execução, uptime do worker) que mudam a cada execução do teste.
+# A tolerância abaixo absorve pequenas diferenças de texto/antialiasing; se o
+# layout mudar de propósito, apague o baseline correspondente para regenerá-lo.
+# ---------------------------------------------------------------------------
+
+BASELINE_DIR = (
+    Path(TESTS_DIR).resolve().parents[1]
+    / "docs"
+    / "playwright-screenshots"
+    / "baseline"
+)
+VISUAL_DIFF_TOLERANCE = 0.05  # 5% dos pixels podem divergir do baseline
+
+
+def _assert_matches_baseline(page: Any, name: str) -> None:
+    """Compara o screenshot atual contra o baseline em disco; cria o baseline se ausente."""
+    BASELINE_DIR.mkdir(parents=True, exist_ok=True)
+    baseline_path = BASELINE_DIR / f"{name}.png"
+    current = Image.open(BytesIO(page.screenshot(full_page=True))).convert("RGB")
+
+    if not baseline_path.exists():
+        current.save(baseline_path)
+        pytest.skip(f"Baseline criado para '{name}'; rode novamente para comparar.")
+
+    baseline = Image.open(baseline_path).convert("RGB")
+    if baseline.size != current.size:
+        pytest.fail(
+            f"Dimensão do screenshot '{name}' mudou: baseline={baseline.size} atual={current.size}."
+        )
+
+    histogram = ImageChops.difference(baseline, current).convert("L").histogram()
+    # Bins de intensidade 0-15 tratados como ruído (antialiasing); acima disso conta como divergência real.
+    diff_pixels = sum(histogram[16:])
+    total_pixels = current.width * current.height
+    diff_ratio = diff_pixels / total_pixels
+
+    assert diff_ratio <= VISUAL_DIFF_TOLERANCE, (
+        f"Regressão visual em '{name}': {diff_ratio:.1%} dos pixels divergem do "
+        f"baseline (tolerância: {VISUAL_DIFF_TOLERANCE:.0%}). Se a mudança de "
+        f"layout for intencional, apague {baseline_path} para regenerar."
+    )
+
+
+@pytest.mark.e2e
+def test_screenshot_dashboard_overview_estado_healthy(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/painel")
+    page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
+    page.wait_for_selector("text=automações ativas", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_painel_healthy")
+
+
+@pytest.mark.e2e
+def test_screenshot_diagnostics_com_findings(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/observabilidade")
+    page.get_by_role("heading", name="Observabilidade").wait_for(timeout=30_000)
+    _assert_matches_baseline(page, "dashboard_observabilidade")
+
+
+@pytest.mark.e2e
+def test_screenshot_automacoes_lista(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/automacoes")
+    page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    _assert_matches_baseline(page, "dashboard_automacoes")
+
+
+@pytest.mark.e2e
+def test_screenshot_beneficiamento_kpi_carregado(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
+    page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
+    page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_beneficiamento_kpi")

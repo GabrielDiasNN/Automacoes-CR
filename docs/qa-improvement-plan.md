@@ -567,89 +567,76 @@ def test_todos_os_modulos_usam_test_engine(client: TestClient) -> None:
 
 ---
 
-### Fase 3 — Qualidade Avançada (Meses 2–3)
+### Fase 3 — Qualidade Avançada (implementada parcialmente em 03/07/2026)
 
-> **Meta:** Cobertura 90%, mutation testing, performance, regressão visual.
+> **Meta original:** Cobertura 90%, mutation testing, performance, regressão visual.
+> **Resultado real:** F3-T2, F3-T3 e F3-T4 implementados e validados. F3-T1 (mutmut)
+> e F3-T5 (threshold 90%) não são viáveis nesta onda — motivos documentados abaixo.
+> Decisão de fechar a fase aqui tomada em conjunto com o usuário em 03/07/2026.
 
-#### F3-T1 — Mutation Testing com `mutmut`
+#### F3-T1 — Mutation Testing com `mutmut` — **bloqueado, não implementado**
 
-```bash
-pip install mutmut
-```
+`mutmut` 3.6.0 se recusa a rodar nativamente no Windows (`To run mutmut on Windows,
+please use the WSL`, exit code 1 — bloqueio deliberado da ferramenta, não um bug).
+O toolchain deste projeto é Windows-first (dev local e o job `testes-python` do CI
+rodam em `windows-latest`). Rodar o mutation testing exigiria um job dedicado em
+`ubuntu-latest` (os 4 módulos-alvo são lógica pura, sem dependência de SO, então
+tecnicamente deveria funcionar lá) — mas isso não foi configurado nem validado
+nesta onda por não ser possível testar localmente neste ambiente. Pendência clara
+para uma sessão futura com acesso a um runner/ambiente Linux para validação.
 
-```toml
-# pyproject.toml
-[tool.mutmut]
-paths_to_mutate = [
-    "Produção Beneficimento/src/beneficiamento/core/",
-    "lib/python/oracle_extract.py",
-    "Orchestrator/app/services/scoring.py",
-    "Orchestrator/app/services/operational_baseline.py",
-]
-tests_dir = "Orchestrator/tests/"
-```
+#### F3-T2 — Property-Based Testing com `hypothesis` ✅
 
-**Meta:** Mutation score > 80% nos módulos de lógica pura.
+`hypothesis` instalado. **Escopo corrigido**: os 3 exemplos do plano original não
+correspondem ao código real de `beneficiamento/core/` — não existe uma função de
+"cálculo de turno determinístico para qualquer datetime" (`shifts.py` apenas
+normaliza um payload já extraído, sem lógica de data), e `normalize_shift` documenta
+explicitamente que pode retornar `(None, None)` quando não há dados, contradizendo
+a propriedade "nome de turno nunca vazio". `Orchestrator/tests/test_beneficiamento_property.py`
+criado com 13 propriedades reais sobre `coercion.py` (`to_float`, `safe_text`,
+`round_or_zero`), `metrics.py` (`time_efficiency`, `weighted_average`), `schema.py`
+(`first_present`) e `shifts.py` (`normalize_shift`). Todas passaram (100 exemplos
+por propriedade, padrão do hypothesis) sem encontrar violações.
 
-#### F3-T2 — Property-Based Testing com `hypothesis`
+#### F3-T3 — Performance Testing com `pytest-benchmark` ✅
 
-```bash
-pip install hypothesis
-```
+`pytest-benchmark` instalado; marcador `benchmark` registrado em `pytest.ini`.
+**Escopo corrigido**: `scheduler_runtime.py` não tem uma função `parse_cron` —
+substituída por `schemas.parse_schedule` (equivalente real de parsing de
+agendamento). `Orchestrator/tests/test_performance_baseline.py` criado com 4
+benchmarks, todos dentro do orçamento do plano: `build_diagnostics_payload`
+(~6-10ms, meta <50ms), `portfolio_catalog._build_portfolio_summary` com 500 itens
+sintéticos (~0.4-1.5ms, meta <100ms), `schemas.parse_schedule` (~4-10µs, meta
+<5ms) e `oracle_extract.serialize_rows` com 1000 linhas (~1-2ms, meta <20ms).
+Job `benchmark` adicionado ao CI (`continue-on-error: true`, não bloqueante),
+publica `benchmark-results.json` como artefato.
 
-**Arquivo a criar:** `Orchestrator/tests/test_beneficiamento_property.py`
+#### F3-T4 — Regressão Visual com Playwright Screenshots ✅
 
-```python
-@given(st.floats(min_value=0, max_value=1e9))
-def test_coercao_metrica_sempre_float_nao_negativo(valor: float) -> None: ...
+4 testes adicionados a `test_e2e_dashboard.py` nas rotas reais do Dashboard
+(`/painel`, `/observabilidade`, `/automacoes`, `/beneficiamento` — o plano citava
+"diagnostics" e "risk badges", que não existem como tal; mapeados para as rotas e
+conceitos reais). Mecanismo: cria o baseline em `docs/playwright-screenshots/baseline/`
+na primeira execução (teste marcado como `skip`) e compara nas execuções seguintes
+via diff de histograma de pixels (PIL), com tolerância de 5%. **Limitação conhecida
+e documentada no código**: as páginas exibem contadores de tempo relativo (idade de
+execução, uptime do worker) que mudam a cada execução — a tolerância absorve
+pequenas variações de texto, mas o baseline pode precisar ser regenerado
+periodicamente. Validado localmente: 1ª rodada cria os 4 baselines, 2ª rodada
+compara e passa.
 
-@given(st.text(min_size=1, max_size=50))
-def test_nome_turno_nunca_vazio_apos_normalizacao(nome: str) -> None: ...
+#### F3-T5 — Elevar threshold para 90% — **não implementado, meta não alcançável nesta onda**
 
-@given(st.datetimes())
-def test_calculo_turno_deterministico_para_qualquer_datetime(dt: datetime) -> None: ...
-```
-
-#### F3-T3 — Performance Testing com `pytest-benchmark`
-
-```bash
-pip install pytest-benchmark
-```
-
-```python
-# test_performance_baseline.py
-- bench_system_diagnostics_build_payload      (< 50ms)
-- bench_portfolio_catalog_calculate_health    (< 100ms)
-- bench_scheduler_runtime_parse_cron          (< 5ms)
-- bench_oracle_extract_serialize_rows_1000    (< 20ms)
-```
-
-```yaml
-# CI — job não-bloqueante:
-- name: Benchmark
-  run: pytest -m benchmark --benchmark-json=benchmark-results.json || true
-- uses: actions/upload-artifact@v4
-  with:
-    name: benchmark-results
-    path: benchmark-results.json
-```
-
-#### F3-T4 — Regressão Visual com Playwright Screenshots
-
-```python
-# Adicionar em test_e2e_dashboard.py:
-- test_screenshot_dashboard_overview_estado_healthy
-- test_screenshot_diagnostics_com_findings
-- test_screenshot_automacoes_com_risk_badges
-- test_screenshot_beneficiamento_kpi_carregado
-```
-
-Baseline em `docs/playwright-screenshots/baseline/`.
-
-#### F3-T5 — Elevar threshold para 90%
+Cobertura medida após F3-T2/T3/T4: **82.71%** — praticamente inalterada frente aos
+82.66% da Fase 2, porque os testes de propriedade e benchmark reforçam a robustez
+de lógica **já coberta**, sem adicionar cobertura de linhas novas. Os módulos com
+menor cobertura (`telemetry.py` 28%, `beneficiamento_refresh.py` 31%, `metrics.py`
+40%, `websocket.py` 47%, `automation_ide.py` 57%) exigiriam uma frente própria de
+testes dedicados a cobertura — fora do escopo do que F3-T1 a F3-T4 naturalmente
+produzem. Threshold mantido em 82% (não regride).
 
 ```
-Progresso: 77% → F1: 79% → F2: 85% → F3: 90%
+Progresso: 77% (Fase 1) → 82% (Fase 2) → 82.71% medido (Fase 3, threshold mantido em 82%)
 ```
 
 ---

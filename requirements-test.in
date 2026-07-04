@@ -8,4 +8,6 @@ httpx
 pytest-playwright
 time-machine
 diff-cover
+hypothesis
+pytest-benchmark
 
