@@ -496,6 +496,9 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: Testes Unitarios (Vitest)
+        run: npm test
+
       - name: Build (tsc + vite)
         run: npm run build
 
