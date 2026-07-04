@@ -743,8 +743,10 @@ tests(dashboard): Vitest para schedule parser e auth
 - [x] **F2-T6** — Criado `test_portfolio_catalog_unit.py` (31 cenários das funções puras)
 - [x] **F2-T7** — Criado `test_scheduler_runtime_unit.py` (24 cenários; inclui `app/runtime.py.trigger_worker_wakeup`, que o plano atribuía erroneamente a `scheduler_runtime.py`). **Bug real corrigido**: `list_scheduled_jobs` quebrava com `TypeError` ao ordenar jobs quando havia mistura de `next_run_time` real (convertido a string BR) e `None` — corrigido com uma chave de ordenação `(has_run_time, valor)` que nunca compara tipos incompatíveis
 - [x] **F2-T8** — Criado `test_conftest_coverage.py` (auditoria dinâmica via varredura de `app/**/*.py`, não lista estática)
-- [ ] Adicionar `diff-cover` ao job de PR — não implementado nesta onda
+- [x] Adicionado `diff-cover` ao job `testes-python` do CI, condicionado a `pull_request` (checkout com `fetch-depth: 0`, compara contra `github.event.pull_request.base.sha`, gate `--fail-under=85` nas linhas alteradas, relatório markdown publicado no step summary)
 - [x] Verificado cobertura acima de 82% ✅ (358 testes passando, 82.66%)
+
+### Fase 2 — status final: 100% concluída (03/07/2026)
 
 ### Fase 3 — Meses 2–3
 

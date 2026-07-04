@@ -1,5 +1,9 @@
 # Changelog
 
+## [9.5.25] - 03/07/2026
+### Adicionado
+- **`diff-cover` no job de PR, fechando a Fase 2 do plano de melhoria de QA**: `requirements-test.in`/`.txt` ganharam a dependência `diff-cover`; o job `testes-python` do CI (`.github/workflows/governanca.yml`) passou a fazer checkout com `fetch-depth: 0` (necessário para comparar contra o SHA base do PR) e, apenas em eventos `pull_request`, roda `diff-cover coverage.xml --compare-branch=<base sha> --fail-under=85` — exige 85% de cobertura só nas linhas alteradas pelo PR, sem penalizar código legado ainda sem teste. Relatório em markdown publicado no step summary do GitHub Actions e como artefato.
+
 ## [9.5.24] - 03/07/2026
 ### Adicionado
 - **F2-T2 do plano de melhoria de QA: Vitest + Testing Library no Dashboard React**. `Dashboard/vitest.config.ts` (ambiente jsdom, `include` restrito a `src/__tests__/**/*.test.{ts,tsx}`); `Dashboard/package.json` ganhou `test`/`test:watch`/`test:coverage`; job `frontend` do CI (`.github/workflows/governanca.yml`) ganhou o passo `npm test` entre ESLint e o build. 4 arquivos de teste novos (54 cenários): `format.test.ts` (`lib/format.ts` — `formatDuration`, `formatAge`, `formatNumber`, `formatPercent`, `successRate`, `shortId`), `status.test.ts` (`lib/status.ts` — mapeamento de tom/badge: `executionTone`, `severityTone`, `healthTone`, `slaTone`, `criticalityTone`, `healthLabel`), `client.test.ts` (`api/client.ts` — `qs`, `setApiKey`/`getApiKey`, tratamento de erro HTTP não-ok) e `useApiKey.test.ts` (`hooks/useApiKey.ts` — persistência via `sessionStorage`, incluindo o caso negativo de que a chave *não* vai para `localStorage`). O plano original descrevia 5 arquivos para conceitos que não existem no Dashboard atual (parser de schedule, badges CAT/DRIFT/DOCS, `action_code`, KPI de beneficiamento, `localStorage`) — o escopo foi corrigido para testar a lógica real e testável do módulo.

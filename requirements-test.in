@@ -7,4 +7,5 @@ pytest-asyncio
 httpx
 pytest-playwright
 time-machine
+diff-cover
 

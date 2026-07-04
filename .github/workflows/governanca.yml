@@ -205,6 +205,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # fetch-depth 0: diff-cover (abaixo) precisa do historico completo
+          # para comparar contra o SHA base do PR.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Configurar Python
@@ -232,6 +235,17 @@ jobs:
             --cov-report=xml:coverage.xml --cov-report=term `
             --cov-fail-under=82 `
             --junitxml=junit-unit.xml
+
+      - name: Cobertura diferencial do PR (diff-cover)
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          # Exige cobertura >=85% apenas nas linhas alteradas pelo PR, sem
+          # penalizar o codigo legado ainda nao coberto (F2: diff-cover).
+          diff-cover coverage.xml --compare-branch="${{ github.event.pull_request.base.sha }}" --fail-under=85 --format markdown:diff-cover-report.md
+          if (Test-Path 'diff-cover-report.md') {
+            Get-Content 'diff-cover-report.md' >> $env:GITHUB_STEP_SUMMARY
+          }
 
       - name: Publicar resumo de cobertura
         if: always()
@@ -269,6 +283,7 @@ jobs:
           path: |
             junit-unit.xml
             coverage.xml
+            diff-cover-report.md
           retention-days: 14
           if-no-files-found: warn
 
