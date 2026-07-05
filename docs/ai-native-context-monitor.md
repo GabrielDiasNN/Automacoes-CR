@@ -64,6 +64,7 @@ Este arquivo é o snapshot curado para bootstrap de agentes no Hub de Automaçõ
 - `.github/skills/README.md`: taxonomia canônica de skills do workspace.
 - `docs/quality-dashboard.md`: snapshot de qualidade e métricas de referência.
 - `docs/release-checklist.md`: checklist de promoção, governança e evidência E2E.
+- `Produção Beneficimento/CONTEXT.md`: **exceção arquitetural deliberada** — única automação sem `automation.manifest.json` e sem `run.ps1`. Snapshot-based (`runner.py`, orçamento de 20s), orquestrada via `Produção Beneficimento/docs/arquitetura.md`. Não interpretar a ausência de manifesto como lacuna a corrigir.
 
 ## Critério de Atualização
 

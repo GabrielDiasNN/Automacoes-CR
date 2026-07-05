@@ -37,6 +37,7 @@ htmlcov/
 # Dashboard gerado/exportado (nao confundir com SPA fonte em Dashboard/)
 Dashboard/dashboard.html
 Dashboard/dist/
+Dashboard/coverage/
 
 # Evidencias geradas localmente (nao versionar)
 docs/playwright-e2e-evidence-generated.md

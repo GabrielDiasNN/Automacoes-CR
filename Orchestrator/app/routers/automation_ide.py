@@ -1,6 +1,7 @@
 """
 Router: Automation IDE - Gestão de scripts e código-fonte via Web IDE das automações.
 """
+
 from __future__ import annotations
 
 import json

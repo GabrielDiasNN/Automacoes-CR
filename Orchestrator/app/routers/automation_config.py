@@ -1,6 +1,7 @@
 """
 Router: Automation Config - Gestão de arquivos JSON de configuração das automações.
 """
+
 from __future__ import annotations
 
 import glob

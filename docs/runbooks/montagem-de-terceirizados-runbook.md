@@ -42,3 +42,21 @@ O e-mail operacional de divergências também expõe a placa kanban por OB quand
 - Divergência recorrente na quantidade de peças erradas por NF.
 - Placa kanban ausente (`N/A`) no e-mail indica ausência do valor na origem Oracle, não falha de renderização do HTML.
 - Falha de Outlook COM na entrega do e-mail.
+
+## Evidência de SLA (verificação periódica)
+
+SLA declarado no manifesto: **180 minutos**. Última execução `SUCCESS` verificada em 05/07/2026 contra o banco real do Orchestrator: duração de **~0,1 min**, concluída em `04/07/2026 22:00:16` — dentro do SLA com folga ampla. Consulta usada (via `Orchestrator/automacoes.db`, somente leitura):
+```sql
+SELECT e.duration_seconds, e.finished_at FROM executions e
+JOIN automations a ON a.id = e.automation_id
+WHERE a.name = 'Montagem de Terceirizados' AND e.status = 'SUCCESS'
+ORDER BY e.finished_at DESC LIMIT 1;
+```
+
+## Drill de Falha (simulado, isolado de produção)
+
+Drill executado em 05/07/2026 contra uma cópia isolada em memória do schema real (nunca contra `automacoes.db` de produção nem disparando WhatsApp/e-mail/Outlook real): injetada uma execução `ERROR` sintética e uma execução `SUCCESS` com duração 15 min acima do SLA (195 min), e chamadas as funções reais `collect_sla_breaches`/`check_sla_breaches` e `prepare_requeue`.
+
+**Resultado:** SLA breach detectado corretamente; execução `ERROR` elegível para auto-retry (nova execução `PENDING` criada). Confirma que o mecanismo de recuperação automática funciona para esta automação.
+
+Nota: MT-02 compartilha `queue_group="oracle"` com as outras 3 automações em produção — retries concorrentes do mesmo grupo são serializados por design.

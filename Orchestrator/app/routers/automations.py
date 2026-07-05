@@ -3,6 +3,7 @@
 Router: Automations - CRUD completo com paginacao, validacao e auditoria. v5.1.0
 
 """
+
 from __future__ import annotations
 
 import json
@@ -184,7 +185,9 @@ def _build_mutation_response(
     return response
 
 
-def _preflight_payload_or_422(payload: dict[str, Any]) -> schemas.AutomationPreflightResponse:
+def _preflight_payload_or_422(
+    payload: dict[str, Any],
+) -> schemas.AutomationPreflightResponse:
     try:
         preflight = build_automation_preflight(payload, PROJECT_ROOT)
     except ValueError as exc:

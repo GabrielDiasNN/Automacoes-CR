@@ -40,7 +40,39 @@ def format_dt_br(val: Any) -> Any:
     return br_dt.strftime("%d/%m/%Y %H:%M:%S")
 
 
-def parse_dt_br(val: Any) -> datetime | None:  # pylint: disable=too-many-return-statements
+def _parse_dt_br_pattern(value: str) -> datetime | None:
+    br_match = re.match(
+        r"^(\d{2})/(\d{2})/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$",
+        value,
+    )
+    if not br_match:
+        return None
+    try:
+        return datetime(
+            int(br_match.group(3)),
+            int(br_match.group(2)),
+            int(br_match.group(1)),
+            int(br_match.group(4) or 0),
+            int(br_match.group(5) or 0),
+            int(br_match.group(6) or 0),
+        )
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _parse_dt_iso_or_legacy(value: str) -> datetime | None:
+    try:
+        normalized = value.replace(" ", "T")
+        iso_dt = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+        return to_br_timezone(iso_dt) if iso_dt.tzinfo is not None else iso_dt
+    except (ValueError, TypeError, AttributeError):
+        try:
+            return datetime.strptime(value.split(".")[0], "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+
+def parse_dt_br(val: Any) -> datetime | None:
     """Converte datas em datetime naive no fuso do Brasil quando possível."""
     if val is None:
         return None
@@ -53,31 +85,7 @@ def parse_dt_br(val: Any) -> datetime | None:  # pylint: disable=too-many-return
     if not value:
         return None
 
-    try:
-        br_match = re.match(
-            r"^(\d{2})/(\d{2})/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$",
-            value,
-        )
-        if br_match:
-            return datetime(
-                int(br_match.group(3)),
-                int(br_match.group(2)),
-                int(br_match.group(1)),
-                int(br_match.group(4) or 0),
-                int(br_match.group(5) or 0),
-                int(br_match.group(6) or 0),
-            )
-
-        normalized = value.replace(" ", "T")
-        iso_dt = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-        if iso_dt.tzinfo is not None:
-            return to_br_timezone(iso_dt)
-        return iso_dt
-    except (ValueError, TypeError, AttributeError):
-        try:
-            return datetime.strptime(value.split(".")[0], "%Y-%m-%d %H:%M:%S")
-        except (ValueError, TypeError, AttributeError):
-            return None
+    return _parse_dt_br_pattern(value) or _parse_dt_iso_or_legacy(value)
 
 
 def _validate_safe_name(v: str) -> str:
@@ -442,9 +450,7 @@ def _normalize_cron_expression(
             return exprs
         if strict:
             raise ValueError("cron_expression é obrigatório para schedule_type=cron.")
-        logger.warning(
-            "cron_expression (lista) vazia ou inválida. Usando fallback."
-        )
+        logger.warning("cron_expression (lista) vazia ou inválida. Usando fallback.")
         return "0 8 * * 1-5"
     if isinstance(value, str) and value.strip():
         return value.strip()
@@ -686,8 +692,10 @@ def _preview_interval_runs(
     anchor_t = schedule.get("anchor_time")
     initial_candidate = first_interval_candidate(now, step, anchor_t)
 
-    has_window = schedule.get("start_time") or schedule.get("end_time") or schedule.get(
-        "days_of_week"
+    has_window = (
+        schedule.get("start_time")
+        or schedule.get("end_time")
+        or schedule.get("days_of_week")
     )
     if not has_window:
         return [

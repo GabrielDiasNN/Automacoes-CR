@@ -144,3 +144,21 @@ Caso precise rodar localmente no servidor em modo de emergência:
    .\run.ps1
    ```
 4. Acompanhe a execução no arquivo `Logs/ReceitasBloqueadas.log`. O robô fará a extração Oracle e, caso detecte alterações em relação ao diff de `receitas_state.json`, disparará os e-mails e as mensagens no WhatsApp imediatamente.
+
+## Evidência de SLA (verificação periódica)
+
+SLA declarado no manifesto: **180 minutos**. Última execução `SUCCESS` verificada em 05/07/2026 contra o banco real do Orchestrator: duração de **~1,0 min**, concluída em `03/07/2026 17:01:16` — dentro do SLA com folga ampla. Consulta usada (via `Orchestrator/automacoes.db`, somente leitura):
+```sql
+SELECT e.duration_seconds, e.finished_at FROM executions e
+JOIN automations a ON a.id = e.automation_id
+WHERE a.name = 'Receitas Bloqueadas' AND e.status = 'SUCCESS'
+ORDER BY e.finished_at DESC LIMIT 1;
+```
+
+## Drill de Falha (simulado, isolado de produção)
+
+Drill executado em 05/07/2026 contra uma cópia isolada em memória do schema real (nunca contra `automacoes.db` de produção nem disparando WhatsApp/e-mail real): injetada uma execução `ERROR` sintética e uma execução `SUCCESS` com duração 15 min acima do SLA (195 min), e chamadas as funções reais `collect_sla_breaches`/`check_sla_breaches` (`app/services/diagnostic_collectors.py`, `app/services/diagnostic_checks.py`) e `prepare_requeue` (`app/services/execution_runtime.py`).
+
+**Resultado:** SLA breach detectado corretamente (finding `WARN` gerado); execução `ERROR` elegível para auto-retry (`prepare_requeue` aceitou, nova execução `PENDING` criada). Confirma que o mecanismo de recuperação automática (auto-retry) e o alerta de SLA breach funcionam para esta automação.
+
+Nota: RB-01 compartilha `queue_group="oracle"` com as outras 3 automações em produção — retries concorrentes do mesmo grupo são serializados (só um requeue ativo por vez), por design (evita concorrência de conexões Oracle).

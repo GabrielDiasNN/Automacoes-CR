@@ -17,8 +17,8 @@ from .metrics import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
 )
-from .portfolio_manifest import (  # pylint: disable=useless-import-alias
-    CatalogManifest as CatalogManifest,  # noqa: F401
+from .portfolio_manifest import (  # pylint: disable=useless-import-alias; noqa: F401
+    CatalogManifest as CatalogManifest,
 )
 from .portfolio_manifest import (
     _channels_to_csv,
@@ -569,9 +569,7 @@ def _build_review_status(  # pylint: disable=too-many-arguments
     return "active", []
 
 
-def _build_portfolio_lookups(
-    db: Session, automation_ids: list[int]
-) -> dict[str, Any]:
+def _build_portfolio_lookups(db: Session, automation_ids: list[int]) -> dict[str, Any]:
     jobs = list_scheduled_jobs(db)
     next_run_lookup = build_next_run_lookup(jobs)
     return {
@@ -780,9 +778,7 @@ def _build_governed_row(
         queue_group=(
             manifest.queue_group
             if manifest.queue_group
-            else (
-                cast(str | None, matched_auto.queue_group) if matched_auto else None
-            )
+            else (cast(str | None, matched_auto.queue_group) if matched_auto else None)
         ),
         sla_minutes=manifest.sla_minutes,
         health_status=m["health_status"],

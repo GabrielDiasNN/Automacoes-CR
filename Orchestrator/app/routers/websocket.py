@@ -183,13 +183,17 @@ async def websocket_global_events(websocket: WebSocket) -> None:
 
 
 @router.post("/api/broadcast_log")
-async def broadcast_log_endpoint(log_data: dict[str, Any], _api_key: str = Depends(get_api_key)) -> dict[str, Any]:
+async def broadcast_log_endpoint(
+    log_data: dict[str, Any], _api_key: str = Depends(get_api_key)
+) -> dict[str, Any]:
     await log_broadcaster.emit_entries([log_data])
     return {"status": "ok"}
 
 
 @router.post("/api/broadcast_logs")
-async def broadcast_logs_endpoint(logs_data: dict[str, Any], _api_key: str = Depends(get_api_key)) -> dict[str, Any]:
+async def broadcast_logs_endpoint(
+    logs_data: dict[str, Any], _api_key: str = Depends(get_api_key)
+) -> dict[str, Any]:
     logs = logs_data.get("logs", [])
     processed = await log_broadcaster.emit_entries(logs)
     return {"status": "ok", "processed": processed}

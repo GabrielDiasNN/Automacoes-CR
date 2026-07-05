@@ -227,13 +227,15 @@ jobs:
         shell: pwsh
         run: |
           $env:PYTHONPATH="Orchestrator"
-          # Gate de regressao: cobertura medida em 03/07/2026 (Fase 2 do plano
-          # de QA) era 83%; o gate fica em 82% para dar margem a flutuacoes de
-          # plataforma. Escalonamento: 77% (Fase 1) -> 82% (Fase 2) -> 90% (Fase 3).
+          # Gate de regressao: cobertura medida em 05/07/2026 (testes novos para
+          # telemetry.py, metrics.py, beneficiamento_refresh.py, websocket.py na
+          # Fase 2 do planejamento de fechamento) e 85.40%; o gate fica em 84%
+          # para dar margem a flutuacoes de plataforma (mesmo criterio da subida
+          # anterior 83%->82%). Escalonamento: 77% -> 82% -> 84% (05/07/2026).
           pytest "Orchestrator\tests" -v -m "not e2e" `
             --cov=app --cov=worker `
             --cov-report=xml:coverage.xml --cov-report=term `
-            --cov-fail-under=82 `
+            --cov-fail-under=84 `
             --junitxml=junit-unit.xml
 
       - name: Cobertura diferencial do PR (diff-cover)
@@ -554,8 +556,8 @@ jobs:
       - name: ESLint
         run: npm run lint
 
-      - name: Testes Unitarios (Vitest)
-        run: npm test
+      - name: Testes Unitarios (Vitest) com gate de cobertura
+        run: npm run test:coverage
 
       - name: Build (tsc + vite)
         run: npm run build

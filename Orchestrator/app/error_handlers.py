@@ -36,7 +36,9 @@ def register_exception_handlers(app: FastAPI, logger: logging.Logger) -> None:
     """Attach standardised JSON error handlers to the FastAPI application."""
 
     @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    async def http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
         detail = exc.detail if exc.detail is not None else "Falha de requisição."
         message = detail if isinstance(detail, str) else "Falha de requisição."
         action_hint = "Revisar os dados da requisição e tentar novamente."
@@ -88,7 +90,9 @@ def register_exception_handlers(app: FastAPI, logger: logging.Logger) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def global_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
         """Captura qualquer erro não tratado e devolve JSON padronizado (Pilar R)."""
         error_id = str(int(time.time()))
         correlation_id = _get_correlation_id(request)

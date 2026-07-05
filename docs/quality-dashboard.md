@@ -48,3 +48,27 @@ O script fará de forma totalmente idempotente e segura:
 5. O type-checking do `Mypy` em todos os módulos ativos do Orquestrador;
 6. A execução de toda a suite nativa de conformidade de governança local (`ValidarAutomacoes.ps1`);
 7. A leitura opcional do baseline operacional live quando o Orchestrator está disponível na porta `8000`.
+
+---
+
+## ⏱️ Critério de Transição do Job `benchmark` (não-bloqueante)
+
+O job `benchmark` do `.github/workflows/governanca.yml` (pytest-benchmark, 4
+testes de performance baseline) roda com `continue-on-error: true` desde a
+Fase 3 do plano de melhoria de QA (jun/2026) — resultados são publicados em
+`benchmark-results.json`, mas uma regressão de performance não bloqueia o PR.
+
+**Decisão (05/07/2026, planejamento de fechamento de desenvolvimento):**
+mantido não-bloqueante por tempo indeterminado. Critério explícito para
+reavaliar:
+- Se algum dos 4 benchmarks (`test_bench_schedule_parse`,
+  `test_bench_portfolio_catalog_build_summary`,
+  `test_bench_oracle_extract_serialize_rows_1000`,
+  `test_bench_system_diagnostics_build_payload`) apresentar uma regressão
+  sustentada (não um outlier isolado) em 3 execuções consecutivas de CI, abrir
+  uma revisão para decidir entre: (a) investigar e corrigir a causa raiz, ou
+  (b) formalizar um novo baseline aceito.
+- Só promover o job para bloqueante (`continue-on-error: false`) se houver um
+  incidente real de produção rastreável a uma regressão de performance que o
+  job já media e não bloqueou — até lá, o custo de falsos positivos (runners
+  de CI compartilhados têm variância de timing) supera o benefício.

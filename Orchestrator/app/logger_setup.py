@@ -15,7 +15,9 @@ class OrchestratorJsonFormatter(logging.Formatter):
     When False (Worker process), reads the same fields from LogRecord attributes.
     """
 
-    def __init__(self, component: str, use_context_vars: bool = False, **kwargs: Any) -> None:
+    def __init__(
+        self, component: str, use_context_vars: bool = False, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self._component = component
         self._use_context_vars = use_context_vars

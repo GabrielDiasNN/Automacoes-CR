@@ -147,6 +147,12 @@ Ao implementar uma nova feature:
 
 ---
 
+## 7.1 Mutation Testing — Decisão Formal
+
+**Status: descartado permanentemente.** Avaliado durante a Fase 3 do plano de melhoria de QA (jun/2026) via `mutmut`, que não roda nativamente no Windows — exigiria WSL. Decisão do responsável do projeto (05/07/2026): não introduzir dependência de Linux/WSL na stack, que é 100% nativa Windows por design. Não será revisitado; a confiança na qualidade dos testes segue apoiada em cobertura de linha (Seção 5), property-based testing (`hypothesis`) e regressão visual (Playwright), não em mutation score.
+
+---
+
 ## 🧠 Gestão de Contexto (AI-Native)
 
 - Este documento descreve a estratégia de testes em `v9.5.0`.

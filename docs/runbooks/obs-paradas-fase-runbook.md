@@ -178,3 +178,21 @@ turnos definido em 03/07/2026) — continua documentada, basta reativar (`"ativo
 quando for necessário monitorá-la. Fases 160 e 165 antes da migração para código exato
 não eram monitoradas de forma confiável (a keyword `CQ` não batia com o texto `"CDQ-..."`,
 e nada batia com `"CDF-..."`).
+
+## Evidência de SLA (verificação periódica)
+
+SLA declarado no manifesto: **20 minutos** (o mais apertado das 4 automações registradas, coerente com o cron a cada 30 min). Última execução `SUCCESS` verificada em 05/07/2026 contra o banco real do Orchestrator: duração de **~2,5 min**, concluída em `05/07/2026 14:02:33` — dentro do SLA com folga confortável. Consulta usada (via `Orchestrator/automacoes.db`, somente leitura):
+```sql
+SELECT e.duration_seconds, e.finished_at FROM executions e
+JOIN automations a ON a.id = e.automation_id
+WHERE a.name = 'OBs Paradas Fase' AND e.status = 'SUCCESS'
+ORDER BY e.finished_at DESC LIMIT 1;
+```
+
+## Drill de Falha (simulado, isolado de produção)
+
+Drill executado em 05/07/2026 contra uma cópia isolada em memória do schema real (nunca contra `automacoes.db` de produção nem disparando WhatsApp real), usando a config real desta automação (`max_retries=0`): injetada uma execução `ERROR` sintética e uma execução `SUCCESS` com duração 15 min acima do SLA (35 min), e chamadas as funções reais `collect_sla_breaches`/`check_sla_breaches` e `prepare_requeue`.
+
+**Resultado:** SLA breach detectado corretamente (finding `WARN` gerado). Auto-retry **corretamente bloqueado** (`RequeueValidationError: Limite de retry excedido para esta execução: 0/0`) — comportamento esperado, pois `max_retries=0` é decisão deliberada do operador para esta automação: falhas exigem intervenção manual, não recuperação automática. Dado o SLA apertado (20 min), vale reavaliar periodicamente se `max_retries=0` continua sendo a escolha certa para OBP-04 ou se um retry automático rápido reduziria o risco de breach por falha transitória.
+
+Nota: OBP-04 compartilha `queue_group="oracle"` com as outras 3 automações em produção — retries concorrentes do mesmo grupo são serializados por design.
