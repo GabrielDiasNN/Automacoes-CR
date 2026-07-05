@@ -6,13 +6,12 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from conftest import AUTH_HEADERS
-
 import app.routers.system as system_router
 from app import models
 from app.constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from app.schemas import WorkerStatus
 from app.timezone import get_now_local
+from conftest import AUTH_HEADERS
 
 
 def test_read_root(client: Any) -> None:
@@ -104,7 +103,9 @@ def test_diagnostics_endpoint(client: Any) -> None:
     ]
 
 
-def test_diagnostics_reports_actionable_queue_and_wal_findings(client: Any, db_session: Any, monkeypatch: Any) -> None:
+def test_diagnostics_reports_actionable_queue_and_wal_findings(
+    client: Any, db_session: Any, monkeypatch: Any
+) -> None:
 
     auto = models.Automation(name="Diag Queue", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -151,7 +152,9 @@ def test_system_version_exposes_contract_version(client: Any) -> None:
     assert res.json()["contract_version"] == ORCHESTRATOR_CONTRACT_VERSION
 
 
-def test_system_history_endpoint_returns_snapshots(client: Any, db_session: Any) -> None:
+def test_system_history_endpoint_returns_snapshots(
+    client: Any, db_session: Any
+) -> None:
 
     db_session.add(
         models.SystemHealthSnapshot(
@@ -194,7 +197,9 @@ def test_operational_baseline_endpoint_returns_summary(client: Any) -> None:
     assert "recommended_action" in data
 
 
-def test_diagnostics_offline_worker_prefers_recovery_action(client: Any, db_session: Any, monkeypatch: Any) -> None:
+def test_diagnostics_offline_worker_prefers_recovery_action(
+    client: Any, db_session: Any, monkeypatch: Any
+) -> None:
 
     auto = models.Automation(name="Recover Worker", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -261,7 +266,9 @@ def test_system_overview_includes_diagnostics_summary(client: Any) -> None:
     assert data["diagnostics"]["performance"]["timings_ms"]["total_ms"] >= 0
 
 
-def test_system_overview_exposes_automation_operational_metrics(client: Any, db_session: Any) -> None:
+def test_system_overview_exposes_automation_operational_metrics(
+    client: Any, db_session: Any
+) -> None:
 
     auto = models.Automation(name="Metrics Auto", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -315,7 +322,9 @@ def test_wait_for_task_requires_api_key(client: Any) -> None:
     assert res.status_code == 403
 
 
-def test_update_env_creates_backup(client: Any, monkeypatch: Any, tmp_path: Path) -> None:
+def test_update_env_creates_backup(
+    client: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
 
     env_path = tmp_path / ".env"
     env_path.write_text("ORCHESTRATOR_API_KEY=old\n", encoding="utf-8")

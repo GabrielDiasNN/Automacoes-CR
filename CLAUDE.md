@@ -204,7 +204,7 @@ val = json.load(f).get("k", "")     # retorna Any → cast: str(json.load(f).get
 
 ### Contrato Python — pylint
 
-Desabilitados por padrão (não precisam ser corrigidos): `C0114` (module docstring), `C0115` (class docstring), `C0116` (function docstring), `R0801` (duplicate-code), `C0413` (wrong-import-position), `C0301` (line-too-long), `C0302` (too-many-lines).
+Desabilitados por padrão (não precisam ser corrigidos): `C0114` (module docstring), `C0115` (class docstring), `C0116` (function docstring), `R0801` (duplicate-code), `C0413` (wrong-import-position), `C0301` (line-too-long), `C0302` (too-many-lines), `C0411` (wrong-import-order — a detecção de first-party do pylint diverge do isort/perfil black usado no CI; isort é a fonte de verdade para ordem de imports).
 
 **Limites que reprovam:**
 

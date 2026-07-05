@@ -14,15 +14,13 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.schemas.common import (
     describe_schedule_payload,
     normalize_schedule_payload,
     parse_schedule,
     preview_next_runs,
 )
-
+from fastapi.testclient import TestClient
 from tests.conftest import AUTH_HEADERS
 
 # --------------------------------------------------------------------------- #
@@ -128,7 +126,9 @@ class TestIntervalWithWindow:
             {"start_time": "18:00", "end_time": "12:00"},  # janela invertida
         ],
     )
-    def test_interval_invalid_start_time_strict_raises(self, extra_fields: dict[str, str]) -> None:
+    def test_interval_invalid_start_time_strict_raises(
+        self, extra_fields: dict[str, str]
+    ) -> None:
         """Em modo strict, start_time inválido ou janela invertida deve lançar ValueError."""
         payload = {"schedule_type": "interval", "interval_minutes": 10, **extra_fields}
         with pytest.raises(ValueError, match="start_time"):
@@ -202,7 +202,9 @@ class TestDescribeSchedulePayload:  # pylint: disable=too-few-public-methods
             (None, ["Manual"]),
         ],
     )
-    def test_describe_schedule_payload(self, schedule: dict[str, Any] | None, expected_fragments: list[str]) -> None:
+    def test_describe_schedule_payload(
+        self, schedule: dict[str, Any] | None, expected_fragments: list[str]
+    ) -> None:
         """Descrição gerada deve conter os fragmentos esperados para cada tipo de schedule."""
         desc = describe_schedule_payload(schedule)
         for fragment in expected_fragments:

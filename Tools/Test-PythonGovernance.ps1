@@ -101,7 +101,13 @@ if ($mypy) {
 $ErrorActionPreference = $oldPreference
 
 if ($pylint) {
-    $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302 @resolvedTargetFiles 2>&1
+    # C0411 (wrong-import-order) desabilitado: a deteccao de first-party do pylint
+    # (baseada no PYTHONPATH/layout de pacotes) diverge da ordenacao real exigida
+    # pelo isort (perfil "black", sem known-first-party configurado) que roda no
+    # CI (job Lint Python). As duas ferramentas discordam sobre a mesma linha em
+    # arquivos de Orchestrator/tests/ que importam de "app.*" e de bibliotecas
+    # como fastapi/sqlalchemy/pytest — isort e o padrao real, pylint fica mudo.
+    $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302,C0411 @resolvedTargetFiles 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint)" -ForegroundColor Red
         $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }

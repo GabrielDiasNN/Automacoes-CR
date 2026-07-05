@@ -10,9 +10,6 @@ Valida:
 from datetime import timedelta
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-
 from app import models
 from app.constants import (
     ACTION_CODE_CHECKPOINT,
@@ -23,6 +20,8 @@ from app.constants import (
 )
 from app.schemas import WorkerStatus
 from app.timezone import get_now_local
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS
 
 
@@ -84,7 +83,9 @@ def test_diagnostics_stalled_queue(client: TestClient, db_session: Session) -> N
     assert "Execução pendente há" in queue_findings[0]["message"]
 
 
-def test_diagnostics_wal_risk(client: TestClient, db_session: Session) -> None:  # pylint: disable=unused-argument
+def test_diagnostics_wal_risk(
+    client: TestClient, db_session: Session  # pylint: disable=unused-argument
+) -> None:
     """Garante que um arquivo WAL do SQLite excessivamente grande seja sinalizado com risco crítico."""
     # Fazer mock do get_wal_size_mb no router de system
     import app.routers.system as system_router  # pylint: disable=import-outside-toplevel
@@ -115,7 +116,9 @@ def test_diagnostics_wal_risk(client: TestClient, db_session: Session) -> None: 
         setattr(system_router, "get_wal_size_mb", original_get_wal)
 
 
-def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Session) -> None:
+def test_diagnostics_running_over_max_runtime(
+    client: TestClient, db_session: Session
+) -> None:
     """Diagnóstico deve diferenciar execução longa legítima de RUNNING acima do max_runtime."""
     auto = models.Automation(
         id=904,
@@ -164,7 +167,9 @@ def test_diagnostics_running_over_max_runtime(client: TestClient, db_session: Se
     ]
 
 
-def test_diagnostics_queue_risk_summary(client: TestClient, db_session: Session) -> None:
+def test_diagnostics_queue_risk_summary(
+    client: TestClient, db_session: Session
+) -> None:
     auto = models.Automation(
         id=905,
         name="Fila Pressionada",

@@ -28,14 +28,14 @@ os.environ["BENEFICIAMENTO_HISTORICO_DB"] = os.path.join(
 import pytest
 from _pytest.config import Config
 from _pytest.nodes import Item
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 # Import necessario para registrar as tabelas no Base.metadata.
 from app import models  # pylint: disable=unused-import
 from app.database import Base, get_db
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 _INTEGRATION_FIXTURES = {"client", "db_session"}
 

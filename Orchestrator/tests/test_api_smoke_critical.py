@@ -6,13 +6,12 @@ import re
 from pathlib import Path
 from typing import Any
 
+import app.routers.system as system_router
 import pytest
+from app.constants import ORCHESTRATOR_CONTRACT_VERSION
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm.session import Session as SqlAlchemySession
-
-import app.routers.system as system_router
-from app.constants import ORCHESTRATOR_CONTRACT_VERSION
 
 
 def _create_default_automation(client: TestClient, name: str = "Smoke Auto") -> Any:

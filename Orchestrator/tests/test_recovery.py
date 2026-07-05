@@ -2,9 +2,8 @@
 
 from typing import Any
 
-import pytest
-
 import app.main as main_module
+import pytest
 from app import models
 from app.timezone import get_now_local
 

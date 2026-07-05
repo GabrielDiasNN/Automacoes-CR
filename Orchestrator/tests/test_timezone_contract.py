@@ -4,13 +4,12 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from conftest import AUTH_HEADERS
-
 from app import models
 from app import timezone as tz_module
 from app.schemas import format_dt_br, parse_dt_br
 from app.schemas.common import preview_next_runs
 from app.timezone import get_now_local
+from conftest import AUTH_HEADERS
 
 
 def test_parse_and_format_dt_br_handles_iso_and_brazil_strings() -> None:
@@ -76,7 +75,9 @@ def test_system_endpoints_return_brazilian_date_contract(client: Any) -> None:
     )
 
 
-def test_system_scheduler_jobs_and_automation_overview_are_br_formatted(client: Any, db_session: Any) -> None:
+def test_system_scheduler_jobs_and_automation_overview_are_br_formatted(
+    client: Any, db_session: Any
+) -> None:
     auto = models.Automation(name="Timezone Auto", script_path="./test/run.ps1")
     db_session.add(auto)
     db_session.flush()

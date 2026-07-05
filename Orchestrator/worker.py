@@ -39,6 +39,8 @@ try:
     from app.database import SessionLocal, session_scope
     from app.logger_setup import setup_json_logger as _setup_json_logger
     from app.runtime import get_project_root
+
+    # isort: off
     from app.services.execution_runtime import (
         apply_internal_worker_error,
         apply_timeout_result,
@@ -53,6 +55,8 @@ try:
     from app.services.execution_runtime import (  # pylint: disable=useless-import-alias,unused-import
         classify_process_result as classify_process_result,
     )
+
+    # isort: on
     from app.timezone import get_now_local
 except ImportError as e:
     print(f"CRITICAL: Falha ao importar componentes do app: {e}")

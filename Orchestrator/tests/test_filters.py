@@ -9,12 +9,11 @@ Cobre:
 
 from datetime import timedelta
 
+from app import models
+from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-
-from app import models
-from app.timezone import get_now_local
 
 
 def test_list_automations_search_and_sort(client: TestClient) -> None:
@@ -45,7 +44,9 @@ def test_list_automations_search_and_sort(client: TestClient) -> None:
     assert names == ["Receitas Oracle", "Fiscal Oracle"]
 
 
-def test_list_executions_supports_all_filters_combined(client: TestClient, db_session: Session) -> None:
+def test_list_executions_supports_all_filters_combined(
+    client: TestClient, db_session: Session
+) -> None:
     auto_fin = models.Automation(
         name="Financeiro Diario",
         script_path="./test/run.ps1",
@@ -148,7 +149,9 @@ def test_list_executions_supports_all_filters_combined(client: TestClient, db_se
     assert [item["id"] for item in data["items"]] == ["EXEC_FILTER_TARGET"]
 
 
-def test_list_executions_date_filters_can_return_empty_result(client: TestClient, db_session: Session) -> None:
+def test_list_executions_date_filters_can_return_empty_result(
+    client: TestClient, db_session: Session
+) -> None:
     auto = models.Automation(
         name="Filtro Janela",
         script_path="./test/run.ps1",
@@ -182,7 +185,9 @@ def test_list_executions_date_filters_can_return_empty_result(client: TestClient
     assert payload["items"] == []
 
 
-def test_system_audit_filter_returns_only_requested_action(client: TestClient, db_session: Session) -> None:
+def test_system_audit_filter_returns_only_requested_action(
+    client: TestClient, db_session: Session
+) -> None:
     now = get_now_local()
     db_session.add_all(
         [
@@ -213,7 +218,9 @@ def test_system_audit_filter_returns_only_requested_action(client: TestClient, d
     assert all(item["action"] == "UPDATE" for item in items)
 
 
-def test_list_executions_pagination_filters_respect_page_boundaries(client: TestClient, db_session: Session) -> None:
+def test_list_executions_pagination_filters_respect_page_boundaries(
+    client: TestClient, db_session: Session
+) -> None:
     auto = models.Automation(
         name="Filtro Paginado",
         script_path="./test/run.ps1",
@@ -274,7 +281,9 @@ def test_list_executions_pagination_filters_respect_page_boundaries(client: Test
     assert [item["id"] for item in payload_2["items"]] == ["EXEC_PAGE_3"]
 
 
-def test_list_executions_rejects_invalid_pagination_filter_values(client: TestClient) -> None:
+def test_list_executions_rejects_invalid_pagination_filter_values(
+    client: TestClient,
+) -> None:
     page_res = client.get("/api/executions?page=0", headers=AUTH_HEADERS)
     assert page_res.status_code == 422
     assert "page deve ser >= 1" in page_res.json()["detail"]
@@ -284,7 +293,9 @@ def test_list_executions_rejects_invalid_pagination_filter_values(client: TestCl
     assert "per_page deve estar entre 1 e 200" in per_page_res.json()["detail"]
 
 
-def test_list_executions_rejects_invalid_status_priority_and_dates(client: TestClient) -> None:
+def test_list_executions_rejects_invalid_status_priority_and_dates(
+    client: TestClient,
+) -> None:
     invalid_status = client.get("/api/executions?status=UNKNOWN", headers=AUTH_HEADERS)
     assert invalid_status.status_code == 422
     assert "status inválido" in invalid_status.json()["detail"]

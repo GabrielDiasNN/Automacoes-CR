@@ -1,9 +1,8 @@
 """Regressoes de integridade de schema do Orchestrator."""
 
-from fastapi.testclient import TestClient
-
 from app import models as _models  # pylint: disable=unused-import
 from app.database import Base, validate_database_schema
+from fastapi.testclient import TestClient
 
 assert _models  # registra tabelas no Base.metadata antes da validacao de schema
 

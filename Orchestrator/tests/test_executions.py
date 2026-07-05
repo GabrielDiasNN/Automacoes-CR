@@ -4,12 +4,11 @@ Testes focados nas operações e controle de Execuções do Orchestrator.
 
 from datetime import timedelta
 
+from app import models
+from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-
-from app import models
-from app.timezone import get_now_local
 
 
 def test_start_automation_creates_pending(client: TestClient) -> None:
@@ -83,7 +82,9 @@ def test_list_recent_executions(client: TestClient) -> None:
     assert "requeue_allowed" in payload[0]
 
 
-def test_execution_summary_exposes_operator_triage_fields(client: TestClient, db_session: Session) -> None:
+def test_execution_summary_exposes_operator_triage_fields(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto = models.Automation(
         name="Operator Summary",
@@ -122,7 +123,9 @@ def test_execution_summary_exposes_operator_triage_fields(client: TestClient, db
     assert item["operator_reason_summary"]
 
 
-def test_execution_summary_keeps_success_rows_compact_when_healthy(client: TestClient, db_session: Session) -> None:
+def test_execution_summary_keeps_success_rows_compact_when_healthy(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto = models.Automation(
         name="Healthy Success",
@@ -163,7 +166,9 @@ def test_execution_summary_keeps_success_rows_compact_when_healthy(client: TestC
     assert item["operator_severity"] == "NORMAL"
 
 
-def test_list_executions_filters_by_queue_group(client: TestClient, db_session: Session) -> None:
+def test_list_executions_filters_by_queue_group(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto_a = models.Automation(
         name="Grupo A", script_path="./test/run.ps1", queue_group="grupo_a"
@@ -202,7 +207,9 @@ def test_list_executions_filters_by_queue_group(client: TestClient, db_session: 
     assert all(item["related_queue_group"] == "grupo_a" for item in items)
 
 
-def test_list_executions_filters_by_priority(client: TestClient, db_session: Session) -> None:
+def test_list_executions_filters_by_priority(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto = models.Automation(name="Filtro Prioridade", script_path="./test/run.ps1")
     db_session.add(auto)
@@ -236,7 +243,9 @@ def test_list_executions_filters_by_priority(client: TestClient, db_session: Ses
     assert all(item["priority"] == "HIGH" for item in items)
 
 
-def test_execution_requeue_creates_auditable_pending_retry(client: TestClient, db_session: Session) -> None:
+def test_execution_requeue_creates_auditable_pending_retry(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto = models.Automation(
         name="Retry Source",
@@ -294,7 +303,9 @@ def test_execution_requeue_creates_auditable_pending_retry(client: TestClient, d
     assert queued.recovery_action == "REQUEUE_MANUAL"
 
 
-def test_execution_requeue_blocks_retry_limit(client: TestClient, db_session: Session) -> None:
+def test_execution_requeue_blocks_retry_limit(
+    client: TestClient, db_session: Session
+) -> None:
 
     auto = models.Automation(
         name="Retry Limit", script_path="./test/run.ps1", max_retries=1
@@ -322,7 +333,9 @@ def test_execution_requeue_blocks_retry_limit(client: TestClient, db_session: Se
     assert res.status_code == 409
 
 
-def test_execution_requeue_blocks_active_queue_group(client: TestClient, db_session: Session) -> None:
+def test_execution_requeue_blocks_active_queue_group(
+    client: TestClient, db_session: Session
+) -> None:
 
     source_auto = models.Automation(
         name="Retry Group Source",
