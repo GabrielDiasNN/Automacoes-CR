@@ -10,6 +10,9 @@ Valida:
 from datetime import timedelta
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
 from app import models
 from app.constants import (
     ACTION_CODE_CHECKPOINT,
@@ -20,8 +23,6 @@ from app.constants import (
 )
 from app.schemas import WorkerStatus
 from app.timezone import get_now_local
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS
 
 
@@ -249,3 +250,101 @@ def test_diagnostics_operational_baseline_marks_orphaned_running_as_incident(
     metrics = {item["code"]: item for item in data["operational_baseline"]["metrics"]}
     assert metrics["orphaned_running"]["status"] == "incident"
     assert data["operational_baseline"]["status"] == "incident"
+
+
+def test_diagnostics_sla_breach(client: TestClient, db_session: Session) -> None:
+    """Execução finalizada acima do sla_minutes cadastrado deve gerar finding e slo_breach."""
+    auto = models.Automation(
+        id=907,
+        name="Automacao Com SLA",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        enabled=True,
+        sla_minutes=10,
+    )
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="SLA_BREACH_001",
+            automation_id=907,
+            status="SUCCESS",
+            started_at=get_now_local() - timedelta(minutes=30),
+            finished_at=get_now_local() - timedelta(minutes=15),
+            duration_seconds=900.0,  # 15 min > sla de 10 min
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["sla_breaches"]
+    assert data["sla_breaches"][0]["exec_id"] == "SLA_BREACH_001"
+    assert data["slo"]["breaches"]["sla_breached"] is True
+    sla_findings = [
+        f
+        for f in data["findings"]
+        if f["component"] == "automation" and "SLA" in f["message"]
+    ]
+    assert sla_findings
+
+
+def test_diagnostics_sla_within_limit_nao_gera_breach(
+    client: TestClient, db_session: Session
+) -> None:
+    auto = models.Automation(
+        id=908,
+        name="Automacao Dentro Do SLA",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        enabled=True,
+        sla_minutes=30,
+    )
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="SLA_OK_001",
+            automation_id=908,
+            status="SUCCESS",
+            started_at=get_now_local() - timedelta(minutes=10),
+            finished_at=get_now_local() - timedelta(minutes=5),
+            duration_seconds=120.0,
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["sla_breaches"] == []
+    assert data["slo"]["breaches"]["sla_breached"] is False
+
+
+def test_diagnostics_worker_saturation(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pool continuamente saturado deve gerar finding e slo_breach de saturação."""
+    hb = models.WorkerHeartbeat(
+        id=1,
+        last_ping=get_now_local(),
+        pid=1234,
+        pool_saturated_seconds=600.0,  # acima do limite de 300s
+    )
+    db_session.add(hb)
+    db_session.commit()
+
+    monkeypatch.setenv("WORKER_MAX_CONCURRENCY", "4")
+
+    response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["slo"]["breaches"]["worker_saturated"] is True
+    worker_findings = [
+        f
+        for f in data["findings"]
+        if f["component"] == "worker" and "saturado" in f["message"]
+    ]
+    assert worker_findings

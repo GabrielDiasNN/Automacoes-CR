@@ -208,6 +208,129 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = "") -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Alertas de incidente de infraestrutura (fora do ciclo de falha de automação)
+# ---------------------------------------------------------------------------
+
+# Cooldown fixo (não escalonado) por componente: incidentes de infra tendem a
+# persistir por minutos/horas, então um alerta a cada 30 min é suficiente para
+# não deixar o operador sem sinal, sem virar spam continuo do mesmo problema.
+INFRA_ALERT_COOLDOWN_SECONDS = 1800
+
+_infra_alert_state: dict[str, float] = {}
+_infra_state_lock = threading.Lock()
+
+
+def _is_infra_throttled(component: str) -> bool:
+    """Verifica se o alerta de infraestrutura esta em cooldown. Thread-safe."""
+    with _infra_state_lock:
+        last_sent = _infra_alert_state.get(component, 0.0)
+        return (time.time() - last_sent) < INFRA_ALERT_COOLDOWN_SECONDS
+
+
+def _mark_infra_sent(component: str) -> None:
+    """Registra o envio do alerta de infraestrutura. Thread-safe."""
+    with _infra_state_lock:
+        _infra_alert_state[component] = time.time()
+
+
+def reset_infra_alert_state(component: str) -> None:
+    """Reseta o cooldown de um componente (uso principal: testes)."""
+    with _infra_state_lock:
+        _infra_alert_state.pop(component, None)
+
+
+def send_infra_alert(component: str, message: str) -> None:
+    """Dispara alerta de incidente de infraestrutura (worker/WAL/fila) fora do
+    ciclo de falha de automação — hoje esses incidentes só apareciam no
+    dashboard, exigindo que alguém estivesse olhando para percebê-los.
+    """
+    if _is_infra_throttled(component):
+        logger.info("Alerta de infraestrutura suprimido por throttle: %s", component)
+        return
+
+    full_message = (
+        f"*Hub de Automacoes: INCIDENTE DE INFRAESTRUTURA*\n\n"
+        f"*Componente:* {component}\n"
+        f"*Detalhe:* {message}"
+    )
+
+    wa_script = os.path.join(PROJECT_ROOT, "lib", "Send-WhatsApp.ps1")
+    whatsapp_sent = False
+    if os.path.exists(wa_script):
+        try:
+            result = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    wa_script,
+                    "-Message",
+                    full_message,
+                ],
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+            whatsapp_sent = result.returncode == 0
+        except subprocess.TimeoutExpired:
+            logger.error(
+                "Timeout ao enviar alerta de infraestrutura via WhatsApp: %s",
+                component,
+            )
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Erro ao enviar alerta de infraestrutura via WhatsApp: %s", e)
+    else:
+        logger.error("Script de WhatsApp nao encontrado na pasta lib.")
+
+    alert_email = os.environ.get("AUTOMACAO_ALERT_EMAIL", "")
+    lib_email = os.path.join(PROJECT_ROOT, "lib", "Lib-Email.psm1")
+    email_sent = False
+    if alert_email and os.path.exists(lib_email):
+        agora = get_now_local().strftime("%d/%m/%Y %H:%M:%S")
+        subject = f"[INCIDENTE INFRA] {component} - {agora}"
+        html_body = (
+            f"<p><b>Componente:</b> {component}<br>"
+            f"<b>Horário:</b> {agora}<br>"
+            f"<b>Detalhe:</b> {message}</p>"
+        )
+        ps_command = (
+            f"Import-Module '{lib_email}' -Force; "
+            f"Send-OutlookEmail -To $env:ALERT_TO "
+            f"-Subject $env:ALERT_SUBJECT "
+            f"-HtmlBody $env:ALERT_HTML_BODY "
+            f"-ExecId 'INFRA' -LogPath 'ALERT'"
+        )
+        env = os.environ.copy()
+        env["ALERT_TO"] = alert_email
+        env["ALERT_SUBJECT"] = subject
+        env["ALERT_HTML_BODY"] = html_body
+        try:
+            result = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    ps_command,
+                ],
+                env=env,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+            email_sent = result.returncode == 0
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Erro ao enviar alerta de infraestrutura via e-mail: %s", e)
+
+    if whatsapp_sent or email_sent:
+        logger.info("Alerta de infraestrutura enviado: %s", component)
+        _mark_infra_sent(component)
+
+
 def dispatch_alerts(automation: Any, execution: Any) -> None:
     """Analisa os canais configurados e dispara os alertas necessarios (com throttling)."""
     if not automation.notification_channels:

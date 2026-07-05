@@ -3,13 +3,18 @@
 
 import json
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
 from app import models
 from app import runtime as app_runtime
+from app.constants import EXECUTION_STATUS_ERROR, EXECUTION_STATUS_PENDING
 from app.services import scheduler_runtime as sr
+from app.timezone import get_now_local
 
 
 def _fake_automation(name: str, schedule: dict[str, Any] | None) -> models.Automation:
@@ -266,3 +271,199 @@ def test_register_event_loop_atualiza_o_loop_global(monkeypatch: Any) -> None:
     app_runtime.register_event_loop(fake_loop)
 
     assert app_runtime._event_loop is fake_loop
+
+
+# ---------------------------------------------------------------------------
+# auto_retry_transient_failures
+# ---------------------------------------------------------------------------
+
+
+def _create_error_execution(
+    db_session: Session,
+    *,
+    automation_id: int,
+    exec_id: str,
+    retries: tuple[int, int] = (0, 2),
+    minutes_ago_finished: float = 5.0,
+) -> models.Execution:
+    retry_count, max_retries = retries
+    execution = models.Execution(
+        id=exec_id,
+        automation_id=automation_id,
+        status=EXECUTION_STATUS_ERROR,
+        retry_count=retry_count,
+        max_retries=max_retries,
+        started_at=get_now_local() - timedelta(minutes=minutes_ago_finished + 1),
+        finished_at=get_now_local() - timedelta(minutes=minutes_ago_finished),
+    )
+    db_session.add(execution)
+    db_session.commit()
+    return execution
+
+
+def test_auto_retry_reenfileira_falha_transitoria_dentro_do_limite(
+    client: TestClient, db_session: Session  # pylint: disable=unused-argument
+) -> None:
+    auto = models.Automation(
+        id=980,
+        name="Automacao Auto-Retry",
+        script_path="./test/run.ps1",
+        enabled=True,
+        max_retries=2,
+        cooldown_minutes=0,
+    )
+    db_session.add(auto)
+    db_session.commit()
+    _create_error_execution(db_session, automation_id=980, exec_id="AR_001")
+
+    with patch("app.services.scheduler_runtime.trigger_worker_wakeup") as mock_wakeup:
+        sr.auto_retry_transient_failures()
+
+    mock_wakeup.assert_called_once()
+    original = db_session.query(models.Execution).filter_by(id="AR_001").first()
+    assert original is not None
+    assert original.status == "REQUEUED"
+
+    novos = (
+        db_session.query(models.Execution)
+        .filter(
+            models.Execution.automation_id == 980,
+            models.Execution.status == EXECUTION_STATUS_PENDING,
+        )
+        .all()
+    )
+    assert len(novos) == 1
+    assert novos[0].retry_count == 1
+    assert novos[0].requested_by == "AUTO_RETRY"
+
+
+def test_auto_retry_respeita_cooldown_minutes(
+    client: TestClient, db_session: Session  # pylint: disable=unused-argument
+) -> None:
+    auto = models.Automation(
+        id=981,
+        name="Automacao Com Cooldown",
+        script_path="./test/run.ps1",
+        enabled=True,
+        max_retries=2,
+        cooldown_minutes=30,
+    )
+    db_session.add(auto)
+    db_session.commit()
+    _create_error_execution(
+        db_session, automation_id=981, exec_id="AR_002", minutes_ago_finished=5.0
+    )
+
+    sr.auto_retry_transient_failures()
+
+    original = db_session.query(models.Execution).filter_by(id="AR_002").first()
+    assert original is not None
+    assert original.status == EXECUTION_STATUS_ERROR  # ainda nao retentado
+
+
+def test_auto_retry_ignora_automacao_desabilitada(
+    client: TestClient, db_session: Session  # pylint: disable=unused-argument
+) -> None:
+    auto = models.Automation(
+        id=982,
+        name="Automacao Desabilitada",
+        script_path="./test/run.ps1",
+        enabled=False,
+        max_retries=2,
+        cooldown_minutes=0,
+    )
+    db_session.add(auto)
+    db_session.commit()
+    _create_error_execution(db_session, automation_id=982, exec_id="AR_003")
+
+    sr.auto_retry_transient_failures()
+
+    original = db_session.query(models.Execution).filter_by(id="AR_003").first()
+    assert original is not None
+    assert original.status == EXECUTION_STATUS_ERROR
+
+
+def test_auto_retry_nao_reenfileira_acima_do_max_retries(
+    client: TestClient, db_session: Session  # pylint: disable=unused-argument
+) -> None:
+    auto = models.Automation(
+        id=983,
+        name="Automacao No Limite",
+        script_path="./test/run.ps1",
+        enabled=True,
+        max_retries=2,
+        cooldown_minutes=0,
+    )
+    db_session.add(auto)
+    db_session.commit()
+    _create_error_execution(
+        db_session, automation_id=983, exec_id="AR_004", retries=(2, 2)
+    )
+
+    sr.auto_retry_transient_failures()
+
+    original = db_session.query(models.Execution).filter_by(id="AR_004").first()
+    assert original is not None
+    assert original.status == EXECUTION_STATUS_ERROR
+
+
+def test_auto_retry_ignora_conflito_de_concorrencia(
+    client: TestClient, db_session: Session  # pylint: disable=unused-argument
+) -> None:
+    """Se ja existe execucao ativa para a automacao, prepare_requeue recusa e o job segue sem quebrar."""
+    auto = models.Automation(
+        id=984,
+        name="Automacao Com Execucao Ativa",
+        script_path="./test/run.ps1",
+        enabled=True,
+        max_retries=2,
+        cooldown_minutes=0,
+    )
+    db_session.add(auto)
+    db_session.commit()
+    _create_error_execution(db_session, automation_id=984, exec_id="AR_005")
+    db_session.add(
+        models.Execution(
+            id="AR_005_ATIVA",
+            automation_id=984,
+            status=EXECUTION_STATUS_PENDING,
+            started_at=get_now_local(),
+        )
+    )
+    db_session.commit()
+
+    sr.auto_retry_transient_failures()  # nao deve lancar excecao
+
+    original = db_session.query(models.Execution).filter_by(id="AR_005").first()
+    assert original is not None
+    assert original.status == EXECUTION_STATUS_ERROR
+
+
+# ---------------------------------------------------------------------------
+# _dispatch_infra_alerts_from_payload
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_infra_alerts_dispara_apenas_breaches_mapeados() -> None:
+    payload = {
+        "slo_breaches": {
+            "worker_offline": True,
+            "wal_critical": False,
+            "orphaned_running": True,
+            "sla_breached": True,  # nao mapeado para alerta de infra
+        }
+    }
+    with patch("app.services.scheduler_runtime.notifications") as mock_notifications:
+        sr._dispatch_infra_alerts_from_payload(payload)
+
+    called_components = {
+        call.args[0] for call in mock_notifications.send_infra_alert.call_args_list
+    }
+    assert called_components == {"worker_offline", "orphaned_running"}
+
+
+def test_dispatch_infra_alerts_sem_breaches_nao_dispara() -> None:
+    with patch("app.services.scheduler_runtime.notifications") as mock_notifications:
+        sr._dispatch_infra_alerts_from_payload({"slo_breaches": {}})
+
+    mock_notifications.send_infra_alert.assert_not_called()

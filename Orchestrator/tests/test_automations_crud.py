@@ -7,15 +7,16 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-import app.routers.automations as auto_router
 import pytest
+from conftest import AUTH_HEADERS
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session, sessionmaker
+
+import app.routers.automations as auto_router
 from app import models, schemas
 from app.runtime import scheduler
 from app.services import scheduler_runtime
 from app.timezone import get_now_local
-from conftest import AUTH_HEADERS
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session, sessionmaker
 
 
 def test_create_automation(client: TestClient) -> None:

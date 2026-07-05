@@ -147,6 +147,7 @@ class WorkerHeartbeat(Base):  # type: ignore[misc,valid-type]
     tasks_failed = Column(Integer, default=0)
     active_tasks = Column(Integer, default=0)
     version = Column(String(20), default="4.0.0")
+    pool_saturated_seconds = Column(Float, default=0)
 
 
 class SystemHealthSnapshot(Base):  # type: ignore[misc,valid-type]

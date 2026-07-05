@@ -6,12 +6,13 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from conftest import AUTH_HEADERS
+
 import app.routers.system as system_router
 from app import models
 from app.constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from app.schemas import WorkerStatus
 from app.timezone import get_now_local
-from conftest import AUTH_HEADERS
 
 
 def test_read_root(client: Any) -> None:

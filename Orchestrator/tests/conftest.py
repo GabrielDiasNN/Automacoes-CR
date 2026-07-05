@@ -28,14 +28,14 @@ os.environ["BENEFICIAMENTO_HISTORICO_DB"] = os.path.join(
 import pytest
 from _pytest.config import Config
 from _pytest.nodes import Item
-
-# Import necessario para registrar as tabelas no Base.metadata.
-from app import models  # pylint: disable=unused-import
-from app.database import Base, get_db
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+# Import necessario para registrar as tabelas no Base.metadata.
+from app import models  # pylint: disable=unused-import
+from app.database import Base, get_db
 
 _INTEGRATION_FIXTURES = {"client", "db_session"}
 
@@ -311,6 +311,7 @@ def reset_worker_globals() -> Generator[None, None, None]:
     _worker_module.stats["tasks_completed"] = 0
     _worker_module.stats["tasks_failed"] = 0
     _worker_module.stats["active_tasks"] = 0
+    _worker_module.stats["pool_saturated_seconds"] = 0.0
     _worker_module.stats["active_processes"].clear()
     yield
     _worker_module.shutdown_event.clear()

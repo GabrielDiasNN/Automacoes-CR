@@ -110,6 +110,7 @@ stats: dict[str, Any] = {
     "tasks_completed": 0,
     "tasks_failed": 0,
     "active_tasks": 0,
+    "pool_saturated_seconds": 0.0,
     "lock": threading.Lock(),
     "active_processes": {},  # {exec_id: Popen_object}
 }
@@ -119,6 +120,27 @@ def update_stat(key: str, delta: int = 1) -> None:
     """Atualiza estatistica global de forma thread-safe."""
     with cast(threading.Lock, stats["lock"]):
         stats[key] += delta
+
+
+def set_pool_saturation(seconds: float) -> None:
+    """Atualiza o tempo continuo (streak atual) em que o pool ficou 100% ocupado."""
+    with cast(threading.Lock, stats["lock"]):
+        stats["pool_saturated_seconds"] = seconds
+
+
+def _track_pool_saturation(
+    saturated: bool, saturation_started_at: float | None
+) -> float | None:
+    """Atualiza o streak de saturacao do pool e reporta o valor atual ao heartbeat."""
+    if saturated:
+        started_at = (
+            saturation_started_at if saturation_started_at is not None else time.time()
+        )
+        set_pool_saturation(time.time() - started_at)
+        return started_at
+    if saturation_started_at is not None:
+        set_pool_saturation(0.0)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +208,7 @@ def _update_heartbeat(db: Any) -> None:
         completed: int = stats["tasks_completed"]
         failed: int = stats["tasks_failed"]
         active: int = stats["active_tasks"]
+        pool_saturated_seconds: float = stats["pool_saturated_seconds"]
 
     if not hb:
         hb = models.WorkerHeartbeat(
@@ -199,6 +222,7 @@ def _update_heartbeat(db: Any) -> None:
             tasks_failed=failed,
             active_tasks=active,
             version=WORKER_VERSION,
+            pool_saturated_seconds=pool_saturated_seconds,
         )
         db.add(hb)
     else:
@@ -211,6 +235,7 @@ def _update_heartbeat(db: Any) -> None:
         hb.tasks_failed = failed
         hb.active_tasks = active
         hb.version = WORKER_VERSION
+        hb.pool_saturated_seconds = round(pool_saturated_seconds, 2)
 
     db.commit()
 
@@ -356,7 +381,9 @@ def _build_subprocess_env(db_exec: Any, exec_id: str) -> dict[str, str]:
     return env
 
 
-def _start_process(db_exec: Any, script_path: str, exec_id: str) -> "subprocess.Popen[str]":
+def _start_process(
+    db_exec: Any, script_path: str, exec_id: str
+) -> "subprocess.Popen[str]":
     """Inicia o PowerShell e registra o processo ativo para shutdown seguro."""
     env = _build_subprocess_env(db_exec, exec_id)
     process = subprocess.Popen(  # pylint: disable=consider-using-with
@@ -653,14 +680,18 @@ def main_loop() -> None:
 
     current_poll_interval = POLL_INTERVAL
     active_futures: set[Future[None]] = set()
+    saturation_started_at: float | None = None
 
     while not shutdown_event.is_set():
         active_futures = {future for future in active_futures if not future.done()}
 
         if len(active_futures) >= MAX_WORKERS:
+            saturation_started_at = _track_pool_saturation(True, saturation_started_at)
             wakeup_event.wait(POLL_INTERVAL)
             wakeup_event.clear()
             continue
+
+        saturation_started_at = _track_pool_saturation(False, saturation_started_at)
 
         try:
             with session_scope(SessionLocal) as db:

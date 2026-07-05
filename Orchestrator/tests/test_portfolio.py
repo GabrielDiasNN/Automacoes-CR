@@ -5,10 +5,11 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from conftest import AUTH_HEADERS
+
 import app.routers.portfolio as portfolio_router
 from app import models
 from app.timezone import get_now_local
-from conftest import AUTH_HEADERS
 
 
 def _create_catalog_automation(  # pylint: disable=too-many-arguments

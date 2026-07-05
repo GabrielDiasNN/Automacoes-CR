@@ -232,6 +232,40 @@ def collect_timeouts_24h_by_group(
     ]
 
 
+def collect_sla_breaches(
+    db: Session,
+    reference_now: datetime,
+) -> list[dict[str, Any]]:
+    """Lista execuções finalizadas nas últimas 24h que estouraram o sla_minutes cadastrado."""
+    rows = (
+        db.query(models.Execution)
+        .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .filter(
+            models.Automation.sla_minutes.isnot(None),
+            models.Execution.duration_seconds.isnot(None),
+            models.Execution.finished_at.isnot(None),
+            models.Execution.finished_at >= reference_now - timedelta(hours=24),
+            models.Execution.duration_seconds > models.Automation.sla_minutes * 60,
+        )
+        .order_by(desc(models.Execution.finished_at))
+        .limit(10)
+        .all()
+    )
+    return [
+        {
+            "automation_id": item.automation_id,
+            "automation_name": item.automation.name if item.automation else None,
+            "exec_id": item.id,
+            "duration_seconds": float(item.duration_seconds or 0),
+            "sla_minutes": (
+                int(item.automation.sla_minutes or 0) if item.automation else 0
+            ),
+            "finished_at": schemas.format_dt_br(item.finished_at),
+        }
+        for item in rows
+    ]
+
+
 def collect_oldest_queue_items(
     db: Session,
 ) -> tuple[models.Execution | None, models.Execution | None, float, float]:

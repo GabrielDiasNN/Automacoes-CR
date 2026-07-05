@@ -36,6 +36,7 @@ def get_worker_status(db: Session) -> schemas.WorkerStatus:
         tasks_completed=cast(int, hb.tasks_completed),
         tasks_failed=cast(int, hb.tasks_failed),
         active_tasks=cast(int, hb.active_tasks),
+        pool_saturated_seconds=cast(float | None, hb.pool_saturated_seconds) or 0.0,
         version=str(hb.version or "unknown"),
     )
 

@@ -7,6 +7,10 @@ Valida:
 3. Classificação operacional de falhas através de exit codes conhecidos.
 """
 
+from conftest import AUTH_HEADERS
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
 from app import models
 from app.constants import (
     EXECUTION_STATUS_ERROR,
@@ -19,9 +23,6 @@ from app.constants import (
     RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
 )
 from app.services.execution_runtime import claim_next_task, classify_process_result
-from conftest import AUTH_HEADERS
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 
 def test_classify_process_result() -> None:

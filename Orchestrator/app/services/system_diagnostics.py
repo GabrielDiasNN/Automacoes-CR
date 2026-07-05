@@ -2,6 +2,7 @@
 
 # pylint: disable=relative-beyond-top-level,too-many-locals,too-many-statements
 
+import os
 from collections.abc import Callable
 from time import perf_counter
 from typing import Any
@@ -21,6 +22,7 @@ from ..constants import (
     DIAGNOSTIC_WAL_CRITICAL_MB,
     DIAGNOSTIC_WAL_ELEVATED_MB,
     DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
+    DIAGNOSTIC_WORKER_SATURATION_WARN_SECONDS,
     EXECUTION_ACTIVE_STATUSES,
     ORCHESTRATOR_CONTRACT_VERSION,
     ORCHESTRATOR_VERSION,
@@ -41,8 +43,10 @@ from .diagnostic_checks import (
     check_running_over_runtime,
     check_scheduler_health,
     check_schema_integrity,
+    check_sla_breaches,
     check_wal_health,
     check_worker_health,
+    check_worker_saturation,
 )
 from .diagnostic_collectors import (
     coerce_datetime,
@@ -51,6 +55,7 @@ from .diagnostic_collectors import (
     collect_retry_pressure,
     collect_running_over_runtime,
     collect_scheduler_inconsistencies,
+    collect_sla_breaches,
     collect_timeouts_24h_by_group,
     seconds_since,
 )
@@ -312,6 +317,7 @@ def build_diagnostics_payload(
     )
     running_over_runtime = collect_running_over_runtime(db)
     orphaned_running = collect_orphaned_running(db, worker_status)
+    sla_breaches = collect_sla_breaches(db, reference_now)
     timings_ms["queue_metrics_ms"] = round(
         (perf_counter() - stage_started_at) * 1000, 2
     )
@@ -337,6 +343,13 @@ def build_diagnostics_payload(
     findings.extend(check_running_over_runtime(running_over_runtime))
     findings.extend(check_orphaned_running(orphaned_running))
     findings.extend(check_failure_hotspots(failure_hotspots))
+    findings.extend(check_sla_breaches(sla_breaches))
+    max_workers = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
+    findings.extend(
+        check_worker_saturation(
+            getattr(worker_status, "pool_saturated_seconds", None), max_workers
+        )
+    )
     timings_ms["analysis_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
 
     # 4. Consolidar o status geral e ações recomendadas
@@ -383,6 +396,11 @@ def build_diagnostics_payload(
         "wal_elevated": wal_size_mb >= DIAGNOSTIC_WAL_ELEVATED_MB,
         "wal_critical": wal_size_mb >= DIAGNOSTIC_WAL_CRITICAL_MB,
         "orphaned_running": bool(orphaned_running),
+        "sla_breached": bool(sla_breaches),
+        "worker_saturated": (
+            getattr(worker_status, "pool_saturated_seconds", None) or 0.0
+        )
+        >= DIAGNOSTIC_WORKER_SATURATION_WARN_SECONDS,
     }
     timings_ms["assembly_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
     stage_started_at = perf_counter()
@@ -446,6 +464,7 @@ def build_diagnostics_payload(
             "last_ping_age_seconds": last_ping_age_seconds,
         },
         "failure_hotspots": failure_hotspots,
+        "sla_breaches": sla_breaches,
         "operator_actions": operator_actions,
         "checks": checks,
         "recovery": {
@@ -468,6 +487,7 @@ def build_diagnostics_payload(
                 "worker_offline_warn_seconds": DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
                 "wal_elevated_mb": DIAGNOSTIC_WAL_ELEVATED_MB,
                 "wal_critical_mb": DIAGNOSTIC_WAL_CRITICAL_MB,
+                "worker_saturation_warn_seconds": DIAGNOSTIC_WORKER_SATURATION_WARN_SECONDS,
             },
             "breaches": slo_breaches,
         },

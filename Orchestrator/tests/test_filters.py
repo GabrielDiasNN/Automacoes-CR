@@ -9,11 +9,12 @@ Cobre:
 
 from datetime import timedelta
 
-from app import models
-from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
+from app import models
+from app.timezone import get_now_local
 
 
 def test_list_automations_search_and_sort(client: TestClient) -> None:

@@ -11,6 +11,7 @@ import sys
 from typing import Any
 
 import pytest
+
 from app import schemas
 from app.services import portfolio_catalog as pc
 from app.services.system_diagnostics import build_diagnostics_payload
@@ -23,7 +24,7 @@ sys.path.insert(
     ),
 )
 
-from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position
+from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position,wrong-import-order
     serialize_rows,
 )
 

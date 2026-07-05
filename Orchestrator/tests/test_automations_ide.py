@@ -5,10 +5,11 @@ Testes focados nas operações de Web IDE de Automações (Scripts e Configs).
 import json
 from pathlib import Path
 
-import app.routers.automations as auto_router
 import pytest
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
+
+import app.routers.automations as auto_router
 
 
 def test_update_automation_config_creates_backup(

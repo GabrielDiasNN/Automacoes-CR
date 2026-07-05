@@ -21,6 +21,7 @@ from ..constants import (
     DIAGNOSTIC_WAL_CRITICAL_MB,
     DIAGNOSTIC_WAL_ELEVATED_MB,
     DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS,
+    DIAGNOSTIC_WORKER_SATURATION_WARN_SECONDS,
     ORCHESTRATOR_SCHEMA_VERSION,
     SEVERITY_ERROR,
     SEVERITY_WARN,
@@ -272,6 +273,59 @@ def check_failure_hotspots(
                 "action_code": "show_errors",
                 "action_label": "Ver falhas recentes",
                 "impact": "Falha recorrente tende a virar ruído operacional e pode exigir correção de causa raiz.",
+                "priority": 2,
+            },
+        )
+    return findings
+
+
+def check_worker_saturation(
+    pool_saturated_seconds: float | None,
+    max_workers: int,
+) -> list[dict[str, Any]]:
+    """Gera finding se o pool de workers estiver continuamente saturado."""
+    findings: list[dict[str, Any]] = []
+    saturated = pool_saturated_seconds or 0.0
+    if saturated >= DIAGNOSTIC_WORKER_SATURATION_WARN_SECONDS:
+        add_finding(
+            findings,
+            SEVERITY_WARN,
+            "worker",
+            (
+                f"Pool de workers ({max_workers}) saturado continuamente há "
+                f"{round(saturated / 60, 1)} min."
+            ),
+            {
+                "action_hint": "Avaliar aumento de WORKER_MAX_CONCURRENCY ou investigar automações lentas segurando o pool.",
+                "action_code": "show_running",
+                "action_label": "Ver execuções em andamento",
+                "impact": "Concorrência insuficiente atrasa toda a fila, não só a automação lenta que está segurando o pool.",
+                "priority": 2,
+            },
+        )
+    return findings
+
+
+def check_sla_breaches(
+    sla_breaches: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Gera finding se alguma execução recente estourou o sla_minutes cadastrado."""
+    findings: list[dict[str, Any]] = []
+    if sla_breaches:
+        top = sla_breaches[0]
+        add_finding(
+            findings,
+            SEVERITY_WARN,
+            "automation",
+            (
+                f"{top['automation_name'] or top['exec_id']} excedeu o SLA de "
+                f"recuperação cadastrado ({top['sla_minutes']} min)."
+            ),
+            {
+                "action_hint": "Revisar a duração real da execução frente ao SLA cadastrado e investigar degradação de tempo de resposta.",
+                "action_code": "show_errors",
+                "action_label": "Ver execuções recentes",
+                "impact": "SLA estourado pode não ser percebido pela área de negócio antes de virar reclamação.",
                 "priority": 2,
             },
         )

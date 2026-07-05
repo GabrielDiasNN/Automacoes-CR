@@ -17,6 +17,7 @@ from app import notifications
 def clean_cooldown() -> None:
     """Limpa o estado de throttle antes de cada teste."""
     notifications._alert_state.clear()
+    notifications._infra_alert_state.clear()
 
 
 def test_is_throttled_behavior() -> None:
@@ -272,6 +273,70 @@ def test_dispatch_alerts_apenas_email() -> None:
 
     mock_email.assert_called_once()
     mock_wa.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# send_infra_alert (alertas de incidente de infraestrutura, fora do ciclo de
+# falha de automação)
+# ---------------------------------------------------------------------------
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+def test_send_infra_alert_envia_whatsapp(
+    mock_exists: Any, mock_run: Any, monkeypatch: Any
+) -> None:
+    monkeypatch.delenv("AUTOMACAO_ALERT_EMAIL", raising=False)
+    mock_exists.return_value = True
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_run.return_value = mock_proc
+
+    notifications.send_infra_alert("worker_offline", "Worker sem heartbeat recente.")
+
+    mock_run.assert_called_once()
+    args, _kwargs = mock_run.call_args
+    cmd = args[0]
+    assert "-File" in cmd
+    assert "worker_offline" in cmd[-1]
+    assert "worker_offline" in notifications._infra_alert_state
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+def test_send_infra_alert_respeita_throttle(
+    mock_exists: Any, mock_run: Any, monkeypatch: Any
+) -> None:
+    monkeypatch.delenv("AUTOMACAO_ALERT_EMAIL", raising=False)
+    mock_exists.return_value = True
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_run.return_value = mock_proc
+
+    notifications.send_infra_alert("wal_critical", "WAL critico.")
+    assert mock_run.call_count == 1
+
+    notifications.send_infra_alert("wal_critical", "WAL critico de novo.")
+    assert mock_run.call_count == 1  # segundo disparo suprimido pelo cooldown
+
+
+@patch("app.notifications.os.path.exists")
+def test_send_infra_alert_sem_canais_nao_marca_throttle(
+    mock_exists: Any, monkeypatch: Any
+) -> None:
+    monkeypatch.delenv("AUTOMACAO_ALERT_EMAIL", raising=False)
+    mock_exists.return_value = False
+    notifications.send_infra_alert("orphaned_running", "Execucao orfa detectada.")
+    assert "orphaned_running" not in notifications._infra_alert_state
+
+
+def test_reset_infra_alert_state_limpa_componente() -> None:
+    notifications._mark_infra_sent("wal_critical")
+    assert "wal_critical" in notifications._infra_alert_state
+
+    notifications.reset_infra_alert_state("wal_critical")
+
+    assert "wal_critical" not in notifications._infra_alert_state
 
 
 def test_dispatch_alerts_async_submete_ao_executor() -> None:

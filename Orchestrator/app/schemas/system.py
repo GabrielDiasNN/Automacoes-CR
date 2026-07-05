@@ -31,6 +31,7 @@ class WorkerStatus(BaseModel):
     tasks_completed: int = 0
     tasks_failed: int = 0
     active_tasks: int = 0
+    pool_saturated_seconds: float = 0.0
     version: str = WORKER_VERSION
 
     @model_validator(mode="after")
@@ -188,6 +189,15 @@ class DiagnosticsFailureHotspot(BaseModel):
     notification_channels: str | None = None
 
 
+class DiagnosticsSlaBreach(BaseModel):
+    automation_id: int
+    automation_name: str | None = None
+    exec_id: str
+    duration_seconds: float
+    sla_minutes: int
+    finished_at: str | None = None
+
+
 class DiagnosticsOperatorAction(BaseModel):
     action_code: str
     action_label: str
@@ -299,6 +309,7 @@ class DiagnosticsPayload(BaseModel):
     queue: DiagnosticsQueue
     heartbeat: DiagnosticsHeartbeat
     failure_hotspots: list[DiagnosticsFailureHotspot] = []
+    sla_breaches: list[DiagnosticsSlaBreach] = []
     operator_actions: list[DiagnosticsOperatorAction] = []
     checks: list[RuntimeCheckItem] = []
     recovery: RecoveryPlan = Field(default_factory=RecoveryPlan)

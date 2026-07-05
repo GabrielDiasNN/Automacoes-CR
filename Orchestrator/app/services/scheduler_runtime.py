@@ -14,8 +14,12 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
-from ..constants import EXECUTION_ACTIVE_STATUSES
+from .. import models, notifications, schemas
+from ..constants import (
+    EXECUTION_ACTIVE_STATUSES,
+    EXECUTION_STATUS_ERROR,
+    EXECUTION_STATUS_TIMEOUT,
+)
 from ..database import (
     SessionLocal,
     purge_old_executions,
@@ -23,11 +27,16 @@ from ..database import (
     run_wal_checkpoint,
     session_scope,
 )
-from ..runtime import scheduler
+from ..runtime import scheduler, trigger_worker_wakeup
 from ..schemas.schedule_rules import first_interval_candidate, ui_day_to_python_weekday
 from ..timezone import get_now_local
 from .beneficiamento_refresh import run_beneficiamento_refresh
-from .execution_runtime import build_queued_execution, get_group_active_execution
+from .execution_runtime import (
+    RequeueValidationError,
+    build_queued_execution,
+    get_group_active_execution,
+    prepare_requeue,
+)
 
 logger = logging.getLogger("orchestrator")
 
@@ -318,6 +327,71 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
         )
 
 
+def auto_retry_transient_failures() -> None:
+    """Reenfileira automaticamente ERROR/TIMEOUT dentro do limite de retry cadastrado.
+
+    Reusa ``prepare_requeue`` (mesma validacao de concorrencia/queue_group do
+    requeue manual). Respeita ``cooldown_minutes`` da automacao como backoff
+    antes de tentar de novo, e so age em execucoes cujo ``max_retries`` > 0
+    (config explicita do operador, ver ``models.Automation``).
+    """
+    try:
+        with session_scope(SessionLocal) as db:
+            candidates = (
+                db.query(models.Execution)
+                .filter(
+                    models.Execution.status.in_(
+                        [EXECUTION_STATUS_ERROR, EXECUTION_STATUS_TIMEOUT]
+                    ),
+                    models.Execution.retry_count < models.Execution.max_retries,
+                )
+                .order_by(models.Execution.finished_at.asc())
+                .limit(20)
+                .all()
+            )
+            for db_exec in candidates:
+                automation = db_exec.automation
+                if not automation or not automation.enabled or not db_exec.finished_at:
+                    continue
+                elapsed_minutes = (
+                    get_now_local() - db_exec.finished_at
+                ).total_seconds() / 60
+                if elapsed_minutes < (automation.cooldown_minutes or 0):
+                    continue
+
+                attempt = int(db_exec.retry_count or 0) + 1
+                try:
+                    new_exec, _audit_payload = prepare_requeue(
+                        db,
+                        db_exec,
+                        payload_reason=(
+                            "Retry automatico apos falha transitoria "
+                            f"(tentativa {attempt}/{db_exec.max_retries})."
+                        ),
+                        payload_requested_by="AUTO_RETRY",
+                        payload_priority=None,
+                        fallback_requested_by="AUTO_RETRY",
+                    )
+                except RequeueValidationError as exc:
+                    logger.info(
+                        "Auto-retry ignorado para %s: %s", db_exec.id, exc.detail
+                    )
+                    continue
+
+                db.add(new_exec)
+                db.commit()
+                logger.info(
+                    "Auto-retry disparado: %s -> %s (tentativa %d/%s)",
+                    db_exec.id,
+                    new_exec.id,
+                    attempt,
+                    db_exec.max_retries,
+                )
+                trigger_worker_wakeup()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Falha no job de auto-retry: %s", exc)
+
+
 def register_enterprise_jobs(retention_days: int) -> None:
     scheduler.add_job(
         run_wal_checkpoint,
@@ -348,6 +422,14 @@ def register_enterprise_jobs(retention_days: int) -> None:
         id="enterprise_scheduler_heartbeat",
         replace_existing=True,
         misfire_grace_time=60,
+    )
+    scheduler.add_job(
+        auto_retry_transient_failures,
+        "interval",
+        minutes=3,
+        id="enterprise_auto_retry",
+        replace_existing=True,
+        misfire_grace_time=120,
     )
     scheduler.add_job(
         capture_system_history_snapshot_job,
@@ -437,6 +519,25 @@ def safe_scheduler_heartbeat() -> None:
         logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
 
 
+# Mapeamento de slo_breaches para alerta de infraestrutura (fora do dashboard):
+# so os breaches que indicam risco de a fila inteira parar de ser processada,
+# nao qualquer degradacao (evita alerta para coisas ja cobertas por
+# dispatch_alerts em cada falha de automacao).
+_INFRA_BREACH_LABELS = {
+    "worker_offline": "Processador (worker) sem heartbeat recente.",
+    "wal_critical": "WAL do banco de dados em nivel critico.",
+    "orphaned_running": "Execucao em andamento sem responsavel valido (worker orfao).",
+}
+
+
+def _dispatch_infra_alerts_from_payload(payload: dict[str, Any]) -> None:
+    """Dispara alerta de infraestrutura para os slo_breaches criticos do payload."""
+    breaches = payload.get("slo_breaches") or {}
+    for code, label in _INFRA_BREACH_LABELS.items():
+        if breaches.get(code):
+            notifications.send_infra_alert(code, label)
+
+
 def capture_system_history_snapshot_job() -> None:
     try:
         with session_scope(SessionLocal) as db:
@@ -452,6 +553,7 @@ def capture_system_history_snapshot_job() -> None:
                 include_history=False,
             )
             capture_system_health_snapshot(db, payload, retention_days=30)
+            _dispatch_infra_alerts_from_payload(payload)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Falha ao capturar snapshot operacional: %s", exc)
 

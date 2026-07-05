@@ -14,13 +14,15 @@ from datetime import datetime
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
+
 from app.schemas.common import (
     describe_schedule_payload,
     normalize_schedule_payload,
     parse_schedule,
     preview_next_runs,
 )
-from fastapi.testclient import TestClient
+
 from tests.conftest import AUTH_HEADERS
 
 # --------------------------------------------------------------------------- #
