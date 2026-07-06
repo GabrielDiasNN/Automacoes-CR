@@ -11,7 +11,7 @@ import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
@@ -34,7 +34,7 @@ from ..runtime import (
     wait_for_task_signal,
 )
 from ..services import env_admin, scheduler_runtime, system_runtime
-from ..services.metrics import get_global_execution_counts
+from ..services.metrics import get_daily_execution_metrics, get_global_execution_counts
 from ..services.portfolio_catalog import build_portfolio_health_response
 from ..services.system_diagnostics import build_diagnostics_payload
 from ..services.system_history import build_system_history_response
@@ -488,6 +488,21 @@ def get_system_history(
 ) -> schemas.SystemHistoryResponse:
     """Retorna histórico recente de snapshots operacionais do Orchestrator."""
     return build_system_history_response(db, hours)
+
+
+@router.get("/metrics/daily", response_model=schemas.SystemMetricsDailyResponse)
+def get_system_metrics_daily(
+    days: int = Query(14, ge=1, le=90),
+    db: Session = Depends(get_db),
+    _api_key: str = Depends(get_api_key),
+) -> schemas.SystemMetricsDailyResponse:
+    """Retorna métricas diárias agregadas de execuções (total, sucesso, erros, duração)."""
+    items = get_daily_execution_metrics(db, days)
+    return schemas.SystemMetricsDailyResponse(
+        generated_at=schemas.format_dt_br(get_now_local()),
+        days=days,
+        items=[schemas.DailyExecutionMetric(**item) for item in items],
+    )
 
 
 @router.post("/schedule/validate", response_model=schemas.ScheduleValidationResponse)

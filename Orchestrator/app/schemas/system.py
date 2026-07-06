@@ -520,6 +520,22 @@ class SystemHistoryResponse(BaseModel):
     items: list[SystemHistoryPoint] = []
 
 
+class DailyExecutionMetric(BaseModel):
+    date: str
+    total: int = 0
+    success: int = 0
+    errors: int = 0
+    success_rate_pct: float | None = None
+    avg_duration_seconds: float | None = None
+    p95_duration_seconds: float | None = None
+
+
+class SystemMetricsDailyResponse(BaseModel):
+    generated_at: str
+    days: int
+    items: list[DailyExecutionMetric] = []
+
+
 class PortfolioDependencyStatus(BaseModel):
     oracle: str = "not_used"
     outlook: str = "not_used"

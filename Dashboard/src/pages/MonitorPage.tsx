@@ -5,7 +5,7 @@ import { useDiagnostics } from "../hooks/useDiagnostics";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { usePolling } from "../hooks/usePolling";
 import { getApiKey } from "../api/client";
-import { orchestratorApi, type SystemHistory } from "../api/orchestrator";
+import { orchestratorApi, type SystemHistory, type SystemMetricsDaily } from "../api/orchestrator";
 import {
   Button,
   Card,
@@ -168,6 +168,29 @@ export function MonitorPage() {
 
   const goToExecucoes = useCallback((execStatus: string) => navigate(`/execucoes?status=${execStatus}`), [navigate]);
 
+  const fetchDailyMetrics = useCallback(() => orchestratorApi.getSystemMetricsDaily(14), []);
+  const { data: dailyMetrics } = usePolling<SystemMetricsDaily>(fetchDailyMetrics, 120_000);
+
+  const dailyItems = dailyMetrics?.items ?? [];
+  const dailyLabels = dailyItems.map((d) => d.date.slice(5));
+  const successRateSeries = dailyItems.map((d) => d.success_rate_pct);
+  const avgDurationSeries = dailyItems.map((d) => d.avg_duration_seconds);
+  const successRateLine: SeriesLine = { label: "taxa de sucesso %", values: successRateSeries, tone: "green" };
+  const avgDurationLine: SeriesLine = { label: "duração média (s)", values: avgDurationSeries, tone: "blue" };
+
+  const cutoff7d = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const currentWeekErrors = dailyItems.filter((d) => d.date >= cutoff7d).reduce((sum, d) => sum + d.errors, 0);
+  const previousWeekErrors = dailyItems.filter((d) => d.date < cutoff7d).reduce((sum, d) => sum + d.errors, 0);
+  const errorsTrendHint =
+    previousWeekErrors > 0
+      ? `${currentWeekErrors >= previousWeekErrors ? "+" : ""}${Math.round(((currentWeekErrors - previousWeekErrors) / previousWeekErrors) * 100)}% vs 7d anteriores`
+      : "sem base de comparação";
+  const errorsTrendTone = currentWeekErrors > previousWeekErrors ? "red" : currentWeekErrors < previousWeekErrors ? "green" : undefined;
+
   return (
     <div className={page.page}>
       <Nameplate
@@ -213,6 +236,7 @@ export function MonitorPage() {
         <ClickableTile onClick={() => goToExecucoes("ERROR")}>
           <StatTile label="falhas" value={worker?.tasks_failed ?? 0} tone={worker?.tasks_failed ? "red" : undefined} />
         </ClickableTile>
+        <StatTile label="falhas (7d)" value={currentWeekErrors} tone={errorsTrendTone} hint={errorsTrendHint} />
       </div>
 
       {(pendingSeries.length > 1 || runningSeries.length > 1) && (
@@ -235,6 +259,17 @@ export function MonitorPage() {
         >
           <TimeSeries xLabels={xLabels} lines={[pendingLine, runningLine]} height={160} />
         </Card>
+      )}
+
+      {dailyItems.length > 1 && (
+        <div className={page.split}>
+          <Card label="taxa de sucesso · 14 dias">
+            <TimeSeries xLabels={dailyLabels} lines={[successRateLine]} height={160} />
+          </Card>
+          <Card label="duração média (s) · 14 dias">
+            <TimeSeries xLabels={dailyLabels} lines={[avgDurationLine]} height={160} />
+          </Card>
+        </div>
       )}
 
       <Card
