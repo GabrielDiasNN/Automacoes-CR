@@ -28,4 +28,27 @@ Describe "Lib-Config Tests" {
             }
         }
     }
+
+    Context "ConvertFrom-EnvLine" {
+        It "remove comentario inline apos o valor (ex.: '123 # Nome')" {
+            InModuleScope Lib-Config {
+                $resultado = ConvertFrom-EnvLine -Line "OBP_CONTATO_TESTE=5500000000000         # Nome Exemplo"
+                $resultado.Key | Should -Be "OBP_CONTATO_TESTE"
+                $resultado.Value | Should -Be "5500000000000"
+            }
+        }
+
+        It "preserva valores sem comentario inline" {
+            InModuleScope Lib-Config {
+                $resultado = ConvertFrom-EnvLine -Line "OBP_WHATSAPP_TARGET=550000000000-0000000000@g.us"
+                $resultado.Value | Should -Be "550000000000-0000000000@g.us"
+            }
+        }
+
+        It "ignora linhas de comentario puro" {
+            InModuleScope Lib-Config {
+                ConvertFrom-EnvLine -Line "# isso e um comentario" | Should -BeNullOrEmpty
+            }
+        }
+    }
 }
