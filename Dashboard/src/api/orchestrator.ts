@@ -336,8 +336,195 @@ export interface BeneficiamentoDashboard {
   health: BeneficiamentoHealth;
 }
 
-export type BeneficiamentoOverview = Record<string, unknown>;
-export type BeneficiamentoDetail = Record<string, unknown>;
+// ── Beneficiamento — overview/detail (filtros dinâmicos sobre SQLite histórico) ──
+
+export interface BeneficiamentoFilterOptions {
+  maquinas: string[];
+  fases: string[];
+  turnos: string[];
+  alternativos: string[];
+}
+
+export interface BeneficiamentoEffectiveFilters {
+  dt_inicio: string | null;
+  dt_fim: string | null;
+  maquina: string | null;
+  fase: string | null;
+  turno: string | null;
+  alternativo: string | null;
+  q: string | null;
+}
+
+export interface BeneficiamentoKpis {
+  ob_distintas: number;
+  fases_concluidas: number;
+  kg_total: number;
+  mt_total: number;
+  eficiencia_tempo_pct: number;
+  reprocesso_kg_pct: number;
+  desvio_tempo_min: number;
+  produtividade_kg_h: number;
+}
+
+export interface BeneficiamentoGargalo {
+  maquina: string;
+  fase: string;
+  fases_concluidas: number;
+  kg_total: number;
+  mt_total: number;
+  desvio_min: number;
+  eficiencia_tempo_pct: number;
+  score: number;
+}
+
+export interface BeneficiamentoFaseCritica {
+  fase: string;
+  fases_concluidas: number;
+  kg_total: number;
+  eficiencia_tempo_pct: number;
+  reprocesso_kg_pct: number;
+}
+
+export interface BeneficiamentoProdutoPrincipal {
+  codigo: string;
+  produto: string;
+  artigo: string;
+  cor: string;
+  ob_distintas: number;
+  fases_concluidas: number;
+  kg_total: number;
+  mt_total: number;
+  reprocesso_kg_pct: number;
+  produtividade_kg_h: number;
+}
+
+export interface BeneficiamentoTurnoRanking {
+  turno_id: string | null;
+  turno_label: string;
+  ob_distintas: number;
+  fases_concluidas: number;
+  kg_total: number;
+  mt_total: number;
+  eficiencia_tempo_pct: number;
+  reprocesso_kg_pct: number;
+  produtividade_kg_h: number;
+  min_real_medio: number;
+  desvio_medio_min: number;
+}
+
+export interface BeneficiamentoRankings {
+  gargalos: BeneficiamentoGargalo[];
+  fases_criticas: BeneficiamentoFaseCritica[];
+  produtos_principais: BeneficiamentoProdutoPrincipal[];
+}
+
+export interface BeneficiamentoSeriesPoint {
+  date: string;
+  kg_total?: number;
+  eficiencia_tempo_pct?: number;
+}
+
+export interface BeneficiamentoSeries {
+  volume_diario: { date: string; kg_total: number }[];
+  eficiencia_diaria: { date: string; eficiencia_tempo_pct: number }[];
+}
+
+export interface BeneficiamentoOverview {
+  generated_at: string;
+  filters: { effective: BeneficiamentoEffectiveFilters };
+  health: {
+    status: string;
+    source: string;
+    max_data_fim: string | null;
+    records: number;
+    findings: string[];
+  };
+  kpis: BeneficiamentoKpis;
+  rankings: BeneficiamentoRankings;
+  series: BeneficiamentoSeries;
+  filter_options: BeneficiamentoFilterOptions;
+  turnos: BeneficiamentoTurnoRanking[];
+  tingimento: Record<string, unknown>;
+  interaction: { detail_endpoint: string; clickable_targets: string[] };
+}
+
+export type BeneficiamentoTargetType = "produto" | "maquina_fase" | "fase" | "turno" | "ob";
+
+export interface BeneficiamentoDetailRecord {
+  ob: string | null;
+  seq: number | null;
+  data_fim: string | null;
+  fase: string | null;
+  maquina: string | null;
+  turno: string;
+  alternativo: string | null;
+  reduz: string | null;
+  produto: string | null;
+  artigo: string | null;
+  cor: string | null;
+  kg: number;
+  mt: number;
+  min_real: number;
+  min_prev: number;
+  desvio_min: number;
+  reprocesso: number;
+}
+
+export interface BeneficiamentoTraceFase {
+  seq: number;
+  data_fim: string | null;
+  fase: string | null;
+  maquina: string | null;
+  turno: string;
+  kg: number;
+  min_real: number;
+  reprocesso: number;
+}
+
+export interface BeneficiamentoTraceOb {
+  ob: string;
+  fases: BeneficiamentoTraceFase[];
+}
+
+export interface BeneficiamentoDetailSummary {
+  target_type: string;
+  ob_distintas: number;
+  fases_concluidas: number;
+  kg_total: number;
+  mt_total: number;
+  eficiencia_tempo_pct: number;
+  reprocesso_kg_pct: number;
+  produtividade_kg_h: number;
+  turnos: string[];
+}
+
+export interface BeneficiamentoDetail {
+  generated_at: string;
+  filters: { effective: Record<string, unknown> };
+  target: { type: string; label: string };
+  summary: BeneficiamentoDetailSummary;
+  records: BeneficiamentoDetailRecord[];
+  trace: BeneficiamentoTraceOb[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+  raw_records: Record<string, unknown>[];
+}
+
+export interface BeneficiamentoOverviewParams {
+  dt_inicio?: string;
+  dt_fim?: string;
+  maquina?: string;
+  fase?: string;
+  turno?: string;
+  alternativo?: string;
+  q?: string;
+}
+
+export interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams {
+  target_type: BeneficiamentoTargetType;
+  ob?: string;
+  page?: number;
+  limit?: number;
+}
 
 /* ============================================================================
    API — rotas reconciliadas com os routers reais do Orchestrator.
@@ -395,9 +582,9 @@ export const orchestratorApi = {
   // ── Beneficiamento ──
   getBeneficiamentoDashboard: () => api.get<BeneficiamentoDashboard>("/api/beneficiamento/dashboard"),
   getBeneficiamentoHealth: () => api.get<BeneficiamentoHealth>("/api/beneficiamento/health"),
-  getBeneficiamentoOverview: (params?: Record<string, string | number | undefined>) =>
+  getBeneficiamentoOverview: (params?: BeneficiamentoOverviewParams) =>
     api.get<BeneficiamentoOverview>(`/api/beneficiamento/overview${qs({ ...params })}`),
-  getBeneficiamentoDetail: (params?: Record<string, string | number | undefined>) =>
+  getBeneficiamentoDetail: (params: BeneficiamentoDetailParams) =>
     api.get<BeneficiamentoDetail>(`/api/beneficiamento/detail${qs({ ...params })}`),
   refreshBeneficiamento: (period: string) =>
     api.post<Record<string, unknown>>(`/api/beneficiamento/refresh${qs({ period })}`),
