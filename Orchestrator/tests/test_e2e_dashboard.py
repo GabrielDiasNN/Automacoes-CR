@@ -253,7 +253,7 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
 ROUTES = [
     ("painel", "Painel"),
     ("execucoes", "Execuções"),
-    ("observabilidade", "Observabilidade"),
+    ("monitor", "Monitor"),
     ("beneficiamento", "Beneficiamento"),
     ("automacoes", "Automações"),
     ("sistema", "Sistema"),
@@ -314,7 +314,7 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
 - Módulos navegados:
   - Painel
   - Execuções
-  - Observabilidade
+  - Monitor
   - Beneficiamento
   - Automações
   - Sistema
@@ -441,6 +441,19 @@ def test_e2e_dashboard_beneficiamento_loads(uvicorn_server: str, page: Any) -> N
     assert not console_errors, f"Erros de console em Beneficiamento: {console_errors}"
 
 
+@pytest.mark.e2e
+def test_e2e_dashboard_observabilidade_redirect_to_monitor(
+    uvicorn_server: str, page: Any
+) -> None:
+    """A rota legada /observabilidade redireciona para /monitor (rename da Fase 2)."""
+    _inject_api_key(page)
+
+    page.goto(f"{uvicorn_server}/dashboard/observabilidade")
+    page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
+
+    assert page.url.rstrip("/").endswith("/dashboard/monitor")
+
+
 # ---------------------------------------------------------------------------
 # Regressão Visual (F3-T4): compara screenshot atual contra baseline em disco.
 #
@@ -502,9 +515,9 @@ def test_screenshot_dashboard_overview_estado_healthy(
 @pytest.mark.e2e
 def test_screenshot_diagnostics_com_findings(uvicorn_server: str, page: Any) -> None:
     _inject_api_key(page)
-    page.goto(f"{uvicorn_server}/dashboard/observabilidade")
-    page.get_by_role("heading", name="Observabilidade").wait_for(timeout=30_000)
-    _assert_matches_baseline(page, "dashboard_observabilidade")
+    page.goto(f"{uvicorn_server}/dashboard/monitor")
+    page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
+    _assert_matches_baseline(page, "dashboard_monitor")
 
 
 @pytest.mark.e2e
