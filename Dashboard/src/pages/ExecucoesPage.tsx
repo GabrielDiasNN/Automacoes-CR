@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, RotateCw, Square, RefreshCw } from "lucide-react";
 import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
 import {
@@ -35,7 +36,8 @@ const selectStyle: React.CSSProperties = {
 
 export function ExecucoesPage() {
   const toast = useToast();
-  const [status, setStatus] = useState("");
+  const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
   const [pageNum, setPageNum] = useState(1);
 
   const [detail, setDetail] = useState<ExecutionDetail | null>(null);

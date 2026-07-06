@@ -15,7 +15,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/painel", label: "Painel", icon: <LayoutDashboard size={16} />, section: "Operação" },
   { to: "/execucoes", label: "Execuções", icon: <ListChecks size={16} /> },
-  { to: "/observabilidade", label: "Observabilidade", icon: <Radio size={16} /> },
+  { to: "/monitor", label: "Monitor", icon: <Radio size={16} /> },
   { to: "/beneficiamento", label: "Beneficiamento", icon: <Factory size={16} />, section: "Análise" },
   { to: "/automacoes", label: "Automações", icon: <Workflow size={16} />, section: "Administração" },
   { to: "/sistema", label: "Sistema", icon: <Server size={16} /> },
