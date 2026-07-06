@@ -124,36 +124,32 @@ Demais seções do `config.json`:
   }
   ```
 
-### Contatos (variáveis de responsável, desde v9.5.20)
+### Contatos (variáveis de responsável, desde v9.5.20; migrado para `.env` na v9.5.34)
 
-`config.json` tem uma seção `contatos` onde cada chave é o **nome da variável** usada em
-`fases_monitoradas.responsavel`, e o valor é um objeto `{nome, numero}` (contato único)
-ou uma lista desses objetos (equipe — todos recebem menção na mesma mensagem):
+Os números reais de responsável nunca ficam versionados em `config.json` — vivem só no
+`.env` local (nunca commitado), em variáveis `OBP_CONTATO_<PAPEL>` (ver `.env.example`).
+`fases_monitoradas.responsavel` referencia apenas o **nome do papel** (ex.: `lider_1_turno`),
+nunca um número literal; `generate_phase_cards.py`/`format_message.py` resolvem cada papel
+lendo a variável de ambiente correspondente em tempo de execução.
 
-```json
-"contatos": {
-  "lider_1_turno": { "nome": "Adir Marques", "numero": "5547984856137" },
-  "equipe_cq": [
-    { "nome": "Sidiane Klehm", "numero": "5548998221241" },
-    { "nome": "Elso Boges", "numero": "5547999188695" },
-    { "nome": "Daniele Renaud", "numero": "5541997575631" }
-  ]
-}
+```
+# .env (não versionado)
+OBP_CONTATO_LIDER_1_TURNO=<numero>
+OBP_CONTATO_EQUIPE_CQ=<numero1>,<numero2>,<numero3>
 ```
 
-O campo `nome` é só documentação (para você identificar quem é o contato ao editar) —
-apenas `numero` é usado no envio. **Para trocar o número de um líder, edite só aqui** —
-todas as fases cuja `responsavel` referencia essa variável recebem o número novo
-automaticamente, sem precisar editar `fases_monitoradas`.
+**Para trocar o número de um líder, edite só o `.env`** — todas as fases cuja
+`responsavel` referencia esse papel recebem o número novo automaticamente, sem precisar
+editar `fases_monitoradas`. `equipe_cq` aceita múltiplos números separados por vírgula
+(todos recebem menção na mesma mensagem).
 
-Papéis hoje configurados: `lider_1_turno` / `lider_reserva_1_turno` (Adir Marques /
-Anderson Koehler), `lider_2_turno` / `lider_reserva_2_turno` (Mateus Conaco / Elisa
-Mendes), `lider_3_turno` / `lider_reserva_3_turno` (Cristóvão Luiz / Lucas Pilantil) e
-`equipe_cq` (Sidiane Klehm, Elso Boges, Daniele Renaud).
+Papéis hoje configurados: `lider_1_turno` / `lider_reserva_1_turno`, `lider_2_turno` /
+`lider_reserva_2_turno`, `lider_3_turno` / `lider_reserva_3_turno` e `equipe_cq` (3
+contatos). Os nomes/números reais de cada papel estão só no `.env` de produção.
 
 #### Fases monitoradas hoje (levantado em 03/07/2026 via consulta em `SGTPRD.FASES_FLUXO`)
 
-| Código | Fase (Oracle) | Responsável (`contatos`) | Ativo |
+| Código | Fase (Oracle) | Responsável (papel — número real no `.env`) | Ativo |
 |---|---|---|---|
 | 20 | RMC-REVISÃO MALHA CRUA | `lider_3_turno` | sim |
 | 25 | CDP-CONFERENCIA DE PESO | `equipe_cq` | **não** |

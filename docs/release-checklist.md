@@ -1,6 +1,6 @@
 # Checklist de Release — Hub de Automações
 
-> **Versão:** v9.5.0 | **Atualizado:** 27/05/2026
+> **Versão:** v1.0.0 | **Atualizado:** 05/07/2026
 
 ---
 
@@ -15,16 +15,19 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
 
 ### 1.1 Testes Automatizados
 
-- [ ] `pytest tests/ -q` — **todos os testes passando** (zero falhas)
-- [ ] Cobertura de código ≥ 60%: `pytest tests/ --cov=app --cov-fail-under=60 -q`
+- [ ] `pytest -m "not e2e"` (em `Orchestrator/`) — **todos os testes passando** (zero falhas); rodar E2E separado com `-m e2e` como no CI
+- [ ] Cobertura de código ≥ 84% (gate real do CI): `pytest -m "not e2e" --cov=app --cov=worker --cov-fail-under=84`
+- [ ] Em PR: cobertura diferencial ≥ 85% nas linhas alteradas (`diff-cover coverage.xml --fail-under=85`)
+- [ ] Dashboard: `cd Dashboard; npm run test:coverage` — Vitest verde acima dos pisos configurados
 - [ ] Nenhum teste marcado como `xfail` inesperado
 
 ### 1.2 Qualidade de Código Python
 
-- [ ] `black Orchestrator/app/ --check` — sem diferenças de formatação
-- [ ] `isort Orchestrator/app/ --check-only` — imports ordenados
-- [ ] `pylint Orchestrator/app/ --fail-under=7.5` — score acima do mínimo
-- [ ] `mypy Orchestrator/app/ --ignore-missing-imports` — sem erros de tipo críticos
+- [ ] `python -m ruff check Orchestrator/app Orchestrator/worker.py` — lint bloqueante do CI, zero erros
+- [ ] `python -m black --check Orchestrator/app` — sem diferenças de formatação
+- [ ] `python -m isort --check-only Orchestrator/app` — imports ordenados (perfil `black`, fonte de verdade)
+- [ ] `python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll` — sem findings de segurança
+- [ ] `pwsh -File Tools/Test-PythonGovernance.ps1 -RootPath .` — mypy `--strict` + pylint (gate bloqueante do pre-commit hook)
 - [ ] `Tools/Get-QualitySnapshot.ps1 -BasePath .` — snapshot consolidado sem alerta estrutural inesperado
 
 ### 1.3 Governança e Encoding
@@ -42,6 +45,8 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
 - [ ] Gitleaks sem alertas: `gitleaks detect --source . --no-git` (ou via CI)
 - [ ] Nenhum segredo em texto claro no diff: `git diff main..HEAD`
 - [ ] `.env` não está sendo commitado: `git ls-files .env` retorna vazio
+- [ ] `Tools/Test-ZeroTrust.ps1 -RootPath .` — nenhuma credencial/token hardcoded
+- [ ] Varredura de PII/informação sensível em arquivos versionados (telefone BR, e-mail corporativo, CPF/CNPJ, hostname interno): destinatários de e-mail e alvos WhatsApp vêm de `.env` (`*_EMAIL_TO/CC`, `*_WHATSAPP_TARGET`), nunca de config versionado; host Oracle vem de `ORACLE_CONNECT_STRING`, nunca hardcoded
 
 ---
 
@@ -149,6 +154,6 @@ Preencha após a conclusão bem-sucedida:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este checklist cobre o processo de release do Hub de Automações em `v9.5.0`.
+- Este checklist cobre o processo de release do Hub de Automações em `v1.0.0`.
 - Atualize este checklist quando novos gates de qualidade forem adicionados ao pipeline.
 - Registre estado operacional relevante para agentes em `docs/ai-native-context-monitor.md`, não em seções longas dentro de `GEMINI.md`.

@@ -6,7 +6,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$Email = "gabriel.dias@costaricamalhas.ind.br",
+    [string]$Email = "teste@example.com",
 
     [Parameter(Mandatory = $false)]
     [switch]$Remover

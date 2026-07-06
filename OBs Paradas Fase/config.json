@@ -1,19 +1,6 @@
 {
   "threshold_default": 99,
   "max_obs_por_mensagem": 10,
-  "contatos": {
-    "lider_1_turno": { "nome": "Adir Marques", "numero": "5547984856137" },
-    "lider_reserva_1_turno": { "nome": "Anderson Koehler", "numero": "5547991591816" },
-    "lider_2_turno": { "nome": "Mateus Conaco", "numero": "5547997750596" },
-    "lider_reserva_2_turno": { "nome": "Elisa Mendes", "numero": "5547996608441" },
-    "lider_3_turno": { "nome": "Cristóvão Luiz", "numero": "5548999894828" },
-    "lider_reserva_3_turno": { "nome": "Lucas Pilantil", "numero": "5548988614164" },
-    "equipe_cq": [
-      { "nome": "Sidiane Klehm", "numero": "5548998221241" },
-      { "nome": "Elso Boges", "numero": "5547999188695" },
-      { "nome": "Daniele Renaud", "numero": "5541997575631" }
-    ]
-  },
   "fases_monitoradas": {
     "20": {
       "descricao": "RMC-REVISÃO MALHA CRUA",

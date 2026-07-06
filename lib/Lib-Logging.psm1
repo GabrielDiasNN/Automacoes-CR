@@ -280,6 +280,8 @@ param(
 
 [switch]$CheckOracle,
 
+[string]$OracleHost = "",
+
 [string[]]$CheckPaths = @()
 
 )
@@ -356,13 +358,44 @@ $results += "ERRO: Path inacessivel: $(Split-Path $p -Leaf)"
 
 if ($CheckOracle) {
 
-if (Test-Connection -ComputerName "SRVDB02" -Count 1 -Quiet) {
+# Host do Oracle nunca fica hardcoded aqui: resolve de -OracleHost, senao de
+# ORACLE_CONNECT_STRING (env ou .env local), sempre parametrizado e nao versionado.
 
-$results += "OK: SRVDB02 On"
+$oracleHostResolved = $OracleHost
+
+if ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
+
+$connStr = [System.Environment]::GetEnvironmentVariable("ORACLE_CONNECT_STRING", "Process")
+
+if ([string]::IsNullOrWhiteSpace($connStr)) {
+
+$envFile = Join-Path $script:ProjectRoot ".env"
+
+if (Test-Path $envFile) {
+
+$match = Select-String -Path $envFile -Pattern '^\s*ORACLE_CONNECT_STRING\s*=\s*(.+)$' | Select-Object -First 1
+
+if ($match) { $connStr = $match.Matches[0].Groups[1].Value.Trim() }
+
+}
+
+}
+
+if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ($connStr -split '[:/]')[0].Trim() }
+
+}
+
+if ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
+
+$results += "WARN: Oracle host nao configurado (ORACLE_CONNECT_STRING ausente)"
+
+} elseif (Test-Connection -ComputerName $oracleHostResolved -Count 1 -Quiet) {
+
+$results += "OK: Oracle ($oracleHostResolved) On"
 
 } else {
 
-$results += "WARN: SRVDB02 Off"
+$results += "WARN: Oracle ($oracleHostResolved) Off"
 
 }
 

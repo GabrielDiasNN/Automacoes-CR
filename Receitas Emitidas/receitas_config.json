@@ -1,6 +1,7 @@
 {
+    "_comentario_email": "Destinatário real vem de RE_EMAIL_TO no .env (não versionado). O valor abaixo é apenas placeholder/fallback.",
     "email": {
-        "to": "acacio.klann@costaricamalhas.ind.br",
+        "to": "destinatario-principal@example.com",
         "subject_prefix": "Relat\u00f3rio Semanal: Controle de Receitas Emitidas",
         "intro_text": "Segue relat\u00f3rio atualizado para confer\u00eancia operacional."
     },

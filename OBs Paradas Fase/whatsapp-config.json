@@ -5,10 +5,12 @@
   "auth": {
     "clientId": "hub-global"
   },
+  "_comentario_target": "ID do grupo real vem de OBP_WHATSAPP_TARGET no .env (não versionado). contactId abaixo é apenas placeholder/fallback.",
   "target": {
     "enabled": true,
     "type": "group",
-    "contactId": "554784080341-1568734655@g.us"
+    "contactIdEnv": "OBP_WHATSAPP_TARGET",
+    "contactId": "550000000000-0000000000@g.us"
   },
   "idempotency": {
     "enabled": true

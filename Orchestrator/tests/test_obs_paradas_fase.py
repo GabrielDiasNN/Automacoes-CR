@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 ROOT = Path(__file__).parent.parent.parent
 AUTOMATION_DIR = ROOT / "OBs Paradas Fase"
 
@@ -58,10 +60,14 @@ def test_config_json_valido() -> None:
     cfg_path = AUTOMATION_DIR / "config.json"
     assert cfg_path.exists(), "config.json ausente"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-    assert "contatos" in cfg, "config.json deve conter 'contatos'"
-    contatos = cfg["contatos"]
-    assert isinstance(contatos, dict), "'contatos' deve ser um objeto"
-    assert len(contatos) > 0, "'contatos' não pode ser vazio"
+    assert "contatos" not in cfg, (
+        "config.json não deve mais conter 'contatos' — números/nomes reais vivem só no "
+        ".env local, nunca versionados (ver OBP_CONTATO_* em .env.example)"
+    )
+    module = _load_module(
+        "generate_phase_cards_test", AUTOMATION_DIR / "generate_phase_cards.py"
+    )
+    contatos = module._load_contatos_from_env()  # pylint: disable=protected-access
     assert "fases_monitoradas" in cfg, "config.json deve conter 'fases_monitoradas'"
     fases = cfg["fases_monitoradas"]
     assert isinstance(fases, dict), "'fases_monitoradas' deve ser um objeto"
@@ -125,15 +131,15 @@ def test_get_fase_config_resolve_por_codigo_exato() -> None:
         "generate_phase_cards_test", AUTOMATION_DIR / "generate_phase_cards.py"
     )
     fases = {
-        "26": module.FaseConfig("IVF-INVERSÃO P/FELPAGEM", 1, "554899894828"),
-        "65": module.FaseConfig("FEL-FELPAGEM", 1, "554791591816"),
+        "26": module.FaseConfig("IVF-INVERSÃO P/FELPAGEM", 1, "5500000000026"),
+        "65": module.FaseConfig("FEL-FELPAGEM", 1, "5500000000065"),
     }
 
     cfg_26 = module.get_fase_config("26", fases)
     cfg_65 = module.get_fase_config("65", fases)
 
-    assert cfg_26 is not None and cfg_26.responsavel == "554899894828"
-    assert cfg_65 is not None and cfg_65.responsavel == "554791591816"
+    assert cfg_26 is not None and cfg_26.responsavel == "5500000000026"
+    assert cfg_65 is not None and cfg_65.responsavel == "5500000000065"
     assert module.get_fase_config("999", fases) is None
 
 
@@ -144,9 +150,9 @@ def test_fase_inativa_e_excluida_do_envio() -> None:
     )
     fases = {
         "26": module.FaseConfig(
-            "IVF-INVERSÃO P/FELPAGEM", 1, "554899894828", ativo=True
+            "IVF-INVERSÃO P/FELPAGEM", 1, "5500000000026", ativo=True
         ),
-        "65": module.FaseConfig("FEL-FELPAGEM", 1, "554791591816", ativo=False),
+        "65": module.FaseConfig("FEL-FELPAGEM", 1, "5500000000065", ativo=False),
     }
     obs = [
         {
@@ -174,29 +180,33 @@ def test_resolve_contato_aceita_objeto_lista_e_string_legada() -> None:
     )
     assert (
         module._resolve_contato(  # pylint: disable=protected-access
-            {"nome": "Adir Marques", "numero": "5547984856137"}
+            {"nome": "Fulano de Tal", "numero": "5500000000001"}
         )
-        == "5547984856137"
+        == "5500000000001"
     )
     assert (
         module._resolve_contato(  # pylint: disable=protected-access
             [
-                {"nome": "Sidiane Klehm", "numero": "5548998221241"},
-                {"nome": "Elso Boges", "numero": "5547999188695"},
+                {"nome": "Fulano de Tal", "numero": "5500000000001"},
+                {"nome": "Ciclano da Silva", "numero": "5500000000002"},
             ]
         )
-        == "5548998221241 @5547999188695"
+        == "5500000000001 @5500000000002"
     )
     assert (
-        module._resolve_contato("5547984856137")  # pylint: disable=protected-access
-        == "5547984856137"
+        module._resolve_contato("5500000000001")  # pylint: disable=protected-access
+        == "5500000000001"
     )
 
 
-def test_config_real_resolve_contatos_por_variavel() -> None:
+def test_config_real_resolve_contatos_por_variavel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Regressão de ponta a ponta: 'responsavel' em fases_monitoradas referencia uma
-    chave de 'contatos' (nunca um número literal) e cada variável resolve para o
-    telefone correto configurado hoje."""
+    chave resolvida via .env (nunca um número literal), e cada variável resolve para
+    o telefone configurado no ambiente."""
+    monkeypatch.setenv("OBP_CONTATO_LIDER_3_TURNO", "5500000000026")
+    monkeypatch.setenv("OBP_CONTATO_LIDER_RESERVA_1_TURNO", "5500000000065")
     module = _load_module(
         "generate_phase_cards_test", AUTOMATION_DIR / "generate_phase_cards.py"
     )
@@ -207,6 +217,8 @@ def test_config_real_resolve_contatos_por_variavel() -> None:
 
     # Fase 26 (líder 3º turno) e fase 65 (líder reserva 1º turno) devem resolver
     # para números de telefone diferentes.
+    assert fases["26"].responsavel == "5500000000026"
+    assert fases["65"].responsavel == "5500000000065"
     assert fases["26"].responsavel != fases["65"].responsavel
     # Fase 25 foi explicitamente desativada (decisão de negócio), mesmo mapeada por código.
     assert fases["25"].ativo is False

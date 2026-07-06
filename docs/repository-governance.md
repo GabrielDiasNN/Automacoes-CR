@@ -1,8 +1,8 @@
 # Diretrizes de Governança do Repositório (Hub de Automações)
 
-> **Versão:** v9.5.0 | **Atualizado:** 27/05/2026
+> **Versão:** v1.0.0 | **Atualizado:** 05/07/2026
 
-Este documento estabelece as regras e padrões de integridade do Hub de Automações (v9.5.0), garantindo consistência técnica, segurança e idempotência operacional entre desenvolvedores e agentes autônomos (ChatGPT/Codex, Gemini CLI e Antigravity).
+Este documento estabelece as regras e padrões de integridade do Hub de Automações (v1.0.0), garantindo consistência técnica, segurança e idempotência operacional entre desenvolvedores e agentes autônomos (ChatGPT/Codex, Gemini CLI e Antigravity).
 
 ---
 

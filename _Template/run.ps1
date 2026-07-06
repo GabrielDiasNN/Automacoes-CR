@@ -82,7 +82,7 @@ try {
         # else {
         #    $globalTestEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
         #    $isTestMode = ($env:ORCHESTRATOR_TEST_MODE -eq "true") -or ($null -eq $env:ORCHESTRATOR_TEST_MODE -and $globalTestEmail)
-        #    $targetTo = if ($isTestMode) { ($globalTestEmail, "gabriel.dias@costaricamalhas.ind.br" | Select-Object -First 1) } else { "OFICIAL@..." }
+        #    $targetTo = if ($isTestMode) { ($globalTestEmail, $env:AUTOMACAO_ALERT_EMAIL | Select-Object -First 1) } else { "OFICIAL@..." }
         #    $sent = Send-OutlookEmail -To $targetTo ...
         #    if ($sent) { 
         #        $deliveryState.delivery_status.email.success = $true; $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'o')

@@ -1,6 +1,6 @@
 # Estratégia de Testes — Hub de Automações
 
-> **Versão:** v9.5.0 | **Atualizado:** 27/05/2026
+> **Versão:** v1.0.0 | **Atualizado:** 05/07/2026
 
 ---
 
@@ -155,5 +155,5 @@ Ao implementar uma nova feature:
 
 ## 🧠 Gestão de Contexto (AI-Native)
 
-- Este documento descreve a estratégia de testes em `v9.5.0`.
+- Este documento descreve a estratégia de testes em `v1.0.0`.
 - Atualize quando novas suítes forem criadas ou quando a meta de cobertura mudar.

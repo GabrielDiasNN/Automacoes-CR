@@ -348,9 +348,10 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                     $emailConfig = Get-Content $EmailConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
-                    $to = $emailConfig.email.to -join ";"
+                    # Destinatarios: .env (RB_EMAIL_TO/CC) tem prioridade; config.json e apenas fallback/placeholder.
+                    $to = if (-not [string]::IsNullOrWhiteSpace($env:RB_EMAIL_TO)) { $env:RB_EMAIL_TO } else { $emailConfig.email.to -join ";" }
 
-                    $cc = if ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
+                    $cc = if (-not [string]::IsNullOrWhiteSpace($env:RB_EMAIL_CC)) { $env:RB_EMAIL_CC } elseif ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
 
                     $bcc = if ($emailConfig.email.bcc) { $emailConfig.email.bcc -join ";" } else { $null }
 

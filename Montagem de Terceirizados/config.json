@@ -1,7 +1,8 @@
 {
+  "_comentario_email": "Destinatários reais vêm de MT_EMAIL_TO/MT_EMAIL_CC no .env (não versionado). Os valores abaixo são apenas placeholders/fallback.",
   "email": {
-    "to": "israel.soares@costaricamalhas.ind.br; dener.silva@costaricamalhas.ind.br",
-    "cc": "acacio.klann@costaricamalhas.ind.br; guilherme.bertolini@costaricamalhas.ind.br"
+    "to": "destinatario-principal@example.com",
+    "cc": "copia@example.com"
   },
   "version": "1.0.0",
   "description": "Configurações de entrega para Montagem de Terceirizados"

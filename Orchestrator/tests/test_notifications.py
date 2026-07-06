@@ -63,7 +63,7 @@ def test_send_whatsapp_alert_success(mock_exists: Any, mock_run: Any) -> None:
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
-@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@costaricamalhas.com"})
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@example.com"})
 def test_send_email_alert_success(mock_exists: Any, mock_run: Any) -> None:
     """Garante que send_email_alert passa as variáveis de ambiente corretas e blinda contra aspas."""
     mock_exists.return_value = True
@@ -95,14 +95,14 @@ def test_send_email_alert_success(mock_exists: Any, mock_run: Any) -> None:
     # As variáveis reais devem estar seguras no kwargs['env']
     env = kwargs.get("env")
     assert env is not None
-    assert env["ALERT_TO"] == "alertas@costaricamalhas.com"
+    assert env["ALERT_TO"] == "alertas@example.com"
     assert "Montagem de Terceirizados" in env["ALERT_SUBJECT"]
     assert "EXEC-EMAIL-456" in env["ALERT_HTML_BODY"]
 
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
-@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@costaricamalhas.com"})
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@example.com"})
 def test_dispatch_alerts_respects_throttle(mock_exists: Any, mock_run: Any) -> None:
     """Garante que dispatch_alerts respeita o throttling de forma ponta a ponta."""
     mock_exists.return_value = True
@@ -199,7 +199,7 @@ def test_send_email_alert_sem_env_configurado_retorna_false(monkeypatch: Any) ->
 
 
 @patch("app.notifications.os.path.exists")
-@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@costaricamalhas.com"})
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@example.com"})
 def test_send_email_alert_lib_ausente_retorna_false(mock_exists: Any) -> None:
     mock_exists.return_value = False
     assert notifications.send_email_alert("Robo", "EXEC-1") is False
@@ -207,7 +207,7 @@ def test_send_email_alert_lib_ausente_retorna_false(mock_exists: Any) -> None:
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
-@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@costaricamalhas.com"})
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@example.com"})
 def test_send_email_alert_exit_code_nao_zero_retorna_false(
     mock_exists: Any, mock_run: Any
 ) -> None:

@@ -1,13 +1,13 @@
-# Central de Automações — v9.5.0
+# Central de Automações — v1.0.0
 
 Este repositório é o núcleo governado para orquestração de automações corporativas. Stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e Dashboard React "Sala de Instrumentação".
 
-## 🏗️ Arquitetura Técnica (Enterprise Control Tower v9.5.0)
+## 🏗️ Arquitetura Técnica (Enterprise Control Tower v1.0.0)
 
 ```mermaid
 graph TD
     subgraph "FRONTEND — Dashboard SPA"
-        UI["Dashboard React v9.5.0<br/>Sala de Instrumentação"]
+        UI["Dashboard React v1.0.0<br/>Sala de Instrumentação"]
         WS_CLIENT["WebSocket Client<br/>Logs + Events Replay"]
         UI --> WS_CLIENT
     end
@@ -21,7 +21,7 @@ graph TD
     end
 
     subgraph "CORE — Motor de Execução v5"
-        WORKER["Worker v9.5.0<br/>Graceful Shutdown + JSON Logs"]
+        WORKER["Worker v1.0.0<br/>Graceful Shutdown + JSON Logs"]
         PRIORITY["Priority Queue<br/>HIGH/NORMAL/LOW"]
         SCHEDULER["APScheduler<br/>WAL Checkpoint + Purge"]
         WORKER --- PRIORITY

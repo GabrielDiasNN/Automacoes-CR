@@ -180,7 +180,8 @@ try {
             Write-Log "Enviando e-mail oficial via Outlook COM..."
             $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $subject = "$($config.email.subject_prefix) - $(Get-Date -Format 'dd/MM/yyyy')"
-            $targetTo = $config.email.to
+            # Destinatario: .env (RE_EMAIL_TO) tem prioridade; config.json e apenas fallback/placeholder.
+            $targetTo = if (-not [string]::IsNullOrWhiteSpace($env:RE_EMAIL_TO)) { $env:RE_EMAIL_TO } else { $config.email.to }
             $fullHtmlBody = "<p>$($config.email.intro_text)</p>$($htmlOutput)"
 
             $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -ExecId $ExecId -LogPath $LogFile -Action {

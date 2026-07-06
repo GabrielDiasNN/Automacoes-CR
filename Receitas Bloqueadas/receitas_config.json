@@ -1,11 +1,12 @@
 {
+  "_comentario_email": "Destinatários reais vêm de RB_EMAIL_TO/RB_EMAIL_CC no .env (não versionado). Os valores abaixo são apenas placeholders/fallback.",
   "email": {
     "to": [
-      "janilson.pacheco@costaricamalhas.ind.br"
+      "destinatario-principal@example.com"
     ],
     "cc": [
-      "alexandre.faria@costaricamalhas.ind.br",
-      "acacio.klann@costaricamalhas.ind.br"
+      "copia1@example.com",
+      "copia2@example.com"
     ],
     "bcc": []
   }

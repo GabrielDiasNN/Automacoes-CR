@@ -260,9 +260,10 @@ try {
 
             $config = if (Test-Path $configFile) { Get-Content $configFile -Raw | ConvertFrom-Json } else { $null }
 
-            $officialTo = if ($config -and $config.email -and $config.email.to) { $config.email.to } else { "gabriel.dias@costaricamalhas.ind.br" }
+            # Destinatarios: .env (MT_EMAIL_TO/CC) tem prioridade; config.json e apenas fallback/placeholder.
+            $officialTo = if (-not [string]::IsNullOrWhiteSpace($env:MT_EMAIL_TO)) { $env:MT_EMAIL_TO } elseif ($config -and $config.email -and $config.email.to) { $config.email.to } else { $env:AUTOMACAO_ALERT_EMAIL }
 
-            $officialCc = if ($config -and $config.email -and $config.email.cc) { $config.email.cc } else { "" }
+            $officialCc = if (-not [string]::IsNullOrWhiteSpace($env:MT_EMAIL_CC)) { $env:MT_EMAIL_CC } elseif ($config -and $config.email -and $config.email.cc) { $config.email.cc } else { "" }
 
             # Verificar Modo Teste (Hierarquia: Orquestrador > VS Code)
 
@@ -292,7 +293,7 @@ try {
 
                 $testTarget = if (-not [string]::IsNullOrWhiteSpace($EmailToTest)) { $EmailToTest } else { $globalTestEmail }
 
-                $finalTo = if (-not [string]::IsNullOrWhiteSpace($testTarget)) { $testTarget } else { "gabriel.dias@costaricamalhas.ind.br" }
+                $finalTo = if (-not [string]::IsNullOrWhiteSpace($testTarget)) { $testTarget } else { $env:AUTOMACAO_ALERT_EMAIL }
 
                 Write-Log "MODO TESTE ATIVO: Redirecionando para $finalTo" -Lvl "WARN"
 

@@ -219,9 +219,9 @@ try {
         $utf8NoBOM = [System.Text.UTF8Encoding]::new($false)
         [System.IO.File]::WriteAllText($BatchInputFile, ($batchInput | ConvertTo-Json -Depth 5), $utf8NoBOM)
 
-        # Ler chatId do config WhatsApp
+        # Ler chatId: .env (OBP_WHATSAPP_TARGET) tem prioridade; config.json e apenas fallback/placeholder.
         $waCfg = Get-Content $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        $chatId = $waCfg.target.contactId
+        $chatId = if (-not [string]::IsNullOrWhiteSpace($env:OBP_WHATSAPP_TARGET)) { $env:OBP_WHATSAPP_TARGET } else { $waCfg.target.contactId }
         $clientId = if ($waCfg.auth.clientId) { $waCfg.auth.clientId } else { "hub-global" }
 
         $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"

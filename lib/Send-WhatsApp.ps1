@@ -47,6 +47,11 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
 
     # Suporte a contactId completo (grupos @g.us) com fallback para contactPhone
     $finalPhone = if ($json.target.contactId) { $json.target.contactId } else { $json.target.contactPhone }
+    # Override de destino via .env (contactIdEnv): mantem o numero real fora do config versionado.
+    if ($json.target.contactIdEnv) {
+        $envTarget = [Environment]::GetEnvironmentVariable([string]$json.target.contactIdEnv, "Process")
+        if (-not [string]::IsNullOrWhiteSpace($envTarget)) { $finalPhone = $envTarget }
+    }
     $finalClientId = $json.auth.clientId
 
     # Suporte a mensagem via arquivo externo (textFile) com fallback para caption inline

@@ -8,12 +8,14 @@
     "stateFile": "whatsapp-state.json",
     "authDir": ".wwebjs_auth"
   },
+  "_comentario_target": "Destino real vem de RB_WHATSAPP_TARGET no .env (não versionado). contactId/contactPhone abaixo são apenas placeholder/fallback.",
   "target": {
     "enabled": true,
     "type": "contact",
     "groupName": "",
-    "contactPhone": "5547999999999",
-    "contactId": "5547999999999@c.us",
+    "contactIdEnv": "RB_WHATSAPP_TARGET",
+    "contactPhone": "550000000000",
+    "contactId": "550000000000@c.us",
     "mentions": {
       "enabled": false,
       "list": []

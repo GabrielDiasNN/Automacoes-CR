@@ -40,16 +40,17 @@ class FaseConfig:
     ativo: bool = True
 
 
-# Fallback usado apenas se config.json estiver ausente/corrompido — mesmos valores
-# de referencia hoje versionados em config.json (contatos/fases_monitoradas).
-_LIDER_1_TURNO         = "5547984856137"   # Adir Marques
-_LIDER_RESERVA_1_TURNO = "5547991591816"   # Anderson Koehler
-_LIDER_2_TURNO         = "5547997750596"   # Mateus Conaco
-_LIDER_RESERVA_2_TURNO = "5547996608441"   # Elisa Mendes
-_LIDER_3_TURNO         = "5548999894828"   # Cristóvão Luiz
-_LIDER_RESERVA_3_TURNO = "5548988614164"   # Lucas Pilantil
+# Contatos reais (nome/numero) nunca ficam no codigo-fonte nem no config.json —
+# vivem só no .env local (nao versionado), lido via os.environ pelo run.ps1/Lib-Config.psm1.
+# Sem .env configurado, o fallback abaixo fica vazio e a mensagem sai sem mencao.
+_LIDER_1_TURNO         = os.environ.get("OBP_CONTATO_LIDER_1_TURNO", "")
+_LIDER_RESERVA_1_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_1_TURNO", "")
+_LIDER_2_TURNO         = os.environ.get("OBP_CONTATO_LIDER_2_TURNO", "")
+_LIDER_RESERVA_2_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_2_TURNO", "")
+_LIDER_3_TURNO         = os.environ.get("OBP_CONTATO_LIDER_3_TURNO", "")
+_LIDER_RESERVA_3_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_3_TURNO", "")
 _EQUIPE_QUALIDADE = _join_responsavel(
-    ["5548998221241", "5547999188695", "5541997575631"]  # Sidiane, Elso, Daniele
+    os.environ.get("OBP_CONTATO_EQUIPE_CQ", "").split(",")
 )
 
 DEFAULT_FASES_MONITORADAS: dict[str, FaseConfig] = {
@@ -254,6 +255,19 @@ def build_message(
     return "\n".join(lines)
 
 
+def _load_contatos_from_env() -> dict[str, str]:
+    """Mesmas chaves de referencia de 'responsavel' em fases_monitoradas, valor lido do .env."""
+    return {
+        "lider_1_turno": _LIDER_1_TURNO,
+        "lider_reserva_1_turno": _LIDER_RESERVA_1_TURNO,
+        "lider_2_turno": _LIDER_2_TURNO,
+        "lider_reserva_2_turno": _LIDER_RESERVA_2_TURNO,
+        "lider_3_turno": _LIDER_3_TURNO,
+        "lider_reserva_3_turno": _LIDER_RESERVA_3_TURNO,
+        "equipe_cq": _EQUIPE_QUALIDADE,
+    }
+
+
 def _load_config() -> tuple[dict[str, FaseConfig], int, dict[str, Any], list[int]]:
     fases_monitoradas = dict(DEFAULT_FASES_MONITORADAS)
     max_obs = DEFAULT_MAX_OBS
@@ -269,10 +283,7 @@ def _load_config() -> tuple[dict[str, FaseConfig], int, dict[str, Any], list[int
             str(k): v for k, v in cfg.get("filtros_por_codigo_fase", {}).items()
         }
         phase_order = [int(c) for c in cfg.get("ordem_codigos_fase", DEFAULT_PHASE_ORDER)]
-        contatos = {
-            str(nome): _resolve_contato(valor)
-            for nome, valor in cfg.get("contatos", {}).items()
-        }
+        contatos = _load_contatos_from_env()
         fases_cfg = cfg.get("fases_monitoradas")
         if fases_cfg:
             fases_monitoradas = {}

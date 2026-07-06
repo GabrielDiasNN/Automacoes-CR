@@ -4,7 +4,7 @@ Monitora Ordens de Beneficiamento paradas por fase no processo produtivo e envia
 
 ## Funcionamento
 
-1. **Extração Oracle** — `extract_obs.py` consulta `SRVDB02` e grava `obs_result.json`
+1. **Extração Oracle** — `extract_obs.py` consulta o banco Oracle (host via `ORACLE_CONNECT_STRING` no `.env`) e grava `obs_result.json`
 2. **Geração de cards** — `generate_phase_cards.py` gera um PNG por fase com Pillow
 3. **Idempotência** — `delivery_state.json` evita reenvio do mesmo lote
 4. **Envio WhatsApp** — sessão `hub-global` envia todas as fases em lote único (BATCH mode)
