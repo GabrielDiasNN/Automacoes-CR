@@ -163,6 +163,85 @@ def get_sla_metrics_by_automation_24h(db: Session) -> dict[int, dict[str, Any]]:
     return metrics
 
 
+def _success_rate_pct(success: int, errors: int) -> float | None:
+    """Calcula a taxa de sucesso percentual; None quando não há amostra terminal."""
+    total = success + errors
+    if total == 0:
+        return None
+    return round(success / total * 100.0, 2)
+
+
+def _average(values: list[float]) -> float | None:
+    """Média simples; None para lista vazia."""
+    if not values:
+        return None
+    return round(sum(values) / len(values), 2)
+
+
+def _percentile(sorted_values: list[float], pct: float) -> float | None:
+    """Percentil por posição sobre uma lista já ordenada; None para lista vazia."""
+    if not sorted_values:
+        return None
+    idx = min(len(sorted_values) - 1, int(len(sorted_values) * pct))
+    return round(sorted_values[idx], 2)
+
+
+def _aggregate_daily_rows(rows: Iterable[Any]) -> list[dict[str, Any]]:
+    """Agrupa linhas (dia, status, duração) em métricas diárias ordenadas."""
+    grouped: dict[str, dict[str, Any]] = {}
+    for day, status, duration in rows:
+        key = str(day)
+        bucket = grouped.setdefault(
+            key, {"total": 0, "success": 0, "errors": 0, "durations": []}
+        )
+        bucket["total"] += 1
+        if status in ("SUCCESS", "PARTIAL"):
+            bucket["success"] += 1
+        elif status in ("ERROR", "TIMEOUT", "TERMINATED"):
+            bucket["errors"] += 1
+        if duration is not None:
+            bucket["durations"].append(float(duration))
+
+    result: list[dict[str, Any]] = []
+    for day in sorted(grouped):
+        bucket = grouped[day]
+        durations = sorted(bucket["durations"])
+        result.append(
+            {
+                "date": day,
+                "total": bucket["total"],
+                "success": bucket["success"],
+                "errors": bucket["errors"],
+                "success_rate_pct": _success_rate_pct(
+                    bucket["success"], bucket["errors"]
+                ),
+                "avg_duration_seconds": _average(durations),
+                "p95_duration_seconds": _percentile(durations, 0.95),
+            }
+        )
+    return result
+
+
+def get_daily_execution_metrics(db: Session, days: int = 14) -> list[dict[str, Any]]:
+    """Agrega execuções por dia: total, sucesso, erros, duração média e p95.
+
+    Usa o índice ix_exec_status_started (status, started_at). Cálculo de p95
+    é feito em Python (SQLite não tem percentil nativo); volume é limitado
+    pela retenção de purge_old_executions (90 dias)."""
+    window_start = get_now_local() - timedelta(days=days)
+    rows = (
+        db.query(
+            func.date(models.Execution.started_at).label("day"),
+            models.Execution.status,
+            models.Execution.duration_seconds,
+        )
+        .filter(models.Execution.started_at >= window_start)
+        .order_by(func.date(models.Execution.started_at))
+        .all()
+    )
+    return _aggregate_daily_rows(rows)
+
+
 def _normalize_automation_ids(
     automation_ids: Iterable[int] | None = None,
 ) -> list[int]:

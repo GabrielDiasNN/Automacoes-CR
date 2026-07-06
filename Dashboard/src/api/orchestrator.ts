@@ -177,6 +177,22 @@ export interface SystemHistory {
   items: SystemHistoryPoint[];
 }
 
+export interface DailyExecutionMetric {
+  date: string;
+  total: number;
+  success: number;
+  errors: number;
+  success_rate_pct: number | null;
+  avg_duration_seconds: number | null;
+  p95_duration_seconds: number | null;
+}
+
+export interface SystemMetricsDaily {
+  generated_at: string;
+  days: number;
+  items: DailyExecutionMetric[];
+}
+
 export interface SystemKpis {
   active_automations: number;
   success_24h: number;
@@ -570,6 +586,8 @@ export const orchestratorApi = {
   getOverview: () => api.get<SystemOverview>("/api/system/overview"),
   getBaseline: () => api.get<BaselineStatus>("/api/system/baseline"),
   getHistory: (hours = 24) => api.get<SystemHistory>(`/api/system/history${qs({ hours })}`),
+  getSystemMetricsDaily: (days = 14) =>
+    api.get<SystemMetricsDaily>(`/api/system/metrics/daily${qs({ days })}`),
   getScheduledJobs: () => api.get<ScheduledJob[]>("/api/system/scheduler/jobs"),
   runCheckpoint: () => api.post<{ message: string }>("/api/system/checkpoint"),
   runPurge: () => api.post<{ message: string }>("/api/system/purge"),

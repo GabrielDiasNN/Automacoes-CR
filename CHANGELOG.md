@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.4] - 06/07/2026
+### Adicionado
+- **Endpoint `GET /api/system/metrics/daily?days=N` — métricas diárias agregadas de execução (Fase 3 do plano Monitor/Beneficiamento)**: novo `services.metrics.get_daily_execution_metrics` agrega por dia (via `func.date(started_at)`, aproveitando o índice `ix_exec_status_started`) total, sucessos, erros, taxa de sucesso, duração média e p95 (calculado em Python por dia — SQLite não tem percentil nativo; volume limitado pela retenção de 90 dias de `purge_old_executions`). `days` limitado a `[1, 90]` via `Query(ge=1, le=90)` no router (`Orchestrator/app/routers/system.py`); novos schemas `DailyExecutionMetric`/`SystemMetricsDailyResponse` em `Orchestrator/app/schemas/system.py`. Cobertura de `services/metrics.py`: 97% (`Orchestrator/tests/test_metrics_daily.py`, 6 testes: agregação vazia/single-day, execução pendente sem taxa terminal, payload do endpoint, `days` padrão e limites 0/91/90).
+- **Página Monitor: tendência de taxa de sucesso, duração média e falhas 7d**: dois novos gráficos `TimeSeries` (uPlot) — taxa de sucesso % e duração média (s) — cobrindo os últimos 14 dias, consumindo o endpoint acima (`orchestratorApi.getSystemMetricsDaily`, novo em `Dashboard/src/api/orchestrator.ts`). Novo tile "falhas (7d)" compara a semana atual com a anterior (client-side, a partir dos mesmos 14 dias) e mostra a variação percentual ou "sem base de comparação" quando a semana anterior não teve erros.
+
 ## [1.0.3] - 06/07/2026
 ### Alterado
 - **Rename "Observabilidade" → "Monitor" no Dashboard (Fase 2 do plano Monitor/Beneficiamento)**: item de menu, rota (`/observabilidade` → `/monitor`, com redirect `<Navigate>` preservando bookmarks/links antigos) e página (`Dashboard/src/pages/ObservabilidadePage.tsx` → `MonitorPage.tsx`) renomeados. `Orchestrator/tests/test_e2e_dashboard.py` atualizado (tupla de rotas, docstring de evidência, teste de screenshot) e ganhou `test_e2e_dashboard_observabilidade_redirect_to_monitor` cobrindo o redirect. Baseline visual `dashboard_observabilidade.png` removido (órfão) e regenerado como `dashboard_monitor.png`.
