@@ -5,10 +5,16 @@
 .venv*/
 .venv_old/
 .venv_trash/
+venv/
 node_modules/
 npm-debug.log*
 playwright-report/
 test-results/
+
+# Cruft de Sistema Operacional e IDEs alternativas
+Thumbs.db
+.DS_Store
+.idea/
 
 # Artefatos de build e compressão
 *.zip
@@ -33,6 +39,8 @@ Startup_Error.txt
 # Cobertura de testes
 .coverage
 htmlcov/
+coverage.xml
+diff-cover-report.md
 
 # Dashboard gerado/exportado (nao confundir com SPA fonte em Dashboard/)
 Dashboard/dashboard.html
@@ -78,6 +86,10 @@ Audit/
 .env
 *.pem
 *.key
+*.pfx
+*.p12
+*.crt
+*.cer
 .aider*
 
 # Claude Code — estado local e segredos (não versionar)
