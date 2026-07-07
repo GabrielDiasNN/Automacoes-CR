@@ -156,6 +156,7 @@ contatos). Os nomes/números reais de cada papel estão só no `.env` de produç
 | 26 | IVF-INVERSÃO P/FELPAGEM | `lider_3_turno` | sim |
 | 45 | CDC-CONFERENCIA DE COR | `lider_reserva_3_turno` | sim |
 | 46 | PPA-PREPARAÇÃO AMACIANTE | `lider_1_turno` | sim |
+| 47 | UMM-UMEDECIMENTO DE MALHA | `lider_reserva_3_turno` | sim |
 | 50 | HID-HIDRO UMIDO | `lider_1_turno` | sim |
 | 55 | HIS-HIDRO SECO | `lider_1_turno` | sim |
 | 60 | SEC-SECADOR | `lider_1_turno` | sim |

@@ -26,6 +26,12 @@
       "threshold_dias": 0.5,
       "responsavel": "lider_reserva_3_turno"
     },
+    "47": {
+      "descricao": "UMM-UMEDECIMENTO DE MALHA",
+      "ativo": true,
+      "threshold_dias": 0.5,
+      "responsavel": "lider_reserva_3_turno"
+    },
     "46": {
       "descricao": "PPA-PREPARAÇÃO AMACIANTE",
       "ativo": true,
@@ -114,6 +120,7 @@
     "20": "RMC-REVISÃO MALHA CRUA",
     "26": "IVF-INVERSÃO P/FELPAGEM",
     "45": "CDC-CONFERENCIA DE COR",
+    "47": "UMM-UMEDECIMENTO DE MALHA",
     "46": "PPA-PREPARAÇÃO AMACIANTE",
     "50": "HID-HIDRO UMIDO",
     "55": "HIS-HIDRO SECO",

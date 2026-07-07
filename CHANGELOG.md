@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.6] - 07/07/2026
+### Adicionado
+- **OBP-04: nova fase monitorada 47-UMM (UMEDECIMENTO DE MALHA)**: adicionada em `OBs Paradas Fase/config.json` (bloco `fases_monitoradas` e mapa `ordem_codigos_fase`), com `threshold_dias: 0.5`, `ativo: true` e `responsavel: lider_reserva_3_turno` (mesmo papel da fase 45-CDC). Tabela de fases monitoradas em `docs/runbooks/obs-paradas-fase-runbook.md` atualizada.
+
 ## [1.0.5] - 06/07/2026
 ### Corrigido
 - **`Import-HubEnv` (`lib/Lib-Config.psm1`) enviava o comentário inline do `.env` junto com o valor real**: linhas no formato `CHAVE=numero         # Nome Legível` (comentário usado só para legibilidade/manutenção do `.env`, nunca deveria compor o valor) eram parseadas sem remover esse comentário. O valor resultante incluía o texto do comentário, e como `generate_phase_cards.py` (OBP-04) monta a menção do card com `f"Responsável: @{cfg.responsavel}"`, o WhatsApp exibia o nome do comentário (prefixado por `#`) ao lado da menção — afetava todos os contatos de líder/reserva configurados dessa forma. Lógica de parsing extraída para a função `ConvertFrom-EnvLine` (nova, testável isoladamente via `InModuleScope`) que agora aplica `[regex]::Replace($value, '\s+#.*$', '')` para descartar tudo após um `#` precedido de espaço. Afeta todas as automações que leem `.env` via `Import-HubEnv`/`Get-HubConfig` (mecanismo compartilhado), não só OBP-04. Testes de regressão em `lib/tests/Lib-Config.Tests.ps1` cobrindo comentário inline, valor sem comentário e linha de comentário puro.
