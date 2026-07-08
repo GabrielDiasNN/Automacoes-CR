@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.2] - 08/07/2026
+### Corrigido
+- **`comTimeout()` (`lib/WhatsApp-Core.js`) causava crash silencioso do processo Node em lotes com menções**: o helper de timeout adicionado em `82ca31be` usava `Promise.race([promise, timeout])` sem descartar a promise perdedora. Quando `client.getNumberId()` (chamado por `resolverMencoes()` para cada `@numero` na caption) rejeitava *depois* que o timeout de 15s já havia "vencido" a corrida, essa rejeição tardia não tinha `.catch` anexado — unhandled rejection que, a partir do Node 15+ (ambiente roda Node 24), derruba o processo inteiro. Afetava apenas automações que geram menções em volume no modo `BATCH` (OBP-04/OBs Paradas Fase, com até ~17 fases por execução), nunca `Receitas Bloqueadas` (modo `AUTO`, sem menções) — explicando por que só a primeira apresentava timeout/erro recorrente. Corrigido anexando `promise.catch(() => {})` à promise original dentro de `comTimeout()`, suprimindo a rejeição tardia sem alterar o comportamento de timeout já observável por quem chama.
+
 ## [1.1.1] - 07/07/2026
 ### Adicionado
 - **Quantidade de peças e quilos reais (origem/destino) no drill-down**: a função Oracle bloqueada por falta de GRANT (`PKGBENF0001.FNC_RETORNA_PC_ORIGEM_OB`, ver [1.1.0]) foi substituída por join direto em `SGTPRD.GERAPECAORIGEMOB`/`GERAPECADESTINOOB` + `GERAPECASPRODUTO` (acessíveis ao usuário readonly, validado em produção: 89,6% de cobertura, ~3s por dia). Duas novas CTEs (`DIM_PECAS_ORIGEM`, `DIM_PECAS_DESTINO`) no template SQL, colunas `PECAS_ORIGEM`/`KG_ORIGEM_REAL`/`PECAS_DESTINO`/`KG_DESTINO_REAL` persistidas (schema SQLite v6, nova recarga completa de 90 dias). São valores por OB (não escalados por fase/percentual, ao contrário de `QT_KG`) — nova coluna "Peças (OB)" no `DetailDrawer` com tooltip detalhando origem vs. destino.
