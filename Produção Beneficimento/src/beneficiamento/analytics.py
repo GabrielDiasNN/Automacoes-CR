@@ -186,7 +186,7 @@ def build_analytics(records: list[dict[str, Any]]) -> dict[str, Any]:
     ]
 
     per_machine = aggregate_group(records, ("NUMERO_MAQUINA", "NOME_MAQUINA"))
-    per_phase = aggregate_group(records, ("CD_DS_FASE",))
+    per_phase = aggregate_group(records, ("DESCR_FASE",))
     per_turno = aggregate_group(records, ("TURNO_PROD", "TURNO_DESC"))
     attach_share_pct(per_machine, total_kg)
     attach_share_pct(per_phase, total_kg)
@@ -213,7 +213,7 @@ def build_analytics(records: list[dict[str, Any]]) -> dict[str, Any]:
                 {safe_text(record.get("NUMERO_MAQUINA")) for record in records}
             ),
             "fases_distintas": len(
-                {safe_text(record.get("CD_DS_FASE")) for record in records}
+                {safe_text(record.get("DESCR_FASE")) for record in records}
             ),
             "turnos_distintos": len(
                 {safe_text(record.get("TURNO_PROD")) for record in records}

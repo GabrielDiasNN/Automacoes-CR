@@ -50,8 +50,8 @@ A recriação é intencional: evita manter colunas tipadas parcialmente preenchi
 2. Confirmar que `snapshots/latest/<period>.analytics.json` (apenas `diario` e `mensal`) foi atualizado.
 3. Abrir `/api/beneficiamento/health` e conferir `status`, `reason_code`, `recommended_action`, `issues`, idade do snapshot e metadados Oracle.
 4. Abrir `/api/beneficiamento/overview` sem parâmetros e confirmar que a janela efetiva termina em `MAX(DATA_FIM)` do SQLite.
-5. Validar que `/overview` retorna `health.source=sqlite_historico`, KPIs preenchidos, `turnos` populados com `TURNO 1/2/3` e `tingimento.summary` coerente.
-6. Validar que `filter_options` inclui máquina, fase, turno e alternativo disponíveis no recorte.
+5. Validar que `/overview` retorna `health.source=sqlite_historico`, KPIs preenchidos, `turnos` populados com `TURNO 1/2/3` e `treemap` não vazio quando há dados no recorte.
+6. Validar que `filter_options` inclui máquina, fase, turno, alternativo, setor, grupo de fase e tipo de máquina disponíveis no recorte.
 7. Abrir `/api/beneficiamento/detail?target_type=produto&alternativo=<ALT>` e conferir resumo, lista curada, rastreabilidade por OB e paginação sem erro.
 8. Abrir `/api/beneficiamento/historico?ob=<OB>` para conferir rastreabilidade compacta de uma ordem do recorte.
 9. Se o status ficar `attention`, usar `reason_code` e `issues[0].action_hint` para decidir a próxima ação sem depender de interpretação manual do payload.

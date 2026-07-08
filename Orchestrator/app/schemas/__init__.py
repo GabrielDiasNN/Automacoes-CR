@@ -28,8 +28,11 @@ from .beneficiamento import (
     BeneficiamentoOverviewResponse,
     BeneficiamentoPeriodPayload,
     BeneficiamentoPeriodsResponse,
+    BeneficiamentoProdutoOption,
+    BeneficiamentoProdutosResponse,
     BeneficiamentoRefreshResponse,
     BeneficiamentoSourceFiles,
+    BeneficiamentoTingimentoResponse,
 )
 from .common import (
     _validate_safe_name,
@@ -146,7 +149,10 @@ __all__ = [
     "BeneficiamentoHistoricoResponse",
     "BeneficiamentoOverviewResponse",
     "BeneficiamentoDetailResponse",
+    "BeneficiamentoProdutoOption",
+    "BeneficiamentoProdutosResponse",
     "BeneficiamentoRefreshResponse",
+    "BeneficiamentoTingimentoResponse",
     # System
     "WorkerStatus",
     "EnvContent",

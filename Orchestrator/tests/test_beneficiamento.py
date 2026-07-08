@@ -17,7 +17,10 @@ def test_beneficiamento_historico_init_db_maintains_derived_columns_and_indexes(
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento.historico_db import descrever_schema_historico, init_db  # pylint: disable=import-outside-toplevel
+    from beneficiamento.historico_db import (  # pylint: disable=import-outside-toplevel
+        descrever_schema_historico,
+        init_db,
+    )
 
     db_path = tmp_path / "beneficiamento_historico.db"
     resolved = init_db(db_path)
@@ -81,7 +84,7 @@ def test_beneficiamento_overview_endpoint_contract(client: TestClient) -> None:
             "series",
             "filter_options",
             "turnos",
-            "tingimento",
+            "treemap",
             "interaction",
         }
     )
@@ -90,7 +93,6 @@ def test_beneficiamento_overview_endpoint_contract(client: TestClient) -> None:
     assert payload["filters"]["effective"]["dt_fim"]
     assert payload["turnos"]
     assert payload["turnos"][0]["turno_label"].startswith("TURNO")
-    assert "summary" in payload["tingimento"]
 
     kpis = payload["kpis"]
     for key in [
@@ -202,6 +204,10 @@ def test_beneficiamento_overview_filters(client: TestClient) -> None:
             "turno": "Turno A",
             "alternativo": "03212",
             "q": "tingimento",
+            "setor": "SETOR TINGIMENTO",
+            "grupo_fase": "TINGIMENTO",
+            "tipo_maquina": "HIDROEXTRATORA",
+            "reprocesso": "0",
         },
     )
 
@@ -214,6 +220,150 @@ def test_beneficiamento_overview_filters(client: TestClient) -> None:
     assert effective["turno"] == "Turno A"
     assert effective["alternativo"] == "03212"
     assert effective["q"] == "tingimento"
+    assert effective["setor"] == "SETOR TINGIMENTO"
+    assert effective["grupo_fase"] == "TINGIMENTO"
+    assert effective["tipo_maquina"] == "HIDROEXTRATORA"
+    assert effective["reprocesso"] == "0"
+
+
+def test_beneficiamento_overview_rankings_gerais_nao_expoe_reprocesso(
+    client: TestClient,
+) -> None:
+    """Reprocesso só tem sinal relativizado a uma fase (Tingimento); rankings
+    gerais de setor/fase não devem mais expor esse campo."""
+    response = client.get("/api/beneficiamento/overview", headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    rankings = response.json()["rankings"]
+    for item in rankings["fases_criticas"]:
+        assert "reprocesso_kg_pct" not in item
+        assert "amostra_insuficiente" not in item
+    for item in rankings["setores"]:
+        assert "reprocesso_kg_pct" not in item
+
+
+def test_beneficiamento_tingimento_endpoint_contract(client: TestClient) -> None:
+    """Painel dedicado de Tingimento: escopo fixo CODIGO_FASE=40."""
+    response = client.get("/api/beneficiamento/tingimento", headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload).issuperset(
+        {"generated_at", "filters", "health", "resumo", "series", "rankings"}
+    )
+    resumo = payload["resumo"]
+    for key in [
+        "ob_distintas",
+        "fases",
+        "kg_total",
+        "mt_total",
+        "eficiencia_tempo_pct",
+        "reprocesso_kg_pct",
+        "setup_medio_min",
+        "desvio_medio_min",
+        "produtividade_kg_h",
+    ]:
+        assert key in resumo
+    assert "por_maquina" in payload["rankings"]
+    assert "por_cor" in payload["rankings"]
+    assert "por_turno" in payload["rankings"]
+    assert payload["rankings"]["por_maquina"]
+    maquina_item = payload["rankings"]["por_maquina"][0]
+    assert {
+        "maquina",
+        "fases",
+        "kg_total",
+        "eficiencia_tempo_pct",
+        "setup_medio_min",
+        "reprocesso_kg_pct",
+        "amostra_insuficiente",
+    }.issubset(maquina_item)
+
+
+def test_beneficiamento_tingimento_ignora_filtros_gerais(client: TestClient) -> None:
+    """O painel de tingimento e escopo fixo: so aceita dt_inicio/dt_fim."""
+    response = client.get(
+        "/api/beneficiamento/tingimento",
+        headers=AUTH_HEADERS,
+        params={"dt_inicio": "2026-01-01", "dt_fim": "2026-12-31"},
+    )
+
+    assert response.status_code == 200
+    effective = response.json()["filters"]["effective"]
+    assert effective["dt_inicio"] == "2026-01-01"
+    assert effective["dt_fim"] == "2026-12-31"
+
+
+def test_beneficiamento_overview_expoe_setores_e_treemap(client: TestClient) -> None:
+    """Overview deve expor ranking por setor e agregação de treemap."""
+    response = client.get("/api/beneficiamento/overview", headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "setores" in payload["rankings"]
+    assert payload["rankings"]["setores"]
+    assert payload["treemap"]
+    node = payload["treemap"][0]
+    assert {"setor", "fase", "maquina", "kg_total"}.issubset(node)
+
+
+def test_beneficiamento_overview_kpis_expoe_planejado_pct(client: TestClient) -> None:
+    """KPIs devem indicar quanto do total no recorte é produção apenas planejada."""
+    response = client.get("/api/beneficiamento/overview", headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    kpis = response.json()["kpis"]
+    assert "fases_planejadas" in kpis
+    assert "planejado_pct" in kpis
+    assert kpis["fases_planejadas"] >= 1
+    assert kpis["planejado_pct"] > 0.0
+
+
+def test_beneficiamento_overview_filtra_por_status(client: TestClient) -> None:
+    """Filtro de status deve restringir o recorte a confirmada ou planejada."""
+    confirmada = client.get(
+        "/api/beneficiamento/overview",
+        headers=AUTH_HEADERS,
+        params={"status": "confirmada"},
+    ).json()
+    planejada = client.get(
+        "/api/beneficiamento/overview",
+        headers=AUTH_HEADERS,
+        params={"status": "planejada"},
+    ).json()
+
+    assert confirmada["kpis"]["planejado_pct"] == 0.0
+    assert (
+        planejada["kpis"]["fases_planejadas"] == planejada["kpis"]["fases_concluidas"]
+    )
+    assert planejada["filters"]["effective"]["status"] == "planejada"
+
+
+def test_beneficiamento_produtos_autocomplete(client: TestClient) -> None:
+    """Endpoint de autocomplete de produto deve buscar por código ou descrição."""
+    response = client.get(
+        "/api/beneficiamento/produtos",
+        headers=AUTH_HEADERS,
+        params={"q": "03212"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"]
+    assert any(item["codigo"] == "03212" for item in payload["items"])
+
+
+def test_beneficiamento_produtos_autocomplete_requires_min_length(
+    client: TestClient,
+) -> None:
+    """Termo de busca abaixo do mínimo deve ser rejeitado pela validação de query."""
+    response = client.get(
+        "/api/beneficiamento/produtos",
+        headers=AUTH_HEADERS,
+        params={"q": "a"},
+    )
+
+    assert response.status_code == 422
 
 
 def test_beneficiamento_overview_empty_cut_returns_no_data(client: TestClient) -> None:
@@ -312,7 +462,9 @@ def test_beneficiamento_snapshot_dashboard_reuses_period_reads(
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
+    from beneficiamento import (  # pylint: disable=import-outside-toplevel
+        snapshot_dashboard,
+    )
 
     call_count = {"count": 0}
 
@@ -371,7 +523,9 @@ def test_beneficiamento_health_payload_structures_attention_causes(
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
+    from beneficiamento import (  # pylint: disable=import-outside-toplevel
+        snapshot_dashboard,
+    )
 
     fake_periods = {
         "diario": {
@@ -530,7 +684,9 @@ def test_beneficiamento_health_prefers_most_severe_issue_as_reason(
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
+    from beneficiamento import (  # pylint: disable=import-outside-toplevel
+        snapshot_dashboard,
+    )
 
     fake_periods = {
         "diario": {
@@ -702,7 +858,9 @@ def test_beneficiamento_health_expands_quality_blocked_details(
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento import snapshot_dashboard  # pylint: disable=import-outside-toplevel
+    from beneficiamento import (  # pylint: disable=import-outside-toplevel
+        snapshot_dashboard,
+    )
 
     fake_periods = {
         "diario": {
@@ -813,7 +971,10 @@ def test_beneficiamento_historico_date_filter_includes_end_of_day(
     src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-    from beneficiamento.historico_db import buscar_historico, salvar_historico  # pylint: disable=import-outside-toplevel
+    from beneficiamento.historico_db import (  # pylint: disable=import-outside-toplevel
+        buscar_historico,
+        salvar_historico,
+    )
 
     db_path = tmp_path / "beneficiamento_historico.db"
     salvar_historico(
@@ -823,7 +984,7 @@ def test_beneficiamento_historico_date_filter_includes_end_of_day(
                 "SEQ": 1,
                 "DATA_FIM": "2026-06-10T10:30:00",
                 "NOME_MAQUINA": "JET 01",
-                "CD_DS_FASE": "03 - TINGIMENTO",
+                "DESCR_FASE": "03 - TINGIMENTO",
                 "CODIGO_ALTERNATIVO": "03212",
                 "DESCR_ITEM": "Produto teste",
                 "ARTIGO": "ART-1",

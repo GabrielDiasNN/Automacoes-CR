@@ -1,0 +1,31 @@
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.cell {
+  cursor: pointer;
+}
+.cell:hover rect {
+  stroke: var(--text-mid);
+  stroke-width: 2;
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--text-hi);
+  pointer-events: none;
+}
+.setorLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--text-lo);
+  pointer-events: none;
+}
+.empty {
+  padding: var(--sp-4);
+  text-align: center;
+  color: var(--text-lo);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+}

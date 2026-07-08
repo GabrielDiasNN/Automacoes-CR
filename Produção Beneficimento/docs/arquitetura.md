@@ -30,20 +30,26 @@ Ao detectar schema anterior ao v2, `init_db` recria a tabela para evitar backfil
 
 ## Contrato V1 do Dashboard
 
-`GET /api/beneficiamento/overview` aceita `dt_inicio`, `dt_fim`, `maquina`, `fase`, `turno`, `alternativo` e `q`.
+`GET /api/beneficiamento/overview` aceita `dt_inicio`, `dt_fim`, `maquina`, `fase`, `turno`, `alternativo`, `q`, `setor`, `grupo_fase`, `tipo_maquina`, `reprocesso` e `status` (`confirmada`/`planejada`).
 
 Quando `dt_inicio` e `dt_fim` não são informados, o backend calcula a janela padrão como os últimos 30 dias encerrados em `MAX(DATA_FIM)` do SQLite. Isso evita drift por data do sistema quando o refresh não acompanha o dia corrente.
 
 A resposta expõe:
 
-- `generated_at`, `filters.effective`, `health`, `kpis`, `rankings`, `series`, `filter_options`, `turnos`, `tingimento` e `interaction`.
-- `kpis`: OBs distintas, fases concluídas, KG, MT, eficiência de tempo, reprocesso KG, desvio em minutos e produtividade KG/h.
-- `rankings`: gargalos por máquina/fase, fases críticas e produtos principais.
+- `generated_at`, `filters.effective`, `health`, `kpis`, `rankings`, `series`, `filter_options`, `turnos`, `treemap` e `interaction`.
+- `kpis`: OBs distintas, fases concluídas, KG, MT, eficiência de tempo, reprocesso KG, desvio em minutos, produtividade KG/h, `fases_planejadas` e `planejado_pct` (quanto do recorte é produção `PLANEJADA`/`PROGRAMADA`, não `CONFIRMADA`).
+- `rankings`: gargalos por máquina/fase, fases críticas, produtos principais e setores industriais. **Reprocesso não é exposto em `fases_criticas`/`setores`** — só tem sinal real relativizado a uma fase específica (ver painel de Tingimento).
 - `series`: volume diário e eficiência diária calculados no SQLite.
-- `filter_options`: máquinas, fases, turnos e alternativos disponíveis no recorte.
+- `filter_options`: máquinas, fases, turnos, setores, grupos de fase e tipos de máquina disponíveis no recorte (produto usa autocomplete dedicado, ver abaixo — não entra em `filter_options` por ter 500+ valores).
 - `turnos`: visão geral operacional do Beneficiamento por turno com volume, eficiência, reprocesso e produtividade.
-- `tingimento`: bloco dedicado da fase `03 - TINGIMENTO`, com médias, percentuais e rankings por Alternativo e máquina.
+- `treemap`: agregação hierárquica Setor → Fase → Máquina (volume em KG) para o gráfico de mesmo nome no Dashboard.
 - `interaction`: metadados mínimos de drill-down para a UI.
+
+`GET /api/beneficiamento/produtos?q=` — autocomplete de produto por código ou descrição (mínimo 2 caracteres), busca direta no SQLite via `LIKE`.
+
+## Painel de Tingimento
+
+`GET /api/beneficiamento/tingimento` (`dt_inicio`/`dt_fim` opcionais) é um contrato **independente** do overview, com escopo fixo `CODIGO_FASE = 40` — não aceita os demais filtros da aba, propositalmente, pois é uma tela de análise dedicada. Reconstruído do zero (o bloco fixo antigo, atrelado ao bucket textual `CD_DS_FASE`, foi removido). Expõe `resumo` (KPIs incluindo reprocesso relativizado ao KG produzido e setup médio em minutos), `series.diaria` (volume + reprocesso %) e `rankings.{por_maquina, por_cor, por_turno}`, com `amostra_insuficiente` (n<20) nas quebras por máquina/cor. Implementado em `contracts/tingimento.py`.
 
 No baseline atual do domínio, a montagem direta do overview pelo módulo Python ficou na faixa de centenas de milissegundos para a base local promovida, com reaproveitamento do mesmo recorte filtrado para todos os blocos analíticos.
 

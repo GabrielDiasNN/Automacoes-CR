@@ -39,6 +39,11 @@ def _normalize_request_filters(filtros: Mapping[str, Any]) -> dict[str, str]:
         "alternativo": _safe_strip(filtros.get("alternativo")),
         "q": _safe_strip(filtros.get("q")),
         "ob": _safe_strip(filtros.get("ob")),
+        "setor": _safe_strip(filtros.get("setor")),
+        "grupo_fase": _safe_strip(filtros.get("grupo_fase")),
+        "tipo_maquina": _safe_strip(filtros.get("tipo_maquina")),
+        "reprocesso": _safe_strip(filtros.get("reprocesso")),
+        "status": _safe_strip(filtros.get("status")),
     }
 
 
@@ -123,6 +128,26 @@ def _build_filtered_where(
         where_clauses.append("CODIGO_KEY = ?")
         params.append(normalized["alternativo"])
 
+    if normalized["setor"]:
+        where_clauses.append("SETOR_KEY = ?")
+        params.append(normalized["setor"])
+
+    if normalized["grupo_fase"]:
+        where_clauses.append("GRUPO_FASE_KEY = ?")
+        params.append(normalized["grupo_fase"])
+
+    if normalized["tipo_maquina"]:
+        where_clauses.append("TIPO_MAQ_KEY = ?")
+        params.append(normalized["tipo_maquina"])
+
+    if normalized["reprocesso"] in ("0", "1"):
+        where_clauses.append("REPROCESSO = ?")
+        params.append(int(normalized["reprocesso"]))
+
+    if normalized["status"] in ("confirmada", "planejada"):
+        where_clauses.append("STATUS_KEY = ?")
+        params.append(normalized["status"])
+
     termo = normalized["q"]
     if termo:
         like = f"%{termo}%"
@@ -151,7 +176,11 @@ def _build_filtered_dataset(
             SEQ,
             DATA_FIM,
             NOME_MAQUINA,
-            CD_DS_FASE,
+            CODIGO_FASE,
+            DESCR_FASE,
+            DESCR_GRUPO_FASE,
+            DESCR_SETOR_INDUST,
+            DESCR_TIPO_MAQ,
             CODIGO_ALTERNATIVO,
             REDUZ,
             DESCR_ITEM,
@@ -162,6 +191,8 @@ def _build_filtered_dataset(
             QT_KG,
             QT_MT,
             REPROCESSO,
+            STATUS_FASE,
+            DS_STATUS_FASE,
             MIN_REAL,
             MIN_PREV,
             DESVIO_MIN,
@@ -169,6 +200,10 @@ def _build_filtered_dataset(
             COALESCE(TURNO_LABEL, 'Indefinido') AS TURNO_LABEL,
             MAQUINA_KEY,
             FASE_KEY,
+            SETOR_KEY,
+            GRUPO_FASE_KEY,
+            TIPO_MAQ_KEY,
+            STATUS_KEY,
             CODIGO_KEY
         FROM fato_producao_historica
         WHERE {where_sql}
@@ -183,6 +218,15 @@ def _build_filtered_dataset(
     )
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_temp_filtered_codigo ON filtered_beneficiamento(CODIGO_KEY);"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_temp_filtered_setor ON filtered_beneficiamento(SETOR_KEY);"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_temp_filtered_status ON filtered_beneficiamento(STATUS_KEY);"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_temp_filtered_tipo_maq ON filtered_beneficiamento(TIPO_MAQ_KEY);"
     )
 
 
@@ -211,19 +255,35 @@ def _fetch_filter_options(
             ORDER BY value
             LIMIT 20
         """,
-        "alternativos": """
-            SELECT DISTINCT CODIGO_KEY AS value
+        "setores": """
+            SELECT DISTINCT SETOR_KEY AS value
             FROM filtered_beneficiamento
-            WHERE COALESCE(CODIGO_KEY, '') != ''
+            WHERE COALESCE(SETOR_KEY, '') != ''
             ORDER BY value
-            LIMIT 160
+            LIMIT 60
+        """,
+        "grupos_fase": """
+            SELECT DISTINCT GRUPO_FASE_KEY AS value
+            FROM filtered_beneficiamento
+            WHERE COALESCE(GRUPO_FASE_KEY, '') != ''
+            ORDER BY value
+            LIMIT 60
+        """,
+        "tipos_maquina": """
+            SELECT DISTINCT TIPO_MAQ_KEY AS value
+            FROM filtered_beneficiamento
+            WHERE COALESCE(TIPO_MAQ_KEY, '') != ''
+            ORDER BY value
+            LIMIT 60
         """,
     }
     options: dict[str, list[str]] = {
         "maquinas": [],
         "fases": [],
         "turnos": [],
-        "alternativos": [],
+        "setores": [],
+        "grupos_fase": [],
+        "tipos_maquina": [],
     }
     for key, sql in queries.items():
         cursor.execute(sql)

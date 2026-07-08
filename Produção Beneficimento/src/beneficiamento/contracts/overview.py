@@ -11,9 +11,9 @@ from ..data.schema import init_db
 from ._queries import (_build_fases_criticas, _build_filtered_dataset,
                        _build_filtered_where, _build_gargalos,
                        _build_overview_kpis, _build_overview_series,
-                       _build_produtos, _build_tingimento, _build_turnos,
-                       _fetch_filter_options, _normalize_request_filters,
-                       _resolve_overview_window)
+                       _build_produtos, _build_setores, _build_treemap,
+                       _build_turnos, _fetch_filter_options,
+                       _normalize_request_filters, _resolve_overview_window)
 
 
 def obter_overview_historico(  # pylint: disable=too-many-locals
@@ -34,11 +34,12 @@ def obter_overview_historico(  # pylint: disable=too-many-locals
             "gargalos": _build_gargalos(cursor),
             "fases_criticas": _build_fases_criticas(cursor),
             "produtos_principais": _build_produtos(cursor),
+            "setores": _build_setores(cursor),
         }
         series = _build_overview_series(cursor)
         turnos = _build_turnos(cursor)
-        tingimento = _build_tingimento(cursor)
         filter_options = _fetch_filter_options(cursor)
+        treemap = _build_treemap(cursor)
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -51,6 +52,11 @@ def obter_overview_historico(  # pylint: disable=too-many-locals
                 "turno": normalized["turno"] or None,
                 "alternativo": normalized["alternativo"] or None,
                 "q": normalized["q"] or None,
+                "setor": normalized["setor"] or None,
+                "grupo_fase": normalized["grupo_fase"] or None,
+                "tipo_maquina": normalized["tipo_maquina"] or None,
+                "reprocesso": normalized["reprocesso"] or None,
+                "status": normalized["status"] or None,
             }
         },
         "health": {
@@ -69,10 +75,19 @@ def obter_overview_historico(  # pylint: disable=too-many-locals
         "series": series,
         "filter_options": filter_options,
         "turnos": turnos,
-        "tingimento": tingimento,
+        "treemap": treemap,
         "interaction": {
             "detail_endpoint": "/api/beneficiamento/detail",
-            "clickable_targets": ["produto", "maquina_fase", "fase", "turno", "ob"],
+            "clickable_targets": [
+                "produto",
+                "maquina_fase",
+                "fase",
+                "turno",
+                "ob",
+                "setor",
+                "grupo_fase",
+                "tipo_maquina",
+            ],
         },
     }
 

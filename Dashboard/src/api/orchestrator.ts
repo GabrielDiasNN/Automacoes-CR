@@ -358,7 +358,9 @@ export interface BeneficiamentoFilterOptions {
   maquinas: string[];
   fases: string[];
   turnos: string[];
-  alternativos: string[];
+  setores: string[];
+  grupos_fase: string[];
+  tipos_maquina: string[];
 }
 
 export interface BeneficiamentoEffectiveFilters {
@@ -369,6 +371,11 @@ export interface BeneficiamentoEffectiveFilters {
   turno: string | null;
   alternativo: string | null;
   q: string | null;
+  setor: string | null;
+  grupo_fase: string | null;
+  tipo_maquina: string | null;
+  reprocesso: string | null;
+  status: string | null;
 }
 
 export interface BeneficiamentoKpis {
@@ -380,6 +387,8 @@ export interface BeneficiamentoKpis {
   reprocesso_kg_pct: number;
   desvio_tempo_min: number;
   produtividade_kg_h: number;
+  fases_planejadas: number;
+  planejado_pct: number;
 }
 
 export interface BeneficiamentoGargalo {
@@ -398,7 +407,6 @@ export interface BeneficiamentoFaseCritica {
   fases_concluidas: number;
   kg_total: number;
   eficiencia_tempo_pct: number;
-  reprocesso_kg_pct: number;
 }
 
 export interface BeneficiamentoProdutoPrincipal {
@@ -428,16 +436,94 @@ export interface BeneficiamentoTurnoRanking {
   desvio_medio_min: number;
 }
 
+export interface BeneficiamentoSetorRanking {
+  setor: string;
+  ob_distintas: number;
+  fases_concluidas: number;
+  kg_total: number;
+  mt_total: number;
+  eficiencia_tempo_pct: number;
+}
+
 export interface BeneficiamentoRankings {
   gargalos: BeneficiamentoGargalo[];
   fases_criticas: BeneficiamentoFaseCritica[];
   produtos_principais: BeneficiamentoProdutoPrincipal[];
+  setores: BeneficiamentoSetorRanking[];
+}
+
+export interface BeneficiamentoTreemapNode {
+  setor: string;
+  fase: string;
+  maquina: string;
+  fases_concluidas: number;
+  kg_total: number;
 }
 
 export interface BeneficiamentoSeriesPoint {
   date: string;
   kg_total?: number;
   eficiencia_tempo_pct?: number;
+}
+
+export interface BeneficiamentoTingimentoResumo {
+  ob_distintas: number;
+  fases: number;
+  kg_total: number;
+  mt_total: number;
+  eficiencia_tempo_pct: number;
+  reprocesso_kg_pct: number;
+  fases_reprocessadas: number;
+  setup_medio_min: number;
+  desvio_medio_min: number;
+  produtividade_kg_h: number;
+}
+
+export interface BeneficiamentoTingimentoSeriePonto {
+  date: string;
+  kg_total: number;
+  eficiencia_tempo_pct: number;
+  reprocesso_kg_pct: number;
+}
+
+export interface BeneficiamentoTingimentoPorMaquina {
+  maquina: string;
+  fases: number;
+  kg_total: number;
+  eficiencia_tempo_pct: number;
+  setup_medio_min: number;
+  reprocesso_kg_pct: number;
+  amostra_insuficiente: boolean;
+}
+
+export interface BeneficiamentoTingimentoPorCor {
+  cor: string;
+  fases: number;
+  ob_distintas: number;
+  kg_total: number;
+  reprocesso_kg_pct: number;
+  amostra_insuficiente: boolean;
+}
+
+export interface BeneficiamentoTingimentoPorTurno {
+  turno: string;
+  fases: number;
+  kg_total: number;
+  eficiencia_tempo_pct: number;
+  setup_medio_min: number;
+}
+
+export interface BeneficiamentoTingimento {
+  generated_at: string;
+  filters: { effective: { dt_inicio: string | null; dt_fim: string | null } };
+  health: { status: string; max_data_fim: string | null; records: number };
+  resumo: BeneficiamentoTingimentoResumo;
+  series: { diaria: BeneficiamentoTingimentoSeriePonto[] };
+  rankings: {
+    por_maquina: BeneficiamentoTingimentoPorMaquina[];
+    por_cor: BeneficiamentoTingimentoPorCor[];
+    por_turno: BeneficiamentoTingimentoPorTurno[];
+  };
 }
 
 export interface BeneficiamentoSeries {
@@ -460,17 +546,38 @@ export interface BeneficiamentoOverview {
   series: BeneficiamentoSeries;
   filter_options: BeneficiamentoFilterOptions;
   turnos: BeneficiamentoTurnoRanking[];
-  tingimento: Record<string, unknown>;
+  treemap: BeneficiamentoTreemapNode[];
   interaction: { detail_endpoint: string; clickable_targets: string[] };
 }
 
-export type BeneficiamentoTargetType = "produto" | "maquina_fase" | "fase" | "turno" | "ob";
+export interface BeneficiamentoProdutoOption {
+  codigo: string | null;
+  produto: string;
+}
+
+export interface BeneficiamentoProdutosResponse {
+  items: BeneficiamentoProdutoOption[];
+}
+
+export type BeneficiamentoTargetType =
+  | "produto"
+  | "maquina_fase"
+  | "fase"
+  | "turno"
+  | "ob"
+  | "setor"
+  | "grupo_fase"
+  | "tipo_maquina";
 
 export interface BeneficiamentoDetailRecord {
   ob: string | null;
   seq: number | null;
   data_fim: string | null;
+  codigo_fase: number | null;
   fase: string | null;
+  grupo_fase: string | null;
+  setor: string | null;
+  tipo_maquina: string | null;
   maquina: string | null;
   turno: string;
   alternativo: string | null;
@@ -480,6 +587,10 @@ export interface BeneficiamentoDetailRecord {
   cor: string | null;
   kg: number;
   mt: number;
+  pecas_origem: number | null;
+  kg_origem_real: number;
+  pecas_destino: number | null;
+  kg_destino_real: number;
   min_real: number;
   min_prev: number;
   desvio_min: number;
@@ -490,6 +601,7 @@ export interface BeneficiamentoTraceFase {
   seq: number;
   data_fim: string | null;
   fase: string | null;
+  setor: string | null;
   maquina: string | null;
   turno: string;
   kg: number;
@@ -533,6 +645,11 @@ export interface BeneficiamentoOverviewParams {
   turno?: string;
   alternativo?: string;
   q?: string;
+  setor?: string;
+  grupo_fase?: string;
+  tipo_maquina?: string;
+  reprocesso?: string;
+  status?: string;
 }
 
 export interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams {
@@ -604,6 +721,10 @@ export const orchestratorApi = {
     api.get<BeneficiamentoOverview>(`/api/beneficiamento/overview${qs({ ...params })}`),
   getBeneficiamentoDetail: (params: BeneficiamentoDetailParams) =>
     api.get<BeneficiamentoDetail>(`/api/beneficiamento/detail${qs({ ...params })}`),
+  getBeneficiamentoProdutos: (q: string) =>
+    api.get<BeneficiamentoProdutosResponse>(`/api/beneficiamento/produtos${qs({ q })}`),
+  getBeneficiamentoTingimento: (params?: { dt_inicio?: string; dt_fim?: string }) =>
+    api.get<BeneficiamentoTingimento>(`/api/beneficiamento/tingimento${qs({ ...params })}`),
   refreshBeneficiamento: (period: string) =>
     api.post<Record<string, unknown>>(`/api/beneficiamento/refresh${qs({ period })}`),
 };

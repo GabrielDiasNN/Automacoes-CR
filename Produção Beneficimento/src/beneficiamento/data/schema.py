@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..settings import DOMAIN_ROOT
 
-HISTORICO_SCHEMA_VERSION = 2
+HISTORICO_SCHEMA_VERSION = 6
 TABLE_NAME = "fato_producao_historica"
 
 # Colunas tipadas persistidas, na ordem de INSERT. A ultima (DADOS_COMPLETOS)
@@ -22,7 +22,13 @@ COLUMNS: tuple[tuple[str, str], ...] = (
     ("DATA_FIM", "TEXT"),
     ("NUMERO_MAQUINA", "INTEGER"),
     ("NOME_MAQUINA", "TEXT"),
-    ("CD_DS_FASE", "TEXT"),
+    ("CODIGO_FASE", "INTEGER"),
+    ("DESCR_FASE", "TEXT"),
+    ("DESCR_GRUPO_FASE", "TEXT"),
+    ("SETOR_IND_SEQ", "INTEGER"),
+    ("DESCR_SETOR_INDUST", "TEXT"),
+    ("TIPO_MAQUINA", "INTEGER"),
+    ("DESCR_TIPO_MAQ", "TEXT"),
     ("REDUZ", "TEXT"),
     ("CODIGO_ALTERNATIVO", "TEXT"),
     ("DESCR_ITEM", "TEXT"),
@@ -32,17 +38,29 @@ COLUMNS: tuple[tuple[str, str], ...] = (
     ("DESCR_COR", "TEXT"),
     ("QT_KG", "REAL"),
     ("QT_MT", "REAL"),
+    ("PECAS_ORIGEM", "INTEGER"),
+    ("KG_ORIGEM_REAL", "REAL"),
+    ("PECAS_DESTINO", "INTEGER"),
+    ("KG_DESTINO_REAL", "REAL"),
     ("ANO_MES", "TEXT"),
     ("ANO_SEM", "INTEGER"),
     ("OPERADOR_FINAL", "TEXT"),
     ("REPROCESSO", "INTEGER"),
+    ("STATUS_FASE", "INTEGER"),
+    ("DS_STATUS_FASE", "TEXT"),
     ("MIN_REAL", "REAL"),
     ("MIN_PREV", "REAL"),
+    ("MIN_SETUP", "REAL"),
+    ("MIN_PROCESSO", "REAL"),
     ("DESVIO_MIN", "REAL"),
     ("TURNO_ID", "TEXT"),
     ("TURNO_LABEL", "TEXT"),
     ("MAQUINA_KEY", "TEXT"),
     ("FASE_KEY", "TEXT"),
+    ("SETOR_KEY", "TEXT"),
+    ("GRUPO_FASE_KEY", "TEXT"),
+    ("TIPO_MAQ_KEY", "TEXT"),
+    ("STATUS_KEY", "TEXT"),
     ("CODIGO_KEY", "TEXT"),
     ("DADOS_COMPLETOS", "TEXT"),
 )
@@ -63,7 +81,11 @@ INDEXES: tuple[str, ...] = (
     f"CREATE INDEX IF NOT EXISTS idx_producao_maquina_key ON {TABLE_NAME}(MAQUINA_KEY);",
     f"CREATE INDEX IF NOT EXISTS idx_producao_fase_key ON {TABLE_NAME}(FASE_KEY);",
     f"CREATE INDEX IF NOT EXISTS idx_producao_codigo_key ON {TABLE_NAME}(CODIGO_KEY);",
+    f"CREATE INDEX IF NOT EXISTS idx_producao_setor_key ON {TABLE_NAME}(SETOR_KEY);",
+    f"CREATE INDEX IF NOT EXISTS idx_producao_tipo_maq_key ON {TABLE_NAME}(TIPO_MAQ_KEY);",
+    f"CREATE INDEX IF NOT EXISTS idx_producao_status_key ON {TABLE_NAME}(STATUS_KEY);",
     f"CREATE INDEX IF NOT EXISTS idx_producao_data_maquina_fase ON {TABLE_NAME}(DATA_FIM, MAQUINA_KEY, FASE_KEY);",
+    f"CREATE INDEX IF NOT EXISTS idx_producao_data_setor_fase ON {TABLE_NAME}(DATA_FIM, SETOR_KEY, FASE_KEY);",
 )
 
 

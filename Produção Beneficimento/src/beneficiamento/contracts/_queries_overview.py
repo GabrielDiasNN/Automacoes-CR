@@ -70,175 +70,6 @@ def _build_turnos(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
     return items
 
 
-def _build_tingimento(cursor: sqlite3.Cursor) -> dict[str, Any]:
-    """Monta painel completo de Tingimento: resumo, série diária e rankings."""
-    ting_where = "FASE_KEY = '03 - TINGIMENTO'"
-    cursor.execute(
-        f"""
-        SELECT
-            COUNT(DISTINCT NUMERO_OB) AS ob_distintas,
-            COUNT(*) AS fases_concluidas,
-            SUM(COALESCE(QT_KG, 0)) AS kg_total,
-            SUM(COALESCE(QT_MT, 0)) AS mt_total,
-            SUM(COALESCE(MIN_REAL, 0)) AS min_real_total,
-            SUM(COALESCE(MIN_PREV, 0)) AS min_prev_total,
-            SUM(CASE WHEN REPROCESSO = 1 THEN COALESCE(QT_KG, 0) ELSE 0 END) AS reprocesso_kg,
-            SUM(CASE WHEN REPROCESSO = 1 THEN 1 ELSE 0 END) AS reprocesso_fases
-        FROM filtered_beneficiamento
-        WHERE {ting_where}
-        """,
-    )
-    row = cursor.fetchone()
-    fases = int(row["fases_concluidas"] or 0)
-    kg_total = float(row["kg_total"] or 0.0)
-    mt_total = float(row["mt_total"] or 0.0)
-    min_real = float(row["min_real_total"] or 0.0)
-    min_prev = float(row["min_prev_total"] or 0.0)
-    summary = {
-        "ob_distintas": int(row["ob_distintas"] or 0),
-        "fases_concluidas": fases,
-        "kg_total": _round(kg_total),
-        "mt_total": _round(mt_total),
-        "kg_medio_fase": _round((kg_total / fases) if fases > 0 else 0.0),
-        "mt_medio_fase": _round((mt_total / fases) if fases > 0 else 0.0),
-        "min_real_medio": _round((min_real / fases) if fases > 0 else 0.0),
-        "min_prev_medio": _round((min_prev / fases) if fases > 0 else 0.0),
-        "desvio_medio_min": _round(
-            ((min_real - min_prev) / fases) if fases > 0 else 0.0
-        ),
-        "eficiencia_media_pct": _round(
-            (min_prev / min_real * 100.0) if min_real > 0 else 0.0
-        ),
-        "reprocesso_kg_pct": _round(
-            (float(row["reprocesso_kg"] or 0.0) / kg_total * 100.0)
-            if kg_total > 0
-            else 0.0
-        ),
-        "reprocesso_fases_pct": _round(
-            (float(row["reprocesso_fases"] or 0.0) / fases * 100.0)
-            if fases > 0
-            else 0.0
-        ),
-    }
-
-    cursor.execute(
-        f"""
-        SELECT
-            substr(DATA_FIM, 1, 10) AS dia,
-            SUM(COALESCE(QT_KG, 0)) AS kg_total,
-            AVG(COALESCE(MIN_REAL, 0)) AS min_real_medio,
-            AVG(COALESCE(MIN_PREV, 0)) AS min_prev_medio,
-            SUM(CASE WHEN REPROCESSO = 1 THEN COALESCE(QT_KG, 0) ELSE 0 END) AS reprocesso_kg
-        FROM filtered_beneficiamento
-        WHERE {ting_where} AND DATA_FIM IS NOT NULL
-        GROUP BY dia
-        ORDER BY dia
-        LIMIT 90
-        """,
-    )
-    series: dict[str, list[dict[str, Any]]] = {"diaria": []}
-    for item in cursor.fetchall():
-        min_real_day = float(item["min_real_medio"] or 0.0)
-        min_prev_day = float(item["min_prev_medio"] or 0.0)
-        kg_day = float(item["kg_total"] or 0.0)
-        series["diaria"].append(
-            {
-                "date": item["dia"],
-                "kg_total": _round(kg_day),
-                "eficiencia_media_pct": _round(
-                    (min_prev_day / min_real_day * 100.0) if min_real_day > 0 else 0.0
-                ),
-                "reprocesso_kg_pct": _round(
-                    (float(item["reprocesso_kg"] or 0.0) / kg_day * 100.0)
-                    if kg_day > 0
-                    else 0.0
-                ),
-            }
-        )
-
-    cursor.execute(
-        f"""
-        SELECT
-            CODIGO_KEY AS alternativo,
-            TRIM(COALESCE(DESCR_ITEM, 'Sem descrição')) AS produto,
-            COUNT(*) AS fases_concluidas,
-            COUNT(DISTINCT NUMERO_OB) AS ob_distintas,
-            SUM(COALESCE(QT_KG, 0)) AS kg_total,
-            AVG(COALESCE(MIN_REAL, 0)) AS min_real_medio,
-            AVG(COALESCE(MIN_PREV, 0)) AS min_prev_medio,
-            SUM(CASE WHEN REPROCESSO = 1 THEN COALESCE(QT_KG, 0) ELSE 0 END) AS reprocesso_kg
-        FROM filtered_beneficiamento
-        WHERE {ting_where}
-        GROUP BY alternativo, produto
-        ORDER BY kg_total DESC
-        LIMIT 12
-        """,
-    )
-    por_alternativo = []
-    for item in cursor.fetchall():
-        kg_item = float(item["kg_total"] or 0.0)
-        min_real_item = float(item["min_real_medio"] or 0.0)
-        min_prev_item = float(item["min_prev_medio"] or 0.0)
-        por_alternativo.append(
-            {
-                "alternativo": item["alternativo"] or "Sem código",
-                "produto": item["produto"] or "Sem descrição",
-                "fases_concluidas": int(item["fases_concluidas"] or 0),
-                "ob_distintas": int(item["ob_distintas"] or 0),
-                "kg_total": _round(kg_item),
-                "eficiencia_media_pct": _round(
-                    (min_prev_item / min_real_item * 100.0)
-                    if min_real_item > 0
-                    else 0.0
-                ),
-                "reprocesso_kg_pct": _round(
-                    (float(item["reprocesso_kg"] or 0.0) / kg_item * 100.0)
-                    if kg_item > 0
-                    else 0.0
-                ),
-            }
-        )
-
-    cursor.execute(
-        f"""
-        SELECT
-            COALESCE(MAQUINA_KEY, 'Sem máquina') AS maquina,
-            COUNT(*) AS fases_concluidas,
-            SUM(COALESCE(QT_KG, 0)) AS kg_total,
-            AVG(COALESCE(MIN_REAL, 0)) AS min_real_medio,
-            AVG(COALESCE(MIN_PREV, 0)) AS min_prev_medio
-        FROM filtered_beneficiamento
-        WHERE {ting_where}
-        GROUP BY maquina
-        ORDER BY kg_total DESC
-        LIMIT 10
-        """,
-    )
-    por_maquina = []
-    for item in cursor.fetchall():
-        min_real_item = float(item["min_real_medio"] or 0.0)
-        min_prev_item = float(item["min_prev_medio"] or 0.0)
-        por_maquina.append(
-            {
-                "maquina": item["maquina"] or "Sem máquina",
-                "fases_concluidas": int(item["fases_concluidas"] or 0),
-                "kg_total": _round(item["kg_total"]),
-                "eficiencia_media_pct": _round(
-                    (min_prev_item / min_real_item * 100.0)
-                    if min_real_item > 0
-                    else 0.0
-                ),
-                "desvio_medio_min": _round(min_real_item - min_prev_item),
-            }
-        )
-
-    return {
-        "summary": summary,
-        "series": series,
-        "rankings": {"por_alternativo": por_alternativo, "por_maquina": por_maquina},
-    }
-
-
 def _build_overview_kpis(cursor: sqlite3.Cursor) -> tuple[int, dict[str, Any]]:
     """Retorna (total_fases, kpis) com métricas globais do período filtrado."""
     cursor.execute("""
@@ -250,7 +81,8 @@ def _build_overview_kpis(cursor: sqlite3.Cursor) -> tuple[int, dict[str, Any]]:
             SUM(COALESCE(MIN_REAL, 0)) AS min_real_total,
             SUM(COALESCE(MIN_PREV, 0)) AS min_prev_total,
             SUM(CASE WHEN REPROCESSO = 1 THEN COALESCE(QT_KG, 0) ELSE 0 END) AS reprocesso_kg,
-            SUM(CASE WHEN REPROCESSO = 1 THEN 1 ELSE 0 END) AS fases_reprocessadas
+            SUM(CASE WHEN REPROCESSO = 1 THEN 1 ELSE 0 END) AS fases_reprocessadas,
+            SUM(CASE WHEN STATUS_KEY = 'planejada' THEN 1 ELSE 0 END) AS fases_planejadas
         FROM filtered_beneficiamento
         """)
     row = cursor.fetchone()
@@ -260,6 +92,7 @@ def _build_overview_kpis(cursor: sqlite3.Cursor) -> tuple[int, dict[str, Any]]:
     min_prev = float(row["min_prev_total"] or 0.0)
     reprocesso_kg = float(row["reprocesso_kg"] or 0.0)
     fases_reprocessadas = int(row["fases_reprocessadas"] or 0)
+    fases_planejadas = int(row["fases_planejadas"] or 0)
     return fases, {
         "ob_distintas": int(row["ob_distintas"] or 0),
         "fases_concluidas": fases,
@@ -277,6 +110,8 @@ def _build_overview_kpis(cursor: sqlite3.Cursor) -> tuple[int, dict[str, Any]]:
         "produtividade_kg_h": _round(
             (kg_total * 60.0 / min_real) if min_real > 0 else 0.0
         ),
+        "fases_planejadas": fases_planejadas,
+        "planejado_pct": _round((fases_planejadas / fases * 100.0) if fases > 0 else 0.0),
     }
 
 
@@ -325,13 +160,18 @@ def _build_gargalos(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
 
 
 def _build_fases_criticas(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
-    """Retorna top-12 fases por volume de kg, com eficiência e reprocesso."""
+    """Retorna top-12 fases por volume de kg, com eficiência de tempo.
+
+    Reprocesso nao e exposto aqui: so faz sentido operacionalmente quando
+    relativizado a producao de uma fase especifica (ex.: Tingimento, onde o
+    reprocesso de cor e um indicador real de qualidade). Ver
+    ``contracts.tingimento`` para essa analise dedicada.
+    """
     cursor.execute("""
         SELECT
             COALESCE(FASE_KEY, 'Sem fase') AS fase,
             COUNT(*) AS fases_concluidas,
             SUM(COALESCE(QT_KG, 0)) AS kg_total,
-            SUM(CASE WHEN REPROCESSO = 1 THEN COALESCE(QT_KG, 0) ELSE 0 END) AS reprocesso_kg,
             SUM(COALESCE(MIN_REAL, 0)) AS min_real,
             SUM(COALESCE(MIN_PREV, 0)) AS min_prev
         FROM filtered_beneficiamento
@@ -352,11 +192,6 @@ def _build_fases_criticas(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
                 "eficiencia_tempo_pct": _round(
                     (min_prev_item / min_real_item * 100.0)
                     if min_real_item > 0
-                    else 0.0
-                ),
-                "reprocesso_kg_pct": _round(
-                    (float(item["reprocesso_kg"] or 0.0) / kg_item * 100.0)
-                    if kg_item > 0
                     else 0.0
                 ),
             }
@@ -446,3 +281,70 @@ def _build_overview_series(cursor: sqlite3.Cursor) -> dict[str, list[dict[str, A
         "volume_diario": volume_diario,
         "eficiencia_diaria": eficiencia_diaria,
     }
+
+
+def _build_setores(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
+    """Retorna ranking por setor industrial (kg, eficiência).
+
+    Reprocesso nao e exposto aqui pelo mesmo motivo de ``_build_fases_criticas``:
+    so tem sinal real quando relativizado a uma fase especifica.
+    """
+    cursor.execute("""
+        SELECT
+            COALESCE(SETOR_KEY, 'SEM SETOR') AS setor,
+            COUNT(DISTINCT NUMERO_OB) AS ob_distintas,
+            COUNT(*) AS fases_concluidas,
+            SUM(COALESCE(QT_KG, 0)) AS kg_total,
+            SUM(COALESCE(QT_MT, 0)) AS mt_total,
+            SUM(COALESCE(MIN_REAL, 0)) AS min_real_total,
+            SUM(COALESCE(MIN_PREV, 0)) AS min_prev_total
+        FROM filtered_beneficiamento
+        GROUP BY setor
+        ORDER BY kg_total DESC
+        LIMIT 20
+        """)
+    setores = []
+    for item in cursor.fetchall():
+        kg_total = float(item["kg_total"] or 0.0)
+        min_real = float(item["min_real_total"] or 0.0)
+        min_prev = float(item["min_prev_total"] or 0.0)
+        setores.append(
+            {
+                "setor": item["setor"],
+                "ob_distintas": int(item["ob_distintas"] or 0),
+                "fases_concluidas": int(item["fases_concluidas"] or 0),
+                "kg_total": _round(kg_total),
+                "mt_total": _round(item["mt_total"]),
+                "eficiencia_tempo_pct": _round(
+                    (min_prev / min_real * 100.0) if min_real > 0 else 0.0
+                ),
+            }
+        )
+    return setores
+
+
+def _build_treemap(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
+    """Retorna agregação hierárquica Setor -> Fase -> Máquina (volume kg)."""
+    cursor.execute("""
+        SELECT
+            COALESCE(SETOR_KEY, 'SEM SETOR') AS setor,
+            COALESCE(FASE_KEY, 'Sem fase') AS fase,
+            COALESCE(MAQUINA_KEY, 'Sem máquina') AS maquina,
+            COUNT(*) AS fases_concluidas,
+            SUM(COALESCE(QT_KG, 0)) AS kg_total
+        FROM filtered_beneficiamento
+        GROUP BY setor, fase, maquina
+        HAVING kg_total > 0
+        ORDER BY setor, kg_total DESC
+        LIMIT 500
+        """)
+    return [
+        {
+            "setor": item["setor"],
+            "fase": item["fase"],
+            "maquina": item["maquina"],
+            "fases_concluidas": int(item["fases_concluidas"] or 0),
+            "kg_total": _round(item["kg_total"]),
+        }
+        for item in cursor.fetchall()
+    ]

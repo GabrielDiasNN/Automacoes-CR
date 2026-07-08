@@ -101,6 +101,13 @@ def beneficiamento_historico_seed() -> Generator[None, None, None]:
 
     agora = datetime.now()
 
+    # Codigos de fase reais (Oracle FASES_FLUXO) usados nas fixtures de teste.
+    fase_meta = {
+        "03 - TINGIMENTO": (40, "TINGIMENTO", "SETOR TINGIMENTO"),
+        "05 - ACABAMENTO": (60, "SECADOR", "SETOR ACABAMENTO"),
+        "01 - PREPARACAO": (20, "REVISAO MALHA CRUA", "SETOR PREPARACAO"),
+    }
+
     def _row(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         ob: str,
         seq: int,
@@ -111,13 +118,20 @@ def beneficiamento_historico_seed() -> Generator[None, None, None]:
         alternativo: str,
         kg: float,
         mt: float,
+        confirmada: bool = True,
     ) -> dict[str, Any]:
+        codigo_fase, descr_grupo_fase, descr_setor = fase_meta[fase]
         return {
             "NUMERO_OB": ob,
             "SEQ": seq,
             "DATA_FIM": dt.isoformat(),
             "NOME_MAQUINA": maquina,
-            "CD_DS_FASE": fase,
+            "CODIGO_FASE": codigo_fase,
+            "DESCR_FASE": fase,
+            "DESCR_GRUPO_FASE": descr_grupo_fase,
+            "DESCR_SETOR_INDUST": descr_setor,
+            "TIPO_MAQUINA": 22,
+            "DESCR_TIPO_MAQ": "HIDROEXTRATORA",
             "CODIGO_ALTERNATIVO": alternativo,
             "REDUZ": alternativo,
             "DESCR_ITEM": f"Produto {alternativo}",
@@ -133,6 +147,8 @@ def beneficiamento_historico_seed() -> Generator[None, None, None]:
             "TURNO_DESC": f"TURNO {turno}",
             "OPERADOR_FINAL": "QA FIXTURE",
             "REPROCESSO": 0,
+            "STATUS_FASE": 4 if confirmada else 0,
+            "DS_STATUS_FASE": "CONFIRMADA" if confirmada else "PROGRAMADA",
         }
 
     registros = [
@@ -202,6 +218,20 @@ def beneficiamento_historico_seed() -> Generator[None, None, None]:
             "02414",
             148.0,
             355.0,
+        ),
+        # OB agendada/nao concluida (STATUS_FASE=PROGRAMADA) para cobrir o
+        # filtro de status e o indicador planejado_pct.
+        _row(
+            "900005",
+            1,
+            agora + timedelta(days=3),
+            "1",
+            "03 - TINGIMENTO",
+            "JET 01",
+            "03212",
+            0.0,
+            0.0,
+            confirmada=False,
         ),
     ]
     salvar_historico(registros, db_path=os.environ["BENEFICIAMENTO_HISTORICO_DB"])

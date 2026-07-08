@@ -40,7 +40,8 @@ from ._queries_overview import (
     _build_overview_kpis as _build_overview_kpis,
     _build_overview_series as _build_overview_series,
     _build_produtos as _build_produtos,
-    _build_tingimento as _build_tingimento,
+    _build_setores as _build_setores,
+    _build_treemap as _build_treemap,
     _build_turnos as _build_turnos,
 )
 
@@ -68,7 +69,6 @@ def obter_overview_historico(
         produtos = _build_produtos(cursor)
         series = _build_overview_series(cursor)
         turnos = _build_turnos(cursor)
-        tingimento = _build_tingimento(cursor)
         filter_options = _fetch_filter_options(cursor)
 
     status = "healthy" if fases > 0 else "no_data"
@@ -105,7 +105,6 @@ def obter_overview_historico(
         "series": series,
         "filter_options": filter_options,
         "turnos": turnos,
-        "tingimento": tingimento,
         "interaction": {
             "detail_endpoint": "/api/beneficiamento/detail",
             "clickable_targets": ["produto", "maquina_fase", "fase", "turno", "ob"],
@@ -183,7 +182,7 @@ def obter_detail_historico(
                 "ob": item.get("NUMERO_OB"),
                 "seq": item.get("SEQ"),
                 "data_fim": item.get("DATA_HORA_FIM") or item.get("DATA_FIM"),
-                "fase": item.get("CD_DS_FASE"),
+                "fase": item.get("DESCR_FASE"),
                 "maquina": _safe_strip(item.get("NOME_MAQUINA")),
                 "turno": item.get("TURNO_DESC") or "Indefinido",
                 "alternativo": _safe_strip(item.get("CODIGO_ALTERNATIVO")),

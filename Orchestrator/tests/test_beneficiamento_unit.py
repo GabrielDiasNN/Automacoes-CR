@@ -112,7 +112,7 @@ def _sample_records() -> list[dict[str, Any]]:
             "SEQ": 1,
             "DATA_FIM": "2026-06-10T08:00:00",
             "NOME_MAQUINA": "JET-01",
-            "CD_DS_FASE": "03 - TINGIMENTO",
+            "DESCR_FASE": "03 - TINGIMENTO",
             "CODIGO_ALTERNATIVO": "ABC",
             "QT_KG": "120,5",
             "MIN_REAL": 100,

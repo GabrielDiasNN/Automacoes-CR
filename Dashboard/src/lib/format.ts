@@ -41,3 +41,16 @@ export function successRate(success: number, failures: number): number | null {
 export function shortId(id: string, len = 14): string {
   return id.length > len ? id.slice(0, len) : id;
 }
+
+/**
+ * Formata um timestamp ISO naive (sem timezone, ex.: "2026-07-06T05:16:00",
+ * como vem do Oracle) para DD/MM/YYYY HH:MM:SS. Parse manual via regex — não
+ * usa `new Date()` para evitar reinterpretação de timezone pelo browser.
+ */
+export function formatDateTimeBr(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(iso);
+  if (!match) return iso;
+  const [, year, month, day, hour, minute, second] = match;
+  return `${day}/${month}/${year} ${hour}:${minute}:${second ?? "00"}`;
+}

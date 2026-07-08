@@ -121,6 +121,33 @@ def explicar_busca_historico(
         return [str(row[3]) for row in conn.execute(sql, params).fetchall()]
 
 
+def buscar_produtos(
+    termo: str,
+    db_path: Path | str | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Autocomplete de produto: busca por codigo (CODIGO_KEY) ou descricao (DESCR_ITEM)."""
+    path = init_db(db_path)
+    termo_norm = termo.strip()
+    if not termo_norm:
+        return []
+    like = f"%{termo_norm}%"
+    sql = (
+        "SELECT DISTINCT CODIGO_KEY AS codigo, DESCR_ITEM AS produto"
+        f" FROM {TABLE_NAME}"
+        " WHERE COALESCE(CODIGO_KEY, '') != ''"
+        " AND (CODIGO_KEY LIKE ? OR DESCR_ITEM LIKE ?)"
+        " ORDER BY produto LIMIT ?"
+    )
+    with sqlite3.connect(path) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.execute(sql, [like, like, limit])
+        return [
+            {"codigo": row["codigo"], "produto": row["produto"] or "Sem descrição"}
+            for row in cursor.fetchall()
+        ]
+
+
 def descrever_schema_historico(
     db_path: Path | str | None = None,
 ) -> dict[str, dict[str, str] | list[str]]:

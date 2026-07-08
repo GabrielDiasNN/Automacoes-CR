@@ -17,8 +17,11 @@ COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "volume_mt": ("METROS", "QT_MT", "mt_total"),
     "maquina_cod": ("NUMERO_MAQUINA",),
     "maquina_nom": ("DESCR_MAQ", "NOME_MAQUINA"),
-    "fase_cod": ("FASE", "CD_DS_FASE", "CD_FASE"),
-    "fase_nom": ("DESCR_FASE", "CD_DS_FASE"),
+    "fase_cod": ("CODIGO_FASE", "FASE", "CD_FASE"),
+    "fase_nom": ("DESCR_FASE",),
+    "setor_nom": ("DESCR_SETOR_INDUST",),
+    "grupo_fase_nom": ("DESCR_GRUPO_FASE",),
+    "tipo_maquina_nom": ("DESCR_TIPO_MAQ",),
     "reduz": ("REDUZ", "CODIGO_REDUZIDO"),
     "codigo_operacional": ("CODIGO_ALTERNATIVO", "REDUZ"),
     "produto": ("DESCR_ITEM",),
@@ -34,9 +37,9 @@ COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Grupos de fase reconhecidos por rotulo canonico -> rotulos aceitos no dado.
-PHASE_GROUPS: dict[str, tuple[str, ...]] = {
-    "tingimento": ("03 - TINGIMENTO", "03 - TINGIMENTO REATIVO"),
+# Grupos de fase reconhecidos por rotulo canonico -> codigos de fase Oracle aceitos.
+PHASE_GROUPS: dict[str, tuple[int, ...]] = {
+    "tingimento": (40,),
 }
 
 

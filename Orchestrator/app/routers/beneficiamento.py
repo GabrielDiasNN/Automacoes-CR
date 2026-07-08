@@ -25,8 +25,9 @@ try:
     from beneficiamento.contracts import (
         obter_detail_historico,
         obter_overview_historico,
+        obter_tingimento_historico,
     )
-    from beneficiamento.data import buscar_historico
+    from beneficiamento.data import buscar_historico, buscar_produtos
     from beneficiamento.snapshot_dashboard import (
         build_dashboard_payload,
         build_health_payload,
@@ -35,8 +36,10 @@ try:
     )
 except ImportError:
     buscar_historico = None
+    buscar_produtos = None
     obter_detail_historico = None
     obter_overview_historico = None
+    obter_tingimento_historico = None
     build_dashboard_payload = None
     build_health_payload = None
     build_periods_payload = None
@@ -103,7 +106,33 @@ def get_beneficiamento_historico(
         ) from exc
 
 
+@router.get("/produtos", response_model=schemas.BeneficiamentoProdutosResponse)
+def get_beneficiamento_produtos(
+    q: str = Query(
+        ..., min_length=2, description="Termo de busca (código ou nome do produto)"
+    ),
+    limit: int = Query(20, ge=1, le=50, description="Limite máximo de sugestões"),
+    api_key: str = Depends(get_api_key),
+) -> schemas.BeneficiamentoProdutosResponse:
+    """Autocomplete de produto para a busca dinâmica no Dashboard."""
+
+    if buscar_produtos is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Módulo de persistência histórica do beneficiamento indisponível.",
+        )
+
+    try:
+        items = buscar_produtos(q, limit=limit)
+        return schemas.BeneficiamentoProdutosResponse(items=items)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Erro na busca de produtos: {exc}"
+        ) from exc
+
+
 @router.get("/overview", response_model=schemas.BeneficiamentoOverviewResponse)
+# pylint: disable=too-many-locals
 def get_beneficiamento_overview(
     dt_inicio: str | None = Query(
         None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
@@ -119,6 +148,18 @@ def get_beneficiamento_overview(
     ),
     q: str | None = Query(
         None, description="Busca por OB, produto, artigo, cor ou código"
+    ),
+    setor: str | None = Query(None, description="Setor industrial para filtro"),
+    grupo_fase: str | None = Query(None, description="Grupo de fase para filtro"),
+    tipo_maquina: str | None = Query(
+        None, description="Descrição do tipo de máquina para filtro"
+    ),
+    reprocesso: str | None = Query(
+        None, description="Filtra por reprocesso: '1' só reprocesso, '0' sem reprocesso"
+    ),
+    status: str | None = Query(
+        None,
+        description="Filtra por status de execução: 'confirmada' ou 'planejada'",
     ),
     api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoOverviewResponse:
@@ -138,6 +179,11 @@ def get_beneficiamento_overview(
         "turno": turno,
         "alternativo": alternativo,
         "q": q,
+        "setor": setor,
+        "grupo_fase": grupo_fase,
+        "tipo_maquina": tipo_maquina,
+        "reprocesso": reprocesso,
+        "status": status,
     }
 
     try:
@@ -146,6 +192,34 @@ def get_beneficiamento_overview(
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"Erro no overview SQLite: {exc}"
+        ) from exc
+
+
+@router.get("/tingimento", response_model=schemas.BeneficiamentoTingimentoResponse)
+def get_beneficiamento_tingimento(
+    dt_inicio: str | None = Query(
+        None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
+    ),
+    dt_fim: str | None = Query(
+        None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
+    ),
+    api_key: str = Depends(get_api_key),
+) -> schemas.BeneficiamentoTingimentoResponse:
+    """Painel dedicado de Tingimento (escopo fixo CODIGO_FASE=40), independente
+    dos filtros gerais do overview."""
+
+    if obter_tingimento_historico is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Módulo de persistência histórica do beneficiamento indisponível.",
+        )
+
+    try:
+        data = obter_tingimento_historico({"dt_inicio": dt_inicio, "dt_fim": dt_fim})
+        return schemas.BeneficiamentoTingimentoResponse.model_validate(data)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Erro no painel de tingimento SQLite: {exc}"
         ) from exc
 
 
@@ -224,7 +298,11 @@ def get_beneficiamento_dashboard(
 # pylint: disable=too-many-locals
 def get_beneficiamento_detail(
     target_type: str = Query(
-        ..., description="Tipo do detalhe: produto, maquina_fase, fase, turno ou ob"
+        ...,
+        description=(
+            "Tipo do detalhe: produto, maquina_fase, fase, turno, ob, "
+            "setor, grupo_fase ou tipo_maquina"
+        ),
     ),
     dt_inicio: str | None = Query(
         None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
@@ -241,6 +319,18 @@ def get_beneficiamento_detail(
     ob: str | None = Query(None, description="Número da OB"),
     q: str | None = Query(
         None, description="Busca por OB, produto, artigo, cor ou código"
+    ),
+    setor: str | None = Query(None, description="Setor industrial para filtro"),
+    grupo_fase: str | None = Query(None, description="Grupo de fase para filtro"),
+    tipo_maquina: str | None = Query(
+        None, description="Descrição do tipo de máquina para filtro"
+    ),
+    reprocesso: str | None = Query(
+        None, description="Filtra por reprocesso: '1' só reprocesso, '0' sem reprocesso"
+    ),
+    status: str | None = Query(
+        None,
+        description="Filtra por status de execução: 'confirmada' ou 'planejada'",
     ),
     page: int = Query(1, description="Página do detalhe"),
     limit: int = Query(50, description="Limite máximo por página"),
@@ -267,6 +357,11 @@ def get_beneficiamento_detail(
         "alternativo": alternativo,
         "ob": ob,
         "q": q,
+        "setor": setor,
+        "grupo_fase": grupo_fase,
+        "tipo_maquina": tipo_maquina,
+        "reprocesso": reprocesso,
+        "status": status,
         "page": page,
         "limit": limit,
         "include_raw": include_raw,

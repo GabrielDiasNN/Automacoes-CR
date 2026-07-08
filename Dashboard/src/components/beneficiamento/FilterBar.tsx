@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Search, X } from "lucide-react";
 import type { BeneficiamentoFilterOptions } from "../../api/orchestrator";
 import { Button } from "../ui";
+import { ProductAutocomplete } from "./ProductAutocomplete";
 import styles from "./FilterBar.module.css";
 
 export interface BeneficiamentoFiltersState {
@@ -12,6 +13,11 @@ export interface BeneficiamentoFiltersState {
   turno: string;
   alternativo: string;
   q: string;
+  setor: string;
+  grupoFase: string;
+  tipoMaquina: string;
+  reprocesso: string;
+  status: string;
 }
 
 export const DEFAULT_BENEFICIAMENTO_FILTERS: BeneficiamentoFiltersState = {
@@ -22,6 +28,11 @@ export const DEFAULT_BENEFICIAMENTO_FILTERS: BeneficiamentoFiltersState = {
   turno: "",
   alternativo: "",
   q: "",
+  setor: "",
+  grupoFase: "",
+  tipoMaquina: "",
+  reprocesso: "",
+  status: "",
 };
 
 function isoDate(d: Date): string {
@@ -84,12 +95,25 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
       <div className={styles.group}>
         <select
           className={styles.select}
-          value={filters.maquina}
-          onChange={(e) => onChange({ maquina: e.target.value })}
-          aria-label="Máquina"
+          value={filters.setor}
+          onChange={(e) => onChange({ setor: e.target.value, grupoFase: "", fase: "" })}
+          aria-label="Setor industrial"
         >
-          <option value="">Todas as máquinas</option>
-          {(options?.maquinas ?? []).map((v) => (
+          <option value="">Todos os setores</option>
+          {(options?.setores ?? []).map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <select
+          className={styles.select}
+          value={filters.grupoFase}
+          onChange={(e) => onChange({ grupoFase: e.target.value, fase: "" })}
+          aria-label="Grupo de fase"
+        >
+          <option value="">Todos os grupos de fase</option>
+          {(options?.grupos_fase ?? []).map((v) => (
             <option key={v} value={v}>
               {v}
             </option>
@@ -110,6 +134,32 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
         </select>
         <select
           className={styles.select}
+          value={filters.maquina}
+          onChange={(e) => onChange({ maquina: e.target.value })}
+          aria-label="Máquina"
+        >
+          <option value="">Todas as máquinas</option>
+          {(options?.maquinas ?? []).map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <select
+          className={styles.select}
+          value={filters.tipoMaquina}
+          onChange={(e) => onChange({ tipoMaquina: e.target.value })}
+          aria-label="Tipo de máquina"
+        >
+          <option value="">Todos os tipos de máquina</option>
+          {(options?.tipos_maquina ?? []).map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <select
+          className={styles.select}
           value={filters.turno}
           onChange={(e) => onChange({ turno: e.target.value })}
           aria-label="Turno"
@@ -121,18 +171,30 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
             </option>
           ))}
         </select>
+        <ProductAutocomplete
+          value={filters.alternativo}
+          onSelect={(codigo) => onChange({ alternativo: codigo })}
+          onClear={() => onChange({ alternativo: "" })}
+        />
         <select
           className={styles.select}
-          value={filters.alternativo}
-          onChange={(e) => onChange({ alternativo: e.target.value })}
-          aria-label="Produto"
+          value={filters.reprocesso}
+          onChange={(e) => onChange({ reprocesso: e.target.value })}
+          aria-label="Reprocesso"
         >
-          <option value="">Todos os produtos</option>
-          {(options?.alternativos ?? []).map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
+          <option value="">Reprocesso: todos</option>
+          <option value="1">Só reprocesso</option>
+          <option value="0">Sem reprocesso</option>
+        </select>
+        <select
+          className={styles.select}
+          value={filters.status}
+          onChange={(e) => onChange({ status: e.target.value })}
+          aria-label="Status de execução"
+        >
+          <option value="">Confirmada + planejada</option>
+          <option value="confirmada">Só confirmada</option>
+          <option value="planejada">Só planejada</option>
         </select>
       </div>
 

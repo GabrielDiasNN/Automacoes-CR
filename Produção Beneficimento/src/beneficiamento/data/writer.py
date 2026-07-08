@@ -44,6 +44,12 @@ def _date_iso(value: Any) -> str | None:
     return text or None
 
 
+# OBF.STATUS_FASE=4 corresponde a DS_STATUS_FASE='CONFIRMADA' na query Oracle
+# (ver CASE OBF.STATUS_FASE em sql/templates/detalhado.sql); demais valores
+# (PROGRAMADA/EMITIDA/PESADA/EM EXECUCAO) sao producao ainda nao concluida.
+_STATUS_FASE_CONFIRMADA = 4
+
+
 class FieldSpec(NamedTuple):
     """Mapeia uma coluna tipada para suas fontes candidatas e a coercao aplicada."""
 
@@ -67,7 +73,13 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("DATA_FIM", ("DATA_HORA_FIM", "DATA_FIM", "DATA_PROD"), _date_iso),
     FieldSpec("NUMERO_MAQUINA", ("NUMERO_MAQUINA",), _int_or_none),
     FieldSpec("NOME_MAQUINA", ("NOME_MAQUINA",), _text_or_none),
-    FieldSpec("CD_DS_FASE", ("CD_DS_FASE",), _text_or_none),
+    FieldSpec("CODIGO_FASE", ("CODIGO_FASE",), _int_or_none),
+    FieldSpec("DESCR_FASE", ("DESCR_FASE",), _text_or_none),
+    FieldSpec("DESCR_GRUPO_FASE", ("DESCR_GRUPO_FASE",), _text_or_none),
+    FieldSpec("SETOR_IND_SEQ", ("SETOR_IND_SEQ",), _int_or_none),
+    FieldSpec("DESCR_SETOR_INDUST", ("DESCR_SETOR_INDUST",), _text_or_none),
+    FieldSpec("TIPO_MAQUINA", ("TIPO_MAQUINA",), _int_or_none),
+    FieldSpec("DESCR_TIPO_MAQ", ("DESCR_TIPO_MAQ",), _text_or_none),
     FieldSpec("REDUZ", ("REDUZ",), _text_or_none),
     FieldSpec("CODIGO_ALTERNATIVO", ("CODIGO_ALTERNATIVO",), _text_or_none),
     FieldSpec("DESCR_ITEM", ("DESCR_ITEM",), _text_or_none),
@@ -77,12 +89,20 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("DESCR_COR", ("DESCR_COR",), _text_or_none),
     FieldSpec("QT_KG", ("QT_KG",), to_float),
     FieldSpec("QT_MT", ("QT_MT",), to_float),
+    FieldSpec("PECAS_ORIGEM", ("PECAS_ORIGEM",), _int_or_none),
+    FieldSpec("KG_ORIGEM_REAL", ("KG_ORIGEM_REAL",), to_float),
+    FieldSpec("PECAS_DESTINO", ("PECAS_DESTINO",), _int_or_none),
+    FieldSpec("KG_DESTINO_REAL", ("KG_DESTINO_REAL",), to_float),
     FieldSpec("ANO_MES", ("ANO_MES",), _text_or_none),
     FieldSpec("ANO_SEM", ("ANO_SEM",), _int_or_none),
     FieldSpec("OPERADOR_FINAL", ("OPERADOR_FINAL",), _text_or_none),
     FieldSpec("REPROCESSO", ("REPROCESSO",), _int_or_zero),
+    FieldSpec("STATUS_FASE", ("STATUS_FASE",), _int_or_none),
+    FieldSpec("DS_STATUS_FASE", ("DS_STATUS_FASE",), _text_or_none),
     FieldSpec("MIN_REAL", ("MIN_REAL",), to_float),
     FieldSpec("MIN_PREV", ("MIN_PREV",), to_float),
+    FieldSpec("MIN_SETUP", ("MIN_SETUP",), to_float),
+    FieldSpec("MIN_PROCESSO", ("MIN_PROCESSO",), to_float),
     FieldSpec("DESVIO_MIN", ("DESVIO_MIN",), to_float),
 )
 
@@ -114,7 +134,13 @@ def _build_row(record: dict[str, Any]) -> tuple[Any, ...] | None:
     values["TURNO_ID"] = turno_id
     values["TURNO_LABEL"] = turno_label or "Indefinido"
     values["MAQUINA_KEY"] = safe_strip(record.get("NOME_MAQUINA"))
-    values["FASE_KEY"] = safe_strip(record.get("CD_DS_FASE"))
+    values["FASE_KEY"] = safe_strip(record.get("DESCR_FASE"))
+    values["SETOR_KEY"] = safe_strip(record.get("DESCR_SETOR_INDUST")) or "SEM SETOR"
+    values["GRUPO_FASE_KEY"] = safe_strip(record.get("DESCR_GRUPO_FASE"))
+    values["TIPO_MAQ_KEY"] = safe_strip(record.get("DESCR_TIPO_MAQ"))
+    values["STATUS_KEY"] = (
+        "confirmada" if values["STATUS_FASE"] == _STATUS_FASE_CONFIRMADA else "planejada"
+    )
     values["CODIGO_KEY"] = (
         safe_strip(record.get("CODIGO_ALTERNATIVO") or record.get("REDUZ")) or None
     )

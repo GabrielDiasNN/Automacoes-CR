@@ -80,7 +80,8 @@ def _build_trace(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     {
                         "seq": int(row.get("SEQ") or 0),
                         "data_fim": row.get("DATA_HORA_FIM") or row.get("DATA_FIM"),
-                        "fase": row.get("CD_DS_FASE"),
+                        "fase": row.get("DESCR_FASE"),
+                        "setor": row.get("DESCR_SETOR_INDUST"),
                         "maquina": _safe_strip(row.get("NOME_MAQUINA")),
                         "turno": row.get("TURNO_DESC") or "Indefinido",
                         "kg": _round(row.get("QT_KG")),

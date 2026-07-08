@@ -131,6 +131,15 @@ class BeneficiamentoHistoricoResponse(BaseModel):
     records: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class BeneficiamentoProdutoOption(BaseModel):
+    codigo: str | None = None
+    produto: str
+
+
+class BeneficiamentoProdutosResponse(BaseModel):
+    items: list[BeneficiamentoProdutoOption] = Field(default_factory=list)
+
+
 class BeneficiamentoOverviewResponse(BaseModel):
     generated_at: str
     filters: dict[str, Any] = Field(default_factory=dict)
@@ -140,8 +149,17 @@ class BeneficiamentoOverviewResponse(BaseModel):
     series: dict[str, Any] = Field(default_factory=dict)
     filter_options: dict[str, Any] = Field(default_factory=dict)
     turnos: list[dict[str, Any]] = Field(default_factory=list)
-    tingimento: dict[str, Any] = Field(default_factory=dict)
+    treemap: list[dict[str, Any]] = Field(default_factory=list)
     interaction: dict[str, Any] = Field(default_factory=dict)
+
+
+class BeneficiamentoTingimentoResponse(BaseModel):
+    generated_at: str
+    filters: dict[str, Any] = Field(default_factory=dict)
+    health: dict[str, Any] = Field(default_factory=dict)
+    resumo: dict[str, Any] = Field(default_factory=dict)
+    series: dict[str, Any] = Field(default_factory=dict)
+    rankings: dict[str, Any] = Field(default_factory=dict)
 
 
 class BeneficiamentoDetailResponse(BaseModel):

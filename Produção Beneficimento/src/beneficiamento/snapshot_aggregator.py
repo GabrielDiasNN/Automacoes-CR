@@ -57,7 +57,7 @@ def _build_period_highlights(
             "kg_total": top_machine.get("kg_total"),
         },
         "top_phase": {
-            "fase": top_phase.get("CD_DS_FASE"),
+            "fase": top_phase.get("DESCR_FASE"),
             "kg_total": top_phase.get("kg_total"),
         },
         "top_turno": {

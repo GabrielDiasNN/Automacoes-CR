@@ -20,6 +20,7 @@
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_detail\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\overview\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\detail\\.py$",
+    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\tingimento\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\data\\\\(?:schema|writer|queries)\\.py$"
   ],
   "automation_exclusions": [

@@ -37,3 +37,9 @@
   font-size: var(--fs-small);
   color: var(--text-mid);
 }
+.desvioAmber {
+  color: var(--amber);
+}
+.desvioRed {
+  color: var(--red);
+}

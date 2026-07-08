@@ -15,6 +15,16 @@ from ._queries import (_DETAIL_SELECT, _build_filtered_where, _build_trace,
                        _summary_from_records)
 
 
+# Alvos de coluna unica: target_type -> (coluna SQL, campo normalizado, rotulo padrao).
+_SIMPLE_TARGETS: dict[str, tuple[str, str, str]] = {
+    "fase": ("FASE_KEY", "fase", "Fase"),
+    "turno": ("TURNO_LABEL", "turno", "Turno"),
+    "setor": ("SETOR_KEY", "setor", "Setor"),
+    "grupo_fase": ("GRUPO_FASE_KEY", "grupo_fase", "Grupo de fase"),
+    "tipo_maquina": ("TIPO_MAQ_KEY", "tipo_maquina", "Tipo de máquina"),
+}
+
+
 def _target_filter(
     target_type: str,
     filtros: dict[str, Any],
@@ -29,16 +39,13 @@ def _target_filter(
             [normalized["maquina"], normalized["fase"]],
             f"{normalized['maquina']} / {normalized['fase']}",
         )
-    if target_type == "fase":
-        return "FASE_KEY = ?", [normalized["fase"]], normalized["fase"] or "Fase"
-    if target_type == "turno":
-        return (
-            "TURNO_LABEL = ?",
-            [normalized["turno"]],
-            normalized["turno"] or "Turno",
-        )
     if target_type == "ob":
         return "NUMERO_OB LIKE ?", [f"{normalized['ob']}%"], normalized["ob"] or "OB"
+    simple = _SIMPLE_TARGETS.get(target_type)
+    if simple:
+        column, field, fallback_label = simple
+        value = normalized[field]
+        return f"{column} = ?", [value], value or fallback_label
     return "1=1", [], target_type
 
 
@@ -88,7 +95,11 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
             "ob": item.get("NUMERO_OB"),
             "seq": item.get("SEQ"),
             "data_fim": item.get("DATA_FIM"),
-            "fase": item.get("CD_DS_FASE"),
+            "codigo_fase": item.get("CODIGO_FASE"),
+            "fase": item.get("DESCR_FASE"),
+            "grupo_fase": item.get("DESCR_GRUPO_FASE"),
+            "setor": item.get("DESCR_SETOR_INDUST"),
+            "tipo_maquina": item.get("DESCR_TIPO_MAQ"),
             "maquina": safe_strip(item.get("NOME_MAQUINA")),
             "turno": item.get("TURNO_DESC") or "Indefinido",
             "alternativo": safe_strip(item.get("CODIGO_ALTERNATIVO")),
@@ -98,6 +109,10 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
             "cor": safe_strip(item.get("DESCR_COR") or item.get("COR")),
             "kg": round_or_zero(item.get("QT_KG")),
             "mt": round_or_zero(item.get("QT_MT")),
+            "pecas_origem": item.get("PECAS_ORIGEM"),
+            "kg_origem_real": round_or_zero(item.get("KG_ORIGEM_REAL")),
+            "pecas_destino": item.get("PECAS_DESTINO"),
+            "kg_destino_real": round_or_zero(item.get("KG_DESTINO_REAL")),
             "min_real": round_or_zero(item.get("MIN_REAL")),
             "min_prev": round_or_zero(item.get("MIN_PREV")),
             "desvio_min": round_or_zero(item.get("DESVIO_MIN")),

@@ -9,8 +9,27 @@ import {
   type BeneficiamentoTraceFase,
 } from "../../api/orchestrator";
 import { Card, DataTable, Drawer, EmptyState, ErrorState, Loading, StatTile, type Column } from "../ui";
-import { formatNumber, formatPercent } from "../../lib/format";
+import { formatDateTimeBr, formatNumber, formatPercent } from "../../lib/format";
 import styles from "./DetailDrawer.module.css";
+
+/** Desvio relativo ao tempo previsto — normaliza fases curtas vs longas (ver análise em conversa). */
+function desvioPct(minReal: number, minPrev: number): number | null {
+  if (!minPrev) return null;
+  return ((minReal - minPrev) / minPrev) * 100;
+}
+
+function DesvioCell({ minReal, minPrev }: { minReal: number; minPrev: number }) {
+  const pct = desvioPct(minReal, minPrev);
+  if (pct == null) return <span>—</span>;
+  const abs = Math.abs(pct);
+  const tone = abs > 30 ? styles.desvioRed : abs > 15 ? styles.desvioAmber : undefined;
+  return (
+    <span className={tone} title={`${formatNumber(minReal)} min reais vs ${formatNumber(minPrev)} min previstos`}>
+      {pct > 0 ? "+" : ""}
+      {pct.toFixed(0)}%
+    </span>
+  );
+}
 
 export interface DetailDrawerRequest {
   targetType: BeneficiamentoTargetType;
@@ -20,6 +39,9 @@ export interface DetailDrawerRequest {
   turno?: string;
   alternativo?: string;
   ob?: string;
+  setor?: string;
+  grupoFase?: string;
+  tipoMaquina?: string;
 }
 
 interface DetailDrawerProps {
@@ -32,17 +54,33 @@ const LIMIT = 20;
 
 const RECORD_COLUMNS: Column<BeneficiamentoDetailRecord>[] = [
   { key: "ob", header: "OB", render: (r) => r.ob ?? "—" },
-  { key: "data_fim", header: "Fim", render: (r) => r.data_fim ?? "—", hideOnNarrow: true },
+  { key: "data_fim", header: "Fim", render: (r) => formatDateTimeBr(r.data_fim), hideOnNarrow: true },
   { key: "fase", header: "Fase", render: (r) => r.fase ?? "—" },
   { key: "maquina", header: "Máquina", render: (r) => r.maquina ?? "—", hideOnNarrow: true },
   { key: "turno", header: "Turno", render: (r) => r.turno },
   { key: "produto", header: "Produto", render: (r) => r.produto ?? r.reduz ?? "—" },
   { key: "kg", header: "KG", align: "right", render: (r) => formatNumber(r.kg) },
+  { key: "mt", header: "MT", align: "right", render: (r) => formatNumber(r.mt), hideOnNarrow: true },
   {
-    key: "desvio_min",
-    header: "Desvio (min)",
+    key: "pecas",
+    header: "Peças (OB)",
     align: "right",
-    render: (r) => formatNumber(r.desvio_min),
+    render: (r) => {
+      const pecas = r.pecas_destino ?? r.pecas_origem;
+      if (pecas == null) return "—";
+      return (
+        <span title={`Origem: ${r.pecas_origem ?? "—"} peças / ${formatNumber(r.kg_origem_real)} kg · Destino: ${r.pecas_destino ?? "—"} peças / ${formatNumber(r.kg_destino_real)} kg`}>
+          {formatNumber(pecas)}
+        </span>
+      );
+    },
+    hideOnNarrow: true,
+  },
+  {
+    key: "desvio_pct",
+    header: "Desvio",
+    align: "right",
+    render: (r) => <DesvioCell minReal={r.min_real} minPrev={r.min_prev} />,
     hideOnNarrow: true,
   },
   { key: "reprocesso", header: "Reproc.", align: "center", render: (r) => (r.reprocesso ? "sim" : "não") },
@@ -50,7 +88,7 @@ const RECORD_COLUMNS: Column<BeneficiamentoDetailRecord>[] = [
 
 const TRACE_COLUMNS: Column<BeneficiamentoTraceFase>[] = [
   { key: "seq", header: "Seq", render: (f) => f.seq },
-  { key: "data_fim", header: "Fim", render: (f) => f.data_fim ?? "—" },
+  { key: "data_fim", header: "Fim", render: (f) => formatDateTimeBr(f.data_fim) },
   { key: "fase", header: "Fase", render: (f) => f.fase ?? "—" },
   { key: "maquina", header: "Máquina", render: (f) => f.maquina ?? "—" },
   { key: "turno", header: "Turno", render: (f) => f.turno },
@@ -70,6 +108,9 @@ function buildDetailParams(
     turno: request.turno,
     alternativo: request.alternativo,
     ob: request.ob,
+    setor: request.setor,
+    grupo_fase: request.grupoFase,
+    tipo_maquina: request.tipoMaquina,
     dt_inicio: contextFilters.dt_inicio,
     dt_fim: contextFilters.dt_fim,
     q: contextFilters.q,
@@ -130,7 +171,7 @@ export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerP
   }, [request, page]);
 
   return (
-    <Drawer open={request != null} onClose={onClose} eyebrow="// drill-down" title={request?.label ?? ""} width={720}>
+    <Drawer open={request != null} onClose={onClose} eyebrow="// drill-down" title={request?.label ?? ""} width={1080}>
       {loading && !data && <Loading label="carregando detalhe" />}
       {error && <ErrorState message={error} />}
       {data && (

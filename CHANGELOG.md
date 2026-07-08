@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.1.1] - 07/07/2026
+### Adicionado
+- **Quantidade de peças e quilos reais (origem/destino) no drill-down**: a função Oracle bloqueada por falta de GRANT (`PKGBENF0001.FNC_RETORNA_PC_ORIGEM_OB`, ver [1.1.0]) foi substituída por join direto em `SGTPRD.GERAPECAORIGEMOB`/`GERAPECADESTINOOB` + `GERAPECASPRODUTO` (acessíveis ao usuário readonly, validado em produção: 89,6% de cobertura, ~3s por dia). Duas novas CTEs (`DIM_PECAS_ORIGEM`, `DIM_PECAS_DESTINO`) no template SQL, colunas `PECAS_ORIGEM`/`KG_ORIGEM_REAL`/`PECAS_DESTINO`/`KG_DESTINO_REAL` persistidas (schema SQLite v6, nova recarga completa de 90 dias). São valores por OB (não escalados por fase/percentual, ao contrário de `QT_KG`) — nova coluna "Peças (OB)" no `DetailDrawer` com tooltip detalhando origem vs. destino.
+
+## [1.1.0] - 07/07/2026
+### Adicionado
+- **Painel dedicado de Tingimento, reconstruído do zero**: novo módulo `contracts/tingimento.py` e endpoint `GET /api/beneficiamento/tingimento` (escopo fixo `CODIGO_FASE=40`, independente dos filtros gerais da aba — só aceita `dt_inicio`/`dt_fim`). Cobre resumo (OBs, KG, eficiência, reprocesso relativizado ao KG produzido, setup médio, desvio médio, produtividade), série diária (volume + reprocesso %) e rankings por máquina, por cor e por turno, com `amostra_insuficiente` (n<20) sinalizado. `MIN_SETUP`/`MIN_PROCESSO` agora persistidos (schema SQLite v5, nova recarga completa de 90 dias). Novo componente `Dashboard/src/components/beneficiamento/TingimentoPanel.tsx`, com presets de período próprios, na `BeneficiamentoPage`.
+- **Autocomplete de produto e filtro hierárquico Setor→Grupo→Fase** (ver seção anterior) ganharam continuidade neste ciclo com a coluna MT (metros) e desvio relativo no drill-down (`DetailDrawer`).
+### Alterado
+- **Reprocesso removido dos rankings gerais "por setor industrial" e "fases críticas"**: só tem sinal real quando relativizado à produção de uma fase específica (ex.: cor tingida); nas demais fases/máquinas é ruído. A análise de reprocesso agora vive exclusivamente no painel de Tingimento.
+- **`DetailDrawer` (drill-down)**: largura aumentada (720px → 1080px) para eliminar a barra de rolagem lateral com as colunas atuais. Coluna "Fim" agora formata `DD/MM/YYYY HH:MM:SS` (`formatDateTimeBr`, novo em `lib/format.ts`) em vez do ISO cru. Coluna "Desvio (min)" (minutos absolutos, sem contexto do tamanho da fase) substituída por "Desvio" em percentual relativo ao tempo previsto, com destaque visual (âmbar >15%, vermelho >30%). Nova coluna MT (metros).
+### Não incluído (bloqueio técnico)
+- **Quantidade de peças**: a função Oracle `PKGBENF0001.FNC_RETORNA_PC_ORIGEM_OB` usada para esse cálculo retornou `ORA-00904` para o usuário Oracle readonly atual — o Oracle disfarça falta de permissão (`GRANT EXECUTE`) como "identificador inválido". Precisa de liberação do DBA antes de ser adicionada com segurança à query de produção.
+
+## [1.0.9] - 07/07/2026
+### Adicionado
+- **Beneficiamento: separação visual de produção confirmada vs. planejada**: investigação do default de 30 dias revelou que a query sempre trouxe OBs `PLANEJADA`/`PROGRAMADA` (ainda não executadas) misturadas com produção `CONFIRMADA` — não é um bug de refresh, é um comportamento pré-existente (útil para um PCP ver o que está agendado). `STATUS_FASE`/`DS_STATUS_FASE` agora são persistidos no histórico (schema SQLite bump para v4, nova recarga completa de 90 dias) com a chave derivada `STATUS_KEY` (`confirmada`/`planejada`). Novo filtro `status` (`confirmada`/`planejada`/todos) em `GET /overview` e `/detail`. KPIs ganharam `fases_planejadas` e `planejado_pct`, exibidos como indicador visual (⚠ acima de 20%) no tile "Fases concluídas" do Dashboard, sem remover ou filtrar dados por padrão — apenas tornando visível a mistura.
+
+## [1.0.8] - 07/07/2026
+### Alterado
+- **Beneficiamento: enquadramento e sinal de reprocesso**: o painel fixo dedicado da fase Tingimento (`_build_tingimento`, campo `tingimento` do overview) foi removido — desde a fase real por fase (v1.0.7), qualquer fase tem drill-down equivalente via `rankings.fases_criticas`/`treemap`, tornando o bloco redundante e de baixo sinal (0,74% de reprocesso na base). Ranking "por setor industrial" promovido para o topo da grade de rankings no Dashboard. `rankings.fases_criticas` ganhou o campo `amostra_insuficiente` (true quando `fases_concluidas < 20`), sinalizado com aviso visual na UI para não comparar percentuais de reprocesso estatisticamente instáveis (ex.: 1 fase com reprocesso = 100%).
+- **`filter_options.alternativos` removido**: listava até 160 dos 596+ produtos distintos em um `<select>` simples, inviável de navegar; substituído por busca dinâmica.
+### Adicionado
+- **Autocomplete de produto**: novo endpoint `GET /api/beneficiamento/produtos?q=` (busca por código ou descrição, mínimo 2 caracteres, limite configurável) e componente `Dashboard/src/components/beneficiamento/ProductAutocomplete.tsx` substituindo o `<select>` de 596 itens na `FilterBar`.
+- **Filtro hierárquico completo Setor → Grupo de Fase → Fase** na `FilterBar` (selecionar setor reseta grupo/fase; selecionar grupo reseta fase).
+
+## [1.0.7] - 07/07/2026
+### Alterado
+- **Beneficiamento: substitui o bucket grosseiro `CD_DS_FASE` (11 categorias por `TIPO_MAQUINA`) pela fase real do Oracle + hierarquia Setor Industrial → Grupo de Fase → Fase**: `sql/templates/detalhado.sql` ganhou as CTEs `DIM_FASE` (join `FASES_FLUXO`→`GRUPO_FASES`→`SETOR_INDUSTRIAL`) e `DIM_TIPO_MAQ` (`VW_ENU_TIPO_DE_MAQUINAS_SETOR`), projetando `CODIGO_FASE`, `DESCR_FASE`, `DESCR_GRUPO_FASE`, `DESCR_SETOR_INDUST` e `DESCR_TIPO_MAQ` em vez do `CASE` textual. Schema SQLite bump para v3 (`HISTORICO_SCHEMA_VERSION = 3`, dispara recarga completa do histórico via `runner.py`) com as novas colunas e chaves derivadas `SETOR_KEY`/`GRUPO_FASE_KEY`/`TIPO_MAQ_KEY`. Painel de Tingimento reancorado em `CODIGO_FASE = 40` (antes `FASE_KEY = '03 - TINGIMENTO'`).
+### Adicionado
+- **Filtros dinâmicos por setor industrial, grupo de fase, tipo de máquina e reprocesso** em `GET /api/beneficiamento/overview` e `/detail` (novos query params `setor`, `grupo_fase`, `tipo_maquina`, `reprocesso`), com novos `target_type` de drill-down (`setor`, `grupo_fase`, `tipo_maquina`). Novo ranking "por setor industrial" e agregação hierárquica `treemap` (Setor → Fase → Máquina) no contrato de overview.
+- **Treemap Setor → Fase → Máquina no Dashboard** (`Dashboard/src/components/beneficiamento/Treemap.tsx`, SVG próprio slice-and-dice sem dependência externa, tooltip com top-3 máquinas por célula), integrado à `BeneficiamentoPage` com drill-down por clique. `FilterBar` ganhou seletores hierárquicos de Setor → Fase, Tipo de Máquina e toggle tri-state de Reprocesso.
+
 ## [1.0.6] - 07/07/2026
 ### Adicionado
 - **OBP-04: nova fase monitorada 47-UMM (UMEDECIMENTO DE MALHA)**: adicionada em `OBs Paradas Fase/config.json` (bloco `fases_monitoradas` e mapa `ordem_codigos_fase`), com `threshold_dias: 0.5`, `ativo: true` e `responsavel: lider_reserva_3_turno` (mesmo papel da fase 45-CDC). Tabela de fases monitoradas em `docs/runbooks/obs-paradas-fase-runbook.md` atualizada.

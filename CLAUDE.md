@@ -93,7 +93,7 @@ Monorepo com três camadas principais:
 ### Domínio Beneficiamento (`Produção Beneficimento/src/beneficiamento/`)
 - `core/` — coerção, métricas, schema e turnos (lógica pura, sem I/O).
 - `data/` — queries SQL, schema de dados e writer para persistência histórica.
-- `contracts/` — implementação histórica canônica (`overview.py`, `detail.py`, `_queries.py`).
+- `contracts/` — implementação histórica canônica (`overview.py`, `detail.py`, `_queries.py`, `tingimento.py` — agregação da fase real de tingimento consumida por `GET /api/beneficiamento/tingimento`).
 - `oracle.py` — única interface com Oracle; nunca abre conexão fora deste arquivo.
 - `runner.py` — orquestra snapshot Oracle → SQLite histórico; orçamento de 20 s.
 - `snapshot_store.py` — lê/escreve `Produção Beneficimento/snapshots/latest/`. A API **nunca** consulta Oracle diretamente; consome apenas esses snapshots.

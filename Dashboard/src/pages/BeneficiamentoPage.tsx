@@ -6,6 +6,7 @@ import {
   type BeneficiamentoGargalo,
   type BeneficiamentoOverview,
   type BeneficiamentoProdutoPrincipal,
+  type BeneficiamentoSetorRanking,
   type BeneficiamentoTurnoRanking,
 } from "../api/orchestrator";
 import {
@@ -25,6 +26,8 @@ import {
   useToast,
 } from "../components/ui";
 import { DetailDrawer, type DetailDrawerRequest } from "../components/beneficiamento/DetailDrawer";
+import { Treemap } from "../components/beneficiamento/Treemap";
+import { TingimentoPanel } from "../components/beneficiamento/TingimentoPanel";
 import {
   DEFAULT_BENEFICIAMENTO_FILTERS,
   FilterBar,
@@ -80,13 +83,6 @@ const FASE_CRITICA_COLUMNS: Column<BeneficiamentoFaseCritica>[] = [
     align: "right",
     render: (r) => formatPercent(r.eficiencia_tempo_pct, 1),
   },
-  {
-    key: "reprocesso_kg_pct",
-    header: "Reproc. %",
-    align: "right",
-    render: (r) => formatPercent(r.reprocesso_kg_pct, 1),
-    hideOnNarrow: true,
-  },
 ];
 
 const PRODUTO_COLUMNS: Column<BeneficiamentoProdutoPrincipal>[] = [
@@ -105,6 +101,18 @@ const PRODUTO_COLUMNS: Column<BeneficiamentoProdutoPrincipal>[] = [
     align: "right",
     render: (r) => formatNumber(r.produtividade_kg_h),
     hideOnNarrow: true,
+  },
+];
+
+const SETOR_COLUMNS: Column<BeneficiamentoSetorRanking>[] = [
+  { key: "setor", header: "Setor industrial", render: (r) => r.setor },
+  { key: "ob_distintas", header: "OBs", align: "right", render: (r) => formatNumber(r.ob_distintas), hideOnNarrow: true },
+  { key: "kg_total", header: "KG", align: "right", render: (r) => formatNumber(r.kg_total) },
+  {
+    key: "eficiencia_tempo_pct",
+    header: "Efic. %",
+    align: "right",
+    render: (r) => formatPercent(r.eficiencia_tempo_pct, 1),
   },
 ];
 
@@ -169,8 +177,26 @@ export function BeneficiamentoPage() {
       turno: filters.turno || undefined,
       alternativo: filters.alternativo || undefined,
       q: debouncedQ || undefined,
+      setor: filters.setor || undefined,
+      grupo_fase: filters.grupoFase || undefined,
+      tipo_maquina: filters.tipoMaquina || undefined,
+      reprocesso: filters.reprocesso || undefined,
+      status: filters.status || undefined,
     }),
-    [filters.dtInicio, filters.dtFim, filters.maquina, filters.fase, filters.turno, filters.alternativo, debouncedQ],
+    [
+      filters.dtInicio,
+      filters.dtFim,
+      filters.maquina,
+      filters.fase,
+      filters.turno,
+      filters.alternativo,
+      filters.setor,
+      filters.grupoFase,
+      filters.tipoMaquina,
+      filters.reprocesso,
+      filters.status,
+      debouncedQ,
+    ],
   );
 
   const fetchOverview = useCallback(() => orchestratorApi.getBeneficiamentoOverview(overviewParams), [overviewParams]);
@@ -252,6 +278,8 @@ export function BeneficiamentoPage() {
         }
       />
 
+      <TingimentoPanel />
+
       <FilterBar filters={filters} options={overview.filter_options} onChange={patchFilters} onReset={resetFilters} />
 
       {health && (
@@ -286,7 +314,18 @@ export function BeneficiamentoPage() {
         <>
           <div className={page.tiles}>
             <StatTile label="OBs distintas" value={formatNumber(kpis.ob_distintas)} />
-            <StatTile label="Fases concluídas" value={formatNumber(kpis.fases_concluidas)} />
+            <StatTile
+              label="Fases concluídas"
+              value={formatNumber(kpis.fases_concluidas)}
+              hint={
+                kpis.planejado_pct > 0 ? (
+                  <span title={`${formatNumber(kpis.fases_planejadas)} fases ainda planejadas/programadas, não concluídas`}>
+                    {formatPercent(kpis.planejado_pct, 1)} planejado
+                  </span>
+                ) : undefined
+              }
+              tone={kpis.planejado_pct > 20 ? "amber" : undefined}
+            />
             <StatTile
               label="KG total"
               value={formatNumber(kpis.kg_total)}
@@ -326,7 +365,32 @@ export function BeneficiamentoPage() {
             </div>
           )}
 
+          {overview.treemap.length > 0 && (
+            <Card label="volume por setor → fase → máquina">
+              <Treemap
+                nodes={overview.treemap}
+                onCellClick={({ setor, fase }) =>
+                  setDetailRequest({ targetType: "fase", label: `${setor} / ${fase}`, setor, fase })
+                }
+              />
+            </Card>
+          )}
+
           <div className={page.split}>
+            <RankingSection
+              title="por setor industrial"
+              rows={overview.rankings.setores}
+              columns={SETOR_COLUMNS}
+              rowKey={(r) => r.setor}
+              onRowClick={(r) => setDetailRequest({ targetType: "setor", label: r.setor, setor: r.setor })}
+            />
+            <RankingSection
+              title="fases críticas"
+              rows={overview.rankings.fases_criticas}
+              columns={FASE_CRITICA_COLUMNS}
+              rowKey={(r) => r.fase}
+              onRowClick={(r) => setDetailRequest({ targetType: "fase", label: r.fase, fase: r.fase })}
+            />
             <RankingSection
               title="gargalos (máquina + fase)"
               rows={overview.rankings.gargalos}
@@ -340,13 +404,6 @@ export function BeneficiamentoPage() {
                   fase: r.fase,
                 })
               }
-            />
-            <RankingSection
-              title="fases críticas"
-              rows={overview.rankings.fases_criticas}
-              columns={FASE_CRITICA_COLUMNS}
-              rowKey={(r) => r.fase}
-              onRowClick={(r) => setDetailRequest({ targetType: "fase", label: r.fase, fase: r.fase })}
             />
             <RankingSection
               title="produtos principais"
