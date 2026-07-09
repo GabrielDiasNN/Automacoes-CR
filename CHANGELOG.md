@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.6] - 09/07/2026
+### Alterado
+- **Endurecimento de `Tools/Test-PortablePaths.ps1`**: a regex de detecção de caminhos absolutos exigia barra de separador tanto antes quanto depois do primeiro segmento de pasta, deixando escapar caminhos de um único segmento de disco sem barra final antes do fechamento da string (o caso real que existia em `Orchestrator/tools/diagnostics.py` antes de ser corrigido). Regex ajustada para também capturar esse padrão via lookahead alternativo (fim de string/aspas), com exclusão adicional para o diretório do sistema operacional Windows (mesmo princípio já aplicado a `instantclient`). Validado com dry-run contra o repositório inteiro antes de promover a mudança: zero novas reprovações.
+
 ## [1.1.2] - 08/07/2026
 ### Corrigido
 - **`comTimeout()` (`lib/WhatsApp-Core.js`) causava crash silencioso do processo Node em lotes com menções**: o helper de timeout adicionado em `82ca31be` usava `Promise.race([promise, timeout])` sem descartar a promise perdedora. Quando `client.getNumberId()` (chamado por `resolverMencoes()` para cada `@numero` na caption) rejeitava *depois* que o timeout de 15s já havia "vencido" a corrida, essa rejeição tardia não tinha `.catch` anexado — unhandled rejection que, a partir do Node 15+ (ambiente roda Node 24), derruba o processo inteiro. Afetava apenas automações que geram menções em volume no modo `BATCH` (OBP-04/OBs Paradas Fase, com até ~17 fases por execução), nunca `Receitas Bloqueadas` (modo `AUTO`, sem menções) — explicando por que só a primeira apresentava timeout/erro recorrente. Corrigido anexando `promise.catch(() => {})` à promise original dentro de `comTimeout()`, suprimindo a rejeição tardia sem alterar o comportamento de timeout já observável por quem chama.
