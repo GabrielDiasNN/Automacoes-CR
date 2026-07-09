@@ -1,6 +1,6 @@
 # Fluxo de Desenvolvimento — Hub de Automações
 
-> **Versão:** v9.3.0 | **Atualizado:** 25/05/2026
+> **Versão:** v1.0.0 | **Atualizado:** 05/07/2026
 
 ---
 

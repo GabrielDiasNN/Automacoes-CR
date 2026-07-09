@@ -35,7 +35,7 @@ vazio, todas as areas sao forcadas.
 
 - **Bloqueante (required checks)**: `Gitleaks Security Scan`, `Governanca agregada`, `Resumo final`. O `Resumo final` falha se qualquer job obrigatorio falhar ou for cancelado; jobs pulados por area contam como OK.
 - **Nao bloqueante**: `pip-audit` no PR roda com `continue-on-error` (o gate real e o agendado semanal); warnings de ESLint nao falham o job.
-- **Gate de cobertura**: `--cov-fail-under=77` nos testes Python (regressao; cobertura real medida em 80% em 12/06/2026 — ao subir a cobertura, suba o gate junto).
+- **Gate de cobertura**: `--cov-fail-under=84` nos testes Python (cobertura real medida em 85,40% em 05/07/2026 — ao subir a cobertura, suba o gate junto), alem de `diff-cover --fail-under=85` nas linhas alteradas do PR (job `testes-python`, apenas em eventos `pull_request`).
 - **CHANGELOG**: PR com mudanca de codigo (`.py`, `.ps1/.psm1/.psd1`, `.js`, `.sql`, fora de testes/docs/CI) exige entrada no `CHANGELOG.md`. Override: incluir `[skip-changelog]` no titulo do PR.
 
 ## Validacao

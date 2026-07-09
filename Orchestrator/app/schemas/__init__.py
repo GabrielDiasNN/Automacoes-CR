@@ -1,5 +1,5 @@
 """
-Pacote contendo schemas Pydantic do Orchestrator Central de Automações v5.1.
+Pacote contendo schemas Pydantic do Orchestrator Central de Automações v1.0.0.
 
 Este __init__.py reexporta todas as entidades dos submódulos comuns,
 automations, executions e system para manter retrocompatibilidade absoluta

@@ -1,6 +1,6 @@
 # pylint: disable=R0903,R0901,W0718,W0223,E0402
 """
-Modelos SQLAlchemy do Orchestrator Central de Automacoes v5.0.
+Modelos SQLAlchemy do Orchestrator Central de Automacoes v1.0.0.
 
 Tabelas:
   - Automation: Cadastro de robos e suas configuracoes.

@@ -1,5 +1,5 @@
 """
-Utilitarios compartilhados do Orchestrator Central de Automacoes v5.0.
+Utilitarios compartilhados do Orchestrator Central de Automacoes v1.0.0.
 
 Modulo centralizado para eliminar duplicacao entre routers:
   - log_audit(): Registra trilha de auditoria no AuditLog.

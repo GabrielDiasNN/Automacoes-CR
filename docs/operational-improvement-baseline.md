@@ -1,6 +1,6 @@
 # Baseline Operacional do Orchestrator
 
-> **Versão:** v9.3.2 | **Atualizado:** 25/05/2026
+> **Versão:** v1.0.0 | **Atualizado:** 05/07/2026
 
 ## Resumo
 
