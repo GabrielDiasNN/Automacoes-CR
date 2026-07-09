@@ -75,7 +75,12 @@ graph TD
 * A resiliência é gerenciada via biblioteca `stamina` com **Retry Exponencial**. Em caso de falhas de rede comuns ou desconexões ativas (`ORA-00028`, `DPY-4011`), o robô tentará restabelecer a conexão até 3 vezes com esperas exponenciais crescentes antes de desistir.
 
 ### 2. Idempotência Cruzada (Zero Spam)
-* Para evitar fadiga de alertas nas equipes fabris, o robô calcula o hash MD5 do estado extraído e o compara com a última execução salva em `receitas_state.json`. Se o diff for nulo, a automação finaliza graciosamente com **Exit Code 0** sem enviar e-mails ou mensagens repetidas.
+* Para evitar fadiga de alertas nas equipes fabris, o robô calcula o hash SHA-256 do estado extraído (`compute_hash()`, `lib/python/oracle_extract.py`) e o compara com a última execução salva em `receitas_state.json`. Se o diff for nulo, a automação finaliza graciosamente com **Exit Code 0** sem enviar e-mails ou mensagens repetidas.
+* `run.ps1` (ADR-013) cruza esse hash com `email_state.json.last_sent_hash` para decidir, por canal, se e-mail e WhatsApp já foram entregues para o lote atual (`delivery_status.email.success` / `.whatsapp.success`).
+
+> [!WARNING]
+> **Janela de deploy ao migrar o algoritmo de hash**: o formato do hash persistido em `receitas_state.json` mudou de `pd.util.hash_pandas_object(...).sum()` (inteiro) para `compute_hash()` (SHA-256 hex). Qualquer mudança de formato de hash faz a PRIMEIRA execução pós-deploy comparar um hash novo contra um `last_sent_hash` no formato antigo — mismatch garantido, mesmo que os dados não tenham mudado, disparando reenvio de e-mail e WhatsApp uma única vez.
+> Mitigação adotada: **janela controlada**. Só faça o deploy (merge + próxima execução agendada) quando `Receitas Bloqueadas/email_state.json` estiver "assentado" para o hash atual — ou seja, `delivery_status.email.success` e `delivery_status.whatsapp.success` ambos `true` e `last_sent_hash` igual ao `last_hash` de `receitas_state.json`, sem retry pendente. Nessas condições, o pior caso é um único reenvio de conteúdo já entregue (duplicata inofensiva), não a colisão com uma notificação real ainda não confirmada.
 
 ### 3. Resiliência do Canal WhatsApp
 * O wrapper do WhatsApp possui **Graceful Degradation**. Se um número de telefone na lista de envios for inválido (LID handling inválido), a falha é registrada como `WARN` nos logs e o processo finaliza com sucesso para os demais contatos.

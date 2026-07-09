@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.5] - 09/07/2026
+### Alterado
+- **Receitas Bloqueadas migrada para `lib/python/oracle_extract.py`**: `processar_receitas.py` passa a usar `resolve_oracle_credentials` (credenciais), `fetch_all` (conexão/fetch) e `compute_hash` (hash SHA-256) da biblioteca compartilhada, eliminando a última duplicação do padrão fetch/serialize/hash entre os 4 scripts de extração Oracle do projeto. Pipeline de diff NEW/MODIFIED/DELETED, geração de Excel e de HTML permanecem idênticos (validado com a suíte completa: 470 testes).
+- **⚠️ Mudança de formato do hash de idempotência**: o hash persistido em `receitas_state.json` muda de `pd.util.hash_pandas_object(...).sum()` para SHA-256 determinístico (`compute_hash()`). Notificação pendente do formato antigo enviada manualmente antes do deploy (e-mail + WhatsApp confirmados) para minimizar o risco de reenvio na primeira execução pós-deploy — documentado em `docs/runbooks/receitas-bloqueadas-runbook.md`.
+
 ## [1.1.6] - 09/07/2026
 ### Alterado
 - **Endurecimento de `Tools/Test-PortablePaths.ps1`**: a regex de detecção de caminhos absolutos exigia barra de separador tanto antes quanto depois do primeiro segmento de pasta, deixando escapar caminhos de um único segmento de disco sem barra final antes do fechamento da string (o caso real que existia em `Orchestrator/tools/diagnostics.py` antes de ser corrigido). Regex ajustada para também capturar esse padrão via lookahead alternativo (fim de string/aspas), com exclusão adicional para o diretório do sistema operacional Windows (mesmo princípio já aplicado a `instantclient`). Validado com dry-run contra o repositório inteiro antes de promover a mudança: zero novas reprovações.
