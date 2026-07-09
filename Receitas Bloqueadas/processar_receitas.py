@@ -21,6 +21,12 @@ from dotenv import load_dotenv
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from oracle_client import init_oracle_thick_mode
+from oracle_extract import (
+    OracleCredentials,
+    compute_hash,
+    fetch_all,
+    resolve_oracle_credentials,
+)
 from oracle_retry import CircuitBreakerError, make_oracle_retry
 from pydantic import BaseModel, Field, ValidationError
 
@@ -58,15 +64,15 @@ _oracle_retry = make_oracle_retry()
 
 @_oracle_retry
 def fetch_data_with_retry(
-    user: str, password: str, dsn: str, sql_query: str, exec_id: str
+    creds: OracleCredentials, sql_query: str, exec_id: str
 ) -> pd.DataFrame:
     log(
         "Estabelecendo conexao e extraindo dados (com Circuit Breaker)...",
         "INFO",
         exec_id,
     )
-    with oracledb.connect(user=user, password=password, dsn=dsn) as connection:
-        return pd.read_sql(sql_query, con=connection)
+    columns, rows = fetch_all(creds, sql_query, exec_id, log)
+    return pd.DataFrame(rows, columns=columns)
 
 
 def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str:
@@ -273,13 +279,7 @@ def process() -> None:
     if os.path.exists(html_path):
         os.remove(html_path)
 
-    user = os.environ.get("ORACLE_READONLY_USER")
-    password = os.environ.get("ORACLE_READONLY_PASSWORD")
-    dsn = os.environ.get("ORACLE_CONNECT_STRING", "dbprd")
-    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get(
-        "ORACLE_CLIENT_PATH"
-    )
-    tns_admin = os.environ.get("TNS_ADMIN")
+    creds = resolve_oracle_credentials(log, exec_id, require_tns_admin=True)
 
     def handle_exception(exc_type: Any, exc_value: Any, exc_traceback: Any) -> None:
         if issubclass(exc_type, KeyboardInterrupt):
@@ -290,18 +290,14 @@ def process() -> None:
 
     sys.excepthook = handle_exception
 
-    if not client_lib or not tns_admin:
-        log("Caminhos Oracle ausentes no ambiente.", "ERROR", exec_id)
+    if creds is None:
+        log("Credenciais ou caminhos Oracle invalidos no ambiente.", "ERROR", exec_id)
         sys.exit(1)
-    assert (
-        user is not None
-        and password is not None
-        and client_lib is not None
-        and tns_admin is not None
-    )
 
     init_oracle_thick_mode(
-        client_lib, tns_admin, lambda msg, lvl="INFO": log(msg, lvl, exec_id)
+        creds.client_lib,
+        creds.tns_admin,
+        lambda msg, lvl="INFO": log(msg, lvl, exec_id),
     )
 
     try:
@@ -309,7 +305,7 @@ def process() -> None:
         with open(sql_path, "r", encoding="utf-8") as f:
             sql_query = f.read()
 
-        df_raw = fetch_data_with_retry(user, password, dsn, sql_query, exec_id)
+        df_raw = fetch_data_with_retry(creds, sql_query, exec_id)
         df_raw = df_raw.rename(
             columns={
                 "COR_REC": "Cor Rec.",
@@ -319,6 +315,12 @@ def process() -> None:
                 "DATA_BLOQUEIO": "Data Bloqueio",
             }
         )
+        # Falso positivo do analisador estatico apos fetch_all()+pd.DataFrame(...)
+        # tornar o tipo de df_raw precisamente inferivel; a resolucao do overload
+        # de .rename(columns=...) acima passa a inferir None daqui em diante. Com
+        # pd.read_sql() (forma anterior) o retorno ja era nao inferivel e
+        # mascarava essa mesma limitacao do analisador.
+        # pylint: disable=unsupported-assignment-operation,unsubscriptable-object
         for col in ["Data Última Prod.", "Data Bloqueio"]:
             df_raw[col] = (
                 pd.to_datetime(df_raw[col], errors="coerce")
@@ -336,6 +338,7 @@ def process() -> None:
         df_agreg = (
             df_raw[cols_agreg].drop_duplicates().sort_values(by=["Cor Rec.", "EP Rec."])
         )
+        # pylint: enable=unsupported-assignment-operation,unsubscriptable-object
         df_agreg["Key"] = (
             df_agreg["Cor Rec."].astype(str)
             + "_"
@@ -425,10 +428,11 @@ def process() -> None:
             log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
             sys.exit(2)
 
+        records = df_agreg.to_dict(orient="records")
         state_data = {
-            "last_hash": str(pd.util.hash_pandas_object(df_agreg).sum()),
+            "last_hash": compute_hash(records),
             "updated_at": datetime.now().isoformat(),
-            "records": df_agreg.to_dict(orient="records"),
+            "records": records,
         }
         # Salva apenas no temporario. O commit para o oficial sera via PowerShell apos notificacoes.
         with open(state_tmp_path, "w", encoding="utf-8") as f:

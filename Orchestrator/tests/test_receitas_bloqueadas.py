@@ -179,6 +179,8 @@ def test_process_sem_alteracoes_exit_2(
     )
 
     def side_exists(path: str) -> bool:
+        if path == tmp_path.as_posix():
+            return True  # ORACLE_CLIENT_LIB_DIR, checado por resolve_oracle_credentials
         if "SQL-ReceitasBloqueadas.sql" in path:
             return True
         if "receitas_state.json" in path and ".tmp" not in path:
@@ -210,23 +212,25 @@ def test_process_sem_alteracoes_exit_2(
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_connect.return_value = mock_conn
+    mock_conn.__enter__.return_value = mock_conn
     mock_conn.cursor.return_value = mock_cursor
 
     # Oracle devolve exatamente os mesmos dados que estão no estado → sem diff
-    mock_df_igual = pd.DataFrame(
-        [
-            {
-                "COR_REC": "Azul",
-                "EP_REC": 5,
-                "PE_REC": 15,
-                "DATA_ULT_PROD": "2026-05-18",
-                "DATA_BLOQUEIO": "2026-05-17",
-            }
-        ]
-    )
+    # (fetch_all le columns via cursor.description e linhas via cursor.fetchmany
+    # em lotes ate um lote vazio; sem isso, o while True nunca termina)
+    mock_cursor.description = [
+        ("COR_REC",),
+        ("EP_REC",),
+        ("PE_REC",),
+        ("DATA_ULT_PROD",),
+        ("DATA_BLOQUEIO",),
+    ]
+    mock_cursor.fetchmany.side_effect = [
+        [("Azul", 5, 15, "2026-05-18", "2026-05-17")],
+        [],
+    ]
 
     with (
-        patch("processar_receitas.pd.read_sql", return_value=mock_df_igual),
         patch("processar_receitas.sys.argv", ["processar_receitas.py", "test_idem"]),
         patch("processar_receitas.sys.exit", side_effect=SystemExit(2)) as mock_exit,
     ):
@@ -263,6 +267,8 @@ def test_process_sucesso_com_novos_bloqueios(
 
     # Mocks de arquivo exist
     def side_exists(path: str) -> bool:
+        if path == tmp_path.as_posix():
+            return True  # ORACLE_CLIENT_LIB_DIR, checado por resolve_oracle_credentials
         if "SQL-ReceitasBloqueadas.sql" in path:
             return True
         if "receitas_state.json" in path:
@@ -316,35 +322,32 @@ def test_process_sucesso_com_novos_bloqueios(
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_connect.return_value = mock_conn
+    mock_conn.__enter__.return_value = mock_conn
     mock_conn.cursor.return_value = mock_cursor
 
-    # Retorna registros de teste no read_sql
     # Simula dados extraidos contendo a receita anterior modificada e uma nova!
-    mock_df_db = pd.DataFrame(
+    # (fetch_all le columns via cursor.description e linhas via cursor.fetchmany
+    # em lotes ate um lote vazio; sem isso, o while True nunca termina)
+    mock_cursor.description = [
+        ("COR_REC",),
+        ("EP_REC",),
+        ("PE_REC",),
+        ("DATA_ULT_PROD",),
+        ("DATA_BLOQUEIO",),
+    ]
+    mock_cursor.fetchmany.side_effect = [
         [
-            {
-                "COR_REC": "Azul",
-                "EP_REC": 5,
-                "PE_REC": 15,
-                "DATA_ULT_PROD": "2026-05-20",  # Data mudou (MODIFIED)
-                "DATA_BLOQUEIO": "2026-05-19",
-            },
-            {
-                "COR_REC": "Preto",
-                "EP_REC": 10,
-                "PE_REC": 20,
-                "DATA_ULT_PROD": "2026-05-20",  # Nova receita (NEW)
-                "DATA_BLOQUEIO": "2026-05-20",
-            },
-        ]
-    )
+            ("Azul", 5, 15, "2026-05-20", "2026-05-19"),  # Data mudou (MODIFIED)
+            ("Preto", 10, 20, "2026-05-20", "2026-05-20"),  # Nova receita (NEW)
+        ],
+        [],
+    ]
 
     excel_writer = MagicMock()
     excel_writer.__enter__.return_value = MagicMock()
     excel_writer.__exit__.return_value = None
 
     with (
-        patch("processar_receitas.pd.read_sql", return_value=mock_df_db),
         patch("processar_receitas.pd.ExcelWriter", return_value=excel_writer),
         patch("processar_receitas.pd.DataFrame.to_excel"),
         patch("processar_receitas.formatar_excel") as mock_format,
