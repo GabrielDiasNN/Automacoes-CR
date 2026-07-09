@@ -23,6 +23,7 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Test-OrchestratorIntegrity.ps1:** Valida integridade estrutural do Orchestrator.
 - **Test-DashboardTemplate.ps1:** Valida contrato HTML/CSS do template de dashboard.
 - **Test-PowerShellApprovedVerbs.ps1:** Valida verbos aprovados em funções PowerShell.
+- **Test-ChangelogUpdated.ps1:** Valida que mudanças em código (`.py`, `.ps1/.psm1/.psd1`, `.js/.mjs/.cjs`, `.sql`) no diff do PR vêm acompanhadas de atualização do `CHANGELOG.md`; permite override com `-AllowSkip` (marcador `[skip-changelog]` no título do PR).
 - **Get-GovernanceTargetSummary.ps1:** Classifica o diff do CI (alvos críticos e de log) para seleção de jobs.
 - **Fix-MarkdownStyle.ps1:** Lint/correção de estilo Markdown (`-DryRun` no CI).
 - **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
@@ -37,6 +38,9 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Review-Code.ps1:** Revisão estática local com relatório de governança.
 - **ConfigurarEmailTeste.ps1:** Define/remove o e-mail de redirecionamento do modo de teste.
 - **CargarHistoricoBeneficiamento.ps1:** Carga de histórico do Beneficiamento por janela de datas.
+- **Get-WhatsAppGroups.ps1:** Lista os grupos da sessão WhatsApp já autenticada e seus IDs (parâmetro `-ClientId`, padrão `hub-global`), para descobrir o ID do grupo destino de uma automação.
+- **AtivarModoTeste.bat / DesativarModoTeste.bat:** Ativam/desativam o Modo Teste (sandbox) via API do Orchestrator, globalmente ou para uma automação específica; carregam `ORCHESTRATOR_API_KEY` do `.env` via `Lib-Config.psm1`.
+- **Watch-CI.ps1:** Monitora execuções do GitHub Actions em tempo real (`-RunId`, `-Branch`, `-Follow`); autentica via `GH_TOKEN` ou `gh auth login`.
 
 ---
 
