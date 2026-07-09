@@ -22,7 +22,12 @@ if ($targetFiles.Count -eq 0) {
 $hasErrors = $false
 # Regex detectando caminhos absolutos hardcoded, ex: C:\Users, D:/Projetos
 # Exige que tenha pelo menos uma barra seguida de caracteres de pasta
-$absolutePathRegex = '(?i)[a-z]:[\\/](?![\\/\s])(?!instantclient)[a-z0-9_ -]+[\\/]'
+# Tambem captura caminhos de UM UNICO segmento sem barra final antes do fim
+# da string/aspas (ex: r"c:\Automacoes"), usando lookahead alternativo.
+# Exclui tambem "Windows" (ex: C:\Windows, C:/Windows) pelo mesmo motivo de
+# "instantclient": e um caminho de sistema operacional universal (mesmo em toda maquina
+# Windows), nao um caminho de projeto/desenvolvedor especifico.
+$absolutePathRegex = '(?i)[a-z]:[\\/](?![\\/\s])(?!instantclient)(?!Windows\b)[a-z0-9_ -]+(?:[\\/]|(?=["''\)\];,]|\s*$))'
 
 foreach ($file in $targetFiles) {
     $file = $file.Trim('"')
