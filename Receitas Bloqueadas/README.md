@@ -1,6 +1,6 @@
 # Automacao - Receitas Bloqueadas (v2.3.2 - Pure Python + Resilience) 🌟
 
-[⬅️ Voltar para o Hub Central](file:///c:/Automacoes/README.md)
+[⬅️ Voltar para o Hub Central](../README.md)
 
 ## Visão Geral
 

@@ -63,7 +63,7 @@ graph TD
 - **Performance SQLite**: Pragmas otimizados para operação em RAM (`temp_store=MEMORY`).
 - **Skills Compartilhadas**: `.github/skills/` é a fonte canônica das 7 skills ativas; `.gemini/skills/` é apenas o espelho de compatibilidade para Gemini CLI e Antigravity.
 - **Dashboard React "Sala de Instrumentação"**: identidade visual industrial (grafite + ciano/âmbar), IBM Plex, react-router com deep-links, design system em `Dashboard/src/components/ui/`, uPlot para time series.
-- **OBs Paradas Fase (OBP-04)**: automação de visibilidade de OBs paradas por fase, cards PNG via WhatsApp, cron Seg-Sex 07:00/14:00.
+- **OBs Paradas Fase (OBP-04)**: automação de visibilidade de OBs paradas por fase, cards PNG via WhatsApp, cron diário às 05:30 e 14:00, com terceiro disparo às 22:30 (Seg-Sáb) ou 23:00 (Dom).
 
 ---
 Mantido pela equipe de Automações

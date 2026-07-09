@@ -6,13 +6,13 @@ Este painel consolida as métricas de qualidade de software do **Hub de Automaç
 
 ---
 
-## 📈 Status Atual das Métricas (Snapshot 27/05/2026)
+## 📈 Status Atual das Métricas (Snapshot 05/07/2026)
 
 O quadro abaixo resume a conformidade da codebase do projeto em relação às metas estabelecidas na governança técnica:
 
 | Métrica | Meta estabelecida | Valor Atual (Snapshot) | Status |
 |---|---|---|---|
-| **Cobertura de Testes (Pytest)** | `>= 60%` | **81%** | ✅ Meta Atingida |
+| **Cobertura de Testes (Pytest)** | `>= 84%` | **85,40%** | ✅ Meta Atingida |
 | **Erros de Tipagem (Mypy)** | `0` | **0** | ✅ Meta Atingida |
 | **Score de Estilo (Pylint)** | `>= 8.5/10` | **10/10** | ✅ Meta Atingida |
 | **Tamanho Versionado (Git)** | `<= 150 MB` | **2.54 MB** | ✅ Meta Atingida |

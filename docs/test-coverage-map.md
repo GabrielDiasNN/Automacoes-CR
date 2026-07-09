@@ -41,7 +41,7 @@ O quadro abaixo descreve a cobertura dos módulos prioritários de runtime do pr
 
 ---
 
-## 🎯 Metas de Cobertura por Camada (v9.4.x)
+## 🎯 Metas de Cobertura por Camada (v1.0.0)
 
 | Camada | Módulos Representativos | Meta | Prioridade |
 |--------|------------------------|------|-----------|

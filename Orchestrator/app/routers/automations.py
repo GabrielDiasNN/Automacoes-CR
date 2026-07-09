@@ -1,6 +1,6 @@
 """
 
-Router: Automations - CRUD completo com paginacao, validacao e auditoria. v5.1.0
+Router: Automations - CRUD completo com paginacao, validacao e auditoria. v1.0.0
 
 """
 

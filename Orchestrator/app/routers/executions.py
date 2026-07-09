@@ -1,5 +1,5 @@
 """
-Router: Executions - Histórico de execuções com decorações operacionais (A2, A3), filtros avançados, logs, artefatos e controle de fila. v9.2.0
+Router: Executions - Histórico de execuções com decorações operacionais (A2, A3), filtros avançados, logs, artefatos e controle de fila. v1.0.0
 """
 
 from __future__ import annotations

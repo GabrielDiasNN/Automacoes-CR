@@ -147,13 +147,15 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - `POST /api/automations/preflight` valida manifesto, docs obrigatórias e smoke tests antes de `create/update`.
 
 ### CI (GitHub Actions — `.github/workflows/governanca.yml`)
-Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py`, black/isort/bandit (job `lint-python`), pytest com `--cov-fail-under=77` (job `testes-python`), E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
+Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py`, black/isort/bandit (job `lint-python`), pytest com `--cov-fail-under=84` (job `testes-python`), além de `diff-cover --fail-under=85` nas linhas alteradas do PR, E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
 
 ## Contratos de Governança (Pre-Commit Hook)
 
 O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit. Quando arquivos centrais (infra, lib, Tools) estão staged, o modo é `full_scan` — varre todo o repositório. **Escreva já no padrão abaixo; não tente depois.**
 
 ### Pipeline de validações (ordem de execução)
+
+Ordem real do array `$checks` em `Tools/ValidarAutomacoes.ps1` (função `Invoke-NativeGovernanceCheck`):
 
 | # | Script | O que reprova |
 |---|--------|---------------|
@@ -165,10 +167,14 @@ O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit. Quando arq
 | 6 | `Test-PortablePaths.ps1` | Caminhos absolutos em `.ps1` |
 | 7 | `Test-SourceEncoding.ps1` | `.ps1` sem BOM; `.py/.json` com BOM |
 | 8 | `Test-JsonConfig.ps1` | JSON inválido em qualquer `*.json` staged |
-| 9 | `Test-AutomationCatalog.ps1` | Manifesto ausente ou campos faltando |
-| 10 | `Test-ArchitectureStandard.ps1` | Oracle fora de `oracle.py`, sessão sem `session_scope` |
-| 11 | `Test-NodeCommunications.ps1` | Contrato Node.js (whatsapp-offline.test.js) |
-| 12 | Outros | Encoding, Playwright, Skills, Semântica, Datas |
+| 9 | `Test-PlaywrightEvidence.ps1` | Evidência E2E sem URL real, console limpo ou resultado aprovado |
+| 10 | `Test-AutomationCatalog.ps1` | Manifesto ausente ou campos faltando |
+| 11 | `Test-ArchitectureStandard.ps1` | Oracle fora de `oracle.py`, sessão sem `session_scope` |
+| 12 | `Test-DateConformidade.ps1` | Datas fora do formato DD/MM/AAAA |
+| 13 | `Test-SemanticGovernance.ps1` | Drift entre monitor, constantes, docs, skills, catálogo e dependências |
+| 14 | `Test-NodeCommunications.ps1` | Contrato Node.js (whatsapp-offline.test.js) |
+
+Nota: `Test-SkillsGovernance.ps1` e `Test-DashboardTemplate.ps1` **não** fazem parte do array `$checks` acima — rodam em pontos próprios do script, via `Invoke-SkillsGovernanceCheck` e `Invoke-DashboardTemplateCheck`, respectivamente.
 
 ---
 

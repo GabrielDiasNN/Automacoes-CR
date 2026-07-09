@@ -12,11 +12,11 @@ Você está trabalhando em um repositório de automações operacionais crítica
 - Node.js é usado no bridge de WhatsApp.
 
 ## Regras obrigatórias e Governança AI-Native
-- **NUNCA use caminhos absolutos** (`.\...`). O repositório é 100% dinâmico e portável. Sempre use `.\` ou `$PSScriptRoot`.
+- **NUNCA use caminhos absolutos** (ex.: `C:\...`). O repositório é 100% dinâmico e portável. Sempre use `.\` ou `$PSScriptRoot`.
 - **Zero Trust:** Nenhuma credencial, token ou senha hardcoded é permitida (use `.env`).
 - **Python & SQL:** Exija performance O(n), vetorização (Pandas/NumPy) e nunca faça `SELECT *` no Oracle.
 - **PowerShell:** Tipagem estrita (`[string]`, `[int]`) e blocos `try/catch` específicos são mandatórios.
-- As automações obedecem às 6 skills canônicas presentes em `.github/skills/`.
+- As automações obedecem às 7 skills canônicas presentes em `.github/skills/`.
 - O diretório `.gemini/skills/` e apenas um espelho de compatibilidade para Gemini CLI e Antigravity; a fonte de verdade continua sendo `.github/skills/`.
 - Preserve compatibilidade com o fluxo atual e nunca faça rewrite total.
 - Preserve logs humanos existentes e proteja dados sensíveis (Auto-Masking).
