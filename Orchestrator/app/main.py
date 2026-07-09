@@ -1,5 +1,5 @@
 """
-Orchestrator Central de Automacoes v5.0.0 - Ponto de Entrada.
+Orchestrator Central de Automacoes v1.0.0 - Ponto de Entrada.
 
 Responsabilidades:
   1. Inicializar FastAPI e agendador

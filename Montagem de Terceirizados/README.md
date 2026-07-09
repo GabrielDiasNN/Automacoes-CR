@@ -1,6 +1,6 @@
 # Automacao - Montagem de Terceirizados (v2.0 - Pure-Native) ⚙️
 
-[⬅️ Voltar para o Hub Central](file:///c:/Automacoes/README.md)
+[⬅️ Voltar para o Hub Central](../README.md)
 
 ## Visao Geral
 
@@ -31,9 +31,6 @@ O motor de execucao nativa:
 - **`validate_and_generate_html.py`**: Nucleo de validacao. Implementa idempotencia (cache `.cache_erros.json`), calcula a quantidade de pecas vinculadas a NF incorreta em cada OB e gera o dashboard visual com cards e destaques de erro.
 - **Placa kanban no e-mail**: quando a extracao retornar `NR_KANBAN`, o HTML da notificacao passa a exibir a placa por OB nas tabelas resumida e detalhada para acelerar a triagem operacional.
 
-### 3. Pasta Legado (`Legacy/`)
-Contem o workbook e scripts da arquitetura antiga (v1.1 e anteriores). Mantidos apenas para historico de auditoria. **Nao sao mais utilizados no fluxo de producao.**
-
 ---
 
 ## Operacao e Diagnostico
@@ -48,13 +45,6 @@ A migracao para o modo nativo reduziu o tempo de execucao de minutos (via Excel 
 
 ---
 
-## 🧠 Gestão de Contexto (AI-Native)
-Este arquivo é o mapa cognitivo local do robô de Montagem de Terceirizados.
-- **Obrigação**: Deve ser atualizado após mudanças nas regras fiscais de validação NF vs OB ou alteração na query SQL otimizada.
-- **Sincronismo**: Garante que a IA compreenda a transição Legacy -> Pure-Native e a lógica de cache de erros em JSON.
-
----
-
 ## Regras de Negocio Criticas
 1. **Idempotencia**: O sistema utiliza cache de estado para enviar alertas apenas quando surgem novos erros ou mudancas significativas.
 2. **Filtros de Producao**: A automacao foca exclusivamente em OBs Montadas (Setor 5), com Destino Receita 1 e Programacao do tipo `%T`.
@@ -63,8 +53,10 @@ Este arquivo é o mapa cognitivo local do robô de Montagem de Terceirizados.
 ---
 
 ## 🧠 Gestão de Contexto (AI-Native)
-- **Obrigação:** Este arquivo deve refletir qualquer mudança no `Secure File-Payload Protocol` ou na lógica de idempotência.
-- **Objetivo:** Manter a IA ciente da arquitetura "Pure-Native" e da ausência de dependências de interface COM.
-- **Atualização 17/05/2026:** A notificacao agora destaca, por OB e no resumo do e-mail, a quantidade de pecas vinculadas a NF incorreta na montagem a partir de `QT_PC_NF`.
-- **Atualização 17/05/2026:** A extracao Python direta passou a usar `load_dotenv(..., override=True)` para garantir que o `.env` do repositorio prevaleca sobre variaveis stale da sessao local, alinhando a execucao manual ao contrato do Orchestrator.
-- **Atualização 07/06/2026:** O e-mail de divergencias passou a expor a placa kanban (`NR_KANBAN`) por OB quando disponivel, com fallback visual `N/A` quando o Oracle nao retornar placa.
+Este arquivo é o mapa cognitivo local do robô de Montagem de Terceirizados.
+- **Obrigação**: Deve ser atualizado após mudanças nas regras fiscais de validação NF vs OB, na query SQL otimizada, no `Secure File-Payload Protocol` ou na lógica de idempotência.
+- **Sincronismo**: Garante que a IA compreenda a transição Legacy -> Pure-Native e a lógica de cache de erros em JSON.
+- **Objetivo**: Manter a IA ciente da arquitetura "Pure-Native" e da ausência de dependências de interface COM.
+- **Atualização 17/05/2026**: A notificacao agora destaca, por OB e no resumo do e-mail, a quantidade de pecas vinculadas a NF incorreta na montagem a partir de `QT_PC_NF`.
+- **Atualização 17/05/2026**: A extracao Python direta passou a usar `load_dotenv(..., override=True)` para garantir que o `.env` do repositorio prevaleca sobre variaveis stale da sessao local, alinhando a execucao manual ao contrato do Orchestrator.
+- **Atualização 07/06/2026**: O e-mail de divergencias passou a expor a placa kanban (`NR_KANBAN`) por OB quando disponivel, com fallback visual `N/A` quando o Oracle nao retornar placa.

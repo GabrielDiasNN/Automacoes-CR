@@ -1,6 +1,6 @@
 # Automacao - Receitas Emitidas (Nativo v2.6.0 - Pure-Python) 🚀
 
-[⬅️ Voltar para o Hub Central](file:///c:/Automacoes/README.md)
+[⬅️ Voltar para o Hub Central](../README.md)
 
 ## Visao Geral
 
@@ -50,11 +50,6 @@ A automação possui controle rigoroso de estado para evitar execuções redunda
 
 ---
 
-## 🧠 Gestão de Contexto (AI-Native)
-Este arquivo é o mapa cognitivo local do robô de Receitas Emitidas.
-- **Obrigação**: Deve ser atualizado após mudanças na query SQL (Oracle) ou na lógica de geração do relatório adaptativo.
-- **Sincronismo**: Garante que a IA compreenda o fluxo de memória via Stdout Pipes (IPC) e o controle de estado SHA-256.
-
 ### Codigos de Saida (Exit Codes)
 - `0`: Sucesso Absoluto.
 - `1`: Falha tecnica tratada.
@@ -63,11 +58,8 @@ Este arquivo é o mapa cognitivo local do robô de Receitas Emitidas.
 
 ---
 
-## Legado
-Os artefatos originais baseados em Excel/VBA foram movidos para a pasta **`Legacy/`**. Esta automacao provou a viabilidade tecnica da migracao para 100% Python no ecossistema Costa Rica Malhas.
-
----
-
 ## 🧠 Gestão de Contexto (AI-Native)
-- **Obrigação:** Atualizar este README sempre que a versão (v2.x.x) for incrementada ou o protocolo de saída for alterado.
-- **Objetivo:** Manter a IA informada sobre o estado de excelência e independência de Excel deste módulo.
+Este arquivo é o mapa cognitivo local do robô de Receitas Emitidas.
+- **Obrigação**: Deve ser atualizado após mudanças na query SQL (Oracle), na lógica de geração do relatório adaptativo, sempre que a versão (v2.x.x) for incrementada ou o protocolo de saída for alterado.
+- **Sincronismo**: Garante que a IA compreenda o fluxo de memória via Stdout Pipes (IPC) e o controle de estado SHA-256.
+- **Objetivo**: Manter a IA informada sobre o estado de excelência e independência de Excel deste módulo.

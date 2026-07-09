@@ -1,6 +1,6 @@
 # pylint: disable=R0903,W1203
 """
-Middleware Stack do Orchestrator Central de Automacoes v5.0.
+Middleware Stack do Orchestrator Central de Automacoes v1.0.0.
 
 Camadas de seguranca e observabilidade:
   - RequestIdMiddleware: Injeta X-Request-Id unico em toda requisicao

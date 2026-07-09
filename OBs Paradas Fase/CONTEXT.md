@@ -37,3 +37,10 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 - BATCH mode adotado para envio (sessão Chrome única para todas as fases)
 - 40s de settle (`BATCH_SETTLE_MS_NORMAL`) após `ready` para garantir WhatsApp Web totalmente carregado antes do envio; dreno ativo com `mouse.move` a cada 3s para manter Chrome acordado durante uploads de mídia
 - `cleanProfileForRetry` remove apenas LOCK files — `.log` contêm tokens de sessão válidos
+
+---
+
+## 🧠 Gestão de Contexto (AI-Native)
+- **Obrigação:** Atualizar este contexto após mudanças nas fases monitoradas, na resolução de contatos via `.env` ou no protocolo BATCH do WhatsApp.
+- **Estado (07/07/2026):** Fase 47-UMM (UMEDECIMENTO DE MALHA) adicionada ao monitoramento (`threshold_dias: 0.5`, responsável `lider_reserva_3_turno`).
+- **Objetivo:** Permitir que a IA entenda o fluxo Oracle → cards PNG → WhatsApp BATCH e a idempotência via hash SHA-256 sem reanalisar o código Python.
