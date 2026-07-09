@@ -5,8 +5,5 @@
   "description": "Ferramentas de qualidade do monorepo. O lint do Dashboard (React/TypeScript) delega ao projeto em Dashboard/, que tem seu proprio toolchain. Dependencias de runtime Node.js vivem nos projetos (ex.: Receitas Bloqueadas).",
   "scripts": {
     "lint:js": "npm --prefix Dashboard run lint"
-  },
-  "devDependencies": {
-    "eslint": "10.6.0"
   }
 }
