@@ -7,7 +7,7 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 ### Governança e Testes (CI/CD Local)
 - **Test-ZeroTrust.ps1:** Garante que nenhuma senha ou segredo esteja hardcoded.
 - **Test-SqlPerformance.ps1:** Bloqueia o uso de `SELECT *` e valida queries.
-- **Test-PythonGovernance.ps1:** Valida Type Hints e padrões Python; bloqueia `pylint: disable=all` em arquivos novos (débito histórico congelado em `pylint-disable-all-baseline.txt`).
+- **Test-PythonGovernance.ps1:** Valida Type Hints e padrões Python; bloqueia `pylint: disable=all` em arquivos novos (débito histórico congelado em `pylint-disable-all-baseline.txt`, hoje com 0 bytes — ou seja, nenhum débito técnico "grandfathered" desse tipo existe atualmente no repositório).
 - **Test-PowerShellGovernance.ps1:** Valida tipagem estrita em PS.
 - **Test-PortablePaths.ps1:** Impede o uso de caminhos absolutos (`C:\...`).
 - **Test-SourceEncoding.ps1:** Valida encoding por extensão: `.md/.py/.js/.json/.txt/.sql/.html/.css` em UTF-8 sem BOM e `.ps1/.psm1` em UTF-8 with BOM, com detecção de mojibake em Markdown.
@@ -41,6 +41,7 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Get-WhatsAppGroups.ps1:** Lista os grupos da sessão WhatsApp já autenticada e seus IDs (parâmetro `-ClientId`, padrão `hub-global`), para descobrir o ID do grupo destino de uma automação.
 - **AtivarModoTeste.bat / DesativarModoTeste.bat:** Ativam/desativam o Modo Teste (sandbox) via API do Orchestrator, globalmente ou para uma automação específica; carregam `ORCHESTRATOR_API_KEY` do `.env` via `Lib-Config.psm1`.
 - **Watch-CI.ps1:** Monitora execuções do GitHub Actions em tempo real (`-RunId`, `-Branch`, `-Follow`); autentica via `GH_TOKEN` ou `gh auth login`.
+- **Install-Hooks.ps1:** Configura `core.hooksPath=.githooks` na raiz do repositório, garantindo que o hook de pre-commit versionado (governança) seja executado em vez do hook padrão de `.git/hooks`. Idempotente.
 
 ---
 

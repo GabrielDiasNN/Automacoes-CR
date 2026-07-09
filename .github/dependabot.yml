@@ -31,11 +31,13 @@ updates:
           - minor
           - patch
 
-  # Dependencias Node.js (raiz: eslint do Dashboard; Receitas Bloqueadas: whatsapp-web.js)
+  # Dependencias Node.js (Dashboard: React/Vite/ESLint; lib: whatsapp-web.js; Receitas Bloqueadas: delega para lib)
   - package-ecosystem: npm
     directories:
       - /
       - '/Receitas Bloqueadas'
+      - /Dashboard
+      - /lib
     schedule:
       interval: weekly
       day: monday
