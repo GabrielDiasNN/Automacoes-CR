@@ -1,4 +1,4 @@
-# Security Governance: Automações Hub v6.5.4 (Hardened)
+# Security Governance: Automações Hub v1.0.0 (Hardened)
 
 ## 1. Zero-Trust & API Security
 - **Dynamic API Key**: Removidos segredos do código. O Dashboard solicita a chave ao administrador.
