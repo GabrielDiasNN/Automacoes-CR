@@ -23,7 +23,7 @@ Monitora Ordens de Beneficiamento paradas por fase no processo produtivo e envia
 ## Autenticação WhatsApp
 
 ```
-C:\Automacoes\lib\Authenticate-WhatsApp.bat
+.\lib\Authenticate-WhatsApp.bat
 ```
 
 ## Agendamento
@@ -41,3 +41,11 @@ Todos os dias às 05:30 e 14:00; terceiro disparo às 22:30 (Segunda a Sábado) 
 | 9 | Falha no pre-flight |
 | 21 | Sessão WhatsApp expirada — reautenticar |
 | 24 | Chrome não inicializa — verificar processos zumbi e reautenticar |
+
+---
+
+## 🧠 Gestão de Contexto (AI-Native)
+- **Obrigação:** Atualizar este README após mudanças nas fases monitoradas (`config.json`), no cron real ou no protocolo de exit codes.
+- **Fases monitoradas:** inclui a fase **47-UMM (UMEDECIMENTO DE MALHA)**, adicionada em 07/07/2026 (`threshold_dias: 0.5`, responsável `lider_reserva_3_turno`), além das fases já monitoradas historicamente.
+- **Cron real:** todos os dias às 05:30 e 14:00, com terceiro disparo às 22:30 (Segunda a Sábado) ou 23:00 (Domingo) — America/Sao_Paulo (ver `automation.manifest.json`).
+- **Objetivo:** Garantir que a IA entenda o modo BATCH de envio (sessão Chrome única para todas as fases) e a idempotência via `delivery_state.json` sem reanalisar o código Python.

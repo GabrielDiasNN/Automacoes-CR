@@ -1,6 +1,6 @@
 """
 
-Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v5.2.0
+Router: System - Health check, metricas, backup, status do worker, audit log e endpoints enterprise v1.0.0
 
 """
 

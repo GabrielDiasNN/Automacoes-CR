@@ -1,6 +1,6 @@
 # Biblioteca PowerShell Compartilhada (`lib/`)
 
-[⬅️ Voltar para o Hub Central](file:///c:/Automacoes/README.md)
+[⬅️ Voltar para o Hub Central](../README.md)
 
 Este diretorio contem os modulos e scripts utilitarios consumidos pelos orquestradores de automacao. Estes componentes formam a fundacao tecnica para a soberania e seguranca do hub.
 

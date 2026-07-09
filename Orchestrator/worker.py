@@ -1,5 +1,5 @@
 """
-Worker Central de Automacoes v5.3 - Motor de Execucao Concorrente com Tipagem Estrita e Log Batching.
+Worker Central de Automacoes v1.0.0 - Motor de Execucao Concorrente com Tipagem Estrita e Log Batching.
 """
 
 import contextlib

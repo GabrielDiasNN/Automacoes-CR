@@ -1,5 +1,7 @@
 # Runbook — OBs Paradas Fase (OBP-04)
 
+[⬅️ Voltar para o Hub Central](../../README.md)
+
 ## Diagnóstico rápido
 
 ```powershell

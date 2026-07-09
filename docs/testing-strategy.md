@@ -38,7 +38,7 @@ O ecossistema de testes do Hub de Automações é organizado em três camadas:
 | `tests/test_receitas_emitidas.py` | Unitário | Smoke da geração HTML e sanitização básica de Receitas Emitidas |
 | `tests/test_validation.py` | Integração | Validação de schedule, `.env` e preflight administrativo |
 
-> **Total atual:** 165 testes coletados | Cobertura atual: 81% | Meta de cobertura: ≥ 60% (`pytest-cov`)
+> **Total atual:** 165 testes coletados | Cobertura atual medida: 85,40% | Gate mínimo do CI: ≥ 84% (`pytest-cov`)
 
 ---
 
@@ -72,7 +72,7 @@ O pipeline `.github/workflows/governanca.yml` executa automaticamente em `push` 
 
 1. Instala dependências (`requirements.txt` + `requirements-test.txt`)
 2. Roda ruff/black/isort/bandit no job `lint-python`
-3. Roda `pytest Orchestrator\tests -m "not e2e"` com gate de cobertura (`--cov-fail-under=77`)
+3. Roda `pytest Orchestrator\tests -m "not e2e"` com gate de cobertura (`--cov-fail-under=84`)
 4. Roda os testes E2E Playwright headless no job `testes-e2e` (Windows runner)
 5. Falha o PR se qualquer job obrigatório quebrar (consolidação no job `resumo-final`)
 

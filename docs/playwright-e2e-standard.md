@@ -19,7 +19,7 @@ Padronizar Playwright como validação E2E final para mudanças que afetem exper
 - URL alvo: `http://127.0.0.1:8000/dashboard/`.
 - Validar página real servida pelo Orchestrator, não apenas HTML estático.
 - Itens mínimos de aceite:
-  - Navegação entre módulos principais (`Comando`, `Automações`, `Execuções`, `Observabilidade`, `Sistema`, `Configuração`).
+  - Navegação entre módulos principais (`Comando`, `Automações`, `Execuções`, `Monitor`, `Sistema`, `Configuração`).
   - Fluxo de `Execuções`: carregar listagem e aplicar ao menos um filtro.
   - Fluxo de logs: abrir modal de logs para uma execução.
   - Console limpo: zero erros de console no fluxo validado.

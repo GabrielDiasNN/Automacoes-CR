@@ -4,7 +4,7 @@ Módulo contendo schemas Pydantic relacionados ao Sistema, Telemetria, Diagnóst
 
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -654,10 +654,8 @@ class SystemVersion(BaseModel):
 # Paginação
 # ---------------------------------------------------------------------------
 
-T = TypeVar("T")
 
-
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse[T](BaseModel):
     items: list[T]
     total: int
     page: int

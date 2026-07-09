@@ -1,5 +1,5 @@
 """
-Camada de Banco de Dados do Orchestrator Central de Automacoes v5.0.
+Camada de Banco de Dados do Orchestrator Central de Automacoes v1.0.0.
 
 Configuracoes hardened de SQLite:
   - WAL mode para acesso concorrente (API + Worker)
