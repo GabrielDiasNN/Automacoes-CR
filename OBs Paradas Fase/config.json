@@ -5,7 +5,7 @@
     "20": {
       "descricao": "RMC-REVISÃO MALHA CRUA",
       "ativo": true,
-      "threshold_dias": 3,
+      "threshold_dias": 1,
       "responsavel": "lider_3_turno"
     },
     "25": {
@@ -23,7 +23,7 @@
     "45": {
       "descricao": "CDC-CONFERENCIA DE COR",
       "ativo": true,
-      "threshold_dias": 0.5,
+      "threshold_dias": 0.1,
       "responsavel": "lider_reserva_3_turno"
     },
     "47": {
@@ -35,7 +35,7 @@
     "46": {
       "descricao": "PPA-PREPARAÇÃO AMACIANTE",
       "ativo": true,
-      "threshold_dias": 0.25,
+      "threshold_dias": 1,
       "responsavel": "lider_1_turno"
     },
     "50": {
@@ -107,7 +107,7 @@
     "165": {
       "descricao": "CDF-CONFERÊNCIA DE FELPA",
       "ativo": true,
-      "threshold_dias": 1,
+      "threshold_dias": 0.1,
       "responsavel": "equipe_cq"
     }
   },
