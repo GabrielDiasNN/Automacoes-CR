@@ -50,35 +50,7 @@ Antes de análise profunda, refatoração estrutural, mudança de skill ou alter
 
 ## Princípios Comportamentais
 
-Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de implementação.
-
-**1. Pensar Antes de Executar**
-
-Antes de implementar qualquer mudança:
-- Declare assunções explicitamente. Se incerto, pergunte.
-- Se existirem múltiplas interpretações, apresente-as — não escolha silenciosamente.
-- Se existir abordagem mais simples, diga. Questione quando pertinente.
-- Se algo não estiver claro, pare. Nomeie o que está confuso. Pergunte.
-
-**2. Simplicidade Primeiro**
-
-- Sem features além do que foi pedido.
-- Sem abstrações para código de uso único.
-- Sem tratamento de erro para cenários impossíveis.
-- Se você escrever 200 linhas e poderiam ser 50, reescreva.
-
-**3. Mudanças Cirúrgicas**
-
-- Toque apenas o necessário; não "melhore" código, comentários ou formatação adjacentes.
-- Siga o estilo existente do arquivo.
-- Se notar código morto não relacionado, mencione — não delete sem pedido.
-- Cada linha alterada deve ser rastreável diretamente ao pedido do usuário.
-
-**4. Execução Orientada a Metas**
-
-- Transforme tarefas em metas verificáveis antes de iniciar.
-- Para tarefas de múltiplos passos, declare um plano e verifique cada etapa.
-- Critérios fracos ("fazer funcionar") exigem clarificação; declare critérios de sucesso precisos.
+Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de implementação. Fonte única (não duplicar aqui): `CLAUDE.md § Princípios Comportamentais` e a skill `karpathy-guidelines` (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution).
 
 ## Regras de Encoding
 
