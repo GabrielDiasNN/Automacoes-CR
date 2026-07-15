@@ -124,6 +124,7 @@ Write-Log "INÍCIO - Execução Montagem Terceirizados (Pure-Native). ExecId=$Ex
 Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
 
 $execStatus = "ERROR"
+$emailChannelFailed = $false
 
 try {
 
@@ -151,13 +152,16 @@ try {
 
     $fileSize = (Get-Item $dataFile).Length
 
-    if ($fileSize -lt 10) {
-
-        throw "Arquivo de dados $dataFile gerado mas parece vazio ou corrompido (Tamanho: $fileSize bytes)."
-
+    try {
+        $extractedData = Get-Content $dataFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch [System.Exception] {
+        throw "Arquivo de dados $dataFile gerado mas contem JSON invalido (Tamanho: $fileSize bytes): $_"
     }
 
-    Write-Log "Dados extraídos com sucesso ($( [math]::round($fileSize/1kb, 2) ) KB)."
+    # Lista vazia ([]) e um resultado de negocio valido (0 divergencias) e nao um erro de extracao.
+    $extractedCount = if ($null -eq $extractedData) { 0 } else { @($extractedData).Count }
+
+    Write-Log "Dados extraídos com sucesso ($( [math]::round($fileSize/1kb, 2) ) KB, $extractedCount registro(s))."
 
     # 2. Validação e HTML
     Write-Log "Fase 2: Validando dados e gerando notificação..."
@@ -337,6 +341,8 @@ try {
 
             Write-Log "Falha no envio de e-mail. O cache NÃO será atualizado para garantir retentativa." -Lvl "WARN"
 
+            $emailChannelFailed = $true
+
         }
 
         Remove-Item $payloadFile -Force
@@ -349,7 +355,15 @@ try {
 
     }
 
-    $execStatus = "SUCCESS"
+    if ($emailChannelFailed) {
+
+        $execStatus = "ERROR"
+
+    } else {
+
+        $execStatus = "SUCCESS"
+
+    }
 
 } catch [System.Exception] {
 
@@ -382,6 +396,12 @@ try {
     Write-Log "FIM - Processo finalizado."
 
     Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
+
+}
+
+if ($emailChannelFailed) {
+
+    exit 25
 
 }
 

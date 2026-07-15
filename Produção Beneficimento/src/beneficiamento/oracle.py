@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ from .settings import (
     REPO_ROOT,
     WALL_CLOCK_BUDGET_SECONDS,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -70,8 +73,10 @@ def connect_readonly() -> Any:
                 lib_dir=client_lib,
                 config_dir=tns_admin if _path_exists(tns_admin) else None,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "Falha ao inicializar Oracle Thick Mode (seguindo em Thin Mode): %s", e
+            )
 
     return oracledb.connect(user=user, password=password, dsn=dsn)
 

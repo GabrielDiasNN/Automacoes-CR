@@ -299,7 +299,9 @@ try {
     }
 
 } catch [System.Exception] {
-    if ($_.Exception -is [System.Management.Automation.RuntimeException] -and
-        $null -ne $_.Exception.InnerException) { throw }
+    # Sem sinal de controle de fluxo por mensagem (padrao "Processo finalizado" usado em
+    # outras automacoes) neste script: toda excecao que chegar aqui - incluindo
+    # MethodInvocationException de chamadas .NET como [System.IO.File]::WriteAllText - deve
+    # fechar a telemetria e sair com ExitCode padronizado, nunca escapar sem Exit-WithCode.
     Exit-WithCode 4 "Falha critica na orquestracao: $_"
 }

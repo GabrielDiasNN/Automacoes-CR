@@ -15,7 +15,7 @@
   "max_runtime_minutes": 30,
   "max_retries": 2,
   "schedule_summary": "Seg-Sex às 07:00, 11:00, 14:00 e 17:00",
-  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":\"0 7,11,14,17 * * 1-5\",\"timezone\":\"America/Sao_Paulo\"}",
+  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":\"0 7,11,14,17 * * 0-4\",\"timezone\":\"America/Sao_Paulo\"}",
   "runbook_path": "docs/runbooks/receitas-bloqueadas-runbook.md",
   "context_path": "Receitas Bloqueadas/CONTEXT.md",
   "readme_path": "Receitas Bloqueadas/README.md",

@@ -98,8 +98,7 @@ def generate_html() -> str:  # pylint: disable=too-many-locals,too-many-branches
         sys.exit(1)
 
     if not data:
-        log("Conjunto de dados vazio.", "WARN", exec_id)
-        return ""
+        log("Conjunto de dados vazio. Gerando relatorio sem receitas emitidas pendentes.", "WARN", exec_id)
 
     # 3. Agrupar e Ordenar Dados
     data_sorted = sorted(

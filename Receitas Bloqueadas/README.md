@@ -60,7 +60,9 @@ Para evitar redundância e "fadiga de alertas", o sistema só dispara notificaç
 | **1** | Erro Fatal / Crash |
 | **3** | Erro de Negócio (ex: Falha DB após retentativas) |
 | **9** | Falha no Pre-Flight Check (Ambiente/Dependências) |
+| **21** | WhatsApp requer reautenticação (QR Code) |
 | **24** | Erro não tratado no Bridge WhatsApp |
+| **25** | Falha definitiva no envio de E-mail (canal pendente para retentativa) |
 | **40** | Concorrência Bloqueada (WhatsApp Lock) |
 
 ---

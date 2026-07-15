@@ -14,7 +14,7 @@
   "max_runtime_minutes": 30,
   "max_retries": 0,
   "schedule_summary": "Sex às 07:05",
-  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":\"5 7 * * 5\",\"timezone\":\"America/Sao_Paulo\"}",
+  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":\"5 7 * * 4\",\"timezone\":\"America/Sao_Paulo\"}",
   "runbook_path": "docs/runbooks/receitas-emitidas-runbook.md",
   "context_path": "Receitas Emitidas/CONTEXT.md",
   "readme_path": "Receitas Emitidas/README.md",

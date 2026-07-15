@@ -389,10 +389,22 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                             }
 
-                            Write-Log "Enviando e-mail para $to..."
+                            $effectiveTo = $to
+                            $effectiveCc = $cc
+
+                            if ($isTestMode) {
+
+                                $effectiveTo = if (-not [string]::IsNullOrWhiteSpace($globalTestEmail)) { $globalTestEmail } else { $env:AUTOMACAO_ALERT_EMAIL }
+                                $effectiveCc = $null
+
+                                Write-Log "MODO TESTE ATIVO: Redirecionando e-mail para $effectiveTo" -Lvl "WARN"
+
+                            }
+
+                            Write-Log "Enviando e-mail para $effectiveTo..."
 
                             $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -ExecId $ExecId -LogPath $LogFile -Action {
-                                $sent = Send-OutlookEmail -To $to -Cc $cc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
+                                $sent = Send-OutlookEmail -To $effectiveTo -Cc $effectiveCc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
                                 if (-not $sent) { throw "Send-OutlookEmail retornou false." }
                                 return $true
                             }
@@ -410,6 +422,8 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                             } else {
 
                                 Write-Log "Falha definitiva no envio de e-mail. Canal pendente para retentativa." -Lvl "ERRO"
+                                $channelFailureExitCode = 25
+                                $channelFailureMessage = "Execucao concluida com falha parcial no canal E-mail. Revise os logs do canal antes de novo requeue."
 
                             }
 
@@ -444,13 +458,15 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                             $whatsappSuccess = $false
 
-                            if ($whatsAppExit -eq 0 -or $whatsAppExit -eq 40 -or $whatsAppExit -eq 23) {
-
-                                if ($whatsAppExit -eq 40) { Write-Log "WhatsApp ignorado por lock ativo (comportamento normal)." -Lvl "INFO" }
-
-                                if ($whatsAppExit -eq 23) { Write-Log "WhatsApp em cooldown (comportamento normal)." -Lvl "INFO" }
+                            if ($whatsAppExit -eq 0) {
 
                                 $whatsappSuccess = $true
+
+                            } elseif ($whatsAppExit -eq 40 -or $whatsAppExit -eq 23) {
+
+                                if ($whatsAppExit -eq 40) { Write-Log "WhatsApp ignorado por lock ativo (comportamento normal). Canal permanece pendente para a proxima execucao." -Lvl "INFO" }
+
+                                if ($whatsAppExit -eq 23) { Write-Log "WhatsApp em cooldown (comportamento normal). Canal permanece pendente para a proxima execucao." -Lvl "INFO" }
 
                             } elseif ($whatsAppExit -eq 21) {
 
@@ -494,12 +510,19 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                     }
 
                     # --- SAFE-STATE COMMIT (Python Engine) ---
+                    # So consolida quando TODOS os canais foram entregues (ou permanecem pendentes sem erro,
+                    # ex.: lock/cooldown do WhatsApp). Com falha de canal, o commit fica pendente para a
+                    # proxima execucao reavaliar o mesmo lote (evita perda silenciosa de notificacao).
 
-                    if (Test-Path $PythonStateTmp) {
+                    if ($channelFailureExitCode -eq 0 -and (Test-Path $PythonStateTmp)) {
 
                         Move-Item -Path $PythonStateTmp -Destination $PythonStatePath -Force
 
                         Write-Log "Estado Python atualizado: $PythonStatePath"
+
+                    } elseif ($channelFailureExitCode -ne 0 -and (Test-Path $PythonStateTmp)) {
+
+                        Write-Log "Commit de estado adiado: canal com falha parcial (ExitCode=$channelFailureExitCode). Lote sera reavaliado na proxima execucao." -Lvl "WARN"
 
                     }
 

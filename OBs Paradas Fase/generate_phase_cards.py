@@ -63,11 +63,12 @@ _EQUIPE_QUALIDADE = _join_responsavel(
 )
 
 DEFAULT_FASES_MONITORADAS: dict[str, FaseConfig] = {
-    "20":  FaseConfig("RMC-REVISÃO MALHA CRUA", 3, _LIDER_3_TURNO),
+    "20":  FaseConfig("RMC-REVISÃO MALHA CRUA", 1, _LIDER_3_TURNO),
     "25":  FaseConfig("CDP-CONFERENCIA DE PESO", 0.5, _EQUIPE_QUALIDADE, ativo=False),
     "26":  FaseConfig("IVF-INVERSÃO P/FELPAGEM", 1, _LIDER_3_TURNO),
-    "45":  FaseConfig("CDC-CONFERENCIA DE COR", 0.5, _LIDER_RESERVA_3_TURNO),
-    "46":  FaseConfig("PPA-PREPARAÇÃO AMACIANTE", 0.25, _LIDER_1_TURNO),
+    "45":  FaseConfig("CDC-CONFERENCIA DE COR", 0.1, _LIDER_RESERVA_3_TURNO),
+    "46":  FaseConfig("PPA-PREPARAÇÃO AMACIANTE", 1, _LIDER_1_TURNO),
+    "47":  FaseConfig("UMM-UMEDECIMENTO DE MALHA", 0.5, _LIDER_RESERVA_3_TURNO),
     "50":  FaseConfig("HID-HIDRO UMIDO", 1, _LIDER_1_TURNO),
     "55":  FaseConfig("HIS-HIDRO SECO", 1, _LIDER_1_TURNO),
     "60":  FaseConfig("SEC-SECADOR", 1, _LIDER_1_TURNO),
@@ -79,9 +80,9 @@ DEFAULT_FASES_MONITORADAS: dict[str, FaseConfig] = {
     "110": FaseConfig("RAS-RAMAR SECO", 1, _LIDER_2_TURNO),
     "150": FaseConfig("EXP-EXPEDICAO ACABADO", 1, _LIDER_RESERVA_2_TURNO),
     "160": FaseConfig("CDQ-CONTROLE DE QUALIDADE", 1, _EQUIPE_QUALIDADE),
-    "165": FaseConfig("CDF-CONFERÊNCIA DE FELPA", 1, _EQUIPE_QUALIDADE),
+    "165": FaseConfig("CDF-CONFERÊNCIA DE FELPA", 0.1, _EQUIPE_QUALIDADE),
 }
-DEFAULT_PHASE_ORDER: list[int] = [20, 46, 50, 55, 60, 90, 100, 110, 26, 65, 25, 45, 80, 70, 160, 165, 150]
+DEFAULT_PHASE_ORDER: list[int] = [20, 46, 47, 50, 55, 60, 90, 100, 110, 26, 65, 25, 45, 80, 70, 160, 165, 150]
 DEFAULT_MAX_OBS = 10
 MAX_OBS_PER_PHASE = 15   # limite por fase para evitar cards com altura > 5000px (WhatsApp)
 MAX_CARD_HEIGHT   = 4800
@@ -447,7 +448,15 @@ def _load_config(
                     ativo=bool(dados.get("ativo", True)),
                 )
     except Exception as e:
-        print(f"[WARN] Falha ao ler config.json, usando defaults: {e}", file=sys.stderr)
+        # config.json existe mas nao pode ser interpretado: falhar explicitamente em vez de
+        # degradar silenciosamente para defaults hardcoded, que podem estar desatualizados
+        # em relacao ao config de producao (thresholds, fases ativas).
+        print(
+            f"[ERROR] config.json existe mas falhou ao processar: {e}. "
+            "Corrija o arquivo antes de reexecutar; defaults hardcoded nao serao usados como fallback silencioso.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     return fases_monitoradas, max_obs, phase_filters, phase_order
 
 
