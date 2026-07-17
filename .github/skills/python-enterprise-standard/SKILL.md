@@ -19,7 +19,7 @@ Padronizar o desenvolvimento Python no hub, garantindo que regras de negócio, e
 
 ## Related Skills
 - `enterprise-orchestration-contract` para o papel do código Python no pipeline corporativo de execuções.
-- `automation-runtime-safety` para as regras de log, Zero Trust e classificação de severidade que o Python deve adotar.
+- `automation-runtime-safety` para as regras de log, Zero Trust, encoding e classificação de severidade que o Python deve adotar.
 - `ai-native-development-standard` para alinhar as documentações quando o backend for estruturalmente alterado.
 
 ## Non-Negotiable Rules
@@ -27,7 +27,7 @@ Padronizar o desenvolvimento Python no hub, garantindo que regras de negócio, e
 - Todo código deve passar no check de qualidade do Pylint conforme configuração local.
 - Todo código em `Orchestrator/app/` e `Orchestrator/worker.py` deve passar no lint bloqueante do CI: `python -m ruff check Orchestrator/app Orchestrator/worker.py`.
 - Utilize abordagens vetorizadas no Pandas (sem loops `iterrows`) para scripts de alta volumetria.
-- O encoding de todos os arquivos `.py` deve ser, obrigatoriamente, UTF-8 sem BOM (conforme `GEMINI.md`).
+- Encoding de `.py` segue o contrato único definido em `automation-runtime-safety` (UTF-8 sem BOM); não redefina aqui, apenas valide com `Test-SourceEncoding.ps1`.
 - A aplicação deve modularizar contratos (ex: schemas Pydantic separados por domínio) ao invés de usar monolitos.
 
 ## Repo-Specific Constraints
@@ -36,6 +36,7 @@ Padronizar o desenvolvimento Python no hub, garantindo que regras de negócio, e
 - Migrações de schema do banco do Orchestrator são feitas exclusivamente via Alembic (`alembic upgrade head`); não altere schema manualmente.
 - Sessões SQLAlchemy fora do contexto FastAPI devem usar `session_scope` (não `SessionLocal()` diretamente), conforme `Tools/Test-ArchitectureStandard.ps1`.
 - Scripts de negócio em Python (como `.env` binding e caminhos) devem se valer da estratégia robusta descrita no `GEMINI.md`.
+- Consulte `docs/governance-contracts.md` para os limites exatos de Mypy/Pylint e formato de contratos exigidos pelo pre-commit hook antes de escrever código novo.
 
 ## Validation
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PythonGovernance.ps1 -RootPath .`

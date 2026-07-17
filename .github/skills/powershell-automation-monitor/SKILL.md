@@ -33,6 +33,7 @@ Padronizar como PowerShell e usado no hub para entrypoints, infraestrutura, moni
 - Trate `Infrastructure/MonitorAutomacoes.ps1`, `Infrastructure/Start-Orchestrator.ps1` e `Tools/ValidarAutomacoes.ps1` como referencias de scripts corporativos de controle.
 - Mantenha approved verbs e estrutura de modulo compativeis com `Tools/Test-PowerShellApprovedVerbs.ps1`.
 - Ao alterar governanca de skills em PowerShell, preserve compatibilidade com `Tools/Test-SkillsGovernance.ps1`.
+- Consulte `docs/governance-contracts.md` para os contratos PowerShell detalhados (catch tipado, snippets corretos/errados) exigidos pelo pre-commit hook.
 
 ## Validation
 - Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PowerShellGovernance.ps1 -RootPath .`.
