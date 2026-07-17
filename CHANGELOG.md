@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.5] - 17/07/2026
+### Corrigido
+- **Dashboard/Execuções: duração de execução podia aparecer negativa (ex.: `-6.8s`)**: `worker.py` media a duração com `time.time()` (relógio de parede), vulnerável a recuo por sincronização NTP/W32Time do Windows durante execuções curtas — visto majoritariamente em `Montagem de Terceirizados` (cron a cada 30 min, execuções de ~7-8s). A medição de duração (`worker.py` e os caminhos de finalização terminated/timeout/internal-error em `Orchestrator/app/services/execution_runtime.py`) passou a usar `time.monotonic()`, imune a saltos de relógio; `task_start_ts` (parede) foi preservado apenas onde é comparado com mtime de arquivo (`scan_for_artifacts`). Os cálculos de duração por `finished_at - started_at` (`mark_task_as_failed` e os dois trechos equivalentes em `Orchestrator/app/routers/executions.py`) ganharam clamp defensivo `max(0.0, ...)`. Os 52 registros históricos com `duration_seconds` negativo (`automacoes.db`) foram corrigidos para `0`.
+- **Dashboard/Automações: descrições placeholder `"Importado do config.json"`**: `Montagem de Terceirizados`, `Receitas Bloqueadas` e `Receitas Emitidas` tinham a descrição de exibição (`automations.description`) presa a um valor residual da migração para manifesto — nunca foi re-semeada com um resumo real. Atualizadas para descrições no mesmo padrão informativo de `OBs Fluxo Sem Tingimento`/`OBs Paradas Fase` (o que a automação consulta, valida e para onde notifica).
+
 ## [1.2.4] - 17/07/2026
 ### Alterado
 - **OFST-06: mensagem WhatsApp ganha data de entrega e filial destino, e perde o rodapé técnico**: cada bloco de OB agora mostra `Data de entrega` (`ITENSPEDIDOCOMERCIAL.EXPEDIREM`) e `Filial destino` (`PESSOASFJ.NOMEFANTASIA` via `PEDIDOCOMERCIAL.IDFILIALRESPONSAVEL` — mesmos campos/joins da CTE `ENTREGA_OB` de OBs Paradas Fase); OB sem pedido comercial mostra `—`. As linhas "Tempo de consulta: Xms" e "Grupo: ..." foram removidas da mensagem (irrelevantes para o grupo) — o tempo permanece em `ofst_result.json` (`resumo.tempo_consulta_ms`) e nos logs.

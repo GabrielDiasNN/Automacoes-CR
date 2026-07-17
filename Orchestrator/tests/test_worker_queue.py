@@ -81,7 +81,7 @@ def test_finalize_terminated_task_persists_terminal_metadata(db_session: Any) ->
         db_session,
         "EXEC_STOP",
         ["runtime log\n"],
-        time.time() - 3,
+        time.monotonic() - 3,
     )
 
     stopped = (

@@ -206,12 +206,13 @@ def mark_task_as_failed(
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY  # type: ignore[assignment]
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
     if db_exec.started_at and db_exec.finished_at:
-        db_exec.duration_seconds = round(
+        delta_seconds = round(
             (
                 cast(Any, db_exec.finished_at) - cast(Any, db_exec.started_at)
             ).total_seconds(),
             2,
         )
+        db_exec.duration_seconds = max(0.0, delta_seconds)  # type: ignore[arg-type]
     db.commit()
 
 
@@ -219,7 +220,7 @@ def finalize_terminated_task(
     db: Session,
     exec_id: str,
     logs: list[str],
-    task_start_ts: float,
+    task_start_monotonic: float,
 ) -> None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
@@ -227,7 +228,7 @@ def finalize_terminated_task(
     termination_log = "\n[INTERROMPIDO PELO USUARIO]\n"
     db_exec.status = EXECUTION_STATUS_TERMINATED  # type: ignore[assignment]
     db_exec.exit_code = -15  # type: ignore[assignment]
-    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)  # type: ignore[arg-type]
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
     db_exec.failure_reason = FAILURE_REASON_USER_TERMINATED  # type: ignore[assignment]
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE  # type: ignore[assignment]
@@ -241,14 +242,14 @@ def apply_timeout_result(
     db: Session,
     exec_id: str,
     logs: list[str],
-    task_start_ts: float,
+    task_start_monotonic: float,
 ) -> models.Execution | None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         return None
     db_exec.status = EXECUTION_STATUS_TIMEOUT  # type: ignore[assignment]
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)  # type: ignore[arg-type]
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
     db_exec.failure_reason = FAILURE_REASON_MAX_RUNTIME_EXCEEDED  # type: ignore[assignment]
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE  # type: ignore[assignment]
     db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
@@ -291,7 +292,7 @@ def apply_internal_worker_error(
     db: Session,
     exec_id: str,
     message: str,
-    task_start_ts: float,
+    task_start_monotonic: float,
 ) -> None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec or db_exec.status in [
@@ -308,7 +309,7 @@ def apply_internal_worker_error(
     db_exec.failure_reason = FAILURE_REASON_INTERNAL_WORKER_ERROR  # type: ignore[assignment]
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_WORKER_LOGS  # type: ignore[assignment]
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-    db_exec.duration_seconds = round(time.time() - task_start_ts, 2)  # type: ignore[arg-type]
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
     db.commit()
 
 

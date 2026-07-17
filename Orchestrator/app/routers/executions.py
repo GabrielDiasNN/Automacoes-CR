@@ -393,7 +393,8 @@ def stop_execution(
     if db_exec.started_at and db_exec.finished_at:
         try:
             delta = db_exec.finished_at - db_exec.started_at
-            db_exec.duration_seconds = round(delta.total_seconds(), 2)
+            delta_seconds = round(delta.total_seconds(), 2)
+            db_exec.duration_seconds = max(0.0, delta_seconds)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             pass
     _stop_log: str = (
@@ -542,7 +543,8 @@ def telemetry_end(
     if db_exec.started_at and db_exec.finished_at:
         try:
             delta = db_exec.finished_at - db_exec.started_at
-            db_exec.duration_seconds = round(delta.total_seconds(), 2)
+            delta_seconds = round(delta.total_seconds(), 2)
+            db_exec.duration_seconds = max(0.0, delta_seconds)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             pass
 

@@ -447,7 +447,7 @@ def _monitor_process(
     """Monitora saída, interrupção e timeout; retorna True para finalização normal."""
     exec_id: str = task_ctx["exec_id"]
     task_start: datetime = task_ctx["task_start"]
-    task_start_ts: float = task_ctx["task_start_ts"]
+    task_start_monotonic: float = task_ctx["task_start_monotonic"]
     max_runtime: int = task_ctx["max_runtime"]
     timeout_delta = timedelta(minutes=max_runtime)
     last_db_check = 0.0
@@ -470,7 +470,7 @@ def _monitor_process(
                 if db_status == EXECUTION_STATUS_TERMINATED:
                     _force_kill(process.pid)
                     broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
-                    finalize_terminated_task(check_db, exec_id, logs, task_start_ts)
+                    finalize_terminated_task(check_db, exec_id, logs, task_start_monotonic)
                     broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
                     return False
 
@@ -480,7 +480,7 @@ def _monitor_process(
                         f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
                     )
                     db_exec_upd = apply_timeout_result(
-                        check_db, exec_id, logs, task_start_ts
+                        check_db, exec_id, logs, task_start_monotonic
                     )
                     if db_exec_upd:
                         auto = (
@@ -508,8 +508,9 @@ def _finalize_execution(
     exec_id: str = task_ctx["exec_id"]
     robot_dir: str = task_ctx["robot_dir"]
     task_start_ts: float = task_ctx["task_start_ts"]
+    task_start_monotonic: float = task_ctx["task_start_monotonic"]
     broadcast_log(f"\n[Fim da Execução - ExitCode: {process.returncode}]\n", exec_id)
-    duration = round(time.time() - task_start_ts, 2)
+    duration = round(time.monotonic() - task_start_monotonic, 2)
     artifacts_json = scan_for_artifacts(robot_dir, task_start_ts)
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if db_exec and db_exec.status not in [
@@ -559,10 +560,13 @@ def _finalize_execution(
     )
 
 
-def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
+def run_task(  # pylint: disable=too-many-locals
+    exec_id: str, script_path: str, max_runtime: int = 30
+) -> None:
     """Orquestra as fases de início, monitoramento e finalização da tarefa."""
     update_stat("active_tasks", 1)
     task_start_ts = time.time()
+    task_start_monotonic = time.monotonic()
     log_extra: dict[str, str] = {"correlation_id": exec_id}
     try:
         with session_scope(SessionLocal) as db:
@@ -611,6 +615,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
                 "exec_id": exec_id,
                 "task_start": get_now_local(),
                 "task_start_ts": task_start_ts,
+                "task_start_monotonic": task_start_monotonic,
                 "max_runtime": max_runtime,
                 "robot_dir": os.path.dirname(script_path),
             }
@@ -630,7 +635,7 @@ def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Erro fatal na tarefa %s: %s", exec_id, exc, extra=log_extra)
         with session_scope(SessionLocal) as error_db:
-            apply_internal_worker_error(error_db, exec_id, str(exc), task_start_ts)
+            apply_internal_worker_error(error_db, exec_id, str(exc), task_start_monotonic)
         update_stat("tasks_failed", 1)
         broadcast_event("TASK_FAILED", {"exec_id": exec_id, "error": str(exc)})
     finally:
