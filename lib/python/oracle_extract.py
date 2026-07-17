@@ -92,11 +92,15 @@ def fetch_all(  # pylint: disable=too-many-arguments
     *,
     batch_size: int = 5000,
     cursor_arraysize: int | None = None,
+    params: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[Any]]:
     """Conecta, executa a query e retorna (colunas, linhas) buscadas em lotes.
 
     Sem decorator de retry proprio: cada script decora a chamada com o
     make_oracle_retry() configurado para o seu proprio perfil de resiliencia.
+
+    `params` sao bind variables passadas ao cursor. Valores SEMPRE via bind —
+    nunca interpolados na string SQL.
     """
     log(f"Conectando ao Oracle (DSN: {creds.dsn})...", "INFO", exec_id)
     with oracledb.connect(
@@ -105,7 +109,7 @@ def fetch_all(  # pylint: disable=too-many-arguments
         cursor = connection.cursor()
         if cursor_arraysize is not None:
             cursor.arraysize = cursor_arraysize
-        cursor.execute(sql)
+        cursor.execute(sql, params or {})
         if not cursor.description:
             return [], []
         columns = [col[0] for col in cursor.description]

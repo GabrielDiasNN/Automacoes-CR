@@ -1,0 +1,33 @@
+{
+  "id": "OFST-06",
+  "name": "OBs Fluxo Sem Tingimento",
+  "slug": "obs-fluxo-sem-tingimento",
+  "criticality": "medium",
+  "script_path": "OBs Fluxo Sem Tingimento/run.ps1",
+  "entrypoint": "run.ps1",
+  "runtime": "powershell",
+  "channels": [
+    "whatsapp"
+  ],
+  "sla_minutes": 15,
+  "owner_area": "PCP / Expedicao Tinturaria",
+  "queue_group": "oracle",
+  "max_runtime_minutes": 10,
+  "max_retries": 0,
+  "schedule_summary": "A cada 120 minutos, das 05:00 as 19:00, Seg-Sex e Sab das 05:00 as 13:00",
+  "schedule": "{\"schedule_version\":2,\"schedule_type\":\"cron\",\"cron_expression\":[\"0 5-19/2 * * 0-4\",\"0 5-13/2 * * 5\"],\"timezone\":\"America/Sao_Paulo\"}",
+  "runbook_path": "docs/runbooks/obs-fluxo-sem-tingimento-runbook.md",
+  "context_path": "OBs Fluxo Sem Tingimento/CONTEXT.md",
+  "readme_path": "OBs Fluxo Sem Tingimento/README.md",
+  "orchestrator": {
+    "script_path": "./OBs Fluxo Sem Tingimento/run.ps1"
+  },
+  "dependencies": {
+    "oracle": true,
+    "outlook": false,
+    "whatsapp": true
+  },
+  "smoke_tests": [
+    "Orchestrator/tests/test_ofst.py"
+  ]
+}

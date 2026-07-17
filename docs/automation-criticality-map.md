@@ -30,6 +30,7 @@ A tabela abaixo consolida a governança, cadência e prazos operacionais das aut
 | **`MT-02`** | **[Montagem de Terceirizados](runbooks/montagem-de-terceirizados-runbook.md)** | **⚠️ ALTA** | **3 horas** | Seg-Sáb, a cada 30 min, 05:00 às 21:30, em horários redondos | Faturamento, Controladoria e Expedição de Terceirizados | Risco de divergências fiscais na entrada de NFs de parceiros/facções, atraso na liberação de estoque de produtos acabados. |
 | **`RE-03`** | **[Receitas Emitidas](runbooks/receitas-emitidas-runbook.md)** | **💡 MÉDIA** | **6 horas** | Sex às 07:05 | Planejamento, Tinturaria e PCP | Perda de visibilidade das receitas expedidas para a produção no dia, afetando a acurácia do planejamento produtivo do dia seguinte. |
 | **`OBP-04`** | **[OBs Paradas Fase](runbooks/obs-paradas-fase-runbook.md)** | **⚠️ ALTA** | **20 min** | Todos os dias às 05:30 e 14:00; 22:30 (Seg-Sáb) ou 23:00 (Dom) | PCP / Producao Beneficiamento | Falta de visibilidade de OBs paradas por fase no Beneficiamento, risco de atraso na producao e acumulo de estoque intermediario. |
+| **`OFST-06`** | **[OBs Fluxo Sem Tingimento](runbooks/obs-fluxo-sem-tingimento-runbook.md)** | **💡 MÉDIA** | **15 min** | A cada 120 minutos, das 05:00 as 19:00, Seg-Sex e Sab das 05:00 as 13:00 | PCP / Expedicao Tinturaria | Perda de visibilidade de OBs de fluxo 204 (sem tingimento) prontas para montagem no deposito 95; peca disponivel fica parada e a montagem atrasa sem que a Expedicao saiba. |
 
 ---
 

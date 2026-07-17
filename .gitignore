@@ -146,6 +146,10 @@ OBs Paradas Fase/images/
 OBs Paradas Fase/phase_cards.json
 OBs Paradas Fase/batch_input.json
 OBs Paradas Fase/batch_result.json
+OBs Fluxo Sem Tingimento/ofst_result.json
+OBs Fluxo Sem Tingimento/ofst_state.json
+OBs Fluxo Sem Tingimento/ofst_state.json.tmp
+OBs Fluxo Sem Tingimento/message.txt
 
 # Caches locais adicionais
 .npm-cache-codex/
