@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.6] - 21/07/2026
+### Alterado
+- **OBP-04: responsável da fase 160 (CDQ-CONTROLE DE QUALIDADE) deixa de ser o papel `equipe_cq` e passa a ser o novo papel individual `lider_cq`** (Alexandre Cunha) — `config.json` (`fases_monitoradas.160.responsavel`), `generate_phase_cards.py` (`_LIDER_CQ`, `DEFAULT_FASES_MONITORADAS["160"]` e `_load_contatos_from_env`) e `docs/runbooks/obs-paradas-fase-runbook.md` atualizados. Fase 165 (CDF-CONFERÊNCIA DE FELPA) continua em `equipe_cq`, inalterada. Novo contato em `OBP_CONTATO_LIDER_CQ` (`.env`); `.env.example` ganhou o placeholder correspondente. Os 3 números já existentes em `OBP_CONTATO_EQUIPE_CQ` ganharam comentário com nome (Sidiane Klehm, Elso Boges, Daniele Renaud), padronizando com os demais contatos do `.env`.
+
 ## [1.2.5] - 17/07/2026
 ### Corrigido
 - **Dashboard/Execuções: duração de execução podia aparecer negativa (ex.: `-6.8s`)**: `worker.py` media a duração com `time.time()` (relógio de parede), vulnerável a recuo por sincronização NTP/W32Time do Windows durante execuções curtas — visto majoritariamente em `Montagem de Terceirizados` (cron a cada 30 min, execuções de ~7-8s). A medição de duração (`worker.py` e os caminhos de finalização terminated/timeout/internal-error em `Orchestrator/app/services/execution_runtime.py`) passou a usar `time.monotonic()`, imune a saltos de relógio; `task_start_ts` (parede) foi preservado apenas onde é comparado com mtime de arquivo (`scan_for_artifacts`). Os cálculos de duração por `finished_at - started_at` (`mark_task_as_failed` e os dois trechos equivalentes em `Orchestrator/app/routers/executions.py`) ganharam clamp defensivo `max(0.0, ...)`. Os 52 registros históricos com `duration_seconds` negativo (`automacoes.db`) foram corrigidos para `0`.

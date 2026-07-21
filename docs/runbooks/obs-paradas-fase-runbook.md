@@ -146,8 +146,9 @@ editar `fases_monitoradas`. `equipe_cq` aceita múltiplos números separados por
 (todos recebem menção na mesma mensagem).
 
 Papéis hoje configurados: `lider_1_turno` / `lider_reserva_1_turno`, `lider_2_turno` /
-`lider_reserva_2_turno`, `lider_3_turno` / `lider_reserva_3_turno` e `equipe_cq` (3
-contatos). Os nomes/números reais de cada papel estão só no `.env` de produção.
+`lider_reserva_2_turno`, `lider_3_turno` / `lider_reserva_3_turno`, `lider_cq` (1 contato,
+responsável da fase 160) e `equipe_cq` (3 contatos, fase 165). Os nomes/números reais de
+cada papel estão só no `.env` de produção.
 
 #### Fases monitoradas hoje (levantado em 03/07/2026 via consulta em `SGTPRD.FASES_FLUXO`)
 
@@ -169,7 +170,7 @@ contatos). Os nomes/números reais de cada papel estão só no `.env` de produç
 | 100 | RAU-RAMAR UMIDO | `lider_2_turno` | sim |
 | 110 | RAS-RAMAR SECO | `lider_2_turno` | sim |
 | 150 | EXP-EXPEDICAO ACABADO | `lider_reserva_2_turno` | sim |
-| 160 | CDQ-CONTROLE DE QUALIDADE | `equipe_cq` | sim |
+| 160 | CDQ-CONTROLE DE QUALIDADE | `lider_cq` | sim |
 | 165 | CDF-CONFERÊNCIA DE FELPA | `equipe_cq` | sim |
 
 Fase 25 está com `ativo: false` por decisão de negócio (não fazia parte do mapeamento de

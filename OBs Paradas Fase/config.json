@@ -102,7 +102,7 @@
       "descricao": "CDQ-CONTROLE DE QUALIDADE",
       "ativo": true,
       "threshold_dias": 1,
-      "responsavel": "equipe_cq"
+      "responsavel": "lider_cq"
     },
     "165": {
       "descricao": "CDF-CONFERÊNCIA DE FELPA",

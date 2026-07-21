@@ -58,6 +58,7 @@ _LIDER_2_TURNO         = os.environ.get("OBP_CONTATO_LIDER_2_TURNO", "")
 _LIDER_RESERVA_2_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_2_TURNO", "")
 _LIDER_3_TURNO         = os.environ.get("OBP_CONTATO_LIDER_3_TURNO", "")
 _LIDER_RESERVA_3_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_3_TURNO", "")
+_LIDER_CQ              = os.environ.get("OBP_CONTATO_LIDER_CQ", "")
 _EQUIPE_QUALIDADE = _join_responsavel(
     os.environ.get("OBP_CONTATO_EQUIPE_CQ", "").split(",")
 )
@@ -79,7 +80,7 @@ DEFAULT_FASES_MONITORADAS: dict[str, FaseConfig] = {
     "100": FaseConfig("RAU-RAMAR UMIDO", 1, _LIDER_2_TURNO),
     "110": FaseConfig("RAS-RAMAR SECO", 1, _LIDER_2_TURNO),
     "150": FaseConfig("EXP-EXPEDICAO ACABADO", 1, _LIDER_RESERVA_2_TURNO),
-    "160": FaseConfig("CDQ-CONTROLE DE QUALIDADE", 1, _EQUIPE_QUALIDADE),
+    "160": FaseConfig("CDQ-CONTROLE DE QUALIDADE", 1, _LIDER_CQ),
     "165": FaseConfig("CDF-CONFERÊNCIA DE FELPA", 0.1, _EQUIPE_QUALIDADE),
 }
 DEFAULT_PHASE_ORDER: list[int] = [20, 46, 47, 50, 55, 60, 90, 100, 110, 26, 65, 25, 45, 80, 70, 160, 165, 150]
@@ -409,6 +410,7 @@ def _load_contatos_from_env() -> dict[str, str]:
         "lider_reserva_2_turno": _LIDER_RESERVA_2_TURNO,
         "lider_3_turno": _LIDER_3_TURNO,
         "lider_reserva_3_turno": _LIDER_RESERVA_3_TURNO,
+        "lider_cq": _LIDER_CQ,
         "equipe_cq": _EQUIPE_QUALIDADE,
     }
 
