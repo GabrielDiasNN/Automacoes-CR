@@ -106,6 +106,10 @@ from .system import (
     SystemOverviewScheduler,
     SystemVersion,
     WorkerStatus,
+    WsEventPayload,
+    WsLogBatch,
+    WsLogEntry,
+    WsTokenResponse,
 )
 
 __all__ = [
@@ -156,6 +160,10 @@ __all__ = [
     # System
     "WorkerStatus",
     "EnvContent",
+    "WsEventPayload",
+    "WsTokenResponse",
+    "WsLogBatch",
+    "WsLogEntry",
     "FileContent",
     "SystemHealth",
     "ScheduledJob",

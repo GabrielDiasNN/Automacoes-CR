@@ -2,21 +2,55 @@
 
 from __future__ import annotations
 
+import logging
 import os
-import shutil
+import subprocess  # nosec B404 - execução controlada de script próprio do projeto
 
 from .. import schemas
-from ..timezone import get_now_local
+from ..security import ENV_MASK_PLACEHOLDER
+from ..utils import backup_timestamped_file, timestamp_suffix
+
+logger = logging.getLogger("orchestrator")
+
+
+def sync_global_test_mode_env(enabled: bool, project_root: str) -> bool:
+    """Sincroniza a variável de ambiente AUTOMACAO_TEST_EMAIL via Tools.
+
+    Extraído do router (achado #12): orquestração de subprocesso é
+    responsabilidade de serviço, não de camada HTTP. Best-effort — falha aqui
+    não invalida a mudança de test_mode já persistida no banco.
+
+    Retorna True se o script foi executado com sucesso.
+    """
+    ps_script = os.path.join(project_root, "Tools", "ConfigurarEmailTeste.ps1")
+    if not os.path.exists(ps_script):
+        return False
+
+    comando = [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ps_script,
+    ]
+    if not enabled:
+        comando.append("-Remover")
+
+    try:
+        subprocess.run(comando, check=True)  # nosec B603 - argv fixo, sem shell
+        return True
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Erro ao sincronizar variavel AUTOMACAO_TEST_EMAIL: %s", exc)
+        return False
 
 
 def backup_env_file(project_root: str, env_path: str) -> str:
     if not os.path.exists(env_path):
         return ""
     backup_dir = os.path.join(project_root, "Backups", "env")
-    os.makedirs(backup_dir, exist_ok=True)
-    ts = get_now_local().strftime("%Y%m%d_%H%M%S_%f")
-    backup_path = os.path.join(backup_dir, f".env.{ts}.bak")
-    shutil.copy2(env_path, backup_path)
+    backup_name = f".env.{timestamp_suffix()}.bak"
+    backup_path = backup_timestamped_file(env_path, backup_dir, backup_name)
     return os.path.relpath(backup_path, project_root)
 
 
@@ -66,6 +100,21 @@ def validate_env_content(content: str) -> schemas.EnvValidationResponse:
                 )
             )
         seen_keys.add(key)
+
+        # GET /env devolve segredos mascarados (#9): gravar o placeholder de
+        # volta sobrescreveria a credencial real por "********".
+        _, _, value = raw_line.partition("=")
+        if value.strip() == ENV_MASK_PLACEHOLDER:
+            issues.append(
+                schemas.EnvValidationIssue(
+                    line=idx,
+                    code="MASKED_VALUE",
+                    message=(
+                        f"Valor de {key} está mascarado; informe o valor real "
+                        "ou remova a linha para preservar o atual."
+                    ),
+                )
+            )
 
     return schemas.EnvValidationResponse(
         valid=len(issues) == 0,

@@ -44,6 +44,45 @@ class EnvContent(BaseModel):
     content: str
 
 
+# Teto de entradas por lote de broadcast. O flusher do Worker emite UMA entrada
+# por execução ativa (as mensagens são concatenadas antes do POST), então o lote
+# real é limitado por WORKER_MAX_CONCURRENCY — este teto é folgado e serve só
+# para impedir um payload não-limitado de um chamador arbitrário (#42).
+WS_MAX_LOG_ENTRIES = 500
+
+
+class WsTokenResponse(BaseModel):
+    """Token efêmero de handshake WebSocket (uso único)."""
+
+    token: str
+    expires_in_seconds: int
+
+
+class WsLogEntry(BaseModel):
+    """Entrada de log emitida pelo Worker para o Event Bus WebSocket.
+
+    Campos têm default vazio de propósito: entradas incompletas são descartadas
+    por LogBroadcaster.emit_entries (que exige exec_id E message), preservando o
+    contrato de "ignora silenciosamente" em vez de reprovar o lote inteiro.
+    """
+
+    exec_id: str = ""
+    message: str = ""
+
+
+class WsLogBatch(BaseModel):
+    """Lote de logs enviado pelo flusher do Worker."""
+
+    logs: list[WsLogEntry] = Field(default_factory=list, max_length=WS_MAX_LOG_ENTRIES)
+
+
+class WsEventPayload(BaseModel):
+    """Evento de sistema para o WebSocket global."""
+
+    type: str = "UNKNOWN"
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
 class FileContent(BaseModel):
     # Limite anti-DoS: configs/código gerenciado são pequenos; 1 MB é folgado
     # mas impede escrita de payload gigante via rotas de edição de arquivo.

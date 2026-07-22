@@ -121,15 +121,19 @@ def test_manifest_valido() -> None:
     assert manifest["dependencies"]["oracle"] is True
 
 
-def test_schedule_e_json_valido_de_60_em_60_minutos() -> None:
+def test_schedule_e_json_valido_de_120_em_120_minutos() -> None:
     manifest = json.loads(
         (AUTOMATION_DIR / "automation.manifest.json").read_text(encoding="utf-8")
     )
     schedule = json.loads(manifest["schedule"])
     assert schedule["schedule_type"] == "cron"
     assert schedule["timezone"] == "America/Sao_Paulo"
-    # minuto 0 de cada hora = intervalo de 60 min
-    assert schedule["cron_expression"].startswith("0 ")
+    # Desde [1.2.4] o cron_expression é uma lista (janelas distintas Seg-Sex e
+    # Sáb), a cada 120 min. Cada expressão dispara no minuto 0 com passo de 2h.
+    cron = schedule["cron_expression"]
+    assert isinstance(cron, list) and cron
+    assert all(expr.startswith("0 ") for expr in cron)
+    assert all("/2" in expr for expr in cron)
 
 
 def test_entrypoint_e_scripts_existem() -> None:

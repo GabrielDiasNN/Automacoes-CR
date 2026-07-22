@@ -262,6 +262,8 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     # Patch do SessionLocal no main e nos routers para usar o test engine
     import app.database as db_module  # pylint: disable=import-outside-toplevel
     import app.main as main_module  # pylint: disable=import-outside-toplevel
+    import app.routers.automation_config as config_router  # pylint: disable=import-outside-toplevel
+    import app.routers.automation_ide as ide_router  # pylint: disable=import-outside-toplevel
     import app.routers.automations as auto_router  # pylint: disable=import-outside-toplevel
     import app.routers.websocket as websocket_router  # pylint: disable=import-outside-toplevel
     from app.services import (  # pylint: disable=import-outside-toplevel
@@ -271,7 +273,11 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     original_session_local = db_module.SessionLocal
     original_engine = db_module.engine
     original_db_path = db_module.DB_PATH
+    # Os routers de config/IDE têm PROJECT_ROOT próprio desde a extração de
+    # services/managed_file_access.py — todos precisam apontar para TESTS_DIR.
     original_project_root = auto_router.PROJECT_ROOT
+    original_config_root = config_router.PROJECT_ROOT
+    original_ide_root = ide_router.PROJECT_ROOT
     original_scheduler_session = getattr(scheduler_runtime, "SessionLocal")
     original_websocket_session = getattr(websocket_router, "SessionLocal")
 
@@ -283,6 +289,8 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     setattr(websocket_router, "SessionLocal", testing_session_local)
     # Redirecionar PROJECT_ROOT para o diretorio de testes (contem /test/*.ps1)
     auto_router.PROJECT_ROOT = TESTS_DIR
+    config_router.PROJECT_ROOT = TESTS_DIR
+    ide_router.PROJECT_ROOT = TESTS_DIR
 
     def override_get_db() -> Generator[Session, None, None]:
         try:
@@ -313,6 +321,8 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     db_module.DB_PATH = original_db_path
     setattr(main_module, "SessionLocal", original_session_local)
     auto_router.PROJECT_ROOT = original_project_root
+    config_router.PROJECT_ROOT = original_config_root
+    ide_router.PROJECT_ROOT = original_ide_root
     setattr(scheduler_runtime, "SessionLocal", original_scheduler_session)
     setattr(websocket_router, "SessionLocal", original_websocket_session)
 

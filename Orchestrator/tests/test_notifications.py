@@ -222,6 +222,7 @@ def test_send_email_alert_exit_code_nao_zero_retorna_false(
 def test_dispatch_alerts_sem_canais_configurados_nao_envia() -> None:
     class MockAutomation:  # pylint: disable=too-few-public-methods
         id = 501
+        name = "Robo Sem Canais"
         notification_channels = None
 
     class MockExecution:  # pylint: disable=too-few-public-methods
@@ -341,7 +342,11 @@ def test_reset_infra_alert_state_limpa_componente() -> None:
 
 def test_dispatch_alerts_async_submete_ao_executor() -> None:
     class MockAutomation:  # pylint: disable=too-few-public-methods
+        # Satisfaz o Protocol AlertAutomation (#36): mesmo o caminho async, que
+        # só repassa ao executor, recebe o contrato completo da automação.
         id = 504
+        name = "Robo Async"
+        notification_channels = "email"
 
     class MockExecution:  # pylint: disable=too-few-public-methods
         id = "EXEC-ASYNC"

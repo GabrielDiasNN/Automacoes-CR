@@ -18,15 +18,19 @@ def _seed_automation(db: Session, name: str) -> int:
 
 
 def _seed_executions(
-    db: Session, automation_id: int, count: int, age_days: int
+    db: Session,
+    automation_id: int,
+    count: int,
+    age_days: int,
+    status: str = "SUCCESS",
 ) -> None:
     base = get_now_local() - timedelta(days=age_days)
     for i in range(count):
         db.add(
             models.Execution(
-                id=f"exec-{automation_id}-{age_days}-{i:04d}",
+                id=f"exec-{automation_id}-{age_days}-{status}-{i:04d}",
                 automation_id=automation_id,
-                status="SUCCESS",
+                status=status,
                 started_at=base + timedelta(minutes=i),
                 finished_at=base + timedelta(minutes=i + 1),
             )
@@ -73,3 +77,29 @@ def test_purge_remove_apenas_alem_do_cutoff(
     # As 60 recentes ocupam o top-50 + estão dentro da retenção; das 10 antigas
     # nenhuma está no top-50, então todas saem.
     assert removed == 10
+
+
+def test_purge_remove_execucoes_partial_antigas(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regressão do achado #1: PARTIAL é status terminal e deve ser purgado; a
+    # lista hardcoded antiga o omitia, preservando PARTIAL indefinidamente.
+    monkeypatch.setattr(
+        db_module, "SessionLocal", sessionmaker(bind=db_session.get_bind())
+    )
+
+    automation_id = _seed_automation(db_session, "auto-purge-partial")
+    # 60 PARTIAL antigas: 50 preservadas pelo top-50, 10 além do cutoff saem.
+    _seed_executions(
+        db_session, automation_id, count=60, age_days=120, status="PARTIAL"
+    )
+
+    removed = purge_old_executions(retention_days=90)
+
+    assert removed == 10
+    remaining = (
+        db_session.query(models.Execution)
+        .filter(models.Execution.automation_id == automation_id)
+        .count()
+    )
+    assert remaining == 50

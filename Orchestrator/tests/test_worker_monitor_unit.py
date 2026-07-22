@@ -40,6 +40,7 @@ def _task_ctx(exec_id: str, task_start: Any, max_runtime: int = 30) -> dict[str,
         "exec_id": exec_id,
         "task_start": task_start,
         "task_start_ts": time.time(),
+        "task_start_monotonic": time.monotonic(),
         "max_runtime": max_runtime,
         "robot_dir": "C:\\robot",
     }
@@ -156,16 +157,62 @@ def test_monitor_chama_finalize_terminated_task(
     assert "log runtime" in persistido.logs
 
 
-def test_monitor_retorna_false_em_shutdown_event() -> None:
+def test_monitor_finaliza_reboot_em_shutdown_com_processo_vivo(
+    db_session: Any, monkeypatch: Any, reset_worker_globals: None
+) -> None:
+    # Achado #3: shutdown com processo ainda vivo deve finalizar a execução como
+    # FAILED_BY_REBOOT (em vez de deixá-la presa em RUNNING) e retornar False.
+    del reset_worker_globals
+    monkeypatch.setattr(worker, "SessionLocal", lambda: db_session)
+    _seed_running_execution(db_session, "EXEC_SHUTDOWN_LIVE")
+    process = MagicMock()
+    process.pid = 4242
+    process.poll.return_value = None  # processo ainda vivo no momento do shutdown
+
     worker.shutdown_event.set()
     try:
-        resultado = worker._monitor_process(
-            MagicMock(), Queue(), [], _task_ctx("EXEC_SHUTDOWN", get_now_local())
-        )
+        with (
+            patch("worker._force_kill") as mock_force_kill,
+            patch("worker.broadcast_log"),
+            patch("worker.broadcast_event"),
+        ):
+            resultado = worker._monitor_process(
+                process,
+                Queue(),
+                [],
+                _task_ctx("EXEC_SHUTDOWN_LIVE", get_now_local()),
+            )
     finally:
         worker.shutdown_event.clear()
 
     assert resultado is False
+    mock_force_kill.assert_called_once_with(4242)
+    execucao = (
+        db_session.query(models.Execution).filter_by(id="EXEC_SHUTDOWN_LIVE").first()
+    )
+    assert execucao.status == "FAILED_BY_REBOOT"
+    assert execucao.failure_reason == "ORCHESTRATOR_REBOOT"
+
+
+def test_monitor_retorna_true_quando_processo_finaliza_no_shutdown(
+    reset_worker_globals: None,
+) -> None:
+    # Se o processo concluiu na janela do shutdown, o monitor pede finalização
+    # normal (return True) para não descartar o resultado real.
+    del reset_worker_globals
+    process = MagicMock()
+    process.poll.return_value = 0
+
+    worker.shutdown_event.set()
+    try:
+        with patch("worker.broadcast_log"):
+            resultado = worker._monitor_process(
+                process, Queue(), [], _task_ctx("EXEC_SHUTDOWN_DONE", get_now_local())
+            )
+    finally:
+        worker.shutdown_event.clear()
+
+    assert resultado is True
 
 
 def test_monitor_db_check_interval_respeita_5s(monkeypatch: Any) -> None:

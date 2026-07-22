@@ -5,10 +5,23 @@ Testes focados nas operações de Web IDE de Automações (Scripts e Configs).
 import json
 from pathlib import Path
 
+import app.routers.automation_config as config_router
+import app.routers.automation_ide as ide_router
 import app.routers.automations as auto_router
 import pytest
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
+
+
+def _patch_project_root(monkeypatch: pytest.MonkeyPatch, root: str) -> None:
+    """Aponta o PROJECT_ROOT dos três routers de automação para o dir de teste.
+
+    Desde a extração de services/managed_file_access.py, os routers de config e
+    IDE resolvem o diretório da automação com o PROJECT_ROOT do próprio módulo;
+    o de automations segue sendo usado na validação de script_path na criação.
+    """
+    for module in (auto_router, config_router, ide_router):
+        monkeypatch.setattr(module, "PROJECT_ROOT", root)
 
 
 def test_update_automation_config_creates_backup(
@@ -21,7 +34,7 @@ def test_update_automation_config_creates_backup(
     script_path.write_text("Write-Host 'ok'", encoding="utf-8")
     config_path.write_text('{"old": true}', encoding="utf-8")
 
-    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+    _patch_project_root(monkeypatch, str(tmp_path))
     client.post(
         "/api/automations",
         json={"name": "Config Backup", "script_path": "./Bot/run.ps1"},
@@ -50,7 +63,7 @@ def test_update_automation_script_creates_backup_and_preserves_ps_bom(
     script_path = bot_dir / "run.ps1"
     script_path.write_text("Write-Host 'old'", encoding="utf-8-sig")
 
-    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+    _patch_project_root(monkeypatch, str(tmp_path))
     client.post(
         "/api/automations",
         json={"name": "Script Backup", "script_path": "./Bot/run.ps1"},
@@ -78,7 +91,7 @@ def test_update_automation_script_rejects_path_escape(
     bot_dir.mkdir()
     (bot_dir / "run.ps1").write_text("Write-Host 'ok'", encoding="utf-8")
 
-    monkeypatch.setattr(auto_router, "PROJECT_ROOT", str(tmp_path))
+    _patch_project_root(monkeypatch, str(tmp_path))
     client.post(
         "/api/automations",
         json={"name": "Script Escape", "script_path": "./Bot/run.ps1"},

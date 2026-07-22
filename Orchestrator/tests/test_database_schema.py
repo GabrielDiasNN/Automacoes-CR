@@ -32,3 +32,14 @@ def test_orm_schema_covers_execution_queue_contract() -> None:
     assert {"queue_group", "cooldown_minutes", "max_retries"}.issubset(
         schema["automations"]
     )
+
+
+def test_orm_declares_indexes_created_by_migrations() -> None:
+    # Regressão do achado #2: índices criados na migration 20260620_01 precisam
+    # existir no ORM para o --autogenerate do Alembic não emitir DROP INDEX.
+    execution_indexes = {
+        index.name for index in Base.metadata.tables["executions"].indexes
+    }
+    assert {"ix_exec_finished_at", "ix_exec_status_finished"}.issubset(
+        execution_indexes
+    )

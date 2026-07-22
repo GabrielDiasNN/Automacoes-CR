@@ -162,6 +162,7 @@ def _finalize(
         "exec_id": exec_id,
         "robot_dir": str(tmp_path),
         "task_start_ts": time.time() - 1,
+        "task_start_monotonic": time.monotonic() - 1,
     }
     with patch("worker.broadcast_log"), patch("worker.broadcast_event"):
         worker._finalize_execution(db_session, process, ["novo log"], task_ctx)

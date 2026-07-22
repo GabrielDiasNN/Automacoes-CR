@@ -15,6 +15,7 @@ import os
 from typing import Any
 
 logger = logging.getLogger("orchestrator")
+logger.propagate = True
 
 _otel_available = False
 

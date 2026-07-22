@@ -47,4 +47,8 @@ def open_portfolio_runbook(
         _path, content = read_portfolio_runbook(PROJECT_ROOT, catalog_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail="Erro ao ler o runbook da automação."
+        ) from exc
     return content

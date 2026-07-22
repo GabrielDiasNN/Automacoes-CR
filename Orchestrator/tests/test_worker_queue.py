@@ -4,14 +4,15 @@ import time
 from typing import Any
 
 from app import models
+from app.middleware import RATE_LIMIT_EXEMPT_PATHS
 from app.services.execution_runtime import (
     apply_internal_worker_error,
     apply_timeout_result,
     complete_process_execution,
+    finalize_reboot_interrupted_task,
     mark_running_tasks_as_failed_by_reboot,
     mark_task_as_failed,
 )
-from app.middleware import RATE_LIMIT_EXEMPT_PATHS
 from app.timezone import get_now_local
 from worker import _finalize_terminated_task, claim_next_task, classify_process_result
 
@@ -181,7 +182,9 @@ def test_execution_runtime_completes_process_execution(db_session: Any) -> None:
     assert "token=********" in result.logs
 
 
-def test_execution_runtime_internal_error_skips_terminal_execution(db_session: Any) -> None:
+def test_execution_runtime_internal_error_skips_terminal_execution(
+    db_session: Any,
+) -> None:
     auto = models.Automation(name="Terminal Script", script_path="./terminal.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -209,7 +212,9 @@ def test_execution_runtime_internal_error_skips_terminal_execution(db_session: A
     assert terminal.logs == "already terminal"
 
 
-def test_execution_runtime_marks_running_tasks_failed_by_reboot(db_session: Any) -> None:
+def test_execution_runtime_marks_running_tasks_failed_by_reboot(
+    db_session: Any,
+) -> None:
     auto = models.Automation(name="Running Script", script_path="./running.ps1")
     db_session.add(auto)
     db_session.flush()
@@ -235,3 +240,75 @@ def test_execution_runtime_marks_running_tasks_failed_by_reboot(db_session: Any)
     assert rebooted.failure_reason == "ORCHESTRATOR_REBOOT"
     assert rebooted.recovery_action == "REQUEUE_IF_SAFE"
     assert "[RECOVERY_AUDIT]" in rebooted.logs
+
+
+def test_finalize_reboot_interrupted_task_persists_reboot_metadata(
+    db_session: Any,
+) -> None:
+    auto = models.Automation(name="Shutdown Helper", script_path="./run.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_SHUTDOWN_HELPER",
+            automation_id=auto.id,
+            status="RUNNING",
+            requested_by="TEST",
+            started_at=get_now_local(),
+            logs="antes do shutdown\n",
+        )
+    )
+    db_session.commit()
+
+    finalize_reboot_interrupted_task(
+        db_session,
+        "EXEC_SHUTDOWN_HELPER",
+        ["log em andamento\n"],
+        time.monotonic() - 4,
+    )
+
+    row = (
+        db_session.query(models.Execution).filter_by(id="EXEC_SHUTDOWN_HELPER").first()
+    )
+    assert row.status == "FAILED_BY_REBOOT"
+    assert row.exit_code == -1
+    assert row.failure_reason == "ORCHESTRATOR_REBOOT"
+    assert row.recovery_action == "REQUEUE_IF_SAFE"
+    assert row.duration_seconds >= 4
+    assert row.finished_at is not None
+    assert "[INTERROMPIDO POR SHUTDOWN DO ORQUESTRADOR]" in row.logs
+    assert "actor=WORKER_SHUTDOWN" in row.logs
+
+
+def test_finalize_reboot_interrupted_task_skips_terminal_execution(
+    db_session: Any,
+) -> None:
+    auto = models.Automation(name="Shutdown Terminal", script_path="./run.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_SHUTDOWN_TERMINAL",
+            automation_id=auto.id,
+            status="TERMINATED",
+            requested_by="TEST",
+            started_at=get_now_local(),
+            logs="já terminado",
+        )
+    )
+    db_session.commit()
+
+    finalize_reboot_interrupted_task(
+        db_session,
+        "EXEC_SHUTDOWN_TERMINAL",
+        ["não deve anexar"],
+        time.monotonic() - 1,
+    )
+
+    row = (
+        db_session.query(models.Execution)
+        .filter_by(id="EXEC_SHUTDOWN_TERMINAL")
+        .first()
+    )
+    assert row.status == "TERMINATED"
+    assert row.logs == "já terminado"

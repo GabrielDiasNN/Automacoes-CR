@@ -9,9 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
-import shutil
-import subprocess
 import threading
 import time
 from typing import Any
@@ -21,10 +18,11 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import PRIORITY_NORMAL
+from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, scheduler, trigger_worker_wakeup
+from ..services import env_admin
 from ..services.automation_preflight import build_automation_preflight
 from ..services.automation_snapshot import (
     build_automation_response as build_operational_automation_response,
@@ -131,49 +129,6 @@ def _build_automation_response(
     )
 
 
-def _resolve_automation_dir(script_path: str) -> str:
-    """Resolve a pasta da automacao garantindo permanencia no PROJECT_ROOT."""
-    if script_path.startswith("./") or script_path.startswith(".\\"):
-        resolved_script = os.path.join(PROJECT_ROOT, script_path[2:])
-    elif not os.path.isabs(script_path):
-        resolved_script = os.path.join(PROJECT_ROOT, script_path)
-    else:
-        resolved_script = script_path
-
-    auto_dir = os.path.dirname(os.path.abspath(os.path.normpath(resolved_script)))
-    project_root = os.path.abspath(os.path.normpath(PROJECT_ROOT))
-    if os.path.commonpath([project_root, auto_dir]) != project_root:
-        raise HTTPException(
-            status_code=403, detail="Diretorio da automacao fora do projeto."
-        )
-    return auto_dir
-
-
-def _resolve_managed_file(auto_dir: str, filename: str) -> str:
-    """Resolve arquivo gerenciado impedindo path traversal por nome ou symlink."""
-    if os.path.basename(filename) != filename or filename.startswith("."):
-        raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
-
-    target_path = os.path.abspath(os.path.normpath(os.path.join(auto_dir, filename)))
-    auto_dir_abs = os.path.abspath(os.path.normpath(auto_dir))
-    if os.path.commonpath([auto_dir_abs, target_path]) != auto_dir_abs:
-        raise HTTPException(status_code=403, detail="Acesso negado ao arquivo.")
-    if not os.path.exists(target_path) or not os.path.isfile(target_path):
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
-    return target_path
-
-
-def _backup_file_before_write(target_path: str, auto_dir: str) -> str:
-    """Cria backup local antes de sobrescrever arquivo gerenciado."""
-    backup_dir = os.path.join(auto_dir, ".orchestrator_backups")
-    os.makedirs(backup_dir, exist_ok=True)
-    ts = get_now_local().strftime("%Y%m%d_%H%M%S_%f")
-    backup_name = f"{os.path.basename(target_path)}.{ts}.bak"
-    backup_path = os.path.join(backup_dir, backup_name)
-    shutil.copy2(target_path, backup_path)
-    return os.path.relpath(backup_path, auto_dir)
-
-
 def _build_mutation_response(
     db: Session,
     auto: models.Automation,
@@ -227,6 +182,21 @@ def list_automations(  # pylint: disable=R0913,R0917
         query = query.filter(models.Automation.name.ilike(f"%{search}%"))
 
     # Ordenacao
+    allowed_sorts = {
+        "id",
+        "name",
+        "script_path",
+        "test_mode",
+        "priority",
+        "max_runtime_minutes",
+        "created_at",
+        "updated_at",
+    }
+    if sort not in allowed_sorts:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Campo de ordenação inválido: '{sort}'. Opções válidas: {sorted(allowed_sorts)}",
+        )
 
     sort_column = getattr(models.Automation, sort, models.Automation.name)
 
@@ -584,7 +554,7 @@ async def start_automation(
         db.query(models.Execution)
         .filter(
             models.Execution.automation_id == automation_id,
-            models.Execution.status.in_(["PENDING", "RUNNING"]),
+            models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES),
         )
         .first()
     )
@@ -671,37 +641,8 @@ def set_global_test_mode(
         }
     )
 
-    # Sincroniza a variavel de ambiente do Windows
-    ps_script = os.path.join(PROJECT_ROOT, "Tools", "ConfigurarEmailTeste.ps1")
-    if os.path.exists(ps_script):
-        try:
-            if enabled:
-                subprocess.run(
-                    [
-                        "powershell.exe",
-                        "-NoProfile",
-                        "-ExecutionPolicy",
-                        "Bypass",
-                        "-File",
-                        ps_script,
-                    ],
-                    check=True,
-                )
-            else:
-                subprocess.run(
-                    [
-                        "powershell.exe",
-                        "-NoProfile",
-                        "-ExecutionPolicy",
-                        "Bypass",
-                        "-File",
-                        ps_script,
-                        "-Remover",
-                    ],
-                    check=True,
-                )
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Erro ao sincronizar variavel AUTOMACAO_TEST_EMAIL: %s", e)
+    # Sincroniza a variavel de ambiente do Windows (orquestracao no service, #12)
+    env_admin.sync_global_test_mode_env(enabled, PROJECT_ROOT)
 
     log_audit(
         db,

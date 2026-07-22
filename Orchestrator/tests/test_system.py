@@ -40,6 +40,124 @@ def test_health_check(client: Any) -> None:
     assert data["status"] in ["healthy", "degraded", "unhealthy"]
 
 
+def test_csp_restringe_connect_src_a_self(client: Any) -> None:
+    # Achado #31: "ws: wss:" liberava WebSocket para qualquer host.
+    res = client.get("/api/system/health")
+    csp = res.headers.get("Content-Security-Policy", "")
+    assert "connect-src 'self';" in csp
+    assert "ws:" not in csp and "wss:" not in csp
+
+
+def test_csp_script_src_sem_unsafe_inline(client: Any) -> None:
+    # Achado #43: o build do Vite só emite <script src=...> externo, então
+    # 'unsafe-inline' era desnecessário e neutralizava a proteção anti-XSS.
+    # Continua permitido em style-src (React/Vite injetam estilo inline).
+    res = client.get("/api/system/health")
+    csp = res.headers.get("Content-Security-Policy", "")
+    assert "script-src 'self';" in csp
+    assert "style-src 'self' 'unsafe-inline'" in csp
+
+
+def test_resposta_429_do_rate_limit_recebe_headers_de_seguranca() -> None:
+    # Achado #31: o 429 retorna sem chamar call_next; com SecurityHeaders como
+    # camada interna ele saía sem CSP/X-Frame-Options. Reproduz a mesma ordem de
+    # registro do main.py, com limite de 1 req/min.
+    from app.main import (  # pylint: disable=import-outside-toplevel
+        SecurityHeadersMiddleware,
+    )
+    from app.middleware import (  # pylint: disable=import-outside-toplevel
+        RateLimitMiddleware,
+    )
+    from fastapi import FastAPI  # pylint: disable=import-outside-toplevel
+
+    app_teste = FastAPI()
+
+    @app_teste.get("/api/ping")
+    def _ping() -> dict[str, str]:
+        return {"ok": "1"}
+
+    app_teste.add_middleware(RateLimitMiddleware, rpm=1)
+    app_teste.add_middleware(SecurityHeadersMiddleware)
+
+    from fastapi.testclient import (  # pylint: disable=import-outside-toplevel
+        TestClient,
+    )
+
+    with TestClient(app_teste) as c:
+        primeira = c.get("/api/ping")
+        segunda = c.get("/api/ping")
+
+    assert primeira.status_code == 200
+    assert segunda.status_code == 429
+    assert "Content-Security-Policy" in segunda.headers
+    assert segunda.headers.get("X-Frame-Options") == "DENY"
+
+
+def test_mask_env_content_mascara_apenas_chaves_sensiveis() -> None:
+    # Achado #9: GET /env expunha o .env completo (credenciais Oracle e a
+    # própria API Key) para qualquer portador da chave mestra.
+    from app.security import (  # pylint: disable=import-outside-toplevel
+        mask_env_content,
+    )
+
+    original = (
+        "# comentario\n"
+        "ORCHESTRATOR_API_KEY=chave-secreta\n"
+        "ORACLE_READONLY_PASSWORD=senha-oracle\n"
+        "RATE_LIMIT_RPM=120\n"
+        "HUB_API_PORT=8000\n"
+        "\n"
+    )
+    mascarado = mask_env_content(original)
+
+    assert "chave-secreta" not in mascarado
+    assert "senha-oracle" not in mascarado
+    assert "ORCHESTRATOR_API_KEY=********" in mascarado
+    assert "ORACLE_READONLY_PASSWORD=********" in mascarado
+    # Chaves operacionais seguem legíveis para diagnóstico.
+    assert "RATE_LIMIT_RPM=120" in mascarado
+    assert "HUB_API_PORT=8000" in mascarado
+    assert "# comentario" in mascarado
+    assert mascarado.endswith("\n")
+
+
+def test_env_validate_rejeita_valor_mascarado(client: Any) -> None:
+    # Blindagem do round-trip: gravar o placeholder de volta sobrescreveria o
+    # segredo real por "********".
+    res = client.post(
+        "/api/system/env/validate",
+        json={"content": "ORCHESTRATOR_API_KEY=********\n"},
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["valid"] is False
+    assert any(issue["code"] == "MASKED_VALUE" for issue in body["issues"])
+
+
+def test_prometheus_metrics_requires_api_key(client: Any) -> None:
+    # Achado #8: include_in_schema=False não é controle de acesso.
+    res = client.get("/api/system/metrics/prometheus")
+    assert res.status_code == 403
+
+
+def test_request_id_invalido_do_cliente_nao_e_refletido(client: Any) -> None:
+    # Achado #24: X-Request-Id malicioso (CRLF/tamanho) não pode ser refletido
+    # cru no header de resposta — deve ser substituído por um ID gerado.
+    malicioso = "bad\r\nX-Injected: 1" + "a" * 100
+    res = client.get("/api/system/health", headers={"X-Request-Id": malicioso})
+    devolvido = res.headers.get("X-Request-Id", "")
+    assert devolvido != malicioso
+    assert "\r" not in devolvido and "\n" not in devolvido
+    assert len(devolvido) <= 64
+
+
+def test_request_id_valido_do_cliente_e_preservado(client: Any) -> None:
+    valido = "req-ABC123-2026"
+    res = client.get("/api/system/health", headers={"X-Request-Id": valido})
+    assert res.headers.get("X-Request-Id") == valido
+
+
 def test_metrics(client: Any) -> None:
     res = client.get("/api/system/metrics", headers=AUTH_HEADERS)
     assert res.status_code == 200

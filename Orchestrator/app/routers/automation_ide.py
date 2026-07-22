@@ -15,14 +15,17 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..middleware import get_api_key
-from ..utils import get_client_ip, log_audit
-from .automations import (
-    _backup_file_before_write,
-    _resolve_automation_dir,
-    _resolve_managed_file,
+from ..runtime import get_project_root
+from ..services.managed_file_access import (
+    backup_file_before_write,
+    resolve_automation_dir,
+    resolve_managed_file,
 )
+from ..utils import get_client_ip, log_audit
 
 logger = logging.getLogger("orchestrator")
+
+PROJECT_ROOT = get_project_root()
 
 router = APIRouter(prefix="/api/automations", tags=["Automation IDE"])
 
@@ -37,7 +40,7 @@ def get_automation_scripts(
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_dir = _resolve_automation_dir(str(auto.script_path))
+    auto_dir = resolve_automation_dir(str(auto.script_path), PROJECT_ROOT)
 
     allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
     scripts: list[dict[str, Any]] = []
@@ -76,14 +79,14 @@ def update_automation_script(  # pylint: disable=R0913,R0917
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    auto_dir = _resolve_automation_dir(str(auto.script_path))
+    auto_dir = resolve_automation_dir(str(auto.script_path), PROJECT_ROOT)
     allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
     if not filename.endswith(allowed_exts):
         raise HTTPException(status_code=400, detail="Extensão de script não permitida.")
-    target_path = _resolve_managed_file(auto_dir, filename)
+    target_path = resolve_managed_file(auto_dir, filename)
 
     try:
-        backup_relpath = _backup_file_before_write(target_path, auto_dir)
+        backup_relpath = backup_file_before_write(target_path, auto_dir)
         if filename.endswith(".ps1") or filename.endswith(".psm1"):
             with open(target_path, "w", encoding="utf-8-sig") as f:
                 f.write(payload.content)

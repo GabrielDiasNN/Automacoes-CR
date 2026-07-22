@@ -14,6 +14,7 @@ import collections
 import hmac
 import logging
 import os
+import re
 import time
 import uuid
 from contextvars import ContextVar
@@ -34,6 +35,22 @@ RATE_LIMIT_EXEMPT_PATHS = {
     "/api/system/health",
 }
 
+# Rotas de telemetria interna emitidas pelo próprio Worker (log flusher a cada 1s,
+# eventos de ciclo de vida). Isentas do rate limit APENAS quando a conexão vem do
+# loopback (socket real, não o header X-Forwarded-For spoofável) — evita que o
+# tráfego do Worker esgote o bucket compartilhado com um Dashboard co-localizado,
+# sem abrir superfície de flood para chamadores externos.
+INTERNAL_TELEMETRY_PATHS = {
+    "/api/broadcast_log",
+    "/api/broadcast_logs",
+    "/api/broadcast_event",
+}
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+# X-Request-Id aceito do cliente apenas se casar este formato restrito: impede
+# reflexão de CRLF/tamanho arbitrário no header de resposta (injeção de log/header).
+_REQUEST_ID_RE = re.compile(r"[A-Za-z0-9\-]{1,64}")
+
 # ---------------------------------------------------------------------------
 # Autenticacao Timing-Safe
 # ---------------------------------------------------------------------------
@@ -50,6 +67,9 @@ def get_api_key(request: Request, api_key: str = Depends(api_key_header)) -> str
         expected_key = f"MISSING_ENV_{uuid.uuid4()}"
 
     if api_key is None or not hmac.compare_digest(api_key, expected_key):
+        # Divergência deliberada de get_client_ip(): a detecção de brute-force usa
+        # o IP de socket (request.client.host), não o X-Forwarded-For spoofável —
+        # get_client_ip() é reservado à atribuição de audit-log (informativa).
         client_ip = request.client.host if request.client else "unknown"
         req_id = getattr(request.state, "request_id", "UNK")
         logger.warning(
@@ -73,7 +93,11 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        request_id = request.headers.get("X-Request-Id", str(uuid.uuid4())[:12])
+        client_request_id = request.headers.get("X-Request-Id")
+        if client_request_id and _REQUEST_ID_RE.fullmatch(client_request_id):
+            request_id = client_request_id
+        else:
+            request_id = str(uuid.uuid4())[:12]
         request.state.request_id = request_id
 
         token = request_id_var.set(request_id)
@@ -126,6 +150,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     IPs sem atividade por _STALE_TTL segundos sao removidos a cada _CLEANUP_EVERY
     requisicoes para evitar crescimento ilimitado do dicionario em memoria.
+
+    INVARIANTE: a janela deslizante vive na memoria DESTE processo. O limite
+    efetivo so corresponde ao configurado enquanto o Orchestrator rodar em um
+    unico worker uvicorn (e o caso hoje: Start-Orchestrator.ps1 nao passa
+    --workers). Com N workers, cada um manteria sua propria janela e o limite
+    real por IP passaria a ser N x RATE_LIMIT_RPM; nesse cenario o estado
+    precisaria migrar para um store compartilhado (#39).
     """
 
     _STALE_TTL = 3600  # 1h sem atividade → elegível para poda
@@ -160,7 +191,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path in RATE_LIMIT_EXEMPT_PATHS:
             return await call_next(request)
 
+        # Chave do limiter e isenção de loopback usam o IP de socket
+        # (request.client.host), nunca o X-Forwarded-For spoofável — ver nota em
+        # INTERNAL_TELEMETRY_PATHS. get_client_ip() fica restrito ao audit-log.
         client_ip = request.client.host if request.client else "unknown"
+
+        # Telemetria interna do Worker via loopback: isenta do bucket compartilhado.
+        if (
+            request.url.path in INTERNAL_TELEMETRY_PATHS
+            and client_ip in _LOOPBACK_HOSTS
+        ):
+            return await call_next(request)
+
         now = time.time()
         window_start = now - self._window_seconds
 

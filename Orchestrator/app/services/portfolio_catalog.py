@@ -10,7 +10,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import EXECUTION_ACTIVE_STATUSES, EXECUTION_DELIVERED_STATUSES
+from ..constants import (
+    EXECUTION_ACTIVE_STATUSES,
+    EXECUTION_DELIVERED_STATUSES,
+    EXECUTION_FAILED_STATUSES,
+)
 from ..timezone import get_now_local
 from .automation_snapshot import build_automation_response, build_next_run_lookup
 from .metrics import (
@@ -31,7 +35,7 @@ from .portfolio_manifest import (
 )
 from .scheduler_runtime import list_scheduled_jobs
 
-FAILURE_STATUSES = ["ERROR", "TIMEOUT", "TERMINATED", "FAILED_BY_REBOOT"]
+FAILURE_STATUSES = sorted(EXECUTION_FAILED_STATUSES)
 SUCCESS_STATUSES = ["SUCCESS"]
 CRITICALITY_RANK = {
     "critical": 0,

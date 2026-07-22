@@ -1,11 +1,14 @@
 """Estado de runtime compartilhado do Orchestrator."""
 
 import asyncio
+import logging
 import os
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
+
+logger = logging.getLogger("orchestrator")
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,8 +55,15 @@ def get_allowed_origins() -> list[str]:
 def trigger_worker_wakeup() -> None:
     if _event_loop is not None and not _event_loop.is_closed():
         _event_loop.call_soon_threadsafe(task_queued_event.set)
-    else:
-        task_queued_event.set()
+        return
+    # Sem loop registrado não há forma thread-safe de sinalizar: chamar
+    # task_queued_event.set() aqui violaria a premissa documentada acima (o
+    # chamador pode estar na threadpool de endpoints sync). No-op consciente —
+    # o worker ainda assim busca a tarefa no próximo ciclo de polling (#34).
+    logger.warning(
+        "Wake-up do worker ignorado: event loop não registrado. "
+        "A tarefa será consumida no próximo ciclo de polling."
+    )
 
 
 async def wait_for_task_signal(timeout_seconds: int = 30) -> str:
