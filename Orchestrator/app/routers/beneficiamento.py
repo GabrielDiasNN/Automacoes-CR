@@ -2,6 +2,7 @@
 
 # pylint: disable=relative-beyond-top-level,unused-argument,too-many-arguments,too-many-positional-arguments,line-too-long,trailing-newlines
 
+import logging
 import sys
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from .. import schemas
 from ..middleware import get_api_key
 from ..runtime import get_project_root
 from ..services.beneficiamento_refresh import run_beneficiamento_refresh
+
+logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/beneficiamento", tags=["Beneficiamento"])
 
@@ -35,6 +38,11 @@ try:
         load_period_payload,
     )
 except ImportError:
+    # Loga a causa real: um bug de import em módulo transitivo colapsaria na mesma
+    # mensagem genérica "Módulo indisponível", escondendo o diagnóstico (#30).
+    logger.exception(
+        "Módulos do beneficiamento indisponíveis; endpoints entram em modo degradado."
+    )
     buscar_historico = None
     buscar_produtos = None
     obter_detail_historico = None
@@ -75,7 +83,12 @@ def get_beneficiamento_historico(
         None, description="Código do Ano + Semana ISO (ex: 202622)"
     ),
     ano_mes: str | None = Query(None, description="Código do Ano + Mês (ex: 202605)"),
-    limit: int = Query(500, description="Limite máximo de registros retornados"),
+    limit: int = Query(
+        500,
+        ge=1,
+        le=5000,
+        description="Limite máximo de registros retornados",
+    ),
     api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoHistoricoResponse:
     """Realiza buscas rápidas no SQLite indexado local para rastreabilidade de OBs e produtos."""
@@ -101,8 +114,9 @@ def get_beneficiamento_historico(
             total_records=len(records), records=records
         )
     except Exception as exc:
+        logger.error("Erro na busca de histórico SQLite: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro na busca SQLite: {exc}"
+            status_code=500, detail="Erro interno na busca de histórico."
         ) from exc
 
 
@@ -126,8 +140,9 @@ def get_beneficiamento_produtos(
         items = buscar_produtos(q, limit=limit)
         return schemas.BeneficiamentoProdutosResponse(items=items)
     except Exception as exc:
+        logger.error("Erro na busca de produtos: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro na busca de produtos: {exc}"
+            status_code=500, detail="Erro interno na busca de produtos."
         ) from exc
 
 
@@ -190,8 +205,9 @@ def get_beneficiamento_overview(
         data = obter_overview_historico(filtros)
         return schemas.BeneficiamentoOverviewResponse.model_validate(data)
     except Exception as exc:
+        logger.error("Erro no overview de beneficiamento: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro no overview SQLite: {exc}"
+            status_code=500, detail="Erro interno no overview de beneficiamento."
         ) from exc
 
 
@@ -218,8 +234,9 @@ def get_beneficiamento_tingimento(
         data = obter_tingimento_historico({"dt_inicio": dt_inicio, "dt_fim": dt_fim})
         return schemas.BeneficiamentoTingimentoResponse.model_validate(data)
     except Exception as exc:
+        logger.error("Erro no painel de tingimento: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro no painel de tingimento SQLite: {exc}"
+            status_code=500, detail="Erro interno no painel de tingimento."
         ) from exc
 
 
@@ -235,8 +252,9 @@ def get_beneficiamento_health(
         data = build_health_payload()
         return schemas.BeneficiamentoHealthResponse.model_validate(data)
     except Exception as exc:
+        logger.error("Erro na saúde dos snapshots: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro na saúde dos snapshots: {exc}"
+            status_code=500, detail="Erro interno na saúde dos snapshots."
         ) from exc
 
 
@@ -252,8 +270,9 @@ def get_beneficiamento_periods(
         data = build_periods_payload()
         return schemas.BeneficiamentoPeriodsResponse.model_validate(data)
     except Exception as exc:
+        logger.error("Erro ao listar períodos de snapshot: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro ao listar períodos: {exc}"
+            status_code=500, detail="Erro interno ao listar períodos."
         ) from exc
 
 
@@ -272,8 +291,9 @@ def get_beneficiamento_period(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
+        logger.error("Erro ao carregar período de snapshot: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro ao carregar período: {exc}"
+            status_code=500, detail="Erro interno ao carregar o período."
         ) from exc
 
 
@@ -289,8 +309,9 @@ def get_beneficiamento_dashboard(
         data = build_dashboard_payload()
         return schemas.BeneficiamentoDashboardPayload.model_validate(data)
     except Exception as exc:
+        logger.error("Erro no dashboard de snapshots: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro no dashboard de snapshots: {exc}"
+            status_code=500, detail="Erro interno no dashboard de snapshots."
         ) from exc
 
 
@@ -371,8 +392,9 @@ def get_beneficiamento_detail(
         data = obter_detail_historico(filtros)
         return schemas.BeneficiamentoDetailResponse.model_validate(data)
     except Exception as exc:
+        logger.error("Erro no detalhe de beneficiamento: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Erro no detalhe SQLite: {exc}"
+            status_code=500, detail="Erro interno na consulta de detalhe."
         ) from exc
 
 

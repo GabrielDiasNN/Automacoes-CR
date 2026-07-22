@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import wait as futures_wait
 from datetime import datetime, timedelta
 from queue import Empty, Queue
 from types import FrameType
@@ -45,6 +46,7 @@ try:
         apply_internal_worker_error,
         apply_timeout_result,
         complete_process_execution,
+        finalize_reboot_interrupted_task,
         finalize_terminated_task,
         mark_task_as_failed,
         resolve_script_path,
@@ -77,6 +79,7 @@ MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
 HEARTBEAT_INTERVAL: int = 15  # segundos
 POLL_INTERVAL: float = 2.0
 MAX_POLL_INTERVAL: float = 15.0
+SHUTDOWN_GRACE_SECONDS: float = 30.0  # espera máxima por tarefas ativas no shutdown
 _port = os.environ.get("HUB_API_PORT", "8000")
 API_BASE: str = f"http://127.0.0.1:{_port}"
 WORKER_HOST: str = socket.gethostname()
@@ -436,9 +439,28 @@ def _drain_process_output(
 
 
 _DB_CHECK_INTERVAL = 5.0  # verifica banco a cada 5s em vez de 1s (A4/2.1)
+_READER_JOIN_TIMEOUT = 5.0  # espera máxima pelo reader thread drenar stdout (EOF)
 
 
-def _monitor_process(
+def _drain_final_output(
+    reader_thread: "threading.Thread | None",
+    output_queue: Queue[str],
+    logs: list[str],
+    exec_id: str,
+) -> None:
+    """Aguarda o reader thread esvaziar stdout (EOF) e captura a saída final.
+
+    O join com timeout evita perder a última rajada de saída no fim do processo
+    (o reader pode ter linhas em trânsito quando process.poll() já retornou), sem
+    pendurar o worker caso um subprocesso-neto herde o handle e impeça o EOF —
+    achado #20 (e mitigação defensiva do #37).
+    """
+    if reader_thread is not None:
+        reader_thread.join(timeout=_READER_JOIN_TIMEOUT)
+    _drain_process_output(output_queue, logs, exec_id)
+
+
+def _monitor_process(  # pylint: disable=too-many-locals
     process: "subprocess.Popen[str]",
     output_queue: Queue[str],
     logs: list[str],
@@ -452,10 +474,11 @@ def _monitor_process(
     timeout_delta = timedelta(minutes=max_runtime)
     last_db_check = 0.0
 
+    reader_thread = task_ctx.get("reader_thread")
     while not shutdown_event.is_set():
         _drain_process_output(output_queue, logs, exec_id)
         if process.poll() is not None:
-            _drain_process_output(output_queue, logs, exec_id)
+            _drain_final_output(reader_thread, output_queue, logs, exec_id)
             return True
 
         now_ts = time.time()
@@ -470,7 +493,9 @@ def _monitor_process(
                 if db_status == EXECUTION_STATUS_TERMINATED:
                     _force_kill(process.pid)
                     broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
-                    finalize_terminated_task(check_db, exec_id, logs, task_start_monotonic)
+                    finalize_terminated_task(
+                        check_db, exec_id, logs, task_start_monotonic
+                    )
                     broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
                     return False
 
@@ -495,6 +520,23 @@ def _monitor_process(
                     return False
 
         time.sleep(1)
+
+    # Loop encerrado por shutdown_event (graceful shutdown do worker).
+    if process.poll() is not None:
+        # Processo concluiu dentro da janela do shutdown: preserva o resultado
+        # real via finalização normal em vez de descartá-lo.
+        _drain_final_output(reader_thread, output_queue, logs, exec_id)
+        return True
+    # Processo ainda vivo: encerra e finaliza como interrupção por reboot, para
+    # não deixar a execução presa em RUNNING até o recovery do próximo boot.
+    _force_kill(process.pid)
+    _drain_final_output(reader_thread, output_queue, logs, exec_id)
+    broadcast_log("\n[INTERROMPIDO POR SHUTDOWN DO ORQUESTRADOR]\n", exec_id)
+    with session_scope(SessionLocal) as shutdown_db:
+        finalize_reboot_interrupted_task(
+            shutdown_db, exec_id, logs, task_start_monotonic
+        )
+    broadcast_event("TASK_FAILED_BY_REBOOT", {"exec_id": exec_id})
     return False
 
 
@@ -618,6 +660,7 @@ def run_task(  # pylint: disable=too-many-locals
                 "task_start_monotonic": task_start_monotonic,
                 "max_runtime": max_runtime,
                 "robot_dir": os.path.dirname(script_path),
+                "reader_thread": reader_thread,
             }
             should_finalize = _monitor_process(
                 process,
@@ -635,7 +678,9 @@ def run_task(  # pylint: disable=too-many-locals
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Erro fatal na tarefa %s: %s", exec_id, exc, extra=log_extra)
         with session_scope(SessionLocal) as error_db:
-            apply_internal_worker_error(error_db, exec_id, str(exc), task_start_monotonic)
+            apply_internal_worker_error(
+                error_db, exec_id, str(exc), task_start_monotonic
+            )
         update_stat("tasks_failed", 1)
         broadcast_event("TASK_FAILED", {"exec_id": exec_id, "error": str(exc)})
     finally:
@@ -651,16 +696,20 @@ def run_task(  # pylint: disable=too-many-locals
 
 def _terminate_active_processes() -> None:
     """Encerra forçadamente todos os processos filhos registrados (Pillar G)."""
+    # Copia a lista sob o lock e o libera antes de chamar _force_kill (bloqueante,
+    # até 15s por processo via taskkill). Manter o lock global durante os kills
+    # trava heartbeat/stats por até N×15s no shutdown (achado #19).
     with cast(threading.Lock, stats["lock"]):
-        for eid, proc in stats["active_processes"].items():
-            logger.warning("Terminando processo %s (Shutdown)", eid)
-            try:
-                _force_kill(proc.pid)
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.warning("Falha ao encerrar processo %s: %s", eid, e)
+        snapshot = list(stats["active_processes"].items())
+    for eid, proc in snapshot:
+        logger.warning("Terminando processo %s (Shutdown)", eid)
+        try:
+            _force_kill(proc.pid)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("Falha ao encerrar processo %s: %s", eid, e)
 
 
-def main_loop() -> None:
+def main_loop() -> None:  # pylint: disable=too-many-locals,too-many-statements
     """Loop principal: consome tarefas PENDING e despacha para o ThreadPool."""
     logger.info(
         "Worker v%s iniciado (PID: %d, MaxWorkers: %d)",
@@ -761,7 +810,19 @@ def main_loop() -> None:
 
     logger.info("Shutdown solicitado. Encerrando tarefas ativas...")
     _terminate_active_processes()
-    executor.shutdown(wait=True, cancel_futures=False)
+    # Deadline defensivo: aguarda as tarefas ativas encerrarem por até
+    # SHUTDOWN_GRACE_SECONDS (após o force-kill, o run_task desenrola rápido).
+    # Sem o timeout, uma thread presa em I/O que não reavalia shutdown_event
+    # penduraria o worker indefinidamente em executor.shutdown(wait=True) (#21).
+    if active_futures:
+        _, not_done = futures_wait(active_futures, timeout=SHUTDOWN_GRACE_SECONDS)
+        if not_done:
+            logger.warning(
+                "%d tarefa(s) não encerraram em %ss; abandonando no shutdown.",
+                len(not_done),
+                SHUTDOWN_GRACE_SECONDS,
+            )
+    executor.shutdown(wait=False, cancel_futures=True)
     logger.info("Worker encerrado de forma controlada.")
 
 

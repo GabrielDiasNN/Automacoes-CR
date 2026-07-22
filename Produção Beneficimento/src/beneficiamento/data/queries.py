@@ -21,6 +21,11 @@ _TYPED_COLUMNS: tuple[str, ...] = tuple(
 )
 _TYPED_SELECT = ", ".join(_TYPED_COLUMNS)
 
+# Teto defensivo do LIMIT. No SQLite, LIMIT negativo significa "sem limite":
+# clampar aqui impede dump completo da tabela mesmo se um chamador passar
+# limit<=0 ou um valor absurdo (defesa em profundidade do endpoint /historico).
+_MAX_HISTORICO_LIMIT = 5000
+
 
 def _row_to_record(row: sqlite3.Row, *, include_raw: bool) -> dict[str, Any]:
     record = {column: row[column] for column in _TYPED_COLUMNS}
@@ -85,6 +90,7 @@ def buscar_historico(
     include_raw: bool = False,
 ) -> list[dict[str, Any]]:
     """Busca rapida por OB/produto/periodo lendo colunas tipadas indexadas."""
+    limit = max(1, min(int(limit), _MAX_HISTORICO_LIMIT))
     path = init_db(db_path)
     where_sql, params = _apply_filters(filtros)
     sql = (

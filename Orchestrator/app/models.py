@@ -124,11 +124,16 @@ class Execution(Base):  # type: ignore[misc,valid-type]
     # Relationship bidirecional
     automation = relationship("Automation", back_populates="executions")
 
-    # Indexes compostos para queries de metricas e fila priorizada
+    # Indexes compostos para queries de metricas e fila priorizada.
+    # ix_exec_finished_at / ix_exec_status_finished existem no banco desde a
+    # migration 20260620_01 e precisam ser declarados aqui para o --autogenerate
+    # do Alembic não emitir DROP INDEX acidental.
     __table_args__ = (
         Index("ix_exec_status_started", "status", "started_at"),
         Index("ix_exec_auto_status", "automation_id", "status"),
         Index("ix_exec_priority_status", "priority", "status", "started_at"),
+        Index("ix_exec_finished_at", "finished_at"),
+        Index("ix_exec_status_finished", "status", "finished_at"),
     )
 
 

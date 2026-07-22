@@ -414,6 +414,20 @@ def test_beneficiamento_historico_search_endpoint(client: TestClient) -> None:
     assert "records" in payload
 
 
+@pytest.mark.parametrize("limit_value", [-1, 0, 5001])
+def test_beneficiamento_historico_rejects_out_of_range_limit(
+    client: TestClient, limit_value: int
+) -> None:
+    # Regressão do achado #7: limit sem clamp permitia limit=-1 (dump completo
+    # no SQLite). Agora valores fora de [1, 5000] devem retornar 422.
+    response = client.get(
+        "/api/beneficiamento/historico",
+        headers=AUTH_HEADERS,
+        params={"ob": "2401", "limit": limit_value},
+    )
+    assert response.status_code == 422
+
+
 def test_beneficiamento_detail_endpoint_for_product(client: TestClient) -> None:
     """Valida o drill-down por produto com resposta paginada."""
     response = client.get(

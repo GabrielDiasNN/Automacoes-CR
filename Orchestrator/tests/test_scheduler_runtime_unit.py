@@ -241,16 +241,18 @@ def test_trigger_worker_wakeup_usa_call_soon_threadsafe(monkeypatch: Any) -> Non
 
 
 def test_wakeup_sem_event_loop_registrado_nao_lanca_excecao(monkeypatch: Any) -> None:
+    # Achado #34: sem loop registrado não existe caminho thread-safe para
+    # sinalizar (asyncio.Event.set() fora do loop viola a premissa do módulo).
+    # O wake-up vira no-op logado — o worker consome a tarefa no próximo polling.
     monkeypatch.setattr(app_runtime, "_event_loop", None)
     app_runtime.task_queued_event.clear()
 
     app_runtime.trigger_worker_wakeup()  # nao deve lancar excecao
 
-    assert app_runtime.task_queued_event.is_set() is True
-    app_runtime.task_queued_event.clear()
+    assert app_runtime.task_queued_event.is_set() is False
 
 
-def test_wakeup_com_loop_fechado_usa_fallback_direto(monkeypatch: Any) -> None:
+def test_wakeup_com_loop_fechado_nao_sinaliza_fora_do_loop(monkeypatch: Any) -> None:
     fake_loop = MagicMock()
     fake_loop.is_closed.return_value = True
     monkeypatch.setattr(app_runtime, "_event_loop", fake_loop)
@@ -259,8 +261,7 @@ def test_wakeup_com_loop_fechado_usa_fallback_direto(monkeypatch: Any) -> None:
     app_runtime.trigger_worker_wakeup()
 
     fake_loop.call_soon_threadsafe.assert_not_called()
-    assert app_runtime.task_queued_event.is_set() is True
-    app_runtime.task_queued_event.clear()
+    assert app_runtime.task_queued_event.is_set() is False
 
 
 def test_register_event_loop_atualiza_o_loop_global(monkeypatch: Any) -> None:

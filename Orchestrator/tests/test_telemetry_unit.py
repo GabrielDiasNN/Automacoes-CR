@@ -10,6 +10,15 @@ from app import telemetry
 from app.telemetry import get_tracer, setup_telemetry
 
 
+@pytest.fixture(autouse=True)
+def reset_telemetry_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    lgr = logging.getLogger("orchestrator")
+    monkeypatch.setattr(lgr, "handlers", [])
+    monkeypatch.setattr(lgr, "propagate", True)
+    monkeypatch.setattr(lgr, "level", logging.NOTSET)
+    monkeypatch.setattr(lgr, "disabled", False)
+
+
 def test_setup_telemetry_sem_env_var_retorna_false(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -134,10 +143,10 @@ def test_setup_telemetry_endpoint_configurado_mas_exporter_ausente_loga_warning(
     monkeypatch.setitem(
         sys.modules, "opentelemetry.sdk.resources", mock_resource_module
     )
-    monkeypatch.delitem(
+    monkeypatch.setitem(
         sys.modules,
         "opentelemetry.exporter.otlp.proto.grpc.trace_exporter",
-        raising=False,
+        None,
     )
     monkeypatch.setitem(
         sys.modules,
@@ -172,9 +181,7 @@ def test_setup_telemetry_instrumentation_fastapi_ausente_loga_warning(
     monkeypatch.setitem(
         sys.modules, "opentelemetry.sdk.resources", mock_resource_module
     )
-    monkeypatch.delitem(
-        sys.modules, "opentelemetry.instrumentation.fastapi", raising=False
-    )
+    monkeypatch.setitem(sys.modules, "opentelemetry.instrumentation.fastapi", None)
 
     with caplog.at_level(logging.WARNING, logger="orchestrator"):
         resultado = setup_telemetry(MagicMock())

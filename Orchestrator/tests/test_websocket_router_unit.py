@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from collections.abc import Coroutine
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -28,6 +27,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app import models
 from app.routers import websocket as websocket_router
 from app.routers.websocket import ConnectionManager, _send_log_replay, _validate_ws_key
+from app.services import ws_auth
 from fastapi import WebSocketDisconnect
 from tests.conftest import AUTH_HEADERS, TEST_AUTH_VALUE
 
@@ -241,35 +241,69 @@ def test_broadcast_event_sem_conexoes_nao_levanta_excecao() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_ws_with_key(key: str | None) -> Any:
+def _make_ws_with_token(token: str | None) -> Any:
     ws = MagicMock()
-    ws.query_params = {"key": key} if key is not None else {}
+    ws.query_params = {"token": token} if token is not None else {}
     return ws
 
 
-def test_validate_ws_key_aceita_chave_correta() -> None:
-    with patch.dict(os.environ, {"ORCHESTRATOR_API_KEY": TEST_AUTH_VALUE}):
-        ws = _make_ws_with_key(TEST_AUTH_VALUE)
-        assert _validate_ws_key(ws) is True
+def test_validate_ws_aceita_token_emitido() -> None:
+    # Achado #41: o handshake passou a exigir token efêmero em vez da API Key
+    # mestra, que ficava exposta na URL.
+    ws_auth.reset_ws_tokens()
+    token, _ttl = ws_auth.issue_ws_token()
+
+    assert _validate_ws_key(_make_ws_with_token(token)) is True
 
 
-def test_validate_ws_key_rejeita_chave_incorreta() -> None:
-    with patch.dict(os.environ, {"ORCHESTRATOR_API_KEY": TEST_AUTH_VALUE}):
-        ws = _make_ws_with_key("chave-errada")
-        assert _validate_ws_key(ws) is False
+def test_validate_ws_token_e_de_uso_unico() -> None:
+    ws_auth.reset_ws_tokens()
+    token, _ttl = ws_auth.issue_ws_token()
+
+    assert _validate_ws_key(_make_ws_with_token(token)) is True
+    # Segunda tentativa com o mesmo token deve falhar (já consumido).
+    assert _validate_ws_key(_make_ws_with_token(token)) is False
 
 
-def test_validate_ws_key_rejeita_chave_ausente() -> None:
-    with patch.dict(os.environ, {"ORCHESTRATOR_API_KEY": TEST_AUTH_VALUE}):
-        ws = _make_ws_with_key(None)
-        assert _validate_ws_key(ws) is False
+def test_validate_ws_rejeita_token_desconhecido() -> None:
+    ws_auth.reset_ws_tokens()
+    assert _validate_ws_key(_make_ws_with_token("token-inventado")) is False
 
 
-def test_validate_ws_key_falha_fechada_quando_env_nao_configurada() -> None:
-    with patch.dict(os.environ, {}, clear=True):
-        os.environ.pop("ORCHESTRATOR_API_KEY", None)
-        ws = _make_ws_with_key("qualquer-chave")
-        assert _validate_ws_key(ws) is False
+def test_validate_ws_rejeita_token_ausente() -> None:
+    ws_auth.reset_ws_tokens()
+    assert _validate_ws_key(_make_ws_with_token(None)) is False
+
+
+def test_validate_ws_rejeita_api_key_mestra_na_query() -> None:
+    # Regressão: a API Key não pode mais autenticar o handshake.
+    ws_auth.reset_ws_tokens()
+    ws = MagicMock()
+    ws.query_params = {"key": TEST_AUTH_VALUE}
+
+    assert _validate_ws_key(ws) is False
+
+
+def test_validate_ws_rejeita_token_expirado(monkeypatch: Any) -> None:
+    ws_auth.reset_ws_tokens()
+    monkeypatch.setattr(ws_auth, "WS_TOKEN_TTL_SECONDS", 0)
+    token, _ttl = ws_auth.issue_ws_token()
+
+    assert _validate_ws_key(_make_ws_with_token(token)) is False
+
+
+def test_ws_token_endpoint_exige_api_key(client: Any) -> None:
+    assert client.post("/api/system/ws-token").status_code == 403
+
+
+def test_ws_token_endpoint_emite_token_utilizavel(client: Any) -> None:
+    ws_auth.reset_ws_tokens()
+    res = client.post("/api/system/ws-token", headers=AUTH_HEADERS)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["expires_in_seconds"] > 0
+    assert _validate_ws_key(_make_ws_with_token(body["token"])) is True
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +336,34 @@ def test_send_log_replay_envia_historico_quando_execucao_tem_logs(
     assert ws.send_text.await_count == 2
     primeira_chamada = ws.send_text.await_args_list[0].args[0]
     assert primeira_chamada == "linha 1\nlinha 2"
+
+
+def test_send_log_replay_trunca_historico_muito_grande(
+    client: Any, db_session: Any
+) -> None:
+    # Achado #40: o replay enviava db_exec.logs inteiro, sem o teto de 50k que o
+    # broadcast ao vivo já aplicava para o mesmo objetivo.
+    del client
+
+    automacao = models.Automation(name="Replay Grande", script_path="./test/run.ps1")
+    db_session.add(automacao)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_REPLAY_GRANDE",
+            automation_id=automacao.id,
+            status="RUNNING",
+            logs="y" * 60000,
+        )
+    )
+    db_session.commit()
+
+    ws = _make_ws()
+    _run_async(_send_log_replay(ws, "EXEC_REPLAY_GRANDE"))
+
+    enviado = ws.send_text.await_args_list[0].args[0]
+    assert len(enviado) < 60000
+    assert enviado.endswith("[TRUNCATED FOR WS PERFORMANCE]")
 
 
 def test_send_log_replay_nao_envia_nada_quando_execucao_sem_logs(
@@ -454,6 +516,34 @@ def test_broadcast_logs_endpoint_sem_logs_processa_zero(client: Any) -> None:
     )
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "processed": 0}
+
+
+def test_broadcast_logs_endpoint_rejeita_lote_acima_do_teto(client: Any) -> None:
+    # Achado #42: os endpoints aceitavam dict livre, sem schema nem limite de
+    # itens. O flusher do Worker manda 1 entrada por execução ativa, então o
+    # teto é folgado — serve contra payload não-limitado de chamador arbitrário.
+    from app.schemas.system import (  # pylint: disable=import-outside-toplevel
+        WS_MAX_LOG_ENTRIES,
+    )
+
+    excedente = [
+        {"exec_id": f"EXEC_{i}", "message": "linha"}
+        for i in range(WS_MAX_LOG_ENTRIES + 1)
+    ]
+    response = client.post(
+        "/api/broadcast_logs", json={"logs": excedente}, headers=AUTH_HEADERS
+    )
+    assert response.status_code == 422
+
+
+def test_broadcast_log_endpoint_rejeita_tipo_invalido(client: Any) -> None:
+    # message precisa ser string; antes qualquer estrutura passava.
+    response = client.post(
+        "/api/broadcast_log",
+        json={"exec_id": "EXEC_X", "message": {"nested": "objeto"}},
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 422
 
 
 def test_broadcast_event_endpoint_retorna_status_ok(client: Any) -> None:

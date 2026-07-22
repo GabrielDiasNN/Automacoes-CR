@@ -143,11 +143,20 @@ class SecurityHeadersMiddleware(
         response: StarletteResponse = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            # Sem 'unsafe-inline' em script-src: o build do Vite emite apenas
+            # <script type="module" src=...> externo, nenhum script inline — a
+            # permissão era desnecessária e neutralizava a proteção anti-XSS da
+            # CSP (achado #43). Mantido em style-src, onde o React/Vite ainda
+            # injeta estilos inline.
+            "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; "
-            "connect-src 'self' ws: wss:; "
+            # 'self' já cobre o WebSocket same-origin (CSP3): o Dashboard monta a
+            # URL a partir de location.host com o protocolo casado. Os esquemas
+            # abertos "ws: wss:" permitiam exfiltração via WS para qualquer host
+            # em caso de XSS (achado #31).
+            "connect-src 'self'; "
             "frame-ancestors 'none';"
         )
         response.headers["X-Frame-Options"] = "DENY"
@@ -166,7 +175,6 @@ register_exception_handlers(app, logger)
 _allowed_origins = get_allowed_origins()
 
 setup_telemetry(app)
-app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(TimingMiddleware)
 app.add_middleware(RequestIdMiddleware)
@@ -176,6 +184,12 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+# Registrado por ÚLTIMO de propósito: add_middleware empilha em LIFO, então o
+# último registrado é a camada mais externa. Só assim os headers de segurança
+# alcançam também as respostas short-circuit geradas por middlewares internos
+# (ex.: o 429 do RateLimitMiddleware, que retorna sem chamar call_next) — antes
+# elas saíam sem CSP/X-Frame-Options (achado #31).
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Registrar routers
 app.include_router(automations.router)

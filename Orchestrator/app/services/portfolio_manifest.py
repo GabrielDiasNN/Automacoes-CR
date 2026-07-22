@@ -147,7 +147,7 @@ def _path_exists(project_root: Path, raw_path: str | None) -> bool:
 
 
 def _load_manifest(manifest_path: Path) -> CatalogEntry:
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
     payload["directory_name"] = manifest_path.parent.name
     manifest = CatalogManifest.model_validate(payload)
     return CatalogEntry(manifest=manifest, manifest_path=manifest_path)

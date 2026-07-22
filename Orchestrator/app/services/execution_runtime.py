@@ -16,6 +16,7 @@ from ..constants import (
     EXECUTION_ALLOWED_PRIORITIES,
     EXECUTION_QUEUEABLE_SOURCE_STATUSES,
     EXECUTION_STATUS_ERROR,
+    EXECUTION_STATUS_FAILED_BY_REBOOT,
     EXECUTION_STATUS_PENDING,
     EXECUTION_STATUS_REQUEUED,
     EXECUTION_STATUS_RUNNING,
@@ -188,11 +189,13 @@ def classify_process_result(
     )
 
 
-def mark_task_as_failed(
+def mark_task_as_failed(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     db: Session,
     exec_id: str,
     message: str,
     exit_code: int = -1,
+    failure_reason: str | None = None,
+    recovery_action: str | None = None,
 ) -> None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
@@ -202,8 +205,8 @@ def mark_task_as_failed(
         str(db_exec.logs or "") + sanitize_log_payload(message)
     )
     db_exec.exit_code = exit_code  # type: ignore[assignment]
-    db_exec.failure_reason = FAILURE_REASON_AUTOMATION_NOT_FOUND  # type: ignore[assignment]
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY  # type: ignore[assignment]
+    db_exec.failure_reason = failure_reason or FAILURE_REASON_AUTOMATION_NOT_FOUND  # type: ignore[assignment]
+    db_exec.recovery_action = recovery_action or RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY  # type: ignore[assignment]
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
     if db_exec.started_at and db_exec.finished_at:
         delta_seconds = round(
@@ -234,6 +237,48 @@ def finalize_terminated_task(
     db_exec.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE  # type: ignore[assignment]
     db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
         sanitize_log_payload(str(db_exec.logs or "") + "".join(logs) + termination_log)
+    )
+    db.commit()
+
+
+def finalize_reboot_interrupted_task(
+    db: Session,
+    exec_id: str,
+    logs: list[str],
+    task_start_monotonic: float,
+) -> None:
+    """Finaliza uma execução interrompida por shutdown do orquestrador.
+
+    Mesma semântica de mark_running_tasks_as_failed_by_reboot (recovery no
+    startup), porém aplicada de forma síncrona no próprio worker durante o
+    graceful shutdown: evita a execução ficar presa em RUNNING na janela entre
+    o encerramento e o próximo boot. Idempotente para status já terminais.
+    """
+    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    if not db_exec or db_exec.status in [
+        EXECUTION_STATUS_TERMINATED,
+        EXECUTION_STATUS_TIMEOUT,
+    ]:
+        return
+    now = get_now_local()
+    interruption_log = "\n[INTERROMPIDO POR SHUTDOWN DO ORQUESTRADOR]\n"
+    reboot_audit_line = (
+        f"[RECOVERY_AUDIT] actor=WORKER_SHUTDOWN "
+        f"action=MARK_FAILED_BY_REBOOT timestamp={now.strftime('%d/%m/%Y %H:%M:%S')}"
+    )
+    db_exec.status = EXECUTION_STATUS_FAILED_BY_REBOOT  # type: ignore[assignment]
+    db_exec.exit_code = -1  # type: ignore[assignment]
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
+    db_exec.finished_at = now  # type: ignore[assignment]
+    db_exec.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT  # type: ignore[assignment]
+    db_exec.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+        sanitize_log_payload(
+            str(db_exec.logs or "")
+            + "".join(logs)
+            + interruption_log
+            + f"{reboot_audit_line}"
+        )
     )
     db.commit()
 

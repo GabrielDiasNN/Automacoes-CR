@@ -22,7 +22,7 @@ from typing import Any
 from sqlalchemy import create_engine, event, func, inspect, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from .constants import ORCHESTRATOR_SCHEMA_VERSION
+from .constants import EXECUTION_TERMINAL_STATUSES, ORCHESTRATOR_SCHEMA_VERSION
 from .timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
@@ -296,13 +296,9 @@ def purge_old_executions(retention_days: int = 90) -> int:
     from . import models as _models  # pylint: disable=C0415,cyclic-import
 
     cutoff = get_now_local() - timedelta(days=retention_days)
-    terminal_statuses = [
-        "SUCCESS",
-        "ERROR",
-        "TIMEOUT",
-        "TERMINATED",
-        "FAILED_BY_REBOOT",
-    ]
+    # Fonte única de verdade dos status terminais (inclui PARTIAL): evita que o
+    # purge preserve indefinidamente execuções PARTIAL por divergência de lista.
+    terminal_statuses = list(EXECUTION_TERMINAL_STATUSES)
 
     try:
         with session_scope() as db:

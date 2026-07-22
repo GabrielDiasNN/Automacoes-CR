@@ -17,9 +17,30 @@ import os
 import subprocess
 import threading
 import time
-from typing import Any
+from typing import Any, Protocol
 
 from app.timezone import get_now_local
+
+
+class AlertAutomation(Protocol):  # pylint: disable=too-few-public-methods
+    """Contrato mínimo de automação consumido por dispatch_alerts.
+
+    Protocol em vez do models.Automation concreto (#36): tipa exatamente os três
+    atributos usados, é satisfeito tanto pela entidade ORM — cujos atributos o
+    mypy enxerga como Column[...] no nível de classe — quanto pelos dublês dos
+    testes, sem exigir cast. Mesmo padrão de log_broadcast.BroadcastManager.
+    """
+
+    id: Any
+    name: Any
+    notification_channels: Any
+
+
+class AlertExecution(Protocol):  # pylint: disable=too-few-public-methods
+    """Contrato mínimo de execução consumido por dispatch_alerts."""
+
+    id: Any
+
 
 logger = logging.getLogger("orchestrator.notifications")
 
@@ -331,25 +352,35 @@ def send_infra_alert(component: str, message: str) -> None:
         _mark_infra_sent(component)
 
 
-def dispatch_alerts(automation: Any, execution: Any) -> None:
+def dispatch_alerts(automation: AlertAutomation, execution: AlertExecution) -> None:
     """Analisa os canais configurados e dispara os alertas necessarios (com throttling)."""
     if not automation.notification_channels:
         return
 
-    if _is_throttled(automation.id):
+    automation_id = int(automation.id)
+    if _is_throttled(automation_id):
         return
 
-    channels = [c.strip().lower() for c in automation.notification_channels.split(",")]
+    # Conversões explícitas: com os modelos reais no lugar de Any (#36), o mypy
+    # enxerga os atributos como Column[...] no nível de classe — mesmo padrão
+    # str(auto.script_path) já usado nos routers.
+    channels = [
+        c.strip().lower() for c in str(automation.notification_channels).split(",")
+    ]
+    automation_name = str(automation.name)
+    exec_id = str(execution.id)
 
     if "whatsapp" in channels:
-        send_whatsapp_alert(automation.name, execution.id)
+        send_whatsapp_alert(automation_name, exec_id)
 
     if "email" in channels:
-        send_email_alert(automation.name, execution.id)
+        send_email_alert(automation_name, exec_id)
 
-    _mark_sent(automation.id)
+    _mark_sent(automation_id)
 
 
-def dispatch_alerts_async(automation: Any, execution: Any) -> None:
+def dispatch_alerts_async(
+    automation: AlertAutomation, execution: AlertExecution
+) -> None:
     """Submete dispatch para thread pool dedicada, liberando a thread do worker imediatamente (HF-4/C1)."""
     _notification_executor.submit(dispatch_alerts, automation, execution)

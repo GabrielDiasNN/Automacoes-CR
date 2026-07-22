@@ -5,15 +5,13 @@ import { getApiKey } from "../api/client";
 import { healthTone, healthLabel, toneVar } from "../lib/status";
 import styles from "./StatusBar.module.css";
 
-const WS_BASE = `${typeof location !== "undefined" && location.protocol === "https:" ? "wss:" : "ws:"}//${
-  typeof location !== "undefined" ? location.host : ""
-}`;
-
 /** Barra de status global ao vivo — estado do sistema, fila, worker, sinal. */
 export function StatusBar() {
   const { health, worker } = useDiagnostics(10_000);
   const key = getApiKey();
-  const { status: ws } = useWebSocket(key ? `${WS_BASE}/ws/events?key=${encodeURIComponent(key)}` : "", {
+  // O hook troca a API Key por um token efêmero antes de abrir o WebSocket,
+  // então a chave não aparece mais na URL de handshake.
+  const { status: ws } = useWebSocket("/ws/events", key ?? "", {
     enabled: !!key,
   });
 

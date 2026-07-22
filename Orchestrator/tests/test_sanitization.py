@@ -3,7 +3,12 @@ Testes unitários para o módulo de segurança e higienização de logs e payloa
 """
 
 from app.constants import MAX_DB_LOGS_CHARS
-from app.security import sanitize_log_payload, sanitize_string, truncate_log_payload
+from app.security import (
+    mask_env_content,
+    sanitize_log_payload,
+    sanitize_string,
+    truncate_log_payload,
+)
 
 
 def test_sanitize_string_oracle_credentials() -> None:
@@ -130,7 +135,9 @@ def test_json_formatter_sanitizes_exception_traceback() -> None:
     import logging  # pylint: disable=import-outside-toplevel
     import sys  # pylint: disable=import-outside-toplevel
 
-    from app.logger_setup import OrchestratorJsonFormatter  # pylint: disable=import-outside-toplevel
+    from app.logger_setup import (  # pylint: disable=import-outside-toplevel
+        OrchestratorJsonFormatter,
+    )
 
     formatter = OrchestratorJsonFormatter(component="QA")
     try:
@@ -151,3 +158,76 @@ def test_json_formatter_sanitizes_exception_traceback() -> None:
         assert "exception" in doc
         assert "senha-ultra-secreta" not in doc["exception"]
         assert "password=********" in doc["exception"]
+
+
+def test_sanitize_string_mascara_cpf_cnpj_cru_apenas_com_rotulo() -> None:
+    # Achado #38: CPF/CNPJ sem pontuação só é mascarado quando há rótulo
+    # explícito — mascarar qualquer sequência de 11/14 dígitos destruiria IDs.
+    assert sanitize_string("cpf: 12345678901") == "cpf: ********"
+    assert sanitize_string("CNPJ=12345678000199") == "CNPJ=********"
+
+
+def test_sanitize_string_preserva_ids_numericos_sem_rotulo() -> None:
+    # Guarda anti-falso-positivo do #38: exec_ids, timestamps e contadores não
+    # podem ser corrompidos pela heurística de PII crua.
+    for original in (
+        "CRON_5_1784232000 disparado",
+        "exec_id=EXEC_1784232000_AB12",
+        "duracao 12345678901 ms",
+        "NUMERO_OB 900001 seq 1",
+    ):
+        assert sanitize_string(original) == original
+
+
+def test_sanitize_string_mascara_credencial_em_query_string() -> None:
+    # Achado #41: o handshake WebSocket manda a API Key em ?key= (o protocolo
+    # não permite header no browser). Se essa URL cair em log, a chave não podia
+    # sair em claro.
+    assert (
+        sanitize_string("GET /ws/events?key=minha-chave-secreta 101")
+        == "GET /ws/events?key=******** 101"
+    )
+    assert (
+        sanitize_string("/ws/logs/EXEC_1?key=abc123&outro=ok")
+        == "/ws/logs/EXEC_1?key=********&outro=ok"
+    )
+
+
+def test_sanitize_string_nao_mascara_query_param_nao_sensivel() -> None:
+    original = "GET /api/beneficiamento/historico?limit=500 200 OK"
+    assert sanitize_string(original) == original
+    livre = "texto livre com key=valor normal"
+    assert sanitize_string(livre) == livre
+
+
+def test_sanitize_string_mascara_dsn_ezconnect_sem_scheme() -> None:
+    # DSN Oracle EZConnect nativo (sem oracle://), com porta/servico ou hostname
+    # puro, deve ser mascarado mesmo sem prefixo de esquema.
+    assert (
+        sanitize_string("conectando em system/senha123@dbprd:1521/PROD ok")
+        == "conectando em system/********@dbprd:1521/PROD ok"
+    )
+    assert (
+        sanitize_string("conectando em system/senha123@localhost/XE ok")
+        == "conectando em system/********@localhost/XE ok"
+    )
+    assert (
+        sanitize_string("conectando em system/senha123@dbserver ok")
+        == "conectando em system/********@dbserver ok"
+    )
+
+
+def test_sanitize_string_nao_mascara_email_em_texto_livre() -> None:
+    # A forma "usuario/senha@dominio.com" é ambigua com "identificador/senha@host"
+    # do EZConnect, mas um FQDN nu sem porta/servico não deve ser mascarado, para
+    # não corromper e-mails mencionados em mensagens de log/notificação.
+    original = "Falha ao enviar e-mail para usuario/teste@dominio.com: SMTP timeout"
+    assert sanitize_string(original) == original
+
+
+def test_mask_env_content_mascara_oracle_connect_string() -> None:
+    # ORACLE_CONNECT_STRING é a chave real usada em .env/.env.example para o DSN
+    # Oracle; precisa ser reconhecida por _SENSITIVE_ENV_KEY_RE mesmo sem casar
+    # literalmente "conn_str"/"connection_string".
+    content = "ORACLE_CONNECT_STRING=system/secretpass@dbprd:1521/PROD\n"
+    assert mask_env_content(content) == "ORACLE_CONNECT_STRING=********\n"

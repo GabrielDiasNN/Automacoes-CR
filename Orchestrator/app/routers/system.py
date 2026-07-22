@@ -12,11 +12,11 @@ import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import case, desc, func
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from .. import metrics as _metrics
-from .. import models, schemas
+from .. import models, schemas, security
 from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
 )
@@ -33,8 +33,11 @@ from ..runtime import (
     trigger_worker_wakeup,
     wait_for_task_signal,
 )
-from ..services import env_admin, scheduler_runtime, system_runtime
-from ..services.metrics import get_daily_execution_metrics, get_global_execution_counts
+from ..services import env_admin, scheduler_runtime, system_runtime, ws_auth
+from ..services.metrics import (
+    build_global_metrics_response,
+    get_daily_execution_metrics,
+)
 from ..services.portfolio_catalog import build_portfolio_health_response
 from ..services.system_diagnostics import build_diagnostics_payload
 from ..services.system_history import build_system_history_response
@@ -101,107 +104,7 @@ def get_metrics(
     _api_key: str = Depends(get_api_key),
 ) -> schemas.MetricsResponse:
     """Metricas completas do sistema (Otimizado sem N+1)."""
-
-    total_execs, success_count, error_count, pending_count = (
-        get_global_execution_counts(db)
-    )
-
-    # Duracao media global
-
-    avg_dur = (
-        db.query(func.avg(models.Execution.duration_seconds))
-        .filter(
-            models.Execution.status == "SUCCESS",
-            models.Execution.duration_seconds.isnot(None),
-        )
-        .scalar()
-        or 0
-    )
-
-    success_rate = (
-        round((success_count / total_execs * 100), 2) if total_execs > 0 else 0
-    )
-
-    # Agregacao de metricas por automacao em uma unica query
-    stats_map = {
-        row.automation_id: row
-        for row in db.query(
-            models.Execution.automation_id,
-            func.count(  # pylint: disable=not-callable
-                case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1))
-            ).label("total_success"),
-            func.count(  # pylint: disable=not-callable
-                case((models.Execution.status == "ERROR", 1))
-            ).label("total_errors"),
-            func.avg(
-                case(
-                    (
-                        models.Execution.status == "SUCCESS",
-                        models.Execution.duration_seconds,
-                    )
-                )
-            ).label("avg_duration"),
-        )
-        .group_by(models.Execution.automation_id)
-        .all()
-    }
-
-    # Subquery para ultima execucao
-    subq = (
-        db.query(
-            models.Execution.automation_id,
-            func.max(models.Execution.started_at).label("max_started_at"),
-        )
-        .group_by(models.Execution.automation_id)
-        .subquery()
-    )
-
-    last_execs_map = {
-        row.automation_id: row
-        for row in db.query(
-            models.Execution.automation_id,
-            models.Execution.status,
-            models.Execution.started_at,
-        )
-        .join(
-            subq,
-            (models.Execution.automation_id == subq.c.automation_id)
-            & (models.Execution.started_at == subq.c.max_started_at),
-        )
-        .all()
-    }
-
-    automation_stats = []
-
-    for auto in db.query(models.Automation).all():
-        stat = stats_map.get(auto.id)
-        last_ex = last_execs_map.get(auto.id)
-
-        automation_stats.append(
-            schemas.AutomationMetric(
-                name=str(auto.name),
-                total_success=stat.total_success if stat else 0,
-                total_errors=stat.total_errors if stat else 0,
-                avg_duration_sec=(
-                    round(stat.avg_duration, 2) if stat and stat.avg_duration else 0
-                ),
-                last_status=last_ex.status if last_ex else None,
-                last_run=last_ex.started_at if last_ex else None,
-                test_mode=bool(auto.test_mode),
-            )
-        )
-
-    return schemas.MetricsResponse(
-        summary=schemas.MetricsSummary(
-            total_executions=total_execs,
-            success_count=success_count,
-            error_count=error_count,
-            success_rate=success_rate,
-            pending_count=pending_count,
-            avg_duration_sec=round(avg_dur, 2),
-        ),
-        automations=automation_stats,
-    )
+    return build_global_metrics_response(db)
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +344,10 @@ def get_system_overview(
 
 
 @router.get("/version", response_model=schemas.SystemVersion)
-def get_version(request: Request) -> schemas.SystemVersion:
+def get_version(
+    request: Request,
+    _api_key: str = Depends(get_api_key),
+) -> schemas.SystemVersion:
     """Retorna informacoes detalhadas de versao e build do Orchestrator."""
     return system_runtime.build_version_payload(request.app.state.startup_time)
 
@@ -650,11 +556,31 @@ async def wait_for_task(_api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     return {"status": await wait_for_task_signal(timeout_seconds=30)}
 
 
+@router.post("/ws-token", response_model=schemas.WsTokenResponse)
+def create_ws_token(_api_key: str = Depends(get_api_key)) -> schemas.WsTokenResponse:
+    """Emite um token efêmero de uso único para o handshake WebSocket (#41).
+
+    O browser não permite header no handshake WS, então a credencial vai na
+    query string. Trocar a API Key mestra por este token limita a exposição a
+    uma única conexão e a poucos segundos.
+    """
+    token, ttl = ws_auth.issue_ws_token()
+    return schemas.WsTokenResponse(token=token, expires_in_seconds=ttl)
+
+
 @router.get("/env", response_model=schemas.EnvContent)
 def get_env_content(_api_key: str = Depends(get_api_key)) -> schemas.EnvContent:
-    """Lê o conteúdo do arquivo .env global."""
+    """Lê o .env global com os valores sensíveis MASCARADOS (achado #9).
+
+    Chaves de credencial (API key, senhas, tokens, DSN) voltam como
+    ``********``; chaves operacionais (portas, limites) seguem legíveis. Como o
+    retorno é mascarado, ele NÃO serve para um round-trip GET→editar→PUT: o
+    ``PUT /env`` rejeita valores mascarados justamente para impedir que a máscara
+    seja gravada por cima do segredo real.
+    """
     env_path = os.path.join(PROJECT_ROOT, ".env")
-    return schemas.EnvContent(content=env_admin.read_env_content(env_path))
+    raw_content = env_admin.read_env_content(env_path)
+    return schemas.EnvContent(content=security.mask_env_content(raw_content))
 
 
 @router.post("/env/validate", response_model=schemas.EnvValidationResponse)
@@ -723,8 +649,12 @@ def update_env_content(
 
 
 @router.get("/metrics/prometheus", include_in_schema=False)
-def prometheus_metrics() -> Response:
-    """Endpoint Prometheus — texto plain com todas as métricas do sistema (3.4/Fase 3)."""
+def prometheus_metrics(_api_key: str = Depends(get_api_key)) -> Response:
+    """Endpoint Prometheus — texto plain com todas as métricas do sistema (3.4/Fase 3).
+
+    Requer API Key: ``include_in_schema=False`` oculta a rota do OpenAPI mas não
+    é controle de acesso. Scrapers Prometheus enviam a chave via header X-API-Key.
+    """
     body, content_type = _metrics.get_metrics_response()
     if body is None:
         raise HTTPException(

@@ -5,7 +5,11 @@
 from datetime import datetime
 
 from .. import models
-from ..constants import EXECUTION_ACTIVE_STATUSES
+from ..constants import (
+    EXECUTION_ACTIVE_STATUSES,
+    EXECUTION_FAILED_STATUSES,
+    EXECUTION_QUEUEABLE_SOURCE_STATUSES,
+)
 
 
 def compute_attention_score(
@@ -37,7 +41,7 @@ def compute_attention_score(
                     reasons.append("Execução ativa acima do tempo máximo cadastrado")
 
     # 2. Regras de Estado Terminal com erro ou PENDING
-    elif ex.status in {"ERROR", "TIMEOUT", "TERMINATED"}:
+    elif ex.status in EXECUTION_FAILED_STATUSES:
         score += 30
         reasons.append("Execução terminal com necessidade de triagem")
     elif ex.status == "PENDING":
@@ -60,15 +64,7 @@ def compute_attention_score(
     )
     retry_count = int(ex.retry_count or 0)
 
-    queueable = ex.status in {
-        "SUCCESS",
-        "PARTIAL",
-        "ERROR",
-        "TIMEOUT",
-        "TERMINATED",
-        "FAILED_BY_REBOOT",
-        "REQUEUED",
-    }
+    queueable = ex.status in EXECUTION_QUEUEABLE_SOURCE_STATUSES
 
     if queueable:
         if active_for_automation and active_for_automation.id != ex.id:

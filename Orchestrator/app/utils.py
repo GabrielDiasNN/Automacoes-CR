@@ -4,14 +4,13 @@ Utilitarios compartilhados do Orchestrator Central de Automacoes v1.0.0.
 Modulo centralizado para eliminar duplicacao entre routers:
   - log_audit(): Registra trilha de auditoria no AuditLog.
   - get_client_ip(): Extrai IP do cliente de forma segura.
-  - sanitize_name(): Valida naming ASCII-safe para automacoes.
   - validate_script_path(): Pre-flight de existencia de script (Pilar V).
 """
 
 import json
 import logging
 import os
-import re
+import shutil
 from typing import Any
 
 from fastapi import Request
@@ -19,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .middleware import request_id_var
+from .timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
 
@@ -118,18 +118,33 @@ def get_client_ip(request: Request) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Validacao V - Pilar de Validacao (Pre-flight)
+# Backup de arquivos gerenciados
 # ---------------------------------------------------------------------------
 
-# Regex permite alfanumericos, espacos, pontos, hifens e acentuacao PT-BR comum (ASCII-Safe via Unicode Range)
-_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 _\-\.À-ÿ]+$")
+
+def backup_timestamped_file(source_path: str, backup_dir: str, backup_name: str) -> str:
+    """Copia ``source_path`` para ``backup_dir/backup_name`` antes de sobrescrever.
+
+    Fonte única da receita de backup (makedirs → copy2), usada por
+    ``services/env_admin.py`` (backup de .env) e
+    ``services/managed_file_access.py`` (backup de arquivo gerenciado de
+    automação) — evita que as duas divirjam silenciosamente se a estratégia de
+    cópia precisar mudar.
+    """
+    os.makedirs(backup_dir, exist_ok=True)
+    backup_path = os.path.join(backup_dir, backup_name)
+    shutil.copy2(source_path, backup_path)
+    return backup_path
 
 
-def sanitize_name(name: str) -> bool:
-    """Retorna True se o nome e seguro para uso no sistema (sem path traversal)."""
-    if not name or ".." in name:
-        return False
-    return bool(_SAFE_NAME_RE.match(name))
+def timestamp_suffix() -> str:
+    """Timestamp local no formato usado pelos nomes de arquivo de backup."""
+    return get_now_local().strftime("%Y%m%d_%H%M%S_%f")
+
+
+# ---------------------------------------------------------------------------
+# Validacao V - Pilar de Validacao (Pre-flight)
+# ---------------------------------------------------------------------------
 
 
 def validate_script_path(script_path: str, project_root: str) -> tuple[bool, str]:

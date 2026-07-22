@@ -27,10 +27,6 @@ interface LogLine {
   tone: string;
 }
 
-const WS_BASE = `${typeof location !== "undefined" && location.protocol === "https:" ? "wss:" : "ws:"}//${
-  typeof location !== "undefined" ? location.host : ""
-}`;
-
 function lineColor(message: string): string {
   if (/erro|error|fail|falh|exception|traceback|critical/i.test(message)) return "var(--red)";
   if (/warn|aviso|atenç|timeout|retry/i.test(message)) return "var(--amber)";
@@ -131,7 +127,8 @@ export function MonitorPage() {
     }
   }, []);
 
-  const { status } = useWebSocket(key ? `${WS_BASE}/ws/events?key=${encodeURIComponent(key)}` : "", {
+  // Token efêmero em vez da API Key na URL do handshake (ver useWebSocket).
+  const { status } = useWebSocket("/ws/events", key ?? "", {
     onMessage: handleMessage,
     enabled: !!key,
   });

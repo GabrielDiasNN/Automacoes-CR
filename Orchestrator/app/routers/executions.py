@@ -529,7 +529,14 @@ def telemetry_end(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    db_exec.status = str(payload.status).upper()  # type: ignore[assignment]
+    status_upper = str(payload.status).upper()
+    if status_upper not in EXECUTION_ALLOWED_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Status de execução inválido: {payload.status}",
+        )
+
+    db_exec.status = status_upper  # type: ignore[assignment]
     if payload.exit_code is not None:
         db_exec.exit_code = int(payload.exit_code)  # type: ignore[assignment]
     if payload.logs is not None:

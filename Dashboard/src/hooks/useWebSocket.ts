@@ -1,57 +1,117 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-export type WsStatus = "connecting" | "open" | "closed";
+export type WsStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 export interface UseWebSocketOptions {
   onMessage?: (event: MessageEvent) => void;
   enabled?: boolean;
 }
 
-export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
+function wsBase(): string {
+  if (typeof location === "undefined") return "";
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${scheme}//${location.host}`;
+}
+
+/**
+ * Conecta a um endpoint WebSocket do Orchestrator.
+ *
+ * `path` é apenas o caminho (ex.: "/ws/events"). A API Key NÃO viaja na URL:
+ * como o browser não permite header no handshake WebSocket, o hook troca a chave
+ * por um token efêmero de uso único em `POST /api/system/ws-token` e apresenta
+ * somente esse token no `?token=`. Assim a credencial mestra deixa de aparecer
+ * em logs de acesso de servidor/proxy.
+ */
+export function useWebSocket(
+  path: string,
+  apiKey: string,
+  options: UseWebSocketOptions = {},
+) {
   const { onMessage, enabled = true } = options;
   const [status, setStatus] = useState<WsStatus>("closed");
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectDelay = useRef(1000);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRef = useRef(true);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
 
   const connect = useCallback(() => {
-    if (!enabled || !url) return;
+    if (!enabled || !path || !apiKey) return;
 
     setStatus("connecting");
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
 
-    ws.onopen = () => {
-      setStatus("open");
-      reconnectDelay.current = 1000; // reset backoff em sucesso (3.2)
-    };
-
-    ws.onmessage = (evt) => {
-      onMessageRef.current?.(evt);
-    };
-
-    ws.onclose = (evt) => {
-      setStatus("closed");
-      wsRef.current = null;
-      // code 4003 = auth recusada pelo servidor — não reconectar
-      if (evt.code === 4003) return;
-      // backoff exponencial até 30s (3.2)
+    const scheduleReconnect = () => {
+      // activeRef evita reconectar depois do unmount (o token é buscado async).
+      if (!activeRef.current) return;
       timerRef.current = setTimeout(() => {
         reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30_000);
         connect();
       }, reconnectDelay.current);
     };
 
-    ws.onerror = () => {
-      ws.close();
-    };
-  }, [url, enabled]);
+    fetch("/api/system/ws-token", {
+      method: "POST",
+      headers: { "X-API-Key": apiKey },
+    })
+      .then((res) => {
+        if (res.status === 401 || res.status === 403) {
+          // Chave de API genuinamente inválida/revogada: reconectar não resolve
+          // (o servidor sempre vai recusar), então para de tentar em vez de
+          // repetir o POST /ws-token indefinidamente com backoff.
+          throw new Error("unauthorized");
+        }
+        if (!res.ok) throw new Error(`ws-token ${res.status}`);
+        return res.json() as Promise<{ token: string }>;
+      })
+      .then(({ token }) => {
+        if (!activeRef.current) return;
+
+        const ws = new WebSocket(
+          `${wsBase()}${path}?token=${encodeURIComponent(token)}`,
+        );
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          setStatus("open");
+          reconnectDelay.current = 1000; // reset backoff em sucesso (3.2)
+        };
+
+        ws.onmessage = (evt) => {
+          onMessageRef.current?.(evt);
+        };
+
+        ws.onclose = () => {
+          setStatus("closed");
+          wsRef.current = null;
+          // Diferente do fluxo antigo com API Key fixa, o 4003 aqui é
+          // transitório (token de uso único já consumido ou expirado por
+          // reinício do servidor), então vale reconectar com backoff. Chave
+          // inválida de verdade falha antes, no POST /ws-token, e cai no catch.
+          scheduleReconnect();
+        };
+
+        ws.onerror = () => {
+          ws.close();
+        };
+      })
+      .catch((err) => {
+        if (err instanceof Error && err.message === "unauthorized") {
+          setStatus("unauthorized");
+          return;
+        }
+        // Falha transitória ao emitir o token (servidor fora do ar, rede):
+        // tenta de novo com backoff exponencial até 30s.
+        setStatus("closed");
+        scheduleReconnect();
+      });
+  }, [path, apiKey, enabled]);
 
   useEffect(() => {
+    activeRef.current = true;
     connect();
     return () => {
+      activeRef.current = false;
       if (timerRef.current) clearTimeout(timerRef.current);
       wsRef.current?.close();
     };

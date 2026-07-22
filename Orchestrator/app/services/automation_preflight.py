@@ -279,7 +279,7 @@ def _load_manifest_governance(
         )
 
     with open(manifest_path, encoding="utf-8") as f:
-        manifest_payload = json.load(f)
+        manifest_payload: dict[str, Any] = json.load(f)
     manifest = CatalogManifest.model_validate(manifest_payload)
 
     blocking_issues = (

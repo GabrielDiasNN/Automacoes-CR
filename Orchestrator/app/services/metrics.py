@@ -10,8 +10,11 @@ from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import EXECUTION_ACTIVE_STATUSES
+from ..constants import EXECUTION_ACTIVE_STATUSES, EXECUTION_FAILED_STATUSES
 from ..timezone import get_now_local
+
+# Ordenado para gerar SQL determinístico no IN (...).
+_FAILED_STATUS_LIST = sorted(EXECUTION_FAILED_STATUSES)
 
 
 def get_success_errors_count_24h(db: Session) -> tuple[int, int]:
@@ -25,7 +28,7 @@ def get_success_errors_count_24h(db: Session) -> tuple[int, int]:
             func.sum(
                 case(
                     (
-                        models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+                        models.Execution.status.in_(_FAILED_STATUS_LIST),
                         1,
                     ),
                     else_=0,
@@ -45,9 +48,9 @@ def get_global_execution_counts(db: Session) -> tuple[int, int, int, int]:
         func.sum(
             case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1), else_=0)
         ).label("success"),
-        func.sum(case((models.Execution.status == "ERROR", 1), else_=0)).label(
-            "errors"
-        ),
+        func.sum(
+            case((models.Execution.status.in_(_FAILED_STATUS_LIST), 1), else_=0)
+        ).label("errors"),
         func.sum(case((models.Execution.status == "PENDING", 1), else_=0)).label(
             "pending"
         ),
@@ -57,6 +60,112 @@ def get_global_execution_counts(db: Session) -> tuple[int, int, int, int]:
         int(row.success or 0),
         int(row.errors or 0),
         int(row.pending or 0),
+    )
+
+
+def build_global_metrics_response(db: Session) -> schemas.MetricsResponse:
+    """Monta o payload completo de GET /api/system/metrics.
+
+    Extraído do router (achado #11): a agregação pertence a esta camada, junto
+    das demais queries de métrica, não ao handler HTTP. Mantém o padrão sem N+1
+    (uma query agregada por automação + uma para a última execução).
+    """
+    total_execs, success_count, error_count, pending_count = (
+        get_global_execution_counts(db)
+    )
+
+    # Duração média global (apenas execuções SUCCESS com duração registrada)
+    avg_dur = (
+        db.query(func.avg(models.Execution.duration_seconds))
+        .filter(
+            models.Execution.status == "SUCCESS",
+            models.Execution.duration_seconds.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
+    success_rate = (
+        round((success_count / total_execs * 100), 2) if total_execs > 0 else 0
+    )
+
+    # Agregação de métricas por automação em uma única query
+    stats_map = {
+        row.automation_id: row
+        for row in db.query(
+            models.Execution.automation_id,
+            func.count(
+                case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1))
+            ).label("total_success"),
+            func.count(
+                case((models.Execution.status.in_(_FAILED_STATUS_LIST), 1))
+            ).label("total_errors"),
+            func.avg(
+                case(
+                    (
+                        models.Execution.status == "SUCCESS",
+                        models.Execution.duration_seconds,
+                    )
+                )
+            ).label("avg_duration"),
+        )
+        .group_by(models.Execution.automation_id)
+        .all()
+    }
+
+    # Subquery para a última execução de cada automação
+    subq = (
+        db.query(
+            models.Execution.automation_id,
+            func.max(models.Execution.started_at).label("max_started_at"),
+        )
+        .group_by(models.Execution.automation_id)
+        .subquery()
+    )
+
+    last_execs_map = {
+        row.automation_id: row
+        for row in db.query(
+            models.Execution.automation_id,
+            models.Execution.status,
+            models.Execution.started_at,
+        )
+        .join(
+            subq,
+            (models.Execution.automation_id == subq.c.automation_id)
+            & (models.Execution.started_at == subq.c.max_started_at),
+        )
+        .all()
+    }
+
+    automation_stats = []
+    for auto in db.query(models.Automation).all():
+        stat = stats_map.get(auto.id)
+        last_ex = last_execs_map.get(auto.id)
+        automation_stats.append(
+            schemas.AutomationMetric(
+                name=str(auto.name),
+                total_success=stat.total_success if stat else 0,
+                total_errors=stat.total_errors if stat else 0,
+                avg_duration_sec=(
+                    round(stat.avg_duration, 2) if stat and stat.avg_duration else 0
+                ),
+                last_status=last_ex.status if last_ex else None,
+                last_run=last_ex.started_at if last_ex else None,
+                test_mode=bool(auto.test_mode),
+            )
+        )
+
+    return schemas.MetricsResponse(
+        summary=schemas.MetricsSummary(
+            total_executions=total_execs,
+            success_count=success_count,
+            error_count=error_count,
+            success_rate=success_rate,
+            pending_count=pending_count,
+            avg_duration_sec=round(avg_dur, 2),
+        ),
+        automations=automation_stats,
     )
 
 
@@ -105,7 +214,7 @@ def get_failure_hotspots_24h(db: Session, limit: int = 5) -> list[dict[str, Any]
         )
         .join(models.Execution, models.Execution.automation_id == models.Automation.id)
         .filter(
-            models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+            models.Execution.status.in_(_FAILED_STATUS_LIST),
             models.Execution.started_at >= window_start,
         )
         .group_by(
@@ -197,7 +306,7 @@ def _aggregate_daily_rows(rows: Iterable[Any]) -> list[dict[str, Any]]:
         bucket["total"] += 1
         if status in ("SUCCESS", "PARTIAL"):
             bucket["success"] += 1
-        elif status in ("ERROR", "TIMEOUT", "TERMINATED"):
+        elif status in EXECUTION_FAILED_STATUSES:
             bucket["errors"] += 1
         if duration is not None:
             bucket["durations"].append(float(duration))
@@ -267,7 +376,7 @@ def get_automation_metrics_24h(
             func.sum(
                 case(
                     (
-                        models.Execution.status.in_(["ERROR", "TIMEOUT", "TERMINATED"]),
+                        models.Execution.status.in_(_FAILED_STATUS_LIST),
                         1,
                     ),
                     else_=0,
