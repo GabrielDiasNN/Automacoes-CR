@@ -102,7 +102,7 @@ Não crie nova skill quando:
 
 ## Fluxo de Manutenção
 
-1. Identificar qual das 6 fronteiras ativas realmente possui a responsabilidade.
+1. Identificar qual das 4 fronteiras ativas realmente possui a responsabilidade.
 2. Atualizar primeiro a fonte principal do contrato e depois as skills consumidoras.
 3. Revisar discovery para garantir que o pedido correto aciona a skill correta.
 4. Rodar a validação de skills e a validação agregada de governança.
