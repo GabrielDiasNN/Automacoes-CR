@@ -56,6 +56,7 @@ $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
+$libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
 # Scripts
@@ -79,6 +80,7 @@ Import-Module $libConfig  -Force
 Import-Module $libProcess -Force
 Import-Module $libRetry   -Force
 Import-Module $libOracle  -Force
+Import-Module $libIdempotency -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
@@ -204,51 +206,18 @@ try {
 
         $currentHash = [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($jsonOutput))).Replace("-", "")
 
-        $deliveryState = @{
-
-            last_sent_hash = ""
-
-            delivery_status = @{
-
-                email = @{ success = $false; sent_at = $null }
-
-            }
-
-        }
-
         $DeliveryStatePath = Join-Path $ScriptDir "delivery_state.json"
 
-        if (Test-Path $DeliveryStatePath) {
-
-            try {
-
-                $savedState = Get-Content $DeliveryStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
-
-                if ($savedState.last_sent_hash) { $deliveryState.last_sent_hash = $savedState.last_sent_hash }
-
-                if ($null -ne $savedState.delivery_status -and $null -ne $savedState.delivery_status.email) {
-
-                    $deliveryState.delivery_status.email.success = [bool]$savedState.delivery_status.email.success
-
-                    $deliveryState.delivery_status.email.sent_at = $savedState.delivery_status.email.sent_at
-
-                }
-
-            } catch [System.Exception] { Write-Log "Aviso: Falha ao parsear delivery_state.json." -Lvl "WARN" }
-
+        $deliveryState = Read-DeliveryState -Path $DeliveryStatePath -Channels @("email") -OnWarning {
+            param($mensagem)
+            Write-Log $mensagem -Lvl "WARN"
         }
 
-        if ($currentHash -ne $deliveryState.last_sent_hash) {
-
+        if (Update-DeliveryStateHash -State $deliveryState -CurrentHash $currentHash) {
             Write-Log "Mudança de conteúdo detectada. Resetando status de entrega."
-
-            $deliveryState.last_sent_hash = $currentHash
-
-            $deliveryState.delivery_status.email.success = $false
-
         }
 
-        $skipEmail = $deliveryState.delivery_status.email.success
+        $skipEmail = -not (Test-DeliveryPending -State $deliveryState -Channel "email")
 
         if ($skipEmail) {
 
@@ -315,11 +284,9 @@ try {
 
                 Write-Log "E-mail enviado com sucesso. Consolidando estado parcial (E-mail)."
 
-                $deliveryState.delivery_status.email.success = $true
+                Set-DeliverySuccess -State $deliveryState -Channel "email"
 
-                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
-
-                $deliveryState | ConvertTo-Json -Depth 5 | Out-File $DeliveryStatePath -Encoding UTF8
+                Save-DeliveryState -State $deliveryState -Path $DeliveryStatePath
 
             }
 

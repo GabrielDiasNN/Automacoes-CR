@@ -7,7 +7,7 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 ## Sessão WhatsApp
 
 - `clientId`: `hub-global` (compartilhada com Receitas Bloqueadas)
-- Sessão salva em: `lib/.wwebjs_auth/session-hub-global/`
+- Sessão salva em: `%LOCALAPPDATA%\Automacoes\wwebjs_auth\session-hub-global\` (fora do repositório; override via `WHATSAPP_AUTH_PATH`)
 - Re-autenticar via: `lib/Authenticate-WhatsApp.bat`
 
 ## Idempotência

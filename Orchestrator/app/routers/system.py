@@ -34,7 +34,7 @@ from ..runtime import (
     wait_for_task_signal,
 )
 from ..services import env_admin, scheduler_runtime, system_runtime, ws_auth
-from ..services.metrics import (
+from ..services.metrics_queries import (
     build_global_metrics_response,
     get_daily_execution_metrics,
 )

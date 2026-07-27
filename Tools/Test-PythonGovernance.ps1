@@ -87,10 +87,18 @@ $pylint = Get-PythonTool "pylint"
 $oldPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 if ($mypy) {
-    foreach ($file in $resolvedTargetFiles) {
-        $mypyOutput = & $mypy --strict --explicit-package-bases --namespace-packages $file 2>&1
+    # Mypy roda agrupado por diretorio, nao um processo por arquivo: o overhead de
+    # startup dominava o gate (200s -> 45s no repositorio completo). O lote unico
+    # nao serve porque automacoes diferentes tem modulos homonimos
+    # (format_message.py, extract_oracle.py) e o mypy aborta com "Duplicate module";
+    # dentro de um mesmo diretorio essa colisao nao existe.
+    $filesByDirectory = $resolvedTargetFiles | Group-Object { Split-Path -Parent $_ }
+
+    foreach ($group in $filesByDirectory) {
+        $groupFiles = @($group.Group)
+        $mypyOutput = & $mypy --strict --explicit-package-bases --namespace-packages @groupFiles 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERRO] Falha de Tipagem Estrita (Mypy) em $file" -ForegroundColor Red
+            Write-Host "[ERRO] Falha de Tipagem Estrita (Mypy) em $($group.Name)" -ForegroundColor Red
             $mypyOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
             $hasErrors = $true
         }

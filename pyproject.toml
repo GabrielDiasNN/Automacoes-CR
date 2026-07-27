@@ -23,10 +23,7 @@ python_version = "3.12"
 ignore_missing_imports = true
 warn_return_any = false
 warn_unused_ignores = false
-# Módulos críticos excluídos do mypy gradualmente (remover um a um nas fases seguintes)
-exclude = [
-    "Orchestrator/app/notifications\\.py",
-    "Orchestrator/app/database\\.py",
-    "Orchestrator/app/models\\.py",
-    "Orchestrator/worker\\.py",
-]
+# Sem exclusões: os quatro módulos críticos (notifications, database, models, worker)
+# que ficavam de fora passaram a compilar limpos em `mypy --strict` e foram
+# reintegrados na revisão arquitetural (achado A8). Não reintroduzir exclusão aqui
+# sem registrar a justificativa e um prazo de saída.

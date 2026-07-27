@@ -25,6 +25,15 @@ os.environ["BENEFICIAMENTO_HISTORICO_DB"] = os.path.join(
     _BENEF_DB_DIR, "beneficiamento_historico.db"
 )
 
+# Bootstrap único do pacote `beneficiamento` no sys.path (achado A4 da revisão
+# arquitetural). O pytest sempre carrega este conftest antes de coletar qualquer
+# teste do diretório, então nenhum módulo de teste precisa repetir o insert.
+BENEFICIAMENTO_SRC = (
+    Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
+)
+if BENEFICIAMENTO_SRC.is_dir() and str(BENEFICIAMENTO_SRC) not in sys.path:
+    sys.path.insert(0, str(BENEFICIAMENTO_SRC))
+
 import pytest
 from _pytest.config import Config
 from _pytest.nodes import Item
@@ -92,9 +101,6 @@ def beneficiamento_historico_seed() -> Generator[None, None, None]:
     Garante dados deterministas (turnos, alternativo 03212, payload bruto)
     para os contratos overview/detail e para o fluxo E2E do dashboard.
     """
-    src_root = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
-    if str(src_root) not in sys.path:
-        sys.path.insert(0, str(src_root))
     from beneficiamento.historico_db import (  # pylint: disable=import-outside-toplevel
         salvar_historico,
     )

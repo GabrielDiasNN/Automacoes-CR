@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from .. import models, schemas
 from ..constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
 from ..timezone import get_now_local
-from . import metrics  # pylint: disable=no-name-in-module
+from . import metrics_queries as metrics
 from .automation_snapshot import (
     build_automation_response,
     build_next_run_lookup,

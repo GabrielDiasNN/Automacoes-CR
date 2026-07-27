@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..constants import EXECUTION_ACTIVE_STATUSES
-from . import metrics
+from . import metrics_queries as metrics
 
 
 def build_next_run_lookup(jobs: list[schemas.ScheduledJob]) -> dict[int, Any]:

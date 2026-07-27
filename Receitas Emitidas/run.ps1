@@ -33,6 +33,7 @@ $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
+$libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 $pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $generatePy = Join-Path $ScriptDir "generate_html_report.py"
@@ -48,6 +49,7 @@ Import-Module $libRetry   -Force
 Import-Module $libProcess -Force
 Import-Module $libConfig  -Force
 Import-Module $libOracle  -Force
+Import-Module $libIdempotency -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
@@ -147,34 +149,18 @@ try {
 
         # 3. Envio de E-mail
         Write-Log "Verificando estado de notificacoes (Idempotencia Granular)..."
-        $currentHash = ""
-        if (Test-Path $StateTmp) {
-            $currentHash = (Get-Content $StateTmp -Raw -Encoding UTF8 | ConvertFrom-Json).last_hash
-        } elseif (Test-Path $StatePath) {
-            $currentHash = (Get-Content $StatePath -Raw -Encoding UTF8 | ConvertFrom-Json).last_hash
+        $currentHash = Get-LastContentHash -StateTmpPath $StateTmp -StatePath $StatePath
+
+        $deliveryState = Read-DeliveryState -Path $DeliveryStatePath -Channels @("email") -OnWarning {
+            param($mensagem)
+            Write-Log $mensagem "WARN"
         }
 
-        $deliveryState = @{ last_sent_hash = ""; delivery_status = @{ email = @{ success = $false; sent_at = $null } } }
-        if (Test-Path $DeliveryStatePath) {
-            try {
-                $savedState = Get-Content $DeliveryStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ($savedState.last_sent_hash) { $deliveryState.last_sent_hash = $savedState.last_sent_hash }
-                if ($null -ne $savedState.delivery_status.email) {
-                    $deliveryState.delivery_status.email.success = [bool]$savedState.delivery_status.email.success
-                    $deliveryState.delivery_status.email.sent_at = $savedState.delivery_status.email.sent_at
-                }
-            } catch [System.Exception] {
-                Write-Log ("Falha ao ler delivery_state.json existente. Estado sera reiniciado. Motivo: {0}" -f $_.Exception.Message) "WARN"
-            }
-        }
-
-        if ($currentHash -and $currentHash -ne $deliveryState.last_sent_hash) {
+        if (Update-DeliveryStateHash -State $deliveryState -CurrentHash $currentHash) {
             Write-Log "Novo Hash detectado ($currentHash). Resetando status de entrega."
-            $deliveryState.last_sent_hash = $currentHash
-            $deliveryState.delivery_status.email.success = $false
         }
 
-        if ($deliveryState.delivery_status.email.success -and ($currentHash -eq $deliveryState.last_sent_hash)) {
+        if (-not (Test-DeliveryPending -State $deliveryState -Channel "email" -CurrentHash $currentHash)) {
             Write-Log "Conteudo identico ao ultimo envio e ja entregue. Suprimindo."
         } else {
             Write-Log "Enviando e-mail oficial via Outlook COM..."
@@ -192,9 +178,8 @@ try {
 
             if ($emailOk) {
                 Write-Log "E-mail enviado com sucesso. Consolidando estado parcial."
-                $deliveryState.delivery_status.email.success = $true
-                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
-                $deliveryState | ConvertTo-Json -Depth 5 | Out-File $DeliveryStatePath -Encoding UTF8
+                Set-DeliverySuccess -State $deliveryState -Channel "email"
+                Save-DeliveryState -State $deliveryState -Path $DeliveryStatePath
             } else { throw "Falha definitiva no envio do e-mail." }
         }
 

@@ -1,7 +1,6 @@
 {
   "whatsapp": {
     "clientId": "hub-global",
-    "authDir": ".wwebjs_auth",
     "cacheDir": ".wwebjs_cache"
   },
   "target": {

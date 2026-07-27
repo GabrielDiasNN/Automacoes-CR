@@ -5,8 +5,7 @@
   "paths": {
     "attachmentPath": "Receitas Bloqueadas.xlsx",
     "logFile": "Logs\\ReceitasBloqueadas.log",
-    "stateFile": "whatsapp-state.json",
-    "authDir": ".wwebjs_auth"
+    "stateFile": "whatsapp-state.json"
   },
   "_comentario_target": "Destino real vem de RB_WHATSAPP_TARGET no .env (não versionado). contactId/contactPhone abaixo são apenas placeholder/fallback.",
   "target": {

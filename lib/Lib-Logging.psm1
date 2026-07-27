@@ -547,6 +547,59 @@ if (-not [string]::IsNullOrWhiteSpace($ExecId) -and $ExecId -match '^TEL_') {
 
 # ------------------------------------------------------------------------------
 
+# Get-ForwardedLogLevel
+
+# ------------------------------------------------------------------------------
+
+function Get-ForwardedLogLevel {
+    <#
+    .SYNOPSIS
+        Extrai o nivel de log de uma linha ja formatada por um processo filho.
+
+    .DESCRIPTION
+        Scripts de automacao encaminham para o log a saida de processos Python/Node
+        que ja vem prefixada com [INFO]/[WARN]/[ERROR]. Esta funcao reaproveita esse
+        nivel em vez de rebaixar tudo para INFO, normalizando ERROR->ERRO (padrao
+        do Write-AutomacaoLog).
+
+        Centralizada aqui na revisao arquitetural (achado A1): a mesma
+        implementacao estava copiada em tres run.ps1 de automacao.
+
+    .PARAMETER Message
+        Linha de log recebida do processo filho.
+
+    .PARAMETER Fallback
+        Nivel usado quando a linha nao traz marcador reconhecivel. Padrao: INFO.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        # Alias -Msg mantido: e o nome usado pelas chamadas ja existentes nos run.ps1.
+        [Alias('Msg')]
+        [string]$Message,
+        [string]$Fallback = "INFO"
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Message)) { return $Fallback }
+
+    $detected = [regex]::Match(
+        $Message,
+        '\[(INFO|WARN|ERROR|ERRO|DEBUG)\]',
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    if (-not $detected.Success) { return $Fallback }
+
+    switch ($detected.Groups[1].Value.ToUpperInvariant()) {
+        "ERROR" { return "ERRO" }
+        "ERRO" { return "ERRO" }
+        "WARN" { return "WARN" }
+        "DEBUG" { return "DEBUG" }
+        default { return "INFO" }
+    }
+}
+
+# ------------------------------------------------------------------------------
+
 # Get-AutomacaoLogPath
 
 # ------------------------------------------------------------------------------
@@ -716,6 +769,6 @@ $script:AutomationMutex = $null
 
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
 
 
