@@ -20,9 +20,12 @@ export default defineConfig({
         "src/main.tsx",
         "src/vite-env.d.ts",
       ],
-      // Gate de regressao: medido 05/07/2026 em 43.6% linhas / 90% branches /
-      // 70% funcoes (api/hooks/lib/context). Piso abaixo do medido para dar
+      // Gate de regressao: medido 27/07/2026 em 46.8% linhas / 92.2% branches /
+      // 71.9% funcoes (api/hooks/lib/context). Piso abaixo do medido para dar
       // margem, mesmo criterio usado no gate de cobertura do Orchestrator.
+      // O gate cumpriu o papel: a cobertura havia caido de 43.6% (05/07) para
+      // 38.3% com a entrada de hooks sem teste, e reprovou o CI ate serem
+      // cobertos usePolling e useDebouncedValue.
       thresholds: {
         lines: 40,
         statements: 40,

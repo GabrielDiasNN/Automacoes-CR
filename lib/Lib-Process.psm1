@@ -187,10 +187,13 @@ function Get-WhatsAppAuthPath {
     [OutputType([string])]
     param()
 
-    # Base de resolucao relativa: o CWD do PROCESSO (nao o $PWD do PowerShell, que
-    # pode divergir). E o mesmo diretorio que um processo Node filho herda, que e
-    # o que `path.resolve` usa do outro lado.
-    $processCwd = [System.IO.Directory]::GetCurrentDirectory()
+    # Base de resolucao relativa: $PWD, e NAO
+    # [System.IO.Directory]::GetCurrentDirectory() — este ultimo congela no
+    # diretorio em que o processo PowerShell iniciou e nao acompanha Set-Location,
+    # enquanto um processo Node filho e lancado no $PWD corrente. Usar o valor
+    # errado aqui faz os dois runtimes resolverem diretorios diferentes (coberto
+    # pelo caso de paridade "override relativo").
+    $processCwd = $PWD.ProviderPath
 
     # Normalizacao LEXICAL, deliberadamente sem [System.IO.Path]::GetFullPath: no
     # .NET Framework ele consulta o filesystem e expande nomes curtos 8.3
