@@ -71,7 +71,7 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
 # --- Limpeza de Locks de Sessão e Processos Zumbis (Mitigação de travamentos de Puppeteer) ---
 function Clear-StaleWhatsAppLocksAndProcesses {
     $now = [DateTime]::Now
-    $authSessionDir = Join-Path $LibDir ".wwebjs_auth"
+    $authSessionDir = Get-WhatsAppAuthPath
     
     # 1. Limpeza direcionada de processos zumbis do Chromium e Node vinculados ao repositório
     try {

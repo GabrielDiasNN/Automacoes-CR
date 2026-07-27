@@ -3,14 +3,12 @@
 # pylint: disable=relative-beyond-top-level,unused-argument,too-many-arguments,too-many-positional-arguments,line-too-long,trailing-newlines
 
 import logging
-import sys
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import schemas
 from ..middleware import get_api_key
-from ..runtime import get_project_root
+from ..runtime import ensure_beneficiamento_on_path, get_project_root
 from ..services.beneficiamento_refresh import run_beneficiamento_refresh
 
 logger = logging.getLogger("orchestrator")
@@ -19,10 +17,8 @@ router = APIRouter(prefix="/api/beneficiamento", tags=["Beneficiamento"])
 
 PROJECT_ROOT = get_project_root()
 
-# Inserção portátil do diretório de sources do beneficiamento no path do runtime do FastAPI
-src_dir = Path(PROJECT_ROOT).resolve() / "Produção Beneficimento" / "src"
-if src_dir.exists() and str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Acoplamento com o domínio Beneficiamento centralizado no runtime (achado A3).
+ensure_beneficiamento_on_path()
 
 try:
     from beneficiamento.contracts import (

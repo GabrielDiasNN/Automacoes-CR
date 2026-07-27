@@ -14,30 +14,37 @@ pwsh -File Infrastructure\Start-Orchestrator.ps1
 # Recuperar após falha
 pwsh -File Infrastructure\Recover-Orchestrator.ps1
 
+# O virtualenv do projeto fica na RAIZ do repositório (.venv\), não dentro de Orchestrator/.
+# Todo comando Python abaixo deve usá-lo — o Python do sistema tem versões defasadas
+# do lock e não é o ambiente do projeto.
+
 # Aplicar migrações de schema
-cd Orchestrator && .venv\Scripts\alembic upgrade head
+cd Orchestrator && ..\.venv\Scripts\alembic upgrade head
 
 # Rodar todos os testes
-cd Orchestrator && .venv\Scripts\pytest
+cd Orchestrator && ..\.venv\Scripts\pytest
 
 # Rodar teste único
-cd Orchestrator && .venv\Scripts\pytest tests/test_foo.py::test_bar -v
+cd Orchestrator && ..\.venv\Scripts\pytest tests/test_foo.py::test_bar -v
 
 # Rodar testes por marcador (unitario | integracao | e2e)
-cd Orchestrator && .venv\Scripts\pytest -m integracao -v
+cd Orchestrator && ..\.venv\Scripts\pytest -m integracao -v
 
 # Lint Python (black, isort, bandit, mypy, pylint) — ferramentas via requirements-dev.txt
-python -m black --check Orchestrator
-python -m isort --check-only Orchestrator
-python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll
+.venv\Scripts\python -m black --check Orchestrator
+.venv\Scripts\python -m isort --check-only Orchestrator
+.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll
 # mypy + pylint: usar o script de governança (aplica flags corretas por arquivo)
 pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 
 # Recompilar dependências pinadas (pip-tools)
-pip-compile requirements.in -o requirements.txt
+.venv\Scripts\pip-compile requirements.in -o requirements.txt
+
+# Sincronizar o ambiente com o lock (após pull que altere requirements*.txt)
+.venv\Scripts\python -m pip install -r requirements.txt -r requirements-test.txt -r requirements-dev.txt
 
 # Lint que roda no CI (bloqueante) — reproduzir localmente antes do push
-python -m ruff check Orchestrator/app Orchestrator/worker.py
+.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py
 ```
 
 ### Dashboard (React + TypeScript + Vite)
@@ -78,7 +85,7 @@ Monorepo com três camadas principais:
 
 1. **Orchestrator** (`Orchestrator/`) — FastAPI v5 + APScheduler + SQLite WAL. Motor de execução central.
 2. **Dashboard** (`Dashboard/`) — SPA React + TypeScript + Vite (fontes em `Dashboard/src/`, build em `Dashboard/dist/`) servido pelo próprio FastAPI via `StaticFiles` com fallback SPA para rotas client-side. Roda em `http://127.0.0.1:8000/dashboard/`.
-3. **Automações de domínio** — diretórios independentes. As automações registradas com manifesto (`Receitas Bloqueadas/`, `Receitas Emitidas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo).
+3. **Automações de domínio** — diretórios independentes. As cinco automações registradas com manifesto (`Receitas Bloqueadas/` RB-01, `Montagem de Terceirizados/` MT-02, `Receitas Emitidas/` RE-03, `OBs Paradas Fase/` OBP-04, `OBs Fluxo Sem Tingimento/` OFST-06) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo). Criticidade, SLA e cadência canônicas: `docs/automation-criticality-map.md`.
 
 ### Orchestrator (`Orchestrator/app/`)
 - `main.py` — startup FastAPI: registra routers, monta SPA, inicializa Alembic e jobs APScheduler. Chama `register_event_loop(asyncio.get_running_loop())` no lifespan para viabilizar wake-up thread-safe do worker.
@@ -93,18 +100,18 @@ Monorepo com três camadas principais:
 ### Domínio Beneficiamento (`Produção Beneficimento/src/beneficiamento/`)
 - `core/` — coerção, métricas, schema e turnos (lógica pura, sem I/O).
 - `data/` — queries SQL, schema de dados e writer para persistência histórica.
-- `contracts/` — implementação histórica canônica (`overview.py`, `detail.py`, `_queries.py`, `tingimento.py` — agregação da fase real de tingimento consumida por `GET /api/beneficiamento/tingimento`).
+- `contracts/` — implementação histórica canônica (`overview.py`, `detail.py`, `tingimento.py` — agregação da fase real de tingimento consumida por `GET /api/beneficiamento/tingimento`); o SQL fica isolado nos módulos privados `_queries.py`, `_queries_common.py`, `_queries_overview.py`, `_queries_detail.py`.
 - `oracle.py` — única interface com Oracle; nunca abre conexão fora deste arquivo.
 - `runner.py` — orquestra snapshot Oracle → SQLite histórico; orçamento de 20 s.
 - `snapshot_store.py` — lê/escreve `Produção Beneficimento/snapshots/latest/`. A API **nunca** consulta Oracle diretamente; consome apenas esses snapshots.
 
 ### Biblioteca compartilhada Python (`lib/python/`)
-- `oracle_extract.py` — núcleo compartilhado de extração Oracle: `resolve_oracle_credentials`, `init_thick_mode`, `fetch_all` (lotes), `serialize_rows` (datetime→isoformat, strip), `compute_hash`, `read_last_hash`, `write_state_tmp`. **Todos os 4 scripts de extração de domínio (`Receitas Emitidas/`, `Receitas Bloqueadas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`) usam este módulo** — não duplicar o padrão fetch/serialize/hash em novos scripts. Para DSN fixo (ignorar `.env`), passe `force_dsn="dbprd"` em `resolve_oracle_credentials`.
+- `oracle_extract.py` — núcleo compartilhado de extração Oracle: `resolve_oracle_credentials`, `init_thick_mode`, `fetch_all` (lotes), `serialize_rows` (datetime→isoformat, strip), `compute_hash`, `read_last_hash`, `write_state_tmp`. **Todos os 5 scripts de extração de domínio (`Receitas Emitidas/`, `Receitas Bloqueadas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`, `OBs Fluxo Sem Tingimento/`) usam este módulo** — não duplicar o padrão fetch/serialize/hash em novos scripts. Para DSN fixo (ignorar `.env`), passe `force_dsn="dbprd"` em `resolve_oracle_credentials`.
 - `oracle_client.py` — `init_oracle_thick_mode` (ativa Thick Mode do oracledb).
 - `oracle_retry.py` — `make_oracle_retry()` (pybreaker + stamina) e `CircuitBreakerError`.
 
 ### Biblioteca compartilhada PowerShell (`lib/`)
-- `Lib-OrchestratorRuntime.psm1` — fonte única para scripts de Infrastructure: `Get-OrchestratorRuntimeVersion` (lê `ORCHESTRATOR_VERSION` de `constants.py`), `Get-OrchestratorEnvValue` (parser de `.env`), `Stop-OrchestratorProcesses` (usa `Get-CimInstance Win32_Process` — **nunca** `Get-Process`, que não expõe `CommandLine` no PS 5.1). Todos os scripts de `Infrastructure/` devem importar este módulo.
+- `Lib-OrchestratorRuntime.psm1` — fonte única para scripts de Infrastructure: `Get-OrchestratorRuntimeVersion` (lê `ORCHESTRATOR_VERSION` de `constants.py`), `Get-OrchestratorEnvValue` (parser de `.env`), `Stop-OrchestratorProcesses` (usa `Get-CimInstance Win32_Process` — **nunca** `Get-Process`, que não expõe `CommandLine` no PS 5.1). Todo script de `Infrastructure/` que precise de versão de runtime, leitura de `.env` ou encerramento de processos deve consumi-lo em vez de reimplementar (`Install-OrchestratorTask.ps1` é exceção legítima: só registra a tarefa agendada e não usa nenhuma dessas capacidades).
 - `Lib-Config.psm1` — leitura de `.env` para scripts de automação de domínio.
 
 ### Infrastructure (`Infrastructure/`)

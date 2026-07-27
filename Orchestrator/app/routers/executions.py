@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import desc
-from sqlalchemy.orm import Query, Session, joinedload
+from sqlalchemy.orm import Query, Session
 
 from .. import models, schemas
 from ..constants import (
@@ -31,6 +31,7 @@ from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, trigger_worker_wakeup
 from ..security import sanitize_log_payload
+from ..services import execution_repository as exec_repo
 from ..services.execution_decoration import (
     build_active_execution_maps,
     decorate_execution_summary,
@@ -135,7 +136,7 @@ def list_executions(  # pylint: disable=R0913,R0914,R0917
             status_code=422, detail="per_page deve estar entre 1 e 200."
         )
 
-    query = db.query(models.Execution).options(joinedload(models.Execution.automation))
+    query = exec_repo.base_query_with_automation(db)
     query = _apply_execution_filters(
         query,
         status,
@@ -183,14 +184,7 @@ def list_by_automation(
     _api_key: str = Depends(get_api_key),
 ) -> list[schemas.ExecutionSummary]:
     """Retorna execuções de uma automação específica com decoração."""
-    execs = (
-        db.query(models.Execution)
-        .options(joinedload(models.Execution.automation))
-        .filter(models.Execution.automation_id == automation_id)
-        .order_by(desc(models.Execution.started_at))
-        .limit(limit)
-        .all()
-    )
+    execs = exec_repo.get_recent_by_automation(db, automation_id, limit)
 
     active_by_auto, active_by_group = build_active_execution_maps(db)
 
@@ -215,13 +209,7 @@ def list_recent(
     _api_key: str = Depends(get_api_key),
 ) -> list[schemas.ExecutionSummary]:
     """Retorna as execuções mais recentes de todas as automações com decoração."""
-    execs = (
-        db.query(models.Execution)
-        .options(joinedload(models.Execution.automation))
-        .order_by(desc(models.Execution.started_at))
-        .limit(limit)
-        .all()
-    )
+    execs = exec_repo.get_recent(db, limit)
 
     active_by_auto, active_by_group = build_active_execution_maps(db)
 
@@ -245,12 +233,7 @@ def get_execution(
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> schemas.ExecutionResponse:
-    db_exec = (
-        db.query(models.Execution)
-        .options(joinedload(models.Execution.automation))
-        .filter(models.Execution.id == exec_id)
-        .first()
-    )
+    db_exec = exec_repo.get_by_id_with_automation(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
@@ -279,7 +262,7 @@ def get_execution_logs(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Retorna logs de uma execução com paginação por linhas."""
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
@@ -308,7 +291,7 @@ def list_artifacts(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Lista artefatos gerados por uma execução."""
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
@@ -328,12 +311,7 @@ def download_artifact(
     _api_key: str = Depends(get_api_key),
 ) -> FileResponse:
     """Download de um artefato específico."""
-    db_exec = (
-        db.query(models.Execution)
-        .options(joinedload(models.Execution.automation))
-        .filter(models.Execution.id == exec_id)
-        .first()
-    )
+    db_exec = exec_repo.get_by_id_with_automation(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
@@ -380,7 +358,7 @@ def stop_execution(
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
@@ -424,12 +402,7 @@ def requeue_execution(
     _api_key: str = Depends(get_api_key),
 ) -> schemas.ExecutionQueueActionResponse:
     """Reenfileira uma execução terminal mantendo rastreabilidade de retry."""
-    db_exec = (
-        db.query(models.Execution)
-        .options(joinedload(models.Execution.automation))
-        .filter(models.Execution.id == exec_id)
-        .first()
-    )
+    db_exec = exec_repo.get_by_id_with_automation(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
@@ -482,11 +455,7 @@ def telemetry_start(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Inicia o registro de uma execução disparada externamente (ex: terminal)."""
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.name == payload.automation_name)
-        .first()
-    )
+    db_auto = exec_repo.get_automation_by_name(db, payload.automation_name)
     if not db_auto:
         raise HTTPException(
             status_code=404,
@@ -525,7 +494,7 @@ def telemetry_end(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Finaliza o registro de uma execução disparada externamente."""
-    db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 

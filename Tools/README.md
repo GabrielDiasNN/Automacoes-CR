@@ -4,7 +4,15 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 
 ## 🛠️ Ferramentas Ativas (Modernas)
 
-### Governança e Testes (CI/CD Local)
+> **Como ler esta lista:** cada ferramenta declara **quem a invoca**. Isso evita que um script vire
+> gate imaginário — só é gate o que `Tools\ValidarAutomacoes.ps1`, `.githooks/pre-commit` ou
+> `.github/workflows/governanca.yml` de fato executa.
+
+### Gates estáticos — executados por `ValidarAutomacoes.ps1 -OnlyGovernance`
+
+Rodam no pre-commit (com `-StagedOnly`) e no job `governanca-agregada` do CI. Não exigem servidor,
+banco nem rede.
+
 - **Test-ZeroTrust.ps1:** Garante que nenhuma senha ou segredo esteja hardcoded.
 - **Test-SqlPerformance.ps1:** Bloqueia o uso de `SELECT *` e valida queries.
 - **Test-PythonGovernance.ps1:** Valida Type Hints e padrões Python; bloqueia `pylint: disable=all` em arquivos novos (débito histórico congelado em `pylint-disable-all-baseline.txt`, hoje com 0 bytes — ou seja, nenhum débito técnico "grandfathered" desse tipo existe atualmente no repositório).
@@ -17,15 +25,28 @@ Este diretório contém utilitários para garantir a governança, integridade e 
 - **Test-SkillsGovernance.ps1:** Valida skills canônicas em `.github/skills/`.
 - **Test-SemanticGovernance.ps1:** Detecta drift entre documentação viva, catálogo, versão operacional e skills.
 - **Test-LogConformidade.ps1 / Test-DateConformidade.ps1:** Guardrails de convenção de datas BR em logs e documentação.
-- **Test-EncodingResilience.ps1:** Trava de regressão para acentuação PT-BR no ecossistema (logs, API, DB).
 - **Test-JsonConfig.ps1:** Valida sintaxe JSON de configs e arquivos de estado.
 - **Test-NodeCommunications.ps1:** Testes offline de comunicações Node.js (sem WhatsApp/internet).
-- **Test-OrchestratorIntegrity.ps1:** Valida integridade estrutural do Orchestrator.
 - **Test-DashboardTemplate.ps1:** Valida contrato HTML/CSS do template de dashboard.
 - **Test-PowerShellApprovedVerbs.ps1:** Valida verbos aprovados em funções PowerShell.
-- **Test-ChangelogUpdated.ps1:** Valida que mudanças em código (`.py`, `.ps1/.psm1/.psd1`, `.js/.mjs/.cjs`, `.sql`) no diff do PR vêm acompanhadas de atualização do `CHANGELOG.md`; permite override com `-AllowSkip` (marcador `[skip-changelog]` no título do PR).
-- **Get-GovernanceTargetSummary.ps1:** Classifica o diff do CI (alvos críticos e de log) para seleção de jobs.
-- **Fix-MarkdownStyle.ps1:** Lint/correção de estilo Markdown (`-DryRun` no CI).
+
+### Gates do CI — executados apenas por `.github/workflows/governanca.yml`
+
+- **Test-ChangelogUpdated.ps1:** Valida que mudanças em código (`.py`, `.ps1/.psm1/.psd1`, `.js/.mjs/.cjs`, `.sql`) no diff do PR vêm acompanhadas de atualização do `CHANGELOG.md`; permite override com `-AllowSkip` (marcador `[skip-changelog]` no título do PR). Roda no job `governanca-agregada`, somente em pull request.
+- **Get-GovernanceTargetSummary.ps1:** Classifica o diff do CI (alvos críticos e de log) para seleção de jobs. Roda no job `preparar-diff`.
+- **Fix-MarkdownStyle.ps1:** Lint/correção de estilo Markdown. Roda no job `markdown` com `-DryRun`, apenas quando o diff contém arquivos `.md` (`needs.preparar-diff.outputs.has_md == 'true'`). Fora do CI, pode ser invocada sem `-DryRun` para aplicar as correções.
+
+### Verificações de runtime — **não são gates de commit**
+
+Exigem Orchestrator no ar (e `ORCHESTRATOR_API_KEY` no ambiente). Por isso ficam fora de
+`ValidarAutomacoes.ps1`, que precisa rodar offline no pre-commit. Invoque manualmente após subir o
+serviço, ou em validação pós-deploy.
+
+- **Test-OrchestratorIntegrity.ps1:** Smoke pós-deploy — processos ativos, API online, contratos operacionais (`diagnostics`/`baseline`/`history`/`portfolio`) e suíte PyTest completa. Referenciado por `docs/operational-improvement-baseline.md`.
+- **Test-EncodingResilience.ps1:** Trava de regressão para acentuação PT-BR ponta a ponta (logs, API, DB). Requer `-ApiKey` ou `ORCHESTRATOR_API_KEY` no ambiente; falha imediatamente sem ela.
+
+### Ferramentas manuais de estilo
+
 - **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
 
 ### Operação e Utilitários

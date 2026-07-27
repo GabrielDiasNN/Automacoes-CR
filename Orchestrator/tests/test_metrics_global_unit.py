@@ -3,7 +3,7 @@
 from typing import Any
 
 from app import models
-from app.services.metrics import (
+from app.services.metrics_queries import (
     build_global_metrics_response,
     get_global_execution_counts,
 )

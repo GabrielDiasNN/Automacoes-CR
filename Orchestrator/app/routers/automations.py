@@ -14,14 +14,14 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import EXECUTION_ACTIVE_STATUSES, PRIORITY_NORMAL
+from ..constants import PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, scheduler, trigger_worker_wakeup
+from ..services import automation_repository as repo
 from ..services import env_admin
 from ..services.automation_preflight import build_automation_preflight
 from ..services.automation_snapshot import (
@@ -36,7 +36,7 @@ from ..services.execution_runtime import (
     generate_execution_id,
     get_group_active_execution,
 )
-from ..services.metrics import (
+from ..services.metrics_queries import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
 )
@@ -173,46 +173,25 @@ def list_automations(  # pylint: disable=R0913,R0917
 ) -> schemas.PaginatedResponse[schemas.AutomationResponse]:
     """Lista automacoes com paginacao, ordenacao e busca."""
 
-    query = db.query(models.Automation)
-
-    # Filtro de busca por nome
-
-    if search:
-
-        query = query.filter(models.Automation.name.ilike(f"%{search}%"))
-
-    # Ordenacao
-    allowed_sorts = {
-        "id",
-        "name",
-        "script_path",
-        "test_mode",
-        "priority",
-        "max_runtime_minutes",
-        "created_at",
-        "updated_at",
-    }
-    if sort not in allowed_sorts:
+    if sort not in repo.ALLOWED_SORT_FIELDS:
         raise HTTPException(
             status_code=422,
-            detail=f"Campo de ordenação inválido: '{sort}'. Opções válidas: {sorted(allowed_sorts)}",
+            detail=(
+                f"Campo de ordenação inválido: '{sort}'. "
+                f"Opções válidas: {sorted(repo.ALLOWED_SORT_FIELDS)}"
+            ),
         )
 
-    sort_column = getattr(models.Automation, sort, models.Automation.name)
-
-    if order == "desc":
-
-        query = query.order_by(sort_column.desc())
-
-    else:
-
-        query = query.order_by(sort_column.asc())
-
-    total = query.count()
+    items, total = repo.paginate(
+        db,
+        search=search,
+        sort=sort,
+        descending=order == "desc",
+        page=page,
+        per_page=per_page,
+    )
 
     pages = math.ceil(total / per_page) if per_page > 0 else 1
-
-    items = query.offset((page - 1) * per_page).limit(per_page).all()
 
     next_run_lookup = _load_next_run_lookup()
     snapshot_dependencies = load_snapshot_dependencies(db, items)
@@ -242,7 +221,7 @@ def list_all_automations(
 ) -> list[schemas.AutomationResponse]:
     """Retorna todas as automacoes sem paginacao (uso interno do Dashboard)."""
 
-    automations = db.query(models.Automation).order_by(models.Automation.name).all()
+    automations = repo.list_all_ordered(db)
 
     next_run_lookup = _load_next_run_lookup()
     snapshot_dependencies = load_snapshot_dependencies(db, automations)
@@ -282,11 +261,7 @@ def get_automation(
     _api_key: str = Depends(get_api_key),
 ) -> schemas.AutomationResponse:
 
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
 
     if not db_auto:
 
@@ -310,11 +285,7 @@ def create_automation(
     _api_key: str = Depends(get_api_key),
 ) -> schemas.AutomationResponse:
 
-    existing = (
-        db.query(models.Automation)
-        .filter(models.Automation.name == automation.name)
-        .first()
-    )
+    existing = repo.get_by_name(db, automation.name)
 
     if existing:
 
@@ -373,11 +344,7 @@ def update_automation(
     _api_key: str = Depends(get_api_key),
 ) -> schemas.AutomationResponse:
 
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
 
     if not db_auto:
 
@@ -434,11 +401,7 @@ def get_automation_overview(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Retorna payload consolidado da automacao para telas operacionais."""
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
@@ -453,13 +416,7 @@ def get_automation_overview(
         metrics_24h_lookup=metrics_24h_lookup,
     )
 
-    recent_execs = (
-        db.query(models.Execution)
-        .filter(models.Execution.automation_id == automation_id)
-        .order_by(models.Execution.started_at.desc())
-        .limit(10)
-        .all()
-    )
+    recent_execs = repo.get_recent_executions(db, automation_id)
     recent_payload = []
     for item in recent_execs:
         summary = schemas.ExecutionSummary.model_validate(item)
@@ -492,11 +449,7 @@ def delete_automation(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
 
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
 
     if not db_auto:
 
@@ -538,11 +491,7 @@ async def start_automation(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
 
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
 
     if not db_auto:
 
@@ -550,14 +499,7 @@ async def start_automation(
 
     # Protecao contra execucao duplicada
 
-    running = (
-        db.query(models.Execution)
-        .filter(
-            models.Execution.automation_id == automation_id,
-            models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES),
-        )
-        .first()
-    )
+    running = repo.get_active_execution(db, automation_id)
 
     if running:
 
@@ -581,12 +523,7 @@ async def start_automation(
         )
 
     if db_auto.cooldown_minutes and db_auto.cooldown_minutes > 0:
-        latest_exec = (
-            db.query(models.Execution)
-            .filter(models.Execution.automation_id == automation_id)
-            .order_by(desc(models.Execution.started_at))
-            .first()
-        )
+        latest_exec = repo.get_latest_execution(db, automation_id)
         if latest_exec and latest_exec.started_at:
             elapsed_minutes = (
                 get_now_local() - latest_exec.started_at
@@ -634,12 +571,7 @@ def set_global_test_mode(
 ) -> dict[str, str]:
     """Ativa ou desativa o Modo Teste para TODAS as automacoes cadastradas."""
 
-    db.query(models.Automation).update(
-        {
-            models.Automation.test_mode: enabled,
-            models.Automation.updated_at: get_now_local(),
-        }
-    )
+    repo.set_test_mode_for_all(db, enabled)
 
     # Sincroniza a variavel de ambiente do Windows (orquestracao no service, #12)
     env_admin.sync_global_test_mode_env(enabled, PROJECT_ROOT)
@@ -670,11 +602,7 @@ def set_automation_test_mode(
 ) -> dict[str, str]:
     """Ativa ou desativa o Modo Teste para uma automacao especifica."""
 
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
 
     if not db_auto:
 
@@ -712,7 +640,7 @@ def pause_all(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
 
-    db.query(models.Automation).update({models.Automation.enabled: False})
+    repo.set_enabled_for_all(db, False)
 
     log_audit(db, "PAUSE_ALL", "AUTOMATION", None, get_client_ip(request))
 
@@ -729,7 +657,7 @@ def resume_all(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
 
-    db.query(models.Automation).update({models.Automation.enabled: True})
+    repo.set_enabled_for_all(db, True)
 
     log_audit(db, "RESUME_ALL", "AUTOMATION", None, get_client_ip(request))
 
@@ -746,11 +674,7 @@ def pause_automation(
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
     db_auto.enabled = False  # type: ignore[assignment]
@@ -774,11 +698,7 @@ def resume_automation(
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
     db_auto.enabled = True  # type: ignore[assignment]
@@ -804,21 +724,10 @@ def clone_automation(
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> schemas.AutomationResponse:
-    db_auto = (
-        db.query(models.Automation)
-        .filter(models.Automation.id == automation_id)
-        .first()
-    )
+    db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
-    base_name = f"{db_auto.name} (Clone)"
-    candidate = base_name
-    idx = 2
-    while (
-        db.query(models.Automation).filter(models.Automation.name == candidate).first()
-    ):
-        candidate = f"{base_name} {idx}"
-        idx += 1
+    candidate = repo.next_available_clone_name(db, f"{db_auto.name} (Clone)")
 
     clone = models.Automation(
         name=candidate,

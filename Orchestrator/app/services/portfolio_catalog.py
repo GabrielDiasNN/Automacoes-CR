@@ -17,7 +17,7 @@ from ..constants import (
 )
 from ..timezone import get_now_local
 from .automation_snapshot import build_automation_response, build_next_run_lookup
-from .metrics import (
+from .metrics_queries import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
 )

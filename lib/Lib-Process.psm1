@@ -167,4 +167,67 @@ function Invoke-NativeProcess {
     }
 }
 
-Export-ModuleMember -Function Invoke-NativeProcess
+function Get-WhatsAppAuthPath {
+    <#
+    .SYNOPSIS
+        Caminho da sessao autenticada do WhatsApp (LocalAuth), sempre FORA da arvore do repositorio.
+    .DESCRIPTION
+        Espelha lib/whatsapp-auth-path.js (resolveAuthPath) — os dois resolvedores
+        PRECISAM devolver o mesmo diretorio: o PowerShell limpa locks residuais do
+        perfil e o Node abre o perfil. Se divergirem, a automacao pede QR code em
+        producao. Por isso a paridade e replicada aqui passo a passo: trim do
+        override, caminho absoluto, e a mesma cadeia de fallback de base
+        (LOCALAPPDATA -> HOME -> diretorio corrente).
+
+        O diretorio contem credenciais de sessao do WhatsApp Web: mante-lo dentro do
+        repositorio faria qualquer zip/backup/sync da pasta do projeto carregar a
+        sessao junto. Override: $env:WHATSAPP_AUTH_PATH.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    # Base de resolucao relativa: $PWD, e NAO
+    # [System.IO.Directory]::GetCurrentDirectory() — este ultimo congela no
+    # diretorio em que o processo PowerShell iniciou e nao acompanha Set-Location,
+    # enquanto um processo Node filho e lancado no $PWD corrente. Usar o valor
+    # errado aqui faz os dois runtimes resolverem diretorios diferentes (coberto
+    # pelo caso de paridade "override relativo").
+    $processCwd = $PWD.ProviderPath
+
+    # Normalizacao LEXICAL, deliberadamente sem [System.IO.Path]::GetFullPath: no
+    # .NET Framework ele consulta o filesystem e expande nomes curtos 8.3
+    # (GABRIE~1.DIA -> gabriel.dias), enquanto path.resolve do Node e puramente
+    # lexical — bastaria isso para os dois runtimes abrirem perfis diferentes.
+    $absolutizar = {
+        param([string]$Candidate)
+
+        if (-not [System.IO.Path]::IsPathRooted($Candidate)) {
+            $Candidate = "$processCwd\$Candidate"
+        }
+
+        $segmentos = New-Object System.Collections.Generic.List[string]
+        foreach ($parte in ($Candidate -split '[\\/]+')) {
+            if ($parte -eq '.' -or $parte -eq '') { continue }
+            if ($parte -eq '..' -and $segmentos.Count -gt 1) {
+                $segmentos.RemoveAt($segmentos.Count - 1)
+                continue
+            }
+            $segmentos.Add($parte)
+        }
+
+        $prefixoUnc = if ($Candidate -match '^[\\/]{2}') { '\\' } else { '' }
+        return ($prefixoUnc + ($segmentos -join '\'))
+    }
+
+    $override = "$($env:WHATSAPP_AUTH_PATH)".Trim()
+    if ($override) { return & $absolutizar $override }
+
+    $base = $env:LOCALAPPDATA
+    if ([string]::IsNullOrWhiteSpace($base)) { $base = $env:HOME }
+    if ([string]::IsNullOrWhiteSpace($base)) { $base = $processCwd }
+
+    return & $absolutizar (Join-Path $base "Automacoes\wwebjs_auth")
+}
+
+Export-ModuleMember -Function Invoke-NativeProcess, Get-WhatsAppAuthPath

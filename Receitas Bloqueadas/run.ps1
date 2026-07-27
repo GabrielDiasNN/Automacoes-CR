@@ -86,6 +86,7 @@ $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
+$libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
 
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
@@ -103,6 +104,7 @@ Import-Module $libRetry   -Force
 Import-Module $libProcess -Force
 Import-Module $libConfig  -Force
 Import-Module $libOracle  -Force
+Import-Module $libIdempotency -Force
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
@@ -126,27 +128,7 @@ function Write-Log {
 
 }
 
-function Get-ForwardedLogLevel {
-
-    param(
-        [string]$Msg,
-        [string]$Fallback = "INFO"
-    )
-
-    if ([string]::IsNullOrWhiteSpace($Msg)) { return $Fallback }
-
-    $detected = [regex]::Match($Msg, '\[(INFO|WARN|ERROR|ERRO|DEBUG)\]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    if (-not $detected.Success) { return $Fallback }
-
-    switch ($detected.Groups[1].Value.ToUpperInvariant()) {
-        "ERROR" { return "ERRO" }
-        "ERRO"  { return "ERRO" }
-        "WARN"  { return "WARN" }
-        "DEBUG" { return "DEBUG" }
-        default { return "INFO" }
-    }
-
-}
+# Get-ForwardedLogLevel vem de lib/Lib-Logging.psm1 (achado A1).
 
 function Exit-WithCode {
 
@@ -250,83 +232,30 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
             if (Test-Path $HtmlPath) {
 
-                $currentHash = ""
-
-                if (Test-Path $PythonStatePath) {
-
-                    $currentHash = (Get-Content $PythonStatePath -Raw -Encoding UTF8 | ConvertFrom-Json).last_hash
-
+                $currentHash = Get-LastContentHash -StateTmpPath $PythonStateTmp -StatePath $PythonStatePath -OnWarning {
+                    param($mensagem)
+                    Write-Log $mensagem -Lvl "WARN"
                 }
 
                 # Leitura Resiliente do Estado
 
-                $deliveryState = @{
-
-                    last_sent_hash = ""
-
-                    delivery_status = @{
-
-                        email = @{ success = $false; sent_at = $null }
-
-                        whatsapp = @{ success = $false; sent_at = $null; exit_code = $null }
-
-                    }
-
+                $deliveryState = Read-DeliveryState -Path $EmailStatePath -Channels @("email", "whatsapp") -OnWarning {
+                    param($mensagem)
+                    Write-Log $mensagem -Lvl "WARN"
+                }
+                # exit_code e diagnostico exclusivo deste canal: preservado no
+                # formato do arquivo, fora do contrato generico da Lib-Idempotency.
+                if (-not $deliveryState.delivery_status.whatsapp.ContainsKey("exit_code")) {
+                    $deliveryState.delivery_status.whatsapp.exit_code = $null
                 }
 
-                if (Test-Path $EmailStatePath) {
-
-                    try {
-
-                        $savedState = Get-Content $EmailStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
-
-                        if ($savedState.last_sent_hash) { $deliveryState.last_sent_hash = $savedState.last_sent_hash }
-
-                        if ($null -ne $savedState.delivery_status) {
-
-                            if ($null -ne $savedState.delivery_status.email) {
-
-                                $deliveryState.delivery_status.email.success = [bool]$savedState.delivery_status.email.success
-
-                                $deliveryState.delivery_status.email.sent_at = $savedState.delivery_status.email.sent_at
-
-                            }
-
-                            if ($null -ne $savedState.delivery_status.whatsapp) {
-
-                                $deliveryState.delivery_status.whatsapp.success = [bool]$savedState.delivery_status.whatsapp.success
-
-                                $deliveryState.delivery_status.whatsapp.sent_at = $savedState.delivery_status.whatsapp.sent_at
-
-                            }
-
-                        }
-
-                    } catch [System.Exception] {
-
-                        Write-Log "Aviso: Falha ao parsear email_state.json. Iniciando com estado limpo." -Lvl "WARN"
-
-                    }
-
-                }
-
-                # Se o hash mudou, resetar status de entrega
-
-                if ($currentHash -and $currentHash -ne $deliveryState.last_sent_hash) {
-
+                if (Update-DeliveryStateHash -State $deliveryState -CurrentHash $currentHash) {
                     Write-Log "Novo Hash detectado ($currentHash). Resetando status de entrega."
-
-                    $deliveryState.last_sent_hash = $currentHash
-
-                    $deliveryState.delivery_status.email.success = $false
-
-                    $deliveryState.delivery_status.whatsapp.success = $false
-
                 }
 
-                $skipEmail = $deliveryState.delivery_status.email.success -and ($currentHash -eq $deliveryState.last_sent_hash)
+                $skipEmail = -not (Test-DeliveryPending -State $deliveryState -Channel "email" -CurrentHash $currentHash)
 
-                $skipWhatsApp = $deliveryState.delivery_status.whatsapp.success -and ($currentHash -eq $deliveryState.last_sent_hash)
+                $skipWhatsApp = -not (Test-DeliveryPending -State $deliveryState -Channel "whatsapp" -CurrentHash $currentHash)
 
                 if ($skipEmail -and $skipWhatsApp) {
 
@@ -365,7 +294,9 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                             Write-Log "Destinatarios 'to' nao configurados. Pulando e-mail." -Lvl "WARN"
 
-                            $deliveryState.delivery_status.email.success = $true
+                            # Nada foi entregue, mas o canal e marcado para nao reprocessar
+                            # o mesmo conteudo a cada execucao enquanto a config nao mudar.
+                            Set-DeliverySuccess -State $deliveryState -Channel "email"
 
                         } else {
 
@@ -413,11 +344,9 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                                 Write-Log "E-mail enviado com sucesso. Consolidando estado parcial (E-mail)."
 
-                                $deliveryState.delivery_status.email.success = $true
+                                Set-DeliverySuccess -State $deliveryState -Channel "email"
 
-                                $deliveryState.delivery_status.email.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
-
-                                $deliveryState | ConvertTo-Json -Depth 5 | Out-File $EmailStatePath -Encoding UTF8
+                                Save-DeliveryState -State $deliveryState -Path $EmailStatePath
 
                             } else {
 
@@ -486,11 +415,9 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                                 Write-Log "WhatsApp concluido com sucesso. Consolidando estado parcial (WhatsApp)."
 
-                                $deliveryState.delivery_status.whatsapp.success = $true
+                                Set-DeliverySuccess -State $deliveryState -Channel "whatsapp"
 
-                                $deliveryState.delivery_status.whatsapp.sent_at = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
-
-                                $deliveryState | ConvertTo-Json -Depth 5 | Out-File $EmailStatePath -Encoding UTF8
+                                Save-DeliveryState -State $deliveryState -Path $EmailStatePath
 
                             }
 

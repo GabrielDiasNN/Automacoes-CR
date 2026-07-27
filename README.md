@@ -64,6 +64,7 @@ graph TD
 - **Skills Compartilhadas**: `.github/skills/` é a fonte canônica das 7 skills ativas; `.gemini/skills/` é apenas o espelho de compatibilidade para Gemini CLI e Antigravity.
 - **Dashboard React "Sala de Instrumentação"**: identidade visual industrial (grafite + ciano/âmbar), IBM Plex, react-router com deep-links, design system em `Dashboard/src/components/ui/`, uPlot para time series.
 - **OBs Paradas Fase (OBP-04)**: automação de visibilidade de OBs paradas por fase, cards PNG via WhatsApp, cron diário às 05:30 e 14:00, com terceiro disparo às 22:30 (Seg-Sáb) ou 23:00 (Dom).
+- **OBs Fluxo Sem Tingimento (OFST-06)**: automação de visibilidade de OBs de fluxo 204 prontas para montagem no depósito 95, mensagem de texto via WhatsApp para a Expedição Tinturaria, a cada 2 h das 05:00 às 19:00 (Seg-Sex) e das 05:00 às 13:00 (Sáb).
 
 ---
 Mantido pela equipe de Automações

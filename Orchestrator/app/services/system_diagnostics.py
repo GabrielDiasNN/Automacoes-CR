@@ -35,7 +35,7 @@ from ..database import (
     validate_database_schema,
 )
 from ..timezone import get_now_local
-from . import metrics  # pylint: disable=no-name-in-module
+from . import metrics_queries as metrics
 from .diagnostic_checks import (
     check_failure_hotspots,
     check_orphaned_running,

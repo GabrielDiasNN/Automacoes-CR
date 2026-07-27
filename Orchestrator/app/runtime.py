@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import sys
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -42,6 +43,22 @@ def get_dashboard_path() -> str:
 
 def get_lib_path() -> str:
     return os.path.join(PROJECT_ROOT, "lib")
+
+
+def ensure_beneficiamento_on_path() -> bool:
+    """Registra `Produção Beneficimento/src` no `sys.path` do runtime FastAPI.
+
+    Ponto único de acoplamento entre o Orchestrator e o domínio Beneficiamento
+    (achado A3 da revisão arquitetural): antes o `sys.path.insert` ficava inline
+    no router, escondendo a dependência na camada HTTP. Retorna `True` se o
+    diretório existe e está registrado.
+    """
+    src_dir = os.path.join(PROJECT_ROOT, "Produção Beneficimento", "src")
+    if not os.path.isdir(src_dir):
+        return False
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+    return True
 
 
 def get_allowed_origins() -> list[str]:

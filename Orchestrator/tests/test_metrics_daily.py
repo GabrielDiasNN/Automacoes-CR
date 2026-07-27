@@ -3,7 +3,7 @@
 from typing import Any
 
 from app import models
-from app.services.metrics import get_daily_execution_metrics
+from app.services.metrics_queries import get_daily_execution_metrics
 from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 

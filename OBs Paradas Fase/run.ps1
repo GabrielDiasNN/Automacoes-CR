@@ -58,19 +58,7 @@ function Write-Log {
     Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
 }
 
-function Get-ForwardedLogLevel {
-    param([string]$Msg, [string]$Fallback = "INFO")
-    if ([string]::IsNullOrWhiteSpace($Msg)) { return $Fallback }
-    $m = [regex]::Match($Msg, '\[(INFO|WARN|ERROR|ERRO|DEBUG)\]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    if (-not $m.Success) { return $Fallback }
-    switch ($m.Groups[1].Value.ToUpperInvariant()) {
-        "ERROR" { return "ERRO" }
-        "ERRO"  { return "ERRO" }
-        "WARN"  { return "WARN" }
-        "DEBUG" { return "DEBUG" }
-        default { return "INFO" }
-    }
-}
+# Get-ForwardedLogLevel vem de lib/Lib-Logging.psm1 (achado A1).
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
@@ -101,7 +89,7 @@ try {
         try { Import-HubEnv } catch [System.Exception] { Write-Log "Aviso: falha ao carregar .env: $_" -Lvl "WARN" }
 
         # --- CLEANUP CIRURGICO: Chrome zumbis do motor WhatsApp (somente user-data-dir do projeto) ---
-        $waAuthDir = (Join-Path $projectRoot "lib\.wwebjs_auth").ToLower()
+        $waAuthDir = (Get-WhatsAppAuthPath).ToLower()
         $chromeZombies = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains($waAuthDir) }
         if ($chromeZombies) {

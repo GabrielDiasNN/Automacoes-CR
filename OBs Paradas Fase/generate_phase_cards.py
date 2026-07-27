@@ -19,12 +19,13 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
-SCRIPT_DIR      = os.path.dirname(os.path.abspath(__file__))
-RESULT_FILE     = os.path.join(SCRIPT_DIR, "obs_result.json")
-CONFIG_FILE     = os.path.join(SCRIPT_DIR, "config.json")
-IMAGES_DIR      = os.path.join(SCRIPT_DIR, "images")
-MANIFEST_FILE   = os.path.join(SCRIPT_DIR, "phase_cards.json")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+RESULT_FILE = os.path.join(SCRIPT_DIR, "obs_result.json")
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
+IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
+MANIFEST_FILE = os.path.join(SCRIPT_DIR, "phase_cards.json")
 SEEN_STATE_FILE = os.path.join(SCRIPT_DIR, "obs_seen_state.json")
+
 
 def _join_responsavel(numeros: list[Any]) -> str:
     return " @".join(str(x).strip() for x in numeros if str(x).strip())
@@ -52,65 +53,86 @@ class FaseConfig:
 # Contatos reais (nome/numero) nunca ficam no codigo-fonte nem no config.json —
 # vivem só no .env local (nao versionado), lido via os.environ pelo run.ps1/Lib-Config.psm1.
 # Sem .env configurado, o fallback abaixo fica vazio e a mensagem sai sem mencao.
-_LIDER_1_TURNO         = os.environ.get("OBP_CONTATO_LIDER_1_TURNO", "")
+_LIDER_1_TURNO = os.environ.get("OBP_CONTATO_LIDER_1_TURNO", "")
 _LIDER_RESERVA_1_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_1_TURNO", "")
-_LIDER_2_TURNO         = os.environ.get("OBP_CONTATO_LIDER_2_TURNO", "")
+_LIDER_2_TURNO = os.environ.get("OBP_CONTATO_LIDER_2_TURNO", "")
 _LIDER_RESERVA_2_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_2_TURNO", "")
-_LIDER_3_TURNO         = os.environ.get("OBP_CONTATO_LIDER_3_TURNO", "")
+_LIDER_3_TURNO = os.environ.get("OBP_CONTATO_LIDER_3_TURNO", "")
 _LIDER_RESERVA_3_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_3_TURNO", "")
-_LIDER_CQ              = os.environ.get("OBP_CONTATO_LIDER_CQ", "")
+_LIDER_CQ = os.environ.get("OBP_CONTATO_LIDER_CQ", "")
 _EQUIPE_QUALIDADE = _join_responsavel(
     os.environ.get("OBP_CONTATO_EQUIPE_CQ", "").split(",")
 )
 
 DEFAULT_FASES_MONITORADAS: dict[str, FaseConfig] = {
-    "20":  FaseConfig("RMC-REVISÃO MALHA CRUA", 1, _LIDER_3_TURNO),
-    "25":  FaseConfig("CDP-CONFERENCIA DE PESO", 0.5, _EQUIPE_QUALIDADE, ativo=False),
-    "26":  FaseConfig("IVF-INVERSÃO P/FELPAGEM", 1, _LIDER_3_TURNO),
-    "45":  FaseConfig("CDC-CONFERENCIA DE COR", 0.1, _LIDER_RESERVA_3_TURNO),
-    "46":  FaseConfig("PPA-PREPARAÇÃO AMACIANTE", 1, _LIDER_1_TURNO),
-    "47":  FaseConfig("UMM-UMEDECIMENTO DE MALHA", 0.5, _LIDER_RESERVA_3_TURNO),
-    "50":  FaseConfig("HID-HIDRO UMIDO", 1, _LIDER_1_TURNO),
-    "55":  FaseConfig("HIS-HIDRO SECO", 1, _LIDER_1_TURNO),
-    "60":  FaseConfig("SEC-SECADOR", 1, _LIDER_1_TURNO),
-    "65":  FaseConfig("FEL-FELPAGEM", 1, _LIDER_RESERVA_1_TURNO),
-    "70":  FaseConfig("CLB-CALANDRA DE BRILHO", 1, _LIDER_RESERVA_1_TURNO),
-    "80":  FaseConfig("CLC-CALANDRA DE COMPACTACAO", 1, _LIDER_RESERVA_1_TURNO),
-    "90":  FaseConfig("ABR-ABRIDOR", 1, _LIDER_2_TURNO),
+    "20": FaseConfig("RMC-REVISÃO MALHA CRUA", 1, _LIDER_3_TURNO),
+    "25": FaseConfig("CDP-CONFERENCIA DE PESO", 0.5, _EQUIPE_QUALIDADE, ativo=False),
+    "26": FaseConfig("IVF-INVERSÃO P/FELPAGEM", 1, _LIDER_3_TURNO),
+    "45": FaseConfig("CDC-CONFERENCIA DE COR", 0.1, _LIDER_RESERVA_3_TURNO),
+    "46": FaseConfig("PPA-PREPARAÇÃO AMACIANTE", 1, _LIDER_1_TURNO),
+    "47": FaseConfig("UMM-UMEDECIMENTO DE MALHA", 0.5, _LIDER_RESERVA_3_TURNO),
+    "50": FaseConfig("HID-HIDRO UMIDO", 1, _LIDER_1_TURNO),
+    "55": FaseConfig("HIS-HIDRO SECO", 1, _LIDER_1_TURNO),
+    "60": FaseConfig("SEC-SECADOR", 1, _LIDER_1_TURNO),
+    "65": FaseConfig("FEL-FELPAGEM", 1, _LIDER_RESERVA_1_TURNO),
+    "70": FaseConfig("CLB-CALANDRA DE BRILHO", 1, _LIDER_RESERVA_1_TURNO),
+    "80": FaseConfig("CLC-CALANDRA DE COMPACTACAO", 1, _LIDER_RESERVA_1_TURNO),
+    "90": FaseConfig("ABR-ABRIDOR", 1, _LIDER_2_TURNO),
     "100": FaseConfig("RAU-RAMAR UMIDO", 1, _LIDER_2_TURNO),
     "110": FaseConfig("RAS-RAMAR SECO", 1, _LIDER_2_TURNO),
     "150": FaseConfig("EXP-EXPEDICAO ACABADO", 1, _LIDER_RESERVA_2_TURNO),
     "160": FaseConfig("CDQ-CONTROLE DE QUALIDADE", 1, _LIDER_CQ),
     "165": FaseConfig("CDF-CONFERÊNCIA DE FELPA", 0.1, _EQUIPE_QUALIDADE),
 }
-DEFAULT_PHASE_ORDER: list[int] = [20, 46, 47, 50, 55, 60, 90, 100, 110, 26, 65, 25, 45, 80, 70, 160, 165, 150]
+DEFAULT_PHASE_ORDER: list[int] = [
+    20,
+    46,
+    47,
+    50,
+    55,
+    60,
+    90,
+    100,
+    110,
+    26,
+    65,
+    25,
+    45,
+    80,
+    70,
+    160,
+    165,
+    150,
+]
 DEFAULT_MAX_OBS = 10
-MAX_OBS_PER_PHASE = 15   # limite por fase para evitar cards com altura > 5000px (WhatsApp)
-MAX_CARD_HEIGHT   = 4800
+MAX_OBS_PER_PHASE = (
+    15  # limite por fase para evitar cards com altura > 5000px (WhatsApp)
+)
+MAX_CARD_HEIGHT = 4800
 
 _PREFIX_RE = re.compile(r"^[A-Z0-9]{2,5}-")
 
 # ── Cores do card ─────────────────────────────────────────────────────────────
-BG_COLOR      = (30,  30,  46)
-HEADER_COLOR  = (245, 158, 11)
-HEADER_TEXT   = (30,  30,  46)
-TEXT_MAIN     = (236, 234, 228)
-TEXT_DIM      = (160, 160, 180)
-ACCENT_URGENT = (239,  68,  68)
-DIVIDER_COLOR = (60,  60,  80)
-FOOTER_BG     = (20,  20,  36)
-DOT_NEW       = (34, 197,  94)
-DOT_PERM      = (110, 110, 130)
+BG_COLOR = (30, 30, 46)
+HEADER_COLOR = (245, 158, 11)
+HEADER_TEXT = (30, 30, 46)
+TEXT_MAIN = (236, 234, 228)
+TEXT_DIM = (160, 160, 180)
+ACCENT_URGENT = (239, 68, 68)
+DIVIDER_COLOR = (60, 60, 80)
+FOOTER_BG = (20, 20, 36)
+DOT_NEW = (34, 197, 94)
+DOT_PERM = (110, 110, 130)
 
-CARD_W        = 800
-PAD           = 28
-HEADER_H      = 72
-OB_ROW_H      = 42
-FOOTER_H      = 52
-DOT_RADIUS    = 4
-DOT_GAP       = 8
+CARD_W = 800
+PAD = 28
+HEADER_H = 72
+OB_ROW_H = 42
+FOOTER_H = 52
+DOT_RADIUS = 4
+DOT_GAP = 8
 URGENCY_ICON_SIZE = 7
-URGENCY_ICON_W    = 20
+URGENCY_ICON_W = 20
 
 
 def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -123,7 +145,11 @@ def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     ]
     for path in candidates:
         try:
-            return ImageFont.truetype(path, size)
+            # Pillow não publica stubs tipados para truetype: a chamada é untyped
+            # e devolve Any. A anotação explícita mantém o contrato de retorno sob
+            # mypy --strict sem afrouxar o resto do módulo.
+            font: ImageFont.FreeTypeFont = ImageFont.truetype(path, size)
+            return font
         except OSError:
             continue
     return ImageFont.load_default()  # type: ignore[return-value]
@@ -195,7 +221,9 @@ def _phase_sort_key(codigo_fase: int, ordem: list[int]) -> int:
     return ordem.index(codigo_fase) if codigo_fase in ordem else len(ordem)
 
 
-def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.ImageDraw) -> list[str]:
+def _wrap_text(
+    text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.ImageDraw
+) -> list[str]:
     """Quebra texto em linhas que cabem em max_width."""
     words = text.split()
     lines: list[str] = []
@@ -216,7 +244,13 @@ def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: Im
 
 # ── Helpers de desenho ────────────────────────────────────────────────────────
 
-def _draw_header(draw: ImageDraw.ImageDraw, phase_display: str, n_obs: int, font: ImageFont.FreeTypeFont) -> None:
+
+def _draw_header(
+    draw: ImageDraw.ImageDraw,
+    phase_display: str,
+    n_obs: int,
+    font: ImageFont.FreeTypeFont,
+) -> None:
     draw.rectangle([(0, 0), (CARD_W, HEADER_H)], fill=HEADER_COLOR)
     label = f"  {phase_display}  —  {n_obs} {'OB' if n_obs == 1 else 'OBs'} paradas"
     draw.text((PAD, (HEADER_H - 22) // 2), label, font=font, fill=HEADER_TEXT)
@@ -243,18 +277,28 @@ def _draw_urgency_icon(draw: ImageDraw.ImageDraw, x: float, y_center: float) -> 
     )
 
 
-def _ob_display_data(ob: dict[str, Any], threshold: float) -> tuple[float, bool, str, str, str, str, str]:
+def _ob_display_data(
+    ob: dict[str, Any], threshold: float
+) -> tuple[float, bool, str, str, str, str, str]:
     """Extrai (dias, urgente, kanban, alternativo, produto, cliente, entrega) de um OB."""
-    dias    = float(ob.get("_dias_float", 0))
-    thr     = float(ob.get("_threshold", threshold))
+    dias = float(ob.get("_dias_float", 0))
+    thr = float(ob.get("_threshold", threshold))
     urgente = dias >= thr * 2
-    kanban  = ob.get("PLACA_KANBAN") or "S/Kanban"
+    kanban = ob.get("PLACA_KANBAN") or "S/Kanban"
     if kanban == "SEM KANBAN":
         kanban = "S/Kanban"
     cliente_raw = ob.get("NOME_CLIENTE") or "—"
     cliente = cliente_raw if len(cliente_raw) <= 40 else cliente_raw[:39] + "…"
     entrega = fmt_entrega(ob.get("DT_ENTREGA"))
-    return dias, urgente, kanban, ob.get("ALTERNATIVO") or "", (ob.get("DS_ITEM") or "—").upper(), cliente, entrega
+    return (
+        dias,
+        urgente,
+        kanban,
+        ob.get("ALTERNATIVO") or "",
+        (ob.get("DS_ITEM") or "—").upper(),
+        cliente,
+        entrega,
+    )
 
 
 def _load_seen_obs(path: str) -> set[str]:
@@ -271,7 +315,10 @@ def _load_seen_obs(path: str) -> set[str]:
 def _save_seen_obs(path: str, numero_obs: set[str]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(
-            {"numero_obs": sorted(numero_obs), "updated_at": datetime.now().isoformat()},
+            {
+                "numero_obs": sorted(numero_obs),
+                "updated_at": datetime.now().isoformat(),
+            },
             f,
             ensure_ascii=False,
             indent=2,
@@ -289,7 +336,9 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
     if i > 0:
         draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
 
-    dias, urgente, kanban, alternativo, produto, cliente, entrega = _ob_display_data(ob, threshold)
+    dias, urgente, kanban, alternativo, produto, cliente, entrega = _ob_display_data(
+        ob, threshold
+    )
     dias_color = ACCENT_URGENT if urgente else TEXT_MAIN
     dot_color = DOT_NEW if ob.get("_is_new") else DOT_PERM
     text_x0 = PAD + DOT_RADIUS * 2 + DOT_GAP
@@ -363,9 +412,9 @@ def _draw_footer(
     obs_distintas = len({o.get("NUMERO_OB") for o in obs_fase})
     pcs_total = sum(int(float(o.get("QT_PECAS") or 0)) for o in obs_fase)
     kg_total = sum(float(o.get("QT_KILOS_REAL") or 0) for o in obs_fase)
-    agora    = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
     ob_label = "OB" if obs_distintas == 1 else "OBs"
-    text     = (
+    text = (
         f"  {obs_distintas} {ob_label}  ·  {pcs_total} pcs  ·  {fmt_kg(kg_total)} kg parados  ·  "
         f"limite ≥ {fmt_dias(threshold)} dia  ·  {agora}"
     )
@@ -378,17 +427,17 @@ def build_phase_image(
     threshold: float,
     out_path: str,
 ) -> None:
-    n_obs  = len(obs_fase)
-    img_h  = HEADER_H + OB_ROW_H * n_obs + FOOTER_H + PAD
-    img    = Image.new("RGB", (CARD_W, img_h), BG_COLOR)
+    n_obs = len(obs_fase)
+    img_h = HEADER_H + OB_ROW_H * n_obs + FOOTER_H + PAD
+    img = Image.new("RGB", (CARD_W, img_h), BG_COLOR)
     draw: ImageDraw.ImageDraw = ImageDraw.Draw(img)
     fonts: dict[str, ImageFont.FreeTypeFont] = {
-        "header":     _load_font(22, bold=True),
-        "ob":         _load_font(13, bold=True),
-        "produto":    _load_font(12, bold=False),
-        "detalhe":    _load_font(12, bold=False),
+        "header": _load_font(22, bold=True),
+        "ob": _load_font(13, bold=True),
+        "produto": _load_font(12, bold=False),
+        "detalhe": _load_font(12, bold=False),
         "secundaria": _load_font(10, bold=False),
-        "footer":     _load_font(13, bold=False),
+        "footer": _load_font(13, bold=False),
     }
 
     _draw_header(draw, phase_display, n_obs, fonts["header"])
@@ -400,6 +449,7 @@ def build_phase_image(
 
 
 # ── Helpers de main ───────────────────────────────────────────────────────────
+
 
 def _load_contatos_from_env() -> dict[str, str]:
     """Mesmas chaves de referencia de 'responsavel' em fases_monitoradas, valor lido do .env."""
@@ -431,7 +481,9 @@ def _load_config(
         phase_filters = {
             str(k): v for k, v in cfg.get("filtros_por_codigo_fase", {}).items()
         }
-        phase_order = [int(c) for c in cfg.get("ordem_codigos_fase", DEFAULT_PHASE_ORDER)]
+        phase_order = [
+            int(c) for c in cfg.get("ordem_codigos_fase", DEFAULT_PHASE_ORDER)
+        ]
         contatos = _load_contatos_from_env()
         fases_cfg = cfg.get("fases_monitoradas")
         if fases_cfg:
@@ -528,8 +580,11 @@ def _group_obs(
     for _, obs_fase in grupos_ordenados:
         obs_fase.sort(key=lambda o: o["_dias_float"], reverse=True)
         # Limita por fase; também aplica teto de altura de card para WhatsApp (~5000px)
-        max_por_fase = min(max_obs, MAX_OBS_PER_PHASE,
-                          max(1, (MAX_CARD_HEIGHT - HEADER_H - FOOTER_H - PAD) // OB_ROW_H))
+        max_por_fase = min(
+            max_obs,
+            MAX_OBS_PER_PHASE,
+            max(1, (MAX_CARD_HEIGHT - HEADER_H - FOOTER_H - PAD) // OB_ROW_H),
+        )
         del obs_fase[max_por_fase:]
     return grupos_ordenados
 
@@ -541,12 +596,12 @@ def _build_card_entry(
     script_dir: str,
     fases_monitoradas: dict[str, FaseConfig],
 ) -> dict[str, Any]:
-    fase_norm  = normalize_fase(obs_fase[0].get("FASE_ATUAL") or "Indefinida")
-    phase_key  = re.sub(r"[^A-Z0-9]+", "_", fase_norm.upper()).strip("_")
-    thr_val    = float(obs_fase[0]["_threshold"])
-    max_dias   = max(o["_dias_float"] for o in obs_fase)
-    kg_total   = sum(float(o.get("QT_KILOS_REAL") or 0) for o in obs_fase)
-    n          = len(obs_fase)
+    fase_norm = normalize_fase(obs_fase[0].get("FASE_ATUAL") or "Indefinida")
+    phase_key = re.sub(r"[^A-Z0-9]+", "_", fase_norm.upper()).strip("_")
+    thr_val = float(obs_fase[0]["_threshold"])
+    max_dias = max(o["_dias_float"] for o in obs_fase)
+    kg_total = sum(float(o.get("QT_KILOS_REAL") or 0) for o in obs_fase)
+    n = len(obs_fase)
 
     image_path = os.path.join(images_dir, f"{phase_key}.png")
     build_phase_image(fase_norm, obs_fase, thr_val, image_path)
@@ -565,23 +620,26 @@ def _build_card_entry(
     rel_image = os.path.relpath(image_path, script_dir).replace("\\", "/")
     print(f"[OK] {fase_norm}: {n} OBs → {rel_image}")
     return {
-        "phase_key":     phase_key,
+        "phase_key": phase_key,
         "phase_display": fase_norm,
-        "image_path":    rel_image,
-        "caption":       caption,
+        "image_path": rel_image,
+        "caption": caption,
     }
 
 
 def main() -> None:
     if not os.path.exists(RESULT_FILE):
-        print("[ERROR] obs_result.json nao encontrado. Execute extract_obs.py primeiro.", file=sys.stderr)
+        print(
+            "[ERROR] obs_result.json nao encontrado. Execute extract_obs.py primeiro.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     with open(RESULT_FILE, "r", encoding="utf-8") as f:
         result = json.load(f)
 
     fases_monitoradas, max_obs, phase_filters, phase_order = _load_config(CONFIG_FILE)
-    obs_all   = result.get("rows", [])
+    obs_all = result.get("rows", [])
     filtradas = _filter_obs(obs_all, fases_monitoradas, phase_filters)
 
     if not filtradas:
@@ -596,7 +654,9 @@ def main() -> None:
 
     os.makedirs(IMAGES_DIR, exist_ok=True)
     manifest = [
-        _build_card_entry(codigo_fase, obs_fase, IMAGES_DIR, SCRIPT_DIR, fases_monitoradas)
+        _build_card_entry(
+            codigo_fase, obs_fase, IMAGES_DIR, SCRIPT_DIR, fases_monitoradas
+        )
         for codigo_fase, obs_fase in grupos_ordenados
     ]
 

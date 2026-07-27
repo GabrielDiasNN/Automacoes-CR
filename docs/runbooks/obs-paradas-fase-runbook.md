@@ -9,7 +9,7 @@
 Get-Content "OBs Paradas Fase\Logs\*.log" -Tail 50
 
 # Verificar sessão WhatsApp
-Test-Path "lib\.wwebjs_auth\session-hub-global\Default\Local Storage\leveldb\*.log"
+Test-Path "$env:LOCALAPPDATA\Automacoes\wwebjs_auth\session-hub-global\Default\Local Storage\leveldb\*.log"
 ```
 
 ## Falhas comuns
