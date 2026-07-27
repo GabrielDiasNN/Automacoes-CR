@@ -2,6 +2,8 @@
 
 Este repositório é o núcleo governado para orquestração de automações corporativas. Stack consolidada em Python, PowerShell e Node.js, governança Zero-Trust, observabilidade acionável e Dashboard React "Sala de Instrumentação".
 
+> **Instalando em uma máquina nova ou recém-formatada?** Clonar o repositório não devolve o hub funcionando: `.env` e dois bancos de dados operacionais não são versionados, e um deles guarda série histórica que não se reconstrói. Passo a passo e o que salvar antes de formatar: [docs/runbooks/recuperacao-de-maquina.md](docs/runbooks/recuperacao-de-maquina.md).
+
 ## 🏗️ Arquitetura Técnica (Enterprise Control Tower v1.0.0)
 
 ```mermaid

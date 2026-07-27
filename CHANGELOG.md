@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.3] - 27/07/2026
+
+### Documentação
+- **Runbook de recuperação de máquina** (`docs/runbooks/recuperacao-de-maquina.md`, novo; `README.md`): não existia procedimento para reinstalar o hub em host novo ou recém-formatado, e clonar o repositório **não** basta — três itens ficam fora do versionamento por decisão de segurança e não têm origem para reconstrução automática: `.env` (credenciais Oracle e API Key), `Orchestrator/automacoes.db` (~10 MB — cadastro das automações, histórico de execuções, métricas e audit log) e `Produção Beneficimento/snapshots/beneficiamento_historico.db` (~70 MB — `fato_producao_historica`, série acumulada execução a execução, que as queries Oracle do período corrente não reconstituem). O runbook separa o que exige backup do que se regenera sozinho, lista os pré-requisitos externos (Python 3.12, Node LTS, `pwsh`, **Oracle Instant Client** — sem ele o Thick Mode não sobe e nenhuma extração roda) e registra que a sessão do WhatsApp deve ser **reautenticada por QR code**, nunca copiada entre máquinas. Documenta também o que se prende ao caminho absoluto: a tarefa agendada e os executáveis do `.venv` — os `script_path` das automações no banco são relativos, então o diretório do clone é livre.
+
 ## [1.3.2] - 27/07/2026
 
 Correções da revisão de código stateless das entregas 1.3.0 e 1.3.1. Nenhum achado crítico ou alto.
