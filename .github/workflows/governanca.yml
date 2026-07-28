@@ -460,7 +460,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: preparar-diff
-    if: needs.preparar-diff.outputs.has_powershell == 'true'
+    # has_js tambem dispara: as travas anti-regressao de lib/tests (WhatsApp-AuthPath e
+    # WhatsApp-SessionState) protegem arquivos .js. Reintroduzir a duplicacao que elas
+    # reprovam e, por definicao, um diff so de JS — sem isto o gate nunca rodaria.
+    if: needs.preparar-diff.outputs.has_powershell == 'true' || needs.preparar-diff.outputs.has_js == 'true'
     permissions:
       contents: read
 
