@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.7] - 30/07/2026
+
+Fecha os dois achados colaterais registrados na investigação de [1.3.6].
+
+### Corrigido
+- **Cada execução da suíte vazava um diretório temporário** (`Orchestrator/tests/conftest.py`): o histórico do Beneficiamento é isolado em `tempfile.mkdtemp(prefix="benef-historico-")` no import do conftest, mas nada removia esse diretório — 133 deles (12,5 MB, cada um com um SQLite) haviam se acumulado em `%TEMP%`. A remoção foi registrada em `atexit`, **não** como finalizer de fixture: roda no ponto mais tardio possível, quando nada mais segura o arquivo, e fora do teardown do pytest; `shutil.rmtree(..., ignore_errors=True)` fecha a última porta, para que uma falha de remoção jamais vire erro de teardown — que é exatamente o defeito corrigido em [1.3.6]. Medido: com o diretório zerado, uma execução deixa **0** temporários (antes, +1 por execução).
+
+### Notas
+- **Threads não-daemon que sobrevivem à suíte não são acionáveis daqui.** A investigação de [1.3.6] registrou duas: `close_pools_gracefully` e `asyncio_0`. Rastreadas até a origem, ambas são de terceiros — a primeira vive dentro do binário compilado do driver Oracle (`oracledb/thin_impl.cp312-win_amd64.pyd`), criada no import por design para encerrar pools; a segunda é o executor default do `asyncio`, criado por operação de biblioteca (não há um único `run_in_executor` ou `asyncio.to_thread` no código do projeto). Ficam ociosas e sem impacto observado. Registrado para que a origem não precise ser investigada de novo.
+
 ## [1.3.6] - 30/07/2026
 
 Revisão em loop do Orchestrator e do Dashboard: correção dos defeitos encontrados e as melhorias derivadas. Cada correção tem teste que foi verificado falhando contra o código sem ela.

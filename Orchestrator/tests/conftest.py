@@ -6,7 +6,9 @@ Sobrescreve tanto get_db quanto o engine global para que o lifespan funcione.
 Patch do PROJECT_ROOT para validacao de script_path (Pilar V) funcionar em testes.
 """
 
+import atexit
 import os
+import shutil
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -24,6 +26,21 @@ _BENEF_DB_DIR = tempfile.mkdtemp(prefix="benef-historico-")
 os.environ["BENEFICIAMENTO_HISTORICO_DB"] = os.path.join(
     _BENEF_DB_DIR, "beneficiamento_historico.db"
 )
+
+
+@atexit.register
+def _remover_temp_beneficiamento() -> None:
+    """Remove o temporário da sessão. Sem isto, cada execução da suíte deixava
+    um diretório com um SQLite em `%TEMP%` (133 haviam se acumulado).
+
+    Registrado em `atexit`, e não como finalizer de fixture, de propósito: roda
+    no ponto mais tardio possível, quando nada mais segura o arquivo, e fora do
+    teardown do pytest. `ignore_errors` fecha a última porta — uma falha de
+    remoção aqui não pode virar erro de teardown, que é exatamente o problema
+    corrigido em [1.3.6] (fixture de sessão estourando no último teste).
+    """
+    shutil.rmtree(_BENEF_DB_DIR, ignore_errors=True)
+
 
 # Bootstrap único do pacote `beneficiamento` no sys.path (achado A4 da revisão
 # arquitetural). O pytest sempre carrega este conftest antes de coletar qualquer
