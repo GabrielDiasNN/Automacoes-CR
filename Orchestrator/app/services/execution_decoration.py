@@ -41,10 +41,6 @@ def _determine_operational_actions(
 ) -> None:
     """Determina as ações do operador disponíveis para a execução e condições de reenfileiramento (A2)."""
     queueable = ex.status in EXECUTION_QUEUEABLE_SOURCE_STATUSES
-    max_retries = int(
-        ex.max_retries or (ex.automation.max_retries if ex.automation else 0) or 0
-    )
-    retry_count = int(ex.retry_count or 0)
     active_for_automation = active_by_automation.get(int(ex.automation_id))
     active_for_group = active_by_group.get(queue_group) if queue_group else None
 
@@ -60,6 +56,10 @@ def _determine_operational_actions(
     )
 
     if queueable:
+        # `max_retries` não é um limite de reenfileiramento manual — não existe
+        # retry automático no worker que o consuma, é só o histórico de quantas
+        # vezes o operador já reenfileirou. Reenfileirar manualmente só é
+        # bloqueado por conflito real (execução ativa na mesma automação/fila).
         if active_for_automation and active_for_automation.id != ex.id:
             summary.requeue_block_reason = f"Já existe execução ativa para esta automação ({active_for_automation.id})."
             summary.related_execution_id = str(active_for_automation.id)
@@ -68,10 +68,6 @@ def _determine_operational_actions(
             summary.requeue_block_reason = f"Grupo operacional '{queue_group}' já está em uso por {active_for_group.id}."
             summary.related_execution_id = str(active_for_group.id)
             summary.related_execution_status = str(active_for_group.status)
-        elif retry_count >= max_retries:
-            summary.requeue_block_reason = (
-                f"Limite de retry já foi atingido ({retry_count}/{max_retries})."
-            )
         else:
             summary.requeue_allowed = True
             summary.operator_action_code = "REQUEUE"
@@ -85,10 +81,10 @@ def _determine_operational_actions(
         summary.operator_action_label = "Parar execução"
         summary.operator_action_hint = "Solicita a interrupção imediata do processo."
 
-    # Sobrescrever ações para linhas de sucesso saudáveis
-    if ex.status == "SUCCESS":
-        summary.requeue_allowed = True
-        summary.operator_action_code = "REQUEUE"
+    # Linhas de sucesso saudáveis mantêm o botão de reenfileirar (reprocesso
+    # manual sob demanda), mas sem rótulo/hint de alerta — desde que a checagem
+    # de conflito acima não tenha bloqueado.
+    if ex.status == "SUCCESS" and summary.requeue_allowed:
         summary.operator_action_label = None
         summary.operator_action_hint = None
 

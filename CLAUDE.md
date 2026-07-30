@@ -148,6 +148,7 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - Para mudanças em rotas FastAPI consumidas pelo Dashboard ou em `Dashboard/src/`, a validação final obrigatória é Playwright contra `http://127.0.0.1:8000/dashboard/`.
 - Registrar evidência com `Tools/Test-PlaywrightEvidence.ps1`.
 - Padrão completo (critérios, evidência mínima): `docs/playwright-e2e-standard.md`.
+- Para validação visual ad-hoc via navegador (fora do Playwright formal, ex.: conferir uma UI nova com dados reais), o login do dashboard exige a API Key — sempre lê-la de `ORCHESTRATOR_API_KEY` em `.env` (nunca peça a chave ao usuário nem a hardcode).
 
 ### Manifesto de automação
 - Toda automação registrada no Orchestrator deve ter `automation.manifest.json` na sua pasta.

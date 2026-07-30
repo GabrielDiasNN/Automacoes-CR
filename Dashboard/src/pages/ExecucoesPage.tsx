@@ -245,6 +245,7 @@ export function ExecucoesPage() {
         onClose={() => setDetail(null)}
         eyebrow={detail ? shortId(detail.id, 22) : ""}
         title={detail?.automation_name ?? "Execução"}
+        width={860}
       >
         {detail && (
           <ExecDetailBody

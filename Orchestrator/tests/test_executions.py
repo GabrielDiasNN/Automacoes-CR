@@ -166,6 +166,56 @@ def test_execution_summary_keeps_success_rows_compact_when_healthy(
     assert item["operator_severity"] == "NORMAL"
 
 
+def test_execution_summary_blocks_requeue_for_success_with_active_conflict(
+    client: TestClient, db_session: Session
+) -> None:
+    """SUCCESS não deve oferecer reenfileirar se já há execução ativa no grupo (#dashboard-log-review)."""
+    auto = models.Automation(
+        name="Success With Conflict",
+        script_path="./test/run.ps1",
+        max_retries=3,
+        queue_group="conflito",
+    )
+    db_session.add(auto)
+    db_session.flush()
+    now = get_now_local()
+    db_session.add(
+        models.Execution(
+            id="EXEC_SUCCESS_CONFLICT",
+            automation_id=auto.id,
+            status="SUCCESS",
+            retry_count=0,
+            max_retries=3,
+            queue_group="conflito",
+            requested_by="QA",
+            started_at=now - timedelta(minutes=5),
+            finished_at=now - timedelta(minutes=4),
+            duration_seconds=14,
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="EXEC_SUCCESS_CONFLICT_ACTIVE",
+            automation_id=auto.id,
+            status="RUNNING",
+            retry_count=0,
+            max_retries=3,
+            queue_group="conflito",
+            requested_by="QA",
+            started_at=now - timedelta(seconds=30),
+        )
+    )
+    db_session.commit()
+
+    res = client.get("/api/executions?page=1&per_page=10", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    item = next(
+        entry for entry in res.json()["items"] if entry["id"] == "EXEC_SUCCESS_CONFLICT"
+    )
+    assert item["requeue_allowed"] is False
+    assert item["requeue_block_reason"]
+
+
 def test_list_executions_filters_by_queue_group(
     client: TestClient, db_session: Session
 ) -> None:
@@ -303,18 +353,20 @@ def test_execution_requeue_creates_auditable_pending_retry(
     assert queued.recovery_action == "REQUEUE_MANUAL"
 
 
-def test_execution_requeue_blocks_retry_limit(
+def test_execution_requeue_ignores_retry_budget(
     client: TestClient, db_session: Session
 ) -> None:
+    """max_retries não bloqueia reenfileiramento manual — não há retry automático
+    no worker que o consuma; é só histórico de tentativas (#dashboard-reenfileirar)."""
 
     auto = models.Automation(
-        name="Retry Limit", script_path="./test/run.ps1", max_retries=1
+        name="Retry Budget Exhausted", script_path="./test/run.ps1", max_retries=1
     )
     db_session.add(auto)
     db_session.flush()
     db_session.add(
         models.Execution(
-            id="EXEC_RETRY_LIMIT",
+            id="EXEC_RETRY_BUDGET",
             automation_id=auto.id,
             status="ERROR",
             retry_count=1,
@@ -326,11 +378,12 @@ def test_execution_requeue_blocks_retry_limit(
     db_session.commit()
 
     res = client.post(
-        "/api/executions/EXEC_RETRY_LIMIT/requeue",
-        json={"reason": "limite"},
+        "/api/executions/EXEC_RETRY_BUDGET/requeue",
+        json={"reason": "reprocesso manual apos esgotar budget"},
         headers=AUTH_HEADERS,
     )
-    assert res.status_code == 409
+    assert res.status_code == 200
+    assert res.json()["retry_count"] == 2
 
 
 def test_execution_requeue_blocks_active_queue_group(

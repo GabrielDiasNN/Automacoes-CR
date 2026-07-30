@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.5] - 30/07/2026
+
+### Adicionado
+- **Visor de logs de execução mais legível** (`Dashboard/src/components/ui/LogViewer.tsx`, novo): a aba de detalhe de execução mostrava os logs como texto cru em `<pre>`, sem estrutura visual — difícil de escanear em execuções com dezenas de linhas mistas de INFO/WARN/ERROR/DEBUG. O novo componente reconhece o formato `[timestamp] [fonte] [NÍVEL] [ExecId:...] mensagem` (incluindo continuações de fontes internas como `[PY-EXTRACT]`/`[NODE-WA]` aninhadas dentro de uma linha `[PS]`) e renderiza cada linha com faixa lateral colorida por severidade, chips de filtro por nível com contagem, busca com destaque de termo, auto-scroll, copiar e tela cheia. Validado contra dados reais de produção via navegador (não apenas mock): a execução `CRON_2_1785411000` classificou corretamente 19/19 linhas (7 avisos, 11 infos, 1 debug) e o filtro por chip reduziu para 7/19 ao isolar avisos.
+
+### Alterado
+- **Aba de detalhe de execução mais larga** (`Dashboard/src/pages/ExecucoesPage.tsx`): 560px (padrão do `Drawer`) cortava linhas de log mais longas em várias quebras. Aumentada para 860px só nesse uso — os demais `Drawer` do app seguem com a largura padrão.
+
+### Corrigido
+- **`max_retries=0` bloqueava reenfileirar manual permanentemente para falhas** (`Orchestrator/app/services/execution_decoration.py`, `Orchestrator/app/services/execution_runtime.py`): `max_retries` nunca foi consumido por nenhum retry automático do worker — servia só de teto para o botão manual "Reenfileirar". Como 3 das 5 automações cadastradas (`OBs Paradas Fase`, `OBs Fluxo Sem Tingimento`, `Receitas Emitidas`) têm `max_retries=0`, toda execução `TIMEOUT`/`ERROR`/`TERMINATED` dessas automações ficava sem a opção de reenfileirar na tela e no endpoint `/requeue`, mesmo sem nenhuma execução ativa conflitante — confirmado com a execução real `CRON_4_1785258000` (`requeue_block_reason: "Limite de retry já foi atingido (0/0)"`). Reenfileirar manual passou a ser bloqueado apenas por conflito real (execução ativa na mesma automação ou fila); `retry_count`/`max_retries` seguem registrados para auditoria, mas deixaram de ser um teto de tentativas.
+- **Execuções `SUCCESS` reenfileiravam ignorando execução ativa conflitante** (`Orchestrator/app/services/execution_decoration.py`): uma sobrescrita cega forçava `requeue_allowed=True` para toda linha `SUCCESS` — pensada para permitir reprocesso manual sob demanda —, mas pulava a checagem de conflito que já existia para falhas. O botão aparecia habilitado na tela mesmo com outra execução `RUNNING`/`PENDING` ativa na mesma automação ou fila; o backend (`prepare_requeue`) ainda bloqueava corretamente, mas só depois do clique. `SUCCESS` agora passa pela mesma checagem de conflito das falhas, mantendo a possibilidade de reprocesso manual mesmo após esgotar o histórico de retries.
+
 ## [1.3.4] - 28/07/2026
 
 ### Adicionado

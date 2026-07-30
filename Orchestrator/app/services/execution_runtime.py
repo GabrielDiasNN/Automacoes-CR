@@ -439,18 +439,15 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
             f"({group_active.id}, Grupo: {queue_group}).",
         )
 
+    # `max_retries` não limita o reenfileiramento manual — é apenas o
+    # histórico de quantas vezes o operador já reenfileirou esta execução.
+    # Não existe retry automático no worker que consuma esse teto.
     next_retry_count = int(db_exec.retry_count or 0) + 1
     max_retries = int(
         db_exec.max_retries
         or (db_exec.automation.max_retries if db_exec.automation else 0)
         or 0
     )
-    if next_retry_count > max_retries:
-        raise RequeueValidationError(
-            409,
-            "Limite de retry excedido para esta execução: "
-            f"{next_retry_count - 1}/{max_retries}.",
-        )
 
     new_exec_id = generate_execution_id("REQ")
     requested_by = str(payload_requested_by or fallback_requested_by)

@@ -1,6 +1,6 @@
 import { RotateCw, Square } from "lucide-react";
 import type { ExecutionDetail } from "../api/orchestrator";
-import { Button, Card, StatusTag } from "../components/ui";
+import { Button, Card, LogViewer, StatusTag } from "../components/ui";
 import { executionTone, severityTone } from "../lib/status";
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
@@ -70,24 +70,7 @@ export function ExecDetailBody({
 
       <div>
         <div className={page.sectionLabel}>logs</div>
-        <pre
-          style={{
-            margin: 0,
-            maxHeight: 360,
-            overflow: "auto",
-            background: "var(--graphite-950)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-            padding: "var(--sp-3)",
-            fontFamily: "var(--font-mono)",
-            fontSize: "var(--fs-label)",
-            color: "var(--text-mid)",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {loading ? "carregando logs…" : detail.logs || "— sem logs —"}
-        </pre>
+        <LogViewer text={detail.logs ?? ""} loading={loading} />
       </div>
     </div>
   );
