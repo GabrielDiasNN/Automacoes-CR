@@ -115,6 +115,37 @@ def test_drain_cap_chars_para_em_max_log_chars() -> None:
     assert sum(len(line) for line in logs) <= 30
 
 
+def test_drain_retorna_total_de_chars_acumulado() -> None:
+    queue: "Queue[str]" = Queue()
+    for _ in range(3):
+        queue.put("x" * 10)
+    logs: list[str] = []
+
+    with patch("worker.broadcast_log"):
+        total = worker._drain_process_output(queue, logs, "EXEC-1")
+
+    assert total == 30
+
+
+def test_drain_com_total_recebido_nao_recalcula_do_zero() -> None:
+    """O acumulador propagado evita o sum() O(n) a cada tick do monitoramento.
+
+    Passar um total já próximo do cap deve barrar a acumulação mesmo com `logs`
+    curto — prova de que o valor recebido é usado, e não recalculado da lista.
+    """
+    queue: "Queue[str]" = Queue()
+    for _ in range(3):
+        queue.put("x" * 10)
+    logs: list[str] = []
+
+    with patch("worker.MAX_LOG_CHARS", 25), patch("worker.broadcast_log") as mock_bc:
+        total = worker._drain_process_output(queue, logs, "EXEC-1", total_chars=100)
+
+    assert not logs  # já acima do cap: nada acumulado
+    assert total == 100
+    assert mock_bc.call_count == 3  # segue transmitindo ao WebSocket
+
+
 def test_drain_acima_do_cap_continua_broadcast_mas_nao_acumula() -> None:
     queue: "Queue[str]" = Queue()
     for _ in range(5):
@@ -264,6 +295,29 @@ def test_scan_retorna_none_sem_artefatos(tmp_path: Any) -> None:
 def test_log_filename_usa_worker_test_em_pytest() -> None:
     assert worker.is_pytest is True
     assert worker.LOG_FILENAME == "Worker_test.jsonl"
+
+
+def test_logger_sob_pytest_nao_escreve_arquivo_em_disco(tmp_path: Any) -> None:
+    """A suíte não pode gerar log em disco.
+
+    Os `*_test.jsonl` cresciam a cada execução até os 50 MB do rollover. Além do
+    I/O inútil por teste, girar o arquivo no meio de uma execução levanta
+    PermissionError no Windows quando outro handler o mantém aberto — falha
+    intermitente atribuída a um teste qualquer, sem relação com ele.
+    """
+    from app.logger_setup import (  # pylint: disable=import-outside-toplevel
+        setup_json_logger,
+    )
+
+    alvo = tmp_path / "nao_deve_existir.jsonl"
+    logger = setup_json_logger("qa-probe-sem-disco", str(alvo), component="qa")
+    try:
+        logger.info("mensagem que não deve chegar ao disco")
+        assert not alvo.exists()
+    finally:
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
 
 
 # ---------------------------------------------------------------------------

@@ -32,18 +32,25 @@ export function useWebSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectDelay = useRef(1000);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeRef = useRef(true);
+  // Contador de geração em vez de um booleano "ativo": no remount (troca de
+  // path/apiKey) o cleanup e o novo effect rodam em sequência, então um booleano
+  // já estaria de volta em `true` quando o fetch do token da geração anterior
+  // resolvesse — abrindo um segundo WebSocket órfão e disparando reconexões
+  // duplicadas a partir do `onclose` do cleanup. A geração invalida de vez.
+  const generationRef = useRef(0);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
 
   const connect = useCallback(() => {
     if (!enabled || !path || !apiKey) return;
 
+    const generation = ++generationRef.current;
+    const isCurrent = () => generationRef.current === generation;
+
     setStatus("connecting");
 
     const scheduleReconnect = () => {
-      // activeRef evita reconectar depois do unmount (o token é buscado async).
-      if (!activeRef.current) return;
+      if (!isCurrent()) return;
       timerRef.current = setTimeout(() => {
         reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30_000);
         connect();
@@ -65,7 +72,7 @@ export function useWebSocket(
         return res.json() as Promise<{ token: string }>;
       })
       .then(({ token }) => {
-        if (!activeRef.current) return;
+        if (!isCurrent()) return;
 
         const ws = new WebSocket(
           `${wsBase()}${path}?token=${encodeURIComponent(token)}`,
@@ -73,15 +80,21 @@ export function useWebSocket(
         wsRef.current = ws;
 
         ws.onopen = () => {
+          if (!isCurrent()) {
+            ws.close();
+            return;
+          }
           setStatus("open");
           reconnectDelay.current = 1000; // reset backoff em sucesso (3.2)
         };
 
         ws.onmessage = (evt) => {
+          if (!isCurrent()) return;
           onMessageRef.current?.(evt);
         };
 
         ws.onclose = () => {
+          if (!isCurrent()) return;
           setStatus("closed");
           wsRef.current = null;
           // Diferente do fluxo antigo com API Key fixa, o 4003 aqui é
@@ -96,6 +109,7 @@ export function useWebSocket(
         };
       })
       .catch((err) => {
+        if (!isCurrent()) return;
         if (err instanceof Error && err.message === "unauthorized") {
           setStatus("unauthorized");
           return;
@@ -108,12 +122,14 @@ export function useWebSocket(
   }, [path, apiKey, enabled]);
 
   useEffect(() => {
-    activeRef.current = true;
     connect();
     return () => {
-      activeRef.current = false;
+      // Invalida a geração corrente: callbacks em voo (token, onclose) viram
+      // no-op e não reagendam reconexão para esta instância.
+      generationRef.current += 1;
       if (timerRef.current) clearTimeout(timerRef.current);
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [connect]);
 

@@ -108,6 +108,56 @@ def test_run_task_chamada_duas_vezes_para_mesmo_exec_id_inicia_dois_processos(
     assert mock_start.call_count == 2
 
 
+class _TrackedSession:
+    """Proxy que conta sessões abertas sem fechar a sessão real do fixture."""
+
+    def __init__(self, inner: Any, state: dict[str, int]) -> None:
+        self._inner = inner
+        self._state = state
+        state["abertas"] += 1
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def close(self) -> None:
+        self._state["abertas"] -= 1
+
+
+def test_run_task_nao_mantem_sessao_aberta_durante_o_monitoramento(
+    db_session: Any, monkeypatch: Any, reset_worker_globals: None
+) -> None:
+    """A sessão não pode ficar retida pelos até 30min de execução do processo.
+
+    _monitor_process abre as próprias janelas curtas a cada _DB_CHECK_INTERVAL;
+    segurar uma sessão externa em paralelo prende uma conexão do pool e deixa o
+    identity map envelhecer enquanto as mesmas linhas mudam por fora.
+    """
+    del reset_worker_globals
+    state = {"abertas": 0}
+    monkeypatch.setattr(
+        worker, "SessionLocal", lambda: _TrackedSession(db_session, state)
+    )
+    _seed_execution(db_session, "EXEC_SESSAO", EXECUTION_STATUS_PENDING)
+
+    abertas_durante_monitoramento: list[int] = []
+
+    def _spy_monitor(*_args: Any, **_kwargs: Any) -> bool:
+        abertas_durante_monitoramento.append(state["abertas"])
+        return False
+
+    fake_process = MagicMock()
+    fake_process.stdout.readline.return_value = ""
+    with (
+        patch("worker._start_process", return_value=fake_process),
+        patch("worker._monitor_process", side_effect=_spy_monitor),
+        patch("worker.broadcast_event"),
+    ):
+        worker.run_task("EXEC_SESSAO", "C:\\script.ps1")
+
+    assert abertas_durante_monitoramento == [0]
+    assert state["abertas"] == 0
+
+
 def test_run_task_excecao_aplica_internal_worker_error(
     db_session: Any, monkeypatch: Any, reset_worker_globals: None
 ) -> None:

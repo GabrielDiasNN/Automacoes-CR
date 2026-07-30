@@ -667,7 +667,7 @@ export const orchestratorApi = {
   // ── Automações ──
   listAutomations: (params?: { page?: number; per_page?: number; search?: string; sort?: string; order?: string }) =>
     api.get<Paginated<Automation>>(`/api/automations${qs({ ...params })}`).then((r) => r.items),
-  listAllAutomations: () => api.get<Automation[]>("/api/automations/all"),
+  listAllAutomations: (signal?: AbortSignal) => api.get<Automation[]>("/api/automations/all", signal),
   getAutomation: (id: number) => api.get<Automation>(`/api/automations/${id}`),
   getAutomationOverview: (id: number) =>
     api.get<{ automation: Automation; metrics_24h: Record<string, number>; recent_executions: ExecutionSummary[] }>(
@@ -700,9 +700,10 @@ export const orchestratorApi = {
   // ── Sistema ──
   getHealth: () => api.get<SystemHealth>("/api/system/health"),
   getWorkerStatus: () => api.get<WorkerStatus>("/api/system/worker/status"),
-  getOverview: () => api.get<SystemOverview>("/api/system/overview"),
+  getOverview: (signal?: AbortSignal) => api.get<SystemOverview>("/api/system/overview", signal),
   getBaseline: () => api.get<BaselineStatus>("/api/system/baseline"),
-  getHistory: (hours = 24) => api.get<SystemHistory>(`/api/system/history${qs({ hours })}`),
+  getHistory: (hours = 24, signal?: AbortSignal) =>
+    api.get<SystemHistory>(`/api/system/history${qs({ hours })}`, signal),
   getSystemMetricsDaily: (days = 14) =>
     api.get<SystemMetricsDaily>(`/api/system/metrics/daily${qs({ days })}`),
   getScheduledJobs: () => api.get<ScheduledJob[]>("/api/system/scheduler/jobs"),
@@ -712,11 +713,12 @@ export const orchestratorApi = {
   reloadScheduler: () => api.post<{ message: string }>("/api/system/scheduler/reload"),
 
   // ── Portfólio ──
-  getPortfolioHealth: () => api.get<PortfolioHealth>("/api/portfolio/health"),
+  getPortfolioHealth: (signal?: AbortSignal) => api.get<PortfolioHealth>("/api/portfolio/health", signal),
 
   // ── Beneficiamento ──
   getBeneficiamentoDashboard: () => api.get<BeneficiamentoDashboard>("/api/beneficiamento/dashboard"),
-  getBeneficiamentoHealth: () => api.get<BeneficiamentoHealth>("/api/beneficiamento/health"),
+  getBeneficiamentoHealth: (signal?: AbortSignal) =>
+    api.get<BeneficiamentoHealth>("/api/beneficiamento/health", signal),
   getBeneficiamentoOverview: (params?: BeneficiamentoOverviewParams) =>
     api.get<BeneficiamentoOverview>(`/api/beneficiamento/overview${qs({ ...params })}`),
   getBeneficiamentoDetail: (params: BeneficiamentoDetailParams) =>

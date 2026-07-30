@@ -62,6 +62,54 @@ def test_worker_long_poll_endpoint_is_not_rate_limit_exempt() -> None:
     assert "/api/system/wait-for-task" not in RATE_LIMIT_EXEMPT_PATHS
 
 
+def _app_com_rate_limit(rpm: int) -> Any:
+    """App mínimo com o endpoint de long-poll e uma janela de rate limit nova."""
+    from app.middleware import (  # pylint: disable=import-outside-toplevel
+        RateLimitMiddleware,
+    )
+    from fastapi import FastAPI  # pylint: disable=import-outside-toplevel
+
+    app_teste = FastAPI()
+
+    @app_teste.get("/api/system/wait-for-task")
+    def _wait() -> dict[str, str]:
+        return {"status": "timeout"}
+
+    app_teste.add_middleware(RateLimitMiddleware, rpm=rpm)
+    return app_teste
+
+
+def test_wait_for_task_isento_do_rate_limit_via_loopback() -> None:
+    """O Worker não pode competir pelo bucket de 127.0.0.1 com o Dashboard.
+
+    O long-poll é reenviado continuamente pelo Worker; sem isenção ele consome o
+    bucket do IP de loopback, que é o mesmo do Dashboard servido no mesmo host.
+    """
+    from fastapi.testclient import (  # pylint: disable=import-outside-toplevel
+        TestClient,
+    )
+
+    with TestClient(_app_com_rate_limit(1), client=("127.0.0.1", 5000)) as c:
+        assert c.get("/api/system/wait-for-task").status_code == 200
+        assert c.get("/api/system/wait-for-task").status_code == 200
+
+
+def test_wait_for_task_continua_limitado_fora_do_loopback() -> None:
+    """A isenção é restrita ao socket de loopback.
+
+    Cada long-poll prende um worker por até 30s: liberá-lo para qualquer origem
+    seria um vetor de exaustão barato. Por isso o path fica em
+    INTERNAL_LOOPBACK_PATHS e não em RATE_LIMIT_EXEMPT_PATHS.
+    """
+    from fastapi.testclient import (  # pylint: disable=import-outside-toplevel
+        TestClient,
+    )
+
+    with TestClient(_app_com_rate_limit(1), client=("10.0.0.5", 5000)) as c:
+        assert c.get("/api/system/wait-for-task").status_code == 200
+        assert c.get("/api/system/wait-for-task").status_code == 429
+
+
 def test_finalize_terminated_task_persists_terminal_metadata(db_session: Any) -> None:
     auto = models.Automation(name="Worker Stop", script_path="./test/run.ps1")
     db_session.add(auto)

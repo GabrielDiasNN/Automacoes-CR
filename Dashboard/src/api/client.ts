@@ -40,7 +40,9 @@ export function qs(params: Record<string, string | number | boolean | undefined 
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  /** `signal` permite cancelar a requisição — ver usePolling, que aborta o
+   *  fetch anterior ao trocar de parâmetros ou desmontar. */
+  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, {
       method: "POST",

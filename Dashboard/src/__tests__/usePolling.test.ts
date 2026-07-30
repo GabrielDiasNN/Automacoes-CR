@@ -190,6 +190,97 @@ describe("usePolling", () => {
     expect(result.current.data).toBe("B");
   });
 
+  it("descarta resposta que chega fora de ordem", async () => {
+    // Trocar de página/filtro dispara um novo fetch antes do anterior voltar.
+    // Se a resposta antiga chegar depois, ela NÃO pode sobrescrever a tela —
+    // seriam dados que não correspondem aos parâmetros atuais.
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => setTimeout(() => resolve("antigo"), 5_000)),
+      )
+      .mockImplementationOnce(() => Promise.resolve("novo"));
+
+    const { result, rerender } = renderHook(
+      ({ pagina }) => usePolling(fetcher, 60_000, [pagina]),
+      { initialProps: { pagina: 1 } },
+    );
+
+    rerender({ pagina: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toBe("novo");
+
+    // A resposta lenta da primeira chamada chega agora e deve ser ignorada.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(result.current.data).toBe("novo");
+  });
+
+  it("aborta o fetch anterior ao disparar um novo", async () => {
+    const sinais: AbortSignal[] = [];
+    const fetcher = vi.fn((signal?: AbortSignal) => {
+      if (signal) sinais.push(signal);
+      return new Promise<string>((resolve) => setTimeout(() => resolve("ok"), 5_000));
+    });
+
+    const { rerender } = renderHook(
+      ({ pagina }) => usePolling(fetcher, 60_000, [pagina]),
+      { initialProps: { pagina: 1 } },
+    );
+
+    rerender({ pagina: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(sinais).toHaveLength(2);
+    expect(sinais[0].aborted).toBe(true); // o anterior foi cancelado
+    expect(sinais[1].aborted).toBe(false); // o atual segue em voo
+  });
+
+  it("aborta o fetch em voo no unmount", async () => {
+    const sinais: AbortSignal[] = [];
+    const fetcher = vi.fn((signal?: AbortSignal) => {
+      if (signal) sinais.push(signal);
+      return new Promise<string>((resolve) => setTimeout(() => resolve("ok"), 5_000));
+    });
+
+    const { unmount } = renderHook(() => usePolling(fetcher, 60_000));
+    unmount();
+
+    expect(sinais).toHaveLength(1);
+    expect(sinais[0].aborted).toBe(true);
+  });
+
+  it("não expõe o cancelamento como erro de tela", async () => {
+    const fetcher = vi.fn((signal?: AbortSignal) => {
+      return new Promise<string>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => {
+          const err = new Error("The operation was aborted.");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    });
+
+    const { result, rerender } = renderHook(
+      ({ pagina }) => usePolling(fetcher, 60_000, [pagina]),
+      { initialProps: { pagina: 1 } },
+    );
+
+    rerender({ pagina: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.error).toBeNull();
+  });
+
   it("para de buscar após o unmount", async () => {
     const fetcher = vi.fn().mockResolvedValue("ok");
     const { unmount } = renderHook(() => usePolling(fetcher, 1_000));
