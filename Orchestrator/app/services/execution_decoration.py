@@ -68,7 +68,12 @@ def _determine_operational_actions(
             summary.requeue_block_reason = f"Grupo operacional '{queue_group}' já está em uso por {active_for_group.id}."
             summary.related_execution_id = str(active_for_group.id)
             summary.related_execution_status = str(active_for_group.status)
-        elif retry_count >= max_retries:
+        elif retry_count >= max_retries and ex.status != "SUCCESS":
+            # `max_retries=0` é decisão deliberada do operador para automações
+            # com efeito colateral real (ex.: WhatsApp/e-mail) — falhas exigem
+            # investigação manual antes de qualquer retry, automático ou manual
+            # (ver runbooks OBP-04/RE-03, drill validado). SUCCESS é reprocesso
+            # sob demanda, não uma retentativa de falha, por isso ignora o teto.
             summary.requeue_block_reason = (
                 f"Limite de retry já foi atingido ({retry_count}/{max_retries})."
             )
@@ -85,10 +90,10 @@ def _determine_operational_actions(
         summary.operator_action_label = "Parar execução"
         summary.operator_action_hint = "Solicita a interrupção imediata do processo."
 
-    # Sobrescrever ações para linhas de sucesso saudáveis
-    if ex.status == "SUCCESS":
-        summary.requeue_allowed = True
-        summary.operator_action_code = "REQUEUE"
+    # Linhas de sucesso saudáveis mantêm o botão de reenfileirar (reprocesso
+    # manual sob demanda), mas sem rótulo/hint de alerta — desde que a checagem
+    # de conflito acima não tenha bloqueado.
+    if ex.status == "SUCCESS" and summary.requeue_allowed:
         summary.operator_action_label = None
         summary.operator_action_hint = None
 

@@ -107,7 +107,10 @@ def test_requeue_respects_queue_group(client: TestClient, db_session: Session) -
 
 
 def test_requeue_enforces_max_retries(client: TestClient, db_session: Session) -> None:
-    """Garante que o requeue falha (409) se a contagem de retry atingir o limite max_retries."""
+    """Garante que o requeue falha (409) se a contagem de retry atingir o limite
+    max_retries. Automações com max_retries=0 (WhatsApp/e-mail) dependem deste
+    bloqueio para exigir investigação manual antes de qualquer retry — ver
+    runbooks OBP-04/RE-03."""
     # Criar automação de teste com limite de 2 retries
     auto = models.Automation(
         id=902,

@@ -445,7 +445,13 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
         or (db_exec.automation.max_retries if db_exec.automation else 0)
         or 0
     )
-    if next_retry_count > max_retries:
+    if next_retry_count > max_retries and db_exec.status != "SUCCESS":
+        # `max_retries=0` é decisão deliberada do operador para automações com
+        # efeito colateral real (WhatsApp/e-mail) — falhas exigem investigação
+        # manual antes de retry, automático (`auto_retry_transient_failures`,
+        # que também passa por esta função) ou manual. Runbooks OBP-04/RE-03
+        # documentam esse bloqueio como comportamento correto e testado em
+        # drill. SUCCESS é reprocesso sob demanda, não retentativa de falha.
         raise RequeueValidationError(
             409,
             "Limite de retry excedido para esta execução: "
