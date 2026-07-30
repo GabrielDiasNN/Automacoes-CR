@@ -175,7 +175,21 @@ def wakeup_listener_loop() -> None:
                 headers=headers,
                 timeout=35,
             )
-            if res.status_code == 200 and res.json().get("status") == "wakeup":
+            if res.status_code != 200:
+                # Sem espera aqui o loop vira hot-loop: 403 (API Key ausente/errada)
+                # e 429 (rate limit) respondem de imediato, ao contrário do 200 que
+                # só volta após o long-poll de 30s. O flood resultante ainda esgota
+                # o bucket de rate limit do IP de loopback, derrubando junto o
+                # Dashboard servido no mesmo host.
+                logger.warning(
+                    "wait-for-task respondeu HTTP %d; aguardando %ds antes de reenviar.",
+                    res.status_code,
+                    backoff,
+                )
+                shutdown_event.wait(backoff)
+                backoff = min(backoff * 2, max_backoff)
+                continue
+            if res.json().get("status") == "wakeup":
                 logger.info("Sinal de wakeup recebido!")
                 wakeup_event.set()
             backoff = 5  # reset em sucesso
@@ -421,10 +435,21 @@ MAX_LOG_CHARS = 5_000_000  # 5 MB hard cap por execução (HF-3/A1)
 
 
 def _drain_process_output(
-    output_queue: Queue[str], logs: list[str], exec_id: str
-) -> None:
-    """Transfere saída disponível para memória com cap de tamanho (HF-3/A1)."""
-    total_chars = sum(len(line) for line in logs)
+    output_queue: Queue[str],
+    logs: list[str],
+    exec_id: str,
+    total_chars: int | None = None,
+) -> int:
+    """Transfere saída disponível para memória com cap de tamanho (HF-3/A1).
+
+    Retorna o total de caracteres acumulado em ``logs``. O chamador do loop de
+    monitoramento repassa esse valor na chamada seguinte: recalcular o total com
+    ``sum()`` a cada tick custa O(nº de linhas) uma vez por segundo, o que em
+    execuções longas (até MAX_LOG_LINES) vira trabalho quadrático inútil.
+    Omitir o argumento preserva o comportamento antigo (recalcula do zero).
+    """
+    if total_chars is None:
+        total_chars = sum(len(line) for line in logs)
     while not output_queue.empty():
         try:
             line = output_queue.get_nowait()
@@ -436,6 +461,7 @@ def _drain_process_output(
             continue
         logs.append(line)
         total_chars += len(line)
+    return total_chars
 
 
 _DB_CHECK_INTERVAL = 5.0  # verifica banco a cada 5s em vez de 1s (A4/2.1)
@@ -447,7 +473,8 @@ def _drain_final_output(
     output_queue: Queue[str],
     logs: list[str],
     exec_id: str,
-) -> None:
+    total_chars: int | None = None,
+) -> int:
     """Aguarda o reader thread esvaziar stdout (EOF) e captura a saída final.
 
     O join com timeout evita perder a última rajada de saída no fim do processo
@@ -457,7 +484,7 @@ def _drain_final_output(
     """
     if reader_thread is not None:
         reader_thread.join(timeout=_READER_JOIN_TIMEOUT)
-    _drain_process_output(output_queue, logs, exec_id)
+    return _drain_process_output(output_queue, logs, exec_id, total_chars)
 
 
 def _monitor_process(  # pylint: disable=too-many-locals
@@ -475,10 +502,12 @@ def _monitor_process(  # pylint: disable=too-many-locals
     last_db_check = 0.0
 
     reader_thread = task_ctx.get("reader_thread")
+    # Acumulador de tamanho carregado entre os ticks (ver _drain_process_output).
+    total_chars = 0
     while not shutdown_event.is_set():
-        _drain_process_output(output_queue, logs, exec_id)
+        total_chars = _drain_process_output(output_queue, logs, exec_id, total_chars)
         if process.poll() is not None:
-            _drain_final_output(reader_thread, output_queue, logs, exec_id)
+            _drain_final_output(reader_thread, output_queue, logs, exec_id, total_chars)
             return True
 
         now_ts = time.time()
@@ -525,12 +554,12 @@ def _monitor_process(  # pylint: disable=too-many-locals
     if process.poll() is not None:
         # Processo concluiu dentro da janela do shutdown: preserva o resultado
         # real via finalização normal em vez de descartá-lo.
-        _drain_final_output(reader_thread, output_queue, logs, exec_id)
+        _drain_final_output(reader_thread, output_queue, logs, exec_id, total_chars)
         return True
     # Processo ainda vivo: encerra e finaliza como interrupção por reboot, para
     # não deixar a execução presa em RUNNING até o recovery do próximo boot.
     _force_kill(process.pid)
-    _drain_final_output(reader_thread, output_queue, logs, exec_id)
+    _drain_final_output(reader_thread, output_queue, logs, exec_id, total_chars)
     broadcast_log("\n[INTERROMPIDO POR SHUTDOWN DO ORQUESTRADOR]\n", exec_id)
     with session_scope(SessionLocal) as shutdown_db:
         finalize_reboot_interrupted_task(
@@ -605,12 +634,21 @@ def _finalize_execution(
 def run_task(  # pylint: disable=too-many-locals
     exec_id: str, script_path: str, max_runtime: int = 30
 ) -> None:
-    """Orquestra as fases de início, monitoramento e finalização da tarefa."""
+    """Orquestra as fases de início, monitoramento e finalização da tarefa.
+
+    A sessão do banco é aberta em duas janelas curtas — início e finalização —
+    e fica FECHADA durante o monitoramento. Antes uma única sessão cobria a
+    execução inteira: até `max_runtime` minutos (30 por padrão) segurando uma
+    conexão do pool à toa, com um identity map que envelhecia enquanto
+    `_monitor_process` abria sessões próprias e alterava as mesmas linhas por
+    fora — de onde vinha o risco de ler estado obsoleto na finalização.
+    """
     update_stat("active_tasks", 1)
     task_start_ts = time.time()
     task_start_monotonic = time.monotonic()
     log_extra: dict[str, str] = {"correlation_id": exec_id}
     try:
+        # Fase 1 — janela curta: valida o status, reivindica e inicia o processo.
         with session_scope(SessionLocal) as db:
             db_exec = (
                 db.query(models.Execution)
@@ -646,31 +684,38 @@ def run_task(  # pylint: disable=too-many-locals
                 "TASK_STARTED",
                 {"exec_id": exec_id, "automation_id": db_exec.automation_id},
             )
+            # Dentro da janela porque _build_subprocess_env lê
+            # db_exec.automation.test_mode (carga lazy do relacionamento).
             process = _start_process(db_exec, script_path, exec_id)
-            output_queue: Queue[str] = Queue()
-            reader_thread = threading.Thread(
-                target=enqueue_output, args=(process.stdout, output_queue), daemon=True
-            )
-            reader_thread.start()
-            logs: list[str] = []
-            task_ctx: dict[str, Any] = {
-                "exec_id": exec_id,
-                "task_start": get_now_local(),
-                "task_start_ts": task_start_ts,
-                "task_start_monotonic": task_start_monotonic,
-                "max_runtime": max_runtime,
-                "robot_dir": os.path.dirname(script_path),
-                "reader_thread": reader_thread,
-            }
-            should_finalize = _monitor_process(
-                process,
-                output_queue,
-                logs,
-                task_ctx,
-            )
-            if should_finalize:
+
+        output_queue: Queue[str] = Queue()
+        reader_thread = threading.Thread(
+            target=enqueue_output, args=(process.stdout, output_queue), daemon=True
+        )
+        reader_thread.start()
+        logs: list[str] = []
+        task_ctx: dict[str, Any] = {
+            "exec_id": exec_id,
+            "task_start": get_now_local(),
+            "task_start_ts": task_start_ts,
+            "task_start_monotonic": task_start_monotonic,
+            "max_runtime": max_runtime,
+            "robot_dir": os.path.dirname(script_path),
+            "reader_thread": reader_thread,
+        }
+        # Fase 2 — monitoramento sem sessão aberta. _monitor_process abre as
+        # suas próprias janelas curtas a cada _DB_CHECK_INTERVAL.
+        should_finalize = _monitor_process(
+            process,
+            output_queue,
+            logs,
+            task_ctx,
+        )
+        # Fase 3 — janela curta para persistir o resultado.
+        if should_finalize:
+            with session_scope(SessionLocal) as final_db:
                 _finalize_execution(
-                    db,
+                    final_db,
                     process,
                     logs,
                     task_ctx,

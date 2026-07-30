@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Maximize2, Minimize2, SlidersHorizontal } from "lucide-react";
+import { countByLevel, filterLines, parseLog, type Level } from "../../lib/logParser";
 import styles from "./LogViewer.module.css";
 
-type Level = "info" | "warn" | "error" | "debug" | "plain";
-
-interface LogLine {
-  raw: string;
-  level: Level;
-  time: string | null;
-  source: string | null;
-  message: string;
-}
+// Teto de linhas efetivamente montadas no DOM. O worker permite até 5 MB de log
+// por execução (MAX_LOG_CHARS): renderizar tudo criaria dezenas de milhares de
+// nós e travaria a aba. Mostramos a JANELA FINAL — que é a relevante para
+// diagnóstico e a que o auto-scroll persegue — e sinalizamos o que ficou fora.
+const MAX_RENDERED_LINES = 2_000;
 
 const LEVEL_ORDER: Exclude<Level, "plain">[] = ["error", "warn", "info", "debug"];
 
@@ -29,47 +26,27 @@ const LEVEL_TINT: Record<Exclude<Level, "plain">, string> = {
   debug: "var(--grey)",
 };
 
-// Ex.: [30/07/2026 08:30:05] [PS] [INFO] [ExecId:CRON_2_1785411000] mensagem...
-const LINE_RE =
-  /^\[([^\]]+)\]\s*\[([^\]]+)\]\s*\[(INFO|WARN|WARNING|ERROR|ERRO|DEBUG)\]\s*(?:\[[^\]]*\]\s*)*(.*)$/i;
-
-function parseLine(raw: string): LogLine {
-  const match = LINE_RE.exec(raw);
-  if (!match) {
-    return { raw, level: "plain", time: null, source: null, message: raw };
-  }
-  const [, time, source, levelToken, message] = match;
-  const token = levelToken.toUpperCase();
-  const level: Level = token.startsWith("ERR") ? "error" : token.startsWith("WARN") ? "warn" : token === "DEBUG" ? "debug" : "info";
-  return { raw, level, time, source, message: message.trim() || raw };
-}
-
-/** Junta continuações (linhas sem cabeçalho) à última linha reconhecida. */
-function parseLog(text: string): LogLine[] {
-  const lines: LogLine[] = [];
-  for (const raw of text.split(/\r?\n/)) {
-    if (!raw.trim()) continue;
-    const parsed = parseLine(raw);
-    if (parsed.level === "plain" && lines.length && LINE_RE.test(lines[lines.length - 1].raw)) {
-      lines[lines.length - 1].message += `\n${raw}`;
-      continue;
-    }
-    lines.push(parsed);
-  }
-  return lines;
-}
-
+/** Destaca TODAS as ocorrências do termo buscado, não só a primeira. */
 function highlight(text: string, query: string) {
-  if (!query.trim()) return text;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  const needle = query.trim();
+  if (!needle) return text;
+
+  const haystack = text.toLowerCase();
+  const target = needle.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let idx = haystack.indexOf(target);
   if (idx === -1) return text;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark>{text.slice(idx, idx + query.length)}</mark>
-      {text.slice(idx + query.length)}
-    </>
-  );
+
+  let key = 0;
+  while (idx !== -1) {
+    if (idx > cursor) parts.push(text.slice(cursor, idx));
+    parts.push(<mark key={key++}>{text.slice(idx, idx + needle.length)}</mark>);
+    cursor = idx + needle.length;
+    idx = haystack.indexOf(target, cursor);
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }
 
 export function LogViewer({ text, loading }: { text: string; loading?: boolean }) {
@@ -82,25 +59,25 @@ export function LogViewer({ text, loading }: { text: string; loading?: boolean }
 
   const parsed = useMemo(() => parseLog(text || ""), [text]);
 
-  const counts = useMemo(() => {
-    const c: Record<Level, number> = { info: 0, warn: 0, error: 0, debug: 0, plain: 0 };
-    for (const l of parsed) c[l.level]++;
-    return c;
-  }, [parsed]);
+  const counts = useMemo(() => countByLevel(parsed), [parsed]);
 
-  const filtered = useMemo(() => {
-    return parsed.filter((l) => {
-      if (activeLevels.size > 0 && !activeLevels.has(l.level)) return false;
-      if (query.trim() && !l.message.toLowerCase().includes(query.trim().toLowerCase())) return false;
-      return true;
-    });
-  }, [parsed, activeLevels, query]);
+  const filtered = useMemo(
+    () => filterLines(parsed, activeLevels, query),
+    [parsed, activeLevels, query],
+  );
+
+  // Janela final efetivamente montada — ver MAX_RENDERED_LINES.
+  const hidden = Math.max(0, filtered.length - MAX_RENDERED_LINES);
+  const visible = useMemo(
+    () => (hidden > 0 ? filtered.slice(-MAX_RENDERED_LINES) : filtered),
+    [filtered, hidden],
+  );
 
   useEffect(() => {
     if (autoScroll && bodyRef.current) {
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
     }
-  }, [filtered.length, autoScroll]);
+  }, [visible.length, autoScroll]);
 
   function toggleLevel(level: Level) {
     setActiveLevels((prev) => {
@@ -175,14 +152,22 @@ export function LogViewer({ text, loading }: { text: string; loading?: boolean }
             {parsed.length === 0 ? "— sem logs —" : "nenhuma linha corresponde ao filtro"}
           </div>
         ) : (
-          filtered.map((line, i) => (
+          <>
+          {hidden > 0 && (
+            <div className={styles.emptyState}>
+              {hidden} linha(s) anterior(es) ocultada(s) — exibindo as últimas {MAX_RENDERED_LINES}.
+              Use o botão de copiar para obter o log completo.
+            </div>
+          )}
+          {visible.map((line, i) => (
             <div key={i} className={[styles.row, styles[line.level]].join(" ")}>
               <span className={styles.time}>{line.time ?? ""}</span>
               <span className={styles.source}>{line.source ? `[${line.source}]` : ""}</span>
               <span className={styles.level}>{line.level !== "plain" ? line.level.toUpperCase() : ""}</span>
               <span className={styles.msg}>{highlight(line.message, query)}</span>
             </div>
-          ))
+          ))}
+          </>
         )}
       </div>
 

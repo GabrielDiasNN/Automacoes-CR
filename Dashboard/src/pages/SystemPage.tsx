@@ -24,8 +24,11 @@ import page from "./page.module.css";
 
 export function SystemPage() {
   const toast = useToast();
-  const { data, loading, error, refresh, lastUpdated } = usePolling(() => orchestratorApi.getOverview(), 15_000);
-  const { data: history } = usePolling(() => orchestratorApi.getHistory(24), 60_000);
+  const { data, loading, error, refresh, lastUpdated } = usePolling(
+    (signal) => orchestratorApi.getOverview(signal),
+    15_000,
+  );
+  const { data: history } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 

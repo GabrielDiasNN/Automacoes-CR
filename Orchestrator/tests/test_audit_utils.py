@@ -3,9 +3,8 @@
 import json
 from typing import Any, cast
 
-from sqlalchemy.orm import Session
-
 from app.utils import log_audit
+from sqlalchemy.orm import Session
 
 
 class _FakeSession:  # pylint: disable=too-few-public-methods
@@ -40,7 +39,9 @@ def test_log_audit_details_longos_geram_json_valido() -> None:
 def test_log_audit_details_nao_json_viram_message() -> None:
     db = _FakeSession()
 
-    entry = log_audit(cast(Session, db), "QA", "TEST", 1, "tester", "texto livre não-JSON")
+    entry = log_audit(
+        cast(Session, db), "QA", "TEST", 1, "tester", "texto livre não-JSON"
+    )
 
     parsed = json.loads(str(entry.details))
     assert parsed["message"] == "texto livre não-JSON"

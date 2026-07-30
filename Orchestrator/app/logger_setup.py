@@ -3,8 +3,14 @@
 import json
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 from typing import Any
+
+
+def _sob_pytest() -> bool:
+    """Mesma detecção usada por `worker.py` e `app/main.py` para o nome do log."""
+    return "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
 
 
 class OrchestratorJsonFormatter(logging.Formatter):
@@ -81,9 +87,21 @@ def setup_json_logger(
         use_context_vars: If True, read context from FastAPI contextvars (API process).
         configure_root: If True, also apply handlers to the root logger (Worker pattern).
     """
-    json_handler = RotatingFileHandler(
-        log_file, maxBytes=50 * 1024 * 1024, backupCount=7, encoding="utf-8"
-    )
+    # Sob pytest o log NÃO vai a disco. O desvio para `*_test.jsonl` já existia
+    # para não colidir com o runtime de produção, mas os arquivos de teste
+    # seguiam crescendo a cada execução da suíte (chegaram a 50 MB, o limite do
+    # rollover) — I/O real e inútil em cada teste, e um rollover que uma hora
+    # cairia no meio de uma execução: no Windows, girar o arquivo enquanto outro
+    # handler o mantém aberto levanta PermissionError, que apareceria como falha
+    # intermitente sem relação com o teste que a hospedasse. O console handler
+    # continua ativo, então `caplog` e a saída capturada pelo pytest não mudam.
+    json_handler: logging.Handler
+    if _sob_pytest():
+        json_handler = logging.NullHandler()
+    else:
+        json_handler = RotatingFileHandler(
+            log_file, maxBytes=50 * 1024 * 1024, backupCount=7, encoding="utf-8"
+        )
     json_handler.setFormatter(
         OrchestratorJsonFormatter(
             component=component,

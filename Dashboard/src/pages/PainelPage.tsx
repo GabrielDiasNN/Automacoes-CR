@@ -75,7 +75,7 @@ function ExecRow({ ex, onClick }: { ex: ExecutionSummary; onClick: () => void })
 
 export function PainelPage() {
   const navigate = useNavigate();
-  const { data, loading, error } = usePolling(() => orchestratorApi.getOverview(), 10_000);
+  const { data, loading, error } = usePolling((signal) => orchestratorApi.getOverview(signal), 10_000);
 
   const lanes: QueueLane[] = useMemo(() => {
     if (!data) return [];

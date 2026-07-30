@@ -56,6 +56,40 @@ def test_wakeup_nao_seta_event_em_status_idle(
     assert worker.wakeup_event.is_set() is False
 
 
+def test_wakeup_aplica_backoff_em_resposta_nao_200(
+    mock_requests_worker: dict[str, MagicMock], reset_worker_globals: None
+) -> None:
+    """403/429 respondem na hora; sem espera o listener vira hot-loop.
+
+    /api/system/wait-for-task exige API Key e NÃO é isento de rate limit. Uma
+    key ausente (403) ou o bucket estourado (429) retornam imediatamente, ao
+    contrário do 200 que só volta após o long-poll de 30s. Sem backoff nesse
+    caminho o worker floda a própria API e esgota o bucket do IP de loopback,
+    derrubando junto o Dashboard servido no mesmo host.
+    """
+    del reset_worker_globals
+    waits: list[float] = []
+
+    def _fake_get(*_args: Any, **_kwargs: Any) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = 403
+        return resp
+
+    mock_requests_worker["get"].side_effect = _fake_get
+
+    def _record_wait(timeout: float | None = None) -> bool:
+        waits.append(timeout if timeout is not None else -1)
+        if len(waits) >= 3:
+            worker.shutdown_event.set()
+        return False
+
+    with patch.object(worker.shutdown_event, "wait", side_effect=_record_wait):
+        worker.wakeup_listener_loop()
+
+    assert waits == [5, 10, 20]
+    assert worker.wakeup_event.is_set() is False
+
+
 def test_wakeup_backoff_aumenta_em_falha_de_rede(
     mock_requests_worker: dict[str, MagicMock], reset_worker_globals: None
 ) -> None:

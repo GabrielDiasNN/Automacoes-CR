@@ -35,15 +35,22 @@ RATE_LIMIT_EXEMPT_PATHS = {
     "/api/system/health",
 }
 
-# Rotas de telemetria interna emitidas pelo próprio Worker (log flusher a cada 1s,
-# eventos de ciclo de vida). Isentas do rate limit APENAS quando a conexão vem do
-# loopback (socket real, não o header X-Forwarded-For spoofável) — evita que o
-# tráfego do Worker esgote o bucket compartilhado com um Dashboard co-localizado,
-# sem abrir superfície de flood para chamadores externos.
-INTERNAL_TELEMETRY_PATHS = {
+# Rotas do plano de controle interno emitidas pelo próprio Worker: telemetria
+# (log flusher a cada 1s, eventos de ciclo de vida) e o long-poll de wake-up.
+# Isentas do rate limit APENAS quando a conexão vem do loopback (socket real, não
+# o header X-Forwarded-For spoofável) — evita que o tráfego do Worker esgote o
+# bucket compartilhado com um Dashboard co-localizado, sem abrir superfície de
+# flood para chamadores externos.
+#
+# wait-for-task entra aqui, e NÃO em RATE_LIMIT_EXEMPT_PATHS: a isenção global
+# abriria o long-poll a qualquer origem (cada conexão prende um worker por 30s,
+# o que é um vetor de exaustão barato). Restrita ao loopback, o Worker deixa de
+# competir pelo bucket de 127.0.0.1 com o Dashboard servido no mesmo host.
+INTERNAL_LOOPBACK_PATHS = {
     "/api/broadcast_log",
     "/api/broadcast_logs",
     "/api/broadcast_event",
+    "/api/system/wait-for-task",
 }
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
@@ -193,14 +200,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Chave do limiter e isenção de loopback usam o IP de socket
         # (request.client.host), nunca o X-Forwarded-For spoofável — ver nota em
-        # INTERNAL_TELEMETRY_PATHS. get_client_ip() fica restrito ao audit-log.
+        # INTERNAL_LOOPBACK_PATHS. get_client_ip() fica restrito ao audit-log.
         client_ip = request.client.host if request.client else "unknown"
 
-        # Telemetria interna do Worker via loopback: isenta do bucket compartilhado.
-        if (
-            request.url.path in INTERNAL_TELEMETRY_PATHS
-            and client_ip in _LOOPBACK_HOSTS
-        ):
+        # Plano de controle interno do Worker via loopback: isento do bucket
+        # compartilhado com o Dashboard.
+        if request.url.path in INTERNAL_LOOPBACK_PATHS and client_ip in _LOOPBACK_HOSTS:
             return await call_next(request)
 
         now = time.time()

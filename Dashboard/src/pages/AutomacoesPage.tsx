@@ -13,12 +13,12 @@ interface AutomacoesData {
   crit: Record<number, string>;
 }
 
-async function fetchAutomacoesData(): Promise<AutomacoesData> {
-  const items = await orchestratorApi.listAllAutomations();
+async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData> {
+  const items = await orchestratorApi.listAllAutomations(signal);
   let crit: Record<number, string> = {};
   try {
     // criticidade é do catálogo (portfólio) — best-effort
-    const p = await orchestratorApi.getPortfolioHealth();
+    const p = await orchestratorApi.getPortfolioHealth(signal);
     crit = Object.fromEntries(
       p.items.filter((it) => it.automation_id != null).map((it) => [it.automation_id as number, it.criticality]),
     );

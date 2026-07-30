@@ -50,6 +50,8 @@ Dashboard/coverage/
 # Evidencias geradas localmente (nao versionar)
 docs/playwright-e2e-evidence-generated.md
 Logs/playwright-*.png
+# basetemp do job E2E; no CI e publicado como artifact, nunca versionado
+Orchestrator/tests/e2e-evidence/
 
 # Caches de Inteligência e Estado
 .cache_erros.json
@@ -117,6 +119,8 @@ Backups/
 
 # Scratch local de investigação
 scratch/
+# Estado de loops agenticos (skill loop-agentico) — local, por sessao
+.loop-state/
 SQL Reference/
 
 # Beneficiamento - artefatos exploratórios e arquivos de refresh local
