@@ -439,15 +439,24 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
             f"({group_active.id}, Grupo: {queue_group}).",
         )
 
-    # `max_retries` não limita o reenfileiramento manual — é apenas o
-    # histórico de quantas vezes o operador já reenfileirou esta execução.
-    # Não existe retry automático no worker que consuma esse teto.
     next_retry_count = int(db_exec.retry_count or 0) + 1
     max_retries = int(
         db_exec.max_retries
         or (db_exec.automation.max_retries if db_exec.automation else 0)
         or 0
     )
+    if next_retry_count > max_retries and db_exec.status != "SUCCESS":
+        # `max_retries=0` é decisão deliberada do operador para automações com
+        # efeito colateral real (WhatsApp/e-mail) — falhas exigem investigação
+        # manual antes de retry, automático (`auto_retry_transient_failures`,
+        # que também passa por esta função) ou manual. Runbooks OBP-04/RE-03
+        # documentam esse bloqueio como comportamento correto e testado em
+        # drill. SUCCESS é reprocesso sob demanda, não retentativa de falha.
+        raise RequeueValidationError(
+            409,
+            "Limite de retry excedido para esta execução: "
+            f"{next_retry_count - 1}/{max_retries}.",
+        )
 
     new_exec_id = generate_execution_id("REQ")
     requested_by = str(payload_requested_by or fallback_requested_by)

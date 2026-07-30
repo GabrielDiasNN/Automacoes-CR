@@ -353,20 +353,21 @@ def test_execution_requeue_creates_auditable_pending_retry(
     assert queued.recovery_action == "REQUEUE_MANUAL"
 
 
-def test_execution_requeue_ignores_retry_budget(
+def test_execution_requeue_blocks_retry_limit(
     client: TestClient, db_session: Session
 ) -> None:
-    """max_retries não bloqueia reenfileiramento manual — não há retry automático
-    no worker que o consuma; é só histórico de tentativas (#dashboard-reenfileirar)."""
+    """max_retries=0 é decisão deliberada do operador (automação com efeito
+    colateral real) — falhas continuam bloqueadas para retry manual (ver
+    runbooks OBP-04/RE-03)."""
 
     auto = models.Automation(
-        name="Retry Budget Exhausted", script_path="./test/run.ps1", max_retries=1
+        name="Retry Limit", script_path="./test/run.ps1", max_retries=1
     )
     db_session.add(auto)
     db_session.flush()
     db_session.add(
         models.Execution(
-            id="EXEC_RETRY_BUDGET",
+            id="EXEC_RETRY_LIMIT",
             automation_id=auto.id,
             status="ERROR",
             retry_count=1,
@@ -378,7 +379,41 @@ def test_execution_requeue_ignores_retry_budget(
     db_session.commit()
 
     res = client.post(
-        "/api/executions/EXEC_RETRY_BUDGET/requeue",
+        "/api/executions/EXEC_RETRY_LIMIT/requeue",
+        json={"reason": "limite"},
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 409
+
+
+def test_execution_requeue_success_ignores_retry_budget(
+    client: TestClient, db_session: Session
+) -> None:
+    """SUCCESS é reprocesso manual sob demanda, não retentativa de falha —
+    ignora o teto de max_retries (ao contrário de ERROR/TIMEOUT)."""
+
+    auto = models.Automation(
+        name="Success Retry Budget Exhausted",
+        script_path="./test/run.ps1",
+        max_retries=1,
+    )
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_SUCCESS_RETRY_BUDGET",
+            automation_id=auto.id,
+            status="SUCCESS",
+            retry_count=1,
+            max_retries=1,
+            requested_by="TEST",
+            started_at=get_now_local(),
+        )
+    )
+    db_session.commit()
+
+    res = client.post(
+        "/api/executions/EXEC_SUCCESS_RETRY_BUDGET/requeue",
         json={"reason": "reprocesso manual apos esgotar budget"},
         headers=AUTH_HEADERS,
     )

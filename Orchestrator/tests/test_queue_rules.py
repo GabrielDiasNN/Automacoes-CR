@@ -106,11 +106,11 @@ def test_requeue_respects_queue_group(client: TestClient, db_session: Session) -
     )
 
 
-def test_requeue_ignores_max_retries_budget(
-    client: TestClient, db_session: Session
-) -> None:
-    """max_retries não bloqueia requeue manual (sem execução ativa conflitante):
-    é só histórico de tentativas, não um teto de retry automático do worker."""
+def test_requeue_enforces_max_retries(client: TestClient, db_session: Session) -> None:
+    """Garante que o requeue falha (409) se a contagem de retry atingir o limite
+    max_retries. Automações com max_retries=0 (WhatsApp/e-mail) dependem deste
+    bloqueio para exigir investigação manual antes de qualquer retry — ver
+    runbooks OBP-04/RE-03."""
     # Criar automação de teste com limite de 2 retries
     auto = models.Automation(
         id=902,
@@ -122,7 +122,7 @@ def test_requeue_ignores_max_retries_budget(
     db_session.add(auto)
     db_session.commit()
 
-    # Execução original que já esgotou o "budget" histórico (retry_count=2, max_retries=2)
+    # Criar execução original que já atingiu o limite de retry (retry_count=2, max_retries=2)
     exec_source = models.Execution(
         id="SRC_002",
         automation_id=902,
@@ -133,14 +133,14 @@ def test_requeue_ignores_max_retries_budget(
     db_session.add(exec_source)
     db_session.commit()
 
-    # Requeue segue permitido — nenhuma execução ativa conflitante para a automação/fila
+    # Tentar dar requeue na execução original (deverá falhar porque 2 + 1 > 2)
     response = client.post(
         "/api/executions/SRC_002/requeue",
         headers=AUTH_HEADERS,
-        json={"requested_by": "TestOperator", "reason": "Reprocesso manual"},
+        json={"requested_by": "TestOperator", "reason": "Teste de limite retry"},
     )
-    assert response.status_code == 200
-    assert response.json()["retry_count"] == 3
+    assert response.status_code == 409
+    assert "Limite de retry excedido" in response.json()["detail"]
 
 
 def test_claim_next_task_skips_blocked_queue_group(db_session: Session) -> None:
