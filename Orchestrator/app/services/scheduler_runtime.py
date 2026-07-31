@@ -327,9 +327,24 @@ def _resolve_interval_start_date(
         return first_interval_candidate(now, step_minutes, anchor_time)
 
     anterior = _pending_interval_resume.pop(f"job_{automation_id}_interval", None)
+    if anterior is None:
+        return None
+
+    # Comparação por timestamp POSIX: `get_now_local()` devolve datetime NAIVE
+    # (convenção do projeto) e o `next_run_time` do APScheduler é AWARE —
+    # compará-los diretamente levanta
+    # "can't compare offset-naive and offset-aware datetimes", que estouraria
+    # dentro do reload do agendador.
+    agora = get_now_local()
+    try:
+        anterior_ts = anterior.timestamp()
+        agora_ts = agora.timestamp()
+    except (OverflowError, OSError, ValueError):  # pragma: no cover - defensivo
+        return None
+
     # Só aproveita se ainda estiver no futuro: horário passado cairia no misfire
     # e seria descartado pelo `misfire_grace_time`.
-    if anterior and anterior > get_now_local().astimezone(anterior.tzinfo):
+    if anterior_ts > agora_ts:
         return anterior
     return None
 
