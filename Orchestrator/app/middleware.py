@@ -66,6 +66,27 @@ API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 
+def _api_keys_match(provided: str, expected: str) -> bool:
+    """Comparação timing-safe tolerante a header não-ASCII.
+
+    `hmac.compare_digest` sobre `str` levanta `TypeError` quando um operando tem
+    caractere fora de ASCII — e o Starlette decodifica headers em latin-1, então
+    `X-API-Key: café` produzia exatamente isso. A exceção subia ANTES do bloco
+    que emite `[AUTH_FAIL]`: a tentativa virava HTTP 500 e escapava por completo
+    da detecção de força bruta descrita no cabeçalho deste módulo.
+
+    Comparar em bytes preserva a propriedade timing-safe (é o mesmo
+    `compare_digest`, que aceita qualquer byte) e trata o header inválido como o
+    que ele é: uma chave errada.
+    """
+    try:
+        provided_bytes = provided.encode("utf-8")
+        expected_bytes = expected.encode("utf-8")
+    except (UnicodeEncodeError, AttributeError):
+        return False
+    return hmac.compare_digest(provided_bytes, expected_bytes)
+
+
 def get_api_key(request: Request, api_key: str = Depends(api_key_header)) -> str:
     """Valida API Key com comparacao timing-safe (anti timing-attack)."""
     # Secure-by-Default: Se a key nao estiver no ENV, gera um valor aleatorio impossivel de usar.
@@ -73,7 +94,7 @@ def get_api_key(request: Request, api_key: str = Depends(api_key_header)) -> str
     if not expected_key:
         expected_key = f"MISSING_ENV_{uuid.uuid4()}"
 
-    if api_key is None or not hmac.compare_digest(api_key, expected_key):
+    if api_key is None or not _api_keys_match(api_key, expected_key):
         # Divergência deliberada de get_client_ip(): a detecção de brute-force usa
         # o IP de socket (request.client.host), não o X-Forwarded-For spoofável —
         # get_client_ip() é reservado à atribuição de audit-log (informativa).

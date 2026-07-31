@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,13 +39,36 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    """Escreve JSON com troca atômica, isolando escritores concorrentes.
+
+    O temporário era derivado deterministicamente (`<periodo>.<kind>.json.tmp`).
+    O `max_instances=1` das jobs impede a sobreposição do agendador consigo
+    mesmo, mas NÃO com `POST /api/beneficiamento/refresh`, que chama a mesma
+    função: um "Atualizar agora" clicado durante o ciclo de 90 s punha dois
+    processos escrevendo o MESMO arquivo temporário, e o `replace` — atômico
+    quanto à troca — podia promover a intercalação das duas escritas.
+
+    O sufixo por PID + uuid isola os escritores. `fsync` antes do `replace`
+    fecha a outra ponta: sem ele, uma queda de energia podia promover um arquivo
+    de conteúdo truncado por cima de um snapshot íntegro.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    tmp_path = path.with_suffix(
+        f"{path.suffix}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp"
     )
-    tmp_path.replace(path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp_path.replace(path)
+    finally:
+        # O temporário agora é único por processo: se algo falhar antes do
+        # replace, ninguém o sobrescreve no ciclo seguinte — removê-lo aqui
+        # evita acúmulo de lixo no diretório de snapshots.
+        if tmp_path.exists():
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
 
 
 def file_sha256(path: Path) -> str | None:

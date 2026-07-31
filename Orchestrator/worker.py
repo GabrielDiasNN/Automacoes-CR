@@ -40,6 +40,8 @@ try:
     from app.database import SessionLocal, session_scope
     from app.logger_setup import setup_json_logger as _setup_json_logger
     from app.runtime import get_project_root
+    from app.security import sanitize_log_payload
+    from app.subprocess_env import ALLOWED_ENV_KEYS, build_subprocess_env
 
     # isort: off
     from app.services.execution_runtime import (
@@ -109,6 +111,30 @@ logger: logging.Logger = _setup_json_logger(
 # ---------------------------------------------------------------------------
 # Estado Global
 # ---------------------------------------------------------------------------
+
+# Sentinela de parada gracioso. No Windows, `Stop-Process -Force` é
+# `TerminateProcess`: NÃO entrega sinal, então todo o caminho de encerramento
+# controlado do worker (handler de SIGINT/SIGTERM, `shutdown_event`,
+# `_terminate_active_processes`, `SHUTDOWN_GRACE_SECONDS`,
+# `finalize_reboot_interrupted_task`) era inalcançável pelo caminho canônico de
+# restart/recover. Na prática: os `powershell.exe` filhos ficavam órfãos
+# rodando contra Oracle/WhatsApp sem supervisor, e a execução permanecia RUNNING
+# até o `_cleanup_zombie_tasks` do boot seguinte. O arquivo dá aos scripts de
+# Infrastructure um jeito de PEDIR a parada antes de forçá-la.
+SHUTDOWN_SENTINEL_PATH: str = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "worker.shutdown"
+)
+
+
+def _graceful_stop_requested() -> bool:
+    return os.path.exists(SHUTDOWN_SENTINEL_PATH)
+
+
+def _clear_shutdown_sentinel() -> None:
+    with contextlib.suppress(OSError):
+        if os.path.exists(SHUTDOWN_SENTINEL_PATH):
+            os.remove(SHUTDOWN_SENTINEL_PATH)
+
 
 shutdown_event: threading.Event = threading.Event()
 wakeup_event: threading.Event = threading.Event()  # Novo: Evento de Wakeup (v6.2.0)
@@ -294,7 +320,20 @@ def log_flusher_loop() -> None:
         for exec_id, messages in to_flush.items():
             if not messages:
                 continue
-            payload.append({"exec_id": exec_id, "message": "".join(messages)})
+            # Sanitiza ANTES de sair do worker. O efeito era assimétrico e
+            # contraintuitivo: uma senha ou DSN impressa por um script aparecia
+            # mascarada no banco e no replay histórico (que lê `db_exec.logs`,
+            # já higienizado em `complete_process_execution`) mas EM CLARO na
+            # tela do operador em tempo real — e trafegava assim no `LOG_UPDATE`
+            # de preview enviado a TODAS as conexões globais, não só a quem
+            # assiste àquela execução. Aplicado uma vez por lote, e não por
+            # linha, para não pagar as regex a cada uma das até 10.000 linhas.
+            payload.append(
+                {
+                    "exec_id": exec_id,
+                    "message": sanitize_log_payload("".join(messages)),
+                }
+            )
 
         if payload:
             # 1 retry com backoff curto; na falha final os logs daquela janela sao
@@ -372,34 +411,23 @@ def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-# Variáveis de ambiente permitidas nos subprocessos PowerShell (D3/1.5)
-_ALLOWED_ENV_KEYS = {
-    "PATH",
-    "SYSTEMROOT",
-    "SYSTEMDRIVE",
-    "WINDIR",
-    "TEMP",
-    "TMP",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "COMPUTERNAME",
-    "USERNAME",
-    "ORACLE_CLIENT_LIB_DIR",
-    "ORACLE_CLIENT_PATH",
-    "HUB_API_PORT",
-    "PYTHONUTF8",
-    "PYTHONIOENCODING",
-}
+# A allowlist vive em app/subprocess_env.py desde 31/07/2026 — era local a este
+# módulo e os demais criadores de subprocesso (alertas, limpeza, refresh do
+# Beneficiamento) herdavam `os.environ` inteiro por não terem acesso a ela.
+_ALLOWED_ENV_KEYS = ALLOWED_ENV_KEYS
 
 
 def _build_subprocess_env(db_exec: Any, exec_id: str) -> dict[str, str]:
     """Ambiente mínimo para subprocesso — exclui secrets sensíveis (D3/1.5)."""
-    env = {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
-    env["ORCHESTRATOR_TEST_MODE"] = "true" if db_exec.automation.test_mode else "false"
-    env["EXEC_ID"] = exec_id
-    env["CORRELATION_ID"] = exec_id  # propaga correlation_id (E1)
-    return env
+    return build_subprocess_env(
+        {
+            "ORCHESTRATOR_TEST_MODE": (
+                "true" if db_exec.automation.test_mode else "false"
+            ),
+            "EXEC_ID": exec_id,
+            "CORRELATION_ID": exec_id,  # propaga correlation_id (E1)
+        }
+    )
 
 
 def _start_process(
@@ -495,7 +523,8 @@ def _monitor_process(  # pylint: disable=too-many-locals
 ) -> bool:
     """Monitora saída, interrupção e timeout; retorna True para finalização normal."""
     exec_id: str = task_ctx["exec_id"]
-    task_start: datetime = task_ctx["task_start"]
+    # `task_start` (wall-clock) permanece no task_ctx para exibição, mas o corte
+    # por max_runtime usa exclusivamente o relógio monotônico — ver abaixo.
     task_start_monotonic: float = task_ctx["task_start_monotonic"]
     max_runtime: int = task_ctx["max_runtime"]
     timeout_delta = timedelta(minutes=max_runtime)
@@ -528,7 +557,18 @@ def _monitor_process(  # pylint: disable=too-many-locals
                     broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
                     return False
 
-                if (get_now_local() - task_start) > timeout_delta:
+                # Relógio MONOTÔNICO, não wall-clock. Até 31/07/2026 a
+                # comparação era `get_now_local() - task_start`, ambos datetimes
+                # de relógio de parede: um acerto de NTP para trás adiava o
+                # timeout pelo mesmo delta (processo travado seguia vivo,
+                # segurando um slot e bloqueando o queue_group), e um acerto
+                # para a frente derrubava execução saudável, gravando TIMEOUT
+                # com `duration_seconds` MENOR que o max_runtime declarado — um
+                # estado internamente contraditório. Todo o resto da medição
+                # desta execução já usava `task_start_monotonic`.
+                if (
+                    time.monotonic() - task_start_monotonic
+                ) > timeout_delta.total_seconds():
                     _force_kill(process.pid)
                     broadcast_log(
                         f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
@@ -598,6 +638,15 @@ def _finalize_execution(
         )
         if db_exec and db_exec.status in EXECUTION_DELIVERED_STATUSES:
             update_stat("tasks_completed", 1)
+            # Zera o contador de falhas CONSECUTIVAS do throttle de alertas.
+            # `reset_alert_state` existia com a docstring "chamar em execucao
+            # bem-sucedida" e não tinha nenhum chamador em produção — só um
+            # teste. `_mark_sent` incrementava monotonicamente durante toda a
+            # vida do processo, então após 5 falhas acumuladas (podendo estar
+            # meses separadas) a automação ficava permanentemente no tier de
+            # 60 s, e a métrica "falhas consecutivas" do log de supressão era,
+            # na verdade, "falhas desde o boot da API".
+            notifications.reset_alert_state(int(db_exec.automation_id))
         else:
             update_stat("tasks_failed", 1)
 
@@ -731,7 +780,24 @@ def run_task(  # pylint: disable=too-many-locals
     finally:
         with cast(threading.Lock, stats["lock"]):
             stats["active_tasks"] = max(0, stats["active_tasks"] - 1)
-            stats["active_processes"].pop(exec_id, None)
+            orfao = stats["active_processes"].pop(exec_id, None)
+        # Se o processo ainda está vivo quando saímos daqui, ele ficou ÓRFÃO:
+        # foi removido de `active_processes` (logo o `_terminate_active_processes`
+        # do shutdown já não o enxerga) e nenhum monitor o supervisiona. Isso
+        # acontecia quando uma exceção ocorria depois do `_start_process` — por
+        # exemplo um `OperationalError` do SQLite dentro de `_monitor_process`,
+        # que abre sessão a cada 5 s. O banco registrava INTERNAL_WORKER_ERROR
+        # enquanto o PowerShell seguia rodando e podendo enviar e-mail/WhatsApp;
+        # o operador via a falha, reenfileirava, e a entrega duplicava.
+        if orfao is not None and orfao.poll() is None:
+            logger.error(
+                "Processo da tarefa %s continuava vivo apos o encerramento do "
+                "monitor; encerrando para nao deixar orfao sem supervisao.",
+                exec_id,
+                extra=log_extra,
+            )
+            with contextlib.suppress(Exception):
+                _force_kill(orfao.pid)
 
 
 # ---------------------------------------------------------------------------
@@ -786,6 +852,14 @@ def main_loop() -> None:  # pylint: disable=too-many-locals,too-many-statements
     saturation_started_at: float | None = None
 
     while not shutdown_event.is_set():
+        if _graceful_stop_requested():
+            logger.info(
+                "Sentinela de parada encontrado (%s). Iniciando shutdown gracioso.",
+                SHUTDOWN_SENTINEL_PATH,
+            )
+            shutdown_event.set()
+            break
+
         active_futures = {future for future in active_futures if not future.done()}
 
         if len(active_futures) >= MAX_WORKERS:
@@ -868,6 +942,13 @@ def main_loop() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 SHUTDOWN_GRACE_SECONDS,
             )
     executor.shutdown(wait=False, cancel_futures=True)
+    # O pool de notificações também precisa ser encerrado explicitamente: suas
+    # threads não são daemon e o `atexit` do concurrent.futures faria join delas
+    # DEPOIS deste ponto, furando o deadline de SHUTDOWN_GRACE_SECONDS que todo
+    # o bloco acima existe para garantir.
+    notifications.shutdown_notification_executor()
+    # Remove o sentinela para não bloquear o próximo start.
+    _clear_shutdown_sentinel()
     logger.info("Worker encerrado de forma controlada.")
 
 

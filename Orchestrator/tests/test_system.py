@@ -131,8 +131,15 @@ def test_env_validate_rejeita_valor_mascarado(client: Any) -> None:
     )
     assert res.status_code == 200
     body = res.json()
-    assert body["valid"] is False
-    assert any(issue["code"] == "MASKED_VALUE" for issue in body["issues"])
+    # MASKED_VALUE deixou de ser bloqueante em 31/07/2026: o placeholder é
+    # resolvido para o valor real por `restore_masked_values` antes da gravação.
+    # A mensagem antiga mandava "remover a linha para preservar o atual" — e
+    # como o payload sobrescreve o arquivo inteiro (nunca houve merge), seguir a
+    # instrução APAGAVA a ORCHESTRATOR_API_KEY e as credenciais Oracle.
+    assert body["valid"] is True
+    masked = [i for i in body["issues"] if i["code"] == "MASKED_VALUE"]
+    assert len(masked) == 1
+    assert masked[0]["severity"] == "info"
 
 
 def test_prometheus_metrics_requires_api_key(client: Any) -> None:

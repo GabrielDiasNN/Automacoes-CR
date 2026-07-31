@@ -1,5 +1,6 @@
 # pylint: disable=too-many-arguments,too-many-positional-arguments
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import oracledb
 import pybreaker

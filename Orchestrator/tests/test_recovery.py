@@ -8,13 +8,26 @@ from app import models
 from app.timezone import get_now_local
 
 
-def _execution(exec_id: str, automation_id: Any, status: str) -> models.Execution:
+def _execution(
+    exec_id: str,
+    automation_id: Any,
+    status: str,
+    worker_instance_id: str | None = "worker-teste",
+) -> models.Execution:
+    """Execução de teste, por padrão COM dono registrado.
+
+    Desde 31/07/2026 `mark_running_tasks_as_failed_by_reboot` só alcança
+    execuções que têm `worker_instance_id` — é o que separa a órfã de um worker
+    morto da telemetria externa viva, que não tem dono e seguia sendo carimbada
+    como interrompida por reboot enquanto o processo real rodava.
+    """
     return models.Execution(
         id=exec_id,
         automation_id=automation_id,
         status=status,
         requested_by="TEST",
         started_at=get_now_local(),
+        worker_instance_id=worker_instance_id,
     )
 
 

@@ -265,6 +265,21 @@ def _load_manifest_governance(
 ) -> schemas.AutomationPreflightGovernance:
     manifest_path = os.path.join(automation_dir, "automation.manifest.json")
     if not os.path.isfile(manifest_path):
+        # NÃO é bloqueante — e essa é uma decisão em aberto, não um descuido.
+        #
+        # `is_valid = governance.status != "incident"`, então "attention" passa:
+        # a automação é persistida sem manifesto, sem docs obrigatórias e sem
+        # verificação de `whatsapp-config.json`. Como `_manifest_field_mismatches`
+        # só roda quando o manifesto existe, a forma mais fácil de escapar de
+        # toda a governança de manifesto é não ter um.
+        #
+        # Elevar para "incident" foi testado em 31/07/2026 e reprova 17 testes:
+        # o fluxo de criação/atualização via API pressupõe automações sem
+        # manifesto (cadastro experimental, cenários de teste). Tornar
+        # bloqueante é uma decisão de produto — exigiria criar o manifesto antes
+        # de qualquer cadastro — e não uma correção de defeito. Enquanto não for
+        # tomada, o `CLAUDE.md` descreve o comportamento real: o preflight
+        # SINALIZA a ausência, não a impede.
         return schemas.AutomationPreflightGovernance(
             manifest_present=False,
             status="attention",

@@ -36,11 +36,20 @@ def _seed_running_execution(db_session: Any, exec_id: str) -> Any:
 
 
 def _task_ctx(exec_id: str, task_start: Any, max_runtime: int = 30) -> dict[str, Any]:
+    """Contexto de tarefa com os DOIS relógios coerentes entre si.
+
+    Desde 31/07/2026 o corte por `max_runtime` usa `time.monotonic()`, não o
+    relógio de parede (um acerto de NTP para trás adiava o timeout
+    indefinidamente). Os testes expressam "a tarefa começou há N minutos"
+    recuando `task_start`; o monotônico precisa acompanhar o mesmo offset, senão
+    o timeout nunca dispara e `_monitor_process` roda para sempre.
+    """
+    decorrido = (get_now_local() - task_start).total_seconds() if task_start else 0.0
     return {
         "exec_id": exec_id,
         "task_start": task_start,
-        "task_start_ts": time.time(),
-        "task_start_monotonic": time.monotonic(),
+        "task_start_ts": time.time() - decorrido,
+        "task_start_monotonic": time.monotonic() - decorrido,
         "max_runtime": max_runtime,
         "robot_dir": "C:\\robot",
     }

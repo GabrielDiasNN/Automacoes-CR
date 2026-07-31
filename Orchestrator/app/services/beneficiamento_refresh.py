@@ -16,6 +16,12 @@ import sys
 from typing import Any
 
 from ..runtime import get_project_root  # pylint: disable=relative-beyond-top-level
+from ..security import (  # pylint: disable=relative-beyond-top-level
+    sanitize_log_payload,
+)
+from ..subprocess_env import (  # pylint: disable=relative-beyond-top-level
+    build_subprocess_env,
+)
 
 logger = logging.getLogger("orchestrator")
 
@@ -60,6 +66,11 @@ def run_beneficiamento_refresh(period: str) -> dict[str, Any]:
         proc = subprocess.run(
             [_runner_python(), entrypoint, "--period", period],
             cwd=root,
+            # Allowlist em vez de herdar os.environ (31/07/2026). As credenciais
+            # Oracle do runner vêm do `.env` via `load_dotenv(override=True)` em
+            # `beneficiamento/oracle.py`, não do ambiente — então filtrar aqui
+            # não quebra a conexão e deixa de repassar ORCHESTRATOR_API_KEY.
+            env=build_subprocess_env(),
             capture_output=True,
             text=True,
             timeout=_SUBPROCESS_TIMEOUT_SECONDS,
@@ -84,7 +95,14 @@ def run_beneficiamento_refresh(period: str) -> dict[str, Any]:
 
     payload = _parse_runner_output(proc.stdout) or _parse_runner_output(proc.stderr)
     if payload is None:
-        detail = (proc.stderr or proc.stdout or "Saída vazia do runner.").strip()[:500]
+        # `sanitize_log_payload` antes de expor: este era o único caminho em que
+        # saída BRUTA de subprocesso chegava ao cliente (o router repassa este
+        # `detail` como corpo do HTTPException para o Dashboard) e ao log
+        # estruturado — vindo justamente do processo que fala com o Oracle, cuja
+        # mensagem de erro pode carregar DSN, usuário ou string de conexão.
+        detail = sanitize_log_payload(
+            (proc.stderr or proc.stdout or "Saída vazia do runner.").strip()
+        )[:500]
         logger.error(
             "Refresh do beneficiamento (%s) sem JSON válido: %s", period, detail
         )

@@ -23,6 +23,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import TypeDecorator
@@ -113,6 +114,12 @@ class Execution(Base):  # type: ignore[misc,valid-type]
     exit_code = Column(Integer, nullable=True)
     requested_by = Column(String(100), default="SYSTEM")
     started_at = Column(DateTime, default=get_now_local)
+    # Instante do ENFILEIRAMENTO. `started_at` é sobrescrito pelo claim (e é
+    # lido como "início da execução" por ~8 consultas de métricas), então sem
+    # esta coluna o tempo de espera em fila era inobservável — `claimed_at`
+    # acabava sempre idêntico a `started_at`. Nulo em linhas anteriores a
+    # 31/07/2026: tempo de fila desconhecido, não zero.
+    queued_at = Column(DateTime, default=get_now_local, nullable=True)
     claimed_at = Column(DateTime, nullable=True)
     worker_instance_id = Column(String(100), nullable=True)
     worker_pid = Column(Integer, nullable=True)
@@ -134,6 +141,19 @@ class Execution(Base):  # type: ignore[misc,valid-type]
         Index("ix_exec_priority_status", "priority", "status", "started_at"),
         Index("ix_exec_finished_at", "finished_at"),
         Index("ix_exec_status_finished", "status", "finished_at"),
+        # Impõe no banco a invariante "no máximo uma execução RUNNING por
+        # automação" (migration 20260731_01). Os quatro produtores de execução
+        # verificavam isso em Python no padrão ler-checar-inserir, sem lock:
+        # jobs cron concorrentes do APScheduler podiam ambos ler "nenhuma ativa"
+        # e ambos inserir. O predicado cobre só RUNNING de propósito —
+        # múltiplas PENDING são legítimas e alimentam a fila de prioridades de
+        # `claim_next_task`.
+        Index(
+            "ix_execucao_running_unica_por_automacao",
+            "automation_id",
+            unique=True,
+            sqlite_where=text("status = 'RUNNING'"),
+        ),
     )
 
 
