@@ -175,6 +175,8 @@ EXIT_CODE_MAP = {
     # Falha apenas no canal secundário (WhatsApp): o entregável principal
     # (e-mail/artefatos) foi concluído. Classificado como PARTIAL para não gerar
     # alerta crítico diário nem penalizar o SLA, preservando o motivo do canal.
+    # Em automação de canal ÚNICO esse pressuposto não vale e
+    # `classify_process_result_for_channels` rebaixa o desfecho para ERROR.
     24: (
         EXECUTION_STATUS_PARTIAL,
         FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
@@ -186,6 +188,17 @@ EXIT_CODE_MAP = {
         FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
         RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
     ),
+}
+
+# Exit codes que sinalizam degradação de UM canal de entrega específico.
+#
+# O contrato de PARTIAL pressupõe que o OUTRO canal entregou — é o que justifica
+# não gerar alerta crítico nem penalizar o SLA. Quando o canal degradado é o
+# único que a automação possui, essa premissa é falsa: nada foi entregue, e o
+# desfecho correto é ERROR. Ver `classify_process_result_for_channels`.
+DEGRADED_CHANNEL_EXIT_CODES = {
+    24: "whatsapp",
+    25: "email",
 }
 
 # Limite máximo de caracteres de logs persistidos no banco de dados para evitar inchaço

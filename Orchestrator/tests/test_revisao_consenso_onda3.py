@@ -1,5 +1,6 @@
 """Regressões dos achados 1/4 (outliers) da revisão por consenso estocástico."""
 
+import concurrent.futures
 import json
 import os
 import sys
@@ -228,23 +229,47 @@ def test_delete_bloqueado_com_execucao_ativa(
 # ---------------------------------------------------------------------------
 
 
+class _ExecutorSincrono:  # pylint: disable=too-few-public-methods
+    """Executa na thread do chamador e devolve um Future já concluído.
+
+    O pool real tem `max_workers=2`, então submeter uma segunda tarefa não
+    sequencia nada: ela roda na outra thread e o teste podia checar o log antes
+    de o callback do primeiro Future ter rodado. Com o Future já concluído,
+    `add_done_callback` executa de imediato, na thread do teste.
+    """
+
+    def submit(
+        self, fn: Any, *args: Any, **kwargs: Any
+    ) -> "concurrent.futures.Future[Any]":
+        future: "concurrent.futures.Future[Any]" = concurrent.futures.Future()
+        try:
+            future.set_result(fn(*args, **kwargs))
+        except Exception as exc:  # pylint: disable=broad-except
+            future.set_exception(exc)
+        return future
+
+
 @pytest.mark.unitario
-def test_excecao_no_dispatch_e_registrada(
-    caplog: Any,
-) -> None:  # pylint: disable=protected-access
-    """Sem `.result()` nem callback, a exceção ficava presa no Future."""
+def test_excecao_no_dispatch_e_registrada() -> None:
+    """Sem `.result()` nem callback, a exceção ficava presa no Future.
+
+    A asserção é sobre o logger do módulo, não sobre `caplog`: outros testes da
+    suíte reconfiguram o logging estruturado e a captura pela raiz deixa de ver
+    o registro, o que fazia este teste passar isolado e reprovar na suíte.
+    """
     from app import notifications  # pylint: disable=import-outside-toplevel
 
-    with patch.object(
-        notifications, "dispatch_alerts", side_effect=RuntimeError("boom")
+    with (
+        patch.object(
+            notifications, "dispatch_alerts", side_effect=RuntimeError("boom")
+        ),
+        patch.object(notifications, "_notification_executor", _ExecutorSincrono()),
+        patch.object(notifications, "logger") as logger_mock,
     ):
-        with caplog.at_level("ERROR"):
-            notifications.dispatch_alerts_async(MagicMock(), MagicMock())
-            notifications._notification_executor.submit(  # pylint: disable=protected-access
-                lambda: None
-            ).result()
+        notifications.dispatch_alerts_async(MagicMock(), MagicMock())
 
-    assert any("dispatch" in registro.message.lower() for registro in caplog.records)
+    assert logger_mock.error.called, "A exceção do dispatch não chegou ao logger."
+    assert "dispatch" in str(logger_mock.error.call_args).lower()
 
 
 @pytest.mark.unitario

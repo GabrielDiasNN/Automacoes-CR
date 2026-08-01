@@ -12,11 +12,13 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..constants import (
+    DEGRADED_CHANNEL_EXIT_CODES,
     EXECUTION_ACTIVE_STATUSES,
     EXECUTION_ALLOWED_PRIORITIES,
     EXECUTION_QUEUEABLE_SOURCE_STATUSES,
     EXECUTION_STATUS_ERROR,
     EXECUTION_STATUS_FAILED_BY_REBOOT,
+    EXECUTION_STATUS_PARTIAL,
     EXECUTION_STATUS_PENDING,
     EXECUTION_STATUS_REQUEUED,
     EXECUTION_STATUS_RUNNING,
@@ -215,6 +217,46 @@ def classify_process_result(
     )
 
 
+def classify_process_result_for_channels(
+    return_code: int | None,
+    notification_channels: str | None,
+) -> tuple[str, str | None, str]:
+    """Corrige o PARTIAL de canal degradado quando o canal era o único.
+
+    `classify_process_result` é pura sobre o exit code e não tem como saber
+    quantos canais a automação usa. Os códigos 24 (WhatsApp) e 25 (e-mail)
+    mapeiam para PARTIAL porque pressupõem que o outro canal entregou — o que
+    evita alerta crítico e preserva o SLA. Em automação de canal único a
+    premissa cai: `Montagem de Terceirizados` (MT-02) emite `exit 25` e tem
+    apenas `email`, ou seja, um desfecho sem nenhuma entrega estava sendo
+    contado como sucesso parcial, sem alerta e sem penalidade de SLA.
+
+    A lista de canais vem de `Automation.notification_channels` — a mesma coluna
+    que `notifications.dispatch_alerts` consome. Não há acoplamento ao catálogo
+    de portfólio: a informação já está na linha da automação.
+
+    Com `notification_channels` nulo ou vazio, mantém-se o PARTIAL: sem a lista
+    não há evidência de que o canal degradado fosse o único, e inventar um
+    incidente a partir de configuração ausente trocaria um erro por outro.
+    """
+    status, failure_reason, recovery_action = classify_process_result(return_code)
+    if status != EXECUTION_STATUS_PARTIAL:
+        return status, failure_reason, recovery_action
+
+    canal_degradado = DEGRADED_CHANNEL_EXIT_CODES.get(cast(int, return_code))
+    if not canal_degradado:
+        return status, failure_reason, recovery_action
+
+    canais = {
+        canal.strip().lower()
+        for canal in str(notification_channels or "").split(",")
+        if canal.strip()
+    }
+    if canais == {canal_degradado}:
+        return EXECUTION_STATUS_ERROR, failure_reason, recovery_action
+    return status, failure_reason, recovery_action
+
+
 def mark_task_as_failed(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     db: Session,
     exec_id: str,
@@ -353,7 +395,10 @@ def complete_process_execution(  # pylint: disable=too-many-arguments
     ]:
         return db_exec
 
-    status, failure_reason, recovery_action = classify_process_result(return_code)
+    status, failure_reason, recovery_action = classify_process_result_for_channels(
+        return_code,
+        db_exec.automation.notification_channels if db_exec.automation else None,
+    )
     db_exec.exit_code = return_code  # type: ignore[assignment]
     db_exec.duration_seconds = duration_seconds  # type: ignore[assignment]
     db_exec.status = status  # type: ignore[assignment]
