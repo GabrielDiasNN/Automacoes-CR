@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.14] - 01/08/2026
+
+### Corrigido
+- **A allowlist de ambiente cortava configuração operacional junto com segredo** (`Orchestrator/app/subprocess_env.py`): achado da revisão do próprio PR. `beneficiamento_refresh` fazia `os.environ.copy()` antes da consolidação da allowlist; ao passar a usar `build_subprocess_env()`, cinco variáveis do domínio deixaram de chegar ao subprocesso. A grave é `BENEFICIAMENTO_HISTORICO_DB`, que redireciona o banco histórico (`data/schema.py`): com ela filtrada, o refresh escreveria no caminho **default** enquanto o processo pai lê o redirecionado — dois bancos divergentes, sem erro e sem aviso. As outras quatro (`_ORACLE_TIMEOUT_MS`, `_WALL_CLOCK_SECONDS`, `_FETCH_ARRAY_SIZE`, `_FETCH_BATCH_SIZE`) são knobs lidos por `settings.py` no import e degradavam para o default em silêncio. Nenhuma é credencial; todas entraram na allowlist. As credenciais Oracle seguem de fora — `beneficiamento/oracle.py` as lê do `.env` com `load_dotenv(override=True)`, nunca do ambiente herdado, o que foi verificado antes da mudança.
+
 ## [1.3.13] - 31/07/2026
 
 ### Alterado

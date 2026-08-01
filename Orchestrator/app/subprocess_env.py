@@ -40,6 +40,18 @@ ALLOWED_ENV_KEYS = frozenset(
         "HUB_API_PORT",
         "PYTHONUTF8",
         "PYTHONIOENCODING",
+        # Redireciona o banco histórico do Beneficiamento
+        # (`data/schema.py`). Filtrá-la fazia o subprocesso de refresh escrever
+        # no caminho DEFAULT enquanto o processo pai lia o redirecionado — dois
+        # bancos divergentes, em silêncio. É caminho de arquivo, não segredo.
+        "BENEFICIAMENTO_HISTORICO_DB",
+        # Knobs de tuning lidos por `beneficiamento/settings.py` no import.
+        # Sem eles o refresh degradava para os defaults, ignorando o ajuste
+        # operacional — sem erro e sem aviso.
+        "BENEFICIAMENTO_ORACLE_TIMEOUT_MS",
+        "BENEFICIAMENTO_WALL_CLOCK_SECONDS",
+        "BENEFICIAMENTO_FETCH_ARRAY_SIZE",
+        "BENEFICIAMENTO_FETCH_BATCH_SIZE",
     }
 )
 

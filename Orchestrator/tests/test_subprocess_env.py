@@ -57,6 +57,30 @@ def test_extra_e_aplicado_e_vence_a_allowlist() -> None:
 
 
 @pytest.mark.unitario
+def test_configuracao_do_beneficiamento_chega_ao_subprocesso() -> None:
+    """A allowlist não pode cortar configuração operacional junto com segredo.
+
+    `BENEFICIAMENTO_HISTORICO_DB` redireciona o banco histórico
+    (`data/schema.py`). Filtrada, o subprocesso de refresh escrevia no caminho
+    default enquanto o pai lia o redirecionado — dois bancos divergentes, sem
+    erro. Os demais são knobs de tuning lidos por `settings.py` no import, que
+    degradavam para o default em silêncio.
+    """
+    configuracao = {
+        "BENEFICIAMENTO_HISTORICO_DB": "D:\\dados\\historico.db",
+        "BENEFICIAMENTO_ORACLE_TIMEOUT_MS": "25000",
+        "BENEFICIAMENTO_WALL_CLOCK_SECONDS": "30",
+        "BENEFICIAMENTO_FETCH_ARRAY_SIZE": "2000",
+        "BENEFICIAMENTO_FETCH_BATCH_SIZE": "8000",
+    }
+    with patch.dict(os.environ, configuracao):
+        env = build_subprocess_env()
+
+    for chave, valor in configuracao.items():
+        assert env.get(chave) == valor, f"{chave} não chegou ao subprocesso"
+
+
+@pytest.mark.unitario
 def test_allowlist_nao_contem_segredo_conhecido() -> None:
     """Guarda contra alguém adicionar uma chave sensível à allowlist."""
     proibidos = {"KEY", "PASSWORD", "SECRET", "TOKEN", "PASSWD", "CREDENTIAL"}
