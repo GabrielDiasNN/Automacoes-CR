@@ -23,10 +23,10 @@ Use como artefato de auditoria: registre a data e o executor de cada item.
 
 ### 1.2 Qualidade de Código Python
 
-- [ ] `python -m ruff check Orchestrator/app Orchestrator/worker.py` — lint bloqueante do CI, zero erros
+- [ ] `python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src"` — lint bloqueante do CI, zero erros
 - [ ] `python -m black --check Orchestrator/app` — sem diferenças de formatação
 - [ ] `python -m isort --check-only Orchestrator/app` — imports ordenados (perfil `black`, fonte de verdade)
-- [ ] `python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll` — sem findings de segurança
+- [ ] `python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" -ll` — sem findings de segurança
 - [ ] `pwsh -File Tools/Test-PythonGovernance.ps1 -RootPath .` — mypy `--strict` + pylint (gate bloqueante do pre-commit hook)
 - [ ] `Tools/Get-QualitySnapshot.ps1 -BasePath .` — snapshot consolidado sem alerta estrutural inesperado
 
