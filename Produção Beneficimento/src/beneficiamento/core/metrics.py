@@ -7,7 +7,7 @@ snapshot_dashboard, dando-lhes nome e documentacao unica.
 from __future__ import annotations
 
 import statistics
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def time_efficiency(min_prev: float, min_real: float) -> float:

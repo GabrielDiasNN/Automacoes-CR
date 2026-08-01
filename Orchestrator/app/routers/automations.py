@@ -22,13 +22,10 @@ from ..constants import PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, scheduler, trigger_worker_wakeup
-from ..services import automation_repository as repo
-from ..services import env_admin
+from ..services import automation_repository as repo, env_admin
 from ..services.automation_preflight import build_automation_preflight
 from ..services.automation_snapshot import (
     build_automation_response as build_operational_automation_response,
-)
-from ..services.automation_snapshot import (
     build_automation_response_batch,
     load_snapshot_dependencies,
 )

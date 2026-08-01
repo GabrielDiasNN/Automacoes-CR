@@ -11,13 +11,11 @@ que o overview geral nao tem espaco para.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from ..core import parse_iso_date
-from ..core import round_or_zero as _round
-from ..core import safe_strip as _safe_strip
+from ..core import parse_iso_date, round_or_zero as _round, safe_strip as _safe_strip
 from ..data.schema import init_db
 
 _CODIGO_FASE_TINGIMENTO = 40
@@ -87,7 +85,7 @@ def _build_resumo(
             SUM(CASE WHEN REPROCESSO = 1 THEN 1 ELSE 0 END) AS fases_reprocessadas
         FROM fato_producao_historica
         WHERE {where_sql}
-        """,
+        """,  # nosec B608
         params,
     )
     row = cursor.fetchone()
@@ -136,7 +134,7 @@ def _build_series(
         GROUP BY dia
         ORDER BY dia
         LIMIT 90
-        """,
+        """,  # nosec B608
         params,
     )
     serie = []
@@ -179,7 +177,7 @@ def _build_por_maquina(
         GROUP BY maquina
         ORDER BY kg_total DESC
         LIMIT 15
-        """,
+        """,  # nosec B608
         params,
     )
     itens = []
@@ -228,7 +226,7 @@ def _build_por_cor(
         GROUP BY cor
         ORDER BY kg_total DESC
         LIMIT 15
-        """,
+        """,  # nosec B608
         params,
     )
     itens = []
@@ -268,7 +266,7 @@ def _build_por_turno(
         WHERE {where_sql}
         GROUP BY turno
         ORDER BY turno
-        """,
+        """,  # nosec B608
         params,
     )
     itens = []
@@ -312,7 +310,7 @@ def obter_tingimento_historico(  # pylint: disable=too-many-locals
         por_turno = _build_por_turno(cursor, where_sql, params)
 
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "filters": {"effective": {"dt_inicio": dt_inicio, "dt_fim": dt_fim}},
         "health": {
             "status": "healthy" if fases > 0 else "no_data",

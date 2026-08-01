@@ -15,8 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
-from .. import metrics as _metrics
-from .. import models, schemas, security
+from .. import metrics as _metrics, models, schemas, security
 from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
 )

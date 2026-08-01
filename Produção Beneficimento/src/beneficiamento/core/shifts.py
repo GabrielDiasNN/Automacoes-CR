@@ -7,7 +7,8 @@ logica embutida em analytics.build_fato_producao.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .coercion import safe_strip
 

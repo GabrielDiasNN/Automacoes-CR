@@ -5,8 +5,7 @@ formulas de KPI. Substitui as copias historicamente duplicadas em analytics,
 historico_db, overview_v1, quality e profile.
 """
 
-from .coercion import (parse_iso_date, round_or_zero, safe_strip, safe_text,
-                       to_float)
+from .coercion import parse_iso_date, round_or_zero, safe_strip, safe_text, to_float
 from .metrics import deviation_minutes, time_efficiency, weighted_average
 from .schema import PHASE_GROUPS, first_present, resolve_alias
 from .shifts import normalize_shift

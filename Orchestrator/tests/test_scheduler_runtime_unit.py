@@ -8,8 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from app import models
-from app import runtime as app_runtime
+from app import models, runtime as app_runtime
 from app.constants import EXECUTION_STATUS_ERROR, EXECUTION_STATUS_PENDING
 from app.services import scheduler_runtime as sr
 from app.timezone import get_now_local

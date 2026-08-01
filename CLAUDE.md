@@ -33,7 +33,7 @@ cd Orchestrator && ..\.venv\Scripts\pytest -m integracao -v
 # Lint Python (black, isort, bandit, mypy, pylint) — ferramentas via requirements-dev.txt
 .venv\Scripts\python -m black --check Orchestrator
 .venv\Scripts\python -m isort --check-only Orchestrator
-.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll
+.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" -ll
 # mypy + pylint: usar o script de governança (aplica flags corretas por arquivo)
 pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 
@@ -44,7 +44,7 @@ pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 .venv\Scripts\python -m pip install -r requirements.txt -r requirements-test.txt -r requirements-dev.txt
 
 # Lint que roda no CI (bloqueante) — reproduzir localmente antes do push
-.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python
+.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src"
 ```
 
 ### Dashboard (React + TypeScript + Vite)
@@ -155,7 +155,7 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - `POST /api/automations/preflight` valida manifesto, docs obrigatórias e smoke tests antes de `create/update`. **Atenção:** manifesto AUSENTE gera status `attention`, que NÃO bloqueia o `create/update` (só `incident` bloqueia) — a governança de manifesto é verificada apenas quando o arquivo existe. Elevar a ausência a bloqueante é decisão de produto em aberto: foi testado em 31/07/2026 e reprova 17 testes, porque o fluxo de cadastro via API pressupõe automações sem manifesto.
 
 ### CI (GitHub Actions — `.github/workflows/governanca.yml`)
-Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py lib/python`, black/isort/bandit (job `lint-python`; ruff e bandit passaram a cobrir `lib/python` em 31/07/2026 — é o núcleo compartilhado de extração Oracle e estava fora de todo gate), pytest com `--cov-fail-under=84` (job `testes-python`), além de `diff-cover --fail-under=85` nas linhas alteradas do PR, E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
+Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src"`, black/isort/bandit (job `lint-python`; ruff e bandit passaram a cobrir `lib/python` e `Produção Beneficimento/src` em 31/07/2026 — o primeiro é o núcleo compartilhado de extração Oracle, o segundo é o domínio que monta o SQL do histórico; ambos estavam fora de todo gate. Os 13 `# nosec B608` do Beneficiamento foram revisados um a um e quem sustenta a premissa é `tests/test_beneficiamento_sql_seguranca.py`), pytest com `--cov-fail-under=84` (job `testes-python`), além de `diff-cover --fail-under=85` nas linhas alteradas do PR, E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
 
 ## Contratos de Governança (Pre-Commit Hook)
 

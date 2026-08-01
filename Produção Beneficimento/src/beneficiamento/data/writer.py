@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 from ..core import normalize_shift, safe_strip, to_float
 from .schema import COLUMN_NAMES, apply_pragmas, init_db
@@ -139,7 +140,9 @@ def _build_row(record: dict[str, Any]) -> tuple[Any, ...] | None:
     values["GRUPO_FASE_KEY"] = safe_strip(record.get("DESCR_GRUPO_FASE"))
     values["TIPO_MAQ_KEY"] = safe_strip(record.get("DESCR_TIPO_MAQ"))
     values["STATUS_KEY"] = (
-        "confirmada" if values["STATUS_FASE"] == _STATUS_FASE_CONFIRMADA else "planejada"
+        "confirmada"
+        if values["STATUS_FASE"] == _STATUS_FASE_CONFIRMADA
+        else "planejada"
     )
     values["CODIGO_KEY"] = (
         safe_strip(record.get("CODIGO_ALTERNATIVO") or record.get("REDUZ")) or None

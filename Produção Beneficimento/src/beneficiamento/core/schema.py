@@ -8,7 +8,8 @@ em analytics.py e overview_v1.py.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 # Cada alias logico mapeia para a lista ordenada de colunas candidatas.
 # A primeira presente (valor nao None) vence.

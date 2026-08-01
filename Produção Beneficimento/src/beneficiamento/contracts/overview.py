@@ -3,17 +3,26 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ..data.schema import init_db
-from ._queries import (_build_fases_criticas, _build_filtered_dataset,
-                       _build_filtered_where, _build_gargalos,
-                       _build_overview_kpis, _build_overview_series,
-                       _build_produtos, _build_setores, _build_treemap,
-                       _build_turnos, _fetch_filter_options,
-                       _normalize_request_filters, _resolve_overview_window)
+from ._queries import (
+    _build_fases_criticas,
+    _build_filtered_dataset,
+    _build_filtered_where,
+    _build_gargalos,
+    _build_overview_kpis,
+    _build_overview_series,
+    _build_produtos,
+    _build_setores,
+    _build_treemap,
+    _build_turnos,
+    _fetch_filter_options,
+    _normalize_request_filters,
+    _resolve_overview_window,
+)
 
 
 def obter_overview_historico(  # pylint: disable=too-many-locals
@@ -42,7 +51,7 @@ def obter_overview_historico(  # pylint: disable=too-many-locals
         treemap = _build_treemap(cursor)
 
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "filters": {
             "effective": {
                 "dt_inicio": dt_inicio,

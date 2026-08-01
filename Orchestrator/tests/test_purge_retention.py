@@ -3,8 +3,7 @@
 from datetime import timedelta
 
 import pytest
-from app import database as db_module
-from app import models
+from app import database as db_module, models
 from app.database import purge_old_executions
 from app.timezone import get_now_local
 from sqlalchemy.orm import Session, sessionmaker

@@ -9,12 +9,11 @@ contrato de overview quanto pelo contrato de detail.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 from datetime import datetime, timedelta
-from typing import Any, Mapping
+from typing import Any
 
-from ..core import normalize_shift, parse_iso_date
-from ..core import round_or_zero as _round
-from ..core import safe_strip
+from ..core import normalize_shift, parse_iso_date, safe_strip
 from ..data.schema import COLUMN_NAMES
 
 # Projeção tipada usada no drill-down (tudo menos o blob de auditoria).
@@ -207,7 +206,7 @@ def _build_filtered_dataset(
             CODIGO_KEY
         FROM fato_producao_historica
         WHERE {where_sql}
-        """,
+        """,  # nosec B608
         params,
     )
     cursor.execute(

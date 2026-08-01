@@ -118,7 +118,7 @@ def explicar_busca_historico(
     path = init_db(db_path)
     where_sql, params = _apply_filters(filtros)
     sql = (
-        f"EXPLAIN QUERY PLAN SELECT {_TYPED_SELECT}"
+        f"EXPLAIN QUERY PLAN SELECT {_TYPED_SELECT}"  # nosec B608
         f" FROM {TABLE_NAME}{where_sql}"
         " ORDER BY DATA_FIM DESC, NUMERO_OB DESC, SEQ ASC LIMIT ?"
     )
@@ -139,7 +139,7 @@ def buscar_produtos(
         return []
     like = f"%{termo_norm}%"
     sql = (
-        "SELECT DISTINCT CODIGO_KEY AS codigo, DESCR_ITEM AS produto"
+        "SELECT DISTINCT CODIGO_KEY AS codigo, DESCR_ITEM AS produto"  # nosec B608
         f" FROM {TABLE_NAME}"
         " WHERE COALESCE(CODIGO_KEY, '') != ''"
         " AND (CODIGO_KEY LIKE ? OR DESCR_ITEM LIKE ?)"

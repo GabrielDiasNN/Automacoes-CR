@@ -13,8 +13,7 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
-from concurrent.futures import wait as futures_wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait as futures_wait
 from datetime import datetime, timedelta
 from queue import Empty, Queue
 from types import FrameType

@@ -10,7 +10,7 @@ compatibilidade interna.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +45,6 @@ from ._queries_overview import (
     _build_turnos as _build_turnos,
 )
 
-
 # --- Implementações legadas (não usadas pelo roteador; preservadas para compat) ---
 
 
@@ -73,7 +72,7 @@ def obter_overview_historico(
 
     status = "healthy" if fases > 0 else "no_data"
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "filters": {
             "effective": {
                 "dt_inicio": dt_inicio,
@@ -155,7 +154,7 @@ def obter_detail_historico(
             target_label = target_type
 
         cursor.execute(
-            f"SELECT COUNT(*) AS total FROM fato_producao_historica WHERE {where_sql}",
+            f"SELECT COUNT(*) AS total FROM fato_producao_historica WHERE {where_sql}",  # nosec B608
             params,
         )
         total = int(cursor.fetchone()["total"] or 0)
@@ -168,7 +167,7 @@ def obter_detail_historico(
             WHERE {where_sql}
             ORDER BY DATA_FIM DESC, NUMERO_OB DESC, SEQ ASC
             LIMIT ? OFFSET ?
-            """,
+            """,  # nosec B608
             params + [limit, offset],
         )
         records = [_detail_row_to_record(row) for row in cursor.fetchall()]
@@ -201,7 +200,7 @@ def obter_detail_historico(
         ]
 
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "filters": {
             "effective": {
                 "dt_inicio": dt_inicio,

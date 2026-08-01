@@ -1,4 +1,5 @@
 """Profiling leve de colunas para snapshots do Beneficiamento."""
+
 # pylint: disable=missing-class-docstring,too-many-instance-attributes
 
 from __future__ import annotations
@@ -59,9 +60,16 @@ def serialize_value(value: Any) -> Any:
     return value
 
 
-def rows_to_records(columns: list[str], rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
+def rows_to_records(
+    columns: list[str], rows: list[tuple[Any, ...]]
+) -> list[dict[str, Any]]:
     return [
-        {column: serialize_value(value) for column, value in zip(columns, row)}
+        {
+            column: serialize_value(value)
+            # Colunas vêm de `cursor.description` e os valores da mesma linha:
+            # tamanhos diferentes indicam cursor corrompido, não dado faltante.
+            for column, value in zip(columns, row, strict=True)
+        }
         for row in rows
     ]
 
@@ -71,7 +79,7 @@ def profile_rows(
 ) -> list[ColumnProfile]:
     profiles = [ColumnProfile(name=column) for column in columns]
     for row in rows:
-        for profile, value in zip(profiles, row):
+        for profile, value in zip(profiles, row, strict=True):
             profile.add(value, sample_limit)
     return profiles
 

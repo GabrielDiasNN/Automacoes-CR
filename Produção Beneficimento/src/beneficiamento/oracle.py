@@ -1,4 +1,5 @@
 """Acesso Oracle controlado para refresh de snapshots."""
+
 # pylint: disable=missing-class-docstring,broad-exception-caught,too-many-locals
 
 from __future__ import annotations
@@ -6,9 +7,10 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import oracledb
 from dotenv import load_dotenv
@@ -58,7 +60,9 @@ def connect_readonly() -> Any:
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = os.environ.get("ORACLE_CONNECT_STRING")
-    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
+    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get(
+        "ORACLE_CLIENT_PATH"
+    )
     tns_admin = os.environ.get("TNS_ADMIN")
 
     if not user or not password or not dsn:

@@ -18,8 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Query as SAQuery
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query as SAQuery, Session
 
 from .. import models, schemas
 from ..constants import (

@@ -11,8 +11,7 @@ import json
 import sqlite3
 from typing import Any
 
-from ..core import round_or_zero as _round
-from ..core import safe_strip as _safe_strip
+from ..core import round_or_zero as _round, safe_strip as _safe_strip
 from ._queries_common import _DETAIL_TYPED, _normalize_record
 
 
@@ -101,7 +100,9 @@ def _detail_row_to_record(row: sqlite3.Row) -> dict[str, Any]:
     record = {column: row[column] for column in _DETAIL_TYPED}
     record["TURNO_PROD"] = record.get("TURNO_ID")
     record["TURNO_DESC"] = record.get("TURNO_LABEL") or "Indefinido"
-    if "DADOS_COMPLETOS" in row.keys():
+    # `row` é `sqlite3.Row`, não dict: `in row` itera os VALORES, não as chaves.
+    # A correção automática do SIM118 inverteria a semântica silenciosamente.
+    if "DADOS_COMPLETOS" in row.keys():  # noqa: SIM118
         record["__raw__"] = row["DADOS_COMPLETOS"]
     return record
 
