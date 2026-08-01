@@ -16,6 +16,7 @@ import os
 
 from fastapi import HTTPException
 
+from ..path_safety import is_contained
 from ..utils import backup_timestamped_file, timestamp_suffix
 
 
@@ -29,28 +30,28 @@ def resolve_automation_dir(script_path: str, project_root: str) -> str:
         resolved_script = script_path
 
     auto_dir = os.path.dirname(os.path.abspath(os.path.normpath(resolved_script)))
-    root_abs = os.path.abspath(os.path.normpath(project_root))
-    try:
-        if os.path.commonpath([root_abs, auto_dir]) != root_abs:
-            raise HTTPException(
-                status_code=403, detail="Diretorio da automacao fora do projeto."
-            )
-    except ValueError as exc:
-        # commonpath levanta ValueError para drives distintos no Windows.
+    if not is_contained(project_root, auto_dir):
         raise HTTPException(
             status_code=403, detail="Diretorio da automacao fora do projeto."
-        ) from exc
+        )
     return auto_dir
 
 
 def resolve_managed_file(auto_dir: str, filename: str) -> str:
-    """Resolve arquivo gerenciado impedindo path traversal por nome ou symlink."""
+    """Resolve arquivo gerenciado impedindo path traversal por nome ou symlink.
+
+    A promessa de bloqueio de symlink era falsa até 31/07/2026: a resolução
+    usava `abspath`, que colapsa `..` apenas lexicalmente e NÃO resolve links.
+    Um symlink/junction dentro da pasta da automação apontando para `.env` ou
+    para fora do repositório passava nas duas checagens e era lido — e
+    sobrescrito — pelo IDE. Agora a contenção passa por `realpath` nos dois
+    lados (ver `app/path_safety.py`).
+    """
     if os.path.basename(filename) != filename or filename.startswith("."):
         raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
 
     target_path = os.path.abspath(os.path.normpath(os.path.join(auto_dir, filename)))
-    auto_dir_abs = os.path.abspath(os.path.normpath(auto_dir))
-    if os.path.commonpath([auto_dir_abs, target_path]) != auto_dir_abs:
+    if not is_contained(auto_dir, target_path):
         raise HTTPException(status_code=403, detail="Acesso negado ao arquivo.")
     if not os.path.exists(target_path) or not os.path.isfile(target_path):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")

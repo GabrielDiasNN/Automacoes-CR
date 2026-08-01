@@ -16,11 +16,19 @@ from .data.writer import salvar_historico
 from .oracle import QueryResult, execute_query
 from .profile import profile_rows, rows_to_records, summarize_profiles
 from .quality import assess_quality
-from .settings import (ORACLE_CALL_TIMEOUT_MS, PERIOD_ORDER, SNAPSHOT_DIR,
-                       WALL_CLOCK_BUDGET_SECONDS)
+from .settings import (
+    ORACLE_CALL_TIMEOUT_MS,
+    PERIOD_ORDER,
+    SNAPSHOT_DIR,
+    WALL_CLOCK_BUDGET_SECONDS,
+)
 from .snapshot_store import snapshot_path, write_json_atomic
-from .sql_repository import (apply_rownum_limit, bind_parameters,
-                             load_sql_template, period_window)
+from .sql_repository import (
+    apply_rownum_limit,
+    bind_parameters,
+    load_sql_template,
+    period_window,
+)
 
 
 def _load_sql_file(path: Path) -> str:

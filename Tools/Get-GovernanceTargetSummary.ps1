@@ -116,7 +116,16 @@ function Test-AreaAffected {
 
 $hasPython = Test-AreaAffected -Patterns @("\.py$", "^requirements[^\\]*\.(txt|in)$")
 $hasPowerShell = Test-AreaAffected -Patterns @("\.(ps1|psm1|psd1)$")
-$hasJs = Test-AreaAffected -Patterns @("\.(js|mjs|cjs|ts|tsx)$", "\.(html|css)$")
+# `package.json` / `package-lock.json` entram aqui desde 31/07/2026: eles sao
+# `.json` e nao batiam em nenhuma area, entao um PR que so alterasse dependencias
+# do Dashboard passava pela governanca com ZERO jobs de build/teste executados —
+# o job `frontend` (npm ci, ESLint, Vitest com gate de cobertura, tsc+vite build)
+# depende de `has_js`, e `testes-e2e`/`testes-powershell` das mesmas flags.
+$hasJs = Test-AreaAffected -Patterns @(
+    "\.(js|mjs|cjs|ts|tsx)$",
+    "\.(html|css)$",
+    "package(-lock)?\.json$"
+)
 $hasMarkdown = Test-AreaAffected -Patterns @("\.md$")
 
 $summary = [PSCustomObject]@{

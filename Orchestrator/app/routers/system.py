@@ -15,8 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
-from .. import metrics as _metrics
-from .. import models, schemas, security
+from .. import metrics as _metrics, models, schemas, security
 from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
 )
@@ -249,7 +248,11 @@ def recover_worker(
 
 @router.get("/audit", response_model=list[schemas.AuditEntry])
 def list_audit_log(
-    limit: int = 50,
+    # Teto explícito: `limit: int = 50` sem validação aceitava
+    # `?limit=100000000`, materializando toda a `audit_log` em memória do
+    # uvicorn — e ela é justamente a tabela que cresce sem purge próprio.
+    # `/metrics/daily` e `list_executions` já usavam Query(ge=, le=).
+    limit: int = Query(50, ge=1, le=500),
     action: str | None = None,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
@@ -388,7 +391,7 @@ def get_operational_baseline(
 
 @router.get("/history", response_model=schemas.SystemHistoryResponse)
 def get_system_history(
-    hours: int = 24,
+    hours: int = Query(24, ge=1, le=720),  # teto de 30 dias
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> schemas.SystemHistoryResponse:
@@ -612,7 +615,14 @@ def update_env_content(
                 },
             )
         backup_relpath = env_admin.backup_env_file(PROJECT_ROOT, env_path)
-        env_admin.write_env_content(env_path, payload.content)
+        # Resolve os `********` que vieram do GET para os valores reais antes de
+        # gravar. Sem isso, o ciclo natural GET → editar → PUT ou apagava as
+        # credenciais (se a linha fosse removida, como a mensagem antiga
+        # instruía) ou as sobrescrevia pelo literal do placeholder.
+        conteudo_final = env_admin.restore_masked_values(
+            payload.content, env_admin.read_env_content(env_path)
+        )
+        env_admin.write_env_content(env_path, conteudo_final)
 
         logger.info("Arquivo .env global atualizado via API.")
 

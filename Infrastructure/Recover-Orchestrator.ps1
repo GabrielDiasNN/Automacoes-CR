@@ -10,6 +10,7 @@ Write-Host "--- [RESCUE MODE: ORQUESTRADOR $RuntimeVersion] ---" -ForegroundColo
 Write-Host "Iniciando limpeza profunda de processos e locks..." -ForegroundColor Yellow
 
 # 1. Matar todos os processos Python e PowerShell relacionados as automacoes
+Request-OrchestratorGracefulStop -ProjectRoot $ProjectRoot | Out-Null
 $killed = Stop-OrchestratorProcesses -ProjectRoot $ProjectRoot -IncludeStarter
 Write-Host "  > $killed processo(s) encerrado(s)." -ForegroundColor Gray
 

@@ -19,6 +19,7 @@ import threading
 import time
 from typing import Any, Protocol
 
+from app.subprocess_env import build_subprocess_env
 from app.timezone import get_now_local
 
 
@@ -68,6 +69,24 @@ PROJECT_ROOT = os.path.dirname(
 _notification_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=2, thread_name_prefix="notif"
 )
+
+
+def shutdown_notification_executor() -> None:
+    """Encerra o pool de notificações com prazo, no shutdown do worker.
+
+    As threads de `ThreadPoolExecutor` não são daemon, e o pool nunca era
+    desligado: o handler `atexit` do `concurrent.futures` fazia join delas
+    DEPOIS de `main_loop` retornar. Com fila de alertas pendentes (cada um até
+    60 s de WhatsApp + 30 s de e-mail), o processo ficava preso muito além dos
+    `SHUTDOWN_GRACE_SECONDS = 30` planejados — e o `Start-Orchestrator.ps1`
+    seguinte acabava matando-o à força.
+
+    Os alertas já submetidos têm o prazo para terminar; o que não couber é
+    abandonado. Preferir isso a pendurar o encerramento: perder um alerta é
+    menos grave que um worker que não morre e é morto com `-Force` no meio de
+    uma escrita.
+    """
+    _notification_executor.shutdown(wait=True, cancel_futures=True)
 
 
 def _get_cooldown(fail_count: int) -> int:
@@ -144,6 +163,7 @@ def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = "") -> bo
                 "-Message",
                 message,
             ],
+            env=build_subprocess_env(),
             capture_output=True,
             timeout=60,
             check=False,
@@ -196,10 +216,17 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = "") -> bool:
         f"-ExecId '{exec_id}' -LogPath 'ALERT'"
     )
 
-    env = os.environ.copy()
-    env["ALERT_TO"] = alert_email
-    env["ALERT_SUBJECT"] = subject
-    env["ALERT_HTML_BODY"] = html_body
+    # Allowlist, nunca os.environ.copy(): o corpo do alerta vai por variável de
+    # ambiente justamente para não ser interpolado no -Command, mas a cópia
+    # integral do ambiente levava junto ORCHESTRATOR_API_KEY e as credenciais
+    # Oracle para dentro do PowerShell de notificação (corrigido em 31/07/2026).
+    env = build_subprocess_env(
+        {
+            "ALERT_TO": alert_email,
+            "ALERT_SUBJECT": subject,
+            "ALERT_HTML_BODY": html_body,
+        }
+    )
 
     try:
         result = subprocess.run(
@@ -291,6 +318,7 @@ def send_infra_alert(component: str, message: str) -> None:
                     "-Message",
                     full_message,
                 ],
+                env=build_subprocess_env(),
                 capture_output=True,
                 timeout=60,
                 check=False,
@@ -324,10 +352,13 @@ def send_infra_alert(component: str, message: str) -> None:
             f"-HtmlBody $env:ALERT_HTML_BODY "
             f"-ExecId 'INFRA' -LogPath 'ALERT'"
         )
-        env = os.environ.copy()
-        env["ALERT_TO"] = alert_email
-        env["ALERT_SUBJECT"] = subject
-        env["ALERT_HTML_BODY"] = html_body
+        env = build_subprocess_env(
+            {
+                "ALERT_TO": alert_email,
+                "ALERT_SUBJECT": subject,
+                "ALERT_HTML_BODY": html_body,
+            }
+        )
         try:
             result = subprocess.run(
                 [
@@ -379,8 +410,24 @@ def dispatch_alerts(automation: AlertAutomation, execution: AlertExecution) -> N
     _mark_sent(automation_id)
 
 
+def _log_dispatch_failure(future: "concurrent.futures.Future[None]") -> None:
+    """Loga exceção do dispatch — `concurrent.futures` a guarda em silêncio.
+
+    Sem `.result()` nem `add_done_callback`, qualquer exceção dentro de
+    `dispatch_alerts` ficava presa no Future e NUNCA chegava ao logger: o alerta
+    de falha de uma automação crítica sumia sem rastro, exatamente quando é mais
+    necessário. Vale em especial para `DetachedInstanceError`, se as entidades
+    ORM passadas para a outra thread tiverem sido expiradas pelo fechamento da
+    sessão do chamador.
+    """
+    exc = future.exception()
+    if exc is not None:
+        logger.error("Falha no dispatch assíncrono de alertas: %s", exc, exc_info=exc)
+
+
 def dispatch_alerts_async(
     automation: AlertAutomation, execution: AlertExecution
 ) -> None:
     """Submete dispatch para thread pool dedicada, liberando a thread do worker imediatamente (HF-4/C1)."""
-    _notification_executor.submit(dispatch_alerts, automation, execution)
+    future = _notification_executor.submit(dispatch_alerts, automation, execution)
+    future.add_done_callback(_log_dispatch_failure)

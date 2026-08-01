@@ -4,8 +4,7 @@ import os
 import statistics
 import sys
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 
 sys.path.insert(
     0,

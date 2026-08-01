@@ -22,7 +22,11 @@ from typing import Any
 from sqlalchemy import create_engine, event, func, inspect, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from .constants import EXECUTION_TERMINAL_STATUSES, ORCHESTRATOR_SCHEMA_VERSION
+from .constants import (
+    EXECUTION_STATUS_REQUEUED,
+    EXECUTION_TERMINAL_STATUSES,
+    ORCHESTRATOR_SCHEMA_VERSION,
+)
 from .timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
@@ -53,7 +57,12 @@ def set_sqlite_pragma(
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA busy_timeout=5000")
+    # 30 s, alinhado ao `timeout=30` do connect_args. O `timeout` do pysqlite
+    # instala um busy handler de 30 s, mas este PRAGMA roda logo depois e o
+    # SUBSTITUI — o valor efetivo era 5 s para todos os escritores (API +
+    # scheduler + até 4 threads do worker + heartbeat a cada 15 s + snapshot a
+    # cada 5 min). Sob contenção, `database is locked` estourava no worker.
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA cache_size=-8000")  # 8MB de cache
     cursor.execute("PRAGMA temp_store=MEMORY")  # Tabelas temporarias em RAM
     cursor.close()
@@ -157,6 +166,9 @@ def run_alembic_migrations() -> dict[str, Any]:
     # Importacao local: alembic e pesado e so e necessario neste caminho de codigo
     from alembic import command  # pylint: disable=import-outside-toplevel
     from alembic.config import Config  # pylint: disable=import-outside-toplevel
+    from alembic.script import (  # pylint: disable=import-outside-toplevel
+        ScriptDirectory,
+    )
 
     current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ini_path = os.path.join(current_dir, "alembic.ini")
@@ -164,32 +176,52 @@ def run_alembic_migrations() -> dict[str, Any]:
     alembic_cfg = Config(ini_path)
     alembic_cfg.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
 
+    # HEAD REAL do diretório de migrations, não a constante do código.
+    # Até 31/07/2026 o early-return abaixo comparava com
+    # ORCHESTRATOR_SCHEMA_VERSION: adicionar uma migration sem bumpar a constante
+    # fazia `upgrade head` NUNCA rodar, em silêncio. `validate_database_schema`
+    # só compara tabelas e colunas, então migrations de índice, constraint ou
+    # backfill de dados passavam despercebidas. O import é gratuito aqui — o
+    # pacote alembic já foi carregado duas linhas acima.
+    head = ScriptDirectory.from_config(alembic_cfg).get_current_head()
+    if head is None:  # diretório de versions vazio ou ilegível
+        head = ORCHESTRATOR_SCHEMA_VERSION
+    if head != ORCHESTRATOR_SCHEMA_VERSION:
+        # Não é fatal — o head real manda —, mas a constante alimenta o
+        # diagnóstico de divergência e precisa ser atualizada.
+        logger.warning(
+            "ORCHESTRATOR_SCHEMA_VERSION (%s) diverge do head real do Alembic (%s). "
+            "Atualize a constante em app/constants.py.",
+            ORCHESTRATOR_SCHEMA_VERSION,
+            head,
+        )
+
     schema_status = validate_database_schema()
     schema_version = get_schema_version()
-    if schema_version == ORCHESTRATOR_SCHEMA_VERSION:
-        logger.info("Schema Alembic ja esta no head %s.", ORCHESTRATOR_SCHEMA_VERSION)
-        return {"applied": [], "schema_version": ORCHESTRATOR_SCHEMA_VERSION}
+    if schema_version == head:
+        logger.info("Schema Alembic ja esta no head %s.", head)
+        return {"applied": [], "schema_version": head}
 
     if schema_status["valid"] and schema_version in {"none", "unknown"}:
         logger.info(
             "Schema legado valido sem revisao Alembic. Aplicando stamp para %s.",
-            ORCHESTRATOR_SCHEMA_VERSION,
+            head,
         )
         with engine.begin() as conn:  # transacao atomica (HF-5/B3)
             conn.execute(text("DELETE FROM alembic_version"))
             conn.execute(
                 text("INSERT INTO alembic_version (version_num) VALUES (:version)"),
-                {"version": ORCHESTRATOR_SCHEMA_VERSION},
+                {"version": head},
             )
         # Verificacao pos-stamp: garante que o registro foi gravado corretamente
         actual = get_schema_version()
-        if actual != ORCHESTRATOR_SCHEMA_VERSION:
+        if actual != head:
             raise RuntimeError(
-                f"Stamp Alembic falhou: esperado {ORCHESTRATOR_SCHEMA_VERSION}, obtido {actual}"
+                f"Stamp Alembic falhou: esperado {head}, obtido {actual}"
             )
         return {
             "applied": ["alembic_stamp"],
-            "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+            "schema_version": head,
         }
 
     logger.info("Iniciando aplicacao programática de migracao via Alembic...")
@@ -197,7 +229,7 @@ def run_alembic_migrations() -> dict[str, Any]:
     logger.info("Migracao do Alembic aplicada com sucesso.")
     return {
         "applied": ["alembic_upgrade_head"],
-        "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
+        "schema_version": head,
     }
 
 
@@ -298,7 +330,12 @@ def purge_old_executions(retention_days: int = 90) -> int:
     cutoff = get_now_local() - timedelta(days=retention_days)
     # Fonte única de verdade dos status terminais (inclui PARTIAL): evita que o
     # purge preserve indefinidamente execuções PARTIAL por divergência de lista.
-    terminal_statuses = list(EXECUTION_TERMINAL_STATUSES)
+    # REQUEUED entra explicitamente: não faz parte de EXECUTION_TERMINAL_STATUSES
+    # (é declarado à parte, em EXECUTION_QUEUEABLE_SOURCE_STATUSES), então toda
+    # execução já reenfileirada ficava imune à retenção — e o auto-retry roda a
+    # cada 3 minutos. A execução de origem é terminal do ponto de vista da
+    # retenção: foi substituída e não volta a rodar.
+    terminal_statuses = list(EXECUTION_TERMINAL_STATUSES | {EXECUTION_STATUS_REQUEUED})
 
     try:
         with session_scope() as db:

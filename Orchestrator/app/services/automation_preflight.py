@@ -265,15 +265,28 @@ def _load_manifest_governance(
 ) -> schemas.AutomationPreflightGovernance:
     manifest_path = os.path.join(automation_dir, "automation.manifest.json")
     if not os.path.isfile(manifest_path):
+        # BLOQUEANTE desde 31/07/2026.
+        #
+        # Antes devolvia "attention", e `is_valid = status != "incident"` deixava
+        # passar: a automação era persistida sem manifesto, sem docs obrigatórias
+        # e sem verificação de `whatsapp-config.json`. Como
+        # `_manifest_field_mismatches` só roda quando o manifesto EXISTE, a forma
+        # mais fácil de escapar de toda a governança de manifesto era não ter um.
+        #
+        # O caminho canônico de criação nunca cai aqui: `Tools/New-Automation.ps1`
+        # sempre gera o manifesto a partir de `_Template`. Quem cai aqui é o
+        # registro via API de uma pasta que não passou pelo scaffolding — que é
+        # exatamente o buraco.
         return schemas.AutomationPreflightGovernance(
             manifest_present=False,
-            status="attention",
+            status="incident",
             top_issue="A pasta da automação não possui automation.manifest.json.",
-            recommended_action="Crie ou complete o manifesto canônico antes de promover a automação.",
-            warnings=[
+            recommended_action="Crie o manifesto canônico (Tools/New-Automation.ps1 o gera) antes de cadastrar a automação.",
+            blocking_issues=[
                 _issue(
                     "manifest_missing",
                     "Nenhum automation.manifest.json foi encontrado na pasta da automação.",
+                    severity="ERROR",
                 )
             ],
         )

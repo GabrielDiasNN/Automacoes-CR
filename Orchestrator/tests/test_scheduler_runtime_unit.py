@@ -2,13 +2,13 @@
 """Testes unitários de app/services/scheduler_runtime.py e app/runtime.py (wakeup)."""
 
 import json
+import os
 import subprocess
 from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from app import models
-from app import runtime as app_runtime
+from app import models, runtime as app_runtime
 from app.constants import EXECUTION_STATUS_ERROR, EXECUTION_STATUS_PENDING
 from app.services import scheduler_runtime as sr
 from app.timezone import get_now_local
@@ -174,19 +174,59 @@ def test_safe_scheduler_heartbeat_nao_lanca_mesmo_com_falha_de_log() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_file_cleanup_sucesso_invoca_pwsh() -> None:
+def test_run_file_cleanup_sucesso_invoca_powershell_51() -> None:
+    """Regressão: era o único ponto do runtime a exigir `pwsh.exe` (PS7).
+
+    Em host sem PowerShell 7 o job das 02:00 falhava toda noite e o `except`
+    largo transformava isso numa linha de log — a política de retenção nunca
+    rodava e o disco crescia sem limite.
+    """
     with patch("app.services.scheduler_runtime.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
         sr.run_file_cleanup()
 
     args, kwargs = mock_run.call_args
-    assert args[0][0] == "pwsh.exe"
+    assert args[0][0] == "powershell.exe"
     assert kwargs.get("check") is True
+
+
+def test_run_file_cleanup_tem_timeout() -> None:
+    """Sem `timeout=`, um script travado prendia uma thread do APScheduler."""
+    with patch("app.services.scheduler_runtime.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        sr.run_file_cleanup()
+
+    _args, kwargs = mock_run.call_args
+    assert kwargs.get("timeout") == sr.FILE_CLEANUP_TIMEOUT_SECONDS
+    assert kwargs["timeout"] > 0
+
+
+def test_run_file_cleanup_nao_repassa_segredos() -> None:
+    """O subprocesso recebe a allowlist, não `os.environ` inteiro."""
+    with patch.dict(
+        os.environ,
+        {"ORCHESTRATOR_API_KEY": "chave-secreta", "ORACLE_READONLY_PASSWORD": "senha"},
+    ):
+        with patch("app.services.scheduler_runtime.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            sr.run_file_cleanup()
+
+    _args, kwargs = mock_run.call_args
+    env = kwargs.get("env")
+    assert env is not None, "run_file_cleanup precisa passar env= explícito"
+    assert "ORCHESTRATOR_API_KEY" not in env
+    assert "ORACLE_READONLY_PASSWORD" not in env
+
+
+def test_run_file_cleanup_timeout_nao_propaga() -> None:
+    with patch("app.services.scheduler_runtime.subprocess.run") as mock_run:
+        mock_run.side_effect = subprocess.TimeoutExpired("powershell.exe", 900)
+        sr.run_file_cleanup()  # nao deve propagar excecao
 
 
 def test_run_file_cleanup_falha_nao_propaga_excecao() -> None:
     with patch("app.services.scheduler_runtime.subprocess.run") as mock_run:
-        mock_run.side_effect = subprocess.CalledProcessError(1, "pwsh.exe")
+        mock_run.side_effect = subprocess.CalledProcessError(1, "powershell.exe")
         sr.run_file_cleanup()  # nao deve propagar excecao
 
 

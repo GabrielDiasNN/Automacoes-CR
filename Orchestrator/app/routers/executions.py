@@ -14,10 +14,11 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import desc
-from sqlalchemy.orm import Query, Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Query as SAQuery, Session
 
 from .. import models, schemas
 from ..constants import (
@@ -26,11 +27,13 @@ from ..constants import (
     EXECUTION_ALLOWED_STATUSES,
     EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TERMINATED,
+    EXECUTION_TERMINAL_STATUSES,
 )
 from ..database import get_db
 from ..middleware import get_api_key
+from ..path_safety import is_contained
 from ..runtime import get_project_root, trigger_worker_wakeup
-from ..security import sanitize_log_payload
+from ..security import sanitize_log_payload, truncate_log_payload
 from ..services import execution_repository as exec_repo
 from ..services.execution_decoration import (
     build_active_execution_maps,
@@ -43,6 +46,9 @@ from ..services.execution_runtime import (
 from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
+# `SAQuery` é o `sqlalchemy.orm.Query` sob alias, usado só como anotação de tipo.
+# Sem o alias ele sombreava o `fastapi.Query`, e `Query(0, ge=0)` resolvia para o
+# construtor do SQLAlchemy — TypeError na coleta dos testes.
 logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/executions", tags=["Executions"])
@@ -57,7 +63,7 @@ PROJECT_ROOT = get_project_root()
 
 
 def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
-    query: Query[models.Execution],
+    query: SAQuery[models.Execution],
     status: str | None,
     automation_id: int | None,
     queue_group: str | None,
@@ -65,7 +71,7 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
     requested_by: str | None,
     date_from: str | None,
     date_to: str | None,
-) -> Query[models.Execution]:
+) -> SAQuery[models.Execution]:
     """Aplica filtros opcionais à query de execuções e valida entradas."""
     if status:
         normalized_status = status.upper()
@@ -256,8 +262,10 @@ def get_execution(
 @router.get("/{exec_id}/logs")
 def get_execution_logs(
     exec_id: str,
-    offset: int = 0,
-    limit: int = 500,
+    # `offset` negativo fatiava a lista pelo fim silenciosamente; `limit` sem
+    # teto materializava o log inteiro (até MAX_LOG_CHARS = 5 MB).
+    offset: int = Query(0, ge=0),
+    limit: int = Query(500, ge=1, le=5000),
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
@@ -303,6 +311,30 @@ def list_artifacts(
     return {"exec_id": exec_id, "artifacts": artifacts}
 
 
+# Extensões que `scan_for_artifacts` (worker.py) reconhece como entregável.
+# Usadas como allowlist de compatibilidade para execuções cujo campo
+# `artifacts` está nulo — anteriores ao campo, ou cuja varredura não capturou o
+# arquivo (ela filtra por mtime). Sem esse fallback, corrigir o endpoint
+# quebraria o download de todo o histórico; com ele, o que fica de fora são
+# exatamente os arquivos que nunca deveriam ser servidos (`.json` de config e
+# de estado, `.bak`, logs).
+_ARTIFACT_EXTENSIONS = frozenset({".xlsx", ".html", ".pdf", ".csv"})
+
+
+def _artifact_is_downloadable(db_exec: models.Execution, clean_filename: str) -> bool:
+    """O arquivo pedido é um artefato desta execução?"""
+    raw = db_exec.artifacts
+    if raw:
+        try:
+            declarados = json.loads(str(raw))
+        except (ValueError, TypeError):
+            declarados = None
+        if isinstance(declarados, list) and declarados:
+            return clean_filename in {str(nome) for nome in declarados}
+
+    return os.path.splitext(clean_filename)[1].lower() in _ARTIFACT_EXTENSIONS
+
+
 @router.get("/{exec_id}/download")
 def download_artifact(
     exec_id: str,
@@ -332,10 +364,20 @@ def download_artifact(
     else:
         robot_dir = os.path.normpath(os.path.dirname(os.path.abspath(script_path)))
 
-    file_path = os.path.normpath(os.path.join(robot_dir, filename))
+    # ALLOWLIST: o endpoint servia qualquer arquivo do diretório do robô, sem
+    # nunca conferir `db_exec.artifacts` — `?filename=whatsapp-config.json`
+    # devolvia o contactId do destinatário, e `delivery_state.json` o estado
+    # operacional. O `exec_id` só era usado para descobrir o diretório.
+    if not _artifact_is_downloadable(db_exec, clean_filename):
+        raise HTTPException(status_code=403, detail="Acesso negado ao arquivo.")
 
-    # Validar se o arquivo resolvido ainda reside dentro do diretório do robô ou do projeto
-    if not file_path.startswith(robot_dir):
+    # `clean_filename`, não `filename`: o valor cru era o que entrava no join,
+    # tornando a sanitização da linha acima inócua para a montagem do caminho.
+    file_path = os.path.normpath(os.path.join(robot_dir, clean_filename))
+
+    # Contenção por componentes de caminho, com symlink resolvido (era
+    # `startswith`, que não respeita fronteira de diretório).
+    if not is_contained(robot_dir, file_path):
         raise HTTPException(status_code=403, detail="Acesso negado ao arquivo.")
 
     if not os.path.exists(file_path) or not os.path.isfile(file_path):
@@ -427,7 +469,14 @@ def requeue_execution(
         get_client_ip(request),
         json.dumps(audit_payload),
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe uma execução ativa para esta automação.",
+        ) from exc
 
     trigger_worker_wakeup()
 
@@ -477,7 +526,20 @@ def telemetry_start(
     db.add(new_exec)
 
     log_audit(db, "START_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Este endpoint não checava execução ativa nenhuma — inseria direto em
+        # RUNNING. O índice único parcial (migration 20260731_01) passa a
+        # aplicar aqui a mesma invariante dos demais produtores.
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Já existe uma execução ativa para esta automação. "
+                "Finalize-a antes de registrar telemetria."
+            ),
+        ) from exc
 
     logger.info(
         "Telemetria iniciada: %s para automacao %s", exec_id, payload.automation_name
@@ -498,18 +560,36 @@ def telemetry_end(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
+    # Somente status TERMINAIS: o endpoint é o "/end" da telemetria. Validar
+    # contra EXECUTION_ALLOWED_STATUSES (que inclui PENDING e RUNNING) abria um
+    # caminho de reexecução fora da fila — `status: "PENDING"` gravava
+    # `finished_at`/`duration_seconds` e devolvia a execução ao pool, onde o
+    # worker a reivindicava e rodava a automação de novo, ignorando cooldown,
+    # `max_retries`, `queue_group` e a checagem de execução ativa.
     status_upper = str(payload.status).upper()
-    if status_upper not in EXECUTION_ALLOWED_STATUSES:
+    if status_upper not in EXECUTION_TERMINAL_STATUSES:
+        permitidos = ", ".join(sorted(EXECUTION_TERMINAL_STATUSES))
         raise HTTPException(
             status_code=422,
-            detail=f"Status de execução inválido: {payload.status}",
+            detail=(
+                f"Status de encerramento inválido: {payload.status}. "
+                f"Use um status terminal: {permitidos}."
+            ),
         )
 
     db_exec.status = status_upper  # type: ignore[assignment]
     if payload.exit_code is not None:
         db_exec.exit_code = int(payload.exit_code)  # type: ignore[assignment]
     if payload.logs is not None:
-        db_exec.logs = sanitize_log_payload(payload.logs)
+        # `truncate_log_payload` também aqui: era o ÚNICO caminho de escrita de
+        # log que ignorava MAX_DB_LOGS_CHARS (todo o worker o respeita). Como
+        # `logs` é CompressedText, cada leitura descomprime a coluna inteira em
+        # memória — um payload de dezenas de MB vindo de um cliente externo
+        # ficava permanentemente no SQLite e inflava toda listagem que tocasse
+        # aquela execução.
+        db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+            sanitize_log_payload(payload.logs)
+        )
     if payload.artifacts is not None:
         db_exec.artifacts = payload.artifacts  # type: ignore[assignment]
 

@@ -12,9 +12,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 import oracledb
 from oracle_client import init_oracle_thick_mode
@@ -136,7 +137,10 @@ def serialize_rows(
     """Converte linhas Oracle em dicts, normalizando datetime (isoformat) e strings (strip)."""
     data: list[dict[str, Any]] = []
     for row in rows:
-        record: dict[str, Any] = dict(zip(columns, row))
+        # `strict=True`: colunas e valores vêm do mesmo cursor e devem ter o
+        # mesmo tamanho. Divergência indica cursor corrompido — melhor falhar
+        # alto que gerar registros silenciosamente truncados.
+        record: dict[str, Any] = dict(zip(columns, row, strict=True))
         for key, value in record.items():
             if isinstance(value, datetime):
                 record[key] = value.isoformat()
@@ -159,7 +163,7 @@ def read_last_hash(state_path: str) -> str:
     if not os.path.exists(state_path):
         return ""
     try:
-        with open(state_path, "r", encoding="utf-8") as f:
+        with open(state_path, encoding="utf-8") as f:
             return str(json.load(f).get("last_hash", ""))
     except (OSError, json.JSONDecodeError):
         return ""

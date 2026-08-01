@@ -274,6 +274,11 @@ def test_execution_runtime_marks_running_tasks_failed_by_reboot(
             requested_by="TEST",
             started_at=get_now_local(),
             logs="before reboot",
+            # Desde 31/07/2026 o recovery só alcança execuções COM dono
+            # registrado: é o que distingue uma órfã de worker morto de uma
+            # telemetria externa viva (que não tem worker_instance_id).
+            worker_instance_id="worker-1",
+            worker_pid=4242,
         )
     )
     db_session.commit()
@@ -288,6 +293,41 @@ def test_execution_runtime_marks_running_tasks_failed_by_reboot(
     assert rebooted.failure_reason == "ORCHESTRATOR_REBOOT"
     assert rebooted.recovery_action == "REQUEUE_IF_SAFE"
     assert "[RECOVERY_AUDIT]" in rebooted.logs
+    # Era o único finalizador que não gravava duração, deixando buracos na série.
+    assert rebooted.duration_seconds is not None
+
+
+def test_recovery_preserva_execucao_sem_dono(db_session: Any) -> None:
+    """Regressão: telemetria externa não pode ser marcada como reboot.
+
+    `POST /api/executions/telemetry/start` grava RUNNING sem
+    `worker_instance_id`, disparada por um terminal externo. Antes, qualquer
+    reinício da API a carimbava como interrompida por reboot enquanto o processo
+    real seguia rodando — e o `/telemetry/end` depois sobrescrevia o status,
+    produzindo histórico contraditório.
+    """
+    auto = models.Automation(name="Telemetria Externa", script_path="./tel.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="TEL_SEM_DONO",
+            automation_id=auto.id,
+            status="RUNNING",
+            requested_by="TERMINAL",
+            started_at=get_now_local(),
+        )
+    )
+    db_session.commit()
+
+    mark_running_tasks_as_failed_by_reboot(db_session)
+
+    preservada = db_session.query(models.Execution).filter_by(id="TEL_SEM_DONO").first()
+    assert preservada.status == "RUNNING", (
+        "Execução sem worker_instance_id foi marcada como FAILED_BY_REBOOT — "
+        "o recovery de boot não deve tocar em execuções que não são dele."
+    )
+    assert preservada.finished_at is None
 
 
 def test_finalize_reboot_interrupted_task_persists_reboot_metadata(

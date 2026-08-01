@@ -8,8 +8,12 @@ Reorganiza o antigo historico_db.py em tres responsabilidades:
   (``DADOS_COMPLETOS``) fica reservado a auditoria/``include_raw``.
 """
 
-from .queries import (buscar_historico, buscar_produtos,
-                      descrever_schema_historico, explicar_busca_historico)
+from .queries import (
+    buscar_historico,
+    buscar_produtos,
+    descrever_schema_historico,
+    explicar_busca_historico,
+)
 from .schema import HISTORICO_SCHEMA_VERSION, init_db, resolve_db_path
 from .writer import salvar_historico
 

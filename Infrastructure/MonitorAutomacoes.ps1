@@ -52,6 +52,7 @@ if (-not $script:MutexAcquired) {
 Write-Log "Watchdog $RuntimeVersion iniciado. Monitorando porta $HubPort"
 Start-Sleep -Seconds 15 # Aguardar startup inicial
 $script:LastOrchestratorRestart = $null
+$script:LastWorkerRecover = $null
 
 while ($true) {
     try {
@@ -64,9 +65,35 @@ while ($true) {
             throw "API respondeu, mas componentes internos em falha: DB=$($health.database), Sched=$($health.scheduler)"
         }
         
-        # Verificar se o Worker esta respondendo ao ping (heartbeat)
+        # Verificar se o Worker esta respondendo ao ping (heartbeat).
+        # Ate 31/07/2026 este ramo APENAS logava um WARN: com a API saudavel e o
+        # worker morto, o unico caminho de reinicio (o catch abaixo) nunca
+        # disparava e a fila ficava parada indefinidamente — exatamente o
+        # cenario para o qual /api/system/worker/recover existe, mas que ninguem
+        # acionava sem um humano olhando o dashboard.
         if ($health.worker.is_alive -eq $false) {
-             Write-Log "Alerta: Worker Engine parou de enviar Heartbeat. API operacional." -Type "WARN"
+            $now = Get-Date
+            # Cooldown proprio, separado do reinicio total do Orquestrador.
+            if ($null -eq $script:LastWorkerRecover -or ($now - $script:LastWorkerRecover).TotalSeconds -gt 180) {
+                Write-Log "Worker Engine sem heartbeat com API operacional. Acionando recuperacao do worker..." -Type "WARN"
+                $script:LastWorkerRecover = $now
+                try {
+                    # Recupera SOMENTE o worker. Reiniciar o Orquestrador inteiro
+                    # derrubaria tambem a API e as execucoes em voo.
+                    $recoverUrl = "http://127.0.0.1:$HubPort/api/system/worker/recover"
+                    Invoke-RestMethod -Uri $recoverUrl -Method Post -Headers $headers -TimeoutSec 30 -ErrorAction Stop | Out-Null
+                    Write-Log "Recuperacao do worker solicitada com sucesso." -Type "INFO"
+                }
+                catch [System.Exception] {
+                    Write-Log "Falha ao acionar recuperacao do worker: $($_.Exception.Message)" -Type "ERRO"
+                }
+            }
+            else {
+                Write-Log "Worker ainda sem heartbeat; aguardando cooldown da recuperacao anterior." -Type "WARN"
+            }
+        }
+        else {
+            $script:LastWorkerRecover = $null
         }
 
         $script:LastOrchestratorRestart = $null

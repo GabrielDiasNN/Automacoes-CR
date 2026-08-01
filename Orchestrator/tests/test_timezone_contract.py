@@ -4,8 +4,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from app import models
-from app import timezone as tz_module
+from app import models, timezone as tz_module
 from app.schemas import format_dt_br, parse_dt_br
 from app.schemas.common import preview_next_runs
 from app.timezone import get_now_local

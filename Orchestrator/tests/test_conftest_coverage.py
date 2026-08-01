@@ -4,8 +4,7 @@ que silenciosamente tocariam o banco real de produção."""
 
 import os
 
-from conftest import TESTS_DIR
-from conftest import testing_session_local as _testing_session_local
+from conftest import TESTS_DIR, testing_session_local as _testing_session_local
 from fastapi.testclient import TestClient
 
 # Módulos que importam `SessionLocal` diretamente de app.database (fora de

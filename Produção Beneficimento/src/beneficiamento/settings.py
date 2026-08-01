@@ -1,4 +1,5 @@
 """Configuracoes centrais do dominio Beneficiamento."""
+
 # pylint: disable=missing-class-docstring
 
 from __future__ import annotations
@@ -6,7 +7,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-
 
 DOMAIN_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = DOMAIN_ROOT.parent

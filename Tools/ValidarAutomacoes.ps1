@@ -166,6 +166,14 @@ function Invoke-NativeGovernanceCheck {
                 $allOk = $false
             }
         }
+        else {
+            # Ate 31/07/2026 nao havia este 'else': renomear, mover ou apagar um
+            # script de checagem fazia o gate correspondente DESAPARECER com
+            # $allOk intacto, e tanto o pre-commit quanto o job de CI reportavam
+            # sucesso. O meta-gate nao tinha manifesto do que deveria ter rodado.
+            Write-Host "[FALHA] Checagem obrigatoria ausente: Tools\$script. Se foi renomeada ou removida deliberadamente, atualize a lista `$checks no mesmo commit." -ForegroundColor Red
+            $allOk = $false
+        }
     }
     if ($allOk) { return 0 } else { return 1 }
 }

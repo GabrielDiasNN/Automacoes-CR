@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ..core import round_or_zero, safe_strip
 from ..data.schema import TABLE_NAME, init_db
-from ._queries import (_DETAIL_SELECT, _build_filtered_where, _build_trace,
-                       _detail_raw_records, _detail_row_to_record,
-                       _normalize_request_filters, _resolve_overview_window,
-                       _summary_from_records)
-
+from ._queries import (
+    _DETAIL_SELECT,
+    _build_filtered_where,
+    _build_trace,
+    _detail_raw_records,
+    _detail_row_to_record,
+    _normalize_request_filters,
+    _resolve_overview_window,
+    _summary_from_records,
+)
 
 # Alvos de coluna unica: target_type -> (coluna SQL, campo normalizado, rotulo padrao).
 _SIMPLE_TARGETS: dict[str, tuple[str, str, str]] = {
@@ -72,7 +77,7 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
 
         total = int(
             cursor.execute(
-                f"SELECT COUNT(*) AS total FROM {TABLE_NAME} WHERE {where_sql}",
+                f"SELECT COUNT(*) AS total FROM {TABLE_NAME} WHERE {where_sql}",  # nosec B608
                 params,
             ).fetchone()["total"]
             or 0
@@ -85,7 +90,7 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
             WHERE {where_sql}
             ORDER BY DATA_FIM DESC, NUMERO_OB DESC, SEQ ASC
             LIMIT ? OFFSET ?
-            """,
+            """,  # nosec B608
             params + [limit, (page - 1) * limit],
         ).fetchall()
         records = [_detail_row_to_record(row) for row in rows]
@@ -121,7 +126,7 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
         for item in records
     ]
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "filters": {"effective": dict(filtros, dt_inicio=dt_inicio, dt_fim=dt_fim)},
         "target": {"type": target_type, "label": target_label},
         "summary": _summary_from_records(target_type, records),

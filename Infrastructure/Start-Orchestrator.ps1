@@ -17,10 +17,15 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Forc
 $envPath = Join-Path $ProjectRoot ".env"
 $HubPort = "8000"
 if (Test-Path $envPath) {
-    Get-Content $envPath | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
+    # Semantica alinhada a ConvertFrom-EnvLine (Lib-Config.psm1) e a
+    # Get-OrchestratorEnvValue em 31/07/2026. Este laco tinha DUAS divergencias:
+    # nao removia comentario inline (exportando "5511999999999   # Nome" como
+    # valor) e usava '^#', que nao reconhece comentario indentado.
+    Get-Content $envPath | Where-Object { $_ -match '=' -and $_ -notmatch '^\s*#' } | ForEach-Object {
         $parts = $_.Split('=', 2)
         $key = $parts[0].Trim()
-        $val = $parts[1].Trim().Trim('"').Trim("'")
+        $val = [regex]::Replace($parts[1].Trim(), '\s+#.*$', '').Trim()
+        $val = $val.Trim('"').Trim("'")
         [System.Environment]::SetEnvironmentVariable($key, $val, "Process")
         if ($key -eq "HUB_API_PORT") { $HubPort = $val }
     }
@@ -30,16 +35,39 @@ if (Test-Path $envPath) {
 Write-Host "[RESET] Realizando limpeza segura do ambiente ($RuntimeVersion)..." -ForegroundColor Gray
 
 # Matar apenas processos Python ligados ao projeto para nao afetar outros sistemas no servidor
+# Pede a parada gracioso ANTES de forcar: Stop-Process -Force nao entrega
+# sinal no Windows, e sem isso o worker nunca finalizava as execucoes em voo
+# nem matava seus powershell.exe filhos (que ficavam orfaos).
+Request-OrchestratorGracefulStop -ProjectRoot $ProjectRoot | Out-Null
 Stop-OrchestratorProcesses -ProjectRoot $ProjectRoot | Out-Null
 
-# Liberar porta dinamica configurada
+# Liberar porta dinamica configurada — SOMENTE se o dono pertencer a este projeto.
+# Ate 31/07/2026 todo OwningProcess retornado era encerrado com -Force sem
+# verificacao de identidade: se a porta de HUB_API_PORT estivesse ocupada por
+# outro servico do servidor, o start derrubava esse servico e o
+# -ErrorAction SilentlyContinue apagava qualquer rastro.
+$rootPattern = [regex]::Escape($ProjectRoot)
 $portInUse = Get-NetTCPConnection -LocalPort $HubPort -ErrorAction SilentlyContinue
-if ($portInUse) {
-    $portInUse.OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+foreach ($ownerPid in @($portInUse.OwningProcess | Sort-Object -Unique)) {
+    $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $ownerPid" -ErrorAction SilentlyContinue
+    if ($null -eq $owner) { continue }
+
+    $doProjeto = ($owner.CommandLine -match $rootPattern) -or
+                 ($null -ne $owner.ExecutablePath -and $owner.ExecutablePath -match $rootPattern)
+    if ($doProjeto) {
+        Write-Host "[RESET] Liberando porta $HubPort (PID $ownerPid, $($owner.Name))." -ForegroundColor Gray
+        Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        Write-Host "[AVISO] Porta $HubPort ocupada pelo PID $ownerPid ($($owner.Name)), que NAO pertence a este projeto. Nao sera encerrado — ajuste HUB_API_PORT no .env ou libere a porta manualmente." -ForegroundColor Yellow
+    }
 }
 
 # Limpar lock files
 Remove-Item (Join-Path $OrchestratorDir "*.pid") -Force -ErrorAction SilentlyContinue
+# Sentinela de parada: se sobrou de um encerramento anterior, o worker que esta
+# prestes a subir se encerraria no primeiro ciclo do laco.
+Remove-Item (Join-Path $OrchestratorDir "worker.shutdown") -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
 # 3. INICIAR WORKER (Background)

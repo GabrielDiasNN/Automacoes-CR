@@ -393,6 +393,10 @@ class EnvValidationIssue(BaseModel):
     line: int
     code: str
     message: str
+    # "error" bloqueia a escrita; "info" é apenas informativo. MASKED_VALUE
+    # passou a "info" em 31/07/2026: o placeholder é resolvido para o valor real
+    # antes da gravação, em vez de reprovar o payload.
+    severity: str = "error"
 
 
 class EnvValidationResponse(BaseModel):

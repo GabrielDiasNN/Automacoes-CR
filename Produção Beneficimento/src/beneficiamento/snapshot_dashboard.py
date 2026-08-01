@@ -10,7 +10,7 @@ e ``snapshot_aggregator`` (consolidação cross-período).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +35,7 @@ def _file_age_seconds(path: Path) -> int | None:
 def _file_updated_at(path: Path) -> str | None:
     if not path.exists():
         return None
-    return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat()
 
 
 def load_period_payload(period: str) -> dict[str, Any]:
@@ -44,9 +44,8 @@ def load_period_payload(period: str) -> dict[str, Any]:
     analytics = read_json(analytics_path)
     available = bool(analytics)
     updated_at = (
-        ((analytics.get("snapshot") or {}).get("generated_at"))
-        or _file_updated_at(analytics_path)
-    )
+        (analytics.get("snapshot") or {}).get("generated_at")
+    ) or _file_updated_at(analytics_path)
     age_seconds = _file_age_seconds(analytics_path)
     stale = bool(
         age_seconds is not None and age_seconds > (config.max_age_minutes * 60)
@@ -129,7 +128,7 @@ def build_periods_payload() -> dict[str, Any]:
     periods_list = [periods[period] for period in PERIOD_ORDER]
     periods_map = {item["key"]: item for item in periods_list}
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "default_period": _default_period_key(periods_map),
         "periods": periods_list,
     }
@@ -159,7 +158,7 @@ def build_dashboard_payload() -> dict[str, Any]:
             }
         )
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "default_period": default_period,
         "overall": {
             "period": default_period,

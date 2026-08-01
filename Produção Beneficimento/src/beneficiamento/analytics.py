@@ -6,8 +6,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from .core import first_present, resolve_alias, safe_text, to_float
-from .core import weighted_average as average_or_none
+from .core import (
+    first_present,
+    resolve_alias,
+    safe_text,
+    to_float,
+    weighted_average as average_or_none,
+)
 
 
 def first_available_float(record: dict[str, Any], fields: tuple[str, ...]) -> float:
@@ -67,7 +72,9 @@ def aggregate_group(
     summaries: list[dict[str, Any]] = []
     for key, group in groups.items():
         desvio_total = group["min_real_total"] - group["min_prev_total"]
-        summary: dict[str, Any] = dict(zip(key_fields, key))
+        # `key` é a tupla montada a partir de `key_fields`; divergência de
+        # tamanho significaria chave corrompida e deve falhar alto.
+        summary: dict[str, Any] = dict(zip(key_fields, key, strict=True))
         summary.update(
             {
                 "linhas": group["rows"],
@@ -148,7 +155,7 @@ def build_fato_producao(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         group["rendimento_soma"] += to_float(resolve_alias(r, "rendimento"))
 
     result = []
-    for key, g in fato.items():
+    for g in fato.values():
         g["kg"] = round(g["kg"], 2)
         g["mt"] = round(g["mt"], 2)
         g["efic_carga_media"] = (

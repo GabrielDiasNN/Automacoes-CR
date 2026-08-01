@@ -7,6 +7,7 @@ Patch do PROJECT_ROOT para validacao de script_path (Pilar V) funcionar em teste
 """
 
 import atexit
+import json
 import os
 import shutil
 import sys
@@ -58,6 +59,7 @@ from _pytest.nodes import Item
 # Import necessario para registrar as tabelas no Base.metadata.
 from app import models  # pylint: disable=unused-import
 from app.database import Base, get_db
+from app.path_safety import is_contained
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
@@ -326,6 +328,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as c:
+        _governar_cadastros(c)
         yield c
 
     app.dependency_overrides.clear()
@@ -405,3 +408,181 @@ def mock_oracle_connection() -> Generator[MagicMock, None, None]:
         mock_conn.return_value.__exit__ = MagicMock(return_value=False)
         mock_conn.return_value.cursor.return_value = mock_cursor
         yield mock_conn
+
+
+# ---------------------------------------------------------------------------
+# Manifesto canônico exigido pelo preflight
+# ---------------------------------------------------------------------------
+# Desde 31/07/2026 a ausência de `automation.manifest.json` é BLOQUEANTE em
+# `create`/`update`. As fixtures que cadastram automações sintéticas precisam,
+# portanto, de um manifesto coerente com o payload — os campos são comparados
+# um a um por `_manifest_field_mismatches`.
+
+# Caminhos escritos pelo helper, registrados para o teardown. A pasta é
+# derivada do `script_path` do payload contra o `PROJECT_ROOT` vigente no
+# router — que alguns testes monkeypatcham para um `tmp_path` próprio.
+_ARQUIVOS_DE_GOVERNANCA_ESCRITOS: list[str] = []
+
+# Interruptor do wrapper. Testes que verificam o BLOQUEIO por manifesto ausente
+# precisam do `client` cru — ver a fixture `sem_governanca_automatica`.
+_GOVERNANCA_AUTOMATICA = [True]
+
+
+def com_manifesto(payload: dict[str, Any]) -> dict[str, Any]:
+    """Escreve o manifesto que torna `payload` governado e devolve o payload.
+
+    Uso: `client.post("/api/automations", json=com_manifesto({...}))`.
+
+    O arquivo vive em `tests/test/` (o `PROJECT_ROOT` dos testes) e é removido
+    ao fim de cada teste pela fixture autouse `_limpar_manifesto_de_teste`.
+    """
+    import app.routers.automations as auto_router  # pylint: disable=import-outside-toplevel
+
+    script_path = str(payload.get("script_path") or "./test/run.ps1")
+    pasta = os.path.join(
+        auto_router.PROJECT_ROOT, os.path.dirname(script_path.lstrip("./\\"))
+    )
+    manifesto_path = os.path.join(pasta, "automation.manifest.json")
+    whatsapp_path = os.path.join(pasta, "whatsapp-config.json")
+    doc_path = script_path.lstrip("./\\").replace("\\", "/")
+
+    # Payload de escape de path é cenário legítimo de teste; o helper não pode
+    # tentar escrever fora da raiz por causa dele.
+    if not is_contained(auto_router.PROJECT_ROOT, pasta):
+        return payload
+    canais = [
+        canal.strip()
+        for canal in str(payload.get("notification_channels") or "").split(",")
+        if canal.strip()
+    ]
+    manifesto = {
+        "id": "TST-99",
+        "name": str(payload.get("name") or "").strip(),
+        "slug": "fixture-de-teste",
+        "criticality": "low",
+        "owner_area": "QA",
+        "entrypoint": os.path.basename(script_path),
+        "runtime": "powershell",
+        "channels": sorted(set(canais)),
+        "queue_group": payload.get("queue_group") or None,
+        "sla_minutes": payload.get("sla_minutes") or None,
+        # O preflight compara contra o payload já validado pelo schema, com os
+        # defaults aplicados (`max_runtime_minutes = 30`) — não contra o corpo
+        # cru da requisição.
+        "max_runtime_minutes": int(payload.get("max_runtime_minutes") or 30),
+        "max_retries": int(payload.get("max_retries") or 0),
+        "schedule_summary": "Manual",
+        # Os três caminhos de documentação apontam para o próprio entrypoint.
+        # `_manifest_docs_issues` só checa existência, e o entrypoint sabidamente
+        # existe em qualquer raiz — inclusive nos `tmp_path` que alguns testes
+        # montam. Assim o helper não cria nem sobrescreve arquivo nenhum na
+        # pasta de fixtures. Quem cobre docs ausentes é o teste de governança
+        # dedicado, que monta o cenário à mão.
+        "runbook_path": doc_path,
+        "context_path": doc_path,
+        "readme_path": doc_path,
+        "orchestrator": {"script_path": script_path},
+        "dependencies": {"oracle": False, "outlook": False, "whatsapp": False},
+        "smoke_tests": [],
+    }
+    if not os.path.isdir(pasta):
+        return payload
+    # Um manifesto que o wrapper não escreveu é cenário deliberado do teste
+    # (drift de campo, whatsapp-config inválido) e não pode ser desfeito. Os
+    # que ele mesmo escreveu são reescritos a cada cadastro, porque um teste
+    # pode registrar várias automações na mesma pasta com payloads diferentes.
+    if (
+        os.path.isfile(manifesto_path)
+        and manifesto_path not in _ARQUIVOS_DE_GOVERNANCA_ESCRITOS
+    ):
+        return payload
+    if manifesto_path not in _ARQUIVOS_DE_GOVERNANCA_ESCRITOS:
+        _ARQUIVOS_DE_GOVERNANCA_ESCRITOS.append(manifesto_path)
+    with open(manifesto_path, "w", encoding="utf-8") as arquivo:
+        json.dump(manifesto, arquivo, ensure_ascii=False, indent=2)
+
+    # Declarar o canal whatsapp obriga a existência de `whatsapp-config.json`
+    # na pasta da automação, com clientId e destinatário válidos.
+    if "whatsapp" in canais:
+        if whatsapp_path not in _ARQUIVOS_DE_GOVERNANCA_ESCRITOS:
+            _ARQUIVOS_DE_GOVERNANCA_ESCRITOS.append(whatsapp_path)
+        with open(whatsapp_path, "w", encoding="utf-8") as arquivo:
+            json.dump(
+                {
+                    "auth": {"clientId": "fixture-qa"},
+                    # Destinatário sintético: número inexistente, nunca um
+                    # contato real. O arquivo é gitignored e removido no
+                    # teardown de cada teste.
+                    "target": {"type": "contact", "contactId": "000000000000@c.us"},
+                },
+                arquivo,
+            )
+    return payload
+
+
+def _governar_cadastros(cliente: TestClient) -> None:
+    """Faz o `client` de teste cadastrar automações governadas.
+
+    O preflight passou a EXIGIR `automation.manifest.json` (31/07/2026). As
+    dezoito fixtures que registram automações sintéticas não existem para
+    exercitar governança — existem para exercitar CRUD, execuções e filtros —
+    e enchê-las de bookkeeping de manifesto só afastaria cada teste do que ele
+    de fato verifica.
+
+    Este wrapper escreve, antes de cada `POST`/`PUT` em `/api/automations`, o
+    manifesto coerente com o payload. Quem verifica o bloqueio em si é
+    `test_manifesto_obrigatorio.py`, com requisição direta e sem o wrapper.
+    """
+    original_post = cliente.post
+    original_put = cliente.put
+
+    def _preparar(url: str, kwargs: dict[str, Any], *, atual: Any = None) -> None:
+        if not _GOVERNANCA_AUTOMATICA[0] or not url.startswith("/api/automations"):
+            return
+        payload = kwargs.get("json")
+        if not isinstance(payload, dict):
+            return
+        # `PUT` é parcial: o preflight avalia o registro já persistido com o
+        # patch aplicado por cima, então o manifesto precisa espelhar a fusão,
+        # não só os campos enviados.
+        efetivo = {**atual, **payload} if isinstance(atual, dict) else payload
+        if efetivo.get("script_path"):
+            com_manifesto(efetivo)
+
+    def post(url: str, **kwargs: Any) -> Any:
+        _preparar(url, kwargs)
+        return original_post(url, **kwargs)
+
+    def put(url: str, **kwargs: Any) -> Any:
+        atual = None
+        if url.startswith("/api/automations/"):
+            resposta = cliente.get(url, headers=kwargs.get("headers"))
+            if resposta.status_code == 200:
+                atual = resposta.json()
+        _preparar(url, kwargs, atual=atual)
+        return original_put(url, **kwargs)
+
+    setattr(cliente, "post", post)
+    setattr(cliente, "put", put)
+
+
+@pytest.fixture(autouse=True)
+def _limpar_manifesto_de_teste() -> Generator[None, None, None]:
+    """Impede que o manifesto de um teste vaze para o seguinte."""
+    yield
+    for caminho in _ARQUIVOS_DE_GOVERNANCA_ESCRITOS:
+        if os.path.isfile(caminho):
+            os.remove(caminho)
+    _ARQUIVOS_DE_GOVERNANCA_ESCRITOS.clear()
+
+
+@pytest.fixture
+def sem_governanca_automatica() -> Generator[None, None, None]:
+    """Desliga o wrapper de manifesto para este teste.
+
+    Necessário para verificar o próprio bloqueio: com o wrapper ativo, o
+    cadastro sem manifesto nunca chega ao preflight sem um.
+    """
+    _GOVERNANCA_AUTOMATICA[0] = False
+    yield
+    _GOVERNANCA_AUTOMATICA[0] = True

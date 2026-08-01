@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Any, Callable
+from collections.abc import Callable
+from enum import StrEnum
+from typing import Any
 
 
-class HealthStatus(str, Enum):
+class HealthStatus(StrEnum):
     """Estados agregados expostos pelo health do Beneficiamento."""
 
     HEALTHY = "healthy"

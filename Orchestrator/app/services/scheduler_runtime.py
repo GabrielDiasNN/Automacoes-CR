@@ -3,22 +3,28 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import subprocess
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models, notifications, schemas
 from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
     EXECUTION_STATUS_ERROR,
+    EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TIMEOUT,
+    FAILURE_REASON_TELEMETRY_ABANDONED,
+    RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
 )
 from ..database import (
     SessionLocal,
@@ -29,7 +35,9 @@ from ..database import (
 )
 from ..runtime import scheduler, trigger_worker_wakeup
 from ..schemas.schedule_rules import first_interval_candidate, ui_day_to_python_weekday
+from ..subprocess_env import build_subprocess_env
 from ..timezone import get_now_local
+from ..utils import log_audit
 from .beneficiamento_refresh import run_beneficiamento_refresh
 from .execution_runtime import (
     RequeueValidationError,
@@ -39,6 +47,10 @@ from .execution_runtime import (
 )
 
 logger = logging.getLogger("orchestrator")
+
+# `next_run_time` das jobs de intervalo entre a remoção e o re-registro dentro
+# de `reload_scheduled_tasks`. Preenchido e consumido no mesmo ciclo síncrono.
+_pending_interval_resume: dict[str, datetime] = {}
 
 
 def _get_reserved_cleanup_script_path() -> str:
@@ -183,7 +195,14 @@ def scheduled_task_wrapper(automation_id: int) -> None:
                 )
                 return
 
-            exec_id = f"CRON_{automation_id}_{int(get_now_local().timestamp())}"
+            # Sufixo aleatório como em `generate_execution_id`: sem ele, duas
+            # expressões cron da mesma automação coincidindo no mesmo SEGUNDO
+            # geravam o mesmo exec_id e a colisão de PK virava um IntegrityError
+            # engolido pelo except largo — o disparo sumia com uma linha de log.
+            exec_id = (
+                f"CRON_{automation_id}_{int(get_now_local().timestamp())}"
+                f"_{uuid.uuid4().hex[:4]}"
+            )
             db.add(
                 build_queued_execution(
                     automation=db_auto,
@@ -191,16 +210,44 @@ def scheduled_task_wrapper(automation_id: int) -> None:
                     requested_by="CRON",
                 )
             )
-            db.commit()
+            try:
+                db.commit()
+            except IntegrityError:
+                # Índice único parcial (migration 20260731_01) barrou uma
+                # segunda execução ativa para esta automação: outra thread do
+                # pool do APScheduler venceu a corrida. Não é erro operacional —
+                # é exatamente a serialização pretendida.
+                db.rollback()
+                logger.info(
+                    "Agendamento de %s ignorado: outra execucao ativa foi criada "
+                    "concorrentemente (constraint de execucao ativa unica).",
+                    db_auto.name,
+                )
+                return
             logger.info("Disparo agendado: %s -> %s", db_auto.name, exec_id)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Erro no disparo agendado id=%s: %s", automation_id, exc)
 
 
 def reload_scheduled_tasks() -> None:
+    # Preserva o `next_run_time` dos agendamentos por INTERVALO antes de
+    # remover as jobs. Sem isso, `_register_schedule` recriava o trigger com
+    # `start_date=None` e o APScheduler agendava a primeira execução para
+    # "agora + intervalo": o tempo já decorrido era perdido a cada reload.
+    # `_reload_scheduler_safe` roda em create, update, delete, clone, pause,
+    # resume, pause-all e resume-all, e `reload_scheduled_tasks` também no
+    # lifespan — uma automação de `interval_minutes = 60` num ambiente onde o
+    # operador mexe no Dashboard (ou o watchdog reinicia) mais de uma vez por
+    # hora NUNCA disparava, sem erro algum: a job aparecia listada e saudável
+    # em `/api/system/scheduler/jobs`.
+    proximas_execucoes: dict[str, datetime] = {}
     for job in scheduler.get_jobs():
         if job.id.startswith("job_"):
+            if job.id.endswith("_interval") and job.next_run_time:
+                proximas_execucoes[job.id] = job.next_run_time
             scheduler.remove_job(job.id)
+    _pending_interval_resume.clear()
+    _pending_interval_resume.update(proximas_execucoes)
 
     with session_scope(SessionLocal) as db:
         automations_db = (
@@ -259,6 +306,49 @@ def _register_cron_schedule(automation_id: int, sched_data: dict[str, Any]) -> N
         )
 
 
+def _resolve_interval_start_date(
+    automation_id: int, step_minutes: int, anchor_time: Any
+) -> datetime | None:
+    """Primeira execução de um agendamento por intervalo.
+
+    Com `anchor_time`, o horário é derivado da âncora. Sem ela, retoma o
+    `next_run_time` que a job tinha antes do reload — até 31/07/2026 o
+    `start_date` ficava `None` nesse caminho e o APScheduler reagendava para
+    "agora + intervalo", DESCARTANDO o tempo já decorrido. Como
+    `_reload_scheduler_safe` roda em create, update, delete, clone, pause,
+    resume, pause-all e resume-all (e `reload_scheduled_tasks` também no
+    lifespan), uma automação de 60 minutos num ambiente onde o operador mexe no
+    Dashboard — ou o watchdog reinicia — mais de uma vez por hora NUNCA
+    disparava, sem erro: a job aparecia listada e saudável em
+    `/api/system/scheduler/jobs`.
+    """
+    if anchor_time:
+        now = get_now_local().replace(second=0, microsecond=0)
+        return first_interval_candidate(now, step_minutes, anchor_time)
+
+    anterior = _pending_interval_resume.pop(f"job_{automation_id}_interval", None)
+    if anterior is None:
+        return None
+
+    # Comparação por timestamp POSIX: `get_now_local()` devolve datetime NAIVE
+    # (convenção do projeto) e o `next_run_time` do APScheduler é AWARE —
+    # compará-los diretamente levanta
+    # "can't compare offset-naive and offset-aware datetimes", que estouraria
+    # dentro do reload do agendador.
+    agora = get_now_local()
+    try:
+        anterior_ts = anterior.timestamp()
+        agora_ts = agora.timestamp()
+    except (OverflowError, OSError, ValueError):  # pragma: no cover - defensivo
+        return None
+
+    # Só aproveita se ainda estiver no futuro: horário passado cairia no misfire
+    # e seria descartado pelo `misfire_grace_time`.
+    if anterior_ts > agora_ts:
+        return anterior
+    return None
+
+
 def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
     schedule_type = sched_data.get("schedule_type")
     if schedule_type == "manual":
@@ -268,11 +358,9 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
         return
     if schedule_type == "interval":
         step_minutes = int(sched_data["interval_minutes"])
-        anchor_time = sched_data.get("anchor_time")
-        start_date = None
-        if anchor_time:
-            now = get_now_local().replace(second=0, microsecond=0)
-            start_date = first_interval_candidate(now, step_minutes, anchor_time)
+        start_date = _resolve_interval_start_date(
+            automation_id, step_minutes, sched_data.get("anchor_time")
+        )
 
         scheduler.add_job(
             scheduled_task_wrapper,
@@ -337,13 +425,26 @@ def auto_retry_transient_failures() -> None:
     """
     try:
         with session_scope(SessionLocal) as db:
+            # Candidatos permanentemente inelegíveis são excluídos NA QUERY.
+            # Antes de 31/07/2026 eles caíam num `continue` sem mudar de status
+            # e, como a ordenação é pelos mais antigos, continuavam ocupando a
+            # janela de 20 para sempre: bastavam 20 falhas antigas travadas
+            # (automação desabilitada, `finished_at` nulo) para o auto-retry
+            # parar de agir sobre QUALQUER falha nova — em silêncio, com o job
+            # reportando execução normal a cada 3 minutos.
             candidates = (
                 db.query(models.Execution)
+                .join(
+                    models.Automation,
+                    models.Automation.id == models.Execution.automation_id,
+                )
                 .filter(
                     models.Execution.status.in_(
                         [EXECUTION_STATUS_ERROR, EXECUTION_STATUS_TIMEOUT]
                     ),
                     models.Execution.retry_count < models.Execution.max_retries,
+                    models.Execution.finished_at.isnot(None),
+                    models.Automation.enabled.is_(True),
                 )
                 .order_by(models.Execution.finished_at.asc())
                 .limit(20)
@@ -361,7 +462,7 @@ def auto_retry_transient_failures() -> None:
 
                 attempt = int(db_exec.retry_count or 0) + 1
                 try:
-                    new_exec, _audit_payload = prepare_requeue(
+                    new_exec, audit_payload = prepare_requeue(
                         db,
                         db_exec,
                         payload_reason=(
@@ -379,7 +480,32 @@ def auto_retry_transient_failures() -> None:
                     continue
 
                 db.add(new_exec)
-                db.commit()
+                # Trilha de auditoria: o docstring de `prepare_requeue` atribui
+                # ao chamador "commit, audit log e wake-up". O requeue manual
+                # cumpria os três; este job fazia commit e wake-up e DESCARTAVA
+                # o audit_payload. Reenfileiramentos automáticos — que criam
+                # execuções, consomem retry e disparam efeito colateral real
+                # (e-mail/WhatsApp) — não apareciam em GET /api/system/audit:
+                # numa investigação, a trilha mostrava um salto de execuções
+                # sem ator.
+                log_audit(
+                    db,
+                    "AUTO_RETRY",
+                    "EXECUTION",
+                    str(new_exec.id),
+                    "SYSTEM",
+                    json.dumps(audit_payload, default=str),
+                )
+                try:
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    logger.info(
+                        "Auto-retry de %s ignorado: execucao ativa criada "
+                        "concorrentemente.",
+                        db_exec.id,
+                    )
+                    continue
                 logger.info(
                     "Auto-retry disparado: %s -> %s (tentativa %d/%s)",
                     db_exec.id,
@@ -440,6 +566,14 @@ def register_enterprise_jobs(retention_days: int) -> None:
         misfire_grace_time=120,
     )
     scheduler.add_job(
+        reap_orphaned_telemetry,
+        "interval",
+        minutes=15,
+        id="enterprise_telemetry_reaper",
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+    scheduler.add_job(
         run_file_cleanup,
         CronTrigger(hour=2, minute=0),
         id="enterprise_file_cleanup",
@@ -494,22 +628,101 @@ def register_beneficiamento_live_jobs() -> None:
     )
 
 
+# Teto de execução da limpeza de retenção. Sem ele, um script travado (lock de
+# arquivo, share de rede indisponível) prendia PARA SEMPRE uma thread do pool do
+# APScheduler — compartilhado com o auto-retry, o snapshot de saúde e o refresh
+# do Beneficiamento.
+FILE_CLEANUP_TIMEOUT_SECONDS = 900
+
+
+# Idade a partir da qual uma execução de telemetria externa sem conclusão é
+# considerada abandonada. Generoso de propósito: matar cedo demais encerraria
+# telemetria legítima de execução longa disparada do terminal.
+TELEMETRY_ORPHAN_TIMEOUT_MINUTES = 360  # 6 horas
+
+
+def reap_orphaned_telemetry() -> None:
+    """Finaliza execuções de telemetria externa que nunca receberam `/end`.
+
+    `POST /api/executions/telemetry/start` insere uma execução já em RUNNING,
+    sem `worker_instance_id` e sem supervisor — o timeout do worker só cobre o
+    processo que ele mesmo criou. Se o terminal que a criou morrer antes do
+    `/telemetry/end`, a linha ficava RUNNING PARA SEMPRE e, via
+    `_has_running_execution_for_group`, congelava a fila inteira daquele
+    queue_group. O único socorro era o recovery de boot — que desde 31/07/2026
+    (corretamente) ignora execuções sem dono, deixando este reaper como o
+    caminho próprio para o caso.
+    """
+    try:
+        with session_scope(SessionLocal) as db:
+            limite = get_now_local() - timedelta(
+                minutes=TELEMETRY_ORPHAN_TIMEOUT_MINUTES
+            )
+            orfas = (
+                db.query(models.Execution)
+                .filter(
+                    models.Execution.status == EXECUTION_STATUS_RUNNING,
+                    models.Execution.worker_instance_id.is_(None),
+                    models.Execution.started_at < limite,
+                )
+                .all()
+            )
+            for execucao in orfas:
+                agora = get_now_local()
+                execucao.status = EXECUTION_STATUS_ERROR  # type: ignore[assignment]
+                execucao.finished_at = agora  # type: ignore[assignment]
+                execucao.failure_reason = FAILURE_REASON_TELEMETRY_ABANDONED  # type: ignore[assignment]
+                execucao.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE  # type: ignore[assignment]
+                if execucao.started_at:
+                    execucao.duration_seconds = round(
+                        (agora - execucao.started_at).total_seconds(), 2
+                    )
+                nota_reaper = (
+                    str(execucao.logs or "")
+                    + f"\n[REAPER] Telemetria externa sem /end apos "
+                    f"{TELEMETRY_ORPHAN_TIMEOUT_MINUTES} min. Encerrada para "
+                    "liberar o grupo operacional."
+                )
+                execucao.logs = nota_reaper  # type: ignore[assignment]
+                logger.warning(
+                    "Telemetria orfa encerrada: %s (automacao %s)",
+                    execucao.id,
+                    execucao.automation_id,
+                )
+            if orfas:
+                db.commit()
+                trigger_worker_wakeup()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Falha no reaper de telemetria orfa: %s", exc)
+
+
 def run_file_cleanup() -> None:
     script_path = _get_reserved_cleanup_script_path()
     try:
         logger.info("Iniciando limpeza de arquivos (Self-Cleaning)...")
         subprocess.run(
             [
-                "pwsh.exe",
+                # `powershell.exe` (5.1), não `pwsh.exe`: este era o ÚNICO ponto
+                # do runtime a exigir PowerShell 7, dependência não declarada em
+                # lugar nenhum. Em host sem PS7 o job das 02:00 falhava toda
+                # noite e o except abaixo transformava isso em uma linha de log.
+                "powershell.exe",
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
                 script_path,
             ],
+            env=build_subprocess_env(),
+            timeout=FILE_CLEANUP_TIMEOUT_SECONDS,
             check=True,
         )
         logger.info("Limpeza de arquivos concluída com sucesso.")
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Limpeza de arquivos excedeu %ds e foi interrompida.",
+            FILE_CLEANUP_TIMEOUT_SECONDS,
+        )
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Erro ao executar limpeza de arquivos: %s", e)
 

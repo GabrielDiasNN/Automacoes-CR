@@ -12,8 +12,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from ..core import round_or_zero as _round
-from ..core import safe_strip as _safe_strip
+from ..core import round_or_zero as _round, safe_strip as _safe_strip
 
 
 def _build_turnos(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
@@ -111,7 +110,9 @@ def _build_overview_kpis(cursor: sqlite3.Cursor) -> tuple[int, dict[str, Any]]:
             (kg_total * 60.0 / min_real) if min_real > 0 else 0.0
         ),
         "fases_planejadas": fases_planejadas,
-        "planejado_pct": _round((fases_planejadas / fases * 100.0) if fases > 0 else 0.0),
+        "planejado_pct": _round(
+            (fases_planejadas / fases * 100.0) if fases > 0 else 0.0
+        ),
     }
 
 

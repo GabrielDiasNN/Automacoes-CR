@@ -49,7 +49,6 @@ from .routers import (
 from .runtime import (
     get_allowed_origins,
     get_dashboard_path,
-    get_lib_path,
     register_event_loop,
     scheduler,
 )
@@ -205,7 +204,6 @@ app.include_router(websocket.router)
 # --- SERVICO DE ARQUIVOS ESTATICOS (DASHBOARD) ---
 # Resolvendo raiz do projeto (C:\Automacoes)
 dashboard_path = get_dashboard_path()
-lib_path = get_lib_path()
 
 
 class RevalidatedStaticFiles(StaticFiles):
@@ -215,18 +213,51 @@ class RevalidatedStaticFiles(StaticFiles):
     Dashboard sempre sirva a versao atual sem depender de ?v= nos imports ES.
     """
 
+    # Extensões de asset servido pelo build do Vite. Um 404 nesses caminhos é
+    # deploy quebrado, não rota client-side — e devolver index.html com status
+    # 200 no lugar de um módulo ES faz o browser falhar por MIME type, sem
+    # nenhum 404 no servidor, no log ou no health check para indicar o problema
+    # (o TimingMiddleware só loga /api). Corrigido em 31/07/2026.
+    _ASSET_EXTENSIONS = frozenset(
+        {
+            ".js",
+            ".mjs",
+            ".css",
+            ".map",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".otf",
+            ".eot",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".ico",
+            ".webp",
+            ".json",
+            ".wasm",
+        }
+    )
+
+    @classmethod
+    def _is_asset(cls, path: str) -> bool:
+        return os.path.splitext(path)[1].lower() in cls._ASSET_EXTENSIONS
+
     async def get_response(
         self, path: str, scope: MutableMapping[str, Any]
     ) -> StarletteResponse:
         # SPA fallback: rotas client-side (react-router, ex.: /dashboard/execucoes)
         # nao existem como arquivo; ao recarregar a pagina caem em index.html.
+        # Asset ausente, porém, precisa continuar sendo 404.
         try:
             response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
-            if exc.status_code != 404:
+            if exc.status_code != 404 or self._is_asset(path):
                 raise
             response = await super().get_response("index.html", scope)
-        if response.status_code == 404:
+        if response.status_code == 404 and not self._is_asset(path):
             response = await super().get_response("index.html", scope)
         response.headers["Cache-Control"] = "no-cache"
         return response
@@ -242,8 +273,14 @@ if os.path.exists(dashboard_path):
 else:
     logger.error("ERRO: Pasta Dashboard não encontrada em: %s", dashboard_path)
 
-if os.path.exists(lib_path):
-    app.mount("/lib", StaticFiles(directory=lib_path), name="lib")
+# O mount de `lib/` foi REMOVIDO em 31/07/2026. `app.mount("/lib", StaticFiles(...))`
+# publicava a árvore inteira do diretório — `Lib-Oracle.psm1`, `Lib-Email.psm1`,
+# `Send-WhatsApp.ps1`, `WhatsApp-Core.js`, `lib/python/*.py`, `package-lock.json`
+# e `node_modules/` — sem `Depends(get_api_key)` e fora do RateLimitMiddleware,
+# que só age em `/api`. Era resíduo do dashboard vanilla anterior ao React:
+# nenhuma referência a `/lib/...` existe em `Dashboard/src` ou `Dashboard/dist`.
+# Se algum asset de `lib/assets/` voltar a ser necessário, monte apenas esse
+# subdiretório — nunca a raiz de `lib/`.
 
 
 @app.get("/")

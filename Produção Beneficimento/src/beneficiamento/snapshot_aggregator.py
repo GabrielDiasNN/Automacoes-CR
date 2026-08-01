@@ -7,7 +7,7 @@ individuais de cada período. Consumido por ``snapshot_dashboard``.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .health import HealthStatus, compute_health_status
@@ -210,7 +210,7 @@ def _compute_health_status(
 def _build_health_from_periods(periods: dict[str, dict[str, Any]]) -> dict[str, Any]:
     status, reason_code, recommended_action = _compute_health_status(periods)
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "snapshot_root": str(snapshot_path("diario", "analytics").parent),
         "source": "snapshot_local",
         "status": status.value,

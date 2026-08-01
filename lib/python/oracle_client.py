@@ -1,10 +1,12 @@
 # pylint: disable=broad-exception-caught
-from typing import Callable
+from collections.abc import Callable
 
 import oracledb
 
 
-def init_oracle_thick_mode(client_lib: str, tns_admin: str | None, log_fn: Callable[..., None]) -> None:
+def init_oracle_thick_mode(
+    client_lib: str, tns_admin: str | None, log_fn: Callable[..., None]
+) -> None:
     """Initializes Oracle Thick Mode client.
 
     log_fn signature: (message: str, level: str = "INFO") -> None

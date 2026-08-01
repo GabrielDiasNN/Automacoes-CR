@@ -163,7 +163,14 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install ruff
-          python -m ruff check Orchestrator/app Orchestrator/worker.py
+          # `lib/python` incluído em 31/07/2026: é o núcleo compartilhado de
+          # extração Oracle (resolve_oracle_credentials, init_thick_mode,
+          # fetch_all), usado pelos 5 scripts de extração de domínio, e estava
+          # fora de todo gate bloqueante — uma regressão ali não era detectada.
+          # `Produção Beneficimento/src` incluído em 31/07/2026: é o domínio que
+          # fala com o Oracle e monta o SQL do histórico, e era o último tronco
+          # de Python de produção fora do gate.
+          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src"
 
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
@@ -184,7 +191,11 @@ jobs:
       - name: Analise Estatica de Seguranca (Bandit)
         shell: pwsh
         run: |
-          python -m bandit -r Orchestrator/app Orchestrator/worker.py -ll
+          # Os 13 `# nosec B608` de `Produção Beneficimento/src` foram revisados
+          # um a um: WHERE montado com fragmentos literais e valores ligados por
+          # `?`. Quem garante que isso continua valendo é
+          # `tests/test_beneficiamento_sql_seguranca.py`, não o `nosec`.
+          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" -ll
 
       - name: Auditoria de Dependencias (pip-audit)
         continue-on-error: true

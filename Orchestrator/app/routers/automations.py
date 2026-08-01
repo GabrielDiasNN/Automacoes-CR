@@ -13,7 +13,8 @@ import threading
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -21,13 +22,10 @@ from ..constants import PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, scheduler, trigger_worker_wakeup
-from ..services import automation_repository as repo
-from ..services import env_admin
+from ..services import automation_repository as repo, env_admin
 from ..services.automation_preflight import build_automation_preflight
 from ..services.automation_snapshot import (
     build_automation_response as build_operational_automation_response,
-)
-from ..services.automation_snapshot import (
     build_automation_response_batch,
     load_snapshot_dependencies,
 )
@@ -163,8 +161,10 @@ def _preflight_payload_or_422(
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.AutomationResponse])
 def list_automations(  # pylint: disable=R0913,R0917
-    page: int = 1,
-    per_page: int = 20,
+    # `per_page` negativo virava `LIMIT -1` no SQLite (sem limite) e `page`
+    # negativo produzia OFFSET negativo — ambos aceitos sem validação.
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=200),
     sort: str = "name",
     order: str = "asc",
     search: str | None = None,
@@ -457,6 +457,25 @@ def delete_automation(
 
     auto_name = db_auto.name
 
+    # Bloqueia a remoção enquanto houver execução ativa. `start_automation` já
+    # validava isso; `delete_automation` não fazia checagem nenhuma — e com
+    # `cascade="all, delete-orphan"` no ORM mais `ondelete="CASCADE"` na FK
+    # (com PRAGMA foreign_keys=ON), apagar a automação removia a linha da
+    # execução RUNNING enquanto o processo PowerShell continuava vivo. O worker
+    # então chamava `complete_process_execution`, que faz `.first()` e devolve
+    # None em silêncio: o processo terminava sem registro, sem artefato
+    # catalogado e sem alerta.
+    execucao_ativa = repo.get_active_execution(db, automation_id)
+    if execucao_ativa:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Automação possui execução ativa ({execucao_ativa.id}, "
+                f"status {execucao_ativa.status}). Aguarde o término ou pare a "
+                "execução antes de remover."
+            ),
+        )
+
     log_audit(
         db,
         "DELETE",
@@ -555,7 +574,17 @@ async def start_automation(
         db, "START", "EXECUTION", exec_id, client_ip, f"Disparado: {db_auto.name}"
     )
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # O índice único parcial (migration 20260731_01) venceu a corrida entre
+        # a checagem acima e este commit. Antes da constraint, as duas inserções
+        # passavam e a automação rodava duas vezes.
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe uma execução ativa para esta automação.",
+        ) from exc
 
     trigger_worker_wakeup()
 
@@ -741,6 +770,14 @@ def clone_automation(
         enabled=False,
         test_mode=db_auto.test_mode,
         notification_channels=db_auto.notification_channels,
+        # `sla_minutes` era omitido até 31/07/2026: o clone nascia com SLA nulo
+        # e `collect_sla_breaches` simplesmente não o avaliava — a automação
+        # desaparecia do painel de violação sem erro nem warning. Como o clone
+        # nasce desabilitado, o defeito só se manifestava depois que alguém
+        # habilitasse a cópia, longe do momento da criação.
+        # O teste `test_clone_copia_todos_os_campos_operacionais` reprova quando
+        # uma coluna nova de `Automation` fica de fora desta lista.
+        sla_minutes=db_auto.sla_minutes,
     )
     db.add(clone)
     db.flush()

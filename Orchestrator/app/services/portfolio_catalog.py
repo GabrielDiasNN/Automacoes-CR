@@ -23,8 +23,6 @@ from .metrics_queries import (
 )
 from .portfolio_manifest import (  # pylint: disable=useless-import-alias; noqa: F401
     CatalogManifest as CatalogManifest,
-)
-from .portfolio_manifest import (
     _channels_to_csv,
     _format_value,
     _normalize_repo_relative,

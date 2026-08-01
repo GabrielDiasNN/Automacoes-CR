@@ -400,6 +400,39 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
     scheduled_run_at = (get_now_local() + timedelta(hours=1)).strftime(
         "%Y-%m-%dT%H:%M:%S"
     )
+    # O preflight exige `automation.manifest.json` desde 31/07/2026, e este
+    # teste fala com um uvicorn real — o wrapper da conftest, que atua sobre o
+    # `TestClient`, não alcança esta requisição.
+    manifesto_e2e = (
+        Path(__file__).resolve().parent / "test" / "automation.manifest.json"
+    )
+    manifesto_e2e.write_text(
+        json.dumps(
+            {
+                "id": "E2E-99",
+                "name": "Timezone E2E Auto",
+                "slug": "timezone-e2e-auto",
+                "criticality": "low",
+                "owner_area": "QA",
+                "entrypoint": "run.ps1",
+                "runtime": "powershell",
+                "channels": [],
+                "queue_group": None,
+                "sla_minutes": None,
+                "max_runtime_minutes": 30,
+                "max_retries": 0,
+                "schedule_summary": "Manual",
+                "runbook_path": "Orchestrator/tests/test/run.ps1",
+                "context_path": "Orchestrator/tests/test/run.ps1",
+                "readme_path": "Orchestrator/tests/test/run.ps1",
+                "orchestrator": {"script_path": "./Orchestrator/tests/test/run.ps1"},
+                "dependencies": {"oracle": False, "outlook": False, "whatsapp": False},
+                "smoke_tests": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     create_response = requests.post(
         f"{uvicorn_server}/api/automations",
         json={
@@ -411,6 +444,7 @@ def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> Non
         headers={"X-API-Key": API_KEY},
         timeout=20,
     )
+    manifesto_e2e.unlink(missing_ok=True)
     assert create_response.status_code == 201, create_response.text
 
     _inject_api_key(page)

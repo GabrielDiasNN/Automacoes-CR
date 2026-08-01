@@ -2,7 +2,7 @@
 
 ORCHESTRATOR_VERSION = "1.0.0"
 WORKER_VERSION = "1.0.0"
-ORCHESTRATOR_SCHEMA_VERSION = "20260721_01"
+ORCHESTRATOR_SCHEMA_VERSION = "20260731_02"
 ORCHESTRATOR_CONTRACT_VERSION = "2026.05.25.1"
 
 EXECUTION_STATUS_PENDING = "PENDING"
@@ -109,32 +109,96 @@ RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE = "REVIEW_TIMEOUT_AND_REQUEUE"
 RECOVERY_ACTION_REVIEW_WORKER_LOGS = "REVIEW_WORKER_LOGS"
 
 FAILURE_REASON_AUTOMATION_NOT_FOUND = "AUTOMATION_NOT_FOUND"
+FAILURE_REASON_AUTOMATION_SCRIPT_FAILED = "AUTOMATION_SCRIPT_FAILED"
 FAILURE_REASON_CHANNEL_DELIVERY_FAILED = "CHANNEL_DELIVERY_FAILED"
+FAILURE_REASON_DATA_EXTRACTION_FAILED = "DATA_EXTRACTION_FAILED"
 FAILURE_REASON_INTERNAL_WORKER_ERROR = "INTERNAL_WORKER_ERROR"
 FAILURE_REASON_MAX_RUNTIME_EXCEEDED = "MAX_RUNTIME_EXCEEDED"
 FAILURE_REASON_ORCHESTRATOR_REBOOT = "ORCHESTRATOR_REBOOT"
+FAILURE_REASON_PREFLIGHT_FAILED = "PREFLIGHT_FAILED"
+FAILURE_REASON_TELEMETRY_ABANDONED = "TELEMETRY_ABANDONED"
 FAILURE_REASON_USER_TERMINATED = "USER_TERMINATED"
 FAILURE_REASON_WHATSAPP_SESSION_EXPIRED = "WHATSAPP_SESSION_EXPIRED"
 
 # Mapeamento semântico de exit codes das automações:
 # exit_code -> (status, failure_reason, recovery_action)
+#
+# CONTRATO: todo código emitido por um `run.ps1` precisa constar aqui. Códigos
+# ausentes caem no default ERROR/EXIT_CODE_<n> de `classify_process_result`, o
+# que transforma desfecho normal em falso incidente. O teste
+# `tests/test_exit_code_contract.py` varre os `run.ps1` e falha se algum código
+# emitido não estiver mapeado.
 EXIT_CODE_MAP = {
     0: (EXECUTION_STATUS_SUCCESS, None, RECOVERY_ACTION_NONE),
+    # Erro fatal genérico do script (bloco catch da automação) e propagação do
+    # exit 1 de lib/Send-WhatsApp.ps1 por parâmetro de destino ausente.
+    1: (
+        EXECUTION_STATUS_ERROR,
+        FAILURE_REASON_AUTOMATION_SCRIPT_FAILED,
+        RECOVERY_ACTION_REVIEW_LOGS_AND_OPTIONALLY_REQUEUE,
+    ),
+    # Idempotência: nada mudou desde o último envio, nada a notificar.
     2: (EXECUTION_STATUS_SUCCESS, None, RECOVERY_ACTION_NONE),
-    3: (EXECUTION_STATUS_SUCCESS, None, RECOVERY_ACTION_NONE),
+    # Falha DEFINITIVA na obtenção dos dados (extração Oracle após 3 tentativas
+    # ou script Python de extração). Nenhum entregável foi produzido: é falha,
+    # não sucesso. Como o state não é commitado nesse caminho, o requeue é
+    # seguro e não duplica entrega.
+    3: (
+        EXECUTION_STATUS_ERROR,
+        FAILURE_REASON_DATA_EXTRACTION_FAILED,
+        RECOVERY_ACTION_REQUEUE_IF_SAFE,
+    ),
+    # Falha na orquestração, na geração do artefato ou no envio do canal
+    # principal. State não commitado — o lote é reavaliado na próxima execução.
+    4: (
+        EXECUTION_STATUS_ERROR,
+        FAILURE_REASON_AUTOMATION_SCRIPT_FAILED,
+        RECOVERY_ACTION_REVIEW_LOGS_AND_OPTIONALLY_REQUEUE,
+    ),
+    # Pre-flight reprovado (Python/Oracle/paths). O ambiente está quebrado:
+    # requeue cego repete a falha, então exige revisão antes.
+    9: (
+        EXECUTION_STATUS_ERROR,
+        FAILURE_REASON_PREFLIGHT_FAILED,
+        RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
+    ),
     21: (
         EXECUTION_STATUS_ERROR,
         FAILURE_REASON_WHATSAPP_SESSION_EXPIRED,
         RECOVERY_ACTION_REAUTHENTICATE_WHATSAPP_SESSION,
     ),
+    # WhatsApp adiado por lock ativo ou cooldown da sessão hub-global
+    # compartilhada. É comportamento normal, não falha: o state não é commitado
+    # e o mesmo lote é reavaliado no próximo ciclo. Classificar como ERROR
+    # geraria alerta e poluiria os hotspots de falha a cada disputa de sessão.
+    22: (EXECUTION_STATUS_SUCCESS, None, RECOVERY_ACTION_NONE),
     # Falha apenas no canal secundário (WhatsApp): o entregável principal
     # (e-mail/artefatos) foi concluído. Classificado como PARTIAL para não gerar
     # alerta crítico diário nem penalizar o SLA, preservando o motivo do canal.
+    # Em automação de canal ÚNICO esse pressuposto não vale e
+    # `classify_process_result_for_channels` rebaixa o desfecho para ERROR.
     24: (
         EXECUTION_STATUS_PARTIAL,
         FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
         RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
     ),
+    # Simétrico ao 24, para o canal e-mail degradado.
+    25: (
+        EXECUTION_STATUS_PARTIAL,
+        FAILURE_REASON_CHANNEL_DELIVERY_FAILED,
+        RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
+    ),
+}
+
+# Exit codes que sinalizam degradação de UM canal de entrega específico.
+#
+# O contrato de PARTIAL pressupõe que o OUTRO canal entregou — é o que justifica
+# não gerar alerta crítico nem penalizar o SLA. Quando o canal degradado é o
+# único que a automação possui, essa premissa é falsa: nada foi entregue, e o
+# desfecho correto é ERROR. Ver `classify_process_result_for_channels`.
+DEGRADED_CHANNEL_EXIT_CODES = {
+    24: "whatsapp",
+    25: "email",
 }
 
 # Limite máximo de caracteres de logs persistidos no banco de dados para evitar inchaço

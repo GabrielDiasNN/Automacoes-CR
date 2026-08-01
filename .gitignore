@@ -115,6 +115,8 @@ Orchestrator/tests/test-e2e-*.db-wal
 Orchestrator/tests/fix_tests*.py
 Orchestrator/orchestrator.pid
 Orchestrator/worker.pid
+# Sentinela de parada gracioso do worker (Lib-OrchestratorRuntime.psm1)
+Orchestrator/worker.shutdown
 Backups/
 
 # Scratch local de investigação
@@ -164,3 +166,5 @@ OBs Fluxo Sem Tingimento/message.txt
 
 # Saída de testes Pester (-CI)
 testResults.xml
+Orchestrator/tests/test/automation.manifest.json
+Orchestrator/tests/test/whatsapp-config.json
