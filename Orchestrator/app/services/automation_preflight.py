@@ -265,30 +265,28 @@ def _load_manifest_governance(
 ) -> schemas.AutomationPreflightGovernance:
     manifest_path = os.path.join(automation_dir, "automation.manifest.json")
     if not os.path.isfile(manifest_path):
-        # NÃO é bloqueante — e essa é uma decisão em aberto, não um descuido.
+        # BLOQUEANTE desde 31/07/2026.
         #
-        # `is_valid = governance.status != "incident"`, então "attention" passa:
-        # a automação é persistida sem manifesto, sem docs obrigatórias e sem
-        # verificação de `whatsapp-config.json`. Como `_manifest_field_mismatches`
-        # só roda quando o manifesto existe, a forma mais fácil de escapar de
-        # toda a governança de manifesto é não ter um.
+        # Antes devolvia "attention", e `is_valid = status != "incident"` deixava
+        # passar: a automação era persistida sem manifesto, sem docs obrigatórias
+        # e sem verificação de `whatsapp-config.json`. Como
+        # `_manifest_field_mismatches` só roda quando o manifesto EXISTE, a forma
+        # mais fácil de escapar de toda a governança de manifesto era não ter um.
         #
-        # Elevar para "incident" foi testado em 31/07/2026 e reprova 17 testes:
-        # o fluxo de criação/atualização via API pressupõe automações sem
-        # manifesto (cadastro experimental, cenários de teste). Tornar
-        # bloqueante é uma decisão de produto — exigiria criar o manifesto antes
-        # de qualquer cadastro — e não uma correção de defeito. Enquanto não for
-        # tomada, o `CLAUDE.md` descreve o comportamento real: o preflight
-        # SINALIZA a ausência, não a impede.
+        # O caminho canônico de criação nunca cai aqui: `Tools/New-Automation.ps1`
+        # sempre gera o manifesto a partir de `_Template`. Quem cai aqui é o
+        # registro via API de uma pasta que não passou pelo scaffolding — que é
+        # exatamente o buraco.
         return schemas.AutomationPreflightGovernance(
             manifest_present=False,
-            status="attention",
+            status="incident",
             top_issue="A pasta da automação não possui automation.manifest.json.",
-            recommended_action="Crie ou complete o manifesto canônico antes de promover a automação.",
-            warnings=[
+            recommended_action="Crie o manifesto canônico (Tools/New-Automation.ps1 o gera) antes de cadastrar a automação.",
+            blocking_issues=[
                 _issue(
                     "manifest_missing",
                     "Nenhum automation.manifest.json foi encontrado na pasta da automação.",
+                    severity="ERROR",
                 )
             ],
         )

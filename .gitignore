@@ -166,3 +166,5 @@ OBs Fluxo Sem Tingimento/message.txt
 
 # Saída de testes Pester (-CI)
 testResults.xml
+Orchestrator/tests/test/automation.manifest.json
+Orchestrator/tests/test/whatsapp-config.json
