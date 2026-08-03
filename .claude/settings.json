@@ -13,10 +13,10 @@
           },
           {
             "type": "command",
-            "command": "$data = $env:CLAUDE_TOOL_INPUT | ConvertFrom-Json; $f = $data.file_path; if ($f -and $f.EndsWith('.ps1')) { $bytes = [System.IO.File]::ReadAllBytes($f); if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) { Write-Output '{\"systemMessage\":\"AVISO: ' + $f + ' nao tem UTF-8 BOM obrigatorio para .ps1 — corrija antes do PR\"}' } }",
+            "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Assert-FileEncoding.ps1\"",
             "shell": "powershell",
-            "statusMessage": "Verificando UTF-8 BOM (.ps1)...",
-            "async": true
+            "statusMessage": "Verificando encoding (BOM)...",
+            "timeout": 30
           },
           {
             "type": "command",
@@ -24,6 +24,32 @@
             "shell": "powershell",
             "statusMessage": "ESLint Dashboard/src...",
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Register-GateRun.ps1\"",
+            "shell": "powershell",
+            "statusMessage": "Registrando execucao de gate...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Assert-StopQualityGate.ps1\"",
+            "shell": "powershell",
+            "statusMessage": "Rodando governanca direcionada...",
+            "timeout": 240
           }
         ]
       }
