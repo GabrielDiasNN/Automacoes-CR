@@ -114,9 +114,9 @@ Audit/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 # Carimbos ISO-8601 de ultima execucao dos gates (last-pytest, last-governance,
-# last-dashboard). Nenhum script versionado os produz: sao escritos por
-# ferramental local de sessao, fora do repositorio. Estado por maquina, muda a
-# cada commit e nao tem leitura fora da sessao local.
+# last-dashboard), escritos por .claude/hooks/Register-GateRun.ps1 e lidos por
+# Assert-StopQualityGate.ps1. Estado por maquina, muda a cada commit e nao tem
+# leitura fora da sessao local.
 .claude/.state/
 
 # Banco de Dados SQLite (runtime — nao versionar)
@@ -186,5 +186,8 @@ OBs Fluxo Sem Tingimento/message.txt
 
 # Saída de testes Pester (-CI)
 testResults.xml
+
+# Marcadores de execução de gate gravados por .claude/hooks/Register-GateRun.ps1
+.claude/.state/
 Orchestrator/tests/test/automation.manifest.json
 Orchestrator/tests/test/whatsapp-config.json

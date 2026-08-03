@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.3.17] - 03/08/2026
+
+> Trabalho realizado em 02/08/2026; publicado em 03/08/2026, depois de `[1.3.16]`.
+
+### Corrigido
+- **O hook de verificação de BOM nunca avisou nada** (`.claude/settings.json`): o comando era `Write-Output '{"systemMessage":"AVISO: ' + $f + ' ...'`. Em PowerShell isso não concatena — o parser lê três **argumentos posicionais** para `Write-Output`, que saem em três linhas separadas. O resultado nunca foi JSON válido, então o campo `systemMessage` jamais chegou ao agente: o hook rodava, gastava tempo e reportava silêncio. Além disso só olhava `.ps1` (BOM ausente), deixando de fora a metade inversa da regra — `.py`/`.json`/`.md`/`.ts` com BOM indevido, que é a violação mais provável quando um agente grava arquivo novo no Windows.
+
+### Adicionado
+- **Hooks movidos de one-liners embutidos para `.claude/hooks/`** (`Assert-FileEncoding.ps1`, `Register-GateRun.ps1`, `Assert-StopQualityGate.ps1`, `HookCommon.psm1`): a lógica de encoding deixou de ser reimplementada no `settings.json` e passou a delegar para `Tools/Test-SourceEncoding.ps1`, que já é a fonte única da regra e cobre as duas direções. O hook sai com **código 2**, que devolve o stderr ao agente e força a correção no mesmo turno.
+- **Hook `Stop` com gate de qualidade** (`Assert-StopQualityGate.ps1`): bloqueia o encerramento quando há `.py` governado alterado sem `pytest` posterior à edição, `Dashboard/src` alterado sem lint/build, ou arquivo pendente violando encoding. Os marcadores de execução são gravados por `Register-GateRun.ps1` (hook `PostToolUse` em `Bash|PowerShell`) em `.claude/.state/`, diretório ignorado pelo git.
+- **O `Stop` passou a rodar os 14 gates em modo direcionado**: a premissa registrada na primeira versão do hook estava incompleta — os 171 s medidos são do modo `full_scan`, em que `ValidarAutomacoes.ps1 -OnlyGovernance` cai quando não recebe alvos. Com `-Paths` ele roda os mesmos 14 checks apenas sobre os arquivos informados: **6-9 s** em diffs sem Python e **18 s** com dois `.py`, onde o mypy domina — diferença de ~28x pela flag. O hook deixou de verificar só encoding e passou a cobrir zero-trust, SQL, mypy/pylint, PSScriptAnalyzer, JSON, Playwright, manifesto, arquitetura, datas, semântica e Node. Verificado com um `.ps1` contendo caminho absoluto: antes passava, agora bloqueia com o detalhe de `Test-PortablePaths`. `Select-FailureLines` filtra a saída antes de devolvê-la ao agente (o gate emite 60+ linhas de `[OK]` mesmo reprovando, e o achado real cabe em 8); quando nenhum marcador de falha é reconhecido, devolve a saída integral — esconder o motivo da reprovação é pior que gastar contexto. Timeout do hook subiu de 45 s para 240 s por margem.
+
+### Notas
+- **O gate completo em `full_scan` não cabe num hook `Stop`.** `ValidarAutomacoes.ps1 -OnlyGovernance` sem `-Paths` foi medido em **171 s** (`governanca_nativa` sozinha responde por 168 s) — acima do timeout padrão de hook e inviável a cada encerramento de tarefa. É a passagem de `-Paths` que torna o gate viável ali. Quem continua sendo fonte final de verdade é o pre-commit hook e o CI, que rodam o modo completo.
+- **A checagem de marcadores permanece** porque o gate de governança **não** roda pytest nem build do Dashboard.
+- **`Write-Host`/`Out-Host` não são capturáveis com `2>&1` no mesmo processo.** `Test-SourceEncoding.ps1` emite os achados por esses caminhos, que escrevem no host e não no pipeline; a primeira versão do hook capturava string vazia e perdia justamente a regra violada (`UTF8_BOM_FORBIDDEN` vs. `POWERSHELL_BOM_MISSING`). `Invoke-EncodingCheck` e `Invoke-GovernanceGate` (em `HookCommon.psm1`) compartilham `Invoke-GovernedScript`, que executa o verificador como **processo filho**, onde tudo converge para o stdout e pode ser lido. Os caminhos trafegam por arquivo temporário, nunca interpolados na linha de comando.
+- **`stop_hook_active` é obrigatório no hook de `Stop`.** Sem consultá-lo, um bloqueio que o agente não consiga satisfazer vira laço infinito de encerramento. A consulta é a primeira instrução do hook e retorna em 0,02 s: o ciclo de reentrada não paga o custo do gate.
+- **Marcador registra disparo, não aprovação.** `Register-GateRun.ps1` grava o carimbo ao ver `pytest`/`npm run lint` no comando; não afirma que passou. A leitura da saída pelo agente continua sendo o sinal de aprovação.
+- **Isto fecha o achado da entrada `[1.3.16]` sobre `Register-GateRun.ps1`.** Aquela revisão apurou corretamente que o `.gitignore` citava um script inexistente **no repositório**: o produtor dos carimbos vivia só nesta branch, ainda não publicada. Com o merge, o nome passa a existir em `.claude/hooks/` e o comentário do `.gitignore` voltou a citá-lo — agora com referência verificável, apontando também o consumidor (`Assert-StopQualityGate.ps1`).
+
 ## [1.3.16] - 03/08/2026
 
 ### Corrigido
