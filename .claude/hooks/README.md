@@ -10,7 +10,7 @@ Fiação em [`.claude/settings.json`](../settings.json). Hooks são carregados n
 | `Assert-StopQualityGate.ps1` | `Stop` | `*` | Sim (exit 2) |
 | `HookCommon.psm1` | — | — | módulo compartilhado |
 
-## `exit $LASTEXITCODE` não é opcional na fiação
+## A fiação é parte do gate
 
 O `settings.json` invoca estes scripts como `pwsh -Command "& '<script>'"`. Nessa
 forma o `exit 2` do script **não** chega ao harness: quando o script escreve em
@@ -23,14 +23,38 @@ descarta. O gate emite a mensagem certa e não bloqueia nada.
 | `-Command "& '<script>'; exit $LASTEXITCODE"` | `2` — bloqueia |
 | `-File <script>` | `2` — bloqueia |
 
-Por isso **todo** comando que invoca um script daqui termina com
-`; exit $LASTEXITCODE` — inclusive `Register-GateRun.ps1`, que hoje é `async` e
-sempre sai 0. Ali o sufixo não muda nada em operação normal; existe para que o
-script não vire gate silenciosamente inerte se algum dia passar a bloquear, e
-para que a fiação não tenha duas convenções concorrentes.
+`; exit $LASTEXITCODE` resolve o caminho feliz, mas **não** basta. Os scripts
+começam com `$ErrorActionPreference = 'Stop'` seguido de `Import-Module
+HookCommon.psm1`: se o módulo sumir, tiver erro de parse ou o `Set-StrictMode
+-Version Latest` dele disparar, a exceção terminante encerra o `pwsh` **antes**
+de alcançar o `exit`. Medido nessa condição: a forma com apenas o sufixo devolve
+`1` (gate inerte) e, com `$LASTEXITCODE` nulo, `exit $LASTEXITCODE` devolve `0`
+(aprova). Um único erro no módulo compartilhado deixaria os três gates inertes
+de uma vez, sem sinal nenhum.
+
+Por isso a forma canônica da fiação é **fail-closed**:
+
+```powershell
+$r = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+try { & "$r\.claude\hooks\<script>.ps1" }
+catch { [Console]::Error.WriteLine("BLOQUEADO: <script>.ps1 falhou antes de decidir: $_"); exit 2 }
+if ($null -eq $LASTEXITCODE) { exit 2 }
+exit $LASTEXITCODE
+```
+
+Vale para **todo** comando que invoca um script daqui — inclusive
+`Register-GateRun.ps1`, que hoje é `async` e sempre sai 0. Ali a forma não muda
+nada em operação normal; existe para que o script não vire gate silenciosamente
+inerte se algum dia passar a bloquear, e para que a fiação não tenha duas
+convenções concorrentes.
 
 Ao adicionar um hook novo, **teste o código de saída pela fiação real**, não só
-rodando o script direto: os dois caminhos divergem.
+rodando o script direto: os dois caminhos divergem. A cobertura automatizada
+disso vive em [`lib/tests/Hooks-SensitiveWriteGuard.Tests.ps1`](../../lib/tests/Hooks-SensitiveWriteGuard.Tests.ps1),
+que roda no job Pester do CI: além dos casos de bloqueio e de não-bloqueio
+(payload por **stdin**, o caminho real), há um caso que executa o comando
+literal extraído do `settings.json` e um que quebra `HookCommon.psm1` de
+propósito para provar que a fiação falha fechada.
 
 ## Assert-FileEncoding.ps1
 
@@ -52,17 +76,38 @@ Bloqueia **escrita**, não leitura — ler `.env` é operação legítima e docu
 barrado por engano. O conteúdo de `-Value`/`-Body` é descartado antes da análise,
 senão citar `orchestrator.pid` dentro de um texto viraria bloqueio.
 
+Dentro do segmento, `>` e `>>` são **fronteira entre fonte e alvo**: o que está à
+esquerda é leitura, o que está à direita é o arquivo escrito. Por isso
+`Get-Content .env > backup.txt` e `grep CHAVE .env > /tmp/out.txt` passam — antes
+eram barrados, o que quebrava o fluxo documentado de ler a API Key assim que o
+operador redirecionasse a saída. O alvo à direita bloqueia **sozinho**, sem
+exigir verbo: `echo x > .env` continua barrado.
+
 Erra para o lado conservador: na dúvida bloqueia, com a mensagem indicando o
-segmento culpado. O caso conhecido é **texto que cita um comando**: uma mensagem
-de `git commit` ou um trecho de documentação que mencione o cmdlet e o arquivo na
-mesma linha é barrado, ainda que nada seja escrito. Descartar `-Value`/`-Body`
-cobre o cmdlet; texto livre não tem marcador que permita distingui-lo de um
-comando real. Contorne reformulando a frase — não enfraqueça o padrão.
+segmento culpado. Dois casos conhecidos:
+
+- **Texto que cita um comando** — uma mensagem de `git commit` ou um trecho de
+  documentação que mencione o cmdlet e o arquivo na mesma linha é barrado, ainda
+  que nada seja escrito. Descartar `-Value`/`-Body` cobre o cmdlet; texto livre
+  não tem marcador que permita distingui-lo de um comando real.
+- **Cópia/movimentação com o arquivo sensível como origem** — `Copy-Item .env
+  .env.bak` é barrado. Distinguir origem de destino em `Copy-Item`/`Move-Item`
+  exige parser posicional, e errar para o lado permissivo aqui liberaria
+  `Copy-Item qualquer.txt .env`. O bloqueio também não é gratuito: copiar um
+  arquivo de segredos é operação que vale passar pelo usuário.
+
+Contorne reformulando o comando — não enfraqueça o padrão.
 
 A detecção é **textual**: alvo montado dinamicamente ou alcançado por glob não é
-reconhecido. O guard reduz o alcance de um engano, não substitui permissão de
-arquivo — não o trate como fronteira de segurança rígida. A lista de alvos é a mesma do guard de `Edit|Write` e os dois
-precisam ser mantidos em sincronia manual.
+reconhecido, e a lacuna não está fechada — `python -c "open('.env','w')"` passa
+com exit 0. O guard reduz o alcance de um engano, não substitui permissão de
+arquivo; não o trate como fronteira de segurança rígida.
+
+A lista de alvos e o predicado vivem em `Test-SensitiveTarget`
+(`HookCommon.psm1`), consumido tanto por este script quanto pelo guard inline de
+`Edit|Write` no `settings.json` — não há mais duas implementações para manter em
+sincronia. Antes havia: o inline usava `EndsWith('.env')` e o guard um regex, de
+modo que a cobertura efetiva dependia de qual ferramenta o agente escolhia.
 
 ## Register-GateRun.ps1
 

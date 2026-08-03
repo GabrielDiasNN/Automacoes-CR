@@ -6,14 +6,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$raw = if ($env:CLAUDE_TOOL_INPUT) { $env:CLAUDE_TOOL_INPUT } elseif ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() }; if (-not $raw) { exit 0 }; $d = $raw | ConvertFrom-Json; $f = if ($d.PSObject.Properties.Name -contains 'tool_input') { $d.tool_input.file_path } else { $d.file_path }; $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; $py = Join-Path $root '.venv\\Scripts\\python.exe'; if (-not (Test-Path $py)) { $py = 'python' }; if ($f -and $f.EndsWith('.py') -and $f.StartsWith($root)) { & $py -m black $f 2>&1; & $py -m isort $f 2>&1 }",
+            "command": "$raw = if ($env:CLAUDE_TOOL_INPUT) { $env:CLAUDE_TOOL_INPUT } elseif ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() }; if (-not $raw) { exit 0 }; $d = $raw | ConvertFrom-Json; $f = if ($d.PSObject.Properties.Name -contains 'tool_input') { $d.tool_input.file_path } else { $d.file_path }; $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; $root = Join-Path $root ''; $py = Join-Path $root '.venv\\Scripts\\python.exe'; if (-not (Test-Path $py)) { $py = 'python' }; if ($f -and $f.EndsWith('.py') -and $f.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { & $py -m black $f 2>&1; & $py -m isort $f 2>&1 }",
             "shell": "powershell",
             "statusMessage": "Formatando Python (black + isort)...",
             "async": true
           },
           {
             "type": "command",
-            "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Assert-FileEncoding.ps1\"; exit $LASTEXITCODE",
+            "command": "$r = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; try { & \"$r\\.claude\\hooks\\Assert-FileEncoding.ps1\" } catch { [Console]::Error.WriteLine(\"BLOQUEADO: Assert-FileEncoding.ps1 falhou antes de decidir: $_\"); exit 2 }; if ($null -eq $LASTEXITCODE) { exit 2 }; exit $LASTEXITCODE",
             "shell": "powershell",
             "statusMessage": "Verificando encoding (BOM)...",
             "timeout": 30
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Register-GateRun.ps1\"; exit $LASTEXITCODE",
+            "command": "$r = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; try { & \"$r\\.claude\\hooks\\Register-GateRun.ps1\" } catch { [Console]::Error.WriteLine(\"BLOQUEADO: Register-GateRun.ps1 falhou antes de decidir: $_\"); exit 2 }; if ($null -eq $LASTEXITCODE) { exit 2 }; exit $LASTEXITCODE",
             "shell": "powershell",
             "statusMessage": "Registrando execucao de gate...",
             "async": true
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Assert-StopQualityGate.ps1\"; exit $LASTEXITCODE",
+            "command": "$r = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; try { & \"$r\\.claude\\hooks\\Assert-StopQualityGate.ps1\" } catch { [Console]::Error.WriteLine(\"BLOQUEADO: Assert-StopQualityGate.ps1 falhou antes de decidir: $_\"); exit 2 }; if ($null -eq $LASTEXITCODE) { exit 2 }; exit $LASTEXITCODE",
             "shell": "powershell",
             "statusMessage": "Rodando governanca direcionada...",
             "timeout": 240
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$raw = if ($env:CLAUDE_TOOL_INPUT) { $env:CLAUDE_TOOL_INPUT } elseif ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() }; if (-not $raw) { exit 0 }; $d = $raw | ConvertFrom-Json; $f = if ($d.PSObject.Properties.Name -contains 'tool_input') { $d.tool_input.file_path } else { $d.file_path }; $blocked = @('.env', 'automacoes.db', 'orchestrator.db', 'orchestrator.pid', 'worker.pid'); foreach ($b in $blocked) { if ($f -and $f.EndsWith($b)) { Write-Error \"BLOQUEADO: arquivo sensivel nao pode ser editado pelo agente: $f\"; exit 2 } }",
+            "command": "$raw = if ($env:CLAUDE_TOOL_INPUT) { $env:CLAUDE_TOOL_INPUT } elseif ([Console]::IsInputRedirected) { [Console]::In.ReadToEnd() }; if (-not $raw) { exit 0 }; $d = $raw | ConvertFrom-Json; $f = if ($d.PSObject.Properties.Name -contains 'tool_input') { $d.tool_input.file_path } else { $d.file_path }; if (-not $f) { exit 0 }; $r = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; try { Import-Module \"$r\\.claude\\hooks\\HookCommon.psm1\" -Force -DisableNameChecking; $sensivel = Test-SensitiveTarget -Value $f } catch { [Console]::Error.WriteLine(\"BLOQUEADO: guard de arquivos sensiveis falhou antes de decidir: $_\"); exit 2 }; if ($sensivel) { [Console]::Error.WriteLine(\"BLOQUEADO: arquivo sensivel nao pode ser editado pelo agente: $f\"); exit 2 }; exit 0",
             "shell": "powershell",
             "statusMessage": "Checando arquivos sensiveis..."
           }
@@ -71,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Assert-SensitiveWriteGuard.ps1\"; exit $LASTEXITCODE",
+            "command": "$r = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }; try { & \"$r\\.claude\\hooks\\Assert-SensitiveWriteGuard.ps1\" } catch { [Console]::Error.WriteLine(\"BLOQUEADO: Assert-SensitiveWriteGuard.ps1 falhou antes de decidir: $_\"); exit 2 }; if ($null -eq $LASTEXITCODE) { exit 2 }; exit $LASTEXITCODE",
             "shell": "powershell",
             "statusMessage": "Checando escrita em arquivos sensiveis...",
             "timeout": 15

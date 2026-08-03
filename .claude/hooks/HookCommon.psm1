@@ -13,6 +13,50 @@
 
 Set-StrictMode -Version Latest
 
+# Fonte unica dos alvos sensiveis. Antes a lista vivia duplicada em dois lugares
+# (guard inline de Edit|Write no settings.json e Assert-SensitiveWriteGuard.ps1)
+# com predicados DIFERENTES — EndsWith('.env') de um lado, regex do outro — de
+# modo que a cobertura efetiva dependia de qual ferramenta o agente escolheu.
+# Manter aqui o padrao E o predicado elimina a divergencia por construcao.
+#
+# .env nao pode ser seguido de palavra, ponto ou hifen: protege .env mas libera
+# .env.example. ".venv" nao casa (o ponto e seguido de 'v', nao de 'e').
+$script:SensitiveTargetPattern = '(\.env(?![\w.\-])|automacoes\.db|orchestrator\.db|orchestrator\.pid|worker\.pid)'
+
+function Get-SensitiveTargetPattern {
+    <#
+    .SYNOPSIS
+        Devolve o padrao canonico de alvos sensiveis.
+    #>
+    [CmdletBinding()]
+    param()
+
+    return $script:SensitiveTargetPattern
+}
+
+function Test-SensitiveTarget {
+    <#
+    .SYNOPSIS
+        Indica se o texto informado referencia um alvo sensivel.
+
+    .DESCRIPTION
+        Serve tanto para caminho de arquivo (guard de Edit|Write) quanto para
+        trecho de linha de comando (guard de Bash|PowerShell): em ambos os casos
+        a pergunta e a mesma — o nome protegido aparece aqui?
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+
+    return ($Value -match $script:SensitiveTargetPattern)
+}
+
 function Get-HookPayload {
     <#
     .SYNOPSIS
@@ -284,4 +328,4 @@ function Invoke-GovernedScript {
     }
 }
 
-Export-ModuleMember -Function Get-HookPayload, Get-HookProperty, Get-RepositoryRoot, Invoke-EncodingCheck, Invoke-GovernanceGate, Select-FailureLines
+Export-ModuleMember -Function Get-SensitiveTargetPattern, Test-SensitiveTarget, Get-HookPayload, Get-HookProperty, Get-RepositoryRoot, Invoke-EncodingCheck, Invoke-GovernanceGate, Select-FailureLines
