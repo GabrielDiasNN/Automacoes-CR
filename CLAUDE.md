@@ -30,9 +30,6 @@ cd Orchestrator && ..\.venv\Scripts\alembic upgrade head
 # Depende de `pythonpath = .` no pytest.ini: sem essa linha o conftest não acha `app`.
 cd Orchestrator && ..\.venv\Scripts\pytest
 
-# Rodar teste único
-cd Orchestrator && ..\.venv\Scripts\pytest tests/test_foo.py::test_bar -v
-
 # Rodar testes por marcador (unitario | integracao | e2e)
 cd Orchestrator && ..\.venv\Scripts\pytest -m integracao -v
 
@@ -53,36 +50,8 @@ pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 .venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills
 ```
 
-### Dashboard (React + TypeScript + Vite)
-```powershell
-cd Dashboard; npm ci            # instalar dependências
-cd Dashboard; npm run lint      # ESLint (src/**/*.ts,tsx)
-cd Dashboard; npm run build     # tsc + vite build → Dashboard/dist/
-npm run lint:js                 # atalho na raiz: delega ao lint do Dashboard
-```
-
-### Governança e Quality Gate
-```powershell
-# Quality gate completo
-pwsh -File Tools\ValidarAutomacoes.ps1 -BasePath .
-
-# Somente governança (skills, encoding, manifesto)
-pwsh -File Tools\ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance
-
-# Encoding dos fontes
-pwsh -File Tools\Test-SourceEncoding.ps1 -RootPath .
-
-# Skills governance (canônico vs mirror)
-pwsh -File Tools\Test-SkillsGovernance.ps1 -BasePath .
-
-# Padrão arquitetural
-pwsh -File Tools\Test-ArchitectureStandard.ps1
-```
-
-### Scaffolding de nova automação
-```powershell
-pwsh -File Tools\New-Automation.ps1 -Name "NomeAutomacao" -Owner "equipe" -Criticidade "high"
-```
+### Governança, quality gate e scaffolding
+Rodados pelas skills do projeto: `/quality-gate` (ValidarAutomacoes completo), `/preflight` (checklist pré-PR: encoding, skills governance, lint Python) e `/new-automation` (scaffolding com manifesto válido).
 
 ## Arquitetura
 
@@ -93,23 +62,7 @@ Monorepo com três camadas principais:
 2. **Dashboard** (`Dashboard/`) — SPA React + TypeScript + Vite (fontes em `Dashboard/src/`, build em `Dashboard/dist/`) servido pelo próprio FastAPI via `StaticFiles` com fallback SPA para rotas client-side. Roda em `http://127.0.0.1:8000/dashboard/`.
 3. **Automações de domínio** — diretórios independentes. As cinco automações registradas com manifesto (`Receitas Bloqueadas/` RB-01, `Montagem de Terceirizados/` MT-02, `Receitas Emitidas/` RE-03, `OBs Paradas Fase/` OBP-04, `OBs Fluxo Sem Tingimento/` OFST-06) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo). Criticidade, SLA e cadência canônicas: `docs/automation-criticality-map.md`.
 
-### Orchestrator (`Orchestrator/app/`)
-- `main.py` — startup FastAPI: registra routers, monta SPA, inicializa Alembic e jobs APScheduler. Chama `register_event_loop(asyncio.get_running_loop())` no lifespan para viabilizar wake-up thread-safe do worker.
-- `worker.py` (em `Orchestrator/`, fora de `app/`) — loop de execução: consome fila, spawn de processos PowerShell, graceful shutdown.
-- `runtime.py` — estado compartilhado entre `main.py`, routers e worker. Inclui `register_event_loop` + `trigger_worker_wakeup` (usa `loop.call_soon_threadsafe` — **nunca** chamar `task_queued_event.set()` diretamente de endpoint sync, pois endpoints FastAPI sync rodam em threadpool separada do event loop).
-- `database.py` — engine SQLite WAL, `SessionLocal`, `session_scope` (context manager para sessões fora do FastAPI). `purge_old_executions` preserva as últimas 50 execuções por automação via subquery com `ROW_NUMBER() OVER (PARTITION BY automation_id)`.
-- `models.py` — ORM SQLAlchemy: `Automation`, `Execution`, `WorkerHeartbeat`, `SystemHealthSnapshot`, `AuditLog`.
-- `routers/` — um arquivo por domínio de API (`automations`, `executions`, `system`, `beneficiamento`, `portfolio`, `websocket`, `automation_config`, `automation_ide`).
-- `services/` — lógica desacoplada dos routers: `system_diagnostics`, `system_history`, `operational_baseline`, `portfolio_catalog`, `scheduler_runtime`, `scoring`, `execution_decoration` (decoração de execuções com ações do operador), `execution_runtime` (requeue e validação), etc.
-- `migrations/` (em `Orchestrator/`, fora de `app/`) — Alembic; `env.py` usa `render_as_batch=True` para compatibilidade SQLite.
-
-### Domínio Beneficiamento (`Produção Beneficimento/src/beneficiamento/`)
-- `core/` — coerção, métricas, schema e turnos (lógica pura, sem I/O).
-- `data/` — queries SQL, schema de dados e writer para persistência histórica.
-- `contracts/` — implementação histórica canônica (`overview.py`, `detail.py`, `tingimento.py` — agregação da fase real de tingimento consumida por `GET /api/beneficiamento/tingimento`); o SQL fica isolado nos módulos privados `_queries.py`, `_queries_common.py`, `_queries_overview.py`, `_queries_detail.py`.
-- `oracle.py` — única interface com Oracle; nunca abre conexão fora deste arquivo.
-- `runner.py` — orquestra snapshot Oracle → SQLite histórico; orçamento de 20 s.
-- `snapshot_store.py` — lê/escreve `Produção Beneficimento/snapshots/latest/`. A API **nunca** consulta Oracle diretamente; consome apenas esses snapshots.
+Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md` e `Produção Beneficimento/CLAUDE.md`.
 
 ### Biblioteca compartilhada Python (`lib/python/`)
 - `oracle_extract.py` — núcleo compartilhado de extração Oracle: `resolve_oracle_credentials`, `init_thick_mode`, `fetch_all` (lotes), `serialize_rows` (datetime→isoformat, strip), `compute_hash`, `read_last_hash`, `write_state_tmp`. **Todos os 5 scripts de extração de domínio (`Receitas Emitidas/`, `Receitas Bloqueadas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`, `OBs Fluxo Sem Tingimento/`) usam este módulo** — não duplicar o padrão fetch/serialize/hash em novos scripts. Para DSN fixo (ignorar `.env`), passe `force_dsn="dbprd"` em `resolve_oracle_credentials`.
@@ -121,7 +74,7 @@ Monorepo com três camadas principais:
 - `Lib-Config.psm1` — leitura de `.env` para scripts de automação de domínio.
 
 ### Infrastructure (`Infrastructure/`)
-Scripts PowerShell para ciclo de vida do Orchestrator: `Start-Orchestrator.ps1`, `Recover-Orchestrator.ps1`, `Diagnose-Orchestrator.ps1`, `MonitorAutomacoes.ps1`. Todos importam `Lib-OrchestratorRuntime.psm1`.
+Todo script de ciclo de vida do Orchestrator importa `Lib-OrchestratorRuntime.psm1`.
 
 ### Skills canônicas (`.github/skills/`)
 Sete skills governam decisões de implementação. `.gemini/skills/` é apenas mirror. Edite sempre a fonte canônica.
@@ -129,8 +82,7 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 ## Regras Operacionais Críticas
 
 ### Encoding
-- `.ps1` / `.psm1` → **UTF-8 com BOM** (obrigatório para PowerShell 5.1 com acentuação PT-BR).
-- `.py`, `.js`, `.json`, `.html`, `.css`, `.md`, `.sql`, `.txt` → **UTF-8 sem BOM**.
+Fonte única (não duplicar aqui): `AGENTS.md § Regras de Encoding`. Aplicado mecanicamente pelo hook `Assert-FileEncoding.ps1` a cada `Edit`/`Write` e por `Tools/Test-SourceEncoding.ps1` no pre-commit.
 
 ### Caminhos
 - **Nunca use caminhos absolutos** em scripts PowerShell. Use `.\` ou `$PSScriptRoot`.
@@ -146,14 +98,12 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - Dashboard solicita API Key via prompt; persiste em `sessionStorage` (não sobrevive ao fechamento da aba — mais restritivo que `localStorage`, e há teste dedicado proibindo o uso deste último).
 
 ### Commits e Documentação Viva
-- Mensagens de commit em **Português do Brasil** (mesmo padrão de `CHANGELOG.md` e ADRs).
-- Atualizar `CHANGELOG.md` quando a mudança alterar comportamento, contrato operacional, governança ou arquitetura.
+- Idioma dos commits e regra do `CHANGELOG.md`: `AGENTS.md § Idioma e Comunicação` e `§ Colaboração com Documentação AI-Native`.
 - Atualizar `docs/ai-native-context-monitor.md` quando a mudança alterar estado que futuros agentes precisam conhecer para decidir corretamente.
 
 ### Validação E2E
-- Para mudanças em rotas FastAPI consumidas pelo Dashboard ou em `Dashboard/src/`, a validação final obrigatória é Playwright contra `http://127.0.0.1:8000/dashboard/`.
+- Quando o Playwright é obrigatório e como validar: `AGENTS.md § Validação`. Padrão completo (critérios, evidência mínima): `docs/playwright-e2e-standard.md`.
 - Registrar evidência com `Tools/Test-PlaywrightEvidence.ps1`.
-- Padrão completo (critérios, evidência mínima): `docs/playwright-e2e-standard.md`.
 - Para validação visual ad-hoc via navegador (fora do Playwright formal, ex.: conferir uma UI nova com dados reais), o login do dashboard exige a API Key — sempre lê-la de `ORCHESTRATOR_API_KEY` em `.env` (nunca peça a chave ao usuário nem a hardcode).
 
 ### Manifesto de automação
@@ -162,7 +112,7 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - Fixtures de teste que cadastram automações sintéticas recebem o manifesto automaticamente pelo wrapper `com_manifesto` do `client` (`Orchestrator/tests/conftest.py`); ele nunca sobrescreve um manifesto que o próprio teste criou. Para testar o bloqueio, use a fixture `sem_governanca_automatica`.
 
 ### CI (GitHub Actions — `.github/workflows/governanca.yml`)
-Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills`, black/isort/bandit (job `lint-python`; `.claude/skills` entrou em ruff e bandit em 03/08/2026 — `run-orchestrator/driver.py` é código executável que nasceu fora de todo gate, com um `# noqa: S310` que nenhuma ferramenta verificava e uma linha acima de 100 colunas. black/isort já o pegavam por serem aplicados ao diff, e mypy/pylint via `git ls-files "*.py"` do `Test-PythonGovernance.ps1`; ruff e bandit fecham a lacuna. `Tools/Test-SkillsGovernance.ps1` segue cobrindo só `.github/skills/` — ele valida forma de `SKILL.md` canônico vs. mirror, não Python); ruff e bandit passaram a cobrir `lib/python` e `Produção Beneficimento/src` em 31/07/2026 — o primeiro é o núcleo compartilhado de extração Oracle, o segundo é o domínio que monta o SQL do histórico; ambos estavam fora de todo gate. Os 13 `# nosec B608` do Beneficiamento foram revisados um a um e quem sustenta a premissa é `tests/test_beneficiamento_sql_seguranca.py`), pytest com `--cov-fail-under=84` (job `testes-python`), além de `diff-cover --fail-under=85` nas linhas alteradas do PR, E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
+Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes, cobertura de cada diretório e o histórico das decisões: skill `ci-gates` (`.claude/skills/ci-gates/SKILL.md`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`), não o do CI.
 
 ## Contratos de Governança (Pre-Commit Hook)
 
