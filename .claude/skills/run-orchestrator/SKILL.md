@@ -57,7 +57,15 @@ depois do build, basta recarregar a página.
 ```
 
 `smoke` = `health` + `login` + varredura das 6 rotas, com relatório de console.
-Sai com 1 se algo falhar. Comandos individuais:
+
+**Política de exit code dos comandos com browser** (`login`, `shot`, `smoke`):
+sai com 1 apenas em `error` de console, `pageerror` (exceção não tratada no
+bundle) ou gate de API Key aparecendo onde não devia. `warning` de console é
+listado no relatório como `console (aviso)` mas **não reprova** — a alternativa
+seria inflar `IGNORAR_CONSOLE` até ele deixar de detectar erro real. Cada
+mensagem vem carimbada com a rota em que apareceu (`[painel] error: ...`).
+
+Comandos individuais:
 
 | Comando | O que faz |
 |---|---|
@@ -66,6 +74,14 @@ Sai com 1 se algo falhar. Comandos individuais:
 | `login` | Fluxo real: digita a chave no gate, clica **Entrar →**, espera o shell. |
 | `shot [rota ...]` | Injeta a chave em `sessionStorage` (pula o gate) e captura cada rota. Sem argumentos, captura todas. |
 | `smoke` | Os três acima em sequência. |
+
+Opção comum a todos: `--tag <rótulo>` sufixa os PNGs (`rota-painel--antes.png`),
+para comparar antes/depois sem sobrescrever a evidência da execução anterior.
+Sem `--tag`, o nome é o simples de sempre.
+
+Exceto `health` — que bate numa rota pública — todos os comandos exigem
+`ORCHESTRATOR_API_KEY` no `.env` e abortam com mensagem própria se ela faltar
+(sem a chave a API responde 403).
 
 Exemplos que rodaram nesta sessão:
 
@@ -138,13 +154,21 @@ cd Orchestrator && ..\.venv\Scripts\pytest -m unitario -q
 - **Nunca execute os `run.ps1` das automações de domínio para "testar".** Eles
   disparam e-mail/Outlook e consultas Oracle de produção. Para exercitar o motor,
   enfileire pela API/dashboard e observe.
-- Console limpo é o esperado: as 6 rotas rodaram com 0 erro e 0 warning.
+- Console limpo é o esperado: as 6 rotas rodaram com 0 erro e 0 warning. Só o
+  erro reprova (ver a política de exit code acima); um warning novo aparecendo
+  no relatório merece investigação mesmo saindo 0.
+- **`driver.py` está nos gates de qualidade** desde 03/08/2026: ruff, black,
+  isort e bandit cobrem `.claude/skills` no CI e no `CLAUDE.md`, e o
+  `Test-PythonGovernance.ps1` já o pegava via `git ls-files "*.py"` (mypy
+  `--strict` + pylint). Rode-os antes de commitar mudanças aqui.
 
 ## Troubleshooting
 
 | Sintoma | Causa / correção |
 |---|---|
-| `[FALHA] API nao respondeu em http://127.0.0.1:8000` | Orchestrator parado. `pwsh -File Infrastructure\Start-Orchestrator.ps1`. |
+| `[FALHA] API nao respondeu em http://127.0.0.1:8000` | Falha de **conexão** — Orchestrator parado. Só neste caso: `pwsh -File Infrastructure\Start-Orchestrator.ps1`. |
+| `[FALHA] /api/system/health -> HTTP <código>` | A API **respondeu** (429 do rate limit, 500 de health degradado). Não reinicie: investigue o código e os logs. |
+| `[FALHA] ORCHESTRATOR_API_KEY ausente ou vazia no .env` | O `.env` da raiz não tem a chave (ou ela foi renomeada). Não passe a chave por argumento nem peça ao usuário. |
 | `driver.py shot` sai 1 com "gate de API Key apareceu" | `ORCHESTRATOR_API_KEY` do `.env` divergente da que a API valida. Confira o `.env` — não hardcode. |
 | `ModuleNotFoundError: No module named 'app'` | Rodou de fora de `Orchestrator/`, ou o `pythonpath = .` sumiu do `pytest.ini`. |
 | `Executable doesn't exist at ...chromium...` | `.venv\Scripts\python -m playwright install chromium`. |
