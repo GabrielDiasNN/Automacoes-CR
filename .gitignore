@@ -57,6 +57,11 @@ Orchestrator/tests/e2e-evidence/
 .cache_erros.json
 **/__pycache__/
 .mypy_cache/
+# ruff e hypothesis hoje se autoprotegem com um .gitignore proprio dentro do
+# cache; declarados aqui para nao depender de artefato de terceiro.
+.ruff_cache/
+.hypothesis/
+.benchmarks/
 **/.pytest_cache/
 .pytest_cache/
 .gemini/
@@ -86,6 +91,10 @@ Audit/
 
 # Segredos (CRÍTICO)
 .env
+# Variantes por ambiente/maquina: so `.env` exato era coberto, entao um
+# `.env.local` ou `.env.producao` entrava no commit sem aviso.
+.env.*
+!.env.example
 *.pem
 *.key
 *.pfx
@@ -98,6 +107,9 @@ Audit/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+# Carimbos de ultima execucao dos gates (Register-GateRun.ps1): estado por
+# maquina, muda a cada commit e nao tem leitura fora da sessao local.
+.claude/.state/
 
 # Banco de Dados SQLite (runtime — nao versionar)
 Orchestrator/automacoes.db
