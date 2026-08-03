@@ -48,8 +48,8 @@
             "type": "command",
             "command": "& \"$(if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path })\\.claude\\hooks\\Assert-StopQualityGate.ps1\"",
             "shell": "powershell",
-            "statusMessage": "Verificando gates pendentes...",
-            "timeout": 45
+            "statusMessage": "Rodando governanca direcionada...",
+            "timeout": 240
           }
         ]
       }

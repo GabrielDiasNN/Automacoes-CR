@@ -5,16 +5,19 @@
     nao passou pelas verificacoes correspondentes.
 
 .DESCRIPTION
-    O gate completo (ValidarAutomacoes.ps1 -OnlyGovernance) leva ~171 s — acima
-    do timeout padrao de hook e inviavel a cada encerramento. Por isso este hook
-    faz apenas duas coisas baratas:
+    Duas verificacoes:
 
-      1. Encoding: Tools/Test-SourceEncoding.ps1 em modo direcionado sobre os
-         arquivos alterados. Deterministico e rapido; bloqueia se falhar.
+      1. Governanca: Tools/ValidarAutomacoes.ps1 -OnlyGovernance -Paths sobre os
+         arquivos alterados — os 14 checks (zero-trust, SQL, mypy/pylint,
+         PSScriptAnalyzer, encoding, JSON, Playwright, manifesto, arquitetura,
+         datas, semantica, Node). O modo direcionado e o que torna isso viavel:
+         SEM -Paths o script cai em full_scan (~171 s, medido); COM -Paths custa
+         ~6 s sem Python e ~18 s com dois .py, onde o mypy domina.
 
-      2. Marcadores: confere se pytest / lint do Dashboard foram disparados
-         DEPOIS da ultima alteracao nos arquivos que os exigem, usando os
-         carimbos gravados por Register-GateRun.ps1.
+      2. Marcadores: o gate de governanca NAO roda pytest nem build do Dashboard.
+         Entao segue valendo a conferencia de que eles foram disparados DEPOIS da
+         ultima alteracao nos arquivos que os exigem, pelos carimbos gravados por
+         Register-GateRun.ps1.
 
     Respeita stop_hook_active: se o proprio hook ja bloqueou uma vez neste
     ciclo, aprova, para nao entrar em laco infinito.
@@ -99,11 +102,12 @@ if ($existing.Count -eq 0) {
 
 $problems = @()
 
-# --- 1. Encoding direcionado ---------------------------------------------
-$encoding = Invoke-EncodingCheck -RepositoryRoot $repoRoot -RelativePaths $existing
-if ($encoding.ExitCode -gt 0) {
-    $problems += 'ENCODING: arquivos alterados violam a regra de BOM do repositorio.'
-    $problems += $encoding.Output
+# --- 1. Governanca direcionada (14 checks) --------------------------------
+$gate = Invoke-GovernanceGate -RepositoryRoot $repoRoot -RelativePaths $existing
+if ($gate.ExitCode -gt 0) {
+    $problems += 'GOVERNANCA: os arquivos alterados reprovam em Tools/ValidarAutomacoes.ps1 -OnlyGovernance.'
+    $problems += (Select-FailureLines -Output $gate.Output)
+    $problems += '  (saida integral: pwsh -File Tools\ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance -StagedOnly)'
     $problems += ''
 }
 
