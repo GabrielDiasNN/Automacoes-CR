@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.18] - 03/08/2026
+
+### Corrigido
+- **`pillow==12.2.0` (dependência transitiva) tinha 20 vulnerabilidades conhecidas** (`requirements.txt`, `requirements-test.txt`, `requirements-dev.txt`): detectado pelo job agendado `Auditoria de Dependencias (pip-audit)` do workflow `Seguranca Agendada`. Atualizado para `12.3.0` (versão com o fix) nos três lockfiles, com hashes reais obtidos do PyPI. `pip-compile` puro nesta máquina Windows não serviu para recompilar: ele resolve os marcadores de ambiente (`environment markers`) contra a plataforma atual em vez de gerar um lock universal, e removia silenciosamente a entrada condicional do `uvloop` (`sys_platform != "win32"`) — o que quebraria a instalação no runner Linux do CI. Por isso o bloco do `pillow` foi substituído cirurgicamente por script, preservando o restante de cada lockfile byte a byte (CRLF incluso). Validado com `pip-audit` local ("No known vulnerabilities found") e a suíte completa (747 testes).
+- **O passo `Abrir issue em caso de vulnerabilidade` do mesmo workflow falhava mesmo sem nenhum achado real** (`.github/workflows/governanca.yml`): `gh issue create --label seguranca` reprovava com `could not add label: 'seguranca' not found`, porque o label nunca tinha sido criado no repositório. Criado via `gh label create seguranca`.
+
 ## [1.3.17] - 03/08/2026
 
 > Trabalho realizado em 02/08/2026; publicado em 03/08/2026, depois de `[1.3.16]`.
