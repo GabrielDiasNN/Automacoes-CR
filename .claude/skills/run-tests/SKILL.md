@@ -10,12 +10,16 @@ Marcadores disponíveis: `unitario`, `integracao`, `e2e`.
 
 Se `args` foi fornecido, rode:
 ```
-cd Orchestrator && .venv\Scripts\pytest -m {{args}} -v
+cd Orchestrator && ..\.venv\Scripts\pytest -m {{args}} -v
 ```
 
-Se nenhum marcador foi passado, rode todos os testes:
+Se nenhum marcador foi passado, rode a suíte padrão:
 ```
-cd Orchestrator && .venv\Scripts\pytest -v
+cd Orchestrator && ..\.venv\Scripts\pytest -v
 ```
+
+Atenção: `Orchestrator/pytest.ini` carrega `addopts = ... -m "not e2e"`, então a suíte
+padrão **não** inclui os testes Playwright — isso alinha o local ao CI. Para rodá-los,
+`-m e2e` sobrescreve a exclusão e exige o Orchestrator no ar.
 
 Relate ao usuário: quantos testes passaram, falharam e foram pulados, e qualquer falha com o nome do teste e a mensagem de erro resumida.

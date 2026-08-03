@@ -170,7 +170,11 @@ jobs:
           # `Produção Beneficimento/src` incluído em 31/07/2026: é o domínio que
           # fala com o Oracle e monta o SQL do histórico, e era o último tronco
           # de Python de produção fora do gate.
-          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src"
+          # `.claude/skills` incluído em 03/08/2026: `run-orchestrator/driver.py`
+          # nasceu fora de todo gate — o `# noqa: S310` da linha do `urlopen`
+          # sinalizava conformidade que nenhuma ferramenta verificava, e o arquivo
+          # já tinha linha acima do limite de 100 colunas.
+          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills
 
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
@@ -195,7 +199,9 @@ jobs:
           # um a um: WHERE montado com fragmentos literais e valores ligados por
           # `?`. Quem garante que isso continua valendo é
           # `tests/test_beneficiamento_sql_seguranca.py`, não o `nosec`.
-          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" -ll
+          # `.claude/skills` incluído em 03/08/2026 junto com o ruff: o
+          # `urlopen` do driver é o `# nosec B310` (host fixo 127.0.0.1).
+          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills -ll
 
       - name: Auditoria de Dependencias (pip-audit)
         continue-on-error: true

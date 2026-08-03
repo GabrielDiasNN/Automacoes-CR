@@ -14,6 +14,11 @@ pwsh -File Infrastructure\Start-Orchestrator.ps1
 # Recuperar após falha
 pwsh -File Infrastructure\Recover-Orchestrator.ps1
 
+# Dirigir o app real (health, login no dashboard, screenshot, rotas /api/*).
+# Cheque `health` ANTES de reiniciar: esta máquina roda o Orchestrator em produção.
+# Contrato completo em .claude/skills/run-orchestrator/SKILL.md
+.venv\Scripts\python .claude\skills\run-orchestrator\driver.py smoke
+
 # O virtualenv do projeto fica na RAIZ do repositório (.venv\), não dentro de Orchestrator/.
 # Todo comando Python abaixo deve usá-lo — o Python do sistema tem versões defasadas
 # do lock e não é o ambiente do projeto.
@@ -21,7 +26,8 @@ pwsh -File Infrastructure\Recover-Orchestrator.ps1
 # Aplicar migrações de schema
 cd Orchestrator && ..\.venv\Scripts\alembic upgrade head
 
-# Rodar todos os testes
+# Rodar a suíte padrão (exclui e2e via addopts do pytest.ini, como o CI)
+# Depende de `pythonpath = .` no pytest.ini: sem essa linha o conftest não acha `app`.
 cd Orchestrator && ..\.venv\Scripts\pytest
 
 # Rodar teste único
@@ -31,9 +37,9 @@ cd Orchestrator && ..\.venv\Scripts\pytest tests/test_foo.py::test_bar -v
 cd Orchestrator && ..\.venv\Scripts\pytest -m integracao -v
 
 # Lint Python (black, isort, bandit, mypy, pylint) — ferramentas via requirements-dev.txt
-.venv\Scripts\python -m black --check Orchestrator
-.venv\Scripts\python -m isort --check-only Orchestrator
-.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" -ll
+.venv\Scripts\python -m black --check Orchestrator .claude/skills
+.venv\Scripts\python -m isort --check-only Orchestrator .claude/skills
+.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills -ll
 # mypy + pylint: usar o script de governança (aplica flags corretas por arquivo)
 pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 
@@ -44,7 +50,7 @@ pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 .venv\Scripts\python -m pip install -r requirements.txt -r requirements-test.txt -r requirements-dev.txt
 
 # Lint que roda no CI (bloqueante) — reproduzir localmente antes do push
-.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src"
+.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills
 ```
 
 ### Dashboard (React + TypeScript + Vite)
@@ -156,7 +162,7 @@ Sete skills governam decisões de implementação. `.gemini/skills/` é apenas m
 - Fixtures de teste que cadastram automações sintéticas recebem o manifesto automaticamente pelo wrapper `com_manifesto` do `client` (`Orchestrator/tests/conftest.py`); ele nunca sobrescreve um manifesto que o próprio teste criou. Para testar o bloqueio, use a fixture `sem_governanca_automatica`.
 
 ### CI (GitHub Actions — `.github/workflows/governanca.yml`)
-Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src"`, black/isort/bandit (job `lint-python`; ruff e bandit passaram a cobrir `lib/python` e `Produção Beneficimento/src` em 31/07/2026 — o primeiro é o núcleo compartilhado de extração Oracle, o segundo é o domínio que monta o SQL do histórico; ambos estavam fora de todo gate. Os 13 `# nosec B608` do Beneficiamento foram revisados um a um e quem sustenta a premissa é `tests/test_beneficiamento_sql_seguranca.py`), pytest com `--cov-fail-under=84` (job `testes-python`), além de `diff-cover --fail-under=85` nas linhas alteradas do PR, E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
+Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes: `ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills`, black/isort/bandit (job `lint-python`; `.claude/skills` entrou em ruff e bandit em 03/08/2026 — `run-orchestrator/driver.py` é código executável que nasceu fora de todo gate, com um `# noqa: S310` que nenhuma ferramenta verificava e uma linha acima de 100 colunas. black/isort já o pegavam por serem aplicados ao diff, e mypy/pylint via `git ls-files "*.py"` do `Test-PythonGovernance.ps1`; ruff e bandit fecham a lacuna. `Tools/Test-SkillsGovernance.ps1` segue cobrindo só `.github/skills/` — ele valida forma de `SKILL.md` canônico vs. mirror, não Python); ruff e bandit passaram a cobrir `lib/python` e `Produção Beneficimento/src` em 31/07/2026 — o primeiro é o núcleo compartilhado de extração Oracle, o segundo é o domínio que monta o SQL do histórico; ambos estavam fora de todo gate. Os 13 `# nosec B608` do Beneficiamento foram revisados um a um e quem sustenta a premissa é `tests/test_beneficiamento_sql_seguranca.py`), pytest com `--cov-fail-under=84` (job `testes-python`), além de `diff-cover --fail-under=85` nas linhas alteradas do PR, E2E Playwright (job `testes-e2e`), Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`). O antigo `ci.yml` foi consolidado neste pipeline em 01/07/2026.
 
 ## Contratos de Governança (Pre-Commit Hook)
 

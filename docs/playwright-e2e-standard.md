@@ -18,8 +18,12 @@ Padronizar Playwright como validação E2E final para mudanças que afetem exper
 ## Método padrão (fonte de verdade)
 - URL alvo: `http://127.0.0.1:8000/dashboard/`.
 - Validar página real servida pelo Orchestrator, não apenas HTML estático.
+- Ferramenta de apoio: `.claude/skills/run-orchestrator/driver.py` (comando `smoke`) autentica,
+  navega as seis rotas e coleta erros de console. Ele **não** substitui a evidência formal desta
+  seção — cobre navegação e console, não os fluxos de filtro e log abaixo.
 - Itens mínimos de aceite:
-  - Navegação entre módulos principais (`Comando`, `Automações`, `Execuções`, `Monitor`, `Sistema`, `Configuração`).
+  - Navegação entre os módulos reais da SPA: `Painel`, `Execuções`, `Monitor`, `Beneficiamento`,
+    `Automações`, `Sistema` (a rota `/observabilidade` é redirect preservado para `/monitor`).
   - Fluxo de `Execuções`: carregar listagem e aplicar ao menos um filtro.
   - Fluxo de logs: abrir modal de logs para uma execução.
   - Console limpo: zero erros de console no fluxo validado.
