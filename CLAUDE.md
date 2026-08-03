@@ -14,6 +14,11 @@ pwsh -File Infrastructure\Start-Orchestrator.ps1
 # Recuperar após falha
 pwsh -File Infrastructure\Recover-Orchestrator.ps1
 
+# Dirigir o app real (health, login no dashboard, screenshot, rotas /api/*).
+# Cheque `health` ANTES de reiniciar: esta máquina roda o Orchestrator em produção.
+# Contrato completo em .claude/skills/run-orchestrator/SKILL.md
+.venv\Scripts\python .claude\skills\run-orchestrator\driver.py smoke
+
 # O virtualenv do projeto fica na RAIZ do repositório (.venv\), não dentro de Orchestrator/.
 # Todo comando Python abaixo deve usá-lo — o Python do sistema tem versões defasadas
 # do lock e não é o ambiente do projeto.
@@ -21,7 +26,8 @@ pwsh -File Infrastructure\Recover-Orchestrator.ps1
 # Aplicar migrações de schema
 cd Orchestrator && ..\.venv\Scripts\alembic upgrade head
 
-# Rodar todos os testes
+# Rodar a suíte padrão (exclui e2e via addopts do pytest.ini, como o CI)
+# Depende de `pythonpath = .` no pytest.ini: sem essa linha o conftest não acha `app`.
 cd Orchestrator && ..\.venv\Scripts\pytest
 
 # Rodar teste único

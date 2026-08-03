@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.15] - 03/08/2026
+
+### Corrigido
+- **O comando de teste documentado no repositório não funcionava** (`Orchestrator/pytest.ini`): `cd Orchestrator; ..\.venv\Scripts\pytest` — a forma registrada em `CLAUDE.md`, em `docs/runbooks/recuperacao-de-maquina.md`, em `OBs Fluxo Sem Tingimento/README.md` e na skill `run-tests` — falhava com `ModuleNotFoundError: No module named 'app'` no import do `conftest.py` (exit 4). O console script do pytest não coloca o cwd em `sys.path`, e o `pytest.ini` não declarava `pythonpath`. Funcionavam apenas os caminhos que exportam `PYTHONPATH=Orchestrator` por fora — o job `testes-python` do CI e `Tools/Test-OrchestratorIntegrity.ps1` — o que explica o gate verde com a documentação quebrada. Corrigido com `pythonpath = .` no `pytest.ini`, que é relativo ao rootdir. Verificado nos três caminhos: `pytest` de dentro de `Orchestrator/`, `python -m pytest` e a invocação no estilo do CI (`pytest "Orchestrator\tests"` com `PYTHONPATH`), 527 testes em cada.
+- **A skill `run-tests` apontava para um caminho inexistente**: `.venv\Scripts\pytest` a partir de `Orchestrator/` (faltava o `..`), e descrevia a execução sem marcador como "todos os testes", quando o `addopts` exclui `e2e` desde 30/07/2026.
+- **O padrão E2E listava módulos que não existem** (`docs/playwright-e2e-standard.md`): os itens mínimos de aceite pediam navegação por `Comando` e `Configuração` — nenhuma das duas é rota da SPA — e omitiam `Beneficiamento`. A lista passou a ser as seis rotas reais (`painel`, `execucoes`, `monitor`, `beneficiamento`, `automacoes`, `sistema`), confirmadas por varredura contra a instância em execução.
+
+### Adicionado
+- **Skill local `run-orchestrator`** (`.claude/skills/run-orchestrator/`): driver executável (`driver.py`, Playwright do `.venv` + `urllib`) para subir, autenticar e dirigir o app real, com os comandos `health`, `api`, `login`, `shot` e `smoke`. Autentica lendo `ORCHESTRATOR_API_KEY` do `.env` e grava screenshots em `Logs/driver/`. Dois contratos ficam registrados ali: (a) a chave precisa entrar em `sessionStorage` via `add_init_script`, **antes** do bundle carregar, porque `Dashboard/src/api/client.ts` a lê no carregamento do módulo e não em `useEffect` — injetar depois do `goto` deixa o gate de login na tela; (b) esta máquina roda o Orchestrator em produção, então o caminho padrão é **anexar** à instância viva, nunca chamar `Start-Orchestrator.ps1`, cujo reset cirúrgico aborta execuções em voo.
+
 ## [1.3.14] - 01/08/2026
 
 ### Corrigido

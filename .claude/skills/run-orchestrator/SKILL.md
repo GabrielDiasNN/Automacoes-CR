@@ -112,17 +112,19 @@ Recuperação após falha: `pwsh -File Infrastructure\Recover-Orchestrator.ps1`.
 ## Testes
 
 ```bash
-cd Orchestrator && ..\.venv\Scripts\python -m pytest -m unitario -q
+cd Orchestrator && ..\.venv\Scripts\pytest -m unitario -q
 ```
 
-527 passaram em ~76 s. Marcadores: `unitario | integracao | e2e`.
+527 passaram em ~78 s. Marcadores: `unitario | integracao | e2e`. A suíte padrão exclui
+`e2e` via `addopts` do `pytest.ini`; `-m e2e` sobrescreve e exige o Orchestrator no ar.
 
 ## Gotchas
 
-- **`..\.venv\Scripts\pytest.exe` quebra.** Dá
-  `ModuleNotFoundError: No module named 'app'` ao carregar o `conftest.py` (exit 4),
-  porque o `.exe` não coloca o cwd em `sys.path`. Use sempre
-  `..\.venv\Scripts\python -m pytest`. O `CLAUDE.md` documenta a forma que falha.
+- **Se `pytest` falhar com `ModuleNotFoundError: No module named 'app'`** (exit 4, no import
+  do `conftest.py`), confira se `Orchestrator/pytest.ini` ainda declara `pythonpath = .`.
+  Sem essa linha, o console script não põe o cwd em `sys.path` e só funcionam os caminhos
+  que exportam `PYTHONPATH` por fora (CI, `Test-OrchestratorIntegrity.ps1`) ou
+  `python -m pytest`. Foi assim que o repositório ficou até 03/08/2026.
 - **`sessionStorage` tem que ser setado ANTES do bundle carregar.**
   `Dashboard/src/api/client.ts:6` lê a chave no carregamento do módulo, não em
   `useEffect`. Setar via `page.evaluate()` depois do `goto` deixa o gate de login
@@ -144,6 +146,6 @@ cd Orchestrator && ..\.venv\Scripts\python -m pytest -m unitario -q
 |---|---|
 | `[FALHA] API nao respondeu em http://127.0.0.1:8000` | Orchestrator parado. `pwsh -File Infrastructure\Start-Orchestrator.ps1`. |
 | `driver.py shot` sai 1 com "gate de API Key apareceu" | `ORCHESTRATOR_API_KEY` do `.env` divergente da que a API valida. Confira o `.env` — não hardcode. |
-| `ModuleNotFoundError: No module named 'app'` | Rodou de fora de `Orchestrator/`, ou usou `pytest.exe` em vez de `python -m pytest`. |
+| `ModuleNotFoundError: No module named 'app'` | Rodou de fora de `Orchestrator/`, ou o `pythonpath = .` sumiu do `pytest.ini`. |
 | `Executable doesn't exist at ...chromium...` | `.venv\Scripts\python -m playwright install chromium`. |
 | Screenshot em branco / tela antiga | Bundle velho em `Dashboard/dist/`. `cd Dashboard && npm run build` e recapture (a API não precisa reiniciar). |

@@ -120,6 +120,7 @@ Todos os agentes devem operar com estas regras não negociáveis:
 - ChatGPT/Codex: ler primeiro `.github/skills/README.md` e depois a skill aplicável.
 - Gemini CLI e Antigravity: podem ler `.gemini/skills/`, mas o conteúdo esperado é o mesmo de `.github/skills/`.
 - Claude Code: além de `CLAUDE.md`, usa `.claude/agents/` (subagentes especializados), `.claude/skills/` (skills locais) e `.claude/settings.json` (hooks/config); GitHub Copilot usa `.github/copilot-instructions.md` como fonte de instruções.
+- Para **rodar e dirigir o app real** (subir, autenticar no dashboard, capturar tela, chamar rotas `/api/*`), a fonte é `.claude/skills/run-orchestrator/` — driver executável, não descrição. Não reimplementar o caminho de login nem reiniciar o Orchestrator sem antes checar se já há instância viva.
 - Para regras globais compartilhadas entre agentes, carregar `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais canônicas.
 - Quando houver divergência entre `.github/skills/` e `.gemini/skills/`, considerar `.github/skills/` a fonte de verdade do workspace.
 
