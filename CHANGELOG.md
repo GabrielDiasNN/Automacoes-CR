@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.23] - 04/08/2026
+
+### Alterado
+- **Teto de versão do `oracledb` fixado em `3.3.0`** (`requirements.in`, `requirements.txt`, `requirements-test.txt`, `requirements-dev.txt`): o pin anterior (`==2.5.1`, 2 majors atrás) não tinha justificativa registrada no repositório. Investigação (auditoria de débito técnico, [issue #15](https://github.com/GabrielDiasNN/Automacoes-CR/issues/15)) confirmou, por consulta read-only direta contra o `dbprd` (`SELECT banner FROM v$version`), que o servidor de produção é **Oracle Database 12c (12.2.0.1.0), 64-bit** — não 19 nem 32-bit, como hipóteses iniciais sugeriam. A partir do `python-oracledb` 3.4.0 a lib passou a **deprecar** conectividade com Database/Client anteriores à versão 19, e a partir da 4.0.0 esse suporte é **removido**; como o servidor de produção é 12.2, subir além de `3.3.0` quebraria a inicialização do Thick Mode nas 5 automações de extração Oracle. `3.3.0` é a última versão sem nenhum aviso de depreciação relacionado, capturando ~1,5 ano de patches de bug/segurança sobre `2.5.1` sem esse risco. Verificado com conexão real contra produção (`oracledb.clientversion()` e `SELECT` executado com sucesso) e suíte completa (`747 passed`). Upgrade real para `oracledb` 4.x continua bloqueado até uma decisão separada de infraestrutura sobre migrar o Database Server de produção para 19c+ — fora do escopo de dívida técnica de rotina.
+
 ## [1.3.22] - 04/08/2026
 
 ### Corrigido

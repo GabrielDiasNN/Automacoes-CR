@@ -1,6 +1,6 @@
 # Core Runtime Dependencies
 stamina>=24.2.0
-oracledb==2.5.1
+oracledb==3.3.0  # Teto: 3.4.0+ avisa depreciacao de Database/Client <19c, 4.0.0+ remove suporte. Servidor de producao e Oracle 12.2 (ver issue #15).
 pandas
 openpyxl
 python-dotenv
