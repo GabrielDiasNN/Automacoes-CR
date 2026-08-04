@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.27] - 04/08/2026
+
+### Corrigido
+- **`undici` e `brace-expansion` elevados por `npm audit fix` (Onda 3, final, do upgrade de frontend)**: as duas últimas CVEs acionáveis eram transitivas e exclusivas de `devDependencies` — `undici` (`high`, cookie attribute injection, CRLF injection, dessincronização de resposta e divulgação de informação entre usuários) chegava via `jsdom`, que é só o ambiente de teste do Vitest; `brace-expansion` (`high`, várias DoS por expansão exponencial/ilimitada) via `eslint` e `@typescript-eslint`. Nenhuma das duas entra no bundle de produção. Fix não-breaking (`fixAvailable = true`), aplicado sem alterar `package.json` — só o `package-lock.json`. Validado com `tsc --noEmit`, lint, cobertura no novo piso, build e os 11 E2E Playwright.
+
+### Notas
+- **Estado final do `npm audit` após as 3 ondas: de 7 vulnerabilidades para 2**, e as 2 remanescentes são a mesma advisory `GHSA-qwww-vcr4-c8h2` (RSC Mode CSRF) contada em `react-router` e `react-router-dom`. Ela é **inaplicável a este projeto** por decisão documentada em `[1.3.25]`: o texto oficial restringe o impacto a quem usa as APIs instáveis de RSC, e este é um SPA client-side puro. Não há versão de `react-router-dom` livre das duas famílias de advisory — a de open redirect afeta `6.0.0 – 7.17.0` e a de RSC afeta `7.12.0 – 8.2.0`, então o único ponto limpo é `react-router@8.3.0`, que exige React >= 19.2.7 e abandona o pacote `react-router-dom`. Deliberadamente **não** perseguido: forçar um major do React por advisory comprovadamente inaplicável trocaria risco real por métrica cosmética.
+- **O que ficou de fora das 3 ondas, por não ter driver de segurança**: React 18 → 19, `react-router` 8, TypeScript 5 → 7 (compilador nativo em Go, reescrita grande), ESLint 9 → 10 e `lucide-react` 0.x → 1.x. O código está bem posicionado para React 19 quando houver motivo próprio: zero `defaultProps`, zero `propTypes`, zero `forwardRef`, zero APIs removidas na v19, já usa `createRoot`, só hooks modernos, e o `@testing-library/react` instalado já declara suporte a React 19.
+
 ## [1.3.26] - 04/08/2026
 
 ### Corrigido
