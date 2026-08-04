@@ -43,6 +43,24 @@
 .wordmark {
   padding: var(--sp-4) var(--sp-4) var(--sp-3);
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.railClose {
+  display: none;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-mid);
+  padding: 5px;
+  cursor: pointer;
+}
+.railClose:hover {
+  color: var(--text-hi);
+  border-color: var(--border-strong);
 }
 .brand {
   font-family: var(--font-display);
@@ -144,6 +162,19 @@
   padding: 5px;
   cursor: pointer;
 }
+.searchBtn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-mid);
+  padding: 5px;
+  cursor: pointer;
+}
+.searchBtn:hover {
+  color: var(--text-hi);
+  border-color: var(--border-strong);
+}
 .content {
   flex: 1;
   overflow-y: auto;
@@ -171,11 +202,14 @@
   .menuBtn {
     display: inline-flex;
   }
+  .railClose {
+    display: inline-flex;
+  }
   .scrim {
     display: block;
     position: fixed;
     inset: var(--brand-rail-h) 0 0 0;
     z-index: 40;
-    background: rgba(7, 10, 13, 0.6);
+    background: rgba(7, 10, 13, 0.75);
   }
 }

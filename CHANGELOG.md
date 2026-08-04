@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.21] - 04/08/2026
+
+### Adicionado
+- **Busca global no Dashboard (`Ctrl+K`/`Cmd+K`)** (`Dashboard/src/components/CommandPalette.tsx`): paleta de comando que navega entre as 6 telas por nome e busca automações via `orchestratorApi.listAutomations({ search })`, com atalho global registrado no `Shell.tsx` e botão de lupa na topbar (mobile não tem teclado físico, então precisa do botão). Antes não havia forma de pular direto para uma tela ou achar uma automação por nome sem navegar manualmente pelo menu lateral.
+- **Densidade de tabela ajustável** (`Dashboard/src/context/TableDensityContext.tsx`): toggle na topbar (ícone `Rows3`/`Rows4`) alterna o padding das células de `DataTable` entre confortável e compacto, persistido em `localStorage` (`orchestrator_table_density`) e aplicado a todas as tabelas do dashboard via contexto compartilhado — sem prop drilling por página.
+
+### Corrigido
+- **Tabela de Execuções exigia rolagem horizontal em mobile** (`Dashboard/src/pages/ExecucoesPage.tsx`): em 375px de largura a tabela tinha `scrollWidth` de 488px contra um container de 334px, escondendo as colunas Duração e Ação sem indicação visual de que havia mais conteúdo à direita. As duas colunas ganharam `hideOnNarrow`; a informação e as ações (Parar/Reenfileirar) continuam acessíveis a um toque, pois `onRowClick` já abre o `Drawer` de detalhe com esses dados.
+- **Menu-gaveta mobile sem affordance clara de fechamento** (`Dashboard/src/components/Shell.tsx`, `Shell.module.css`): o `.scrim` já fechava a gaveta ao clicar fora, mas com opacidade insuficiente (`0.6`) para comunicar visualmente que o conteúdo atrás estava desabilitado, e não havia botão de fechar dentro da própria gaveta. Opacidade subiu para `0.75` e foi adicionado um botão "X" no topo do `<aside>`.
+- **Valor do card "KG TOTAL" cortava na borda em mobile** (`Dashboard/src/components/ui/StatTile.module.css`): `font-size` fixo em `--fs-data-xl` (30px) não reduzia em telas estreitas; valores como "1.072.704,06" estouravam a largura do card. Passou a usar `clamp(1.25rem, 6vw, var(--fs-data-xl))` com `overflow-wrap: anywhere`. Verificado no card real: fonte caiu para 22.5px e o conteúdo (128px) ficou dentro do card (160px).
+- **Filtros avançados do Beneficiamento (9 selects) sempre expandidos empurravam o conteúdo para baixo em mobile** (`Dashboard/src/components/beneficiamento/FilterBar.tsx`, `FilterBar.module.css`): passaram a ficar dentro de um `<details>` recolhido por padrão abaixo de 721px (mas sempre expandido em desktop, via `display: contents` no `<details>` e `summary` oculto), com contador "N ativos" no resumo para o filtro não desaparecer silenciosamente quando o bloco estiver fechado.
+
+### Notas
+- **Origem: `/stochastic-consensus` sobre layout/funcionalidades do Orquestrador** (desktop + mobile), com 4 agentes independentes de contexto limpo lendo o código-fonte real do `Dashboard/src` — não especulação. As 6 propostas com consenso 4/4 foram implementadas nesta entrada. A tabulação completa (itens de consenso parcial e outliers descartados, como toggle de tema claro) ficou em `.claude/consensus/` — artefato de processo local da sessão (agora em `.gitignore`), não versionado.
+- **Verificado em navegador real** (dev server Vite proxiado para o Orchestrator em produção nesta máquina, não mockado): overflow da tabela, opacidade do scrim, clamp do StatTile, estado inicial do `<details>`, navegação e busca de automação na paleta, e persistência da densidade em `localStorage` — todos confirmados via inspeção de DOM/`getComputedStyle`, não apenas leitura de código.
+
 ## [1.3.20] - 03/08/2026
 
 ### Alterado

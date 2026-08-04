@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTableDensity } from "../../context/TableDensityContext";
 import styles from "./DataTable.module.css";
 
 export interface Column<T> {
@@ -20,9 +21,10 @@ interface DataTableProps<T> {
 
 /** Tabela de dados de telemetria — header fixo, números tabulares. */
 export function DataTable<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataTableProps<T>) {
+  const { density } = useTableDensity();
   return (
     <div className={styles.scroll}>
-      <table className={styles.table}>
+      <table className={`${styles.table} ${density === "compact" ? styles.compact : ""}`}>
         <thead>
           <tr>
             {columns.map((c) => (

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { BeneficiamentoFilterOptions } from "../../api/orchestrator";
 import { Button } from "../ui";
@@ -63,9 +63,30 @@ function isActive(filters: BeneficiamentoFiltersState): boolean {
   return Object.values(filters).some((v) => v !== "");
 }
 
+const ADVANCED_KEYS: (keyof BeneficiamentoFiltersState)[] = [
+  "setor",
+  "grupoFase",
+  "fase",
+  "maquina",
+  "tipoMaquina",
+  "turno",
+  "alternativo",
+  "reprocesso",
+  "status",
+];
+
 /** Barra de filtros dinâmicos do Beneficiamento — datas, dimensões e busca livre. */
 export function FilterBar({ filters, options, onChange, onReset }: FilterBarProps) {
   const active = useMemo(() => isActive(filters), [filters]);
+  const advancedActiveCount = useMemo(
+    () => ADVANCED_KEYS.filter((k) => filters[k] !== "").length,
+    [filters],
+  );
+  // Em telas largas os filtros avançados ficam sempre visíveis (CSS troca <details> por display:contents);
+  // em mobile só abrem se o operador já chegar com um filtro avançado ativo.
+  const [advancedOpen, setAdvancedOpen] = useState(
+    () => typeof window === "undefined" || window.matchMedia("(min-width: 721px)").matches || advancedActiveCount > 0,
+  );
 
   return (
     <div className={styles.bar}>
@@ -92,7 +113,15 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
         />
       </div>
 
-      <div className={styles.group}>
+      <details
+        className={styles.advanced}
+        open={advancedOpen}
+        onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+      >
+        <summary className={styles.advancedSummary}>
+          Filtros avançados{advancedActiveCount > 0 ? ` · ${advancedActiveCount} ativo${advancedActiveCount > 1 ? "s" : ""}` : ""}
+        </summary>
+        <div className={styles.group}>
         <select
           className={styles.select}
           value={filters.setor}
@@ -196,7 +225,8 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
           <option value="confirmada">Só confirmada</option>
           <option value="planejada">Só planejada</option>
         </select>
-      </div>
+        </div>
+      </details>
 
       <div className={styles.searchGroup}>
         <Search size={13} className={styles.searchIcon} aria-hidden="true" />

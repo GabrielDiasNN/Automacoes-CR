@@ -1,0 +1,111 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(7, 10, 13, 0.6);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--sp-4);
+  padding-top: 12vh;
+}
+.box {
+  width: min(560px, 96vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  outline: none;
+  overflow: hidden;
+}
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.searchIcon {
+  color: var(--text-lo);
+  flex-shrink: 0;
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-hi);
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+}
+.input::placeholder {
+  color: var(--text-lo);
+}
+.kbd {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+}
+.empty {
+  padding: var(--sp-5) var(--sp-4);
+  text-align: center;
+  color: var(--text-lo);
+  font-size: var(--fs-small);
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-2);
+  overflow-y: auto;
+}
+.item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-mid);
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+}
+.itemActive {
+  background: var(--graphite-800);
+  color: var(--text-hi);
+}
+.itemIcon {
+  display: inline-flex;
+  color: var(--text-lo);
+  flex-shrink: 0;
+}
+.itemActive .itemIcon {
+  color: var(--cyan);
+}
+.itemLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.itemHint {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+  text-transform: uppercase;
+  letter-spacing: var(--track-mid);
+}

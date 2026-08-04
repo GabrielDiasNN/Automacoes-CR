@@ -24,10 +24,11 @@
 .valueBig {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-data-xl);
+  font-size: clamp(1.25rem, 6vw, var(--fs-data-xl));
   font-weight: 500;
   color: var(--text-hi);
-  line-height: 1;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 .hint {
   font-family: var(--font-mono);

@@ -113,6 +113,10 @@ Audit/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+# Artefatos de processo de skills (ex.: /stochastic-consensus) — memória de
+# trabalho da sessão, não documentação viva; achados relevantes vão para o
+# CHANGELOG ou docs/, não para este diretório.
+.claude/consensus/
 # Carimbos ISO-8601 de ultima execucao dos gates (last-pytest, last-governance,
 # last-dashboard), escritos por .claude/hooks/Register-GateRun.ps1 e lidos por
 # Assert-StopQualityGate.ps1. Estado por maquina, muda a cada commit e nao tem

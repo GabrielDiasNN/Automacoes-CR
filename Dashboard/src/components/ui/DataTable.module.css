@@ -28,6 +28,12 @@
   color: var(--text-mid);
   vertical-align: middle;
 }
+.compact th {
+  padding: 4px var(--sp-2);
+}
+.compact td {
+  padding: 6px var(--sp-2);
+}
 .table tbody tr:last-child td {
   border-bottom: none;
 }

@@ -55,3 +55,34 @@
 .search::placeholder {
   color: var(--text-lo);
 }
+
+.advanced {
+  width: 100%;
+}
+.advancedSummary {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-lo);
+  padding: var(--sp-2) 0;
+}
+.advancedSummary::-webkit-details-marker {
+  display: none;
+}
+.advancedSummary::before {
+  content: "▸ ";
+}
+.advanced[open] > .advancedSummary::before {
+  content: "▾ ";
+}
+
+@media (min-width: 721px) {
+  .advanced {
+    width: auto;
+    display: contents;
+  }
+  .advancedSummary {
+    display: none;
+  }
+}

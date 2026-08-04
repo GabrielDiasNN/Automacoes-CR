@@ -158,12 +158,14 @@ export function ExecucoesPage() {
       key: "dur",
       header: "Duração",
       align: "right",
+      hideOnNarrow: true,
       render: (r) => <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-mid)" }}>{formatDuration(r.duration_seconds)}</span>,
     },
     {
       key: "act",
       header: "Ação",
       align: "right",
+      hideOnNarrow: true,
       render: (r) => (
         <span style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>
           {r.stop_allowed && (

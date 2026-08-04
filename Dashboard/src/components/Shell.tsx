@@ -1,8 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { Factory, LayoutDashboard, ListChecks, Menu, Radio, Server, Workflow } from "lucide-react";
+import { Factory, LayoutDashboard, ListChecks, Menu, Radio, Rows3, Rows4, Search, Server, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
+import { useTableDensity } from "../context/TableDensityContext";
 import { StatusBar } from "./StatusBar";
+import { CommandPalette } from "./CommandPalette";
 import styles from "./Shell.module.css";
 
 interface NavItem {
@@ -12,7 +14,7 @@ interface NavItem {
   section?: string;
 }
 
-const NAV: NavItem[] = [
+export const NAV: NavItem[] = [
   { to: "/painel", label: "Painel", icon: <LayoutDashboard size={16} />, section: "Operação" },
   { to: "/execucoes", label: "Execuções", icon: <ListChecks size={16} /> },
   { to: "/monitor", label: "Monitor", icon: <Radio size={16} /> },
@@ -23,7 +25,20 @@ const NAV: NavItem[] = [
 
 export function Shell() {
   const [open, setOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { clearKey } = useApiKeyContext();
+  const { density, toggleDensity } = useTableDensity();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className={styles.shell}>
@@ -35,8 +50,13 @@ export function Shell() {
       <div className={styles.frame}>
         <aside className={`${styles.rail} ${open ? styles.railOpen : ""}`}>
           <div className={styles.wordmark}>
-            <div className={styles.brand}>ORQUESTRADOR</div>
-            <div className={styles.tagline}>// sala de instrumentação</div>
+            <div>
+              <div className={styles.brand}>ORQUESTRADOR</div>
+              <div className={styles.tagline}>// sala de instrumentação</div>
+            </div>
+            <button className={styles.railClose} onClick={() => setOpen(false)} aria-label="Fechar menu de navegação">
+              <X size={18} />
+            </button>
           </div>
 
           <nav className={styles.nav} aria-label="Navegação principal">
@@ -74,6 +94,22 @@ export function Shell() {
             >
               <Menu size={18} />
             </button>
+            <button
+              className={styles.searchBtn}
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Busca global (Ctrl+K)"
+              title="Busca global (Ctrl+K)"
+            >
+              <Search size={16} />
+            </button>
+            <button
+              className={styles.searchBtn}
+              onClick={toggleDensity}
+              aria-label={density === "compact" ? "Tabelas: modo compacto ativo — trocar para confortável" : "Tabelas: modo confortável ativo — trocar para compacto"}
+              title={density === "compact" ? "Densidade de tabela: compacta" : "Densidade de tabela: confortável"}
+            >
+              {density === "compact" ? <Rows3 size={16} /> : <Rows4 size={16} />}
+            </button>
             <StatusBar />
           </header>
 
@@ -82,6 +118,8 @@ export function Shell() {
           </main>
         </div>
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} navItems={NAV} />
     </div>
   );
 }
