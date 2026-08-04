@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.24] - 04/08/2026
+
+### Corrigido
+- **`cryptography` 49.0.0 → 50.0.0 nos três lockfiles**: `pip-audit` apontava `PYSEC-2026-3552` na versão pinada — corrige buffer overflow com buffers não-contíguos (CVE-2026-39892), name constraints não aplicadas a peer names quando o certificado folha tem SAN DNS curinga, e vazamento de partes da chave privada por chave pública maliciosa em curvas elípticas binárias. É dependência transitiva do `oracledb`, portanto está no caminho crítico das 5 automações de extração Oracle. `requirements.in` já permitia (`>=48.0.1`), então só os locks mudaram. `pip-audit` agora reporta zero vulnerabilidades conhecidas. Verificado com conexão real contra produção (`oracledb=3.3.0` + `cryptography=50.0.0`, Thick Mode, `SELECT` executado) e suíte completa (`747 passed`).
+
+### Notas
+- **Aplicado por substituição cirúrgica do bloco, sem `pip-compile`** (script descartável: busca os 46 hashes sha256 reais na API do PyPI, troca só o bloco do pacote por regex preservando a anotação `# via` e os line endings de cada arquivo — `requirements-test.txt` é CRLF, os outros dois LF). O motivo está registrado em `[1.3.23]` e no aprendizado desta série: **`pip-tools` 7.5.3 não suporta `--universal`**, então recompilar nesta máquina Windows avalia marcadores de ambiente (`sys_platform != "win32"`) contra a plataforma de compilação e descarta silenciosamente dependências condicionais — foi assim que `uvloop` sumiu duas vezes e quebrou o job `Lint Python` do CI. Validação obrigatória antes do push, que pega os dois modos de falha: `git diff -U0 | grep -E "^[+-][a-z0-9_.-]+=="` deve listar **apenas** o pacote pretendido, e `pip install --require-hashes` (que reproduz o modo do CI) deve passar — o `pytest` local passa mesmo com o lock corrompido e não serve de rede de proteção.
+
 ## [1.3.23] - 04/08/2026
 
 ### Alterado
