@@ -51,6 +51,7 @@ serviço, ou em validação pós-deploy.
 
 ### Operação e Utilitários
 - **New-Automation.ps1:** Scaffold governado para criar pasta de automação com `README.md`, `CONTEXT.md`, `run.ps1`, `automation.manifest.json`, runbook inicial e smoke test mínimo em `Orchestrator/tests/`, com parâmetros para owner, criticidade, fila e dependências básicas.
+- **Update-PythonDependency.ps1:** **Caminho canônico para atualizar UMA dependência Python nos lockfiles.** Substitui só o bloco do pacote em `requirements*.txt` com os hashes reais da API do PyPI, preservando a anotação `# via` e os line endings de cada arquivo. **Não use `pip-compile` para isso**: os lockfiles são uma união cross-platform mantida à mão (contêm `uvloop`, só-Linux, *e* `colorama`, só-Windows) e nenhuma execução de `pip-compile` produz os dois — recompilar no Windows perde `uvloop` e quebra o CI, recompilar no Linux perde `colorama` e quebra a instalação local (ambos comprovados empiricamente). Tem `-WhatIf`, falha sem tocar arquivos quando o pacote não está no lock, e imprime o checklist de validação obrigatório. Contexto: issue #16.
 - **Open-LatestLog.ps1:** Atalho rápido para o log da última execução.
 - **AplicarPoliticaRetencao.ps1:** Limpeza segura e auditável do workspace com modo `-DryRun`, retenção por idade e bloqueio contra remoção de itens rastreados pelo Git.
 - **ValidarAutomacoes.ps1:** Health check completo de todo o hub, com resumo de tempo por etapa, modo de seleção governada e opção de exportar um sumário JSON do ciclo local.

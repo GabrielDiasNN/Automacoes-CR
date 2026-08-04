@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.28] - 04/08/2026
+
+### Adicionado
+- **`Tools/Update-PythonDependency.ps1` — caminho canônico para atualizar UMA dependência Python nos lockfiles** (issue #16). Busca os hashes sha256 reais na API do PyPI e substitui apenas o bloco daquele pacote em `requirements.txt`/`-test.txt`/`-dev.txt`, preservando a anotação `# via` e o line ending de cada arquivo (`requirements-test.txt` é CRLF, os outros dois LF). Tem `-WhatIf`, aborta sem tocar arquivo nenhum quando o pacote não está no lock ou a versão não existe no PyPI, e imprime ao final o checklist de validação obrigatório. Detecta o proxy do sistema em tempo de execução e usa credenciais integradas do Windows — endereço e credencial **nunca** hardcoded (o gate Zero-Trust reprovaria o IP privado, corretamente). Validado por round-trip **byte a byte idêntico** (reescrever a versão vigente sobre ela mesma produz diff zero nos três arquivos) e pelos caminhos de erro.
+
+### Notas
+- **Por que esta é a solução, e não `uv` nem geração no CI** — as três opções levantadas na issue #16 foram testadas empiricamente, não avaliadas no papel:
+  - **`uv pip compile --universal`** era a solução tecnicamente correta (é a única ferramenta com resolução universal de fato; o `pip-tools` nunca teve). **Bloqueada neste ambiente**: o proxy corporativo exige autenticação integrada e o stack HTTP em Rust do `uv` não a faz — falha com `407 proxy authorization required` mesmo com `HTTP_PROXY`/`HTTPS_PROXY` explícitos, enquanto o `pip` passa. Revisitar se houver espelho interno do PyPI, exceção no proxy, ou suporte a NTLM no `uv`.
+  - **Gerar o lockfile no CI (Linux)** tem **o mesmo defeito, espelhado**, e isso foi provado: removendo o bloco do `colorama` (dependência que `click`/`uvicorn` exigem só no Windows, e que um `pip-compile` no Linux descartaria) e instalando em venv limpo no Windows, o `pip` falha com exatamente o mesmo erro que derrubou o CI — `In --require-hashes mode, all requirements must have their versions pinned`. Trocaria quebrar o CI por quebrar a máquina de desenvolvimento.
+  - **Descoberta que decidiu a escolha**: os lockfiles deste projeto **já são uma união cross-platform mantida à mão** — contêm simultaneamente `uvloop` (marcador `sys_platform != "win32"`) e `colorama` (exigido só no Windows). **Nenhuma execução de `pip-compile`, em nenhuma plataforma, produz esse conjunto.** Manutenção cirúrgica não é gambiarra em cima da ferramenta: é a única prática consistente com a natureza real do arquivo. A ferramenta apenas torna repetível e verificável o que já era feito à mão.
+- **Limite honesto desta solução**: resolve atualização pacote a pacote, **não** atualização em lote. Os ~35 patches Python pendentes continuam sem caminho barato — para eles, a saída real é `uv` (se o proxy permitir) ou aceitar rodar a ferramenta em série. A issue #16 fica aberta com esse escopo residual.
+
 ## [1.3.27] - 04/08/2026
 
 ### Corrigido
