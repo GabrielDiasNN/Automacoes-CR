@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.26] - 04/08/2026
+
+### Corrigido
+- **`vite` 5.4.21 → 8.2.0 (Onda 2 do upgrade de frontend, dirigida por CVE de dev-server)**: três advisories `high`/`moderate` afetavam o servidor de desenvolvimento — path traversal no tratamento de `.map` de deps otimizadas, bypass de `server.fs.deny` em caminhos alternativos do Windows, `launch-editor` com divulgação de hash NTLMv2 via UNC path **no Windows** (relevante: esta é a máquina de desenvolvimento) e o esbuild permitindo que qualquer site enviasse requisições ao dev server. O fix exige major (`fixAvailable.isSemVerMajor = true`). Upgrade acoplado por peer dependency: `@vitejs/plugin-react` 4.7.0 → 6.0.5 (exige `vite ^8`), `vitest` 3.2.6 → 4.1.10 e `@vitest/coverage-v8` 3.2.6 → 4.1.10 (a série 3 do vitest não aceita `vite 8`). **Zero linha de código de aplicação alterada.** O Vite 8 troca o bundler para Rolldown; build validado (1647 módulos, bundle de 343,64 kB → 334,90 kB, gzip 114,98 kB → 111,84 kB) e o app real exercitado pelos **11 testes E2E Playwright**, incluindo o gate de console limpo nas 6 rotas.
+
+### Alterado
+- **Limiares de cobertura do Vitest recalibrados** (`Dashboard/vitest.config.ts`): `lines` 40 → 53, `statements` 40 → 53, `functions` 65 → **35**, `branches` 85 → **60**. **Não é afrouxamento do gate** — os testes são exatamente os mesmos (92 passando), o que mudou foi a *medição*, por duas remoções do Vitest 4 confirmadas na documentação oficial: (a) `coverage.ignoreEmptyLines` foi removido e linhas sem código de runtime saíram do denominador, então a cobertura de **linhas subiu** (46,8% → 60,6%); (b) `coverage.experimentalAstAwareRemapping` foi removido por deixar de ser opt-in e virar o único método de remapeamento, tornando a contagem de branch/função precisa — o que revela que os números antigos eram **inflados** (branches 92,2% → 67,5%, funções 71,9% → 42,6%). A cobertura real sempre foi essa; o gate é que media errado. Mantida a margem de ~7pp abaixo do medido, mesmo critério anterior. `src/context/**` aparece em 0% porque **nunca teve teste** (verificado: nenhum arquivo em `src/__tests__/` importa `context/`) — não é regressão desta onda.
+
+### Notas
+- **CVEs restantes são todas de `devDependencies` transitivas e com fix não-breaking**, tratadas na Onda 3: `undici` (via `jsdom`, ambiente de teste) e `brace-expansion` (via `eslint`/`@typescript-eslint`, lint). Nenhuma delas chega ao bundle de produção.
+
 ## [1.3.25] - 04/08/2026
 
 ### Corrigido
