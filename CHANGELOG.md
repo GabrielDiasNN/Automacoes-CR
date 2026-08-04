@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.25] - 04/08/2026
+
+### Corrigido
+- **`react-router-dom` 6.30.4 → 7.18.2 (Onda 1 do upgrade de frontend, dirigida por CVE)**: `npm audit` acusava três advisories no caminho de **produção** — open redirect via backslash em `<Link>`/`useNavigate` (bypass de CVE-2025-68470), open redirect levando a XSS, e injeção arbitrária de construtor em `deserializeErrors()`. O range afetado é `6.0.0 – 7.17.0` e **`6.30.4` é a última versão da série 6**, ou seja, não existe 6.x corrigido: o fix obriga o salto major. Migração custou **zero linha de código** — o app usa apenas 8 APIs do modo declarativo (`BrowserRouter`/`Routes`/`Route`/`Navigate`/`NavLink`/`Outlet`/`useNavigate`/`useSearchParams`), sem data router, `loader`, `action` ou `useLoaderData`, que é onde mora quase toda a incompatibilidade v6→v7; o único splat (`path="*"`) renderiza `<Navigate to="/painel">` com caminho absoluto, então a mudança de `v7_relativeSplatPath` não o afeta. Validado com lint, `tsc --noEmit`, 92 testes Vitest, build e — o que de fato cobre roteamento — os **11 testes E2E Playwright**, incluindo o Quality Gate de console limpo navegando as 6 rotas pelo rail (roteamento client-side real).
+
+### Notas
+- **Exploitabilidade das advisories corrigidas era baixa neste app, mas não nula**: todos os `navigate()` usam destinos literais (`/execucoes`, `/automacoes`) ou vindos da lista estática de navegação — nenhum é controlado por input externo — e o app não faz SSR, o que já tornava a advisory de `deserializeErrors()` inaplicável. A correção foi aplicada mesmo assim por ser barata e estar no caminho de produção.
+- **Resíduo conhecido e deliberado no `npm audit`**: a partir de `7.12.0` existe a advisory `GHSA-qwww-vcr4-c8h2` (RSC Mode CSRF Bypass, `high`), cujo range é `7.12.0 – 8.2.0`. Ela **não se aplica aqui** — o texto oficial diz "This only affects your application if you are using the unstable RSC APIs", e o projeto é SPA puramente client-side, sem RSC, sem server actions (verificado por varredura). Zerar o `npm audit` exigiria `react-router@8.3.0`, que por sua vez **exige React >= 19.2.7** e abandona o pacote `react-router-dom` (removido na v8, tudo passa a importar de `react-router`). Forçar um major do React para perseguir advisory comprovadamente inaplicável não se justifica — fica para a onda de React 19, quando houver motivo próprio.
+
 ## [1.3.24] - 04/08/2026
 
 ### Corrigido
