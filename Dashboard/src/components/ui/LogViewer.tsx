@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Maximize2, Minimize2, SlidersHorizontal } from "lucide-react";
 import { countByLevel, filterLines, parseLog, type Level } from "../../lib/logParser";
+import { IconButton } from "./IconButton";
+import { Input } from "./Input";
 import styles from "./LogViewer.module.css";
 
 // Teto de linhas efetivamente montadas no DOM. O worker permite até 5 MB de log
@@ -115,33 +117,35 @@ export function LogViewer({ text, loading }: { text: string; loading?: boolean }
             </button>
           ) : null
         )}
-        <input
+        <Input
           className={styles.search}
           type="text"
           placeholder="buscar nos logs…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          aria-label="Buscar nos logs"
         />
         <div className={styles.filler} />
-        <button
-          type="button"
-          className={[styles.iconBtn, autoScroll ? styles.active : ""].filter(Boolean).join(" ")}
+        <IconButton
+          size="sm"
+          active={autoScroll}
           onClick={() => setAutoScroll((v) => !v)}
           title={autoScroll ? "Auto-scroll ativo" : "Auto-scroll pausado"}
+          aria-label={autoScroll ? "Desativar auto-scroll" : "Ativar auto-scroll"}
         >
           <SlidersHorizontal size={13} />
-        </button>
-        <button type="button" className={styles.iconBtn} onClick={handleCopy} title="Copiar logs">
+        </IconButton>
+        <IconButton size="sm" onClick={handleCopy} title="Copiar logs" aria-label="Copiar logs">
           {copied ? <Check size={13} /> : <Copy size={13} />}
-        </button>
-        <button
-          type="button"
-          className={styles.iconBtn}
+        </IconButton>
+        <IconButton
+          size="sm"
           onClick={() => setFullscreen((v) => !v)}
           title={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
+          aria-label={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
         >
           {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-        </button>
+        </IconButton>
       </div>
 
       <div className={styles.body} ref={bodyRef} style={fullscreen ? { maxHeight: "none" } : { maxHeight: 360 }}>

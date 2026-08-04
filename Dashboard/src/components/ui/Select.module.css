@@ -1,0 +1,9 @@
+.select {
+  background: var(--surface-up);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-mid);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  padding: 6px var(--sp-2);
+}

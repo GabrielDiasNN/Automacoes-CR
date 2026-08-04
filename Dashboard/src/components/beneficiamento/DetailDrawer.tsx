@@ -8,7 +8,7 @@ import {
   type BeneficiamentoTargetType,
   type BeneficiamentoTraceFase,
 } from "../../api/orchestrator";
-import { Card, DataTable, Drawer, EmptyState, ErrorState, Loading, StatTile, type Column } from "../ui";
+import { Card, DataTable, Drawer, EmptyState, ErrorState, IconButton, Loading, StatTile, type Column } from "../ui";
 import { formatDateTimeBr, formatNumber, formatPercent } from "../../lib/format";
 import styles from "./DetailDrawer.module.css";
 
@@ -197,25 +197,25 @@ export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerP
 
           {data.pagination.pages > 1 && (
             <div className={styles.pager}>
-              <button
-                className={styles.pagerBtn}
+              <IconButton
+                variant="plain"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 aria-label="Página anterior"
               >
                 <ChevronLeft size={16} />
-              </button>
+              </IconButton>
               <span className={styles.pagerLabel}>
                 página {data.pagination.page} de {data.pagination.pages} · {formatNumber(data.pagination.total)} registros
               </span>
-              <button
-                className={styles.pagerBtn}
+              <IconButton
+                variant="plain"
                 onClick={() => setPage((p) => Math.min(data.pagination.pages, p + 1))}
                 disabled={page >= data.pagination.pages}
                 aria-label="Próxima página"
               >
                 <ChevronRight size={16} />
-              </button>
+              </IconButton>
             </div>
           )}
         </div>

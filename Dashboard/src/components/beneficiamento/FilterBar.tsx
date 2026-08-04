@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { BeneficiamentoFilterOptions } from "../../api/orchestrator";
-import { Button } from "../ui";
+import { Button, Input, Select } from "../ui";
 import { ProductAutocomplete } from "./ProductAutocomplete";
 import styles from "./FilterBar.module.css";
 
@@ -96,17 +96,15 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
             {p.label}
           </Button>
         ))}
-        <input
+        <Input
           type="date"
-          className={styles.date}
           value={filters.dtInicio}
           onChange={(e) => onChange({ dtInicio: e.target.value })}
           aria-label="Data inicial"
         />
         <span className={styles.sep}>até</span>
-        <input
+        <Input
           type="date"
-          className={styles.date}
           value={filters.dtFim}
           onChange={(e) => onChange({ dtFim: e.target.value })}
           aria-label="Data final"
@@ -122,8 +120,7 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
           Filtros avançados{advancedActiveCount > 0 ? ` · ${advancedActiveCount} ativo${advancedActiveCount > 1 ? "s" : ""}` : ""}
         </summary>
         <div className={styles.group}>
-        <select
-          className={styles.select}
+        <Select
           value={filters.setor}
           onChange={(e) => onChange({ setor: e.target.value, grupoFase: "", fase: "" })}
           aria-label="Setor industrial"
@@ -134,9 +131,8 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
               {v}
             </option>
           ))}
-        </select>
-        <select
-          className={styles.select}
+        </Select>
+        <Select
           value={filters.grupoFase}
           onChange={(e) => onChange({ grupoFase: e.target.value, fase: "" })}
           aria-label="Grupo de fase"
@@ -147,9 +143,8 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
               {v}
             </option>
           ))}
-        </select>
-        <select
-          className={styles.select}
+        </Select>
+        <Select
           value={filters.fase}
           onChange={(e) => onChange({ fase: e.target.value })}
           aria-label="Fase"
@@ -160,9 +155,8 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
               {v}
             </option>
           ))}
-        </select>
-        <select
-          className={styles.select}
+        </Select>
+        <Select
           value={filters.maquina}
           onChange={(e) => onChange({ maquina: e.target.value })}
           aria-label="Máquina"
@@ -173,9 +167,8 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
               {v}
             </option>
           ))}
-        </select>
-        <select
-          className={styles.select}
+        </Select>
+        <Select
           value={filters.tipoMaquina}
           onChange={(e) => onChange({ tipoMaquina: e.target.value })}
           aria-label="Tipo de máquina"
@@ -186,9 +179,8 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
               {v}
             </option>
           ))}
-        </select>
-        <select
-          className={styles.select}
+        </Select>
+        <Select
           value={filters.turno}
           onChange={(e) => onChange({ turno: e.target.value })}
           aria-label="Turno"
@@ -199,14 +191,13 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
               {v}
             </option>
           ))}
-        </select>
+        </Select>
         <ProductAutocomplete
           value={filters.alternativo}
           onSelect={(codigo) => onChange({ alternativo: codigo })}
           onClear={() => onChange({ alternativo: "" })}
         />
-        <select
-          className={styles.select}
+        <Select
           value={filters.reprocesso}
           onChange={(e) => onChange({ reprocesso: e.target.value })}
           aria-label="Reprocesso"
@@ -214,9 +205,8 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
           <option value="">Reprocesso: todos</option>
           <option value="1">Só reprocesso</option>
           <option value="0">Sem reprocesso</option>
-        </select>
-        <select
-          className={styles.select}
+        </Select>
+        <Select
           value={filters.status}
           onChange={(e) => onChange({ status: e.target.value })}
           aria-label="Status de execução"
@@ -224,15 +214,14 @@ export function FilterBar({ filters, options, onChange, onReset }: FilterBarProp
           <option value="">Confirmada + planejada</option>
           <option value="confirmada">Só confirmada</option>
           <option value="planejada">Só planejada</option>
-        </select>
+        </Select>
         </div>
       </details>
 
       <div className={styles.searchGroup}>
-        <Search size={13} className={styles.searchIcon} aria-hidden="true" />
-        <input
+        <Input
           type="search"
-          className={styles.search}
+          icon={<Search size={13} />}
           placeholder="Buscar OB, produto, artigo, cor…"
           value={filters.q}
           onChange={(e) => onChange({ q: e.target.value })}

@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   ErrorState,
+  ListRow,
   Loading,
   Mimico,
   Nameplate,
@@ -26,50 +27,33 @@ function baselineTone(status: string): Tone {
 
 function ExecRow({ ex, onClick }: { ex: ExecutionSummary; onClick: () => void }) {
   const tone = ex.operator_attention_required ? severityTone(ex.operator_severity) : executionTone(ex.status);
+  const label = ex.automation_name ?? `#${ex.automation_id}`;
   return (
-    <button
+    <ListRow
       onClick={onClick}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--sp-3)",
-        width: "100%",
-        textAlign: "left",
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        padding: "var(--sp-2) var(--sp-3)",
-        cursor: "pointer",
-        color: "inherit",
-        font: "inherit",
-        boxShadow: `inset 3px 0 0 var(--${tone === "grey" ? "graphite-600" : tone})`,
-      }}
+      tone={`var(--${tone === "grey" ? "graphite-600" : tone})`}
+      aria-label={`Execução ${label}, status ${ex.status}`}
+      leading={
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-lo)", flexShrink: 0 }}>
+          {shortId(ex.id, 12)}
+        </span>
+      }
+      trailing={
+        <>
+          {ex.operator_attention_required && ex.operator_severity && (
+            <StatusTag tone={severityTone(ex.operator_severity)}>{ex.operator_severity}</StatusTag>
+          )}
+          <StatusTag tone={executionTone(ex.status)} dot pulse={ex.status === "RUNNING"}>
+            {ex.status}
+          </StatusTag>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-lo)", flexShrink: 0 }}>
+            {formatDuration(ex.duration_seconds)}
+          </span>
+        </>
+      }
     >
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-lo)", flexShrink: 0 }}>
-        {shortId(ex.id, 12)}
-      </span>
-      <span
-        style={{
-          flex: 1,
-          minWidth: 0,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          fontSize: "var(--fs-small)",
-          color: "var(--text-hi)",
-        }}
-      >
-        {ex.automation_name ?? `#${ex.automation_id}`}
-      </span>
-      {ex.operator_attention_required && ex.operator_severity && (
-        <StatusTag tone={severityTone(ex.operator_severity)}>{ex.operator_severity}</StatusTag>
-      )}
-      <StatusTag tone={executionTone(ex.status)} dot pulse={ex.status === "RUNNING"}>
-        {ex.status}
-      </StatusTag>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-lo)", flexShrink: 0 }}>
-        {formatDuration(ex.duration_seconds)}
-      </span>
-    </button>
+      {label}
+    </ListRow>
   );
 }
 

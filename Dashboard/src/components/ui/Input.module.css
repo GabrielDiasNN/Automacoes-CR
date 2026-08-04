@@ -1,0 +1,31 @@
+.input {
+  background: var(--surface-up);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-mid);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  padding: 6px var(--sp-2);
+}
+.input::placeholder {
+  color: var(--text-lo);
+}
+
+.iconWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.icon {
+  position: absolute;
+  left: var(--sp-2);
+  color: var(--text-lo);
+  pointer-events: none;
+  display: inline-flex;
+}
+.withIcon {
+  width: 100%;
+  padding-left: 30px;
+  font-family: var(--font-sans);
+}
