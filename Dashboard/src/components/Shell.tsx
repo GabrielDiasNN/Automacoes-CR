@@ -5,6 +5,7 @@ import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
+import { IconButton } from "./ui";
 import styles from "./Shell.module.css";
 
 interface NavItem {
@@ -54,9 +55,9 @@ export function Shell() {
               <div className={styles.brand}>ORQUESTRADOR</div>
               <div className={styles.tagline}>// sala de instrumentação</div>
             </div>
-            <button className={styles.railClose} onClick={() => setOpen(false)} aria-label="Fechar menu de navegação">
+            <IconButton className={styles.railClose} onClick={() => setOpen(false)} aria-label="Fechar menu de navegação">
               <X size={18} />
-            </button>
+            </IconButton>
           </div>
 
           <nav className={styles.nav} aria-label="Navegação principal">
@@ -86,30 +87,28 @@ export function Shell() {
 
         <div className={styles.main}>
           <header className={styles.topbar}>
-            <button
+            <IconButton
               className={styles.menuBtn}
               onClick={() => setOpen((o) => !o)}
               aria-label="Alternar menu de navegação"
               aria-expanded={open}
             >
               <Menu size={18} />
-            </button>
-            <button
-              className={styles.searchBtn}
+            </IconButton>
+            <IconButton
               onClick={() => setPaletteOpen(true)}
               aria-label="Busca global (Ctrl+K)"
               title="Busca global (Ctrl+K)"
             >
               <Search size={16} />
-            </button>
-            <button
-              className={styles.searchBtn}
+            </IconButton>
+            <IconButton
               onClick={toggleDensity}
               aria-label={density === "compact" ? "Tabelas: modo compacto ativo — trocar para confortável" : "Tabelas: modo confortável ativo — trocar para compacto"}
               title={density === "compact" ? "Densidade de tabela: compacta" : "Densidade de tabela: confortável"}
             >
               {density === "compact" ? <Rows3 size={16} /> : <Rows4 size={16} />}
-            </button>
+            </IconButton>
             <StatusBar />
           </header>
 

@@ -2,27 +2,11 @@
   position: relative;
   min-width: 220px;
 }
-.input {
-  width: 100%;
-  background: var(--surface-up);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-mid);
-  font-family: var(--font-mono);
-  font-size: var(--fs-small);
-  padding: 6px 26px 6px var(--sp-2);
-}
 .clear {
   position: absolute;
   right: var(--sp-2);
   top: 50%;
   transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: var(--text-lo);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
 }
 .dropdown {
   position: absolute;

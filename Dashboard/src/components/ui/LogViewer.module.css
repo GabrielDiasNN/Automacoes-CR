@@ -29,20 +29,6 @@
   min-width: 160px;
   flex: 1;
   max-width: 260px;
-  padding: 5px var(--sp-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  color: var(--text-hi);
-  background: var(--surface-up);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.search::placeholder {
-  color: var(--text-lo);
-}
-.search:focus {
-  outline: none;
-  border-color: var(--cyan);
 }
 
 .chip {
@@ -73,29 +59,6 @@
 }
 .chipCount {
   opacity: 0.75;
-}
-
-.iconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-lo);
-  cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-}
-.iconBtn:hover {
-  color: var(--text-hi);
-  border-color: var(--border-strong);
-}
-.iconBtn.active {
-  color: var(--cyan-bright);
-  border-color: var(--cyan);
-  background: var(--cyan-tint);
 }
 
 .body {

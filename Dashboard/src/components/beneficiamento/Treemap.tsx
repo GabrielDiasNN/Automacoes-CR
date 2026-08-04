@@ -21,7 +21,14 @@ interface SetorGroup {
   fases: FaseCell[];
 }
 
-const TONE_ROTATION = ["#38C5C9", "#4C8DF6", "#3FB950", "#E8A317", "#F0524D", "#7C8A9C", "#B084F0", "#F084C0"];
+const TONE_ROTATION = [
+  "var(--cyan)",
+  "var(--blue)",
+  "var(--green)",
+  "var(--amber)",
+  "var(--red)",
+  "var(--grey)",
+];
 
 function groupBySetor(nodes: BeneficiamentoTreemapNode[]): SetorGroup[] {
   const setores = new Map<string, Map<string, FaseCell>>();

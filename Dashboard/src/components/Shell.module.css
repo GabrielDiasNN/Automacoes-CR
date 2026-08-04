@@ -50,17 +50,6 @@
 }
 .railClose {
   display: none;
-  flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-mid);
-  padding: 5px;
-  cursor: pointer;
-}
-.railClose:hover {
-  color: var(--text-hi);
-  border-color: var(--border-strong);
 }
 .brand {
   font-family: var(--font-display);
@@ -155,25 +144,6 @@
 }
 .menuBtn {
   display: none;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-mid);
-  padding: 5px;
-  cursor: pointer;
-}
-.searchBtn {
-  flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-mid);
-  padding: 5px;
-  cursor: pointer;
-}
-.searchBtn:hover {
-  color: var(--text-hi);
-  border-color: var(--border-strong);
 }
 .content {
   flex: 1;

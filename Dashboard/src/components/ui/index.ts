@@ -1,4 +1,8 @@
 export { Button } from "./Button";
+export { IconButton } from "./IconButton";
+export { Input } from "./Input";
+export { Select } from "./Select";
+export { ListRow } from "./ListRow";
 export { StatusTag } from "./StatusTag";
 export { Nameplate } from "./Nameplate";
 export { Card } from "./Card";

@@ -41,20 +41,6 @@
   color: var(--text-hi);
   word-break: break-word;
 }
-.close {
-  display: inline-flex;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-lo);
-  padding: var(--sp-1);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.close:hover {
-  color: var(--text-hi);
-  border-color: var(--border-strong);
-}
 .body {
   flex: 1;
   overflow-y: auto;

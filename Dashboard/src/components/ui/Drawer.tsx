@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { IconButton } from "./IconButton";
 import styles from "./Drawer.module.css";
 
 interface DrawerProps {
@@ -37,9 +38,9 @@ export function Drawer({ open, onClose, title, eyebrow, children, width = 560 }:
             {eyebrow && <div className={styles.eyebrow}>{eyebrow}</div>}
             {title && <h3 className={styles.title}>{title}</h3>}
           </div>
-          <button className={styles.close} onClick={onClose} aria-label="Fechar painel">
+          <IconButton onClick={onClose} aria-label="Fechar painel">
             <X size={18} />
-          </button>
+          </IconButton>
         </header>
         <div className={styles.body}>{children}</div>
       </aside>

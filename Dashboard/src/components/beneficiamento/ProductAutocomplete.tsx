@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { orchestratorApi, type BeneficiamentoProdutoOption } from "../../api/orchestrator";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { IconButton, Input } from "../ui";
 import styles from "./ProductAutocomplete.module.css";
 
 interface ProductAutocompleteProps {
@@ -56,9 +57,10 @@ export function ProductAutocomplete({ value, onSelect, onClear }: ProductAutocom
 
   return (
     <div className={styles.wrap} ref={containerRef}>
-      <input
+      <Input
         type="search"
-        className={styles.input}
+        style={{ width: "100%" }}
+        trailingPadding={26}
         placeholder="Buscar produto (código ou nome)…"
         value={displayValue}
         onChange={(e) => {
@@ -72,8 +74,8 @@ export function ProductAutocomplete({ value, onSelect, onClear }: ProductAutocom
         aria-label="Produto"
       />
       {value && !open && (
-        <button
-          type="button"
+        <IconButton
+          variant="plain"
           className={styles.clear}
           onClick={() => {
             onClear();
@@ -82,7 +84,7 @@ export function ProductAutocomplete({ value, onSelect, onClear }: ProductAutocom
           aria-label="Limpar produto"
         >
           <X size={12} />
-        </button>
+        </IconButton>
       )}
       {open && options.length > 0 && (
         <ul className={styles.dropdown} role="listbox">

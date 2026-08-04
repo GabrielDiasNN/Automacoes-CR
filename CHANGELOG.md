@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.22] - 04/08/2026
+
+### Corrigido
+- **`TONE_ROTATION` do Treemap de Beneficiamento tinha 2 cores órfãs sem token correspondente** (`Dashboard/src/components/beneficiamento/Treemap.tsx`): `#B084F0` (roxo) e `#F084C0` (rosa) eram hex hardcoded fora de `tokens.css`, únicas do arquivo sem equivalente no sistema de sinais (`--cyan/--amber/--green/--red/--blue/--grey`). As 8 cores da rotação passaram a usar `var(--cyan|blue|green|amber|red|grey)`, reduzindo o ciclo para os 6 tons já tokenizados — achado do audit `/design-system audit`.
+
+### Alterado
+- **Quatro componentes compartilhados novos em `Dashboard/src/components/ui/`** consolidam duplicação apontada pelo mesmo audit: `IconButton` (variant `bordered|plain`, size `sm|md`, estado `active`) substitui 15 `<button>` ícone-only que reimplementavam o mesmo CSS em 8 arquivos (`Shell.tsx`, `Drawer.tsx`, `LogViewer.tsx`, `DetailDrawer.tsx`, `ProductAutocomplete.tsx`); `Input`/`Select` substituem 8 `<select>` e 3 `<input>` duplicados em `FilterBar.tsx`/`ProductAutocomplete.tsx`; `ListRow` substitui o `ExecRow` de `PainelPage.tsx` — mantém o visual de feed compacto sem cabeçalho de tabela e adiciona `aria-label`, que faltava no original.
+
+### Notas
+- **Verificado em runtime contra o Orchestrator de produção** via skill `run-orchestrator` (driver Playwright): `smoke` completo (login real + 6 rotas) sem erros/warnings de console, mais sessão interativa cobrindo autocomplete de produto (busca → seleção → limpar), paginação do `DetailDrawer` (68 páginas, estado `disabled` do botão "anterior" correto), fechamento do `Drawer` e `IconButton`s do `LogViewer` — todos confirmados por mudança real de estado do DOM/React props, não apenas leitura de código. Um achado de ambiente (não do app): o Browser pane MCP usado em paralelo parou de compositar frames na sessão, fazendo `getComputedStyle` retornar valores presos — confirmado injetando `color: red !important` num elemento não relacionado e vendo o valor não mudar; descartado como ruído de tooling, não regressão.
+
 ## [1.3.21] - 04/08/2026
 
 ### Adicionado
