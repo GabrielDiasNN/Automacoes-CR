@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.29] - 05/08/2026
+
+### Corrigido
+- **`msgpack` 1.2.0 → 1.2.1 em `requirements-dev.txt`**: `pip-audit` contra os três lockfiles apontava `GHSA-6v7p-g79w-8964` como única vulnerabilidade conhecida pendente — dependência transitiva de `markdown-it-py` (toolchain de dev, não entra em produção). Aplicado com `Tools\Update-PythonDependency.ps1` (issue #16), o caminho canônico introduzido em `[1.3.28]`: primeira atualização de dependência via essa rota desde que ela existe. Validado pelo checklist obrigatório do próprio script — diff isolado ao pacote, `pip install --require-hashes --dry-run` em modo CI, suíte completa (`747 passed`) — e `pip-audit` volta a reportar zero vulnerabilidades conhecidas.
+
 ## [1.3.28] - 04/08/2026
 
 ### Adicionado
