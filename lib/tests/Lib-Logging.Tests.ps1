@@ -47,4 +47,30 @@ Describe "Lib-Logging Tests" {
             Get-ForwardedLogLevel -Msg "[ERROR] via alias" | Should -Be "ERRO"
         }
     }
+
+    Context "Get-AutomationExitStatus" {
+        # Extraida de Exit-AutomationWithCode, que centraliza a classificacao
+        # que tinha divergido entre 4 run.ps1 (achado de qualidade da revisao
+        # arquitetural): -eq 0, -eq 0 -or -eq 2, -in $NonFailureCodes.
+        It "Codigo 0 sem NonFailureCodes explicito (padrao) e sucesso" {
+            Get-AutomationExitStatus -Code 0 | Should -BeTrue
+        }
+
+        It "Codigo diferente de 0 sem NonFailureCodes explicito e falha" {
+            Get-AutomationExitStatus -Code 1 | Should -BeFalse
+        }
+
+        It "Padrao de Receitas Bloqueadas/OBs Paradas Fase: 0 e 2 sao sucesso" {
+            Get-AutomationExitStatus -Code 2 -NonFailureCodes @(0, 2) | Should -BeTrue
+            Get-AutomationExitStatus -Code 9 -NonFailureCodes @(0, 2) | Should -BeFalse
+        }
+
+        It "Padrao de OBs Fluxo Sem Tingimento: 22 (canal pendente) e sucesso" {
+            Get-AutomationExitStatus -Code 22 -NonFailureCodes @(0, 2, 22) | Should -BeTrue
+        }
+
+        It "Codigo fora da lista de NonFailureCodes e sempre falha" {
+            Get-AutomationExitStatus -Code 22 -NonFailureCodes @(0, 2) | Should -BeFalse
+        }
+    }
 }

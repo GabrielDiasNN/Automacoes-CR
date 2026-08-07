@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`Write-Log`/`Exit-WithCode` reimplementados de forma divergente em 4 `run.ps1`** (Receitas Bloqueadas, Receitas Emitidas, OBs Paradas Fase, OBs Fluxo Sem Tingimento): cada cópia tinha sua própria classificação de "código de saída não-falha" (`-eq 0`, `-eq 0 -or -eq 2`, `-in @(0,2,22)`), já divergida entre si havia tempo, em vez de centralizada em `lib/Lib-Logging.psm1`. Extraída a lógica compartilhada (linhas finais de log, fechamento de telemetria, classificação sucesso/falha) para `Exit-AutomationWithCode` — cada `run.ps1` mantém sua própria `Exit-WithCode` local (só para não precisar passar `ExecId`/`LogPath` em toda chamada ao longo do script), mas agora ela só encaminha para a função compartilhada com o `NonFailureCodes` próprio da automação. A lista de códigos continua específica de cada script — só a estrutura foi consolidada.
+
+### Notas
+- Achado #5 (qualidade) de uma revisão completa do repositório. A classificação sucesso/falha foi extraída à parte em `Get-AutomationExitStatus`, função pura, para ficar testável sem precisar mockar `exit` (que encerraria o processo de teste) — 5 casos novos em `lib/tests/Lib-Logging.Tests.ps1` cobrindo os 3 padrões que haviam divergido. `Invoke-Pester lib/tests/` (151 passed), `pytest -q` (747 passed, sem relação direta mas roda como verificação de que nada em Python quebrou) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
