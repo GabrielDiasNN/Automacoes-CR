@@ -42,6 +42,7 @@ from .beneficiamento_refresh import run_beneficiamento_refresh
 from .execution_runtime import (
     RequeueValidationError,
     build_queued_execution,
+    cooldown_remaining_minutes,
     get_group_active_execution,
     prepare_requeue,
 )
@@ -454,10 +455,14 @@ def auto_retry_transient_failures() -> None:
                 automation = db_exec.automation
                 if not automation or not automation.enabled or not db_exec.finished_at:
                     continue
-                elapsed_minutes = (
-                    get_now_local() - db_exec.finished_at
-                ).total_seconds() / 60
-                if elapsed_minutes < (automation.cooldown_minutes or 0):
+                if (
+                    cooldown_remaining_minutes(
+                        cast(datetime, db_exec.finished_at),
+                        automation.cooldown_minutes,
+                        get_now_local(),
+                    )
+                    is not None
+                ):
                     continue
 
                 attempt = int(db_exec.retry_count or 0) + 1

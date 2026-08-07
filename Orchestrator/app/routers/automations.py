@@ -11,7 +11,8 @@ import logging
 import math
 import threading
 import time
-from typing import Any
+from datetime import datetime
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +32,7 @@ from ..services.automation_snapshot import (
 )
 from ..services.execution_runtime import (
     build_queued_execution,
+    cooldown_remaining_minutes,
     generate_execution_id,
     get_group_active_execution,
 )
@@ -543,19 +545,19 @@ def start_automation(
 
     if db_auto.cooldown_minutes and db_auto.cooldown_minutes > 0:
         latest_exec = repo.get_latest_execution(db, automation_id)
-        if latest_exec and latest_exec.started_at:
-            elapsed_minutes = (
-                get_now_local() - latest_exec.started_at
-            ).total_seconds() / 60
-            if elapsed_minutes < db_auto.cooldown_minutes:
-                remaining = round(db_auto.cooldown_minutes - elapsed_minutes, 1)
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        "Cooldown operacional ativo para esta automação. "
-                        f"Aguarde aproximadamente {remaining} minuto(s)."
-                    ),
-                )
+        remaining = cooldown_remaining_minutes(
+            cast(datetime | None, latest_exec.started_at) if latest_exec else None,
+            cast(int, db_auto.cooldown_minutes),
+            get_now_local(),
+        )
+        if remaining is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cooldown operacional ativo para esta automação. "
+                    f"Aguarde aproximadamente {remaining} minuto(s)."
+                ),
+            )
 
     exec_id = generate_execution_id("EXEC")
 

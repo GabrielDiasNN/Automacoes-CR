@@ -60,6 +60,41 @@ def test_reject_duplicate_execution(client: TestClient) -> None:
     assert res.status_code == 409
 
 
+def test_reject_start_during_cooldown(client: TestClient, db_session: Session) -> None:
+    """`start_automation` deve devolver 409 quando o cooldown ainda não expirou.
+
+    Cobre a chamada real a `cooldown_remaining_minutes` dentro do router (não só
+    a função pura, já coberta em `test_execution_runtime_unit.py`): a última
+    execução TERMINAL (`SUCCESS`) começou há 5 minutos e o cooldown configurado
+    é de 30, então `started_at` ainda está dentro da janela.
+    """
+    auto = models.Automation(
+        name="Cooldown Test",
+        script_path="./test/run.ps1",
+        cooldown_minutes=30,
+    )
+    db_session.add(auto)
+    db_session.flush()
+
+    db_session.add(
+        models.Execution(
+            id="EXEC_COOLDOWN_LATEST",
+            automation_id=auto.id,
+            status="SUCCESS",
+            requested_by="SYSTEM",
+            started_at=get_now_local() - timedelta(minutes=5),
+            finished_at=get_now_local() - timedelta(minutes=4),
+            duration_seconds=60,
+        )
+    )
+    db_session.commit()
+
+    res = client.post(f"/api/automations/{auto.id}/start", headers=AUTH_HEADERS)
+
+    assert res.status_code == 409
+    assert "Cooldown operacional ativo" in res.json()["detail"]
+
+
 def test_stop_execution(client: TestClient) -> None:
     client.post(
         "/api/automations",
