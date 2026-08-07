@@ -2,6 +2,7 @@
 Módulo contendo schemas Pydantic de Execuções.
 """
 
+import json
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -121,6 +122,27 @@ class ExecutionTelemetryEnd(BaseModel):
     exit_code: int | None = None
     logs: str | None = None
     artifacts: str | None = None
+
+    @field_validator("artifacts")
+    @classmethod
+    def v_artifacts(cls, v: str | None) -> str | None:
+        """Grava direto em `Execution.artifacts` (ver models.py), lido depois
+        por GET /executions/{exec_id}/artifacts com response_model=list[str].
+        Sem essa checagem aqui, telemetria externa malformada (dict, lista com
+        não-string) entrava no banco sem erro e só quebrava — com 500 — na
+        leitura, quando o FastAPI falhasse a validação do response_model.
+        Rejeitar na escrita devolve 422 imediato e evita o dado inválido."""
+        if v is None:
+            return v
+        try:
+            parsed = json.loads(v)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("artifacts deve ser um JSON válido.") from exc
+        if not isinstance(parsed, list) or not all(
+            isinstance(item, str) for item in parsed
+        ):
+            raise ValueError("artifacts deve ser uma lista JSON de strings.")
+        return v
 
 
 class ExecutionQueueActionRequest(BaseModel):

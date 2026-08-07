@@ -303,10 +303,21 @@ def list_artifacts(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    artifacts = []
+    artifacts: list[str] = []
     if db_exec.artifacts:
         with contextlib.suppress(json.JSONDecodeError, TypeError):
-            artifacts = json.loads(str(db_exec.artifacts))
+            parsed = json.loads(str(db_exec.artifacts))
+            # Precisa ser list[str] para bater com o response_model. A coluna
+            # também é escrita por POST /telemetry/end/{exec_id} (telemetria
+            # externa), que aceita `artifacts` como string livre sem validar a
+            # forma — um JSON válido mas fora do formato (dict, lista com
+            # não-string) antes era servido cru; com response_model declarado
+            # o FastAPI falharia a validação e devolveria 500. Formato
+            # inesperado cai no mesmo fallback de lista vazia do parse falho.
+            if isinstance(parsed, list) and all(
+                isinstance(item, str) for item in parsed
+            ):
+                artifacts = parsed
 
     return schemas.ExecutionArtifactsResponse(exec_id=exec_id, artifacts=artifacts)
 
