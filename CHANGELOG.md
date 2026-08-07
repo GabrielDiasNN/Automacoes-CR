@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`compute_attention_score` (`Orchestrator/app/services/scoring.py`) nunca aplicava o bônus de "fila envelhecida" a execuções PENDING**: `EXECUTION_ACTIVE_STATUSES` inclui tanto `PENDING` quanto `RUNNING`, mas a função testava `if ex.status in EXECUTION_ACTIVE_STATUSES` (ramo genérico de "execução ativa", +45) **antes** de `elif ex.status == "PENDING"` (ramo específico de fila, +18, com +22 adicional se `pending_age >= 900`) — como toda execução PENDING já satisfaz a primeira condição, o segundo ramo era código morto, nunca alcançado. Na prática, execuções PENDING recebiam sempre o bônus genérico de "ativa" (e nunca escalavam por tempo de fila, só por tempo de execução via `max_runtime_minutes`, que não se aplica a quem ainda não começou a rodar). Encontrado ao escrever cobertura de teste direta para a função (achado #2 da revisão completa do repositório, ver Adicionado abaixo) — nenhum teste existente chegava a exercitar a aritmética exata o suficiente para expor o ramo inalcançável. Corrigido invertendo a ordem: PENDING é checado primeiro (ramo específico), RUNNING cai no ramo genérico via `elif ex.status in EXECUTION_ACTIVE_STATUSES` em seguida.
+
+### Adicionado
+- **47 testes unitários novos cobrindo duas peças de lógica de negócio real sem teste direto**, achados #2 e #3 de uma revisão completa do repositório (grafo de 4 revisores paralelos — arquitetura/qualidade/performance/design — mais um verificador independente de contexto limpo, que confirmou os achados lendo o código): `Orchestrator/tests/test_scoring_unit.py` (27 casos, `compute_attention_score` — todas as 7 regras de pontuação, incluindo o teto de escala de retry e o teste de regressão do bug corrigido acima) e `Orchestrator/tests/test_beneficiamento_health_unit.py` (20 casos, `_build_period_health_context`/`_build_health_from_periods` do domínio Beneficiamento — toda a cadeia de precedência de `_primary_issue_for_period` e a composição de issues secundárias, chamando as funções reais em vez de fazer monkeypatch da fronteira que as invoca, como os testes existentes do domínio faziam).
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido

@@ -27,9 +27,21 @@ def compute_attention_score(
 
     queue_group = ex.queue_group or getattr(ex.automation, "queue_group", None)
 
-    # 1. Regras de Estado de Execução Ativa
-    stop_allowed = ex.status in EXECUTION_ACTIVE_STATUSES
-    if stop_allowed:
+    # 1. Regras de Fila (PENDING) — checada antes do ramo genérico de "ativa"
+    # abaixo, já que EXECUTION_ACTIVE_STATUSES inclui PENDING e RUNNING; sem essa
+    # ordem, PENDING nunca alcançava este ramo e o bônus de fila envelhecida
+    # nunca era aplicado.
+    if ex.status == "PENDING":
+        score += 18
+        reasons.append("Execução aguardando processamento na fila")
+        if ex.started_at:
+            pending_age = (now - ex.started_at).total_seconds()
+            if pending_age >= 900:
+                score += 22
+                reasons.append("Fila envelhecida para esta execução")
+
+    # 2. Regras de Estado de Execução Ativa (RUNNING)
+    elif ex.status in EXECUTION_ACTIVE_STATUSES:
         score += 45
         reasons.append("Execução ativa exige acompanhamento direto")
         if ex.started_at and getattr(ex, "automation", None):
@@ -40,18 +52,10 @@ def compute_attention_score(
                     score += 35
                     reasons.append("Execução ativa acima do tempo máximo cadastrado")
 
-    # 2. Regras de Estado Terminal com erro ou PENDING
+    # 3. Regras de Estado Terminal com erro
     elif ex.status in EXECUTION_FAILED_STATUSES:
         score += 30
         reasons.append("Execução terminal com necessidade de triagem")
-    elif ex.status == "PENDING":
-        score += 18
-        reasons.append("Execução aguardando processamento na fila")
-        if ex.started_at:
-            pending_age = (now - ex.started_at).total_seconds()
-            if pending_age >= 900:
-                score += 22
-                reasons.append("Fila envelhecida para esta execução")
 
     # 3. Regras de Concorrência e Conflitos de Requeue
     automation_id = int(ex.automation_id)
