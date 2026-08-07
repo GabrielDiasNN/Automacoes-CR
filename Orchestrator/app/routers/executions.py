@@ -252,7 +252,7 @@ def get_execution(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{exec_id}/logs")
+@router.get("/{exec_id}/logs", response_model=schemas.ExecutionLogsResponse)
 def get_execution_logs(
     exec_id: str,
     # `offset` negativo fatiava a lista pelo fim silenciosamente; `limit` sem
@@ -261,7 +261,7 @@ def get_execution_logs(
     limit: int = Query(500, ge=1, le=5000),
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> dict[str, Any]:
+) -> schemas.ExecutionLogsResponse:
     """Retorna logs de uma execução com paginação por linhas."""
     db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
@@ -271,13 +271,13 @@ def get_execution_logs(
     total_lines = len(all_lines)
     sliced = all_lines[offset : offset + limit]
 
-    return {
-        "exec_id": exec_id,
-        "total_lines": total_lines,
-        "offset": offset,
-        "limit": limit,
-        "lines": sliced,
-    }
+    return schemas.ExecutionLogsResponse(
+        exec_id=exec_id,
+        total_lines=total_lines,
+        offset=offset,
+        limit=limit,
+        lines=sliced,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -285,23 +285,34 @@ def get_execution_logs(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{exec_id}/artifacts")
+@router.get("/{exec_id}/artifacts", response_model=schemas.ExecutionArtifactsResponse)
 def list_artifacts(
     exec_id: str,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> dict[str, Any]:
+) -> schemas.ExecutionArtifactsResponse:
     """Lista artefatos gerados por uma execução."""
     db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    artifacts = []
+    artifacts: list[str] = []
     if db_exec.artifacts:
         with contextlib.suppress(json.JSONDecodeError, TypeError):
-            artifacts = json.loads(str(db_exec.artifacts))
+            parsed = json.loads(str(db_exec.artifacts))
+            # Precisa ser list[str] para bater com o response_model. A coluna
+            # também é escrita por POST /telemetry/end/{exec_id} (telemetria
+            # externa), que aceita `artifacts` como string livre sem validar a
+            # forma — um JSON válido mas fora do formato (dict, lista com
+            # não-string) antes era servido cru; com response_model declarado
+            # o FastAPI falharia a validação e devolveria 500. Formato
+            # inesperado cai no mesmo fallback de lista vazia do parse falho.
+            if isinstance(parsed, list) and all(
+                isinstance(item, str) for item in parsed
+            ):
+                artifacts = parsed
 
-    return {"exec_id": exec_id, "artifacts": artifacts}
+    return schemas.ExecutionArtifactsResponse(exec_id=exec_id, artifacts=artifacts)
 
 
 # Extensões que `scan_for_artifacts` (worker.py) reconhece como entregável.

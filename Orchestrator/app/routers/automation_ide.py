@@ -30,12 +30,12 @@ PROJECT_ROOT = get_project_root()
 router = APIRouter(prefix="/api/automations", tags=["Automation IDE"])
 
 
-@router.get("/{auto_id}/scripts")
+@router.get("/{auto_id}/scripts", response_model=list[schemas.ManagedFileEntry])
 def get_automation_scripts(
     auto_id: int,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> list[dict[str, Any]]:
+) -> list[schemas.ManagedFileEntry]:
     auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
@@ -43,7 +43,7 @@ def get_automation_scripts(
     auto_dir = resolve_automation_dir(str(auto.script_path), PROJECT_ROOT)
 
     allowed_exts = (".ps1", ".py", ".sql", ".bat", ".md", ".js")
-    scripts: list[dict[str, Any]] = []
+    scripts: list[schemas.ManagedFileEntry] = []
 
     for filename in os.listdir(auto_dir):
         if not filename.endswith(allowed_exts) or filename.startswith("."):
@@ -56,7 +56,7 @@ def get_automation_scripts(
         try:
             with open(jf, encoding="utf-8") as f:
                 content = f.read()
-            scripts.append({"filename": filename, "content": content})
+            scripts.append(schemas.ManagedFileEntry(filename=filename, content=content))
         except OSError:
             pass
 

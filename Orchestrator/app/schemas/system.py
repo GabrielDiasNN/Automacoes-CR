@@ -89,6 +89,13 @@ class FileContent(BaseModel):
     content: str = Field(..., max_length=1_000_000)
 
 
+class ManagedFileEntry(BaseModel):
+    """Um arquivo gerenciado (config JSON ou script) listado pela Web IDE."""
+
+    filename: str
+    content: str
+
+
 class SystemHealth(BaseModel):
     status: str
     timestamp: Any
@@ -691,6 +698,25 @@ class SystemVersion(BaseModel):
     uptime_seconds: float
     max_workers: int
     allowed_origins: list[str]
+
+
+class SystemUptime(BaseModel):
+    """Tempo de atividade do Orchestrator (`GET /api/system/uptime`)."""
+
+    started_at: str
+    uptime_seconds: float
+    uptime_human: str
+
+
+class WaitForTaskResponse(BaseModel):
+    """Resultado do long-polling de wake-up do Worker (`GET /api/system/wait-for-task`).
+
+    ``status`` é ``"wakeup"`` quando um sinal chegou dentro do timeout, ou
+    ``"timeout"`` quando os 30s se esgotaram sem sinal — os dois únicos
+    valores retornados por ``runtime.wait_for_task_signal``.
+    """
+
+    status: str
 
 
 # ---------------------------------------------------------------------------

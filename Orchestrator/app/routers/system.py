@@ -279,19 +279,19 @@ def list_audit_log(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/uptime")
+@router.get("/uptime", response_model=schemas.SystemUptime)
 def get_uptime(
     request: Request, _api_key: str = Depends(get_api_key)
-) -> dict[str, Any]:
+) -> schemas.SystemUptime:
     """Retorna o tempo de atividade do Orchestrator."""
     startup_time = request.app.state.startup_time
     uptime = get_now_local() - startup_time
 
-    return {
-        "started_at": schemas.format_dt_br(startup_time),
-        "uptime_seconds": round(uptime.total_seconds(), 2),
-        "uptime_human": str(uptime).split(".", maxsplit=1)[0],
-    }
+    return schemas.SystemUptime(
+        started_at=schemas.format_dt_br(startup_time),
+        uptime_seconds=round(uptime.total_seconds(), 2),
+        uptime_human=str(uptime).split(".", maxsplit=1)[0],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +553,14 @@ def manual_purge(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/wait-for-task")
-async def wait_for_task(_api_key: str = Depends(get_api_key)) -> dict[str, Any]:
+@router.get("/wait-for-task", response_model=schemas.WaitForTaskResponse)
+async def wait_for_task(
+    _api_key: str = Depends(get_api_key),
+) -> schemas.WaitForTaskResponse:
     """Endpoint de long-polling para wake-up do Worker (v6.2.0)."""
-    return {"status": await wait_for_task_signal(timeout_seconds=30)}
+    return schemas.WaitForTaskResponse(
+        status=await wait_for_task_signal(timeout_seconds=30)
+    )
 
 
 @router.post("/ws-token", response_model=schemas.WsTokenResponse)

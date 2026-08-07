@@ -337,7 +337,7 @@ def create_automation(
 # ---------------------------------------------------------------------------
 
 
-@router.put("/{automation_id}", response_model=schemas.AutomationResponse)
+@router.patch("/{automation_id}", response_model=schemas.AutomationResponse)
 def update_automation(
     automation_id: int,
     automation_update: schemas.AutomationUpdate,
@@ -396,12 +396,14 @@ def update_automation(
     return _build_mutation_response(db, db_auto, int(audit_entry.id))
 
 
-@router.get("/{automation_id}/overview")
+@router.get(
+    "/{automation_id}/overview", response_model=schemas.AutomationOverviewResponse
+)
 def get_automation_overview(
     automation_id: int,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> dict[str, Any]:
+) -> schemas.AutomationOverviewResponse:
     """Retorna payload consolidado da automacao para telas operacionais."""
     db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
@@ -425,15 +427,15 @@ def get_automation_overview(
         summary.automation_name = str(db_auto.name)
         recent_payload.append(summary)
 
-    return {
-        "automation": auto_resp,
-        "metrics_24h": {
-            "success_count": auto_resp.success_24h,
-            "error_count": auto_resp.failures_24h,
-            "pending_count": auto_resp.pending_count,
-        },
-        "recent_executions": recent_payload,
-    }
+    return schemas.AutomationOverviewResponse(
+        automation=auto_resp,
+        metrics_24h=schemas.AutomationOverviewMetrics24h(
+            success_count=auto_resp.success_24h,
+            error_count=auto_resp.failures_24h,
+            pending_count=auto_resp.pending_count,
+        ),
+        recent_executions=recent_payload,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -595,13 +597,14 @@ def start_automation(
 
 @router.post("/test-mode/global")
 def set_global_test_mode(
-    enabled: bool,
+    payload: schemas.TestModeRequest,
     request: Request,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
     """Ativa ou desativa o Modo Teste para TODAS as automacoes cadastradas."""
 
+    enabled = payload.enabled
     repo.set_test_mode_for_all(db, enabled)
 
     # Sincroniza a variavel de ambiente do Windows (orquestracao no service, #12)
@@ -626,7 +629,7 @@ def set_global_test_mode(
 @router.post("/{automation_id}/test-mode")
 def set_automation_test_mode(
     automation_id: int,
-    enabled: bool,
+    payload: schemas.TestModeRequest,
     request: Request,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
@@ -639,6 +642,7 @@ def set_automation_test_mode(
 
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
+    enabled = payload.enabled
     db_auto.test_mode = enabled  # type: ignore[assignment]
 
     log_audit(
