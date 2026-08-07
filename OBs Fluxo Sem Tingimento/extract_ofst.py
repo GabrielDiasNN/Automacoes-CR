@@ -30,7 +30,7 @@ sys.path.insert(
 )
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from automation_log import make_logger
+from automation_log import ensure_utf8_streams, make_logger
 from dotenv import load_dotenv
 from errors import DadoIncompletoError, SchemaInvalidoError
 from models import AvaliacaoOb, EstoqueDeposito, ObSemTingimento, ResumoExecucao
@@ -52,10 +52,7 @@ from validators import (
     validate_ob_query,
 )
 
-if sys.stdout.encoding != "utf-8":
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-if sys.stderr.encoding != "utf-8":
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+ensure_utf8_streams()
 
 # Import-HubEnv (run.ps1) ja exporta as variaveis para o processo filho, mas o
 # script tambem e documentado para execucao standalone (README) — carrega o

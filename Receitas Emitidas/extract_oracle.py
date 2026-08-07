@@ -15,7 +15,7 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
 )
 import oracledb
-from automation_log import make_logger
+from automation_log import ensure_utf8_streams, make_logger
 from oracle_extract import (
     OracleCredentials,
     compute_hash,
@@ -28,11 +28,7 @@ from oracle_extract import (
 )
 from oracle_retry import CircuitBreakerError, make_oracle_retry
 
-# Forca UTF-8 para garantir interoperabilidade
-if sys.stdout.encoding != "utf-8":
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-if sys.stderr.encoding != "utf-8":
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+ensure_utf8_streams()
 
 log = make_logger("PY-EXTRACT")
 
