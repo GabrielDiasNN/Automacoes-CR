@@ -349,8 +349,8 @@ def get_beneficiamento_detail(
         None,
         description="Filtra por status de execução: 'confirmada' ou 'planejada'",
     ),
-    page: int = Query(1, description="Página do detalhe"),
-    limit: int = Query(50, description="Limite máximo por página"),
+    page: int = Query(1, ge=1, description="Página do detalhe"),
+    limit: int = Query(50, ge=1, le=200, description="Limite máximo por página"),
     include_raw: bool = Query(
         False, description="Quando verdadeiro, devolve também o payload bruto"
     ),

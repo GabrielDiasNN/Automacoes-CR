@@ -122,8 +122,8 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.ExecutionSummary])
 def list_executions(  # pylint: disable=R0913,R0914,R0917
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=200),
     status: str | None = None,
     automation_id: int | None = None,
     queue_group: str | None = None,
@@ -135,13 +135,6 @@ def list_executions(  # pylint: disable=R0913,R0914,R0917
     _api_key: str = Depends(get_api_key),
 ) -> schemas.PaginatedResponse[schemas.ExecutionSummary]:
     """Lista execuções com filtros avançados e paginação. Otimizado com joinedload."""
-    if page < 1:
-        raise HTTPException(status_code=422, detail="page deve ser >= 1.")
-    if per_page < 1 or per_page > 200:
-        raise HTTPException(
-            status_code=422, detail="per_page deve estar entre 1 e 200."
-        )
-
     query = exec_repo.base_query_with_automation(db)
     query = _apply_execution_filters(
         query,
