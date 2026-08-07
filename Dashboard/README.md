@@ -44,7 +44,7 @@ validação final obrigatória para qualquer mudança em `Dashboard/src/`.
 
 ## Estrutura de pastas
 
-`src/pages/` e `src/components/` coexistem em três padrões, cada um com um
+`src/pages/` e `src/components/` coexistem em quatro padrões, cada um com um
 gatilho próprio — não é inconsistência acidental:
 
 - **`components/ui/`** — design system genérico (`Button`, `Card`, `DataTable`,
@@ -58,13 +58,22 @@ gatilho próprio — não é inconsistência acidental:
   quando só existe **um** bloco isolável de uma página (não uma feature
   inteira com vários arquivos), a extração é por sufixo de nome de arquivo
   dentro de `pages/`, não uma pasta nova.
+- **`components/<Nome>.tsx` solto na raiz de `components/`** (`Shell`,
+  `StatusBar`, `CommandPalette`, `ApiKeyGate`) — componentes de app-shell/layout
+  usados **uma única vez**, no topo da árvore de rotas (`App.tsx`/`Shell.tsx`),
+  compondo o layout de nível superior em vez do conteúdo de uma página
+  específica. Não são genéricos o bastante para `ui/` (não são reusados por
+  2+ páginas) nem exclusivos de uma feature (não há uma página "dona" deles),
+  então ficam soltos na raiz em vez de em subpasta.
 - **Sem subdivisão** (`AutomacoesPage`, `MonitorPage`, `PainelPage`,
   `SystemPage`) — o JSX cabe inteiro na própria página sem nenhum bloco grande
   o bastante para justificar extração.
 
 Regra prática: extraia para pasta de feature ao passar de 1 subcomponente
-exclusivo; extraia por sufixo de arquivo para um único bloco isolável; não
-force extração antecipada em página que ainda cabe inline.
+exclusivo; extraia por sufixo de arquivo para um único bloco isolável;
+componente de app-shell usado uma única vez no topo da árvore de rotas fica
+solto na raiz de `components/`; não force extração antecipada em página que
+ainda cabe inline.
 
 ## Design system
 

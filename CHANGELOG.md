@@ -6,10 +6,11 @@
 - **`Dashboard/README.md` documentava incorretamente `localStorage` como onde a API Key é persistida** — desde sempre é `sessionStorage` (mais restritivo, não sobrevive ao fechamento da aba; há teste dedicado proibindo `localStorage`, conforme `CLAUDE.md` da raiz já documentava). Corrigido.
 
 ### Adicionado
-- **Seção "Estrutura de pastas" em `Dashboard/README.md`** documentando os 3 padrões de organização que coexistem em `src/pages/`/`src/components/` (`components/ui/` genérico, `components/<feature>/` para páginas com múltiplos subcomponentes exclusivos, `pages/<Page>.<Sufixo>.tsx` para um único bloco isolável, sem subdivisão quando o JSX cabe inline) e a regra prática de quando usar cada um.
+- **Seção "Estrutura de pastas" em `Dashboard/README.md`** documentando os 4 padrões de organização que coexistem em `src/pages/`/`src/components/` (`components/ui/` genérico, `components/<feature>/` para páginas com múltiplos subcomponentes exclusivos, `pages/<Page>.<Sufixo>.tsx` para um único bloco isolável, `components/<Nome>.tsx` solto na raiz para componentes de app-shell/layout usados uma única vez no topo da árvore de rotas, sem subdivisão quando o JSX cabe inline) e a regra prática de quando usar cada um.
 
 ### Notas
 - Achado #21 (design) de uma revisão completa do repositório: "estrutura de pastas do Dashboard sem convenção única, três padrões coexistindo sem regra declarada em docs/". Nenhum arquivo do Dashboard foi movido — mover ~15 arquivos entre pastas para forçar um padrão único teria custo/risco real (imports quebrados, histórico de git fragmentado) sem ganho funcional, e os 3 padrões já são justificados por gatilhos distintos e coerentes (visível ao ler o código). A correção real do achado é documentar a regra que já existe implicitamente, não impor uma reorganização especulativa. Mudança documental pura, sem código tocado.
+- **4º padrão adicionado após revisão de código do PR (severidade média)**: os 3 padrões originais não cobriam `Shell.tsx`, `StatusBar.tsx`, `CommandPalette.tsx` e `ApiKeyGate.tsx` — arquivos `.tsx` soltos na raiz de `components/`, confirmados por leitura de `App.tsx`/`Shell.tsx` como usados uma única vez no topo da árvore de rotas (app-shell/layout), não específicos de uma feature nem genéricos o bastante para `ui/`. Documentado o 4º padrão para cobrir esse caso.
 
 ## [1.3.33] - 06/08/2026
 
