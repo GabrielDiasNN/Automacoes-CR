@@ -17,6 +17,7 @@ import {
   ErrorState,
   Loading,
   Nameplate,
+  Select,
   Sparkline,
   StatTile,
   StatusTag,
@@ -43,16 +44,6 @@ const REFRESH_PERIODS: { value: "diario" | "mensal"; label: string }[] = [
   { value: "diario", label: "Diário" },
   { value: "mensal", label: "Mensal" },
 ];
-
-const selectStyle: React.CSSProperties = {
-  background: "var(--surface-up)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  color: "var(--text-mid)",
-  fontFamily: "var(--font-mono)",
-  fontSize: "var(--fs-small)",
-  padding: "6px var(--sp-3)",
-};
 
 const GARGALO_COLUMNS: Column<BeneficiamentoGargalo>[] = [
   { key: "maquina", header: "Máquina", render: (r) => r.maquina },
@@ -259,8 +250,7 @@ export function BeneficiamentoPage() {
         title="Beneficiamento"
         actions={
           <div className={page.toolbar}>
-            <select
-              style={selectStyle}
+            <Select
               value={refreshPeriod}
               onChange={(e) => setRefreshPeriod(e.target.value as "diario" | "mensal")}
               aria-label="Período do snapshot"
@@ -270,7 +260,7 @@ export function BeneficiamentoPage() {
                   {p.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={doRefresh} disabled={refreshing}>
               {refreshing ? "Atualizando…" : "Atualizar snapshot"}
             </Button>
