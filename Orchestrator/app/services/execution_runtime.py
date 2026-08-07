@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import case
@@ -109,6 +110,27 @@ def get_group_active_execution(
     if exclude_automation_id is not None:
         query = query.filter(models.Automation.id != exclude_automation_id)
     return query.order_by(models.Execution.started_at.desc()).first()
+
+
+def cooldown_remaining_minutes(
+    reference_time: datetime | None,
+    cooldown_minutes: int | None,
+    now: datetime,
+) -> float | None:
+    """Minutos restantes de cooldown a partir de `reference_time`, ou None se
+    o cooldown não está configurado ou já expirou.
+
+    Cada chamador decide o que conta como `reference_time` (início ou fim da
+    última execução) — essa diferença é deliberada entre o start manual
+    (conta do início) e o auto-retry (conta do fim da falha), então a função
+    só compartilha a aritmética/comparação, não a escolha do marco temporal.
+    """
+    if not cooldown_minutes or cooldown_minutes <= 0 or reference_time is None:
+        return None
+    elapsed_minutes = (now - reference_time).total_seconds() / 60
+    if elapsed_minutes >= cooldown_minutes:
+        return None
+    return round(cooldown_minutes - elapsed_minutes, 1)
 
 
 def _has_running_execution_for_group(

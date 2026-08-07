@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **Lógica de cooldown/backoff duplicada e já divergente entre `start_automation` (router) e o auto-retry (`scheduler_runtime.py`)**: as duas implementações independentes da mesma categoria de regra (backoff por cooldown) já usavam marcos temporais diferentes — o start manual contava a partir de `latest_exec.started_at`, o auto-retry a partir de `db_exec.finished_at` — sem nenhuma delegação a um serviço comum, exatamente o risco de divergência silenciosa que motivou o achado. Extraída a aritmética/comparação compartilhada para `execution_runtime.cooldown_remaining_minutes(reference_time, cooldown_minutes, now)`; cada chamador continua escolhendo seu próprio `reference_time` (a diferença entre início e fim é deliberada, documentada na função), então o comportamento observável de nenhum dos dois caminhos mudou — só a duplicação foi removida.
+
+### Notas
+- Achado #1 (arquitetura) de uma revisão completa do repositório. 5 testes novos em `test_execution_runtime_unit.py` cobrindo a função pura (sem cooldown configurado, sem `reference_time`, ainda em cooldown, no limiar exato, já expirado); os testes existentes de `start_automation` e do auto-retry (7 arquivos que já cobriam `cooldown`) passam sem alteração, confirmando que o refactor não mudou comportamento. Suíte completa (`752 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
