@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`OBs Fluxo Sem Tingimento/automation.manifest.json` tinha uma chave `script_path` solta na raiz**, única entre os 5 manifestos reais + `_Template`. `automation_preflight.py` só valida `orchestrator.script_path`; a chave solta nunca era lida por nenhum consumidor (confirmado por grep em todo `Orchestrator/app` e `Tools/`), livre para divergir do caminho real sem qualquer validação notando. Removida.
+
+### Notas
+- Achado #16 (design) de uma revisão completa do repositório. 5 testes novos em `test_automation_manifests_consistency.py` (parametrizados pelas 5 automações reais) travando que nenhum manifesto tenha `script_path` na raiz e que todos continuem tendo `orchestrator.script_path`. `Tools/Test-AutomationCatalog.ps1` (gate de governança do catálogo) segue aprovando os 6 manifestos. Suíte completa (`752 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
