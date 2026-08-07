@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **Paginação validada de 3 formas diferentes no mesmo conjunto de routers**: `automations.py` já usava `Query(ge=1)/Query(ge=1, le=200)` declarativo (documentado no OpenAPI); `executions.py` recebia `page`/`per_page` crus e validava manualmente com `if` (nunca aparecia no schema OpenAPI); `beneficiamento.py` (`/detail`) não tinha nenhum bound. Padronizados os 3 para o mesmo estilo declarativo de `automations.py`.
+
+### Notas
+- Achado #17 (design) de uma revisão completa do repositório. `test_list_executions_rejects_invalid_pagination_filter_values` atualizado para o formato de erro padrão do FastAPI (lista de `{loc, msg, ...}` em vez de string customizada — o `HTTPException` manual removido mudava o formato do erro 422, não o status code). 3 testes novos em `test_beneficiamento.py` (`test_beneficiamento_detail_rejects_out_of_range_page_and_limit`, parametrizado) travando os bounds novos de `/detail`. Suíte completa (`750 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido

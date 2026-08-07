@@ -286,11 +286,13 @@ def test_list_executions_rejects_invalid_pagination_filter_values(
 ) -> None:
     page_res = client.get("/api/executions?page=0", headers=AUTH_HEADERS)
     assert page_res.status_code == 422
-    assert "page deve ser >= 1" in page_res.json()["detail"]
+    assert any(err["loc"] == ["query", "page"] for err in page_res.json()["detail"])
 
     per_page_res = client.get("/api/executions?per_page=201", headers=AUTH_HEADERS)
     assert per_page_res.status_code == 422
-    assert "per_page deve estar entre 1 e 200" in per_page_res.json()["detail"]
+    assert any(
+        err["loc"] == ["query", "per_page"] for err in per_page_res.json()["detail"]
+    )
 
 
 def test_list_executions_rejects_invalid_status_priority_and_dates(

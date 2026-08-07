@@ -424,6 +424,26 @@ def test_beneficiamento_historico_rejects_out_of_range_limit(
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize("page_value,limit_value", [(0, 10), (1, 0), (1, 201)])
+def test_beneficiamento_detail_rejects_out_of_range_page_and_limit(
+    client: TestClient, page_value: int, limit_value: int
+) -> None:
+    # Regressão do achado #17: page/limit não tinham nenhum bound (ge/le),
+    # diferente da paginação de automations.py/executions.py (page: ge=1,
+    # limit: ge=1/le=200). Agora valores fora do range devem retornar 422.
+    response = client.get(
+        "/api/beneficiamento/detail",
+        headers=AUTH_HEADERS,
+        params={
+            "target_type": "produto",
+            "alternativo": "03212",
+            "page": page_value,
+            "limit": limit_value,
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_beneficiamento_detail_endpoint_for_product(client: TestClient) -> None:
     """Valida o drill-down por produto com resposta paginada."""
     response = client.get(
