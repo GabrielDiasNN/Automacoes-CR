@@ -21,6 +21,7 @@ _AUTOMATION_DIRS = [
 ]
 
 
+@pytest.mark.unitario
 @pytest.mark.parametrize("automation_dir", _AUTOMATION_DIRS)
 def test_manifesto_nao_tem_script_path_solto_na_raiz(automation_dir: str) -> None:
     manifest_path = _REPO_ROOT / automation_dir / "automation.manifest.json"
