@@ -259,7 +259,7 @@ def get_execution(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{exec_id}/logs")
+@router.get("/{exec_id}/logs", response_model=schemas.ExecutionLogsResponse)
 def get_execution_logs(
     exec_id: str,
     # `offset` negativo fatiava a lista pelo fim silenciosamente; `limit` sem
@@ -268,7 +268,7 @@ def get_execution_logs(
     limit: int = Query(500, ge=1, le=5000),
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> dict[str, Any]:
+) -> schemas.ExecutionLogsResponse:
     """Retorna logs de uma execução com paginação por linhas."""
     db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
@@ -278,13 +278,13 @@ def get_execution_logs(
     total_lines = len(all_lines)
     sliced = all_lines[offset : offset + limit]
 
-    return {
-        "exec_id": exec_id,
-        "total_lines": total_lines,
-        "offset": offset,
-        "limit": limit,
-        "lines": sliced,
-    }
+    return schemas.ExecutionLogsResponse(
+        exec_id=exec_id,
+        total_lines=total_lines,
+        offset=offset,
+        limit=limit,
+        lines=sliced,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -292,12 +292,12 @@ def get_execution_logs(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{exec_id}/artifacts")
+@router.get("/{exec_id}/artifacts", response_model=schemas.ExecutionArtifactsResponse)
 def list_artifacts(
     exec_id: str,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> dict[str, Any]:
+) -> schemas.ExecutionArtifactsResponse:
     """Lista artefatos gerados por uma execução."""
     db_exec = exec_repo.get_by_id(db, exec_id)
     if not db_exec:
@@ -308,7 +308,7 @@ def list_artifacts(
         with contextlib.suppress(json.JSONDecodeError, TypeError):
             artifacts = json.loads(str(db_exec.artifacts))
 
-    return {"exec_id": exec_id, "artifacts": artifacts}
+    return schemas.ExecutionArtifactsResponse(exec_id=exec_id, artifacts=artifacts)
 
 
 # Extensões que `scan_for_artifacts` (worker.py) reconhece como entregável.

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **5 endpoints de leitura sem `response_model`** destoavam do resto da API, que declara `response_model=schemas.X` em praticamente todos os GETs: `get_automation_overview`, `get_automation_configs`, `get_automation_scripts`, `get_execution_logs` e `list_artifacts` retornavam `dict[str, Any]`/`list[dict]` cru, sem contrato tipado no OpenAPI. Adicionados `AutomationOverviewResponse`+`AutomationOverviewMetrics24h`, `ManagedFileEntry` (compartilhado entre `/configs` e `/scripts`, que já tinham o mesmo shape `{filename, content}`), `ExecutionLogsResponse` e `ExecutionArtifactsResponse`.
+
+### Notas
+- Achado #18 (design) de uma revisão completa do repositório. Nenhum campo mudou de nome ou tipo — só passou a ser declarado explicitamente; o cliente TypeScript do Dashboard (`api/orchestrator.ts`) já usava os mesmos nomes de campo nos seus tipos hand-written, não precisou de ajuste. 5 testes novos em `test_openapi_response_models_unit.py` verificando que cada um dos 5 endpoints agora referencia um schema nomeado (`$ref`) no `/openapi.json`, não mais um objeto genérico. Suíte completa (`752 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido

@@ -394,12 +394,14 @@ def update_automation(
     return _build_mutation_response(db, db_auto, int(audit_entry.id))
 
 
-@router.get("/{automation_id}/overview")
+@router.get(
+    "/{automation_id}/overview", response_model=schemas.AutomationOverviewResponse
+)
 def get_automation_overview(
     automation_id: int,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> dict[str, Any]:
+) -> schemas.AutomationOverviewResponse:
     """Retorna payload consolidado da automacao para telas operacionais."""
     db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
@@ -423,15 +425,15 @@ def get_automation_overview(
         summary.automation_name = str(db_auto.name)
         recent_payload.append(summary)
 
-    return {
-        "automation": auto_resp,
-        "metrics_24h": {
-            "success_count": auto_resp.success_24h,
-            "error_count": auto_resp.failures_24h,
-            "pending_count": auto_resp.pending_count,
-        },
-        "recent_executions": recent_payload,
-    }
+    return schemas.AutomationOverviewResponse(
+        automation=auto_resp,
+        metrics_24h=schemas.AutomationOverviewMetrics24h(
+            success_count=auto_resp.success_24h,
+            error_count=auto_resp.failures_24h,
+            pending_count=auto_resp.pending_count,
+        ),
+        recent_executions=recent_payload,
+    )
 
 
 # ---------------------------------------------------------------------------

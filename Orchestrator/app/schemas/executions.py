@@ -147,3 +147,16 @@ class ExecutionQueueActionResponse(BaseModel):
     retry_count: int
     max_retries: int
     recovery_action: str
+
+
+class ExecutionLogsResponse(BaseModel):
+    exec_id: str
+    total_lines: int
+    offset: int
+    limit: int
+    lines: list[str]
+
+
+class ExecutionArtifactsResponse(BaseModel):
+    exec_id: str
+    artifacts: list[str] = []

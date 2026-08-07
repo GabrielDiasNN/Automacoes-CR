@@ -89,6 +89,13 @@ class FileContent(BaseModel):
     content: str = Field(..., max_length=1_000_000)
 
 
+class ManagedFileEntry(BaseModel):
+    """Um arquivo gerenciado (config JSON ou script) listado pela Web IDE."""
+
+    filename: str
+    content: str
+
+
 class SystemHealth(BaseModel):
     status: str
     timestamp: Any
