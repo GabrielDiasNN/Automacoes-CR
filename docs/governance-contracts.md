@@ -23,9 +23,11 @@ Ordem real do array `$checks` em `Tools/ValidarAutomacoes.ps1` (função `Invoke
 | 11 | `Test-ArchitectureStandard.ps1` | Oracle fora de `oracle.py`, sessão sem `session_scope` |
 | 12 | `Test-DateConformidade.ps1` | Datas fora do formato DD/MM/AAAA |
 | 13 | `Test-SemanticGovernance.ps1` | Drift entre monitor, constantes, docs, skills, catálogo e dependências |
-| 14 | `Test-NodeCommunications.ps1` | Contrato Node.js (whatsapp-offline.test.js) |
+| 14 | `Test-NodeCommunications.ps1` | Contrato Node.js (whatsapp-offline.test.js) + suíte de unidade de `lib/WhatsApp-Core.js` (`node:test`, gate de cobertura 90% linhas/branches/funções) |
 
 Nota: `Test-SkillsGovernance.ps1` e `Test-DashboardTemplate.ps1` **não** fazem parte do array `$checks` acima — rodam em pontos próprios do script, via `Invoke-SkillsGovernanceCheck` e `Invoke-DashboardTemplateCheck`, respectivamente.
+
+Nota: `Test-NodeCommunications.ps1` roda `npm test` em cada diretório com `package.json` (`Receitas Bloqueadas/`, `lib/`), exigindo `node_modules/` já instalado **apenas quando o `package.json` do diretório declara `dependencies`/`devDependencies` não vazias** — `Receitas Bloqueadas/package.json` não declara nenhuma (o teste usa só `assert`/`fs`/`path` nativos) e sempre roda sem instalação prévia; `lib/package.json` exige o pacote real `whatsapp-web.js` instalado (`require()` de topo, mesmo com os testes trocando a implementação depois via seam de DI) e `node_modules` é gitignored. Sem essa checagem condicional, um clone novo bloquearia todo commit local até alguém rodar `npm ci` manualmente em `lib/`. Diretório que declara dependências mas ainda não tem `node_modules` é pulado com `[SKIP]` no gate local — não falha o commit, mas também não valida essa suíte localmente. Rode `npm ci --prefix lib` uma vez após clonar (ou `PUPPETEER_SKIP_DOWNLOAD=true npm ci --prefix lib` para pular o download do Chromium, ~200MB, desnecessário pois a suíte só mocka o `Client`) para incluir `lib/` no gate local. O CI (job `governanca-agregada`) sempre instala via `npm ci` antes deste gate, então a cobertura real da suíte permanece obrigatória no pipeline bloqueante independentemente do estado da máquina local.
 
 ---
 
