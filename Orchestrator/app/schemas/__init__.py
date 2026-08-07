@@ -17,6 +17,7 @@ from .automations import (
     AutomationPreflightResponse,
     AutomationResponse,
     AutomationUpdate,
+    TestModeRequest,
 )
 from .beneficiamento import (
     BeneficiamentoDashboardPayload,
@@ -141,6 +142,7 @@ __all__ = [
     "AutomationResponse",
     "AutomationOverviewResponse",
     "AutomationOverviewMetrics24h",
+    "TestModeRequest",
     # Executions
     "ExecutionBase",
     "ExecutionResponse",

@@ -529,12 +529,18 @@ def _governar_cadastros(cliente: TestClient) -> None:
     e enchê-las de bookkeeping de manifesto só afastaria cada teste do que ele
     de fato verifica.
 
-    Este wrapper escreve, antes de cada `POST`/`PUT` em `/api/automations`, o
+    Este wrapper escreve, antes de cada `POST`/`PATCH` em `/api/automations`, o
     manifesto coerente com o payload. Quem verifica o bloqueio em si é
     `test_manifesto_obrigatorio.py`, com requisição direta e sem o wrapper.
+
+    `PATCH /api/automations/{id}` (achado #19: verbo corrigido de PUT, que
+    tinha semântica de update parcial) é o único consumidor real do ramo de
+    update deste wrapper — mantido também em `put` por segurança, caso algum
+    outro endpoint em `/api/automations` volte a usar PUT no futuro.
     """
     original_post = cliente.post
     original_put = cliente.put
+    original_patch = cliente.patch
 
     def _preparar(url: str, kwargs: dict[str, Any], *, atual: Any = None) -> None:
         if not _GOVERNANCA_AUTOMATICA[0] or not url.startswith("/api/automations"):
@@ -542,7 +548,7 @@ def _governar_cadastros(cliente: TestClient) -> None:
         payload = kwargs.get("json")
         if not isinstance(payload, dict):
             return
-        # `PUT` é parcial: o preflight avalia o registro já persistido com o
+        # `PATCH` é parcial: o preflight avalia o registro já persistido com o
         # patch aplicado por cima, então o manifesto precisa espelhar a fusão,
         # não só os campos enviados.
         efetivo = {**atual, **payload} if isinstance(atual, dict) else payload
@@ -553,17 +559,23 @@ def _governar_cadastros(cliente: TestClient) -> None:
         _preparar(url, kwargs)
         return original_post(url, **kwargs)
 
+    def _buscar_atual(url: str, kwargs: dict[str, Any]) -> Any:
+        if not url.startswith("/api/automations/"):
+            return None
+        resposta = cliente.get(url, headers=kwargs.get("headers"))
+        return resposta.json() if resposta.status_code == 200 else None
+
     def put(url: str, **kwargs: Any) -> Any:
-        atual = None
-        if url.startswith("/api/automations/"):
-            resposta = cliente.get(url, headers=kwargs.get("headers"))
-            if resposta.status_code == 200:
-                atual = resposta.json()
-        _preparar(url, kwargs, atual=atual)
+        _preparar(url, kwargs, atual=_buscar_atual(url, kwargs))
         return original_put(url, **kwargs)
+
+    def patch_request(url: str, **kwargs: Any) -> Any:
+        _preparar(url, kwargs, atual=_buscar_atual(url, kwargs))
+        return original_patch(url, **kwargs)
 
     setattr(cliente, "post", post)
     setattr(cliente, "put", put)
+    setattr(cliente, "patch", patch_request)
 
 
 @pytest.fixture(autouse=True)

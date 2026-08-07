@@ -337,7 +337,7 @@ def create_automation(
 # ---------------------------------------------------------------------------
 
 
-@router.put("/{automation_id}", response_model=schemas.AutomationResponse)
+@router.patch("/{automation_id}", response_model=schemas.AutomationResponse)
 def update_automation(
     automation_id: int,
     automation_update: schemas.AutomationUpdate,
@@ -597,13 +597,14 @@ def start_automation(
 
 @router.post("/test-mode/global")
 def set_global_test_mode(
-    enabled: bool,
+    payload: schemas.TestModeRequest,
     request: Request,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
     """Ativa ou desativa o Modo Teste para TODAS as automacoes cadastradas."""
 
+    enabled = payload.enabled
     repo.set_test_mode_for_all(db, enabled)
 
     # Sincroniza a variavel de ambiente do Windows (orquestracao no service, #12)
@@ -628,7 +629,7 @@ def set_global_test_mode(
 @router.post("/{automation_id}/test-mode")
 def set_automation_test_mode(
     automation_id: int,
-    enabled: bool,
+    payload: schemas.TestModeRequest,
     request: Request,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
@@ -641,6 +642,7 @@ def set_automation_test_mode(
 
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
+    enabled = payload.enabled
     db_auto.test_mode = enabled  # type: ignore[assignment]
 
     log_audit(

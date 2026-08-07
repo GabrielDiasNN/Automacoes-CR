@@ -35,7 +35,7 @@ def test_smoke_automations_flow_and_controls(client: TestClient) -> None:
     assert created.status_code == 201
     auto_id = created.json()["id"]
 
-    updated = client.put(
+    updated = client.patch(
         f"/api/automations/{auto_id}",
         json={
             "description": "Atualizado no smoke",
@@ -55,7 +55,8 @@ def test_smoke_automations_flow_and_controls(client: TestClient) -> None:
     assert duplicated.status_code == 409
 
     toggled = client.post(
-        f"/api/automations/{auto_id}/test-mode?enabled=true",
+        f"/api/automations/{auto_id}/test-mode",
+        json={"enabled": True},
         headers=AUTH_HEADERS,
     )
     assert toggled.status_code == 200
