@@ -10,12 +10,14 @@ import {
   Button,
   Card,
   Nameplate,
+  Select,
   Sparkline,
   StatTile,
   StatusTag,
   TimeSeries,
   type SeriesLine,
 } from "../components/ui";
+import selectStyles from "../components/ui/Select.module.css";
 import { healthTone, healthLabel } from "../lib/status";
 import page from "./page.module.css";
 
@@ -65,16 +67,6 @@ const HISTORY_WINDOWS = [
   { label: "24h", hours: 24 },
   { label: "7d", hours: 168 },
 ];
-
-const selectStyle: React.CSSProperties = {
-  background: "var(--surface-up)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  color: "var(--text-mid)",
-  fontFamily: "var(--font-mono)",
-  fontSize: "var(--fs-small)",
-  padding: "6px var(--sp-3)",
-};
 
 interface ClickableTileProps {
   onClick?: () => void;
@@ -240,8 +232,7 @@ export function MonitorPage() {
         <Card
           label="tendência da fila"
           actions={
-            <select
-              style={selectStyle}
+            <Select
               value={historyHours}
               onChange={(e) => setHistoryHours(Number(e.target.value))}
               aria-label="Janela de tempo"
@@ -251,7 +242,7 @@ export function MonitorPage() {
                   {w.label}
                 </option>
               ))}
-            </select>
+            </Select>
           }
         >
           <TimeSeries xLabels={xLabels} lines={[pendingLine, runningLine]} height={160} />
@@ -273,8 +264,7 @@ export function MonitorPage() {
         label="console de telemetria · stream ao vivo"
         actions={
           <>
-            <select
-              style={selectStyle}
+            <Select
               value={execFilter}
               onChange={(e) => setExecFilter(e.target.value)}
               aria-label="Filtrar por execução"
@@ -285,9 +275,8 @@ export function MonitorPage() {
                   {id.slice(0, 14)}
                 </option>
               ))}
-            </select>
-            <select
-              style={selectStyle}
+            </Select>
+            <Select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
               aria-label="Filtrar por tipo de evento"
@@ -298,14 +287,15 @@ export function MonitorPage() {
                   {t}
                 </option>
               ))}
-            </select>
+            </Select>
             <input
               type="search"
               placeholder="buscar…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               aria-label="Buscar no console"
-              style={{ ...selectStyle, width: 140 }}
+              className={selectStyles.select}
+              style={{ width: 140 }}
             />
             <Button
               size="sm"
