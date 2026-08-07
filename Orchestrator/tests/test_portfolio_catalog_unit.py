@@ -448,3 +448,38 @@ def test_manifest_runtime_mismatches_retorna_vazio_quando_alinhado(
     issues = pc._manifest_runtime_mismatches(tmp_path, manifest, auto)
 
     assert not issues
+
+
+def test_build_portfolio_lookups_usa_jobs_recebido_sem_reconsultar(
+    db_session: Any, monkeypatch: Any
+) -> None:
+    """Regressão: GET /api/system/overview já calcula `jobs` uma vez; passar
+    esse valor para `_build_portfolio_lookups` não pode disparar uma segunda
+    resolução via `list_scheduled_jobs` (achado de performance #8)."""
+
+    def _falha_se_chamado(_db: Any) -> list[schemas.ScheduledJob]:
+        raise AssertionError("list_scheduled_jobs não deveria ser chamado de novo")
+
+    monkeypatch.setattr(pc, "list_scheduled_jobs", _falha_se_chamado)
+
+    lookups = pc._build_portfolio_lookups(db_session, automation_ids=[], jobs=[])
+
+    assert not lookups["next_run_lookup"]
+
+
+def test_build_portfolio_lookups_sem_jobs_recalcula_internamente(
+    db_session: Any, monkeypatch: Any
+) -> None:
+    """Chamadores que não têm `jobs` prontos (ex.: GET /api/portfolio/health
+    isolado) continuam funcionando: sem o parâmetro, a função recalcula."""
+    chamadas = []
+
+    def _rastreia(db: Any) -> list[schemas.ScheduledJob]:
+        chamadas.append(db)
+        return []
+
+    monkeypatch.setattr(pc, "list_scheduled_jobs", _rastreia)
+
+    pc._build_portfolio_lookups(db_session, automation_ids=[])
+
+    assert len(chamadas) == 1

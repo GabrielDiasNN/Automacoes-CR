@@ -2,13 +2,31 @@
 Testes focados nas operações e controle de Execuções do Orchestrator.
 """
 
+import inspect
 from datetime import timedelta
 
+import app.routers.automations as auto_router
 from app import models
 from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
+
+def test_start_automation_permanece_sincrona_para_nao_bloquear_o_event_loop() -> None:
+    """Guarda de regressão do achado de performance #11 (revisão de `[1.3.34]`):
+    `start_automation` era a única rota `async def` do arquivo sem nenhum
+    `await` no corpo — bloqueava o único event loop do Uvicorn (que também
+    serve os WebSockets de log em tempo real) durante I/O síncrono do
+    SQLAlchemy. Corrigida para `def` simples, que o Starlette já despacha ao
+    threadpool automaticamente, como as demais rotas do arquivo.
+
+    Este teste não teria como acionar contenção real do event loop de forma
+    determinística sem um cenário concorrente pesado — em vez disso, trava a
+    forma da função como guarda direta contra a reintrodução acidental de
+    `async def`.
+    """
+    assert inspect.iscoroutinefunction(auto_router.start_automation) is False
 
 
 def test_start_automation_creates_pending(client: TestClient) -> None:
@@ -40,6 +58,41 @@ def test_reject_duplicate_execution(client: TestClient) -> None:
     client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     res = client.post("/api/automations/1/start", headers=AUTH_HEADERS)
     assert res.status_code == 409
+
+
+def test_reject_start_during_cooldown(client: TestClient, db_session: Session) -> None:
+    """`start_automation` deve devolver 409 quando o cooldown ainda não expirou.
+
+    Cobre a chamada real a `cooldown_remaining_minutes` dentro do router (não só
+    a função pura, já coberta em `test_execution_runtime_unit.py`): a última
+    execução TERMINAL (`SUCCESS`) começou há 5 minutos e o cooldown configurado
+    é de 30, então `started_at` ainda está dentro da janela.
+    """
+    auto = models.Automation(
+        name="Cooldown Test",
+        script_path="./test/run.ps1",
+        cooldown_minutes=30,
+    )
+    db_session.add(auto)
+    db_session.flush()
+
+    db_session.add(
+        models.Execution(
+            id="EXEC_COOLDOWN_LATEST",
+            automation_id=auto.id,
+            status="SUCCESS",
+            requested_by="SYSTEM",
+            started_at=get_now_local() - timedelta(minutes=5),
+            finished_at=get_now_local() - timedelta(minutes=4),
+            duration_seconds=60,
+        )
+    )
+    db_session.commit()
+
+    res = client.post(f"/api/automations/{auto.id}/start", headers=AUTH_HEADERS)
+
+    assert res.status_code == 409
+    assert "Cooldown operacional ativo" in res.json()["detail"]
 
 
 def test_stop_execution(client: TestClient) -> None:
