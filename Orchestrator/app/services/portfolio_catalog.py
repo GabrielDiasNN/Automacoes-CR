@@ -571,8 +571,13 @@ def _build_review_status(  # pylint: disable=too-many-arguments
     return "active", []
 
 
-def _build_portfolio_lookups(db: Session, automation_ids: list[int]) -> dict[str, Any]:
-    jobs = list_scheduled_jobs(db)
+def _build_portfolio_lookups(
+    db: Session,
+    automation_ids: list[int],
+    jobs: list[schemas.ScheduledJob] | None = None,
+) -> dict[str, Any]:
+    if jobs is None:
+        jobs = list_scheduled_jobs(db)
     next_run_lookup = build_next_run_lookup(jobs)
     return {
         "next_run_lookup": next_run_lookup,
@@ -985,6 +990,7 @@ def _collect_ungoverned_rows(
 def _collect_portfolio_rows(
     db: Session,
     project_root: str | Path,
+    jobs: list[schemas.ScheduledJob] | None = None,
 ) -> tuple[list[schemas.PortfolioHealthItem], list[schemas.PortfolioDriftItem]]:
     root = Path(project_root).resolve()
     manifest_entries = load_catalog_manifests(root, include_template=False)
@@ -993,7 +999,7 @@ def _collect_portfolio_rows(
         db.query(models.Automation).order_by(models.Automation.name.asc()).all()
     )
     automation_ids = [int(auto.id) for auto in automations]
-    lookups = _build_portfolio_lookups(db, automation_ids)
+    lookups = _build_portfolio_lookups(db, automation_ids, jobs=jobs)
     db_by_script, db_by_name, automation_response_by_id = _index_automations(
         root, automations, lookups
     )
@@ -1022,8 +1028,9 @@ def _collect_portfolio_rows(
 def build_portfolio_health_response(
     db: Session,
     project_root: str | Path,
+    jobs: list[schemas.ScheduledJob] | None = None,
 ) -> schemas.PortfolioHealthResponse:
-    health_items, _ = _collect_portfolio_rows(db, project_root)
+    health_items, _ = _collect_portfolio_rows(db, project_root, jobs=jobs)
     summary = _build_portfolio_summary(health_items)
     return schemas.PortfolioHealthResponse(
         generated_at=schemas.format_dt_br(get_now_local()),

@@ -72,6 +72,37 @@ def test_fetch_all_cursor_sem_description_retorna_vazio(
     assert not rows
 
 
+def test_fetch_all_sem_cursor_arraysize_explicito_acompanha_batch_size(
+    mock_oracle_connection: MagicMock,
+) -> None:
+    """Regressão: sem cursor_arraysize, o driver ficava no default (100)
+    independente do batch_size pedido, custando ~50 round-trips de rede por
+    lote de 5000 linhas em vez de 1."""
+    cursor = mock_oracle_connection.return_value.cursor.return_value
+    cursor.description = [("COL",)]
+    cursor.fetchmany.side_effect = [[]]
+
+    creds = _fake_credentials()
+    fetch_all(creds, "SELECT 1", "EXEC-1", _noop_log, batch_size=5000)
+
+    assert cursor.arraysize == 5000
+
+
+def test_fetch_all_cursor_arraysize_explicito_tem_precedencia_sobre_batch_size(
+    mock_oracle_connection: MagicMock,
+) -> None:
+    cursor = mock_oracle_connection.return_value.cursor.return_value
+    cursor.description = [("COL",)]
+    cursor.fetchmany.side_effect = [[]]
+
+    creds = _fake_credentials()
+    fetch_all(
+        creds, "SELECT 1", "EXEC-1", _noop_log, batch_size=5000, cursor_arraysize=200
+    )
+
+    assert cursor.arraysize == 200
+
+
 def test_serialize_rows_datetime_para_isoformat() -> None:
     dt = datetime(2026, 7, 3, 10, 30)
     data = serialize_rows(["DATA"], [(dt,)])

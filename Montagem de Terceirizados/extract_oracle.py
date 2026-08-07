@@ -51,7 +51,7 @@ def _fetch(
 ) -> tuple[list[str], list[Any]]:
     log(f"Conectando ao Oracle via TNS Alias '{creds.dsn}'...", "INFO", exec_id)
     log("Executando extracao nativa...", "INFO", exec_id)
-    return fetch_all(creds, sql, exec_id, log, batch_size=5000, cursor_arraysize=100)
+    return fetch_all(creds, sql, exec_id, log, batch_size=5000)
 
 
 def extract() -> None:
