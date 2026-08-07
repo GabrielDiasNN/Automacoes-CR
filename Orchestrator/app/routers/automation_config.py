@@ -31,12 +31,12 @@ PROJECT_ROOT = get_project_root()
 router = APIRouter(prefix="/api/automations", tags=["Automation Config"])
 
 
-@router.get("/{auto_id}/configs")
+@router.get("/{auto_id}/configs", response_model=list[schemas.ManagedFileEntry])
 def get_automation_configs(
     auto_id: int,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
-) -> list[dict[str, Any]]:
+) -> list[schemas.ManagedFileEntry]:
     auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
@@ -44,7 +44,7 @@ def get_automation_configs(
     auto_dir = resolve_automation_dir(str(auto.script_path), PROJECT_ROOT)
 
     json_files = glob.glob(os.path.join(auto_dir, "*.json"))
-    configs: list[dict[str, Any]] = []
+    configs: list[schemas.ManagedFileEntry] = []
 
     for jf in json_files:
         filename = os.path.basename(jf)
@@ -57,7 +57,7 @@ def get_automation_configs(
         try:
             with open(jf, encoding="utf-8") as f:
                 content = f.read()
-            configs.append({"filename": filename, "content": content})
+            configs.append(schemas.ManagedFileEntry(filename=filename, content=content))
         except OSError as exc:
             logger.warning("Falha ao ler config '%s': %s", filename, exc)
 

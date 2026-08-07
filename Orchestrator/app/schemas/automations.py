@@ -13,6 +13,7 @@ from .common import (
     _validate_script_path,
     format_dt_br,
 )
+from .executions import ExecutionSummary
 
 
 def _normalize_queue_group(value: str | None) -> str | None:
@@ -229,3 +230,15 @@ class AutomationResponse(AutomationBase):
         self.last_execution_finished_at = format_dt_br(self.last_execution_finished_at)
         self.error_24h = self.failures_24h
         return self
+
+
+class AutomationOverviewMetrics24h(BaseModel):
+    success_count: int = 0
+    error_count: int = 0
+    pending_count: int = 0
+
+
+class AutomationOverviewResponse(BaseModel):
+    automation: AutomationResponse
+    metrics_24h: AutomationOverviewMetrics24h
+    recent_executions: list[ExecutionSummary] = []
