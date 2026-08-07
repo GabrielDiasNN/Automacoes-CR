@@ -69,14 +69,7 @@ $NonFailureCodes = @(0, 2, 22)
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
-    if ($Msg) { Write-Log $Msg -Lvl $(if ($Code -in $NonFailureCodes) { "INFO" } else { "ERRO" }) }
-    Write-Log "FIM - ExitCode=$Code"
-    Write-Log "========================================================================================="
-    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
-        $finalStatus = if ($Code -in $NonFailureCodes) { "SUCCESS" } else { "ERROR" }
-        Close-ExecutionTelemetry -ExecId $ExecId -Status $finalStatus -LogPath $LogFile
-    }
-    exit $Code
+    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes $NonFailureCodes -EndMessage "FIM - ExitCode=$Code"
 }
 
 # --- PRE-FLIGHT ---
