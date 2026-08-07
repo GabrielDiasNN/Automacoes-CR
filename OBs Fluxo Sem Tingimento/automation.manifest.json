@@ -3,7 +3,6 @@
   "name": "OBs Fluxo Sem Tingimento",
   "slug": "obs-fluxo-sem-tingimento",
   "criticality": "medium",
-  "script_path": "OBs Fluxo Sem Tingimento/run.ps1",
   "entrypoint": "run.ps1",
   "runtime": "powershell",
   "channels": [
