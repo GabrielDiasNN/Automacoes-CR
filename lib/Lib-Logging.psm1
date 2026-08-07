@@ -68,28 +68,6 @@ return (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -M
 
 # ------------------------------------------------------------------------------
 
-# Get-FromBase64
-
-# ------------------------------------------------------------------------------
-
-function Get-FromBase64 {
-
-param([string]$B64)
-
-if ([string]::IsNullOrWhiteSpace($B64)) { return "" }
-
-try {
-
-$bytes = [System.Convert]::FromBase64String($B64)
-
-return [System.Text.Encoding]::UTF8.GetString($bytes)
-
-} catch [System.Exception] { return $B64 }
-
-}
-
-# ------------------------------------------------------------------------------
-
 # Protect-SensitiveData
 
 # ------------------------------------------------------------------------------

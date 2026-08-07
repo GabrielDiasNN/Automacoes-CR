@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`Get-FromBase64` (`lib/Lib-Logging.psm1`) era código morto**: não constava em `Export-ModuleMember` e não tinha nenhum chamador em todo o repositório (`.ps1`/`.psm1`). Removida.
+- **`test_process_sucesso_com_novos_bloqueios` (`Orchestrator/tests/test_receitas_bloqueadas.py`) declarava 4 variáveis nunca lidas** (`exec_id`, `state_tmp_path`, `excel_path`, `html_path`) — os mocks do teste já usavam apenas literais de string (`"receitas_state.json"`, `"SQL-ReceitasBloqueadas.sql"`), então essas variáveis nunca alimentavam nada. Removidas (junto de `state_file_path`, que só existia para compor a variável morta `state_tmp_path`).
+
+### Notas
+- Achados #4 e #6 de uma revisão completa do repositório (grafo de revisores paralelos + verificador independente). Ambos confirmados por `ruff --select F841` (teste) e por grep no repositório inteiro (PowerShell) antes da remoção. `pytest -q` (`747 passed`), `Invoke-Pester lib/tests/Lib-Logging.Tests.ps1` (8 passed) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
