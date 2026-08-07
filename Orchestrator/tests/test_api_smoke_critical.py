@@ -55,7 +55,8 @@ def test_smoke_automations_flow_and_controls(client: TestClient) -> None:
     assert duplicated.status_code == 409
 
     toggled = client.post(
-        f"/api/automations/{auto_id}/test-mode?enabled=true",
+        f"/api/automations/{auto_id}/test-mode",
+        json={"enabled": True},
         headers=AUTH_HEADERS,
     )
     assert toggled.status_code == 200

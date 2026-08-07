@@ -110,6 +110,14 @@ class AutomationPreflightGovernance(BaseModel):
     warnings: list[AutomationPreflightIssue] = []
 
 
+class TestModeRequest(BaseModel):
+    """Corpo de POST .../test-mode e .../test-mode/global — antes `enabled`
+    viajava como query param cru, único caso de mutação da API sem corpo
+    Pydantic tipado (achado #20)."""
+
+    enabled: bool
+
+
 class AutomationUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
