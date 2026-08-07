@@ -668,6 +668,13 @@ function Exit-AutomationWithCode {
     .PARAMETER NonFailureCodes
         Codigos de saida que contam como sucesso para fins de log/telemetria.
         Padrao: apenas 0.
+
+    .PARAMETER EndMessage
+        Linha final de encerramento gravada no log. Padrao mantem o texto
+        historico de Receitas Bloqueadas/Receitas Emitidas ("FIM - Finalizado.
+        ExitCode=..."); OBs Fluxo Sem Tingimento e OBs Paradas Fase passam
+        "FIM - ExitCode=..." explicitamente para preservar o texto que usavam
+        antes da consolidacao.
     #>
     [CmdletBinding()]
     param(
@@ -675,7 +682,8 @@ function Exit-AutomationWithCode {
         [string]$Msg = "",
         [Parameter(Mandatory = $true)][string]$ExecId,
         [Parameter(Mandatory = $true)][string]$LogPath,
-        [int[]]$NonFailureCodes = @(0)
+        [int[]]$NonFailureCodes = @(0),
+        [string]$EndMessage = "FIM - Finalizado. ExitCode=$Code"
     )
 
     $isSuccess = Get-AutomationExitStatus -Code $Code -NonFailureCodes $NonFailureCodes
@@ -683,7 +691,7 @@ function Exit-AutomationWithCode {
     if ($Msg) {
         Write-AutomacaoLog -Message $Msg -Level $(if ($isSuccess) { "INFO" } else { "ERRO" }) -ExecId $ExecId -LogPath $LogPath
     }
-    Write-AutomacaoLog -Message "FIM - Finalizado. ExitCode=$Code" -Level "INFO" -ExecId $ExecId -LogPath $LogPath
+    Write-AutomacaoLog -Message $EndMessage -Level "INFO" -ExecId $ExecId -LogPath $LogPath
     Write-AutomacaoLog -Message "=========================================================================================" -Level "INFO" -ExecId $ExecId -LogPath $LogPath
 
     if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {

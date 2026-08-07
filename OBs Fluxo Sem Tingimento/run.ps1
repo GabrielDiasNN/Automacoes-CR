@@ -69,7 +69,7 @@ $NonFailureCodes = @(0, 2, 22)
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
-    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes $NonFailureCodes
+    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes $NonFailureCodes -EndMessage "FIM - ExitCode=$Code"
 }
 
 # --- PRE-FLIGHT ---

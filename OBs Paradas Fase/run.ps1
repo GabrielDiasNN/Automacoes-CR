@@ -62,7 +62,7 @@ function Write-Log {
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
-    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes @(0, 2)
+    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes @(0, 2) -EndMessage "FIM - ExitCode=$Code"
 }
 
 # --- PRE-FLIGHT ---
