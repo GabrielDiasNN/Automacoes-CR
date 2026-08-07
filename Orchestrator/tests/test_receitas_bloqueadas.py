@@ -251,14 +251,6 @@ def test_process_sucesso_com_novos_bloqueios(
     Valida o fluxo process() quando ha novos bloqueios, garantindo a geracao
     de html, xlsx e estado tmp.
     """
-    exec_id = "test_123"
-
-    # Mocks de ambiente e arquivos
-    state_file_path = os.path.join(AUTOMATION_PATH, "receitas_state.json")
-    state_tmp_path = state_file_path + ".tmp"
-    excel_path = os.path.join(AUTOMATION_PATH, "Receitas Bloqueadas.xlsx")
-    html_path = os.path.join(AUTOMATION_PATH, "email_body.html")
-
     # Configurar mock de variaveis de ambiente
     os.environ["ORACLE_READONLY_USER"] = "test_user"
     os.environ["ORACLE_READONLY_PASSWORD"] = "test_pass"
