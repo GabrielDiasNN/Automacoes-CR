@@ -34,11 +34,11 @@ def test_execution_operator_fields_declara_exatamente_os_13_campos() -> None:
 
 
 def test_execution_response_herda_todos_os_campos_de_operador() -> None:
-    assert OPERATOR_FIELDS <= set(ExecutionResponse.model_fields)
+    assert set(ExecutionResponse.model_fields) >= OPERATOR_FIELDS
 
 
 def test_execution_summary_herda_todos_os_campos_de_operador() -> None:
-    assert OPERATOR_FIELDS <= set(ExecutionSummary.model_fields)
+    assert set(ExecutionSummary.model_fields) >= OPERATOR_FIELDS
 
 
 def test_execution_summary_nao_expoe_campos_internos_do_worker() -> None:
