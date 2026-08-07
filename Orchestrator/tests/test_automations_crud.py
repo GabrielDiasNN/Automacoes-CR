@@ -647,3 +647,43 @@ def test_get_automation_returns_latest_execution_context_for_modal(
     assert payload["active_execution_count"] == 1
     assert payload["pending_count"] == 1
     assert payload["operational_state"] == "in_progress"
+
+
+def test_set_automation_test_mode_via_json_body(client: TestClient) -> None:
+    """Achado #20: enabled viajava como query param cru; agora é corpo tipado."""
+    client.post(
+        "/api/automations",
+        json={"name": "Test Mode Auto", "script_path": "./test/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+    res = client.post(
+        "/api/automations/1/test-mode",
+        json={"enabled": True},
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    assert "ativado" in res.json()["message"] or "True" in res.json()["message"]
+
+
+def test_set_automation_test_mode_rejects_query_param(client: TestClient) -> None:
+    """`?enabled=true` sem corpo JSON não deve mais funcionar (achado #20)."""
+    client.post(
+        "/api/automations",
+        json={"name": "Test Mode Query Rejeitado", "script_path": "./test/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+    res = client.post(
+        "/api/automations/1/test-mode?enabled=true",
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 422
+
+
+def test_set_global_test_mode_via_json_body(client: TestClient) -> None:
+    res = client.post(
+        "/api/automations/test-mode/global",
+        json={"enabled": False},
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    assert "desativado" in res.json()["message"]

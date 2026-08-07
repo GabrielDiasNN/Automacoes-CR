@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`set_global_test_mode`/`set_automation_test_mode` recebiam `enabled: bool` como query param cru**, único caso de mutação da API sem corpo Pydantic tipado — toda outra mutação (`start`, `AutomationUpdate`, `ExecutionQueueActionRequest`, `EnvContent`, `FileContent`) usa corpo JSON. O frontend replicava a mesma inconsistência via `qs({ enabled })`. Adicionado `TestModeRequest` (`{enabled: bool}`); os dois endpoints passam a receber o corpo tipado, e `Dashboard/src/api/orchestrator.ts` (`setAutomationTestMode`/`setGlobalTestMode`) envia `{ enabled }` como JSON em vez de query string.
+
+### Notas
+- Achado #20 (design) de uma revisão completa do repositório. `?enabled=true` sem corpo JSON agora retorna 422 (travado por `test_set_automation_test_mode_rejects_query_param`, novo). 3 testes novos em `test_automations_crud.py` cobrindo os dois endpoints com corpo JSON. `tsc --noEmit`, `eslint` e `vitest` (92 passed) do Dashboard limpos — nenhum outro consumidor do frontend chamava esses dois endpoints além de `orchestrator.ts`. Suíte completa (`750 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
