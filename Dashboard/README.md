@@ -13,7 +13,8 @@ npm run dev
 ```
 
 Sobe em `http://localhost:5173`. Requer a API Key do Orchestrator (solicitada
-via prompt na primeira carga, persistida em `localStorage`).
+via prompt na primeira carga, persistida em `sessionStorage` — não sobrevive
+ao fechamento da aba; há teste dedicado proibindo o uso de `localStorage`).
 
 ## Build de produção
 
@@ -40,6 +41,30 @@ sentido testar isoladamente. `src/components/` e `src/pages/` ficam
 deliberadamente fora: são validados via Playwright E2E contra o Dashboard
 rodando de verdade (ver `../docs/playwright-e2e-standard.md`), que é a
 validação final obrigatória para qualquer mudança em `Dashboard/src/`.
+
+## Estrutura de pastas
+
+`src/pages/` e `src/components/` coexistem em três padrões, cada um com um
+gatilho próprio — não é inconsistência acidental:
+
+- **`components/ui/`** — design system genérico (`Button`, `Card`, `DataTable`,
+  `Select`, ...). Qualquer componente reusado por 2+ páginas vive aqui.
+- **`components/<feature>/`** (ex.: `components/beneficiamento/`) — quando uma
+  página cresce a ponto de ter **múltiplos** subcomponentes exclusivos dela
+  (aqui: `DetailDrawer`, `FilterBar`, `ProductAutocomplete`, `TingimentoPanel`,
+  `Treemap` — 5 componentes só usados por `BeneficiamentoPage`), eles ganham
+  pasta de feature própria em vez de inflar `pages/`.
+- **`pages/<Page>.<Sufixo>.tsx`** (ex.: `ExecucoesPage.ExecDetailBody.tsx`) —
+  quando só existe **um** bloco isolável de uma página (não uma feature
+  inteira com vários arquivos), a extração é por sufixo de nome de arquivo
+  dentro de `pages/`, não uma pasta nova.
+- **Sem subdivisão** (`AutomacoesPage`, `MonitorPage`, `PainelPage`,
+  `SystemPage`) — o JSX cabe inteiro na própria página sem nenhum bloco grande
+  o bastante para justificar extração.
+
+Regra prática: extraia para pasta de feature ao passar de 1 subcomponente
+exclusivo; extraia por sufixo de arquivo para um único bloco isolável; não
+force extração antecipada em página que ainda cabe inline.
 
 ## Design system
 

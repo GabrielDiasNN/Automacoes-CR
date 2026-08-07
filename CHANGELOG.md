@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`Dashboard/README.md` documentava incorretamente `localStorage` como onde a API Key é persistida** — desde sempre é `sessionStorage` (mais restritivo, não sobrevive ao fechamento da aba; há teste dedicado proibindo `localStorage`, conforme `CLAUDE.md` da raiz já documentava). Corrigido.
+
+### Adicionado
+- **Seção "Estrutura de pastas" em `Dashboard/README.md`** documentando os 3 padrões de organização que coexistem em `src/pages/`/`src/components/` (`components/ui/` genérico, `components/<feature>/` para páginas com múltiplos subcomponentes exclusivos, `pages/<Page>.<Sufixo>.tsx` para um único bloco isolável, sem subdivisão quando o JSX cabe inline) e a regra prática de quando usar cada um.
+
+### Notas
+- Achado #21 (design) de uma revisão completa do repositório: "estrutura de pastas do Dashboard sem convenção única, três padrões coexistindo sem regra declarada em docs/". Nenhum arquivo do Dashboard foi movido — mover ~15 arquivos entre pastas para forçar um padrão único teria custo/risco real (imports quebrados, histórico de git fragmentado) sem ganho funcional, e os 3 padrões já são justificados por gatilhos distintos e coerentes (visível ao ler o código). A correção real do achado é documentar a regra que já existe implicitamente, não impor uma reorganização especulativa. Mudança documental pura, sem código tocado.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
