@@ -8,7 +8,7 @@ import uuid
 from typing import Any, cast
 
 from sqlalchemy import case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from .. import models
 from ..constants import (
@@ -159,6 +159,7 @@ def claim_next_task(
     )
     candidates = (
         db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
         .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
         .order_by(priority_rank.asc(), models.Execution.started_at.asc())
         .limit(25)
