@@ -335,7 +335,7 @@ def create_automation(
 # ---------------------------------------------------------------------------
 
 
-@router.put("/{automation_id}", response_model=schemas.AutomationResponse)
+@router.patch("/{automation_id}", response_model=schemas.AutomationResponse)
 def update_automation(
     automation_id: int,
     automation_update: schemas.AutomationUpdate,

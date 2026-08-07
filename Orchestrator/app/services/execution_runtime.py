@@ -121,7 +121,7 @@ def _has_running_execution_for_group(
     `get_group_active_execution`. Até então esta função filtrava por
     `Execution.queue_group` — cópia congelada no enfileiramento por
     `build_queued_execution` —, enquanto os guards HTTP e o scheduler já usavam
-    o valor atual da automação. Depois de um `PUT /api/automations/{id}` que
+    o valor atual da automação. Depois de um `PATCH /api/automations/{id}` que
     alterasse o grupo, as execuções PENDING já na fila carregavam o valor
     antigo: o worker serializava por um grupo e a API por outro, e duas
     automações que deveriam ser mutuamente exclusivas (grupo `hub-global`, que

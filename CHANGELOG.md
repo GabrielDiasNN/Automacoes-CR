@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`update_automation` era exposto como `PUT` mas sempre teve semântica de update parcial** (`exclude_unset=True` — só os campos enviados são aplicados por cima do registro existente), diferente dos demais `PUT` do mesmo conjunto de routers (`automation_config.py`, `automation_ide.py`, `system.py`), que fazem substituição completa do recurso. Corrigido trocando o verbo para `PATCH`, que é o que a implementação sempre fez.
+
+### Notas
+- Achado #19 (design) de uma revisão completa do repositório. O Dashboard não tinha nenhuma chamada a este endpoint (`api.put` existe em `client.ts` mas nunca é usado para automações) — sem impacto no frontend. O wrapper de teste `_governar_cadastros` (`conftest.py`) que mantém o manifesto sintético sincronizado antes de cada `POST`/`PUT` em `/api/automations` só cobria `PUT`; sem estender para `PATCH`, o teste de smoke crítico falhava com 422 (manifesto desatualizado comparando contra o payload novo) — corrigido junto, com `_buscar_atual` extraído para eliminar a duplicação entre os dois wrappers. Teste novo (`test_update_automation_rejects_put_verb`) trava que `PUT` no mesmo caminho agora retorna 405. Suíte completa (`748 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
