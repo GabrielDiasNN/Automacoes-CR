@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`ExecutionResponse` e `ExecutionSummary` (`Orchestrator/app/schemas/executions.py`) duplicavam a declaração dos mesmos 13 campos de decoração operacional** (`operator_*`, `requeue_*`, `stop_allowed`, `related_*`) em vez de compartilhar uma origem única — risco real de um campo ser editado numa classe e esquecido na outra. Extraído `ExecutionOperatorFields`, mixin Pydantic com os 13 campos; `ExecutionResponse` e `ExecutionSummary` passam a herdar dele em vez de declarar cada um a sua cópia. Os demais campos ("brutos" da execução) permanecem declarados em cada classe separadamente — são uma diferença real, não duplicação: `ExecutionSummary` deliberadamente omite `claimed_at`/`worker_instance_id`/`worker_pid` (internos do worker, não fazem sentido numa view de listagem) e diverge no default de `requested_by`.
+
+### Notas
+- Achado #15 (design) de uma revisão completa do repositório. 5 testes novos em `test_execution_schemas_unit.py` travando o contrato: os 13 campos exatos do mixin, herança em ambas as classes, exclusão deliberada dos 3 campos internos do worker em `ExecutionSummary`, e defaults idênticos entre as duas classes e o mixin. O tipo TypeScript equivalente no Dashboard (`ExecutionSummary` em `api/orchestrator.ts`) é escrito à mão, não gerado a partir do schema Python — o payload JSON não muda de formato, só a forma como o Pydantic o compõe internamente, então não precisou de ajuste. Suíte completa (`752 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
