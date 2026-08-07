@@ -10,7 +10,7 @@ caminho:
   e `scheduled_task_wrapper` — faz join e filtra por `Automation.queue_group`,
   o valor ATUAL.
 
-Depois de um `PUT /api/automations/{id}` que alterasse o `queue_group`, as
+Depois de um `PATCH /api/automations/{id}` que alterasse o `queue_group`, as
 execuções PENDING já na fila carregavam o valor antigo. As duas guardas passavam
 a discordar, e duas automações do mesmo grupo novo — `hub-global`, que
 compartilha uma única sessão WhatsApp — podiam rodar em paralelo.

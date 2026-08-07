@@ -35,7 +35,7 @@ def test_smoke_automations_flow_and_controls(client: TestClient) -> None:
     assert created.status_code == 201
     auto_id = created.json()["id"]
 
-    updated = client.put(
+    updated = client.patch(
         f"/api/automations/{auto_id}",
         json={
             "description": "Atualizado no smoke",
