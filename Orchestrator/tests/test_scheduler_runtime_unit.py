@@ -263,6 +263,58 @@ def test_list_scheduled_jobs_resolve_nome_da_automacao(db_session: Any) -> None:
     assert jobs[1].automation_name == "System: Wal Checkpoint"
 
 
+def test_list_scheduled_jobs_resolve_nome_correto_por_job_com_multiplas_automacoes(
+    db_session: Any,
+) -> None:
+    """Regressão: a resolução em lote (1 IN query) não pode trocar o nome
+    entre automações distintas, como uma implementação incorreta de dict
+    (ex.: sempre pegar a última linha) faria passar despercebido."""
+    auto_a = models.Automation(name="Automacao A", script_path="./test/run.ps1")
+    auto_b = models.Automation(name="Automacao B", script_path="./test/run.ps1")
+    db_session.add_all([auto_a, auto_b])
+    db_session.flush()
+    db_session.commit()
+
+    job_a = MagicMock(
+        id=f"job_{auto_a.id}_cron",
+        next_run_time=datetime(2026, 7, 8, 8, 0),
+        trigger="cron",
+    )
+    job_b = MagicMock(
+        id=f"job_{auto_b.id}_cron",
+        next_run_time=datetime(2026, 7, 8, 9, 0),
+        trigger="cron",
+    )
+
+    with patch.object(app_runtime.scheduler, "get_jobs", return_value=[job_a, job_b]):
+        jobs = sr.list_scheduled_jobs(db_session)
+
+    by_automation_id = {job.automation_id: job.automation_name for job in jobs}
+    assert by_automation_id[int(auto_a.id)] == "Automacao A"
+    assert by_automation_id[int(auto_b.id)] == "Automacao B"
+
+
+def test_list_scheduled_jobs_sem_jobs_de_automacao_nao_consulta_o_banco(
+    db_session: Any,
+) -> None:
+    """Sem nenhum job de automação (só enterprise_*), o lookup em lote não
+    deve disparar a query IN(...) com uma lista vazia."""
+    fake_job_enterprise = MagicMock(
+        id="enterprise_wal_checkpoint", next_run_time=None, trigger="interval"
+    )
+    query_spy = MagicMock(wraps=db_session.query)
+    with (
+        patch.object(
+            app_runtime.scheduler, "get_jobs", return_value=[fake_job_enterprise]
+        ),
+        patch.object(db_session, "query", query_spy),
+    ):
+        jobs = sr.list_scheduled_jobs(db_session)
+
+    assert jobs[0].automation_name == "System: Wal Checkpoint"
+    query_spy.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # app.runtime: trigger_worker_wakeup / register_event_loop
 # ---------------------------------------------------------------------------
