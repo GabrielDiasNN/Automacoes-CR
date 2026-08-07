@@ -369,7 +369,7 @@ def test_update_automation(client: TestClient) -> None:
         },
         headers=AUTH_HEADERS,
     )
-    res = client.put(
+    res = client.patch(
         "/api/automations/1",
         json={
             "description": "Atualizado",
@@ -381,6 +381,26 @@ def test_update_automation(client: TestClient) -> None:
     assert "last_execution_id" in res.json()
     assert res.json()["validated"] is True
     assert res.json()["audit_id"] is not None
+
+
+def test_update_automation_rejects_put_verb(client: TestClient) -> None:
+    """Achado #19: o endpoint sempre teve semântica de update parcial
+    (exclude_unset=True) mas era exposto como PUT — corrigido para PATCH.
+    PUT no mesmo caminho não deve mais ter rota registrada."""
+    client.post(
+        "/api/automations",
+        json={
+            "name": "Verbo Errado",
+            "script_path": "./test/run.ps1",
+        },
+        headers=AUTH_HEADERS,
+    )
+    res = client.put(
+        "/api/automations/1",
+        json={"description": "Não deveria funcionar"},
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 405
 
 
 def test_update_automation_reloads_scheduler(
@@ -400,7 +420,7 @@ def test_update_automation_reloads_scheduler(
         auto_router, "_reload_scheduler_safe", lambda: calls.append("reload")
     )
 
-    res = client.put(
+    res = client.patch(
         "/api/automations/1",
         json={
             "enabled": False,
@@ -455,7 +475,7 @@ def test_update_automation_rejects_path_escape(client: TestClient) -> None:
         },
         headers=AUTH_HEADERS,
     )
-    res = client.put(
+    res = client.patch(
         "/api/automations/1",
         json={
             "script_path": "C:\\Windows\\win.ini",
