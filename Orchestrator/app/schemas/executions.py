@@ -54,10 +54,15 @@ class ExecutionBase(BaseModel):
         return self
 
 
-class ExecutionResponse(ExecutionBase):
-    logs: str | None = None
-    artifacts: str | None = None
-    automation_name: str | None = None
+class ExecutionOperatorFields(BaseModel):
+    """Decoração operacional (attention score, ações de fila, execução relacionada).
+
+    Idêntica em `ExecutionResponse` e `ExecutionSummary` — ambas expõem a
+    mesma view de operador, só variando os campos "brutos" da execução em
+    volta dela. Extraída para as duas herdarem em vez de declarar duas
+    cópias independentes que podiam divergir silenciosamente.
+    """
+
     operator_attention_required: bool = False
     operator_severity: str | None = None
     operator_score: int = 0
@@ -71,10 +76,16 @@ class ExecutionResponse(ExecutionBase):
     related_execution_id: str | None = None
     related_execution_status: str | None = None
     related_queue_group: str | None = None
+
+
+class ExecutionResponse(ExecutionBase, ExecutionOperatorFields):
+    logs: str | None = None
+    artifacts: str | None = None
+    automation_name: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
-class ExecutionSummary(BaseModel):
+class ExecutionSummary(ExecutionOperatorFields):
     id: str
     automation_id: int
     automation_name: str | None = None
@@ -91,19 +102,6 @@ class ExecutionSummary(BaseModel):
     finished_at: Any | None = None
     duration_seconds: float | None = None
     artifacts: str | None = None
-    operator_attention_required: bool = False
-    operator_severity: str | None = None
-    operator_score: int = 0
-    operator_reason_summary: str | None = None
-    operator_action_code: str | None = None
-    operator_action_label: str | None = None
-    operator_action_hint: str | None = None
-    requeue_allowed: bool = False
-    requeue_block_reason: str | None = None
-    stop_allowed: bool = False
-    related_execution_id: str | None = None
-    related_execution_status: str | None = None
-    related_queue_group: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
     @model_validator(mode="after")

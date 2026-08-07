@@ -328,7 +328,7 @@ def get_system_overview(
     diagnostics["trace"] = {
         "correlation_id": getattr(request.state, "request_id", "SYSTEM")
     }
-    portfolio_health = build_portfolio_health_response(db, PROJECT_ROOT)
+    portfolio_health = build_portfolio_health_response(db, PROJECT_ROOT, jobs=jobs)
     return build_system_overview_payload(
         db=db,
         scheduler=scheduler,

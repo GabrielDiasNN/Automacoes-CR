@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import desc, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from .. import models, schemas
 from ..constants import (
@@ -104,6 +104,7 @@ def collect_running_over_runtime(db: Session) -> list[dict[str, Any]]:
     running = (
         db.query(models.Execution)
         .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .options(contains_eager(models.Execution.automation))
         .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
         .all()
     )
@@ -143,6 +144,7 @@ def collect_orphaned_running(
     running = (
         db.query(models.Execution)
         .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .options(contains_eager(models.Execution.automation))
         .filter(models.Execution.status == EXECUTION_STATUS_RUNNING)
         .all()
     )
@@ -240,6 +242,7 @@ def collect_sla_breaches(
     rows = (
         db.query(models.Execution)
         .join(models.Automation, models.Automation.id == models.Execution.automation_id)
+        .options(contains_eager(models.Execution.automation))
         .filter(
             models.Automation.sla_minutes.isnot(None),
             models.Execution.duration_seconds.isnot(None),
