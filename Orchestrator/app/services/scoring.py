@@ -57,7 +57,7 @@ def compute_attention_score(
         score += 30
         reasons.append("Execução terminal com necessidade de triagem")
 
-    # 3. Regras de Concorrência e Conflitos de Requeue
+    # 4. Regras de Concorrência e Conflitos de Requeue
     automation_id = int(ex.automation_id)
     group_str = str(queue_group) if queue_group else None
     active_for_automation = active_by_automation.get(automation_id)
@@ -81,7 +81,7 @@ def compute_attention_score(
             score += 12
             reasons.append("Limite de retry já foi atingido")
 
-    # 4. Regras de Prioridade
+    # 5. Regras de Prioridade
     priority_str = str(ex.priority or "NORMAL").upper()
     if priority_str == "HIGH":
         score += 20
@@ -89,12 +89,12 @@ def compute_attention_score(
     elif priority_str == "LOW":
         score = max(score - 5, 0)
 
-    # 5. Regras baseadas em Retries
+    # 6. Regras baseadas em Retries
     if retry_count > 0:
         score += min(retry_count * 8, 24)
         reasons.append(f"Execução já passou por {retry_count} retry(s)")
 
-    # 6. Regra baseada em Motivo de Falha
+    # 7. Regra baseada em Motivo de Falha
     if ex.failure_reason:
         score += 8
         reasons.append("Há motivo de falha registrado")
