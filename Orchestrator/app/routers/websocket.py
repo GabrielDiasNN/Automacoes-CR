@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from starlette.concurrency import run_in_threadpool
 
 from .. import schemas
 from ..database import SessionLocal, session_scope
@@ -171,16 +172,25 @@ def _validate_ws_key(websocket: WebSocket) -> bool:
     return ws_auth.consume_ws_token(token)
 
 
+def _fetch_execution_logs(exec_id: str) -> str | None:
+    with session_scope(SessionLocal) as db:
+        db_exec = db.query(Execution).filter(Execution.id == exec_id).first()
+        return str(db_exec.logs) if db_exec and db_exec.logs else None
+
+
 async def _send_log_replay(websocket: WebSocket, exec_id: str) -> None:
     """LOG REPLAY: envia o historico de logs persistido ao cliente recem-conectado."""
     try:
-        with session_scope(SessionLocal) as db:
-            db_exec = db.query(Execution).filter(Execution.id == exec_id).first()
-            if db_exec and db_exec.logs:
-                # Mesmo teto do broadcast ao vivo: o histórico acumulado pode ser
-                # muito maior que uma linha individual (#40).
-                await websocket.send_text(truncate_ws_message(str(db_exec.logs)))
-                await websocket.send_text("\n--- Historico recuperado ---\n")
+        # Handlers WebSocket são sempre async (exigência do Starlette, sem o
+        # despacho automático ao threadpool que rotas HTTP `def` ganham) — a
+        # consulta síncrona ao SQLite roda em thread separada para não travar
+        # o event loop único do Uvicorn a cada nova conexão de log.
+        logs = await run_in_threadpool(_fetch_execution_logs, exec_id)
+        if logs:
+            # Mesmo teto do broadcast ao vivo: o histórico acumulado pode ser
+            # muito maior que uma linha individual (#40).
+            await websocket.send_text(truncate_ws_message(logs))
+            await websocket.send_text("\n--- Historico recuperado ---\n")
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.warning("Falha ao recuperar replay de logs para %s: %s", exec_id, e)
 
