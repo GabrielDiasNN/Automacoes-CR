@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`selectStyle` redefinido localmente em 3 páginas do Dashboard** (`MonitorPage.tsx`, `ExecucoesPage.tsx`, `BeneficiamentoPage.tsx`) em vez de usar `components/ui/Select.tsx`, criado especificamente para consolidar esse estilo (o próprio componente já documentava "consolida o estilo duplicado 8x em FilterBar" — essas 3 páginas não tinham migrado). Substituídos os 4 `<select style={selectStyle}>` pelo componente `<Select>`; o único uso do estilo fora de um `<select>` real (o campo de busca do console de telemetria em `MonitorPage.tsx`, um `<input type="search">`) passou a reusar a classe CSS de `Select.module.css` diretamente via `className`, em vez de duplicar o objeto de estilo inline.
+
+### Notas
+- Achado #14 (design) de uma revisão completa do repositório. `tsc --noEmit`, `eslint` e `vitest` (92 passed) limpos. Validação visual via dev server (`npm run dev`, proxy para a API real do Orchestrator) confirmou renderização pixel-consistente dos 3 `<select>` + 1 `<input>` de `MonitorPage.tsx`; `ExecucoesPage.tsx`/`BeneficiamentoPage.tsx` não puderam ser validados visualmente com dados reais porque a `ORCHESTRATOR_API_KEY` atual do `.env` está sendo rejeitada com 403 em todo endpoint autenticado — reproduzido de forma idêntica no build de produção já publicado (`Dashboard/dist/`, código não tocado por este PR), confirmando que é um problema de ambiente pré-existente, não introduzido por esta mudança. Fora do escopo deste PR; sinalizado para investigação à parte.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
