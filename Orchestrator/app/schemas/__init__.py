@@ -9,6 +9,8 @@ com as diretivas de importação 'from .schemas import ...'.
 from .automations import (
     AutomationBase,
     AutomationCreate,
+    AutomationOverviewMetrics24h,
+    AutomationOverviewResponse,
     AutomationPreflightGovernance,
     AutomationPreflightIssue,
     AutomationPreflightRequest,
@@ -47,7 +49,9 @@ from .common import (
     preview_next_runs,
 )
 from .executions import (
+    ExecutionArtifactsResponse,
     ExecutionBase,
+    ExecutionLogsResponse,
     ExecutionQueueActionRequest,
     ExecutionQueueActionResponse,
     ExecutionResponse,
@@ -73,6 +77,7 @@ from .system import (
     EnvValidationIssue,
     EnvValidationResponse,
     FileContent,
+    ManagedFileEntry,
     ManagedMutationResponse,
     MetricsResponse,
     MetricsSummary,
@@ -105,7 +110,9 @@ from .system import (
     SystemOverviewQueue,
     SystemOverviewResponse,
     SystemOverviewScheduler,
+    SystemUptime,
     SystemVersion,
+    WaitForTaskResponse,
     WorkerStatus,
     WsEventPayload,
     WsLogBatch,
@@ -133,6 +140,8 @@ __all__ = [
     "AutomationPreflightIssue",
     "AutomationUpdate",
     "AutomationResponse",
+    "AutomationOverviewResponse",
+    "AutomationOverviewMetrics24h",
     "TestModeRequest",
     # Executions
     "ExecutionBase",
@@ -142,6 +151,8 @@ __all__ = [
     "ExecutionTelemetryEnd",
     "ExecutionQueueActionRequest",
     "ExecutionQueueActionResponse",
+    "ExecutionLogsResponse",
+    "ExecutionArtifactsResponse",
     # Beneficiamento
     "BeneficiamentoDashboardPayload",
     "BeneficiamentoHealthIssue",
@@ -167,6 +178,7 @@ __all__ = [
     "WsLogBatch",
     "WsLogEntry",
     "FileContent",
+    "ManagedFileEntry",
     "SystemHealth",
     "ScheduledJob",
     "AutomationMetric",
@@ -214,5 +226,7 @@ __all__ = [
     "PortfolioDriftResponse",
     "AuditEntry",
     "SystemVersion",
+    "SystemUptime",
+    "WaitForTaskResponse",
     "PaginatedResponse",
 ]
