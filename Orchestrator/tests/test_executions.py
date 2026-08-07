@@ -2,13 +2,31 @@
 Testes focados nas operações e controle de Execuções do Orchestrator.
 """
 
+import inspect
 from datetime import timedelta
 
+import app.routers.automations as auto_router
 from app import models
 from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
+
+def test_start_automation_permanece_sincrona_para_nao_bloquear_o_event_loop() -> None:
+    """Guarda de regressão do achado de performance #11 (revisão de `[1.3.34]`):
+    `start_automation` era a única rota `async def` do arquivo sem nenhum
+    `await` no corpo — bloqueava o único event loop do Uvicorn (que também
+    serve os WebSockets de log em tempo real) durante I/O síncrono do
+    SQLAlchemy. Corrigida para `def` simples, que o Starlette já despacha ao
+    threadpool automaticamente, como as demais rotas do arquivo.
+
+    Este teste não teria como acionar contenção real do event loop de forma
+    determinística sem um cenário concorrente pesado — em vez disso, trava a
+    forma da função como guarda direta contra a reintrodução acidental de
+    `async def`.
+    """
+    assert inspect.iscoroutinefunction(auto_router.start_automation) is False
 
 
 def test_start_automation_creates_pending(client: TestClient) -> None:
