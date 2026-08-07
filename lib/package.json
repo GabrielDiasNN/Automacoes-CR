@@ -4,6 +4,12 @@
   "description": "Dependencias do motor soberano de WhatsApp compartilhado (lib/WhatsApp-Core.js).",
   "private": true,
   "type": "commonjs",
+  "engines": {
+    "node": ">=22.8.0"
+  },
+  "scripts": {
+    "test": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=90 --test-coverage-functions=90 --test-coverage-include=WhatsApp-Core.js --test tests/*.test.js"
+  },
   "dependencies": {
     "qrcode-terminal": "0.12.0",
     "whatsapp-web.js": "1.34.6"
