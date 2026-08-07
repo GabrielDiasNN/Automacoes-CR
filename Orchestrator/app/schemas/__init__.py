@@ -109,7 +109,9 @@ from .system import (
     SystemOverviewQueue,
     SystemOverviewResponse,
     SystemOverviewScheduler,
+    SystemUptime,
     SystemVersion,
+    WaitForTaskResponse,
     WorkerStatus,
     WsEventPayload,
     WsLogBatch,
@@ -222,5 +224,7 @@ __all__ = [
     "PortfolioDriftResponse",
     "AuditEntry",
     "SystemVersion",
+    "SystemUptime",
+    "WaitForTaskResponse",
     "PaginatedResponse",
 ]

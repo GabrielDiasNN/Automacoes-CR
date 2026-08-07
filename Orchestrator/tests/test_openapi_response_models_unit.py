@@ -2,6 +2,10 @@
 retornavam `dict[str, Any]`/`list[dict]` cru, sem contrato tipado no OpenAPI,
 destoando do resto da API. Verifica que os 5 endpoints agora declaram um
 schema nomeado (via `$ref`), não um objeto genérico.
+
+`get_uptime` e `wait_for_task` (`Orchestrator/app/routers/system.py`) ficaram
+de fora da varredura original e foram corrigidos em revisão de PR posterior
+(severidade baixa) — mesmo padrão, cobertos abaixo.
 """
 
 from typing import Any
@@ -62,3 +66,17 @@ def test_execution_artifacts_declara_schema_nomeado(client: TestClient) -> None:
         _response_schema(openapi, "/api/executions/{exec_id}/artifacts")
     )
     assert ref.endswith("ExecutionArtifactsResponse")
+
+
+def test_system_uptime_declara_schema_nomeado(client: TestClient) -> None:
+    openapi = client.get("/openapi.json").json()
+    ref = _resolve_ref_or_array_ref(_response_schema(openapi, "/api/system/uptime"))
+    assert ref.endswith("SystemUptime")
+
+
+def test_wait_for_task_declara_schema_nomeado(client: TestClient) -> None:
+    openapi = client.get("/openapi.json").json()
+    ref = _resolve_ref_or_array_ref(
+        _response_schema(openapi, "/api/system/wait-for-task")
+    )
+    assert ref.endswith("WaitForTaskResponse")
