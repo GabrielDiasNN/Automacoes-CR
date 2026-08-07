@@ -108,8 +108,12 @@ def fetch_all(  # pylint: disable=too-many-arguments
         user=creds.user, password=creds.password, dsn=creds.dsn
     ) as connection:
         cursor = connection.cursor()
-        if cursor_arraysize is not None:
-            cursor.arraysize = cursor_arraysize
+        # Sem isto, o driver mantém o arraysize padrão (100) independente do
+        # batch_size pedido: um fetchmany(5000) ainda exige ~50 round-trips de
+        # rede ao Oracle para preencher um único lote em memória, em vez de 1.
+        cursor.arraysize = (
+            cursor_arraysize if cursor_arraysize is not None else batch_size
+        )
         cursor.execute(sql, params or {})
         if not cursor.description:
             return [], []

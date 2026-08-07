@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`_send_log_replay` (WebSocket `/ws/logs/{exec_id}`) executava query síncrona do SQLite direto no event loop**: diferente de rotas HTTP `def`, handlers WebSocket do Starlette são sempre `async def` e não ganham despacho automático ao threadpool — a consulta ao histórico de logs rodava no mesmo event loop único do Uvicorn a cada nova conexão de log aberta no Dashboard. Corrigido extraindo a consulta para `_fetch_execution_logs` (síncrona) e despachando via `starlette.concurrency.run_in_threadpool`.
+- **`fetch_all` (`lib/python/oracle_extract.py`) deixava o `cursor.arraysize` no padrão do driver (100) independente do `batch_size` pedido**: um `fetchmany(5000)` ainda exigia ~50 round-trips de rede ao Oracle para preencher um único lote em memória. `Receitas Emitidas/extract_oracle.py` e `Receitas Bloqueadas/processar_receitas.py` chamavam `fetch_all` sem informar `cursor_arraysize`; `OBs Paradas Fase/extract_obs.py` e `OBs Fluxo Sem Tingimento/extract_ofst.py` tinham o mesmo problema em menor escala (`batch_size=1000`); `Montagem de Terceirizados/extract_oracle.py` setava `cursor_arraysize=100` explicitamente, mas sem acompanhar seu próprio `batch_size=5000`. Corrigido na fonte única: sem `cursor_arraysize` explícito, `fetch_all` agora sincroniza o arraysize do cursor com `batch_size` — os 5 scripts de extração de domínio passam a se beneficiar automaticamente, sem precisar editar cada um.
+
+### Notas
+- Achados #12 e #13 de uma revisão completa do repositório (grafo de revisores paralelos + verificador independente), sequência dos achados #8-#11 de performance (corrigidos em PR separado da mesma revisão). Cobertura: os 5 testes existentes de `_send_log_replay` já validam o refactor (não alterados, servem de regressão), mais 2 testes novos em `test_oracle_extract_unit.py` (`cursor.arraysize` acompanha `batch_size` por padrão; valor explícito continua tendo precedência). Suíte completa (`749 passed`), `ruff check` (escopo canônico) e o gate de governança nos arquivos alterados permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
