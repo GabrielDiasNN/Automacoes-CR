@@ -11,6 +11,7 @@ import {
   ErrorState,
   Loading,
   Nameplate,
+  Select,
   StatusTag,
   useToast,
   type Column,
@@ -23,16 +24,6 @@ import page from "./page.module.css";
 
 const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED"];
 const PER_PAGE = 25;
-
-const selectStyle: React.CSSProperties = {
-  background: "var(--surface-up)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  color: "var(--text-mid)",
-  fontFamily: "var(--font-mono)",
-  fontSize: "var(--fs-small)",
-  padding: "6px var(--sp-3)",
-};
 
 export function ExecucoesPage() {
   const toast = useToast();
@@ -192,8 +183,7 @@ export function ExecucoesPage() {
         title="Execuções"
         actions={
           <div className={page.toolbar}>
-            <select
-              style={selectStyle}
+            <Select
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value);
@@ -206,7 +196,7 @@ export function ExecucoesPage() {
                   {s || "todos os status"}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
               Atualizar
             </Button>
