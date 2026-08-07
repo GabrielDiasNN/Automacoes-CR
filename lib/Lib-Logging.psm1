@@ -578,6 +578,110 @@ function Get-ForwardedLogLevel {
 
 # ------------------------------------------------------------------------------
 
+# Get-AutomationExitStatus
+
+# ------------------------------------------------------------------------------
+
+function Get-AutomationExitStatus {
+    <#
+    .SYNOPSIS
+        Classifica um exit code de automacao como sucesso ou falha.
+
+    .DESCRIPTION
+        Extraida de `Exit-AutomationWithCode` para ficar testavel isoladamente
+        sem precisar mockar `exit` (que encerraria o processo de teste). Era
+        exatamente esta classificacao que tinha divergido entre run.ps1 (-eq 0,
+        -eq 0 -or -eq 2, -in $NonFailureCodes) antes da consolidacao.
+
+    .PARAMETER Code
+        Codigo de saida a classificar.
+
+    .PARAMETER NonFailureCodes
+        Codigos que contam como sucesso. Padrao: apenas 0.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)][int]$Code,
+        [int[]]$NonFailureCodes = @(0)
+    )
+    return $Code -in $NonFailureCodes
+}
+
+# ------------------------------------------------------------------------------
+
+# Exit-AutomationWithCode
+
+# ------------------------------------------------------------------------------
+
+function Exit-AutomationWithCode {
+    <#
+    .SYNOPSIS
+        Finaliza uma automacao: loga o encerramento, fecha a telemetria e sai do processo.
+
+    .DESCRIPTION
+        Centraliza o padrao de `Exit-WithCode` que cada run.ps1 reimplementava
+        localmente: gravar as linhas finais de log, classificar o Code como
+        sucesso/falha (via `Get-AutomationExitStatus`) e fechar a telemetria
+        antes de `exit`. A lista de codigos que NAO representam falha
+        (`NonFailureCodes`) e propria de cada automacao -- so a estrutura e
+        compartilhada, nao a lista.
+
+        Cada run.ps1 continua com sua propria funcao local `Exit-WithCode`, que
+        so encaminha para esta com ExecId/LogPath/NonFailureCodes fechados por
+        closure -- os call sites ao longo do script nao mudam.
+
+    .PARAMETER Code
+        Codigo de saida do processo.
+
+    .PARAMETER Msg
+        Mensagem final opcional, logada antes da linha de encerramento.
+
+    .PARAMETER ExecId
+        Identificador da execucao corrente (telemetria/log).
+
+    .PARAMETER LogPath
+        Caminho do arquivo de log jsonl da automacao.
+
+    .PARAMETER NonFailureCodes
+        Codigos de saida que contam como sucesso para fins de log/telemetria.
+        Padrao: apenas 0.
+
+    .PARAMETER EndMessage
+        Linha final de encerramento gravada no log. Padrao mantem o texto
+        historico de Receitas Bloqueadas/Receitas Emitidas ("FIM - Finalizado.
+        ExitCode=..."); OBs Fluxo Sem Tingimento e OBs Paradas Fase passam
+        "FIM - ExitCode=..." explicitamente para preservar o texto que usavam
+        antes da consolidacao.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][int]$Code,
+        [string]$Msg = "",
+        [Parameter(Mandatory = $true)][string]$ExecId,
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [int[]]$NonFailureCodes = @(0),
+        [string]$EndMessage = "FIM - Finalizado. ExitCode=$Code"
+    )
+
+    $isSuccess = Get-AutomationExitStatus -Code $Code -NonFailureCodes $NonFailureCodes
+
+    if ($Msg) {
+        Write-AutomacaoLog -Message $Msg -Level $(if ($isSuccess) { "INFO" } else { "ERRO" }) -ExecId $ExecId -LogPath $LogPath
+    }
+    Write-AutomacaoLog -Message $EndMessage -Level "INFO" -ExecId $ExecId -LogPath $LogPath
+    Write-AutomacaoLog -Message "=========================================================================================" -Level "INFO" -ExecId $ExecId -LogPath $LogPath
+
+    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        $finalStatus = if ($isSuccess) { "SUCCESS" } else { "ERROR" }
+        Close-ExecutionTelemetry -ExecId $ExecId -Status $finalStatus -LogPath $LogPath
+    }
+
+    exit $Code
+}
+
+# ------------------------------------------------------------------------------
+
 # Get-AutomacaoLogPath
 
 # ------------------------------------------------------------------------------
@@ -747,6 +851,6 @@ $script:AutomationMutex = $null
 
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
 
 
