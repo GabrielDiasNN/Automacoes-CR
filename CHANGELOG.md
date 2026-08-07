@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.34] - 07/08/2026
+
+### Corrigido
+- **`GET /api/system/overview` executava `list_scheduled_jobs` duas vezes por request** (`Orchestrator/app/routers/system.py:321` direto, e de novo dentro de `build_portfolio_health_response` via `portfolio_catalog._build_portfolio_lookups`), e cada execução fazia **1 SELECT por job agendado** dentro de um loop Python em vez de uma única query `IN (...)` (`Orchestrator/app/services/scheduler_runtime.py`). Endpoint com polling de 10-15s por aba de dashboard aberta (`PainelPage.tsx`, `SystemPage.tsx`). Corrigido em duas frentes: `list_scheduled_jobs` agora resolve todos os nomes de automação com uma única query em lote antes do loop de formatação; `_build_portfolio_lookups`/`build_portfolio_health_response` ganharam um parâmetro opcional `jobs` para reaproveitar o resultado já calculado em `get_system_overview`, em vez de recalcular.
+- **Três coletores de diagnóstico (`diagnostic_collectors.py`) faziam lazy-load por linha ao acessar `.automation.name`/`.automation.sla_minutes`** dentro de um loop após um `join` que só filtrava, sem carregar a relação: `collect_running_over_runtime`, `collect_orphaned_running` e `collect_sla_breaches`. Mesmo endpoint quente do item acima (`build_diagnostics_payload`, chamado por `GET /api/system/overview`). Corrigido com `contains_eager(models.Execution.automation)`, reaproveitando o `join` já existente na query em vez de duplicá-lo.
+- **`claim_next_task` (loop principal do worker) buscava até 25 candidatos PENDING sem `joinedload(Execution.automation)`**, e o acesso a `candidate.automation.queue_group` dentro do loop de checagem de conflito de grupo gerava um SELECT lazy por candidato de automação distinta — no caminho crítico de despacho de tarefas, a cada ciclo de poll do worker. Corrigido com `joinedload`.
+- **`start_automation` (`POST /api/automations/{id}/start`) era `async def` mas executava I/O síncrono do SQLAlchemy** (`repo.get_by_id`, `repo.get_active_execution`, `get_group_active_execution`, `repo.get_latest_execution`, `db.commit()`) sem `run_in_threadpool` — era a única rota `async def` do arquivo, sem nenhum `await` no corpo, então bloqueava o único event loop do Uvicorn (que também serve os WebSockets de log em tempo real) durante qualquer contenção do SQLite. Corrigido trocando para `def` simples: o Starlette já despacha rotas síncronas para o threadpool automaticamente, como as demais rotas do mesmo arquivo já fazem.
+
+### Notas
+- Os quatro achados acima (#8-#11 de uma revisão completa do repositório — arquitetura/qualidade/performance/design via grafo de revisores paralelos + verificador independente) foram confirmados lendo o código antes da correção; nenhum deles tinha teste que capturasse o comportamento antigo, então a correção veio acompanhada de testes de regressão: `test_list_scheduled_jobs_resolve_nome_correto_por_job_com_multiplas_automacoes` e `test_list_scheduled_jobs_sem_jobs_de_automacao_nao_consulta_o_banco` (`test_scheduler_runtime_unit.py`), `test_build_portfolio_lookups_usa_jobs_recebido_sem_reconsultar` e `test_build_portfolio_lookups_sem_jobs_recalcula_internamente` (`test_portfolio_catalog_unit.py`). Suíte completa (`751 passed`), `ruff check` e o gate de governança (`mypy --strict`, `pylint`) permanecem limpos.
+
 ## [1.3.33] - 06/08/2026
 
 ### Corrigido
