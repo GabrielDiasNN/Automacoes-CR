@@ -7,6 +7,9 @@ Valida:
 3. Classificação operacional de falhas através de exit codes conhecidos.
 """
 
+import re
+from typing import Any
+
 from app import models
 from app.constants import (
     EXECUTION_STATUS_ERROR,
@@ -19,8 +22,9 @@ from app.constants import (
     RECOVERY_ACTION_REVIEW_CHANNEL_STATE_BEFORE_REQUEUE,
 )
 from app.services.execution_runtime import claim_next_task, classify_process_result
-from conftest import AUTH_HEADERS
+from conftest import AUTH_HEADERS, test_engine
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 
@@ -212,3 +216,89 @@ def test_claim_next_task_skips_blocked_queue_group(db_session: Session) -> None:
     )
     assert blocked_row is not None
     assert blocked_row.status == EXECUTION_STATUS_PENDING
+
+
+def test_claim_next_task_usa_joinedload_sem_lazy_load_por_automacao(
+    db_session: Session,
+) -> None:
+    """Regressão do achado de performance #10 (revisão de `[1.3.34]`):
+    `claim_next_task` buscava candidatos sem `joinedload(Execution.automation)`,
+    e o acesso a `candidate.automation.queue_group` dentro do loop de checagem
+    de conflito de grupo disparava um SELECT lazy por candidato de automação
+    distinta — no caminho crítico de despacho do worker.
+
+    Monta 1 candidato bloqueado (força o loop a seguir para o próximo) e 1
+    livre, cada um de uma automação diferente, então conta as queries SQL de
+    fato emitidas. Com `joinedload`, a busca inicial já traz `automation`
+    junto (1 única query combinada); sem ele, cada acesso a `.automation`
+    reintroduziria uma query separada `... FROM automations WHERE
+    automations.id = ?`.
+    """
+    auto_bloqueada = models.Automation(
+        id=912,
+        name="Automacao Bloqueada Joinedload",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        queue_group="grupo_joinedload_bloq",
+        enabled=True,
+    )
+    auto_livre = models.Automation(
+        id=913,
+        name="Automacao Livre Joinedload",
+        script_path="Orchestrator/tests/test/run1.ps1",
+        queue_group="grupo_joinedload_livre",
+        enabled=True,
+    )
+    db_session.add_all([auto_bloqueada, auto_livre])
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="RUNNING_JOINEDLOAD",
+            automation_id=912,
+            status=EXECUTION_STATUS_RUNNING,
+            queue_group="grupo_joinedload_bloq",
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="PENDING_JOINEDLOAD_BLOQ",
+            automation_id=912,
+            status=EXECUTION_STATUS_PENDING,
+            priority="HIGH",
+            queue_group="grupo_joinedload_bloq",
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="PENDING_JOINEDLOAD_LIVRE",
+            automation_id=913,
+            status=EXECUTION_STATUS_PENDING,
+            priority="NORMAL",
+            queue_group="grupo_joinedload_livre",
+        )
+    )
+    db_session.commit()
+
+    statements: list[str] = []
+
+    def _listener(
+        _conn: Any, _cursor: Any, statement: str, _params: Any, _ctx: Any, _many: Any
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(test_engine, "before_cursor_execute", _listener)
+    try:
+        claimed = claim_next_task(
+            db_session, worker_instance_id="w-joinedload", worker_pid=1
+        )
+    finally:
+        event.remove(test_engine, "before_cursor_execute", _listener)
+
+    assert claimed == "PENDING_JOINEDLOAD_LIVRE"
+
+    lazy_automation_loads = [
+        s for s in statements if re.search(r"FROM automations\b", s)
+    ]
+    assert not lazy_automation_loads, (
+        "candidate.automation disparou lazy-load — joinedload ausente? "
+        f"{lazy_automation_loads}"
+    )

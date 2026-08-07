@@ -1,3 +1,7 @@
+/* Também consumida por um <input type="search"> em MonitorPage.tsx (fora do
+   componente Select). Regras específicas de <select> (ex.: appearance: none,
+   seta customizada via background-image) vazariam para esse input — faça
+   essas mudanças com cuidado ou isole numa classe própria. */
 .select {
   background: var(--surface-up);
   border: 1px solid var(--border);
