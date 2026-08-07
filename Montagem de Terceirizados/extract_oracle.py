@@ -14,7 +14,7 @@ from typing import Any
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
 )
-from automation_log import make_logger
+from automation_log import ensure_utf8_streams, make_logger
 from dotenv import load_dotenv
 from oracle_extract import (
     OracleCredentials,
@@ -31,12 +31,7 @@ from oracle_retry import CircuitBreakerError, make_oracle_retry
 # evitando que variaveis stale da sessao atual vencam o .env do repositorio.
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=True)
 
-# Forca UTF-8 para stdout e stderr para garantir interoperabilidade
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
-if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8")
-
+ensure_utf8_streams()
 
 log = make_logger("PY-EXTRACT")
 

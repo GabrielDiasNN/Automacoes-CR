@@ -16,7 +16,7 @@ sys.path.insert(
 )
 import oracledb
 import pandas as pd
-from automation_log import make_logger
+from automation_log import ensure_utf8_streams, make_logger
 from dotenv import load_dotenv
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -33,10 +33,7 @@ from pydantic import BaseModel, Field, ValidationError
 # Carregar ambiente (.env) do projeto raiz
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-if sys.stdout.encoding != "utf-8":
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-if sys.stderr.encoding != "utf-8":
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+ensure_utf8_streams()
 
 
 log = make_logger("PY-PROCESS")
