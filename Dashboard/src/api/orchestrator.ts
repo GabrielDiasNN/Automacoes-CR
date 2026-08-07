@@ -677,9 +677,9 @@ export const orchestratorApi = {
   pauseAutomation: (id: number) => api.post<{ message: string }>(`/api/automations/${id}/pause`),
   resumeAutomation: (id: number) => api.post<{ message: string }>(`/api/automations/${id}/resume`),
   setAutomationTestMode: (id: number, enabled: boolean) =>
-    api.post<{ message: string }>(`/api/automations/${id}/test-mode${qs({ enabled })}`),
+    api.post<{ message: string }>(`/api/automations/${id}/test-mode`, { enabled }),
   setGlobalTestMode: (enabled: boolean) =>
-    api.post<{ message: string }>(`/api/automations/test-mode/global${qs({ enabled })}`),
+    api.post<{ message: string }>(`/api/automations/test-mode/global`, { enabled }),
   pauseAll: () => api.post<{ message: string }>("/api/automations/control/pause-all"),
   resumeAll: () => api.post<{ message: string }>("/api/automations/control/resume-all"),
 

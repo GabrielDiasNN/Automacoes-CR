@@ -11,7 +11,8 @@ import logging
 import math
 import threading
 import time
-from typing import Any
+from datetime import datetime
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +32,7 @@ from ..services.automation_snapshot import (
 )
 from ..services.execution_runtime import (
     build_queued_execution,
+    cooldown_remaining_minutes,
     generate_execution_id,
     get_group_active_execution,
 )
@@ -335,7 +337,7 @@ def create_automation(
 # ---------------------------------------------------------------------------
 
 
-@router.put("/{automation_id}", response_model=schemas.AutomationResponse)
+@router.patch("/{automation_id}", response_model=schemas.AutomationResponse)
 def update_automation(
     automation_id: int,
     automation_update: schemas.AutomationUpdate,
@@ -503,7 +505,7 @@ def delete_automation(
 
 
 @router.post("/{automation_id}/start")
-async def start_automation(
+def start_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -543,19 +545,19 @@ async def start_automation(
 
     if db_auto.cooldown_minutes and db_auto.cooldown_minutes > 0:
         latest_exec = repo.get_latest_execution(db, automation_id)
-        if latest_exec and latest_exec.started_at:
-            elapsed_minutes = (
-                get_now_local() - latest_exec.started_at
-            ).total_seconds() / 60
-            if elapsed_minutes < db_auto.cooldown_minutes:
-                remaining = round(db_auto.cooldown_minutes - elapsed_minutes, 1)
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        "Cooldown operacional ativo para esta automação. "
-                        f"Aguarde aproximadamente {remaining} minuto(s)."
-                    ),
-                )
+        remaining = cooldown_remaining_minutes(
+            cast(datetime | None, latest_exec.started_at) if latest_exec else None,
+            cast(int, db_auto.cooldown_minutes),
+            get_now_local(),
+        )
+        if remaining is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cooldown operacional ativo para esta automação. "
+                    f"Aguarde aproximadamente {remaining} minuto(s)."
+                ),
+            )
 
     exec_id = generate_execution_id("EXEC")
 
@@ -593,13 +595,14 @@ async def start_automation(
 
 @router.post("/test-mode/global")
 def set_global_test_mode(
-    enabled: bool,
+    payload: schemas.TestModeRequest,
     request: Request,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, str]:
     """Ativa ou desativa o Modo Teste para TODAS as automacoes cadastradas."""
 
+    enabled = payload.enabled
     repo.set_test_mode_for_all(db, enabled)
 
     # Sincroniza a variavel de ambiente do Windows (orquestracao no service, #12)
@@ -624,7 +627,7 @@ def set_global_test_mode(
 @router.post("/{automation_id}/test-mode")
 def set_automation_test_mode(
     automation_id: int,
-    enabled: bool,
+    payload: schemas.TestModeRequest,
     request: Request,
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
@@ -637,6 +640,7 @@ def set_automation_test_mode(
 
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
+    enabled = payload.enabled
     db_auto.test_mode = enabled  # type: ignore[assignment]
 
     log_audit(

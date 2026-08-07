@@ -134,21 +134,7 @@ function Exit-WithCode {
 
     param([int]$Code, [string]$Msg = "")
 
-    if ($Msg) { Write-Log $Msg -Lvl $(if ($Code -eq 0 -or $Code -eq 2) { "INFO" } else { "ERRO" }) }
-
-    Write-Log "FIM - Finalizado. ExitCode=$Code"
-
-    Write-Log "========================================================================================="
-
-    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
-
-        $finalStatus = if ($Code -eq 0 -or $Code -eq 2) { "SUCCESS" } else { "ERROR" }
-
-        Close-ExecutionTelemetry -ExecId $ExecId -Status $finalStatus -LogPath $LogFile
-
-    }
-
-    exit $Code
+    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes @(0, 2)
 
 }
 

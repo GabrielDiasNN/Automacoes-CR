@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from .. import models
 from ..constants import (
@@ -111,6 +112,27 @@ def get_group_active_execution(
     return query.order_by(models.Execution.started_at.desc()).first()
 
 
+def cooldown_remaining_minutes(
+    reference_time: datetime | None,
+    cooldown_minutes: int | None,
+    now: datetime,
+) -> float | None:
+    """Minutos restantes de cooldown a partir de `reference_time`, ou None se
+    o cooldown não está configurado ou já expirou.
+
+    Cada chamador decide o que conta como `reference_time` (início ou fim da
+    última execução) — essa diferença é deliberada entre o start manual
+    (conta do início) e o auto-retry (conta do fim da falha), então a função
+    só compartilha a aritmética/comparação, não a escolha do marco temporal.
+    """
+    if not cooldown_minutes or cooldown_minutes <= 0 or reference_time is None:
+        return None
+    elapsed_minutes = (now - reference_time).total_seconds() / 60
+    if elapsed_minutes >= cooldown_minutes:
+        return None
+    return round(cooldown_minutes - elapsed_minutes, 1)
+
+
 def _has_running_execution_for_group(
     db: Session,
     queue_group: str | None,
@@ -121,7 +143,7 @@ def _has_running_execution_for_group(
     `get_group_active_execution`. Até então esta função filtrava por
     `Execution.queue_group` — cópia congelada no enfileiramento por
     `build_queued_execution` —, enquanto os guards HTTP e o scheduler já usavam
-    o valor atual da automação. Depois de um `PUT /api/automations/{id}` que
+    o valor atual da automação. Depois de um `PATCH /api/automations/{id}` que
     alterasse o grupo, as execuções PENDING já na fila carregavam o valor
     antigo: o worker serializava por um grupo e a API por outro, e duas
     automações que deveriam ser mutuamente exclusivas (grupo `hub-global`, que
@@ -159,6 +181,7 @@ def claim_next_task(
     )
     candidates = (
         db.query(models.Execution)
+        .options(joinedload(models.Execution.automation))
         .filter(models.Execution.status == EXECUTION_STATUS_PENDING)
         .order_by(priority_rank.asc(), models.Execution.started_at.asc())
         .limit(25)

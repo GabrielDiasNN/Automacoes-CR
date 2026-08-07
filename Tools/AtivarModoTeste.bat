@@ -31,9 +31,11 @@ set /p choice="Escolha uma opcao: "
 if "%choice%"=="1" (
     echo.
     echo Ativando Modo Teste GLOBAL...
-    curl.exe -s -X POST "!BASE_URL!/test-mode/global?enabled=true" ^
+    curl.exe -s -X POST "!BASE_URL!/test-mode/global" ^
          -H "X-API-Key: !API_KEY!" ^
-         -H "accept: application/json"
+         -H "accept: application/json" ^
+         -H "Content-Type: application/json" ^
+         -d "{\"enabled\": true}"
     goto end
 )
 
@@ -41,9 +43,11 @@ if "%choice%"=="2" (
     set /p auto_id="Digite o ID da automacao: "
     echo.
     echo Ativando Modo Teste para ID %auto_id%...
-    curl.exe -s -X POST "!BASE_URL!/%auto_id%/test-mode?enabled=true" ^
+    curl.exe -s -X POST "!BASE_URL!/%auto_id%/test-mode" ^
          -H "X-API-Key: !API_KEY!" ^
-         -H "accept: application/json"
+         -H "accept: application/json" ^
+         -H "Content-Type: application/json" ^
+         -d "{\"enabled\": true}"
     goto end
 )
 
