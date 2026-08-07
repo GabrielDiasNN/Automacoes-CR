@@ -781,17 +781,27 @@ def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
     # formatá-lo em string BR) usando uma chave (has_run_time, valor): jobs sem
     # próxima execução (None) vão para o fim sem comparar string com datetime,
     # nem datetime naive com aware (bug corrigido em 03/07/2026).
+    jobs = scheduler.get_jobs()
+    auto_ids = {
+        auto_id
+        for job in jobs
+        if (auto_id := extract_automation_id_from_job(job.id)) is not None
+    }
+    names_by_id: dict[int, str] = {}
+    if auto_ids:
+        rows = (
+            db.query(models.Automation.id, models.Automation.name)
+            .filter(models.Automation.id.in_(auto_ids))
+            .all()
+        )
+        names_by_id = {int(row.id): cast(str, row.name) for row in rows}
+
     entries: list[tuple[tuple[int, datetime | int], schemas.ScheduledJob]] = []
-    for job in scheduler.get_jobs():
+    for job in jobs:
         auto_id = extract_automation_id_from_job(job.id)
         auto_name: str | None = None
         if auto_id is not None:
-            auto = (
-                db.query(models.Automation)
-                .filter(models.Automation.id == auto_id)
-                .first()
-            )
-            auto_name = cast(str | None, auto.name) if auto else None
+            auto_name = names_by_id.get(auto_id)
         elif job.id.startswith("enterprise_"):
             auto_name = (
                 f"System: {job.id.replace('enterprise_', '').replace('_', ' ').title()}"

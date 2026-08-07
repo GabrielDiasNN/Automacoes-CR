@@ -102,14 +102,27 @@ def fetch_all(  # pylint: disable=too-many-arguments
 
     `params` sao bind variables passadas ao cursor. Valores SEMPRE via bind —
     nunca interpolados na string SQL.
+
+    `batch_size` tambem define o `arraysize` implicito do cursor quando
+    `cursor_arraysize` nao e passado explicitamente (sincroniza o tamanho do
+    lote de `fetchmany()` com o arraysize do driver, evitando round-trips
+    extras). Valores muito grandes de `batch_size` podem, por isso, inflar o
+    consumo de memoria por round-trip em queries com colunas largas
+    (CLOB/BLOB/LONG) — hoje nao e um problema pratico, pois os 5 chamadores
+    usam `batch_size` entre 1000 e 5000 e nenhuma query envolvida traz essas
+    colunas.
     """
     log(f"Conectando ao Oracle (DSN: {creds.dsn})...", "INFO", exec_id)
     with oracledb.connect(
         user=creds.user, password=creds.password, dsn=creds.dsn
     ) as connection:
         cursor = connection.cursor()
-        if cursor_arraysize is not None:
-            cursor.arraysize = cursor_arraysize
+        # Sem isto, o driver mantém o arraysize padrão (100) independente do
+        # batch_size pedido: um fetchmany(5000) ainda exige ~50 round-trips de
+        # rede ao Oracle para preencher um único lote em memória, em vez de 1.
+        cursor.arraysize = (
+            cursor_arraysize if cursor_arraysize is not None else batch_size
+        )
         cursor.execute(sql, params or {})
         if not cursor.description:
             return [], []

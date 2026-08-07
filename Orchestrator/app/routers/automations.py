@@ -505,7 +505,7 @@ def delete_automation(
 
 
 @router.post("/{automation_id}/start")
-async def start_automation(
+def start_automation(
     automation_id: int,
     request: Request,
     db: Session = Depends(get_db),
