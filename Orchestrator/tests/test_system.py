@@ -375,6 +375,36 @@ def test_diagnostics_offline_worker_prefers_recovery_action(
     recover_payload = recover.json()
     assert recover_payload["script"] == "Recover-Orchestrator.ps1"
     assert recover_payload["queue_active_count"] == 1
+    assert recover_payload["status"] == "triggered"
+
+    # Teste de worker já online sem force: retorna 200 informativo sem 409
+    monkeypatch.setattr(
+        system_router,
+        "_get_worker_status",
+        lambda db: WorkerStatus(
+            is_alive=True,
+            pid=1234,
+            instance_id="inst-1",
+            host="host-1",
+            last_ping=get_now_local(),
+            uptime_seconds=120.0,
+            tasks_completed=1,
+            tasks_failed=0,
+            active_tasks=0,
+            version="6.4.0",
+        ),
+    )
+    recover_alive = client.post("/api/system/worker/recover", headers=AUTH_HEADERS)
+    assert recover_alive.status_code == 200
+    assert recover_alive.json()["status"] == "already_alive"
+
+    # Teste de worker já online com force=True: força o disparo
+    recover_forced = client.post(
+        "/api/system/worker/recover?force=true", headers=AUTH_HEADERS
+    )
+    assert recover_forced.status_code == 200
+    assert recover_forced.json()["status"] == "triggered"
+    assert recover_forced.json()["script"] == "Recover-Orchestrator.ps1"
 
 
 def test_system_overview_includes_diagnostics_summary(client: Any) -> None:

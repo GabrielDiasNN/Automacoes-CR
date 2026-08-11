@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, getApiKey, qs, setApiKey } from "../api/client";
+import { api, getApiKey, qs, setApiKey, setUnauthorizedHandler } from "../api/client";
 
 describe("qs", () => {
   it("monta query-string a partir de um objeto", () => {
@@ -46,6 +46,7 @@ describe("api.get", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     setApiKey("");
+    setUnauthorizedHandler(null);
   });
 
   it("envia o header X-API-Key quando a chave está definida", async () => {
@@ -71,5 +72,77 @@ describe("api.get", () => {
     globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     await expect(api.get("/api/system/health")).rejects.toThrow("403 API key inválida");
+  });
+});
+
+describe("setUnauthorizedHandler", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    setUnauthorizedHandler(null);
+  });
+
+  it("chama o handler ao receber status 401", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      text: async () => "Token expirado",
+    }) as unknown as typeof fetch;
+
+    await expect(api.get("/api/system/overview")).rejects.toThrow();
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(401);
+  });
+
+  it("chama o handler ao receber status 403", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      text: async () => "Acesso negado",
+    }) as unknown as typeof fetch;
+
+    await expect(api.get("/api/system/overview")).rejects.toThrow();
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(403);
+  });
+
+  it("não chama o handler para outros erros HTTP (ex: 400 ou 500)", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      text: async () => "Erro interno",
+    }) as unknown as typeof fetch;
+
+    await expect(api.get("/api/system/overview")).rejects.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("permite desregistrar o handler passando null", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    setUnauthorizedHandler(null);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      text: async () => "Token expirado",
+    }) as unknown as typeof fetch;
+
+    await expect(api.get("/api/system/overview")).rejects.toThrow();
+    expect(handler).not.toHaveBeenCalled();
   });
 });

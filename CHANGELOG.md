@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.35] - 11/08/2026
+
+### Corrigido
+- **Queda do Orchestrator por falso positivo do Watchdog eliminada** (`Infrastructure/MonitorAutomacoes.ps1`): o Watchdog usava um timeout de probe estrito de 10s e reiniciava todo o sistema no primeiro erro (`catch`). Uma consulta com latência de 11.7s sob contenção de disco derrubou o Orchestrator em 11/08 às 08:36 UTC. Corrigido com timeout de probe ampliado para 25s, filtro com 3 tentativas consecutivas com rechecagem rápida de 3s e tratamento de erro HTTP 403 sem reiniciar o serviço.
+- **Falha de recuperação do Worker com HTTP 409 eliminada** (`Orchestrator/app/routers/system.py`, `Orchestrator/app/services/system_runtime.py`): `POST /api/system/worker/recover` lançava HTTP 409 se o worker emitisse heartbeat logo após a requisição. Agora aceita parâmetro `force: bool = False` e retorna `200 OK` amigável (`status: already_alive`) sem lançar 409 quando o worker já estiver operacional. A tolerância de `is_alive` do Worker foi ajustada de 60s para 90s (6x o heartbeat de 15s) para absorver o `busy_timeout` de 30s do SQLite.
+- **Startup race condition e erro de schema no Worker eliminados** (`Infrastructure/Start-Orchestrator.ps1`): o script iniciava o Worker antes do FastAPI executar as migrações do Alembic, causando crash com `sqlite3.OperationalError: no such column: executions.queued_at` em 03/08. Agora executa explicitamente `alembic upgrade head` de forma síncrona antes dos processos, inicia a API FastAPI primeiro e valida a saúde do sistema antes de subir o Worker.
+- **Loop de pollings com 403 no Dashboard cessado imediatamente** (`Dashboard/src/api/client.ts`, `Dashboard/src/context/ApiKeyContext.tsx`): quando a API Key expira ou está inválida, os hooks de polling mantinham centenas de requisições 403 em background. Adicionado listener de `onUnauthorized` que limpa a credencial de sessão, desmonta o painel e exibe a tela de login (`ApiKeyGate`) na primeira resposta 401/403.
+
 ## [1.3.34] - 07/08/2026
 
 ### Corrigido

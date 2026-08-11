@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useApiKey } from "../hooks/useApiKey";
-import { setApiKey } from "../api/client";
+import { setApiKey, setUnauthorizedHandler } from "../api/client";
 
 interface ApiKeyContextValue {
   apiKey: string;
@@ -18,6 +18,17 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setApiKey(apiKey);
   }, [apiKey]);
+
+  // Registra handler para limpar a chave automaticamente em caso de 401/403,
+  // interrompendo o loop de pollings e exibindo a tela de login
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      clearKey();
+    });
+    return () => {
+      setUnauthorizedHandler(null);
+    };
+  }, [clearKey]);
 
   return (
     <ApiKeyContext.Provider value={{ apiKey, saveKey, clearKey, hasKey: !!apiKey }}>

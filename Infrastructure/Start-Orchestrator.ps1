@@ -70,19 +70,21 @@ Remove-Item (Join-Path $OrchestratorDir "*.pid") -Force -ErrorAction SilentlyCon
 Remove-Item (Join-Path $OrchestratorDir "worker.shutdown") -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
-# 3. INICIAR WORKER (Background)
+# 2. APLICAR MIGRACOES DO BANCO (Alembic - Sincrono)
 Set-Location $OrchestratorDir
-Write-Host "Iniciando Worker $RuntimeVersion (Zero-Latency)..." -ForegroundColor Cyan
-$workerProcess = Start-Process -FilePath $VenvPython -ArgumentList "worker.py" -WindowStyle Hidden -PassThru
-$workerProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "worker.pid") -Encoding ascii -Force
+Write-Host "Garantindo schema atualizado do banco de dados (Alembic)..." -ForegroundColor Cyan
+& $VenvPython -m alembic upgrade head
+if ($LASTEXITCODE -ne 0) {
+    throw "Falha ao aplicar migracoes do Alembic. Startup cancelado para evitar inconsistencias."
+}
 
-# 4. INICIAR FASTAPI (Background)
+# 3. INICIAR FASTAPI (Background)
 Write-Host "Iniciando Central de Automacoes (API) na porta $HubPort..." -ForegroundColor Green
 $apiLog = Join-Path $LogDir "uvicorn_startup.log"
 $apiProcess = Start-Process -FilePath $VenvPython -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port $HubPort" -WindowStyle Hidden -PassThru -RedirectStandardError $apiLog
 $apiProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "orchestrator.pid") -Encoding ascii -Force
 
-# 5. VALIDAR STARTUP REAL DA API
+# 4. VALIDAR STARTUP REAL DA API
 $healthUrl = "http://127.0.0.1:$HubPort/api/system/health"
 $apiReady = $false
 for ($i = 0; $i -lt 20; $i++) {
@@ -105,6 +107,11 @@ if (-not $apiReady) {
     }
     throw "API nao ficou saudavel na porta $HubPort apos restart. Ultimos logs: $errTail"
 }
+
+# 5. INICIAR WORKER (Background - Garantido com Schema Pronto)
+Write-Host "Iniciando Worker $RuntimeVersion (Zero-Latency)..." -ForegroundColor Cyan
+$workerProcess = Start-Process -FilePath $VenvPython -ArgumentList "worker.py" -WindowStyle Hidden -PassThru
+$workerProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "worker.pid") -Encoding ascii -Force
 
 # 6. GARANTIR WATCHDOG (Monitor)
 Write-Host "Ativando Watchdog $RuntimeVersion (Resiliencia)..." -ForegroundColor Cyan

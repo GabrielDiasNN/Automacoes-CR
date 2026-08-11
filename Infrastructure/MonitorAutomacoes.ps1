@@ -54,32 +54,61 @@ Start-Sleep -Seconds 15 # Aguardar startup inicial
 $script:LastOrchestratorRestart = $null
 $script:LastWorkerRecover = $null
 
-while ($true) {
-    try {
-        # Validacao autenticada (Pilar V)
-        $headers = @{ "X-API-Key" = $ApiKey }
-        $health = Invoke-RestMethod -Uri $HealthUrl -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+$script:ConsecutiveHealthFailures = 0
 
-        # Verificacao de integridade dos componentes vitais
-        if ($health.database -ne "online" -or $health.scheduler -ne "executando") {
-            throw "API respondeu, mas componentes internos em falha: DB=$($health.database), Sched=$($health.scheduler)"
+while ($true) {
+    $healthSuccess = $false
+    $errReason = ""
+    $isAuthError = $false
+
+    # Pilar E/V: Probe resiliente com 3 tentativas consecutivas para evitar falsos positivos
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            $headers = @{ "X-API-Key" = $ApiKey }
+            $health = Invoke-RestMethod -Uri $HealthUrl -Headers $headers -TimeoutSec 25 -ErrorAction Stop
+
+            if ($health.database -ne "online" -or $health.scheduler -ne "executando") {
+                throw "API respondeu, mas componentes internos em falha: DB=$($health.database), Sched=$($health.scheduler)"
+            }
+
+            $healthSuccess = $true
+            $script:ConsecutiveHealthFailures = 0
+            break
         }
-        
+        catch [System.Exception] {
+            $errReason = $_.Exception.Message
+            $statusCode = 0
+            if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            } elseif ($_.Exception.StatusCode) {
+                $statusCode = [int]$_.Exception.StatusCode
+            }
+
+            if ($statusCode -eq 403 -or $statusCode -eq 401) {
+                $isAuthError = $true
+                break # Erro de credencial nao deve retentar nem reiniciar o servico
+            }
+
+            if ($attempt -lt 3) {
+                Start-Sleep -Seconds 3
+            }
+        }
+    }
+
+    if ($isAuthError) {
+        Write-Log "Watchdog: Falha de autenticacao (403) com a API na porta $HubPort. Verifique a ORCHESTRATOR_API_KEY no .env." -Type "WARN"
+        Start-Sleep -Seconds 45
+        continue
+    }
+
+    if ($healthSuccess) {
         # Verificar se o Worker esta respondendo ao ping (heartbeat).
-        # Ate 31/07/2026 este ramo APENAS logava um WARN: com a API saudavel e o
-        # worker morto, o unico caminho de reinicio (o catch abaixo) nunca
-        # disparava e a fila ficava parada indefinidamente — exatamente o
-        # cenario para o qual /api/system/worker/recover existe, mas que ninguem
-        # acionava sem um humano olhando o dashboard.
         if ($health.worker.is_alive -eq $false) {
             $now = Get-Date
-            # Cooldown proprio, separado do reinicio total do Orquestrador.
             if ($null -eq $script:LastWorkerRecover -or ($now - $script:LastWorkerRecover).TotalSeconds -gt 180) {
                 Write-Log "Worker Engine sem heartbeat com API operacional. Acionando recuperacao do worker..." -Type "WARN"
                 $script:LastWorkerRecover = $now
                 try {
-                    # Recupera SOMENTE o worker. Reiniciar o Orquestrador inteiro
-                    # derrubaria tambem a API e as execucoes em voo.
                     $recoverUrl = "http://127.0.0.1:$HubPort/api/system/worker/recover"
                     Invoke-RestMethod -Uri $recoverUrl -Method Post -Headers $headers -TimeoutSec 30 -ErrorAction Stop | Out-Null
                     Write-Log "Recuperacao do worker solicitada com sucesso." -Type "INFO"
@@ -98,18 +127,18 @@ while ($true) {
 
         $script:LastOrchestratorRestart = $null
     }
-    catch [System.Exception] {
-        $errReason = $_.Exception.Message
+    else {
+        $script:ConsecutiveHealthFailures++
         $now = Get-Date
         # Cooldown de 180 segundos para evitar loops de reinicio infinito (Pilar E)
         if ($null -eq $script:LastOrchestratorRestart -or ($now - $script:LastOrchestratorRestart).TotalSeconds -gt 180) {
-            Write-Log "Watchdog: Orquestrador inacessivel na porta $HubPort ($errReason). Reiniciando..." -Type "WARN"
+            Write-Log "Watchdog: Orquestrador inacessivel na porta $HubPort apos 3 tentativas ($errReason). Reiniciando..." -Type "WARN"
             $script:LastOrchestratorRestart = $now
             $startScript = Join-Path $InfrastructureDir "Start-Orchestrator.ps1"
-            # Disparar reinicio seguro
             Start-Process "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
             Start-Sleep -Seconds 30
         }
     }
     Start-Sleep -Seconds 45
 }
+

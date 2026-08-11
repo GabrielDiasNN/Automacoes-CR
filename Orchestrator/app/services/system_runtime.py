@@ -25,7 +25,9 @@ def get_worker_status(db: Session) -> schemas.WorkerStatus:
         return schemas.WorkerStatus(is_alive=False)
 
     now = get_now_local()
-    is_alive = (now - hb.last_ping).total_seconds() < 60
+    # Tolerância de 90s (6x o intervalo de 15s), permitindo absorver contenções de
+    # lock SQLite (busy_timeout=30s) sem declarar falso worker offline.
+    is_alive = (now - hb.last_ping).total_seconds() < 90
     return schemas.WorkerStatus(
         is_alive=is_alive,
         pid=cast(int | None, hb.pid),
