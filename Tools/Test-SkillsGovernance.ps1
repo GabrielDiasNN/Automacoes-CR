@@ -477,7 +477,7 @@ function Test-CodexGlobalSharedSkillMirrors {
     }
 
     foreach ($skillName in $script:GlobalSharedSkillNames) {
-        $mirrorPath = Join-Path $codexSkillsRoot $skillName
+        $codexSkillPath = Join-Path $codexSkillsRoot $skillName
         $canonicalPath = Join-Path $globalSharedRoot $skillName
 
         if (-not (Test-Path -LiteralPath $canonicalPath)) {
@@ -485,33 +485,35 @@ function Test-CodexGlobalSharedSkillMirrors {
             continue
         }
 
-        if (-not (Test-Path -LiteralPath $mirrorPath)) {
-            $findings += New-Finding -File $mirrorPath -Rule "CODEX_SHARED_SKILL_MIRROR_MISSING" -Detail ("Mirror da skill global obrigatoria nao encontrado no Codex: {0}" -f $skillName)
+        if (-not (Test-Path -LiteralPath $codexSkillPath)) {
+            $findings += New-Finding -File $codexSkillPath -Rule "CODEX_SHARED_SKILL_MISSING" -Detail ("Skill global obrigatoria nao encontrada no Codex: {0}" -f $skillName)
             continue
         }
 
-        $targetState = Resolve-LinkTargetPath -LinkPath $mirrorPath -RootForRelativeTarget $codexSkillsRoot
-        if (-not $targetState.IsLinked) {
-            $findings += New-Finding -File $mirrorPath -Rule "CODEX_SHARED_SKILL_MIRROR_NOT_LINKED" -Detail ("Skill global existe no Codex, mas nao e link simbolico ou junction: {0}" -f $skillName)
+        $codexSkillMd = Join-Path $codexSkillPath "SKILL.md"
+        if (-not (Test-Path -LiteralPath $codexSkillMd)) {
+            $findings += New-Finding -File $codexSkillPath -Rule "CODEX_SHARED_SKILL_MD_MISSING" -Detail ("SKILL.md nao encontrado na skill do Codex: {0}" -f $skillName)
             continue
         }
 
-        $resolvedMirror = $targetState.ResolvedTarget
+        $targetState = Resolve-LinkTargetPath -LinkPath $codexSkillPath -RootForRelativeTarget $codexSkillsRoot
+        if ($targetState.IsLinked) {
+            $resolvedMirror = $targetState.ResolvedTarget
+            $canonicalTargetState = Resolve-LinkTargetPath -LinkPath $canonicalPath -RootForRelativeTarget $globalSharedRoot
+            if ($canonicalTargetState.IsLinked -and -not [string]::IsNullOrWhiteSpace($canonicalTargetState.ResolvedTarget)) {
+                $resolvedCanonical = $canonicalTargetState.ResolvedTarget
+            } else {
+                $resolvedCanonical = (Resolve-Path -LiteralPath $canonicalPath).Path
+            }
 
-        $canonicalTargetState = Resolve-LinkTargetPath -LinkPath $canonicalPath -RootForRelativeTarget $globalSharedRoot
-        if ($canonicalTargetState.IsLinked -and -not [string]::IsNullOrWhiteSpace($canonicalTargetState.ResolvedTarget)) {
-            $resolvedCanonical = $canonicalTargetState.ResolvedTarget
-        } else {
-            $resolvedCanonical = (Resolve-Path -LiteralPath $canonicalPath).Path
-        }
+            if ([string]::IsNullOrWhiteSpace($resolvedMirror)) {
+                $findings += New-Finding -File $codexSkillPath -Rule "CODEX_SHARED_SKILL_MIRROR_UNRESOLVED" -Detail ("Mirror do Codex nao expoe ResolvedTarget para validacao: {0}" -f $skillName) -Severity "WARN"
+                continue
+            }
 
-        if ([string]::IsNullOrWhiteSpace($resolvedMirror)) {
-            $findings += New-Finding -File $mirrorPath -Rule "CODEX_SHARED_SKILL_MIRROR_UNRESOLVED" -Detail ("Mirror do Codex nao expoe ResolvedTarget para validacao: {0}" -f $skillName) -Severity "WARN"
-            continue
-        }
-
-        if ($resolvedMirror -ne $resolvedCanonical) {
-            $findings += New-Finding -File $mirrorPath -Rule "CODEX_SHARED_SKILL_MIRROR_TARGET_INVALID" -Detail ("Mirror do Codex nao aponta para a skill global canonica: {0}" -f $skillName)
+            if ($resolvedMirror -ne $resolvedCanonical) {
+                $findings += New-Finding -File $codexSkillPath -Rule "CODEX_SHARED_SKILL_MIRROR_TARGET_INVALID" -Detail ("Mirror do Codex nao aponta para a skill global canonica: {0}" -f $skillName)
+            }
         }
     }
 

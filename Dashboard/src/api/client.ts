@@ -4,6 +4,7 @@ const STORAGE_KEY = "orchestrator_api_key";
 // Inicializa a key do sessionStorage imediatamente no carregamento do módulo
 // para evitar race condition entre ApiKeyContext.useEffect e os primeiros fetches
 let _apiKey = (typeof sessionStorage !== "undefined" ? sessionStorage.getItem(STORAGE_KEY) : null) ?? "";
+let _unauthorizedHandler: ((status: number) => void) | null = null;
 
 export function setApiKey(key: string) {
   _apiKey = key;
@@ -11,6 +12,10 @@ export function setApiKey(key: string) {
 
 export function getApiKey(): string {
   return _apiKey;
+}
+
+export function setUnauthorizedHandler(handler: ((status: number) => void) | null) {
+  _unauthorizedHandler = handler;
 }
 
 function headers(): HeadersInit {
@@ -23,6 +28,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { ...headers(), ...(init.headers ?? {}) },
   });
   if (!res.ok) {
+    if ((res.status === 401 || res.status === 403) && _unauthorizedHandler) {
+      _unauthorizedHandler(res.status);
+    }
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`${res.status} ${text}`);
   }

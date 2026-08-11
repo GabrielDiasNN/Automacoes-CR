@@ -196,6 +196,7 @@ def wakeup_worker(
 @router.post("/worker/recover")
 def recover_worker(
     request: Request,
+    force: bool = Query(False, description="Forçar recuperação mesmo se o heartbeat estiver recente"),
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
@@ -208,11 +209,13 @@ def recover_worker(
         or 0
     )
 
-    if worker_status.is_alive:
-        raise HTTPException(
-            status_code=409,
-            detail="Worker já está online; use apenas wake-up para acelerar a fila.",
-        )
+    if worker_status.is_alive and not force:
+        return {
+            "status": "already_alive",
+            "message": "Worker já está online; recuperação não necessária.",
+            "queue_active_count": active_count,
+            "script": None,
+        }
 
     script_name = _launch_orchestrator_recovery()
 
@@ -227,12 +230,14 @@ def recover_worker(
                 "script": script_name,
                 "queue_active_count": active_count,
                 "worker_alive": worker_status.is_alive,
+                "force": force,
             }
         ),
     )
     db.commit()
 
     return {
+        "status": "triggered",
         "message": "Recuperação do Orchestrator acionada com sucesso.",
         "script": script_name,
         "queue_active_count": active_count,
