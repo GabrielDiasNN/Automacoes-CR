@@ -1,3 +1,5 @@
+# import-error e wrong-import-position: import de lib/python via sys.path.insert()
+# dinamico (linhas 28-31), que o pylint nao resolve em tempo de analise estatica.
 # pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
 #   "version": "1.0.0",

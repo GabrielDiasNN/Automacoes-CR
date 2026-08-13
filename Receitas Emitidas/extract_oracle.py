@@ -1,3 +1,5 @@
+# import-error e wrong-import-position: import de lib/python via sys.path.insert()
+# dinamico abaixo, que o pylint nao resolve em tempo de analise estatica.
 # pylint: disable=line-too-long, too-many-locals, broad-exception-caught, import-error, wrong-import-position
 # {
 #   "version": "2.8.0",
@@ -126,7 +128,7 @@ def extract() -> None:
             exec_id,
         )
         sys.exit(1)
-    except Exception as e:
+    except (oracledb.Error, OSError, json.JSONDecodeError, ValueError, TypeError) as e:
         log(f"Erro fatal na extracao: {e}", "ERROR", exec_id)
         sys.exit(1)
 

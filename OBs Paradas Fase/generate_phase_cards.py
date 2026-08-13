@@ -1,18 +1,42 @@
-# pylint: disable=broad-exception-caught
-# {
-#   "version": "1.7.0",
-#   "description": "Le obs_result.json + config.json, gera images PNG por fase e phase_cards.json"
-# }
 import json
 import os
 import re
 import sys
-from collections import defaultdict
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
+
+# import-error e wrong-import-position: import de lib/python via sys.path.insert()
+# dinamico abaixo, que o pylint nao resolve em tempo de analise estatica.
+# pylint: disable=broad-exception-caught, import-error, wrong-import-position
+# {
+#   "version": "1.7.0",
+#   "description": "Le obs_result.json + config.json, gera images PNG por fase e phase_cards.json"
+# }
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
+)
+# FaseConfig, fmt_dias, fmt_kg, normalize_fase, _load_config, _filter_obs e
+# group_obs_by_phase sao usados diretamente abaixo. get_fase_config,
+# _codigo_fase_key, _load_contatos_from_env e _resolve_contato nao tem chamada
+# local neste arquivo: sao importados apenas para ficarem acessiveis como
+# atributos do modulo, pois Orchestrator/tests/test_obs_paradas_fase.py carrega
+# este arquivo dinamicamente via importlib e os acessa como module.<nome> — sem
+# o import ficariam ausentes.
+from obp_config import (  # pylint: disable=unused-import
+    FaseConfig,
+    _codigo_fase_key,
+    _filter_obs,
+    _load_config,
+    _load_contatos_from_env,
+    _resolve_contato,
+    fmt_dias,
+    fmt_kg,
+    get_fase_config,
+    group_obs_by_phase,
+    normalize_fase,
+)
 
 if sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
@@ -26,91 +50,10 @@ IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 MANIFEST_FILE = os.path.join(SCRIPT_DIR, "phase_cards.json")
 SEEN_STATE_FILE = os.path.join(SCRIPT_DIR, "obs_seen_state.json")
 
-
-def _join_responsavel(numeros: list[Any]) -> str:
-    return " @".join(str(x).strip() for x in numeros if str(x).strip())
-
-
-def _resolve_contato(contato: Any) -> str:
-    """Resolve uma entrada de 'contatos': objeto {nome, numero}, lista desses, ou string legada."""
-    if isinstance(contato, list):
-        return _join_responsavel(
-            [c.get("numero", "") if isinstance(c, dict) else c for c in contato]
-        )
-    if isinstance(contato, dict):
-        return str(contato.get("numero", "")).strip()
-    return str(contato).strip()
-
-
-@dataclass
-class FaseConfig:
-    descricao: str
-    threshold_dias: float
-    responsavel: str
-    ativo: bool = True
-
-
-# Contatos reais (nome/numero) nunca ficam no codigo-fonte nem no config.json —
-# vivem só no .env local (nao versionado), lido via os.environ pelo run.ps1/Lib-Config.psm1.
-# Sem .env configurado, o fallback abaixo fica vazio e a mensagem sai sem mencao.
-_LIDER_1_TURNO = os.environ.get("OBP_CONTATO_LIDER_1_TURNO", "")
-_LIDER_RESERVA_1_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_1_TURNO", "")
-_LIDER_2_TURNO = os.environ.get("OBP_CONTATO_LIDER_2_TURNO", "")
-_LIDER_RESERVA_2_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_2_TURNO", "")
-_LIDER_3_TURNO = os.environ.get("OBP_CONTATO_LIDER_3_TURNO", "")
-_LIDER_RESERVA_3_TURNO = os.environ.get("OBP_CONTATO_LIDER_RESERVA_3_TURNO", "")
-_LIDER_CQ = os.environ.get("OBP_CONTATO_LIDER_CQ", "")
-_EQUIPE_QUALIDADE = _join_responsavel(
-    os.environ.get("OBP_CONTATO_EQUIPE_CQ", "").split(",")
-)
-
-DEFAULT_FASES_MONITORADAS: dict[str, FaseConfig] = {
-    "20": FaseConfig("RMC-REVISÃO MALHA CRUA", 1, _LIDER_3_TURNO),
-    "25": FaseConfig("CDP-CONFERENCIA DE PESO", 0.5, _EQUIPE_QUALIDADE, ativo=False),
-    "26": FaseConfig("IVF-INVERSÃO P/FELPAGEM", 1, _LIDER_3_TURNO),
-    "45": FaseConfig("CDC-CONFERENCIA DE COR", 0.1, _LIDER_RESERVA_3_TURNO),
-    "46": FaseConfig("PPA-PREPARAÇÃO AMACIANTE", 1, _LIDER_1_TURNO),
-    "47": FaseConfig("UMM-UMEDECIMENTO DE MALHA", 0.5, _LIDER_RESERVA_3_TURNO),
-    "50": FaseConfig("HID-HIDRO UMIDO", 1, _LIDER_1_TURNO),
-    "55": FaseConfig("HIS-HIDRO SECO", 1, _LIDER_1_TURNO),
-    "60": FaseConfig("SEC-SECADOR", 1, _LIDER_1_TURNO),
-    "65": FaseConfig("FEL-FELPAGEM", 1, _LIDER_RESERVA_1_TURNO),
-    "70": FaseConfig("CLB-CALANDRA DE BRILHO", 1, _LIDER_RESERVA_1_TURNO),
-    "80": FaseConfig("CLC-CALANDRA DE COMPACTACAO", 1, _LIDER_RESERVA_1_TURNO),
-    "90": FaseConfig("ABR-ABRIDOR", 1, _LIDER_2_TURNO),
-    "100": FaseConfig("RAU-RAMAR UMIDO", 1, _LIDER_2_TURNO),
-    "110": FaseConfig("RAS-RAMAR SECO", 1, _LIDER_2_TURNO),
-    "150": FaseConfig("EXP-EXPEDICAO ACABADO", 1, _LIDER_RESERVA_2_TURNO),
-    "160": FaseConfig("CDQ-CONTROLE DE QUALIDADE", 1, _LIDER_CQ),
-    "165": FaseConfig("CDF-CONFERÊNCIA DE FELPA", 0.1, _EQUIPE_QUALIDADE),
-}
-DEFAULT_PHASE_ORDER: list[int] = [
-    20,
-    46,
-    47,
-    50,
-    55,
-    60,
-    90,
-    100,
-    110,
-    26,
-    65,
-    25,
-    45,
-    80,
-    70,
-    160,
-    165,
-    150,
-]
-DEFAULT_MAX_OBS = 10
 MAX_OBS_PER_PHASE = (
     15  # limite por fase para evitar cards com altura > 5000px (WhatsApp)
 )
 MAX_CARD_HEIGHT = 4800
-
-_PREFIX_RE = re.compile(r"^[A-Z0-9]{2,5}-")
 
 # ── Cores do card ─────────────────────────────────────────────────────────────
 BG_COLOR = (30, 30, 46)
@@ -155,59 +98,6 @@ def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()  # type: ignore[return-value]
 
 
-def normalize_fase(fase: str) -> str:
-    clean = _PREFIX_RE.sub("", fase.strip()).upper().strip()
-
-    mapeamentos = {
-        "EXPEDICAO ACABADO": "Expedição Acabado",
-        "RAMAR UMIDO": "Ramar Úmido",
-        "CALANDRA DE COMPACTACAO": "Calandra de Compactação",
-        "CONFERENCIA": "Conferência",
-        "REVISAO MALHA CRUA": "Revisão Malha Crua",
-        "REVISAO": "Revisão",
-        "PRODUCAO": "Produção",
-        "COMPACTACAO": "Compactação",
-    }
-
-    if clean in mapeamentos:
-        return mapeamentos[clean]
-
-    return clean.title()
-
-
-def _codigo_fase_key(ob: dict[str, Any]) -> str | None:
-    """Normaliza CODIGO_FASE (int/float/str vindos do Oracle) para a chave usada em fases_monitoradas."""
-    raw = ob.get("CODIGO_FASE")
-    if raw is None:
-        return None
-    try:
-        return str(int(float(raw)))
-    except (TypeError, ValueError):
-        return None
-
-
-def get_fase_config(
-    codigo_key: str | None, fases_monitoradas: dict[str, FaseConfig]
-) -> FaseConfig | None:
-    if codigo_key is None:
-        return None
-    return fases_monitoradas.get(codigo_key)
-
-
-def fmt_dias(dias: Any) -> str:
-    try:
-        return f"{float(dias):.1f}".replace(".", ",")
-    except (TypeError, ValueError):
-        return str(dias)
-
-
-def fmt_kg(kilos: Any) -> str:
-    try:
-        return f"{float(kilos):,.0f}".replace(",", ".")
-    except (TypeError, ValueError):
-        return str(kilos)
-
-
 def fmt_entrega(dt_entrega: Any) -> str:
     if not dt_entrega:
         return "—"
@@ -215,10 +105,6 @@ def fmt_entrega(dt_entrega: Any) -> str:
         return datetime.fromisoformat(str(dt_entrega)).strftime("%d/%m")
     except ValueError:
         return "—"
-
-
-def _phase_sort_key(codigo_fase: int, ordem: list[int]) -> int:
-    return ordem.index(codigo_fase) if codigo_fase in ordem else len(ordem)
 
 
 def _wrap_text(
@@ -451,135 +337,17 @@ def build_phase_image(
 # ── Helpers de main ───────────────────────────────────────────────────────────
 
 
-def _load_contatos_from_env() -> dict[str, str]:
-    """Mesmas chaves de referencia de 'responsavel' em fases_monitoradas, valor lido do .env."""
-    return {
-        "lider_1_turno": _LIDER_1_TURNO,
-        "lider_reserva_1_turno": _LIDER_RESERVA_1_TURNO,
-        "lider_2_turno": _LIDER_2_TURNO,
-        "lider_reserva_2_turno": _LIDER_RESERVA_2_TURNO,
-        "lider_3_turno": _LIDER_3_TURNO,
-        "lider_reserva_3_turno": _LIDER_RESERVA_3_TURNO,
-        "lider_cq": _LIDER_CQ,
-        "equipe_cq": _EQUIPE_QUALIDADE,
-    }
-
-
-def _load_config(
-    config_file: str,
-) -> tuple[dict[str, FaseConfig], int, dict[str, Any], list[int]]:
-    fases_monitoradas = dict(DEFAULT_FASES_MONITORADAS)
-    max_obs = DEFAULT_MAX_OBS
-    phase_filters: dict[str, Any] = {}
-    phase_order = list(DEFAULT_PHASE_ORDER)
-    if not os.path.exists(config_file):
-        return fases_monitoradas, max_obs, phase_filters, phase_order
-    try:
-        with open(config_file, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        max_obs = int(cfg.get("max_obs_por_mensagem", DEFAULT_MAX_OBS))
-        phase_filters = {
-            str(k): v for k, v in cfg.get("filtros_por_codigo_fase", {}).items()
-        }
-        phase_order = [
-            int(c) for c in cfg.get("ordem_codigos_fase", DEFAULT_PHASE_ORDER)
-        ]
-        contatos = _load_contatos_from_env()
-        fases_cfg = cfg.get("fases_monitoradas")
-        if fases_cfg:
-            fases_monitoradas = {}
-            for codigo, dados in fases_cfg.items():
-                resp_ref = dados.get("responsavel", "")
-                responsavel = (
-                    contatos[resp_ref]
-                    if isinstance(resp_ref, str) and resp_ref in contatos
-                    else _resolve_contato(resp_ref)
-                )
-                fases_monitoradas[str(codigo)] = FaseConfig(
-                    descricao=str(dados.get("descricao", "")),
-                    threshold_dias=float(dados.get("threshold_dias", 1)),
-                    responsavel=responsavel,
-                    ativo=bool(dados.get("ativo", True)),
-                )
-    except Exception as e:
-        # config.json existe mas nao pode ser interpretado: falhar explicitamente em vez de
-        # degradar silenciosamente para defaults hardcoded, que podem estar desatualizados
-        # em relacao ao config de producao (thresholds, fases ativas).
-        print(
-            f"[ERROR] config.json existe mas falhou ao processar: {e}. "
-            "Corrija o arquivo antes de reexecutar; defaults hardcoded nao serao usados como fallback silencioso.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return fases_monitoradas, max_obs, phase_filters, phase_order
-
-
-def _apply_phase_filter(
-    ob: dict[str, Any], codigo_key: str | None, phase_filters: dict[str, Any]
-) -> bool:
-    """Retorna True se o OB deve ser ignorado (filtro não satisfeito)."""
-    regras = phase_filters.get(codigo_key) if codigo_key is not None else None
-    if not regras:
-        return False
-    for campo, valor_esperado in regras.items():
-        raw = ob.get(campo)
-        try:
-            val: Any = int(raw)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            val = raw
-        if val != valor_esperado:
-            return True
-    return False
-
-
-def _filter_obs(
-    obs_all: list[dict[str, Any]],
-    fases_monitoradas: dict[str, FaseConfig],
-    phase_filters: dict[str, Any],
-) -> list[dict[str, Any]]:
-    filtradas: list[dict[str, Any]] = []
-    for ob in obs_all:
-        codigo_key = _codigo_fase_key(ob)
-        cfg = get_fase_config(codigo_key, fases_monitoradas)
-        if cfg is None or not cfg.ativo:
-            continue
-        try:
-            dias = float(ob.get("DIAS_PARADO") or 0)
-        except (TypeError, ValueError):
-            continue
-        if dias < cfg.threshold_dias:
-            continue
-        if _apply_phase_filter(ob, codigo_key, phase_filters):
-            continue
-        filtradas.append({**ob, "_threshold": cfg.threshold_dias, "_dias_float": dias})
-    return filtradas
-
-
 def _group_obs(
     filtradas: list[dict[str, Any]],
     max_obs: int,
     phase_order: list[int],
 ) -> list[tuple[int, list[dict[str, Any]]]]:
-    # Agrupa por codigo de fase antes de limitar, para não excluir fases inteiras por
-    # saturação global. max_obs controla o teto por fase (não o total), garantindo que
-    # todas as fases com OBs acima do threshold apareçam no relatório.
-    filtradas.sort(key=lambda x: x["_dias_float"], reverse=True)
-
-    grupos: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    for ob in filtradas:
-        codigo = int(float(ob.get("CODIGO_FASE") or 0))
-        grupos[codigo].append(ob)
-
-    grupos_ordenados = sorted(
-        grupos.items(),
-        key=lambda kv: (
-            _phase_sort_key(kv[0], phase_order),
-            -max(o["_dias_float"] for o in kv[1]),
-        ),
-    )
+    # max_obs controla o teto por fase (não o total), garantindo que todas as fases
+    # com OBs acima do threshold apareçam no relatório — mesmo conjunto de fases que
+    # format_message.py, via group_obs_by_phase() (fonte única em lib/python).
+    grupos_ordenados = group_obs_by_phase(filtradas, phase_order)
     for _, obs_fase in grupos_ordenados:
-        obs_fase.sort(key=lambda o: o["_dias_float"], reverse=True)
-        # Limita por fase; também aplica teto de altura de card para WhatsApp (~5000px)
+        # Também aplica teto de altura de card para WhatsApp (~5000px)
         max_por_fase = min(
             max_obs,
             MAX_OBS_PER_PHASE,

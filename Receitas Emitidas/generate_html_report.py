@@ -69,7 +69,18 @@ def html_escape(text: Any) -> str:
     return s
 
 
-def generate_html() -> str:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+# Avaliado (achado de revisao RE-03 Q3): extrair a logica de layout adaptativo (secao
+# 4) para uma funcao auxiliar nao reduz a complexidade real — sao ~25 variaveis
+# escalares (fontes/paddings/larguras) calculadas em cadeia a partir de poucas
+# entradas, todas lineares e interdependentes; fragmentar em sub-helpers que
+# retornam tuplas so move o mesmo numero de variaveis para outro escopo e cria
+# risco de transposicao (ex.: inverter title_line/meta_line na desestruturacao),
+# sem ganho de legibilidade num bloco que ja e lido de cima para baixo. Complexidade
+# tratada como inerente ao dominio (relatorio HTML com layout adaptativo por volume
+# de dados); disable mantido e documentado aqui em vez de silenciado sem explicacao.
+def generate_html() -> (
+    str
+):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     exec_id: str = sys.argv[1] if len(sys.argv) > 1 else "manual"
     script_dir: str = os.path.dirname(os.path.abspath(__file__))
     config_path: str = os.path.join(script_dir, "receitas_config.json")
@@ -98,7 +109,11 @@ def generate_html() -> str:  # pylint: disable=too-many-locals,too-many-branches
         sys.exit(1)
 
     if not data:
-        log("Conjunto de dados vazio. Gerando relatorio sem receitas emitidas pendentes.", "WARN", exec_id)
+        log(
+            "Conjunto de dados vazio. Gerando relatorio sem receitas emitidas pendentes.",
+            "WARN",
+            exec_id,
+        )
 
     # 3. Agrupar e Ordenar Dados
     data_sorted = sorted(

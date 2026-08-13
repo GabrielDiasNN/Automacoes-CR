@@ -1,3 +1,5 @@
+# Import de lib/python via sys.path.insert() dinamico abaixo forca estas duas
+# desabilitacoes: o pylint nao resolve o path em tempo de analise estatica.
 # pylint: disable=import-error, wrong-import-position
 # {
 #   "version": "1.3.0",

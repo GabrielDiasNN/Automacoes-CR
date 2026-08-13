@@ -133,7 +133,11 @@ try {
             Exit-WithCode 4 "phase_cards.json nao foi gerado."
         }
 
-        [array]$cards = Get-Content $PhaseCardsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        try {
+            [array]$cards = Get-Content $PhaseCardsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        } catch [System.Exception] {
+            Exit-WithCode 4 "Falha ao interpretar '$PhaseCardsFile' como JSON: $_"
+        }
         if (-not $cards -or $cards.Count -eq 0) {
             Exit-WithCode 2 "phase_cards.json vazio — nenhuma fase para enviar."
         }
@@ -201,7 +205,11 @@ try {
         [System.IO.File]::WriteAllText($BatchInputFile, ($batchInput | ConvertTo-Json -Depth 5), $utf8NoBOM)
 
         # Ler chatId: .env (OBP_WHATSAPP_TARGET) tem prioridade; config.json e apenas fallback/placeholder.
-        $waCfg = Get-Content $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        try {
+            $waCfg = Get-Content $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        } catch [System.Exception] {
+            Exit-WithCode 4 "Falha ao interpretar '$WaConfigPath' como JSON: $_"
+        }
         $chatId = if (-not [string]::IsNullOrWhiteSpace($env:OBP_WHATSAPP_TARGET)) { $env:OBP_WHATSAPP_TARGET } else { $waCfg.target.contactId }
         $clientId = if ($waCfg.auth.clientId) { $waCfg.auth.clientId } else { "hub-global" }
 
