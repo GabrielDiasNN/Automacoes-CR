@@ -1,4 +1,9 @@
-# pylint: disable=line-too-long, missing-class-docstring, too-many-locals, bare-except, consider-using-max-builtin, too-many-branches, broad-exception-caught, too-many-statements, import-error
+# import-error e wrong-import-position: import de lib/python via sys.path.insert()
+# dinamico abaixo, que o pylint nao resolve em tempo de analise estatica. Os demais
+# limites de complexidade (too-many-locals/branches/statements) foram removidos deste
+# disable amplo apos o refactor de process() em helpers dedicados (achado de revisao
+# RB-01 G1); bare-except tambem removido apos tipar a excecao em formatar_excel (RB-01 Q1).
+# pylint: disable=line-too-long, missing-class-docstring, consider-using-max-builtin, broad-exception-caught, import-error, wrong-import-position
 # {
 #   "name": "processar-receitas-bloqueadas",
 #   "version": "2.3.2",
@@ -72,7 +77,13 @@ def fetch_data_with_retry(
     return pd.DataFrame(rows, columns=columns)
 
 
-def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str:
+# too-many-locals: builder de template HTML com muitas variaveis de cor/texto por
+# legibilidade (nomes descritivos em vez de indices/dicionarios); extrair helpers
+# fragmentaria o template sem reduzir complexidade real. Nao coberto pelo refactor
+# de RB-01 G1 (escopo daquele achado era process()); disable localizado aqui.
+def gerar_html_artistico(  # pylint: disable=too-many-locals
+    df_display: pd.DataFrame, stats: dict[str, int]
+) -> str:
     # Cores Classicas
     cor_header = "#0f4c81"
     cor_header_text = "#ffffff"
@@ -210,7 +221,10 @@ def gerar_html_artistico(df_display: pd.DataFrame, stats: dict[str, int]) -> str
     return html
 
 
-def formatar_excel(file_path: str) -> None:
+# too-many-branches: laco de formatacao percorre celula a celula aplicando varias
+# regras condicionais de estilo (fill, formato de data, borda); nao coberto pelo
+# refactor de RB-01 G1 (escopo daquele achado era process()); disable localizado aqui.
+def formatar_excel(file_path: str) -> None:  # pylint: disable=too-many-branches
     wb = load_workbook(file_path)
     header_fill = PatternFill(
         start_color="0F4C81", end_color="0F4C81", fill_type="solid"
@@ -258,10 +272,218 @@ def formatar_excel(file_path: str) -> None:
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(str(cell.value))
-                except:
+                except (TypeError, ValueError, AttributeError):
                     pass
             ws.column_dimensions[column].width = max_length + 2
     wb.save(file_path)
+
+
+def _carregar_e_normalizar(
+    creds: OracleCredentials, exec_id: str
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Le a SQL, busca no Oracle e retorna (df_raw, df_agreg) ja normalizados."""
+    sql_path = os.path.join(os.path.dirname(__file__), "SQL-ReceitasBloqueadas.sql")
+    with open(sql_path, "r", encoding="utf-8") as f:
+        sql_query = f.read()
+
+    df_raw = fetch_data_with_retry(creds, sql_query, exec_id)
+    df_raw = df_raw.rename(
+        columns={
+            "COR_REC": "Cor Rec.",
+            "EP_REC": "EP Rec.",
+            "PE_REC": "PE Rec",
+            "DATA_ULT_PROD": "Data Última Prod.",
+            "DATA_BLOQUEIO": "Data Bloqueio",
+        }
+    )
+    # Falso positivo do analisador estatico apos fetch_all()+pd.DataFrame(...)
+    # tornar o tipo de df_raw precisamente inferivel; a resolucao do overload
+    # de .rename(columns=...) acima passa a inferir None daqui em diante. Com
+    # pd.read_sql() (forma anterior) o retorno ja era nao inferivel e
+    # mascarava essa mesma limitacao do analisador.
+    # pylint: disable=unsupported-assignment-operation,unsubscriptable-object
+    for col in ["Data Última Prod.", "Data Bloqueio"]:
+        df_raw[col] = (
+            pd.to_datetime(df_raw[col], errors="coerce")
+            .dt.strftime("%d/%m/%Y")
+            .fillna("")
+        )
+
+    cols_agreg = [
+        "Cor Rec.",
+        "EP Rec.",
+        "PE Rec",
+        "Data Última Prod.",
+        "Data Bloqueio",
+    ]
+    df_agreg = (
+        df_raw[cols_agreg].drop_duplicates().sort_values(by=["Cor Rec.", "EP Rec."])
+    )
+    # pylint: enable=unsupported-assignment-operation,unsubscriptable-object
+    df_agreg["Key"] = (
+        df_agreg["Cor Rec."].astype(str)
+        + "_"
+        + df_agreg["EP Rec."].astype(str)
+        + "_"
+        + df_agreg["PE Rec"].astype(str)
+    )
+    return df_raw, df_agreg
+
+
+def _carregar_ultimo_state(state_path: str, exec_id: str) -> List[Any]:
+    """Le e valida (Pydantic) o receitas_state.json anterior.
+
+    Retorna a lista de records (vazia se o arquivo nao existir ou for invalido).
+    """
+    last_state_data: Any = {}
+    if os.path.exists(state_path):
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                raw_json = json.load(f)
+                # Validacao de Contrato de Dados (Pydantic)
+                StateFile.model_validate(raw_json)
+                last_state_data = raw_json
+        except ValidationError as ve:
+            log(f"Contrato de Dados Violado no Estado: {ve}", "ERROR", exec_id)
+            last_state_data = {}
+        except Exception as e:
+            log(f"Erro ao carregar estado: {e}", "WARN", exec_id)
+            last_state_data = {}
+
+    records: List[Any] = (
+        last_state_data.get("records", [])
+        if isinstance(last_state_data, dict)
+        else last_state_data
+    )
+    return records
+
+
+def _computar_diff(
+    df_agreg: pd.DataFrame, last_records: List[Any]
+) -> tuple[Dict[str, int], List[Dict[Any, Any]]]:
+    """Compara df_agreg com o ultimo estado conhecido; retorna (stats, diff_rows)."""
+    df_last = pd.DataFrame(last_records)
+    stats = {"new": 0, "mod": 0, "del": 0}
+    diff_rows: List[Dict[Any, Any]] = []
+
+    if df_last.empty:
+        df_diff_new = df_agreg.copy()
+        df_diff_new["_change_type"] = "NEW"
+        diff_rows = df_diff_new.to_dict("records")
+        stats["new"] = len(df_diff_new)
+        return stats, diff_rows
+
+    df_merge = df_agreg.merge(
+        df_last, on="Key", how="outer", indicator=True, suffixes=("", "_last")
+    )
+
+    new_mask = df_merge["_merge"] == "left_only"
+    del_mask = df_merge["_merge"] == "right_only"
+
+    mod_mask = (df_merge["_merge"] == "both") & (
+        df_merge["Data Bloqueio"] != df_merge["Data Bloqueio_last"]
+    )
+
+    stats["new"] = int(new_mask.sum())
+    stats["mod"] = int(mod_mask.sum())
+    stats["del"] = int(del_mask.sum())
+
+    if stats["new"] > 0:
+        df_new = df_merge[new_mask][df_agreg.columns].copy()
+        df_new["_change_type"] = "NEW"
+        diff_rows.extend(df_new.to_dict("records"))
+
+    if stats["mod"] > 0:
+        df_mod = df_merge[mod_mask][df_agreg.columns].copy()
+        df_mod["_change_type"] = "MODIFIED"
+        diff_rows.extend(df_mod.to_dict("records"))
+
+    if stats["del"] > 0:
+        rename_cols = {col + "_last": col for col in df_agreg.columns if col != "Key"}
+        df_deleted = (
+            df_merge[del_mask][["Key"] + list(rename_cols.keys())]
+            .rename(columns=rename_cols)
+            .copy()
+        )
+        df_deleted["_change_type"] = "DELETED"
+        diff_rows.extend(df_deleted.to_dict("records"))
+
+    return stats, diff_rows
+
+
+def _montar_df_display(
+    df_agreg: pd.DataFrame, diff_rows: List[Dict[Any, Any]]
+) -> pd.DataFrame:
+    """Monta o DataFrame de exibicao (STABLE/NEW/MODIFIED + linhas DELETED) para o HTML."""
+    df_diff = pd.DataFrame(diff_rows)
+    df_display = df_agreg.copy()
+    df_display["_change_type"] = "STABLE"
+
+    if not df_diff.empty:
+        change_map = df_diff[
+            df_diff["_change_type"].isin(["NEW", "MODIFIED"])
+        ].set_index("Key")["_change_type"]
+        if not change_map.empty:
+            df_display["_change_type"] = (
+                df_display["Key"].map(change_map).fillna("STABLE")
+            )
+
+        df_deleted = df_diff[df_diff["_change_type"] == "DELETED"]
+        if not df_deleted.empty:
+            df_display = pd.concat([df_display, df_deleted], ignore_index=True)
+
+    return df_display
+
+
+def _salvar_state_tmp(df_agreg: pd.DataFrame, state_path: str) -> None:
+    """Grava o state.json.tmp com o snapshot atual de df_agreg (commit final via PowerShell).
+
+    Nao usa write_state_tmp() de lib/python/oracle_extract.py aqui porque essa funcao
+    persiste apenas {last_hash, updated_at}; este script precisa manter tambem "records"
+    (a lista completa de receitas bloqueadas) no state, para computar o diff na proxima
+    execucao — um schema de state estendido que a funcao compartilhada nao suporta.
+    """
+    records = df_agreg.to_dict(orient="records")
+    state_data = {
+        "last_hash": compute_hash(records),
+        "updated_at": datetime.now().isoformat(),
+        "records": records,
+    }
+    with open(state_path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(state_data, f, ensure_ascii=False, indent=4)
+
+
+def _gerar_saidas(
+    df_agreg: pd.DataFrame,
+    df_raw: pd.DataFrame,
+    diff: tuple[Dict[str, int], List[Dict[Any, Any]]],
+    html_path: str,
+    exec_id: str,
+) -> None:
+    """Gera o Excel formatado e o HTML de notificacao a partir do diff computado.
+
+    `diff` e o par (stats, diff_rows) retornado por _computar_diff(), agrupado num
+    unico parametro para manter a assinatura desta funcao dentro do limite de
+    argumentos do pre-commit (R0913/R0917).
+    """
+    stats, diff_rows = diff
+    excel_path = os.path.join(os.path.dirname(__file__), "Receitas Bloqueadas.xlsx")
+    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+        df_agreg.drop(columns=["Key"], errors="ignore").to_excel(
+            writer, sheet_name="ReceitasBloqueadas", index=False
+        )
+        df_raw.to_excel(writer, sheet_name="OBsReceitasBloqueadas", index=False)
+
+    try:
+        formatar_excel(excel_path)
+        log("Excel formatado.", "INFO", exec_id)
+    except Exception as e:
+        log(f"Aviso Excel: {e}", "WARN", exec_id)
+
+    df_display = _montar_df_display(df_agreg, diff_rows)
+    html_content = gerar_html_artistico(df_display, stats)
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
 
 
 def process() -> None:
@@ -298,120 +520,11 @@ def process() -> None:
     )
 
     try:
-        sql_path = os.path.join(os.path.dirname(__file__), "SQL-ReceitasBloqueadas.sql")
-        with open(sql_path, "r", encoding="utf-8") as f:
-            sql_query = f.read()
-
-        df_raw = fetch_data_with_retry(creds, sql_query, exec_id)
-        df_raw = df_raw.rename(
-            columns={
-                "COR_REC": "Cor Rec.",
-                "EP_REC": "EP Rec.",
-                "PE_REC": "PE Rec",
-                "DATA_ULT_PROD": "Data Última Prod.",
-                "DATA_BLOQUEIO": "Data Bloqueio",
-            }
-        )
-        # Falso positivo do analisador estatico apos fetch_all()+pd.DataFrame(...)
-        # tornar o tipo de df_raw precisamente inferivel; a resolucao do overload
-        # de .rename(columns=...) acima passa a inferir None daqui em diante. Com
-        # pd.read_sql() (forma anterior) o retorno ja era nao inferivel e
-        # mascarava essa mesma limitacao do analisador.
-        # pylint: disable=unsupported-assignment-operation,unsubscriptable-object
-        for col in ["Data Última Prod.", "Data Bloqueio"]:
-            df_raw[col] = (
-                pd.to_datetime(df_raw[col], errors="coerce")
-                .dt.strftime("%d/%m/%Y")
-                .fillna("")
-            )
-
-        cols_agreg = [
-            "Cor Rec.",
-            "EP Rec.",
-            "PE Rec",
-            "Data Última Prod.",
-            "Data Bloqueio",
-        ]
-        df_agreg = (
-            df_raw[cols_agreg].drop_duplicates().sort_values(by=["Cor Rec.", "EP Rec."])
-        )
-        # pylint: enable=unsupported-assignment-operation,unsubscriptable-object
-        df_agreg["Key"] = (
-            df_agreg["Cor Rec."].astype(str)
-            + "_"
-            + df_agreg["EP Rec."].astype(str)
-            + "_"
-            + df_agreg["PE Rec"].astype(str)
-        )
+        df_raw, df_agreg = _carregar_e_normalizar(creds, exec_id)
 
         state_path = os.path.join(os.path.dirname(__file__), "receitas_state.json")
-        last_state_data = {}
-        if os.path.exists(state_path):
-            try:
-                with open(state_path, "r", encoding="utf-8") as f:
-                    raw_json = json.load(f)
-                    # Validacao de Contrato de Dados (Pydantic)
-                    StateFile.model_validate(raw_json)
-                    last_state_data = raw_json
-            except ValidationError as ve:
-                log(f"Contrato de Dados Violado no Estado: {ve}", "ERROR", exec_id)
-                last_state_data = {}
-            except Exception as e:
-                log(f"Erro ao carregar estado: {e}", "WARN", exec_id)
-                last_state_data = {}
-
-        last_records = (
-            last_state_data.get("records", [])
-            if isinstance(last_state_data, dict)
-            else last_state_data
-        )
-        df_last = pd.DataFrame(last_records)
-        stats = {"new": 0, "mod": 0, "del": 0}
-        diff_rows: List[Dict[Any, Any]] = []
-
-        if df_last.empty:
-            df_diff_new = df_agreg.copy()
-            df_diff_new["_change_type"] = "NEW"
-            diff_rows = df_diff_new.to_dict("records")
-            stats["new"] = len(df_diff_new)
-            df_deleted = pd.DataFrame()
-        else:
-            df_merge = df_agreg.merge(
-                df_last, on="Key", how="outer", indicator=True, suffixes=("", "_last")
-            )
-
-            new_mask = df_merge["_merge"] == "left_only"
-            del_mask = df_merge["_merge"] == "right_only"
-
-            mod_mask = (df_merge["_merge"] == "both") & (
-                df_merge["Data Bloqueio"] != df_merge["Data Bloqueio_last"]
-            )
-
-            stats["new"] = int(new_mask.sum())
-            stats["mod"] = int(mod_mask.sum())
-            stats["del"] = int(del_mask.sum())
-
-            if stats["new"] > 0:
-                df_new = df_merge[new_mask][df_agreg.columns].copy()
-                df_new["_change_type"] = "NEW"
-                diff_rows.extend(df_new.to_dict("records"))
-
-            if stats["mod"] > 0:
-                df_mod = df_merge[mod_mask][df_agreg.columns].copy()
-                df_mod["_change_type"] = "MODIFIED"
-                diff_rows.extend(df_mod.to_dict("records"))
-
-            if stats["del"] > 0:
-                rename_cols = {
-                    col + "_last": col for col in df_agreg.columns if col != "Key"
-                }
-                df_deleted = (
-                    df_merge[del_mask][["Key"] + list(rename_cols.keys())]
-                    .rename(columns=rename_cols)
-                    .copy()
-                )
-                df_deleted["_change_type"] = "DELETED"
-                diff_rows.extend(df_deleted.to_dict("records"))
+        last_records = _carregar_ultimo_state(state_path, exec_id)
+        stats, diff_rows = _computar_diff(df_agreg, last_records)
 
         state_tmp_path = state_path + ".tmp"
         if not diff_rows:
@@ -425,49 +538,9 @@ def process() -> None:
             log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
             sys.exit(2)
 
-        records = df_agreg.to_dict(orient="records")
-        state_data = {
-            "last_hash": compute_hash(records),
-            "updated_at": datetime.now().isoformat(),
-            "records": records,
-        }
-        # Salva apenas no temporario. O commit para o oficial sera via PowerShell apos notificacoes.
-        with open(state_tmp_path, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, ensure_ascii=False, indent=4)
+        _salvar_state_tmp(df_agreg, state_path)
+        _gerar_saidas(df_agreg, df_raw, (stats, diff_rows), html_path, exec_id)
 
-        excel_path = os.path.join(os.path.dirname(__file__), "Receitas Bloqueadas.xlsx")
-        with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
-            df_agreg.drop(columns=["Key"], errors="ignore").to_excel(
-                writer, sheet_name="ReceitasBloqueadas", index=False
-            )
-            df_raw.to_excel(writer, sheet_name="OBsReceitasBloqueadas", index=False)
-
-        try:
-            formatar_excel(excel_path)
-            log("Excel formatado.", "INFO", exec_id)
-        except Exception as e:
-            log(f"Aviso Excel: {e}", "WARN", exec_id)
-
-        df_diff = pd.DataFrame(diff_rows)
-        df_display = df_agreg.copy()
-        df_display["_change_type"] = "STABLE"
-
-        if not df_diff.empty:
-            change_map = df_diff[
-                df_diff["_change_type"].isin(["NEW", "MODIFIED"])
-            ].set_index("Key")["_change_type"]
-            if not change_map.empty:
-                df_display["_change_type"] = (
-                    df_display["Key"].map(change_map).fillna("STABLE")
-                )
-
-            df_deleted = df_diff[df_diff["_change_type"] == "DELETED"]
-            if not df_deleted.empty:
-                df_display = pd.concat([df_display, df_deleted], ignore_index=True)
-
-        html_content = gerar_html_artistico(df_display, stats)
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
         log("Processo concluido com alteracoes. Notificacao gerada.", "INFO", exec_id)
         sys.exit(0)
 
