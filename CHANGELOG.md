@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.36] - 13/08/2026
+
+### Corrigido
+- **`format_message.py` e `generate_phase_cards.py` (OBP-04) mantinham `DEFAULT_FASES_MONITORADAS` e responsáveis duplicados e já divergentes**: `threshold_dias` de 4 fases e o responsável da fase 160 diferiam entre os dois scripts, o que podia fazer a mensagem de texto e o card de imagem da MESMA execução reportarem conjuntos diferentes de OBs paradas para o mesmo destinatário; os dois também tinham tratamento divergente para `config.json` inválido (um degradava silenciosamente para defaults, o outro falhava explícito). Extraída `lib/python/obp_config.py` como fonte única de config, thresholds, responsáveis e falha explícita em config inválido.
+- **A mesma dupla de scripts também divergia na estratégia de corte de `max_obs`**, achado de revisão stateless em cima da consolidação acima: `format_message.py` cortava `max_obs` GLOBALMENTE antes de agrupar por fase (podendo excluir fases inteiras que `generate_phase_cards.py` ainda mostrava, pois este agrupava por fase primeiro) — mesma classe de bug (texto e imagem reportando fases diferentes na mesma execução) reaparecendo por um mecanismo diferente. Extraída `group_obs_by_phase()` para `obp_config.py`; cada script continua aplicando seu próprio teto por fase (texto: `max_obs`; imagem: `min(max_obs, MAX_OBS_PER_PHASE, altura_do_card)`), mas ambos agora partem do mesmo conjunto de fases. Verificado com cenário sintético (fase com 6 OBs críticas vs. fase com 1): antes da correção a mensagem de texto omitia a fase menos crítica; depois, ambos os canais reportam as mesmas 2 fases.
+- **`Receitas Bloqueadas/processar_receitas.py`: `process()` concentrava toda a lógica de extração, diff de estado e geração de saídas num único bloco `try`**, dificultando revisão e teste isolado. Extraída em helpers dedicados (`_carregar_e_normalizar`, `_carregar_ultimo_state`, `_computar_diff`, `_montar_df_display`, `_salvar_state_tmp`, `_gerar_saidas`), comportamento preservado. `formatar_excel` também tinha um `except:` nu na medição de largura de coluna; tipado para `(TypeError, ValueError, AttributeError)`.
+- **`Receitas Emitidas/extract_oracle.py`: o `except Exception` fatal foi inicialmente estreitado para `(oracledb.Error, OSError, json.JSONDecodeError)`**, mas essa tupla não cobria `ValueError` (de `zip(strict=True)` em `serialize_rows`, que falha alto deliberadamente em mismatch de colunas/linhas do cursor Oracle) nem `TypeError` (de `json.dumps` em dado não serializável) — ambos escapariam do log estruturado correlacionado por `exec_id`, quebrando o contrato de observabilidade do script (achado de revisão stateless). Ampliada para incluir também `ValueError` e `TypeError`.
+
 ## [1.3.35] - 11/08/2026
 
 ### Corrigido

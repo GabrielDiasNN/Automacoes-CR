@@ -290,7 +290,7 @@ def _load_config(
     if not os.path.exists(config_file):
         return fases_monitoradas, max_obs, phase_filters, phase_order
     try:
-        with open(config_file, "r", encoding="utf-8") as f:
+        with open(config_file, encoding="utf-8") as f:
             cfg = json.load(f)
         max_obs = int(cfg.get("max_obs_por_mensagem", DEFAULT_MAX_OBS))
         phase_filters = {
