@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # {
 #   "version": "1.2.0",
 #   "skill": "ai-native-development-standard",
@@ -12,7 +11,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 # Forca UTF-8 para garantir interoperabilidade
 if hasattr(sys.stdout, "reconfigure"):
@@ -46,7 +45,7 @@ def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
     sys.stderr.flush()
 
 
-def html_escape(text: Optional[Any]) -> str:
+def html_escape(text: Any | None) -> str:
     """Escapa caracteres HTML fundamentais para seguranca.
     Caracteres acentuados sao mantidos nativos em UTF-8 para melhor legibilidade e suporte moderno.
     """
@@ -71,13 +70,13 @@ def clean_str(val: Any) -> str:
     return str(val).strip()
 
 
-def parse_qt_pc_nf(qt_pc_nf: str) -> List[Dict[str, Any]]:
+def parse_qt_pc_nf(qt_pc_nf: str) -> list[dict[str, Any]]:
     """Quebra o campo QT_PC_NF em itens de quantidade/NF, tolerando sufixos e separadores variaveis."""
-    itens: List[Dict[str, Any]] = []
+    itens: list[dict[str, Any]] = []
     if not qt_pc_nf:
         return itens
 
-    partes: List[str] = [
+    partes: list[str] = [
         trecho.strip()
         for trecho in re.split(r"\s*;\s*|\s*,\s*(?=\d+\s*-)", qt_pc_nf)
         if trecho.strip()
@@ -97,18 +96,18 @@ def parse_qt_pc_nf(qt_pc_nf: str) -> List[Dict[str, Any]]:
 
 
 def processar_validacao(  # pylint: disable=too-many-locals
-    data: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    data: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Executa a logica de negocio: compara Montagem com Programacao."""
-    erros: List[Dict[str, Any]] = []
+    erros: list[dict[str, Any]] = []
     for row in data:
         cd_ref_clt: str = clean_str(row.get("CD_REF_CLT"))
         qt_pc_nf: str = clean_str(row.get("QT_PC_NF"))
         obs_ob: str = clean_str(row.get("OBS_OB"))
 
-        itens_montagem: List[Dict[str, Any]] = parse_qt_pc_nf(qt_pc_nf)
-        nfs_montagem: List[str] = [clean_str(item.get("nf")) for item in itens_montagem]
-        itens_incorretos: List[Dict[str, Any]] = [
+        itens_montagem: list[dict[str, Any]] = parse_qt_pc_nf(qt_pc_nf)
+        nfs_montagem: list[str] = [clean_str(item.get("nf")) for item in itens_montagem]
+        itens_incorretos: list[dict[str, Any]] = [
             item for item in itens_montagem if clean_str(item.get("nf")) != cd_ref_clt
         ]
         montagem_ok: bool = len(itens_incorretos) == 0
@@ -146,7 +145,7 @@ def processar_validacao(  # pylint: disable=too-many-locals
     return erros
 
 
-def formatar_qtd_pecas_incorretas(erro: Dict[str, Any]) -> str:
+def formatar_qtd_pecas_incorretas(erro: dict[str, Any]) -> str:
     """Renderiza a quantidade de pecas com NF incorreta apenas para divergencia de montagem."""
     if not bool(erro.get("TEM_ERRO_MONTAGEM")):
         return "<span style='color:#9ca3af;'><i>N/A</i></span>"
@@ -157,7 +156,7 @@ def formatar_qtd_pecas_incorretas(erro: Dict[str, Any]) -> str:
     )
 
 
-def formatar_nr_kanban(erro: Dict[str, Any]) -> str:
+def formatar_nr_kanban(erro: dict[str, Any]) -> str:
     """Renderiza a placa kanban com fallback visual quando nao existir valor."""
     nr_kanban: str = clean_str(erro.get("NR_KANBAN"))
     if not nr_kanban:
@@ -168,12 +167,12 @@ def formatar_nr_kanban(erro: Dict[str, Any]) -> str:
     )
 
 
-def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> str:
+def destaque_nf_montagem(nf_montagem_str: str | None, nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NFs divergentes na Montagem."""
     if not nf_montagem_str:
         return "<span style='color:#9ca3af;'><i>N/A</i></span>"
-    nfs: List[str] = [n.strip() for n in nf_montagem_str.split(",")]
-    res: List[str] = []
+    nfs: list[str] = [n.strip() for n in nf_montagem_str.split(",")]
+    res: list[str] = []
     for nf in nfs:
         if nf == nf_esperada:
             res.append(
@@ -186,7 +185,7 @@ def destaque_nf_montagem(nf_montagem_str: Optional[str], nf_esperada: str) -> st
     return ", ".join(res)
 
 
-def destaque_nf_prog(nf_prog: Optional[str], nf_esperada: str) -> str:
+def destaque_nf_prog(nf_prog: str | None, nf_esperada: str) -> str:
     """Gera visual HTML para destaque de NF divergente na Programacao."""
     if not nf_prog:
         return "<span style='color:#9ca3af;'><i>N/A</i></span>"
@@ -196,7 +195,7 @@ def destaque_nf_prog(nf_prog: Optional[str], nf_esperada: str) -> str:
 
 
 def gerar_tabela_categoria_html(
-    titulo: str, erros: List[Dict[str, Any]], cor_titulo: str
+    titulo: str, erros: list[dict[str, Any]], cor_titulo: str
 ) -> str:
     """Gera uma tabela HTML para uma categoria especifica de erros."""
     html: str = (
@@ -216,7 +215,7 @@ def gerar_tabela_categoria_html(
     return html
 
 
-def gerar_tabela_completa_erros(erros: List[Dict[str, Any]]) -> str:
+def gerar_tabela_completa_erros(erros: list[dict[str, Any]]) -> str:
     """Gera o detalhamento completo das divergencias para o e-mail."""
     if not erros:
         return ""
@@ -304,7 +303,7 @@ def montar_template_email(  # pylint: disable=too-many-arguments,too-many-locals
         else f"{total_erros}"
     )
     width_padrao: str = "25%" if tipo != "ACERTO" else "33.33%"
-    cards: List[str] = [
+    cards: list[str] = [
         card_tpl.format(
             width=width_padrao,
             icon=HTML_ICON_CROSS if tipo != "ACERTO" else HTML_ICON_CHECK,
@@ -349,17 +348,19 @@ def montar_template_email(  # pylint: disable=too-many-arguments,too-many-locals
     return html
 
 
-def gerar_assinatura(erro: Dict[str, Any]) -> str:
+def gerar_assinatura(erro: dict[str, Any]) -> str:
     """Gera um hash MD5 unico para a combinacao de erro/OB."""
     base: str = (
         f"{str(erro.get('NR_OB', '')).strip().upper()}|{str(erro.get('NR_PROG', '')).strip().upper()}|{str(erro.get('CD_REF_CLT', '')).strip().upper()}|{str(erro.get('DETALHE_ERRO', '')).strip().upper()}|{str(erro.get('NF_MONTAGEM', '')).strip().upper()}|{str(erro.get('NF_PROGRAMACAO', '')).strip().upper()}|{str(erro.get('QT_PECA_NF_INCORRETA', '')).strip().upper()}"
     )
     if not base.strip("|_"):
         base = "VAZIO"
-    return hashlib.md5(base.encode("utf-8")).hexdigest()
+    return hashlib.md5(base.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
-def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+def main() -> (
+    None
+):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Orquestrador principal da validacao."""
     exec_id: str = sys.argv[1] if len(sys.argv) > 1 else "manual"
     script_dir: str = os.path.dirname(os.path.abspath(__file__))
@@ -371,37 +372,37 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
         if not os.path.exists(data_file):
             log(f"Arquivo de dados nao encontrado: {data_file}", "ERROR", exec_id)
             sys.exit(1)
-        with open(data_file, "r", encoding="utf-8-sig") as f:
-            data: List[Dict[str, Any]] = json.load(f)
+        with open(data_file, encoding="utf-8-sig") as f:
+            data: list[dict[str, Any]] = json.load(f)
         os.remove(data_file)
     except Exception as e:  # pylint: disable=broad-exception-caught
         log(f"Falha ao ler dados do arquivo: {e}", "ERROR", exec_id)
         sys.exit(1)
 
     total_linhas: int = len(data)
-    erros_atuais: List[Dict[str, Any]] = processar_validacao(data)
+    erros_atuais: list[dict[str, Any]] = processar_validacao(data)
     total_erros: int = len(erros_atuais)
     total_pecas_nf_incorreta: int = sum(
         int(erro.get("QT_PECA_NF_INCORRETA", 0) or 0) for erro in erros_atuais
     )
-    dic_atuais: Dict[str, Dict[str, Any]] = {
+    dic_atuais: dict[str, dict[str, Any]] = {
         gerar_assinatura(e): e for e in erros_atuais
     }
 
-    cache_anterior: Dict[str, Any] = {}
+    cache_anterior: dict[str, Any] = {}
     if os.path.exists(cache_file):
         try:
-            with open(cache_file, "r", encoding="utf-8") as f_cache:
+            with open(cache_file, encoding="utf-8") as f_cache:
                 cache_anterior = json.load(f_cache)
         except Exception:  # pylint: disable=broad-exception-caught
             pass
 
-    dic_anteriores: Dict[str, Any] = cache_anterior.get("itens", {})
+    dic_anteriores: dict[str, Any] = cache_anterior.get("itens", {})
     ja_existia_cache: bool = bool(cache_anterior)
 
-    novos: List[Dict[str, Any]] = []
-    permanentes: List[Dict[str, Any]] = []
-    corrigidos: List[Dict[str, Any]] = []
+    novos: list[dict[str, Any]] = []
+    permanentes: list[dict[str, Any]] = []
+    corrigidos: list[dict[str, Any]] = []
 
     for ass, erro in dic_atuais.items():
         if ass in dic_anteriores:
@@ -519,7 +520,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
             permanentes_count=len(permanentes),
             detalhes_html=detalhes_html,
         )
-        result_payload: Dict[str, Any] = {
+        result_payload: dict[str, Any] = {
             "subject": subject,
             "html": html_final,
             "tipo_notificacao": tipo_notif,

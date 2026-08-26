@@ -2,6 +2,7 @@
 #   "version": "2.5.0",
 #   "description": "Le obs_result.json + config.json, aplica threshold por fase, gera message.txt"
 # }
+import contextlib
 import json
 import os
 import sys
@@ -58,10 +59,8 @@ def _build_fase_section(obs_fase: list[dict[str, Any]]) -> tuple[list[str], floa
     kg = 0.0
     for ob in obs_fase:
         lines.extend(_build_ob_lines(ob))
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             kg += float(ob.get("QT_KILOS_REAL") or 0)
-        except (TypeError, ValueError):
-            pass
     return lines, kg
 
 
@@ -129,7 +128,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    with open(RESULT_FILE, "r", encoding="utf-8") as f:
+    with open(RESULT_FILE, encoding="utf-8") as f:
         result = json.load(f)
 
     fases_monitoradas, max_obs, phase_filters, phase_order = _load_config(CONFIG_FILE)

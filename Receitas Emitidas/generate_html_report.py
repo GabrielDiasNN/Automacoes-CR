@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+import contextlib
 import json
 import os
 import sys
@@ -13,10 +13,9 @@ if sys.stderr.encoding != "utf-8" and hasattr(sys.stderr, "reconfigure"):
 
 # Configura o stdin para ler UTF-8-SIG do PowerShell (limpando o BOM automaticamente)
 if hasattr(sys.stdin, "encoding") and sys.stdin.encoding != "utf-8-sig":
-    try:
+    # Evita falha durante testes (ex: pytest mock de stdin)
+    with contextlib.suppress(AttributeError):
         sys.stdin.reconfigure(encoding="utf-8-sig")  # type: ignore[union-attr]
-    except AttributeError:
-        pass  # Evita falha durante testes (ex: pytest mock de stdin)
 
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
@@ -102,7 +101,7 @@ def generate_html() -> (
         if not os.path.exists(config_path):
             log(f"Configuracao nao encontrada: {config_path}", "ERROR", exec_id)
             sys.exit(1)
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             config: dict[str, Any] = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log(f"Erro ao carregar configuracoes: {e}", "ERROR", exec_id)
@@ -158,7 +157,7 @@ def generate_html() -> (
             machines[mq]["recipes"] += 1
 
     machine_count = len(machines)
-    for mq, machine_data in machines.items():
+    for _mq, machine_data in machines.items():
         total_weight += machine_data["weight"]
         recipe_count += machine_data["recipes"]
         if machine_data["weight"] > max_machine_weight:
