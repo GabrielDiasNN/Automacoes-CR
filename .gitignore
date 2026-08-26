@@ -65,6 +65,10 @@ Orchestrator/tests/e2e-evidence/
 **/.pytest_cache/
 .pytest_cache/
 .gemini/
+# Mirrors de skills sao artefato local reconstruivel, nunca conteudo versionado:
+# `.gemini/skills` espelha `.github/skills` e `.agents/skills` espelha as skills
+# operacionais de `.claude/skills`. Ambos sao recriados por Tools/New-SkillMirrors.ps1.
+.agents/skills/
 .playwright-mcp/
 .playwright-cli/
 email_body.html

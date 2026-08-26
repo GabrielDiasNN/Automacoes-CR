@@ -6,9 +6,12 @@ O projeto atual é 100% nativo, com stack consolidada em Python, PowerShell e No
 
 ## Regra Oficial
 
-- Local canônico: `.github/skills`
-- Local descontinuado: `.agents/skills`
-- Não manter skills duplicadas em múltiplos diretórios para evitar drift.
+- Local canônico das skills de padrão: `.github/skills`
+- Mirror declarado delas: `.gemini/skills` (junctions para `.github/skills`)
+- Fonte única das skills operacionais do projeto: `.claude/skills`
+- Mirror declarado delas: `.agents/skills` (junctions para `.claude/skills`)
+- Não manter skills duplicadas em múltiplos diretórios para evitar drift: mirror é link, nunca cópia — `Tools/Test-SkillsGovernance.ps1` reprova cópia real, alvo divergente e mirror órfão.
+- Mirror não é versionado (ver `.gitignore`): é artefato local, recriado por `pwsh -File Tools\New-SkillMirrors.ps1`. Rode-o após clonar o repositório e sempre que criar ou renomear uma skill — skill nova sem espelho reprova a governança com `GEMINI_SKILL_MIRROR_MISSING` (skills de padrão em `.github/skills`) ou `AGENTS_SKILL_MIRROR_MISSING` (skills operacionais em `.claude/skills`, cobrado apenas quando `.agents/skills` já existe — o mirror inteiro é opcional). Use `-Force` para substituir um mirror que virou cópia real.
 - Melhorar skill existente antes de propor uma skill nova.
 
 ## Taxonomia Ativa do Workspace

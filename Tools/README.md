@@ -22,7 +22,8 @@ banco nem rede.
 - **Test-PlaywrightEvidence.ps1:** Valida se o padrão, template e evidências Playwright registram URL real, ordem final, console limpo e resultado aprovado.
 - **Test-AutomationCatalog.ps1:** Valida `automation.manifest.json`, runbooks, smoke tests e coerência mínima do catálogo governado das automações.
 - **Test-ArchitectureStandard.ps1:** Valida o padrão arquitetural descrito em `docs/architecture-standard.md`, usando `Tools/architecture-standard.rules.json` para allowlists versionadas e falhando apenas violações críticas no v1.
-- **Test-SkillsGovernance.ps1:** Valida skills canônicas em `.github/skills/`.
+- **Test-SkillsGovernance.ps1:** Valida skills canônicas em `.github/skills/` e os dois mirrors declarados: `.gemini/skills` (link para `.github/skills`) e `.agents/skills` (link para as skills operacionais de `.claude/skills`).
+- **New-SkillMirrors.ps1:** Recria esses mirrors como junctions. Mirror não é versionado — rode após clonar o repositório e ao criar/renomear skill. Idempotente; `-Force` substitui mirror que virou cópia real.
 - **Test-SemanticGovernance.ps1:** Detecta drift entre documentação viva, catálogo, versão operacional e skills.
 - **Test-LogConformidade.ps1 / Test-DateConformidade.ps1:** Guardrails de convenção de datas BR em logs e documentação.
 - **Test-JsonConfig.ps1:** Valida sintaxe JSON de configs e arquivos de estado.
