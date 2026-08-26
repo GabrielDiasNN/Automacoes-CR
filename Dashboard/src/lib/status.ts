@@ -34,6 +34,10 @@ export function executionTone(status: string): Tone {
       return "amber";
     case "PENDING":
       return "cyan";
+    case "EXPIRED":
+      // Slot agendado não entregue (descartado por teto de fila), não erro de
+      // execução — tom próprio para não se confundir com ERROR/TIMEOUT (red).
+      return "blue";
     default:
       return "grey"; // TERMINATED, REQUEUED, PARTIAL
   }

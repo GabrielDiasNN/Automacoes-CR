@@ -43,7 +43,6 @@ from .execution_runtime import (
     RequeueValidationError,
     build_queued_execution,
     cooldown_remaining_minutes,
-    get_group_active_execution,
     prepare_requeue,
 )
 
@@ -182,19 +181,16 @@ def scheduled_task_wrapper(automation_id: int) -> None:
                 )
                 return
 
-            group_active = get_group_active_execution(
-                db,
-                cast(str | None, db_auto.queue_group),
-                exclude_automation_id=automation_id,
-            )
-            if group_active:
-                logger.info(
-                    "Agendamento ignorado: %s bloqueada por queue_group=%s em uso por %s.",
-                    db_auto.name,
-                    db_auto.queue_group,
-                    group_active.id,
-                )
-                return
+            # Não checa mais `queue_group` aqui: até 26/08/2026 um tick cujo
+            # grupo estivesse ocupado era DESCARTADO neste ponto — sem virar
+            # execução, sem retry, sem alerta, só uma linha de log ("Agendamento
+            # ignorado: ... bloqueada por queue_group"). Automações com cron
+            # idêntico no mesmo grupo perdiam disparos em silêncio (ORB perdeu
+            # 50% dos ticks em produção). `claim_next_task` já sabe segurar uma
+            # PENDING até o grupo liberar (`_has_running_execution_for_group`) e
+            # já expira a que ficar velha demais (`_expire_if_queue_window_exceeded`,
+            # ver `execution_runtime.py`) — então o agendador sempre enfileira, e
+            # é o worker quem decide quando (ou se) ela roda.
 
             # Sufixo aleatório como em `generate_execution_id`: sem ele, duas
             # expressões cron da mesma automação coincidindo no mesmo SEGUNDO

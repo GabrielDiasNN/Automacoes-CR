@@ -11,13 +11,15 @@ from typing import Any, cast
 from sqlalchemy import case
 from sqlalchemy.orm import Session, joinedload
 
-from .. import models
+from .. import models, notifications
 from ..constants import (
     DEGRADED_CHANNEL_EXIT_CODES,
+    DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS,
     EXECUTION_ACTIVE_STATUSES,
     EXECUTION_ALLOWED_PRIORITIES,
     EXECUTION_QUEUEABLE_SOURCE_STATUSES,
     EXECUTION_STATUS_ERROR,
+    EXECUTION_STATUS_EXPIRED,
     EXECUTION_STATUS_FAILED_BY_REBOOT,
     EXECUTION_STATUS_PARTIAL,
     EXECUTION_STATUS_PENDING,
@@ -30,6 +32,7 @@ from ..constants import (
     FAILURE_REASON_INTERNAL_WORKER_ERROR,
     FAILURE_REASON_MAX_RUNTIME_EXCEEDED,
     FAILURE_REASON_ORCHESTRATOR_REBOOT,
+    FAILURE_REASON_QUEUE_GROUP_WINDOW_EXPIRED,
     FAILURE_REASON_USER_TERMINATED,
     PRIORITY_HIGH,
     PRIORITY_LOW,
@@ -168,6 +171,68 @@ def _has_running_execution_for_group(
     )
 
 
+def _expire_if_queue_window_exceeded(
+    db: Session, candidate: models.Execution, now: datetime
+) -> bool:
+    """Descarta uma PENDING cuja espera em fila ultrapassou a janela de validade.
+
+    Sem este teto, um tick preso atrás de outra automação do mesmo
+    `queue_group` seria reivindicado e rodado horas depois como se fosse um
+    disparo novo — para uma automação de cadência de horas isso é um ciclo
+    obsoleto que já não faz sentido operacional. A janela reusa o limiar de
+    INCIDENT do próprio watchdog de fila pendente (`operational_baseline`):
+    é o mesmo ponto em que o dashboard já sinaliza severidade máxima, então o
+    descarte não introduz um número novo — só age sobre o que o operador já
+    veria como crítico.
+
+    Marca EXECUTION_STATUS_EXPIRED (terminal). Fica fora do escopo de
+    `auto_retry_transient_failures`, que só varre ERROR/TIMEOUT — um tick
+    expirado nunca é reenfileirado sozinho, só por requeue manual do operador.
+    `queued_at` nulo (linhas anteriores à migration 20260731_02) não é
+    tratado como expirado: tempo de fila desconhecido, não infinito.
+    """
+    queued_at = cast(Any, candidate.queued_at)
+    if queued_at is None:
+        return False
+    age_seconds = (now - queued_at).total_seconds()
+    if age_seconds < DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS:
+        return False
+
+    note = (
+        f"\n[EXPIRED] Descartada apos {int(age_seconds)}s em fila "
+        f"(limite {DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS}s) - "
+        "queue_group ocupado alem da janela de validade."
+    )
+    new_logs = truncate_log_payload(
+        sanitize_log_payload(str(candidate.logs or "") + note)
+    )
+    updated = (
+        db.query(models.Execution)
+        .filter(
+            models.Execution.id == candidate.id,
+            models.Execution.status == EXECUTION_STATUS_PENDING,
+        )
+        .update(
+            {
+                models.Execution.status: EXECUTION_STATUS_EXPIRED,
+                models.Execution.finished_at: now,
+                models.Execution.failure_reason: FAILURE_REASON_QUEUE_GROUP_WINDOW_EXPIRED,
+                models.Execution.recovery_action: RECOVERY_ACTION_REQUEUE_MANUAL,
+                models.Execution.logs: new_logs,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    if updated == 1:
+        # EXPIRED nunca passa pelo pipeline de spawn/finalize do worker (nenhum
+        # processo chega a rodar), que é onde os outros status terminais disparam
+        # alerta — sem isto, um SLA miss real ficava visível só passivamente no
+        # dashboard, nunca via alerta proativo.
+        notifications.dispatch_alerts_async(candidate.automation, candidate)
+    return updated == 1
+
+
 def claim_next_task(
     db: Session,
     worker_instance_id: str | None = None,
@@ -190,13 +255,17 @@ def claim_next_task(
     if not candidates:
         return None
 
+    now = get_now_local()
     for candidate in candidates:
         # Grupo ATUAL da automação, não o congelado em `candidate.queue_group`.
         # `Execution.queue_group` permanece gravado como registro histórico
         # ("sob qual grupo isto foi enfileirado"), mas nenhuma decisão de
         # concorrência o consulta — ver `_has_running_execution_for_group`.
         grupo_atual = cast(str | None, candidate.automation.queue_group)
-        if _has_running_execution_for_group(db, grupo_atual):
+        bloqueado = _has_running_execution_for_group(db, grupo_atual)
+
+        if bloqueado:
+            _expire_if_queue_window_exceeded(db, candidate, now)
             continue
 
         claimed_at = get_now_local()
@@ -574,13 +643,27 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
             f"({group_active.id}, Grupo: {queue_group}).",
         )
 
-    next_retry_count = int(db_exec.retry_count or 0) + 1
     max_retries = int(
         db_exec.max_retries
         or (db_exec.automation.max_retries if db_exec.automation else 0)
         or 0
     )
-    if next_retry_count > max_retries and db_exec.status != "SUCCESS":
+    # EXPIRED nunca chegou a rodar (descartada por congestionamento de
+    # queue_group antes de qualquer tentativa — ver `_expire_if_queue_window_exceeded`),
+    # entao nao consome orcamento de retry: sem esta excecao, toda automacao com
+    # max_retries=0 (4 das 6 hoje) fica com uma EXPIRED cujo
+    # recovery_action=RECOVERY_ACTION_REQUEUE_MANUAL aponta para um requeue que
+    # este mesmo bloqueio sempre rejeitaria com 409, mesmo o operador seguindo
+    # exatamente a acao recomendada.
+    next_retry_count = (
+        int(db_exec.retry_count or 0)
+        if db_exec.status == EXECUTION_STATUS_EXPIRED
+        else int(db_exec.retry_count or 0) + 1
+    )
+    if next_retry_count > max_retries and db_exec.status not in (
+        "SUCCESS",
+        EXECUTION_STATUS_EXPIRED,
+    ):
         # `max_retries=0` é decisão deliberada do operador para automações com
         # efeito colateral real (WhatsApp/e-mail) — falhas exigem investigação
         # manual antes de retry, automático (`auto_retry_transient_failures`,

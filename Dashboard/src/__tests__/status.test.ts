@@ -35,6 +35,12 @@ describe("executionTone", () => {
     expect(executionTone("TERMINATED")).toBe("grey");
     expect(executionTone("PARTIAL")).toBe("grey");
   });
+
+  it("mapeia EXPIRED para um tom próprio, distinto do cinza de desconhecidos e do vermelho de erro", () => {
+    const tone = executionTone("EXPIRED");
+    expect(tone).not.toBe("grey");
+    expect(tone).not.toBe("red");
+  });
 });
 
 describe("severityTone", () => {
