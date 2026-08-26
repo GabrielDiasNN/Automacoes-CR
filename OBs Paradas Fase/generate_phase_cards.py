@@ -24,7 +24,7 @@ sys.path.insert(
 # atributos do modulo, pois Orchestrator/tests/test_obs_paradas_fase.py carrega
 # este arquivo dinamicamente via importlib e os acessa como module.<nome> — sem
 # o import ficariam ausentes.
-from obp_config import (  # pylint: disable=unused-import
+from obp_config import (  # pylint: disable=unused-import  # noqa: F401
     FaseConfig,
     _codigo_fase_key,
     _filter_obs,
@@ -191,9 +191,9 @@ def _load_seen_obs(path: str) -> set[str]:
     if not os.path.exists(path):
         return set()
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        return set(str(n) for n in data.get("numero_obs", []))
+        return {str(n) for n in data.get("numero_obs", [])}
     except (OSError, json.JSONDecodeError):
         return set()
 
@@ -403,7 +403,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    with open(RESULT_FILE, "r", encoding="utf-8") as f:
+    with open(RESULT_FILE, encoding="utf-8") as f:
         result = json.load(f)
 
     fases_monitoradas, max_obs, phase_filters, phase_order = _load_config(CONFIG_FILE)

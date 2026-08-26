@@ -176,7 +176,14 @@ jobs:
           # já tinha linha acima do limite de 100 colunas.
           # `OBs Restricao Branco` incluído em 25/08/2026: é um novo domínio
           # produtivo Oracle/WhatsApp e deve nascer coberto pelo gate bloqueante.
-          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" .claude/skills
+          # `Receitas Bloqueadas`, `Montagem de Terceirizados`, `Receitas Emitidas`,
+          # `OBs Paradas Fase` e `OBs Fluxo Sem Tingimento` incluídas em 26/08/2026:
+          # eram as 5 automações de domínio mais antigas do repositório e, por não
+          # terem manifesto quando o gate nasceu, nunca entraram nesta lista —
+          # código de produção com cron ativo ficou sem lint bloqueante por meses.
+          # Achado em code review; 86 violações de estilo/modernização corrigidas
+          # antes da inclusão (ver CHANGELOG.md).
+          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills
 
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
@@ -205,7 +212,14 @@ jobs:
           # `urlopen` do driver é o `# nosec B310` (host fixo 127.0.0.1).
           # A ORB-07 consulta Oracle e prepara payload WhatsApp; por isso entra
           # no mesmo escopo bloqueante desde a criação, sem janela sem scanner.
-          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" .claude/skills -ll
+          # `Receitas Bloqueadas`, `Montagem de Terceirizados`, `Receitas Emitidas`,
+          # `OBs Paradas Fase` e `OBs Fluxo Sem Tingimento` incluídas em 26/08/2026
+          # junto com o ruff (mesmo achado de code review): o único finding real
+          # (B324, MD5 em `Montagem de Terceirizados/validate_and_generate_html.py`)
+          # foi corrigido com `usedforsecurity=False` — é hash de conteúdo para
+          # deduplicação em cache, não uso criptográfico, então o algoritmo e o
+          # valor do hash não mudam.
+          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills -ll
 
       - name: Auditoria de Dependencias (pip-audit)
         continue-on-error: true

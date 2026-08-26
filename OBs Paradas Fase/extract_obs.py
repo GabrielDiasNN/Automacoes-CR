@@ -61,7 +61,7 @@ def extract() -> None:
     if not os.path.exists(sql_file):
         log(f"Arquivo SQL nao encontrado: {sql_file}", "ERROR", exec_id)
         sys.exit(1)
-    with open(sql_file, "r", encoding="utf-8") as f:
+    with open(sql_file, encoding="utf-8") as f:
         sql = f.read()
 
     try:

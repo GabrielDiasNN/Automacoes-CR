@@ -77,7 +77,7 @@ def extract() -> None:
     init_thick_mode(creds, log, exec_id)
 
     sql_file = os.path.join(os.path.dirname(__file__), "SQL-ReceitasEmitidas.sql")
-    with open(sql_file, "r", encoding="utf-8") as f:
+    with open(sql_file, encoding="utf-8") as f:
         sql = f.read()
 
     sql = sql.replace(

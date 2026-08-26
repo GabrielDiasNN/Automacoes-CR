@@ -14,6 +14,18 @@
 ### Notas
 - Validado com **envio real** da RB-01 em 26/08/2026 18:04, com a cadeia completa observável no log: `Destino canonico do chat difere do numero discado (dominio @lid)` → `sendMessage retornou sem id; message_create confirmou o dispatch` → `Confirmacao de recebimento detectada via ACK` → `ExitCode=0`, estado consolidado. O WARN de `sendMessage` sem id é esperado e permanente enquanto o `whatsapp-web.js` instalado usar `MsgKey._serialized`: é o sintoma da causa (1), que vive na dependência e não neste repositório. Se uma atualização futura da lib passar a ler `$1`, o WARN desaparece sozinho e nada mais precisa mudar.
 
+## [1.3.45] - 26/08/2026
+
+### Corrigido
+- **5 automações de domínio com cron ativo ficaram anos fora do lint/bandit bloqueante do CI:** `.github/workflows/governanca.yml` usa uma lista fixa de diretórios nos gates `ruff check` e `bandit -r`; `Receitas Bloqueadas` (RB-01), `Montagem de Terceirizados` (MT-02), `Receitas Emitidas` (RE-03), `OBs Paradas Fase` (OBP-04) e `OBs Fluxo Sem Tingimento` (OFST-06) nunca entraram nessa lista, mesmo sendo código de produção com execução agendada. Achado em `/code-review high` do diff pendente. Antes de incluí-las, corrigidas 86 violações de ruff (todas de estilo/modernização — `UP006`/`UP015`/`UP035`/`UP045`/`SIM102`/`SIM105`/`B007`/`C401` — nenhuma alterava comportamento) e 1 finding de bandit (B324: MD5 em `Montagem de Terceirizados/validate_and_generate_html.py:359` usado para assinatura de deduplicação em cache, não para fim criptográfico — resolvido com `usedforsecurity=False`, mantendo algoritmo e valor do hash para não invalidar `.cache_erros.json` já persistido).
+- **`ruff check --fix` em lote removeu 4 imports necessários em `OBs Paradas Fase/generate_phase_cards.py`:** `get_fase_config`, `_codigo_fase_key`, `_resolve_contato` e `_load_contatos_from_env` são importados apenas para existirem como atributos do módulo — `Orchestrator/tests/test_obs_paradas_fase.py` carrega o arquivo dinamicamente via `importlib` e os acessa como `module.<nome>`. O `# pylint: disable=unused-import` já presente no import não suprime o F401 do ruff, e o fix automático os removeu como "não usados", quebrando 4 testes. Restaurados com `# noqa: F401` adicionado ao mesmo comentário.
+
+### Alterado
+- **`.github/workflows/governanca.yml`:** as 5 automações entraram nos gates `ruff check` e `bandit -r -ll`, com comentário datado explicando a lacuna (mesmo padrão das entradas anteriores). `.claude/skills/ci-gates/SKILL.md` atualizado com a lista completa de diretórios e o histórico da correção — a skill já estava desatualizada mesmo em relação à inclusão anterior de `OBs Restricao Branco`.
+
+### Adicionado
+- **Verificação de regressão:** suíte completa das 5 automações (`test_receitas_bloqueadas.py`, `test_montagem_terceirizados.py`, `test_receitas_emitidas.py`, `test_obs_paradas_fase.py`, `test_ofst.py`) — 84 testes verdes após as correções de ruff/bandit, incluindo os 4 que a remoção acidental de imports havia quebrado.
+
 ## [1.3.44] - 26/08/2026
 
 ### Corrigido

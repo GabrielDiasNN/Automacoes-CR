@@ -14,7 +14,7 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
@@ -50,14 +50,14 @@ class RecipeRecord(BaseModel):
     cor: str = Field(alias="Cor Rec.")
     ep: int = Field(alias="EP Rec.")
     pe: int = Field(alias="PE Rec")
-    data_prod: Optional[str] = Field(alias="Data Última Prod.", default="")
-    data_bloqueio: Optional[str] = Field(alias="Data Bloqueio", default="")
+    data_prod: str | None = Field(alias="Data Última Prod.", default="")
+    data_bloqueio: str | None = Field(alias="Data Bloqueio", default="")
 
 
 class StateFile(BaseModel):
     last_hash: str
     updated_at: str
-    records: List[RecipeRecord]
+    records: list[RecipeRecord]
 
 
 # --- RESILIENCIA DE CONEXAO ---
@@ -256,9 +256,15 @@ def formatar_excel(file_path: str) -> None:  # pylint: disable=too-many-branches
                 cell.border = border
                 if isinstance(cell.value, datetime):
                     cell.number_format = "DD/MM/YYYY HH:MM:SS"
-                elif sheet_name == "OBsReceitasBloqueadas":
-                    if cell.column in [11, 12, 15, 18, 19, 20]:
-                        cell.number_format = "DD/MM/YYYY"
+                elif sheet_name == "OBsReceitasBloqueadas" and cell.column in [
+                    11,
+                    12,
+                    15,
+                    18,
+                    19,
+                    20,
+                ]:
+                    cell.number_format = "DD/MM/YYYY"
                 if sheet_name == "OBsReceitasBloqueadas":
                     if ws.cell(row=int(cell.row or 0), column=22).value == "Divergente":
                         ws.cell(row=int(cell.row or 0), column=22).fill = (
@@ -283,7 +289,7 @@ def _carregar_e_normalizar(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Le a SQL, busca no Oracle e retorna (df_raw, df_agreg) ja normalizados."""
     sql_path = os.path.join(os.path.dirname(__file__), "SQL-ReceitasBloqueadas.sql")
-    with open(sql_path, "r", encoding="utf-8") as f:
+    with open(sql_path, encoding="utf-8") as f:
         sql_query = f.read()
 
     df_raw = fetch_data_with_retry(creds, sql_query, exec_id)
@@ -330,7 +336,7 @@ def _carregar_e_normalizar(
     return df_raw, df_agreg
 
 
-def _carregar_ultimo_state(state_path: str, exec_id: str) -> List[Any]:
+def _carregar_ultimo_state(state_path: str, exec_id: str) -> list[Any]:
     """Le e valida (Pydantic) o receitas_state.json anterior.
 
     Retorna a lista de records (vazia se o arquivo nao existir ou for invalido).
@@ -338,7 +344,7 @@ def _carregar_ultimo_state(state_path: str, exec_id: str) -> List[Any]:
     last_state_data: Any = {}
     if os.path.exists(state_path):
         try:
-            with open(state_path, "r", encoding="utf-8") as f:
+            with open(state_path, encoding="utf-8") as f:
                 raw_json = json.load(f)
                 # Validacao de Contrato de Dados (Pydantic)
                 StateFile.model_validate(raw_json)
@@ -350,7 +356,7 @@ def _carregar_ultimo_state(state_path: str, exec_id: str) -> List[Any]:
             log(f"Erro ao carregar estado: {e}", "WARN", exec_id)
             last_state_data = {}
 
-    records: List[Any] = (
+    records: list[Any] = (
         last_state_data.get("records", [])
         if isinstance(last_state_data, dict)
         else last_state_data
@@ -359,12 +365,12 @@ def _carregar_ultimo_state(state_path: str, exec_id: str) -> List[Any]:
 
 
 def _computar_diff(
-    df_agreg: pd.DataFrame, last_records: List[Any]
-) -> tuple[Dict[str, int], List[Dict[Any, Any]]]:
+    df_agreg: pd.DataFrame, last_records: list[Any]
+) -> tuple[dict[str, int], list[dict[Any, Any]]]:
     """Compara df_agreg com o ultimo estado conhecido; retorna (stats, diff_rows)."""
     df_last = pd.DataFrame(last_records)
     stats = {"new": 0, "mod": 0, "del": 0}
-    diff_rows: List[Dict[Any, Any]] = []
+    diff_rows: list[dict[Any, Any]] = []
 
     if df_last.empty:
         df_diff_new = df_agreg.copy()
@@ -412,7 +418,7 @@ def _computar_diff(
 
 
 def _montar_df_display(
-    df_agreg: pd.DataFrame, diff_rows: List[Dict[Any, Any]]
+    df_agreg: pd.DataFrame, diff_rows: list[dict[Any, Any]]
 ) -> pd.DataFrame:
     """Monta o DataFrame de exibicao (STABLE/NEW/MODIFIED + linhas DELETED) para o HTML."""
     df_diff = pd.DataFrame(diff_rows)
@@ -456,7 +462,7 @@ def _salvar_state_tmp(df_agreg: pd.DataFrame, state_path: str) -> None:
 def _gerar_saidas(
     df_agreg: pd.DataFrame,
     df_raw: pd.DataFrame,
-    diff: tuple[Dict[str, int], List[Dict[Any, Any]]],
+    diff: tuple[dict[str, int], list[dict[Any, Any]]],
     html_path: str,
     exec_id: str,
 ) -> None:
