@@ -60,12 +60,12 @@ Monorepo com três camadas principais:
 
 1. **Orchestrator** (`Orchestrator/`) — FastAPI v5 + APScheduler + SQLite WAL. Motor de execução central.
 2. **Dashboard** (`Dashboard/`) — SPA React + TypeScript + Vite (fontes em `Dashboard/src/`, build em `Dashboard/dist/`) servido pelo próprio FastAPI via `StaticFiles` com fallback SPA para rotas client-side. Roda em `http://127.0.0.1:8000/dashboard/`.
-3. **Automações de domínio** — diretórios independentes. As cinco automações registradas com manifesto (`Receitas Bloqueadas/` RB-01, `Montagem de Terceirizados/` MT-02, `Receitas Emitidas/` RE-03, `OBs Paradas Fase/` OBP-04, `OBs Fluxo Sem Tingimento/` OFST-06) usam `run.ps1` como entrypoint; `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo). Criticidade, SLA e cadência canônicas: `docs/automation-criticality-map.md`.
+3. **Automações de domínio** — diretórios independentes. As seis automações registradas com manifesto (`Receitas Bloqueadas/` RB-01, `Montagem de Terceirizados/` MT-02, `Receitas Emitidas/` RE-03, `OBs Paradas Fase/` OBP-04, `OBs Fluxo Sem Tingimento/` OFST-06, `OBs Restricao Branco/` ORB-07) usam `run.ps1` como entrypoint. `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo). Criticidade, SLA e cadência canônicas: `docs/automation-criticality-map.md`.
 
 Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md` e `Produção Beneficimento/CLAUDE.md`.
 
 ### Biblioteca compartilhada Python (`lib/python/`)
-- `oracle_extract.py` — núcleo compartilhado de extração Oracle: `resolve_oracle_credentials`, `init_thick_mode`, `fetch_all` (lotes), `serialize_rows` (datetime→isoformat, strip), `compute_hash`, `read_last_hash`, `write_state_tmp`. **Todos os 5 scripts de extração de domínio (`Receitas Emitidas/`, `Receitas Bloqueadas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`, `OBs Fluxo Sem Tingimento/`) usam este módulo** — não duplicar o padrão fetch/serialize/hash em novos scripts. Para DSN fixo (ignorar `.env`), passe `force_dsn="dbprd"` em `resolve_oracle_credentials`.
+- `oracle_extract.py` — núcleo compartilhado de extração Oracle: `resolve_oracle_credentials`, `init_thick_mode`, `fetch_all` (lotes), `serialize_rows` (datetime→isoformat, strip), `compute_hash`, `read_last_hash`, `write_state_tmp`. **Todos os 6 scripts de extração de domínio (`Receitas Emitidas/`, `Receitas Bloqueadas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`, `OBs Fluxo Sem Tingimento/`, `OBs Restricao Branco/`) usam este módulo** — não duplicar o padrão fetch/serialize/hash em novos scripts. Para DSN fixo (ignorar `.env`), passe `force_dsn="dbprd"` em `resolve_oracle_credentials`.
 - `oracle_client.py` — `init_oracle_thick_mode` (ativa Thick Mode do oracledb).
 - `oracle_retry.py` — `make_oracle_retry()` (pybreaker + stamina) e `CircuitBreakerError`.
 

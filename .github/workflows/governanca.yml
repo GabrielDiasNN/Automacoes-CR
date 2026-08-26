@@ -174,7 +174,9 @@ jobs:
           # nasceu fora de todo gate — o `# noqa: S310` da linha do `urlopen`
           # sinalizava conformidade que nenhuma ferramenta verificava, e o arquivo
           # já tinha linha acima do limite de 100 colunas.
-          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills
+          # `OBs Restricao Branco` incluído em 25/08/2026: é um novo domínio
+          # produtivo Oracle/WhatsApp e deve nascer coberto pelo gate bloqueante.
+          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" .claude/skills
 
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
@@ -201,7 +203,9 @@ jobs:
           # `tests/test_beneficiamento_sql_seguranca.py`, não o `nosec`.
           # `.claude/skills` incluído em 03/08/2026 junto com o ruff: o
           # `urlopen` do driver é o `# nosec B310` (host fixo 127.0.0.1).
-          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills -ll
+          # A ORB-07 consulta Oracle e prepara payload WhatsApp; por isso entra
+          # no mesmo escopo bloqueante desde a criação, sem janela sem scanner.
+          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" .claude/skills -ll
 
       - name: Auditoria de Dependencias (pip-audit)
         continue-on-error: true

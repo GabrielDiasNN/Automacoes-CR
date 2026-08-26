@@ -42,7 +42,7 @@ Se o ruleset estiver ausente ou inválido, o validador deve retornar `RULESET_MI
 
 ## Canal WhatsApp — Sessão Única e Concorrência
 
-Todas as automações que enviam WhatsApp (`Receitas Bloqueadas`, `OBs Paradas Fase`, `OBs Fluxo Sem Tingimento`) e o alerta de falhas do Orchestrator (`Orchestrator/app/notifications.py`) compartilham a mesma sessão autenticada `hub-global`, acionada através do motor único `lib/WhatsApp-Core.js` (invocado sempre via `lib/Send-WhatsApp.ps1`).
+Todas as automações que enviam WhatsApp (`Receitas Bloqueadas`, `OBs Paradas Fase`, `OBs Fluxo Sem Tingimento` e a ORB-07 ativa `OBs Restricao Branco`) e o alerta de falhas do Orchestrator (`Orchestrator/app/notifications.py`) compartilham a mesma sessão autenticada `hub-global`, acionada através do motor único `lib/WhatsApp-Core.js` (invocado sempre via `lib/Send-WhatsApp.ps1`).
 
 - **Sessão fora da árvore do repositório:** o diretório `LocalAuth` vive em `%LOCALAPPDATA%\Automacoes\wwebjs_auth\session-hub-global\` (override: `WHATSAPP_AUTH_PATH`). Ele contém credenciais de sessão do WhatsApp Web — quem copiar o diretório assume a conta sem QR code. Manter fora do repositório impede que zip, backup ou sync da pasta do projeto carregue a sessão junto. Resolução canônica: `lib/whatsapp-auth-path.js` (Node) e `Get-WhatsAppAuthPath` em `lib/Lib-Process.psm1` (PowerShell) — nunca reconstruir o caminho manualmente.
 - **Sessão única por design:** não há pool de sessões nem fila dedicada; a concorrência entre chamadores é resolvida por lock de arquivo no perfil da sessão.
@@ -56,7 +56,13 @@ Duas decisões registradas na revisão arquitetural de 26/07/2026 (`CHANGELOG.md
 
 **Idempotência por canal é da `lib/Lib-Idempotency.psm1`.** Automação que suprime reenvio por hash de conteúdo (`Receitas Bloqueadas`, `Receitas Emitidas`, `Montagem de Terceirizados`) consome `Get-LastContentHash`, `Read-DeliveryState`, `Update-DeliveryStateHash`, `Test-DeliveryPending`, `Set-DeliverySuccess` e `Save-DeliveryState` — nunca reimplementa a leitura/escrita de `delivery_state.json`. `lib/tests/Lib-Idempotency.Tests.ps1` trava esse contrato.
 
-Duas exceções deliberadas, por usarem modelo estruturalmente diferente: `OBs Paradas Fase` é idempotente **por fase** (array `phases` de tamanho variável por execução) e `OBs Fluxo Sem Tingimento` resolve idempotência dentro do Python, sem `delivery_state`. Ambas reaproveitam apenas `Get-LastContentHash`; encaixá-las no contrato por canal seria abstração errada.
+Três exceções deliberadas, por usarem modelo estruturalmente diferente: `OBs Paradas Fase` é idempotente **por fase** (array `phases` de tamanho variável por execução) e reaproveita `Get-LastContentHash`; `OBs Fluxo Sem Tingimento` e `OBs Restricao Branco` resolvem idempotência por ciclo da OB dentro do Python, sem `delivery_state`. Encaixá-las no contrato por canal seria abstração errada.
+
+Na ORB-07, a consulta de estoque mantém uma linha por reduzido mesmo quando há
+peças nas finalidades 3 e 4: `COUNT(DISTINCT IDPECASPRODUTO)` decide o saldo e
+as contagens por finalidade servem apenas à auditoria da mensagem. O artigo e
+a cor programada são normalizados na camada de apresentação (3 e 2 dígitos,
+respectivamente), sem alterar o dado Oracle usado na decisão.
 
 **Bootstrap do `lib/python` fica no script, em forma única.** Cada script de extração declara exatamente uma linha:
 

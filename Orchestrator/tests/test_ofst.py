@@ -267,7 +267,6 @@ def test_validate_ob_query_acumula_todos_os_problemas() -> None:
         ({"NUMERO_OB": None}, "NUMERO_OB"),
         ({"TOTAL_PECAS": None}, "TOTAL_PECAS"),
         ({"CODIGO_REDUZIDO_CRU": "abc"}, "CODIGO_REDUZIDO_CRU"),
-        ({"CODIGO_ARTIGO_CRU": "abc"}, "CODIGO_ARTIGO_CRU"),
         ({"ID_CLIENTE": "abc"}, "ID_CLIENTE"),
         ({"CODIGO_FLUXO": 205}, "CODIGO_FLUXO"),
         ({"STATUS": 0}, "STATUS"),
@@ -300,11 +299,27 @@ def test_coerce_ob_row_aceita_numeros_como_string_ou_decimal() -> None:
     assert ob.kilos_programados == pytest.approx(120.5)
 
 
-def test_coerce_ob_row_descarta_zeros_a_esquerda_do_artigo() -> None:
-    """CDARTIGOCRU do Oracle vem com zeros a esquerda (ex.: '00489'); int() normaliza."""
+def test_coerce_ob_row_preserva_artigo_cru_como_texto() -> None:
+    """CDARTIGOCRU é texto no Oracle e chega com zeros à esquerda ('00489')."""
     v = _validators()
     ob = v.coerce_ob_row(_ob_row(CODIGO_ARTIGO_CRU="00489"))
-    assert ob.codigo_artigo_cru == 489
+    assert ob.codigo_artigo_cru == "00489"
+
+
+def test_coerce_ob_row_aceita_artigo_cru_alfanumerico() -> None:
+    """Defeito latente idêntico ao da ORB-07 (onde '0A231' descartou 27% do lote).
+
+    A população de fluxo sem tingimento nunca trouxe um artigo alfanumérico em
+    246 execuções, mas o código é o mesmo — este teste trava a regressão.
+    """
+    v = _validators()
+    ob = v.coerce_ob_row(_ob_row(CODIGO_ARTIGO_CRU="0A231"))
+    assert ob.codigo_artigo_cru == "0A231"
+
+
+def test_coerce_ob_row_trata_artigo_cru_em_branco_como_ausente() -> None:
+    v = _validators()
+    assert v.coerce_ob_row(_ob_row(CODIGO_ARTIGO_CRU="   ")).codigo_artigo_cru is None
 
 
 def test_coerce_ob_row_aceita_artigo_cru_nulo() -> None:
@@ -694,6 +709,27 @@ def test_build_message_monta_o_template_do_grupo() -> None:
     assert "Estoque disponível: 75 peças" in msg
     assert "Data de entrega: 20/07/2026" in msg
     assert "Filial destino: CR-LOJA BLUMENAU" in msg
+
+
+def test_build_message_exibe_artigo_alfanumerico_e_mantem_o_numerico_como_antes() -> (
+    None
+):
+    """`codigo_artigo_cru` deixou de ser int (ver coerce_ob_row).
+
+    O texto alfanumérico passa inteiro; o código puramente numérico continua sem
+    os zeros à esquerda, para que a mudança de tipo não altere a mensagem que a
+    Expedição já conhece.
+    """
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    assert "Artigo: 0A231" in module.build_message(
+        {"rows": [_row_mensagem(CODIGO_ARTIGO_CRU="0A231")]}
+    )
+    assert "Artigo: 489" in module.build_message(
+        {"rows": [_row_mensagem(CODIGO_ARTIGO_CRU="00489")]}
+    )
+    assert "Artigo: —" in module.build_message(
+        {"rows": [_row_mensagem(CODIGO_ARTIGO_CRU=None)]}
+    )
 
 
 def test_build_message_nao_expoe_tempo_de_consulta_nem_grupo() -> None:

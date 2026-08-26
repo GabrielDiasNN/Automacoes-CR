@@ -115,11 +115,24 @@ if ($pylint) {
     # CI (job Lint Python). As duas ferramentas discordam sobre a mesma linha em
     # arquivos de Orchestrator/tests/ que importam de "app.*" e de bibliotecas
     # como fastapi/sqlalchemy/pytest — isort e o padrao real, pylint fica mudo.
-    $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302,C0411 @resolvedTargetFiles 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint)" -ForegroundColor Red
-        $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
-        $hasErrors = $true
+    #
+    # Agrupado por diretorio pelo MESMO motivo que o mypy acima: automacoes de
+    # dominio tem modulos homonimos (models.py, queries.py, validators.py). Num
+    # lote unico o pylint resolve `from models import ...` para o PRIMEIRO
+    # models.py da lista e reprova o outro com E0611/E1101/W0632 — achados
+    # falsos, apontando para linhas de um arquivo de outra automacao. Antes de
+    # 26/08/2026 so `OBs Fluxo Sem Tingimento` tinha esse trio de nomes, entao a
+    # colisao nao existia; a ORB-07 a tornou observavel.
+    $pylintPorDiretorio = $resolvedTargetFiles | Group-Object { Split-Path -Parent $_ }
+
+    foreach ($grupoPylint in $pylintPorDiretorio) {
+        $arquivosGrupo = @($grupoPylint.Group)
+        $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302,C0411 @arquivosGrupo 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint) em $($grupoPylint.Name)" -ForegroundColor Red
+            $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+            $hasErrors = $true
+        }
     }
 } else {
     Write-Host "[AVISO] Pylint nao instalado. Validacao de qualidade Python pulada." -ForegroundColor Yellow
