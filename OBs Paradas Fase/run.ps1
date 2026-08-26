@@ -204,13 +204,15 @@ try {
         $utf8NoBOM = [System.Text.UTF8Encoding]::new($false)
         [System.IO.File]::WriteAllText($BatchInputFile, ($batchInput | ConvertTo-Json -Depth 5), $utf8NoBOM)
 
-        # Ler chatId: .env (OBP_WHATSAPP_TARGET) tem prioridade; config.json e apenas fallback/placeholder.
+        # Ler chatId: contactIdEnv (OBP_WHATSAPP_TARGET) tem prioridade; config.json e apenas
+        # fallback/placeholder. Resolve-WhatsAppTarget falha cedo se a env var estiver ausente,
+        # em vez de despachar o lote inteiro para o placeholder do hub.
         try {
             $waCfg = Get-Content $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
         } catch [System.Exception] {
             Exit-WithCode 4 "Falha ao interpretar '$WaConfigPath' como JSON: $_"
         }
-        $chatId = if (-not [string]::IsNullOrWhiteSpace($env:OBP_WHATSAPP_TARGET)) { $env:OBP_WHATSAPP_TARGET } else { $waCfg.target.contactId }
+        $chatId = Resolve-WhatsAppTarget -Target $waCfg.target -ConfigPath $WaConfigPath
         $clientId = if ($waCfg.auth.clientId) { $waCfg.auth.clientId } else { "hub-global" }
 
         $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"

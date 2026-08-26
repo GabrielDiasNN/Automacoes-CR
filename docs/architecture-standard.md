@@ -49,6 +49,7 @@ Todas as automações que enviam WhatsApp (`Receitas Bloqueadas`, `OBs Paradas F
 - **Exit code `40` (lock ativo)** e **exit code `23` (cooldown)** são **comportamento normal de serialização**, não falha da automação — o chamador deve reprocessar no próximo ciclo agendado, não escalar como incidente.
 - **Exit code `21`** (sessão expirada) exige reautenticação manual via `lib\Authenticate-WhatsApp.bat`; nenhuma automação deve tentar reautenticar sozinha.
 - Novos consumidores do canal WhatsApp devem invocar exclusivamente `lib/Send-WhatsApp.ps1` (nunca `lib/WhatsApp-Core.js` diretamente), para herdar a limpeza de locks/processos zumbis e a resolução de `NODE_PATH` centralizadas no wrapper.
+- A confirmação de despacho do motor é independente do exit code isolado: `waitUntilMsgSent` é solicitado e o ID é obtido do retorno ou de `message_create`. Na versão instalada do `whatsapp-web.js`, `_serialized` pode faltar e o identificador interno `$1` deve ser aceito; sem ambos, o consumidor falha sem consolidar idempotência.
 
 ## Idempotência de Entrega e Bootstrap Python das Automações
 

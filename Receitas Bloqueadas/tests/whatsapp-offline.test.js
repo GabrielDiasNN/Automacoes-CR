@@ -38,12 +38,15 @@ assert.doesNotMatch(sharedCore, /function extrairOpcoesMensagem/);
 
 // Regressao [1.1.7]: whatsapp-web.js 1.34.6 pode resolver client.sendMessage() com
 // `undefined` (getMessageModel nao serializa) apesar de a mensagem ter sido entregue.
-// Dereferenciar sentMsg.id._serialized sem guarda lancava "Cannot read properties of
-// undefined (reading 'id')", marcava fases entregues como falha e o circuit-breaker
-// abortava o lote. O acesso ao .id do retorno de sendMessage deve ser sempre guardado.
+// Dereferenciar sentMsg.id sem guarda lancava "Cannot read properties of undefined
+// (reading 'id')", marcava fases entregues como falha e o circuit-breaker abortava o
+// lote. A normalizacao deve aceitar retorno sem id e tambem o ID interno `$1` exposto
+// pelo modelo instalado.
 assert.doesNotMatch(sharedCore, /=\s*sentMsg\.id\._serialized/,
-  'Retorno de sendMessage deve ser guardado (sentMsg pode ser undefined) — use (sentMsg && sentMsg.id) ? ... : null');
-assert.match(sharedCore, /\(sentMsg && sentMsg\.id\) \? sentMsg\.id\._serialized : null/,
+  'Retorno de sendMessage nao deve acessar _serialized diretamente (sentMsg pode ser undefined)');
+assert.match(sharedCore, /function serializarIdMensagem\(id\)/,
+  'Normalizador de ID do WhatsApp ausente');
+assert.match(sharedCore, /serializarIdMensagem\(sentMsg && sentMsg\.id\)/,
   'Guarda defensiva do id de sendMessage ausente');
 
 console.log('[OK] Contrato offline de WhatsApp validado.');
