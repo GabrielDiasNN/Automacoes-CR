@@ -73,5 +73,42 @@ function Get-HubConfig {
     return $val
 }
 
-Export-ModuleMember -Function Get-HubConfig, Import-HubEnv
+function Resolve-WhatsAppTarget {
+    <#
+    .SYNOPSIS
+        Resolve o destino real de um envio WhatsApp a partir do `target` de um whatsapp-config.json.
+    .DESCRIPTION
+        Quando o config declara `contactIdEnv`, o `contactId`/`contactPhone` do JSON e' apenas
+        placeholder de schema (todo config do hub que usa contactIdEnv usa o mesmo placeholder
+        generico "550000000000...") — nunca um destino real. Falha cedo se a variavel de
+        ambiente nao estiver definida, em vez de enviar silenciosamente para o placeholder.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        $Target,
+        [string]$ConfigPath = ""
+    )
+
+    $placeholder = if ($Target.contactId) { $Target.contactId } else { $Target.contactPhone }
+
+    if ($Target.contactIdEnv) {
+        $envTarget = [Environment]::GetEnvironmentVariable([string]$Target.contactIdEnv, "Process")
+        if ([string]::IsNullOrWhiteSpace($envTarget)) {
+            $origem = if ($ConfigPath) { " ($ConfigPath)" } else { "" }
+            throw "Destino do WhatsApp ausente: variavel de ambiente '$($Target.contactIdEnv)'$origem nao esta definida ou esta vazia. O contactId do config e apenas placeholder de schema, nunca um destino real."
+        }
+        return $envTarget
+    }
+
+    if ([string]::IsNullOrWhiteSpace($placeholder)) {
+        $origem = if ($ConfigPath) { " ($ConfigPath)" } else { "" }
+        throw "Destino do WhatsApp ausente: 'target' $origem nao declara contactId, contactPhone nem contactIdEnv."
+    }
+
+    return $placeholder
+}
+
+Export-ModuleMember -Function Get-HubConfig, Import-HubEnv, Resolve-WhatsAppTarget
 

@@ -25,7 +25,9 @@ $ErrorActionPreference = "Stop"
 $LibDir = $PSScriptRoot
 $NodeScript = Join-Path $LibDir "WhatsApp-Core.js"
 $ProcessModule = Join-Path $LibDir "Lib-Process.psm1"
+$ConfigModule = Join-Path $LibDir "Lib-Config.psm1"
 Import-Module $ProcessModule -Force
+Import-Module $ConfigModule -Force
 
 # --- Detectar Node.js ---
 $NodeExe = "node"
@@ -45,13 +47,10 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
     $resolvedConfig = Convert-Path $ConfigPath
     $base = Split-Path -Parent $resolvedConfig
 
-    # Suporte a contactId completo (grupos @g.us) com fallback para contactPhone
-    $finalPhone = if ($json.target.contactId) { $json.target.contactId } else { $json.target.contactPhone }
-    # Override de destino via .env (contactIdEnv): mantem o numero real fora do config versionado.
-    if ($json.target.contactIdEnv) {
-        $envTarget = [Environment]::GetEnvironmentVariable([string]$json.target.contactIdEnv, "Process")
-        if (-not [string]::IsNullOrWhiteSpace($envTarget)) { $finalPhone = $envTarget }
-    }
+    # Resolve o destino real (contactId/contactPhone do JSON, ou o override via .env em
+    # contactIdEnv). Falha cedo se contactIdEnv estiver declarado mas a env var ausente —
+    # nesse caso o contactId do config e apenas placeholder, nunca um destino valido.
+    $finalPhone = Resolve-WhatsAppTarget -Target $json.target -ConfigPath $resolvedConfig
     $finalClientId = $json.auth.clientId
 
     # Suporte a mensagem via arquivo externo (textFile) com fallback para caption inline
