@@ -12,6 +12,7 @@ from app.constants import (  # pylint: disable=import-error
     BASELINE_STATUS_ATTENTION,
     BASELINE_STATUS_HEALTHY,
     BASELINE_STATUS_INCIDENT,
+    DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS,
     DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
     DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
     DIAGNOSTIC_WAL_CRITICAL_MB,
@@ -110,7 +111,7 @@ def build_operational_baseline_summary(
     )
 
     pending_status = BASELINE_STATUS_HEALTHY
-    if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS * 2:
+    if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS:
         pending_status = BASELINE_STATUS_INCIDENT
     elif pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS:
         pending_status = BASELINE_STATUS_ATTENTION
@@ -129,7 +130,7 @@ def build_operational_baseline_summary(
                 )
             ),
             attention_threshold=f">= {DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS}s",
-            incident_threshold=f">= {DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS * 2}s",
+            incident_threshold=f">= {DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS}s",
             action_code=ACTION_CODE_WORKER_WAKEUP,
         )
     )

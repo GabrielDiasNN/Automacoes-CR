@@ -17,6 +17,13 @@ EXECUTION_STATUS_TIMEOUT = "TIMEOUT"
 EXECUTION_STATUS_TERMINATED = "TERMINATED"
 EXECUTION_STATUS_FAILED_BY_REBOOT = "FAILED_BY_REBOOT"
 EXECUTION_STATUS_REQUEUED = "REQUEUED"
+# PENDING cujo tempo de fila (`queued_at`) ultrapassou
+# DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS antes de o queue_group liberar —
+# ver `claim_next_task`. Terminal, mas fora de EXECUTION_QUEUEABLE_SOURCE via
+# auto-retry: `auto_retry_transient_failures` só varre ERROR/TIMEOUT, então um
+# tick expirado nunca é reenfileirado automaticamente. Requeue manual continua
+# possível (EXPIRED entra em EXECUTION_TERMINAL_STATUSES).
+EXECUTION_STATUS_EXPIRED = "EXPIRED"
 
 EXECUTION_ACTIVE_STATUSES = {
     EXECUTION_STATUS_PENDING,
@@ -30,6 +37,7 @@ EXECUTION_TERMINAL_STATUSES = {
     EXECUTION_STATUS_TIMEOUT,
     EXECUTION_STATUS_TERMINATED,
     EXECUTION_STATUS_FAILED_BY_REBOOT,
+    EXECUTION_STATUS_EXPIRED,
 }
 
 # Status que representam entrega efetiva do resultado principal (contam como
@@ -39,10 +47,19 @@ EXECUTION_DELIVERED_STATUSES = {
     EXECUTION_STATUS_PARTIAL,
 }
 
-# Status terminais que representam falha (todo terminal que não foi entregue).
-# Fonte única para métricas, scoring e portfólio: listas hardcoded divergentes
-# faziam FAILED_BY_REBOOT ser contado em uns lugares e ignorado em outros (#17).
-EXECUTION_FAILED_STATUSES = EXECUTION_TERMINAL_STATUSES - EXECUTION_DELIVERED_STATUSES
+# Status terminais que representam falha (todo terminal que não foi entregue,
+# exceto EXPIRED). Fonte única para métricas, scoring e portfólio: listas
+# hardcoded divergentes faziam FAILED_BY_REBOOT ser contado em uns lugares e
+# ignorado em outros (#17). EXPIRED é excluído deliberadamente: representa um
+# tick descartado por congestionamento de queue_group ANTES de qualquer
+# tentativa de execução — não uma automação que rodou e falhou. Contá-lo aqui
+# faria scoring, métricas diárias e portfólio penalizarem uma automação
+# saudável pelo simples fato de compartilhar queue_group com outra mais lenta.
+EXECUTION_FAILED_STATUSES = (
+    EXECUTION_TERMINAL_STATUSES
+    - EXECUTION_DELIVERED_STATUSES
+    - {EXECUTION_STATUS_EXPIRED}
+)
 
 EXECUTION_QUEUEABLE_SOURCE_STATUSES = EXECUTION_TERMINAL_STATUSES | {
     EXECUTION_STATUS_REQUEUED,
@@ -73,6 +90,14 @@ OPERATIONAL_BASELINE_STATUSES = {
 }
 
 DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS = 900
+# Mesmo teto usado por `operational_baseline` para escalar a fila pendente de
+# ATTENTION para INCIDENT. Reusado por `claim_next_task` (H2) como janela de
+# validade de uma PENDING presa atrás de queue_group: quando o dashboard já
+# marcaria a fila como INCIDENT, o tick correspondente é descartado como
+# EXPIRED em vez de rodar horas depois como se fosse um disparo novo.
+DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS = (
+    DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS * 2
+)
 DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS = 3600
 DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS = 300
 DIAGNOSTIC_WORKER_OFFLINE_WARN_SECONDS = 120
@@ -116,6 +141,7 @@ FAILURE_REASON_INTERNAL_WORKER_ERROR = "INTERNAL_WORKER_ERROR"
 FAILURE_REASON_MAX_RUNTIME_EXCEEDED = "MAX_RUNTIME_EXCEEDED"
 FAILURE_REASON_ORCHESTRATOR_REBOOT = "ORCHESTRATOR_REBOOT"
 FAILURE_REASON_PREFLIGHT_FAILED = "PREFLIGHT_FAILED"
+FAILURE_REASON_QUEUE_GROUP_WINDOW_EXPIRED = "QUEUE_GROUP_WINDOW_EXPIRED"
 FAILURE_REASON_TELEMETRY_ABANDONED = "TELEMETRY_ABANDONED"
 FAILURE_REASON_USER_TERMINATED = "USER_TERMINATED"
 FAILURE_REASON_WHATSAPP_SESSION_EXPIRED = "WHATSAPP_SESSION_EXPIRED"

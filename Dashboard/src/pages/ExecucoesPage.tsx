@@ -22,7 +22,7 @@ import { formatDuration, shortId } from "../lib/format";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
 import page from "./page.module.css";
 
-const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED"];
+const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED", "EXPIRED"];
 const PER_PAGE = 25;
 
 export function ExecucoesPage() {

@@ -9,6 +9,7 @@ from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
     EXECUTION_FAILED_STATUSES,
     EXECUTION_QUEUEABLE_SOURCE_STATUSES,
+    EXECUTION_STATUS_EXPIRED,
 )
 
 
@@ -56,6 +57,14 @@ def compute_attention_score(
     elif ex.status in EXECUTION_FAILED_STATUSES:
         score += 30
         reasons.append("Execução terminal com necessidade de triagem")
+
+    # 3b. EXPIRED fica fora de EXECUTION_FAILED_STATUSES de propósito (não é uma
+    # automação que rodou e falhou — ver constants.py), mas ainda é um tick
+    # descartado que exige requeue manual do operador: sem pontuação própria,
+    # ficava com score residual menor que o de uma PENDING comum.
+    elif ex.status == EXECUTION_STATUS_EXPIRED:
+        score += 26
+        reasons.append("Tick descartado por fila — requer requeue manual")
 
     # 4. Regras de Concorrência e Conflitos de Requeue
     automation_id = int(ex.automation_id)

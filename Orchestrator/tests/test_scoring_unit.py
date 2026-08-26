@@ -147,6 +147,21 @@ def test_status_terminal_entregue_nao_soma_bonus_de_estado() -> None:
     assert not reasons
 
 
+def test_expired_tem_pontuacao_propria_e_nao_e_tratado_como_falha() -> None:
+    """EXPIRED fica fora de EXECUTION_FAILED_STATUSES, mas exige requeue manual.
+
+    Sem o ramo dedicado (`3b` em scoring.py) o tick descartado cairia no score
+    residual — abaixo do 18 de uma PENDING comum — e sumiria da triagem
+    justamente quando um slot agendado deixou de ser entregue.
+    """
+    ex = _execution(status="EXPIRED")
+    score, reasons = compute_attention_score(ex, NOW, {}, {})
+    assert score == 26
+    assert reasons == ["Tick descartado por fila — requer requeue manual"]
+    # Nao e' o bonus de triagem de falha: os dois ramos sao mutuamente exclusivos.
+    assert "Execução terminal com necessidade de triagem" not in reasons
+
+
 # ---------------------------------------------------------------------------
 # 4. Regras de concorrência (apenas para status "queueable": terminais + REQUEUED)
 # ---------------------------------------------------------------------------

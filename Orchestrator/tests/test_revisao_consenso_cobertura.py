@@ -19,11 +19,20 @@ from unittest.mock import patch
 import pytest
 from app import models
 from app.constants import (
+    DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS,
+    EXECUTION_FAILED_STATUSES,
     EXECUTION_STATUS_ERROR,
+    EXECUTION_STATUS_EXPIRED,
+    EXECUTION_STATUS_PENDING,
+    EXECUTION_STATUS_REQUEUED,
     EXECUTION_STATUS_RUNNING,
+    EXECUTION_STATUS_SUCCESS,
+    FAILURE_REASON_QUEUE_GROUP_WINDOW_EXPIRED,
     FAILURE_REASON_TELEMETRY_ABANDONED,
+    RECOVERY_ACTION_REQUEUE_MANUAL,
 )
 from app.services import scheduler_runtime as sr
+from app.services.execution_runtime import claim_next_task, prepare_requeue
 from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
@@ -31,8 +40,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 
-def _automacao(db: Session, nome: str) -> models.Automation:
-    auto = models.Automation(name=nome, script_path=f"./{nome}.ps1", enabled=True)
+def _automacao(
+    db: Session, nome: str, queue_group: str | None = None
+) -> models.Automation:
+    auto = models.Automation(
+        name=nome, script_path=f"./{nome}.ps1", enabled=True, queue_group=queue_group
+    )
     db.add(auto)
     db.flush()
     return auto
@@ -396,3 +409,312 @@ def test_env_admin_placeholder_de_chave_nova_fica_como_esta() -> None:
 
     resultado = restore_masked_values("NOVA=********\n", "OUTRA=1\n")
     assert "NOVA=********" in resultado
+
+
+# ---------------------------------------------------------------------------
+# Descarte silencioso por queue_group ocupado (26/08/2026)
+#
+# Até aqui, um tick cujo queue_group estivesse ocupado era descartado dentro
+# de `scheduled_task_wrapper` antes de qualquer `Execution` existir: sem
+# execução, sem retry, sem alerta — só uma linha de log. `claim_next_task` já
+# sabia segurar uma PENDING até o grupo liberar; o agendador é quem jogava o
+# tick fora antes de chegar lá. Os testes abaixo cobrem o novo contrato:
+# o agendador SEMPRE enfileira (exceto pela regra de H1, inalterada), e é o
+# worker quem decide quando — ou se, dentro da janela de validade — reivindicar.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integracao
+def test_scheduled_task_wrapper_enfileira_mesmo_com_queue_group_ocupado(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O tick vira PENDING mesmo com outra automação do mesmo grupo RUNNING.
+
+    Antes desta correção, nenhuma `Execution` era criada aqui: o cenário exato
+    do incidente de produção (OBs Restrição Branco perdendo ticks porque
+    Montagem de Terceirizados ocupava o grupo `oracle`).
+    """
+    ocupante = _automacao(db_session, "OcupanteGrupo", queue_group="oracle")
+    bloqueada = _automacao(db_session, "BloqueadaGrupo", queue_group="oracle")
+    db_session.add(
+        models.Execution(
+            id="EXEC_OCUPANTE",
+            automation_id=ocupante.id,
+            status=EXECUTION_STATUS_RUNNING,
+            started_at=get_now_local(),
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(sr, "session_scope", lambda _factory: _NoOpScope(db_session))
+
+    sr.scheduled_task_wrapper(int(bloqueada.id))
+
+    criada = (
+        db_session.query(models.Execution)
+        .filter(models.Execution.automation_id == bloqueada.id)
+        .first()
+    )
+    assert criada is not None, (
+        "O tick foi descartado em vez de enfileirado: a regressão do "
+        "descarte silencioso por queue_group voltou."
+    )
+    assert criada.status == EXECUTION_STATUS_PENDING
+
+
+@pytest.mark.integracao
+def test_scheduled_task_wrapper_nao_empilha_pending_da_mesma_automacao(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """H1: mesmo enfileirando sempre, uma automação não acumula 2 PENDING.
+
+    Guarda contra o efeito colateral óbvio de remover o corte por
+    queue_group: se o corte por "já tem execução ativa" (checado antes)
+    quebrasse, uma automação de cadência curta acumularia execuções durante
+    um bloqueio longo e disparia todas em sequência quando o grupo liberasse.
+    """
+    ocupante = _automacao(db_session, "OcupanteH1", queue_group="oracle")
+    auto = _automacao(db_session, "CadenciaCurtaH1", queue_group="oracle")
+    db_session.add(
+        models.Execution(
+            id="EXEC_OCUPANTE_H1",
+            automation_id=ocupante.id,
+            status=EXECUTION_STATUS_RUNNING,
+            started_at=get_now_local(),
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(sr, "session_scope", lambda _factory: _NoOpScope(db_session))
+
+    sr.scheduled_task_wrapper(int(auto.id))
+    sr.scheduled_task_wrapper(int(auto.id))
+    sr.scheduled_task_wrapper(int(auto.id))
+
+    pendentes = (
+        db_session.query(models.Execution)
+        .filter(
+            models.Execution.automation_id == auto.id,
+            models.Execution.status == EXECUTION_STATUS_PENDING,
+        )
+        .all()
+    )
+    assert len(pendentes) == 1
+
+
+@pytest.mark.integracao
+def test_claim_next_task_reivindica_pending_apos_grupo_liberar(
+    db_session: Session,
+) -> None:
+    """A PENDING que ficou presa atrás do grupo é reivindicada quando ele libera.
+
+    Fecha o ciclo: `scheduled_task_wrapper` enfileira apesar do bloqueio
+    (teste acima), `claim_next_task` já sabia segurar essa PENDING enquanto
+    o grupo estava ocupado — e agora prova que ela é de fato processada assim
+    que a execução ocupante termina, em vez de ficar presa para sempre.
+    """
+    ocupante = _automacao(db_session, "OcupanteLibera", queue_group="oracle")
+    presa = _automacao(db_session, "PresaLibera", queue_group="oracle")
+    db_session.add(
+        models.Execution(
+            id="EXEC_OCUPANTE_LIBERA",
+            automation_id=ocupante.id,
+            status=EXECUTION_STATUS_RUNNING,
+            started_at=get_now_local(),
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="EXEC_PRESA_LIBERA",
+            automation_id=presa.id,
+            status=EXECUTION_STATUS_PENDING,
+            queue_group="oracle",
+        )
+    )
+    db_session.commit()
+
+    assert claim_next_task(db_session) is None, (
+        "Reivindicou a PENDING com o grupo ainda ocupado — exclusão mútua " "quebrada."
+    )
+
+    ocupante_exec = (
+        db_session.query(models.Execution).filter_by(id="EXEC_OCUPANTE_LIBERA").first()
+    )
+    assert ocupante_exec is not None
+    ocupante_exec.status = EXECUTION_STATUS_SUCCESS  # type: ignore[assignment]
+    ocupante_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_session.commit()
+
+    assert claim_next_task(db_session) == "EXEC_PRESA_LIBERA"
+
+
+@pytest.mark.integracao
+def test_claim_next_task_expira_pending_velha_de_queue_group(
+    db_session: Session,
+) -> None:
+    """H2: uma PENDING velha demais, presa atrás do grupo, não roda tardiamente.
+
+    O grupo está OCUPADO no momento do claim (execução RUNNING do mesmo
+    `queue_group`) — é essa ocupação que causou a espera. A política de
+    validade reusa o limiar de INCIDENT do próprio watchdog de fila pendente
+    (`DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS`): quando o dashboard já
+    marcaria a fila como INCIDENT, o tick é descartado como EXPIRED em vez de
+    ser reivindicado tardiamente. Sem a ocupante RUNNING aqui, a expiração
+    não tem causa real e o teste estaria de volta a afirmar o bug do item 1
+    da revisão de 26/08/2026 (expirar PENDING velha mesmo com grupo livre).
+    """
+    ocupante = _automacao(db_session, "OcupanteTickVelho", queue_group="oracle")
+    auto = _automacao(db_session, "TickVelho", queue_group="oracle")
+    velha = get_now_local() - timedelta(
+        seconds=DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS + 1
+    )
+    db_session.add(
+        models.Execution(
+            id="EXEC_OCUPANTE_TICK_VELHO",
+            automation_id=ocupante.id,
+            status=EXECUTION_STATUS_RUNNING,
+            started_at=get_now_local(),
+        )
+    )
+    db_session.add(
+        models.Execution(
+            id="EXEC_TICK_VELHO",
+            automation_id=auto.id,
+            status=EXECUTION_STATUS_PENDING,
+            queue_group="oracle",
+            queued_at=velha,
+        )
+    )
+    db_session.commit()
+
+    assert claim_next_task(db_session) is None
+
+    expirada = (
+        db_session.query(models.Execution).filter_by(id="EXEC_TICK_VELHO").first()
+    )
+    assert expirada is not None
+    assert expirada.status == EXECUTION_STATUS_EXPIRED
+    assert expirada.failure_reason == FAILURE_REASON_QUEUE_GROUP_WINDOW_EXPIRED
+    assert expirada.recovery_action == RECOVERY_ACTION_REQUEUE_MANUAL
+    assert expirada.finished_at is not None
+
+
+@pytest.mark.integracao
+def test_claim_next_task_nao_expira_pending_velha_com_grupo_livre(
+    db_session: Session,
+) -> None:
+    """Item 1 da revisão de 26/08/2026: sem bloqueio de grupo, idade não expira.
+
+    Uma PENDING antiga (acima do teto de `DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS`)
+    cujo `queue_group` não tem nenhuma execução RUNNING não foi causada por
+    disputa de grupo — não deve ser descartada como
+    `FAILURE_REASON_QUEUE_GROUP_WINDOW_EXPIRED`, e sim reivindicada normalmente.
+    """
+    auto = _automacao(db_session, "TickVelhoGrupoLivre", queue_group="oracle")
+    velha = get_now_local() - timedelta(
+        seconds=DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS + 1
+    )
+    db_session.add(
+        models.Execution(
+            id="EXEC_TICK_VELHO_LIVRE",
+            automation_id=auto.id,
+            status=EXECUTION_STATUS_PENDING,
+            queue_group="oracle",
+            queued_at=velha,
+        )
+    )
+    db_session.commit()
+
+    assert claim_next_task(db_session) == "EXEC_TICK_VELHO_LIVRE"
+
+    reivindicada = (
+        db_session.query(models.Execution).filter_by(id="EXEC_TICK_VELHO_LIVRE").first()
+    )
+    assert reivindicada is not None
+    assert reivindicada.status == EXECUTION_STATUS_RUNNING
+
+
+@pytest.mark.integracao
+def test_claim_next_task_nao_expira_pending_dentro_da_janela(
+    db_session: Session,
+) -> None:
+    """Guarda contra política agressiva demais: dentro da janela, roda normal.
+
+    Sem este teste, um teto de validade poderia ser implementado tão baixo
+    que qualquer atraso normal do poller do worker já descartaria ticks
+    legítimos — o que reintroduziria, por outra via, a mesma perda silenciosa
+    que esta correção existe para eliminar.
+    """
+    auto = _automacao(db_session, "TickDentroDaJanela", queue_group="oracle")
+    quase_no_limite = get_now_local() - timedelta(
+        seconds=DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS - 60
+    )
+    db_session.add(
+        models.Execution(
+            id="EXEC_TICK_OK",
+            automation_id=auto.id,
+            status=EXECUTION_STATUS_PENDING,
+            queue_group="oracle",
+            queued_at=quase_no_limite,
+        )
+    )
+    db_session.commit()
+
+    assert claim_next_task(db_session) == "EXEC_TICK_OK"
+
+
+# ---------------------------------------------------------------------------
+# Achados da revisão de 26/08/2026 sobre EXPIRED (achados 1 e 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integracao
+def test_prepare_requeue_aceita_expired_mesmo_com_max_retries_zero(
+    db_session: Session,
+) -> None:
+    """`_expire_if_queue_window_exceeded` grava `recovery_action=RECOVERY_ACTION_REQUEUE_MANUAL`
+    numa EXPIRED — esse requeue precisa realmente funcionar, mesmo para as
+    automações com `max_retries=0` (maioria hoje: OFST-06, OBP-04, ORB-07,
+    RE-03). Sem a isenção em `prepare_requeue`, o operador seguiria a ação
+    recomendada e receberia 409 "Limite de retry excedido: 0/0" — a EXPIRED
+    nunca chegou a rodar, então não deveria consumir orçamento de retry.
+    """
+    auto = _automacao(db_session, "ExpiradaSemRetryBudget")
+    auto.max_retries = 0  # type: ignore[assignment]
+    expirada = models.Execution(
+        id="EXEC_EXPIRADA_MAX_RETRIES_ZERO",
+        automation_id=auto.id,
+        status=EXECUTION_STATUS_EXPIRED,
+        started_at=get_now_local(),
+        finished_at=get_now_local(),
+        retry_count=0,
+        max_retries=0,
+        failure_reason=FAILURE_REASON_QUEUE_GROUP_WINDOW_EXPIRED,
+        recovery_action=RECOVERY_ACTION_REQUEUE_MANUAL,
+    )
+    db_session.add(expirada)
+    db_session.commit()
+
+    novo_exec, _audit = prepare_requeue(
+        db_session,
+        expirada,
+        payload_reason="teste requeue manual de EXPIRED",
+        payload_requested_by="QA",
+        payload_priority=None,
+        fallback_requested_by="QA",
+    )
+
+    assert novo_exec.status == EXECUTION_STATUS_PENDING
+    assert expirada.status == EXECUTION_STATUS_REQUEUED
+
+
+@pytest.mark.unitario
+def test_expired_nao_conta_como_falha() -> None:
+    """EXPIRED representa um tick descartado por congestionamento de
+    queue_group ANTES de qualquer tentativa — não uma automação que rodou e
+    falhou. Contá-lo em `EXECUTION_FAILED_STATUSES` inflaria scoring, métricas
+    diárias e portfólio toda vez que o grupo `oracle` (compartilhado por 6
+    automações) ficar congestionado, mesmo sem nenhuma execução real ter
+    falhado.
+    """
+    assert EXECUTION_STATUS_EXPIRED not in EXECUTION_FAILED_STATUSES
