@@ -15,12 +15,32 @@ conexao, so seriam testaveis com o banco de pe.
 
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from errors import DadoIncompletoError, SchemaInvalidoError
-from models import AvaliacaoOb, EstoqueDeposito, ObSemTingimento
+# Import de lib/python via sys.path.insert() dinamico — mesmo padrao de
+# extract_ofst.py. Necessario aqui (e nao so no extrator) porque os testes de
+# unidade carregam validators.py isoladamente, sem passar por extract_ofst.py.
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
+)
+
+from errors import (  # noqa: E402  pylint: disable=wrong-import-position
+    DadoIncompletoError,
+    SchemaInvalidoError,
+)
+from models import (  # noqa: E402  pylint: disable=wrong-import-position
+    AvaliacaoOb,
+    EstoqueDeposito,
+    ObSemTingimento,
+)
+from oracle_coerce import (  # noqa: E402  pylint: disable=wrong-import-position,import-error
+    coerce_float,
+    coerce_int,
+)
 
 FLUXO_ESPERADO = 204
 STATUS_EMITIDA = 1
@@ -75,25 +95,11 @@ class RelatorioValidacao:
 
 def _to_int(valor: Any, campo: str, contexto: Any) -> int:
     """Coage NUMBER do Oracle (Decimal/float/str) para int, ou levanta DadoIncompletoError."""
-    if valor is None:
-        raise DadoIncompletoError(f"{contexto}: campo '{campo}' esta nulo")
-    try:
-        return int(valor)
-    except (TypeError, ValueError) as exc:
-        raise DadoIncompletoError(
-            f"{contexto}: campo '{campo}' nao e numerico (valor={valor!r})"
-        ) from exc
+    return coerce_int(valor, campo, contexto, DadoIncompletoError)
 
 
 def _to_float(valor: Any, campo: str, contexto: Any) -> float:
-    if valor is None:
-        raise DadoIncompletoError(f"{contexto}: campo '{campo}' esta nulo")
-    try:
-        return float(valor)
-    except (TypeError, ValueError) as exc:
-        raise DadoIncompletoError(
-            f"{contexto}: campo '{campo}' nao e numerico (valor={valor!r})"
-        ) from exc
+    return coerce_float(valor, campo, contexto, DadoIncompletoError)
 
 
 def coerce_ob_row(record: dict[str, Any]) -> ObSemTingimento:
@@ -111,12 +117,15 @@ def coerce_ob_row(record: dict[str, Any]) -> ObSemTingimento:
         codigo_reduzido_cru=_to_int(
             record.get("CODIGO_REDUZIDO_CRU"), "CODIGO_REDUZIDO_CRU", contexto
         ),
-        # Opcional (LEFT JOIN no SQL): OB sem cadastro de artigo cru continua
-        # notificavel — a mensagem mostra "—" no lugar do artigo.
+        # Opcional (LEFT JOIN no SQL) e ALFANUMERICO: ART.CDARTIGOCRU e texto no
+        # Oracle. A ocorrencia real ('0A231') veio da ORB-07, que roda este mesmo
+        # codigo — la, coagir para int descartava 27% das OBs do lote. Aqui o
+        # defeito era latente, mas identico. Guardado como texto cru; OB sem
+        # cadastro de artigo continua notificavel (a mensagem mostra "—").
         codigo_artigo_cru=(
             None
             if record.get("CODIGO_ARTIGO_CRU") is None
-            else _to_int(record.get("CODIGO_ARTIGO_CRU"), "CODIGO_ARTIGO_CRU", contexto)
+            else str(record.get("CODIGO_ARTIGO_CRU")).strip() or None
         ),
         status=_to_int(record.get("STATUS"), "STATUS", contexto),
         total_pecas=_to_int(record.get("TOTAL_PECAS"), "TOTAL_PECAS", contexto),

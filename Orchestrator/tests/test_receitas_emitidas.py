@@ -1,4 +1,9 @@
 # pylint: disable=protected-access, wrong-import-position, import-outside-toplevel
+# import-error: `generate_html_report` so' existe no sys.path apos o
+# sys.path.append abaixo. O pylint passou a rodar agrupado por diretorio
+# (Tools/Test-PythonGovernance.ps1, 26/08/2026) e nao ve mais o modulo da
+# automacao no mesmo lote — a resolucao antes era acidental, nao contratual.
+# pylint: disable=import-error
 """Smoke tests da automação de Receitas Emitidas."""
 
 import io

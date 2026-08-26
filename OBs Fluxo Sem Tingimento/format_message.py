@@ -32,12 +32,30 @@ def _fmt_entrega(valor: Any) -> str:
         return str(valor)
 
 
+def _fmt_artigo(valor: Any) -> str:
+    """Artigo cru e texto alfanumerico no Oracle ('0A231'); exibe sem truncar.
+
+    Codigo puramente numerico continua saindo sem os zeros a esquerda, como
+    quando o campo ainda era coagido para int — a mudanca de tipo em
+    `coerce_ob_row` nao deve alterar a mensagem que a Expedicao ja conhece.
+    """
+    if valor is None:
+        return "—"
+    texto = str(valor).strip()
+    if not texto:
+        return "—"
+    try:
+        return str(int(texto))
+    except (TypeError, ValueError):
+        return texto
+
+
 def _bloco_ob(row: dict[str, Any]) -> str:
     artigo = row.get("CODIGO_ARTIGO_CRU")
     filial = row.get("NOME_CLIENTE")
     return (
         f"*OB: {row['NUMERO_OB']}*\n"
-        f"Artigo: {artigo if artigo is not None else '—'}\n"
+        f"Artigo: {_fmt_artigo(artigo)}\n"
         f"Reduzido: {row['CODIGO_REDUZIDO_CRU']}\n"
         f"Quantidade necessária: {row['TOTAL_PECAS']} peças\n"
         f"Estoque disponível: {row['QTD_PECAS_DISPONIVEIS']} peças\n"

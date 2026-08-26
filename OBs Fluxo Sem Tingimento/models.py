@@ -25,8 +25,12 @@ class ObSemTingimento:  # pylint: disable=too-many-instance-attributes
     id_ob: int
     codigo_fluxo: int
     codigo_reduzido_cru: int
-    # None quando a OB nao tem cadastro em ENGEITEMESTOARTCRU (LEFT JOIN no SQL)
-    codigo_artigo_cru: int | None
+    # Texto, nao numero: ART.CDARTIGOCRU e alfanumerico no Oracle. None quando a
+    # OB nao tem cadastro em ENGEITEMESTOARTCRU (LEFT JOIN no SQL). A ocorrencia
+    # real ('0A231') apareceu na ORB-07, que compartilha este codigo; aqui o
+    # defeito era latente so' porque a populacao de fluxo sem tingimento nao tem
+    # esses artigos. Campo puramente cosmetico (uma linha da mensagem).
+    codigo_artigo_cru: str | None
     status: int
     total_pecas: int
     kilos_programados: float

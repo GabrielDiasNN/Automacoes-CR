@@ -180,6 +180,11 @@ OBs Fluxo Sem Tingimento/ofst_result.json
 OBs Fluxo Sem Tingimento/ofst_state.json
 OBs Fluxo Sem Tingimento/ofst_state.json.tmp
 OBs Fluxo Sem Tingimento/message.txt
+OBs Restricao Branco/orb_result.json
+OBs Restricao Branco/orb_state.json
+OBs Restricao Branco/orb_state.json.tmp
+OBs Restricao Branco/orb_state.json.backup-*
+OBs Restricao Branco/message.txt
 
 # Caches locais adicionais
 .npm-cache-codex/
