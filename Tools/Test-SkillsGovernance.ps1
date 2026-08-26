@@ -367,18 +367,68 @@ function Test-SkillFile {
     }
 }
 
-function Test-LegacySkillPaths {
+function Test-AgentsSkillMirrors {
     param([string]$RootPath)
 
+    # `.agents/skills` e mirror declarado das skills operacionais de `.claude/skills`
+    # (fonte unica delas), no mesmo contrato de link que `.gemini/skills` usa para as
+    # skills canonicas de `.github/skills`. Copia real e reprovada: e ela que produz
+    # drift — a versao que vivia aqui apontava para um `.Codex/skills` inexistente.
     $findings = @()
-    $legacyRoot = Join-Path $RootPath ".agents\skills"
-    if (-not (Test-Path -LiteralPath $legacyRoot)) {
+    $mirrorRoot = Join-Path $RootPath ".agents\skills"
+    if (-not (Test-Path -LiteralPath $mirrorRoot)) {
         return $findings
     }
 
-    $legacyFiles = @(Get-ChildItem -LiteralPath $legacyRoot -Recurse -File -Filter "SKILL.md" | Sort-Object FullName)
-    foreach ($legacyFile in $legacyFiles) {
-        $findings += New-Finding -File (Convert-ToRelativePath -Path $legacyFile.FullName -Root $RootPath) -Rule "LEGACY_SKILL_LOCATION" -Detail "Skill encontrada em .agents/skills; mover para .github/skills"
+    $operationalRoot = Join-Path $RootPath ".claude\skills"
+    if (-not (Test-Path -LiteralPath $operationalRoot)) {
+        $findings += New-Finding -File ".claude/skills" -Rule "OPERATIONAL_SKILLS_ROOT_MISSING" -Detail "Diretorio fonte das skills operacionais nao encontrado."
+        return $findings
+    }
+
+    # Espelho AUSENTE: simetrico a GEMINI_SKILL_MIRROR_MISSING. So' vale quando
+    # `.agents/skills` ja existe — o mirror inteiro e opcional (clone limpo nao tem
+    # nenhum, e cobrar mirror de quem nunca o criou seria falso positivo). Existindo,
+    # ele tem que estar completo: skill operacional nova sem espelho passava em
+    # silencio, que e' exatamente o cenario que Tools\New-SkillMirrors.ps1 resolve.
+    $operationalEntries = @(Get-ChildItem -LiteralPath $operationalRoot -Force -Directory | Sort-Object Name)
+    foreach ($skill in $operationalEntries) {
+        $mirrorPath = Join-Path $mirrorRoot $skill.Name
+        if (-not (Test-Path -LiteralPath $mirrorPath)) {
+            $findings += New-Finding -File ".agents/skills/$($skill.Name)" -Rule "AGENTS_SKILL_MIRROR_MISSING" -Detail ("Mirror da skill operacional nao encontrado em .agents/skills: {0}. Recrie com: pwsh -File Tools\New-SkillMirrors.ps1" -f $skill.Name)
+        }
+    }
+
+    $mirrorEntries = @(Get-ChildItem -LiteralPath $mirrorRoot -Force -Directory | Sort-Object Name)
+    foreach ($entry in $mirrorEntries) {
+        $skillName = $entry.Name
+        $relativePath = ".agents/skills/$skillName"
+        $sourcePath = Join-Path $operationalRoot $skillName
+
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            $findings += New-Finding -File $relativePath -Rule "AGENTS_SKILL_MIRROR_ORPHAN" -Detail ("Mirror sem skill correspondente em .claude/skills: {0}" -f $skillName)
+            continue
+        }
+
+        $targetState = Resolve-LinkTargetPath -LinkPath $entry.FullName -RootForRelativeTarget $mirrorRoot
+        if (-not $targetState.IsLinked) {
+            $findings += New-Finding -File $relativePath -Rule "AGENTS_SKILL_MIRROR_NOT_LINKED" -Detail ("Mirror e copia real, nao link simbolico ou junction: {0}. Substitua com: pwsh -File Tools\New-SkillMirrors.ps1 -Force" -f $skillName) -Severity "WARN"
+            continue
+        }
+
+        $resolvedMirror = $targetState.ResolvedTarget
+        if ([string]::IsNullOrWhiteSpace($resolvedMirror)) {
+            $findings += New-Finding -File $relativePath -Rule "AGENTS_SKILL_MIRROR_UNRESOLVED" -Detail ("Mirror nao expoe ResolvedTarget para validacao: {0}" -f $skillName) -Severity "WARN"
+            continue
+        }
+
+        # Caminho no Windows e case-insensitive, dai o -ine. Como em Test-GeminiSkillMirrors,
+        # a comparacao e literal: rodar com -BasePath em formato 8.3 (C:\Users\GABRIE~1.DIA\...)
+        # produz falso positivo, porque o alvo da junction volta sempre expandido.
+        $resolvedSource = (Resolve-Path -LiteralPath $sourcePath).Path
+        if ($resolvedMirror -ine $resolvedSource) {
+            $findings += New-Finding -File $relativePath -Rule "AGENTS_SKILL_MIRROR_TARGET_INVALID" -Detail ("Mirror nao aponta para a skill operacional em .claude/skills: {0}" -f $skillName)
+        }
     }
 
     return $findings
@@ -426,7 +476,7 @@ function Test-GeminiSkillMirrors {
     $findings = @()
     $geminiSkillsRoot = Join-Path $RootPath ".gemini\skills"
     if (-not (Test-Path -LiteralPath $geminiSkillsRoot)) {
-        $findings += New-Finding -File ".gemini/skills" -Rule "GEMINI_SKILLS_ROOT_MISSING" -Detail "Diretorio .gemini/skills nao encontrado." -Severity "WARN"
+        $findings += New-Finding -File ".gemini/skills" -Rule "GEMINI_SKILLS_ROOT_MISSING" -Detail "Diretorio .gemini/skills nao encontrado. Recrie com: pwsh -File Tools\New-SkillMirrors.ps1" -Severity "WARN"
         return $findings
     }
 
@@ -435,13 +485,13 @@ function Test-GeminiSkillMirrors {
         $canonicalPath = Join-Path (Join-Path $RootPath ".github\skills") $skillName
 
         if (-not (Test-Path -LiteralPath $mirrorPath)) {
-            $findings += New-Finding -File ".gemini/skills/$skillName" -Rule "GEMINI_SKILL_MIRROR_MISSING" -Detail ("Mirror da skill nao encontrado em .gemini/skills: {0}" -f $skillName)
+            $findings += New-Finding -File ".gemini/skills/$skillName" -Rule "GEMINI_SKILL_MIRROR_MISSING" -Detail ("Mirror da skill nao encontrado em .gemini/skills: {0}. Recrie com: pwsh -File Tools\New-SkillMirrors.ps1" -f $skillName)
             continue
         }
 
         $targetState = Resolve-LinkTargetPath -LinkPath $mirrorPath -RootForRelativeTarget $geminiSkillsRoot
         if (-not $targetState.IsLinked) {
-            $findings += New-Finding -File ".gemini/skills/$skillName" -Rule "GEMINI_SKILL_MIRROR_NOT_LINKED" -Detail ("Mirror existe, mas nao e link simbolico ou junction: {0}" -f $skillName) -Severity "WARN"
+            $findings += New-Finding -File ".gemini/skills/$skillName" -Rule "GEMINI_SKILL_MIRROR_NOT_LINKED" -Detail ("Mirror existe, mas nao e link simbolico ou junction: {0}. Substitua com: pwsh -File Tools\New-SkillMirrors.ps1 -Force" -f $skillName) -Severity "WARN"
             continue
         }
 
@@ -539,7 +589,7 @@ foreach ($skillFile in $skillFiles) {
     $skillNameIndex[$result.SkillName].Add((Convert-ToRelativePath -Path $skillFile.FullName -Root $BasePath))
 }
 
-$allFindings += @(Test-LegacySkillPaths -RootPath $BasePath)
+$allFindings += @(Test-AgentsSkillMirrors -RootPath $BasePath)
 $allFindings += @(Test-SkillsReadme -RootPath $BasePath)
 $allFindings += @(Test-GeminiSkillMirrors -RootPath $BasePath)
 $allFindings += @(Test-CodexGlobalSharedSkillMirrors)
