@@ -193,4 +193,56 @@ Describe "Lib-LogEvent" {
             $ev.component | Should -Be "ps_script"
         }
     }
+
+    Context "Etapa aberta no encerramento da execucao" {
+        It "fecha a etapa pendente e a inclui em steps[] quando a execucao falha" {
+            # Cenario real: um throw entre Start-HubStep e Complete-HubStep cai no
+            # catch do run.ps1, que emite execution.end direto. A etapa em que a
+            # execucao morreu nao podia sumir do rastro.
+            $log = Join-Path $TestDrive "aberta-falha.jsonl"
+            Initialize-HubLogContext -Automation "A" -ExecId "T" -TraceId "t" -LogPath $log
+            Write-HubExecutionStart
+            Start-HubStep -Step "extract"
+            Complete-HubStep -Ok $true
+            Start-HubStep -Step "dispatch" -Message "Envio de e-mail"
+            # Sem Complete-HubStep: simula a excecao no meio do envio.
+            Write-HubExecutionEnd -OutcomeCode 1 -OutcomeReason "ERRO FATAL"
+
+            $eventos = @(Get-JsonlEvents $log)
+            $fim = $eventos[-1]
+            $fim.event | Should -Be "execution.end"
+            @($fim.steps).Count | Should -Be 2
+            @($fim.steps)[-1].step | Should -Be "dispatch"
+            @($fim.steps)[-1].ok | Should -Be $false
+
+            # O step.end da etapa interrompida precisa preceder o execution.end.
+            $eventos[-2].event | Should -Be "step.end"
+            $eventos[-2].step | Should -Be "dispatch"
+        }
+
+        It "fecha como bem-sucedida a etapa pendente quando o outcome e de sucesso" {
+            $log = Join-Path $TestDrive "aberta-ok.jsonl"
+            Initialize-HubLogContext -Automation "A" -ExecId "T" -TraceId "t" -LogPath $log
+            Write-HubExecutionStart
+            Start-HubStep -Step "commit"
+            Write-HubExecutionEnd -OutcomeCode 0 -OutcomeReason "concluido"
+
+            $fim = @(Get-JsonlEvents $log)[-1]
+            @($fim.steps)[-1].step | Should -Be "commit"
+            @($fim.steps)[-1].ok | Should -Be $true
+        }
+
+        It "nao altera steps[] quando nao ha etapa aberta" {
+            $log = Join-Path $TestDrive "sem-aberta.jsonl"
+            Initialize-HubLogContext -Automation "A" -ExecId "T" -TraceId "t" -LogPath $log
+            Write-HubExecutionStart
+            Start-HubStep -Step "extract"
+            Complete-HubStep -Ok $true
+            Write-HubExecutionEnd -OutcomeCode 0 -OutcomeReason "concluido"
+
+            $fim = @(Get-JsonlEvents $log)[-1]
+            @($fim.steps).Count | Should -Be 1
+            @($fim.steps)[0].step | Should -Be "extract"
+        }
+    }
 }
