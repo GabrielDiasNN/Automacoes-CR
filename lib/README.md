@@ -9,10 +9,17 @@ Este diretorio contem os modulos e scripts utilitarios consumidos pelos orquestr
 Modulo de logging centralizado e inteligencia operacional.
 
 ### Diferenciais Tecnicos:
-- **`Base64 Bridge`**: Implementa a decodificacao automatica de logs vindos de Python ou Node.js (via prefixo `B64:`). Isso garante que acentos PT-BR nunca corrompam nos arquivos finais.
-- **`Auto-Masking`**: Protege automaticamente e-mails, senhas e chaves de API, impedindo o vazamento de segredos nos logs.
+- **`Auto-Masking`**: `Protect-SensitiveData` protege automaticamente e-mails, senhas e chaves de API, impedindo o vazamento de segredos nos logs. Paridade textual com `lib/python/log_masking.py`.
 - **`Pre-Flight Diagnostics`**: Fornece o motor `Test-AutomationPreFlight` para validacao de saude do ambiente (Disco, Oracle Ping, Paths).
 - **`Traceability`**: Enforce o uso de `ExecId` para correlacao universal.
+
+> **Encoding:** UTF-8 ponta a ponta. O antigo "Base64 Bridge" (encoder `B64:` sem decoder correspondente) foi removido em 27/08/2026 — ver `docs/logging-standard.md`.
+
+---
+
+## 🧾 `Lib-LogEvent.psm1` (v1.0)
+
+Emissao de eventos de log **estruturados** (JSON Lines) no contrato de `docs/log-event.schema.json`. Ciclo de vida: `Initialize-HubLogContext` -> `Write-HubExecutionStart` -> `Write-HubStepStart`/`End` (por etapa) -> `Write-HubRetryAttempt` -> `Write-HubExecutionEnd`. `Resolve-HubTraceId` herda `HUB_TRACE_ID` do processo pai para correlacao entre camadas. Adotado pela ORB-07; rollout nas demais automacoes em andamento.
 
 ---
 

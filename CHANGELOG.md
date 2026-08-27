@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.48] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado do Hub — PR1 (fundação + piloto ORB-07).** Entrevista de requisitos em 27/08/2026 (`docs/logging-standard.md`) definiu um contrato único de evento de log em JSON Lines para as quatro camadas (`run.ps1`, Python de domínio, Node, Orchestrator), com o objetivo de o agente diagnosticar qualquer execução sem heurística de texto livre. Este PR entrega a fundação e migra **apenas** a ORB-07:
+  - `docs/log-event.schema.json` — contrato do evento (envelope obrigatório `ts`/`level`/`component`/`event`/`automation`/`exec_id`/`trace_id`/`message` + campos condicionais por `event`/`step`). `ts` é ISO-8601 **UTC com sufixo `Z`**.
+  - `lib/Lib-LogEvent.psm1` — `Initialize-HubLogContext`, `Resolve-HubTraceId` (herda `HUB_TRACE_ID` do processo pai), e os emissores de ciclo de vida `Write-HubExecutionStart`/`StepStart`/`StepEnd`/`RetryAttempt`/`ExecutionEnd`. `Write-HubForwardedLine` encaminha verbatim um envelope vindo de processo filho já migrado e embrulha texto avulso como `event:"log"`.
+  - `lib/python/automation_log.py` — `make_logger` reescrito: com `HUB_LOG_STRUCTURED=1` emite o envelope JSON em **stdout**; **sem** a env mantém o comportamento legado (linha humana em stderr) intacto, então as 5 automações ainda não migradas não têm nenhuma mudança de saída.
+  - `lib/python/log_masking.py` — `mask_sensitive()` em paridade textual com `Protect-SensitiveData` (agora exportada por `Lib-Logging.psm1`); defesa em profundidade com o `sanitize_log_payload` do Orchestrator.
+  - `Tools/log_event_validator.py` + `Tools/Test-LogEventSchema.ps1` — validação de `Logs/*.jsonl` contra o schema, sem dependência de `jsonschema` (evita mexer no lock pip-compile). Entra como **check nº 15** de `ValidarAutomacoes.ps1 -OnlyGovernance` e no CI, em **modo `warn`** (reporta, não bloqueia) enquanto o rollout não termina; `--rollout` ignora linhas legadas (sem `trace_id`).
+  - Correlação: `trace_id` global (`<slug>-<ISO8601Z>-<hex4>`) propagado a Python/Node por `--trace-id`/`HUB_TRACE_ID` e ao Orchestrator por `X-Trace-Id`. `exec_id` mantém o significado de id da camada local.
+
+### Corrigido
+- **"Base64 Bridge" era letra morta — o encoder existia, o decoder nunca foi implementado.** `lib/Lib-Retry.psm1` codificava em base64 (`B64:<...>`) toda mensagem de retry que contivesse qualquer caractere não-ASCII, mas nenhuma camada (`Write-AutomacaoLog`, ingestão do Orchestrator, `Dashboard/src/lib/logParser.ts`) decodificava — a linha chegava crua ao dashboard. Como o `OperationName` das 6 automações contém acento (`Extração ... Restrição Branco`), **toda** execução com retry na etapa Oracle exibia uma linha `B64:...` ilegível. O encoder foi removido (UTF-8 ponta a ponta); no lugar, `Invoke-WithRetry` emite o evento estruturado `retry.attempt` quando há contexto de `Lib-LogEvent` ativo. `lib/README.md` deixou de anunciar o "Base64 Bridge".
+
+### Alterado
+- **`OBs Restricao Branco/` (ORB-07) migrada ponta a ponta** (`run.ps1` v1.1.0, `extract_orb.py`, `format_message.py`): `run.ps1` resolve o `trace_id`, exporta `HUB_*` para os filhos, envolve cada etapa em `step.start`/`step.end` com duração medida e emite o `execution.end` único (substitui as linhas `FIM - ExitCode=` + separador `====`). `extract_orb.py` grava `record_counts` (`read`/`qualified`/`notified`/`skipped`/`suppressed`) em `orb_result.json` em **todos** os desfechos não-erro — inclusive o exit 2 ("nada a notificar"), o mais comum — e o `run.ps1` embute esse bloco no `execution.end`.
+- **`Dashboard/src/lib/logParser.ts`** passa a reconhecer os dois formatos: uma linha JSON no envelope do schema é mapeada para a forma `LogLine` (com resumo legível por tipo de evento — `▶`/`▸`/`✓`/`⇄`/`■`), e o formato legado `[ts] [PS] [LEVEL]` segue funcionando. Sem período de emissão dupla no stdout.
+- **Níveis (semântica canônica, `docs/logging-standard.md`):** `INFO` = curso normal (inclui "nada a notificar" e "estoque insuficiente para a OB", que **deixa de ser `WARN`**); `WARN` = desvio a revisar; `ERRO` = a automação falhou. Um run de sucesso não emite `WARN`.
+- **`Tools/Test-LogConformidade.ps1` e `Tools/Test-DateConformidade.ps1`** ganharam a mesma exceção: um timestamp terminado em `Z` (`"ts":"...Z"`, `yyyy-MM-ddTHH:mm:ssZ`, `%Y-%m-%dT%H:%M:%SZ`) é o campo `ts` do evento — ISO-8601 UTC **por contrato do schema** — e não conta como regressão da data BR `dd/MM/yyyy` que os guardrails vigiam para logs/exibição.
+
+### Notas
+- Rollout multi-PR: PR2..N migram as outras 5 automações `run.ps1`; um PR próprio faz o Node emitir o envelope nativo; o PR do Orchestrator cobre `app/`, `worker.py`, scheduler e `runner.py` do Beneficiamento; o **PR final** vira o gate `blocking` e remove o caminho de texto legado.
+- Verificação: 186 testes Pester (`lib/tests`, inclui `Lib-LogEvent.Tests.ps1` novo), 977 do Orchestrator (`test_automation_log_unit.py` ampliado + `test_log_masking_unit.py` e `test_log_event_validator_unit.py` novos), 19 do `logParser` (vitest), `npm run build` do Dashboard, ruff/black/isort/mypy/pylint limpos nos arquivos tocados, e um teste de integração do fluxo estruturado da ORB-07 validado contra o schema.
+
 ## [1.3.47] - 27/08/2026
 
 ### Corrigido

@@ -116,7 +116,7 @@ Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes,
 
 ## Contratos de Governança (Pre-Commit Hook)
 
-O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit (14 validações: zero-trust, SQL, mypy/pylint, PowerShell, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node). Regras detalhadas (limites exatos de mypy/pylint, formato de manifesto, contratos PowerShell, snippets corretos/errados) estão em **[docs/governance-contracts.md](docs/governance-contracts.md)** — consulte antes de escrever código Python/PowerShell novo ou editar `automation.manifest.json`.
+O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit (15 validações: zero-trust, SQL, mypy/pylint, PowerShell, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node, schema de evento de log). Regras detalhadas (limites exatos de mypy/pylint, formato de manifesto, contratos PowerShell, snippets corretos/errados) estão em **[docs/governance-contracts.md](docs/governance-contracts.md)** — consulte antes de escrever código Python/PowerShell novo ou editar `automation.manifest.json`.
 
 ## Princípios Comportamentais
 

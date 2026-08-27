@@ -47,6 +47,8 @@ function Invoke-OraclePythonScript {
         [Parameter(Mandatory)] [string]$ExecId,
         [Parameter(Mandatory)] [string]$LogPath,
         [string]$OperationName  = "Oracle Python Script",
+        [ValidateSet("preflight", "lock", "extract", "transform", "dispatch", "commit", "cleanup", "custom")]
+        [string]$Step           = "extract",
         [int]$MaxAttempts       = 3,
         [int[]]$BackoffSeconds  = @(30, 60, 120),
         [string]$InputData      = ""
@@ -54,15 +56,22 @@ function Invoke-OraclePythonScript {
 
     $state = @{ Idempotent = $false; Output = [string]::Empty; ExitCode = -1 }
 
+    $forwardStructured = ($null -ne (Get-Command Write-HubForwardedLine -ErrorAction SilentlyContinue)) -and `
+        ($null -ne (Get-Command Get-HubLogContext -ErrorAction SilentlyContinue)) -and `
+        ($null -ne (Get-HubLogContext))
+
     $ok = Invoke-WithRetry -MaxAttempts $MaxAttempts -BackoffSeconds $BackoffSeconds `
-        -OperationName $OperationName -ExecId $ExecId -LogPath $LogPath `
+        -OperationName $OperationName -Step $Step -ExecId $ExecId -LogPath $LogPath `
         -Action {
             $invokeParams = @{
                 FilePath  = $PythonExe
                 Arguments = "`"$ScriptPath`" `"$ExecId`""
                 LogAction = {
                     param($msg, $lvl)
-                    if (-not [string]::IsNullOrWhiteSpace($msg)) {
+                    if ([string]::IsNullOrWhiteSpace($msg)) { return }
+                    if ($forwardStructured) {
+                        Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step $Step
+                    } else {
                         Write-AutomacaoLog -Message $msg -Level $lvl -ExecId $ExecId -LogPath $LogPath
                     }
                 }

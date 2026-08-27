@@ -445,9 +445,23 @@ param(
 
 [Parameter(Mandatory = $true)]
 
-[string]$LogPath
+[string]$LogPath,
+
+# Etapa opcional (docs/log-event.schema.json) usada apenas no caminho
+# estruturado; ignorada no formato legado.
+[string]$Step = ""
 
 )
+
+# Padrao de logging estruturado (docs/logging-standard.md): quando ha contexto
+# de LogEvent ativo, toda linha e roteada para o evento JSON. Linha que ja e um
+# envelope completo (saida de processo filho migrado) e encaminhada verbatim.
+if ((Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) -and (Get-HubLogContext)) {
+    if (Get-Command Write-HubForwardedLine -ErrorAction SilentlyContinue) {
+        Write-HubForwardedLine -Line $Message -FallbackLevel $Level -Step $Step
+        return
+    }
+}
 
 $cleanMessage = Protect-SensitiveData $Message
 
@@ -661,10 +675,33 @@ function Exit-AutomationWithCode {
         [Parameter(Mandatory = $true)][string]$ExecId,
         [Parameter(Mandatory = $true)][string]$LogPath,
         [int[]]$NonFailureCodes = @(0),
-        [string]$EndMessage = "FIM - Finalizado. ExitCode=$Code"
+        [string]$EndMessage = "FIM - Finalizado. ExitCode=$Code",
+        # Padrao de logging estruturado: contadores de dominio e duracao total
+        # para o evento execution.end. Ignorados no formato legado.
+        [hashtable]$RecordCounts,
+        [int]$DurationMs = -1
     )
 
     $isSuccess = Get-AutomationExitStatus -Code $Code -NonFailureCodes $NonFailureCodes
+
+    $hubCtx = if (Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) { Get-HubLogContext } else { $null }
+    if ($hubCtx -and (Get-Command Write-HubExecutionEnd -ErrorAction SilentlyContinue)) {
+        $reason = if ($Msg) { $Msg } else { $EndMessage }
+        $endArgs = @{
+            OutcomeCode   = $Code
+            OutcomeReason = $reason
+            Message       = $EndMessage
+        }
+        if ($DurationMs -ge 0) { $endArgs["DurationMs"] = $DurationMs }
+        if ($RecordCounts -and $RecordCounts.Count -gt 0) { $endArgs["RecordCounts"] = $RecordCounts }
+        Write-HubExecutionEnd @endArgs
+
+        if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+            $finalStatus = if ($isSuccess) { "SUCCESS" } else { "ERROR" }
+            Close-ExecutionTelemetry -ExecId $ExecId -Status $finalStatus -LogPath $LogPath
+        }
+        exit $Code
+    }
 
     if ($Msg) {
         Write-AutomacaoLog -Message $Msg -Level $(if ($isSuccess) { "INFO" } else { "ERRO" }) -ExecId $ExecId -LogPath $LogPath
@@ -851,6 +888,6 @@ $script:AutomationMutex = $null
 
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
 
 

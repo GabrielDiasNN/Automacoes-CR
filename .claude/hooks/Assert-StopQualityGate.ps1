@@ -8,9 +8,9 @@
     Duas verificacoes:
 
       1. Governanca: Tools/ValidarAutomacoes.ps1 -OnlyGovernance -Paths sobre os
-         arquivos alterados — os 14 checks (zero-trust, SQL, mypy/pylint,
+         arquivos alterados — os 15 checks (zero-trust, SQL, mypy/pylint,
          PSScriptAnalyzer, encoding, JSON, Playwright, manifesto, arquitetura,
-         datas, semantica, Node). O modo direcionado e o que torna isso viavel:
+         datas, semantica, Node, schema de evento de log). O modo direcionado e o que torna isso viavel:
          SEM -Paths o script cai em full_scan (~171 s, medido); COM -Paths custa
          ~6 s sem Python e ~18 s com dois .py, onde o mypy domina.
 
@@ -102,7 +102,7 @@ if ($existing.Count -eq 0) {
 
 $problems = @()
 
-# --- 1. Governanca direcionada (14 checks) --------------------------------
+# --- 1. Governanca direcionada (15 checks) --------------------------------
 $gate = Invoke-GovernanceGate -RepositoryRoot $repoRoot -RelativePaths $existing
 if ($gate.ExitCode -gt 0) {
     $problems += 'GOVERNANCA: os arquivos alterados reprovam em Tools/ValidarAutomacoes.ps1 -OnlyGovernance.'

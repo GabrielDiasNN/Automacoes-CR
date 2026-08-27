@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://automacoes.hub/log-event.schema.json",
+  "title": "Hub de Automacoes - Evento de Log",
+  "description": "Contrato unico de log (JSON Lines) para run.ps1, Python de dominio, Node e Orchestrator. Ver docs/logging-standard.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ts", "level", "component", "event", "automation", "exec_id", "trace_id", "message"],
+  "properties": {
+    "ts": {
+      "type": "string",
+      "description": "ISO-8601 UTC com sufixo Z, precisao de segundo.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "level": { "enum": ["INFO", "WARN", "ERRO", "DEBUG"] },
+    "component": {
+      "enum": [
+        "ps_script",
+        "python_domain",
+        "node_whatsapp",
+        "orchestrator_api",
+        "orchestrator_worker",
+        "orchestrator_scheduler"
+      ]
+    },
+    "event": {
+      "enum": [
+        "execution.start",
+        "execution.end",
+        "step.start",
+        "step.end",
+        "retry.attempt",
+        "log"
+      ]
+    },
+    "automation": { "type": "string", "minLength": 1 },
+    "exec_id": { "type": "string", "minLength": 1 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "message": { "type": "string" },
+    "env": { "type": "string" },
+    "request_id": { "type": "string" },
+    "step": {
+      "enum": ["preflight", "lock", "extract", "transform", "dispatch", "commit", "cleanup", "custom"]
+    },
+    "step_name": { "type": "string", "minLength": 1 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "max_attempts": { "type": "integer", "minimum": 1 },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "ok": { "type": "boolean" },
+    "outcome_code": { "type": "integer" },
+    "outcome_reason": { "type": "string", "minLength": 1 },
+    "record_counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "ok", "duration_ms"],
+        "properties": {
+          "step": { "type": "string" },
+          "step_name": { "type": "string" },
+          "ok": { "type": "boolean" },
+          "duration_ms": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "enum": ["step.start", "step.end", "retry.attempt"] } } },
+      "then": { "required": ["step"] }
+    },
+    {
+      "if": { "properties": { "step": { "const": "custom" } }, "required": ["step"] },
+      "then": { "required": ["step_name"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "retry.attempt" } } },
+      "then": { "required": ["step", "attempt", "max_attempts"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "step.end" } } },
+      "then": { "required": ["step", "ok", "duration_ms"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "execution.end" } } },
+      "then": { "required": ["outcome_code", "outcome_reason", "duration_ms", "steps"] }
+    }
+  ]
+}

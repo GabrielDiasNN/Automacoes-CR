@@ -24,6 +24,7 @@ Ordem real do array `$checks` em `Tools/ValidarAutomacoes.ps1` (função `Invoke
 | 12 | `Test-DateConformidade.ps1` | Datas fora do formato DD/MM/AAAA |
 | 13 | `Test-SemanticGovernance.ps1` | Drift entre monitor, constantes, docs, skills, catálogo e dependências |
 | 14 | `Test-NodeCommunications.ps1` | Contrato Node.js (whatsapp-offline.test.js) + suíte de unidade de `lib/WhatsApp-Core.js` (`node:test`, gate de cobertura 90% linhas/branches/funções) |
+| 15 | `Test-LogEventSchema.ps1` | `Logs/*.jsonl` fora de `docs/log-event.schema.json` (ver `docs/logging-standard.md`). **Modo `warn` durante o rollout** — reporta violações mas não falha o gate; vira `blocking` no PR final do padrão de logging. |
 
 Nota: `Test-SkillsGovernance.ps1` e `Test-DashboardTemplate.ps1` **não** fazem parte do array `$checks` acima — rodam em pontos próprios do script, via `Invoke-SkillsGovernanceCheck` e `Invoke-DashboardTemplateCheck`, respectivamente.
 
