@@ -12,12 +12,21 @@
     O mascaramento reaproveita Protect-SensitiveData de Lib-Logging.psm1 quando
     disponivel (defesa em profundidade: o Orchestrator revalida na ingestao).
 .NOTES
-    Version: 1.0.0
+    Version: 1.0.1
     Skill: ai-native-development-standard
 #>
 
 $ErrorActionPreference = "Stop"
+
+# $OutputEncoding controla apenas o STDIN que este processo envia a processos
+# nativos (ex.: pipe de texto para um .exe); NAO afeta o que Write-Host escreve
+# no stdout redirecionado. Quem controla isso e [Console]::OutputEncoding, que
+# sem este ajuste fica na code page OEM do console e corrompe toda mensagem
+# acentuada: o worker do Orchestrator le o stdout deste processo com
+# encoding="utf-8" (Orchestrator/worker.py), entao um evento JSON com "ç"/"ã"
+# emitido em OEM chega como mojibake ao dashboard e ao db_exec.logs.
 $OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $script:HubLogCtx = $null
 $script:HubLogSteps = [System.Collections.Generic.List[object]]::new()

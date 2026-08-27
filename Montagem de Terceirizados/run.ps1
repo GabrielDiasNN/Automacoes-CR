@@ -12,7 +12,7 @@
 
 .NOTES
 
-    Version: 2.3.0
+    Version: 2.3.1
 
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-runtime-safety
 
@@ -376,6 +376,13 @@ try {
 
     } else {
 
+        $script:fimCounts = @{
+            read      = $extractedCount
+            errors    = 0
+            new       = 0
+            fixed     = 0
+            permanent = 0
+        }
         Write-Log "Nenhuma divergência ou mudança de estado. Nenhuma notificação enviada."
 
     }
@@ -422,7 +429,9 @@ try {
 
     }
 
-    Write-Log "FIM - Processo finalizado."
+    # DEBUG/cleanup: o evento terminal e o execution.end emitido por Write-Fim;
+    # esta linha e apenas rastro de pos-processamento do finally.
+    Write-Log "FIM - Processo finalizado." -Lvl "DEBUG" -Step "cleanup"
 
     Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
 

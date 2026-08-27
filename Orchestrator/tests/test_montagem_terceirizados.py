@@ -8,6 +8,7 @@ import io
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -321,6 +322,32 @@ def test_main_sem_erros_nao_gera_payload(
         None,
     )
     assert payload is None, f"Payload não deveria ser gerado, mas foi: {payload}"
+
+
+def test_log_do_validador_delega_ao_contrato_no_step_transform() -> None:
+    """F2: `validate_and_generate_html.log` não escreve mais a própria linha
+    legada `[PY-VALIDATE]` em stderr — delega ao logger do contrato único
+    (`make_logger`) sempre no step `transform`."""
+    chamadas: list[Any] = []
+    with patch.object(
+        validate_and_generate_html,
+        "_log",
+        side_effect=lambda *a, **k: chamadas.append((a, k)),
+    ):
+        validate_and_generate_html.log("Nenhuma mudança.", "INFO", "CRON_2_abc")
+        validate_and_generate_html.log("sem exec id")
+
+    assert chamadas == [
+        (("Nenhuma mudança.", "INFO", "CRON_2_abc"), {"step": "transform"}),
+        (("sem exec id", "INFO", None), {"step": "transform"}),
+    ]
+
+
+def test_validador_nao_carrega_mais_o_rotulo_legado_no_fonte() -> None:
+    """A linha `[ts] [PY-VALIDATE] [LEVEL]` montada à mão sumiu do arquivo."""
+    src = Path(validate_and_generate_html.__file__).read_text(encoding="utf-8")
+    assert "[PY-VALIDATE]" not in src
+    assert 'make_logger("PY-VALIDATE")' in src
 
 
 @patch("oracle_extract.oracledb.connect")

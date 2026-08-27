@@ -80,18 +80,34 @@ Campos opcionais do envelope: `env` (`PRD` default), `request_id` (HTTP, só `or
 | `ok` | `step.end` | bool | |
 | `outcome_code` | `execution.end` | int | **Igual ao exit code do processo.** |
 | `outcome_reason` | `execution.end` | string | String canônica do `EXIT_CODE_MAP` (`Orchestrator/app/constants.py`). Ex.: `idempotente: nada a notificar`. |
-| `record_counts` | `execution.end`, quando a automação processa registros | objeto | Chaves canônicas: `read`, `qualified`, `notified`, `skipped`, `suppressed`. Chaves extras específicas do domínio permitidas. |
+| `record_counts` | `execution.end`, quando a automação processa registros | objeto | Núcleo canônico (§ 2.4). Chaves extras específicas do domínio permitidas (ex.: `phases_total`/`phases_sent` na OBP-04, `changed`/`new` na RB-01). Todos os valores são inteiros ≥ 0. |
 | `steps` | `execution.end` | array | Resumo da timeline: `[{ "step": "extract", "ok": true, "duration_ms": 8300 }, …]`. |
 
-### 2.3 Exemplos
+### 2.4 `record_counts` — núcleo canônico
+
+Um agente de monitoramento lê essas chaves sem conhecer o domínio. Semântica fixa:
+
+| Chave | Significado |
+|-------|-------------|
+| `read` | Registros **lidos da fonte** (linhas retornadas pela query Oracle), antes de qualquer filtro. |
+| `validated` | Registros que passaram na validação de schema/coerção. |
+| `rejected` | Registros descartados por dado inválido (campo obrigatório nulo, duplicata) — **não são erro de execução**; aparecem como `WARN`. |
+| `qualified` | Registros que satisfazem a regra de negócio (ex.: OB com estoque suficiente). |
+| `notified` | Registros efetivamente notificados neste ciclo. |
+| `skipped` | Registros ignorados por regra de negócio (ex.: sem estoque). |
+| `suppressed` | Registros qualificados mas não notificados por idempotência (já avisados). |
+
+Cada automação emite o subconjunto que faz sentido para ela; nenhuma chave é obrigatória. A chave `failures` foi **descontinuada** (era ambígua: misturava rejeição de dado com falha de processo).
+
+### 2.5 Exemplos
 
 ```json
 {"ts":"2026-08-27T07:01:40Z","level":"INFO","component":"ps_script","event":"execution.start","automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","message":"Inicio ORB-07"}
 {"ts":"2026-08-27T07:01:41Z","level":"INFO","component":"ps_script","event":"step.start","step":"extract","automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","message":"Extracao Oracle + validacao de estoque"}
-{"ts":"2026-08-27T07:01:49Z","level":"INFO","component":"python_domain","event":"retry.attempt","step":"extract","attempt":1,"max_attempts":3,"automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","message":"Extracao OBs Restrição Branco (extract_orb.py) - sucesso na tentativa 1/3"}
+{"ts":"2026-08-27T07:01:49Z","level":"WARN","component":"python_domain","event":"retry.attempt","step":"extract","attempt":2,"max_attempts":3,"automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","message":"Oracle: retentativa 2/3 agendada em 0.5s (motivo: DatabaseError)"}
 {"ts":"2026-08-27T07:01:50Z","level":"INFO","component":"python_domain","event":"step.end","step":"extract","ok":true,"duration_ms":8300,"automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","message":"120 OBs lidas, 2 qualificadas"}
 {"ts":"2026-08-27T07:01:50Z","level":"INFO","component":"python_domain","event":"log","step":"dispatch","automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","message":"OB #185260 estoque insuficiente: precisa 30 un, saldo livre 8 un"}
-{"ts":"2026-08-27T07:01:51Z","level":"INFO","component":"ps_script","event":"execution.end","automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","outcome_code":2,"outcome_reason":"idempotente: nada a notificar","duration_ms":11120,"record_counts":{"read":120,"qualified":2,"notified":0,"skipped":118,"suppressed":2},"steps":[{"step":"preflight","ok":true,"duration_ms":900},{"step":"extract","ok":true,"duration_ms":8300},{"step":"dispatch","ok":true,"duration_ms":0}],"message":"Nenhuma OB nova com estoque suficiente"}
+{"ts":"2026-08-27T07:01:51Z","level":"INFO","component":"ps_script","event":"execution.end","automation":"OBs Restricao Branco","exec_id":"CRON_6_1787824800_94F5","trace_id":"orb-20260827T070140Z-a4f2","outcome_code":2,"outcome_reason":"idempotente: nada a notificar","duration_ms":11120,"record_counts":{"read":120,"validated":118,"rejected":2,"qualified":2,"notified":0,"skipped":116,"suppressed":2},"steps":[{"step":"preflight","ok":true,"duration_ms":900},{"step":"extract","ok":true,"duration_ms":8300},{"step":"dispatch","ok":true,"duration_ms":0}],"message":"Nenhuma OB nova com estoque suficiente"}
 ```
 
 ---
@@ -102,12 +118,12 @@ Campos opcionais do envelope: `env` (`PRD` default), `request_id` (HTTP, só `or
 |--------|-----------|--------|
 | `execution.start` | `run.ps1` (via helper), após resolver `ExecId`/`trace_id` e passar no pré-flight | uma vez, no início |
 | `step.start` | quem entra na etapa (PS ou o processo filho) | antes de cada etapa |
-| `retry.attempt` | `Invoke-WithRetry` (`lib/Lib-Retry.psm1`) e o equivalente Python | cada tentativa > 1 **e** o resultado de cada tentativa |
+| `retry.attempt` | `Invoke-WithRetry` (`lib/Lib-Retry.psm1`); **e** o hook do stamina em `lib/python/oracle_retry.py` para as retentativas internas do connect Oracle | PS: cada tentativa > 1 e o desfecho. Python: cada retentativa agendada pelo stamina (`attempt` = a próxima tentativa) |
 | `step.end` | quem sai da etapa | após cada etapa, com `ok` + `duration_ms` |
 | `execution.end` | `Exit-AutomationWithCode` (`lib/Lib-Logging.psm1`) | uma vez, imediatamente antes do `exit` |
 | `log` | qualquer camada | linha informativa/aviso/erro que não é marco de ciclo |
 
-`retry.attempt` substitui as linhas de texto `[RETRY] …` que hoje passam pelo encoder Base64 — é a mudança que fecha o defeito original na raiz, para as 6 automações de uma vez (todas compartilham `Lib-Retry.psm1`).
+`retry.attempt` substitui as linhas de texto `[RETRY] …` que passavam pelo encoder Base64 — é a mudança que fecha o defeito original na raiz, para as 6 automações de uma vez (todas compartilham `Lib-Retry.psm1`). A retentativa que acontece **dentro** do Python (stamina, no `connect` do Oracle) também vira `retry.attempt`: sem o hook, o stamina despejava a chave crua `stamina.retry_scheduled` em `WARNING`.
 
 ---
 
@@ -193,7 +209,8 @@ O runtime mascara **antes** de gravar em disco/`stdout`. O Orchestrator revalida
 | **PR3** ✅ | **OBP-04** migrada; `Invoke-OraclePythonScript -StdoutIsData` (preparação p/ RE-03). |
 | **PR4** ✅ | **RE-03, RB-01, MT-02** migradas — rollout de código-fonte das 6 automações completo. |
 | **PR5** ✅ | Node: `lib/WhatsApp-Core.js` `writeLog` emite envelope nativo (`component:"node_whatsapp"`) sob `HUB_LOG_STRUCTURED`; `lib/log-masking.js`. |
-| **PR final** ✅ | `docs/log-event.samples.jsonl` (golden, âncora do CI); `Test-LogEventSchema.ps1` v2.0.0 default `blocking`. |
+| **PR6 — gate + âncora** ✅ | `docs/log-event.samples.jsonl` (golden, âncora do CI); `Test-LogEventSchema.ps1` v2.0.0 default `blocking`. |
+| **PR7 — correções da validação em produção** ✅ | Achados do 1º ciclo real (27/08): hook do stamina emite `retry.attempt` em vez de `stamina.retry_scheduled`; `validate_and_generate_html.py` (MT-02) migrado para `make_logger`; `record_counts` com núcleo canônico (`read` = linhas cruas, `failures`→`rejected`, `+validated`); `phases_pending`→`phases_attempted` (OBP-04); MT-02 emite `record_counts` no caminho "sem mudança" e move o log pós-`execution.end` para `DEBUG`; `WhatsApp-Core.js` não duplica mais cada evento no `.jsonl`. |
 | Follow-up | Alinhar `OrchestratorJsonFormatter` (`app/logger_setup.py`) ao envelope + propagar `trace_id` via header `X-Trace-Id`. |
 | **PR Orchestrator** | `Orchestrator/app/**`, `worker.py`, scheduler e `Produção Beneficimento/src/runner.py` no mesmo envelope. |
 | **PR final** | Gate `Test-LogEventSchema.ps1` → `blocking`; entrada no `CHANGELOG.md`. **`Get-ForwardedLogLevel` permanece** (é usada internamente por `Write-HubForwardedLine`). O parser legado de `logParser.ts`/worker **permanece** enquanto houver logs históricos no formato antigo no DB (retenção 90 dias). |
