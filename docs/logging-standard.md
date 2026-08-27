@@ -191,7 +191,7 @@ O runtime mascara **antes** de gravar em disco/`stdout`. O Orchestrator revalida
 | **PR1 — fundação + piloto** | `log-event.schema.json`; helper `lib/Lib-LogEvent.psm1`; `lib/python/automation_log.py` reescrito + `lib/python/log_masking.py`; `Test-LogEventSchema.ps1` (modo `warn`); `Lib-Retry.psm1` passa a emitir `retry.attempt` estruturado (remove o encoder B64); `Lib-Logging.psm1` emite envelope estruturado em `stdout`; **ORB-07** adaptada ponta a ponta (`run.ps1` + `extract_orb.py` + `format_message.py`); `logParser.ts` + worker passam a aceitar JSON **e** o formato legado. Validar 1 ciclo em produção. |
 | **PR2** ✅ | Helpers `Start-HubStep`/`Complete-HubStep`/`Get-HubRecordCounts` + `Exit-AutomationWithCode -RecordCountsPath`; **OFST-06** migrada; ORB-07 refatorada para os helpers. |
 | **PR3** ✅ | **OBP-04** migrada; `Invoke-OraclePythonScript -StdoutIsData` (preparação p/ RE-03). |
-| **PR4…N** | RB-01, MT-02, RE-03 — as 3 restantes. |
+| **PR4** ✅ | **RE-03, RB-01, MT-02** migradas — rollout de código-fonte das 6 automações completo. |
 | **PR Node** | `lib/WhatsApp-Core.js` + `lib/log-masking.js` / `lib/log-event.js` — envelope nativo, sem embrulho do `run.ps1`. |
 | **PR Orchestrator** | `Orchestrator/app/**`, `worker.py`, scheduler e `Produção Beneficimento/src/runner.py` no mesmo envelope. |
 | **PR final** | Gate → `blocking`; remove `Get-ForwardedLogLevel` e o caminho de texto legado; atualiza `lib/README.md`, `AGENTS.md`, `docs/ai-native-context-monitor.md`; entrada no `CHANGELOG.md`. |

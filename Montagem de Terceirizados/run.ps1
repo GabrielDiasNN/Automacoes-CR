@@ -12,11 +12,13 @@
 
 .NOTES
 
-    Version: 2.2.0
+    Version: 2.3.0
 
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-runtime-safety
 
-    Contract: native-fetch-logic, ipc-file-payload, base64-bridge-logs, preflight-v1, granular-idempotency
+    Contract: native-fetch-logic, ipc-file-payload, structured-logging, preflight-v1, granular-idempotency
+
+    Emite eventos de log estruturados (docs/logging-standard.md).
 
 #>
 
@@ -51,6 +53,7 @@ if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.P
 $projectRoot = Split-Path -Parent $ScriptDir
 
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
+$libLogEvent = Join-Path $projectRoot "lib\Lib-LogEvent.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
@@ -73,7 +76,8 @@ $LogDir     = Join-Path $ScriptDir "Logs"
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
 
-Import-Module $libLogging -Force
+Import-Module $libLogging  -Force
+Import-Module $libLogEvent -Force
 
 Import-Module $libEmail   -Force
 Import-Module $libConfig  -Force
@@ -82,11 +86,13 @@ Import-Module $libRetry   -Force
 Import-Module $libOracle  -Force
 Import-Module $libIdempotency -Force
 
+$AutomationName = "Montagem de Terceirizados"
+
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
 
-        Register-ExecutionTelemetry -AutomationName "Montagem de Terceirizados"
+        Register-ExecutionTelemetry -AutomationName $AutomationName
 
     } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 
@@ -94,14 +100,46 @@ if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
 $LogFile = Get-AutomacaoLogPath -Slug "Montagem_Terceirizados" -LogDir $LogDir
 
-# Helper para Log (v5.4.0)
+# --- CONTEXTO DE LOG ESTRUTURADO (docs/logging-standard.md) ---
+$TraceId = Resolve-HubTraceId -Slug "mt"
+Initialize-HubLogContext -Automation $AutomationName -ExecId $ExecId -TraceId $TraceId `
+    -LogPath $LogFile -Component "ps_script"
+$env:HUB_LOG_STRUCTURED = "1"
+$env:HUB_AUTOMATION     = $AutomationName
+$env:HUB_EXEC_ID        = $ExecId
+$env:HUB_TRACE_ID       = $TraceId
+
+$script:RunSw = [System.Diagnostics.Stopwatch]::StartNew()
 
 function Write-Log {
 
-    param([string]$Msg, [string]$Lvl = "INFO")
+    param([string]$Msg, [string]$Lvl = "INFO", [string]$Step = "")
 
-    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile -Step $Step
 
+}
+
+# execution.end e emitido uma unica vez (guarda $script:fimEmitted). MT-02 tem
+# multiplos pontos de exit (preflight/catch/pos-finally), por isso o helper em
+# vez do Exit-WithCode dos demais run.ps1. Os contadores sao capturados do
+# payload em $script:fimCounts antes de o .payload_*.json ser apagado.
+$script:fimEmitted = $false
+$script:fimCounts = $null
+function Write-Fim {
+    param([int]$Code, [string]$Reason = "", [hashtable]$Counts)
+    if ($script:fimEmitted) { return }
+    $script:fimEmitted = $true
+    if ((Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) -and (Get-HubLogContext)) {
+        $counts = if ($Counts) { $Counts } else { $script:fimCounts }
+        $fimArgs = @{
+            OutcomeCode   = $Code
+            OutcomeReason = if ($Reason) { $Reason } else { "ExitCode=$Code" }
+            DurationMs    = [int]$script:RunSw.Elapsed.TotalMilliseconds
+            Message       = "FIM - ExitCode=$Code"
+        }
+        if ($counts) { $fimArgs["RecordCounts"] = $counts }
+        Write-HubExecutionEnd @fimArgs
+    }
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
@@ -114,16 +152,23 @@ Get-ChildItem -Path $ScriptDir -Filter ".data_*.json" | Where-Object { $_.LastWr
 
 Get-ChildItem -Path $ScriptDir -Filter ".payload_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
 
-if (-not (Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths $pathsToCheck)) {
+Write-HubExecutionStart -Message "INICIO — $AutomationName (MT-02). ExecId=$ExecId"
+Start-HubStep -Step "preflight" -Message "Python, Oracle e paths"
 
-    Write-Log "FALHA NO PRE-FLIGHT (Python/Oracle/Paths). Abortando execução." -Lvl "ERRO"; exit 9
+$preFlightOk = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths $pathsToCheck
+Complete-HubStep -Ok $preFlightOk
+
+if (-not $preFlightOk) {
+
+    Write-Log "FALHA NO PRE-FLIGHT (Python/Oracle/Paths). Abortando execução." -Lvl "ERRO"
+    Write-Fim 9 "FALHA NO PRE-FLIGHT (Python/Oracle/Paths)."
+    exit 9
 
 }
 
-Write-Log "========================================================================================="
-
-Write-Log "INÍCIO - Execução Montagem Terceirizados (Pure-Native). ExecId=$ExecId"
+Start-HubStep -Step "lock" -Message "Adquirindo lock global"
 Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
+Complete-HubStep
 
 $execStatus = "ERROR"
 $emailChannelFailed = $false
@@ -137,12 +182,13 @@ try {
     if (Test-Path $dataFile) { Remove-Item $dataFile -Force }
 
     # 1. Extração Nativa (Pure-Python via Oracle)
-    Write-Log "Fase 1: Executando extração nativa direta do Oracle..."
+    Start-HubStep -Step "extract" -Message "Extração nativa direta do Oracle"
 
     $extractResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $extractPy `
-        -ExecId $ExecId -LogPath $LogFile `
+        -ExecId $ExecId -LogPath $LogFile -Step "extract" `
         -OperationName "Extracao Oracle (extract_oracle.py)" `
         -MaxAttempts 3 -BackoffSeconds @(30, 60, 120)
+    Complete-HubStep -Ok $extractResult.Success
 
     if (-not $extractResult.Success) {
         throw "Falha definitiva na extracao nativa apos 3 tentativas."
@@ -166,20 +212,22 @@ try {
     Write-Log "Dados extraídos com sucesso ($( [math]::round($fileSize/1kb, 2) ) KB, $extractedCount registro(s))."
 
     # 2. Validação e HTML
-    Write-Log "Fase 2: Validando dados e gerando notificação..."
+    Start-HubStep -Step "transform" -Message "Validando dados e gerando notificação"
     $payloadFile = Join-Path $ScriptDir ".payload_$ExecId.json"
     if (Test-Path $payloadFile) { Remove-Item $payloadFile -Force }
 
     $validateResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $validatePy `
-        -ExecId $ExecId -LogPath $LogFile `
+        -ExecId $ExecId -LogPath $LogFile -Step "transform" `
         -OperationName "Validacao e Geracao HTML (validate_and_generate_html.py)" `
         -MaxAttempts 2 -BackoffSeconds @(15, 30)
+    Complete-HubStep -Ok $validateResult.Success
 
     if (-not $validateResult.Success) { throw "Falha definitiva na validacao Python apos 2 tentativas." }
 
     # 3. Envio do E-mail (Se houver payload)
 
     if (Test-Path $payloadFile) {
+        Start-HubStep -Step "dispatch" -Message "Envio de e-mail via Outlook"
 
         $jsonOutput = Get-Content $payloadFile -Raw -Encoding UTF8
 
@@ -199,8 +247,16 @@ try {
         $permanentes = [int]$payload.permanentes
         $permanentesPecasNfIncorreta = [int]$payload.permanentes_pecas_nf_incorreta
 
-        Write-Log "Notificação gerada: $subject"
-        Write-Log "Resumo seguro payload => tipo=$tipoNotif; total_linhas=$totalLinhas; total_erros=$totalErros; total_pecas_nf_incorreta=$totalPecasNfIncorreta; novos=$novos; novos_pecas_nf_incorreta=$novosPecasNfIncorreta; corrigidos=$corrigidos; corrigidos_pecas_nf_incorreta=$corrigidosPecasNfIncorreta; permanentes=$permanentes; permanentes_pecas_nf_incorreta=$permanentesPecasNfIncorreta"
+        Write-Log "Notificação gerada: $subject" -Step "dispatch"
+        Write-Log "Resumo seguro payload => tipo=$tipoNotif; total_linhas=$totalLinhas; total_erros=$totalErros; total_pecas_nf_incorreta=$totalPecasNfIncorreta; novos=$novos; novos_pecas_nf_incorreta=$novosPecasNfIncorreta; corrigidos=$corrigidos; corrigidos_pecas_nf_incorreta=$corrigidosPecasNfIncorreta; permanentes=$permanentes; permanentes_pecas_nf_incorreta=$permanentesPecasNfIncorreta" -Step "dispatch"
+
+        $script:fimCounts = @{
+            read      = $totalLinhas
+            errors    = $totalErros
+            new       = $novos
+            fixed     = $corrigidos
+            permanent = $permanentes
+        }
 
         # Idempotência Granular (ADR-013)
 
@@ -316,6 +372,8 @@ try {
 
         if (Test-Path $dataFile) { Remove-Item $dataFile -Force }
 
+        Complete-HubStep -Ok (-not $emailChannelFailed)
+
     } else {
 
         Write-Log "Nenhuma divergência ou mudança de estado. Nenhuma notificação enviada."
@@ -325,16 +383,20 @@ try {
     if ($emailChannelFailed) {
 
         $execStatus = "ERROR"
+        Write-Fim 25 "Execucao concluida com falha parcial no canal E-mail."
 
     } else {
 
         $execStatus = "SUCCESS"
+        Write-Fim 0 "Execucao concluida com sucesso."
 
     }
 
 } catch [System.Exception] {
 
-    Write-Log "ERRO FATAL NA EXECUÇÃO NATIVA: $_" -Lvl "ERRO"; exit 1
+    Write-Log "ERRO FATAL NA EXECUÇÃO NATIVA: $_" -Lvl "ERRO"
+    Write-Fim 1 "ERRO FATAL NA EXECUCAO NATIVA: $_"
+    exit 1
 
 } finally {
 

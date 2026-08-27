@@ -18,11 +18,14 @@
 
 .NOTES
 
-    Version: 2.3.0
+    Version: 2.4.0
 
     Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract, protocolo-valeg
 
-    Contract: retry-on-failure, base64-bridge-logs, granular-idempotency
+    Contract: retry-on-failure, structured-logging, granular-idempotency
+
+    Emite eventos de log estruturados (docs/logging-standard.md): execution.start/end,
+    step.start/end, retry.attempt. Exporta HUB_LOG_STRUCTURED/HUB_* para os filhos.
 
 #>
 
@@ -79,6 +82,7 @@ $MaxTimeoutSec = 300
 $projectRoot = Split-Path -Parent $ScriptDir
 
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
+$libLogEvent = Join-Path $projectRoot "lib\Lib-LogEvent.psm1"
 
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
 
@@ -88,6 +92,7 @@ $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
+$ResultFile  = Join-Path $BasePath "rb_result.json"
 
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
 
@@ -96,7 +101,8 @@ $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
 $venvActivate = Join-Path $projectRoot ".venv\Scripts\activate.ps1"
 $pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
-Import-Module $libLogging -Force
+Import-Module $libLogging  -Force
+Import-Module $libLogEvent -Force
 
 Import-Module $libEmail   -Force
 
@@ -106,11 +112,13 @@ Import-Module $libConfig  -Force
 Import-Module $libOracle  -Force
 Import-Module $libIdempotency -Force
 
+$AutomationName = "Receitas Bloqueadas"
+
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
 
-        Register-ExecutionTelemetry -AutomationName "Receitas Bloqueadas"
+        Register-ExecutionTelemetry -AutomationName $AutomationName
 
     } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 
@@ -118,23 +126,34 @@ if ([string]::IsNullOrWhiteSpace($ExecId)) {
 
 $LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
 
-# Helper para Log com suporte a Base64 Interno (Skill log-standardization)
+# --- CONTEXTO DE LOG ESTRUTURADO (docs/logging-standard.md) ---
+$TraceId = Resolve-HubTraceId -Slug "rb"
+Initialize-HubLogContext -Automation $AutomationName -ExecId $ExecId -TraceId $TraceId `
+    -LogPath $LogFile -Component "ps_script"
+$env:HUB_LOG_STRUCTURED = "1"
+$env:HUB_AUTOMATION     = $AutomationName
+$env:HUB_EXEC_ID        = $ExecId
+$env:HUB_TRACE_ID       = $TraceId
+
+$script:RunSw = [System.Diagnostics.Stopwatch]::StartNew()
+Remove-Item $ResultFile -Force -ErrorAction SilentlyContinue
 
 function Write-Log {
 
-    param([string]$Msg, [string]$Lvl = "INFO")
+    param([string]$Msg, [string]$Lvl = "INFO", [string]$Step = "")
 
-    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile
+    Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile -Step $Step
 
 }
 
-# Get-ForwardedLogLevel vem de lib/Lib-Logging.psm1 (achado A1).
+# Start-HubStep / Complete-HubStep vem de lib/Lib-LogEvent.psm1.
 
 function Exit-WithCode {
 
     param([int]$Code, [string]$Msg = "")
 
-    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes @(0, 2)
+    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes @(0, 2) `
+        -RecordCountsPath $ResultFile -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
 
 }
 
@@ -144,7 +163,12 @@ function Exit-WithCode {
 
 Get-ChildItem -Path $ScriptDir -Filter ".tmp_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
 
+Write-HubExecutionStart -Message "INICIO — $AutomationName (RB-01). ExecId=$ExecId"
+Start-HubStep -Step "preflight" -Message "Python, WhatsApp, e-mail e disco"
+
 $preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($PythonScript, $SendWhatsAppScript, $WhatsAppConfig, $EmailConfigPath)
+
+Complete-HubStep -Ok $preFlight
 
 if (-not $preFlight) {
 
@@ -158,8 +182,6 @@ if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
 
 }
 
-Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$ExecId"
-
     try {
 
         $channelFailureExitCode = 0
@@ -167,7 +189,9 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
         # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
 
+        Start-HubStep -Step "lock" -Message "Adquirindo lock global"
         Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
+        Complete-HubStep
 
         try {
 
@@ -183,38 +207,43 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
             # 1. Executar Python Script com Retry
 
-            Write-Log "Acionando script Python..."
-
             if (-not (Test-Path $pythonExe)) {
 
                 Exit-WithCode 2 "Python do ambiente virtual nao encontrado em $pythonExe."
 
             }
 
+            Start-HubStep -Step "extract" -Message "Processamento Python (processar_receitas.py)"
+
             try {
 
                 $pyResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $PythonScript `
-                    -ExecId $ExecId -LogPath $LogFile `
+                    -ExecId $ExecId -LogPath $LogFile -Step "extract" `
                     -OperationName "Processamento Python (processar_receitas.py)" `
                     -MaxAttempts 3 -BackoffSeconds @(60, 120, 300)
 
                 if ($pyResult.Idempotent) {
-                    Write-Log "Python detectou idempotencia (ExitCode 2). Suprimindo notificacoes."
+                    Complete-HubStep -Ok $true
+                    Write-Log "Python detectou idempotencia (ExitCode 2). Suprimindo notificacoes." -Step "commit"
                     Exit-WithCode 2 "Processo finalizado (Idempotencia Python)."
                 }
 
                 if (-not $pyResult.Success) {
+                    Complete-HubStep -Ok $false
                     Send-AlertaFalhaDefinitiva -TaskName "Receitas Bloqueadas" -ExecId $ExecId -UltimoErro "Falha definitiva no processamento Python apos 3 tentativas." -Tentativas 3 -LogPath $LogFile
                     Exit-WithCode 3 "Falha definitiva no script Python. Alerta de falha enviado."
                 }
+                Complete-HubStep -Ok $true
             } catch [System.Exception] {
                 if ($_.Exception.Message -match "Processo finalizado") { throw }
+                Complete-HubStep -Ok $false
                 Exit-WithCode 4 "Falha ao invocar script Python: $_"
             }
 
-            # 2. Resolucao de Idempotencia Granular (ADR-013)
+            # 2. Resolucao de Idempotencia Granular (ADR-013) + envio multicanal
 
-            Write-Log "Verificando estado de notificacoes (Idempotencia Granular)..."
+            Start-HubStep -Step "dispatch" -Message "Idempotencia granular + envio E-mail/WhatsApp"
+            Write-Log "Verificando estado de notificacoes (Idempotencia Granular)..." -Step "dispatch"
 
             if (Test-Path $HtmlPath) {
 
@@ -320,7 +349,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
 
                             Write-Log "Enviando e-mail para $effectiveTo..."
 
-                            $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -ExecId $ExecId -LogPath $LogFile -Action {
+                            $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -Step "dispatch" -ExecId $ExecId -LogPath $LogFile -Action {
                                 $sent = Send-OutlookEmail -To $effectiveTo -Cc $effectiveCc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
                                 if (-not $sent) { throw "Send-OutlookEmail retornou false." }
                                 return $true
@@ -362,7 +391,7 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                             $waResult = Invoke-NativeProcess -FilePath "powershell.exe" -Arguments $waArgs -WorkingDirectory $BasePath -LogAction {
                                 param($msg, $lvl)
                                 if (-not [string]::IsNullOrWhiteSpace($msg)) {
-                                    Write-AutomacaoLog -Message $msg -Level (Get-ForwardedLogLevel -Msg $msg -Fallback $lvl) -ExecId $ExecId -LogPath $LogFile
+                                    Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "dispatch"
                                 }
                             }
                             $whatsAppExit = $waResult.ExitCode
@@ -442,6 +471,8 @@ Write-Log "INICIO - run.ps1 Receitas Bloqueadas (Python + Node.js). ExecId=$Exec
                 }
 
             }
+
+            Complete-HubStep -Ok ($channelFailureExitCode -eq 0)
 
             if ($channelFailureExitCode -ne 0) {
 

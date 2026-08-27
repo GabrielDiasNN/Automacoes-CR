@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.51] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR4: RE-03, RB-01 e MT-02 migradas** (as 3 automações `run.ps1` restantes). Rollout de código-fonte completo — falta só o gate virar `blocking`.
+  - **RE-03** (`Receitas Emitidas/` run.ps1 v2.8.0): `extract_oracle.py` e `generate_html_report.py` usam stdout como canal de dados (IPC stdio), então os filhos **não** recebem `HUB_LOG_STRUCTURED` e ambos os `Invoke-OraclePythonScript` usam `-StdoutIsData`. `extract_oracle.py` grava `re_result.json` com `record_counts`.
+  - **RB-01** (`Receitas Bloqueadas/` run.ps1 v2.4.0): steps preflight→lock→extract→dispatch (E-mail + WhatsApp num único step)→commit; `processar_receitas.py` grava `rb_result.json` (`read`/`changed`/`new`).
+  - **MT-02** (`Montagem de Terceirizados/` run.ps1 v2.3.0): sem `Exit-WithCode` — helper `Write-Fim` idempotente (`$script:fimEmitted`) emite o `execution.end` uma única vez nos 3 pontos de saída (preflight/catch/pós-`finally`); contadores capturados do payload antes de o `.payload_*.json` ser apagado.
+- Menções a "base64-bridge-logs" removidas dos cabeçalhos `.NOTES` de RE-03, RB-01 e MT-02.
+
+### Notas
+- Verificação: 15 pytest (RE/RB/MT), ruff/black/isort verde, parse + approved-verbs PowerShell OK.
+- **Nenhuma das 3 validada em produção.** RE-03 e MT-02 disparam e-mail real; RB-01 dispara e-mail + WhatsApp.
+
 ## [1.3.50] - 27/08/2026
 
 ### Adicionado
