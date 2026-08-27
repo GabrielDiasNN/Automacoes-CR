@@ -1,9 +1,12 @@
+# Import de lib/python via sys.path.insert() dinamico abaixo forca estas duas
+# desabilitacoes: o pylint nao resolve o path em tempo de analise estatica.
+# pylint: disable=import-error, wrong-import-position
 # {
-#   "version": "1.2.0",
+#   "version": "1.3.0",
 #   "skill": "ai-native-development-standard",
 #   "contract": "ipc-file-payload",
 #   "description": "Nucleo de validacao NF/OB com tipagem estrita e gramatica corrigida",
-#   "reliability": "Base64-Bridge-Logs, HTML-Entity-Shield"
+#   "reliability": "structured-logging, HTML-Entity-Shield"
 # }
 import hashlib
 import json
@@ -13,11 +16,13 @@ import sys
 from datetime import datetime
 from typing import Any, cast
 
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
+)
+from automation_log import ensure_utf8_streams, make_logger
+
 # Forca UTF-8 para garantir interoperabilidade
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
-if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8")
+ensure_utf8_streams()
 
 # ==========================================
 # CONSTANTES DE DESIGN / UI
@@ -37,12 +42,16 @@ ROBO_VERSAO: str = "v1.1"
 LEMBRETE_INTERVALO_MINUTOS: int = 20
 
 
+_log = make_logger("PY-VALIDATE")
+
+
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:
-    """Envia logs para o stderr."""
-    ts: str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    raw_msg: str = f"[{ts}] [PY-VALIDATE] [{level}] [ExecId:{exec_id}] {message}"
-    sys.stderr.write(f"{raw_msg}\n")
-    sys.stderr.flush()
+    """Loga via contrato unico (docs/logging-standard.md).
+
+    Com `HUB_LOG_STRUCTURED=1` (exportado pelo run.ps1) emite envelope JSON em
+    stdout no step `transform`; sem a env cai no rastro humano em stderr.
+    """
+    _log(message, level, None if exec_id == "manual" else exec_id, step="transform")
 
 
 def html_escape(text: Any | None) -> str:

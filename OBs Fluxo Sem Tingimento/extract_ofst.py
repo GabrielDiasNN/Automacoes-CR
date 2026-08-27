@@ -2,7 +2,7 @@
 # dinamico (linhas 28-31), que o pylint nao resolve em tempo de analise estatica.
 # pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
-#   "version": "1.0.0",
+#   "version": "1.1.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
 #   "contract": "exit-0=ha-obs-novas, exit-2=nada-a-notificar, exit-1=erro",
 #   "description": "Extrai OBs fluxo 204 (sem tingimento), confronta com estoque do deposito 95, grava ofst_result.json"
@@ -101,6 +101,7 @@ def _fetch_obs(
     """
     columns, rows = _fetch(creds, load_sql(SQL_OBS_PATH), exec_id)
     data = serialize_rows(columns, rows, sort_key=lambda r: r.get("NUMERO_OB") or 0)
+    resumo.total_lidas = len(data)
     relatorio = validate_ob_query(columns, data)
     if not relatorio.ok and relatorio.problemas:
         # Schema quebrado aborta; linha ruim isolada e apenas logada e pulada adiante.
@@ -171,12 +172,13 @@ def _record_counts(resumo: ResumoExecucao, novas_count: int) -> dict[str, int]:
     """
     qualified = resumo.total_notificaveis
     return {
-        "read": resumo.total_obs,
+        "read": resumo.total_lidas or resumo.total_obs,
+        "validated": resumo.total_obs,
+        "rejected": len(resumo.falhas),
         "qualified": qualified,
         "notified": novas_count,
         "skipped": resumo.total_sem_estoque,
         "suppressed": max(qualified - novas_count, 0),
-        "failures": len(resumo.falhas),
     }
 
 

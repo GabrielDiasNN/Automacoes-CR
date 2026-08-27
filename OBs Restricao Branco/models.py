@@ -1,5 +1,5 @@
 # {
-#   "version": "1.0.0",
+#   "version": "1.1.0",
 #   "description": "Dataclasses do dominio OBs Restrição Branco: OB, Estoque, Avaliacao e Resumo"
 # }
 """Modelos de dominio do ORB-07.
@@ -129,6 +129,7 @@ class AvaliacaoOb:
 class ResumoExecucao:
     """Contadores do lote, montados incrementalmente pelo extrator."""
 
+    total_lidas: int = 0
     total_obs: int = 0
     total_notificaveis: int = 0
     total_sem_estoque: int = 0

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.54] - 27/08/2026
+
+### Corrigido
+- **Padrão de logging estruturado — correções do 1º ciclo real em produção (27/08).** As 6 automações rodaram os crons de hoje já com o código migrado; a análise dos `Logs/*.jsonl` reais apontou 6 arestas, todas resolvidas aqui:
+  - **F1 — retentativa interna do Oracle ilegível.** Quando o `connect` do Oracle re-tentava dentro do Python (stamina), o hook default despejava a chave crua `stamina.retry_scheduled` em `WARNING`. `lib/python/oracle_retry.py` passa a registrar um hook que emite `retry.attempt` no envelope do schema (`attempt`/`max_attempts`/`step`), com fallback `[RETRY]` legível em stderr no modo não-estruturado. Cobre as 6 automações (todas usam `make_oracle_retry()`).
+  - **F2 — `validate_and_generate_html.py` (MT-02) não migrado.** O validador do step `transform` ainda montava `[dd/MM/yyyy] [PY-VALIDATE] [LEVEL] …` à mão em stderr — que chegava embrulhado no `message` do envelope, com timestamp BR duplicado e `ç` corrompido. Agora usa `make_logger` (contrato único), sempre no step `transform`.
+  - **F3 — `record_counts` com semântica ambígua.** `read` passa a contar as **linhas cruas do Oracle** (antes era o total pós-filtro); a chave `failures` (que um agente lê como erro de execução) virou `rejected` — são linhas descartadas por dado inválido, emitidas como `WARN`; novo contador `validated`. `phases_pending`→`phases_attempted` na OBP-04. `docs/logging-standard.md § 2.4` define o núcleo canônico; `docs/log-event.schema.json` referencia.
+  - **F4 — MT-02 sem `record_counts` no caminho "sem mudança".** 63 registros extraídos + 0 divergências saía sem contador nenhum. Agora emite `{read, errors:0, new:0, fixed:0, permanent:0}`.
+  - **F5 — cada evento do `WhatsApp-Core.js` gravado 2× no `.jsonl`.** No modo estruturado o `writeLog` escrevia em `stdout` **e** dava `appendFileSync` no `LOG_FILE` — que é o próprio `.jsonl` da automação, também alimentado pelo `Write-HubForwardedLine` do `run.ps1` pai. Passa a escrever só em `stdout` quando `HUB_LOG_STRUCTURED=1`.
+  - **F6 — log depois do `execution.end` (MT-02).** A linha `FIM - Processo finalizado.` do `finally` saía após o evento terminal. Agora é `DEBUG`/`cleanup`.
+
+### Notas
+- Verificação: 985 pytest (+7), 152 Node, 191 Pester; golden `docs/log-event.samples.jsonl` revalidado; os 8 `Logs/*.jsonl` de produção seguem conformes (a chave `failures` antiga continua aceita pelo `additionalProperties` do schema — só os logs novos usam `rejected`).
+- **RE-03** só roda sexta 07:05 (`5 7 * * 4` em fuso `America/Sao_Paulo`, convenção APScheduler 0=segunda) — é a única automação ainda sem ciclo real pós-migração; observar o run.
+- Envelope interno do Orchestrator segue como follow-up documentado (inalterado).
+
 ## [1.3.53] - 27/08/2026
 
 ### Alterado

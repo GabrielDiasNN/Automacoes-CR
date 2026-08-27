@@ -11,7 +11,7 @@
     Emite eventos de log estruturados (docs/logging-standard.md): execution.start/end,
     step.start/end, retry.attempt. Exporta HUB_LOG_STRUCTURED/HUB_* para os filhos.
 .NOTES
-    Version: 3.1.0
+    Version: 3.1.1
     Skill: protocolo-valeg, ai-native-development-standard
 #>
 
@@ -208,7 +208,7 @@ try {
         if ($allAlreadySent) {
             Write-Log "Todas as fases ja entregues para este lote. Idempotencia confirmada."
             if (Test-Path $ObsStateTmp) { Move-Item $ObsStateTmp $ObsStateFile -Force }
-            Exit-WithCode 2 "Entrega ja realizada — nenhum novo envio necessario." -Counts @{ phases_total = $cards.Count; phases_sent = $cards.Count; phases_pending = 0 }
+            Exit-WithCode 2 "Entrega ja realizada — nenhum novo envio necessario." -Counts @{ phases_total = $cards.Count; phases_sent = $cards.Count; phases_attempted = 0 }
         }
 
         # --- ETAPA 3: ENVIO EM LOTE (uma sessão Chrome para todas as fases) ---
@@ -221,7 +221,7 @@ try {
         if ($pendentes.Count -eq 0) {
             Write-Log "Todas as fases ja entregues para este lote. Idempotencia confirmada."
             if (Test-Path $ObsStateTmp) { Move-Item $ObsStateTmp $ObsStateFile -Force }
-            Exit-WithCode 2 "Entrega ja realizada — nenhum novo envio necessario." -Counts @{ phases_total = $cards.Count; phases_sent = $cards.Count; phases_pending = 0 }
+            Exit-WithCode 2 "Entrega ja realizada — nenhum novo envio necessario." -Counts @{ phases_total = $cards.Count; phases_sent = $cards.Count; phases_attempted = 0 }
         }
 
         Start-HubStep -Step "dispatch" -Message "Enviando $($pendentes.Count) fases em lote (sessao unica)"
@@ -320,7 +320,7 @@ try {
 
         $phaseCounts = @{
             phases_total   = $cards.Count
-            phases_pending = $pendentes.Count
+            phases_attempted = $pendentes.Count
             phases_sent    = @($state.phases | Where-Object { $_.success }).Count
             phases_failed  = $failedThisRun
         }

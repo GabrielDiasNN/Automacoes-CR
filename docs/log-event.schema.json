@@ -51,6 +51,7 @@
     "outcome_reason": { "type": "string", "minLength": 1 },
     "record_counts": {
       "type": "object",
+      "description": "Nucleo canonico: read, validated, rejected, qualified, notified, skipped, suppressed (ver docs/logging-standard.md 2.4). Chaves extras de dominio permitidas. Sem a chave 'failures', descontinuada.",
       "additionalProperties": { "type": "integer", "minimum": 0 }
     },
     "steps": {

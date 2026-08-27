@@ -1321,6 +1321,41 @@ def test_extract_trata_query_realmente_vazia_como_nada_a_notificar(
     assert (tmp_path / "orb_state.json.tmp").exists()
 
 
+def test_record_counts_usa_chaves_canonicas_e_read_conta_linhas_cruas() -> None:
+    """F3: `read` = linhas que vieram do Oracle (não o total pós-filtro), e as
+    linhas descartadas por campo obrigatório nulo entram como `rejected` — nunca
+    `failures`, que um agente de monitoramento lê como erro de execução."""
+    extract = _load_module("extract_orb_state", AUTOMATION_DIR / "extract_orb.py")
+    resumo = extract.ResumoExecucao()
+    resumo.total_lidas = 14
+    resumo.total_obs = 9
+    resumo.total_notificaveis = 2
+    resumo.total_sem_estoque = 9
+    resumo.falhas = ["OB #185248: CD_CLASSIFICACAO_COR nulo"] * 5
+
+    rc = extract._record_counts(resumo, novas_count=1)
+
+    assert "failures" not in rc
+    assert rc["read"] == 14
+    assert rc["validated"] == 9
+    assert rc["rejected"] == 5
+    assert rc["qualified"] == 2
+    assert rc["notified"] == 1
+    assert rc["skipped"] == 9
+    assert rc["suppressed"] == 1
+    assert all(isinstance(v, int) and v >= 0 for v in rc.values())
+
+
+def test_record_counts_read_cai_para_total_obs_quando_total_lidas_ausente() -> None:
+    """Caminhos de saída antecipada não populam `total_lidas`; `read` degrada
+    para `total_obs` em vez de reportar 0 linhas lidas."""
+    extract = _load_module("extract_orb_state", AUTOMATION_DIR / "extract_orb.py")
+    resumo = extract.ResumoExecucao()
+    resumo.total_obs = 3
+    rc = extract._record_counts(resumo, novas_count=0)
+    assert rc["read"] == 3
+
+
 def test_state_faz_round_trip_no_formato_novo() -> None:
     v = _validators()
     estado = {"1001": _reserva("2026-08-25T08:00:00", 26, 55)}
