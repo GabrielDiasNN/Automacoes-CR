@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.56] - 27/08/2026
+
+### Corrigido
+- **Achados 3–6 do code review dos PRs #43/#44** (os achados 1–2, de mojibake no `stdout`, saíram em [1.3.55]).
+  - **`Tools/Test-LogEventSchema.ps1` — o gate bloqueante reprovava SEMPRE no Windows PowerShell 5.1.** O `2>&1` sobre um executável nativo converte cada linha de stderr em `ErrorRecord`; com `$ErrorActionPreference = "Stop"` isso vira um `NativeCommandError` **terminante**. Como `log_event_validator.py` sempre escreve a linha de resumo em stderr (mesmo com zero violações), o script abortava com exit 1 em toda execução sob 5.1 — passava só em `pwsh` 7, que é o que CI e hook usam, então o defeito ficava latente no fallback `powershell` do `.githooks/pre-commit`. A chamada nativa foi isolada em `Invoke-LogEventValidator`, que rebaixa a preferência para `Continue` e devolve `$LASTEXITCODE` como único veredito. Verificado nos dois runtimes **e** com violação injetada, para não trocar o falso vermelho por um falso verde.
+  - **`lib/python/oracle_retry.py` — `max_attempts` vazava entre funções decoradas.** `set_on_retry_hooks` é estado global do processo e o limite estava fixo no closure do hook: a última chamada de `make_oracle_retry` reescrevia o valor reportado por todas as funções já decoradas (uma função com `attempts=2` logava `retentativa 2/5`). O limite passou para um registro por callable (`_MAX_ATTEMPTS_BY_CALLABLE`), resolvido no momento do evento pela chave que o stamina expõe em `RetryDetails.name`. Um retry de terceiro, fora do registro, agora cai no rastro humano em vez de emitir envelope com `max_attempts` inventado.
+  - **`lib/Lib-LogEvent.psm1` — etapa aberta sumia do `steps[]` quando a execução morria nela.** Um `throw` entre `Start-HubStep` e `Complete-HubStep` desviava para o `catch` do `run.ps1`, que emitia `execution.end` direto: o operador via a falha sem saber que a etapa (ex.: `dispatch` do MT-02) chegou a começar. `Write-HubExecutionEnd` passa a fechar a etapa pendente antes de montar o array, com `ok` acompanhando o desfecho. Corrige os seis `run.ps1` de uma vez, sem exigir `try/finally` em cada par.
+  - **`OBs Paradas Fase/generate_phase_cards.py` (v1.8.0) — `ExecId` recebido e descartado.** O `run.ps1` do OBP-04 passou a enviar o `ExecId` como `argv[1]`, mas o script nunca foi migrado: não lia `sys.argv`, usava `print` cru e suas linhas chegavam ao `.jsonl` embrulhadas como `log` genérico, sem `exec_id` próprio. Agora usa `make_logger` no step `transform`, como os `format_message.py` de OFST-06/ORB-07.
+
+### Notas
+- Verificação: 987 pytest (+2), 23 Pester (+3), lint Python limpo. Os testes novos de `oracle_retry` foram confirmados **falhando contra o código antigo** antes de valer como prova.
+
 ## [1.3.55] - 27/08/2026
 
 ### Corrigido

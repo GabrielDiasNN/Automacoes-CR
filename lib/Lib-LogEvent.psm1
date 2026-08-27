@@ -377,11 +377,24 @@ function Write-HubExecutionEnd {
             [int][Math]::Round(([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
         } else { 0 }
     }
-    $stepList = if ($null -ne $Steps) { $Steps } else { $script:HubLogSteps.ToArray() }
 
     $lvl = if ($OutcomeCode -in @(0, 2, 22)) { "INFO" }
     elseif ($OutcomeCode -in @(24, 25)) { "WARN" }
     else { "ERRO" }
+
+    # Fecha a etapa que ainda estiver aberta ANTES de montar o array `steps`.
+    # Um `throw` entre Start-HubStep e Complete-HubStep desviava para o catch do
+    # run.ps1, que emitia execution.end direto: a etapa em que a execucao
+    # realmente morreu sumia do rastro (o operador via a falha sem saber que o
+    # dispatch chegou a comecar). Resolver aqui cobre os seis run.ps1 de uma vez,
+    # em vez de exigir try/finally em cada par. `ok` acompanha o desfecho: so um
+    # outcome de sucesso pode fechar como bem-sucedida uma etapa interrompida.
+    if ($script:HubStepActive) {
+        Complete-HubStep -Ok ($lvl -eq "INFO") `
+            -Message "Etapa encerrada pelo fim da execucao (outcome_code=$OutcomeCode)."
+    }
+
+    $stepList = if ($null -ne $Steps) { $Steps } else { $script:HubLogSteps.ToArray() }
 
     $extra = [ordered]@{
         outcome_code   = $OutcomeCode

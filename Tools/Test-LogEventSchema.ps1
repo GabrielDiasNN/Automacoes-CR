@@ -41,11 +41,42 @@ if (-not (Test-Path -LiteralPath $validator)) {
 
 $hardFail = $false
 
+function Invoke-LogEventValidator {
+    <#
+    .SYNOPSIS
+        Executa o validador Python e devolve saida combinada + exit code.
+    .DESCRIPTION
+        O `2>&1` sobre um executavel NATIVO converte cada linha de stderr em
+        ErrorRecord; com $ErrorActionPreference = "Stop" isso vira um
+        NativeCommandError TERMINANTE no Windows PowerShell 5.1. Como o
+        validador SEMPRE escreve a linha de resumo em stderr (mesmo com zero
+        violacoes), o gate abortava com exit 1 em toda execucao sob 5.1 --
+        passando so em pwsh 7. Rebaixar a preferencia ao redor da chamada
+        nativa mantem o stderr como texto e preserva $LASTEXITCODE como a
+        unica fonte de veredito.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Exe,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+    $anterior = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $saida = & $Exe @Arguments 2>&1
+        return [PSCustomObject]@{ Output = $saida; ExitCode = $LASTEXITCODE }
+    }
+    finally {
+        $ErrorActionPreference = $anterior
+    }
+}
+
 # 1) Golden samples — SEMPRE validado, modo ESTRITO (sem --rollout). E a ancora
 #    de conformidade do CI (Logs/*.jsonl e gitignored e nao existe em checkout limpo).
 if (Test-Path -LiteralPath $samplesFile) {
-    $out = & $pythonExe $validator $samplesFile 2>&1
-    $rc = $LASTEXITCODE
+    $res = Invoke-LogEventValidator -Exe $pythonExe -Arguments @($validator, $samplesFile)
+    $out = $res.Output
+    $rc = $res.ExitCode
     $out | ForEach-Object { Write-Host $_ }
     if ($rc -eq 0) {
         Write-Host "[OK] docs/log-event.samples.jsonl em conformidade com o schema." -ForegroundColor Green
@@ -77,8 +108,9 @@ if ($Paths.Count -gt 0) {
 
 if ($files -and @($files).Count -gt 0) {
     $pyArgs = @($validator, "--rollout") + ($files | ForEach-Object { $_.FullName })
-    $out2 = & $pythonExe @pyArgs 2>&1
-    $rc2 = $LASTEXITCODE
+    $res2 = Invoke-LogEventValidator -Exe $pythonExe -Arguments $pyArgs
+    $out2 = $res2.Output
+    $rc2 = $res2.ExitCode
     $out2 | ForEach-Object { Write-Host $_ }
     if ($rc2 -eq 0) {
         Write-Host "[OK] $(@($files).Count) arquivo(s) Logs/*.jsonl em conformidade.`n" -ForegroundColor Green

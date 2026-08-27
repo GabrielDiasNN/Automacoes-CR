@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 # dinamico abaixo, que o pylint nao resolve em tempo de analise estatica.
 # pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
-#   "version": "1.7.0",
+#   "version": "1.8.0",
 #   "description": "Le obs_result.json + config.json, gera images PNG por fase e phase_cards.json"
 # }
 sys.path.insert(
@@ -24,6 +24,7 @@ sys.path.insert(
 # atributos do modulo, pois Orchestrator/tests/test_obs_paradas_fase.py carrega
 # este arquivo dinamicamente via importlib e os acessa como module.<nome> — sem
 # o import ficariam ausentes.
+from automation_log import ensure_utf8_streams, make_logger
 from obp_config import (  # pylint: disable=unused-import  # noqa: F401
     FaseConfig,
     _codigo_fase_key,
@@ -38,10 +39,21 @@ from obp_config import (  # pylint: disable=unused-import  # noqa: F401
     normalize_fase,
 )
 
-if sys.stdout.encoding != "utf-8":
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-if sys.stderr.encoding != "utf-8":
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+ensure_utf8_streams()
+
+# Contrato unico de log (docs/logging-standard.md). O run.ps1 do OBP-04 invoca
+# este script com o ExecId como argv[1] e exporta HUB_* no ambiente; ate a
+# migracao deste arquivo o argumento era recebido e descartado em silencio,
+# enquanto as linhas saiam como `print` cru e chegavam ao .jsonl embrulhadas
+# como `log` generico, sem exec_id proprio.
+_log = make_logger("OBP-CARDS")
+_EXEC_ID: str | None = None
+
+
+def log(message: str, level: str = "INFO") -> None:
+    """Emite no envelope do schema (step `transform`) ou no rastro humano."""
+    _log(message, level, _EXEC_ID, step="transform")
+
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULT_FILE = os.path.join(SCRIPT_DIR, "obs_result.json")
@@ -386,7 +398,7 @@ def _build_card_entry(
         caption += f"\n\nResponsável: @{cfg.responsavel}"
 
     rel_image = os.path.relpath(image_path, script_dir).replace("\\", "/")
-    print(f"[OK] {fase_norm}: {n} OBs → {rel_image}")
+    log(f"{fase_norm}: {n} OBs → {rel_image}")
     return {
         "phase_key": phase_key,
         "phase_display": fase_norm,
@@ -396,11 +408,11 @@ def _build_card_entry(
 
 
 def main() -> None:
+    global _EXEC_ID  # pylint: disable=global-statement
+    _EXEC_ID = sys.argv[1] if len(sys.argv) > 1 else None
+
     if not os.path.exists(RESULT_FILE):
-        print(
-            "[ERROR] obs_result.json nao encontrado. Execute extract_obs.py primeiro.",
-            file=sys.stderr,
-        )
+        log("obs_result.json nao encontrado. Execute extract_obs.py primeiro.", "ERROR")
         sys.exit(1)
 
     with open(RESULT_FILE, encoding="utf-8") as f:
@@ -411,7 +423,7 @@ def main() -> None:
     filtradas = _filter_obs(obs_all, fases_monitoradas, phase_filters)
 
     if not filtradas:
-        print("[OK] Nenhuma OB excedeu o limite configurado — nenhum card gerado.")
+        log("Nenhuma OB excedeu o limite configurado — nenhum card gerado.")
         sys.exit(2)
 
     seen = _load_seen_obs(SEEN_STATE_FILE)
@@ -433,7 +445,7 @@ def main() -> None:
 
     _save_seen_obs(SEEN_STATE_FILE, {str(o.get("NUMERO_OB")) for o in filtradas})
 
-    print(f"[OK] phase_cards.json gerado ({len(manifest)} fases).")
+    log(f"phase_cards.json gerado ({len(manifest)} fases).")
     sys.exit(0)
 
 
