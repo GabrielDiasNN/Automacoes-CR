@@ -1,5 +1,6 @@
 """Testes de Tools/log_event_validator.py contra docs/log-event.schema.json."""
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -88,3 +89,24 @@ def test_load_schema_tem_enums_esperados() -> None:
     assert "python_domain" in ENUMS.component
     assert "retry.attempt" in ENUMS.event
     assert "custom" in ENUMS.step
+
+
+def test_golden_samples_conformes_ao_schema() -> None:
+    """docs/log-event.samples.jsonl e a ancora de conformidade do CI: todo
+    evento nele deve validar no modo estrito (sem --rollout)."""
+    samples = (
+        Path(__file__).resolve().parent.parent.parent
+        / "docs"
+        / "log-event.samples.jsonl"
+    )
+    assert samples.exists(), f"golden samples ausente: {samples}"
+    problemas = validate_file(samples, ENUMS, rollout=False)
+    assert problemas == [], "\n".join(problemas)
+    # cobertura de tipos: todo `event` do enum aparece pelo menos uma vez
+    linhas = [
+        json.loads(x)
+        for x in samples.read_text(encoding="utf-8").splitlines()
+        if x.strip()
+    ]
+    eventos = {e["event"] for e in linhas}
+    assert ENUMS.event.issubset(eventos), f"faltam exemplos de: {ENUMS.event - eventos}"

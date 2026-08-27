@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.53] - 27/08/2026
+
+### Alterado
+- **Padrão de logging estruturado — PR final: gate `blocking` + âncora de conformidade.** Encerra o rollout de código-fonte (docs/logging-standard.md): as 6 automações `run.ps1`, os scripts Python de domínio e o motor Node emitem o envelope do schema; falta apenas a validação em produção ciclo a ciclo.
+  - `docs/log-event.samples.jsonl` — arquivo golden versionado com um exemplo válido de **cada** `event` do schema (`execution.start/end`, `step.start/end`, `retry.attempt`, `log`), cobrindo `ps_script`/`python_domain`/`node_whatsapp`/`orchestrator_scheduler`, `step=custom`+`step_name`, `env`, `record_counts` e `steps[]`. É a âncora do CI: `Logs/*.jsonl` é gitignored e não existe em checkout limpo.
+  - `Tools/Test-LogEventSchema.ps1` v2.0.0: valida `docs/log-event.samples.jsonl` em **modo estrito** (sempre, bloqueante) e `Logs/*.jsonl` local em modo `--rollout`. Default `-Mode` passou de `warn` para **`blocking`**.
+  - `Orchestrator/tests/test_log_event_validator_unit.py`: novo teste trava a conformidade do golden e exige que todo `event` do enum tenha exemplo.
+
+### Notas
+- **Orchestrator (`app/`, `worker.py`, scheduler)** já emite JSON estruturado próprio (`OrchestratorJsonFormatter`: `timestamp`/`automation_name`/`request_id`) — um envelope *irmão*, não idêntico. Alinhá-lo ao schema das automações toca ~977 testes e o parser de telemetria ao vivo do Dashboard; fica como trabalho subsequente. O gate segue verde porque `--rollout` só valida linhas que carregam `trace_id` (as do envelope novo).
+- `Get-ForwardedLogLevel` **não** foi removida — é usada por `Write-HubForwardedLine` para derivar o nível de linha de texto de processo filho.
+
 ## [1.3.52] - 27/08/2026
 
 ### Adicionado

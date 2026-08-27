@@ -1,20 +1,21 @@
 ﻿# {
-#   "version": "1.0.0",
+#   "version": "2.0.0",
 #   "skill": "ai-native-development-standard",
-#   "description": "Valida os arquivos Logs/*.jsonl contra docs/log-event.schema.json (ver docs/logging-standard.md)"
+#   "description": "Valida docs/log-event.samples.jsonl (estrito) e Logs/*.jsonl (rollout) contra docs/log-event.schema.json"
 # }
 [CmdletBinding()]
 param(
     [string]$RootPath = ".",
     [string[]]$Paths = @(),
     [ValidateSet("warn", "blocking")]
-    [string]$Mode = "warn"
+    [string]$Mode = "blocking"
 )
 
 $ErrorActionPreference = "Stop"
 
 $rootFull = (Resolve-Path -LiteralPath $RootPath).Path
 $validator = Join-Path $rootFull "Tools\log_event_validator.py"
+$samplesFile = Join-Path $rootFull "docs\log-event.samples.jsonl"
 
 Write-Host "=== Contrato de Evento de Log (log-event.schema.json) ===" -ForegroundColor Cyan
 
@@ -38,6 +39,26 @@ if (-not (Test-Path -LiteralPath $validator)) {
     exit 1
 }
 
+$hardFail = $false
+
+# 1) Golden samples — SEMPRE validado, modo ESTRITO (sem --rollout). E a ancora
+#    de conformidade do CI (Logs/*.jsonl e gitignored e nao existe em checkout limpo).
+if (Test-Path -LiteralPath $samplesFile) {
+    $out = & $pythonExe $validator $samplesFile 2>&1
+    $rc = $LASTEXITCODE
+    $out | ForEach-Object { Write-Host $_ }
+    if ($rc -eq 0) {
+        Write-Host "[OK] docs/log-event.samples.jsonl em conformidade com o schema." -ForegroundColor Green
+    } else {
+        Write-Host "[ERRO] docs/log-event.samples.jsonl viola o schema (modo estrito)." -ForegroundColor Red
+        $hardFail = $true
+    }
+} else {
+    Write-Host "[WARN] docs/log-event.samples.jsonl ausente." -ForegroundColor Yellow
+}
+
+# 2) Logs/*.jsonl locais (quando existirem) — modo --rollout (ignora linha legada
+#    sem trace_id, ex.: envelope antigo do Orchestrator).
 $excludedPathRegex = "\\(\.venv|node_modules|\.git|\.wwebjs_auth|\.playwright-mcp|\.pytest_cache|\.mypy_cache)\\"
 
 if ($Paths.Count -gt 0) {
@@ -54,27 +75,22 @@ if ($Paths.Count -gt 0) {
         Where-Object { $_.FullName -notmatch $excludedPathRegex -and $_.DirectoryName -match '\\Logs$' }
 }
 
-if (-not $files -or @($files).Count -eq 0) {
+if ($files -and @($files).Count -gt 0) {
+    $pyArgs = @($validator, "--rollout") + ($files | ForEach-Object { $_.FullName })
+    $out2 = & $pythonExe @pyArgs 2>&1
+    $rc2 = $LASTEXITCODE
+    $out2 | ForEach-Object { Write-Host $_ }
+    if ($rc2 -eq 0) {
+        Write-Host "[OK] $(@($files).Count) arquivo(s) Logs/*.jsonl em conformidade.`n" -ForegroundColor Green
+    } elseif ($Mode -eq "blocking") {
+        Write-Host "[ERRO] Violacoes em Logs/*.jsonl (modo blocking)." -ForegroundColor Red
+        $hardFail = $true
+    } else {
+        Write-Host "[WARN] Violacoes em Logs/*.jsonl (modo warn: nao bloqueia).`n" -ForegroundColor Yellow
+    }
+} else {
     Write-Host "[OK] Nenhum arquivo Logs/*.jsonl no escopo." -ForegroundColor Green
-    exit 0
 }
 
-$pyArgs = @($validator, "--rollout") + ($files | ForEach-Object { $_.FullName })
-$output = & $pythonExe @pyArgs 2>&1
-$exitCode = $LASTEXITCODE
-
-$output | ForEach-Object { Write-Host $_ }
-
-if ($exitCode -eq 0) {
-    Write-Host "[OK] $(@($files).Count) arquivo(s) de log em conformidade com o schema.`n" -ForegroundColor Green
-    exit 0
-}
-
-if ($Mode -eq "blocking") {
-    Write-Host "[ERRO] Violacoes de contrato de log-event (modo blocking)." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "[WARN] Violacoes de contrato de log-event (modo warn: nao bloqueia o gate)." -ForegroundColor Yellow
-Write-Host "       Durante o rollout do padrao de logging. Ver docs/logging-standard.md.`n" -ForegroundColor Yellow
+if ($hardFail) { exit 1 }
 exit 0

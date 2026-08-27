@@ -1,6 +1,6 @@
 # Padrão de Logging e Observabilidade do Hub de Automações
 
-> **Versão:** v0.2.0 (27/08/2026) | **Status:** PR1 entregue (fundação + piloto ORB-07); gate `Test-LogEventSchema.ps1` em modo `warn`. Ver `CHANGELOG.md` [1.3.48].
+> **Versão:** v1.0.0 (27/08/2026) | **Status:** rollout de código-fonte **completo** — 6 automações `run.ps1` + Python de domínio + motor Node emitem o envelope; gate `Test-LogEventSchema.ps1` em **`blocking`** com âncora `docs/log-event.samples.jsonl`. Pendente: validação em produção ciclo a ciclo e alinhamento do envelope interno do Orchestrator. Ver `CHANGELOG.md` [1.3.48]–[1.3.53].
 
 ### PR1 — o que já está no repositório
 
@@ -193,6 +193,8 @@ O runtime mascara **antes** de gravar em disco/`stdout`. O Orchestrator revalida
 | **PR3** ✅ | **OBP-04** migrada; `Invoke-OraclePythonScript -StdoutIsData` (preparação p/ RE-03). |
 | **PR4** ✅ | **RE-03, RB-01, MT-02** migradas — rollout de código-fonte das 6 automações completo. |
 | **PR5** ✅ | Node: `lib/WhatsApp-Core.js` `writeLog` emite envelope nativo (`component:"node_whatsapp"`) sob `HUB_LOG_STRUCTURED`; `lib/log-masking.js`. |
+| **PR final** ✅ | `docs/log-event.samples.jsonl` (golden, âncora do CI); `Test-LogEventSchema.ps1` v2.0.0 default `blocking`. |
+| Follow-up | Alinhar `OrchestratorJsonFormatter` (`app/logger_setup.py`) ao envelope + propagar `trace_id` via header `X-Trace-Id`. |
 | **PR Orchestrator** | `Orchestrator/app/**`, `worker.py`, scheduler e `Produção Beneficimento/src/runner.py` no mesmo envelope. |
 | **PR final** | Gate `Test-LogEventSchema.ps1` → `blocking`; entrada no `CHANGELOG.md`. **`Get-ForwardedLogLevel` permanece** (é usada internamente por `Write-HubForwardedLine`). O parser legado de `logParser.ts`/worker **permanece** enquanto houver logs históricos no formato antigo no DB (retenção 90 dias). |
 
