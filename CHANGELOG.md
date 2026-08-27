@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.47] - 27/08/2026
+
+### Corrigido
+- **`Orchestrator/app/routers/system.py` fora do formato do black (26.5.1):** o gate "Validar Estilo Python (Black & Isort)" do CI roda black apenas sobre os arquivos alterados no PR (`$env:CHANGED_FILES_JSON`), então um arquivo que acumula débito de formatação sem ser tocado nunca é pego — o próximo PR que encostasse em `system.py` falharia no CI por um débito alheio. Reformatado (`black Orchestrator`): apenas a quebra de linha do parâmetro `force` em `recover_worker`, sem mudança de comportamento. `black --check Orchestrator` e `isort --check-only Orchestrator` limpos; suíte completa do Orchestrator (958 testes) verde.
+
 ## [1.3.46] - 26/08/2026
 
 ### Corrigido
