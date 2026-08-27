@@ -1,6 +1,6 @@
 ﻿# ==============================================================================
 # ARQUIVO: Send-WhatsApp.ps1
-# VERSAO : 2.3
+# VERSAO : 2.4
 # DESCRICAO: Wrapper Global para envio de WhatsApp. Suporta parametros explicitos
 #            ou carregamento de 'whatsapp-config.json' para retrocompatibilidade.
 #            Inclui rotina de autolimpeza direcionada de processos zumbis e locks.
@@ -22,6 +22,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Este script roda como processo powershell.exe FILHO do run.ps1 da automacao
+# (invocado via Invoke-NativeProcess), com sua propria code page de console —
+# independente da do pai. No padrao de logging estruturado, WhatsApp-Core.js
+# (filho deste processo) emite o envelope JSON em UTF-8 no stdout SEM gravar
+# arquivo proprio (o run.ps1 pai e o unico writer do .jsonl); o relay abaixo
+# (Write-Host $msg) reemitiria esses bytes na code page OEM sem este ajuste,
+# corrompendo toda mensagem acentuada antes mesmo de chegar ao pai.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 $LibDir = $PSScriptRoot
 $NodeScript = Join-Path $LibDir "WhatsApp-Core.js"
 $ProcessModule = Join-Path $LibDir "Lib-Process.psm1"

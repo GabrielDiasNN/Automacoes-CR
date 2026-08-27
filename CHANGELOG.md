@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.55] - 27/08/2026
+
+### Corrigido
+- **Padrão de logging estruturado — mojibake no canal stdout (achados de code review dos PRs #43/#44).** O rollout removeu o B64 Bridge sob a premissa "UTF-8 ponta a ponta"; essa premissa não se sustentava em dois pontos do `stdout` do PowerShell, que usa a code page OEM do console por padrão em vez de UTF-8 — independente de `$OutputEncoding` (que só afeta o STDIN enviado a processos nativos):
+  - **`lib/Lib-LogEvent.psm1` (v1.0.1).** O evento JSON emitido em `stdout` pelo `run.ps1` de topo saía na code page OEM; o worker do Orchestrator lê esse stdout com `encoding="utf-8"` (`Orchestrator/worker.py`), então toda mensagem acentuada chegava corrompida ao dashboard ao vivo e ao `db_exec.logs`. Corrigido com `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` no escopo do módulo.
+  - **`lib/Send-WhatsApp.ps1` (v2.4).** No modo estruturado, `WhatsApp-Core.js` parou de gravar o `.jsonl` diretamente (o `run.ps1` pai é o único writer, via `Write-HubForwardedLine`) e passou a depender só do relay via `stdout`. O `Send-WhatsApp.ps1` é um `powershell.exe` **filho** com sua própria code page de console; sem o mesmo ajuste, o `Write-Host` do relay corrompia o envelope UTF-8 do Node antes de ele chegar ao pai. Reproduzido e corrigido com o mesmo `[Console]::OutputEncoding`.
+
 ## [1.3.54] - 27/08/2026
 
 ### Corrigido
