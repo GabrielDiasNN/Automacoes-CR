@@ -196,7 +196,9 @@ def wakeup_worker(
 @router.post("/worker/recover")
 def recover_worker(
     request: Request,
-    force: bool = Query(False, description="Forçar recuperação mesmo se o heartbeat estiver recente"),
+    force: bool = Query(
+        False, description="Forçar recuperação mesmo se o heartbeat estiver recente"
+    ),
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
