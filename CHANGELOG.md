@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.50] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR3: OBP-04 migrada.**
+  - `OBs Paradas Fase/` (OBP-04) ponta a ponta: `run.ps1` v3.1.0 (eventos `execution.*`/`step.*`/`retry.attempt`, steps preflight→lock→extract→transform→dispatch→commit), `extract_obs.py` grava `record_counts` no `obs_result.json` inclusive no desfecho idempotente. `execution.end` carrega contadores de **fase** (`phases_total`/`phases_pending`/`phases_sent`/`phases_failed`) via `-Counts` explícito no `Exit-WithCode`.
+  - `lib/Lib-Oracle.psm1`: `Invoke-OraclePythonScript -StdoutIsData` — quando o script filho usa stdout como canal de dados (IPC stdio), as linhas de stdout não viram log (só as de stderr). Preparação para RE-03.
+
+### Notas
+- Verificação: 12 pytest OBP-04, ruff/black verde, parse PowerShell OK.
+- OBP-04 **não validada em produção** (envia cards WhatsApp reais ao grupo se houver fase parada).
+
 ## [1.3.49] - 27/08/2026
 
 ### Adicionado

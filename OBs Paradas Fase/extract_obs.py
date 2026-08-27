@@ -70,6 +70,18 @@ def extract() -> None:
         current_hash = compute_hash({"rows": data})
 
         if read_last_hash(STATE_FILE) == current_hash:
+            with open(RESULT_FILE, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "rows": [],
+                        "total": 0,
+                        "record_counts": {"read": len(data)},
+                        "extracted_at": datetime.now().isoformat(),
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
             log("Sem alteracoes (idempotencia).", "INFO", exec_id)
             sys.exit(2)
 
@@ -78,6 +90,7 @@ def extract() -> None:
                 {
                     "rows": data,
                     "total": len(data),
+                    "record_counts": {"read": len(data)},
                     "extracted_at": datetime.now().isoformat(),
                     "hash": current_hash,
                 },
