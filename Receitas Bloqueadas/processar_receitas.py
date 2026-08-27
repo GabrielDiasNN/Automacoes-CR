@@ -492,6 +492,16 @@ def _gerar_saidas(
         f.write(html_content)
 
 
+def _write_result_counts(read: int, changed: int, new: int) -> None:
+    result_path = os.path.join(os.path.dirname(__file__), "rb_result.json")
+    with open(result_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {"record_counts": {"read": read, "changed": changed, "new": new}},
+            f,
+            ensure_ascii=False,
+        )
+
+
 def process() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
     log(
@@ -531,6 +541,9 @@ def process() -> None:
         state_path = os.path.join(os.path.dirname(__file__), "receitas_state.json")
         last_records = _carregar_ultimo_state(state_path, exec_id)
         stats, diff_rows = _computar_diff(df_agreg, last_records)
+
+        # record_counts para o evento execution.end do run.ps1 (docs/logging-standard.md).
+        _write_result_counts(len(df_agreg), len(diff_rows), int(stats.get("new", 0)))
 
         state_tmp_path = state_path + ".tmp"
         if not diff_rows:

@@ -11,15 +11,26 @@ em si e do run.ps1 via lib/Send-WhatsApp.ps1 — este script nao conhece WhatsAp
 so texto.
 """
 
+# pylint: disable=wrong-import-position
 import json
 import os
 import sys
 from datetime import datetime
 from typing import Any
 
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
+)
+
+from automation_log import ensure_utf8_streams, make_logger
+
+ensure_utf8_streams()
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULT_FILE = os.path.join(SCRIPT_DIR, "orb_result.json")
 MESSAGE_FILE = os.path.join(SCRIPT_DIR, "message.txt")
+
+log = make_logger("ORB-FORMAT")
 
 
 def _fmt_codigo(valor: Any, largura: int) -> str:
@@ -140,25 +151,27 @@ def build_message(payload: dict[str, Any]) -> str:
 
 def main() -> None:
     """Lê o resultado validado e grava o preview textual do aviso."""
+    exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
+
     if not os.path.exists(RESULT_FILE):
-        sys.stderr.write("[ERROR] orb_result.json nao encontrado.\n")
+        log("orb_result.json nao encontrado.", "ERROR", exec_id)
         sys.exit(1)
 
     try:
         with open(RESULT_FILE, encoding="utf-8") as f:
             payload: dict[str, Any] = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        sys.stderr.write(f"[ERROR] Falha ao ler orb_result.json: {e}\n")
+        log(f"Falha ao ler orb_result.json: {e}", "ERROR", exec_id)
         sys.exit(1)
 
     if not payload.get("rows"):
-        sys.stderr.write("[INFO] Nenhuma OB a notificar.\n")
+        log("Nenhuma OB a notificar.", "INFO", exec_id)
         sys.exit(2)
 
     with open(MESSAGE_FILE, "w", encoding="utf-8") as f:
         f.write(build_message(payload))
 
-    sys.stderr.write(f"[INFO] message.txt gerado com {len(payload['rows'])} OB(s).\n")
+    log(f"message.txt gerado com {len(payload['rows'])} OB(s).", "INFO", exec_id)
     sys.exit(0)
 
 

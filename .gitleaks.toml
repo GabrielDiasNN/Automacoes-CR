@@ -11,7 +11,9 @@ paths = [
   '''CHANGELOG\.md''',
   '''Orchestrator/tests/conftest\.py''',
   '''Orchestrator/tests/test_api_contracts\.py''',
-  '''Orchestrator/tests/test_e2e_dashboard\.py'''
+  '''Orchestrator/tests/test_e2e_dashboard\.py''',
+  '''Orchestrator/tests/test_log_masking_unit\.py''',
+  '''lib/tests/WhatsApp-Core\.test\.js'''
 ]
 commits = [
   "1eca075401aaf7187d2bbc989802b40e3db2fc08",

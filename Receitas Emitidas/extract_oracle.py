@@ -67,6 +67,12 @@ def _receitas_sort_key(record: dict[str, Any]) -> Any:
     )
 
 
+def _write_result_counts(read: int) -> None:
+    result_path = os.path.join(os.path.dirname(__file__), "re_result.json")
+    with open(result_path, "w", encoding="utf-8") as f:
+        json.dump({"record_counts": {"read": read}}, f, ensure_ascii=False)
+
+
 def extract() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
 
@@ -87,6 +93,10 @@ def extract() -> None:
     try:
         columns, rows = _fetch(creds, sql, exec_id)
         data = serialize_rows(columns, rows, sort_key=_receitas_sort_key)
+
+        # record_counts para o evento execution.end do run.ps1 (o stdout aqui e
+        # canal de dados; os contadores vao por arquivo). Ver docs/logging-standard.md.
+        _write_result_counts(len(data))
 
         current_hash = compute_hash(data)
         log(

@@ -171,6 +171,14 @@ foreach ($filePath in $files) {
             $line = $lines[$i]
             foreach ($p in $codePatterns) {
                 if ($line -match $p.Pattern) {
+                    # Excecao do padrao de logging estruturado (docs/logging-standard.md):
+                    # o campo `ts` do evento e ISO-8601 UTC 'Z' POR CONTRATO. Um
+                    # formato terminado em 'Z' (ex.: %Y-%m-%dT%H:%M:%SZ ou
+                    # yyyy-MM-ddTHH:mm:ssZ) e timestamp de maquina, nao data BR de
+                    # exibicao.
+                    if ($line -match "(%Y-%m-%dT%H:%M:%SZ|yyyy-MM-ddTHH:mm:ssZ|%Y%m%dT%H%M%SZ)") {
+                        continue
+                    }
                     $violations += [PSCustomObject]@{
                         File    = $relPath
                         Line    = $i + 1

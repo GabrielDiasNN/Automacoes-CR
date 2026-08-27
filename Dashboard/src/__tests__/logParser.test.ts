@@ -46,6 +46,66 @@ describe("parseLine", () => {
   });
 });
 
+describe("parseLine — evento estruturado (JSON Lines)", () => {
+  const base = {
+    ts: "2026-08-27T07:01:51Z",
+    component: "python_domain",
+    automation: "OBs Restricao Branco",
+    exec_id: "CRON_6_x",
+    trace_id: "orb-20260827T070140Z-a4f2",
+  };
+
+  it("mapeia envelope de evento 'log' para a forma LogLine", () => {
+    const linha = parseLine(
+      JSON.stringify({ ...base, level: "WARN", event: "log", step: "dispatch", message: "OB #185260 estoque insuficiente" }),
+    );
+    expect(linha.level).toBe("warn");
+    expect(linha.source).toBe("PY");
+    expect(linha.event).toBe("log");
+    expect(linha.step).toBe("dispatch");
+    expect(linha.traceId).toBe("orb-20260827T070140Z-a4f2");
+    expect(linha.message).toContain("estoque insuficiente");
+  });
+
+  it("resume execution.end com código, motivo e contadores", () => {
+    const linha = parseLine(
+      JSON.stringify({
+        ...base,
+        level: "INFO",
+        event: "execution.end",
+        message: "fim",
+        outcome_code: 2,
+        outcome_reason: "idempotente: nada a notificar",
+        duration_ms: 11120,
+        record_counts: { read: 120, notified: 0 },
+        steps: [],
+      }),
+    );
+    expect(linha.level).toBe("info");
+    expect(linha.message).toContain("code=2");
+    expect(linha.message).toContain("idempotente: nada a notificar");
+    expect(linha.message).toContain("read=120");
+  });
+
+  it("formata step.end com duração e marca de sucesso", () => {
+    const linha = parseLine(
+      JSON.stringify({ ...base, level: "INFO", event: "step.end", step: "extract", ok: true, duration_ms: 8300, message: "120 lidas" }),
+    );
+    expect(linha.message).toContain("✓ extract");
+    expect(linha.message).toContain("8.3s");
+  });
+
+  it("normaliza ERRO -> error e mantém texto legado quando não é JSON", () => {
+    expect(parseLine(JSON.stringify({ ...base, level: "ERRO", event: "log", message: "x" })).level).toBe("error");
+    expect(parseLine("[t] [s] [INFO] linha legada").source).toBe("s");
+  });
+
+  it("JSON malformado ou objeto sem envelope cai para plain/legado", () => {
+    expect(parseLine("{isso não é json}").level).toBe("plain");
+    expect(parseLine(JSON.stringify({ foo: 1 })).level).toBe("plain");
+  });
+});
+
 describe("parseLog", () => {
   it("ignora linhas em branco", () => {
     expect(parseLog("\n\n   \n")).toEqual([]);

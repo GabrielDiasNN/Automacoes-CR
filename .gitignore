@@ -167,8 +167,10 @@ Produção Beneficimento/snapshots/latest/*.json
 Montagem de Terceirizados/delivery_state.json
 Receitas Bloqueadas/email_state.json
 Receitas Bloqueadas/receitas_state.json
+Receitas Bloqueadas/rb_result.json
 Receitas Emitidas/delivery_state.json
 Receitas Emitidas/receitas_state.json
+Receitas Emitidas/re_result.json
 OBs Paradas Fase/obs_result.json
 OBs Paradas Fase/obs_state.json
 OBs Paradas Fase/obs_state.json.tmp

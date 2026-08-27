@@ -47,22 +47,39 @@ function Invoke-OraclePythonScript {
         [Parameter(Mandatory)] [string]$ExecId,
         [Parameter(Mandatory)] [string]$LogPath,
         [string]$OperationName  = "Oracle Python Script",
+        [ValidateSet("preflight", "lock", "extract", "transform", "dispatch", "commit", "cleanup", "custom")]
+        [string]$Step           = "extract",
         [int]$MaxAttempts       = 3,
         [int[]]$BackoffSeconds  = @(30, 60, 120),
-        [string]$InputData      = ""
+        [string]$InputData      = "",
+        # IPC via stdio: o script filho escreve o PAYLOAD DE DADOS em stdout
+        # (capturado em .Output e repassado adiante). Nesse caso as linhas de
+        # stdout (Level=INFO no ProcessRunner) NAO devem virar log — so as de
+        # stderr (Level=WARN). Ex.: Receitas Emitidas (extract -> HTML).
+        [switch]$StdoutIsData
     )
 
     $state = @{ Idempotent = $false; Output = [string]::Empty; ExitCode = -1 }
+    $stdoutIsDataFlag = [bool]$StdoutIsData
+
+    $forwardStructured = ($null -ne (Get-Command Write-HubForwardedLine -ErrorAction SilentlyContinue)) -and `
+        ($null -ne (Get-Command Get-HubLogContext -ErrorAction SilentlyContinue)) -and `
+        ($null -ne (Get-HubLogContext))
 
     $ok = Invoke-WithRetry -MaxAttempts $MaxAttempts -BackoffSeconds $BackoffSeconds `
-        -OperationName $OperationName -ExecId $ExecId -LogPath $LogPath `
+        -OperationName $OperationName -Step $Step -ExecId $ExecId -LogPath $LogPath `
         -Action {
             $invokeParams = @{
                 FilePath  = $PythonExe
                 Arguments = "`"$ScriptPath`" `"$ExecId`""
                 LogAction = {
                     param($msg, $lvl)
-                    if (-not [string]::IsNullOrWhiteSpace($msg)) {
+                    if ([string]::IsNullOrWhiteSpace($msg)) { return }
+                    # stdout do ProcessRunner vem como INFO; se for canal de dados, ignora.
+                    if ($stdoutIsDataFlag -and $lvl -eq "INFO") { return }
+                    if ($forwardStructured) {
+                        Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step $Step
+                    } else {
                         Write-AutomacaoLog -Message $msg -Level $lvl -ExecId $ExecId -LogPath $LogPath
                     }
                 }

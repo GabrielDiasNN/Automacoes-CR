@@ -119,7 +119,7 @@ O marcador registra que o comando **foi disparado**, não que passou. A leitura 
 
 Barra o encerramento da tarefa quando o trabalho pendente não passou pela verificação correspondente:
 
-- arquivos de `git status --porcelain` reprovando em `ValidarAutomacoes.ps1 -OnlyGovernance -Paths` (os 14 checks: zero-trust, SQL, mypy/pylint, PSScriptAnalyzer, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node);
+- arquivos de `git status --porcelain` reprovando em `ValidarAutomacoes.ps1 -OnlyGovernance -Paths` (os 15 checks: zero-trust, SQL, mypy/pylint, PSScriptAnalyzer, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node, schema de evento de log);
 - `.py` sob `Orchestrator/`, `lib/python/` ou `Produção Beneficimento/src/` alterado sem marcador de `pytest` posterior ao mtime da edição;
 - `Dashboard/src/` alterado sem marcador de lint/build posterior.
 
@@ -132,7 +132,7 @@ Os dois últimos existem porque o gate de governança **não** roda pytest nem b
 | `-OnlyGovernance` sem alvos (`full_scan`) | **171 s** |
 | `-OnlyGovernance -Paths <alterados>` | **6–9 s**; 18 s com dois `.py` (mypy) |
 
-Mesmos 14 checks, ~28× de diferença. O timeout no `settings.json` é 240 s por margem. A fonte final de verdade continua sendo o pre-commit hook e o CI.
+Mesmos 15 checks, ~28× de diferença. O timeout no `settings.json` é 240 s por margem. A fonte final de verdade continua sendo o pre-commit hook e o CI.
 
 ### Filtragem da saída
 

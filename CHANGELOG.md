@@ -1,5 +1,117 @@
 # Changelog
 
+## [1.3.55] - 27/08/2026
+
+### Corrigido
+- **Padrão de logging estruturado — mojibake no canal stdout (achados de code review dos PRs #43/#44).** O rollout removeu o B64 Bridge sob a premissa "UTF-8 ponta a ponta"; essa premissa não se sustentava em dois pontos do `stdout` do PowerShell, que usa a code page OEM do console por padrão em vez de UTF-8 — independente de `$OutputEncoding` (que só afeta o STDIN enviado a processos nativos):
+  - **`lib/Lib-LogEvent.psm1` (v1.0.1).** O evento JSON emitido em `stdout` pelo `run.ps1` de topo saía na code page OEM; o worker do Orchestrator lê esse stdout com `encoding="utf-8"` (`Orchestrator/worker.py`), então toda mensagem acentuada chegava corrompida ao dashboard ao vivo e ao `db_exec.logs`. Corrigido com `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` no escopo do módulo.
+  - **`lib/Send-WhatsApp.ps1` (v2.4).** No modo estruturado, `WhatsApp-Core.js` parou de gravar o `.jsonl` diretamente (o `run.ps1` pai é o único writer, via `Write-HubForwardedLine`) e passou a depender só do relay via `stdout`. O `Send-WhatsApp.ps1` é um `powershell.exe` **filho** com sua própria code page de console; sem o mesmo ajuste, o `Write-Host` do relay corrompia o envelope UTF-8 do Node antes de ele chegar ao pai. Reproduzido e corrigido com o mesmo `[Console]::OutputEncoding`.
+
+## [1.3.54] - 27/08/2026
+
+### Corrigido
+- **Padrão de logging estruturado — correções do 1º ciclo real em produção (27/08).** As 6 automações rodaram os crons de hoje já com o código migrado; a análise dos `Logs/*.jsonl` reais apontou 6 arestas, todas resolvidas aqui:
+  - **F1 — retentativa interna do Oracle ilegível.** Quando o `connect` do Oracle re-tentava dentro do Python (stamina), o hook default despejava a chave crua `stamina.retry_scheduled` em `WARNING`. `lib/python/oracle_retry.py` passa a registrar um hook que emite `retry.attempt` no envelope do schema (`attempt`/`max_attempts`/`step`), com fallback `[RETRY]` legível em stderr no modo não-estruturado. Cobre as 6 automações (todas usam `make_oracle_retry()`).
+  - **F2 — `validate_and_generate_html.py` (MT-02) não migrado.** O validador do step `transform` ainda montava `[dd/MM/yyyy] [PY-VALIDATE] [LEVEL] …` à mão em stderr — que chegava embrulhado no `message` do envelope, com timestamp BR duplicado e `ç` corrompido. Agora usa `make_logger` (contrato único), sempre no step `transform`.
+  - **F3 — `record_counts` com semântica ambígua.** `read` passa a contar as **linhas cruas do Oracle** (antes era o total pós-filtro); a chave `failures` (que um agente lê como erro de execução) virou `rejected` — são linhas descartadas por dado inválido, emitidas como `WARN`; novo contador `validated`. `phases_pending`→`phases_attempted` na OBP-04. `docs/logging-standard.md § 2.4` define o núcleo canônico; `docs/log-event.schema.json` referencia.
+  - **F4 — MT-02 sem `record_counts` no caminho "sem mudança".** 63 registros extraídos + 0 divergências saía sem contador nenhum. Agora emite `{read, errors:0, new:0, fixed:0, permanent:0}`.
+  - **F5 — cada evento do `WhatsApp-Core.js` gravado 2× no `.jsonl`.** No modo estruturado o `writeLog` escrevia em `stdout` **e** dava `appendFileSync` no `LOG_FILE` — que é o próprio `.jsonl` da automação, também alimentado pelo `Write-HubForwardedLine` do `run.ps1` pai. Passa a escrever só em `stdout` quando `HUB_LOG_STRUCTURED=1`.
+  - **F6 — log depois do `execution.end` (MT-02).** A linha `FIM - Processo finalizado.` do `finally` saía após o evento terminal. Agora é `DEBUG`/`cleanup`.
+
+### Notas
+- Verificação: 985 pytest (+7), 152 Node, 191 Pester; golden `docs/log-event.samples.jsonl` revalidado; os 8 `Logs/*.jsonl` de produção seguem conformes (a chave `failures` antiga continua aceita pelo `additionalProperties` do schema — só os logs novos usam `rejected`).
+- **RE-03** só roda sexta 07:05 (`5 7 * * 4` em fuso `America/Sao_Paulo`, convenção APScheduler 0=segunda) — é a única automação ainda sem ciclo real pós-migração; observar o run.
+- Envelope interno do Orchestrator segue como follow-up documentado (inalterado).
+
+## [1.3.53] - 27/08/2026
+
+### Alterado
+- **Padrão de logging estruturado — PR final: gate `blocking` + âncora de conformidade.** Encerra o rollout de código-fonte (docs/logging-standard.md): as 6 automações `run.ps1`, os scripts Python de domínio e o motor Node emitem o envelope do schema; falta apenas a validação em produção ciclo a ciclo.
+  - `docs/log-event.samples.jsonl` — arquivo golden versionado com um exemplo válido de **cada** `event` do schema (`execution.start/end`, `step.start/end`, `retry.attempt`, `log`), cobrindo `ps_script`/`python_domain`/`node_whatsapp`/`orchestrator_scheduler`, `step=custom`+`step_name`, `env`, `record_counts` e `steps[]`. É a âncora do CI: `Logs/*.jsonl` é gitignored e não existe em checkout limpo.
+  - `Tools/Test-LogEventSchema.ps1` v2.0.0: valida `docs/log-event.samples.jsonl` em **modo estrito** (sempre, bloqueante) e `Logs/*.jsonl` local em modo `--rollout`. Default `-Mode` passou de `warn` para **`blocking`**.
+  - `Orchestrator/tests/test_log_event_validator_unit.py`: novo teste trava a conformidade do golden e exige que todo `event` do enum tenha exemplo.
+
+### Notas
+- **Orchestrator (`app/`, `worker.py`, scheduler)** já emite JSON estruturado próprio (`OrchestratorJsonFormatter`: `timestamp`/`automation_name`/`request_id`) — um envelope *irmão*, não idêntico. Alinhá-lo ao schema das automações toca ~977 testes e o parser de telemetria ao vivo do Dashboard; fica como trabalho subsequente. O gate segue verde porque `--rollout` só valida linhas que carregam `trace_id` (as do envelope novo).
+- `Get-ForwardedLogLevel` **não** foi removida — é usada por `Write-HubForwardedLine` para derivar o nível de linha de texto de processo filho.
+
+## [1.3.52] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR5: motor Node (`lib/WhatsApp-Core.js` v2.11.0).**
+  - `lib/log-masking.js` — `maskSensitive()` em paridade com `Protect-SensitiveData` / `lib/python/log_masking.py`.
+  - `writeLog` reescrito: com `HUB_LOG_STRUCTURED=1` emite o envelope JSON do schema (`component:"node_whatsapp"`, `step` de `HUB_STEP`, `trace_id` de `HUB_TRACE_ID`), tanto em `stdout` quanto no `LOG_FILE`; sem a env mantém o formato legado `[NODE-WA]`. Nível `ERROR`→`ERRO` no schema.
+  - `run.ps1` das automações WhatsApp (ORB-07/OFST-06/OBP-04/RB-01) já exportam `HUB_*` para o `Send-WhatsApp.ps1` → `WhatsApp-Core.js`, que agora emite envelopes encaminhados verbatim pelo `Write-HubForwardedLine`.
+
+### Notas
+- Verificação: 152 testes Node (`node:test`, +2 casos estruturados), cobertura `WhatsApp-Core.js` 97,86% linhas / 92,18% branches / 95% funcs (gate 90%); contrato offline verde.
+
+## [1.3.51] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR4: RE-03, RB-01 e MT-02 migradas** (as 3 automações `run.ps1` restantes). Rollout de código-fonte completo — falta só o gate virar `blocking`.
+  - **RE-03** (`Receitas Emitidas/` run.ps1 v2.8.0): `extract_oracle.py` e `generate_html_report.py` usam stdout como canal de dados (IPC stdio), então os filhos **não** recebem `HUB_LOG_STRUCTURED` e ambos os `Invoke-OraclePythonScript` usam `-StdoutIsData`. `extract_oracle.py` grava `re_result.json` com `record_counts`.
+  - **RB-01** (`Receitas Bloqueadas/` run.ps1 v2.4.0): steps preflight→lock→extract→dispatch (E-mail + WhatsApp num único step)→commit; `processar_receitas.py` grava `rb_result.json` (`read`/`changed`/`new`).
+  - **MT-02** (`Montagem de Terceirizados/` run.ps1 v2.3.0): sem `Exit-WithCode` — helper `Write-Fim` idempotente (`$script:fimEmitted`) emite o `execution.end` uma única vez nos 3 pontos de saída (preflight/catch/pós-`finally`); contadores capturados do payload antes de o `.payload_*.json` ser apagado.
+- Menções a "base64-bridge-logs" removidas dos cabeçalhos `.NOTES` de RE-03, RB-01 e MT-02.
+
+### Notas
+- Verificação: 15 pytest (RE/RB/MT), ruff/black/isort verde, parse + approved-verbs PowerShell OK.
+- **Nenhuma das 3 validada em produção.** RE-03 e MT-02 disparam e-mail real; RB-01 dispara e-mail + WhatsApp.
+
+## [1.3.50] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR3: OBP-04 migrada.**
+  - `OBs Paradas Fase/` (OBP-04) ponta a ponta: `run.ps1` v3.1.0 (eventos `execution.*`/`step.*`/`retry.attempt`, steps preflight→lock→extract→transform→dispatch→commit), `extract_obs.py` grava `record_counts` no `obs_result.json` inclusive no desfecho idempotente. `execution.end` carrega contadores de **fase** (`phases_total`/`phases_pending`/`phases_sent`/`phases_failed`) via `-Counts` explícito no `Exit-WithCode`.
+  - `lib/Lib-Oracle.psm1`: `Invoke-OraclePythonScript -StdoutIsData` — quando o script filho usa stdout como canal de dados (IPC stdio), as linhas de stdout não viram log (só as de stderr). Preparação para RE-03.
+
+### Notas
+- Verificação: 12 pytest OBP-04, ruff/black verde, parse PowerShell OK.
+- OBP-04 **não validada em produção** (envia cards WhatsApp reais ao grupo se houver fase parada).
+
+## [1.3.49] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR2: helpers reutilizáveis + OFST-06.**
+  - `lib/Lib-LogEvent.psm1`: `Start-HubStep`/`Complete-HubStep` (par com cronômetro interno — cada `run.ps1` reimplementava esse padrão) e `Get-HubRecordCounts -Path` (lê o bloco `record_counts` de um `*_result.json`).
+  - `lib/Lib-Logging.psm1`: `Exit-AutomationWithCode` ganhou `-RecordCountsPath` — lê os contadores do arquivo de resultado direto, tirando o boilerplate de cada `Exit-WithCode`.
+  - `OBs Fluxo Sem Tingimento/` (OFST-06) migrada ponta a ponta (`run.ps1` v1.1.0 + `extract_ofst.py` + `format_message.py`), espelhando a ORB-07: eventos `execution.*`/`step.*`/`retry.attempt`, `record_counts` no `ofst_result.json` em todos os desfechos, `trace_id` propagado aos filhos.
+
+### Alterado
+- **`OBs Restricao Branco/run.ps1`** refatorada para consumir `Start-HubStep`/`Complete-HubStep` do módulo em vez das cópias locais; `Exit-WithCode` usa `-RecordCountsPath`.
+
+### Corrigido
+- **`.gitleaks.toml`:** `Orchestrator/tests/test_log_masking_unit.py` adicionado à allowlist — o teste verifica o mascaramento de segredos e por isso contém strings com forma de token (`apikey ...`), falso-positivo do rule `generic-api-key` (mesmo motivo de `conftest.py` já estar na lista).
+
+### Notas
+- Verificação: 191 Pester (`Lib-LogEvent.Tests.ps1` +4 casos), 57 pytest OFST, governança Python/PowerShell verde nos arquivos tocados.
+- OFST-06 e ORB-07 **não validadas em produção** — ambas enviam WhatsApp real a grupo se acharem OB nova.
+
+## [1.3.48] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado do Hub — PR1 (fundação + piloto ORB-07).** Entrevista de requisitos em 27/08/2026 (`docs/logging-standard.md`) definiu um contrato único de evento de log em JSON Lines para as quatro camadas (`run.ps1`, Python de domínio, Node, Orchestrator), com o objetivo de o agente diagnosticar qualquer execução sem heurística de texto livre. Este PR entrega a fundação e migra **apenas** a ORB-07:
+  - `docs/log-event.schema.json` — contrato do evento (envelope obrigatório `ts`/`level`/`component`/`event`/`automation`/`exec_id`/`trace_id`/`message` + campos condicionais por `event`/`step`). `ts` é ISO-8601 **UTC com sufixo `Z`**.
+  - `lib/Lib-LogEvent.psm1` — `Initialize-HubLogContext`, `Resolve-HubTraceId` (herda `HUB_TRACE_ID` do processo pai), e os emissores de ciclo de vida `Write-HubExecutionStart`/`StepStart`/`StepEnd`/`RetryAttempt`/`ExecutionEnd`. `Write-HubForwardedLine` encaminha verbatim um envelope vindo de processo filho já migrado e embrulha texto avulso como `event:"log"`.
+  - `lib/python/automation_log.py` — `make_logger` reescrito: com `HUB_LOG_STRUCTURED=1` emite o envelope JSON em **stdout**; **sem** a env mantém o comportamento legado (linha humana em stderr) intacto, então as 5 automações ainda não migradas não têm nenhuma mudança de saída.
+  - `lib/python/log_masking.py` — `mask_sensitive()` em paridade textual com `Protect-SensitiveData` (agora exportada por `Lib-Logging.psm1`); defesa em profundidade com o `sanitize_log_payload` do Orchestrator.
+  - `Tools/log_event_validator.py` + `Tools/Test-LogEventSchema.ps1` — validação de `Logs/*.jsonl` contra o schema, sem dependência de `jsonschema` (evita mexer no lock pip-compile). Entra como **check nº 15** de `ValidarAutomacoes.ps1 -OnlyGovernance` e no CI, em **modo `warn`** (reporta, não bloqueia) enquanto o rollout não termina; `--rollout` ignora linhas legadas (sem `trace_id`).
+  - Correlação: `trace_id` global (`<slug>-<ISO8601Z>-<hex4>`) propagado a Python/Node por `--trace-id`/`HUB_TRACE_ID` e ao Orchestrator por `X-Trace-Id`. `exec_id` mantém o significado de id da camada local.
+
+### Corrigido
+- **"Base64 Bridge" era letra morta — o encoder existia, o decoder nunca foi implementado.** `lib/Lib-Retry.psm1` codificava em base64 (`B64:<...>`) toda mensagem de retry que contivesse qualquer caractere não-ASCII, mas nenhuma camada (`Write-AutomacaoLog`, ingestão do Orchestrator, `Dashboard/src/lib/logParser.ts`) decodificava — a linha chegava crua ao dashboard. Como o `OperationName` das 6 automações contém acento (`Extração ... Restrição Branco`), **toda** execução com retry na etapa Oracle exibia uma linha `B64:...` ilegível. O encoder foi removido (UTF-8 ponta a ponta); no lugar, `Invoke-WithRetry` emite o evento estruturado `retry.attempt` quando há contexto de `Lib-LogEvent` ativo. `lib/README.md` deixou de anunciar o "Base64 Bridge".
+
+### Alterado
+- **`OBs Restricao Branco/` (ORB-07) migrada ponta a ponta** (`run.ps1` v1.1.0, `extract_orb.py`, `format_message.py`): `run.ps1` resolve o `trace_id`, exporta `HUB_*` para os filhos, envolve cada etapa em `step.start`/`step.end` com duração medida e emite o `execution.end` único (substitui as linhas `FIM - ExitCode=` + separador `====`). `extract_orb.py` grava `record_counts` (`read`/`qualified`/`notified`/`skipped`/`suppressed`) em `orb_result.json` em **todos** os desfechos não-erro — inclusive o exit 2 ("nada a notificar"), o mais comum — e o `run.ps1` embute esse bloco no `execution.end`.
+- **`Dashboard/src/lib/logParser.ts`** passa a reconhecer os dois formatos: uma linha JSON no envelope do schema é mapeada para a forma `LogLine` (com resumo legível por tipo de evento — `▶`/`▸`/`✓`/`⇄`/`■`), e o formato legado `[ts] [PS] [LEVEL]` segue funcionando. Sem período de emissão dupla no stdout.
+- **Níveis (semântica canônica, `docs/logging-standard.md`):** `INFO` = curso normal (inclui "nada a notificar" e "estoque insuficiente para a OB", que **deixa de ser `WARN`**); `WARN` = desvio a revisar; `ERRO` = a automação falhou. Um run de sucesso não emite `WARN`.
+- **`Tools/Test-LogConformidade.ps1` e `Tools/Test-DateConformidade.ps1`** ganharam a mesma exceção: um timestamp terminado em `Z` (`"ts":"...Z"`, `yyyy-MM-ddTHH:mm:ssZ`, `%Y-%m-%dT%H:%M:%SZ`) é o campo `ts` do evento — ISO-8601 UTC **por contrato do schema** — e não conta como regressão da data BR `dd/MM/yyyy` que os guardrails vigiam para logs/exibição.
+
+### Notas
+- Rollout multi-PR: PR2..N migram as outras 5 automações `run.ps1`; um PR próprio faz o Node emitir o envelope nativo; o PR do Orchestrator cobre `app/`, `worker.py`, scheduler e `runner.py` do Beneficiamento; o **PR final** vira o gate `blocking` e remove o caminho de texto legado.
+- Verificação: 186 testes Pester (`lib/tests`, inclui `Lib-LogEvent.Tests.ps1` novo), 977 do Orchestrator (`test_automation_log_unit.py` ampliado + `test_log_masking_unit.py` e `test_log_event_validator_unit.py` novos), 19 do `logParser` (vitest), `npm run build` do Dashboard, ruff/black/isort/mypy/pylint limpos nos arquivos tocados, e um teste de integração do fluxo estruturado da ORB-07 validado contra o schema.
+
 ## [1.3.47] - 27/08/2026
 
 ### Corrigido

@@ -778,3 +778,29 @@ def test_build_message_agrega_multiplas_obs_na_ordem_recebida() -> None:
     )
     assert "2 OBs prontas" in msg
     assert msg.index("*OB: 2*") < msg.index("*OB: 1*")
+
+
+def test_record_counts_usa_chaves_canonicas_sem_failures() -> None:
+    # pylint: disable=protected-access
+    """F3: espelho da ORB-07 — `read` conta as linhas cruas do Oracle e as linhas
+    descartadas na validação de schema entram como `rejected` (não `failures`,
+    que um agente de monitoramento lê como erro de execução)."""
+    extract = _load_module("extract_ofst", AUTOMATION_DIR / "extract_ofst.py")
+    resumo = extract.ResumoExecucao()
+    resumo.total_lidas = 8
+    resumo.total_obs = 6
+    resumo.total_notificaveis = 3
+    resumo.total_sem_estoque = 3
+    resumo.falhas = ["OB #1: campo nulo", "OB #2: campo nulo"]
+
+    rc = extract._record_counts(resumo, novas_count=3)
+
+    assert "failures" not in rc
+    assert rc["read"] == 8
+    assert rc["validated"] == 6
+    assert rc["rejected"] == 2
+    assert rc["qualified"] == 3
+    assert rc["notified"] == 3
+    assert rc["skipped"] == 3
+    assert rc["suppressed"] == 0
+    assert all(isinstance(v, int) and v >= 0 for v in rc.values())

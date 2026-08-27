@@ -48,6 +48,11 @@ function Invoke-WithRetry {
 
         [string]$OperationName = "Operacao",
 
+        # Etapa do schema de log (docs/log-event.schema.json) para o evento
+        # retry.attempt quando a automacao ja opera no padrao estruturado.
+        [ValidateSet("preflight", "lock", "extract", "transform", "dispatch", "commit", "cleanup", "custom")]
+        [string]$Step = "extract",
+
         [Parameter(Mandatory = $true)]
         [string]$ExecId,
 
@@ -55,14 +60,22 @@ function Invoke-WithRetry {
         [string]$LogPath
     )
 
+    $hubRetry = Get-Command Write-HubRetryAttempt -ErrorAction SilentlyContinue
+    $hubCtx = if (Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) { Get-HubLogContext } else { $null }
+    $useHubRetry = ($null -ne $hubRetry) -and ($null -ne $hubCtx)
+
     function Write-RetryLog {
+        # UTF-8 ponta a ponta: sem encoder Base64 (removido no padrao de logging,
+        # ver docs/logging-standard.md). Write-AutomacaoLog ja roteia para o
+        # evento estruturado quando ha contexto de LogEvent ativo.
         param([string]$Msg, [string]$Lvl = "INFO")
-        if ($Msg -match '[^\x00-\x7F]') {
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($Msg)
-            $b64 = [System.Convert]::ToBase64String($bytes)
-            Write-AutomacaoLog -Message "B64:$b64" -Level $Lvl -ExecId $ExecId -LogPath $LogPath
-        } else {
-            Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogPath
+        Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogPath
+    }
+
+    function Write-RetryAttemptEvent {
+        param([int]$AttemptNum, [string]$Lvl, [string]$Msg)
+        if ($useHubRetry) {
+            Write-HubRetryAttempt -Step $Step -Attempt $AttemptNum -MaxAttempts $MaxAttempts -Level $Lvl -Message $Msg
         }
     }
 
@@ -70,26 +83,49 @@ function Invoke-WithRetry {
     while ($attempt -lt $MaxAttempts) {
         $attempt++
         try {
+            # A primeira tentativa nao gera evento proprio (o step.start/end do
+            # run.ps1 ja a delimita); so retentativas e falhas viram retry.attempt.
             if ($attempt -gt 1) {
-                Write-RetryLog "[RETRY] $OperationName - Tentativa $attempt/$($MaxAttempts)" -Lvl "WARN"
+                if ($useHubRetry) {
+                    Write-RetryAttemptEvent $attempt "WARN" "$OperationName - tentativa $attempt/$MaxAttempts"
+                } else {
+                    Write-RetryLog "[RETRY] $OperationName - Tentativa $attempt/$($MaxAttempts)" -Lvl "WARN"
+                }
             }
             $result = & $Action
             if ($result -eq $false) { throw "Acao retornou false na tentativa $attempt." }
-            Write-RetryLog "[RETRY] $OperationName - Sucesso na tentativa $attempt/$($MaxAttempts)"
+            if ($attempt -gt 1) {
+                if ($useHubRetry) {
+                    Write-RetryAttemptEvent $attempt "INFO" "$OperationName - sucesso apos $attempt tentativa(s)"
+                } else {
+                    Write-RetryLog "[RETRY] $OperationName - Sucesso na tentativa $attempt/$($MaxAttempts)"
+                }
+            } elseif (-not $useHubRetry) {
+                Write-RetryLog "[RETRY] $OperationName - Sucesso na tentativa $attempt/$($MaxAttempts)"
+            }
             return $true
         }
         catch [System.Exception] {
             $errMsg = $_.Exception.Message
-            Write-RetryLog "[RETRY] $OperationName - Falha na tentativa $attempt/$($MaxAttempts): $errMsg" -Lvl "WARN"
 
             if ($attempt -ge $MaxAttempts) {
-                Write-RetryLog "[RETRY_ESGOTADO] $OperationName - Todas as $MaxAttempts tentativas falharam. Ultimo erro: $errMsg" -Lvl "ERRO"
+                if ($useHubRetry) {
+                    Write-RetryAttemptEvent $attempt "ERRO" "$OperationName - todas as $MaxAttempts tentativas falharam. Ultimo erro: $errMsg"
+                } else {
+                    Write-RetryLog "[RETRY] $OperationName - Falha na tentativa $attempt/$($MaxAttempts): $errMsg" -Lvl "WARN"
+                    Write-RetryLog "[RETRY_ESGOTADO] $OperationName - Todas as $MaxAttempts tentativas falharam. Ultimo erro: $errMsg" -Lvl "ERRO"
+                }
                 return $false
             }
 
             $waitIdx = [Math]::Min($attempt - 1, $BackoffSeconds.Count - 1)
             $waitSec = $BackoffSeconds[$waitIdx]
-            Write-RetryLog "[RETRY] Aguardando ${waitSec}s antes da proxima tentativa..." -Lvl "WARN"
+            if ($useHubRetry) {
+                Write-RetryAttemptEvent $attempt "WARN" "$OperationName - falha na tentativa $attempt/$($MaxAttempts): $errMsg. Aguardando ${waitSec}s."
+            } else {
+                Write-RetryLog "[RETRY] $OperationName - Falha na tentativa $attempt/$($MaxAttempts): $errMsg" -Lvl "WARN"
+                Write-RetryLog "[RETRY] Aguardando ${waitSec}s antes da proxima tentativa..." -Lvl "WARN"
+            }
             Start-Sleep -Seconds $waitSec
         }
     }

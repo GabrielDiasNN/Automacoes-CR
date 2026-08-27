@@ -260,6 +260,15 @@ foreach ($filePath in $files) {
 
             if ($line -match $p.Pattern) {
 
+                # Padrao de logging estruturado (docs/logging-standard.md): o
+                # campo `ts` do evento e ISO-8601 UTC 'Z' POR CONTRATO. Uma linha
+                # que contenha `"ts":"...Z"` (envelope JSON) ou a string de
+                # formato `yyyy-MM-ddTHH:mm:ssZ` nao e regressao da data BR.
+                if ($p.Desc -like '*T separador*' -and
+                    $line -match '("ts"\s*:\s*"[0-9]|yyyy-MM-ddTHH:mm:ssZ)') {
+                    continue
+                }
+
                 $relPath = $filePath
 
                 if ($filePath.StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {

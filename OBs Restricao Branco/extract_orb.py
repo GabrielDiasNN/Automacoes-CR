@@ -2,7 +2,7 @@
 # dinamico (linhas 28-31), que o pylint nao resolve em tempo de analise estatica.
 # pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
-#   "version": "1.0.0",
+#   "version": "1.1.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
 #   "contract": "exit-0=ha-obs-novas, exit-2=nada-a-notificar, exit-1=erro",
 #   "description": "Extrai OBs brancas, confronta com peças de restrições 3/4 e grava orb_result.json"
@@ -129,6 +129,7 @@ def _fetch_obs(
     """
     columns, rows = _fetch(creds, load_sql(SQL_OBS_PATH), exec_id)
     data = serialize_rows(columns, rows, sort_key=lambda r: r.get("NUMERO_OB") or 0)
+    resumo.total_lidas = len(data)
     relatorio = validate_ob_query(columns, data)
     if not relatorio.ok and relatorio.problemas:
         # Schema quebrado aborta; linha ruim isolada e apenas logada e pulada adiante.
@@ -263,6 +264,24 @@ def _avaliar_todas(
     return avaliacoes
 
 
+def _record_counts(resumo: ResumoExecucao, novas_count: int) -> dict[str, int]:
+    """Contadores canonicos do padrao de logging (docs/logging-standard.md).
+
+    O run.ps1 le este bloco de orb_result.json e o embute no evento
+    execution.end -- a fonte da verdade do resultado da execucao.
+    """
+    qualified = resumo.total_notificaveis
+    return {
+        "read": resumo.total_lidas or resumo.total_obs,
+        "validated": resumo.total_obs,
+        "rejected": len(resumo.falhas),
+        "qualified": qualified,
+        "notified": novas_count,
+        "skipped": resumo.total_sem_estoque,
+        "suppressed": max(qualified - novas_count, 0),
+    }
+
+
 def _write_result(novas: list[AvaliacaoOb], resumo: ResumoExecucao) -> None:
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         json.dump(
@@ -297,6 +316,28 @@ def _write_result(novas: list[AvaliacaoOb], resumo: ResumoExecucao) -> None:
                     "falhas": resumo.falhas,
                     "tempo_consulta_ms": resumo.tempo_consulta_ms,
                 },
+                "record_counts": _record_counts(resumo, len(novas)),
+                "extracted_at": datetime.now().isoformat(),
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+def _write_counts(resumo: ResumoExecucao, novas_count: int) -> None:
+    """Escreve orb_result.json minimo nas saidas sem OB nova (exit 2).
+
+    O run.ps1 le `record_counts` daqui para o evento execution.end mesmo quando
+    nao ha linhas a notificar -- caso contrario o desfecho mais comum ("nada a
+    notificar") ficaria sem contadores.
+    """
+    with open(RESULT_FILE, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "rows": [],
+                "total": 0,
+                "record_counts": _record_counts(resumo, novas_count),
                 "extracted_at": datetime.now().isoformat(),
             },
             f,
@@ -354,6 +395,7 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 )
                 sys.exit(1)
             _write_state_tmp({})
+            _write_counts(resumo, 0)
             log("Nenhuma OB branca emitida e não montada.", "INFO", exec_id)
             sys.exit(2)
 
@@ -404,6 +446,7 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
         _write_state_tmp(notified)
 
         if not novas:
+            _write_counts(resumo, 0)
             detalhe = (
                 f"{len(notificaveis)} OB(s) prontas, todas ja notificadas. "
                 "Idempotencia confirmada."
