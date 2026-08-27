@@ -163,6 +163,40 @@ def _avaliar_todas(
     return avaliacoes
 
 
+def _record_counts(resumo: ResumoExecucao, novas_count: int) -> dict[str, int]:
+    """Contadores canonicos do padrao de logging (docs/logging-standard.md).
+
+    O run.ps1 le este bloco de ofst_result.json e o embute no evento
+    execution.end.
+    """
+    qualified = resumo.total_notificaveis
+    return {
+        "read": resumo.total_obs,
+        "qualified": qualified,
+        "notified": novas_count,
+        "skipped": resumo.total_sem_estoque,
+        "suppressed": max(qualified - novas_count, 0),
+        "failures": len(resumo.falhas),
+    }
+
+
+def _write_counts(resumo: ResumoExecucao, novas_count: int) -> None:
+    """ofst_result.json minimo nas saidas sem OB nova (exit 2), so para o
+    run.ps1 obter record_counts no execution.end. Nao toca no state."""
+    with open(RESULT_FILE, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "rows": [],
+                "total": 0,
+                "record_counts": _record_counts(resumo, novas_count),
+                "extracted_at": datetime.now().isoformat(),
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
 def _write_result(
     novas: list[AvaliacaoOb], resumo: ResumoExecucao, notified: dict[str, str]
 ) -> None:
@@ -191,6 +225,7 @@ def _write_result(
                     "falhas": resumo.falhas,
                     "tempo_consulta_ms": resumo.tempo_consulta_ms,
                 },
+                "record_counts": _record_counts(resumo, len(novas)),
                 "extracted_at": datetime.now().isoformat(),
             },
             f,
@@ -221,6 +256,7 @@ def extract() -> None:
         obs = _fetch_obs(creds, exec_id, resumo)
         resumo.total_obs = len(obs)
         if not obs:
+            _write_counts(resumo, 0)
             log("Nenhuma OB de fluxo 204 emitida e nao montada.", "INFO", exec_id)
             sys.exit(2)
 
@@ -243,6 +279,7 @@ def extract() -> None:
         )
 
         if not novas:
+            _write_counts(resumo, 0)
             log(
                 f"{len(notificaveis)} OB(s) prontas, todas ja notificadas. Idempotencia confirmada.",
                 "INFO",

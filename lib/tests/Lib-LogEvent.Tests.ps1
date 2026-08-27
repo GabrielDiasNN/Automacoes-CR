@@ -136,6 +136,52 @@ Describe "Lib-LogEvent" {
         }
     }
 
+    Context "Start-HubStep / Complete-HubStep" {
+        It "mede a duracao e acumula o passo no execution.end" {
+            $log = Join-Path $TestDrive "hubstep.jsonl"
+            Initialize-HubLogContext -Automation "A" -ExecId "T" -TraceId "t" -LogPath $log
+            Write-HubExecutionStart
+
+            Start-HubStep -Step "extract" -Message "extraindo"
+            $env:HUB_STEP | Should -Be "extract"
+            Start-Sleep -Milliseconds 20
+            Complete-HubStep -Ok $true -Message "ok"
+            $env:HUB_STEP | Should -BeNullOrEmpty
+
+            Write-HubExecutionEnd -OutcomeCode 0 -OutcomeReason "ok"
+
+            $events = Get-JsonlEvents $log
+            $end = $events | Where-Object { $_.event -eq "execution.end" }
+            $end.steps.Count | Should -Be 1
+            $end.steps[0].step | Should -Be "extract"
+            $end.steps[0].duration_ms | Should -BeGreaterThan 0
+        }
+
+        It "Complete-HubStep sem passo ativo e no-op" {
+            $log = Join-Path $TestDrive "hubstep-noop.jsonl"
+            Initialize-HubLogContext -Automation "A" -ExecId "T" -TraceId "t" -LogPath $log
+            { Complete-HubStep } | Should -Not -Throw
+        }
+    }
+
+    Context "Get-HubRecordCounts" {
+        It "le e coage record_counts de um result.json" {
+            $rj = Join-Path $TestDrive "r.json"
+            '{"rows":[],"record_counts":{"read":"120","notified":0,"skipped":118}}' | Set-Content -LiteralPath $rj -Encoding UTF8
+            $c = Get-HubRecordCounts -Path $rj
+            $c["read"] | Should -Be 120
+            $c["notified"] | Should -Be 0
+            $c["skipped"] | Should -Be 118
+        }
+
+        It "devolve null quando o arquivo nao existe ou nao tem o bloco" {
+            Get-HubRecordCounts -Path (Join-Path $TestDrive "inexistente.json") | Should -BeNullOrEmpty
+            $rj2 = Join-Path $TestDrive "r2.json"
+            '{"rows":[]}' | Set-Content -LiteralPath $rj2 -Encoding UTF8
+            Get-HubRecordCounts -Path $rj2 | Should -BeNullOrEmpty
+        }
+    }
+
     Context "Roteamento de Write-AutomacaoLog" {
         It "roteia para evento estruturado quando ha contexto ativo" {
             $log = Join-Path $TestDrive "route.jsonl"

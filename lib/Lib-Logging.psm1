@@ -679,6 +679,7 @@ function Exit-AutomationWithCode {
         # Padrao de logging estruturado: contadores de dominio e duracao total
         # para o evento execution.end. Ignorados no formato legado.
         [hashtable]$RecordCounts,
+        [string]$RecordCountsPath = "",
         [int]$DurationMs = -1
     )
 
@@ -687,6 +688,9 @@ function Exit-AutomationWithCode {
     $hubCtx = if (Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) { Get-HubLogContext } else { $null }
     if ($hubCtx -and (Get-Command Write-HubExecutionEnd -ErrorAction SilentlyContinue)) {
         $reason = if ($Msg) { $Msg } else { $EndMessage }
+        if ((-not $RecordCounts) -and $RecordCountsPath -and (Get-Command Get-HubRecordCounts -ErrorAction SilentlyContinue)) {
+            $RecordCounts = Get-HubRecordCounts -Path $RecordCountsPath
+        }
         $endArgs = @{
             OutcomeCode   = $Code
             OutcomeReason = $reason

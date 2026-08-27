@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.49] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR2: helpers reutilizáveis + OFST-06.**
+  - `lib/Lib-LogEvent.psm1`: `Start-HubStep`/`Complete-HubStep` (par com cronômetro interno — cada `run.ps1` reimplementava esse padrão) e `Get-HubRecordCounts -Path` (lê o bloco `record_counts` de um `*_result.json`).
+  - `lib/Lib-Logging.psm1`: `Exit-AutomationWithCode` ganhou `-RecordCountsPath` — lê os contadores do arquivo de resultado direto, tirando o boilerplate de cada `Exit-WithCode`.
+  - `OBs Fluxo Sem Tingimento/` (OFST-06) migrada ponta a ponta (`run.ps1` v1.1.0 + `extract_ofst.py` + `format_message.py`), espelhando a ORB-07: eventos `execution.*`/`step.*`/`retry.attempt`, `record_counts` no `ofst_result.json` em todos os desfechos, `trace_id` propagado aos filhos.
+
+### Alterado
+- **`OBs Restricao Branco/run.ps1`** refatorada para consumir `Start-HubStep`/`Complete-HubStep` do módulo em vez das cópias locais; `Exit-WithCode` usa `-RecordCountsPath`.
+
+### Corrigido
+- **`.gitleaks.toml`:** `Orchestrator/tests/test_log_masking_unit.py` adicionado à allowlist — o teste verifica o mascaramento de segredos e por isso contém strings com forma de token (`apikey ...`), falso-positivo do rule `generic-api-key` (mesmo motivo de `conftest.py` já estar na lista).
+
+### Notas
+- Verificação: 191 Pester (`Lib-LogEvent.Tests.ps1` +4 casos), 57 pytest OFST, governança Python/PowerShell verde nos arquivos tocados.
+- OFST-06 e ORB-07 **não validadas em produção** — ambas enviam WhatsApp real a grupo se acharem OB nova.
+
 ## [1.3.48] - 27/08/2026
 
 ### Adicionado

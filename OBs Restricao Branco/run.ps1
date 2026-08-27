@@ -75,7 +75,6 @@ $env:HUB_EXEC_ID        = $ExecId
 $env:HUB_TRACE_ID       = $TraceId
 
 $script:RunSw = [System.Diagnostics.Stopwatch]::StartNew()
-$script:StepSw = $null
 
 # orb_result.json so deve existir se ESTA execucao o escreveu (contadores frescos
 # no execution.end). Remove qualquer residuo do ciclo anterior.
@@ -86,28 +85,7 @@ function Write-Log {
     Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile -Step $Step
 }
 
-function Start-Step {
-    param(
-        [ValidateSet("preflight", "lock", "extract", "transform", "dispatch", "commit", "cleanup")]
-        [string]$Step,
-        [string]$Msg = ""
-    )
-    $script:StepSw = [System.Diagnostics.Stopwatch]::StartNew()
-    $env:HUB_STEP = $Step
-    Write-HubStepStart -Step $Step -Message $Msg
-}
-
-function Complete-Step {
-    param(
-        [ValidateSet("preflight", "lock", "extract", "transform", "dispatch", "commit", "cleanup")]
-        [string]$Step,
-        [bool]$Ok = $true,
-        [string]$Msg = ""
-    )
-    $ms = if ($script:StepSw) { [int]$script:StepSw.Elapsed.TotalMilliseconds } else { 0 }
-    Write-HubStepEnd -Step $Step -Ok $Ok -DurationMs $ms -Message $Msg
-    $env:HUB_STEP = ""
-}
+# Start-HubStep / Complete-HubStep vem de lib/Lib-LogEvent.psm1.
 
 # Codes que NAO representam falha operacional (mesmo padrao de Receitas
 # Bloqueadas/run.ps1 para lock=40/cooldown=23 do motor WhatsApp): canal
@@ -117,42 +95,27 @@ $NonFailureCodes = @(0, 2, 22)
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
-
-    $counts = $null
-    if (Test-Path $ResultFile) {
-        try {
-            $rc = (Get-Content $ResultFile -Raw -Encoding UTF8 | ConvertFrom-Json).record_counts
-            if ($rc) {
-                $counts = @{}
-                foreach ($p in $rc.PSObject.Properties) { $counts[$p.Name] = [int]$p.Value }
-            }
-        } catch [System.Exception] {
-            Write-Log "Aviso: falha ao ler record_counts de orb_result.json: $_" -Lvl "WARN"
-        }
-    }
-    $dur = [int]$script:RunSw.Elapsed.TotalMilliseconds
-
     Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile `
         -NonFailureCodes $NonFailureCodes -EndMessage "FIM - ExitCode=$Code" `
-        -RecordCounts $counts -DurationMs $dur
+        -RecordCountsPath $ResultFile -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
 }
 
 Write-HubExecutionStart -Message "INICIO — $AutomationName (ORB-07). ExecId=$ExecId"
 
 # --- PRE-FLIGHT ---
-Start-Step -Step "preflight" -Msg "Oracle, Python e WhatsApp configurados"
+Start-HubStep -Step "preflight" -Message "Oracle, Python e WhatsApp configurados"
 $preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile `
     -CheckOracle -CheckPaths @($pythonExe, $ExtractScript, $FormatScript, $WaConfigPath)
-Complete-Step -Step "preflight" -Ok $preFlight
+Complete-HubStep -Ok $preFlight
 if (-not $preFlight) {
     Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando."
 }
 
 try {
     # --- LOCK ---
-    Start-Step -Step "lock" -Msg "Adquirindo lock global"
+    Start-HubStep -Step "lock" -Message "Adquirindo lock global"
     Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
-    Complete-Step -Step "lock"
+    Complete-HubStep
 
     try {
         try { Import-HubEnv } catch [System.Exception] { Write-Log "Aviso: falha ao carregar .env: $_" -Lvl "WARN" }
@@ -171,7 +134,7 @@ try {
         }
 
         # --- ETAPA 1: EXTRACAO + VALIDACAO ORACLE ---
-        Start-Step -Step "extract" -Msg "Extracao Oracle + validacao de estoque"
+        Start-HubStep -Step "extract" -Message "Extracao Oracle + validacao de estoque"
         $pyResult = Invoke-OraclePythonScript `
             -PythonExe $pythonExe `
             -ScriptPath $ExtractScript `
@@ -181,7 +144,7 @@ try {
             -Step "extract" `
             -MaxAttempts 3 `
             -BackoffSeconds @(30, 60, 120)
-        Complete-Step -Step "extract" -Ok ($pyResult.Success -or $pyResult.Idempotent)
+        Complete-HubStep -Ok ($pyResult.Success -or $pyResult.Idempotent)
 
         if ($pyResult.Idempotent) {
             if (Test-Path $StateTmp) {
@@ -195,7 +158,7 @@ try {
         }
 
         # --- ETAPA 2: MONTAGEM DA MENSAGEM ---
-        Start-Step -Step "transform" -Msg "Gerando message.txt (format_message.py)"
+        Start-HubStep -Step "transform" -Message "Gerando message.txt (format_message.py)"
         $fmtResult = Invoke-NativeProcess -FilePath $pythonExe `
             -Arguments "`"$FormatScript`" `"$ExecId`"" `
             -LogAction {
@@ -204,7 +167,7 @@ try {
                     Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "transform"
                 }
             }
-        Complete-Step -Step "transform" -Ok ($fmtResult.ExitCode -in @(0, 2))
+        Complete-HubStep -Ok ($fmtResult.ExitCode -in @(0, 2))
         if ($fmtResult.ExitCode -eq 2) {
             Exit-WithCode 2 "Nenhuma OB qualificada — mensagem nao gerada."
         }
@@ -219,7 +182,7 @@ try {
         # O destino real vem de OFST_WHATSAPP_TARGET (.env), compartilhado de
         # forma intencional com a OFST-06 por ser o mesmo grupo da Expedicao.
         # Send-WhatsApp.ps1 via target.contactIdEnv — nunca do config versionado.
-        Start-Step -Step "dispatch" -Msg "Enviando ao grupo Expedicao Tinturaria"
+        Start-HubStep -Step "dispatch" -Message "Enviando ao grupo Expedicao Tinturaria"
 
         $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
         $waArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -ConfigPath `"$WaConfigPath`" -LogFile `"$LogFile`""
@@ -235,7 +198,7 @@ try {
 
         $waExit = $waResult.ExitCode
         Write-Log "Motor WhatsApp ExitCode=$waExit" -Step "dispatch"
-        Complete-Step -Step "dispatch" -Ok ($waExit -eq 0)
+        Complete-HubStep -Ok ($waExit -eq 0)
 
         if ($waExit -eq 21) {
             Exit-WithCode 21 "WhatsApp requer reautenticacao."
@@ -253,12 +216,12 @@ try {
         }
 
         # --- COMMIT DA IDEMPOTENCIA (somente apos envio confirmado) ---
-        Start-Step -Step "commit" -Msg "Commit da idempotencia"
+        Start-HubStep -Step "commit" -Message "Commit da idempotencia"
         if (Test-Path $StateTmp) {
             Move-Item $StateTmp $StateFile -Force
             Write-Log "State de OBs notificadas commitado." -Step "commit"
         }
-        Complete-Step -Step "commit"
+        Complete-HubStep
 
         Exit-WithCode 0 "Execucao concluida com sucesso."
 

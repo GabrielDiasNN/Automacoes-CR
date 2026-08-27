@@ -92,6 +92,9 @@ function Clear-HubLogContext {
     param()
     $script:HubLogCtx = $null
     $script:HubLogSteps = [System.Collections.Generic.List[object]]::new()
+    $script:HubStepSw = $null
+    $script:HubStepActive = $null
+    $script:HubStepActiveName = $null
 }
 
 # ------------------------------------------------------------------------------
@@ -268,6 +271,71 @@ function Write-HubStepEnd {
         -Extra @{ ok = $Ok; duration_ms = $DurationMs }
 }
 
+# ------------------------------------------------------------------------------
+# Start-HubStep / Complete-HubStep — par com cronometro interno
+# ------------------------------------------------------------------------------
+# Cada run.ps1 reimplementava esse par (stopwatch + step.start/end + HUB_STEP);
+# aqui e uma so implementacao. Passos sao sequenciais, nao aninhados.
+$script:HubStepSw = $null
+$script:HubStepActive = $null
+$script:HubStepActiveName = $null
+
+function Start-HubStep {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("preflight", "lock", "extract", "transform", "dispatch", "commit", "cleanup", "custom")]
+        [string]$Step,
+        [string]$StepName,
+        [string]$Message = ""
+    )
+    $script:HubStepSw = [System.Diagnostics.Stopwatch]::StartNew()
+    $script:HubStepActive = $Step
+    $script:HubStepActiveName = $StepName
+    $env:HUB_STEP = $Step
+    Write-HubStepStart -Step $Step -StepName $StepName -Message $Message
+}
+
+function Complete-HubStep {
+    [CmdletBinding()]
+    param(
+        [bool]$Ok = $true,
+        [string]$Message = ""
+    )
+    if (-not $script:HubStepActive) { return }
+    $ms = if ($script:HubStepSw) { [int]$script:HubStepSw.Elapsed.TotalMilliseconds } else { 0 }
+    Write-HubStepEnd -Step $script:HubStepActive -StepName $script:HubStepActiveName `
+        -Ok $Ok -DurationMs $ms -Message $Message
+    $script:HubStepActive = $null
+    $script:HubStepActiveName = $null
+    $script:HubStepSw = $null
+    $env:HUB_STEP = ""
+}
+
+# ------------------------------------------------------------------------------
+# Get-HubRecordCounts — le o bloco record_counts de um *_result.json
+# ------------------------------------------------------------------------------
+function Get-HubRecordCounts {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    try {
+        $rc = (Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json).record_counts
+    } catch [System.Exception] {
+        return $null
+    }
+    if (-not $rc) { return $null }
+    $counts = @{}
+    foreach ($p in $rc.PSObject.Properties) {
+        $val = 0
+        if ([int]::TryParse([string]$p.Value, [ref]$val)) { $counts[$p.Name] = $val }
+    }
+    if ($counts.Count -eq 0) { return $null }
+    return $counts
+}
+
 function Write-HubRetryAttempt {
     [CmdletBinding()]
     param(
@@ -319,6 +387,6 @@ function Write-HubExecutionEnd {
 
 Export-ModuleMember -Function `
     New-HubTraceId, Resolve-HubTraceId, Initialize-HubLogContext, Get-HubLogContext, Clear-HubLogContext, `
-    Write-HubLogEvent, Test-HubLogEnvelope, Write-HubForwardedLine, `
-    Write-HubExecutionStart, Write-HubStepStart, Write-HubStepEnd, `
+    Write-HubLogEvent, Test-HubLogEnvelope, Write-HubForwardedLine, Get-HubRecordCounts, `
+    Write-HubExecutionStart, Write-HubStepStart, Write-HubStepEnd, Start-HubStep, Complete-HubStep, `
     Write-HubRetryAttempt, Write-HubExecutionEnd
