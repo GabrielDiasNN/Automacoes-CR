@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.52] - 27/08/2026
+
+### Adicionado
+- **Padrão de logging estruturado — PR5: motor Node (`lib/WhatsApp-Core.js` v2.11.0).**
+  - `lib/log-masking.js` — `maskSensitive()` em paridade com `Protect-SensitiveData` / `lib/python/log_masking.py`.
+  - `writeLog` reescrito: com `HUB_LOG_STRUCTURED=1` emite o envelope JSON do schema (`component:"node_whatsapp"`, `step` de `HUB_STEP`, `trace_id` de `HUB_TRACE_ID`), tanto em `stdout` quanto no `LOG_FILE`; sem a env mantém o formato legado `[NODE-WA]`. Nível `ERROR`→`ERRO` no schema.
+  - `run.ps1` das automações WhatsApp (ORB-07/OFST-06/OBP-04/RB-01) já exportam `HUB_*` para o `Send-WhatsApp.ps1` → `WhatsApp-Core.js`, que agora emite envelopes encaminhados verbatim pelo `Write-HubForwardedLine`.
+
+### Notas
+- Verificação: 152 testes Node (`node:test`, +2 casos estruturados), cobertura `WhatsApp-Core.js` 97,86% linhas / 92,18% branches / 95% funcs (gate 90%); contrato offline verde.
+
 ## [1.3.51] - 27/08/2026
 
 ### Adicionado

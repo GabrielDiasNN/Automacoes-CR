@@ -179,7 +179,7 @@ O runtime mascara **antes** de gravar em disco/`stdout`. O Orchestrator revalida
 
 - **`docs/log-event.schema.json`** — JSON Schema (draft 2020-12) do evento, fonte única. Versionado.
 - **`Tools/Test-LogEventSchema.ps1`** — valida amostras de `Logs/*.jsonl` e as fixtures de teste contra o schema. Entra como validação nº 15 de `ValidarAutomacoes.ps1 -OnlyGovernance` e no job de governança do CI (`.github/workflows/governanca.yml`).
-- **Modo `warn`** até todas as automações migrarem: reporta divergência sem falhar o gate. O PR final vira `blocking` e remove a tolerância a linha de texto legada no `logParser.ts` e no worker.
+- **Modo `warn`** até todas as automações migrarem: reporta divergência sem falhar o gate. O PR final vira `blocking`. O `logParser.ts` e o worker **mantêm** a tolerância ao formato legado (logs históricos no DB, retenção 90 dias).
 - Teste de paridade de mascaramento entre os 3 runtimes (`lib/tests/`).
 
 ---
@@ -192,9 +192,9 @@ O runtime mascara **antes** de gravar em disco/`stdout`. O Orchestrator revalida
 | **PR2** ✅ | Helpers `Start-HubStep`/`Complete-HubStep`/`Get-HubRecordCounts` + `Exit-AutomationWithCode -RecordCountsPath`; **OFST-06** migrada; ORB-07 refatorada para os helpers. |
 | **PR3** ✅ | **OBP-04** migrada; `Invoke-OraclePythonScript -StdoutIsData` (preparação p/ RE-03). |
 | **PR4** ✅ | **RE-03, RB-01, MT-02** migradas — rollout de código-fonte das 6 automações completo. |
-| **PR Node** | `lib/WhatsApp-Core.js` + `lib/log-masking.js` / `lib/log-event.js` — envelope nativo, sem embrulho do `run.ps1`. |
+| **PR5** ✅ | Node: `lib/WhatsApp-Core.js` `writeLog` emite envelope nativo (`component:"node_whatsapp"`) sob `HUB_LOG_STRUCTURED`; `lib/log-masking.js`. |
 | **PR Orchestrator** | `Orchestrator/app/**`, `worker.py`, scheduler e `Produção Beneficimento/src/runner.py` no mesmo envelope. |
-| **PR final** | Gate → `blocking`; remove `Get-ForwardedLogLevel` e o caminho de texto legado; atualiza `lib/README.md`, `AGENTS.md`, `docs/ai-native-context-monitor.md`; entrada no `CHANGELOG.md`. |
+| **PR final** | Gate `Test-LogEventSchema.ps1` → `blocking`; entrada no `CHANGELOG.md`. **`Get-ForwardedLogLevel` permanece** (é usada internamente por `Write-HubForwardedLine`). O parser legado de `logParser.ts`/worker **permanece** enquanto houver logs históricos no formato antigo no DB (retenção 90 dias). |
 
 ---
 
