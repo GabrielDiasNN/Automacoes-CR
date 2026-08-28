@@ -12,10 +12,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import schemas
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root
+from ..services import automation_repository as repo
 from ..services.managed_file_access import (
     backup_file_before_write,
     resolve_automation_dir,
@@ -36,7 +37,7 @@ def get_automation_scripts(
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> list[schemas.ManagedFileEntry]:
-    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+    auto = repo.get_by_id(db, auto_id)
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
@@ -75,7 +76,7 @@ def update_automation_script(  # pylint: disable=R0913,R0917
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
-    auto = db.query(models.Automation).filter(models.Automation.id == auto_id).first()
+    auto = repo.get_by_id(db, auto_id)
     if not auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
@@ -112,4 +113,7 @@ def update_automation_script(  # pylint: disable=R0913,R0917
             "audit_id": audit_entry.id,
         }
     except OSError as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        # `str(e)` de OSError costuma carregar o caminho absoluto do arquivo —
+        # detalhe fica só no logger interno (disciplina do global_exception_handler).
+        logger.error("Falha de I/O ao salvar script %s/%s: %s", auto_id, filename, e)
+        raise HTTPException(status_code=500, detail="Falha ao salvar o arquivo.") from e

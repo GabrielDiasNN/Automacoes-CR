@@ -206,6 +206,40 @@ def test_execution_runtime_applies_timeout_result(db_session: Any) -> None:
     assert "Tarefa excedeu" in result.logs
 
 
+def test_execution_runtime_timeout_skips_terminal_execution(db_session: Any) -> None:
+    # Achado nº 17: `apply_timeout_result` era o único dos quatro finalizadores
+    # sem guarda de estado terminal. Um `POST /executions/{id}/stop` que grava
+    # TERMINATED entre o SELECT do tick de monitoramento e o UPDATE do timeout
+    # não pode ser sobrescrito para TIMEOUT — isso mentiria na auditoria.
+    auto = models.Automation(name="Timeout Terminal", script_path="./tt.ps1")
+    db_session.add(auto)
+    db_session.flush()
+    db_session.add(
+        models.Execution(
+            id="EXEC_TIMEOUT_TERMINAL",
+            automation_id=auto.id,
+            status="TERMINATED",
+            failure_reason="USER_TERMINATED",
+            requested_by="TEST",
+            started_at=get_now_local(),
+            logs="parada manual pelo operador",
+        )
+    )
+    db_session.commit()
+
+    resultado = apply_timeout_result(
+        db_session,
+        "EXEC_TIMEOUT_TERMINAL",
+        ["log que não deve ser anexado"],
+        time.time() - 5,
+    )
+
+    assert resultado is not None
+    assert resultado.status == "TERMINATED"
+    assert resultado.failure_reason == "USER_TERMINATED"
+    assert resultado.logs == "parada manual pelo operador"
+
+
 def test_execution_runtime_completes_process_execution(db_session: Any) -> None:
     auto = models.Automation(name="Complete Script", script_path="./complete.ps1")
     db_session.add(auto)

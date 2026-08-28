@@ -24,6 +24,7 @@
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\tingimento\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\data\\\\(?:schema|writer|queries)\\.py$"
   ],
+  "router_orm_query_allowlist": [],
   "automation_exclusions": [
     "^_Template\\\\run\\.ps1$",
     "^Orchestrator\\\\tests\\\\"

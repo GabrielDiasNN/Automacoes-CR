@@ -12,13 +12,9 @@ import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from .. import metrics as _metrics, models, schemas, security
-from ..constants import (
-    EXECUTION_ACTIVE_STATUSES,
-)
 from ..database import (
     get_db,
     get_wal_size_mb,
@@ -32,7 +28,14 @@ from ..runtime import (
     trigger_worker_wakeup,
     wait_for_task_signal,
 )
-from ..services import env_admin, scheduler_runtime, system_runtime, ws_auth
+from ..services import (
+    audit_repository,
+    env_admin,
+    execution_repository,
+    scheduler_runtime,
+    system_runtime,
+    ws_auth,
+)
 from ..services.metrics_queries import (
     build_global_metrics_response,
     get_daily_execution_metrics,
@@ -57,9 +60,24 @@ PROJECT_ROOT = get_project_root()
 # ---------------------------------------------------------------------------
 
 
-@router.get("/health", response_model=schemas.SystemHealth)
-def health_check(db: Session = Depends(get_db)) -> schemas.SystemHealth:
-    """Health check completo: DB, Scheduler, Worker, Disco."""
+@router.get("/health", response_model=schemas.SystemLiveness)
+def health_check(db: Session = Depends(get_db)) -> schemas.SystemLiveness:
+    """Liveness público: apenas ``status`` (ok | degraded | unhealthy).
+
+    Rota deliberadamente sem ``Depends(get_api_key)`` — probe operacional usado
+    pelo driver da skill ``run-orchestrator`` e pelos runbooks. Não expõe
+    métricas internas nem mensagem de exceção; o detalhamento vive em
+    ``GET /api/system/health/full`` (autenticada). Ver ``docs/security-policy.md``.
+    """
+    return system_runtime.build_liveness_payload(db, _get_worker_status(db))
+
+
+@router.get("/health/full", response_model=schemas.SystemHealth)
+def health_check_full(
+    db: Session = Depends(get_db),
+    _api_key: str = Depends(get_api_key),
+) -> schemas.SystemHealth:
+    """Health check completo e autenticado: DB, Scheduler, Worker, Disco, WAL, CPU, RAM."""
     return system_runtime.build_health_payload(db, _get_worker_status(db))
 
 
@@ -142,7 +160,9 @@ def manual_backup(
 
         logger.error("Falha no backup manual: %s", e)
 
-        raise HTTPException(status_code=500, detail=f"Falha no backup: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail="Falha ao realizar o backup."
+        ) from e
 
 
 @router.post("/scheduler/reload")
@@ -204,12 +224,7 @@ def recover_worker(
 ) -> dict[str, Any]:
     """Aciona a recuperação canônica do Orchestrator quando o worker está offline."""
     worker_status = _get_worker_status(db)
-    active_count = (
-        db.query(func.count(models.Execution.id))  # pylint: disable=not-callable
-        .filter(models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES))
-        .scalar()
-        or 0
-    )
+    active_count = execution_repository.count_active(db)
 
     if worker_status.is_alive and not force:
         return {
@@ -265,18 +280,7 @@ def list_audit_log(
     _api_key: str = Depends(get_api_key),
 ) -> list[models.AuditLog]:
     """Retorna as entradas mais recentes do log de auditoria."""
-
-    query = db.query(models.AuditLog)
-
-    if action:
-
-        query = query.filter(models.AuditLog.action == action.upper())
-
-    entries: list[models.AuditLog] = (
-        query.order_by(desc(models.AuditLog.timestamp)).limit(limit).all()
-    )
-
-    return entries
+    return audit_repository.list_recent(db, limit=limit, action=action)
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +328,11 @@ def get_system_overview(
     _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     """Agrega métricas, saúde, jobs e eventos recentes para o dashboard operacional."""
-    health_payload = health_check(db).model_dump()
+    # `/overview` já é autenticada; usa o payload completo diretamente do
+    # serviço (não a rota pública de liveness).
+    health_payload = system_runtime.build_health_payload(
+        db, _get_worker_status(db)
+    ).model_dump()
     jobs = list_scheduled_jobs(db, _api_key)
     diagnostics = build_diagnostics_payload(
         db,
@@ -665,7 +673,7 @@ def update_env_content(
     except Exception as e:
         logger.error("Erro ao salvar .env: %s", e)
         raise HTTPException(
-            status_code=500, detail=f"Erro ao salvar o arquivo: {str(e)}"
+            status_code=500, detail="Erro ao salvar o arquivo .env."
         ) from e
 
 

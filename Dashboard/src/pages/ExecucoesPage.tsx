@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, RotateCw, Square, RefreshCw } from "lucide-react";
 import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
@@ -31,9 +31,17 @@ export function ExecucoesPage() {
   const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
   const [pageNum, setPageNum] = useState(1);
 
-  const [detail, setDetail] = useState<ExecutionDetail | null>(null);
+  const [detail, setDetail] = useState<(Partial<ExecutionDetail> & { id: string }) | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
+
+  // Guarda de sequência + AbortController, mesmo padrão do `usePolling`: sem
+  // isso, clicar em A e depois em B antes da resposta de A chegar podia fazer
+  // `setDetail(dA)` rodar por último — o operador acabava confirmando "Parar" /
+  // "Reenfileirar" sobre A tendo aberto B (ação em automação de produção).
+  const detailSeqRef = useRef(0);
+  const detailAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => detailAbortRef.current?.abort(), []);
 
   const fetchExecutions = useCallback(
     () =>
@@ -53,16 +61,25 @@ export function ExecucoesPage() {
 
   const openDetail = useCallback(
     async (id: string) => {
+      const seq = ++detailSeqRef.current;
+      const isLatest = () => detailSeqRef.current === seq;
+      detailAbortRef.current?.abort();
+      const controller = new AbortController();
+      detailAbortRef.current = controller;
+
       setDetailLoading(true);
-      setDetail({ id } as ExecutionDetail);
+      setDetail({ id });
       try {
-        const d = await orchestratorApi.getExecution(id);
+        const d = await orchestratorApi.getExecution(id, controller.signal);
+        if (!isLatest()) return;
         setDetail(d);
       } catch (e) {
+        if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
+        if (!isLatest()) return;
         toast(e instanceof Error ? e.message : String(e), "red");
         setDetail(null);
       } finally {
-        setDetailLoading(false);
+        if (isLatest()) setDetailLoading(false);
       }
     },
     [toast],
@@ -239,14 +256,19 @@ export function ExecucoesPage() {
         title={detail?.automation_name ?? "Execução"}
         width={860}
       >
-        {detail && (
-          <ExecDetailBody
-            detail={detail}
-            loading={detailLoading}
-            onStop={() => setConfirmStop(detail.id)}
-            onRequeue={() => doRequeue(detail.id)}
-          />
-        )}
+        {detail &&
+          (detail.started_at ? (
+            <ExecDetailBody
+              detail={detail as ExecutionDetail}
+              loading={detailLoading}
+              onStop={() => setConfirmStop(detail.id)}
+              onRequeue={() => doRequeue(detail.id)}
+            />
+          ) : (
+            <div style={{ padding: "var(--sp-4)" }}>
+              <Loading />
+            </div>
+          ))}
       </Drawer>
 
       <ConfirmModal

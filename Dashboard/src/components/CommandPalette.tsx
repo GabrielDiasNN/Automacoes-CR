@@ -84,7 +84,13 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   if (!open) return null;
 
   const activate = (entry: PaletteEntry) => {
-    navigate(entry.kind === "nav" ? entry.to : "/automacoes");
+    if (entry.kind === "nav") {
+      navigate(entry.to);
+    } else {
+      // Leva o nome escolhido para a tela de Automações, que rola até o card e
+      // o destaca (antes: ia sempre para /automacoes, ignorando a automação).
+      navigate(`/automacoes?focus=${encodeURIComponent(entry.automation.name)}`);
+    }
     onClose();
   };
 

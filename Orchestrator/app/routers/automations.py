@@ -154,6 +154,34 @@ def _preflight_payload_or_422(
     return preflight
 
 
+def _assert_clone_allowed_or_422(payload: dict[str, Any]) -> None:
+    """Gate de governança do clone (achado nº 18).
+
+    ``clone_automation`` montava e persistia ``models.Automation`` direto, sem
+    passar por gate nenhum — a forma mais fácil de criar automação fora de toda
+    a governança era clonar uma cujo ``automation.manifest.json`` tivesse sumido
+    do disco. Diferente de ``create``, o clone é uma automação nova com nome
+    sufixado e ``enabled=False``, então não se exige paridade campo-a-campo com
+    o manifesto canônico — mas a **ausência** de manifesto continua bloqueando,
+    além da revalidação Pydantic do payload (nome, script_path, schedule).
+    """
+    try:
+        preflight = build_automation_preflight(payload, PROJECT_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # `governance` é um campo Pydantic com `Field(default_factory=...)`; sem o
+    # plugin pydantic o pylint infere `FieldInfo` e acusa no-member — o membro
+    # existe (schemas.AutomationPreflightGovernance.manifest_present).
+    if not preflight.governance.manifest_present:  # pylint: disable=no-member
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Clone recusado: o diretório da automação de origem não tem "
+                "automation.manifest.json."
+            ),
+        )
+
+
 # ---------------------------------------------------------------------------
 
 # LISTAGEM com paginacao e ordenacao
@@ -764,27 +792,28 @@ def clone_automation(
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
     candidate = repo.next_available_clone_name(db, f"{db_auto.name} (Clone)")
 
-    clone = models.Automation(
-        name=candidate,
-        description=db_auto.description,
-        script_path=db_auto.script_path,
-        schedule=db_auto.schedule,
-        max_runtime_minutes=db_auto.max_runtime_minutes,
-        max_retries=db_auto.max_retries,
-        cooldown_minutes=db_auto.cooldown_minutes,
-        queue_group=db_auto.queue_group,
-        enabled=False,
-        test_mode=db_auto.test_mode,
-        notification_channels=db_auto.notification_channels,
-        # `sla_minutes` era omitido até 31/07/2026: o clone nascia com SLA nulo
-        # e `collect_sla_breaches` simplesmente não o avaliava — a automação
-        # desaparecia do painel de violação sem erro nem warning. Como o clone
-        # nasce desabilitado, o defeito só se manifestava depois que alguém
-        # habilitasse a cópia, longe do momento da criação.
-        # O teste `test_clone_copia_todos_os_campos_operacionais` reprova quando
-        # uma coluna nova de `Automation` fica de fora desta lista.
-        sla_minutes=db_auto.sla_minutes,
-    )
+    # `sla_minutes` era omitido até 31/07/2026: o clone nascia com SLA nulo e
+    # `collect_sla_breaches` não o avaliava — a automação sumia do painel de
+    # violação sem erro nem warning. Como o clone nasce desabilitado, o defeito
+    # só aparecia depois que alguém habilitasse a cópia. Manter esta lista em
+    # paridade com as colunas de `Automation`.
+    clone_payload: dict[str, Any] = {
+        "name": candidate,
+        "description": db_auto.description,
+        "script_path": db_auto.script_path,
+        "schedule": db_auto.schedule,
+        "max_runtime_minutes": db_auto.max_runtime_minutes,
+        "max_retries": db_auto.max_retries,
+        "cooldown_minutes": db_auto.cooldown_minutes,
+        "queue_group": db_auto.queue_group,
+        "enabled": False,
+        "test_mode": db_auto.test_mode,
+        "notification_channels": db_auto.notification_channels,
+        "sla_minutes": db_auto.sla_minutes,
+    }
+    _assert_clone_allowed_or_422(clone_payload)
+
+    clone = models.Automation(**clone_payload)
     db.add(clone)
     db.flush()
     log_audit(

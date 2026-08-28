@@ -96,6 +96,23 @@ class ManagedFileEntry(BaseModel):
     content: str
 
 
+class SystemLiveness(BaseModel):
+    """Payload público de liveness — só o veredito, sem métricas internas.
+
+    Servido por ``GET /api/system/health`` (rota pública, ver
+    ``docs/security-policy.md``). O detalhamento (DB, scheduler, worker, disco,
+    WAL, CPU, RAM) vive em ``GET /api/system/health/full``, autenticada.
+    """
+
+    status: str  # "ok" | "degraded" | "unhealthy"
+    timestamp: Any
+
+    @model_validator(mode="after")
+    def apply_br_format(self) -> SystemLiveness:
+        self.timestamp = format_dt_br(self.timestamp)
+        return self
+
+
 class SystemHealth(BaseModel):
     status: str
     timestamp: Any

@@ -1,22 +1,15 @@
 import { Activity, Cpu, Layers } from "lucide-react";
-import { useDiagnostics } from "../hooks/useDiagnostics";
-import { useWebSocket } from "../hooks/useWebSocket";
-import { getApiKey } from "../api/client";
+import { useLiveStatus } from "../context/LiveStatusContext";
 import { healthTone, healthLabel, toneVar } from "../lib/status";
 import styles from "./StatusBar.module.css";
 
-/** Barra de status global ao vivo — estado do sistema, fila, worker, sinal. */
+/** Barra de status global ao vivo — estado do sistema, fila, worker, sinal.
+ *  Lê tudo do `LiveStatusProvider`: uma só conexão / um só polling (achado nº 15). */
 export function StatusBar() {
-  const { health, worker } = useDiagnostics(10_000);
-  const key = getApiKey();
-  // O hook troca a API Key por um token efêmero antes de abrir o WebSocket,
-  // então a chave não aparece mais na URL de handshake.
-  const { status: ws } = useWebSocket("/ws/events", key ?? "", {
-    enabled: !!key,
-  });
+  const { health, worker, wsStatus } = useLiveStatus();
 
   const tone = healthTone(health?.status);
-  const wsOnline = ws === "open";
+  const wsOnline = wsStatus === "open";
 
   return (
     <div className={styles.bar}>
@@ -47,7 +40,7 @@ export function StatusBar() {
         <span className={styles.unit}>{worker?.is_alive ? "worker" : "offline"}</span>
       </div>
 
-      <div className={`${styles.group} ${styles.signal}`} title={`Sinal de eventos: ${ws}`}>
+      <div className={`${styles.group} ${styles.signal}`} title={`Sinal de eventos: ${wsStatus}`}>
         <Activity size={13} style={{ color: wsOnline ? "var(--cyan)" : "var(--text-lo)" }} />
         <span className={styles.unit} style={{ color: wsOnline ? "var(--cyan)" : "var(--text-lo)" }}>
           {wsOnline ? "sinal" : "sem sinal"}

@@ -723,29 +723,47 @@ def _preview_once_run(schedule: dict[str, Any], now: datetime) -> list[str]:
 def _preview_periodic_runs(
     schedule: dict[str, Any], now: datetime, count: int, stype: str | None
 ) -> list[str]:
+    """Próximas ocorrências de um schedule daily/weekly/monthly.
+
+    Itera dia a dia numa janela de ~2 meses. O laço antigo avançava minuto a
+    minuto — até 89.280 iterações para um weekly/monthly —, e `preview_next_runs`
+    roda para toda automação a cada request de `/api/system/overview`, que o
+    Painel consulta a cada 10s.
+    """
+    time_slots = sorted({(int(t["h"]), int(t["m"])) for t in schedule.get("times", [])})
+    if not time_slots:
+        return []
+
+    allowed_weekdays: set[int] = set()
+    allowed_month_days: set[int] = set()
+    if stype == "weekly":
+        allowed_weekdays = {
+            _ui_day_to_python_weekday(int(day))
+            for day in schedule.get("days_of_week", [])
+        }
+    elif stype == "monthly":
+        allowed_month_days = {int(day) for day in schedule.get("days_of_month", [])}
+
     out: list[str] = []
-    candidate = now
-    max_scan_days = 62
-    while len(out) < count and max_scan_days > 0:
-        candidate += timedelta(minutes=1)
-        max_scan_days -= 1 if candidate.hour == 0 and candidate.minute == 0 else 0
-        times = schedule.get("times", [])
-        hm = {(t["h"], t["m"]) for t in times}
-        if (candidate.hour, candidate.minute) not in hm:
-            continue
-        if stype == "daily":
-            out.append(format_dt_br(candidate))
-            continue
-        if stype == "weekly":
-            days = set(schedule.get("days_of_week", []))
-            py_days = {_ui_day_to_python_weekday(int(day)) for day in days}
-            if candidate.weekday() in py_days:
-                out.append(format_dt_br(candidate))
-            continue
-        if stype == "monthly":
-            days = set(schedule.get("days_of_month", []))
-            if candidate.day in days:
-                out.append(format_dt_br(candidate))
+    day = now
+    for _ in range(62):
+        if len(out) >= count:
+            break
+        day_matches = (
+            stype == "daily"
+            or (stype == "weekly" and day.weekday() in allowed_weekdays)
+            or (stype == "monthly" and day.day in allowed_month_days)
+        )
+        if day_matches:
+            for hour, minute in time_slots:
+                candidate = day.replace(
+                    hour=hour, minute=minute, second=0, microsecond=0
+                )
+                if candidate > now and len(out) < count:
+                    out.append(format_dt_br(candidate))
+        day = (day + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
     return out
 
 

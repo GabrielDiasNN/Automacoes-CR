@@ -1,8 +1,13 @@
 # Mapa de Cobertura de Testes (Test Coverage Map)
 
-> **Versão:** v1.0.0 | **Atualizado:** 05/07/2026
+> **Versão:** v1.0.1 | **Atualizado:** 27/08/2026
 
 Este documento mapeia os módulos críticos do backend do **Orquestrador (FastAPI & SQLite)**, identificando as suites de teste correspondentes, os cenários cobertos e as lacunas (gaps).
+
+> ⚠️ **Este mapa é uma visão curada e envelhece.** A cobertura real por diretório
+> e os gates bloqueantes vivem na skill `ci-gates`; a fonte de verdade de números
+> é `pytest --cov` / `pytest --co`. Não citar `test_api.py`: esse arquivo **não
+> existe** (a suíte de smoke é `test_api_smoke_critical.py`).
 
 ---
 
@@ -14,9 +19,9 @@ O quadro abaixo descreve a cobertura dos módulos prioritários de runtime do pr
 |---|---|---|---|---|
 | **Controle de Fila & Requeue** | `services/execution_runtime.py` | `test_queue_rules.py`<br>`test_worker_queue.py` | - Retry limitado por `max_retries`<br>- Bloqueio de requeue por `queue_group` ativo<br>- Prioridade de execução | ✅ Coberto |
 | **Diagnóstico do Sistema** | `services/system_diagnostics.py` | `test_diagnostics.py` | - Detecção de worker offline via heartbeat<br>- Análise de fila parada (stalled queue)<br>- Verificação de riscos de concorrência e WAL | ✅ Coberto |
-| **Agendamento de Jobs** | `services/scheduler_runtime.py` | `test_diagnostics.py`<br>`test_api.py` | - Sincronização de agenda<br>- Recuperação automática de órfãos | ✅ Coberto |
-| **Validação de Entradas & Env** | `services/env_admin.py`<br>`routers/automations.py` | `test_validation.py` | - Rejeição de cron schedule inválido<br>- Proteção contra segredos vazados no `.env` | ✅ Coberto |
-| **Contrato e Resiliência da API**| `routers/executions.py`<br>`routers/automations.py` | `test_api_contracts.py`<br>`test_api.py` | - Versionamento com `contract_version`<br>- Mascaramento de chaves secretas em erros<br>- Validação de payloads dinâmicos | ✅ Coberto |
+| **Agendamento de Jobs** | `services/scheduler_runtime.py` | `test_scheduler_runtime_unit.py`<br>`test_revisao_consenso_cobertura.py` | - `_resolve_interval_start_date` (retomada do relógio, 3 testes diretos)<br>- **dispatch de `interval` no `reload_scheduled_tasks` real, com `next_run_time` preservado** (achado nº 2)<br>- `once` com `run_at` no passado gera warning | ✅ Coberto |
+| **Validação de Entradas & Env** | `services/env_admin.py`<br>`routers/automations.py` | `test_validation.py`<br>`test_env_admin_coverage.py` | - Rejeição de cron schedule inválido<br>- Proteção contra segredos vazados no `.env`<br>- `sync_global_test_mode_env`: subprocess, `timeout` e erro genérico | ✅ Coberto |
+| **Contrato e Resiliência da API**| `routers/executions.py`<br>`routers/automations.py` | `test_api_contracts.py`<br>`test_api_smoke_critical.py` | - Versionamento com `contract_version`<br>- Mascaramento de chaves secretas em erros<br>- Validação de payloads dinâmicos | ✅ Coberto |
 | **Lacunas Prioritárias** | `routers/websocket.py`<br>`services/scheduler_runtime.py`<br>`database.py` | `test_e2e_dashboard.py`<br>`test_worker_queue.py`<br>`test_system.py` | - Cobertura total em 81%<br>- `services/execution_runtime.py` subiu para 85%<br>- Módulos críticos abaixo de 60% seguem como alvo de melhoria incremental | ⚠️ Atenção |
 
 ---

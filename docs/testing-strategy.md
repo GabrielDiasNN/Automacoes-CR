@@ -22,9 +22,12 @@ O ecossistema de testes do Hub de Automações é organizado em três camadas:
 
 ## 2. Suítes Existentes
 
+> Lista **curada, não exaustiva** — a suíte tem ~75 arquivos em `Orchestrator/tests/`.
+> A fonte de verdade é `Orchestrator/tests/` + `pytest --co`; a cobertura por
+> diretório e os gates estão na skill `ci-gates` (`.claude/skills/ci-gates/SKILL.md`).
+
 | Arquivo | Camada | O que cobre |
 |---|---|---|
-| `tests/test_api.py` | Integração | Smoke test das rotas principais com banco real |
 | `tests/test_api_smoke_critical.py` | Integração | Endpoints de sistema críticos e erros operacionais |
 | `tests/test_filters.py` | Integração | Matriz de filtros do backend: automações, execuções, auditoria, paginação e inválidos |
 | `tests/test_database_schema.py` | Unitário | Valida colunas do schema contra `EXPECTED_SCHEMA` |
@@ -38,7 +41,7 @@ O ecossistema de testes do Hub de Automações é organizado em três camadas:
 | `tests/test_receitas_emitidas.py` | Unitário | Smoke da geração HTML e sanitização básica de Receitas Emitidas |
 | `tests/test_validation.py` | Integração | Validação de schedule, `.env` e preflight administrativo |
 
-> **Total atual:** 165 testes coletados | Cobertura atual medida: 85,40% | Gate mínimo do CI: ≥ 84% (`pytest-cov`)
+> **Total atual (27/08/2026):** ~1000 testes coletados (`pytest --co`) | Cobertura medida ~88% (`pytest --cov`) | Gate mínimo do CI: ≥ 84% (`pytest-cov`). Os números mudam a cada PR — reconferir com `pytest --co -q` / `--cov` antes de citar.
 
 ---
 

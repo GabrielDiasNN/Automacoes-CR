@@ -1,6 +1,6 @@
 """Endpoints de PCP e OEE de Beneficiamento baseados no SQLite Histórico."""
 
-# pylint: disable=relative-beyond-top-level,unused-argument,too-many-arguments,too-many-positional-arguments,line-too-long,trailing-newlines
+# pylint: disable=relative-beyond-top-level,line-too-long,trailing-newlines
 
 import logging
 
@@ -64,7 +64,10 @@ def _ensure_snapshot_dashboard() -> None:
 
 
 @router.get("/historico", response_model=schemas.BeneficiamentoHistoricoResponse)
-def get_beneficiamento_historico(
+# Handler FastAPI: cada parâmetro é um Query() injetado por DI, nunca posicional
+# de fato. Disable confinado à assinatura, padrão de `routers/executions.py`
+# (achado nº 21) — o gate R0913/R0917 segue ativo no resto do módulo.
+def get_beneficiamento_historico(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     ob: str | None = Query(None, description="Número da OB (busca parcial)"),
     alternativo: str | None = Query(
         None, description="Código Alternativo ou Reduzido do produto"
@@ -85,7 +88,7 @@ def get_beneficiamento_historico(
         le=5000,
         description="Limite máximo de registros retornados",
     ),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoHistoricoResponse:
     """Realiza buscas rápidas no SQLite indexado local para rastreabilidade de OBs e produtos."""
 
@@ -122,7 +125,7 @@ def get_beneficiamento_produtos(
         ..., min_length=2, description="Termo de busca (código ou nome do produto)"
     ),
     limit: int = Query(20, ge=1, le=50, description="Limite máximo de sugestões"),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoProdutosResponse:
     """Autocomplete de produto para a busca dinâmica no Dashboard."""
 
@@ -143,8 +146,7 @@ def get_beneficiamento_produtos(
 
 
 @router.get("/overview", response_model=schemas.BeneficiamentoOverviewResponse)
-# pylint: disable=too-many-locals
-def get_beneficiamento_overview(
+def get_beneficiamento_overview(  # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     dt_inicio: str | None = Query(
         None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
     ),
@@ -172,7 +174,7 @@ def get_beneficiamento_overview(
         None,
         description="Filtra por status de execução: 'confirmada' ou 'planejada'",
     ),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoOverviewResponse:
     """Retorna o contrato operacional V1 do Beneficiamento a partir do SQLite local."""
 
@@ -215,7 +217,7 @@ def get_beneficiamento_tingimento(
     dt_fim: str | None = Query(
         None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
     ),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoTingimentoResponse:
     """Painel dedicado de Tingimento (escopo fixo CODIGO_FASE=40), independente
     dos filtros gerais do overview."""
@@ -238,7 +240,7 @@ def get_beneficiamento_tingimento(
 
 @router.get("/health", response_model=schemas.BeneficiamentoHealthResponse)
 def get_beneficiamento_health(
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoHealthResponse:
     """Expõe a saúde operacional dos snapshots locais do Beneficiamento."""
 
@@ -256,7 +258,7 @@ def get_beneficiamento_health(
 
 @router.get("/periods", response_model=schemas.BeneficiamentoPeriodsResponse)
 def get_beneficiamento_periods(
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoPeriodsResponse:
     """Lista os períodos disponíveis e seus metadados de snapshot."""
 
@@ -275,7 +277,7 @@ def get_beneficiamento_periods(
 @router.get("/periods/{period}", response_model=schemas.BeneficiamentoPeriodPayload)
 def get_beneficiamento_period(
     period: str,
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoPeriodPayload:
     """Retorna o snapshot consolidado de um período do Beneficiamento."""
 
@@ -295,7 +297,7 @@ def get_beneficiamento_period(
 
 @router.get("/dashboard", response_model=schemas.BeneficiamentoDashboardPayload)
 def get_beneficiamento_dashboard(
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoDashboardPayload:
     """Agrega períodos, saúde e comparação para a home analítica da aba."""
 
@@ -312,8 +314,7 @@ def get_beneficiamento_dashboard(
 
 
 @router.get("/detail", response_model=schemas.BeneficiamentoDetailResponse)
-# pylint: disable=too-many-locals
-def get_beneficiamento_detail(
+def get_beneficiamento_detail(  # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     target_type: str = Query(
         ...,
         description=(
@@ -354,7 +355,7 @@ def get_beneficiamento_detail(
     include_raw: bool = Query(
         False, description="Quando verdadeiro, devolve também o payload bruto"
     ),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoDetailResponse:
     """Retorna o drill-down operacional do Beneficiamento a partir do SQLite local."""
 
@@ -399,7 +400,7 @@ def post_beneficiamento_refresh(
     period: str = Query(
         "diario", description="Período a atualizar ao vivo: diario ou mensal"
     ),
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoRefreshResponse:
     """Dispara um refresh on-demand ("Atualizar agora") do período informado.
 

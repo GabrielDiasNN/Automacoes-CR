@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -17,6 +18,36 @@ from ..constants import ORCHESTRATOR_VERSION
 from ..database import get_db_size_mb, get_schema_version, get_wal_size_mb
 from ..runtime import get_allowed_origins, scheduler
 from ..timezone import get_now_local
+
+logger = logging.getLogger("orchestrator")
+
+
+def _probe_database(db: Session) -> bool:
+    """SELECT 1 no banco. Loga o erro internamente; nunca propaga a mensagem."""
+    try:
+        db.execute(text("SELECT 1"))
+        return True
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning("Falha ao consultar o banco no health check: %s", exc)
+        return False
+
+
+def build_liveness_payload(
+    db: Session, worker_status: schemas.WorkerStatus
+) -> schemas.SystemLiveness:
+    """Liveness público: só o veredito, sem métricas internas nem exceção crua.
+
+    Contraparte reduzida de ``build_health_payload``, servida por
+    ``GET /api/system/health`` (rota pública — ver ``docs/security-policy.md``).
+    """
+    db_ok = _probe_database(db)
+    if not db_ok or not scheduler.running:
+        status = "unhealthy"
+    elif not worker_status.is_alive:
+        status = "degraded"
+    else:
+        status = "ok"
+    return schemas.SystemLiveness(status=status, timestamp=get_now_local())
 
 
 def get_worker_status(db: Session) -> schemas.WorkerStatus:
@@ -46,11 +77,10 @@ def get_worker_status(db: Session) -> schemas.WorkerStatus:
 def build_health_payload(
     db: Session, worker_status: schemas.WorkerStatus
 ) -> schemas.SystemHealth:
-    db_status = "online"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        db_status = f"erro: {str(exc)}"
+    # `str(exc)` de um sqlite3.OperationalError costuma trazer o caminho
+    # absoluto do .db; num payload não autenticado isso vaza layout de disco.
+    # O detalhe vai só para o logger interno (ver `_probe_database`).
+    db_status = "online" if _probe_database(db) else "erro"
 
     sched_status = "executando" if scheduler.running else "parado"
     pending = (
@@ -118,6 +148,13 @@ def perform_manual_backup(db: Session, project_root: str) -> dict[str, Any]:
     ts = get_now_local().strftime("%Y%m%d_%H%M%S")
     backup_path = os.path.join(backup_dir, f"automacoes_backup_{ts}.db")
 
+    # `VACUUM INTO` não aceita bind parameter para o destino, então o caminho
+    # entra por f-string. Hoje `backup_path` é 100% derivado no servidor (raiz do
+    # projeto + timestamp), sem entrada do cliente; a checagem de aspa é uma
+    # trava barata para o dia em que a raiz do projeto contiver um caractere que
+    # quebre o literal SQL (achado de baixa severidade — risco futuro, não atual).
+    if "'" in backup_path:
+        raise ValueError("Caminho de backup inválido para VACUUM INTO.")
     db.execute(text(f"VACUUM INTO '{backup_path}'"))
     size_mb = round(os.path.getsize(backup_path) / (1024 * 1024), 2)
 

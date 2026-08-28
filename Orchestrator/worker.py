@@ -394,14 +394,43 @@ def enqueue_output(out: Any, queue: Queue[str]) -> None:
     out.close()
 
 
-def scan_for_artifacts(robot_dir: str, start_time_ts: float) -> str | None:
-    """Busca arquivos gerados durante esta execucao."""
-    patterns: list[str] = ["*.xlsx", "*.html", "*.pdf", "*.csv"]
+_ARTIFACT_PATTERNS: list[str] = ["*.xlsx", "*.html", "*.pdf", "*.csv"]
+
+
+def snapshot_artifact_files(robot_dir: str) -> set[str]:
+    """Nomes dos arquivos de artefato já presentes na pasta antes da execução."""
+    return {
+        os.path.basename(fp)
+        for pattern in _ARTIFACT_PATTERNS
+        for fp in glob.glob(os.path.join(robot_dir, pattern))
+    }
+
+
+def scan_for_artifacts(
+    robot_dir: str, start_time_ts: float, pre_existing: set[str] | None = None
+) -> str | None:
+    """Arquivos gerados durante esta execução.
+
+    Um arquivo conta como novo se (a) não existia na pasta no início — detecção
+    por nome, robusta a ajuste de relógio (NTP) durante a execução — ou (b) tem
+    `mtime` posterior ao início (arquivo pré-existente sobrescrito no run). Antes
+    só a regra (b) valia, com `start_time_ts` no relógio de parede: um passo do
+    relógio para trás durante o run fazia o artefato recém-criado ter `mtime`
+    menor que o início, sumir da lista e ficar indisponível para download, com a
+    execução marcada SUCCESS (achado de baixa severidade).
+    """
+    # Sem snapshot (chamada legada / teste): comportamento puro por mtime.
+    use_snapshot = pre_existing is not None
+    known = pre_existing or set()
     found: list[str] = []
-    for pattern in patterns:
+    for pattern in _ARTIFACT_PATTERNS:
         for fp in glob.glob(os.path.join(robot_dir, pattern)):
-            if os.path.getmtime(fp) >= start_time_ts:
-                found.append(os.path.basename(fp))
+            name = os.path.basename(fp)
+            if name in found:
+                continue
+            is_new_by_name = use_snapshot and name not in known
+            if is_new_by_name or os.path.getmtime(fp) >= start_time_ts:
+                found.append(name)
     return json.dumps(found) if found else None
 
 
@@ -619,9 +648,12 @@ def _finalize_execution(
     robot_dir: str = task_ctx["robot_dir"]
     task_start_ts: float = task_ctx["task_start_ts"]
     task_start_monotonic: float = task_ctx["task_start_monotonic"]
+    pre_existing_artifacts: set[str] = task_ctx.get("pre_existing_artifacts", set())
     broadcast_log(f"\n[Fim da Execução - ExitCode: {process.returncode}]\n", exec_id)
     duration = round(time.monotonic() - task_start_monotonic, 2)
-    artifacts_json = scan_for_artifacts(robot_dir, task_start_ts)
+    artifacts_json = scan_for_artifacts(
+        robot_dir, task_start_ts, pre_existing_artifacts
+    )
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if db_exec and db_exec.status not in [
         EXECUTION_STATUS_TERMINATED,
@@ -694,6 +726,10 @@ def run_task(  # pylint: disable=too-many-locals
     update_stat("active_tasks", 1)
     task_start_ts = time.time()
     task_start_monotonic = time.monotonic()
+    robot_dir = os.path.dirname(script_path)
+    # Snapshot ANTES de spawnar o processo: qualquer arquivo de artefato que
+    # apareça depois é novo, mesmo que o relógio ande para trás no meio do run.
+    pre_existing_artifacts = snapshot_artifact_files(robot_dir)
     log_extra: dict[str, str] = {"correlation_id": exec_id}
     try:
         # Fase 1 — janela curta: valida o status, reivindica e inicia o processo.
@@ -748,7 +784,8 @@ def run_task(  # pylint: disable=too-many-locals
             "task_start_ts": task_start_ts,
             "task_start_monotonic": task_start_monotonic,
             "max_runtime": max_runtime,
-            "robot_dir": os.path.dirname(script_path),
+            "robot_dir": robot_dir,
+            "pre_existing_artifacts": pre_existing_artifacts,
             "reader_thread": reader_thread,
         }
         # Fase 2 — monitoramento sem sessão aberta. _monitor_process abre as

@@ -1,6 +1,6 @@
 """Serviços de diagnóstico operacional do Orchestrator (C1, C4)."""
 
-# pylint: disable=relative-beyond-top-level,too-many-locals,too-many-statements
+# pylint: disable=relative-beyond-top-level
 
 import os
 from collections.abc import Callable
@@ -155,16 +155,21 @@ def build_runtime_checks(  # pylint: disable=too-many-arguments,too-many-positio
         {
             "code": "queue_stalled",
             "label": "Fila parada",
+            # Limiar alinhado ao finding de `diagnostic_checks` e ao nível
+            # `attention` do `operational_baseline` (1×). O `* 2` anterior fazia
+            # o card responder "ok" a uma RUNNING de 1h30 que o resto do sistema
+            # já sinalizava, e ainda contradizia o campo
+            # `running_stalled_warn_seconds` (1h) publicado na mesma resposta.
             "status": (
                 "warn"
                 if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
-                or running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2
+                or running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS
                 else "ok"
             ),
             "detail": (
                 "Há execuções envelhecidas na fila ou em execução."
                 if pending_age_seconds >= DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS
-                or running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2
+                or running_age_seconds >= DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS
                 else "Sem indício de fila parada."
             ),
             "value": f"pending={pending_age_seconds}s,running={running_age_seconds}s",
@@ -277,14 +282,20 @@ def build_queue_payload(  # pylint: disable=too-many-arguments,too-many-position
     }
 
 
-def build_diagnostics_payload(
+def build_diagnostics_payload(  # pylint: disable=too-many-locals,too-many-statements
     db: Session,
     scheduler: Any,
     worker_status_fn: Callable[[Session], Any],
     wal_size_fn: Callable[[], float] | None = None,
     include_history: bool = True,
 ) -> dict[str, Any]:
-    """Monta diagnostico acionavel delegando para sub-funções focadas (C1)."""
+    """Monta diagnostico acionavel delegando para sub-funções focadas (C1).
+
+    Disable confinado a esta função (padrão de `routers/executions.py`): é o
+    agregador central, com um bloco de coleta larga e sequencial cujo split não
+    reduziria complexidade real. O gate R0914/R0915 segue ativo no resto do
+    módulo — antes o disable era a nível de arquivo (achado nº 21).
+    """
     total_started_at = perf_counter()
     findings: list[dict[str, Any]] = []
     timings_ms: dict[str, float] = {}

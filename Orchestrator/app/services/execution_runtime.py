@@ -450,8 +450,18 @@ def apply_timeout_result(
     task_start_monotonic: float,
 ) -> models.Execution | None:
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
-    if not db_exec:
-        return None
+    # Guarda de estado terminal, simétrica aos outros três finalizadores
+    # (complete_process_execution, apply_internal_worker_error,
+    # finalize_reboot_interrupted_task): se um `POST /executions/{id}/stop`
+    # gravou TERMINATED em outra sessão entre o SELECT do tick de monitoramento
+    # e este UPDATE, não sobrescrever para TIMEOUT — isso corromperia a trilha
+    # de auditoria (USER_TERMINATED → MAX_RUNTIME_EXCEEDED) e dispararia alerta
+    # de TASK_TIMEOUT para uma parada esperada.
+    if not db_exec or db_exec.status in [
+        EXECUTION_STATUS_TERMINATED,
+        EXECUTION_STATUS_TIMEOUT,
+    ]:
+        return db_exec
     db_exec.status = EXECUTION_STATUS_TIMEOUT  # type: ignore[assignment]
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
     db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]

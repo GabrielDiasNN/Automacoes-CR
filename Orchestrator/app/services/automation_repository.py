@@ -82,14 +82,26 @@ def paginate(  # pylint: disable=too-many-arguments
     return items, total
 
 
+# Espelha `schemas.AutomationBase.name` (Field max_length=100). Um clone com
+# nome acima disso era persistido sem erro (coluna é String(200) e o clone não
+# passava pelo Pydantic), mas todo PATCH subsequente revalida `name` e falhava
+# com 422 — a automação ficava ineditável pela API (achado nº 19).
+_MAX_NAME_LEN = 100
+
+
 def next_available_clone_name(db: Session, base_name: str) -> str:
-    """Resolve um nome livre para clone, sufixando com um contador se necessário."""
-    candidate = base_name
+    """Resolve um nome livre para clone, truncado a ``_MAX_NAME_LEN`` e sufixado
+    com um contador se necessário (reservando espaço para o sufixo)."""
+    candidate = base_name[:_MAX_NAME_LEN]
+    if get_by_name(db, candidate) is None:
+        return candidate
     idx = 2
-    while get_by_name(db, candidate) is not None:
-        candidate = f"{base_name} {idx}"
+    while True:
+        suffix = f" {idx}"
+        candidate = f"{base_name[: _MAX_NAME_LEN - len(suffix)].rstrip()}{suffix}"
+        if get_by_name(db, candidate) is None:
+            return candidate
         idx += 1
-    return candidate
 
 
 def get_recent_executions(

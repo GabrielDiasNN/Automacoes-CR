@@ -316,6 +316,75 @@ def test_list_scheduled_jobs_sem_jobs_de_automacao_nao_consulta_o_banco(
 
 
 # ---------------------------------------------------------------------------
+# reload_scheduled_tasks — dispatch no scheduler REAL (achado nº 2)
+# ---------------------------------------------------------------------------
+
+
+def test_reload_preserva_next_run_time_do_interval_no_dispatch_real(
+    client: TestClient,  # pylint: disable=unused-argument
+    db_session: Session,
+) -> None:
+    """Achado nº 2: `_resolve_interval_start_date` tem 3 testes diretos, mas o
+    CALL SITE — o dispatch que repassa o resultado como `start_date=` ao
+    `IntervalTrigger` — nunca rodava com o scheduler real. Uma regressão que
+    removesse a propagação do `start_date=` passaria com a suíte verde.
+    """
+    from apscheduler.triggers.interval import (  # pylint: disable=import-outside-toplevel
+        IntervalTrigger,
+    )
+
+    auto = models.Automation(
+        id=970,
+        name="Automacao Interval Dispatch",
+        script_path="./test/run.ps1",
+        enabled=True,
+        schedule=json.dumps({"schedule_type": "interval", "interval_minutes": 60}),
+    )
+    db_session.add(auto)
+    db_session.commit()
+
+    job_id = "job_970_interval"
+    scheduler = app_runtime.scheduler
+    try:
+        # Job pré-existente com um `next_run_time` já a caminho (daqui a 1h).
+        scheduler.add_job(
+            sr.scheduled_task_wrapper,
+            IntervalTrigger(minutes=60),
+            args=[970],
+            id=job_id,
+            replace_existing=True,
+        )
+        esperado = scheduler.get_job(job_id).next_run_time
+        assert esperado is not None
+
+        sr.reload_scheduled_tasks()
+
+        recriado = scheduler.get_job(job_id)
+        assert recriado is not None, "o dispatch de interval não recriou a job"
+        # `next_run_time` preservado (tolerância de 2s para o custo do reload).
+        assert abs((recriado.next_run_time - esperado).total_seconds()) < 2
+    finally:
+        try:
+            scheduler.remove_job(job_id)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+        sr._pending_interval_resume.clear()
+
+
+def test_register_schedule_once_no_passado_loga_aviso(
+    caplog: Any, monkeypatch: Any
+) -> None:
+    # Achado de baixa severidade: um `once` com `run_at` no passado não gerava
+    # job nenhum e o operador não tinha como saber por quê.
+    monkeypatch.setattr(sr, "get_now_local", lambda: datetime(2026, 7, 8, 12, 0))
+    with caplog.at_level("WARNING", logger="orchestrator"):
+        sr._register_schedule(
+            999, {"schedule_type": "once", "run_at": "2026-07-01T09:00:00"}
+        )
+    assert any("once" in r.message and "999" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
 # app.runtime: trigger_worker_wakeup / register_event_loop
 # ---------------------------------------------------------------------------
 

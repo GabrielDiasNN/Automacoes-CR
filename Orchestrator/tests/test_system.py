@@ -4,7 +4,7 @@ Testes focados nas operações e endpoints de diagnóstico/informações do Sist
 
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import app.routers.system as system_router
 from app import models
@@ -32,12 +32,70 @@ def test_reject_wrong_api_key(client: Any) -> None:
     assert res.status_code == 403
 
 
-def test_health_check(client: Any) -> None:
+def test_health_check_liveness_publico(client: Any) -> None:
+    # Rota pública: só o veredito, sem métricas internas nem detalhe do banco.
     res = client.get("/api/system/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] in ["ok", "degraded", "unhealthy"]
+    assert set(data.keys()) == {"status", "timestamp"}
+    # Achado nº 4: nenhuma métrica interna pode vazar pela rota não autenticada.
+    for chave in (
+        "database",
+        "scheduler",
+        "worker",
+        "pending_tasks",
+        "disk_usage_mb",
+        "wal_size_mb",
+        "cpu_usage",
+        "ram_usage_percent",
+    ):
+        assert chave not in data
+
+
+def test_health_full_exige_api_key(client: Any) -> None:
+    assert client.get("/api/system/health/full").status_code == 403
+
+
+def test_health_full_devolve_payload_completo(client: Any) -> None:
+    res = client.get("/api/system/health/full", headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
     assert data["database"] == "online"
     assert data["status"] in ["healthy", "degraded", "unhealthy"]
+    assert "worker" in data and "wal_size_mb" in data
+
+
+def test_health_nao_vaza_mensagem_de_excecao_do_banco() -> None:
+    # Achado nº 4: `db_status = f"erro: {str(exc)}"` expunha o caminho absoluto
+    # do .db num payload não autenticado. Agora o valor é fixo ("erro") e o
+    # detalhe só vai para o logger interno.
+    from app.services import system_runtime  # pylint: disable=import-outside-toplevel
+
+    class _QueryChain:
+        def filter(self, *_a: Any, **_k: Any) -> "_QueryChain":
+            return self
+
+        def count(self) -> int:
+            return 0
+
+    class _SessaoQuebrada:
+        def execute(self, *_a: Any, **_k: Any) -> Any:
+            raise RuntimeError(
+                "unable to open database file: /caminho/secreto/automacoes.db"
+            )
+
+        def query(self, *_a: Any, **_k: Any) -> "_QueryChain":
+            return _QueryChain()
+
+    sessao = cast(Any, _SessaoQuebrada())
+    live = system_runtime.build_liveness_payload(sessao, WorkerStatus(is_alive=True))
+    assert live.status == "unhealthy"
+    assert "secreto" not in repr(live.model_dump())
+
+    health = system_runtime.build_health_payload(sessao, WorkerStatus(is_alive=True))
+    assert health.database == "erro"
+    assert "secreto" not in repr(health.model_dump())
 
 
 def test_csp_restringe_connect_src_a_self(client: Any) -> None:
@@ -179,7 +237,7 @@ def test_uptime(client: Any) -> None:
 
 
 def test_health_includes_wal_size(client: Any) -> None:
-    res = client.get("/api/system/health")
+    res = client.get("/api/system/health/full", headers=AUTH_HEADERS)
     assert res.status_code == 200
     assert "wal_size_mb" in res.json()
 
@@ -505,3 +563,34 @@ def test_system_router_project_root_points_to_repo_root() -> None:
 
     expected_root = Path(__file__).resolve().parents[2]
     assert Path(system_router.PROJECT_ROOT).resolve() == expected_root.resolve()
+
+
+def _queue_stalled_check(running_age_seconds: float) -> dict[str, Any]:
+    from types import SimpleNamespace  # pylint: disable=import-outside-toplevel
+
+    from app.services.system_diagnostics import (  # pylint: disable=import-outside-toplevel
+        build_runtime_checks,
+    )
+
+    checks = build_runtime_checks(
+        worker_status=WorkerStatus(is_alive=True),
+        scheduler=SimpleNamespace(running=True),
+        jobs=[object()],
+        last_ping_age_seconds=1.0,
+        pending_age_seconds=0.0,
+        running_age_seconds=running_age_seconds,
+        running_over_runtime=[],
+        wal_risk="normal",
+        wal_size_mb=1.0,
+        schema_status={"valid": True},
+        schema_version="test",
+    )
+    return next(c for c in checks if c["code"] == "queue_stalled")
+
+
+def test_queue_stalled_usa_limiar_de_uma_hora() -> None:
+    # Achado nº 20: o card usava DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2 (2h),
+    # divergindo do finding, do baseline e do próprio campo de SLO (1h) publicado
+    # na mesma resposta. Uma RUNNING de 90 min deve acender "warn".
+    assert _queue_stalled_check(90 * 60)["status"] == "warn"
+    assert _queue_stalled_check(30 * 60)["status"] == "ok"

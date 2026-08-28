@@ -352,6 +352,17 @@ function Test-PythonArchitecture {
                 -RecommendedAction "Use a camada de banco/runtime existente ou declare uma excecao arquitetural documentada."
         }
 
+        if ($content -match '(?m)(?:^|[^A-Za-z0-9_])(?:db|session|self\._db)\.query\(' -and
+            $normalizedRelativePath -match '^Orchestrator\\app\\routers\\' -and
+            -not (Test-MatchAnyPattern -Value $normalizedRelativePath -Patterns (Get-RulePatterns -PropertyName "router_orm_query_allowlist"))) {
+            Add-ArchitectureFinding `
+                -Severity "critical" `
+                -Rule "ORM_QUERY_IN_API_ROUTER" `
+                -File $relativePath `
+                -Detail "Router FastAPI montando consulta ORM (db.query). Acesso a dados deve viver em services/*_repository.py (revisao arquitetural 26/07/2026, achado nº 6 da revisao Orchestrator/Dashboard)." `
+                -RecommendedAction "Mova a consulta para automation_repository / execution_repository / audit_repository, ou declare a excecao em Tools/architecture-standard.rules.json (router_orm_query_allowlist)."
+        }
+
         if ($normalizedRelativePath -match '^Orchestrator\\tests\\') {
             continue
         }

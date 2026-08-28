@@ -164,8 +164,19 @@ class SecurityHeadersMiddleware(
         return response
 
 
+# A UI de docs e o schema OpenAPI ficam OFF por padrão: expõem toda a superfície
+# da API a qualquer cliente que alcance a porta (fora do rate limit, que só age
+# em `/api`) — reconhecimento fácil. Ative com `ORCHESTRATOR_EXPOSE_API_DOCS=1`
+# em ambiente de desenvolvimento (a suíte de testes liga por conta própria).
+_EXPOSE_API_DOCS = os.environ.get("ORCHESTRATOR_EXPOSE_API_DOCS", "0") == "1"
+
 app = FastAPI(
-    title="Central de Automações", version=ORCHESTRATOR_VERSION, lifespan=lifespan
+    title="Central de Automações",
+    version=ORCHESTRATOR_VERSION,
+    lifespan=lifespan,
+    docs_url="/docs" if _EXPOSE_API_DOCS else None,
+    redoc_url="/redoc" if _EXPOSE_API_DOCS else None,
+    openapi_url="/openapi.json" if _EXPOSE_API_DOCS else None,
 )
 
 register_exception_handlers(app, logger)
@@ -290,5 +301,5 @@ def read_root() -> dict[str, Any]:
         "version": ORCHESTRATOR_VERSION,
         "scheduler_running": scheduler.running,
         "dashboard_url": "/dashboard/",
-        "docs_url": "/docs",
+        "docs_url": "/docs" if _EXPOSE_API_DOCS else None,
     }
