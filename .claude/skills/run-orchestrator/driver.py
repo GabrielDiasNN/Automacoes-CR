@@ -5,7 +5,8 @@ Uso (sempre a partir da raiz do repositorio, com o Python do .venv):
     .venv\\Scripts\\python .claude\\skills\\run-orchestrator\\driver.py <comando> [args]
 
 Comandos:
-    health                 GET /api/system/health (sem browser). Exit 0 se saudavel.
+    health                 GET /api/system/health (liveness publico) + /health/full
+                           autenticado se a chave existir. Exit 0 se operante.
     api <rota> [...]       GET autenticado em uma ou mais rotas /api/*. Imprime resumo do JSON.
     login                  Fluxo real de usuario: digita a API Key no gate e entra. Screenshot.
     shot <rota> [...]      Injeta a chave em sessionStorage (pula o gate) e captura cada rota.
@@ -81,7 +82,7 @@ def _get_json(rota: str) -> object:
 
 def cmd_health() -> int:
     try:
-        dados = _get_json("/api/system/health")
+        live = _get_json("/api/system/health")
     except urllib.error.HTTPError as exc:
         # HTTPError e subclasse de URLError e precisa vir ANTES: a API respondeu
         # (429 do RateLimitMiddleware, 500 de health degradado). Sugerir restart
@@ -93,21 +94,40 @@ def cmd_health() -> int:
         print(f"[FALHA] API nao respondeu em {BASE}: {exc}")
         print("        Suba com: pwsh -File Infrastructure\\Start-Orchestrator.ps1")
         return 1
-    if not isinstance(dados, dict):
+    if not isinstance(live, dict):
         print("[FALHA] payload inesperado de /api/system/health (esperado objeto JSON)")
         return 1
-    worker = dados.get("worker") or {}
-    print(f"status     : {dados.get('status')}")
-    print(f"database   : {dados.get('database')}")
-    print(f"scheduler  : {dados.get('scheduler')}")
-    print(
-        f"worker     : alive={worker.get('is_alive')} pid={worker.get('pid')} "
-        f"tasks={worker.get('tasks_completed')}"
-    )
-    print(f"pendentes  : {dados.get('pending_tasks')}")
-    ok = dados.get("database") == "online" and dados.get("scheduler") == "executando"
-    print("[OK] saudavel" if ok else "[FALHA] degradado")
-    return 0 if ok else 1
+    status = live.get("status")
+    print(f"status     : {status}")
+
+    # O detalhamento (DB, scheduler, worker, pendentes) migrou para
+    # /api/system/health/full, que exige X-API-Key. So consulta se a chave existir.
+    if API_KEY:
+        try:
+            full = _get_json("/api/system/health/full")
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
+            print(f"           (detalhe /health/full indisponivel: {exc})")
+        else:
+            if isinstance(full, dict):
+                worker = full.get("worker") or {}
+                print(f"database   : {full.get('database')}")
+                print(f"scheduler  : {full.get('scheduler')}")
+                print(
+                    f"worker     : alive={worker.get('is_alive')} pid={worker.get('pid')} "
+                    f"tasks={worker.get('tasks_completed')}"
+                )
+                print(f"pendentes  : {full.get('pending_tasks')}")
+
+    # "healthy" aceito para tolerar uma instancia ainda no contrato antigo
+    # (antes de [1.3.57] o liveness devolvia "healthy" em vez de "ok").
+    if status in ("ok", "healthy"):
+        print("[OK] saudavel")
+        return 0
+    if status == "degraded":
+        print("[AVISO] degradado (worker offline); DB e scheduler operantes")
+        return 0
+    print("[FALHA] unhealthy (DB ou scheduler fora)")
+    return 1
 
 
 def cmd_api(rotas: list[str]) -> int:
@@ -261,8 +281,10 @@ COMANDOS: dict[str, Callable[[list[str]], int]] = {
     "smoke": lambda _: cmd_smoke(),
 }
 
-# `health` bate numa rota publica (Orchestrator/app/routers/system.py, sem
-# Depends(get_api_key)); os demais mandam X-API-Key e devolveriam 403 mudo.
+# `health` bate na rota publica de liveness (Orchestrator/app/routers/system.py,
+# `GET /api/system/health`, sem Depends(get_api_key)); os demais mandam X-API-Key
+# e devolveriam 403 mudo. O detalhe (/health/full) e autenticado, mas cmd_health
+# so o consulta quando a chave existe — a ausencia dela nao reprova o comando.
 COMANDOS_SEM_CHAVE = frozenset({"health"})
 
 

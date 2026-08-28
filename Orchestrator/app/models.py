@@ -10,6 +10,7 @@ Tabelas:
 """
 
 import base64
+import logging
 import zlib
 from typing import Any
 
@@ -30,6 +31,8 @@ from sqlalchemy.types import TypeDecorator
 
 from .database import Base
 from .timezone import get_now_local
+
+logger = logging.getLogger("orchestrator")
 
 
 class CompressedText(TypeDecorator[str]):
@@ -54,7 +57,18 @@ class CompressedText(TypeDecorator[str]):
         try:
             compressed = base64.b64decode(value.encode("ascii"))
             return zlib.decompress(compressed).decode("utf-8")
-        except Exception:
+        except Exception as exc:
+            # O fallback cobre dado legado não comprimido (migration
+            # 20260620_02), mas o mesmo except absorveria blob truncado,
+            # valor editado à mão no .db ou mudança futura de formato,
+            # devolvendo lixo como se fosse log válido. O warning deixa
+            # rastro em Logs/orchestrator.jsonl para diferenciar os casos.
+            logger.warning(
+                "CompressedText: falha ao descomprimir valor (len=%d): %s. "
+                "Retornando conteúdo cru como fallback de dado legado.",
+                len(value),
+                exc,
+            )
             return value  # fallback: dado legado não comprimido
 
 

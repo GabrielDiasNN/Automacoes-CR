@@ -69,7 +69,7 @@ Comandos individuais:
 
 | Comando | O que faz |
 |---|---|
-| `health` | `GET /api/system/health` sem browser. Resumo de database/scheduler/worker. |
+| `health` | `GET /api/system/health` (liveness público) sem browser; se a chave existir, complementa com `GET /api/system/health/full` (database/scheduler/worker). |
 | `api <rota> [...]` | `GET` autenticado em rotas `/api/*`. Imprime o JSON truncado. |
 | `login` | Fluxo real: digita a chave no gate, clica **Entrar →**, espera o shell. |
 | `shot [rota ...]` | Injeta a chave em `sessionStorage` (pula o gate) e captura cada rota. Sem argumentos, captura todas. |

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ApiKeyProvider } from "./context/ApiKeyContext";
+import { LiveStatusProvider } from "./context/LiveStatusContext";
 import { TableDensityProvider } from "./context/TableDensityContext";
 import { ApiKeyGate } from "./components/ApiKeyGate";
 import { ToastProvider } from "./components/ui";
@@ -19,7 +20,13 @@ export default function App() {
           <ApiKeyGate>
             <BrowserRouter basename="/dashboard">
               <Routes>
-                <Route element={<Shell />}>
+                <Route
+                  element={
+                    <LiveStatusProvider>
+                      <Shell />
+                    </LiveStatusProvider>
+                  }
+                >
                   <Route index element={<Navigate to="/painel" replace />} />
                   <Route path="painel" element={<PainelPage />} />
                   <Route path="execucoes" element={<ExecucoesPage />} />

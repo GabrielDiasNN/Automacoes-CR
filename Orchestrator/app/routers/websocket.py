@@ -16,9 +16,8 @@ from starlette.concurrency import run_in_threadpool
 from .. import schemas
 from ..database import SessionLocal, session_scope
 from ..middleware import get_api_key
-from ..models import Execution
 from ..schemas import format_dt_br
-from ..services import ws_auth
+from ..services import execution_repository as exec_repo, ws_auth
 from ..services.log_broadcast import LogBroadcaster
 from ..timezone import get_now_local
 
@@ -174,7 +173,7 @@ def _validate_ws_key(websocket: WebSocket) -> bool:
 
 def _fetch_execution_logs(exec_id: str) -> str | None:
     with session_scope(SessionLocal) as db:
-        db_exec = db.query(Execution).filter(Execution.id == exec_id).first()
+        db_exec = exec_repo.get_by_id(db, exec_id)
         return str(db_exec.logs) if db_exec and db_exec.logs else None
 
 

@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Pause, Play, RefreshCw, Zap } from "lucide-react";
 import { orchestratorApi, type Automation } from "../api/orchestrator";
 import { Button, Card, ErrorState, Loading, Nameplate, RatioBar, StatusTag, useToast } from "../components/ui";
@@ -34,6 +35,24 @@ export function AutomacoesPage() {
   const items = data?.items ?? [];
   const crit = data?.crit ?? {};
   const [busy, setBusy] = useState<number | null>(null);
+
+  // `?focus=<nome>` vem do Ctrl+K (CommandPalette): rola até o card e o destaca.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusName = searchParams.get("focus");
+  const focusedCardRef = useRef<HTMLDivElement>(null);
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const lista = data?.items ?? [];
+    if (!focusName || lista.length === 0) return;
+    const alvo = lista.find((a) => a.name === focusName);
+    if (!alvo) return;
+    focusedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedId(alvo.id);
+    const limpar = setTimeout(() => setHighlightedId(null), 2400);
+    setSearchParams({}, { replace: true }); // consome o parâmetro
+    return () => clearTimeout(limpar);
+  }, [focusName, data, setSearchParams]);
 
   const act = useCallback(
     async (id: number, fn: () => Promise<{ message: string }>, okMsg: string) => {
@@ -77,9 +96,14 @@ export function AutomacoesPage() {
         <div className={styles.grid}>
           {items.map((a) => {
             const total24h = a.success_24h + a.failures_24h;
+            const focado = a.name === focusName || a.id === highlightedId;
             return (
               <Card key={a.id} alert={a.last_status === "ERROR" || a.last_status === "TIMEOUT"}>
-                <div className={styles.card}>
+                <div
+                  ref={focado ? focusedCardRef : undefined}
+                  className={styles.card}
+                  style={highlightedId === a.id ? { outline: "2px solid var(--cyan)", outlineOffset: 3, borderRadius: 4 } : undefined}
+                >
                   <div className={styles.top}>
                     <span
                       className={styles.lamp}

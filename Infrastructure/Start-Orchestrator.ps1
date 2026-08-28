@@ -85,6 +85,10 @@ $apiProcess = Start-Process -FilePath $VenvPython -ArgumentList "-m uvicorn app.
 $apiProcess.Id | Out-File -FilePath (Join-Path $OrchestratorDir "orchestrator.pid") -Encoding ascii -Force
 
 # 4. VALIDAR STARTUP REAL DA API
+# `/api/system/health` publico virou liveness reduzido em [1.3.57]: `status`
+# vale `ok|degraded|unhealthy`, e `unhealthy` <=> DB ou scheduler fora (a mesma
+# condicao do antigo `database==online AND scheduler==executando`). Nao precisa
+# da chave aqui.
 $healthUrl = "http://127.0.0.1:$HubPort/api/system/health"
 $apiReady = $false
 for ($i = 0; $i -lt 20; $i++) {
@@ -92,7 +96,7 @@ for ($i = 0; $i -lt 20; $i++) {
     if (-not (Get-Process -Id $apiProcess.Id -ErrorAction SilentlyContinue)) { break }
     try {
         $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2 -ErrorAction Stop
-        if ($health.database -eq "online" -and $health.scheduler -eq "executando") {
+        if ($health.status -and $health.status -ne "unhealthy") {
             $apiReady = $true
             break
         }

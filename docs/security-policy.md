@@ -98,9 +98,21 @@ paths = ["docs/security-policy.md"]
 
 ### Dashboard e API
 
-- O Dashboard e os endpoints da API requerem o header `X-Monitor-Token`.
-- O token é configurado no `.env` e validado em cada requisição pelo middleware de autenticação.
-- **Nunca** expor o token em URLs (query params), logs ou respostas de erro.
+- O Dashboard e os endpoints da API requerem o header `X-API-Key` (`Depends(get_api_key)`).
+- A chave é configurada no `.env` (`ORCHESTRATOR_API_KEY`) e validada em cada requisição pelo middleware, com comparação timing-safe (`hmac.compare_digest`).
+- **Nunca** expor a chave em URLs (query params), logs ou respostas de erro.
+
+#### Documentação da API (OpenAPI / Swagger / ReDoc)
+
+- `/docs`, `/redoc` e `/openapi.json` ficam **desligados por padrão** — expõem toda a superfície da API a qualquer cliente que alcance a porta (ficam fora do rate limit, que só age em `/api`).
+- Habilite apenas em desenvolvimento com `ORCHESTRATOR_EXPOSE_API_DOCS=1` no `.env`. A suíte de testes liga a flag por conta própria (`Orchestrator/tests/conftest.py`).
+
+#### Exceção deliberada: liveness público
+
+- `GET /api/system/health` **não** exige `X-API-Key`. É um probe operacional consumido pelo driver da skill `run-orchestrator` e pelos runbooks de rotação/release.
+- O payload é reduzido de propósito: **apenas** `status` (`ok` | `degraded` | `unhealthy`) e `timestamp`. Nenhuma métrica interna (disco, WAL, CPU, RAM, contagem de fila) e nenhuma mensagem de exceção do banco.
+- O detalhamento completo (`SystemHealth`: DB, scheduler, worker, disco, WAL, CPU, RAM) está em `GET /api/system/health/full`, que **exige** `X-API-Key`.
+- As duas rotas WebSocket usam `_validate_ws_key` (token efêmero de uso único) antes do `accept()`, não `Depends(get_api_key)`.
 
 ### Automações
 
@@ -122,7 +134,7 @@ paths = ["docs/security-policy.md"]
 1. Gerar nova credencial no sistema de origem.
 2. Atualizar `.env` local.
 3. Reiniciar o Orchestrator: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
-4. Verificar saúde via `GET /api/system/health`.
+4. Verificar saúde via `GET /api/system/health` (liveness público) e, com a chave, `GET /api/system/health/full`.
 5. Registrar no `AuditLog` via `POST /api/system/audit` (se disponível).
 
 ---

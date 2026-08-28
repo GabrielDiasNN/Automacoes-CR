@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.3.57] - 28/08/2026
+
+### Corrigido
+
+Rodada da revisão "Orchestrator e Dashboard" (27/08) — 31 achados, 0 críticos. Os defeitos ativos, os furos de gate e as lacunas de cobertura de caminhos de produção:
+
+#### Backend — defeitos ativos
+
+- **Achado nº 1 / nº 16 — `validate_database_schema` só comparava colunas.** Um banco legado com todas as colunas mas **sem** `ix_execucao_running_unica_por_automacao` (índice único parcial da migration `20260731_01`, que impõe "no máximo uma execução RUNNING por automação") era carimbado direto como head por `run_alembic_migrations`, e a migration que cria o índice nunca rodava — a invariante sumia do banco em silêncio. `validate_database_schema` passou a reportar `missing_indexes` (índices declarados em `Base.metadata` ausentes no banco), **fora** de `valid` para não virar hard-fail de startup. Antes de carimbar um schema legado, `run_alembic_migrations` cria via `Index.create(checkfirst=True)` os índices que faltam (não dá para cair no `command.upgrade` normal: a migration inicial faz `CREATE TABLE` sem checkfirst). Generaliza para qualquer índice criado por `op.execute`.
+- **Achado nº 3 — race no drawer de execuções (`Dashboard`).** Clicar na execução A e depois na B antes da resposta de A chegar podia fazer `setDetail(dA)` rodar por último: o operador confirmava "Parar"/"Reenfileirar" sobre A tendo aberto B (ação em automação de produção). `openDetail` ganhou guarda de sequência + `AbortController`, mesmo padrão de `usePolling`; `getExecution` passou a repassar o `signal`.
+- **Achado nº 17 — `apply_timeout_result` era o único dos quatro finalizadores sem guarda de estado terminal.** Um `POST /executions/{id}/stop` que grava `TERMINATED` entre o SELECT do tick de monitoramento e o UPDATE do timeout era sobrescrito para `TIMEOUT` com `failure_reason=MAX_RUNTIME_EXCEEDED` — a trilha de auditoria passava a mentir sobre a causa. Guarda simétrica aos irmãos.
+- **Achado nº 18 / nº 19 — `clone_automation` sem gate de governança.** Clonar produzia automação nova (`201`, nova linha) sem passar pelo preflight — a porta lateral mais fácil para criar automação fora de toda a governança quando o `automation.manifest.json` de origem sumia do disco. Agora `_assert_clone_allowed_or_422` recusa (`422`) se o diretório não tem manifesto. `next_available_clone_name` trunca em 100 chars (limite Pydantic de `name`): um clone com nome longo demais era persistido e depois **qualquer** PATCH nele falhava com 422 em `name`.
+- **Achado nº 20 — card "Fila parada" usava limiar 2× do resto do sistema.** `queue_stalled` disparava em `DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS * 2` (2h) enquanto o finding, o baseline e o próprio campo `running_stalled_warn_seconds` da mesma resposta usam 1h. Uma RUNNING de 1h30 aparecia como "ok". Removido o `* 2`.
+
+#### Backend — furos de gate e dívida de arquitetura
+
+- **Achado nº 4 — `/api/system/health` público expunha métricas internas e exceção crua.** `GET /api/system/health` virou liveness reduzido (só `status` e `timestamp`, valores `ok`|`degraded`|`unhealthy`); o payload completo (`SystemHealth`: DB, scheduler, worker, disco, WAL, CPU, RAM) migrou para `GET /api/system/health/full`, **autenticada**. `db_status` deixou de embutir `str(exc)` (que carrega o caminho absoluto do `.db`) — vai só para o logger. Consumidores atualizados: `driver.py` da skill `run-orchestrator`, o Dashboard (`getHealth`), `Infrastructure/Start-Orchestrator.ps1` (readiness passa a checar `status != "unhealthy"` na rota pública), `Infrastructure/MonitorAutomacoes.ps1` (watchdog — já enviava `X-API-Key`, passou a consumir `/health/full`), `docs/security-policy.md` e `docs/release-checklist.md`.
+- **Achado nº 6 — `db.query(...)` reincidente em routers após a regra de 26/07.** As 7 consultas ORM em `automation_config.py`, `automation_ide.py`, `system.py` e `websocket.py` migraram para `automation_repository` / `execution_repository` (nova `count_active`) e o novo `audit_repository`. Novo gate **bloqueante** `ORM_QUERY_IN_API_ROUTER` em `Test-ArchitectureStandard.ps1` (com allowlist explícita em `architecture-standard.rules.json`) — a regra passou de honorária a executável.
+- **Achado nº 21 — `pylint: disable` a nível de arquivo neutralizava o gate R0914/R0915/R0917.** Os disables de `system_diagnostics.py` e `beneficiamento.py` migraram para as funções específicas (padrão de `routers/executions.py`); handlers do `beneficiamento` que só usam `Query(...)` ganharam `_api_key` (prefixo `_`) e disable por assinatura. O gate volta a valer para o resto dos dois módulos.
+- **Achado de baixa severidade — `/docs`, `/redoc`, `/openapi.json`** ficam **off por padrão** (`ORCHESTRATOR_EXPOSE_API_DOCS=1` só em dev; a suíte liga sozinha).
+
+#### Backend — riscos latentes e cobertura de produção
+
+- **Achado nº 8** — `CompressedText.process_result_value` engolia qualquer falha de descompressão (blob truncado, valor editado à mão) como se fosse dado legado. Adicionado `logger.warning` com o tamanho do valor e o erro.
+- **Achado nº 2** — teste de integração no `reload_scheduled_tasks` **real**: o dispatch de `interval` que repassa `_resolve_interval_start_date` como `start_date=` ao `IntervalTrigger` (o call site do reparo do incidente de 31/07) nunca rodava com o scheduler real.
+- **Achado nº 5** — `set_sqlite_pragma` (engine de produção) agora é exercitado de verdade: `busy_timeout=30000`, `journal_mode=wal`, `synchronous=NORMAL`, `foreign_keys=ON` conferidos num engine avulso. Antes só uma checagem de string na fonte.
+- **Achados nº 11, 12, 13** — cobertura de `env_admin.sync_global_test_mode_env` (subprocess/`timeout`/erro), `database.purge_old_snapshots` (afirma o inteiro retornado — o `0` de "falhou" ≠ `0` de "nada a remover") e `path_safety.is_contained` (ramo `except ValueError` de drives distintos, com `is False` explícito).
+- **Baixa severidade** — `scan_for_artifacts` deixou de perder artefato quando o relógio anda para trás durante a execução (snapshot de arquivos pré-existentes por nome, além do `mtime`); `_preview_periodic_runs` passou a iterar dia a dia (era minuto a minuto, até 89.280 iterações por request de `/api/system/overview`); `once` com `run_at` no passado agora loga `WARNING`; `str(e)` deixou de ir ao cliente em rotas administrativas de IDE/config/backup/env; `VACUUM INTO` ganhou trava de aspa (risco futuro).
+
+#### Dashboard
+
+- **Achado nº 14** — `TimeSeries` só recria o gráfico uPlot quando a **estrutura** muda (nº de séries, rótulos/tons, eixo X); mudança só de valores usa `plot.setData`. No Monitor, cada mensagem do WebSocket destruía e reconstruía o gráfico inteiro.
+- **Achado nº 15** — `StatusBar` e `MonitorPage` abriam **cada um** seu `useDiagnostics(10s)` e seu `useWebSocket`: entrar em `/monitor` dobrava as chamadas a `health`/`worker/status` e abria uma 2ª conexão ao mesmo event bus. Novo `LiveStatusProvider` (montado uma vez no `Shell`) é dono único do polling e da conexão; consumidores usam `useLiveStatus` / `useLiveEvents`.
+- **Baixa severidade** — `useDiagnostics` não escreve estado pós-unmount; `Ctrl+K` numa automação agora navega para `/automacoes?focus=<nome>`, que rola até o card e o destaca (antes ia sempre para `/automacoes`).
+
+#### Documentação
+
+- **Achado nº 9** — `docs/testing-strategy.md` e `docs/test-coverage-map.md` citavam `tests/test_api.py` (**não existe**), "165 testes" (são ~1000), "85,40%" (é 88%) e "~13 arquivos" (são ~75). Corrigidos e marcados como visão curada, apontando `pytest --co`/`--cov` e a skill `ci-gates` como fonte de verdade.
+- **Achado nº 10** — `docs/logging-standard.md` afirmava rollout "completo" sem registrar a exceção arquitetural do **RE-03** (`Receitas Emitidas`): os dois filhos Python usam `stdout` como canal de dados e por isso **não** recebem `HUB_LOG_STRUCTURED` — as linhas chegam ao envelope como `log` genérico com `component: "ps_script"`, nunca `"python_domain"`. Nova § 3.1.
+
+### Notas
+
+- Verificação: **1017 pytest** (+30, gate de cobertura 88% ≥ 84%), **110 vitest** (+8), lint Python e TS limpos, `Test-ArchitectureStandard` Pester +2. `Test-PythonGovernance` (mypy `--strict` + pylint) verde. **E2E Playwright** (`docs/playwright-e2e-evidence-1357.md`): 6 rotas + login + drawer de execução + Ctrl+K, **0 erro / 0 warning** de console; a regressão do nº 4 nos scripts de `Infrastructure/` foi encontrada e corrigida nessa etapa.
+- `test_oracle_circuit_breaker.py` (relógio real, baixa severidade) deixado como está — a margem de 2× torna a flakiness rara e ela nunca apareceu no CI.
+- Contrato da rota de health mudou: quem consumia `GET /api/system/health` para ler `database`/`worker` deve migrar para `GET /api/system/health/full` (autenticada).
+
 ## [1.3.56] - 27/08/2026
 
 ### Corrigido

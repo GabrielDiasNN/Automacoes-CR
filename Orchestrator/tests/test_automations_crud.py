@@ -707,3 +707,53 @@ def test_set_global_test_mode_via_json_body(client: TestClient) -> None:
     )
     assert res.status_code == 200
     assert "desativado" in res.json()["message"]
+
+
+def test_clone_bloqueado_quando_manifesto_some_do_disco(client: TestClient) -> None:
+    # Achado nº 18: `clone_automation` montava e persistia `models.Automation`
+    # direto, sem gate. Uma automação criada quando o manifesto existia, cujo
+    # `automation.manifest.json` depois some (pasta removida, rollback parcial),
+    # podia ser clonada e o clone nascia habilitável fora da governança.
+    criada = client.post(
+        "/api/automations",
+        json={"name": "Alvo de Clone", "script_path": "./test/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+    assert criada.status_code == 201
+    auto_id = criada.json()["id"]
+
+    manifesto = Path(auto_router.PROJECT_ROOT) / "test" / "automation.manifest.json"
+    assert manifesto.is_file()
+    manifesto.unlink()
+
+    clonada = client.post(f"/api/automations/{auto_id}/clone", headers=AUTH_HEADERS)
+    assert clonada.status_code == 422
+    assert "manifest" in clonada.json()["detail"].lower()
+
+
+def test_clone_de_nome_longo_fica_editavel_via_patch(client: TestClient) -> None:
+    # Achado nº 19: o clone ganhava " (Clone)" (+8 chars) sem checagem de
+    # tamanho e não passava pelo Pydantic (max_length=100), então um clone com
+    # nome > 100 era persistido — mas todo PATCH nele falhava com 422.
+    nome_longo = "Auto " + "n" * 90  # 95 chars — legítimo (limite é 100)
+    assert len(nome_longo) == 95
+    criada = client.post(
+        "/api/automations",
+        json={"name": nome_longo, "script_path": "./test/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+    assert criada.status_code == 201
+    auto_id = criada.json()["id"]
+
+    clonada = client.post(f"/api/automations/{auto_id}/clone", headers=AUTH_HEADERS)
+    assert clonada.status_code == 201
+    clone_id = clonada.json()["id"]
+    assert len(clonada.json()["name"]) <= 100
+
+    # O PATCH que só liga/desliga uma flag precisa passar — antes: 422 em "name".
+    patch = client.patch(
+        f"/api/automations/{clone_id}",
+        json={"description": "editado apos clone"},
+        headers=AUTH_HEADERS,
+    )
+    assert patch.status_code == 200

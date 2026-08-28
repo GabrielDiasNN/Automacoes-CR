@@ -314,11 +314,37 @@ def test_snapshot_usa_temporario_unico_por_processo(tmp_path: Any) -> None:
 
 
 @pytest.mark.unitario
-def test_busy_timeout_alinhado_ao_connect_timeout() -> None:
-    """O PRAGMA rodava DEPOIS do connect e substituía o handler de 30 s por 5 s."""
-    import inspect  # pylint: disable=import-outside-toplevel
+def test_set_sqlite_pragma_aplica_valores_de_producao(tmp_path: Any) -> None:
+    """Achado nº 5: `set_sqlite_pragma` (engine de produção) nunca era chamado
+    por teste algum — o `conftest` registra um listener próprio só com
+    `foreign_keys=ON`. Aqui a função de produção roda de verdade num engine
+    avulso (banco em arquivo — `journal_mode=WAL` não pega em `:memory:`) e os
+    PRAGMAs efetivos são conferidos.
 
-    from app import database  # pylint: disable=import-outside-toplevel
+    O `busy_timeout=30000` importa: o `timeout` do pysqlite instala um busy
+    handler de 30 s, mas o PRAGMA roda logo depois e o SUBSTITUI. Se alguém
+    "simplificar" o listener e esquecer a linha, o `database is locked` sob
+    contenção volta em produção — e a suíte continuaria verde sem este teste.
+    """
+    from app.database import (  # pylint: disable=import-outside-toplevel
+        set_sqlite_pragma,
+    )
+    from sqlalchemy import (  # pylint: disable=import-outside-toplevel
+        create_engine,
+        event,
+        text,
+    )
 
-    fonte = inspect.getsource(database.set_sqlite_pragma)
-    assert "PRAGMA busy_timeout=30000" in fonte
+    engine = create_engine(f"sqlite:///{tmp_path / 'pragma.db'}")
+    event.listen(engine, "connect", set_sqlite_pragma)
+    try:
+        with engine.connect() as conn:
+            assert conn.execute(text("PRAGMA busy_timeout")).scalar() == 30000
+            assert (
+                str(conn.execute(text("PRAGMA journal_mode")).scalar()).lower() == "wal"
+            )
+            # synchronous NORMAL == 1
+            assert conn.execute(text("PRAGMA synchronous")).scalar() == 1
+            assert conn.execute(text("PRAGMA foreign_keys")).scalar() == 1
+    finally:
+        engine.dispose()

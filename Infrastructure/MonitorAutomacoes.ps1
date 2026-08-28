@@ -33,8 +33,10 @@ function Write-Log {
 $HubPort = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "HUB_API_PORT" -Default "8000"
 $ApiKey  = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "ORCHESTRATOR_API_KEY"
 
-# Endpoint de Health real
-$HealthUrl = "http://127.0.0.1:$HubPort/api/system/health"
+# Endpoint de Health completo (autenticado). Desde [1.3.57] a rota pública
+# `/api/system/health` é só liveness (`status`); DB/scheduler/worker vivem em
+# `/health/full`, que exige `X-API-Key` (já enviado abaixo).
+$HealthUrl = "http://127.0.0.1:$HubPort/api/system/health/full"
 
 # --- GERENCIAMENTO DE MUTEX (Instancia Unica) ---
 $MutexName = if ([string]::IsNullOrWhiteSpace($MutexNameOverride)) { "Global\MonitorAutomacoesMutex" } else { $MutexNameOverride }

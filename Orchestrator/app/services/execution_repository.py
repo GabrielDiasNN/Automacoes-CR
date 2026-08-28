@@ -9,15 +9,30 @@ coleções vazias e deixam a tradução para 404 na camada HTTP.
 
 from __future__ import annotations
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Query, Session, joinedload
 
 from .. import models
+from ..constants import EXECUTION_ACTIVE_STATUSES
 
 
 def base_query_with_automation(db: Session) -> Query[models.Execution]:
     """Query base de execuções com a automação carregada (evita N+1)."""
     return db.query(models.Execution).options(joinedload(models.Execution.automation))
+
+
+def count_active(db: Session) -> int:
+    """Número de execuções em status ativo (PENDING/RUNNING/…).
+
+    Usado pela rota de recuperação do worker para reportar o tamanho da fila
+    presa quando o processo cai.
+    """
+    total = (
+        db.query(func.count(models.Execution.id))  # pylint: disable=not-callable
+        .filter(models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES))
+        .scalar()
+    )
+    return int(total or 0)
 
 
 def get_by_id(db: Session, exec_id: str) -> models.Execution | None:

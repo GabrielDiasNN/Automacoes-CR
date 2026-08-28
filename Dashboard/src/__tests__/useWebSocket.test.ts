@@ -11,6 +11,7 @@ class FakeWebSocket {
   url: string;
   readyState = 0;
   closed = false;
+  sent: string[] = [];
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onmessage: ((evt: MessageEvent) => void) | null = null;
@@ -19,6 +20,10 @@ class FakeWebSocket {
   constructor(url: string) {
     this.url = url;
     FakeWebSocket.instances.push(this);
+  }
+
+  send(data: string) {
+    this.sent.push(data);
   }
 
   close() {
@@ -118,6 +123,96 @@ describe("useWebSocket", () => {
     });
     expect(resolvers).toHaveLength(1);
     expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it("reconecta com backoff exponencial em quedas consecutivas sem sucesso (achado nº 7)", async () => {
+    renderHook(() => useWebSocket("/ws/events", "chave"));
+
+    // 1ª conexão abre e cai com o hook ainda montado.
+    await act(async () => {
+      resolvers[0](okToken("t1"));
+      await vi.advanceTimersByTimeAsync(0);
+      FakeWebSocket.instances[0].onopen?.();
+      FakeWebSocket.instances[0].onclose?.();
+    });
+
+    // 1ª reconexão: delay inicial de 1000ms.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(999);
+    });
+    expect(resolvers).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(resolvers).toHaveLength(2);
+
+    // A tentativa de reconexão também cai, sem nunca abrir (onopen não é chamado,
+    // então o backoff NÃO reseta) → próximo delay dobra para 2000ms.
+    await act(async () => {
+      resolvers[1](okToken("t2"));
+      await vi.advanceTimersByTimeAsync(0);
+      FakeWebSocket.instances[1].onclose?.();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(resolvers).toHaveLength(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(resolvers).toHaveLength(3);
+  });
+
+  it("reseta o backoff após uma reconexão bem-sucedida", async () => {
+    renderHook(() => useWebSocket("/ws/events", "chave"));
+
+    await act(async () => {
+      resolvers[0](okToken("t1"));
+      await vi.advanceTimersByTimeAsync(0);
+      FakeWebSocket.instances[0].onopen?.();
+    });
+
+    // 1ª queda → reconecta em 1000ms.
+    await act(async () => {
+      FakeWebSocket.instances[0].onclose?.();
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(resolvers).toHaveLength(2);
+
+    // Reconexão bem-sucedida: onopen zera o delay.
+    await act(async () => {
+      resolvers[1](okToken("t2"));
+      await vi.advanceTimersByTimeAsync(0);
+      FakeWebSocket.instances[1].onopen?.();
+    });
+
+    // Nova queda → volta a 1000ms (não 2000ms).
+    await act(async () => {
+      FakeWebSocket.instances[1].onclose?.();
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(resolvers).toHaveLength(3);
+  });
+
+  it("send() escreve no socket só quando ele está aberto", async () => {
+    const { result } = renderHook(() => useWebSocket("/ws/events", "chave"));
+
+    result.current.send("antes de abrir");
+    await act(async () => {
+      resolvers[0](okToken("t1"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // readyState ainda 0 (não abriu): send é no-op.
+    result.current.send("ainda fechado");
+    expect(FakeWebSocket.instances[0].sent).toEqual([]);
+
+    await act(async () => {
+      FakeWebSocket.instances[0].readyState = FakeWebSocket.OPEN;
+      FakeWebSocket.instances[0].onopen?.();
+    });
+    result.current.send("agora vai");
+    result.current.send({ tipo: "ping" });
+    expect(FakeWebSocket.instances[0].sent).toEqual(["agora vai", '{"tipo":"ping"}']);
   });
 
   it("para de tentar quando a API Key é recusada", async () => {

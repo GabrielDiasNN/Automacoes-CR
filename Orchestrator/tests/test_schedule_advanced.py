@@ -446,3 +446,61 @@ class TestAnchorTime:
         assert runs[0] == "20/05/2026 15:30:00"
         assert runs[1] == "20/05/2026 16:00:00"
         assert runs[2] == "20/05/2026 16:30:00"
+
+
+class TestPreviewPeriodico:
+    """Achado de baixa severidade: `_preview_periodic_runs` varria minuto a
+    minuto (até 89.280 iterações). A varredura passou a ser dia a dia — estes
+    testes travam o comportamento visível (ordem, contagem, corte por `now`)."""
+
+    def _now_quarta_10h(self, monkeypatch: Any) -> None:
+        # 20/05/2026 é uma quarta-feira.
+        monkeypatch.setattr(
+            "app.timezone.get_now_local", lambda: datetime(2026, 5, 20, 10, 0, 0)
+        )
+
+    def test_daily_pula_horario_ja_passado_hoje(self, monkeypatch: Any) -> None:
+        self._now_quarta_10h(monkeypatch)
+        schedule = {
+            "schedule_type": "daily",
+            "times": [{"h": 9, "m": 0}, {"h": 14, "m": 30}],
+        }
+        runs = preview_next_runs(schedule, count=3)
+        assert runs == [
+            "20/05/2026 14:30:00",
+            "21/05/2026 09:00:00",
+            "21/05/2026 14:30:00",
+        ]
+
+    def test_weekly_respeita_days_of_week(self, monkeypatch: Any) -> None:
+        self._now_quarta_10h(monkeypatch)
+        # UI: 1=Seg, 3=Qua. Hoje é quarta mas 08:00 já passou.
+        schedule = {
+            "schedule_type": "weekly",
+            "days_of_week": [1, 3],
+            "times": [{"h": 8, "m": 0}],
+        }
+        runs = preview_next_runs(schedule, count=3)
+        assert runs == [
+            "25/05/2026 08:00:00",
+            "27/05/2026 08:00:00",
+            "01/06/2026 08:00:00",
+        ]
+
+    def test_monthly_respeita_days_of_month(self, monkeypatch: Any) -> None:
+        self._now_quarta_10h(monkeypatch)
+        schedule = {
+            "schedule_type": "monthly",
+            "days_of_month": [1, 15],
+            "times": [{"h": 6, "m": 0}],
+        }
+        runs = preview_next_runs(schedule, count=3)
+        assert runs == [
+            "01/06/2026 06:00:00",
+            "15/06/2026 06:00:00",
+            "01/07/2026 06:00:00",
+        ]
+
+    def test_sem_times_retorna_vazio(self, monkeypatch: Any) -> None:
+        self._now_quarta_10h(monkeypatch)
+        assert preview_next_runs({"schedule_type": "daily", "times": []}, count=3) == []

@@ -688,7 +688,7 @@ export const orchestratorApi = {
     api.get<Paginated<ExecutionSummary>>(`/api/executions${qs({ ...params })}`),
   recentExecutions: (limit = 10) =>
     api.get<ExecutionSummary[]>(`/api/executions/recent${qs({ limit })}`),
-  getExecution: (id: string) => api.get<ExecutionDetail>(`/api/executions/${id}`),
+  getExecution: (id: string, signal?: AbortSignal) => api.get<ExecutionDetail>(`/api/executions/${id}`, signal),
   getExecutionLogs: (id: string, params?: { offset?: number; limit?: number }) =>
     api.get<{ lines: string[]; total_lines: number; offset: number; [k: string]: unknown }>(
       `/api/executions/${id}/logs${qs({ ...params })}`,

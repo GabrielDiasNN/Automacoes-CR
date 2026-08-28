@@ -379,6 +379,15 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
                 id=f"job_{automation_id}_once",
                 misfire_grace_time=60,
             )
+        else:
+            # Sem este log, um `once` com data no passado (edição tardia, reload
+            # depois da hora) simplesmente não gera job e o operador não tem como
+            # descobrir por que a automação não disparou.
+            logger.warning(
+                "Agendamento 'once' da automação %s ignorado: run_at=%s já passou.",
+                automation_id,
+                run_at.isoformat(),
+            )
         return
 
     times = sched_data.get("times", [])

@@ -19,6 +19,9 @@ from unittest.mock import MagicMock, patch
 
 os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
 os.environ["RATE_LIMIT_RPM"] = "10000"
+# `/docs` e `/openapi.json` ficam OFF por padrão em produção (achado de baixa
+# severidade); a suíte precisa do schema OpenAPI para os testes de contrato.
+os.environ["ORCHESTRATOR_EXPOSE_API_DOCS"] = "1"
 
 # Historico de beneficiamento isolado em arquivo temporario da sessao.
 # O banco default (snapshots/beneficiamento_historico.db) nao e versionado,

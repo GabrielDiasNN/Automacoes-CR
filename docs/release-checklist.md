@@ -105,7 +105,8 @@ Changelog resumido:
 
 Após publicar a nova versão:
 
-- [ ] `GET /api/system/health` retorna `status: "ok"`
+- [ ] `GET /api/system/health` (liveness público) retorna `status: "ok"`
+- [ ] `GET /api/system/health/full` (com `X-API-Key`) retorna `database: "online"` e `scheduler: "executando"`
 - [ ] `GET /api/system/version` confirma a nova versão
 - [ ] `GET /api/system/diagnostics` sem findings críticos novos
 - [ ] `GET /api/system/baseline` retorna `healthy`, `attention` ou `incident` coerente com o estado real

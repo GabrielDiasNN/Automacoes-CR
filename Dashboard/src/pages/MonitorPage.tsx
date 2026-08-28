@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Pause, Play, Trash2 } from "lucide-react";
-import { useDiagnostics } from "../hooks/useDiagnostics";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useLiveEvents, useLiveStatus } from "../context/LiveStatusContext";
 import { usePolling } from "../hooks/usePolling";
-import { getApiKey } from "../api/client";
 import { orchestratorApi, type SystemHistory, type SystemMetricsDaily } from "../api/orchestrator";
 import {
   Button,
@@ -92,7 +90,7 @@ function ClickableTile({ onClick, children }: ClickableTileProps) {
 
 export function MonitorPage() {
   const navigate = useNavigate();
-  const { health, worker } = useDiagnostics(10_000);
+  const { health, worker, wsStatus: status } = useLiveStatus();
   const [lines, setLines] = useState<LogLine[]>([]);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(paused);
@@ -104,7 +102,6 @@ export function MonitorPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [q, setQ] = useState("");
 
-  const key = getApiKey();
   const handleMessage = useCallback((evt: MessageEvent) => {
     if (pausedRef.current) return;
     try {
@@ -119,11 +116,9 @@ export function MonitorPage() {
     }
   }, []);
 
-  // Token efêmero em vez da API Key na URL do handshake (ver useWebSocket).
-  const { status } = useWebSocket("/ws/events", key ?? "", {
-    onMessage: handleMessage,
-    enabled: !!key,
-  });
+  // Uma única conexão `/ws/events` vive no LiveStatusProvider; a página só se
+  // inscreve no fan-out de mensagens (achado nº 15).
+  useLiveEvents(handleMessage);
 
   useEffect(() => {
     if (!paused) consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight });

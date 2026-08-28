@@ -100,6 +100,39 @@ Describe "Test-ArchitectureStandard" {
         @($report.findings | Where-Object { $_.rule -eq "ORACLE_IN_API_ROUTER" }).Count | Should -Be 1
     }
 
+    It "falha quando router FastAPI monta consulta ORM (achado nº 6)" {
+        $fixture = Join-Path $TestDrive "orm-router"
+        New-ArchitectureFixture -BasePath $fixture
+        @"
+from ..database import get_db
+
+
+def handler(db):
+    return db.query(models.Automation).filter_by(id=1).first()
+"@ | Set-Content -LiteralPath (Join-Path $fixture "Orchestrator\app\routers\bad_query.py") -Encoding UTF8
+
+        $result = Invoke-ArchitectureStandard -BasePath $fixture -ExtraArgs @("-AsJson")
+        $report = $result.Output | ConvertFrom-Json
+
+        $result.ExitCode | Should -Be 1
+        $report.status | Should -Be "incident"
+        @($report.findings | Where-Object { $_.rule -eq "ORM_QUERY_IN_API_ROUTER" }).Count | Should -Be 1
+    }
+
+    It "nao acusa ORM query fora de routers nem chamada a repository" {
+        $fixture = Join-Path $TestDrive "orm-ok"
+        New-ArchitectureFixture -BasePath $fixture
+        "def get_by_id(db, i):`n    return db.query(models.Automation).get(i)`n" |
+            Set-Content -LiteralPath (Join-Path $fixture "Orchestrator\app\services\automation_repository.py") -Encoding UTF8
+        "def handler(db):`n    return repo.get_by_id(db, 1)`n" |
+            Set-Content -LiteralPath (Join-Path $fixture "Orchestrator\app\routers\good.py") -Encoding UTF8
+
+        $result = Invoke-ArchitectureStandard -BasePath $fixture -ExtraArgs @("-AsJson")
+        $report = $result.Output | ConvertFrom-Json
+
+        @($report.findings | Where-Object { $_.rule -eq "ORM_QUERY_IN_API_ROUTER" }).Count | Should -Be 0
+    }
+
     It "emite aviso para subprocess fora da allowlist sem falhar o gate" {
         $fixture = Join-Path $TestDrive "subprocess-warning"
         New-ArchitectureFixture -BasePath $fixture

@@ -104,8 +104,35 @@ def session_scope(session_factory: Any = None) -> Generator[Session, None, None]
         db.close()
 
 
+def _missing_indexes_by_table(
+    inspector: Any, existing_tables: set[str], skip: set[str]
+) -> dict[str, list[str]]:
+    """Índices declarados em ``Base.metadata`` ausentes no banco, por tabela."""
+    missing: dict[str, list[str]] = {}
+    for t_name, table in Base.metadata.tables.items():
+        if t_name in skip or t_name not in existing_tables:
+            continue
+        expected = {idx.name for idx in table.indexes if idx.name}
+        actual = {ix["name"] for ix in inspector.get_indexes(t_name) if ix.get("name")}
+        gap = sorted(expected - actual)
+        if gap:
+            missing[t_name] = gap
+    return missing
+
+
 def validate_database_schema() -> dict[str, Any]:
-    """Valida tabelas/colunas contra o schema ORM atual (derivado de Base.metadata)."""
+    """Valida tabelas/colunas contra o schema ORM atual (derivado de Base.metadata).
+
+    Também reporta ``missing_indexes`` (índices declarados em ``Base.metadata``
+    ausentes no banco), mas **fora** de ``valid``: o campo ``valid`` segue
+    olhando só tabelas e colunas, para não transformar um índice ausente num
+    hard-fail de startup (``main.py``). ``run_alembic_migrations`` usa
+    ``missing_indexes`` para criar via metadata os índices ausentes **antes** de
+    carimbar um schema legado como head — sem esse dado, uma migration feita só
+    com ``op.execute`` (ex.: ``ix_execucao_running_unica_por_automacao``,
+    migration 20260731_01) era invisível e o stamp a pulava para sempre.
+    Triggers e views continuam fora do alcance — não vivem em ``Base.metadata``.
+    """
     # Importacao local para evitar circular import (models depende de Base)
     from . import (  # noqa: F401, I001  # pylint: disable=import-outside-toplevel,cyclic-import
         models as _models,
@@ -137,6 +164,7 @@ def validate_database_schema() -> dict[str, Any]:
         "valid": valid,
         "missing_tables": missing_tables,
         "missing_columns": missing_columns,
+        "missing_indexes": _missing_indexes_by_table(inspector, existing_tables, _skip),
     }
 
 
@@ -150,6 +178,38 @@ def get_schema_version() -> str:
             return str(row[0]) if row else "none"
     except Exception:  # pylint: disable=broad-exception-caught
         return "unknown"
+
+
+def _create_missing_indexes_before_stamp(missing_indexes: dict[str, list[str]]) -> None:
+    """Cria via ORM os índices ausentes antes de carimbar um schema legado.
+
+    Um banco legado pode ter todas as colunas e mesmo assim não ter índices
+    criados por ``op.execute`` — o caso concreto é
+    ``ix_execucao_running_unica_por_automacao`` (migration 20260731_01), que impõe
+    "no máximo uma execução RUNNING por automação". Carimbar direto como head
+    deixava a migration nunca rodar e a invariante sumia do banco em silêncio.
+    ``Index.create(checkfirst=True)`` preserva o ``sqlite_where`` dos parciais e é
+    idempotente. Não dá para cair no ``command.upgrade`` normal aqui: a migration
+    inicial faz ``CREATE TABLE`` sem checkfirst e quebra num banco que já tem as
+    tabelas.
+    """
+    logger.warning(
+        "Schema legado sem os indices %s. Criando via ORM antes do stamp.",
+        missing_indexes,
+    )
+    for t_name, idx_names in missing_indexes.items():
+        table = Base.metadata.tables.get(t_name)
+        if table is None:
+            continue
+        wanted = set(idx_names)
+        for index in table.indexes:
+            if index.name in wanted:
+                index.create(bind=engine, checkfirst=True)
+    recheck = validate_database_schema()
+    if recheck.get("missing_indexes"):
+        raise RuntimeError(
+            f"Falha ao criar indices ausentes antes do stamp: {recheck['missing_indexes']}"
+        )
 
 
 def run_alembic_migrations() -> dict[str, Any]:
@@ -207,6 +267,11 @@ def run_alembic_migrations() -> dict[str, Any]:
             "Schema legado valido sem revisao Alembic. Aplicando stamp para %s.",
             head,
         )
+        applied = ["alembic_stamp"]
+        if schema_status.get("missing_indexes"):
+            _create_missing_indexes_before_stamp(schema_status["missing_indexes"])
+            applied = ["alembic_stamp", "create_missing_indexes"]
+
         with engine.begin() as conn:  # transacao atomica (HF-5/B3)
             conn.execute(text("DELETE FROM alembic_version"))
             conn.execute(
@@ -220,7 +285,7 @@ def run_alembic_migrations() -> dict[str, Any]:
                 f"Stamp Alembic falhou: esperado {head}, obtido {actual}"
             )
         return {
-            "applied": ["alembic_stamp"],
+            "applied": applied,
             "schema_version": head,
         }
 

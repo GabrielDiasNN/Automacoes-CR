@@ -1,6 +1,6 @@
 # Padrão de Logging e Observabilidade do Hub de Automações
 
-> **Versão:** v1.0.0 (27/08/2026) | **Status:** rollout de código-fonte **completo** — 6 automações `run.ps1` + Python de domínio + motor Node emitem o envelope; gate `Test-LogEventSchema.ps1` em **`blocking`** com âncora `docs/log-event.samples.jsonl`. Pendente: validação em produção ciclo a ciclo e alinhamento do envelope interno do Orchestrator. Ver `CHANGELOG.md` [1.3.48]–[1.3.53].
+> **Versão:** v1.0.1 (28/08/2026) | **Status:** rollout de código-fonte **completo** — 6 automações `run.ps1` + Python de domínio + motor Node emitem o envelope; gate `Test-LogEventSchema.ps1` em **`blocking`** com âncora `docs/log-event.samples.jsonl`. **Exceção arquitetural: RE-03** (`Receitas Emitidas`) mantém os filhos Python em stderr legado porque usam `stdout` como canal de dados — ver § 3.1. Pendente: validação em produção ciclo a ciclo e alinhamento do envelope interno do Orchestrator. Ver `CHANGELOG.md` [1.3.48]–[1.3.53].
 
 ### PR1 — o que já está no repositório
 
@@ -124,6 +124,14 @@ Cada automação emite o subconjunto que faz sentido para ela; nenhuma chave é 
 | `log` | qualquer camada | linha informativa/aviso/erro que não é marco de ciclo |
 
 `retry.attempt` substitui as linhas de texto `[RETRY] …` que passavam pelo encoder Base64 — é a mudança que fecha o defeito original na raiz, para as 6 automações de uma vez (todas compartilham `Lib-Retry.psm1`). A retentativa que acontece **dentro** do Python (stamina, no `connect` do Oracle) também vira `retry.attempt`: sem o hook, o stamina despejava a chave crua `stamina.retry_scheduled` em `WARNING`.
+
+### 3.1 Exceção arquitetural — RE-03 (`Receitas Emitidas`)
+
+RE-03 é a **única das 6 automações** que **não** exporta `HUB_LOG_STRUCTURED=1` para os processos filhos, e isso é **deliberado** — não é migração esquecida. `extract_oracle.py` e `generate_html_report.py` usam **`stdout` como canal de dados** (IPC stdio: o `run.ps1` lê o resultado do primeiro pela saída padrão e o repassa ao segundo). Emitir envelope JSON nesse `stdout` corromperia o payload de dados, então os filhos seguem logando em **stderr no formato legado**, que o `run.ps1` encaminha via `Write-HubForwardedLine` (chamada com `-StdoutIsData` nos dois `Invoke-OraclePythonScript`).
+
+**Consequência para quem consome os logs:** `Write-HubForwardedLine` não reconhece o formato legado, então embrulha a linha inteira como evento `log` com `component` herdado do pai (`"ps_script"`), **nunca `"python_domain"`**. Para diagnosticar falha de extração Oracle em RE-03, filtrar por `trace_id` (que propaga), **não** por `component:python_domain`.
+
+O `run.ps1` de topo do RE-03 ainda emite `execution.start`/`execution.end`/`step.*`/`retry.attempt` normalmente — a exceção é só o canal dos dois filhos Python de dados.
 
 ---
 

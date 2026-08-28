@@ -287,6 +287,37 @@ def test_scan_retorna_none_sem_artefatos(tmp_path: Any) -> None:
     assert resultado is None
 
 
+def test_scan_detecta_novo_por_nome_mesmo_com_relogio_para_tras(tmp_path: Any) -> None:
+    # Achado de baixa severidade: um passo do relógio para trás durante a
+    # execução fazia o artefato recém-criado ter mtime menor que o início e
+    # sumir da lista. Com o snapshot de arquivos pré-existentes, ele conta como
+    # novo pelo NOME, independente do mtime.
+    pre = worker.snapshot_artifact_files(str(tmp_path))
+    assert pre == set()
+
+    gerado = tmp_path / "relatorio.xlsx"
+    gerado.write_text("dados", encoding="utf-8")
+    mtime_no_passado = time.time() - 7200
+    os.utime(gerado, (mtime_no_passado, mtime_no_passado))
+
+    resultado = worker.scan_for_artifacts(str(tmp_path), time.time(), pre)
+    assert resultado is not None
+    assert "relatorio.xlsx" in json.loads(resultado)
+
+
+def test_scan_com_snapshot_ignora_arquivo_pre_existente_intocado(tmp_path: Any) -> None:
+    antigo = tmp_path / "base.csv"
+    antigo.write_text("x", encoding="utf-8")
+    mtime_antigo = time.time() - 3600
+    os.utime(antigo, (mtime_antigo, mtime_antigo))
+
+    pre = worker.snapshot_artifact_files(str(tmp_path))
+    assert "base.csv" in pre
+
+    resultado = worker.scan_for_artifacts(str(tmp_path), time.time(), pre)
+    assert resultado is None
+
+
 # ---------------------------------------------------------------------------
 # LOG_FILENAME
 # ---------------------------------------------------------------------------
