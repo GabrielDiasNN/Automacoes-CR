@@ -15,7 +15,13 @@ param(
     [switch]$FailOnHtmlCssWarnings,
     [switch]$FailOnTermWarnings,
     [string[]]$Paths = @(),
-    [string]$SummaryJsonPath = ""
+    [string]$SummaryJsonPath = "",
+
+    # Repassado a Get-GovernanceTargetSummary: mantem a validacao restrita aos
+    # -Paths informados mesmo quando um deles e critico (lib\, Tools\, AGENTS.md,
+    # workflows, skills). Reservado ao hook Stop, que precisa responder em
+    # segundos; pre-commit e CI devem manter a promocao a full_scan.
+    [switch]$NoCriticalPromotion
 )
 
 $ErrorActionPreference = "Stop"
@@ -122,7 +128,8 @@ function Get-GovernanceTargetSummary {
     param(
         [string]$RootPath,
         [switch]$UseStagedFiles,
-        [string[]]$InputPaths = @()
+        [string[]]$InputPaths = @(),
+        [switch]$SuppressCriticalPromotion
     )
 
     $helperPath = Join-Path $RootPath "Tools\Get-GovernanceTargetSummary.ps1"
@@ -131,11 +138,11 @@ function Get-GovernanceTargetSummary {
     }
 
     if ($UseStagedFiles) {
-        return & $helperPath -BasePath $RootPath -StagedOnly
+        return & $helperPath -BasePath $RootPath -StagedOnly -NoCriticalPromotion:$SuppressCriticalPromotion
     }
 
     if ($InputPaths.Count -gt 0) {
-        return & $helperPath -BasePath $RootPath -Paths $InputPaths
+        return & $helperPath -BasePath $RootPath -Paths $InputPaths -NoCriticalPromotion:$SuppressCriticalPromotion
     }
 
     return & $helperPath -BasePath $RootPath
@@ -212,7 +219,7 @@ if ($StagedOnly) {
     Write-Host "`n--- [Git pre-commit] Resolvendo arquivos staged automaticamente ---" -ForegroundColor Gray
     $stepWatch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        $targetSummary = Get-GovernanceTargetSummary -RootPath $BasePath -UseStagedFiles
+        $targetSummary = Get-GovernanceTargetSummary -RootPath $BasePath -UseStagedFiles -SuppressCriticalPromotion:$NoCriticalPromotion
         $selectionMode = [string]$targetSummary.SelectionMode
         $changedFileCount = [int]$targetSummary.ChangedFileCount
         $governancePathCount = @($targetSummary.GovernancePaths).Count
@@ -236,6 +243,10 @@ if ($StagedOnly) {
             Write-Host "[AVISO] Alteracoes em arquivos centrais de infraestrutura/governanca detectadas." -ForegroundColor Yellow
             Write-Host "Forcando scan completo de governanca estatica no repositorio para seguranca de integridade." -ForegroundColor Yellow
         }
+        elseif ($targetSummary.CriticalPathCount -gt 0) {
+            Write-Host ("[AVISO] " + $targetSummary.CriticalPathCount + " caminho(s) critico(s) alterado(s), mas -NoCriticalPromotion suprimiu o scan completo.") -ForegroundColor Yellow
+            Write-Host "Esta execucao NAO substitui o pre-commit nem o CI, que continuam promovendo a full_scan." -ForegroundColor Yellow
+        }
         if ($targetSummary.HasLogTargets) {
             Write-Host ("Arquivos elegiveis para conformidade de log: " + $targetSummary.LogTargetCount) -ForegroundColor Gray
         }
@@ -255,7 +266,7 @@ if ($StagedOnly) {
 
 if (-not $StagedOnly -and $Paths.Count -gt 0) {
     $stepWatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $targetSummary = Get-GovernanceTargetSummary -RootPath $BasePath -InputPaths $Paths
+    $targetSummary = Get-GovernanceTargetSummary -RootPath $BasePath -InputPaths $Paths -SuppressCriticalPromotion:$NoCriticalPromotion
     $Paths = @($targetSummary.GovernancePaths)
     $logTargetPaths = @($targetSummary.LogTargetPaths)
     $selectionMode = [string]$targetSummary.SelectionMode
@@ -266,6 +277,10 @@ if (-not $StagedOnly -and $Paths.Count -gt 0) {
     if ($targetSummary.HasCriticalPaths) {
         Write-Host "[AVISO] Alteracoes em arquivos centrais de infraestrutura/governanca detectadas." -ForegroundColor Yellow
         Write-Host "Forcando scan completo de governanca estatica no repositorio para seguranca de integridade." -ForegroundColor Yellow
+    }
+    elseif ($targetSummary.CriticalPathCount -gt 0) {
+        Write-Host ("[AVISO] " + $targetSummary.CriticalPathCount + " caminho(s) critico(s) alterado(s), mas -NoCriticalPromotion suprimiu o scan completo.") -ForegroundColor Yellow
+        Write-Host "Esta execucao NAO substitui o pre-commit nem o CI, que continuam promovendo a full_scan." -ForegroundColor Yellow
     }
     $stepWatch.Stop()
     Add-StepTiming -Collector $stepTimings -Step "classificacao_diff" -Stopwatch $stepWatch -Status "ok" -Metadata @{

@@ -7,12 +7,18 @@
 .DESCRIPTION
     Duas verificacoes:
 
-      1. Governanca: Tools/ValidarAutomacoes.ps1 -OnlyGovernance -Paths sobre os
-         arquivos alterados — os 15 checks (zero-trust, SQL, mypy/pylint,
-         PSScriptAnalyzer, encoding, JSON, Playwright, manifesto, arquitetura,
-         datas, semantica, Node, schema de evento de log). O modo direcionado e o que torna isso viavel:
-         SEM -Paths o script cai em full_scan (~171 s, medido); COM -Paths custa
-         ~6 s sem Python e ~18 s com dois .py, onde o mypy domina.
+      1. Governanca: Tools/ValidarAutomacoes.ps1 -OnlyGovernance
+         -NoCriticalPromotion -Paths sobre os arquivos alterados — os 15 checks
+         (zero-trust, SQL, mypy/pylint, PSScriptAnalyzer, encoding, JSON,
+         Playwright, manifesto, arquitetura, datas, semantica, Node, schema de
+         evento de log). O modo direcionado e o que torna isso viavel: em
+         full_scan o gate custa 340 s (medido em 01/09/2026), contra ~7 s
+         direcionado e ~18 s com dois .py, onde o mypy domina.
+
+         -NoCriticalPromotion nao e detalhe: sem ele, um unico alvo sob lib\ ou
+         Tools\ fazia Get-GovernanceTargetSummary descartar a lista de -Paths e
+         promover a full_scan pelas costas do hook. Era a causa dos 13 timeouts
+         de 240 s registrados entre 27/08/2026 e 01/09/2026.
 
       2. Marcadores: o gate de governanca NAO roda pytest nem build do Dashboard.
          Entao segue valendo a conferencia de que eles foram disparados DEPOIS da

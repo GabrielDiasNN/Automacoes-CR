@@ -3,7 +3,16 @@ param(
     [string]$BasePath = ".",
     [switch]$StagedOnly,
     [string[]]$Paths = @(),
-    [switch]$AsJson
+    [switch]$AsJson,
+
+    # Suprime a promocao automatica a full_scan quando um caminho critico e
+    # alterado. Existe para o hook Stop de .claude/hooks, que precisa de um
+    # veredito em segundos: com a promocao ligada, um unico arquivo sob lib\ ou
+    # Tools\ zerava GovernancePaths e fazia os 15 checks varrerem o repositorio
+    # inteiro (340 s medidos em 01/09/2026 contra 6,7 s no modo direcionado),
+    # estourando o timeout de 240 s do hook em toda execucao.
+    # NAO use no pre-commit nem no CI: la a promocao e a rede de seguranca.
+    [switch]$NoCriticalPromotion
 )
 
 $ErrorActionPreference = "Stop"
@@ -83,7 +92,11 @@ $logTargetPaths = @(
         Where-Object { -not (Test-MatchAnyPattern -Path $_ -Patterns $excludedLogTargetPatterns) }
 )
 
-$fullScanRequired = $criticalPaths.Count -gt 0
+# CriticalPaths continua registrando o que foi detectado; HasCriticalPaths
+# responde a pergunta diferente de "a promocao a full_scan vale aqui?". Com
+# -NoCriticalPromotion as duas divergem, e e assim que o consumidor descobre
+# que havia caminho critico sem que o scan completo tenha sido forcado.
+$fullScanRequired = ($criticalPaths.Count -gt 0) -and (-not $NoCriticalPromotion)
 $governancePaths = if ($fullScanRequired) { @() } else { $normalizedPaths }
 
 $selectionMode = if ($normalizedPaths.Count -eq 0) {
