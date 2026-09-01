@@ -183,9 +183,17 @@ function Invoke-GovernanceGate {
         Roda Tools/ValidarAutomacoes.ps1 -OnlyGovernance em modo direcionado.
 
     .DESCRIPTION
-        Sem -Paths o script cai em full_scan (~171 s, medido), inviavel em hook.
-        Com -Paths ele roda os 14 checks apenas sobre os alvos informados: ~6 s
-        sem Python e ~18 s com dois .py (o mypy domina o custo).
+        Sem -Paths o script cai em full_scan (340 s, medido em 01/09/2026),
+        inviavel em hook. Com -Paths ele roda os 15 checks apenas sobre os alvos
+        informados: ~7 s sem Python e ~18 s com dois .py (o mypy domina o custo).
+
+        -NoCriticalPromotion e obrigatorio aqui. Passar -Paths NAO bastava: se
+        um unico alvo batesse em caminho critico (lib\, Tools\, AGENTS.md,
+        workflows, skills), Get-GovernanceTargetSummary zerava GovernancePaths e
+        o gate caia em full_scan assim mesmo — 340 s contra o timeout de 240 s
+        do hook Stop, que por isso estourava em 100% das execucoes entre
+        27/08/2026 e 01/09/2026. O modo direcionado nao afrouxa nada: o
+        pre-commit e o CI continuam promovendo a full_scan.
 
     .OUTPUTS
         Mesmo contrato de Invoke-EncodingCheck: ExitCode (-1 = inconclusivo,
@@ -210,7 +218,7 @@ function Invoke-GovernanceGate {
         -RootParameterName 'BasePath' `
         -RepositoryRoot $RepositoryRoot `
         -RelativePaths $RelativePaths `
-        -ExtraArguments '-OnlyGovernance'
+        -ExtraArguments '-OnlyGovernance -NoCriticalPromotion'
 }
 
 function Select-FailureLines {

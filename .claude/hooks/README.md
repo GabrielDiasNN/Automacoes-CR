@@ -119,20 +119,22 @@ O marcador registra que o comando **foi disparado**, não que passou. A leitura 
 
 Barra o encerramento da tarefa quando o trabalho pendente não passou pela verificação correspondente:
 
-- arquivos de `git status --porcelain` reprovando em `ValidarAutomacoes.ps1 -OnlyGovernance -Paths` (os 15 checks: zero-trust, SQL, mypy/pylint, PSScriptAnalyzer, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node, schema de evento de log);
+- arquivos de `git status --porcelain` reprovando em `ValidarAutomacoes.ps1 -OnlyGovernance -NoCriticalPromotion -Paths` (os 15 checks: zero-trust, SQL, mypy/pylint, PSScriptAnalyzer, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node, schema de evento de log);
 - `.py` sob `Orchestrator/`, `lib/python/` ou `Produção Beneficimento/src/` alterado sem marcador de `pytest` posterior ao mtime da edição;
 - `Dashboard/src/` alterado sem marcador de lint/build posterior.
 
 Os dois últimos existem porque o gate de governança **não** roda pytest nem build do Dashboard.
 
-### Por que `-Paths` não é opcional
+### Por que `-Paths` não é opcional — e por que sozinho não bastava
 
 | Modo | Custo |
 |---|---|
-| `-OnlyGovernance` sem alvos (`full_scan`) | **171 s** |
-| `-OnlyGovernance -Paths <alterados>` | **6–9 s**; 18 s com dois `.py` (mypy) |
+| `-OnlyGovernance` sem alvos (`full_scan`) | **340 s** (medido 01/09/2026; eram 171 s quando o hook foi escrito) |
+| `-OnlyGovernance -Paths <alterados>` | **~7 s**; 18 s com dois `.py` (mypy) |
 
-Mesmos 15 checks, ~28× de diferença. O timeout no `settings.json` é 240 s por margem. A fonte final de verdade continua sendo o pre-commit hook e o CI.
+Mesmos 15 checks. O timeout no `settings.json` é 240 s. A fonte final de verdade continua sendo o pre-commit hook e o CI.
+
+**`-NoCriticalPromotion` é o que faz `-Paths` valer.** `Get-GovernanceTargetSummary.ps1` classifica como crítico qualquer alvo sob `lib\`, `Tools\`, `AGENTS.md`, `.github/workflows/` ou `.github/skills/` e, ao encontrar um, devolve `GovernancePaths = @()` — o gate então varre o repositório inteiro mesmo tendo recebido `-Paths`. Entre 27/08/2026 e 01/09/2026 isso fez o hook Stop estourar os 240 s em **13 de 13 execuções**: bastava um `lib/CLAUDE.md` no diff. A promoção continua ligada no pre-commit e no CI, onde o full_scan é a rede de segurança; no hook Stop, que precisa responder em segundos, ela é suprimida.
 
 ### Filtragem da saída
 

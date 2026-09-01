@@ -10,9 +10,12 @@ BeforeAll {
     }
 
     function Invoke-Summary {
-        param([string[]]$Paths)
+        param(
+            [string[]]$Paths,
+            [switch]$NoCriticalPromotion
+        )
 
-        return & $script:ScriptPath -BasePath "." -Paths $Paths
+        return & $script:ScriptPath -BasePath "." -Paths $Paths -NoCriticalPromotion:$NoCriticalPromotion
     }
 }
 
@@ -74,6 +77,31 @@ Describe "Get-GovernanceTargetSummary - flags por area" {
             $summary.HasPowerShell | Should -BeTrue
             $summary.HasJs | Should -BeTrue
             $summary.HasMarkdown | Should -BeTrue
+        }
+
+        It "Suprime a promocao a full_scan com -NoCriticalPromotion" {
+            # Regressao do hook Stop: entre 27/08/2026 e 01/09/2026 um unico
+            # alvo critico no diff zerava GovernancePaths e o gate varria o
+            # repositorio inteiro (340 s) apesar de ter recebido -Paths,
+            # estourando o timeout de 240 s em 13 de 13 execucoes.
+            $alvos = @("lib/CLAUDE.md", "CLAUDE.md")
+            $summary = Invoke-Summary -Paths $alvos -NoCriticalPromotion
+
+            $summary.SelectionMode | Should -Be "targeted_paths"
+            $summary.HasCriticalPaths | Should -BeFalse
+            $summary.GovernancePaths.Count | Should -Be 2
+
+            # A deteccao continua registrada: so a promocao foi suprimida.
+            $summary.CriticalPathCount | Should -Be 1
+            $summary.CriticalPaths | Should -Contain "lib\CLAUDE.md"
+        }
+
+        It "Mantem a promocao a full_scan sem a flag (pre-commit e CI)" {
+            $summary = Invoke-Summary -Paths @("lib/CLAUDE.md", "CLAUDE.md")
+
+            $summary.SelectionMode | Should -Be "full_scan"
+            $summary.HasCriticalPaths | Should -BeTrue
+            $summary.GovernancePaths.Count | Should -Be 0
         }
 
         It "Forca todas as areas quando o diff esta vazio (no_paths)" {

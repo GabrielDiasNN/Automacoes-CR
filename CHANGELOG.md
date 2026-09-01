@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.58] - 01/09/2026
+
+### Corrigido
+
+- **Hook `Stop` estourava o timeout de 240 s em toda execução — `-Paths` era descartado pelo próprio gate.** Entre 27/08/2026 e 01/09/2026, `Assert-StopQualityGate.ps1` foi cancelado por timeout em **13 de 13 execuções** registradas nos transcripts (`durationMs` ≈ 240.000). O hook passava `-Paths` corretamente; `Tools/Get-GovernanceTargetSummary.ps1` é que classifica como crítico qualquer alvo sob `lib\`, `Tools\`, `AGENTS.md`, `.github/workflows/` ou `.github/skills/` e, ao encontrar um, devolve `GovernancePaths = @()` — `ValidarAutomacoes.ps1` então roda os 15 checks sem alvos, sobre o repositório inteiro. Bastava um `lib/CLAUDE.md` no diff. O trabalho de 27/08 (rollout de logging) tocava `lib/` e `Tools/` o tempo todo, o que explica a sequência ininterrupta.
+  - Novo switch **`-NoCriticalPromotion`** em `Get-GovernanceTargetSummary.ps1` e `ValidarAutomacoes.ps1`, consumido apenas por `Invoke-GovernanceGate` (`.claude/hooks/HookCommon.psm1`): mantém a validação restrita aos `-Paths` mesmo com alvo crítico. **Pre-commit e CI não mudam** — lá a promoção a `full_scan` continua sendo a rede de segurança, e o hook `Stop` nunca foi fonte final de verdade.
+  - `CriticalPaths` e `CriticalPathCount` seguem reportando a detecção quando a promoção é suprimida; só `HasCriticalPaths` acompanha a decisão. `ValidarAutomacoes.ps1` avisa explicitamente quando havia crítico e o scan completo foi dispensado.
+  - Medido nesta máquina: **340,6 s → 10,6 s**, mesmo veredito (exit 0). O `full_scan` custa hoje 340 s, não os 171 s documentados em 02/08 — `.claude/hooks/README.md`, o cabeçalho do hook e `docs/ai-native-context-monitor.md` foram remedidos e corrigidos.
+  - Efeito colateral que agravava o quadro: **hook cancelado por timeout não conta como bloqueio**, então `stop_hook_active` seguia `false` e cada `Stop` reiniciava o scan do zero — a sessão `080af020` acumulou 10 timeouts em 3 horas por isso. A lógica de `stop_hook_active` em si está correta (verificada: aprova em 0,76 s).
+  - Cobertura: dois casos novos em `lib/tests/Get-GovernanceTargetSummary.Tests.ps1` fixam os dois lados — com a flag, `targeted_paths` e os alvos preservados; sem ela, `full_scan` como antes.
+
 ## [1.3.57] - 28/08/2026
 
 ### Corrigido
