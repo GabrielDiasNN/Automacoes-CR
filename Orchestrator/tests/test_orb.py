@@ -1263,7 +1263,10 @@ def test_read_notified_trata_json_invalido_como_vazio(tmp_path: Any) -> None:
 
 
 def _stub_extract_ate_fetch_obs(
-    extract: ModuleType, monkeypatch: pytest.MonkeyPatch, fake_fetch_obs: Any
+    extract: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_fetch_obs: Any,
+    tmp_path: Any,
 ) -> None:
     """Substitui a camada Oracle de `extract_orb.py` por dublês, preservando a
     lógica real de `extract()` a partir da chamada a `_fetch_obs`.
@@ -1272,12 +1275,21 @@ def _stub_extract_ate_fetch_obs(
     este arquivo de testes (ver docstring do módulo) — aqui eles só precisam
     não travar/levantar, pois o comportamento sob teste está inteiramente
     DEPOIS deles, na decisão sobre `obs`/`resumo.falhas`.
+
+    `RESULT_FILE` é redirecionado para `tmp_path` AQUI (e não em cada teste)
+    porque todo teste que chama `extract()` passa por este helper: sem o
+    redirecionamento, `_write_result`/`_write_counts` gravam em
+    `OBs Restricao Branco/orb_result.json` — o arquivo VIVO da automação em
+    produção. Um `pytest` rodando entre o extract e o envio de um ciclo real
+    faz o `run.ps1` ler um payload de teste, inclusive o `record_counts` que
+    alimenta o evento `execution.end` (incidente observado em 01/09/2026).
     """
     monkeypatch.setattr(
         extract, "resolve_oracle_credentials", lambda log, exec_id: object()
     )
     monkeypatch.setattr(extract, "init_thick_mode", lambda creds, log, exec_id: None)
     monkeypatch.setattr(extract, "_fetch_obs", fake_fetch_obs)
+    monkeypatch.setattr(extract, "RESULT_FILE", str(tmp_path / "orb_result.json"))
     monkeypatch.setattr(extract.sys, "argv", ["extract_orb.py", "TESTE"])
 
 
@@ -1303,7 +1315,7 @@ def test_extract_aborta_sem_tocar_state_quando_todas_as_linhas_falham_validacao(
         resumo.falhas.append("OB #1: CD_CLASSIFICACAO_COR=7, esperado 6 ou 9")
         return []
 
-    _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs)
+    _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs, tmp_path)
 
     with pytest.raises(SystemExit) as excinfo:
         extract.extract()
@@ -1330,13 +1342,16 @@ def test_extract_trata_query_realmente_vazia_como_nada_a_notificar(
     def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
         return []
 
-    _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs)
+    _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs, tmp_path)
 
     with pytest.raises(SystemExit) as excinfo:
         extract.extract()
 
     assert excinfo.value.code == 2
     assert (tmp_path / "orb_state.json.tmp").exists()
+    # Prova de que `_write_counts` foi redirecionado: o payload do ciclo saiu em
+    # tmp_path, nao por cima do orb_result.json vivo da automacao.
+    assert (tmp_path / "orb_result.json").exists()
 
 
 def test_record_counts_usa_chaves_canonicas_e_read_conta_linhas_cruas() -> None:
