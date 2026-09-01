@@ -116,13 +116,30 @@ class ReservaNotificacao:
 
 @dataclass(frozen=True)
 class AvaliacaoOb:
-    """Resultado da comparacao estoque x necessidade para uma OB."""
+    """Resultado da comparacao estoque x necessidade para uma OB.
+
+    ``alocado`` e quanto do saldo restrito esta reservado para esta OB — igual
+    a ``ob.total_pecas`` na cobertura integral e menor que ela na cobertura
+    PARCIAL. E a quantidade que vai para a reserva do state e para a mensagem;
+    ``disponivel`` continua sendo o saldo do reduzido no momento da avaliacao.
+    """
 
     ob: ObRestricaoBranco
     disponivel: int
     notificar: bool
     motivo: str
     restricoes_disponiveis: tuple[tuple[int, str], ...] = ()
+    alocado: int = 0
+
+    @property
+    def cobertura_total(self) -> bool:
+        """True quando o estoque restrito cobre a OB inteira."""
+        return self.alocado >= self.ob.total_pecas
+
+    @property
+    def faltante(self) -> int:
+        """Pecas que a montagem tera de completar com material sem restricao."""
+        return max(self.ob.total_pecas - self.alocado, 0)
 
 
 @dataclass
@@ -132,6 +149,10 @@ class ResumoExecucao:
     total_lidas: int = 0
     total_obs: int = 0
     total_notificaveis: int = 0
+    # Subconjunto de total_notificaveis: OBs anunciadas com cobertura parcial.
+    total_parciais: int = 0
+    # OBs sem NENHUMA peca restrita disponivel — desde a mudanca de 01/09/2026,
+    # o unico motivo de nao notificar (antes: qualquer cobertura < 100%).
     total_sem_estoque: int = 0
     falhas: list[str] = field(default_factory=list)
     tempo_consulta_ms: int = 0

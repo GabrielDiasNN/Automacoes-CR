@@ -875,10 +875,12 @@ def test_priorizar_obs_sem_data_vai_para_o_fim_do_grupo() -> None:
     assert [ob.id_ob for ob in v.priorizar_obs(obs)] == [2, 1, 3]
 
 
-def test_alocar_estoque_deduz_saldo_e_para_quando_acaba() -> None:
-    """Alocacao sequencial: 90 pecas cobrem as OBs de 50 e 30, mas a terceira
-    (40) NAO entra — o saldo restante e 10. Sem alocacao, as tres seriam
-    notificadas contra o mesmo estoque e a montagem falharia no fisico."""
+def test_alocar_estoque_deduz_saldo_e_a_ultima_ob_leva_o_resto() -> None:
+    """Alocacao sequencial: 90 pecas cobrem as OBs de 50 e 30 por inteiro; a
+    terceira (40) leva as 10 que sobraram como cobertura PARCIAL.
+
+    A soma dos alocados nunca passa do estoque — e o que impede prometer a mesma
+    peca duas vezes —, mas nenhuma peca restrita fica para tras."""
     v = _validators()
     obs = [
         v.coerce_ob_row(_ob_row(NUMERO_OB=1, CODIGO_REDUZIDO_CRU=100, TOTAL_PECAS=50)),
@@ -886,14 +888,20 @@ def test_alocar_estoque_deduz_saldo_e_para_quando_acaba() -> None:
         v.coerce_ob_row(_ob_row(NUMERO_OB=3, CODIGO_REDUZIDO_CRU=100, TOTAL_PECAS=40)),
     ]
     avaliacoes = v.alocar_estoque(obs, _estoques(r100=90))
-    assert [a.notificar for a in avaliacoes] == [True, True, False]
+    assert [a.notificar for a in avaliacoes] == [True, True, True]
     assert [a.disponivel for a in avaliacoes] == [90, 40, 10]
+    assert [a.alocado for a in avaliacoes] == [50, 30, 10]
+    assert sum(a.alocado for a in avaliacoes) == 90
+    assert [a.cobertura_total for a in avaliacoes] == [True, True, False]
+    assert avaliacoes[2].faltante == 30
+    assert "cobertura parcial" in avaliacoes[2].motivo
     assert "faltam 30" in avaliacoes[2].motivo
 
 
-def test_alocar_estoque_matriz_so_entra_se_sobrar_apos_as_lojas() -> None:
+def test_alocar_estoque_matriz_so_recebe_o_que_sobra_das_lojas() -> None:
     """Cenario fim-a-fim da regra: a loja consome o estoque primeiro; a matriz
-    (mais antiga na fila por entrega) so entra se sobrar saldo."""
+    (mais antiga na fila por entrega) fica com o que sobrar — integral se couber,
+    parcial se nao."""
     v = _validators()
     matriz = v.coerce_ob_row(
         _ob_row(
@@ -915,13 +923,16 @@ def test_alocar_estoque_matriz_so_entra_se_sobrar_apos_as_lojas() -> None:
         )
     )
 
-    # Estoque 80: cobre a loja (60), sobra 20 — a matriz (30) fica de fora.
+    # Estoque 80: cobre a loja (60) por inteiro; a matriz (30) entra com as 20
+    # que sobraram, como parcial — a loja continua servida primeiro.
     avaliacoes = v.alocar_estoque(v.priorizar_obs([matriz, loja]), _estoques(r100=80))
-    assert [(a.ob.id_ob, a.notificar) for a in avaliacoes] == [(2, True), (1, False)]
+    assert [(a.ob.id_ob, a.alocado) for a in avaliacoes] == [(2, 60), (1, 20)]
+    assert [a.cobertura_total for a in avaliacoes] == [True, False]
 
-    # Estoque 100: cobre a loja (60) e sobra 40 — a matriz (30) tambem entra.
+    # Estoque 100: cobre a loja (60) e sobra 40 — a matriz (30) entra integral.
     avaliacoes = v.alocar_estoque(v.priorizar_obs([matriz, loja]), _estoques(r100=100))
-    assert [(a.ob.id_ob, a.notificar) for a in avaliacoes] == [(2, True), (1, True)]
+    assert [(a.ob.id_ob, a.alocado) for a in avaliacoes] == [(2, 60), (1, 30)]
+    assert [a.cobertura_total for a in avaliacoes] == [True, True]
 
 
 def test_alocar_estoque_saldos_independentes_por_reduzido() -> None:
@@ -936,12 +947,15 @@ def test_alocar_estoque_saldos_independentes_por_reduzido() -> None:
 
 
 def test_alocar_estoque_sem_linha_de_estoque_nao_notifica_e_explica() -> None:
+    """Saldo zero e o UNICO motivo de nao notificar desde 01/09/2026: sem peca
+    restrita no deposito, nao ha nada a escoar e o aviso seria ruido."""
     v = _validators()
     ob = v.coerce_ob_row(_ob_row(TOTAL_PECAS=50))
     avaliacao = v.alocar_estoque([ob], {})[0]
     assert avaliacao.notificar is False
     assert avaliacao.disponivel == 0
-    assert "faltam 50" in avaliacao.motivo
+    assert avaliacao.alocado == 0
+    assert "sem peca restrita disponivel" in avaliacao.motivo
 
 
 # --------------------------------------------------------------------------
@@ -1159,7 +1173,11 @@ def test_alocar_estoque_desconta_a_reserva_do_saldo_exibido() -> None:
         [ob], {reduzido: _estoque(reduzido, 75)}, {reduzido: 40}
     )[0]
     assert avaliacao.disponivel == 35, "75 no depósito - 40 já reservadas"
-    assert avaliacao.notificar is False
+    # Notificada como parcial sobre as 35 livres — jamais sobre as 40 que outra
+    # OB já prometeu.
+    assert avaliacao.notificar is True
+    assert avaliacao.alocado == 35
+    assert avaliacao.faltante == 15
 
 
 def test_alocar_estoque_nao_produz_saldo_negativo() -> None:
@@ -1583,3 +1601,228 @@ def test_build_message_agrega_multiplas_obs_na_ordem_recebida() -> None:
     )
     assert "2 OBs prontas" in msg
     assert msg.index("*OB: 2*") < msg.index("*OB: 1*")
+
+
+# --------------------------------------------------------------------------
+# Cobertura parcial (01/09/2026) — notificar mesmo sem estoque para a OB inteira
+# --------------------------------------------------------------------------
+
+
+def test_alocar_estoque_notifica_ob_com_estoque_parcial() -> None:
+    """Caso que motivou a mudança: 5 peças restritas do reduzido 26 e uma OB de
+    55. Antes a OB não era anunciada e a Montagem montava as 55 com peça sem
+    restrição, deixando as 5 restritas paradas no depósito."""
+    v = _validators()
+    ob = v.coerce_ob_row(_ob_row(NUMERO_OB=1, CODIGO_REDUZIDO_CRU=26, TOTAL_PECAS=55))
+    avaliacao = v.alocar_estoque([ob], _estoques(r26=5))[0]
+    assert avaliacao.notificar is True
+    assert avaliacao.alocado == 5
+    assert avaliacao.faltante == 50
+    assert avaliacao.cobertura_total is False
+
+
+def test_alocar_estoque_uma_peca_ja_basta_para_notificar() -> None:
+    """MINIMO_PECAS_NOTIFICAVEL = 1: qualquer saldo aproveitável justifica o
+    aviso; zero não gera nada."""
+    v = _validators()
+    ob = v.coerce_ob_row(_ob_row(CODIGO_REDUZIDO_CRU=100, TOTAL_PECAS=500))
+    assert v.alocar_estoque([ob], _estoques(r100=1))[0].notificar is True
+    assert v.alocar_estoque([ob], _estoques(r100=0))[0].notificar is False
+
+
+def test_alocar_estoque_prioriza_quem_fecha_cem_por_cento() -> None:
+    """Duas lojas disputando 50 peças: a de entrega mais próxima precisa de 80
+    (não fecha) e a seguinte precisa de exatamente 50. Quem fecha 100% aloca na
+    primeira passada; a outra fica com o que sobrar — aqui, nada.
+
+    A prioridade de negócio (loja → entrega) segue valendo dentro de cada
+    passada: é o desempate entre parciais e entre integrais."""
+    v = _validators()
+    obs = v.priorizar_obs(
+        [
+            v.coerce_ob_row(
+                _ob_row(
+                    NUMERO_OB=1,
+                    CODIGO_REDUZIDO_CRU=100,
+                    TOTAL_PECAS=80,
+                    DT_ENTREGA="2026-07-10T00:00:00",
+                )
+            ),
+            v.coerce_ob_row(
+                _ob_row(
+                    NUMERO_OB=2,
+                    CODIGO_REDUZIDO_CRU=100,
+                    TOTAL_PECAS=50,
+                    DT_ENTREGA="2026-07-20T00:00:00",
+                )
+            ),
+        ]
+    )
+    avaliacoes = v.alocar_estoque(obs, _estoques(r100=50))
+    por_id = {a.ob.id_ob: a for a in avaliacoes}
+    assert por_id[2].alocado == 50, "fecha 100% e aloca antes"
+    assert por_id[1].notificar is False, "não sobrou peça restrita para a parcial"
+    # A ordem de retorno continua sendo a de prioridade, não a de alocação.
+    assert [a.ob.id_ob for a in avaliacoes] == [1, 2]
+
+
+def test_alocar_estoque_parciais_seguem_a_ordem_de_prioridade() -> None:
+    """Nenhuma das duas fecha 100%: a primeira da fila de prioridade leva todo o
+    saldo, a segunda fica sem — o saldo escoa inteiro, sem sobra guardada."""
+    v = _validators()
+    obs = v.priorizar_obs(
+        [
+            v.coerce_ob_row(
+                _ob_row(
+                    NUMERO_OB=1,
+                    CODIGO_REDUZIDO_CRU=100,
+                    TOTAL_PECAS=90,
+                    DT_ENTREGA="2026-07-10T00:00:00",
+                )
+            ),
+            v.coerce_ob_row(
+                _ob_row(
+                    NUMERO_OB=2,
+                    CODIGO_REDUZIDO_CRU=100,
+                    TOTAL_PECAS=80,
+                    DT_ENTREGA="2026-07-20T00:00:00",
+                )
+            ),
+        ]
+    )
+    avaliacoes = v.alocar_estoque(obs, _estoques(r100=20))
+    assert [(a.ob.id_ob, a.alocado) for a in avaliacoes] == [(1, 20), (2, 0)]
+    assert [a.notificar for a in avaliacoes] == [True, False]
+
+
+def test_merge_notified_state_reserva_o_alocado_e_nao_o_necessario() -> None:
+    """Numa cobertura parcial a reserva é do que a OB de fato segura (5), não do
+    que ela precisa (55) — reservar 55 tiraria do pote peças que o depósito
+    nunca teve e travaria as próximas OBs do mesmo reduzido."""
+    v = _validators()
+    ob = v.coerce_ob_row(_ob_row(NUMERO_OB=1, CODIGO_REDUZIDO_CRU=26, TOTAL_PECAS=55))
+    avaliacoes = v.alocar_estoque([ob], _estoques(r26=5))
+    estado = v.merge_notified_state({}, avaliacoes, avaliacoes, "2026-09-01T08:00:00")
+    assert estado["1"].quantidade == 5
+    assert estado["1"].codigo_reduzido == 26
+
+
+def test_ob_parcial_ja_avisada_nao_e_reanunciada_no_ciclo_seguinte() -> None:
+    """Idempotência por OB continua valendo para a parcial: mesmo que o estoque
+    suba de 5 para 30 no ciclo seguinte, a OB já anunciada não volta ao grupo."""
+    v = _validators()
+    reduzido = 26
+    ob = v.coerce_ob_row(
+        _ob_row(NUMERO_OB=1, CODIGO_REDUZIDO_CRU=reduzido, TOTAL_PECAS=55)
+    )
+
+    avaliacoes1 = v.alocar_estoque([ob], _estoques(r26=5))
+    novas1 = [a for a in avaliacoes1 if a.notificar]
+    estado = v.merge_notified_state({}, avaliacoes1, novas1, "2026-09-01T08:00:00")
+
+    agora = "2026-09-01T10:00:00"
+    vivas = v.reservas_vivas(estado, agora)
+    reservado = v.reservas_por_reduzido(vivas)
+    assert reservado == {reduzido: 5}
+
+    avaliacoes2 = v.alocar_estoque([ob], _estoques(r26=30), reservado, vivas)
+    novas2 = [a for a in avaliacoes2 if a.notificar and str(a.ob.id_ob) not in vivas]
+    assert novas2 == []
+    assert avaliacoes2[0].alocado == 5, "mantém a reserva original, não a re-dimensiona"
+
+
+def test_build_message_status_parcial_explica_o_complemento() -> None:
+    """A Montagem precisa ler, no bloco, que aquela OB não fecha só com peça
+    restrita — senão o '✅ Pronta para montagem' seria falso."""
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    msg = module.build_message(
+        {
+            "rows": [
+                _row_mensagem(
+                    NUMERO_OB=185719,
+                    CODIGO_REDUZIDO_CRU=26,
+                    TOTAL_PECAS=55,
+                    QTD_PECAS_DISPONIVEIS=5,
+                    QTD_PECAS_ALOCADAS=5,
+                    QTD_PECAS_FALTANTES=50,
+                )
+            ]
+        }
+    )
+    assert (
+        "Status: ⚠️ Montagem parcial — usar as 5 peças com restrição e "
+        "completar as 50 restantes com peças sem restrição" in msg
+    )
+    assert "✅" not in msg
+
+
+def test_build_message_status_parcial_concorda_no_singular() -> None:
+    """Saldo de uma peça só é o caso comum (o piso para notificar é 1): a
+    primeira mensagem em produção com a regra nova saiu com "usar as 1 peças"."""
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    msg = module.build_message(
+        {
+            "rows": [
+                _row_mensagem(
+                    TOTAL_PECAS=50,
+                    QTD_PECAS_DISPONIVEIS=1,
+                    QTD_PECAS_ALOCADAS=1,
+                    QTD_PECAS_FALTANTES=49,
+                )
+            ]
+        }
+    )
+    assert (
+        "usar a 1 peça com restrição e completar as 49 restantes "
+        "com peças sem restrição" in msg
+    )
+
+    unica_faltante = module.build_message(
+        {
+            "rows": [
+                _row_mensagem(
+                    TOTAL_PECAS=50,
+                    QTD_PECAS_DISPONIVEIS=49,
+                    QTD_PECAS_ALOCADAS=49,
+                    QTD_PECAS_FALTANTES=1,
+                )
+            ]
+        }
+    )
+    assert (
+        "usar as 49 peças com restrição e completar a 1 restante "
+        "com peças sem restrição" in unica_faltante
+    )
+
+
+def test_build_message_status_integral_quando_nada_falta() -> None:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    msg = module.build_message(
+        {
+            "rows": [
+                _row_mensagem(
+                    TOTAL_PECAS=50, QTD_PECAS_ALOCADAS=50, QTD_PECAS_FALTANTES=0
+                )
+            ]
+        }
+    )
+    assert "Status: ✅ Pronta para montagem" in msg
+    assert "Montagem parcial" not in msg
+
+
+def test_build_message_subtitulo_conta_completas_e_parciais() -> None:
+    """Com parcial na lista, '2 OBs prontas para montagem' seria falso."""
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    msg = module.build_message(
+        {
+            "rows": [
+                _row_mensagem(
+                    NUMERO_OB=1, QTD_PECAS_ALOCADAS=50, QTD_PECAS_FALTANTES=0
+                ),
+                _row_mensagem(
+                    NUMERO_OB=2, QTD_PECAS_ALOCADAS=5, QTD_PECAS_FALTANTES=45
+                ),
+            ]
+        }
+    )
+    assert "2 OBs com peças restritas disponíveis (1 completa, 1 parcial)" in msg

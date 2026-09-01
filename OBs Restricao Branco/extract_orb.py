@@ -302,6 +302,12 @@ def _write_result(novas: list[AvaliacaoOb], resumo: ResumoExecucao) -> None:
                         "TOTAL_PECAS": a.ob.total_pecas,
                         "KILOS_PROGRAMADOS": a.ob.kilos_programados,
                         "QTD_PECAS_DISPONIVEIS": a.disponivel,
+                        # Quanto do saldo restrito ficou reservado para esta OB
+                        # e quanto falta completar com peca sem restricao — o
+                        # que separa "pronta para montagem" de "montagem
+                        # parcial" na mensagem.
+                        "QTD_PECAS_ALOCADAS": a.alocado,
+                        "QTD_PECAS_FALTANTES": a.faltante,
                         "DT_ENTREGA": a.ob.dt_entrega,
                         "NOME_CLIENTE": a.ob.nome_cliente,
                     }
@@ -311,6 +317,7 @@ def _write_result(novas: list[AvaliacaoOb], resumo: ResumoExecucao) -> None:
                 "resumo": {
                     "total_obs": resumo.total_obs,
                     "total_notificaveis": resumo.total_notificaveis,
+                    "total_parciais": resumo.total_parciais,
                     "total_sem_estoque": resumo.total_sem_estoque,
                     "total_falhas": len(resumo.falhas),
                     "falhas": resumo.falhas,
@@ -437,6 +444,7 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
         notificaveis = [a for a in avaliacoes if a.notificar]
         resumo.total_notificaveis = len(notificaveis)
+        resumo.total_parciais = len([a for a in notificaveis if not a.cobertura_total])
         resumo.total_sem_estoque = len(avaliacoes) - len(notificaveis)
 
         # Idempotencia: poda por presenca na query (OB montada sai da query e
@@ -461,7 +469,9 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
         _write_result(novas, resumo)
         log(
             f"Extracao concluida: {resumo.total_obs} OBs analisadas, "
-            f"{len(novas)} nova(s) a notificar, {resumo.total_sem_estoque} sem estoque, "
+            f"{len(novas)} nova(s) a notificar "
+            f"({len([a for a in novas if not a.cobertura_total])} com cobertura parcial), "
+            f"{resumo.total_sem_estoque} sem peca restrita, "
             f"{len(resumo.falhas)} falha(s). Tempo: {resumo.tempo_consulta_ms}ms.",
             "INFO",
             exec_id,

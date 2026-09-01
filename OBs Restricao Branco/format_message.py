@@ -88,6 +88,35 @@ def _fmt_entrega(valor: Any) -> str:
         return str(valor)
 
 
+def _fmt_status(row: dict[str, Any]) -> str:
+    """Distingue montagem integral de parcial.
+
+    Parcial é o caso em que o depósito tem peça restrita, mas menos do que a OB
+    pede. A OB entra na mensagem assim mesmo (mudança de 01/09/2026): a Montagem
+    de Lotes não pode montá-la só com peça sem restrição e deixar as restritas
+    para trás — usa as que existem e completa o resto.
+
+    QTD_PECAS_ALOCADAS/QTD_PECAS_FALTANTES vêm do extrator; ausentes (payload de
+    um ciclo anterior à mudança) caem no status integral, que era o único
+    possível quando aquele arquivo foi escrito.
+    """
+    alocadas = row.get("QTD_PECAS_ALOCADAS")
+    faltantes = row.get("QTD_PECAS_FALTANTES")
+    if not faltantes or alocadas is None:
+        return "✅ Pronta para montagem"
+    # Saldo de uma peça só é caso comum (o piso para notificar é 1), então a
+    # concordância no singular não é detalhe cosmético: "usar as 1 peças" foi
+    # ao grupo no primeiro ciclo com a regra nova.
+    artigo = "a" if alocadas == 1 else "as"
+    pecas = "peça" if alocadas == 1 else "peças"
+    restantes = "restante" if faltantes == 1 else "restantes"
+    return (
+        f"⚠️ Montagem parcial — usar {artigo} {alocadas} {pecas} com restrição e "
+        f"completar {'a' if faltantes == 1 else 'as'} {faltantes} {restantes} "
+        f"com peças sem restrição"
+    )
+
+
 def _bloco_ob(row: dict[str, Any], descontado: bool = False) -> str:
     artigo = row.get("CODIGO_ARTIGO_CRU")
     filial = row.get("NOME_CLIENTE")
@@ -119,7 +148,7 @@ def _bloco_ob(row: dict[str, Any], descontado: bool = False) -> str:
         f"Estoque disponível: {row['QTD_PECAS_DISPONIVEIS']} peças{sufixo_estoque}\n"
         f"Data de entrega: {_fmt_entrega(row.get('DT_ENTREGA'))}\n"
         f"Filial destino: {filial if filial else '—'}\n"
-        f"Status: ✅ Pronta para montagem"
+        f"Status: {_fmt_status(row)}"
     )
 
 
@@ -134,7 +163,18 @@ def build_message(payload: dict[str, Any]) -> str:
 
     titulo = "🎯 *Depósito 95 - OBs Restrição Branco*"
     if len(rows) > 1:
-        titulo += f"\n_{len(rows)} OBs prontas para montagem_"
+        # Com cobertura parcial na lista, "prontas para montagem" seria falso
+        # para parte dos blocos — o subtítulo passa a contar os dois casos.
+        parciais = len([row for row in rows if row.get("QTD_PECAS_FALTANTES")])
+        if parciais:
+            completas = len(rows) - parciais
+            titulo += (
+                f"\n_{len(rows)} OBs com peças restritas disponíveis "
+                f"({completas} completa{'s' if completas != 1 else ''}, "
+                f"{parciais} parcia{'is' if parciais != 1 else 'l'})_"
+            )
+        else:
+            titulo += f"\n_{len(rows)} OBs prontas para montagem_"
 
     # Um reduzido ja citado antes na mesma mensagem significa que o saldo do
     # bloco atual ja esta descontado das OBs anteriores.

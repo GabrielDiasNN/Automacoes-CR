@@ -36,7 +36,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from automation_log import ensure_utf8_streams, make_logger
 from dotenv import load_dotenv
 from errors import DadoIncompletoError
-from models import CLASSIFICACOES_BRANCO_ALVO, ObRestricaoBranco
+from models import (
+    CLASSIFICACOES_BRANCO_ALVO,
+    FINALIDADES_PECA_ALVO,
+    ObRestricaoBranco,
+)
 from oracle_extract import (
     OracleCredentials,
     fetch_all,
@@ -113,12 +117,22 @@ def simular_classificacoes(creds: OracleCredentials) -> None:
 
 
 def _fetch_finalidades(creds: OracleCredentials) -> dict[int, str]:
-    """Finalidades compativeis com as classes brancas, direto de COR_FINALIDADE."""
+    """Finalidades que a ORB-07 contabiliza — as MESMAS da producao.
+
+    `COR_FINALIDADE` e lido so' para resolver as descricoes oficiais e falhar de
+    forma observavel se 3 ou 4 sumirem do cadastro; o conjunto contabilizado e
+    fixo em `FINALIDADES_PECA_ALVO` (CONTEXT.md, item 1). Ate 01/09/2026 esta
+    simulacao usava o cadastro INTEIRO ({1, 3, 4, 6, 8, 12, 13}) e somava a
+    finalidade 1 (SEM RESTRICAO) ao saldo — exatamente o que a regra de negocio
+    proibe. O simulador entao aprovava OB que a producao reprovava, com um saldo
+    que nao existia para esta automacao.
+    """
     sql, params = build_finalidades_sql(CLASSIFICACOES_BRANCO_ALVO)
     columns, rows = fetch_all(creds, sql, EXEC_ID, log, batch_size=1000, params=params)
-    return validate_finalidades_query(
+    cadastro = validate_finalidades_query(
         CLASSIFICACOES_BRANCO_ALVO, serialize_rows(columns, rows)
     )
+    return {f: cadastro[f] for f in FINALIDADES_PECA_ALVO if f in cadastro}
 
 
 def _fetch_estoque_rows(
@@ -228,7 +242,8 @@ def simular_comparacoes(
     """Validacao 3 — priorizacao (lojas antes da matriz) + alocacao sequencial
     de estoque, a MESMA cadeia que a producao roda em extract_orb.py."""
     print(
-        "\n=== Validação 3: Priorização + Alocação de Estoque (saldo >= necessidade) ==="
+        "\n=== Validação 3: Priorização + Alocação de Estoque "
+        "(integral primeiro, depois parcial) ==="
     )
     estoque_rows = _fetch_estoque_rows(
         creds, sorted({ob.codigo_reduzido_cru for ob in obs}), finalidades
@@ -245,18 +260,21 @@ def simular_comparacoes(
     for avaliacao in alocar_estoque(priorizar_obs(obs), estoques):
         ob = avaliacao.ob
         destino = f" | {ob.nome_cliente or '—'} entrega {ob.dt_entrega or '—'}"
-        if avaliacao.notificar:
+        cabecalho = f"OB #{ob.id_ob} precisa {ob.total_pecas} un, saldo {avaliacao.disponivel} un"
+        if avaliacao.notificar and avaliacao.cobertura_total:
+            notificar += 1
+            _linha(OK, f"{cabecalho}{destino} → Notificar ✅ (integral)")
+        elif avaliacao.notificar:
             notificar += 1
             _linha(
-                OK,
-                f"OB #{ob.id_ob} precisa {ob.total_pecas} un, saldo {avaliacao.disponivel} un"
-                f"{destino} → Notificar ✅",
+                AVISO,
+                f"{cabecalho}{destino} → Notificar ⚠️ (parcial: "
+                f"{avaliacao.alocado} un restritas + {avaliacao.faltante} un sem restrição)",
             )
         else:
             _linha(
                 FALHA,
-                f"OB #{ob.id_ob} precisa {ob.total_pecas} un, saldo {avaliacao.disponivel} un"
-                f"{destino} → Sem estoque ❌",
+                f"{cabecalho}{destino} → Sem peça restrita ❌",
             )
     return notificar, len(obs) - notificar
 

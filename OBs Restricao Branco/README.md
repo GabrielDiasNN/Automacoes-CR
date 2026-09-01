@@ -24,8 +24,14 @@ entre as OBs e prepara um aviso para o grupo Expedição Tinturaria.
   de `COR_FINALIDADE` para as classificações 6 e 9 — hoje
   `{1, 3, 4, 6, 8, 12, 13}`. A consulta devolve, por reduzido, uma linha total
   (saldo autoritativo) e uma linha por finalidade para auditoria.
-- Prioridade: lojas por data de entrega; depois matriz. O saldo é consumido por
-  reduzido, evitando prometer a mesma peça para mais de uma OB.
+- Prioridade: lojas por data de entrega; depois matriz. Dentro dessa fila, as
+  OBs cobertas por inteiro alocam primeiro e as demais levam o saldo restante.
+  O saldo é consumido por reduzido, evitando prometer a mesma peça para mais de
+  uma OB.
+- Cobertura parcial (desde 01/09/2026): basta **uma** peça restrita disponível
+  para a OB ser anunciada. O bloco sai como `⚠️ Montagem parcial — usar as N
+  peças com restrição e completar as M restantes com peças sem restrição`. Só
+  fica de fora a OB sem nenhuma peça restrita no depósito.
 - Mensagem: artigo com três dígitos (`32` → `032`) e cor com dois dígitos
   (`00001` → `01`). A linha de restrição lista as finalidades com saldo (ex.:
   `1 — SEM RESTRIÇÃO; 3 — CORES CLARAS`), conforme o estoque encontrado.

@@ -63,6 +63,12 @@ ID_CLIENTE_MATRIZ = 1
 # tirar a OB do state recriaria o bug original de forma invisivel.
 JANELA_RESERVA_HORAS = 24
 
+# Saldo restrito minimo para anunciar uma OB (ver validate_partial_logic).
+# Uma peca basta: o objetivo da automacao e escoar a peca com restricao, e
+# deixar 5 pecas para tras porque a OB pede 55 e exatamente o que a Montagem
+# de Lotes nao pode fazer.
+MINIMO_PECAS_NOTIFICAVEL = 1
+
 COLUNAS_OB_OBRIGATORIAS: tuple[str, ...] = (
     "NUMERO_OB",
     "CODIGO_FLUXO",
@@ -456,13 +462,28 @@ def validate_estoque_query(
 
 
 def validate_comparison_logic(ob_total: int, estoque_count: int) -> bool:
-    """Regra de decisao: ha estoque suficiente para montar a OB?
+    """O estoque restrito cobre a OB INTEIRA?
+
+    Deixou de ser a regra de notificacao em 01/09/2026 (ver
+    `validate_partial_logic`) e passou a ser a regra de PRIORIDADE: quem fecha
+    100% aloca antes, na primeira passada de `alocar_estoque`.
 
     Fonte unica da comparacao — a simulacao e a producao chamam esta mesma
     funcao, entao o que Gabriel valida na Fase 1 e literalmente o que roda
     depois em producao.
     """
     return estoque_count >= ob_total
+
+
+def validate_partial_logic(estoque_count: int) -> bool:
+    """Regra de decisao: vale anunciar a OB com o saldo restrito que existe?
+
+    Basta UMA peca (`MINIMO_PECAS_NOTIFICAVEL`). A Montagem de Lotes nao pode
+    montar a OB so' com peca sem restricao e deixar as restritas para tras: a
+    peca restrita e a que precisa ser escoada, entao qualquer saldo aproveitavel
+    justifica o aviso — a OB e completada com material sem restricao.
+    """
+    return estoque_count >= MINIMO_PECAS_NOTIFICAVEL
 
 
 def chave_prioridade(ob: ObRestricaoBranco) -> tuple[bool, bool, str, int]:
@@ -680,7 +701,10 @@ def merge_notified_state(
             str(a.ob.id_ob): ReservaNotificacao(
                 em=agora,
                 codigo_reduzido=a.ob.codigo_reduzido_cru,
-                quantidade=a.ob.total_pecas,
+                # O que a OB de fato segura, nao o que ela precisa: numa
+                # cobertura parcial, reservar `total_pecas` tiraria do pote
+                # pecas que o deposito nunca teve.
+                quantidade=a.alocado,
             )
             for a in novas
         }
@@ -706,14 +730,21 @@ def alocar_estoque(
     reservado: Mapping[int, int] | None = None,
     ja_reservadas: Mapping[str, ReservaNotificacao] | None = None,
 ) -> list[AvaliacaoOb]:
-    """Aloca o estoque do deposito 95 sequencialmente, na ordem recebida.
+    """Aloca o estoque do deposito 95 em duas passadas sobre a fila priorizada.
 
-    O estoque e por produto (codigo reduzido) e as OBs concorrem por ele:
-    percorre as OBs na ordem de prioridade (ver priorizar_obs) mantendo um
-    saldo por codigo. Uma OB so e notificavel se o saldo RESTANTE cobre a
-    necessidade dela (validate_comparison_logic); ao notificar, a quantidade
-    e deduzida do saldo — assim a mensagem nunca lista mais OBs do que o
-    estoque fisico permite montar. `disponivel` registra o saldo no momento
+    O estoque e por produto (codigo reduzido) e as OBs concorrem por ele,
+    mantendo um saldo por codigo. Desde 01/09/2026 a cobertura INTEGRAL deixou
+    de ser condicao para notificar e virou condicao de PRIORIDADE:
+
+    - passada 1: na ordem de `priorizar_obs`, as OBs que o saldo cobre por
+      inteiro alocam `total_pecas`;
+    - passada 2: as demais, na mesma ordem, levam todo o saldo que restou do
+      seu reduzido (>= `MINIMO_PECAS_NOTIFICAVEL`) e sao anunciadas como
+      cobertura parcial — a Montagem completa o restante com peca sem
+      restricao. So fica de fora quem nao tem nenhuma peca restrita.
+
+    A ordem de retorno e a de entrada (prioridade), nao a de alocacao.
+    `alocado` e o que a OB reservou; `disponivel` registra o saldo no momento
     da avaliacao daquela OB, nao o estoque bruto do deposito.
 
     `reservado` (ver reservas_por_reduzido) desconta o que OBs anunciadas em
@@ -744,41 +775,101 @@ def alocar_estoque(
         codigo: max(estoque.quantidade - presos.get(codigo, 0), 0)
         for codigo, estoque in estoques.items()
     }
-    avaliacoes: list[AvaliacaoOb] = []
-    for ob in obs:
-        saldo = saldos.get(ob.codigo_reduzido_cru, 0)
+
+    def montar(
+        ob: ObRestricaoBranco,
+        saldo: int,
+        notificar: bool,
+        alocado: int,
+        motivo: str,
+    ) -> AvaliacaoOb:
+        estoque = estoques.get(ob.codigo_reduzido_cru)
+        return AvaliacaoOb(
+            ob=ob,
+            disponivel=saldo,
+            notificar=notificar,
+            motivo=motivo,
+            restricoes_disponiveis=(
+                estoque.restricoes_disponiveis if estoque is not None else ()
+            ),
+            alocado=alocado,
+        )
+
+    avaliadas: dict[int, AvaliacaoOb] = {}
+    pendentes: list[tuple[int, ObRestricaoBranco]] = []
+
+    # Passada 0 — OBs ja anunciadas: a quantidade delas ja saiu do saldo via
+    # `presos`, entao nao concorrem de novo. `reserva_viva.quantidade` e o que
+    # foi alocado no anuncio original (pode ser parcial).
+    for indice, ob in enumerate(obs):
         reserva_viva = ja_reservadas.get(str(ob.id_ob))
         if reserva_viva is not None and reserva_viva.quantidade > 0:
-            notificar = True
-            motivo = (
-                f"ja reservada em ciclo anterior: {ob.total_pecas} un do "
-                f"deposito {DEPOSITO_ALVO} ja descontadas via reserva viva"
-            )
-        else:
-            notificar = validate_comparison_logic(ob.total_pecas, saldo)
-            if notificar:
-                saldos[ob.codigo_reduzido_cru] = saldo - ob.total_pecas
-                motivo = (
-                    f"estoque alocado: precisa {ob.total_pecas} un, saldo livre do "
-                    f"deposito {DEPOSITO_ALVO} era {saldo} un "
-                    f"(restam {saldo - ob.total_pecas} un)"
-                )
-            else:
-                motivo = (
-                    f"estoque insuficiente: precisa {ob.total_pecas} un, saldo "
-                    f"livre restante do deposito {DEPOSITO_ALVO} e {saldo} un "
-                    f"(faltam {ob.total_pecas - saldo} un)"
-                )
-        estoque = estoques.get(ob.codigo_reduzido_cru)
-        avaliacoes.append(
-            AvaliacaoOb(
-                ob=ob,
-                disponivel=saldo,
-                notificar=notificar,
-                motivo=motivo,
-                restricoes_disponiveis=(
-                    estoque.restricoes_disponiveis if estoque is not None else ()
+            avaliadas[indice] = montar(
+                ob,
+                saldos.get(ob.codigo_reduzido_cru, 0),
+                notificar=True,
+                alocado=reserva_viva.quantidade,
+                motivo=(
+                    f"ja reservada em ciclo anterior: {reserva_viva.quantidade} un do "
+                    f"deposito {DEPOSITO_ALVO} ja descontadas via reserva viva"
                 ),
             )
+        else:
+            pendentes.append((indice, ob))
+
+    # Passada 1 — cobertura integral primeiro. Dentro da fila ja priorizada
+    # (lojas -> data de entrega), quem fecha 100% aloca antes: o saldo escoa do
+    # mesmo jeito nas duas ordens, mas assim ele fecha a OB que pode ser montada
+    # so' com peca restrita em vez de ficar espalhado em varias parciais.
+    parciais: list[tuple[int, ObRestricaoBranco]] = []
+    for indice, ob in pendentes:
+        saldo = saldos.get(ob.codigo_reduzido_cru, 0)
+        if not validate_comparison_logic(ob.total_pecas, saldo):
+            parciais.append((indice, ob))
+            continue
+        saldos[ob.codigo_reduzido_cru] = saldo - ob.total_pecas
+        avaliadas[indice] = montar(
+            ob,
+            saldo,
+            notificar=True,
+            alocado=ob.total_pecas,
+            motivo=(
+                f"estoque alocado: precisa {ob.total_pecas} un, saldo livre do "
+                f"deposito {DEPOSITO_ALVO} era {saldo} un "
+                f"(restam {saldo - ob.total_pecas} un)"
+            ),
         )
-    return avaliacoes
+
+    # Passada 2 — o que sobrou vai para as parciais, na mesma ordem de
+    # prioridade. Cada uma leva TODO o saldo restante do seu reduzido: a OB e
+    # completada com peca sem restricao, e uma peca restrita guardada para a
+    # proxima OB e uma peca deixada para tras.
+    for indice, ob in parciais:
+        saldo = saldos.get(ob.codigo_reduzido_cru, 0)
+        notificar = validate_partial_logic(saldo)
+        if notificar:
+            saldos[ob.codigo_reduzido_cru] = 0
+            avaliadas[indice] = montar(
+                ob,
+                saldo,
+                notificar=True,
+                alocado=saldo,
+                motivo=(
+                    f"cobertura parcial: precisa {ob.total_pecas} un, alocadas as "
+                    f"{saldo} un livres do deposito {DEPOSITO_ALVO} "
+                    f"(faltam {ob.total_pecas - saldo} un sem restricao)"
+                ),
+            )
+        else:
+            avaliadas[indice] = montar(
+                ob,
+                saldo,
+                notificar=False,
+                alocado=0,
+                motivo=(
+                    f"sem peca restrita disponivel: precisa {ob.total_pecas} un e "
+                    f"o saldo livre restante do deposito {DEPOSITO_ALVO} e zero"
+                ),
+            )
+
+    return [avaliadas[indice] for indice in range(len(obs))]
