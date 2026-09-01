@@ -2,7 +2,7 @@
 
 Carregado apenas ao trabalhar em `Produção Beneficimento/`. As regras universais (encoding, caminhos, banco, Zero-Trust, commits, E2E, manifesto) estão no `CLAUDE.md` da raiz.
 
-Automação orientada a snapshot: não tem `run.ps1`, ao contrário das cinco automações registradas com manifesto.
+Automação orientada a snapshot: não tem `run.ps1`, ao contrário das seis automações registradas com manifesto.
 
 ## Módulos (`src/beneficiamento/`)
 
