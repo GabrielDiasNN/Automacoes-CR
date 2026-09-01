@@ -1,6 +1,6 @@
 ---
 name: run-tests
-description: Roda a suite de testes do Orchestrator filtrando por marcador (unitario | integracao | e2e). Uso: /run-tests <marcador>
+description: "Roda a suite de testes do Orchestrator filtrando por marcador (unitario | integracao | e2e). Uso: /run-tests <marcador>"
 disable-model-invocation: true
 ---
 

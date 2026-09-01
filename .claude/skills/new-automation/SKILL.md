@@ -1,6 +1,6 @@
 ---
 name: new-automation
-description: Scaffold de nova automação com manifesto válido via New-Automation.ps1. Uso: /new-automation <Nome> <owner> <criticidade>. Criticidade válida: low | medium | high.
+description: "Scaffold de nova automação com manifesto válido via New-Automation.ps1. Uso: /new-automation <Nome> <owner> <criticidade>. Criticidade válida: low | medium | high."
 disable-model-invocation: true
 ---
 

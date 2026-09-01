@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 > Herda de: `AGENTS.md`. Em caso de conflito, `AGENTS.md` prevalece salvo onde este arquivo for mais restritivo.
 
 ## Comandos Essenciais
@@ -30,8 +28,16 @@ cd Orchestrator && ..\.venv\Scripts\alembic upgrade head
 # Depende de `pythonpath = .` no pytest.ini: sem essa linha o conftest não acha `app`.
 cd Orchestrator && ..\.venv\Scripts\pytest
 
-# Rodar testes por marcador (unitario | integracao | e2e)
+# Rodar testes por marcador (unitario | integracao | e2e | benchmark)
 cd Orchestrator && ..\.venv\Scripts\pytest -m integracao -v
+
+# Rodar um único arquivo / um único teste
+cd Orchestrator && ..\.venv\Scripts\pytest tests\test_worker_wakeup_unit.py -v
+cd Orchestrator && ..\.venv\Scripts\pytest tests\test_worker_wakeup_unit.py::test_log_flusher_nao_envia_buffer_vazio -v
+
+# E2E Playwright — `-m e2e` sobrescreve o addopts. Exige `Dashboard/dist/` buildado
+# (npm run build) antes, porque o FastAPI serve a SPA a partir dele.
+cd Orchestrator && ..\.venv\Scripts\pytest -m e2e -v
 
 # Lint Python (black, isort, bandit, mypy, pylint) — ferramentas via requirements-dev.txt
 .venv\Scripts\python -m black --check Orchestrator .claude/skills
@@ -62,7 +68,7 @@ Monorepo com três camadas principais:
 2. **Dashboard** (`Dashboard/`) — SPA React + TypeScript + Vite (fontes em `Dashboard/src/`, build em `Dashboard/dist/`) servido pelo próprio FastAPI via `StaticFiles` com fallback SPA para rotas client-side. Roda em `http://127.0.0.1:8000/dashboard/`.
 3. **Automações de domínio** — diretórios independentes. As seis automações registradas com manifesto (`Receitas Bloqueadas/` RB-01, `Montagem de Terceirizados/` MT-02, `Receitas Emitidas/` RE-03, `OBs Paradas Fase/` OBP-04, `OBs Fluxo Sem Tingimento/` OFST-06, `OBs Restricao Branco/` ORB-07) usam `run.ps1` como entrypoint. `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo). Criticidade, SLA e cadência canônicas: `docs/automation-criticality-map.md`.
 
-Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md` e `Produção Beneficimento/CLAUDE.md`.
+Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md`, `Produção Beneficimento/CLAUDE.md`, `Dashboard/CLAUDE.md` (toolchain e comandos do front) e `lib/CLAUDE.md` (Pester).
 
 ### Biblioteca compartilhada Python (`lib/python/`)
 - `oracle_extract.py` — núcleo compartilhado de extração Oracle: `resolve_oracle_credentials`, `init_thick_mode`, `fetch_all` (lotes), `serialize_rows` (datetime→isoformat, strip), `compute_hash`, `read_last_hash`, `write_state_tmp`. **Todos os 6 scripts de extração de domínio (`Receitas Emitidas/`, `Receitas Bloqueadas/`, `Montagem de Terceirizados/`, `OBs Paradas Fase/`, `OBs Fluxo Sem Tingimento/`, `OBs Restricao Branco/`) usam este módulo** — não duplicar o padrão fetch/serialize/hash em novos scripts. Para DSN fixo (ignorar `.env`), passe `force_dsn="dbprd"` em `resolve_oracle_credentials`.

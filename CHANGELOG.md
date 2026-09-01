@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.59] - 01/09/2026
+
+### Corrigido
+
+- **Três arquivos com frontmatter YAML inválido silenciavam campos de configuração.** `description:` sem aspas contendo `: ` (dois-pontos + espaço) faz o parser YAML abortar o bloco inteiro; o arquivo continua carregando, mas com **todos** os campos descartados. Efeito observado: `.claude/skills/run-tests/SKILL.md` aparecia na listagem com a primeira linha do corpo como descrição e era oferecida ao modelo apesar de declarar `disable-model-invocation: true`. Mesmo defeito em `.claude/skills/new-automation/SKILL.md` e `.claude/agents/architecture-reviewer.md`. Nada avisa em verbosidade normal. Correção: valor entre aspas duplas nos três. Varredura confirmou **0 frontmatter inválido restante** entre as 6 skills e os 4 agentes do projeto.
+
+### Alterado
+
+- **Contexto sempre-carregado do `CLAUDE.md` da raiz reduzido.** Removida a linha de boilerplate `This file provides guidance to Claude Code...`, que não carregava informação. Os blocos **Dashboard** (toolchain e comandos do job `frontend` do CI) e **Testes PowerShell / Pester** saíram da raiz para `Dashboard/CLAUDE.md` e `lib/CLAUDE.md`, que só entram em contexto quando o agente trabalha sob esses diretórios. O ponteiro de módulos sob demanda passou a listar os quatro arquivos aninhados.
+  - A seção `## Princípios Comportamentais` foi avaliada para remoção (a skill `karpathy-guidelines` cobre os mesmos quatro princípios) e **mantida**: `AGENTS.md:53` a designa explicitamente como fonte única, e removê-la deixaria esse ponteiro quebrado.
+  - Efeito colateral conhecido: `lib/CLAUDE.md` cai na lista de caminhos críticos de `Get-GovernanceTargetSummary.ps1`, então **enquanto estiver no diff** o pre-commit e o CI rodam em `full_scan` (~240 s medidos nesta máquina). Comportamento intencional preservado em 1.3.58 como rede de segurança; o hook `Stop` não é afetado (usa `-NoCriticalPromotion` e resolve `targeted_paths` com 5 alvos).
+
 ## [1.3.58] - 01/09/2026
 
 ### Corrigido
