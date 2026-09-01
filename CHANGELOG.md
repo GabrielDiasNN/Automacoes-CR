@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.61] - 01/09/2026
+
+### Corrigido
+
+- **A suite de testes sobrescrevia o `orb_result.json` VIVO da ORB-07 em producao.** Os dois testes de `Orchestrator/tests/test_orb.py` que executam `extract()` de verdade (`test_extract_aborta_sem_tocar_state_quando_todas_as_linhas_falham_validacao` e `test_extract_trata_query_realmente_vazia_como_nada_a_notificar`) faziam monkeypatch de `STATE_FILE` para `tmp_path`, mas **nao** de `RESULT_FILE` — entao `_write_counts` gravava em `OBs Restricao Branco/orb_result.json`, o arquivo que o `run.ps1` le no ciclo real. Observado em 01/09/2026: o mtime do arquivo coincidiu com uma execucao de `pytest`, sem nenhuma entrada correspondente em `OBs Restricao Branco/Logs/Orb.jsonl`. O dano foi nulo porque o ciclo anterior tambem tinha gravado `rows: []`, mas uma suite rodando entre o extract e o envio de um ciclo real faria o `run.ps1` publicar um payload de teste — inclusive o bloco `record_counts` que alimenta o evento `execution.end`.
+  - O redirecionamento foi para dentro do helper compartilhado `_stub_extract_ate_fetch_obs` (que agora recebe `tmp_path`), e nao para cada teste: todo teste que chama `extract()` passa por ele, entao qualquer teste futuro nasce protegido. O teste do caminho exit(2) ganhou um assert sobre `tmp_path / "orb_result.json"`, que falha se o patch for removido.
+  - **OFST-06 auditada: sem o mesmo furo.** `Orchestrator/tests/test_ofst.py` nunca chama `extract()` — so' a funcao pura `_record_counts` —, apesar de `extract_ofst.py` ter o mesmo par `RESULT_FILE`/`STATE_FILE` a nivel de modulo. **MT-02** chama `extract_oracle.extract()`, mas o teste decora `@patch("extract_oracle.open")`, o que intercepta toda escrita em disco.
+  - Verificacao: `pytest` completo do Orchestrator (1026 passed) com snapshot de mtime **e** md5 de `orb_result.json`, `ofst_result.json`, `orb_state.json` e `ofst_state.json` antes e depois — todos identicos.
+
 ## [1.3.60] - 01/09/2026
 
 ### Alterado
