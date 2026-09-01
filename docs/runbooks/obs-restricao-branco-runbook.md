@@ -67,6 +67,10 @@ notificada reservou:
 - A reserva é descontada do saldo do depósito antes da alocação do ciclo
   seguinte. Sem ela, duas OBs eram anunciadas como prontas para as mesmas peças
   físicas — a Expedição não separa a malha ao receber o aviso.
+- Em **cobertura parcial** (desde 01/09/2026), `reservado` é o que a OB de fato
+  segura, não o que ela pede: uma OB de 55 peças anunciada sobre 5 peças
+  restritas grava `"reservado": 5`. Se o saldo subir depois, ela **não** é
+  re-anunciada — a idempotência é por OB e a reserva original é mantida.
 - A reserva termina na montagem: a OB sai da query (`OBMONTADA='0'`) e é podada
   do state por ausência.
 - Validade de **24 h** (`JANELA_RESERVA_HORAS` em `validators.py`), só para a OB

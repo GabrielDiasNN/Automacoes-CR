@@ -36,10 +36,23 @@ envio.
    nesse caso a execução falha de forma observável em vez de degradar.
 5. Todos os fluxos são aceitos; a seleção exige `STATUS=1`, `OBMONTADA='0'` e
    exclui pedidos terminados em R/S.
-6. Estoque é alocado sequencialmente por reduzido, lojas antes da matriz.
+6. Estoque é alocado por reduzido em **duas passadas** sobre a fila já
+   priorizada (lojas antes da matriz, por data de entrega): primeiro as OBs que
+   o saldo cobre por inteiro, depois as parciais, que levam o saldo remanescente.
+   Desde 01/09/2026 a cobertura integral **não é mais condição para notificar** —
+   virou condição de prioridade. Uma OB com 5 peças restritas disponíveis e
+   necessidade de 55 é anunciada como *montagem parcial*: a Montagem de Lotes não
+   pode montá-la só com peça sem restrição e deixar as 5 restritas paradas no
+   depósito, que é justamente a peça que precisa escoar. `MINIMO_PECAS_NOTIFICAVEL`
+   é 1; saldo zero é o único motivo de não notificar. `AvaliacaoOb.alocado` é o
+   que a OB de fato segura (≤ `total_pecas`) e é ele — nunca a necessidade — que
+   vai para a reserva do state e para a mensagem.
 7. Idempotência é por OB e o commit ocorre somente após confirmação do canal.
    O `orb_state.json` guarda, por OB notificada, o carimbo do aviso **e a
-   reserva de estoque** que ele criou (`{"em", "reduzido", "reservado"}`). A
+   reserva de estoque** que ele criou (`{"em", "reduzido", "reservado"}` — em
+   cobertura parcial, `reservado` é o que existia, não o que a OB pedia).
+   Uma OB anunciada como parcial **não é re-anunciada** se o saldo subir depois:
+   a idempotência é por OB, e a reserva original é mantida como está. A
    reserva é descontada do saldo nos ciclos seguintes: a Expedição não separa as
    peças ao receber o aviso — a OB entra numa fila e é montada quando chega a
    vez —, então sem reserva persistente duas OBs eram anunciadas como prontas

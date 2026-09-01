@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.60] - 01/09/2026
+
+### Alterado
+
+- **ORB-07 passa a notificar OB com cobertura PARCIAL de estoque restrito.** Até aqui `validate_comparison_logic` (`estoque >= total_pecas`) era a condição de notificação: uma OB de 55 peças com 5 peças restritas disponíveis no depósito 95 não era anunciada, e a Montagem de Lotes montava as 55 com peça sem restrição — deixando as 5 restritas paradas, que são exatamente as que precisam escoar. Agora basta **uma** peça (`MINIMO_PECAS_NOTIFICAVEL = 1`, `validate_partial_logic`); saldo zero virou o único motivo de não notificar.
+  - `alocar_estoque` passou a rodar em **duas passadas** sobre a fila já priorizada (lojas → data de entrega): primeiro as OBs cobertas por inteiro alocam `total_pecas`, depois as parciais levam o saldo remanescente do seu reduzido. A prioridade de negócio segue sendo o desempate dentro de cada passada, e a ordem de retorno continua sendo a de prioridade, não a de alocação. Quem fecha 100% aloca antes porque o saldo escoa igual nas duas ordens, mas assim ele fecha uma OB montável só com peça restrita em vez de ficar espalhado em parciais.
+  - `AvaliacaoOb` ganhou `alocado` (com `cobertura_total`/`faltante` derivados). É `alocado` — nunca `total_pecas` — que vai para a reserva do `orb_state.json`: reservar 55 sobre um depósito que tinha 5 tiraria do pote peças que nunca existiram e travaria as próximas OBs do mesmo reduzido.
+  - Idempotência inalterada: OB anunciada como parcial **não** é re-anunciada se o saldo subir depois, e a reserva original é mantida como está.
+  - Mensagem: o bloco sai como `⚠️ Montagem parcial — usar as N peças com restrição e completar as M restantes com peças sem restrição`; o subtítulo passa a contar completas e parciais em vez de afirmar "N OBs prontas para montagem". `orb_result.json` ganhou `QTD_PECAS_ALOCADAS`/`QTD_PECAS_FALTANTES` e o resumo, `total_parciais`.
+  - **Simulador corrigido junto** (`test_orb_simulation.py`): `_fetch_finalidades` usava o cadastro INTEIRO de `COR_FINALIDADE` (`{1, 3, 4, 6, 8, 12, 13}`) e somava ao saldo a finalidade **1 = SEM RESTRIÇÃO**, que a produção nunca conta (CONTEXT.md, item 1) — o simulador aprovava OB que a produção reprovava, sobre um saldo que não existe para esta automação. Descoberto ao validar esta mudança com dados reais: a peça 141 aparecia com 28 unidades e tinha 4. Agora usa `FINALIDADES_PECA_ALVO`, como o extrator, e o output distingue integral de parcial.
+  - Concordância no singular no status parcial: o primeiro ciclo em produção com a regra nova (01/09, 17:00) enviou "usar as 1 peças com restrição" — saldo de uma peça é caso comum, já que o piso para notificar é 1. Coberto por teste.
+  - Cobertura: 9 testes novos em `Orchestrator/tests/test_orb.py` (caso 5/55, piso de 1 peça, prioridade de quem fecha 100%, ordem entre parciais, reserva pelo alocado, idempotência da parcial, status e subtítulo da mensagem); 4 testes que codificavam a regra antiga foram reescritos para a nova, preservando a garantia central de que a soma dos alocados nunca passa do estoque.
+
 ## [1.3.59] - 01/09/2026
 
 ### Corrigido
