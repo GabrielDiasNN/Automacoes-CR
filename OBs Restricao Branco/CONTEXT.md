@@ -2,8 +2,11 @@
 
 ## Estado
 
-Implementada e ativa em 25/08/2026 no Orchestrator (`id=6`, `enabled=true`), com
-agenda cron de 120 minutos no grupo `oracle`. O preview foi aprovado e a mensagem
+Implementada e ativa em 25/08/2026 no Orchestrator (`id=6`, `enabled=true`), no
+grupo `oracle`. A agenda cron era de 120 minutos e passou a **60 minutos** em
+01/09/2026: com a notificação por cobertura parcial, a janela entre ciclos virou
+o fator limitante — a OB #185889 foi montada consumindo as 4 peças restritas
+poucos minutos antes do ciclo que a teria anunciado. O preview foi aprovado e a mensagem
 operacional contendo as seis OBs foi confirmada no grupo Expedição Tinturaria com
 ACK 1. O ciclo normal seguinte retornou código 2 (todas já notificadas), sem novo
 envio.
