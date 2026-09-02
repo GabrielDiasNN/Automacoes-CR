@@ -186,13 +186,28 @@ export function ExecucoesPage() {
       // origem, não em cada consumidor lembrar de tratar o próprio caso.
       render: (r) => (
         <span style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end" }}>
+          {/* aria-label com o id da execução: sem isso, N linhas produzem N
+           *  botões "Parar"/"Reenfileirar" idênticos para leitor de tela, numa
+           *  ação destrutiva em produção que precisa ser inequívoca. */}
           {r.stop_allowed && (
-            <Button size="sm" variant="danger" icon={<Square size={12} />} onClick={() => setConfirmStop(r.id)}>
+            <Button
+              size="sm"
+              variant="danger"
+              icon={<Square size={12} />}
+              aria-label={`Parar execução ${shortId(r.id)}`}
+              onClick={() => setConfirmStop(r.id)}
+            >
               Parar
             </Button>
           )}
           {r.requeue_allowed && (
-            <Button size="sm" variant="primary" icon={<RotateCw size={12} />} onClick={() => doRequeue(r.id)}>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<RotateCw size={12} />}
+              aria-label={`Reenfileirar execução ${shortId(r.id)}`}
+              onClick={() => doRequeue(r.id)}
+            >
               Reenfileirar
             </Button>
           )}

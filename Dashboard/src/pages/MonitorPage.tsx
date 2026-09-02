@@ -330,6 +330,14 @@ export function MonitorPage() {
       >
         <div
           ref={consoleRef}
+          // `role="log"`: live region própria para stream de mensagens tipo
+          // console/chat — sem isso o conteúdo mudava sozinho sob o cursor
+          // sem nenhum anúncio a leitor de tela. `aria-relevant="additions"`
+          // evita que "Limpar" (esvazia a lista) dispare um anúncio de
+          // remoção em massa.
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
           style={{
             height: 420,
             overflowY: "auto",

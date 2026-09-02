@@ -32,6 +32,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             className={`${styles.toast} animate-in`}
+            // Erro (tom vermelho) é assertivo: `role="alert"` sobrepõe o
+            // `aria-live="polite"` do container para essa mensagem — antes
+            // o erro de uma ação destrutiva (ex.: falha ao Parar uma
+            // execução) tinha a mesma prioridade de anúncio que um "ok".
+            role={t.tone === "red" ? "alert" : undefined}
             style={{ borderColor: toneVar[t.tone], background: toneTint[t.tone] }}
           >
             <span className={styles.bar} style={{ background: toneVar[t.tone] }} />

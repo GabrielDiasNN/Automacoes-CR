@@ -21,7 +21,10 @@ export function StatusBar() {
             animation: health?.status === "unhealthy" ? "blink-alarm 1s steps(1,end) infinite" : undefined,
           }}
         />
-        <span className={styles.state} style={{ color: toneVar[tone] }}>
+        {/* aria-live só neste texto (não na barra inteira, que teria o
+         *  leitor de tela repetindo os 4 grupos a cada tick de 10s): o que
+         *  importa anunciar é a MUDANÇA de estado do sistema, não o polling. */}
+        <span className={styles.state} style={{ color: toneVar[tone] }} aria-live="polite">
           {healthLabel(health?.status)}
         </span>
       </div>

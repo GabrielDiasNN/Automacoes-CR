@@ -162,12 +162,16 @@ export function AutomacoesPage() {
                   </dl>
 
                   <div className={styles.actions}>
+                    {/* aria-label único por card: com N automações, N botões
+                     *  "Disparar" idênticos são indistinguíveis para leitor
+                     *  de tela sem depender de navegação visual. */}
                     {a.enabled ? (
                       <Button
                         size="sm"
                         variant="ghost"
                         icon={<Pause size={13} />}
                         disabled={busy === a.id}
+                        aria-label={`Pausar ${a.name}`}
                         onClick={() => act(a.id, () => orchestratorApi.pauseAutomation(a.id), `${a.name} pausada`)}
                       >
                         Pausar
@@ -178,6 +182,7 @@ export function AutomacoesPage() {
                         variant="ghost"
                         icon={<Play size={13} />}
                         disabled={busy === a.id}
+                        aria-label={`Retomar ${a.name}`}
                         onClick={() => act(a.id, () => orchestratorApi.resumeAutomation(a.id), `${a.name} retomada`)}
                       >
                         Retomar
@@ -188,6 +193,7 @@ export function AutomacoesPage() {
                       variant="primary"
                       icon={<Zap size={13} />}
                       disabled={busy === a.id || !a.enabled}
+                      aria-label={`Disparar ${a.name}`}
                       onClick={() =>
                         act(a.id, () => orchestratorApi.startAutomation(a.id).then((r) => ({ message: r.message })), `${a.name} disparada`)
                       }

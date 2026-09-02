@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Factory, LayoutDashboard, ListChecks, Menu, Radio, Rows3, Rows4, Search, Server, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
+import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -31,6 +33,18 @@ export function Shell() {
   const { clearKey } = useApiKeyContext();
   const { density, toggleDensity } = useTableDensity();
   const location = useLocation();
+  const railRef = useRef<HTMLElement>(null);
+  // Mesmo breakpoint de Shell.module.css: só ABAIXO de 900px o rail vira
+  // gaveta fixed+translateX; em desktop ele está sempre visível e `open`
+  // nunca chega a ser lido pelo CSS (o botão hambúrguer nem aparece).
+  const isMobileRail = useMediaQuery("(max-width: 900px)");
+  const railHidden = isMobileRail && !open;
+
+  // Abaixo de 900px o rail fechado é `translateX(-100%)` mas continuava no
+  // DOM, focável e no tab order — um usuário de teclado tabulava para dentro
+  // de um menu fora da tela sem indício visual algum. Focus trap real
+  // (Escape fecha, Tab cicla) só quando de fato aberto como gaveta mobile.
+  useFocusTrap(railRef, isMobileRail && open, () => setOpen(false));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,7 +65,11 @@ export function Shell() {
       <div className={`hazard ${styles.brandRail}`} aria-hidden="true" />
 
       <div className={styles.frame}>
-        <aside className={`${styles.rail} ${open ? styles.railOpen : ""}`}>
+        <aside
+          ref={railRef}
+          className={`${styles.rail} ${open ? styles.railOpen : ""}`}
+          {...(railHidden ? { inert: "" } : {})}
+        >
           <div className={styles.wordmark}>
             <div>
               <div className={styles.brand}>ORQUESTRADOR</div>
