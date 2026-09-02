@@ -47,6 +47,12 @@ envio.
    é 1; saldo zero é o único motivo de não notificar. `AvaliacaoOb.alocado` é o
    que a OB de fato segura (≤ `total_pecas`) e é ele — nunca a necessidade — que
    vai para a reserva do state e para a mensagem.
+   **Trade-off aceito:** a preferência por quem fecha 100% vale dentro de UM
+   ciclo. Como a OB parcial reserva o saldo, uma OB que fecharia integralmente
+   no ciclo seguinte (porque chegou estoque novo) enxerga só o saldo livre, e
+   não as peças já prometidas à parcial. Antes da mudança essas peças ficavam
+   soltas esperando alguém que fechasse 100% — que era justamente o problema.
+   A reserva expira em `JANELA_RESERVA_HORAS` e a OB volta a concorrer.
 7. Idempotência é por OB e o commit ocorre somente após confirmação do canal.
    O `orb_state.json` guarda, por OB notificada, o carimbo do aviso **e a
    reserva de estoque** que ele criou (`{"em", "reduzido", "reservado"}` — em
