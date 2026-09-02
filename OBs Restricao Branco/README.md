@@ -30,8 +30,14 @@ entre as OBs e prepara um aviso para o grupo Expedição Tinturaria.
   uma OB.
 - Cobertura parcial (desde 01/09/2026): basta **uma** peça restrita disponível
   para a OB ser anunciada. O bloco sai como `⚠️ Montagem parcial — usar as N
-  peças com restrição e completar as M restantes com peças sem restrição`. Só
-  fica de fora a OB sem nenhuma peça restrita no depósito.
+  peças com restrição e completar as M restantes com peças sem restrição
+  (disponíveis no depósito)`.
+- Complemento obrigatório (desde 02/09/2026): a OB parcial só entra se houver
+  saldo **sem restrição** do mesmo reduzido para completar o lote — finalidades
+  `1` (SEM RESTRIÇÃO) e `8` (FIO C/ RESÍDUO). Sem ele a Montagem não fecharia o
+  lote, então a OB fica de fora e as peças restritas seguem livres para a
+  próxima OB. Ficam de fora, portanto, a OB sem nenhuma peça restrita e a OB
+  cujo lote não fecha.
 - Mensagem: artigo com três dígitos (`32` → `032`) e cor com dois dígitos
   (`00001` → `01`). A linha de restrição lista as finalidades com saldo (ex.:
   `1 — SEM RESTRIÇÃO; 3 — CORES CLARAS`), conforme o estoque encontrado.

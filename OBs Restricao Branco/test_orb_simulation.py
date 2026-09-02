@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 from errors import DadoIncompletoError
 from models import (
     CLASSIFICACOES_BRANCO_ALVO,
+    FINALIDADES_COMPLEMENTO,
     FINALIDADES_PECA_ALVO,
     ObRestricaoBranco,
 )
@@ -133,6 +134,15 @@ def _fetch_finalidades(creds: OracleCredentials) -> dict[int, str]:
         CLASSIFICACOES_BRANCO_ALVO, serialize_rows(columns, rows)
     )
     return {f: cadastro[f] for f in FINALIDADES_PECA_ALVO if f in cadastro}
+
+
+def _finalidades_complemento(cadastro_alvo: dict[int, str]) -> dict[int, str]:
+    """Finalidades tratadas como SEM RESTRICAO (1 e 8), usadas so' para saber se
+    a OB parcial e montavel. Nao dependem de COR_FINALIDADE — descricao com
+    fallback, mesma regra da producao (extract_orb._fetch_finalidades)."""
+    del cadastro_alvo  # mantido por simetria com a producao
+    rotulos = {1: "SEM RESTRICAO", 8: "FIO C/ RESIDUO"}
+    return {f: rotulos.get(f, f"FINALIDADE {f}") for f in FINALIDADES_COMPLEMENTO}
 
 
 def _fetch_estoque_rows(
@@ -245,19 +255,33 @@ def simular_comparacoes(
         "\n=== Validação 3: Priorização + Alocação de Estoque "
         "(integral primeiro, depois parcial) ==="
     )
-    estoque_rows = _fetch_estoque_rows(
-        creds, sorted({ob.codigo_reduzido_cru for ob in obs}), finalidades
+    reduzidos = sorted({ob.codigo_reduzido_cru for ob in obs})
+
+    def _saldos(finalidades_alvo: dict[int, str]) -> dict[int, Any]:
+        rows = _fetch_estoque_rows(creds, reduzidos, finalidades_alvo)
+        saldos: dict[int, Any] = {}
+        for registros in _agrupar_por_reduzido(rows).values():
+            try:
+                estoque = validate_estoque_rows(registros, finalidades_alvo)
+                saldos[estoque.codigo_reduzido] = estoque
+            except DadoIncompletoError as exc:
+                _linha(FALHA, f"Estoque inválido: {exc}")
+        return saldos
+
+    estoques = _saldos(finalidades)
+    complementos = _saldos(_finalidades_complemento(finalidades))
+    print(
+        "    complemento sem restrição por reduzido: "
+        + (
+            "; ".join(f"{c}={e.quantidade} un" for c, e in sorted(complementos.items()))
+            or "nenhum"
+        )
     )
-    estoques = {}
-    for registros in _agrupar_por_reduzido(estoque_rows).values():
-        try:
-            estoque = validate_estoque_rows(registros, finalidades)
-            estoques[estoque.codigo_reduzido] = estoque
-        except DadoIncompletoError as exc:
-            _linha(FALHA, f"Estoque inválido: {exc}")
 
     notificar = 0
-    for avaliacao in alocar_estoque(priorizar_obs(obs), estoques):
+    for avaliacao in alocar_estoque(
+        priorizar_obs(obs), estoques, complementos=complementos
+    ):
         ob = avaliacao.ob
         destino = f" | {ob.nome_cliente or '—'} entrega {ob.dt_entrega or '—'}"
         cabecalho = f"OB #{ob.id_ob} precisa {ob.total_pecas} un, saldo {avaliacao.disponivel} un"

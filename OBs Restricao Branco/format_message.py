@@ -113,7 +113,7 @@ def _fmt_status(row: dict[str, Any]) -> str:
     return (
         f"⚠️ Montagem parcial — usar {artigo} {alocadas} {pecas} com restrição e "
         f"completar {'a' if faltantes == 1 else 'as'} {faltantes} {restantes} "
-        f"com peças sem restrição"
+        f"com peças sem restrição (disponíveis no depósito)"
     )
 
 

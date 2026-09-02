@@ -67,6 +67,11 @@ notificada reservou:
 - A reserva é descontada do saldo do depósito antes da alocação do ciclo
   seguinte. Sem ela, duas OBs eram anunciadas como prontas para as mesmas peças
   físicas — a Expedição não separa a malha ao receber o aviso.
+- Desde 02/09/2026 a entrada guarda também `complemento`: as peças SEM
+  RESTRIÇÃO (finalidades 1 e 8) reservadas para fechar o lote daquela OB
+  parcial. Entrada anterior a essa data não tem o campo e é lida como
+  `complemento: 0` — segue idempotente e reservando o restrito, apenas sem
+  reservar complemento.
 - Em **cobertura parcial** (desde 01/09/2026), `reservado` é o que a OB de fato
   segura, não o que ela pede: uma OB de 55 peças anunciada sobre 5 peças
   restritas grava `"reservado": 5`. Se o saldo subir depois, ela **não** é
