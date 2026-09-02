@@ -32,7 +32,11 @@ export function ConfirmModal({
   if (!open) return null;
 
   return createPortal(
-    <div className={styles.overlay} onMouseDown={onCancel}>
+    // Overlay de clique-fora do modal (padrão sem equivalente nativo).
+    // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
+    // de stopPropagation no filho. Escape já fecha via useFocusTrap.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div
         ref={ref}
         className={`${styles.box} animate-in`}
@@ -40,7 +44,6 @@ export function ConfirmModal({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        onMouseDown={(e) => e.stopPropagation()}
       >
         <h3 className={styles.title}>{title}</h3>
         <div className={styles.message}>{message}</div>

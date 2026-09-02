@@ -95,14 +95,17 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   };
 
   return createPortal(
-    <div className={styles.overlay} onMouseDown={onClose}>
+    // Overlay de clique-fora do modal (padrão sem equivalente nativo).
+    // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
+    // de stopPropagation no filho. Escape já fecha via useFocusTrap.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         ref={boxRef}
         className={`${styles.box} animate-in`}
         role="dialog"
         aria-modal="true"
         aria-label="Busca global"
-        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className={styles.inputRow}>
           <Search size={15} className={styles.searchIcon} aria-hidden="true" />

@@ -180,8 +180,12 @@ export function ExecucoesPage() {
       header: "Ação",
       align: "right",
       hideOnNarrow: true,
+      // O stopPropagation manual que existia aqui foi removido: DataTable
+      // agora ignora clique/Enter cujo alvo esteja dentro de um controle
+      // interativo (ver components/ui/DataTable.tsx) — a correção mora na
+      // origem, não em cada consumidor lembrar de tratar o próprio caso.
       render: (r) => (
-        <span style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>
+        <span style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end" }}>
           {r.stop_allowed && (
             <Button size="sm" variant="danger" icon={<Square size={12} />} onClick={() => setConfirmStop(r.id)}>
               Parar
