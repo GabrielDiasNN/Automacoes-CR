@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.66] - 02/09/2026
+
+### Alterado
+
+Onda 3 da revisão geral do frontend (ver [1.3.64], [1.3.65]) — reforma da tela `/dashboard/automacoes`, o painel de controle de disparo/pausa manual das 6 automações em produção.
+
+- **`ConfirmModal` em Disparar e Pausar.** Disparar executava um script de produção com um clique só, sem confirmação, enquanto ações menos graves (Parar execução, Purge de logs) já passavam por `ConfirmModal`. Retomar não confirma (reversível, não destrutiva).
+- **SLA deixa de ser número decorativo.** O card usa agora o item completo do portfólio (antes só a criticidade era extraída, descartando o resto do mesmo response) — `StatusTag` com `slaTone(sla_state)` no lugar do número cru, mais o atraso em minutos quando `schedule_lag_minutes > 0`.
+- **Lâmpada do card usa `operational_state`** (novo `operationalTone`/`operationalStateLabel` em `lib/status.ts`) em vez de só `enabled` — reflete execução em andamento e atenção recente que o backend já resolve e a tela ignorava.
+- **`last_failure_reason` exibido na faixa do card** quando `ERROR`/`TIMEOUT`, em vez de só a cor de alarme.
+- **Disparar desabilita com motivo quando já há execução ativa** (`active_execution_count > 0`) — antes só falhava com 409 depois do clique.
+- **`avg_duration_24h_seconds` exposto em `AutomationResponse`** (backend, sem migração — campo derivado) — já calculado por `metrics_queries.get_automation_metrics_24h` (AVG SQL) e descartado antes de chegar ao schema. Mostrado como "última duração / média 24h".
+- **Drill-down:** link "ver execuções" para `/execucoes?automation_id=X` (`ExecucoesPage` ganha esse filtro — antes só filtrava por status); `exec_id` do disparo (descartado até então: `.then((r) => ({ message: r.message }))`) vira link para a mesma tela; link "runbook" abre um Drawer com o Markdown bruto do runbook (novo `api.getText`/`requestText` em `client.ts`, para rotas `PlainTextResponse` que `api.get` quebraria tentando `res.json()`).
+- **Ordenação por atenção** (client-side, poucos itens): `operational_state=attention` > SLA violado > criticidade > nome — em vez da ordem alfabética que o backend devolve.
+- **`Promise.all`** nas duas chamadas de fetch (antes sequenciais — cada tick de polling esperava a primeira terminar antes de sequer iniciar a segunda). `EmptyState`/`Skeleton` no lugar do `<span>` solto e do spinner genérico no primeiro carregamento.
+- Sincronizado `PortfolioHealthItem` (TS) com o schema Pydantic completo — faltavam `runbook_path`, `schedule_lag_minutes`, `review_reasons`, `dependency_status` e mais 6 campos.
+- Verificação: suíte completa do backend (1034 testes) e do frontend (115 testes) verde; `mypy`/`pylint` (`Test-PythonGovernance.ps1`) verde; build + smoke test (6 rotas, 0 erro de console). Com Playwright (scripts pontuais): Disparar abre o `ConfirmModal` e Cancelar não cria execução (`GET /api/executions` contado antes/depois: 3548/3548); runbook abre com conteúdo real; "ver execuções" navega e a tabela mostra só as linhas da automação filtrada, com botão de limpar.
+- **Pendência:** baseline `dashboard_automacoes` de `test_screenshot_automacoes_lista` não regenerado — layout do card mudou. Regeneração agendada para o fechamento da Onda 5, junto com a da Onda 2.
+
 ## [1.3.65] - 02/09/2026
 
 ### Corrigido
