@@ -24,6 +24,14 @@ CLASSIFICACOES_BRANCO_ALVO: tuple[int, ...] = (6, 9)
 # compativeis com as classes brancas — nunca para ampliar o conjunto.
 FINALIDADES_PECA_ALVO: tuple[int, ...] = (3, 4)
 
+# Finalidades que a Montagem de Lotes trata como SEM RESTRICAO no contexto
+# industrial: 1 (SEM RESTRICAO) e 8 (FIO C/ RESIDUO). Nao entram no saldo
+# restrito — servem para responder se a OB de cobertura PARCIAL pode de fato ser
+# montada, completando o que falta. Sem complemento suficiente a OB nao e
+# anunciada: o aviso seria ruido, porque a Montagem nao conseguiria fechar o
+# lote (regra de 02/09/2026).
+FINALIDADES_COMPLEMENTO: tuple[int, ...] = (1, 8)
+
 
 @dataclass(frozen=True)
 class ObRestricaoBranco:  # pylint: disable=too-many-instance-attributes
@@ -107,11 +115,19 @@ class ReservaNotificacao:
 
     ``codigo_reduzido``/``quantidade`` ausentes (entrada em formato legado, ver
     ``parse_notified_state``) preservam a idempotência sem reservar saldo.
+
+    ``complemento`` é o saldo SEM RESTRIÇÃO (``FINALIDADES_COMPLEMENTO``) que a
+    OB parcial vai consumir para fechar o lote. Reservado pelo mesmo motivo do
+    restrito: a peça continua no depósito até a montagem, e sem registrá-la duas
+    OBs seriam aprovadas contando com o mesmo complemento. Zero em OB de
+    cobertura integral (não precisa completar) e em entrada de state anterior a
+    02/09/2026 — que segue legível, apenas sem reservar complemento.
     """
 
     em: str
     codigo_reduzido: int | None
     quantidade: int
+    complemento: int = 0
 
 
 @dataclass(frozen=True)
@@ -130,6 +146,9 @@ class AvaliacaoOb:
     motivo: str
     restricoes_disponiveis: tuple[tuple[int, str], ...] = ()
     alocado: int = 0
+    # Peças SEM RESTRIÇÃO alocadas para fechar o lote desta OB (zero quando a
+    # cobertura é integral). Vai para a reserva do state junto com `alocado`.
+    complemento_alocado: int = 0
 
     @property
     def cobertura_total(self) -> bool:

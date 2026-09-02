@@ -50,6 +50,17 @@ envio.
    é 1; saldo zero é o único motivo de não notificar. `AvaliacaoOb.alocado` é o
    que a OB de fato segura (≤ `total_pecas`) e é ele — nunca a necessidade — que
    vai para a reserva do state e para a mensagem.
+   **Complemento obrigatório (02/09/2026):** a OB parcial só é anunciada se
+   existir, no mesmo reduzido e depósito, saldo **sem restrição** suficiente
+   para fechar o lote — `FINALIDADES_COMPLEMENTO = (1, 8)`, SEM RESTRIÇÃO e
+   FIO C/ RESÍDUO, as duas que a Montagem trata assim no contexto industrial.
+   Sem esse complemento a OB não pode ser montada, o aviso seria ruído, e as
+   peças restritas ficam **livres** para a próxima OB do reduzido — uma OB menor
+   pode ser montável com elas. O complemento é disputado como o restrito: é
+   alocado por OB dentro do ciclo e **reservado no state** (`complemento`) entre
+   ciclos, pelo mesmo motivo do item 7 — a peça continua no depósito até a
+   montagem. A reserva da OFST-06, que consome finalidade 1 do mesmo depósito,
+   **não** é considerada: risco conhecido e aceito (ver Guardrails).
    **Trade-off aceito:** a preferência por quem fecha 100% vale dentro de UM
    ciclo. Como a OB parcial reserva o saldo, uma OB que fecharia integralmente
    no ciclo seguinte (porque chegou estoque novo) enxerga só o saldo livre, e

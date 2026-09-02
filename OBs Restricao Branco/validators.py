@@ -611,6 +611,11 @@ def parse_notified_state(bruto: Any) -> dict[str, ReservaNotificacao]:
                     em=str(valor.get("em", "")),
                     codigo_reduzido=None if reduzido is None else int(reduzido),
                     quantidade=max(int(valor.get("reservado") or 0), 0),
+                    # Ausente nas entradas anteriores a 02/09/2026: a OB segue
+                    # idempotente e reservando o restrito, apenas sem reservar
+                    # complemento — que era o comportamento vigente quando
+                    # aquela entrada foi escrita.
+                    complemento=max(int(valor.get("complemento") or 0), 0),
                 )
                 continue
             except (TypeError, ValueError):
@@ -636,6 +641,7 @@ def serialize_notified_state(
             "em": reserva.em,
             "reduzido": reserva.codigo_reduzido,
             "reservado": reserva.quantidade,
+            "complemento": reserva.complemento,
         }
         for id_ob, reserva in estado.items()
     }
@@ -677,6 +683,27 @@ def reservas_por_reduzido(estado: Mapping[str, ReservaNotificacao]) -> dict[int,
     return total
 
 
+def reservas_complemento_por_reduzido(
+    estado: Mapping[str, ReservaNotificacao],
+) -> dict[int, int]:
+    """Soma, por reduzido, o saldo SEM RESTRICAO preso por OBs ja anunciadas.
+
+    Irma de `reservas_por_reduzido`, para o outro pote. Uma OB parcial anunciada
+    vai consumir esse complemento quando for montada; sem descontar, a OB
+    seguinte do mesmo reduzido seria aprovada contando com peca ja prometida.
+    Entradas de state anteriores a 02/09/2026 tem `complemento=0` e nao
+    reservam nada — mesma degradacao consciente do formato legado.
+    """
+    total: dict[int, int] = {}
+    for reserva in estado.values():
+        if reserva.codigo_reduzido is None or reserva.complemento <= 0:
+            continue
+        total[reserva.codigo_reduzido] = (
+            total.get(reserva.codigo_reduzido, 0) + reserva.complemento
+        )
+    return total
+
+
 def merge_notified_state(
     previamente: Mapping[str, ReservaNotificacao],
     avaliacoes: Sequence[AvaliacaoOb],
@@ -706,6 +733,7 @@ def merge_notified_state(
                 # cobertura parcial, reservar `total_pecas` tiraria do pote
                 # pecas que o deposito nunca teve.
                 quantidade=a.alocado,
+                complemento=a.complemento_alocado,
             )
             for a in novas
         }
@@ -725,11 +753,19 @@ def priorizar_obs(obs: Sequence[ObRestricaoBranco]) -> list[ObRestricaoBranco]:
     return sorted(obs, key=chave_prioridade)
 
 
-def alocar_estoque(
+def alocar_estoque(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+    # Os seis parametros sao os dois potes de estoque (restrito e complemento),
+    # cada um com o seu mapa de reservas vivas, mais as OBs e o indice de OBs ja
+    # anunciadas. Agrupa-los num objeto seria abstracao de uso unico: nenhum
+    # outro ponto do dominio precisa desse agregado, e o wrapper so' esconderia
+    # a simetria entre os dois potes, que e' justamente o que torna a funcao
+    # legivel.
     obs: Sequence[ObRestricaoBranco],
     estoques: Mapping[int, EstoqueDeposito],
     reservado: Mapping[int, int] | None = None,
     ja_reservadas: Mapping[str, ReservaNotificacao] | None = None,
+    complementos: Mapping[int, EstoqueDeposito] | None = None,
+    reservado_complemento: Mapping[int, int] | None = None,
 ) -> list[AvaliacaoOb]:
     """Aloca o estoque do deposito 95 em duas passadas sobre a fila priorizada.
 
@@ -741,8 +777,16 @@ def alocar_estoque(
       inteiro alocam `total_pecas`;
     - passada 2: as demais, na mesma ordem, levam todo o saldo que restou do
       seu reduzido (>= `MINIMO_PECAS_NOTIFICAVEL`) e sao anunciadas como
-      cobertura parcial — a Montagem completa o restante com peca sem
-      restricao. So fica de fora quem nao tem nenhuma peca restrita.
+      cobertura parcial — desde que exista COMPLEMENTO sem restricao para
+      fechar o lote (`complementos`, finalidades 1 e 8). Sem complemento
+      suficiente a OB nao e anunciada: a Montagem nao conseguiria montar o
+      lote, entao o aviso seria ruido, e as pecas restritas ficam livres para
+      a proxima OB do mesmo reduzido (regra de 02/09/2026).
+
+    `reservado_complemento` faz pelo pote sem restricao o que `reservado` faz
+    pelo restrito: desconta o que OBs anunciadas em ciclos anteriores ainda
+    seguram. A reserva da OFST-06 (que consome finalidade 1 do mesmo deposito)
+    NAO e considerada — risco conhecido e aceito, ver CONTEXT.md.
 
     A ordem de retorno e a de entrada (prioridade), nao a de alocacao.
     `alocado` e o que a OB reservou; `disponivel` registra o saldo no momento
@@ -772,17 +816,23 @@ def alocar_estoque(
     """
     presos = reservado or {}
     ja_reservadas = ja_reservadas or {}
+    presos_complemento = reservado_complemento or {}
     saldos: dict[int, int] = {
         codigo: max(estoque.quantidade - presos.get(codigo, 0), 0)
         for codigo, estoque in estoques.items()
     }
+    livres: dict[int, int] = {
+        codigo: max(estoque.quantidade - presos_complemento.get(codigo, 0), 0)
+        for codigo, estoque in (complementos or {}).items()
+    }
 
-    def montar(
+    def montar(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         ob: ObRestricaoBranco,
         saldo: int,
         notificar: bool,
         alocado: int,
         motivo: str,
+        complemento_alocado: int = 0,
     ) -> AvaliacaoOb:
         estoque = estoques.get(ob.codigo_reduzido_cru)
         return AvaliacaoOb(
@@ -794,6 +844,7 @@ def alocar_estoque(
                 estoque.restricoes_disponiveis if estoque is not None else ()
             ),
             alocado=alocado,
+            complemento_alocado=complemento_alocado,
         )
 
     avaliadas: dict[int, AvaliacaoOb] = {}
@@ -810,9 +861,15 @@ def alocar_estoque(
                 saldos.get(ob.codigo_reduzido_cru, 0),
                 notificar=True,
                 alocado=reserva_viva.quantidade,
+                complemento_alocado=reserva_viva.complemento,
                 motivo=(
                     f"ja reservada em ciclo anterior: {reserva_viva.quantidade} un do "
                     f"deposito {DEPOSITO_ALVO} ja descontadas via reserva viva"
+                    + (
+                        f" (+ {reserva_viva.complemento} un sem restricao)"
+                        if reserva_viva.complemento
+                        else ""
+                    )
                 ),
             )
         else:
@@ -847,21 +904,7 @@ def alocar_estoque(
     # proxima OB e uma peca deixada para tras.
     for indice, ob in parciais:
         saldo = saldos.get(ob.codigo_reduzido_cru, 0)
-        notificar = validate_partial_logic(saldo)
-        if notificar:
-            saldos[ob.codigo_reduzido_cru] = 0
-            avaliadas[indice] = montar(
-                ob,
-                saldo,
-                notificar=True,
-                alocado=saldo,
-                motivo=(
-                    f"cobertura parcial: precisa {ob.total_pecas} un, alocadas as "
-                    f"{saldo} un livres do deposito {DEPOSITO_ALVO} "
-                    f"(faltam {ob.total_pecas - saldo} un sem restricao)"
-                ),
-            )
-        else:
+        if not validate_partial_logic(saldo):
             avaliadas[indice] = montar(
                 ob,
                 saldo,
@@ -872,5 +915,40 @@ def alocar_estoque(
                     f"o saldo livre restante do deposito {DEPOSITO_ALVO} e zero"
                 ),
             )
+            continue
+
+        faltante = ob.total_pecas - saldo
+        livre = livres.get(ob.codigo_reduzido_cru, 0)
+        if livre < faltante:
+            # A OB tem peca restrita, mas o lote nao fecha: nao anunciar, e
+            # DEIXAR o saldo restrito intacto para a proxima OB do reduzido —
+            # uma OB menor pode ser montavel com as mesmas pecas.
+            avaliadas[indice] = montar(
+                ob,
+                saldo,
+                notificar=False,
+                alocado=0,
+                motivo=(
+                    f"lote nao fecha: precisa {ob.total_pecas} un, ha {saldo} un "
+                    f"restritas mas so {livre} un sem restricao livres para "
+                    f"completar as {faltante} un que faltam"
+                ),
+            )
+            continue
+
+        saldos[ob.codigo_reduzido_cru] = 0
+        livres[ob.codigo_reduzido_cru] = livre - faltante
+        avaliadas[indice] = montar(
+            ob,
+            saldo,
+            notificar=True,
+            alocado=saldo,
+            complemento_alocado=faltante,
+            motivo=(
+                f"cobertura parcial: precisa {ob.total_pecas} un, alocadas as "
+                f"{saldo} un livres do deposito {DEPOSITO_ALVO} + {faltante} un "
+                f"sem restricao (restam {livre - faltante} un sem restricao)"
+            ),
+        )
 
     return [avaliadas[indice] for indice in range(len(obs))]

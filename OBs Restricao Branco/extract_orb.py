@@ -39,6 +39,7 @@ from dotenv import load_dotenv
 from errors import DadoIncompletoError, SchemaInvalidoError
 from models import (
     CLASSIFICACOES_BRANCO_ALVO,
+    FINALIDADES_COMPLEMENTO,
     FINALIDADES_PECA_ALVO,
     AvaliacaoOb,
     EstoqueDeposito,
@@ -68,6 +69,7 @@ from validators import (
     merge_notified_state,
     parse_notified_state,
     priorizar_obs,
+    reservas_complemento_por_reduzido,
     reservas_por_reduzido,
     reservas_vivas,
     serialize_notified_state,
@@ -160,8 +162,23 @@ def _fetch_obs(
     return obs
 
 
-def _fetch_finalidades(creds: OracleCredentials, exec_id: str) -> dict[int, str]:
-    """Resolve as descricoes das finalidades de peca contabilizadas pela ORB-07.
+def _fetch_finalidades(
+    creds: OracleCredentials, exec_id: str
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Resolve as descricoes das finalidades usadas pela ORB-07.
+
+    Devolve DOIS conjuntos, com papeis diferentes:
+
+    - o **alvo** (`FINALIDADES_PECA_ALVO` = {3, 4}) — o saldo restrito, o que a
+      automacao existe para escoar;
+    - o **complemento** (`FINALIDADES_COMPLEMENTO` = {1, 8}) — o que a Montagem
+      trata como sem restricao e usa para fechar um lote parcial. Nunca entra no
+      saldo restrito; serve so para decidir se a OB parcial e montavel.
+
+    O complemento NAO depende de `COR_FINALIDADE`: a peca existe fisicamente no
+    deposito com aquela finalidade, e a query de estoque so exige que ela conste
+    em TIPO_FINALIDADE_FIO. O cadastro e usado apenas para a descricao legivel,
+    com fallback quando ele nao lista a finalidade.
 
     O conjunto e FIXO por regra de negocio: FINALIDADES_PECA_ALVO = {3, 4}.
     SGTPRD.COR_FINALIDADE lista para as classes brancas um conjunto maior — que
@@ -186,10 +203,17 @@ def _fetch_finalidades(creds: OracleCredentials, exec_id: str) -> dict[int, str]
         )
 
     finalidades = {f: cadastro[f] for f in FINALIDADES_PECA_ALVO}
-    ignoradas = sorted(set(cadastro) - set(FINALIDADES_PECA_ALVO))
+    complemento = {
+        f: cadastro.get(f, f"FINALIDADE {f}") for f in FINALIDADES_COMPLEMENTO
+    }
+    ignoradas = sorted(
+        set(cadastro) - set(FINALIDADES_PECA_ALVO) - set(FINALIDADES_COMPLEMENTO)
+    )
     log(
         "Finalidades contabilizadas: "
         + "; ".join(f"{c} — {d}" for c, d in finalidades.items())
+        + " | complemento sem restricao: "
+        + "; ".join(f"{c} — {d}" for c, d in complemento.items())
         + (
             f" (ignoradas por regra de negocio: {', '.join(str(f) for f in ignoradas)})"
             if ignoradas
@@ -198,7 +222,7 @@ def _fetch_finalidades(creds: OracleCredentials, exec_id: str) -> dict[int, str]
         "INFO",
         exec_id,
     )
-    return finalidades
+    return finalidades, complemento
 
 
 def _fetch_estoque(  # pylint: disable=too-many-locals
@@ -245,12 +269,14 @@ def _fetch_estoque(  # pylint: disable=too-many-locals
     return estoques
 
 
-def _avaliar_todas(
+def _avaliar_todas(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     obs: list[ObRestricaoBranco],
     estoques: dict[int, EstoqueDeposito],
     reservado: dict[int, int],
     vivas: dict[str, ReservaNotificacao],
     exec_id: str,
+    complementos: dict[int, EstoqueDeposito] | None = None,
+    reservado_complemento: dict[int, int] | None = None,
 ) -> list[AvaliacaoOb]:
     """Prioriza (lojas antes da matriz, por data de entrega) e aloca o estoque
     sequencialmente — a ordem das avaliacoes e a ordem final da mensagem.
@@ -258,7 +284,14 @@ def _avaliar_todas(
     `reservado` e o que OBs anunciadas em ciclos anteriores ainda seguram;
     `vivas` sao essas mesmas OBs (por id), para `alocar_estoque` pular a
     deducao duplicada do saldo ja descontado via `reservado`."""
-    avaliacoes = alocar_estoque(priorizar_obs(obs), estoques, reservado, vivas)
+    avaliacoes = alocar_estoque(
+        priorizar_obs(obs),
+        estoques,
+        reservado,
+        vivas,
+        complementos,
+        reservado_complemento,
+    )
     for avaliacao in avaliacoes:
         log(f"OB #{avaliacao.ob.id_ob} -> {avaliacao.motivo}", "INFO", exec_id)
     return avaliacoes
@@ -308,6 +341,10 @@ def _write_result(novas: list[AvaliacaoOb], resumo: ResumoExecucao) -> None:
                         # parcial" na mensagem.
                         "QTD_PECAS_ALOCADAS": a.alocado,
                         "QTD_PECAS_FALTANTES": a.faltante,
+                        # Confirmado disponivel no deposito 95 (finalidades 1 e
+                        # 8) e reservado para esta OB — sem ele a OB nao teria
+                        # sido notificada.
+                        "QTD_PECAS_COMPLEMENTO": a.complemento_alocado,
                         "DT_ENTREGA": a.ob.dt_entrega,
                         "NOME_CLIENTE": a.ob.nome_cliente,
                     }
@@ -406,12 +443,14 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
             log("Nenhuma OB branca emitida e não montada.", "INFO", exec_id)
             sys.exit(2)
 
-        finalidades = _fetch_finalidades(creds, exec_id)
-        estoques = _fetch_estoque(
-            creds,
-            sorted({ob.codigo_reduzido_cru for ob in obs}),
-            finalidades,
-            exec_id,
+        finalidades, complemento_finalidades = _fetch_finalidades(creds, exec_id)
+        reduzidos = sorted({ob.codigo_reduzido_cru for ob in obs})
+        estoques = _fetch_estoque(creds, reduzidos, finalidades, exec_id)
+        # Segundo saldo, mesmo SQL e mesmos filtros de deposito/qualidade/estado:
+        # o que a Montagem pode usar para COMPLETAR um lote parcial. Nunca soma
+        # ao restrito — decide se a OB parcial e montavel de fato.
+        complementos = _fetch_estoque(
+            creds, reduzidos, complemento_finalidades, exec_id
         )
 
         # A reserva das OBs ja anunciadas e descontada ANTES da alocacao: a
@@ -438,8 +477,24 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 "INFO",
                 exec_id,
             )
+        reservado_complemento = reservas_complemento_por_reduzido(vivas)
+        for codigo, quantidade in sorted(reservado_complemento.items()):
+            log(
+                f"Peca {codigo}: {quantidade} un SEM RESTRICAO reservadas como "
+                f"complemento de OB(s) parcial(is) ja anunciada(s).",
+                "INFO",
+                exec_id,
+            )
 
-        avaliacoes = _avaliar_todas(obs, estoques, reservado, vivas, exec_id)
+        avaliacoes = _avaliar_todas(
+            obs,
+            estoques,
+            reservado,
+            vivas,
+            exec_id,
+            complementos,
+            reservado_complemento,
+        )
         resumo.tempo_consulta_ms = int((time.perf_counter() - inicio) * 1000)
 
         notificaveis = [a for a in avaliacoes if a.notificar]

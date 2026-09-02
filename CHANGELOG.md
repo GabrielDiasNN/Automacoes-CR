@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.63] - 02/09/2026
+
+### Alterado
+
+- **ORB-07 deixa de anunciar OB parcial quando o lote não fecha.** Desde [1.3.60] bastava uma peça restrita para a OB entrar na mensagem, com o pedido de completar o restante com peça sem restrição. Faltava verificar se esse complemento existe: no ciclo das 05:00 de 02/09 a OB #185997 foi anunciada com 53 peças restritas para uma necessidade de 55, pedindo 2 peças sem restrição — se elas não existissem, a Montagem de Lotes não conseguiria fechar o lote e o aviso seria ruído.
+  - Novo `FINALIDADES_COMPLEMENTO = (1, 8)` — SEM RESTRIÇÃO e FIO C/ RESÍDUO, as duas que a Montagem trata como sem restrição no contexto industrial. Nunca entram no saldo restrito (que segue sendo só 3 e 4): servem para responder se a OB parcial é montável.
+  - O extrator faz uma segunda consulta de estoque com o **mesmo SQL e os mesmos filtros** (depósito 95, filial 2, qualidade 1, estados 0/16/18), agora ligada às finalidades de complemento. `_fetch_finalidades` passou a devolver os dois conjuntos; o complemento não depende de `COR_FINALIDADE` (a peça existe fisicamente com aquela finalidade), o cadastro serve só para a descrição legível.
+  - A OB parcial cujo complemento não cobre o faltante **não é anunciada e não consome as peças restritas** — elas ficam livres para a próxima OB do reduzido, que pode ser menor e montável com elas.
+  - O complemento é disputado como o restrito: alocado por OB dentro do ciclo e **reservado no state** (`ReservaNotificacao.complemento`) entre ciclos — a peça continua no depósito até a montagem, então sem reservar, duas OBs seriam aprovadas contando com o mesmo complemento (mesmo bug que motivou a reserva do restrito em [1.3.39]).
+  - Formato do `orb_state.json` estendido com `complemento`; entrada anterior a esta versão é lida como `complemento: 0` — segue idempotente e reservando o restrito, sem reservar complemento.
+  - A reserva da OFST-06, que consome finalidade 1 do mesmo depósito 95, **não** é considerada — risco conhecido e aceito, já documentado nos Guardrails do `CONTEXT.md`.
+  - Mensagem: o status parcial passa a dizer `com peças sem restrição (disponíveis no depósito)`; `orb_result.json` ganhou `QTD_PECAS_COMPLEMENTO`.
+  - Cobertura: 7 testes novos (lote que não fecha, saldo restrito preservado para a OB seguinte, disputa do complemento no ciclo, reserva entre ciclos, state legado sem o campo, cobertura integral não consome complemento, mensagem). Simulação contra o Oracle real: reduzido 26 com 108 restritas e **816** sem restrição — a OB #185997 segue notificável, agora com o complemento confirmado.
+
 ## [1.3.62] - 01/09/2026
 
 ### Alterado
