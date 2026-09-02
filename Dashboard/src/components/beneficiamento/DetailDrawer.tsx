@@ -11,6 +11,7 @@ import {
 import { Card, DataTable, Drawer, EmptyState, ErrorState, IconButton, Loading, StatTile, type Column } from "../ui";
 import { formatDateTimeBr, formatNumber, formatPercent } from "../../lib/format";
 import styles from "./DetailDrawer.module.css";
+import { errMessage } from "../../lib/errors";
 
 /** Desvio relativo ao tempo previsto — normaliza fases curtas vs longas (ver análise em conversa). */
 function desvioPct(minReal: number, minPrev: number): number | null {
@@ -159,7 +160,7 @@ export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerP
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errMessage(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

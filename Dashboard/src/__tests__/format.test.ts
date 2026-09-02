@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractTimeBr,
   formatAge,
   formatDuration,
   formatNumber,
@@ -84,6 +85,32 @@ describe("successRate", () => {
 
   it("retorna 0 quando todas as execuções falharam", () => {
     expect(successRate(0, 5)).toBe(0);
+  });
+});
+
+describe("extractTimeBr", () => {
+  // Fonte real: format_dt_br (backend) sempre produz "DD/MM/YYYY HH:MM:SS" —
+  // ver Orchestrator/app/schemas/common.py. Substitui as duas heurísticas
+  // posicionais que coexistiam para o mesmo campo (achado nº 21, Onda 4):
+  // MonitorPage usava slice(11,16), SystemPage usava split(" ")[1].slice(0,5).
+  it("extrai HH:MM do formato brasileiro completo", () => {
+    expect(extractTimeBr("02/09/2026 20:46:14")).toBe("20:46");
+  });
+
+  it("retorna travessão para null/undefined", () => {
+    expect(extractTimeBr(null)).toBe("—");
+    expect(extractTimeBr(undefined)).toBe("—");
+  });
+
+  it("não quebra silenciosamente se o backend não conseguir formatar (fallback ISO cru)", () => {
+    // As duas heurísticas antigas divergiam exatamente aqui: slice(11,16)
+    // ainda acertava por coincidência de posição do "T"; split(" ")[1] caía
+    // no fallback `?? p.timestamp` e mostrava "2026" em vez da hora.
+    expect(extractTimeBr("2026-09-02T20:46:14")).toBe("20:46");
+  });
+
+  it("devolve a string original quando não há HH:MM reconhecível", () => {
+    expect(extractTimeBr("sem hora aqui")).toBe("sem hora aqui");
   });
 });
 

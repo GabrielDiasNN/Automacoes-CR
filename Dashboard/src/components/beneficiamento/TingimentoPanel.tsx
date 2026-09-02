@@ -21,6 +21,7 @@ import {
 } from "../ui";
 import { formatNumber, formatPercent } from "../../lib/format";
 import styles from "./TingimentoPanel.module.css";
+import { errMessage } from "../../lib/errors";
 
 const PRESETS = [
   { label: "7d", days: 7 },
@@ -110,7 +111,7 @@ export function TingimentoPanel() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errMessage(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

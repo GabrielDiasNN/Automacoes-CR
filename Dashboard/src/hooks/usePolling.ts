@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client";
+import { errMessage } from "../lib/errors";
 
 export interface PollingState<T> {
   data: T | null;
@@ -94,7 +95,7 @@ export function usePolling<T>(
         setRateLimitedUntil(until);
         setError(`limite de requisições atingido — retomando em ${backoffS}s`);
       } else {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errMessage(e));
       }
     } finally {
       if (isLatest()) setLoading(false);

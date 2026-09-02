@@ -18,6 +18,7 @@ import {
 } from "../components/ui";
 import selectStyles from "../components/ui/Select.module.css";
 import { healthTone, healthLabel } from "../lib/status";
+import { extractTimeBr } from "../lib/format";
 import page from "./page.module.css";
 
 interface LogLine {
@@ -152,7 +153,7 @@ export function MonitorPage() {
   } = usePolling<SystemHistory>(fetchHistory, 60_000, [historyHours]);
 
   const historyItems = history?.items ?? [];
-  const xLabels = historyItems.map((p) => String(p.timestamp).slice(11, 16));
+  const xLabels = historyItems.map((p) => extractTimeBr(p.timestamp));
   const pendingSeries = historyItems.map((p) => p.pending_count);
   const runningSeries = historyItems.map((p) => p.running_count);
   const pendingLine: SeriesLine = { label: "pendentes", values: pendingSeries, tone: "amber" };

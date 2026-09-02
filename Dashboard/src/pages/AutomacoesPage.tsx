@@ -26,6 +26,7 @@ import { criticalityTone, executionTone, operationalStateLabel, operationalTone,
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
 import styles from "./AutomacoesPage.module.css";
+import { errMessage } from "../lib/errors";
 
 interface AutomacoesData {
   items: Automation[];
@@ -86,7 +87,7 @@ function RunbookDrawer({
       .then((text) => setContent(text))
       .catch((e) => {
         if (controller.signal.aborted) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errMessage(e));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -172,7 +173,7 @@ export function AutomacoesPage() {
         toast(r.message || fallbackMsg, "cyan");
         await load();
       } catch (e) {
-        toast(e instanceof Error ? e.message : String(e), "red");
+        toast(errMessage(e), "red");
       } finally {
         setBusy(null);
       }

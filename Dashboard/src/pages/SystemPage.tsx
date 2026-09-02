@@ -20,8 +20,9 @@ import {
   type SeriesLine,
 } from "../components/ui";
 import { healthTone, healthLabel } from "../lib/status";
-import { formatAge } from "../lib/format";
+import { extractTimeBr, formatAge } from "../lib/format";
 import page from "./page.module.css";
+import { errMessage } from "../lib/errors";
 
 export function SystemPage() {
   const toast = useToast();
@@ -44,7 +45,7 @@ export function SystemPage() {
       toast(r.message, "cyan");
       refresh();
     } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), "red");
+      toast(errMessage(e), "red");
     } finally {
       setBusy(null);
     }
@@ -52,7 +53,7 @@ export function SystemPage() {
 
   const chart = useMemo(() => {
     const items = history?.items ?? [];
-    const xLabels = items.map((p) => (p.timestamp.split(" ")[1] ?? p.timestamp).slice(0, 5));
+    const xLabels = items.map((p) => extractTimeBr(p.timestamp));
     const queueLines: SeriesLine[] = [
       { label: "pendentes", values: items.map((p) => p.pending_count), tone: "cyan" },
       { label: "em execução", values: items.map((p) => p.running_count), tone: "amber" },

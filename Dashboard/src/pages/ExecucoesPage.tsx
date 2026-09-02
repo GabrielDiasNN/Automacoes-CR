@@ -22,6 +22,7 @@ import { executionTone, severityTone, toneVar } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
 import page from "./page.module.css";
+import { errMessage } from "../lib/errors";
 
 const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED", "EXPIRED"];
 const PER_PAGE = 25;
@@ -91,7 +92,7 @@ export function ExecucoesPage() {
       } catch (e) {
         if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
         if (!isLatest()) return;
-        toast(e instanceof Error ? e.message : String(e), "red");
+        toast(errMessage(e), "red");
         setDetail(null);
       } finally {
         if (isLatest()) setDetailLoading(false);
@@ -108,7 +109,7 @@ export function ExecucoesPage() {
         toast(`Parada solicitada para ${shortId(id)}`, "amber");
         load();
       } catch (e) {
-        toast(e instanceof Error ? e.message : String(e), "red");
+        toast(errMessage(e), "red");
       }
     },
     [toast, load],
@@ -121,7 +122,7 @@ export function ExecucoesPage() {
         toast(`Reenfileirado: ${shortId(id)}`, "cyan");
         load();
       } catch (e) {
-        toast(e instanceof Error ? e.message : String(e), "red");
+        toast(errMessage(e), "red");
       }
     },
     [toast, load],

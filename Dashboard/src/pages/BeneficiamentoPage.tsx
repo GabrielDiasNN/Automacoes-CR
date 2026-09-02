@@ -40,6 +40,7 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { healthTone, healthLabel } from "../lib/status";
 import { formatNumber, formatPercent } from "../lib/format";
 import page from "./page.module.css";
+import { errMessage } from "../lib/errors";
 
 const REFRESH_PERIODS: { value: "diario" | "mensal"; label: string }[] = [
   { value: "diario", label: "Diário" },
@@ -218,7 +219,7 @@ export function BeneficiamentoPage() {
       await Promise.all([reloadOverview(), reloadHealth()]);
       toast("Snapshot atualizado.", "green");
     } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), "red");
+      toast(errMessage(e), "red");
     } finally {
       setRefreshing(false);
     }
