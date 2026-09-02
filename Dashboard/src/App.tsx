@@ -11,6 +11,7 @@ import { MonitorPage } from "./pages/MonitorPage";
 import { BeneficiamentoPage } from "./pages/BeneficiamentoPage";
 import { AutomacoesPage } from "./pages/AutomacoesPage";
 import { SystemPage } from "./pages/SystemPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 
 export default function App() {
   return (
@@ -35,7 +36,7 @@ export default function App() {
                   <Route path="beneficiamento" element={<BeneficiamentoPage />} />
                   <Route path="automacoes" element={<AutomacoesPage />} />
                   <Route path="sistema" element={<SystemPage />} />
-                  <Route path="*" element={<Navigate to="/painel" replace />} />
+                  <Route path="*" element={<NotFoundPage />} />
                 </Route>
               </Routes>
             </BrowserRouter>

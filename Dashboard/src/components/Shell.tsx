@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Factory, LayoutDashboard, ListChecks, Menu, Radio, Rows3, Rows4, Search, Server, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { IconButton } from "./ui";
 import styles from "./Shell.module.css";
 
@@ -29,6 +30,7 @@ export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { clearKey } = useApiKeyContext();
   const { density, toggleDensity } = useTableDensity();
+  const location = useLocation();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -113,7 +115,11 @@ export function Shell() {
           </header>
 
           <main className={styles.content} id="conteudo">
-            <Outlet />
+            {/* key={pathname}: uma exceção de render numa página não deixa o
+             *  usuário preso nela — trocar de rota sempre remonta o boundary. */}
+            <ErrorBoundary key={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
           </main>
         </div>
       </div>
