@@ -57,7 +57,8 @@ ID_CLIENTE_MATRIZ = 1
 
 # Validade da reserva de estoque criada ao anunciar uma OB (ver ReservaNotificacao).
 # 24h cobre a espera normal na fila da Expedicao mais uma virada de noite, com a
-# automacao rodando a cada 120 min (12 ciclos dentro da janela). Prazo unico e
+# automacao rodando a cada 60 min (24 ciclos dentro da janela; eram 12 quando a
+# cadencia era de 120 min, ate 01/09/2026). Prazo unico e
 # nomeado de proposito: a expiracao remove a OB do `notified` POR COMPLETO, entao
 # ela volta a concorrer pelo estoque e pode ser re-anunciada — liberar o saldo sem
 # tirar a OB do state recriaria o bug original de forma invisivel.

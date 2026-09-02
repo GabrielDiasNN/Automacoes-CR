@@ -194,19 +194,26 @@ def test_manifest_valido() -> None:
     assert manifest["dependencies"]["oracle"] is True
 
 
-def test_schedule_e_json_valido_de_120_em_120_minutos() -> None:
+def test_schedule_e_json_valido_de_60_em_60_minutos() -> None:
+    """Cadência horária, nas duas janelas (Seg-Sex e Sáb).
+
+    Desde [1.2.4] `cron_expression` é uma lista — uma expressão por janela. Era
+    de 120 min (passo `/2`) até [1.3.62], quando caiu para 60: com a notificação
+    por cobertura parcial, o intervalo entre ciclos passou a ser o fator
+    limitante (a OB #185889 foi montada minutos antes do ciclo que a anunciaria).
+    O assert de ausência de passo é o que trava a volta silenciosa para 120 min.
+    """
     manifest = json.loads(
         (AUTOMATION_DIR / "automation.manifest.json").read_text(encoding="utf-8")
     )
     schedule = json.loads(manifest["schedule"])
     assert schedule["schedule_type"] == "cron"
     assert schedule["timezone"] == "America/Sao_Paulo"
-    # Desde [1.2.4] o cron_expression é uma lista (janelas distintas Seg-Sex e
-    # Sáb), a cada 120 min. Cada expressão dispara no minuto 0 com passo de 2h.
     cron = schedule["cron_expression"]
     assert isinstance(cron, list) and cron
     assert all(expr.startswith("0 ") for expr in cron)
-    assert all("/2" in expr for expr in cron)
+    assert all("/" not in expr for expr in cron), "passo horário = 1, sem /N"
+    assert cron == ["0 5-19 * * 0-4", "0 5-13 * * 5"]
 
 
 def test_entrypoint_e_scripts_existem() -> None:

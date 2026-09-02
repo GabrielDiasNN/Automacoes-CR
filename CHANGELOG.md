@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.62] - 01/09/2026
+
+### Alterado
+
+- **Cadência da ORB-07 reduzida de 120 para 60 minutos.** Cron do Orchestrator (`id=6`, fila `oracle`) passou de `["0 5-19/2 * * 0-4", "0 5-13/2 * * 5"]` para `["0 5-19 * * 0-4", "0 5-13 * * 5"]` — mesma janela (05:00–19:00 Seg–Sex, 05:00–13:00 Sáb), o dobro de ciclos: 15 por dia útil e 9 no sábado, contra 8 e 5.
+  - Motivo: com a notificação por cobertura parcial ([1.3.60]), a janela entre ciclos virou o fator limitante. Caso observado no mesmo dia: a OB #185889 tinha 4 peças restritas do reduzido 141 e necessidade de 24; a regra nova a anunciaria, mas ela foi montada — consumindo as 4 peças — poucos minutos antes do ciclo das 17:00. Com 60 minutos, o aviso teria saído às 16:00.
+  - Efeito colateral aceito: dobra a carga de consultas Oracle da automação. Cada ciclo faz 4 queries curtas (~7 s de tempo total medido), então o custo é irrelevante frente ao ganho operacional.
+  - `JANELA_RESERVA_HORAS` continua em 24 h — agora são 24 ciclos dentro da janela de reserva, não 12. O comentário em `validators.py` foi atualizado.
+  - Documentação viva sincronizada: `automation.manifest.json` (`schedule` + `schedule_summary`), `README.md`, `CONTEXT.md`, `docs/automation-criticality-map.md` e `docs/ai-native-context-monitor.md`.
+
 ## [1.3.61] - 01/09/2026
 
 ### Corrigido
