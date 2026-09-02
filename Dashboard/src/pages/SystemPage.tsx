@@ -9,6 +9,7 @@ import {
   Card,
   ConfirmModal,
   ErrorState,
+  FreshnessTag,
   Gauge,
   Loading,
   Nameplate,
@@ -24,11 +25,15 @@ import page from "./page.module.css";
 
 export function SystemPage() {
   const toast = useToast();
-  const { data, loading, error, refresh, lastUpdated } = usePolling(
+  const { data, loading, error, refresh, lastUpdated, rateLimitedUntil } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     15_000,
   );
-  const { data: history } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
+  const {
+    data: history,
+    error: historyError,
+    lastUpdated: historyUpdated,
+  } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -85,11 +90,11 @@ export function SystemPage() {
         title="Sistema"
         actions={
           <div className={page.toolbar}>
-            {lastUpdated && (
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-lo)" }}>
-                {lastUpdated.toLocaleTimeString("pt-BR")}
-              </span>
-            )}
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && error ? error : null}
+              rateLimitedUntil={rateLimitedUntil}
+            />
             <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
               {healthLabel(health.status)}
             </StatusTag>
@@ -122,7 +127,10 @@ export function SystemPage() {
 
       {/* Tendência */}
       <div className={page.split}>
-        <Card label="tendência · fila (24h)">
+        <Card
+          label="tendência · fila (24h)"
+          actions={<FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />}
+        >
           {chart.count > 1 ? (
             <TimeSeries xLabels={chart.xLabels} lines={chart.queueLines} height={180} />
           ) : (
@@ -131,7 +139,10 @@ export function SystemPage() {
             </span>
           )}
         </Card>
-        <Card label="tendência · WAL (24h)">
+        <Card
+          label="tendência · WAL (24h)"
+          actions={<FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />}
+        >
           {chart.count > 1 ? (
             <TimeSeries xLabels={chart.xLabels} lines={chart.walLine} height={180} />
           ) : (

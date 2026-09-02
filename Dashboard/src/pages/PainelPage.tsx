@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   ErrorState,
+  FreshnessTag,
   ListRow,
   Loading,
   Mimico,
@@ -59,7 +60,10 @@ function ExecRow({ ex, onClick }: { ex: ExecutionSummary; onClick: () => void })
 
 export function PainelPage() {
   const navigate = useNavigate();
-  const { data, loading, error } = usePolling((signal) => orchestratorApi.getOverview(signal), 10_000);
+  const { data, loading, error, lastUpdated, rateLimitedUntil } = usePolling(
+    (signal) => orchestratorApi.getOverview(signal),
+    10_000,
+  );
 
   const lanes: QueueLane[] = useMemo(() => {
     if (!data) return [];
@@ -106,9 +110,12 @@ export function PainelPage() {
         eyebrow="// operação"
         title="Painel"
         actions={
-          <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
-            sistema {healthLabel(health.status)}
-          </StatusTag>
+          <div className={page.toolbar}>
+            <FreshnessTag lastUpdated={lastUpdated} error={data && error ? error : null} rateLimitedUntil={rateLimitedUntil} />
+            <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
+              sistema {healthLabel(health.status)}
+            </StatusTag>
+          </div>
         }
       />
 

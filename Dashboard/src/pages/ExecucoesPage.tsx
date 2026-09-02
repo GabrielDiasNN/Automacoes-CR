@@ -9,6 +9,7 @@ import {
   DataTable,
   Drawer,
   ErrorState,
+  FreshnessTag,
   Loading,
   Nameplate,
   Select,
@@ -44,12 +45,15 @@ export function ExecucoesPage() {
   useEffect(() => () => detailAbortRef.current?.abort(), []);
 
   const fetchExecutions = useCallback(
-    () =>
-      orchestratorApi.listExecutions({
-        page: pageNum,
-        per_page: PER_PAGE,
-        status: status || undefined,
-      }),
+    (signal?: AbortSignal) =>
+      orchestratorApi.listExecutions(
+        {
+          page: pageNum,
+          per_page: PER_PAGE,
+          status: status || undefined,
+        },
+        signal,
+      ),
     [pageNum, status],
   );
   const {
@@ -57,6 +61,8 @@ export function ExecucoesPage() {
     loading,
     error: err,
     refresh: load,
+    lastUpdated,
+    rateLimitedUntil,
   } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status]);
 
   const openDetail = useCallback(
@@ -214,6 +220,7 @@ export function ExecucoesPage() {
                 </option>
               ))}
             </Select>
+            <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
               Atualizar
             </Button>

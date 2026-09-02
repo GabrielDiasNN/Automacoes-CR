@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Pause, Play, RefreshCw, Zap } from "lucide-react";
 import { orchestratorApi, type Automation } from "../api/orchestrator";
-import { Button, Card, ErrorState, Loading, Nameplate, RatioBar, StatusTag, useToast } from "../components/ui";
+import { Button, Card, ErrorState, FreshnessTag, Loading, Nameplate, RatioBar, StatusTag, useToast } from "../components/ui";
 import { usePolling } from "../hooks/usePolling";
 import { criticalityTone, executionTone } from "../lib/status";
 import { formatDuration } from "../lib/format";
@@ -31,7 +31,14 @@ async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData
 
 export function AutomacoesPage() {
   const toast = useToast();
-  const { data, loading, error: err, refresh: load } = usePolling(fetchAutomacoesData, 15_000);
+  const {
+    data,
+    loading,
+    error: err,
+    refresh: load,
+    lastUpdated,
+    rateLimitedUntil,
+  } = usePolling(fetchAutomacoesData, 15_000);
   const items = data?.items ?? [];
   const crit = data?.crit ?? {};
   const [busy, setBusy] = useState<number | null>(null);
@@ -84,9 +91,12 @@ export function AutomacoesPage() {
         eyebrow="// administração"
         title="Automações"
         actions={
-          <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
-            Atualizar
-          </Button>
+          <div className={page.toolbar}>
+            <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
+            <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
+              Atualizar
+            </Button>
+          </div>
         }
       />
 

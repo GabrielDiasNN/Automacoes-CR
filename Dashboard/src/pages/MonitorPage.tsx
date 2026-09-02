@@ -7,6 +7,7 @@ import { orchestratorApi, type SystemHistory, type SystemMetricsDaily } from "..
 import {
   Button,
   Card,
+  FreshnessTag,
   Nameplate,
   Select,
   Sparkline,
@@ -140,8 +141,15 @@ export function MonitorPage() {
   );
 
   const [historyHours, setHistoryHours] = useState(24);
-  const fetchHistory = useCallback(() => orchestratorApi.getHistory(historyHours), [historyHours]);
-  const { data: history } = usePolling<SystemHistory>(fetchHistory, 60_000, [historyHours]);
+  const fetchHistory = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getHistory(historyHours, signal),
+    [historyHours],
+  );
+  const {
+    data: history,
+    error: historyError,
+    lastUpdated: historyUpdated,
+  } = usePolling<SystemHistory>(fetchHistory, 60_000, [historyHours]);
 
   const historyItems = history?.items ?? [];
   const xLabels = historyItems.map((p) => String(p.timestamp).slice(11, 16));
@@ -152,8 +160,15 @@ export function MonitorPage() {
 
   const goToExecucoes = useCallback((execStatus: string) => navigate(`/execucoes?status=${execStatus}`), [navigate]);
 
-  const fetchDailyMetrics = useCallback(() => orchestratorApi.getSystemMetricsDaily(14), []);
-  const { data: dailyMetrics } = usePolling<SystemMetricsDaily>(fetchDailyMetrics, 120_000);
+  const fetchDailyMetrics = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getSystemMetricsDaily(14, signal),
+    [],
+  );
+  const {
+    data: dailyMetrics,
+    error: dailyError,
+    lastUpdated: dailyUpdated,
+  } = usePolling<SystemMetricsDaily>(fetchDailyMetrics, 120_000);
 
   const dailyItems = dailyMetrics?.items ?? [];
   const dailyLabels = dailyItems.map((d) => d.date.slice(5));
@@ -227,17 +242,20 @@ export function MonitorPage() {
         <Card
           label="tendência da fila"
           actions={
-            <Select
-              value={historyHours}
-              onChange={(e) => setHistoryHours(Number(e.target.value))}
-              aria-label="Janela de tempo"
-            >
-              {HISTORY_WINDOWS.map((w) => (
-                <option key={w.hours} value={w.hours}>
-                  {w.label}
-                </option>
-              ))}
-            </Select>
+            <div className={page.toolbar}>
+              <FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />
+              <Select
+                value={historyHours}
+                onChange={(e) => setHistoryHours(Number(e.target.value))}
+                aria-label="Janela de tempo"
+              >
+                {HISTORY_WINDOWS.map((w) => (
+                  <option key={w.hours} value={w.hours}>
+                    {w.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           }
         >
           <TimeSeries xLabels={xLabels} lines={[pendingLine, runningLine]} height={160} />
@@ -246,7 +264,10 @@ export function MonitorPage() {
 
       {dailyItems.length > 1 && (
         <div className={page.split}>
-          <Card label="taxa de sucesso · 14 dias">
+          <Card
+            label="taxa de sucesso · 14 dias"
+            actions={<FreshnessTag lastUpdated={dailyUpdated} error={dailyMetrics && dailyError ? dailyError : null} />}
+          >
             <TimeSeries xLabels={dailyLabels} lines={[successRateLine]} height={160} />
           </Card>
           <Card label="duração média (s) · 14 dias">

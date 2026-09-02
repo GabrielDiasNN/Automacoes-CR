@@ -15,6 +15,7 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  FreshnessTag,
   Loading,
   Nameplate,
   Select,
@@ -190,15 +191,25 @@ export function BeneficiamentoPage() {
     ],
   );
 
-  const fetchOverview = useCallback(() => orchestratorApi.getBeneficiamentoOverview(overviewParams), [overviewParams]);
+  const fetchOverview = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getBeneficiamentoOverview(overviewParams, signal),
+    [overviewParams],
+  );
   const {
     data: overview,
     loading: overviewLoading,
     error: overviewError,
     refresh: reloadOverview,
+    lastUpdated: overviewUpdated,
+    rateLimitedUntil,
   } = usePolling<BeneficiamentoOverview>(fetchOverview, 30_000, [overviewParams]);
 
-  const { data: health, refresh: reloadHealth } = usePolling(orchestratorApi.getBeneficiamentoHealth, 60_000);
+  const {
+    data: health,
+    error: healthError,
+    refresh: reloadHealth,
+    lastUpdated: healthUpdated,
+  } = usePolling(orchestratorApi.getBeneficiamentoHealth, 60_000);
 
   const doRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -250,6 +261,11 @@ export function BeneficiamentoPage() {
         title="Beneficiamento"
         actions={
           <div className={page.toolbar}>
+            <FreshnessTag
+              lastUpdated={overviewUpdated}
+              error={overview && overviewError ? overviewError : null}
+              rateLimitedUntil={rateLimitedUntil}
+            />
             <Select
               value={refreshPeriod}
               onChange={(e) => setRefreshPeriod(e.target.value as "diario" | "mensal")}
@@ -272,8 +288,18 @@ export function BeneficiamentoPage() {
 
       <FilterBar filters={filters} options={overview.filter_options} onChange={patchFilters} onReset={resetFilters} />
 
+      {!health && healthError && (
+        <Card label="saúde do snapshot" alert>
+          <ErrorState message={healthError} />
+        </Card>
+      )}
+
       {health && (
-        <Card label="saúde do snapshot" alert={healthTone(health.status) === "red"}>
+        <Card
+          label="saúde do snapshot"
+          alert={healthTone(health.status) === "red"}
+          actions={<FreshnessTag lastUpdated={healthUpdated} error={healthError} />}
+        >
           <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", alignItems: "center" }}>
             <StatusTag tone={healthTone(health.status)} dot>
               {healthLabel(health.status)}
