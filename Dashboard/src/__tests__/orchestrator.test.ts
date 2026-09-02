@@ -44,6 +44,12 @@ describe("orchestratorApi", () => {
 
     const [url, init] = mockFetch.mock.calls[0];
     expect(url).toContain("/api/executions/EXEC_1");
-    expect(init.signal).toBe(controller.signal);
+    // `client.ts` combina o signal do chamador com um timeout via
+    // `AbortSignal.any` (achado nº 5, Onda 1) — não é mais o MESMO objeto,
+    // mas precisa continuar abortando quando o `controller` original aborta.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect((init.signal as AbortSignal).aborted).toBe(false);
+    controller.abort();
+    expect((init.signal as AbortSignal).aborted).toBe(true);
   });
 });

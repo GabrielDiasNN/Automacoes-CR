@@ -17,7 +17,7 @@ import {
   StatusTag,
   type QueueLane,
 } from "../components/ui";
-import { executionTone, healthTone, severityTone, type Tone } from "../lib/status";
+import { executionTone, healthLabel, healthTone, severityTone, type Tone } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
 import page from "./page.module.css";
 
@@ -106,8 +106,8 @@ export function PainelPage() {
         eyebrow="// operação"
         title="Painel"
         actions={
-          <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "critical"}>
-            sistema {health.status}
+          <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
+            sistema {healthLabel(health.status)}
           </StatusTag>
         }
       />

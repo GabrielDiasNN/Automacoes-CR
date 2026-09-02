@@ -90,7 +90,7 @@ export function SystemPage() {
                 {lastUpdated.toLocaleTimeString("pt-BR")}
               </span>
             )}
-            <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "critical"}>
+            <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
               {healthLabel(health.status)}
             </StatusTag>
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={refresh}>

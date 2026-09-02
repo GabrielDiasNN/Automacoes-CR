@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePolling } from "../hooks/usePolling";
+import { ApiError } from "../api/client";
 
 describe("usePolling", () => {
   beforeEach(() => {
@@ -296,5 +297,34 @@ describe("usePolling", () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("em 429, expõe rateLimitedUntil e pula ticks até a janela liberar (sem martelar o backend)", async () => {
+    const fetcher = vi.fn().mockRejectedValue(new ApiError(429, "limite excedido", 10));
+    const { result } = renderHook(() => usePolling(fetcher, 1_000));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.current.rateLimitedUntil).toBeInstanceOf(Date);
+    expect(result.current.error).toContain("10s");
+
+    // Ticks dentro da janela de 10s: nenhuma requisição nova.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    // Passada a janela, os próximos ticks voltam a tentar de verdade — não
+    // importa quantos ticks exatos ocorrem no avanço, o que importa é que a
+    // janela é respeitada (nenhuma chamada nova antes dela) e depois libera.
+    fetcher.mockResolvedValue("ok");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(fetcher.mock.calls.length).toBeGreaterThan(1);
+    expect(result.current.rateLimitedUntil).toBeNull();
+    expect(result.current.error).toBeNull();
   });
 });

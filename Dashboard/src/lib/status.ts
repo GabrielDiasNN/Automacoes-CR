@@ -57,7 +57,11 @@ export function severityTone(severity: string | null | undefined): Tone {
   }
 }
 
-/** Saúde de sistema / baseline → tom. */
+/** Saúde de sistema / baseline → tom.
+ *  Cobre 3 vocabulários que compartilham a função por semântica equivalente:
+ *  - `SystemHealth`/`SystemLiveness` (backend): healthy|ok | degraded | unhealthy
+ *  - baseline operacional (backend): healthy | attention | incident
+ *  - genéricos de SLA/portfólio: warning|at_risk | critical|violated */
 export function healthTone(status: string | null | undefined): Tone {
   switch (status?.toLowerCase()) {
     case "healthy":
@@ -66,10 +70,12 @@ export function healthTone(status: string | null | undefined): Tone {
     case "warning":
     case "attention":
     case "at_risk":
+    case "degraded":
       return "amber";
     case "critical":
     case "incident":
     case "violated":
+    case "unhealthy":
       return "red";
     default:
       return "grey";
@@ -106,10 +112,13 @@ export function criticalityTone(crit: string | null | undefined): Tone {
 
 const HEALTH_LABEL: Record<string, string> = {
   healthy: "saudável",
+  ok: "saudável",
   warning: "atenção",
   attention: "atenção",
+  degraded: "degradado",
   critical: "incidente",
   incident: "incidente",
+  unhealthy: "incidente",
 };
 
 export function healthLabel(status: string | null | undefined): string {

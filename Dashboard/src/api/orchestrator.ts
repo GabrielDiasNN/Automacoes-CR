@@ -38,6 +38,8 @@ export interface Automation {
   last_execution_finished_at: string | null;
   last_execution_duration_seconds: number | null;
   last_failure_reason: string | null;
+  last_recovery_action: string | null;
+  last_requested_by: string | null;
   schedule_type: string | null;
   schedule_summary: string | null;
   next_runs_preview: string[];
@@ -45,8 +47,12 @@ export interface Automation {
   success_24h: number;
   failures_24h: number;
   timeouts_24h: number;
+  error_24h: number; // alias de failures_24h (backend, apply_br_format)
   pending_count: number;
   operational_state: string; // idle | running | blocked | ...
+  validated: boolean;
+  backup_path: string | null;
+  audit_id: number | null;
 }
 
 // ── Execuções ───────────────────────────────────────────────────────────────
@@ -81,11 +87,24 @@ export interface ExecutionSummary {
   requeue_block_reason: string | null;
   stop_allowed: boolean;
   related_execution_id: string | null;
+  related_execution_status: string | null;
+  related_queue_group: string | null;
 }
 
 export interface ExecutionDetail extends ExecutionSummary {
   logs: string | null;
   artifacts: string | null;
+  claimed_at: string | null;
+  worker_instance_id: string | null;
+  worker_pid: number | null;
+}
+
+export interface ExecutionLogsResponse {
+  exec_id: string;
+  total_lines: number;
+  offset: number;
+  limit: number;
+  lines: string[];
 }
 
 export interface QueueActionResponse {
@@ -110,11 +129,12 @@ export interface WorkerStatus {
   tasks_completed: number;
   tasks_failed: number;
   active_tasks: number;
+  pool_saturated_seconds: number;
   version: string;
 }
 
 export interface SystemHealth {
-  status: string; // healthy | warning | critical
+  status: string; // healthy | degraded | unhealthy
   timestamp: string;
   database: string;
   scheduler: string;
@@ -690,15 +710,13 @@ export const orchestratorApi = {
     api.get<ExecutionSummary[]>(`/api/executions/recent${qs({ limit })}`),
   getExecution: (id: string, signal?: AbortSignal) => api.get<ExecutionDetail>(`/api/executions/${id}`, signal),
   getExecutionLogs: (id: string, params?: { offset?: number; limit?: number }) =>
-    api.get<{ lines: string[]; total_lines: number; offset: number; [k: string]: unknown }>(
-      `/api/executions/${id}/logs${qs({ ...params })}`,
-    ),
+    api.get<ExecutionLogsResponse>(`/api/executions/${id}/logs${qs({ ...params })}`),
   stopExecution: (id: string) => api.post<{ message: string }>(`/api/executions/${id}/stop`),
   requeueExecution: (id: string, body?: { reason?: string; priority?: string }) =>
     api.post<QueueActionResponse>(`/api/executions/${id}/requeue`, body ?? {}),
 
   // ── Sistema ──
-  getHealth: () => api.get<SystemHealth>("/api/system/health"),
+  getHealth: () => api.get<SystemHealth>("/api/system/health/full"),
   getWorkerStatus: () => api.get<WorkerStatus>("/api/system/worker/status"),
   getOverview: (signal?: AbortSignal) => api.get<SystemOverview>("/api/system/overview", signal),
   getBaseline: () => api.get<BaselineStatus>("/api/system/baseline"),

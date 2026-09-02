@@ -18,7 +18,7 @@ export function StatusBar() {
           className={styles.lamp}
           style={{
             background: toneVar[tone],
-            animation: health?.status === "critical" ? "blink-alarm 1s steps(1,end) infinite" : undefined,
+            animation: health?.status === "unhealthy" ? "blink-alarm 1s steps(1,end) infinite" : undefined,
           }}
         />
         <span className={styles.state} style={{ color: toneVar[tone] }}>
