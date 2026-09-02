@@ -48,7 +48,7 @@ function withTimeout(signal?: AbortSignal): AbortSignal {
   return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function doFetch(path: string, init: RequestInit): Promise<Response> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     signal: withTimeout(init.signal ?? undefined),
@@ -67,7 +67,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : null;
     throw new ApiError(res.status, text, Number.isFinite(retryAfter) ? retryAfter : null);
   }
+  return res;
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await doFetch(path, init);
   return res.json() as Promise<T>;
+}
+
+/** Como `request`, mas para rotas que devolvem texto puro em vez de JSON
+ *  (ex.: `GET /api/portfolio/runbook/{catalog_id}`, `PlainTextResponse` com
+ *  o Markdown bruto do runbook — `res.json()` quebraria nessas respostas). */
+async function requestText(path: string, init: RequestInit = {}): Promise<string> {
+  const res = await doFetch(path, init);
+  return res.text();
 }
 
 /** Monta query-string a partir de um objeto, omitindo null/undefined. */
@@ -84,6 +97,7 @@ export const api = {
   /** `signal` permite cancelar a requisição — ver usePolling, que aborta o
    *  fetch anterior ao trocar de parâmetros ou desmontar. */
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
+  getText: (path: string, signal?: AbortSignal) => requestText(path, { signal }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     request<T>(path, {
       method: "POST",

@@ -210,6 +210,9 @@ class AutomationResponse(AutomationBase):
     failures_24h: int = 0
     timeouts_24h: int = 0
     error_24h: int = 0
+    # Já calculado em metrics_queries.get_automation_metrics_24h (AVG SQL) e
+    # descartado antes desta linha — expõe sem custo adicional de query.
+    avg_duration_24h_seconds: float | None = None
     pending_count: int = 0
     operational_state: str = "idle"
     validated: bool = True

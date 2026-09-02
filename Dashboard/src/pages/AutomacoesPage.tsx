@@ -1,36 +1,125 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Pause, Play, RefreshCw, Zap } from "lucide-react";
-import { orchestratorApi, type Automation } from "../api/orchestrator";
-import { Button, Card, ErrorState, FreshnessTag, Loading, Nameplate, RatioBar, StatusTag, useToast } from "../components/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { BookOpen, Pause, Play, RefreshCw, Workflow, Zap } from "lucide-react";
+import {
+  orchestratorApi,
+  type Automation,
+  type PortfolioHealthItem,
+} from "../api/orchestrator";
+import {
+  Button,
+  Card,
+  ConfirmModal,
+  Drawer,
+  EmptyState,
+  ErrorState,
+  FreshnessTag,
+  Loading,
+  Nameplate,
+  RatioBar,
+  Skeleton,
+  StatusTag,
+  useToast,
+} from "../components/ui";
 import { usePolling } from "../hooks/usePolling";
-import { criticalityTone, executionTone } from "../lib/status";
+import { criticalityTone, executionTone, operationalStateLabel, operationalTone, slaTone } from "../lib/status";
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
 import styles from "./AutomacoesPage.module.css";
 
 interface AutomacoesData {
   items: Automation[];
-  crit: Record<number, string>;
+  /** por `automation_id` — `null` quando o portfólio falhou (best-effort: a
+   *  tela não perde os cards, só a camada de criticidade/SLA/runbook). */
+  portfolio: Record<number, PortfolioHealthItem> | null;
 }
 
 async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData> {
-  const items = await orchestratorApi.listAllAutomations(signal);
-  let crit: Record<number, string> = {};
-  try {
-    // criticidade é do catálogo (portfólio) — best-effort
-    const p = await orchestratorApi.getPortfolioHealth(signal);
-    crit = Object.fromEntries(
-      p.items.filter((it) => it.automation_id != null).map((it) => [it.automation_id as number, it.criticality]),
-    );
-  } catch {
-    /* best-effort: mantém items mesmo se o portfólio falhar */
-  }
-  return { items, crit };
+  // As duas chamadas não dependem uma da outra — paralelizadas via Promise.all
+  // em vez de sequenciais (a versão anterior esperava listAllAutomations
+  // terminar antes de sequer iniciar getPortfolioHealth, dobrando a latência
+  // de cada tick de polling à toa).
+  const [items, portfolioResult] = await Promise.all([
+    orchestratorApi.listAllAutomations(signal),
+    orchestratorApi.getPortfolioHealth(signal).catch(() => null),
+  ]);
+  const portfolio = portfolioResult
+    ? Object.fromEntries(
+        portfolioResult.items
+          .filter((it) => it.automation_id != null)
+          .map((it) => [it.automation_id as number, it]),
+      )
+    : null;
+  return { items, portfolio };
+}
+
+/** Ordena por atenção — quem precisa de olhar primeiro no topo — em vez da
+ *  ordem alfabética que o backend devolve. Critério, em ordem de desempate:
+ *  estado operacional "attention" > SLA violado > criticidade > nome. */
+function attentionRank(a: Automation, p: PortfolioHealthItem | undefined): number {
+  if (a.operational_state === "attention") return 0;
+  if (p?.sla_state === "violated") return 1;
+  if (p?.criticality === "high") return 2;
+  if (p?.sla_state === "at_risk") return 3;
+  if (p?.criticality === "medium") return 4;
+  return 5;
+}
+
+function RunbookDrawer({
+  target,
+  onClose,
+}: {
+  target: { catalogId: string; name: string } | null;
+  onClose: () => void;
+}) {
+  const [content, setContent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!target) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    orchestratorApi
+      .getPortfolioRunbook(target.catalogId, controller.signal)
+      .then((text) => setContent(text))
+      .catch((e) => {
+        if (controller.signal.aborted) return;
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [target]);
+
+  return (
+    <Drawer open={!!target} onClose={onClose} eyebrow="// runbook" title={target?.name} width={720}>
+      {loading && <Loading label="lendo runbook" />}
+      {error && <ErrorState message={error} />}
+      {!loading && !error && content && (
+        <pre
+          style={{
+            margin: 0,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--fs-small)",
+            color: "var(--text-mid)",
+            lineHeight: 1.6,
+          }}
+        >
+          {content}
+        </pre>
+      )}
+    </Drawer>
+  );
 }
 
 export function AutomacoesPage() {
   const toast = useToast();
+  const navigate = useNavigate();
   const {
     data,
     loading,
@@ -39,9 +128,24 @@ export function AutomacoesPage() {
     lastUpdated,
     rateLimitedUntil,
   } = usePolling(fetchAutomacoesData, 15_000);
-  const items = data?.items ?? [];
-  const crit = data?.crit ?? {};
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const portfolio = data?.portfolio ?? null;
+  const portfolioFailed = data !== null && data.portfolio === null;
   const [busy, setBusy] = useState<number | null>(null);
+  const [confirm, setConfirm] = useState<{ id: number; name: string; kind: "dispatch" | "pause" } | null>(null);
+  const [runbookTarget, setRunbookTarget] = useState<{ catalogId: string; name: string } | null>(null);
+  // Último exec_id disparado por automação nesta sessão — o backend devolve
+  // no POST /start e antes era descartado (`.then((r) => ({ message: r.message }))`).
+  const [lastExecId, setLastExecId] = useState<Record<number, string>>({});
+
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const pa = portfolio?.[a.id];
+      const pb = portfolio?.[b.id];
+      const diff = attentionRank(a, pa) - attentionRank(b, pb);
+      return diff !== 0 ? diff : a.name.localeCompare(b.name, "pt-BR");
+    });
+  }, [items, portfolio]);
 
   // `?focus=<nome>` vem do Ctrl+K (CommandPalette): rola até o card e o destaca.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,23 +154,22 @@ export function AutomacoesPage() {
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
 
   useEffect(() => {
-    const lista = data?.items ?? [];
-    if (!focusName || lista.length === 0) return;
-    const alvo = lista.find((a) => a.name === focusName);
+    if (!focusName || items.length === 0) return;
+    const alvo = items.find((a) => a.name === focusName);
     if (!alvo) return;
     focusedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightedId(alvo.id);
     const limpar = setTimeout(() => setHighlightedId(null), 2400);
     setSearchParams({}, { replace: true }); // consome o parâmetro
     return () => clearTimeout(limpar);
-  }, [focusName, data, setSearchParams]);
+  }, [focusName, items, setSearchParams]);
 
   const act = useCallback(
-    async (id: number, fn: () => Promise<{ message: string }>, okMsg: string) => {
+    async (id: number, fn: () => Promise<{ message: string }>, fallbackMsg: string) => {
       setBusy(id);
       try {
-        await fn();
-        toast(okMsg, "cyan");
+        const r = await fn();
+        toast(r.message || fallbackMsg, "cyan");
         await load();
       } catch (e) {
         toast(e instanceof Error ? e.message : String(e), "red");
@@ -77,10 +180,46 @@ export function AutomacoesPage() {
     [toast, load],
   );
 
+  const dispatch = useCallback(
+    (a: Automation) => {
+      setConfirm(null);
+      act(
+        a.id,
+        () =>
+          orchestratorApi.startAutomation(a.id).then((r) => {
+            if (r.exec_id) setLastExecId((prev) => ({ ...prev, [a.id]: r.exec_id! }));
+            return { message: r.exec_id ? `${r.message} (${r.exec_id})` : r.message };
+          }),
+        `${a.name} disparada`,
+      );
+    },
+    [act],
+  );
+
+  const pause = useCallback(
+    (a: Automation) => {
+      setConfirm(null);
+      act(a.id, () => orchestratorApi.pauseAutomation(a.id), `${a.name} pausada`);
+    },
+    [act],
+  );
+
   if (loading && items.length === 0) {
     return (
       <div className={page.page}>
-        <Loading />
+        <Nameplate eyebrow="// administração" title="Automações" />
+        <div className={styles.grid}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i}>
+              <div className={styles.card}>
+                <Skeleton height={20} width="60%" />
+                <Skeleton height={14} width="90%" />
+                <Skeleton height={48} width="100%" />
+                <Skeleton height={28} width="40%" />
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
@@ -93,6 +232,11 @@ export function AutomacoesPage() {
         actions={
           <div className={page.toolbar}>
             <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
+            {portfolioFailed && (
+              <StatusTag tone="grey" dot>
+                criticidade indisponível
+              </StatusTag>
+            )}
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
               Atualizar
             </Button>
@@ -102,11 +246,21 @@ export function AutomacoesPage() {
 
       {err && items.length === 0 ? (
         <ErrorState message={err} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={<Workflow size={28} />}
+          title="nenhuma automação cadastrada"
+          hint="Use Tools/New-Automation.ps1 para criar uma automação com manifesto válido."
+        />
       ) : (
         <div className={styles.grid}>
-          {items.map((a) => {
+          {sortedItems.map((a) => {
+            const p = portfolio?.[a.id];
             const total24h = a.success_24h + a.failures_24h;
             const focado = a.name === focusName || a.id === highlightedId;
+            const emExecucao = a.active_execution_count > 0;
+            const execId = lastExecId[a.id];
+
             return (
               <Card key={a.id} alert={a.last_status === "ERROR" || a.last_status === "TIMEOUT"}>
                 <div
@@ -117,7 +271,9 @@ export function AutomacoesPage() {
                   <div className={styles.top}>
                     <span
                       className={styles.lamp}
-                      style={{ background: `var(--${a.enabled ? "green" : "graphite-600"})` }}
+                      role="img"
+                      aria-label={`Estado operacional: ${operationalStateLabel(a.operational_state)}`}
+                      style={{ background: `var(--${operationalTone(a.operational_state) === "grey" ? "graphite-600" : operationalTone(a.operational_state)})` }}
                     />
                     <div className={styles.titleWrap}>
                       <span className={styles.name}>{a.name}</span>
@@ -126,12 +282,21 @@ export function AutomacoesPage() {
                   </div>
 
                   <div className={styles.tags}>
-                    {crit[a.id] && <StatusTag tone={criticalityTone(crit[a.id])}>{crit[a.id]}</StatusTag>}
+                    {p?.criticality && <StatusTag tone={criticalityTone(p.criticality)}>{p.criticality}</StatusTag>}
                     {a.last_status && <StatusTag tone={executionTone(a.last_status)} dot>{a.last_status}</StatusTag>}
+                    {emExecucao && (
+                      <StatusTag tone="cyan" dot pulse>
+                        em execução
+                      </StatusTag>
+                    )}
                     {!a.enabled && <StatusTag tone="grey">pausada</StatusTag>}
                     {a.test_mode && <StatusTag tone="blue">sandbox</StatusTag>}
                     {a.queue_group && <span className={styles.meta}>fila: {a.queue_group}</span>}
                   </div>
+
+                  {(a.last_status === "ERROR" || a.last_status === "TIMEOUT") && a.last_failure_reason && (
+                    <p className={styles.failureReason}>{a.last_failure_reason}</p>
+                  )}
 
                   <dl className={styles.metrics}>
                     <div>
@@ -149,17 +314,67 @@ export function AutomacoesPage() {
                     </div>
                     <div>
                       <dt className={styles.mLabel}>sla</dt>
-                      <dd className={styles.mVal}>{a.sla_minutes ? `${a.sla_minutes}min` : "—"}</dd>
+                      <dd className={styles.mVal}>
+                        {a.sla_minutes ? (
+                          p?.sla_state ? (
+                            <StatusTag tone={slaTone(p.sla_state)}>{`${a.sla_minutes}min`}</StatusTag>
+                          ) : (
+                            `${a.sla_minutes}min`
+                          )
+                        ) : (
+                          "—"
+                        )}
+                        {p?.schedule_lag_minutes != null && p.schedule_lag_minutes > 0 && (
+                          <span className={styles.mMeta}> · atraso {p.schedule_lag_minutes}min</span>
+                        )}
+                      </dd>
                     </div>
                     <div>
-                      <dt className={styles.mLabel}>última duração</dt>
-                      <dd className={styles.mVal}>{formatDuration(a.last_execution_duration_seconds)}</dd>
+                      <dt className={styles.mLabel}>
+                        última duração{a.avg_duration_24h_seconds != null ? " / média 24h" : ""}
+                      </dt>
+                      <dd className={styles.mVal}>
+                        {formatDuration(a.last_execution_duration_seconds)}
+                        {a.avg_duration_24h_seconds != null && (
+                          <span className={styles.mMeta}> / {formatDuration(a.avg_duration_24h_seconds)}</span>
+                        )}
+                      </dd>
                     </div>
                     <div>
                       <dt className={styles.mLabel}>próxima janela</dt>
-                      <dd className={styles.mMeta}>{a.next_run ?? a.schedule_summary ?? "manual"}</dd>
+                      <dd className={styles.mMeta} title={a.next_runs_preview?.slice(0, 3).join(" · ") || undefined}>
+                        {a.next_run ?? a.schedule_summary ?? "manual"}
+                      </dd>
                     </div>
                   </dl>
+
+                  <div className={styles.links}>
+                    <button
+                      type="button"
+                      className={styles.linkBtn}
+                      onClick={() => navigate(`/execucoes?automation_id=${a.id}`)}
+                    >
+                      ver execuções
+                    </button>
+                    {execId && (
+                      <button
+                        type="button"
+                        className={styles.linkBtn}
+                        onClick={() => navigate(`/execucoes?automation_id=${a.id}`)}
+                      >
+                        {execId}
+                      </button>
+                    )}
+                    {p?.runbook_path && (
+                      <button
+                        type="button"
+                        className={styles.linkBtn}
+                        onClick={() => setRunbookTarget({ catalogId: p.catalog_id, name: a.name })}
+                      >
+                        <BookOpen size={11} style={{ verticalAlign: "-1px" }} /> runbook
+                      </button>
+                    )}
+                  </div>
 
                   <div className={styles.actions}>
                     {/* aria-label único por card: com N automações, N botões
@@ -172,7 +387,7 @@ export function AutomacoesPage() {
                         icon={<Pause size={13} />}
                         disabled={busy === a.id}
                         aria-label={`Pausar ${a.name}`}
-                        onClick={() => act(a.id, () => orchestratorApi.pauseAutomation(a.id), `${a.name} pausada`)}
+                        onClick={() => setConfirm({ id: a.id, name: a.name, kind: "pause" })}
                       >
                         Pausar
                       </Button>
@@ -192,11 +407,10 @@ export function AutomacoesPage() {
                       size="sm"
                       variant="primary"
                       icon={<Zap size={13} />}
-                      disabled={busy === a.id || !a.enabled}
+                      disabled={busy === a.id || !a.enabled || emExecucao}
+                      title={emExecucao ? "Já há uma execução em andamento" : undefined}
                       aria-label={`Disparar ${a.name}`}
-                      onClick={() =>
-                        act(a.id, () => orchestratorApi.startAutomation(a.id).then((r) => ({ message: r.message })), `${a.name} disparada`)
-                      }
+                      onClick={() => setConfirm({ id: a.id, name: a.name, kind: "dispatch" })}
                     >
                       Disparar
                     </Button>
@@ -205,11 +419,30 @@ export function AutomacoesPage() {
               </Card>
             );
           })}
-          {items.length === 0 && (
-            <span style={{ color: "var(--text-lo)", fontFamily: "var(--font-mono)" }}>nenhuma automação cadastrada.</span>
-          )}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!confirm}
+        title={confirm?.kind === "dispatch" ? "Disparar automação" : "Pausar automação"}
+        message={
+          confirm?.kind === "dispatch"
+            ? `Disparar "${confirm.name}" agora? O script roda em produção fora da janela agendada.`
+            : `Pausar "${confirm?.name}"? Nenhuma execução automática ocorrerá até retomar.`
+        }
+        confirmLabel={confirm?.kind === "dispatch" ? "Disparar" : "Pausar"}
+        danger={confirm?.kind === "dispatch"}
+        onConfirm={() => {
+          if (!confirm) return;
+          const a = items.find((it) => it.id === confirm.id);
+          if (!a) return;
+          if (confirm.kind === "dispatch") dispatch(a);
+          else pause(a);
+        }}
+        onCancel={() => setConfirm(null)}
+      />
+
+      <RunbookDrawer target={runbookTarget} onClose={() => setRunbookTarget(null)} />
     </div>
   );
 }

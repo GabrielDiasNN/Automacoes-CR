@@ -48,6 +48,7 @@ export interface Automation {
   failures_24h: number;
   timeouts_24h: number;
   error_24h: number; // alias de failures_24h (backend, apply_br_format)
+  avg_duration_24h_seconds: number | null;
   pending_count: number;
   operational_state: string; // idle | running | blocked | ...
   validated: boolean;
@@ -302,6 +303,12 @@ export interface SystemOverview {
 
 // ── Portfólio ───────────────────────────────────────────────────────────────
 
+export interface PortfolioDependencyStatus {
+  oracle: string;
+  outlook: string;
+  whatsapp: string;
+}
+
 export interface PortfolioHealthItem {
   catalog_id: string;
   automation_id: number | null;
@@ -314,14 +321,27 @@ export interface PortfolioHealthItem {
   queue_group: string | null;
   sla_minutes: number | null;
   health_status: string;
-  sla_state: string;
+  sla_state: string; // ok | at_risk | violated | unknown — ver lib/status.ts slaTone()
   docs_status: string;
   drift_status: string;
   drift_count: number;
+  runbook_path: string | null;
+  readme_path: string | null;
+  context_path: string | null;
   next_run: string | null;
   schedule_summary: string | null;
+  schedule_lag_minutes: number | null;
+  schedule_lag_seconds: number | null;
   last_status: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_success_age_minutes: number | null;
+  last_failure_age_minutes: number | null;
+  last_success_age_seconds: number | null;
+  last_failure_age_seconds: number | null;
   review_status: string;
+  review_reasons: string[];
+  dependency_status: PortfolioDependencyStatus;
 }
 
 export interface PortfolioHealth {
@@ -734,6 +754,8 @@ export const orchestratorApi = {
 
   // ── Portfólio ──
   getPortfolioHealth: (signal?: AbortSignal) => api.get<PortfolioHealth>("/api/portfolio/health", signal),
+  getPortfolioRunbook: (catalogId: string, signal?: AbortSignal) =>
+    api.getText(`/api/portfolio/runbook/${encodeURIComponent(catalogId)}`, signal),
 
   // ── Beneficiamento ──
   getBeneficiamentoDashboard: () => api.get<BeneficiamentoDashboard>("/api/beneficiamento/dashboard"),

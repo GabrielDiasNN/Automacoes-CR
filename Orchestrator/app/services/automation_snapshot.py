@@ -92,6 +92,7 @@ def build_automation_response(
     auto_resp.failures_24h = failures_24h
     auto_resp.timeouts_24h = timeouts_24h
     auto_resp.error_24h = failures_24h
+    auto_resp.avg_duration_24h_seconds = metrics_row.get("avg_duration_24h_seconds")
     auto_resp.active_execution_count = active_execution_count
     auto_resp.pending_count = active_execution_count
     auto_resp.operational_state = _resolve_operational_state(

@@ -122,6 +122,39 @@ export function criticalityTone(crit: string | null | undefined): Tone {
   }
 }
 
+/** `Automation.operational_state` (backend, automation_snapshot.py
+ *  `_resolve_operational_state`) → tom. Usado como fonte da lâmpada de
+ *  status no card de automação — antes calculada localmente no front a
+ *  partir só de `enabled`, ignorando execução em andamento/falha recente
+ *  que o backend já resolve. */
+export function operationalTone(state: string | null | undefined): Tone {
+  switch (state?.toLowerCase()) {
+    case "healthy":
+      return "green";
+    case "in_progress":
+      return "cyan";
+    case "attention":
+      return "amber";
+    case "paused":
+    case "idle":
+    default:
+      return "grey";
+  }
+}
+
+const OPERATIONAL_STATE_LABEL: Record<string, string> = {
+  healthy: "saudável",
+  in_progress: "em execução",
+  attention: "atenção",
+  paused: "pausada",
+  idle: "ociosa",
+};
+
+export function operationalStateLabel(state: string | null | undefined): string {
+  if (!state) return "—";
+  return OPERATIONAL_STATE_LABEL[state.toLowerCase()] ?? state;
+}
+
 const HEALTH_LABEL: Record<string, string> = {
   healthy: "saudável",
   ok: "saudável",

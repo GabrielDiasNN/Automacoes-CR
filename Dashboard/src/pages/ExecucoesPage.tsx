@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, RotateCw, Square, RefreshCw } from "lucide-react";
 import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
 import {
@@ -28,8 +28,16 @@ const PER_PAGE = 25;
 
 export function ExecucoesPage() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
+  // Vem do card de Automações ("ver execuções") — filtra sem exigir que o
+  // operador conheça o nome exato para digitar em algum campo de busca.
+  const [automationId] = useState<number | undefined>(() => {
+    const raw = searchParams.get("automation_id");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  });
   const [pageNum, setPageNum] = useState(1);
 
   const [detail, setDetail] = useState<(Partial<ExecutionDetail> & { id: string }) | null>(null);
@@ -51,10 +59,11 @@ export function ExecucoesPage() {
           page: pageNum,
           per_page: PER_PAGE,
           status: status || undefined,
+          automation_id: automationId,
         },
         signal,
       ),
-    [pageNum, status],
+    [pageNum, status, automationId],
   );
   const {
     data,
@@ -63,7 +72,7 @@ export function ExecucoesPage() {
     refresh: load,
     lastUpdated,
     rateLimitedUntil,
-  } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status]);
+  } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status, automationId]);
 
   const openDetail = useCallback(
     async (id: string) => {
@@ -225,6 +234,27 @@ export function ExecucoesPage() {
         title="Execuções"
         actions={
           <div className={page.toolbar}>
+            {automationId != null && (
+              <StatusTag tone="cyan" dot>
+                {data?.items[0]?.automation_name ?? `automação #${automationId}`}
+                <button
+                  type="button"
+                  onClick={() => navigate("/execucoes")}
+                  aria-label="Limpar filtro de automação"
+                  style={{
+                    marginLeft: 6,
+                    border: "none",
+                    background: "none",
+                    color: "inherit",
+                    cursor: "pointer",
+                    font: "inherit",
+                    padding: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              </StatusTag>
+            )}
             <Select
               value={status}
               onChange={(e) => {
