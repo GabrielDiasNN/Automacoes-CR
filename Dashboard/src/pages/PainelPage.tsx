@@ -161,6 +161,7 @@ export function PainelPage() {
                   tone={baselineTone(m.status)}
                   active={m.status !== "healthy"}
                   blink={m.status === "incident"}
+                  statusLabel={healthLabel(m.status)}
                 />
               ))}
             </AnnunciatorGrid>

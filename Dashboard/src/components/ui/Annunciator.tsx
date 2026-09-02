@@ -10,12 +10,16 @@ interface AnnunciatorProps {
   active?: boolean;
   /** pisca quando aceso (alarme) */
   blink?: boolean;
+  /** Palavra do estado (ex.: "atenção", "incidente") — antes a severidade era
+   *  comunicada só pela cor da lâmpada e pela piscada; renderizada quando
+   *  `active`, ao lado da legenda. */
+  statusLabel?: string;
   onClick?: () => void;
 }
 
 /** Tile de anunciador (estilo painel de planta): acende/pisca em alarme.
  *  Linguagem de alerta recorrente — codifica severidade real. */
-export function Annunciator({ legend, value, tone, active, blink, onClick }: AnnunciatorProps) {
+export function Annunciator({ legend, value, tone, active, blink, statusLabel, onClick }: AnnunciatorProps) {
   const color = toneVar[tone];
   const Tag = onClick ? "button" : "div";
   return (
@@ -36,6 +40,7 @@ export function Annunciator({ legend, value, tone, active, blink, onClick }: Ann
         style={{ background: active ? color : "var(--graphite-700)" }}
       />
       <span className={styles.legend}>{legend}</span>
+      {active && statusLabel && <span className={styles.status}>{statusLabel}</span>}
       {value != null && <span className={styles.value}>{value}</span>}
     </Tag>
   );

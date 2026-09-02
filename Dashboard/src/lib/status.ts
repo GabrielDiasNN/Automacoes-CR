@@ -21,6 +21,18 @@ export const toneTint: Record<Tone, string> = {
   grey: "var(--grey-tint)",
 };
 
+/** Cor do halo de `animation: pulse-ring` (StatusTag/Annunciator com `pulse`).
+ *  Sem isso o keyframe usava --amber-glow fixo: um StatusTag vermelho com
+ *  `pulse` pulsava âmbar, dessincronizado do próprio tom que estava exibindo. */
+export const toneGlow: Record<Tone, string> = {
+  cyan: "var(--cyan-glow)",
+  amber: "var(--amber-glow)",
+  green: "var(--green-glow)",
+  red: "var(--red-glow)",
+  blue: "var(--blue-glow)",
+  grey: "var(--grey-glow)",
+};
+
 /** Estado de execução → tom. */
 export function executionTone(status: string): Tone {
   switch (status?.toUpperCase()) {

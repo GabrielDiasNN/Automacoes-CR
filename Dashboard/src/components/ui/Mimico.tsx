@@ -23,8 +23,13 @@ function Pipe({ running }: { running: boolean }) {
 /** Mímico Operacional — painel sinótico vivo da orquestração.
  *  fontes → filas (serializadas) → worker → resultado 24h. */
 export function Mimico({ sources, lanes, worker, outcomes, running }: MimicoProps) {
+  // `role="group"` (não "img"): o painel É composto de texto/números reais
+  // (fontes, filas, worker, resultado 24h) — "img" podaria tudo isso da
+  // árvore de acessibilidade e o leitor de tela só ouviria o aria-label
+  // genérico, perdendo exatamente os dados que o painel existe para mostrar.
+  // "group" preserva os filhos e ainda nomeia o conjunto.
   return (
-    <div className={styles.synoptic} role="img" aria-label="Mímico operacional da orquestração">
+    <div className={styles.synoptic} role="group" aria-label="Mímico operacional da orquestração">
       {/* Fontes */}
       <div className={styles.node}>
         <div className={styles.nodeLabel}>
