@@ -132,6 +132,7 @@ export function AutomacoesPage() {
     refresh: load,
     lastUpdated,
     rateLimitedUntil,
+    refreshQueued,
   } = usePolling(fetchAutomacoesData, 15_000);
   const items = useMemo(() => data?.items ?? [], [data]);
   const portfolio = data?.portfolio ?? null;
@@ -220,7 +221,12 @@ export function AutomacoesPage() {
         title="Automações"
         actions={
           <div className={page.toolbar}>
-            <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && err ? err : null}
+              rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
+            />
             {portfolioFailed && (
               <StatusTag tone="grey" dot>
                 criticidade indisponível

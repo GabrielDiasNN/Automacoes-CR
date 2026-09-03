@@ -202,6 +202,7 @@ export function BeneficiamentoPage() {
     refresh: reloadOverview,
     lastUpdated: overviewUpdated,
     rateLimitedUntil,
+    refreshQueued,
   } = usePolling<BeneficiamentoOverview>(fetchOverview, 30_000, [overviewParams]);
 
   const {
@@ -264,6 +265,7 @@ export function BeneficiamentoPage() {
               lastUpdated={overviewUpdated}
               error={overview && overviewError ? overviewError : null}
               rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
             />
             <Select
               value={refreshPeriod}

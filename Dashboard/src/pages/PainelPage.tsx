@@ -60,7 +60,7 @@ function ExecRow({ ex, onClick }: { ex: ExecutionSummary; onClick: () => void })
 
 export function PainelPage() {
   const navigate = useNavigate();
-  const { data, loading, error, lastUpdated, rateLimitedUntil } = usePolling(
+  const { data, loading, error, lastUpdated, rateLimitedUntil, refreshQueued } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     10_000,
   );
@@ -111,7 +111,12 @@ export function PainelPage() {
         title="Painel"
         actions={
           <div className={page.toolbar}>
-            <FreshnessTag lastUpdated={lastUpdated} error={data && error ? error : null} rateLimitedUntil={rateLimitedUntil} />
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && error ? error : null}
+              rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
+            />
             <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
               sistema {healthLabel(health.status)}
             </StatusTag>

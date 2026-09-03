@@ -327,4 +327,32 @@ describe("usePolling", () => {
     expect(result.current.rateLimitedUntil).toBeNull();
     expect(result.current.error).toBeNull();
   });
+
+  it("refresh durante a janela de 429 enfileira em vez de virar no-op silencioso", async () => {
+    const fetcher = vi.fn().mockRejectedValueOnce(new ApiError(429, "limite", 10));
+    const { result } = renderHook(() => usePolling(fetcher, 0)); // sem intervalo
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.current.refreshQueued).toBe(false);
+
+    // Operador dispara um refresh manual DENTRO da janela — antes: no-op mudo.
+    fetcher.mockResolvedValue("fresco");
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1); // não bateu no backend ainda
+    expect(result.current.refreshQueued).toBe(true);
+    expect(result.current.loading).toBe(false); // não ficou preso
+
+    // Passada a janela, o refresh enfileirado dispara sozinho.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_100);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toBe("fresco");
+    expect(result.current.refreshQueued).toBe(false);
+  });
 });

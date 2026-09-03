@@ -25,7 +25,7 @@ import { extractTimeBr, formatAge } from "../lib/format";
 import page from "./page.module.css";
 
 export function SystemPage() {
-  const { data, loading, error, refresh, lastUpdated, rateLimitedUntil } = usePolling(
+  const { data, loading, error, refresh, lastUpdated, rateLimitedUntil, refreshQueued } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     15_000,
   );
@@ -81,6 +81,7 @@ export function SystemPage() {
               lastUpdated={lastUpdated}
               error={data && error ? error : null}
               rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
             />
             <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
               {healthLabel(health.status)}

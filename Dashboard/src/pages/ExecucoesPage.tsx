@@ -79,6 +79,7 @@ export function ExecucoesPage() {
     refresh: load,
     lastUpdated,
     rateLimitedUntil,
+    refreshQueued,
   } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status, automationId]);
 
   const openDetail = useCallback(
@@ -284,7 +285,12 @@ export function ExecucoesPage() {
                 </option>
               ))}
             </Select>
-            <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && err ? err : null}
+              rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
+            />
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={() => void load()}>
               Atualizar
             </Button>
