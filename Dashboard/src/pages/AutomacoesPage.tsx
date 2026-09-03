@@ -22,11 +22,11 @@ import {
 } from "../components/ui";
 import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
+import { useAsyncResource } from "../hooks/useAsyncResource";
 import { criticalityTone, executionTone, operationalStateLabel, operationalTone, slaTone } from "../lib/status";
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
 import styles from "./AutomacoesPage.module.css";
-import { errMessage } from "../lib/errors";
 
 interface AutomacoesData {
   items: Automation[];
@@ -71,37 +71,19 @@ function attentionRank(a: Automation, p: PortfolioHealthItem | undefined): numbe
   return 3;
 }
 
-function RunbookDrawer({
-  target,
-  onClose,
-}: {
-  target: { catalogId: string; name: string } | null;
-  onClose: () => void;
-}) {
-  const [content, setContent] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!target) return;
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    orchestratorApi
-      .getPortfolioRunbook(target.catalogId, controller.signal)
-      .then((text) => setContent(text))
-      .catch((e) => {
-        if (controller.signal.aborted) return;
-        setError(errMessage(e));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [target]);
+/** Corpo interno: `useAsyncResource` (aborto real, guarda de sequência). O pai
+ *  monta com `key={catalogId}` para o estado de loading reiniciar a cada alvo
+ *  — o `.then/.catch/.finally` anterior não cancelava de verdade, só descartava
+ *  o resultado. */
+function RunbookBody({ catalogId }: { catalogId: string }) {
+  const fetcher = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getPortfolioRunbook(catalogId, signal),
+    [catalogId],
+  );
+  const { data: content, loading, error } = useAsyncResource(fetcher, [catalogId]);
 
   return (
-    <Drawer open={!!target} onClose={onClose} eyebrow="// runbook" title={target?.name} width={720}>
+    <>
       {loading && <Loading label="lendo runbook" />}
       {error && <ErrorState message={error} />}
       {!loading && !error && content && (
@@ -119,6 +101,20 @@ function RunbookDrawer({
           {content}
         </pre>
       )}
+    </>
+  );
+}
+
+function RunbookDrawer({
+  target,
+  onClose,
+}: {
+  target: { catalogId: string; name: string } | null;
+  onClose: () => void;
+}) {
+  return (
+    <Drawer open={!!target} onClose={onClose} eyebrow="// runbook" title={target?.name} width={720}>
+      {target && <RunbookBody key={target.catalogId} catalogId={target.catalogId} />}
     </Drawer>
   );
 }

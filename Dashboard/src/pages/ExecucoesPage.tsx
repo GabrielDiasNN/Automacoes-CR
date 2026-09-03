@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RotateCw, Square, RefreshCw } from "lucide-react";
-import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
+import { orchestratorApi, type ExecutionSummary, type Paginated } from "../api/orchestrator";
 import {
   Button,
   Card,
@@ -20,11 +20,11 @@ import {
 } from "../components/ui";
 import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
+import { useAsyncResource } from "../hooks/useAsyncResource";
 import { executionTone, severityTone, toneVar } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
 import page from "./page.module.css";
-import { errMessage } from "../lib/errors";
 
 const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED", "EXPIRED"];
 const PER_PAGE = 25;
@@ -47,17 +47,8 @@ export function ExecucoesPage() {
   });
   const [pageNum, setPageNum] = useState(1);
 
-  const [detail, setDetail] = useState<(Partial<ExecutionDetail> & { id: string }) | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
-
-  // Guarda de sequência + AbortController, mesmo padrão do `usePolling`: sem
-  // isso, clicar em A e depois em B antes da resposta de A chegar podia fazer
-  // `setDetail(dA)` rodar por último — o operador acabava confirmando "Parar" /
-  // "Reenfileirar" sobre A tendo aberto B (ação em automação de produção).
-  const detailSeqRef = useRef(0);
-  const detailAbortRef = useRef<AbortController | null>(null);
-  useEffect(() => () => detailAbortRef.current?.abort(), []);
 
   const fetchExecutions = useCallback(
     (signal?: AbortSignal) =>
@@ -82,31 +73,31 @@ export function ExecucoesPage() {
     refreshQueued,
   } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status, automationId]);
 
-  const openDetail = useCallback(
-    async (id: string) => {
-      const seq = ++detailSeqRef.current;
-      const isLatest = () => detailSeqRef.current === seq;
-      detailAbortRef.current?.abort();
-      const controller = new AbortController();
-      detailAbortRef.current = controller;
-
-      setDetailLoading(true);
-      setDetail({ id });
-      try {
-        const d = await orchestratorApi.getExecution(id, controller.signal);
-        if (!isLatest()) return;
-        setDetail(d);
-      } catch (e) {
-        if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
-        if (!isLatest()) return;
-        toast(errMessage(e), "red");
-        setDetail(null);
-      } finally {
-        if (isLatest()) setDetailLoading(false);
-      }
-    },
-    [toast],
+  // Detalhe da execução via useAsyncResource: aborto e guarda de sequência (o
+  // fetch manual anterior os reimplementava à mão — clicar A depois B antes de
+  // A voltar podia fazer `setDetail(dA)` rodar por último, e o operador
+  // confirmava "Parar"/"Reenfileirar" sobre A tendo B na tela). Fechar o drawer
+  // (`selectedId = null`) zera o `data`, então reabrir B nunca mostra A.
+  const detailFetcher = useCallback(
+    (signal?: AbortSignal) =>
+      selectedId ? orchestratorApi.getExecution(selectedId, signal) : Promise.resolve(null),
+    [selectedId],
   );
+  const {
+    data: detailData,
+    loading: detailLoading,
+    error: detailError,
+  } = useAsyncResource(selectedId ? detailFetcher : null, [selectedId]);
+
+  useEffect(() => {
+    if (detailError) {
+      toast(detailError, "red");
+      setSelectedId(null);
+    }
+  }, [detailError, toast]);
+
+  // Só renderiza o detalhe que corresponde ao alvo atual.
+  const detail = detailData && detailData.id === selectedId ? detailData : null;
 
   const { run: runExecAction } = useAction<string>();
 
@@ -310,7 +301,7 @@ export function ExecucoesPage() {
             columns={columns}
             rows={data?.items ?? []}
             rowKey={(r) => r.id}
-            onRowClick={(r) => void openDetail(r.id)}
+            onRowClick={(r) => setSelectedId(r.id)}
             rowTone={(r) => (r.operator_attention_required ? toneVar[severityTone(r.operator_severity)] : undefined)}
           />
         )}
@@ -327,19 +318,19 @@ export function ExecucoesPage() {
       />
 
       <Drawer
-        open={!!detail}
-        onClose={() => setDetail(null)}
-        eyebrow={detail ? shortId(detail.id, 22) : ""}
+        open={!!selectedId}
+        onClose={() => setSelectedId(null)}
+        eyebrow={selectedId ? shortId(selectedId, 22) : ""}
         title={detail?.automation_name ?? "Execução"}
         width={860}
       >
-        {detail &&
-          (detail.started_at ? (
+        {selectedId &&
+          (detail ? (
             <ExecDetailBody
-              detail={detail as ExecutionDetail}
+              detail={detail}
               loading={detailLoading}
-              onStop={() => setConfirmStop(detail.id)}
-              onRequeue={() => doRequeue(detail.id)}
+              onStop={() => setConfirmStop(selectedId)}
+              onRequeue={() => doRequeue(selectedId)}
             />
           ) : (
             <div style={{ padding: "var(--sp-4)" }}>
