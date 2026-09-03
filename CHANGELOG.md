@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.67] - 02/09/2026
+
+### Alterado
+
+Onda 4 da revisão geral do frontend (ver [1.3.64]–[1.3.66]) — deduplicação e limpeza do design system.
+
+- **`hooks/useAction.ts`** substitui o padrão "busy → toast de sucesso/erro → refresh" duplicado 5x (`AutomacoesPage`, `SystemPage`, `ExecucoesPage` ×2, `BeneficiamentoPage`), cada cópia divergindo em nome de variável e ordem. Achado real durante os testes do hook: a condição usava `??` em vez de `||`, então uma API que devolvesse `message: ""` (string vazia) não caía no `fallbackMessage`.
+- **`hooks/useAsyncResource.ts`** substitui o padrão `let cancelled = false; .then/.catch/.finally` duplicado 4x (`DetailDrawer`, `TingimentoPanel`, `ProductAutocomplete`, `CommandPalette`) — nenhuma cópia cancelava a requisição de verdade, só descartava o resultado (a chamada continuava trafegando e consumindo bucket de rate limit). Reaproveita a lógica já testada de `usePolling` (guarda de sequência, `AbortController`) com `intervalMs=0`. `AbortSignal` adicionado aos 4 endpoints envolvidos, que não aceitavam antes. De quebra, corrige um bug latente: `DetailDrawer` tinha um `eslint-disable` manual omitindo `contextFilters` das deps do fetch — mudar o filtro de contexto com o drawer aberto não refazia a busca.
+- **`extractTimeBr`** (`lib/format.ts`) substitui as duas heurísticas posicionais que coexistiam para o mesmo campo (`SystemHistoryPoint.timestamp`): `MonitorPage` usava `.slice(11,16)`, `SystemPage` usava `.split(" ")[1].slice(0,5)`. Ambas coincidem no formato normal, mas a segunda quebrava silenciosamente se `format_dt_br` (backend) falhasse em parsear — mostraria o ano em vez da hora. Teste novo cobre esse caso.
+- **`lib/errors.ts` (`errMessage`)** substitui o padrão `e instanceof Error ? e.message : String(e)`, duplicado em 11 pontos do app.
+- **`components/ui/DescriptionList.tsx`** substitui o componente `KV` copiado inteiro em `SystemPage` e `ExecucoesPage.ExecDetailBody` (divergiam só no `fontFamily` do valor).
+- **`components/ui/Pager.tsx`** substitui o bloco de paginação Anterior/Próxima duplicado com dois componentes de botão diferentes e duas grafias do separador ("/" vs "de"), unificado no formato mais informativo (rótulo textual em vez de ícone isolado).
+- **`Annunciator.onClick`** removido — prop nunca usada externamente; simplificado de volta para sempre `<div>`.
+- Avaliado e descartado: aplicar a classe global `.label-mono` (que tem `text-transform: uppercase` embutido — correto para rótulos como "PID"/"UPTIME") aos pontos restantes com o mesmo objeto de estilo inline — esses são **valores** (id de execução, duração, "prio N"), não rótulos; aplicar teria sido regressão visual, não limpeza.
+- **Decisão documentada, não implementada nesta rodada:** migrar `ApiKeyGate` para `Card`/`Input` do design system (a11y e responsividade já resolvidas na Onda 2) e criar um componente `Lamp` genérico para as 6 implementações de lâmpada — contextos de animação/posicionamento heterogêneos demais para uma abstração seguro sem risco de regressão visual desproporcional a um ganho puramente cosmético.
+- **Regra de `localStorage` esclarecida em `CLAUDE.md`:** o veto (`useApiKey.test.ts`) é sobre a **credencial**, não uma proibição geral — `TableDensityContext` usa `localStorage` legitimamente para uma preferência de UI benigna que deve persistir entre sessões.
+- Verificação: `tsc`/`eslint`/125 testes vitest limpos (6 novos: `useAction`, `extractTimeBr`). Build + smoke test das 6 rotas, 0 erro de console. Playwright confirmou em produção: `Pager` navegando "página 1 / 142" → "página 2 / 142" contra os 3549 registros reais; `ProductAutocomplete` disparando a requisição e populando opções reais.
+
 ## [1.3.66] - 02/09/2026
 
 ### Alterado
