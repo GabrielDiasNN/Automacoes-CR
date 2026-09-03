@@ -17,9 +17,8 @@ import {
   Nameplate,
   StatTile,
   StatusTag,
-  TimeSeries,
-  type SeriesLine,
 } from "../components/ui";
+import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import { useAction } from "../hooks/useAction";
 import { healthTone, healthLabel } from "../lib/status";
 import { extractTimeBr, formatAge } from "../lib/format";

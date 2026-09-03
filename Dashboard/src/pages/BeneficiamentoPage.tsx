@@ -22,10 +22,9 @@ import {
   Sparkline,
   StatTile,
   StatusTag,
-  TimeSeries,
   type Column,
-  type SeriesLine,
 } from "../components/ui";
+import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import { DetailDrawer, type DetailDrawerRequest } from "../components/beneficiamento/DetailDrawer";
 import { Treemap } from "../components/beneficiamento/Treemap";
 import { TingimentoPanel } from "../components/beneficiamento/TingimentoPanel";

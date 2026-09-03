@@ -13,9 +13,8 @@ import {
   Sparkline,
   StatTile,
   StatusTag,
-  TimeSeries,
-  type SeriesLine,
 } from "../components/ui";
+import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import selectStyles from "../components/ui/Select.module.css";
 import { healthTone, healthLabel, type Tone } from "../lib/status";
 import { extractTimeBr } from "../lib/format";
