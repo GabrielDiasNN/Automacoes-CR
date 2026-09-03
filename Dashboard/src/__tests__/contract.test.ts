@@ -70,7 +70,7 @@ describe("contrato: listAllAutomations()", () => {
   it("devolve os campos que AutomacoesPage lê, incluindo avg_duration_24h_seconds (Onda 3)", async () => {
     const items = await orchestratorApi.listAllAutomations();
     expect(items.length).toBeGreaterThan(0);
-    const a = items[0];
+    const a = items[0]!;
     expect(a.operational_state).toBeTypeOf("string");
     expect(a.active_execution_count).toBeTypeOf("number");
     expect(a.success_24h).toBeTypeOf("number");
@@ -96,7 +96,7 @@ describe("contrato: getPortfolioHealth()", () => {
   it("devolve os campos que o card de Automações lê para SLA/runbook (Onda 3)", async () => {
     const portfolio = await orchestratorApi.getPortfolioHealth();
     expect(portfolio.items.length).toBeGreaterThan(0);
-    const item = portfolio.items[0];
+    const item = portfolio.items[0]!;
     expect(item.sla_state).toBeTypeOf("string");
     expect(item.criticality).toBeTypeOf("string");
     expect(item).toHaveProperty("runbook_path");

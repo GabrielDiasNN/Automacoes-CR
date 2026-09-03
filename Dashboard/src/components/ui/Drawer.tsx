@@ -8,8 +8,10 @@ import styles from "./Drawer.module.css";
 interface DrawerProps {
   open: boolean;
   onClose: () => void;
-  title?: string;
-  eyebrow?: string;
+  // `| undefined` explicito p/ `exactOptionalPropertyTypes`: call sites passam
+  // `title={data?.nome}` (string | undefined).
+  title?: string | undefined;
+  eyebrow?: string | undefined;
   children: ReactNode;
   width?: number;
 }

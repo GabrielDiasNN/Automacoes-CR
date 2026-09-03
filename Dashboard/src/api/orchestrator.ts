@@ -677,26 +677,30 @@ export interface BeneficiamentoDetail {
   raw_records: Record<string, unknown>[];
 }
 
+// `| undefined` explicito em todo campo opcional: os call sites montam o objeto
+// como `{ maquina: filtro.maquina || undefined, ... }` — idioma que
+// `exactOptionalPropertyTypes` rejeita sem o `| undefined`. `qs()` (client.ts)
+// ja descarta undefined/null/"" ao serializar.
 export interface BeneficiamentoOverviewParams {
-  dt_inicio?: string;
-  dt_fim?: string;
-  maquina?: string;
-  fase?: string;
-  turno?: string;
-  alternativo?: string;
-  q?: string;
-  setor?: string;
-  grupo_fase?: string;
-  tipo_maquina?: string;
-  reprocesso?: string;
-  status?: string;
+  dt_inicio?: string | undefined;
+  dt_fim?: string | undefined;
+  maquina?: string | undefined;
+  fase?: string | undefined;
+  turno?: string | undefined;
+  alternativo?: string | undefined;
+  q?: string | undefined;
+  setor?: string | undefined;
+  grupo_fase?: string | undefined;
+  tipo_maquina?: string | undefined;
+  reprocesso?: string | undefined;
+  status?: string | undefined;
 }
 
 export interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams {
   target_type: BeneficiamentoTargetType;
-  ob?: string;
-  page?: number;
-  limit?: number;
+  ob?: string | undefined;
+  page?: number | undefined;
+  limit?: number | undefined;
 }
 
 /* ============================================================================
@@ -727,7 +731,12 @@ export const orchestratorApi = {
 
   // ── Execuções ──
   listExecutions: (
-    params?: { page?: number; per_page?: number; status?: string; automation_id?: number },
+    params?: {
+      page?: number | undefined;
+      per_page?: number | undefined;
+      status?: string | undefined;
+      automation_id?: number | undefined;
+    },
     signal?: AbortSignal,
   ) => api.get<Paginated<ExecutionSummary>>(`/api/executions${qs({ ...params })}`, signal),
   recentExecutions: (limit = 10) =>

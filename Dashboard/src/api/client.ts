@@ -96,21 +96,24 @@ export function qs(params: Record<string, string | number | boolean | undefined 
 export const api = {
   /** `signal` permite cancelar a requisição — ver usePolling, que aborta o
    *  fetch anterior ao trocar de parâmetros ou desmontar. */
-  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
-  getText: (path: string, signal?: AbortSignal) => requestText(path, { signal }),
+  // `signal ?? null` / `body ?? null`: `RequestInit` aceita `null` mas nao
+  // `undefined` sob `exactOptionalPropertyTypes`.
+  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal: signal ?? null }),
+  getText: (path: string, signal?: AbortSignal) => requestText(path, { signal: signal ?? null }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     request<T>(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal,
+      body: body !== undefined ? JSON.stringify(body) : null,
+      signal: signal ?? null,
     }),
   put: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     request<T>(path, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal,
+      body: body !== undefined ? JSON.stringify(body) : null,
+      signal: signal ?? null,
     }),
-  delete: <T>(path: string, signal?: AbortSignal) => request<T>(path, { method: "DELETE", signal }),
+  delete: <T>(path: string, signal?: AbortSignal) =>
+    request<T>(path, { method: "DELETE", signal: signal ?? null }),
 };

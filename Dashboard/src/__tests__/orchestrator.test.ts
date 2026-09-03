@@ -52,7 +52,7 @@ describe("orchestratorApi", () => {
 
     await orchestratorApi.getExecution("EXEC_1", controller.signal);
 
-    const [url, init] = mockFetch.mock.calls[0];
+    const [url, init] = mockFetch.mock.calls[0]!;
     expect(url).toContain("/api/executions/EXEC_1");
     // `client.ts` combina o signal do chamador com um timeout via
     // `AbortSignal.any` (achado nº 5, Onda 1) — não é mais o MESMO objeto,

@@ -240,8 +240,8 @@ describe("usePolling", () => {
     });
 
     expect(sinais).toHaveLength(2);
-    expect(sinais[0].aborted).toBe(true); // o anterior foi cancelado
-    expect(sinais[1].aborted).toBe(false); // o atual segue em voo
+    expect(sinais[0]!.aborted).toBe(true); // o anterior foi cancelado
+    expect(sinais[1]!.aborted).toBe(false); // o atual segue em voo
   });
 
   it("aborta o fetch em voo no unmount", async () => {
@@ -255,7 +255,7 @@ describe("usePolling", () => {
     unmount();
 
     expect(sinais).toHaveLength(1);
-    expect(sinais[0].aborted).toBe(true);
+    expect(sinais[0]!.aborted).toBe(true);
   });
 
   it("não expõe o cancelamento como erro de tela", async () => {

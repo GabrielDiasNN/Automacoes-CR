@@ -58,7 +58,7 @@ describe("api.get", () => {
 
     await api.get("/api/system/health");
 
-    const [, init] = mockFetch.mock.calls[0];
+    const [, init] = mockFetch.mock.calls[0]!;
     expect((init.headers as Record<string, string>)["X-API-Key"]).toBe("chave-teste");
   });
 

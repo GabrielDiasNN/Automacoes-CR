@@ -5,7 +5,9 @@ import styles from "./StatTile.module.css";
 interface StatTileProps {
   label: string;
   value: ReactNode;
-  tone?: Tone;
+  // `| undefined` explicito: os call sites passam `cond ? "amber" : undefined`,
+  // idioma que `exactOptionalPropertyTypes` rejeita sem isso.
+  tone?: Tone | undefined;
   hint?: ReactNode;
   /** leitura grande de instrumento (mono tabular) */
   big?: boolean;

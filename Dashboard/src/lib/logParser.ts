@@ -17,10 +17,12 @@ export interface LogLine {
   time: string | null;
   source: string | null;
   message: string;
-  /** Presentes apenas quando a linha é um evento estruturado. */
-  event?: string;
-  step?: string;
-  traceId?: string;
+  /** Presentes apenas quando a linha é um evento estruturado. `| undefined`
+   *  explícito para `exactOptionalPropertyTypes` — `parseEnvelope` monta o
+   *  objeto com `typeof x === "string" ? x : undefined`. */
+  event?: string | undefined;
+  step?: string | undefined;
+  traceId?: string | undefined;
 }
 
 // Ex.: [30/07/2026 08:30:05] [PS] [INFO] [ExecId:CRON_2_1785411000] mensagem...
@@ -128,7 +130,9 @@ export function parseLine(raw: string): LogLine {
   if (!match) {
     return { raw, level: "plain", time: null, source: null, message: raw };
   }
-  const [, time, source, levelToken, message] = match;
+  // Defaults cobrem o `string | undefined` de `noUncheckedIndexedAccess`; os 4
+  // grupos sao garantidos por um match bem-sucedido de LINE_RE.
+  const [, time = "", source = "", levelToken = "", message = ""] = match;
   return {
     raw,
     level: levelFromToken(levelToken),
@@ -144,8 +148,9 @@ export function parseLog(text: string): LogLine[] {
   for (const raw of text.split(/\r?\n/)) {
     if (!raw.trim()) continue;
     const parsed = parseLine(raw);
-    if (parsed.level === "plain" && lines.length && lines[lines.length - 1].level !== "plain") {
-      lines[lines.length - 1].message += `\n${raw}`;
+    const last = lines[lines.length - 1];
+    if (parsed.level === "plain" && last && last.level !== "plain") {
+      last.message += `\n${raw}`;
       continue;
     }
     lines.push(parsed);
