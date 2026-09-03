@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { orchestratorApi, type BeneficiamentoProdutoOption } from "../../api/orchestrator";
+import { orchestratorApi } from "../../api/orchestrator";
+import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { IconButton, Input } from "../ui";
 import styles from "./ProductAutocomplete.module.css";
@@ -16,32 +17,23 @@ export function ProductAutocomplete({ value, onSelect, onClear }: ProductAutocom
   const [term, setTerm] = useState("");
   const [selectedLabel, setSelectedLabel] = useState("");
   const [open, setOpen] = useState(false);
-  const [options, setOptions] = useState<BeneficiamentoProdutoOption[]>([]);
   const debouncedTerm = useDebouncedValue(term, 300);
   const containerRef = useRef<HTMLDivElement>(null);
+  const termoValido = debouncedTerm.trim().length >= 2;
 
   useEffect(() => {
     if (!value) setSelectedLabel("");
   }, [value]);
 
-  useEffect(() => {
-    if (debouncedTerm.trim().length < 2) {
-      setOptions([]);
-      return undefined;
-    }
-    let cancelled = false;
-    orchestratorApi
-      .getBeneficiamentoProdutos(debouncedTerm.trim())
-      .then((res) => {
-        if (!cancelled) setOptions(res.items);
-      })
-      .catch(() => {
-        if (!cancelled) setOptions([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedTerm]);
+  const fetchProdutos = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getBeneficiamentoProdutos(debouncedTerm.trim(), signal),
+    [debouncedTerm],
+  );
+  // Erro descartado deliberadamente (`?? []`): autocomplete sem sugestões é
+  // uma UX aceitável para uma falha transitória de busca — não vale um
+  // ErrorState dentro do dropdown.
+  const { data } = useAsyncResource(termoValido ? fetchProdutos : null, [debouncedTerm]);
+  const options = data?.items ?? [];
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {

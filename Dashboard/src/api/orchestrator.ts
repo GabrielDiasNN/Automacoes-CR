@@ -705,8 +705,10 @@ export interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams
 
 export const orchestratorApi = {
   // ── Automações ──
-  listAutomations: (params?: { page?: number; per_page?: number; search?: string; sort?: string; order?: string }) =>
-    api.get<Paginated<Automation>>(`/api/automations${qs({ ...params })}`).then((r) => r.items),
+  listAutomations: (
+    params?: { page?: number; per_page?: number; search?: string; sort?: string; order?: string },
+    signal?: AbortSignal,
+  ) => api.get<Paginated<Automation>>(`/api/automations${qs({ ...params })}`, signal).then((r) => r.items),
   listAllAutomations: (signal?: AbortSignal) => api.get<Automation[]>("/api/automations/all", signal),
   getAutomation: (id: number) => api.get<Automation>(`/api/automations/${id}`),
   getAutomationOverview: (id: number) =>
@@ -763,12 +765,12 @@ export const orchestratorApi = {
     api.get<BeneficiamentoHealth>("/api/beneficiamento/health", signal),
   getBeneficiamentoOverview: (params?: BeneficiamentoOverviewParams, signal?: AbortSignal) =>
     api.get<BeneficiamentoOverview>(`/api/beneficiamento/overview${qs({ ...params })}`, signal),
-  getBeneficiamentoDetail: (params: BeneficiamentoDetailParams) =>
-    api.get<BeneficiamentoDetail>(`/api/beneficiamento/detail${qs({ ...params })}`),
-  getBeneficiamentoProdutos: (q: string) =>
-    api.get<BeneficiamentoProdutosResponse>(`/api/beneficiamento/produtos${qs({ q })}`),
-  getBeneficiamentoTingimento: (params?: { dt_inicio?: string; dt_fim?: string }) =>
-    api.get<BeneficiamentoTingimento>(`/api/beneficiamento/tingimento${qs({ ...params })}`),
+  getBeneficiamentoDetail: (params: BeneficiamentoDetailParams, signal?: AbortSignal) =>
+    api.get<BeneficiamentoDetail>(`/api/beneficiamento/detail${qs({ ...params })}`, signal),
+  getBeneficiamentoProdutos: (q: string, signal?: AbortSignal) =>
+    api.get<BeneficiamentoProdutosResponse>(`/api/beneficiamento/produtos${qs({ q })}`, signal),
+  getBeneficiamentoTingimento: (params?: { dt_inicio?: string; dt_fim?: string }, signal?: AbortSignal) =>
+    api.get<BeneficiamentoTingimento>(`/api/beneficiamento/tingimento${qs({ ...params })}`, signal),
   refreshBeneficiamento: (period: string) =>
     api.post<Record<string, unknown>>(`/api/beneficiamento/refresh${qs({ period })}`),
 };

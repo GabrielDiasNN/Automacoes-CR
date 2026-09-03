@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Search, Workflow } from "lucide-react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useAsyncResource } from "../hooks/useAsyncResource";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { orchestratorApi, type Automation } from "../api/orchestrator";
 import styles from "./CommandPalette.module.css";
@@ -30,8 +31,8 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
-  const [automations, setAutomations] = useState<Automation[]>([]);
   const debouncedQuery = useDebouncedValue(query, 250);
+  const buscaAtiva = open && debouncedQuery.trim().length >= 2;
 
   useFocusTrap(boxRef, open, onClose);
 
@@ -39,29 +40,19 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
     if (!open) return;
     setQuery("");
     setSelected(0);
-    setAutomations([]);
     const id = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(id);
   }, [open]);
 
-  useEffect(() => {
-    if (!open || debouncedQuery.trim().length < 2) {
-      setAutomations([]);
-      return;
-    }
-    let cancelled = false;
-    orchestratorApi
-      .listAutomations({ search: debouncedQuery.trim(), per_page: 5 })
-      .then((items) => {
-        if (!cancelled) setAutomations(items);
-      })
-      .catch(() => {
-        if (!cancelled) setAutomations([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQuery, open]);
+  const fetchAutomations = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.listAutomations({ search: debouncedQuery.trim(), per_page: 5 }, signal),
+    [debouncedQuery],
+  );
+  // Erro descartado deliberadamente (`?? []`): a paleta sem resultados de
+  // automação ainda funciona para navegação por rota — não é um ErrorState
+  // que caiba num popover de busca.
+  const { data: automationResults } = useAsyncResource(buscaAtiva ? fetchAutomations : null, [debouncedQuery, open]);
+  const automations = useMemo(() => automationResults ?? [], [automationResults]);
 
   const entries: PaletteEntry[] = useMemo(() => {
     const q = query.trim().toLowerCase();

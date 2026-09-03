@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Factory } from "lucide-react";
 import {
   orchestratorApi,
@@ -9,9 +9,9 @@ import {
   type BeneficiamentoTraceFase,
 } from "../../api/orchestrator";
 import { Card, DataTable, Drawer, EmptyState, ErrorState, IconButton, Loading, StatTile, type Column } from "../ui";
+import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { formatDateTimeBr, formatNumber, formatPercent } from "../../lib/format";
 import styles from "./DetailDrawer.module.css";
-import { errMessage } from "../../lib/errors";
 
 /** Desvio relativo ao tempo previsto — normaliza fases curtas vs longas (ver análise em conversa). */
 function desvioPct(minReal: number, minPrev: number): number | null {
@@ -137,39 +137,21 @@ function TraceView({ trace }: { trace: BeneficiamentoDetail["trace"] }) {
 
 /** Painel de drill-down do Beneficiamento — consome /api/beneficiamento/detail sob demanda. */
 export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerProps) {
-  const [data, setData] = useState<BeneficiamentoDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     setPage(1);
-    setData(null);
   }, [request]);
 
-  useEffect(() => {
-    if (!request) return undefined;
-    let cancelled = false;
-    setLoading(true);
-    orchestratorApi
-      .getBeneficiamentoDetail(buildDetailParams(request, contextFilters, page))
-      .then((d) => {
-        if (cancelled) return;
-        setData(d);
-        setError(null);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(errMessage(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request, page]);
+  const fetchDetail = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getBeneficiamentoDetail(buildDetailParams(request!, contextFilters, page), signal),
+    [request, contextFilters, page],
+  );
+  // `contextFilters` agora entra nas deps — antes (eslint-disable manual)
+  // mudar o filtro de contexto com o drawer aberto não refazia o fetch
+  // (achado nº 14, Onda 4). `fetcher: null` (não `request` como argumento)
+  // é o que desliga o fetch quando o drawer está fechado.
+  const { data, loading, error } = useAsyncResource(request ? fetchDetail : null, [request, contextFilters, page]);
 
   return (
     <Drawer open={request != null} onClose={onClose} eyebrow="// drill-down" title={request?.label ?? ""} width={1080}>
