@@ -378,6 +378,54 @@ def test_e2e_dashboard_automations_visible(uvicorn_server: str, page: Any) -> No
     assert page.get_by_role("button", name="Disparar").first.is_visible()
 
 
+def _count_executions() -> int:
+    """Conta linhas de `executions` no banco de teste isolado (não a API)."""
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+        poolclass=NullPool,
+    )
+    try:
+        session = sessionmaker(bind=engine)()
+        try:
+            return session.query(models.Execution).count()
+        finally:
+            session.close()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_automations_dispatch_confirm_and_cancel(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Disparar exige confirmação (ConfirmModal); cancelar não enfileira execução alguma.
+
+    Achado nº 1, Onda 1 do plano de revisão geral do frontend: antes, Disparar
+    executava um script de produção com um único clique.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/automacoes")
+    page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    page.wait_for_selector("text=Receitas Bloqueadas")
+
+    antes = _count_executions()
+
+    page.get_by_role("button", name="Disparar Receitas Bloqueadas").click()
+    dialog = page.get_by_role("alertdialog")
+    dialog.wait_for(timeout=10_000)
+    page.get_by_role("heading", name="Disparar automação").wait_for(timeout=5_000)
+
+    page.get_by_role("button", name="Cancelar").click()
+    dialog.wait_for(state="hidden", timeout=5_000)
+
+    depois = _count_executions()
+    assert depois == antes, (
+        f"Cancelar no ConfirmModal não deve enfileirar execução — "
+        f"antes={antes} depois={depois}"
+    )
+
+
 @pytest.mark.e2e
 def test_e2e_dashboard_system_instruments(uvicorn_server: str, page: Any) -> None:
     """A tela de Sistema mostra os instrumentos (gauges), worker e ações de manutenção."""
