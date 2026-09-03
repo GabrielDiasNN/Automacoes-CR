@@ -24,9 +24,10 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 ## Estado atual
 
 - **Onda em curso:** 1 — Gates e fundação de build
-- **Terminal state:** em progresso
-- **Melhor commit conhecido da onda:** (nenhum ainda — baseline `c1c707d`)
+- **Terminal state:** Human Review Required — checkpoint (c) `npm run build` + (d) reinício/E2E
+- **Melhor commit conhecido da onda:** `e40e17a` (6 etapas de código completas, gates verdes)
 - **Iteração:** 1
+- **Bloqueio:** medição de bundle exige build (= deploy); E2E dos 4 screenshots exige subir a instância de teste. Aguardando OK humano.
 
 ## Histórico por onda
 
@@ -38,11 +39,11 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
   - [x] 1.2 `dd4157b` — vite.config: manualChunks/target/sourcemap/warnLimit
   - [x] 1.3 `e4deac3` — noUncheckedIndexedAccess + exactOptionalPropertyTypes (71 erros resolvidos; 2 latentes em logParser/useFocusTrap)
   - [x] 1.4 `16d2b18` — ESLint type-aware (3 regras `error` + 4 `warn`; 31 erros de promise, todos `void` no call site)
-  - [ ] 1.5 — unions do backend viram tipos literais
-  - [ ] 1.6 — contract tests: getOverview, getDiagnostics, listExecutions
+  - [x] 1.5 `720217f` — unions do backend viram tipos literais (ExecutionStatus, OperationalState, SlaStatus/SlaState, HealthStatus); achado: `attentionRank` comparava `sla_state` contra valores mortos
+  - [x] 1.6 `e40e17a` — contract tests getOverview + listExecutions (fixtures reais; 138 testes)
   - [ ] CHECKPOINT (c): `npm run build` para medir bundle
   - [ ] CHECKPOINT (d): `pytest -m e2e` (4 screenshots sem regenerar) + `driver.py smoke`
-- **Observação (lint/typecheck/test):** lint 0/0, typecheck 0, 130 testes vitest verdes após cada etapa
+- **Observação (lint/typecheck/test):** lint 0 erros / 0 warnings, typecheck 0, 138 testes vitest verdes, coverage exit 0
 - **Gaps:** medição de bundle e E2E pendentes de checkpoint humano
 
 ### Ondas 2–6
