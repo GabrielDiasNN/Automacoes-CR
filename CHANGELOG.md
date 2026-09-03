@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.72] - 03/09/2026
+
+Frontend rodada 2, Onda 2 — camada de dados: memória e menos requisição, sem framework novo. Os 4 baselines de screenshot passam **sem regeneração**.
+
+### Alterado
+
+- **`useDiagnostics` reescrito sobre `usePolling`.** Era o único hook do app sem `AbortController` nem guarda de sequência — e roda em toda aba aberta (tick de 10 s); uma resposta atrasada sobrescrevia uma mais nova. Agora herda aborto, guarda de sequência e backoff de 429. Cobertura foi de 0 % para 100 %, com teste de corrida (resposta N-1 chegando depois da N não escreve estado).
+- **`getWorkerStatus()` saiu do polling fixo.** `worker` passa a vir de `getHealth().worker` (`SystemHealth` já o carrega). O método fica tipado para a Onda 6.
+- **Dedupe do `/health/full` via `skipIfFresh`.** `getOverview` (Painel/Sistema) já traz `health` no payload; enquanto uma dessas telas está aberta, `useDiagnostics` usa esse valor e não faz a própria requisição. **Aba parada em `/painel`: 18 → 6 req/min** (medido no dev server; teto é 120 req/min por IP). Auto-cura fora dessas telas (o cache vence o TTL).
+- **Cache stale-while-revalidate leve** (`src/lib/resourceCache.ts`): `Map` de módulo com TTL, chave escolhida pelo chamador. `/painel → /sistema → /painel` deixa de refazer `getOverview` do zero com `Loading` de tela cheia — a remontagem semeia `data` da última resposta. `useAction` ganha `invalidate` (chaves a limpar pós-ação, antes do `onDone`); ações que mutam estado do sistema invalidam `"overview"`.
+- **`LiveStatusContext` dividido em dois** — `LiveDataCtx` (health/worker/wsStatus, muda a cada tick) e `LiveEventsCtx` (só `subscribe`, valor estável). `useLiveEvents` consome só o segundo e não re-renderiza no tick de 10 s. `loading`/`error` saem do contexto (sem consumidor).
+- **`usePolling.refresh()` durante backoff de 429** deixa de ser no-op silencioso: enfileira para o fim da janela (dispara sozinho, inclusive com `intervalMs=0`) e expõe `refreshQueued`, que o `FreshnessTag` mostra. O mesmo `return` pulava o `finally` e podia prender `loading` em `true` — corrigido.
+- **403 de path safety não derruba mais a sessão.** `client.ts` chamava o handler de "não autorizado" (→ `clearKey` → tela de login) para qualquer 401/403. O backend nunca retorna 401 e usa 403 também para path traversal em download de artefato — origem do surto de 403 de 07/08/2026. Agora só derruba em 401 ou 403 cujo corpo casa `/api key/i`.
+- Os 2 fetch manuais restantes (`ExecucoesPage` detalhe, `RunbookDrawer` de `AutomacoesPage`) migrados para `useAsyncResource` — nenhum cancelava de verdade a requisição em voo.
+
 ## [1.3.71] - 03/09/2026
 
 Frontend rodada 2, Onda 1 — gates e fundação de build (invisível: os 4 baselines de screenshot passam **sem regeneração**).

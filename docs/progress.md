@@ -23,11 +23,10 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 ## Estado atual
 
-- **Onda em curso:** 1 — **VERIFICADA** (aguardando OK para push + PR — checkpoint e)
-- **Terminal state:** Success (Onda 1). Próxima: Onda 2 — camada de dados.
-- **Melhor commit conhecido da onda:** `89f3d4f`
+- **Ondas 1 e 2:** ✅ VERIFICADAS. Branches `escalar/frontend-rodada2-onda1` (`89f3d4f`) e `escalar/frontend-rodada2-onda2` (`6d07ae7`, branchada da onda1). Aguardando push + PR (checkpoint e).
+- **Terminal state:** Success (Ondas 1–2). Próxima: Onda 3 — fundação de tokens (invisível).
 - **Iteração:** 1
-- **Verificação:** lint 0/0 · typecheck 0 · 138 vitest · bundle `index` 22,1 KB gzip · **12/12 E2E incluindo os 4 screenshots sem regenerar baseline** · governança Python limpa
+- **Verificação Onda 2:** lint 0/0 · typecheck 0 · 152 vitest · coverage exit 0 · bundle `index` 22,5 KB gzip (uplot separado) · **12/12 E2E, 4 screenshots sem regenerar** · **req/min em `/painel` parado: 18 → 6** (meta ≤ 8) · `useDiagnostics` 0% → 100% com teste de corrida
 
 ## Histórico por onda
 
@@ -53,8 +52,20 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
   - [ ] `/preflight` + push + PR (checkpoint e)
 - **Observação (verificação real):** lint 0/0 · typecheck 0 · 138 vitest · build medido (index 22,1 KB gzip) · 12/12 E2E · governança Python limpa
 
-### Ondas 2–6
-- Não iniciadas. Escopo em `.claude/skills/loop-agentico` / prompt do `/loop-agentico`.
+### Onda 2 — Camada de dados: memória, sem framework novo
+- **Status:** ✅ COMPLETA E VERIFICADA (branch `escalar/frontend-rodada2-onda2`)
+- **Etapas:**
+  - [x] `5124c17` — 403 de path safety não derruba a sessão (só 401 / 403 "API Key")
+  - [x] `bc90c61` — `refresh()` durante 429 enfileira + `refreshQueued` no FreshnessTag; `loading` preso corrigido
+  - [x] `ba3aa69` — cache SWR (`resourceCache.ts`); `usePolling({cacheKey})`; `useAction({invalidate})`; overview cacheado em Painel/Sistema
+  - [x] `6dc92eb` — `useDiagnostics` sobre `usePolling` (sem `getWorkerStatus`); `LiveStatusContext` dividido (data vs subscribe)
+  - [x] `a64eb74` — 2 fetch manuais → `useAsyncResource` (ExecucoesPage detalhe, RunbookDrawer)
+  - [x] `6d07ae7` — `skipIfFresh`+`onData`: dedupe do `/health/full` (12 → 6 req/min)
+  - [x] VERIFICAÇÃO: build medido, 12/12 E2E, req/min 18→6, CHANGELOG [1.3.72]
+  - [ ] push + PR (checkpoint e)
+
+### Ondas 3–6
+- Não iniciadas. Escopo no prompt do `/loop-agentico`.
 
 ## Log de turnos
 
