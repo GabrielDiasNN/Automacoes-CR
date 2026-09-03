@@ -1,0 +1,10 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-lo);
+}

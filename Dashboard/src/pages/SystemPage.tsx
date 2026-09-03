@@ -8,9 +8,11 @@ import {
   Button,
   Card,
   ConfirmModal,
+  DescriptionList,
   ErrorState,
   FreshnessTag,
   Gauge,
+  KeyValue,
   Loading,
   Nameplate,
   StatTile,
@@ -162,14 +164,14 @@ export function SystemPage() {
             <StatusTag tone={worker.is_alive ? "green" : "red"} dot pulse={worker.active_tasks > 0}>
               {worker.is_alive ? "online" : "offline"}
             </StatusTag>
-            <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px var(--sp-3)", margin: 0 }}>
-              <KV k="PID" v={String(worker.pid ?? "—")} />
-              <KV k="Uptime" v={uptime} />
-              <KV k="Concluídas" v={String(worker.tasks_completed)} />
-              <KV k="Falhas" v={String(worker.tasks_failed)} />
-              <KV k="Ativas" v={String(worker.active_tasks)} />
-              <KV k="Versão" v={worker.version} />
-            </dl>
+            <DescriptionList>
+              <KeyValue k="PID" v={String(worker.pid ?? "—")} />
+              <KeyValue k="Uptime" v={uptime} />
+              <KeyValue k="Concluídas" v={String(worker.tasks_completed)} />
+              <KeyValue k="Falhas" v={String(worker.tasks_failed)} />
+              <KeyValue k="Ativas" v={String(worker.active_tasks)} />
+              <KeyValue k="Versão" v={worker.version} />
+            </DescriptionList>
             {!worker.is_alive && (
               <Button
                 variant="primary"
@@ -234,21 +236,3 @@ export function SystemPage() {
   );
 }
 
-function KV({ k, v }: { k: string; v: string }) {
-  return (
-    <>
-      <dt
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--fs-label)",
-          color: "var(--text-lo)",
-          textTransform: "uppercase",
-          letterSpacing: "var(--track-mid)",
-        }}
-      >
-        {k}
-      </dt>
-      <dd style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>{v}</dd>
-    </>
-  );
-}

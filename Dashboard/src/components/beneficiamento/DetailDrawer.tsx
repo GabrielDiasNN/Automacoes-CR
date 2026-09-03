@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Factory } from "lucide-react";
+import { Factory } from "lucide-react";
 import {
   orchestratorApi,
   type BeneficiamentoDetail,
@@ -8,7 +8,7 @@ import {
   type BeneficiamentoTargetType,
   type BeneficiamentoTraceFase,
 } from "../../api/orchestrator";
-import { Card, DataTable, Drawer, EmptyState, ErrorState, IconButton, Loading, StatTile, type Column } from "../ui";
+import { Card, DataTable, Drawer, EmptyState, ErrorState, Loading, Pager, StatTile, type Column } from "../ui";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { formatDateTimeBr, formatNumber, formatPercent } from "../../lib/format";
 import styles from "./DetailDrawer.module.css";
@@ -179,27 +179,14 @@ export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerP
           )}
 
           {data.pagination.pages > 1 && (
-            <div className={styles.pager}>
-              <IconButton
-                variant="plain"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                aria-label="Página anterior"
-              >
-                <ChevronLeft size={16} />
-              </IconButton>
-              <span className={styles.pagerLabel}>
-                página {data.pagination.page} de {data.pagination.pages} · {formatNumber(data.pagination.total)} registros
-              </span>
-              <IconButton
-                variant="plain"
-                onClick={() => setPage((p) => Math.min(data.pagination.pages, p + 1))}
-                disabled={page >= data.pagination.pages}
-                aria-label="Próxima página"
-              >
-                <ChevronRight size={16} />
-              </IconButton>
-            </div>
+            <Pager
+              page={data.pagination.page}
+              pages={data.pagination.pages}
+              total={data.pagination.total}
+              itemLabel="registros"
+              onPrev={() => setPage((p) => Math.max(1, p - 1))}
+              onNext={() => setPage((p) => Math.min(data.pagination.pages, p + 1))}
+            />
           )}
         </div>
       )}

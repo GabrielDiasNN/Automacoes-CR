@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, RotateCw, Square, RefreshCw } from "lucide-react";
+import { RotateCw, Square, RefreshCw } from "lucide-react";
 import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
 import {
   Button,
@@ -12,6 +12,7 @@ import {
   FreshnessTag,
   Loading,
   Nameplate,
+  Pager,
   Select,
   StatusTag,
   useToast,
@@ -292,17 +293,14 @@ export function ExecucoesPage() {
         )}
       </Card>
 
-      <div className={page.toolbar}>
-        <Button size="sm" variant="subtle" icon={<ChevronLeft size={14} />} disabled={pageNum <= 1} onClick={() => setPageNum((p) => p - 1)}>
-          Anterior
-        </Button>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>
-          página {data?.page ?? 1} / {totalPages} · {data?.total ?? 0} execuções
-        </span>
-        <Button size="sm" variant="subtle" onClick={() => setPageNum((p) => p + 1)} disabled={pageNum >= totalPages}>
-          Próxima <ChevronRight size={14} />
-        </Button>
-      </div>
+      <Pager
+        page={data?.page ?? 1}
+        pages={totalPages}
+        total={data?.total ?? 0}
+        itemLabel="execuções"
+        onPrev={() => setPageNum((p) => p - 1)}
+        onNext={() => setPageNum((p) => p + 1)}
+      />
 
       <Drawer
         open={!!detail}

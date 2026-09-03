@@ -1,6 +1,6 @@
 import { RotateCw, Square } from "lucide-react";
 import type { ExecutionDetail } from "../api/orchestrator";
-import { Button, Card, LogViewer, StatusTag } from "../components/ui";
+import { Button, Card, DescriptionList, KeyValue, LogViewer, StatusTag } from "../components/ui";
 import { executionTone, severityTone } from "../lib/status";
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
@@ -42,16 +42,16 @@ export function ExecDetailBody({
         </Card>
       )}
 
-      <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px var(--sp-3)", margin: 0 }}>
-        <KV k="Início" v={detail.started_at} />
-        <KV k="Fim" v={detail.finished_at ?? "—"} />
-        <KV k="Duração" v={formatDuration(detail.duration_seconds)} />
-        <KV k="Fila" v={detail.queue_group ?? "—"} />
-        <KV k="Tentativas" v={`${detail.retry_count}/${detail.max_retries}`} />
-        <KV k="Solicitado por" v={detail.requested_by ?? "—"} />
-        {detail.exit_code != null && <KV k="Exit code" v={String(detail.exit_code)} />}
-        {detail.failure_reason && <KV k="Falha" v={detail.failure_reason} />}
-      </dl>
+      <DescriptionList>
+        <KeyValue k="Início" v={detail.started_at} />
+        <KeyValue k="Fim" v={detail.finished_at ?? "—"} />
+        <KeyValue k="Duração" v={formatDuration(detail.duration_seconds)} />
+        <KeyValue k="Fila" v={detail.queue_group ?? "—"} />
+        <KeyValue k="Tentativas" v={`${detail.retry_count}/${detail.max_retries}`} />
+        <KeyValue k="Solicitado por" v={detail.requested_by ?? "—"} />
+        {detail.exit_code != null && <KeyValue k="Exit code" v={String(detail.exit_code)} />}
+        {detail.failure_reason && <KeyValue k="Falha" v={detail.failure_reason} />}
+      </DescriptionList>
 
       {(detail.stop_allowed || detail.requeue_allowed) && (
         <div style={{ display: "flex", gap: "var(--sp-2)" }}>
@@ -73,24 +73,5 @@ export function ExecDetailBody({
         <LogViewer text={detail.logs ?? ""} loading={loading} />
       </div>
     </div>
-  );
-}
-
-function KV({ k, v }: { k: string; v: string }) {
-  return (
-    <>
-      <dt
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--fs-label)",
-          color: "var(--text-lo)",
-          textTransform: "uppercase",
-          letterSpacing: "var(--track-mid)",
-        }}
-      >
-        {k}
-      </dt>
-      <dd style={{ margin: 0, fontSize: "var(--fs-small)", color: "var(--text-mid)", wordBreak: "break-word" }}>{v}</dd>
-    </>
   );
 }

@@ -1,0 +1,20 @@
+.list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px var(--sp-3);
+  margin: 0;
+}
+.term {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+  text-transform: uppercase;
+  letter-spacing: var(--track-mid);
+}
+.value {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-mid);
+  word-break: break-word;
+}
