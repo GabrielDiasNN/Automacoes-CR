@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.64] - 03/09/2026
+
+### Corrigido
+
+- **ORB-07 falhava a execução inteira quando todas as OBs do lote estavam em montagem.** Incidente de 03/09/2026, ciclo das 07:00: a query devolveu 2 linhas, ambas com `CD_CLASSIFICACAO_COR` nulo; nenhuma sobreviveu à validação e a guarda de 26/08 abortou com `exit 1`. Resultado: 3 tentativas, `ExitCode=3` e execução marcada `operator_severity: HIGH` no dashboard — por um caso que se resolve sozinho no ciclo seguinte.
+  - A causa é transitória e conhecida: a OB sai de `VW_EXC_OB_PROD_CLASS_COR` **antes** de `PEDPRODUCAOOB.OBMONTADA` virar para `'1'`, então por alguns segundos ela ainda entra na query (LEFT JOIN) sem classificação. Na tentativa 2 a OB #186003 já havia sumido da query — foi montada em 34 segundos. O que tornou o caso visível foi o universo pequeno (2 OBs) somado à cadência horária de [1.3.62].
+  - Nova `ClassificacaoNaoResolvidaError`, subclasse de `DadoIncompletoError`: o caminho normal (pular a OB) não muda, mas o extrator passa a distinguir "todas as linhas eram OB em montagem" de "todas as linhas estavam quebradas". A distinção é por **exceção tipada**, não por casamento de string na mensagem.
+  - Quando todo o lote é rejeitado por classificação ausente, a execução termina em `exit 2` (nada a notificar). Basta uma linha rejeitada por outro motivo para voltar a `exit 1`.
+  - **A guarda de 26/08 continua íntegra**: em nenhum dos dois caminhos o state é tocado. As OBs sumiram da query por estarem montando, e commitar um `orb_state.json.tmp` vazio apagaria as reservas vivas das demais OBs — que era exatamente o bug que a guarda evita.
+  - Cobertura: 4 testes novos — exceção tipada distinguindo NULL de valor fora do domínio, separação no `RelatorioValidacao`, o lote todo em montagem virando exit 2 com state preservado, e o lote misto ainda abortando com exit 1.
+
 ## [1.3.69] - 03/09/2026
 
 ### Corrigido

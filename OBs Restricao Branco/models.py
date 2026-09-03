@@ -162,8 +162,12 @@ class AvaliacaoOb:
 
 
 @dataclass
-class ResumoExecucao:
-    """Contadores do lote, montados incrementalmente pelo extrator."""
+class ResumoExecucao:  # pylint: disable=too-many-instance-attributes
+    """Contadores do lote, montados incrementalmente pelo extrator.
+
+    São contadores planos de UM lote, não estado com invariantes: dividi-los em
+    sub-objetos só afastaria cada número do ponto onde o extrator o incrementa.
+    """
 
     total_lidas: int = 0
     total_obs: int = 0
@@ -174,4 +178,8 @@ class ResumoExecucao:
     # o unico motivo de nao notificar (antes: qualquer cobertura < 100%).
     total_sem_estoque: int = 0
     falhas: list[str] = field(default_factory=list)
+    # True quando TODA linha rejeitada foi OB sem classificação na view
+    # (montagem em curso). Separa o transitório rotineiro do dado corrompido:
+    # só o segundo justifica abortar a execução.
+    todas_falhas_por_montagem: bool = False
     tempo_consulta_ms: int = 0

@@ -29,3 +29,21 @@ class DadoIncompletoError(OrbError):
 
     Escopo de UMA OB: o chamador loga e pula a OB, sem derrubar o lote.
     """
+
+
+class ClassificacaoNaoResolvidaError(DadoIncompletoError):
+    """A OB veio da query sem `CD_CLASSIFICACAO_COR`.
+
+    Nao e dado corrompido: e o estado TRANSITORIO da montagem. A OB some de
+    `VW_EXC_OB_PROD_CLASS_COR` antes de `PEDPRODUCAOOB.OBMONTADA` virar para
+    '1', entao por alguns segundos ela ainda entra na query (LEFT JOIN) sem
+    classificacao. Observado em 01/09/2026 (OB #185889, montada em curso) e em
+    03/09/2026, quando as DUAS unicas OBs do universo estavam nessa janela ao
+    mesmo tempo e o lote inteiro foi tratado como dado quebrado — 3 tentativas
+    e ExitCode=3 num caso que se resolve sozinho no ciclo seguinte.
+
+    Subclasse de `DadoIncompletoError` para o caminho normal (pular a OB) nao
+    mudar; existe para o extrator distinguir "todas as linhas eram OB em
+    montagem" (nada a notificar) de "todas as linhas estavam quebradas"
+    (abortar sem tocar no state).
+    """
