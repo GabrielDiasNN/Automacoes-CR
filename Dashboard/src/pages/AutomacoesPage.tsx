@@ -19,8 +19,8 @@ import {
   RatioBar,
   Skeleton,
   StatusTag,
-  useToast,
 } from "../components/ui";
+import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { criticalityTone, executionTone, operationalStateLabel, operationalTone, slaTone } from "../lib/status";
 import { formatDuration } from "../lib/format";
@@ -119,7 +119,6 @@ function RunbookDrawer({
 }
 
 export function AutomacoesPage() {
-  const toast = useToast();
   const navigate = useNavigate();
   const {
     data,
@@ -132,7 +131,7 @@ export function AutomacoesPage() {
   const items = useMemo(() => data?.items ?? [], [data]);
   const portfolio = data?.portfolio ?? null;
   const portfolioFailed = data !== null && data.portfolio === null;
-  const [busy, setBusy] = useState<number | null>(null);
+  const { busyKey: busy, run } = useAction<number>();
   const [confirm, setConfirm] = useState<{ id: number; name: string; kind: "dispatch" | "pause" } | null>(null);
   const [runbookTarget, setRunbookTarget] = useState<{ catalogId: string; name: string } | null>(null);
   // Último exec_id disparado por automação nesta sessão — o backend devolve
@@ -165,44 +164,28 @@ export function AutomacoesPage() {
     return () => clearTimeout(limpar);
   }, [focusName, items, setSearchParams]);
 
-  const act = useCallback(
-    async (id: number, fn: () => Promise<{ message: string }>, fallbackMsg: string) => {
-      setBusy(id);
-      try {
-        const r = await fn();
-        toast(r.message || fallbackMsg, "cyan");
-        await load();
-      } catch (e) {
-        toast(errMessage(e), "red");
-      } finally {
-        setBusy(null);
-      }
-    },
-    [toast, load],
-  );
-
   const dispatch = useCallback(
     (a: Automation) => {
       setConfirm(null);
-      act(
+      run(
         a.id,
         () =>
           orchestratorApi.startAutomation(a.id).then((r) => {
             if (r.exec_id) setLastExecId((prev) => ({ ...prev, [a.id]: r.exec_id! }));
             return { message: r.exec_id ? `${r.message} (${r.exec_id})` : r.message };
           }),
-        `${a.name} disparada`,
+        { fallbackMessage: `${a.name} disparada`, onDone: load },
       );
     },
-    [act],
+    [run, load],
   );
 
   const pause = useCallback(
     (a: Automation) => {
       setConfirm(null);
-      act(a.id, () => orchestratorApi.pauseAutomation(a.id), `${a.name} pausada`);
+      run(a.id, () => orchestratorApi.pauseAutomation(a.id), { fallbackMessage: `${a.name} pausada`, onDone: load });
     },
-    [act],
+    [run, load],
   );
 
   if (loading && items.length === 0) {
@@ -399,7 +382,12 @@ export function AutomacoesPage() {
                         icon={<Play size={13} />}
                         disabled={busy === a.id}
                         aria-label={`Retomar ${a.name}`}
-                        onClick={() => act(a.id, () => orchestratorApi.resumeAutomation(a.id), `${a.name} retomada`)}
+                        onClick={() =>
+                          run(a.id, () => orchestratorApi.resumeAutomation(a.id), {
+                            fallbackMessage: `${a.name} retomada`,
+                            onDone: load,
+                          })
+                        }
                       >
                         Retomar
                       </Button>

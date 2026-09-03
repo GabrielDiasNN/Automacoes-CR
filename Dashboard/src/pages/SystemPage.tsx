@@ -16,16 +16,14 @@ import {
   StatTile,
   StatusTag,
   TimeSeries,
-  useToast,
   type SeriesLine,
 } from "../components/ui";
+import { useAction } from "../hooks/useAction";
 import { healthTone, healthLabel } from "../lib/status";
 import { extractTimeBr, formatAge } from "../lib/format";
 import page from "./page.module.css";
-import { errMessage } from "../lib/errors";
 
 export function SystemPage() {
-  const toast = useToast();
   const { data, loading, error, refresh, lastUpdated, rateLimitedUntil } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     15_000,
@@ -36,20 +34,7 @@ export function SystemPage() {
     lastUpdated: historyUpdated,
   } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const run = async (kind: string, fn: () => Promise<{ message: string }>) => {
-    setBusy(kind);
-    try {
-      const r = await fn();
-      toast(r.message, "cyan");
-      refresh();
-    } catch (e) {
-      toast(errMessage(e), "red");
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busyKey: busy, run } = useAction<string>();
 
   const chart = useMemo(() => {
     const items = history?.items ?? [];
@@ -190,7 +175,7 @@ export function SystemPage() {
                 variant="primary"
                 icon={<LifeBuoy size={13} />}
                 disabled={busy === "recover"}
-                onClick={() => run("recover", orchestratorApi.recoverWorker)}
+                onClick={() => run("recover", orchestratorApi.recoverWorker, { onDone: refresh })}
               >
                 Recuperar worker
               </Button>
@@ -221,10 +206,10 @@ export function SystemPage() {
       {/* Ações */}
       <Card label="manutenção">
         <div className={page.toolbar}>
-          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => run("ckpt", orchestratorApi.runCheckpoint)}>
+          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => run("ckpt", orchestratorApi.runCheckpoint, { onDone: refresh })}>
             WAL Checkpoint
           </Button>
-          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => run("sched", orchestratorApi.reloadScheduler)}>
+          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => run("sched", orchestratorApi.reloadScheduler, { onDone: refresh })}>
             Recarregar agendador
           </Button>
           <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => setConfirmPurge(true)}>
@@ -241,7 +226,7 @@ export function SystemPage() {
         danger
         onConfirm={() => {
           setConfirmPurge(false);
-          run("purge", orchestratorApi.runPurge);
+          run("purge", orchestratorApi.runPurge, { onDone: refresh });
         }}
         onCancel={() => setConfirmPurge(false)}
       />

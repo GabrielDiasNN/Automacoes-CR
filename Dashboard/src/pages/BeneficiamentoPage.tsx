@@ -25,7 +25,6 @@ import {
   TimeSeries,
   type Column,
   type SeriesLine,
-  useToast,
 } from "../components/ui";
 import { DetailDrawer, type DetailDrawerRequest } from "../components/beneficiamento/DetailDrawer";
 import { Treemap } from "../components/beneficiamento/Treemap";
@@ -35,12 +34,12 @@ import {
   FilterBar,
   type BeneficiamentoFiltersState,
 } from "../components/beneficiamento/FilterBar";
+import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { healthTone, healthLabel } from "../lib/status";
 import { formatNumber, formatPercent } from "../lib/format";
 import page from "./page.module.css";
-import { errMessage } from "../lib/errors";
 
 const REFRESH_PERIODS: { value: "diario" | "mensal"; label: string }[] = [
   { value: "diario", label: "Diário" },
@@ -149,11 +148,12 @@ function RankingSection<T>({ title, rows, columns, rowKey, onRowClick }: Ranking
 }
 
 export function BeneficiamentoPage() {
-  const toast = useToast();
+
   const [filters, setFilters] = useState<BeneficiamentoFiltersState>(DEFAULT_BENEFICIAMENTO_FILTERS);
   const debouncedQ = useDebouncedValue(filters.q, 350);
   const [refreshPeriod, setRefreshPeriod] = useState<"diario" | "mensal">("diario");
-  const [refreshing, setRefreshing] = useState(false);
+  const { busyKey: refreshKey, run: runRefresh } = useAction<string>();
+  const refreshing = refreshKey === "refresh";
   const [detailRequest, setDetailRequest] = useState<DetailDrawerRequest | null>(null);
 
   const patchFilters = useCallback((patch: Partial<BeneficiamentoFiltersState>) => {
@@ -212,18 +212,17 @@ export function BeneficiamentoPage() {
     lastUpdated: healthUpdated,
   } = usePolling(orchestratorApi.getBeneficiamentoHealth, 60_000);
 
-  const doRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await orchestratorApi.refreshBeneficiamento(refreshPeriod);
-      await Promise.all([reloadOverview(), reloadHealth()]);
-      toast("Snapshot atualizado.", "green");
-    } catch (e) {
-      toast(errMessage(e), "red");
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshPeriod, reloadOverview, reloadHealth, toast]);
+  const doRefresh = useCallback(() => {
+    runRefresh(
+      "refresh",
+      () => orchestratorApi.refreshBeneficiamento(refreshPeriod).then(() => undefined),
+      {
+        overrideMessage: "Snapshot atualizado.",
+        successTone: "green",
+        onDone: () => Promise.all([reloadOverview(), reloadHealth()]),
+      },
+    );
+  }, [runRefresh, refreshPeriod, reloadOverview, reloadHealth]);
 
   const contextFilters = useMemo(
     () => ({ dt_inicio: overviewParams.dt_inicio, dt_fim: overviewParams.dt_fim, q: overviewParams.q }),

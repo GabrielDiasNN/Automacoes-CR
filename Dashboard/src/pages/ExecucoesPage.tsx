@@ -17,6 +17,7 @@ import {
   useToast,
   type Column,
 } from "../components/ui";
+import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { executionTone, severityTone, toneVar } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
@@ -101,31 +102,28 @@ export function ExecucoesPage() {
     [toast],
   );
 
+  const { run: runExecAction } = useAction<string>();
+
   const doStop = useCallback(
-    async (id: string) => {
+    (id: string) => {
       setConfirmStop(null);
-      try {
-        await orchestratorApi.stopExecution(id);
-        toast(`Parada solicitada para ${shortId(id)}`, "amber");
-        load();
-      } catch (e) {
-        toast(errMessage(e), "red");
-      }
+      runExecAction(id, () => orchestratorApi.stopExecution(id), {
+        overrideMessage: `Parada solicitada para ${shortId(id)}`,
+        successTone: "amber",
+        onDone: load,
+      });
     },
-    [toast, load],
+    [runExecAction, load],
   );
 
   const doRequeue = useCallback(
-    async (id: string) => {
-      try {
-        await orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" });
-        toast(`Reenfileirado: ${shortId(id)}`, "cyan");
-        load();
-      } catch (e) {
-        toast(errMessage(e), "red");
-      }
+    (id: string) => {
+      runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
+        overrideMessage: `Reenfileirado: ${shortId(id)}`,
+        onDone: load,
+      });
     },
-    [toast, load],
+    [runExecAction, load],
   );
 
   const columns: Column<ExecutionSummary>[] = [
