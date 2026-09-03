@@ -19,10 +19,18 @@ export default defineConfig({
         // Vendors com ciclo de vida proprio saem do chunk inicial e dos chunks
         // de pagina: react/router (base), uplot (so Monitor/Sistema/Beneficiamento)
         // e lucide (compartilhado por telas estaticas e lazy).
-        manualChunks: {
-          react: ["react", "react-dom", "react-router-dom"],
-          uplot: ["uplot"],
-          lucide: ["lucide-react"],
+        //
+        // Forma de FUNCAO: o Vite 8 usa rolldown, que so aceita manualChunks
+        // como funcao (a forma de objeto quebra o build).
+        manualChunks(id) {
+          const p = id.replace(/\\/g, "/");
+          if (!p.includes("/node_modules/")) return undefined;
+          if (p.includes("/node_modules/uplot/")) return "uplot";
+          if (p.includes("/node_modules/lucide-react/")) return "lucide";
+          if (/\/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler|@remix-run)\//.test(p)) {
+            return "react";
+          }
+          return undefined;
         },
       },
     },
