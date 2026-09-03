@@ -791,7 +791,9 @@ export const orchestratorApi = {
     api.post<QueueActionResponse>(`/api/executions/${id}/requeue`, body ?? {}),
 
   // ── Sistema ──
-  getHealth: () => api.get<SystemHealth>("/api/system/health/full"),
+  getHealth: (signal?: AbortSignal) => api.get<SystemHealth>("/api/system/health/full", signal),
+  /** Redundante com `getHealth().worker` — mantido tipado para a Onda 6
+   *  (card do Worker); `useDiagnostics` deixou de chamá-lo. */
   getWorkerStatus: () => api.get<WorkerStatus>("/api/system/worker/status"),
   getOverview: (signal?: AbortSignal) => api.get<SystemOverview>("/api/system/overview", signal),
   getBaseline: () => api.get<BaselineStatus>("/api/system/baseline"),

@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
 import { orchestratorApi, type SystemHealth, type WorkerStatus } from "../api/orchestrator";
-import { errMessage } from "../lib/errors";
+import { usePolling } from "./usePolling";
 
 export interface DiagnosticsState {
   health: SystemHealth | null;
@@ -8,48 +7,34 @@ export interface DiagnosticsState {
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
+  refresh: () => Promise<void>;
 }
 
-export function useDiagnostics(intervalMs = 15_000) {
-  const [state, setState] = useState<DiagnosticsState>({
-    health: null,
-    worker: null,
-    loading: true,
-    error: null,
-    lastUpdated: null,
-  });
+/** Polling de saúde do sistema para o `LiveStatusProvider`.
+ *
+ *  Antes era um hook próprio com `Promise.all` e sem `AbortController` nem
+ *  guarda de sequência — o único do app nessa condição, e o que roda em TODA
+ *  aba aberta (tick de 10s). Uma resposta atrasada sobrescrevia uma mais nova.
+ *  Agora é `usePolling` puro: herda aborto, guarda de sequência e backoff de
+ *  429, e a semente de cache evita o flash ao remontar o Shell.
+ *
+ *  `worker` sai de `health.worker` (`SystemHealth` já o carrega) — a chamada
+ *  separada a `getWorkerStatus()` era um terço do tráfego fixo, desperdiçado
+ *  contra o teto de 120 req/min por IP. */
+export function useDiagnostics(intervalMs = 15_000): DiagnosticsState {
+  const { data, loading, error, lastUpdated, refresh } = usePolling<SystemHealth>(
+    (signal) => orchestratorApi.getHealth(signal),
+    intervalMs,
+    [],
+    { cacheKey: "health" },
+  );
 
-  // Não escreve estado depois do unmount: no React 18 já é só um no-op ruidoso,
-  // mas mantém a disciplina do resto do front (usePolling faz o mesmo).
-  const mountedRef = useRef(true);
-
-  const refresh = useCallback(async () => {
-    try {
-      const [health, worker] = await Promise.all([
-        orchestratorApi.getHealth(),
-        orchestratorApi.getWorkerStatus(),
-      ]);
-      if (!mountedRef.current) return;
-      setState({ health, worker, loading: false, error: null, lastUpdated: new Date() });
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error: errMessage(err),
-      }));
-    }
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    void refresh();
-    const id = setInterval(() => void refresh(), intervalMs);
-    return () => {
-      mountedRef.current = false;
-      clearInterval(id);
-    };
-  }, [refresh, intervalMs]);
-
-  return { ...state, refresh };
+  return {
+    health: data,
+    worker: data?.worker ?? null,
+    loading,
+    error,
+    lastUpdated,
+    refresh,
+  };
 }

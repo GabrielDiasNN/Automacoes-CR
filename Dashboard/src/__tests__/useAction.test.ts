@@ -88,4 +88,25 @@ describe("useAction", () => {
     });
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it("invalidate limpa as chaves de cache antes do onDone", async () => {
+    const { invalidateCache, readCache, writeCache, _clearCache } = await import("../lib/resourceCache");
+    _clearCache();
+    writeCache("overview", { velho: true });
+    writeCache("exec:1", "x");
+    const seenDuringOnDone: unknown[] = [];
+
+    const { result } = renderHook(() => useAction<string>(), { wrapper });
+    await act(async () => {
+      await result.current.run("x", () => Promise.resolve({ message: "ok" }), {
+        invalidate: ["overview", "exec:"],
+        onDone: () => {
+          seenDuringOnDone.push(readCache("overview", 30_000), readCache("exec:1", 30_000));
+        },
+      });
+    });
+
+    expect(seenDuringOnDone).toEqual([undefined, undefined]);
+    expect(invalidateCache).toBeTypeOf("function");
+  });
 });
