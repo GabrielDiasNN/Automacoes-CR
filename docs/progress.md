@@ -23,16 +23,16 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 ## Estado atual
 
-- **Onda em curso:** 1 — Gates e fundação de build
-- **Terminal state:** Human Review Required — checkpoint (c) `npm run build` + (d) reinício/E2E
-- **Melhor commit conhecido da onda:** `e40e17a` (6 etapas de código completas, gates verdes)
+- **Onda em curso:** 1 — **VERIFICADA** (aguardando OK para push + PR — checkpoint e)
+- **Terminal state:** Success (Onda 1). Próxima: Onda 2 — camada de dados.
+- **Melhor commit conhecido da onda:** `89f3d4f`
 - **Iteração:** 1
-- **Bloqueio:** medição de bundle exige build (= deploy); E2E dos 4 screenshots exige subir a instância de teste. Aguardando OK humano.
+- **Verificação:** lint 0/0 · typecheck 0 · 138 vitest · bundle `index` 22,1 KB gzip · **12/12 E2E incluindo os 4 screenshots sem regenerar baseline** · governança Python limpa
 
 ## Histórico por onda
 
 ### Onda 1 — Gates e fundação de build
-- **Status:** em progresso — 4 de 6 etapas commitadas (branch `escalar/frontend-rodada2-onda1`)
+- **Status:** ✅ COMPLETA E VERIFICADA (branch `escalar/frontend-rodada2-onda1`, `89f3d4f`) — falta só push+PR+merge (checkpoint e)
 - **Critério de pronto:** lint verde com `no-floating-promises`/`no-misused-promises`/`await-thenable` em `error`; typecheck verde com `noUncheckedIndexedAccess`+`exactOptionalPropertyTypes`; chunk `index` < 70 KB gzip com `uplot` em chunk próprio; 4 screenshots sem regenerar baseline
 - **Etapas:**
   - [x] 1.1 `d71e2c0` — TimeSeries fora do barrel de ui
@@ -47,9 +47,11 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
     - `uplot`: chunk próprio 51,3 KB / 21,9 KB gzip, **ausente do index** (`grep u-cursor` = 0) ✅
     - `react` 172,8/56,5 · `lucide` 15,7/6,0 · `index.css` 30,2/6,3 (gzip)
     - `sourcemap: hidden` confirmado (nenhum `sourceMappingURL` nos `.js`)
-  - [ ] CHECKPOINT (d): `pytest -m e2e` (4 screenshots sem regenerar) + `driver.py smoke` — **bloqueado**: E2E serve `Dashboard/dist/` (mesmo dir que produção, `get_dashboard_path()` sem override). E2E real = build em `dist/` = deploy.
-- **Observação (lint/typecheck/test):** lint 0 erros / 0 warnings, typecheck 0, 138 testes vitest verdes, coverage exit 0, build de medição OK
-- **Gaps:** só o E2E dos 4 screenshots. Critérios determinísticos da Onda 1 todos atendidos.
+  - [x] `89f3d4f` — override `ORCHESTRATOR_DASHBOARD_DIST` no backend (destrava E2E sem deploy)
+  - [x] CHECKPOINT (d) resolvido: **`pytest -m e2e` 12/12 verde**, os 4 screenshots comparados contra baseline **sem regeneração** (`docs/playwright-screenshots/baseline/` intacto no git). `driver.py smoke` pulado — nada deployado, testaria só o build antigo.
+  - [x] CHANGELOG.md [1.3.71]
+  - [ ] `/preflight` + push + PR (checkpoint e)
+- **Observação (verificação real):** lint 0/0 · typecheck 0 · 138 vitest · build medido (index 22,1 KB gzip) · 12/12 E2E · governança Python limpa
 
 ### Ondas 2–6
 - Não iniciadas. Escopo em `.claude/skills/loop-agentico` / prompt do `/loop-agentico`.

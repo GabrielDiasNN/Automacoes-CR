@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.71] - 03/09/2026
+
+Frontend rodada 2, Onda 1 — gates e fundação de build (invisível: os 4 baselines de screenshot passam **sem regeneração**).
+
+### Adicionado
+
+- **`ORCHESTRATOR_DASHBOARD_DIST`** sobrepõe `get_dashboard_path()` (`Orchestrator/app/runtime.py`) quando aponta para um diretório existente: `override > Dashboard/dist > Dashboard/`. `Dashboard/dist` é servido ao vivo pela instância de produção desta máquina (`RevalidatedStaticFiles`, `no-cache`), então `npm run build` era efetivamente um deploy e o `pytest -m e2e` não tinha como exercitar um build novo sem trocar a UI de produção. Agora o E2E aponta para um build temporário. 3 testes unitários de precedência.
+- Contract tests (`Dashboard/src/__tests__/contract.test.ts`) para `getOverview` e `listExecutions`, com fixtures capturadas da instância viva. Os arrays `EXECUTION_STATUSES`/`OPERATIONAL_STATES`/`SLA_STATUSES` no teste são o gate: se o backend renomear um estado, o teste falha em vez de a UI cair no ramo cinza.
+
+### Alterado (governança / build)
+
+- **ESLint type-aware ligado.** `parserOptions.projectService` + `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `await-thenable` como `error` (estavam inativos num app inteiro sobre promises); `no-for-in-array`, `no-implied-eval`, `no-unnecessary-type-assertion`, `unbound-method` como `warn`. 31 erros corrigidos — em react-router 7 `navigate()` devolve Promise, e `useAction.run`/`usePolling.refresh` são fire-and-forget (`void` no call site).
+- **`tsconfig.json`:** `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`. 71 erros; 2 bugs latentes reais (`logParser.parseLog` e `useFocusTrap` acessavam índice fora de guarda que o TS não enxergava).
+- **`vite.config.ts`:** `manualChunks` (função — a forma de objeto quebra no Vite 8/rolldown) separa `react`/`uplot`/`lucide`; `target: es2020`, `sourcemap: "hidden"`, `chunkSizeWarningLimit`. `TimeSeries` sai do barrel `components/ui` (reexportá-lo arrastava o uPlot para o chunk inicial via as páginas estáticas). Resultado medido: chunk `index` de ~105 KB → **22,1 KB gzip**, uPlot em chunk próprio ausente do `index`.
+- **Unions do backend viram tipos literais** (`ExecutionStatus`, `OperationalState`, `SlaStatus`, `SlaState`, `HealthStatus`) — o `tsc` passa a acusar comparação contra estado que o backend nunca emite. Achado: `attentionRank` em `/automacoes` comparava `sla_state` contra `"violated"`/`"at_risk"`, valores que `_sla_state` nunca produz (`ok|breached|recovering|unknown`) — o SLA nunca influenciou a ordenação. Comparações mortas removidas (ranks mantidos monotônicos, zero mudança visual); wiring real de `breached`/`recovering` fica para a Onda 4.
+
 ## [1.3.70] - 03/09/2026
 
 ### Corrigido
