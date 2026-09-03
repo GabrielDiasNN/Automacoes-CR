@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.3.64] - 03/09/2026
+## [1.3.70] - 03/09/2026
 
 ### Corrigido
 
@@ -10,6 +10,7 @@
   - Quando todo o lote é rejeitado por classificação ausente, a execução termina em `exit 2` (nada a notificar). Basta uma linha rejeitada por outro motivo para voltar a `exit 1`.
   - **A guarda de 26/08 continua íntegra**: em nenhum dos dois caminhos o state é tocado. As OBs sumiram da query por estarem montando, e commitar um `orb_state.json.tmp` vazio apagaria as reservas vivas das demais OBs — que era exatamente o bug que a guarda evita.
   - Cobertura: 4 testes novos — exceção tipada distinguindo NULL de valor fora do domínio, separação no `RelatorioValidacao`, o lote todo em montagem virando exit 2 com state preservado, e o lote misto ainda abortando com exit 1.
+  - Numerada `1.3.70` (era `1.3.64` no commit `dd8d814`): a revisão geral do frontend, que estava commitada só no `main` local e subiu junto no PR #53, já ocupava de `1.3.64` a `1.3.69`. A mensagem daquele commit preserva o número antigo — corrigi-la exigiria reescrever histórico já publicado.
 
 ## [1.3.69] - 03/09/2026
 
