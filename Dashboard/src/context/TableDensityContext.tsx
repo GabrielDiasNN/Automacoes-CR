@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 export type TableDensity = "comfortable" | "compact";
 
@@ -16,17 +16,21 @@ export function TableDensityProvider({ children }: { children: ReactNode }) {
     () => (localStorage.getItem(STORAGE_KEY) as TableDensity | null) ?? "comfortable",
   );
 
-  const toggleDensity = () => {
+  const toggleDensity = useCallback(() => {
     setDensity((prev) => {
       const next = prev === "comfortable" ? "compact" : "comfortable";
       localStorage.setItem(STORAGE_KEY, next);
       return next;
     });
-  };
+  }, []);
 
-  return (
-    <TableDensityContext.Provider value={{ density, toggleDensity }}>{children}</TableDensityContext.Provider>
-  );
+  // Sem useMemo, `value` era um objeto novo a cada render do provider —
+  // qualquer consumidor de useTableDensity (a topbar, todo DataTable via
+  // useContext) re-renderizava mesmo quando density não mudava (achado
+  // nº 30, Onda 5).
+  const value = useMemo(() => ({ density, toggleDensity }), [density, toggleDensity]);
+
+  return <TableDensityContext.Provider value={value}>{children}</TableDensityContext.Provider>;
 }
 
 export function useTableDensity() {

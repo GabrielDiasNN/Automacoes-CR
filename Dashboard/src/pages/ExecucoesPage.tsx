@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RotateCw, Square, RefreshCw } from "lucide-react";
 import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
@@ -127,7 +127,12 @@ export function ExecucoesPage() {
     [runExecAction, load],
   );
 
-  const columns: Column<ExecutionSummary>[] = [
+  // useMemo: sem isso, 8 colunas (cada uma com uma closure de render) eram
+  // recriadas a cada render — a página faz polling a cada 8s, então isso
+  // reconstruía o array inteiro a cada tick sem necessidade (achado nº 31,
+  // Onda 5).
+  const columns: Column<ExecutionSummary>[] = useMemo(
+    () => [
     {
       key: "status",
       header: "Status",
@@ -223,7 +228,9 @@ export function ExecucoesPage() {
         </span>
       ),
     },
-  ];
+    ],
+    [doRequeue],
+  );
 
   const totalPages = data?.pages ?? 1;
 
