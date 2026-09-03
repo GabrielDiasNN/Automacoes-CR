@@ -101,7 +101,7 @@ Fonte única (não duplicar aqui): `AGENTS.md § Regras de Encoding`. Aplicado m
 
 ### Zero-Trust
 - Nenhuma credencial hardcoded. Tudo via `.env` (lido por `lib/Lib-Config.psm1` em PowerShell, `python-dotenv` em Python).
-- Dashboard solicita API Key via prompt; persiste em `sessionStorage` (não sobrevive ao fechamento da aba — mais restritivo que `localStorage`, e há teste dedicado proibindo o uso deste último).
+- Dashboard solicita API Key via prompt; persiste em `sessionStorage` (não sobrevive ao fechamento da aba — mais restritivo que `localStorage`). O veto a `localStorage` (`useApiKey.test.ts`) é especificamente sobre a **credencial**, não uma proibição geral do mecanismo: preferência de UI benigna que deve persistir entre sessões (ex.: densidade de tabela em `TableDensityContext.tsx`) usa `localStorage` legitimamente — não migrar isso para `sessionStorage` por engano ao "corrigir" uma leitura ampla demais da regra.
 
 ### Commits e Documentação Viva
 - Idioma dos commits e regra do `CHANGELOG.md`: `AGENTS.md § Idioma e Comunicação` e `§ Colaboração com Documentação AI-Native`.
