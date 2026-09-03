@@ -22,7 +22,11 @@ export function Drawer({ open, onClose, title, eyebrow, children, width = 560 }:
   if (!open) return null;
 
   return createPortal(
-    <div className={styles.overlay} onMouseDown={onClose}>
+    // Overlay de clique-fora do modal (padrão sem equivalente nativo).
+    // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
+    // de stopPropagation no filho. Escape já fecha via useFocusTrap.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <aside
         ref={panelRef}
         className={`${styles.panel} animate-in`}
@@ -31,7 +35,6 @@ export function Drawer({ open, onClose, title, eyebrow, children, width = 560 }:
         aria-modal="true"
         aria-label={title ?? "Detalhe"}
         tabIndex={-1}
-        onMouseDown={(e) => e.stopPropagation()}
       >
         <header className={styles.head}>
           <div className={styles.headText}>

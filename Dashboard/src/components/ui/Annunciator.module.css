@@ -17,9 +17,6 @@
   font: inherit;
   width: 100%;
 }
-.clickable {
-  cursor: pointer;
-}
 .off {
   opacity: 0.7;
 }
@@ -46,6 +43,14 @@
   color: var(--text-mid);
   flex: 1;
   min-width: 0;
+}
+.status {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: var(--track-mid);
+  text-transform: uppercase;
+  color: var(--tile-color);
+  flex-shrink: 0;
 }
 .on .legend {
   color: var(--text-hi);

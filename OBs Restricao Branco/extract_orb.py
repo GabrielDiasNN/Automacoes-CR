@@ -140,6 +140,9 @@ def _fetch_obs(
         for problema in relatorio.problemas:
             resumo.falhas.append(problema)
             log(f"OB pulada: {problema}", "WARN", exec_id)
+        # Guardado para extract() distinguir "todas as linhas eram OB em
+        # montagem" (rotina, nada a notificar) de "todas quebradas" (abortar).
+        resumo.todas_falhas_por_montagem = relatorio.so_falhou_por_montagem
 
     obs, duplicados, divergencias = dedupe_obs(relatorio.obs)
     for id_ob in duplicados:
@@ -420,6 +423,24 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
         obs = _fetch_obs(creds, exec_id, resumo)
         resumo.total_obs = len(obs)
         if not obs:
+            if resumo.falhas and resumo.todas_falhas_por_montagem:
+                # TODAS as linhas eram OB sem classificacao na view — o estado
+                # transitorio da montagem, nao dado corrompido. Em 03/09/2026 as
+                # duas unicas OBs do universo estavam nessa janela ao mesmo
+                # tempo e o lote foi tratado como quebrado: 3 tentativas e
+                # ExitCode=3 num caso que se resolve sozinho no ciclo seguinte.
+                # Aqui e' "nada a notificar" — mas o state NAO e' tocado: as OBs
+                # sumiram da query por estarem montando, e commitar um state
+                # vazio apagaria as reservas vivas das demais OBs.
+                _write_counts(resumo, 0)
+                log(
+                    f"{len(resumo.falhas)} OB(s) sem classificacao na view "
+                    "(montagem em curso) e nenhuma outra linha — nada a "
+                    "notificar. State preservado.",
+                    "INFO",
+                    exec_id,
+                )
+                sys.exit(2)
             if resumo.falhas:
                 # Linhas VIERAM da query mas nenhuma sobreviveu a coerce_ob_row
                 # (`resumo.falhas` so' e populado por linha rejeitada — query

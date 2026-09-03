@@ -81,6 +81,44 @@
   color: var(--text-lo);
   margin: 0 4px;
 }
+.failureReason {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--red-tint);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-mid);
+  /* Trunca em 2 linhas — a razão completa da falha vive no drawer de
+     execuções (ver botão "ver execuções" logo abaixo). */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: var(--track-mid);
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkBtn:hover {
+  color: var(--cyan-bright);
+}
 .actions {
   display: flex;
   gap: var(--sp-2);

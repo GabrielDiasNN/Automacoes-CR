@@ -7,6 +7,7 @@ import { orchestratorApi, type SystemHistory, type SystemMetricsDaily } from "..
 import {
   Button,
   Card,
+  FreshnessTag,
   Nameplate,
   Select,
   Sparkline,
@@ -16,7 +17,8 @@ import {
   type SeriesLine,
 } from "../components/ui";
 import selectStyles from "../components/ui/Select.module.css";
-import { healthTone, healthLabel } from "../lib/status";
+import { healthTone, healthLabel, type Tone } from "../lib/status";
+import { extractTimeBr } from "../lib/format";
 import page from "./page.module.css";
 
 interface LogLine {
@@ -140,40 +142,74 @@ export function MonitorPage() {
   );
 
   const [historyHours, setHistoryHours] = useState(24);
-  const fetchHistory = useCallback(() => orchestratorApi.getHistory(historyHours), [historyHours]);
-  const { data: history } = usePolling<SystemHistory>(fetchHistory, 60_000, [historyHours]);
+  const fetchHistory = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getHistory(historyHours, signal),
+    [historyHours],
+  );
+  const {
+    data: history,
+    error: historyError,
+    lastUpdated: historyUpdated,
+  } = usePolling<SystemHistory>(fetchHistory, 60_000, [historyHours]);
 
-  const historyItems = history?.items ?? [];
-  const xLabels = historyItems.map((p) => String(p.timestamp).slice(11, 16));
-  const pendingSeries = historyItems.map((p) => p.pending_count);
-  const runningSeries = historyItems.map((p) => p.running_count);
-  const pendingLine: SeriesLine = { label: "pendentes", values: pendingSeries, tone: "amber" };
-  const runningLine: SeriesLine = { label: "em execução", values: runningSeries, tone: "cyan" };
+  // useMemo: essas transformações rodavam a cada render, inclusive a cada
+  // mensagem de WebSocket (que atualiza `lines`, sem relação com o
+  // histórico) — sob rajada de eventos, recomputava map/filter/reduce à toa
+  // a cada linha de log recebida (achado nº 31, Onda 5).
+  const historyItems = useMemo(() => history?.items ?? [], [history]);
+  const { xLabels, pendingSeries, runningSeries, pendingLine, runningLine } = useMemo(() => {
+    const xLabels = historyItems.map((p) => extractTimeBr(p.timestamp));
+    const pendingSeries = historyItems.map((p) => p.pending_count);
+    const runningSeries = historyItems.map((p) => p.running_count);
+    const pendingLine: SeriesLine = { label: "pendentes", values: pendingSeries, tone: "amber" };
+    const runningLine: SeriesLine = { label: "em execução", values: runningSeries, tone: "cyan" };
+    return { xLabels, pendingSeries, runningSeries, pendingLine, runningLine };
+  }, [historyItems]);
 
   const goToExecucoes = useCallback((execStatus: string) => navigate(`/execucoes?status=${execStatus}`), [navigate]);
 
-  const fetchDailyMetrics = useCallback(() => orchestratorApi.getSystemMetricsDaily(14), []);
-  const { data: dailyMetrics } = usePolling<SystemMetricsDaily>(fetchDailyMetrics, 120_000);
+  const fetchDailyMetrics = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getSystemMetricsDaily(14, signal),
+    [],
+  );
+  const {
+    data: dailyMetrics,
+    error: dailyError,
+    lastUpdated: dailyUpdated,
+  } = usePolling<SystemMetricsDaily>(fetchDailyMetrics, 120_000);
 
-  const dailyItems = dailyMetrics?.items ?? [];
-  const dailyLabels = dailyItems.map((d) => d.date.slice(5));
-  const successRateSeries = dailyItems.map((d) => d.success_rate_pct);
-  const avgDurationSeries = dailyItems.map((d) => d.avg_duration_seconds);
-  const successRateLine: SeriesLine = { label: "taxa de sucesso %", values: successRateSeries, tone: "green" };
-  const avgDurationLine: SeriesLine = { label: "duração média (s)", values: avgDurationSeries, tone: "blue" };
+  const dailyItems = useMemo(() => dailyMetrics?.items ?? [], [dailyMetrics]);
+  const { dailyLabels, successRateLine, avgDurationLine } = useMemo(() => {
+    const dailyLabels = dailyItems.map((d) => d.date.slice(5));
+    const successRateLine: SeriesLine = {
+      label: "taxa de sucesso %",
+      values: dailyItems.map((d) => d.success_rate_pct),
+      tone: "green",
+    };
+    const avgDurationLine: SeriesLine = {
+      label: "duração média (s)",
+      values: dailyItems.map((d) => d.avg_duration_seconds),
+      tone: "blue",
+    };
+    return { dailyLabels, successRateLine, avgDurationLine };
+  }, [dailyItems]);
 
   const cutoff7d = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
     return d.toISOString().slice(0, 10);
   }, []);
-  const currentWeekErrors = dailyItems.filter((d) => d.date >= cutoff7d).reduce((sum, d) => sum + d.errors, 0);
-  const previousWeekErrors = dailyItems.filter((d) => d.date < cutoff7d).reduce((sum, d) => sum + d.errors, 0);
-  const errorsTrendHint =
-    previousWeekErrors > 0
-      ? `${currentWeekErrors >= previousWeekErrors ? "+" : ""}${Math.round(((currentWeekErrors - previousWeekErrors) / previousWeekErrors) * 100)}% vs 7d anteriores`
-      : "sem base de comparação";
-  const errorsTrendTone = currentWeekErrors > previousWeekErrors ? "red" : currentWeekErrors < previousWeekErrors ? "green" : undefined;
+  const { errorsTrendHint, errorsTrendTone, currentWeekErrors } = useMemo(() => {
+    const currentWeekErrors = dailyItems.filter((d) => d.date >= cutoff7d).reduce((sum, d) => sum + d.errors, 0);
+    const previousWeekErrors = dailyItems.filter((d) => d.date < cutoff7d).reduce((sum, d) => sum + d.errors, 0);
+    const errorsTrendHint =
+      previousWeekErrors > 0
+        ? `${currentWeekErrors >= previousWeekErrors ? "+" : ""}${Math.round(((currentWeekErrors - previousWeekErrors) / previousWeekErrors) * 100)}% vs 7d anteriores`
+        : "sem base de comparação";
+    const errorsTrendTone: Tone | undefined =
+      currentWeekErrors > previousWeekErrors ? "red" : currentWeekErrors < previousWeekErrors ? "green" : undefined;
+    return { errorsTrendHint, errorsTrendTone, currentWeekErrors };
+  }, [dailyItems, cutoff7d]);
 
   return (
     <div className={page.page}>
@@ -227,17 +263,20 @@ export function MonitorPage() {
         <Card
           label="tendência da fila"
           actions={
-            <Select
-              value={historyHours}
-              onChange={(e) => setHistoryHours(Number(e.target.value))}
-              aria-label="Janela de tempo"
-            >
-              {HISTORY_WINDOWS.map((w) => (
-                <option key={w.hours} value={w.hours}>
-                  {w.label}
-                </option>
-              ))}
-            </Select>
+            <div className={page.toolbar}>
+              <FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />
+              <Select
+                value={historyHours}
+                onChange={(e) => setHistoryHours(Number(e.target.value))}
+                aria-label="Janela de tempo"
+              >
+                {HISTORY_WINDOWS.map((w) => (
+                  <option key={w.hours} value={w.hours}>
+                    {w.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           }
         >
           <TimeSeries xLabels={xLabels} lines={[pendingLine, runningLine]} height={160} />
@@ -246,7 +285,10 @@ export function MonitorPage() {
 
       {dailyItems.length > 1 && (
         <div className={page.split}>
-          <Card label="taxa de sucesso · 14 dias">
+          <Card
+            label="taxa de sucesso · 14 dias"
+            actions={<FreshnessTag lastUpdated={dailyUpdated} error={dailyMetrics && dailyError ? dailyError : null} />}
+          >
             <TimeSeries xLabels={dailyLabels} lines={[successRateLine]} height={160} />
           </Card>
           <Card label="duração média (s) · 14 dias">
@@ -309,6 +351,14 @@ export function MonitorPage() {
       >
         <div
           ref={consoleRef}
+          // `role="log"`: live region própria para stream de mensagens tipo
+          // console/chat — sem isso o conteúdo mudava sozinho sob o cursor
+          // sem nenhum anúncio a leitor de tela. `aria-relevant="additions"`
+          // evita que "Limpar" (esvazia a lista) dispare um anúncio de
+          // remoção em massa.
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
           style={{
             height: 420,
             overflowY: "auto",

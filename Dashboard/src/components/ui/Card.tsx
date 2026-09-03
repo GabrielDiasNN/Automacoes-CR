@@ -19,7 +19,10 @@ export function Card({ label, actions, children, alert, padded = true, className
       {alert && <div className={`hazard ${styles.hazardBar}`} aria-hidden="true" />}
       {(label || actions) && (
         <div className={styles.head}>
-          {label && <span className={styles.label}>{label}</span>}
+          {/* <h3> (não <span>): Card.label é o título visual de cada painel
+           *  de conteúdo da página — sem heading real, nenhuma dessas ~30
+           *  seções aparecia na navegação por cabeçalho de leitor de tela. */}
+          {label && <h3 className={styles.label}>{label}</h3>}
           {actions && <div className={styles.actions}>{actions}</div>}
         </div>
       )}

@@ -54,3 +54,16 @@ export function formatDateTimeBr(iso: string | null | undefined): string {
   const [, year, month, day, hour, minute, second] = match;
   return `${day}/${month}/${year} ${hour}:${minute}:${second ?? "00"}`;
 }
+
+/** Extrai "HH:MM" de um timestamp que o backend já formatou em pt-BR
+ *  (`format_dt_br`, "DD/MM/YYYY HH:MM:SS" — ex.: `SystemHistoryPoint.timestamp`).
+ *  Regex explícito em vez de fatiar por posição: `MonitorPage` e `SystemPage`
+ *  tinham cada um sua própria heurística posicional (`.slice(11,16)` e
+ *  `.split(" ")[1].slice(0,5)`) para o mesmo campo — coincidem no formato
+ *  normal, mas `split(" ")` quebra silenciosamente se `format_dt_br` falhar
+ *  em parsear e devolver o valor original (sem espaço, ex.: ISO cru). */
+export function extractTimeBr(value: string | null | undefined): string {
+  if (!value) return "—";
+  const match = /(\d{2}):(\d{2})/.exec(value);
+  return match ? `${match[1]}:${match[2]}` : value;
+}

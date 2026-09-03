@@ -18,3 +18,6 @@ export { TimeSeries, type SeriesLine } from "./TimeSeries";
 export { DataTable, type Column } from "./DataTable";
 export { Mimico, type QueueLane } from "./Mimico";
 export { LogViewer } from "./LogViewer";
+export { FreshnessTag } from "./FreshnessTag";
+export { DescriptionList, KeyValue } from "./DescriptionList";
+export { Pager } from "./Pager";

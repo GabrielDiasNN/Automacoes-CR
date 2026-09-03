@@ -32,6 +32,7 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
             boxShadow: "var(--shadow-2)",
             padding: "var(--sp-6) var(--sp-5)",
             width: 360,
+            maxWidth: "100%",
             display: "flex",
             flexDirection: "column",
             gap: "var(--sp-4)",
@@ -78,6 +79,13 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
             }}
             placeholder="API Key"
             aria-label="API Key"
+            aria-invalid={!!error}
+            aria-describedby={error ? "apikey-error" : undefined}
+            autoComplete="off"
+            // Única tela do app antes de qualquer navegação — não há contexto
+            // de leitura em andamento para o autofoco atropelar, e é o padrão
+            // esperado num formulário de login de instrumento único.
+            // eslint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
             style={{
               padding: "0.65rem 0.8rem",
@@ -92,7 +100,11 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
           />
 
           {error && (
-            <p style={{ margin: 0, color: "var(--red)", fontSize: "var(--fs-small)", fontFamily: "var(--font-mono)" }}>
+            <p
+              id="apikey-error"
+              role="alert"
+              style={{ margin: 0, color: "var(--red)", fontSize: "var(--fs-small)", fontFamily: "var(--font-mono)" }}
+            >
               ✗ {error}
             </p>
           )}

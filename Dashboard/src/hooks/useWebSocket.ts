@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api, ApiError } from "../api/client";
 
 export type WsStatus = "connecting" | "open" | "closed" | "unauthorized";
 
@@ -57,20 +58,12 @@ export function useWebSocket(
       }, reconnectDelay.current);
     };
 
-    fetch("/api/system/ws-token", {
-      method: "POST",
-      headers: { "X-API-Key": apiKey },
-    })
-      .then((res) => {
-        if (res.status === 401 || res.status === 403) {
-          // Chave de API genuinamente inválida/revogada: reconectar não resolve
-          // (o servidor sempre vai recusar), então para de tentar em vez de
-          // repetir o POST /ws-token indefinidamente com backoff.
-          throw new Error("unauthorized");
-        }
-        if (!res.ok) throw new Error(`ws-token ${res.status}`);
-        return res.json() as Promise<{ token: string }>;
-      })
+    // Via `api.post` (não `fetch` cru) para que um 401/403 aqui também dispare
+    // o `_unauthorizedHandler` global (client.ts) — antes, uma chave revogada
+    // deixava a StatusBar em "sem sinal" e o resto do app "logado", porque só
+    // os pollings HTTP passavam pelo client e limpavam a sessão.
+    api
+      .post<{ token: string; expires_in_seconds: number }>("/api/system/ws-token")
       .then(({ token }) => {
         if (!isCurrent()) return;
 
@@ -110,7 +103,10 @@ export function useWebSocket(
       })
       .catch((err) => {
         if (!isCurrent()) return;
-        if (err instanceof Error && err.message === "unauthorized") {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          // Chave de API genuinamente inválida/revogada: reconectar não resolve
+          // (o servidor sempre vai recusar), então para de tentar em vez de
+          // repetir o POST /ws-token indefinidamente com backoff.
           setStatus("unauthorized");
           return;
         }

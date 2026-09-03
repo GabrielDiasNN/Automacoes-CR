@@ -38,6 +38,8 @@ export interface Automation {
   last_execution_finished_at: string | null;
   last_execution_duration_seconds: number | null;
   last_failure_reason: string | null;
+  last_recovery_action: string | null;
+  last_requested_by: string | null;
   schedule_type: string | null;
   schedule_summary: string | null;
   next_runs_preview: string[];
@@ -45,8 +47,13 @@ export interface Automation {
   success_24h: number;
   failures_24h: number;
   timeouts_24h: number;
+  error_24h: number; // alias de failures_24h (backend, apply_br_format)
+  avg_duration_24h_seconds: number | null;
   pending_count: number;
   operational_state: string; // idle | running | blocked | ...
+  validated: boolean;
+  backup_path: string | null;
+  audit_id: number | null;
 }
 
 // ── Execuções ───────────────────────────────────────────────────────────────
@@ -81,11 +88,24 @@ export interface ExecutionSummary {
   requeue_block_reason: string | null;
   stop_allowed: boolean;
   related_execution_id: string | null;
+  related_execution_status: string | null;
+  related_queue_group: string | null;
 }
 
 export interface ExecutionDetail extends ExecutionSummary {
   logs: string | null;
   artifacts: string | null;
+  claimed_at: string | null;
+  worker_instance_id: string | null;
+  worker_pid: number | null;
+}
+
+export interface ExecutionLogsResponse {
+  exec_id: string;
+  total_lines: number;
+  offset: number;
+  limit: number;
+  lines: string[];
 }
 
 export interface QueueActionResponse {
@@ -110,11 +130,12 @@ export interface WorkerStatus {
   tasks_completed: number;
   tasks_failed: number;
   active_tasks: number;
+  pool_saturated_seconds: number;
   version: string;
 }
 
 export interface SystemHealth {
-  status: string; // healthy | warning | critical
+  status: string; // healthy | degraded | unhealthy
   timestamp: string;
   database: string;
   scheduler: string;
@@ -282,6 +303,12 @@ export interface SystemOverview {
 
 // ── Portfólio ───────────────────────────────────────────────────────────────
 
+export interface PortfolioDependencyStatus {
+  oracle: string;
+  outlook: string;
+  whatsapp: string;
+}
+
 export interface PortfolioHealthItem {
   catalog_id: string;
   automation_id: number | null;
@@ -294,14 +321,27 @@ export interface PortfolioHealthItem {
   queue_group: string | null;
   sla_minutes: number | null;
   health_status: string;
-  sla_state: string;
+  sla_state: string; // ok | at_risk | violated | unknown — ver lib/status.ts slaTone()
   docs_status: string;
   drift_status: string;
   drift_count: number;
+  runbook_path: string | null;
+  readme_path: string | null;
+  context_path: string | null;
   next_run: string | null;
   schedule_summary: string | null;
+  schedule_lag_minutes: number | null;
+  schedule_lag_seconds: number | null;
   last_status: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_success_age_minutes: number | null;
+  last_failure_age_minutes: number | null;
+  last_success_age_seconds: number | null;
+  last_failure_age_seconds: number | null;
   review_status: string;
+  review_reasons: string[];
+  dependency_status: PortfolioDependencyStatus;
 }
 
 export interface PortfolioHealth {
@@ -665,8 +705,10 @@ export interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams
 
 export const orchestratorApi = {
   // ── Automações ──
-  listAutomations: (params?: { page?: number; per_page?: number; search?: string; sort?: string; order?: string }) =>
-    api.get<Paginated<Automation>>(`/api/automations${qs({ ...params })}`).then((r) => r.items),
+  listAutomations: (
+    params?: { page?: number; per_page?: number; search?: string; sort?: string; order?: string },
+    signal?: AbortSignal,
+  ) => api.get<Paginated<Automation>>(`/api/automations${qs({ ...params })}`, signal).then((r) => r.items),
   listAllAutomations: (signal?: AbortSignal) => api.get<Automation[]>("/api/automations/all", signal),
   getAutomation: (id: number) => api.get<Automation>(`/api/automations/${id}`),
   getAutomationOverview: (id: number) =>
@@ -684,28 +726,28 @@ export const orchestratorApi = {
   resumeAll: () => api.post<{ message: string }>("/api/automations/control/resume-all"),
 
   // ── Execuções ──
-  listExecutions: (params?: { page?: number; per_page?: number; status?: string; automation_id?: number }) =>
-    api.get<Paginated<ExecutionSummary>>(`/api/executions${qs({ ...params })}`),
+  listExecutions: (
+    params?: { page?: number; per_page?: number; status?: string; automation_id?: number },
+    signal?: AbortSignal,
+  ) => api.get<Paginated<ExecutionSummary>>(`/api/executions${qs({ ...params })}`, signal),
   recentExecutions: (limit = 10) =>
     api.get<ExecutionSummary[]>(`/api/executions/recent${qs({ limit })}`),
   getExecution: (id: string, signal?: AbortSignal) => api.get<ExecutionDetail>(`/api/executions/${id}`, signal),
   getExecutionLogs: (id: string, params?: { offset?: number; limit?: number }) =>
-    api.get<{ lines: string[]; total_lines: number; offset: number; [k: string]: unknown }>(
-      `/api/executions/${id}/logs${qs({ ...params })}`,
-    ),
+    api.get<ExecutionLogsResponse>(`/api/executions/${id}/logs${qs({ ...params })}`),
   stopExecution: (id: string) => api.post<{ message: string }>(`/api/executions/${id}/stop`),
   requeueExecution: (id: string, body?: { reason?: string; priority?: string }) =>
     api.post<QueueActionResponse>(`/api/executions/${id}/requeue`, body ?? {}),
 
   // ── Sistema ──
-  getHealth: () => api.get<SystemHealth>("/api/system/health"),
+  getHealth: () => api.get<SystemHealth>("/api/system/health/full"),
   getWorkerStatus: () => api.get<WorkerStatus>("/api/system/worker/status"),
   getOverview: (signal?: AbortSignal) => api.get<SystemOverview>("/api/system/overview", signal),
   getBaseline: () => api.get<BaselineStatus>("/api/system/baseline"),
   getHistory: (hours = 24, signal?: AbortSignal) =>
     api.get<SystemHistory>(`/api/system/history${qs({ hours })}`, signal),
-  getSystemMetricsDaily: (days = 14) =>
-    api.get<SystemMetricsDaily>(`/api/system/metrics/daily${qs({ days })}`),
+  getSystemMetricsDaily: (days = 14, signal?: AbortSignal) =>
+    api.get<SystemMetricsDaily>(`/api/system/metrics/daily${qs({ days })}`, signal),
   getScheduledJobs: () => api.get<ScheduledJob[]>("/api/system/scheduler/jobs"),
   runCheckpoint: () => api.post<{ message: string }>("/api/system/checkpoint"),
   runPurge: () => api.post<{ message: string }>("/api/system/purge"),
@@ -714,19 +756,21 @@ export const orchestratorApi = {
 
   // ── Portfólio ──
   getPortfolioHealth: (signal?: AbortSignal) => api.get<PortfolioHealth>("/api/portfolio/health", signal),
+  getPortfolioRunbook: (catalogId: string, signal?: AbortSignal) =>
+    api.getText(`/api/portfolio/runbook/${encodeURIComponent(catalogId)}`, signal),
 
   // ── Beneficiamento ──
   getBeneficiamentoDashboard: () => api.get<BeneficiamentoDashboard>("/api/beneficiamento/dashboard"),
   getBeneficiamentoHealth: (signal?: AbortSignal) =>
     api.get<BeneficiamentoHealth>("/api/beneficiamento/health", signal),
-  getBeneficiamentoOverview: (params?: BeneficiamentoOverviewParams) =>
-    api.get<BeneficiamentoOverview>(`/api/beneficiamento/overview${qs({ ...params })}`),
-  getBeneficiamentoDetail: (params: BeneficiamentoDetailParams) =>
-    api.get<BeneficiamentoDetail>(`/api/beneficiamento/detail${qs({ ...params })}`),
-  getBeneficiamentoProdutos: (q: string) =>
-    api.get<BeneficiamentoProdutosResponse>(`/api/beneficiamento/produtos${qs({ q })}`),
-  getBeneficiamentoTingimento: (params?: { dt_inicio?: string; dt_fim?: string }) =>
-    api.get<BeneficiamentoTingimento>(`/api/beneficiamento/tingimento${qs({ ...params })}`),
+  getBeneficiamentoOverview: (params?: BeneficiamentoOverviewParams, signal?: AbortSignal) =>
+    api.get<BeneficiamentoOverview>(`/api/beneficiamento/overview${qs({ ...params })}`, signal),
+  getBeneficiamentoDetail: (params: BeneficiamentoDetailParams, signal?: AbortSignal) =>
+    api.get<BeneficiamentoDetail>(`/api/beneficiamento/detail${qs({ ...params })}`, signal),
+  getBeneficiamentoProdutos: (q: string, signal?: AbortSignal) =>
+    api.get<BeneficiamentoProdutosResponse>(`/api/beneficiamento/produtos${qs({ q })}`, signal),
+  getBeneficiamentoTingimento: (params?: { dt_inicio?: string; dt_fim?: string }, signal?: AbortSignal) =>
+    api.get<BeneficiamentoTingimento>(`/api/beneficiamento/tingimento${qs({ ...params })}`, signal),
   refreshBeneficiamento: (period: string) =>
     api.post<Record<string, unknown>>(`/api/beneficiamento/refresh${qs({ period })}`),
 };

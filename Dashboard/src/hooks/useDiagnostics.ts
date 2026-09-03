@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { orchestratorApi, type SystemHealth, type WorkerStatus } from "../api/orchestrator";
+import { errMessage } from "../lib/errors";
 
 export interface DiagnosticsState {
   health: SystemHealth | null;
@@ -35,7 +36,7 @@ export function useDiagnostics(intervalMs = 15_000) {
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMessage(err),
       }));
     }
   }, []);

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { toneTint, toneVar, type Tone } from "../../lib/status";
 import styles from "./Toast.module.css";
 
@@ -24,14 +24,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 4200);
   }, []);
 
+  // ToastProvider está acima do router (App.tsx) — sem useMemo, `value` era
+  // um objeto novo a cada render, e como o provider re-renderiza a cada
+  // toast (push, e de novo 4,2s depois na expiração), TODO consumidor de
+  // useToast() — páginas inteiras — re-renderizava com ele (achado nº 30,
+  // Onda 5).
+  const value = useMemo(() => ({ push }), [push]);
+
   return (
-    <ToastCtx.Provider value={{ push }}>
+    <ToastCtx.Provider value={value}>
       {children}
       <div className={styles.wrap} role="status" aria-live="polite">
         {items.map((t) => (
           <div
             key={t.id}
             className={`${styles.toast} animate-in`}
+            // Erro (tom vermelho) é assertivo: `role="alert"` sobrepõe o
+            // `aria-live="polite"` do container para essa mensagem — antes
+            // o erro de uma ação destrutiva (ex.: falha ao Parar uma
+            // execução) tinha a mesma prioridade de anúncio que um "ok".
+            role={t.tone === "red" ? "alert" : undefined}
             style={{ borderColor: toneVar[t.tone], background: toneTint[t.tone] }}
           >
             <span className={styles.bar} style={{ background: toneVar[t.tone] }} />

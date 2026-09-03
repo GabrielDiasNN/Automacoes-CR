@@ -21,6 +21,18 @@ export const toneTint: Record<Tone, string> = {
   grey: "var(--grey-tint)",
 };
 
+/** Cor do halo de `animation: pulse-ring` (StatusTag/Annunciator com `pulse`).
+ *  Sem isso o keyframe usava --amber-glow fixo: um StatusTag vermelho com
+ *  `pulse` pulsava âmbar, dessincronizado do próprio tom que estava exibindo. */
+export const toneGlow: Record<Tone, string> = {
+  cyan: "var(--cyan-glow)",
+  amber: "var(--amber-glow)",
+  green: "var(--green-glow)",
+  red: "var(--red-glow)",
+  blue: "var(--blue-glow)",
+  grey: "var(--grey-glow)",
+};
+
 /** Estado de execução → tom. */
 export function executionTone(status: string): Tone {
   switch (status?.toUpperCase()) {
@@ -57,7 +69,11 @@ export function severityTone(severity: string | null | undefined): Tone {
   }
 }
 
-/** Saúde de sistema / baseline → tom. */
+/** Saúde de sistema / baseline → tom.
+ *  Cobre 3 vocabulários que compartilham a função por semântica equivalente:
+ *  - `SystemHealth`/`SystemLiveness` (backend): healthy|ok | degraded | unhealthy
+ *  - baseline operacional (backend): healthy | attention | incident
+ *  - genéricos de SLA/portfólio: warning|at_risk | critical|violated */
 export function healthTone(status: string | null | undefined): Tone {
   switch (status?.toLowerCase()) {
     case "healthy":
@@ -66,10 +82,12 @@ export function healthTone(status: string | null | undefined): Tone {
     case "warning":
     case "attention":
     case "at_risk":
+    case "degraded":
       return "amber";
     case "critical":
     case "incident":
     case "violated":
+    case "unhealthy":
       return "red";
     default:
       return "grey";
@@ -104,12 +122,48 @@ export function criticalityTone(crit: string | null | undefined): Tone {
   }
 }
 
+/** `Automation.operational_state` (backend, automation_snapshot.py
+ *  `_resolve_operational_state`) → tom. Usado como fonte da lâmpada de
+ *  status no card de automação — antes calculada localmente no front a
+ *  partir só de `enabled`, ignorando execução em andamento/falha recente
+ *  que o backend já resolve. */
+export function operationalTone(state: string | null | undefined): Tone {
+  switch (state?.toLowerCase()) {
+    case "healthy":
+      return "green";
+    case "in_progress":
+      return "cyan";
+    case "attention":
+      return "amber";
+    case "paused":
+    case "idle":
+    default:
+      return "grey";
+  }
+}
+
+const OPERATIONAL_STATE_LABEL: Record<string, string> = {
+  healthy: "saudável",
+  in_progress: "em execução",
+  attention: "atenção",
+  paused: "pausada",
+  idle: "ociosa",
+};
+
+export function operationalStateLabel(state: string | null | undefined): string {
+  if (!state) return "—";
+  return OPERATIONAL_STATE_LABEL[state.toLowerCase()] ?? state;
+}
+
 const HEALTH_LABEL: Record<string, string> = {
   healthy: "saudável",
+  ok: "saudável",
   warning: "atenção",
   attention: "atenção",
+  degraded: "degradado",
   critical: "incidente",
   incident: "incidente",
+  unhealthy: "incidente",
 };
 
 export function healthLabel(status: string | null | undefined): string {

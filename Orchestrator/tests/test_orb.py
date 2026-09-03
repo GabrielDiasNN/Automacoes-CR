@@ -2062,3 +2062,114 @@ def test_build_message_status_parcial_diz_que_o_complemento_existe() -> None:
         }
     )
     assert "com peças sem restrição (disponíveis no depósito)" in msg
+
+
+# --------------------------------------------------------------------------
+# OB em montagem (03/09/2026) — transitório não é dado corrompido
+# --------------------------------------------------------------------------
+
+
+def test_classificacao_nula_levanta_erro_tipado_de_montagem() -> None:
+    """`CD_CLASSIFICACAO_COR` NULL é o estado transitório da montagem: a OB sai
+    da view antes de `OBMONTADA` virar. Precisa ser distinguível de dado
+    quebrado — daí a exceção própria, e não um `DadoIncompletoError` genérico."""
+    v = _validators()
+    erros = _load_module("errors", AUTOMATION_DIR / "errors.py")
+
+    with pytest.raises(erros.ClassificacaoNaoResolvidaError):
+        v.coerce_ob_row(_ob_row(CD_CLASSIFICACAO_COR=None))
+
+    # Valor presente mas fora do domínio continua sendo dado quebrado comum.
+    with pytest.raises(erros.DadoIncompletoError) as exc:
+        v.coerce_ob_row(_ob_row(CD_CLASSIFICACAO_COR=7))
+    assert not isinstance(exc.value, erros.ClassificacaoNaoResolvidaError)
+
+
+def test_relatorio_separa_montagem_de_dado_quebrado() -> None:
+    v = _validators()
+    colunas = list(_ob_row().keys())
+
+    so_montagem = v.validate_ob_query(
+        colunas,
+        [
+            _ob_row(NUMERO_OB=1, CD_CLASSIFICACAO_COR=None),
+            _ob_row(NUMERO_OB=2, CD_CLASSIFICACAO_COR=None),
+        ],
+    )
+    assert so_montagem.so_falhou_por_montagem is True
+
+    # Uma linha quebrada no meio já descaracteriza o lote como transitório.
+    misto = v.validate_ob_query(
+        colunas,
+        [
+            _ob_row(NUMERO_OB=1, CD_CLASSIFICACAO_COR=None),
+            _ob_row(NUMERO_OB=2, CD_CLASSIFICACAO_COR=7),
+        ],
+    )
+    assert misto.so_falhou_por_montagem is False
+
+    # Sem rejeição nenhuma não há o que classificar.
+    assert v.validate_ob_query(colunas, [_ob_row()]).so_falhou_por_montagem is False
+
+
+def test_extract_trata_lote_todo_em_montagem_como_nada_a_notificar(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """Incidente de 03/09/2026: as duas únicas OBs do universo estavam em
+    montagem, o lote foi tratado como dado corrompido e a execução falhou 3
+    vezes (ExitCode=3, alerta HIGH no dashboard) por um transitório que se
+    resolve sozinho no ciclo seguinte.
+
+    Agora é exit 2 — e o state segue intocado, porque as OBs sumiram da query
+    por estarem montando: commitar state vazio apagaria as reservas vivas."""
+    extract = _load_module("extract_orb_state", AUTOMATION_DIR / "extract_orb.py")
+    state_file = tmp_path / "orb_state.json"
+    state_original = json.dumps(
+        {"notified": {"185722": {"em": "x", "reduzido": 26, "reservado": 55}}}
+    )
+    state_file.write_text(state_original, encoding="utf-8")
+    monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
+
+    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+        resumo.falhas.append("OB #186003: campo 'CD_CLASSIFICACAO_COR' esta nulo")
+        resumo.falhas.append("OB #186101: campo 'CD_CLASSIFICACAO_COR' esta nulo")
+        resumo.todas_falhas_por_montagem = True
+        return []
+
+    _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs, tmp_path)
+
+    with pytest.raises(SystemExit) as excinfo:
+        extract.extract()
+
+    assert excinfo.value.code == 2, "montagem em curso nao e' falha de execucao"
+    assert not (tmp_path / "orb_state.json.tmp").exists()
+    assert state_file.read_text(encoding="utf-8") == state_original
+
+
+def test_extract_ainda_aborta_quando_ha_dado_realmente_quebrado(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """A guarda de 26/08 continua valendo: basta UMA linha rejeitada por outro
+    motivo para o lote voltar a ser tratado como dado fora do contrato."""
+    extract = _load_module("extract_orb_state", AUTOMATION_DIR / "extract_orb.py")
+    state_file = tmp_path / "orb_state.json"
+    state_original = json.dumps(
+        {"notified": {"185722": {"em": "x", "reduzido": 26, "reservado": 55}}}
+    )
+    state_file.write_text(state_original, encoding="utf-8")
+    monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
+
+    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+        resumo.falhas.append("OB #1: campo 'CD_CLASSIFICACAO_COR' esta nulo")
+        resumo.falhas.append("OB #2: CD_CLASSIFICACAO_COR=7, esperado 6 ou 9")
+        resumo.todas_falhas_por_montagem = False
+        return []
+
+    _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs, tmp_path)
+
+    with pytest.raises(SystemExit) as excinfo:
+        extract.extract()
+
+    assert excinfo.value.code == 1
+    assert not (tmp_path / "orb_state.json.tmp").exists()
+    assert state_file.read_text(encoding="utf-8") == state_original

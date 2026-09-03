@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, RotateCw, Square, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { RotateCw, Square, RefreshCw } from "lucide-react";
 import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
 import {
   Button,
@@ -9,26 +9,42 @@ import {
   DataTable,
   Drawer,
   ErrorState,
+  FreshnessTag,
   Loading,
   Nameplate,
+  Pager,
   Select,
   StatusTag,
   useToast,
   type Column,
 } from "../components/ui";
+import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { executionTone, severityTone, toneVar } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
 import page from "./page.module.css";
+import { errMessage } from "../lib/errors";
 
 const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED", "EXPIRED"];
 const PER_PAGE = 25;
 
 export function ExecucoesPage() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
+  // Vem do card de Automações ("ver execuções") — filtra sem exigir que o
+  // operador conheça o nome exato para digitar em algum campo de busca.
+  // `setAutomationId` (não só o valor inicial) é necessário para o botão
+  // "Limpar filtro" funcionar: `navigate()` sozinho muda a URL, mas não
+  // remonta este componente (mesma rota), então um automationId lido só
+  // uma vez no initializer nunca seria atualizado.
+  const [automationId, setAutomationId] = useState<number | undefined>(() => {
+    const raw = searchParams.get("automation_id");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  });
   const [pageNum, setPageNum] = useState(1);
 
   const [detail, setDetail] = useState<(Partial<ExecutionDetail> & { id: string }) | null>(null);
@@ -44,20 +60,26 @@ export function ExecucoesPage() {
   useEffect(() => () => detailAbortRef.current?.abort(), []);
 
   const fetchExecutions = useCallback(
-    () =>
-      orchestratorApi.listExecutions({
-        page: pageNum,
-        per_page: PER_PAGE,
-        status: status || undefined,
-      }),
-    [pageNum, status],
+    (signal?: AbortSignal) =>
+      orchestratorApi.listExecutions(
+        {
+          page: pageNum,
+          per_page: PER_PAGE,
+          status: status || undefined,
+          automation_id: automationId,
+        },
+        signal,
+      ),
+    [pageNum, status, automationId],
   );
   const {
     data,
     loading,
     error: err,
     refresh: load,
-  } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status]);
+    lastUpdated,
+    rateLimitedUntil,
+  } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status, automationId]);
 
   const openDetail = useCallback(
     async (id: string) => {
@@ -76,7 +98,7 @@ export function ExecucoesPage() {
       } catch (e) {
         if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
         if (!isLatest()) return;
-        toast(e instanceof Error ? e.message : String(e), "red");
+        toast(errMessage(e), "red");
         setDetail(null);
       } finally {
         if (isLatest()) setDetailLoading(false);
@@ -85,34 +107,36 @@ export function ExecucoesPage() {
     [toast],
   );
 
+  const { run: runExecAction } = useAction<string>();
+
   const doStop = useCallback(
-    async (id: string) => {
+    (id: string) => {
       setConfirmStop(null);
-      try {
-        await orchestratorApi.stopExecution(id);
-        toast(`Parada solicitada para ${shortId(id)}`, "amber");
-        load();
-      } catch (e) {
-        toast(e instanceof Error ? e.message : String(e), "red");
-      }
+      runExecAction(id, () => orchestratorApi.stopExecution(id), {
+        overrideMessage: `Parada solicitada para ${shortId(id)}`,
+        successTone: "amber",
+        onDone: load,
+      });
     },
-    [toast, load],
+    [runExecAction, load],
   );
 
   const doRequeue = useCallback(
-    async (id: string) => {
-      try {
-        await orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" });
-        toast(`Reenfileirado: ${shortId(id)}`, "cyan");
-        load();
-      } catch (e) {
-        toast(e instanceof Error ? e.message : String(e), "red");
-      }
+    (id: string) => {
+      runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
+        overrideMessage: `Reenfileirado: ${shortId(id)}`,
+        onDone: load,
+      });
     },
-    [toast, load],
+    [runExecAction, load],
   );
 
-  const columns: Column<ExecutionSummary>[] = [
+  // useMemo: sem isso, 8 colunas (cada uma com uma closure de render) eram
+  // recriadas a cada render — a página faz polling a cada 8s, então isso
+  // reconstruía o array inteiro a cada tick sem necessidade (achado nº 31,
+  // Onda 5).
+  const columns: Column<ExecutionSummary>[] = useMemo(
+    () => [
     {
       key: "status",
       header: "Status",
@@ -174,22 +198,43 @@ export function ExecucoesPage() {
       header: "Ação",
       align: "right",
       hideOnNarrow: true,
+      // O stopPropagation manual que existia aqui foi removido: DataTable
+      // agora ignora clique/Enter cujo alvo esteja dentro de um controle
+      // interativo (ver components/ui/DataTable.tsx) — a correção mora na
+      // origem, não em cada consumidor lembrar de tratar o próprio caso.
       render: (r) => (
-        <span style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>
+        <span style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end" }}>
+          {/* aria-label com o id da execução: sem isso, N linhas produzem N
+           *  botões "Parar"/"Reenfileirar" idênticos para leitor de tela, numa
+           *  ação destrutiva em produção que precisa ser inequívoca. */}
           {r.stop_allowed && (
-            <Button size="sm" variant="danger" icon={<Square size={12} />} onClick={() => setConfirmStop(r.id)}>
+            <Button
+              size="sm"
+              variant="danger"
+              icon={<Square size={12} />}
+              aria-label={`Parar execução ${shortId(r.id)}`}
+              onClick={() => setConfirmStop(r.id)}
+            >
               Parar
             </Button>
           )}
           {r.requeue_allowed && (
-            <Button size="sm" variant="primary" icon={<RotateCw size={12} />} onClick={() => doRequeue(r.id)}>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<RotateCw size={12} />}
+              aria-label={`Reenfileirar execução ${shortId(r.id)}`}
+              onClick={() => doRequeue(r.id)}
+            >
               Reenfileirar
             </Button>
           )}
         </span>
       ),
     },
-  ];
+    ],
+    [doRequeue],
+  );
 
   const totalPages = data?.pages ?? 1;
 
@@ -200,6 +245,31 @@ export function ExecucoesPage() {
         title="Execuções"
         actions={
           <div className={page.toolbar}>
+            {automationId != null && (
+              <StatusTag tone="cyan" dot>
+                {data?.items[0]?.automation_name ?? `automação #${automationId}`}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAutomationId(undefined);
+                    setPageNum(1);
+                    navigate("/execucoes");
+                  }}
+                  aria-label="Limpar filtro de automação"
+                  style={{
+                    marginLeft: 6,
+                    border: "none",
+                    background: "none",
+                    color: "inherit",
+                    cursor: "pointer",
+                    font: "inherit",
+                    padding: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              </StatusTag>
+            )}
             <Select
               value={status}
               onChange={(e) => {
@@ -214,6 +284,7 @@ export function ExecucoesPage() {
                 </option>
               ))}
             </Select>
+            <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
               Atualizar
             </Button>
@@ -237,17 +308,15 @@ export function ExecucoesPage() {
         )}
       </Card>
 
-      <div className={page.toolbar}>
-        <Button size="sm" variant="subtle" icon={<ChevronLeft size={14} />} disabled={pageNum <= 1} onClick={() => setPageNum((p) => p - 1)}>
-          Anterior
-        </Button>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>
-          página {data?.page ?? 1} / {totalPages} · {data?.total ?? 0} execuções
-        </span>
-        <Button size="sm" variant="subtle" onClick={() => setPageNum((p) => p + 1)} disabled={pageNum >= totalPages}>
-          Próxima <ChevronRight size={14} />
-        </Button>
-      </div>
+      <Pager
+        page={data?.page ?? 1}
+        pages={totalPages}
+        currentPage={pageNum}
+        total={data?.total ?? 0}
+        itemLabel="execuções"
+        onPrev={() => setPageNum((p) => p - 1)}
+        onNext={() => setPageNum((p) => p + 1)}
+      />
 
       <Drawer
         open={!!detail}

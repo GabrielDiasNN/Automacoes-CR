@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Droplet } from "lucide-react";
 import {
   orchestratorApi,
-  type BeneficiamentoTingimento,
   type BeneficiamentoTingimentoPorCor,
   type BeneficiamentoTingimentoPorMaquina,
   type BeneficiamentoTingimentoPorTurno,
@@ -19,6 +18,7 @@ import {
   type Column,
   type SeriesLine,
 } from "../ui";
+import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { formatNumber, formatPercent } from "../../lib/format";
 import styles from "./TingimentoPanel.module.css";
 
@@ -94,31 +94,11 @@ const TURNO_COLUMNS: Column<BeneficiamentoTingimentoPorTurno>[] = [
  */
 export function TingimentoPanel() {
   const [range, setRange] = useState(() => presetRange(30));
-  const [data, setData] = useState<BeneficiamentoTingimento | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    orchestratorApi
-      .getBeneficiamentoTingimento(range)
-      .then((d) => {
-        if (cancelled) return;
-        setData(d);
-        setError(null);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [range]);
+  const fetchTingimento = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getBeneficiamentoTingimento(range, signal),
+    [range],
+  );
+  const { data, loading, error } = useAsyncResource(fetchTingimento, [range]);
 
   return (
     <Card

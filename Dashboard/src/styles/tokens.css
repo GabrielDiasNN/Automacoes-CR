@@ -42,16 +42,25 @@
 
   --green:       #3FB950;
   --green-tint:  rgba(63, 185, 80, 0.12);
+  --green-glow:  rgba(63, 185, 80, 0.30);
 
   --red:         #F0524D;
-  --red-tint:    rgba(240, 82, 77, 0.12);
+  /* 0.07 (não 0.12): sobre --surface, alpha MAIOR aproxima o fundo da própria
+     cor do texto e PIORA o contraste, não melhora — o valor anterior (0.12)
+     dava ratio 4.41:1 e reprovava WCAG AA (mínimo 4.5:1 para texto <18px;
+     StatusTag usa --fs-label, 11px). Ratio real com 0.07: 4.68:1. */
+  --red-tint:    rgba(240, 82, 77, 0.07);
   --red-glow:    rgba(240, 82, 77, 0.32);
 
   --blue:        #4C8DF6;
   --blue-tint:   rgba(76, 141, 246, 0.12);
+  --blue-glow:   rgba(76, 141, 246, 0.30);
 
   --grey:        #7C8A9C;
-  --grey-tint:   rgba(124, 138, 156, 0.12);
+  /* 0.05 (não 0.12): mesmo raciocínio do --red-tint acima — o valor anterior
+     dava 4.25:1 (reprova AA). Ratio real com 0.05: 4.68:1. */
+  --grey-tint:   rgba(124, 138, 156, 0.05);
+  --grey-glow:   rgba(124, 138, 156, 0.30);
 
   /* ── Tipografia ── */
   --font-display: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
@@ -178,7 +187,11 @@ a { color: inherit; }
 
 /* ── Keyframes ── */
 @keyframes pulse-ring {
-  0%, 100% { box-shadow: 0 0 0 0 var(--amber-glow); }
+  /* `--pulse-glow` é definido inline pelo componente (StatusTag, Annunciator)
+     via `toneGlow[tone]` de lib/status.ts — o pulso acompanha o tom real do
+     alarme em vez de ser sempre âmbar. Fallback âmbar preserva quem ainda não
+     define a variável. */
+  0%, 100% { box-shadow: 0 0 0 0 var(--pulse-glow, var(--amber-glow)); }
   50%      { box-shadow: 0 0 0 5px transparent; }
 }
 @keyframes sweep {

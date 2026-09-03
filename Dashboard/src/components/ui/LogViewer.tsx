@@ -148,7 +148,12 @@ export function LogViewer({ text, loading }: { text: string; loading?: boolean }
         </IconButton>
       </div>
 
-      <div className={styles.body} ref={bodyRef} style={fullscreen ? { maxHeight: "none" } : { maxHeight: 360 }}>
+      <div
+        className={styles.body}
+        ref={bodyRef}
+        role="log"
+        style={fullscreen ? { maxHeight: "none" } : { maxHeight: 360 }}
+      >
         {loading ? (
           <div className={styles.emptyState}>carregando logs…</div>
         ) : filtered.length === 0 ? (

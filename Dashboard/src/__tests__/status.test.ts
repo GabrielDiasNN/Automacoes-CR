@@ -69,20 +69,41 @@ describe("healthTone", () => {
     expect(healthTone("ok")).toBe("green");
   });
 
-  it("mapeia warning/attention/at_risk para âmbar", () => {
+  it("mapeia warning/attention/at_risk/degraded para âmbar", () => {
     expect(healthTone("warning")).toBe("amber");
     expect(healthTone("attention")).toBe("amber");
     expect(healthTone("at_risk")).toBe("amber");
+    expect(healthTone("degraded")).toBe("amber");
   });
 
-  it("mapeia critical/incident/violated para vermelho", () => {
+  it("mapeia critical/incident/violated/unhealthy para vermelho", () => {
     expect(healthTone("critical")).toBe("red");
     expect(healthTone("incident")).toBe("red");
     expect(healthTone("violated")).toBe("red");
+    expect(healthTone("unhealthy")).toBe("red");
   });
 
   it("é case-insensitive", () => {
     expect(healthTone("HEALTHY")).toBe("green");
+  });
+
+  // Teste-guarda de contrato: `GET /api/system/health/full` (schemas.SystemHealth,
+  // Orchestrator/app/schemas/system.py) e `GET /api/system/health` (schemas.SystemLiveness)
+  // usam o vocabulário healthy|ok|degraded|unhealthy — NÃO healthy|warning|critical, que
+  // é só o vocabulário do baseline operacional. Consumido por StatusBar, SystemPage e
+  // PainelPage via `getHealth()`/`getOverview().health`. Este teste existe porque esse
+  // exato descompasso já causou bug em produção: o alarme piscante nunca disparava e o
+  // sistema "degraded" aparecia cinza (nem verde, nem âmbar, nem vermelho).
+  it("cobre o vocabulário real de SystemHealth/SystemLiveness sem cair no default cinza", () => {
+    const vocabularioBackend = ["healthy", "ok", "degraded", "unhealthy"] as const;
+    for (const status of vocabularioBackend) {
+      expect(healthTone(status)).not.toBe("grey");
+    }
+  });
+
+  it("healthLabel traduz degraded/unhealthy para pt-BR", () => {
+    expect(healthLabel("degraded")).toBe("degradado");
+    expect(healthLabel("unhealthy")).toBe("incidente");
   });
 });
 

@@ -13,17 +13,6 @@
   flex-direction: column;
   gap: var(--sp-3);
 }
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-3);
-}
-.pagerLabel {
-  font-family: var(--font-mono);
-  font-size: var(--fs-small);
-  color: var(--text-mid);
-}
 .desvioAmber {
   color: var(--amber);
 }

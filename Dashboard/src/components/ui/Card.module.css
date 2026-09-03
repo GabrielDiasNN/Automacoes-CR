@@ -22,8 +22,10 @@
   box-shadow: var(--engraved);
 }
 .label {
+  margin: 0; /* neutraliza o default do navegador para <h3> */
   font-family: var(--font-mono);
   font-size: var(--fs-label);
+  font-weight: 400; /* idem — <h3> vem bold por padrão */
   color: var(--text-lo);
   letter-spacing: var(--track-mid);
   text-transform: uppercase;

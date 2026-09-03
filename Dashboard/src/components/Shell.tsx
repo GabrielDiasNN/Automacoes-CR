@@ -1,11 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Factory, LayoutDashboard, ListChecks, Menu, Radio, Rows3, Rows4, Search, Server, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
+import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
-import { IconButton } from "./ui";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { IconButton, Loading } from "./ui";
 import styles from "./Shell.module.css";
 
 interface NavItem {
@@ -29,6 +32,19 @@ export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { clearKey } = useApiKeyContext();
   const { density, toggleDensity } = useTableDensity();
+  const location = useLocation();
+  const railRef = useRef<HTMLElement>(null);
+  // Mesmo breakpoint de Shell.module.css: só ABAIXO de 900px o rail vira
+  // gaveta fixed+translateX; em desktop ele está sempre visível e `open`
+  // nunca chega a ser lido pelo CSS (o botão hambúrguer nem aparece).
+  const isMobileRail = useMediaQuery("(max-width: 900px)");
+  const railHidden = isMobileRail && !open;
+
+  // Abaixo de 900px o rail fechado é `translateX(-100%)` mas continuava no
+  // DOM, focável e no tab order — um usuário de teclado tabulava para dentro
+  // de um menu fora da tela sem indício visual algum. Focus trap real
+  // (Escape fecha, Tab cicla) só quando de fato aberto como gaveta mobile.
+  useFocusTrap(railRef, isMobileRail && open, () => setOpen(false));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -49,7 +65,11 @@ export function Shell() {
       <div className={`hazard ${styles.brandRail}`} aria-hidden="true" />
 
       <div className={styles.frame}>
-        <aside className={`${styles.rail} ${open ? styles.railOpen : ""}`}>
+        <aside
+          ref={railRef}
+          className={`${styles.rail} ${open ? styles.railOpen : ""}`}
+          {...(railHidden ? { inert: "" } : {})}
+        >
           <div className={styles.wordmark}>
             <div>
               <div className={styles.brand}>ORQUESTRADOR</div>
@@ -113,7 +133,16 @@ export function Shell() {
           </header>
 
           <main className={styles.content} id="conteudo">
-            <Outlet />
+            {/* key={pathname}: uma exceção de render numa página não deixa o
+             *  usuário preso nela — trocar de rota sempre remonta o boundary.
+             *  Suspense cobre o `React.lazy` de Monitor/Beneficiamento/Sistema
+             *  (App.tsx) — code-splitting tira uPlot e os painéis mais
+             *  pesados do bundle inicial. */}
+            <ErrorBoundary key={location.pathname}>
+              <Suspense fallback={<Loading label="carregando tela" />}>
+                <Outlet />
+              </Suspense>
+            </ErrorBoundary>
           </main>
         </div>
       </div>

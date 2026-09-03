@@ -30,6 +30,7 @@ sys.path.insert(
 )
 
 from errors import (  # noqa: E402  pylint: disable=wrong-import-position
+    ClassificacaoNaoResolvidaError,
     DadoIncompletoError,
     SchemaInvalidoError,
 )
@@ -120,11 +121,24 @@ class RelatorioValidacao:
     amostra: list[dict[str, Any]] = field(default_factory=list)
     problemas: list[str] = field(default_factory=list)
     obs: list[ObRestricaoBranco] = field(default_factory=list)
+    # Subconjunto de `problemas`: linhas rejeitadas porque a OB estava sem
+    # classificacao na view (montagem em curso). O extrator usa isso para nao
+    # tratar um lote inteiro de OBs em montagem como dado corrompido.
+    sem_classificacao: list[str] = field(default_factory=list)
 
-    def falhar(self, motivo: str) -> None:
+    def falhar(self, motivo: str, classificacao_ausente: bool = False) -> None:
         """Marca o relatório como inválido e registra a causa."""
         self.ok = False
         self.problemas.append(motivo)
+        if classificacao_ausente:
+            self.sem_classificacao.append(motivo)
+
+    @property
+    def so_falhou_por_montagem(self) -> bool:
+        """Toda linha rejeitada era OB em montagem — nenhum dado quebrado."""
+        return bool(self.problemas) and len(self.sem_classificacao) == len(
+            self.problemas
+        )
 
 
 def _to_int(valor: Any, campo: str, contexto: Any) -> int:
@@ -134,6 +148,21 @@ def _to_int(valor: Any, campo: str, contexto: Any) -> int:
 
 def _to_float(valor: Any, campo: str, contexto: Any) -> float:
     return coerce_float(valor, campo, contexto, DadoIncompletoError)
+
+
+def _classificacao_ou_erro(record: Mapping[str, Any], contexto: Any) -> int:
+    """Coage CD_CLASSIFICACAO_COR, distinguindo AUSENTE de nao-coercivel.
+
+    Ausente (NULL) e o estado transitorio da montagem, nao dado corrompido —
+    ver `ClassificacaoNaoResolvidaError`. Valor presente mas impossivel de
+    coagir segue como `DadoIncompletoError` comum: ai e' dado quebrado mesmo.
+    """
+    if record.get("CD_CLASSIFICACAO_COR") is None:
+        raise ClassificacaoNaoResolvidaError(
+            f"{contexto}: campo 'CD_CLASSIFICACAO_COR' esta nulo "
+            "(OB sem classificacao na view — tipicamente montagem em curso)"
+        )
+    return _to_int(record.get("CD_CLASSIFICACAO_COR"), "CD_CLASSIFICACAO_COR", contexto)
 
 
 def coerce_ob_row(record: dict[str, Any]) -> ObRestricaoBranco:
@@ -167,9 +196,7 @@ def coerce_ob_row(record: dict[str, Any]) -> ObRestricaoBranco:
             if record.get("CODIGO_COR_TINGIMENTO") is None
             else str(record.get("CODIGO_COR_TINGIMENTO")).strip() or None
         ),
-        codigo_classificacao_cor=_to_int(
-            record.get("CD_CLASSIFICACAO_COR"), "CD_CLASSIFICACAO_COR", contexto
-        ),
+        codigo_classificacao_cor=_classificacao_ou_erro(record, contexto),
         descricao_classificacao_cor=str(record.get("DS_CLASSIFICACAO_COR", "")).strip(),
         qtd_classificacoes_cor=_to_int(
             record.get("QTD_CLASSIFICACOES_COR"), "QTD_CLASSIFICACOES_COR", contexto
@@ -249,6 +276,8 @@ def validate_ob_query(
     for record in rows:
         try:
             relatorio.obs.append(coerce_ob_row(record))
+        except ClassificacaoNaoResolvidaError as exc:
+            relatorio.falhar(str(exc), classificacao_ausente=True)
         except DadoIncompletoError as exc:
             relatorio.falhar(str(exc))
 

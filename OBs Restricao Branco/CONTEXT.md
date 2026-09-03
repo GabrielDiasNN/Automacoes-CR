@@ -114,6 +114,18 @@ finalidade cadastrada. `validators.py` contém regras puras.
 - Nenhuma credencial ou ID real em arquivos versionados.
 - Classificação não resolvida é rejeitada com WARN e sem envio; quebra de
   schema ou finalidade também é observável e falha segura.
+- **OB sem classificação na view é transitório, não dado corrompido**
+  (`ClassificacaoNaoResolvidaError`, 03/09/2026). A OB sai de
+  `VW_EXC_OB_PROD_CLASS_COR` antes de `OBMONTADA` virar para `'1'`, então por
+  alguns segundos ela ainda entra na query sem classificação. Quando **todas**
+  as linhas do lote são rejeitadas por esse motivo, a execução termina em
+  `exit 2` (nada a notificar) — antes era `exit 1`, e em 03/09 as duas únicas
+  OBs do universo estavam nessa janela ao mesmo tempo: 3 tentativas, `ExitCode=3`
+  e alerta HIGH no dashboard por um caso que se resolve sozinho no ciclo
+  seguinte. Basta **uma** linha rejeitada por outro motivo para o lote voltar a
+  ser tratado como dado fora do contrato (`exit 1`). Nos dois caminhos o state
+  permanece intocado — as OBs sumiram da query por estarem montando, e commitar
+  um state vazio apagaria as reservas vivas das demais.
 - Lock/cooldown do WhatsApp não consolida state nem abre falso incidente.
 - Alterações futuras nas classes 6/9 exigem nova confrontação com
   `CLASSIFICACAO_COR`, `TIPO_FINALIDADE_FIO` e `COR_FINALIDADE`. Mudanças no

@@ -6,6 +6,13 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/__tests__/**/*.test.{ts,tsx}"],
+    // Sem isso (achado nº 34, Onda 5), @testing-library/jest-dom e
+    // @testing-library/react's cleanup() automático nunca eram ativados —
+    // duas devDeps instaladas e nunca usadas, e o DOM de um teste vazava
+    // para o próximo em qualquer arquivo que usasse renderHook/render sem
+    // seu próprio afterEach manual (achado real: useAction.test.ts precisou
+    // de um antes desta config existir).
+    setupFiles: ["src/__tests__/setup.ts"],
     globals: false,
     css: false,
     coverage: {
@@ -35,14 +42,21 @@ export default defineConfig({
       //     metodo (era opt-in) -> contagem de branch/funcao fica precisa, e os
       //     numeros antigos se revelam INFLADOS (branches 92.2% -> 67.5%,
       //     funcoes 71.9% -> 42.6%). A cobertura real sempre foi essa.
-      // Medido 04/08/2026 com Vitest 4.1.10: 60.6% linhas / 60.2% statements /
-      // 67.5% branches / 42.6% funcoes. `src/context/**` esta em 0% porque
-      // nunca teve teste (verificado) — nao e regressao desta onda.
+      // RECALIBRADO em 02/09/2026 (Onda 5 da revisao geral do frontend): a
+      // cobertura medida subiu bem acima do piso de 04/08 (novos testes de
+      // useAction, useWebSocket, contrato de API com MSW), deixando o gate
+      // sem efeito pratico — nao pegaria regressao nenhuma antes de cair
+      // ~14pp abaixo do real. Medido 02/09/2026 com Vitest 4.1.10: 67.2%
+      // linhas / 66.8% statements / 68.8% branches / 53.2% funcoes.
+      // `useAsyncResource.ts`, `useFocusTrap.ts`, `useMediaQuery.ts` e
+      // `useDiagnostics.ts` estao em 0% (verificado nao ser regressao desta
+      // rodada exceto useAsyncResource, que e novo e foi validado por
+      // Playwright real em vez de teste unitario — ver commit da Onda 4).
       thresholds: {
-        lines: 53,
-        statements: 53,
-        functions: 35,
-        branches: 60,
+        lines: 60,
+        statements: 59,
+        functions: 46,
+        branches: 61,
       },
     },
   },

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, getApiKey, qs, setApiKey, setUnauthorizedHandler } from "../api/client";
+import { api, ApiError, getApiKey, qs, setApiKey, setUnauthorizedHandler } from "../api/client";
 
 describe("qs", () => {
   it("monta query-string a partir de um objeto", () => {
@@ -72,6 +72,43 @@ describe("api.get", () => {
     globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     await expect(api.get("/api/system/health")).rejects.toThrow("403 API key inválida");
+  });
+
+  it("lança ApiError com status e sem retryAfter quando o header não vem", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      text: async () => "erro interno",
+    }) as unknown as typeof fetch;
+
+    try {
+      await api.get("/api/system/health");
+      expect.unreachable("deveria ter lançado");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as ApiError).status).toBe(500);
+      expect((e as ApiError).retryAfter).toBeNull();
+    }
+  });
+
+  it("lê Retry-After em 429 para permitir backoff no polling", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+      text: async () => "limite excedido",
+      headers: { get: (name: string) => (name === "Retry-After" ? "60" : null) },
+    }) as unknown as typeof fetch;
+
+    try {
+      await api.get("/api/system/health");
+      expect.unreachable("deveria ter lançado");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as ApiError).status).toBe(429);
+      expect((e as ApiError).retryAfter).toBe(60);
+    }
   });
 });
 

@@ -68,8 +68,19 @@ export function Treemap({ nodes, height = 320, onCellClick }: TreemapProps) {
     return col;
   });
 
+  const resumo = `Volume por setor e fase: ${formatNumber(total)} kg em ${groups.length} setores`;
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className={styles.svg} preserveAspectRatio="none" role="img">
+    // `role="group"` (não "img"): cada célula abaixo é interativa
+    // (role="button", ver mais adiante) — "img" no ancestral podaria essas
+    // células da árvore de acessibilidade mesmo com tabIndex/onKeyDown nelas.
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className={styles.svg}
+      preserveAspectRatio="none"
+      role="group"
+      aria-label={resumo}
+    >
       {columns.map(({ group, x, width: colWidth }, gi) => {
         let yOffset = 0;
         return (
@@ -82,11 +93,26 @@ export function Treemap({ nodes, height = 320, onCellClick }: TreemapProps) {
                 .slice(0, 3)
                 .map((m) => `${m.maquina}: ${formatNumber(m.kg_total)} kg`)
                 .join(" · ");
+              const celulaLabel = `${group.setor} / ${fase.fase} — ${formatNumber(fase.kg_total)} kg. ${topMaquinas}`;
+              const abrirDrillDown = () => onCellClick?.({ setor: group.setor, fase: fase.fase });
               return (
                 <g
                   key={fase.fase}
-                  onClick={() => onCellClick?.({ setor: group.setor, fase: fase.fase })}
+                  onClick={abrirDrillDown}
                   className={styles.cell}
+                  role={onCellClick ? "button" : undefined}
+                  tabIndex={onCellClick ? 0 : undefined}
+                  aria-label={onCellClick ? celulaLabel : undefined}
+                  onKeyDown={
+                    onCellClick
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            abrirDrillDown();
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   <title>{`${group.setor} / ${fase.fase} — ${formatNumber(fase.kg_total)} kg\n${topMaquinas}`}</title>
                   <rect

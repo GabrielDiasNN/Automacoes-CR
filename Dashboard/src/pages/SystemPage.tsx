@@ -8,46 +8,39 @@ import {
   Button,
   Card,
   ConfirmModal,
+  DescriptionList,
   ErrorState,
+  FreshnessTag,
   Gauge,
+  KeyValue,
   Loading,
   Nameplate,
   StatTile,
   StatusTag,
   TimeSeries,
-  useToast,
   type SeriesLine,
 } from "../components/ui";
+import { useAction } from "../hooks/useAction";
 import { healthTone, healthLabel } from "../lib/status";
-import { formatAge } from "../lib/format";
+import { extractTimeBr, formatAge } from "../lib/format";
 import page from "./page.module.css";
 
 export function SystemPage() {
-  const toast = useToast();
-  const { data, loading, error, refresh, lastUpdated } = usePolling(
+  const { data, loading, error, refresh, lastUpdated, rateLimitedUntil } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     15_000,
   );
-  const { data: history } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
+  const {
+    data: history,
+    error: historyError,
+    lastUpdated: historyUpdated,
+  } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const run = async (kind: string, fn: () => Promise<{ message: string }>) => {
-    setBusy(kind);
-    try {
-      const r = await fn();
-      toast(r.message, "cyan");
-      refresh();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), "red");
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busyKey: busy, run } = useAction<string>();
 
   const chart = useMemo(() => {
     const items = history?.items ?? [];
-    const xLabels = items.map((p) => (p.timestamp.split(" ")[1] ?? p.timestamp).slice(0, 5));
+    const xLabels = items.map((p) => extractTimeBr(p.timestamp));
     const queueLines: SeriesLine[] = [
       { label: "pendentes", values: items.map((p) => p.pending_count), tone: "cyan" },
       { label: "em execução", values: items.map((p) => p.running_count), tone: "amber" },
@@ -85,12 +78,12 @@ export function SystemPage() {
         title="Sistema"
         actions={
           <div className={page.toolbar}>
-            {lastUpdated && (
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-lo)" }}>
-                {lastUpdated.toLocaleTimeString("pt-BR")}
-              </span>
-            )}
-            <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "critical"}>
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && error ? error : null}
+              rateLimitedUntil={rateLimitedUntil}
+            />
+            <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
               {healthLabel(health.status)}
             </StatusTag>
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={refresh}>
@@ -122,7 +115,10 @@ export function SystemPage() {
 
       {/* Tendência */}
       <div className={page.split}>
-        <Card label="tendência · fila (24h)">
+        <Card
+          label="tendência · fila (24h)"
+          actions={<FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />}
+        >
           {chart.count > 1 ? (
             <TimeSeries xLabels={chart.xLabels} lines={chart.queueLines} height={180} />
           ) : (
@@ -131,7 +127,10 @@ export function SystemPage() {
             </span>
           )}
         </Card>
-        <Card label="tendência · WAL (24h)">
+        <Card
+          label="tendência · WAL (24h)"
+          actions={<FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />}
+        >
           {chart.count > 1 ? (
             <TimeSeries xLabels={chart.xLabels} lines={chart.walLine} height={180} />
           ) : (
@@ -154,6 +153,7 @@ export function SystemPage() {
                 tone={healthTone(m.status)}
                 active={m.status !== "healthy"}
                 blink={m.status === "incident"}
+                statusLabel={healthLabel(m.status)}
               />
             ))}
           </AnnunciatorGrid>
@@ -164,20 +164,20 @@ export function SystemPage() {
             <StatusTag tone={worker.is_alive ? "green" : "red"} dot pulse={worker.active_tasks > 0}>
               {worker.is_alive ? "online" : "offline"}
             </StatusTag>
-            <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px var(--sp-3)", margin: 0 }}>
-              <KV k="PID" v={String(worker.pid ?? "—")} />
-              <KV k="Uptime" v={uptime} />
-              <KV k="Concluídas" v={String(worker.tasks_completed)} />
-              <KV k="Falhas" v={String(worker.tasks_failed)} />
-              <KV k="Ativas" v={String(worker.active_tasks)} />
-              <KV k="Versão" v={worker.version} />
-            </dl>
+            <DescriptionList>
+              <KeyValue k="PID" v={String(worker.pid ?? "—")} />
+              <KeyValue k="Uptime" v={uptime} />
+              <KeyValue k="Concluídas" v={String(worker.tasks_completed)} />
+              <KeyValue k="Falhas" v={String(worker.tasks_failed)} />
+              <KeyValue k="Ativas" v={String(worker.active_tasks)} />
+              <KeyValue k="Versão" v={worker.version} />
+            </DescriptionList>
             {!worker.is_alive && (
               <Button
                 variant="primary"
                 icon={<LifeBuoy size={13} />}
                 disabled={busy === "recover"}
-                onClick={() => run("recover", orchestratorApi.recoverWorker)}
+                onClick={() => run("recover", orchestratorApi.recoverWorker, { onDone: refresh })}
               >
                 Recuperar worker
               </Button>
@@ -208,10 +208,10 @@ export function SystemPage() {
       {/* Ações */}
       <Card label="manutenção">
         <div className={page.toolbar}>
-          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => run("ckpt", orchestratorApi.runCheckpoint)}>
+          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => run("ckpt", orchestratorApi.runCheckpoint, { onDone: refresh })}>
             WAL Checkpoint
           </Button>
-          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => run("sched", orchestratorApi.reloadScheduler)}>
+          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => run("sched", orchestratorApi.reloadScheduler, { onDone: refresh })}>
             Recarregar agendador
           </Button>
           <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => setConfirmPurge(true)}>
@@ -228,7 +228,7 @@ export function SystemPage() {
         danger
         onConfirm={() => {
           setConfirmPurge(false);
-          run("purge", orchestratorApi.runPurge);
+          run("purge", orchestratorApi.runPurge, { onDone: refresh });
         }}
         onCancel={() => setConfirmPurge(false)}
       />
@@ -236,21 +236,3 @@ export function SystemPage() {
   );
 }
 
-function KV({ k, v }: { k: string; v: string }) {
-  return (
-    <>
-      <dt
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--fs-label)",
-          color: "var(--text-lo)",
-          textTransform: "uppercase",
-          letterSpacing: "var(--track-mid)",
-        }}
-      >
-        {k}
-      </dt>
-      <dd style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>{v}</dd>
-    </>
-  );
-}

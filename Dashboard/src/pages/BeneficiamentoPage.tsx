@@ -15,6 +15,7 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  FreshnessTag,
   Loading,
   Nameplate,
   Select,
@@ -24,7 +25,6 @@ import {
   TimeSeries,
   type Column,
   type SeriesLine,
-  useToast,
 } from "../components/ui";
 import { DetailDrawer, type DetailDrawerRequest } from "../components/beneficiamento/DetailDrawer";
 import { Treemap } from "../components/beneficiamento/Treemap";
@@ -34,6 +34,7 @@ import {
   FilterBar,
   type BeneficiamentoFiltersState,
 } from "../components/beneficiamento/FilterBar";
+import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { healthTone, healthLabel } from "../lib/status";
@@ -147,11 +148,12 @@ function RankingSection<T>({ title, rows, columns, rowKey, onRowClick }: Ranking
 }
 
 export function BeneficiamentoPage() {
-  const toast = useToast();
+
   const [filters, setFilters] = useState<BeneficiamentoFiltersState>(DEFAULT_BENEFICIAMENTO_FILTERS);
   const debouncedQ = useDebouncedValue(filters.q, 350);
   const [refreshPeriod, setRefreshPeriod] = useState<"diario" | "mensal">("diario");
-  const [refreshing, setRefreshing] = useState(false);
+  const { busyKey: refreshKey, run: runRefresh } = useAction<string>();
+  const refreshing = refreshKey === "refresh";
   const [detailRequest, setDetailRequest] = useState<DetailDrawerRequest | null>(null);
 
   const patchFilters = useCallback((patch: Partial<BeneficiamentoFiltersState>) => {
@@ -190,28 +192,37 @@ export function BeneficiamentoPage() {
     ],
   );
 
-  const fetchOverview = useCallback(() => orchestratorApi.getBeneficiamentoOverview(overviewParams), [overviewParams]);
+  const fetchOverview = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getBeneficiamentoOverview(overviewParams, signal),
+    [overviewParams],
+  );
   const {
     data: overview,
     loading: overviewLoading,
     error: overviewError,
     refresh: reloadOverview,
+    lastUpdated: overviewUpdated,
+    rateLimitedUntil,
   } = usePolling<BeneficiamentoOverview>(fetchOverview, 30_000, [overviewParams]);
 
-  const { data: health, refresh: reloadHealth } = usePolling(orchestratorApi.getBeneficiamentoHealth, 60_000);
+  const {
+    data: health,
+    error: healthError,
+    refresh: reloadHealth,
+    lastUpdated: healthUpdated,
+  } = usePolling(orchestratorApi.getBeneficiamentoHealth, 60_000);
 
-  const doRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await orchestratorApi.refreshBeneficiamento(refreshPeriod);
-      await Promise.all([reloadOverview(), reloadHealth()]);
-      toast("Snapshot atualizado.", "green");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), "red");
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshPeriod, reloadOverview, reloadHealth, toast]);
+  const doRefresh = useCallback(() => {
+    runRefresh(
+      "refresh",
+      () => orchestratorApi.refreshBeneficiamento(refreshPeriod).then(() => undefined),
+      {
+        overrideMessage: "Snapshot atualizado.",
+        successTone: "green",
+        onDone: () => Promise.all([reloadOverview(), reloadHealth()]),
+      },
+    );
+  }, [runRefresh, refreshPeriod, reloadOverview, reloadHealth]);
 
   const contextFilters = useMemo(
     () => ({ dt_inicio: overviewParams.dt_inicio, dt_fim: overviewParams.dt_fim, q: overviewParams.q }),
@@ -250,6 +261,11 @@ export function BeneficiamentoPage() {
         title="Beneficiamento"
         actions={
           <div className={page.toolbar}>
+            <FreshnessTag
+              lastUpdated={overviewUpdated}
+              error={overview && overviewError ? overviewError : null}
+              rateLimitedUntil={rateLimitedUntil}
+            />
             <Select
               value={refreshPeriod}
               onChange={(e) => setRefreshPeriod(e.target.value as "diario" | "mensal")}
@@ -272,8 +288,18 @@ export function BeneficiamentoPage() {
 
       <FilterBar filters={filters} options={overview.filter_options} onChange={patchFilters} onReset={resetFilters} />
 
+      {!health && healthError && (
+        <Card label="saúde do snapshot" alert>
+          <ErrorState message={healthError} />
+        </Card>
+      )}
+
       {health && (
-        <Card label="saúde do snapshot" alert={healthTone(health.status) === "red"}>
+        <Card
+          label="saúde do snapshot"
+          alert={healthTone(health.status) === "red"}
+          actions={<FreshnessTag lastUpdated={healthUpdated} error={healthError} />}
+        >
           <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", alignItems: "center" }}>
             <StatusTag tone={healthTone(health.status)} dot>
               {healthLabel(health.status)}

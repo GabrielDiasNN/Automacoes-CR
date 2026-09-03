@@ -10,34 +10,29 @@ interface AnnunciatorProps {
   active?: boolean;
   /** pisca quando aceso (alarme) */
   blink?: boolean;
-  onClick?: () => void;
+  /** Palavra do estado (ex.: "atenção", "incidente") — antes a severidade era
+   *  comunicada só pela cor da lâmpada e pela piscada; renderizada quando
+   *  `active`, ao lado da legenda. */
+  statusLabel?: string;
 }
 
 /** Tile de anunciador (estilo painel de planta): acende/pisca em alarme.
  *  Linguagem de alerta recorrente — codifica severidade real. */
-export function Annunciator({ legend, value, tone, active, blink, onClick }: AnnunciatorProps) {
+export function Annunciator({ legend, value, tone, active, blink, statusLabel }: AnnunciatorProps) {
   const color = toneVar[tone];
-  const Tag = onClick ? "button" : "div";
   return (
-    <Tag
-      className={[styles.tile, active ? styles.on : styles.off, onClick ? styles.clickable : ""]
-        .filter(Boolean)
-        .join(" ")}
-      style={
-        active
-          ? ({ "--tile-color": color } as React.CSSProperties)
-          : undefined
-      }
-      onClick={onClick}
-      {...(onClick ? { type: "button" as const } : {})}
+    <div
+      className={[styles.tile, active ? styles.on : styles.off].filter(Boolean).join(" ")}
+      style={active ? ({ "--tile-color": color } as React.CSSProperties) : undefined}
     >
       <span
         className={`${styles.lamp} ${active && blink ? styles.blink : ""}`}
         style={{ background: active ? color : "var(--graphite-700)" }}
       />
       <span className={styles.legend}>{legend}</span>
+      {active && statusLabel && <span className={styles.status}>{statusLabel}</span>}
       {value != null && <span className={styles.value}>{value}</span>}
-    </Tag>
+    </div>
   );
 }
 

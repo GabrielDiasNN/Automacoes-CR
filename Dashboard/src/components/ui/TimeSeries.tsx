@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { toneVar, type Tone } from "../../lib/status";
+import styles from "./TimeSeries.module.css";
 
 export interface SeriesLine {
   label: string;
@@ -107,5 +108,25 @@ export function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
 
-  return <div ref={ref} style={{ width: "100%" }} />;
+  // O canvas do uPlot não é exposto pela árvore de acessibilidade e
+  // `legend: { show: false }` (acima) remove a legenda visual do próprio
+  // gráfico — antes disso os rótulos de `SeriesLine.label` não apareciam em
+  // lugar nenhum: um gráfico de 2 linhas coloridas sem indicar qual é qual,
+  // nem para quem enxerga nem para leitor de tela. `role="img"` é seguro
+  // aqui (sem filhos interativos, diferente de Mimico/Treemap).
+  const resumo = `Série temporal: ${lines.map((l) => l.label).join(", ")}`;
+
+  return (
+    <div>
+      <div ref={ref} role="img" aria-label={resumo} style={{ width: "100%" }} />
+      <div className={styles.legend} aria-hidden="true">
+        {lines.map((l) => (
+          <span key={l.label} className={styles.item}>
+            <span className={styles.swatch} style={{ background: CSS_TONE[l.tone] ?? toneVar[l.tone] }} />
+            {l.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
