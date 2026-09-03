@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { errMessage } from "../lib/errors";
+import { readCache, writeCache } from "../lib/resourceCache";
+
+export interface PollingOptions {
+  /** Chave de cache stale-while-revalidate. Com ela, uma remontagem semeia
+   *  `data` a partir da última resposta em vez de voltar a `null` (sem
+   *  `Loading` de tela cheia em `/painel → /sistema → /painel`). O fetch de
+   *  revalidação ainda roda. */
+  cacheKey?: string;
+  /** TTL do cache. Generoso de propósito: como sempre revalida no mount, a
+   *  janela de staleness é ~1 requisição, e `FreshnessTag` sinaliza falha. */
+  cacheTtlMs?: number;
+}
+
+const DEFAULT_CACHE_TTL_MS = 30_000;
 
 export interface PollingState<T> {
   data: T | null;
@@ -35,9 +49,16 @@ export function usePolling<T>(
   fetcher: (signal?: AbortSignal) => Promise<T>,
   intervalMs = 15_000,
   deps: unknown[] = [],
+  options: PollingOptions = {},
 ): PollingState<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { cacheKey, cacheTtlMs = DEFAULT_CACHE_TTL_MS } = options;
+  // Semente lida uma única vez, no mount (initializer lazy).
+  const [seeded] = useState(() =>
+    cacheKey ? readCache<T>(cacheKey, cacheTtlMs) : undefined,
+  );
+
+  const [data, setData] = useState<T | null>(seeded ?? null);
+  const [loading, setLoading] = useState(seeded === undefined);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [rateLimitedUntil, setRateLimitedUntil] = useState<Date | null>(null);
@@ -45,6 +66,8 @@ export function usePolling<T>(
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  const cacheKeyRef = useRef(cacheKey);
+  cacheKeyRef.current = cacheKey;
 
   // Timer que dispara o refresh enfileirado ao fim da janela de 429. Só um por
   // vez — um pedido novo durante a janela apenas renova a intenção.
@@ -111,6 +134,7 @@ export function usePolling<T>(
       const d = await fetcherRef.current(controller.signal);
       if (!isLatest()) return;
       setData(d);
+      if (cacheKeyRef.current) writeCache(cacheKeyRef.current, d);
       setError(null);
       setRateLimitedUntil(null);
       blockedUntilRef.current = 0;

@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePolling } from "../hooks/usePolling";
 import { ApiError } from "../api/client";
+import { _clearCache } from "../lib/resourceCache";
 
 describe("usePolling", () => {
   beforeEach(() => {
@@ -10,6 +11,7 @@ describe("usePolling", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    _clearCache();
   });
 
   it("busca no mount, expõe o dado e sai de loading", async () => {
@@ -326,6 +328,29 @@ describe("usePolling", () => {
     expect(fetcher.mock.calls.length).toBeGreaterThan(1);
     expect(result.current.rateLimitedUntil).toBeNull();
     expect(result.current.error).toBeNull();
+  });
+
+  it("com cacheKey, uma remontagem semeia data do cache e não mostra loading", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ n: 1 });
+    const { result, unmount } = renderHook(() =>
+      usePolling(fetcher, 60_000, [], { cacheKey: "ov" }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.data).toEqual({ n: 1 });
+    unmount();
+
+    // Remonta (equivale a /painel -> /sistema -> /painel): antes voltaria a
+    // loading=true / data=null.
+    const remount = renderHook(() => usePolling(fetcher, 60_000, [], { cacheKey: "ov" }));
+    expect(remount.result.current.loading).toBe(false);
+    expect(remount.result.current.data).toEqual({ n: 1 });
+    // ...e ainda revalida por baixo (SWR).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("refresh durante a janela de 429 enfileira em vez de virar no-op silencioso", async () => {

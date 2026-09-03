@@ -28,6 +28,8 @@ export function SystemPage() {
   const { data, loading, error, refresh, lastUpdated, rateLimitedUntil, refreshQueued } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     15_000,
+    [],
+    { cacheKey: "overview" },
   );
   const {
     data: history,
@@ -177,7 +179,7 @@ export function SystemPage() {
                 variant="primary"
                 icon={<LifeBuoy size={13} />}
                 disabled={busy === "recover"}
-                onClick={() => void run("recover", orchestratorApi.recoverWorker, { onDone: refresh })}
+                onClick={() => void run("recover", orchestratorApi.recoverWorker, { onDone: refresh, invalidate: "overview" })}
               >
                 Recuperar worker
               </Button>
@@ -208,10 +210,10 @@ export function SystemPage() {
       {/* Ações */}
       <Card label="manutenção">
         <div className={page.toolbar}>
-          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => void run("ckpt", orchestratorApi.runCheckpoint, { onDone: refresh })}>
+          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => void run("ckpt", orchestratorApi.runCheckpoint, { onDone: refresh, invalidate: "overview" })}>
             WAL Checkpoint
           </Button>
-          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => void run("sched", orchestratorApi.reloadScheduler, { onDone: refresh })}>
+          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => void run("sched", orchestratorApi.reloadScheduler, { onDone: refresh, invalidate: "overview" })}>
             Recarregar agendador
           </Button>
           <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => setConfirmPurge(true)}>
@@ -228,7 +230,7 @@ export function SystemPage() {
         danger
         onConfirm={() => {
           setConfirmPurge(false);
-          void run("purge", orchestratorApi.runPurge, { onDone: refresh });
+          void run("purge", orchestratorApi.runPurge, { onDone: refresh, invalidate: "overview" });
         }}
         onCancel={() => setConfirmPurge(false)}
       />

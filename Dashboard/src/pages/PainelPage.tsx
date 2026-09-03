@@ -63,6 +63,8 @@ export function PainelPage() {
   const { data, loading, error, lastUpdated, rateLimitedUntil, refreshQueued } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     10_000,
+    [],
+    { cacheKey: "overview" },
   );
 
   const lanes: QueueLane[] = useMemo(() => {

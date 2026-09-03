@@ -117,6 +117,7 @@ export function ExecucoesPage() {
         overrideMessage: `Parada solicitada para ${shortId(id)}`,
         successTone: "amber",
         onDone: load,
+        invalidate: "overview",
       });
     },
     [runExecAction, load],
@@ -127,6 +128,7 @@ export function ExecucoesPage() {
       void runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
         overrideMessage: `Reenfileirado: ${shortId(id)}`,
         onDone: load,
+        invalidate: "overview",
       });
     },
     [runExecAction, load],
