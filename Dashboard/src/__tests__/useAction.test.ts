@@ -1,5 +1,5 @@
-import { act, cleanup, renderHook, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { useAction } from "../hooks/useAction";
 // Direto do módulo fonte (não do barrel `components/ui`) — o barrel também
@@ -15,13 +15,10 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("useAction", () => {
-  // O projeto não configura `setupFiles`/cleanup automático do Testing
-  // Library (achado nº 34, Onda 4) — sem isso, o toast de um teste
-  // permanece no DOM quando o próximo roda, e `screen.getByText` pega o
-  // elemento errado.
-  afterEach(() => {
-    cleanup();
-  });
+  // cleanup() automático entre testes vem de setupFiles (vitest.config.ts) —
+  // sem ele, o toast de um teste permanecia no DOM quando o próximo rodava,
+  // e screen.getByText pegava o elemento errado (achado que motivou o
+  // afterEach manual que existia aqui antes do setupFiles ser configurado).
 
   it("usa a mensagem do backend (r.message) como sucesso por padrão", async () => {
     const { result } = renderHook(() => useAction<string>(), { wrapper });

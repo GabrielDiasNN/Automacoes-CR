@@ -1,0 +1,24 @@
+{
+  "status": "healthy",
+  "timestamp": "02/09/2026 21:36:33",
+  "database": "online",
+  "scheduler": "executando",
+  "worker": {
+    "is_alive": true,
+    "pid": 21952,
+    "instance_id": "1TIN12-21952-1787926476",
+    "host": "1TIN12",
+    "last_ping": "02/09/2026 21:36:33",
+    "uptime_seconds": 469316.49,
+    "tasks_completed": 265,
+    "tasks_failed": 0,
+    "active_tasks": 0,
+    "pool_saturated_seconds": 0.0,
+    "version": "1.0.0"
+  },
+  "pending_tasks": 0,
+  "disk_usage_mb": 11.74,
+  "wal_size_mb": 1.67,
+  "cpu_usage": 19.7,
+  "ram_usage_percent": 84.8
+}
