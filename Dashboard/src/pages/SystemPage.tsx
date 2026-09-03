@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { DatabaseZap, RefreshCw, Trash2, LifeBuoy, RefreshCcw } from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
+import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi } from "../api/orchestrator";
 import {
   Annunciator,
@@ -29,7 +30,7 @@ export function SystemPage() {
     (signal) => orchestratorApi.getOverview(signal),
     15_000,
     [],
-    { cacheKey: "overview" },
+    { cacheKey: "overview", onData: (ov) => writeCache("health", ov.health) },
   );
   const {
     data: history,

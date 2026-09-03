@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
+import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi, type ExecutionSummary } from "../api/orchestrator";
 import {
   Annunciator,
@@ -64,7 +65,9 @@ export function PainelPage() {
     (signal) => orchestratorApi.getOverview(signal),
     10_000,
     [],
-    { cacheKey: "overview" },
+    // `health` do overview alimenta a chave que `useDiagnostics` (StatusBar)
+    // consome via `skipIfFresh` — sem uma 2a requisição a `/health/full`.
+    { cacheKey: "overview", onData: (ov) => writeCache("health", ov.health) },
   );
 
   const lanes: QueueLane[] = useMemo(() => {

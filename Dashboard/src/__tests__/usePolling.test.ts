@@ -353,6 +353,45 @@ describe("usePolling", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("skipIfFresh: usa o cache e não faz requisição enquanto outra fonte o mantém fresco", async () => {
+    const { writeCache } = await import("../lib/resourceCache");
+    const fetcher = vi.fn().mockResolvedValue("da-rede");
+
+    // Outra tela já gravou a chave há pouco.
+    writeCache("health", "do-cache");
+
+    const { result } = renderHook(() =>
+      usePolling(fetcher, 1_000, [], { cacheKey: "health", cacheTtlMs: 5_000, skipIfFresh: true }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result.current.data).toBe("do-cache");
+    expect(result.current.loading).toBe(false);
+
+    // Passado o TTL sem ninguém renovar, a requisição real volta (auto-cura).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(fetcher).toHaveBeenCalled();
+    expect(result.current.data).toBe("da-rede");
+  });
+
+  it("onData roda a cada sucesso (para derivar chaves de cache de um payload composto)", async () => {
+    const { readCache, writeCache } = await import("../lib/resourceCache");
+    const fetcher = vi.fn().mockResolvedValue({ health: { status: "healthy" }, outra: 1 });
+    renderHook(() =>
+      usePolling(fetcher, 60_000, [], {
+        onData: (d: { health: unknown }) => writeCache("health", d.health),
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(readCache("health", 30_000)).toEqual({ status: "healthy" });
+  });
+
   it("refresh durante a janela de 429 enfileira em vez de virar no-op silencioso", async () => {
     const fetcher = vi.fn().mockRejectedValueOnce(new ApiError(429, "limite", 10));
     const { result } = renderHook(() => usePolling(fetcher, 0)); // sem intervalo

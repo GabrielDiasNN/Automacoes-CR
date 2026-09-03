@@ -20,13 +20,19 @@ export interface DiagnosticsState {
  *
  *  `worker` sai de `health.worker` (`SystemHealth` já o carrega) — a chamada
  *  separada a `getWorkerStatus()` era um terço do tráfego fixo, desperdiçado
- *  contra o teto de 120 req/min por IP. */
+ *  contra o teto de 120 req/min por IP.
+ *
+ *  `skipIfFresh`: `getOverview` (Painel/Sistema) já traz `health` no payload e
+ *  o grava na chave `"health"`. Enquanto uma dessas telas está aberta,
+ *  `useDiagnostics` usa esse valor e NÃO faz a própria requisição — numa aba
+ *  parada em `/painel`, o tráfego fixo cai de 12 para 6 req/min. Fora dessas
+ *  telas o cache vence o TTL e a requisição real volta. */
 export function useDiagnostics(intervalMs = 15_000): DiagnosticsState {
   const { data, loading, error, lastUpdated, refresh } = usePolling<SystemHealth>(
     (signal) => orchestratorApi.getHealth(signal),
     intervalMs,
     [],
-    { cacheKey: "health" },
+    { cacheKey: "health", cacheTtlMs: 15_000, skipIfFresh: true },
   );
 
   return {
