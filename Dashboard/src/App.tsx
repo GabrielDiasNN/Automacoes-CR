@@ -1,3 +1,4 @@
+import { lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ApiKeyProvider } from "./context/ApiKeyContext";
 import { LiveStatusProvider } from "./context/LiveStatusContext";
@@ -7,11 +8,19 @@ import { ToastProvider } from "./components/ui";
 import { Shell } from "./components/Shell";
 import { PainelPage } from "./pages/PainelPage";
 import { ExecucoesPage } from "./pages/ExecucoesPage";
-import { MonitorPage } from "./pages/MonitorPage";
-import { BeneficiamentoPage } from "./pages/BeneficiamentoPage";
 import { AutomacoesPage } from "./pages/AutomacoesPage";
-import { SystemPage } from "./pages/SystemPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+
+// Code-splitting: as três páginas que carregam uPlot (TimeSeries) e os
+// painéis mais pesados (Beneficiamento: Treemap + FilterBar + drill-down;
+// Monitor: console ao vivo; Sistema: gauges) saem do bundle inicial — quem
+// abre /painel não precisa baixá-las (achado nº 6, Onda 5). `Shell.tsx`
+// envolve o `<Outlet/>` num `<Suspense>` com fallback de `Loading`.
+const MonitorPage = lazy(() => import("./pages/MonitorPage").then((m) => ({ default: m.MonitorPage })));
+const BeneficiamentoPage = lazy(() =>
+  import("./pages/BeneficiamentoPage").then((m) => ({ default: m.BeneficiamentoPage })),
+);
+const SystemPage = lazy(() => import("./pages/SystemPage").then((m) => ({ default: m.SystemPage })));
 
 export default function App() {
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Factory, LayoutDashboard, ListChecks, Menu, Radio, Rows3, Rows4, Search, Server, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
@@ -8,7 +8,7 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { IconButton } from "./ui";
+import { IconButton, Loading } from "./ui";
 import styles from "./Shell.module.css";
 
 interface NavItem {
@@ -134,9 +134,14 @@ export function Shell() {
 
           <main className={styles.content} id="conteudo">
             {/* key={pathname}: uma exceção de render numa página não deixa o
-             *  usuário preso nela — trocar de rota sempre remonta o boundary. */}
+             *  usuário preso nela — trocar de rota sempre remonta o boundary.
+             *  Suspense cobre o `React.lazy` de Monitor/Beneficiamento/Sistema
+             *  (App.tsx) — code-splitting tira uPlot e os painéis mais
+             *  pesados do bundle inicial. */}
             <ErrorBoundary key={location.pathname}>
-              <Outlet />
+              <Suspense fallback={<Loading label="carregando tela" />}>
+                <Outlet />
+              </Suspense>
             </ErrorBoundary>
           </main>
         </div>
