@@ -55,14 +55,25 @@ async function doFetch(path: string, init: RequestInit): Promise<Response> {
     headers: { ...headers(), ...(init.headers ?? {}) },
   });
   if (!res.ok) {
-    if ((res.status === 401 || res.status === 403) && _unauthorizedHandler) {
-      _unauthorizedHandler(res.status);
-    }
     // `typeof res.text === "function"` tolera respostas mockadas em teste sem
     // `.text()` (ex.: `useWebSocket.test.ts`) — em produção `Response` sempre
     // tem o método.
     const text =
       typeof res.text === "function" ? await res.text().catch(() => res.statusText) : (res.statusText ?? "");
+
+    // O backend nunca retorna 401, e usa 403 para DOIS casos distintos:
+    //  - API Key inválida/ausente  (middleware.get_api_key → "...API Key...")
+    //  - operação proibida: path traversal em download de artefato, diretório
+    //    fora do projeto  ("Acesso negado ao arquivo." / "...fora do projeto.")
+    // Só o primeiro deve derrubar a sessão. Antes, QUALQUER 403 chamava
+    // clearKey() e jogava o operador na tela de login — inclusive um download
+    // barrado por path safety (surto de 403 de 07/08/2026). O 401 continua
+    // tratado por segurança, embora hoje seja código morto no backend.
+    const isAuthFailure = res.status === 401 || (res.status === 403 && /api\s*key/i.test(text));
+    if (isAuthFailure && _unauthorizedHandler) {
+      _unauthorizedHandler(res.status);
+    }
+
     const retryAfterHeader = res.headers?.get("Retry-After") ?? null;
     const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : null;
     throw new ApiError(res.status, text, Number.isFinite(retryAfter) ? retryAfter : null);

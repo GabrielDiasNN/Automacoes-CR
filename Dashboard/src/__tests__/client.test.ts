@@ -136,7 +136,7 @@ describe("setUnauthorizedHandler", () => {
     expect(handler).toHaveBeenCalledWith(401);
   });
 
-  it("chama o handler ao receber status 403", async () => {
+  it("chama o handler em 403 de API Key inválida/ausente", async () => {
     const handler = vi.fn();
     setUnauthorizedHandler(handler);
 
@@ -144,12 +144,29 @@ describe("setUnauthorizedHandler", () => {
       ok: false,
       status: 403,
       statusText: "Forbidden",
-      text: async () => "Acesso negado",
+      text: async () => "Acesso negado: API Key inválida ou ausente.",
     });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith(403);
+  });
+
+  it("NÃO chama o handler em 403 de path safety (não é falha de auth)", async () => {
+    // Regressão do surto de 403 de 07/08/2026: um download de artefato barrado
+    // por path traversal jogava o operador na tela de login.
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      text: async () => "Acesso negado ao arquivo.",
+    });
+
+    await expect(api.get("/api/executions/X/download")).rejects.toThrow();
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("não chama o handler para outros erros HTTP (ex: 400 ou 500)", async () => {
