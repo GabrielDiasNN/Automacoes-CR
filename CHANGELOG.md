@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.68] - 02/09/2026
+
+### Adicionado
+
+Onda 5 (conclusão) da revisão geral do frontend (ver [1.3.64]–[1.3.67]) — performance, testes e gates.
+
+- **Code-splitting** (`React.lazy`) em `MonitorPage`, `BeneficiamentoPage` e `SystemPage` — as três que carregam uPlot e os painéis mais pesados. `Shell.tsx` ganha `<Suspense>` (fallback `Loading`) dentro do `ErrorBoundary` existente. Medido (não estimado): chunk principal 348 KB → 310 KB bruto, 116,5 KB → 107 KB gzip; os 3 chunks lazy somam ~39 KB JS + 3 KB CSS carregados sob demanda.
+- **Cascata de re-render eliminada**: `value` de `Toast`/`TableDensityContext` ganha `useMemo` (ambos ficam acima do router — sem isso, todo consumidor de `useToast()`/`useTableDensity()` re-renderizava a cada toast/densidade). `columns` de `ExecucoesPage` e as séries derivadas de `MonitorPage` ganham `useMemo` — recalculavam a cada tick de polling e a cada mensagem de WebSocket, respectivamente.
+- **`eslint-plugin-jsx-a11y` roda como gate bloqueante** desde a Onda 2; nesta rodada nenhuma regressão nova.
+- **`msw` + testes de contrato** (`contract.test.ts`): valida que os campos que os componentes React leem existem nas respostas reais do backend, usando fixtures capturadas literalmente da instância viva (não inventadas). Achado durante a captura: a instância de produção desta máquina ainda não serve `avg_duration_24h_seconds` ([1.3.66]) — o processo Python não foi reiniciado (edição de `.py` só entra em vigor após reiniciar o Orchestrator; nenhum reinício foi feito, por ser uma ação de efeito colateral em produção que cabe ao usuário decidir).
+- **`setupFiles` no vitest** ativa `@testing-library/jest-dom` (instalado, nunca importado) e `cleanup()` automático entre testes — o DOM de um teste vazava para o seguinte em qualquer arquivo sem seu próprio `afterEach` manual.
+- **Novo teste E2E** `test_e2e_dashboard_automations_dispatch_confirm_and_cancel`: clica em Disparar, confirma que o `ConfirmModal` abre, cancela, e verifica via contagem direta de `models.Execution` no banco de teste isolado que nenhuma execução foi enfileirada.
+- **Cobertura recalibrada** de 53/60/35/53 (linhas/branches/funções/statements) para 59/61/46/60 — os thresholds antigos estavam 13–18pp abaixo do medido (66,8/68,8/53,2/67,2%) e não pegariam regressão nenhuma antes de uma queda grande.
+- **Correção retroativa dos CHANGELOGs [1.3.65]/[1.3.66]:** a pendência de "regenerar baselines de screenshot" anotada nessas duas entradas foi verificada nesta onda e **não se concretizou** — os 4 testes `test_screenshot_*` passam dentro da tolerância de 5% mesmo após as mudanças visuais de contraste e do card de Automações. Nenhum baseline foi regenerado.
+- Verificação: suíte `-m e2e` completa — 12 passed. `tsc`/`eslint`/130 testes vitest limpos. Build + smoke test das 6 rotas, 0 erro de console. Evidência formal em `docs/playwright-e2e-evidence-1367.md`, validada por `Tools/Test-PlaywrightEvidence.ps1`.
+
 ## [1.3.67] - 02/09/2026
 
 ### Alterado
