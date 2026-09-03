@@ -36,7 +36,11 @@ export function ExecucoesPage() {
   const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
   // Vem do card de Automações ("ver execuções") — filtra sem exigir que o
   // operador conheça o nome exato para digitar em algum campo de busca.
-  const [automationId] = useState<number | undefined>(() => {
+  // `setAutomationId` (não só o valor inicial) é necessário para o botão
+  // "Limpar filtro" funcionar: `navigate()` sozinho muda a URL, mas não
+  // remonta este componente (mesma rota), então um automationId lido só
+  // uma vez no initializer nunca seria atualizado.
+  const [automationId, setAutomationId] = useState<number | undefined>(() => {
     const raw = searchParams.get("automation_id");
     const n = raw ? Number(raw) : NaN;
     return Number.isFinite(n) ? n : undefined;
@@ -246,7 +250,11 @@ export function ExecucoesPage() {
                 {data?.items[0]?.automation_name ?? `automação #${automationId}`}
                 <button
                   type="button"
-                  onClick={() => navigate("/execucoes")}
+                  onClick={() => {
+                    setAutomationId(undefined);
+                    setPageNum(1);
+                    navigate("/execucoes");
+                  }}
                   aria-label="Limpar filtro de automação"
                   style={{
                     marginLeft: 6,
@@ -303,6 +311,7 @@ export function ExecucoesPage() {
       <Pager
         page={data?.page ?? 1}
         pages={totalPages}
+        currentPage={pageNum}
         total={data?.total ?? 0}
         itemLabel="execuções"
         onPrev={() => setPageNum((p) => p - 1)}

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.69] - 03/09/2026
+
+### Corrigido
+
+Achados de `/code-review` sobre o diff da revisão geral do frontend (Ondas 1–5, [1.3.64]–[1.3.68]) — todos os 4 corrigidos nesta rodada.
+
+- **`ExecucoesPage`: botão "✕" de limpar filtro de automação não limpava nada.** `automationId` era lido só uma vez no inicializador do `useState`; o clique chamava `navigate("/execucoes")`, que muda a URL mas não remonta o componente (mesma rota), então o filtro continuava aplicado até um reload manual. Corrigido guardando também `setAutomationId`. Verificado na instância real: URL normaliza para `/execucoes` e a tabela passa a listar todas as automações, não só a filtrada.
+- **`/api/system/health/full` voltou a competir pelo bucket de rate limit.** A correção de [1.3.64] (`getHealth()` passou a apontar para `/health/full`, a rota que de fato tem o payload completo) teve um efeito colateral: `RATE_LIMIT_EXEMPT_PATHS` só isentava a rota antiga `/health` (liveness pública). A `StatusBar`, que faz polling constante em toda aba aberta, passou a consumir o bucket de 120 req/min por IP junto com o resto do tráfego. `/api/system/health/full` entra na lista de isenção — é autenticada, então a isenção não abre superfície nova, só evita que um heartbeat de baixo custo dispute banda com ações do operador.
+- **`Pager`: paginação podia ficar fora de sincronia com o estado que a controla.** O componente usava `page` (eco do servidor, atrasado durante requisição em voo ou backoff de 429) tanto para o rótulo quanto para os guardas `disabled` dos botões Anterior/Próxima — os cliques, porém, incrementavam um estado local separado (`pageNum` em `ExecucoesPage`, `page` em `DetailDrawer`). Dois cliques rápidos antes da primeira resposta chegar podiam levar o estado local além do intervalo válido, pedindo uma página inexistente ao backend. `Pager` ganha a prop opcional `currentPage`, usada só nos guardas; os dois consumidores passam o próprio estado de controle.
+- **`DetailDrawer`: registros de um alvo de drill-down podiam aparecer sob o título de outro.** `useAsyncResource`/`usePolling` mantêm o último dado válido em tela durante um refresh (proposital, evita flicker) e pulam a requisição inteira — inclusive a de `fetcher: null` disparada ao trocar de alvo — durante uma janela de backoff de 429. Trocar de OB/máquina/fase nessa janela deixava os registros do alvo anterior visíveis com o título do alvo novo. `DetailDrawer` agora rastreia o instante da troca de alvo e não renderiza `data` cuja última atualização seja anterior a essa troca; nesse caso mostra o estado de carregamento em vez do dado desatualizado.
+- Verificação: `tsc`/`eslint`/130 testes vitest limpos, build ok, `pytest tests/test_system.py` (32 testes, cobre a isenção de rate limit) verde, `black`/`isort`/`ruff` limpos em `middleware.py`. Smoke test das 6 rotas sem erro de console; correção do botão "✕" confirmada por Playwright contra a instância de produção desta máquina.
+
 ## [1.3.68] - 02/09/2026
 
 ### Adicionado

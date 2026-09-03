@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Factory } from "lucide-react";
 import {
   orchestratorApi,
@@ -139,8 +139,20 @@ function TraceView({ trace }: { trace: BeneficiamentoDetail["trace"] }) {
 export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerProps) {
   const [page, setPage] = useState(1);
 
+  // Instante da última troca de ALVO (não de página/filtro) — usado abaixo
+  // para não exibir `data` que ainda pertence ao alvo anterior. Necessário
+  // porque `useAsyncResource` reaproveita `usePolling`, que mantém o último
+  // dado válido em tela durante um refresh (proposital, evita flicker) e
+  // pula a requisição inteira — inclusive a de `fetcher: null` disparada ao
+  // fechar/trocar o drawer — enquanto uma janela de backoff de 429 estiver
+  // ativa (`blockedUntilRef` em usePolling.ts). Sem isso, trocar de alvo
+  // durante essa janela deixava os registros do alvo ANTERIOR visíveis sob
+  // o título do alvo NOVO (achado de revisão de código).
+  const requestChangedAtRef = useRef(Date.now());
+
   useEffect(() => {
     setPage(1);
+    requestChangedAtRef.current = Date.now();
   }, [request]);
 
   const fetchDetail = useCallback(
@@ -151,41 +163,48 @@ export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerP
   // mudar o filtro de contexto com o drawer aberto não refazia o fetch
   // (achado nº 14, Onda 4). `fetcher: null` (não `request` como argumento)
   // é o que desliga o fetch quando o drawer está fechado.
-  const { data, loading, error } = useAsyncResource(request ? fetchDetail : null, [request, contextFilters, page]);
+  const { data, loading, error, lastUpdated } = useAsyncResource(request ? fetchDetail : null, [request, contextFilters, page]);
+
+  // `data` só corresponde ao `request` atual se a última resposta chegou
+  // DEPOIS da troca de alvo — do contrário é resultado do alvo anterior,
+  // ainda não invalidado (ver comentário no ref acima).
+  const isStale = data != null && (lastUpdated == null || lastUpdated.getTime() < requestChangedAtRef.current);
+  const visibleData = isStale ? null : data;
 
   return (
     <Drawer open={request != null} onClose={onClose} eyebrow="// drill-down" title={request?.label ?? ""} width={1080}>
-      {loading && !data && <Loading label="carregando detalhe" />}
+      {loading && !visibleData && <Loading label="carregando detalhe" />}
       {error && <ErrorState message={error} />}
-      {data && (
+      {visibleData && (
         <div className={styles.body}>
           <div className={styles.tiles}>
-            <StatTile label="OBs distintas" value={formatNumber(data.summary.ob_distintas)} />
-            <StatTile label="Fases" value={formatNumber(data.summary.fases_concluidas)} />
-            <StatTile label="KG total" value={formatNumber(data.summary.kg_total)} />
-            <StatTile label="Eficiência" value={formatPercent(data.summary.eficiencia_tempo_pct, 1)} />
-            <StatTile label="Reprocesso" value={formatPercent(data.summary.reprocesso_kg_pct, 1)} />
-            <StatTile label="Produtividade kg/h" value={formatNumber(data.summary.produtividade_kg_h)} />
+            <StatTile label="OBs distintas" value={formatNumber(visibleData.summary.ob_distintas)} />
+            <StatTile label="Fases" value={formatNumber(visibleData.summary.fases_concluidas)} />
+            <StatTile label="KG total" value={formatNumber(visibleData.summary.kg_total)} />
+            <StatTile label="Eficiência" value={formatPercent(visibleData.summary.eficiencia_tempo_pct, 1)} />
+            <StatTile label="Reprocesso" value={formatPercent(visibleData.summary.reprocesso_kg_pct, 1)} />
+            <StatTile label="Produtividade kg/h" value={formatNumber(visibleData.summary.produtividade_kg_h)} />
           </div>
 
           {request?.targetType === "ob" ? (
-            <TraceView trace={data.trace} />
-          ) : data.records.length === 0 ? (
+            <TraceView trace={visibleData.trace} />
+          ) : visibleData.records.length === 0 ? (
             <EmptyState icon={<Factory size={20} />} title="Sem registros" hint="Ajuste os filtros para ver o detalhe." />
           ) : (
             <Card padded={false}>
-              <DataTable columns={RECORD_COLUMNS} rows={data.records} rowKey={(r) => `${r.ob}-${r.seq}`} />
+              <DataTable columns={RECORD_COLUMNS} rows={visibleData.records} rowKey={(r) => `${r.ob}-${r.seq}`} />
             </Card>
           )}
 
-          {data.pagination.pages > 1 && (
+          {visibleData.pagination.pages > 1 && (
             <Pager
-              page={data.pagination.page}
-              pages={data.pagination.pages}
-              total={data.pagination.total}
+              page={visibleData.pagination.page}
+              pages={visibleData.pagination.pages}
+              currentPage={page}
+              total={visibleData.pagination.total}
               itemLabel="registros"
               onPrev={() => setPage((p) => Math.max(1, p - 1))}
-              onNext={() => setPage((p) => Math.min(data.pagination.pages, p + 1))}
+              onNext={() => setPage((p) => Math.min(visibleData.pagination.pages, p + 1))}
             />
           )}
         </div>

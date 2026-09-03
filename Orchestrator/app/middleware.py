@@ -33,6 +33,15 @@ automation_name_var: ContextVar[str] = ContextVar("automation_name", default="")
 
 RATE_LIMIT_EXEMPT_PATHS = {
     "/api/system/health",
+    # Autenticada (exige API key válida — diferente da rota pública acima),
+    # mas de custo baixo (psutil + 1 leitura de estado) e consumida em
+    # polling constante pelo Dashboard (LiveStatusProvider, a cada 10s por
+    # aba). Antes de existir, `getHealth()` do frontend apontava por engano
+    # para a rota pública /health (achado de revisão) e escapava do rate
+    # limit por acidente; corrigido o alvo, essa isenção evita que o mesmo
+    # heartbeat de baixo risco passe a competir pelo bucket de 120 req/min
+    # por IP com o resto do tráfego — a autenticação já limita quem chama.
+    "/api/system/health/full",
 }
 
 # Rotas do plano de controle interno emitidas pelo próprio Worker: telemetria
