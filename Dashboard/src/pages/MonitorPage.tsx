@@ -165,7 +165,12 @@ export function MonitorPage() {
     return { xLabels, pendingSeries, runningSeries, pendingLine, runningLine };
   }, [historyItems]);
 
-  const goToExecucoes = useCallback((execStatus: string) => navigate(`/execucoes?status=${execStatus}`), [navigate]);
+  // `void`: em react-router 7 `navigate` devolve Promise; o handler de clique
+  // espera `() => void` (gate `no-misused-promises`).
+  const goToExecucoes = useCallback(
+    (execStatus: string) => void navigate(`/execucoes?status=${execStatus}`),
+    [navigate],
+  );
 
   const fetchDailyMetrics = useCallback(
     (signal?: AbortSignal) => orchestratorApi.getSystemMetricsDaily(14, signal),

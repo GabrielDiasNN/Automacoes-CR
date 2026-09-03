@@ -135,7 +135,7 @@ export function LogViewer({ text, loading }: { text: string; loading?: boolean }
         >
           <SlidersHorizontal size={13} />
         </IconButton>
-        <IconButton size="sm" onClick={handleCopy} title="Copiar logs" aria-label="Copiar logs">
+        <IconButton size="sm" onClick={() => void handleCopy()} title="Copiar logs" aria-label="Copiar logs">
           {copied ? <Check size={13} /> : <Copy size={13} />}
         </IconButton>
         <IconButton

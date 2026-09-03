@@ -103,9 +103,9 @@ export function usePolling<T>(
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
     if (intervalMs <= 0) return;
-    const id = setInterval(refresh, intervalMs);
+    const id = setInterval(() => void refresh(), intervalMs);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh, intervalMs, ...deps]);

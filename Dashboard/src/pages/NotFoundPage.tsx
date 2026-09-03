@@ -19,7 +19,7 @@ export function NotFoundPage() {
         hint="Confira o link ou use a busca global (Ctrl+K) para encontrar a tela certa."
       />
       <div>
-        <Button onClick={() => navigate("/painel")}>Ir para o Painel</Button>
+        <Button onClick={() => void navigate("/painel")}>Ir para o Painel</Button>
       </div>
     </div>
   );

@@ -189,13 +189,13 @@ export function PainelPage() {
             últimas execuções
           </span>
           <span className={page.filler} />
-          <Button size="sm" variant="subtle" icon={<ArrowRight size={14} />} onClick={() => navigate("/execucoes")}>
+          <Button size="sm" variant="subtle" icon={<ArrowRight size={14} />} onClick={() => void navigate("/execucoes")}>
             ver todas
           </Button>
         </div>
         <div className={page.list}>
           {data.recent.slice(0, 8).map((ex) => (
-            <ExecRow key={ex.id} ex={ex} onClick={() => navigate("/execucoes")} />
+            <ExecRow key={ex.id} ex={ex} onClick={() => void navigate("/execucoes")} />
           ))}
           {data.recent.length === 0 && (
             <div style={{ padding: "var(--sp-5)", textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-lo)", fontSize: "var(--fs-small)" }}>

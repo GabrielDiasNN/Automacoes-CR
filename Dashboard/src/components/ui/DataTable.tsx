@@ -56,12 +56,12 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, rowTone }: Dat
           {rows.map((row) => {
             const tone = rowTone?.(row);
             const handleClick = (e: MouseEvent<HTMLTableRowElement>) => {
-              if (targetIsInteractive(e.target as EventTarget)) return;
+              if (targetIsInteractive(e.target)) return;
               onRowClick?.(row);
             };
             const handleKeyDown = (e: KeyboardEvent<HTMLTableRowElement>) => {
               if (e.key !== "Enter") return;
-              if (targetIsInteractive(e.target as EventTarget)) return;
+              if (targetIsInteractive(e.target)) return;
               onRowClick?.(row);
             };
             return (

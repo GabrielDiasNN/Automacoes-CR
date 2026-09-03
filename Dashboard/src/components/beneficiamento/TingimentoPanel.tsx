@@ -16,7 +16,7 @@ import {
   StatTile,
   type Column,
 } from "../ui";
-import { TimeSeries, type SeriesLine } from "../ui/TimeSeries";
+import { TimeSeries } from "../ui/TimeSeries";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { formatNumber, formatPercent } from "../../lib/format";
 import styles from "./TingimentoPanel.module.css";
@@ -139,7 +139,7 @@ export function TingimentoPanel() {
               <Card label="volume diário (kg)" padded={false}>
                 <TimeSeries
                   xLabels={data.series.diaria.map((p) => p.date.slice(5))}
-                  lines={[{ label: "kg/dia", values: data.series.diaria.map((p) => p.kg_total), tone: "cyan" } as SeriesLine]}
+                  lines={[{ label: "kg/dia", values: data.series.diaria.map((p) => p.kg_total), tone: "cyan" }]}
                   height={160}
                 />
               </Card>
@@ -147,7 +147,7 @@ export function TingimentoPanel() {
                 <TimeSeries
                   xLabels={data.series.diaria.map((p) => p.date.slice(5))}
                   lines={[
-                    { label: "reprocesso %", values: data.series.diaria.map((p) => p.reprocesso_kg_pct), tone: "amber" } as SeriesLine,
+                    { label: "reprocesso %", values: data.series.diaria.map((p) => p.reprocesso_kg_pct), tone: "amber" },
                   ]}
                   height={160}
                 />

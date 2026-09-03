@@ -30,6 +30,10 @@ export function useAction<K extends string | number = string>() {
   const toast = useToast();
   const [busyKey, setBusyKey] = useState<K | null>(null);
 
+  // `run` trata todo erro internamente (toast vermelho) e nunca rejeita. Os
+  // chamadores o disparam de dentro de handlers de evento sem `await` — daí o
+  // `void run(...)` nos call sites, exigido pelos gates type-aware
+  // (`no-floating-promises` / `no-misused-promises`).
   const run = useCallback(
     async (key: K, fn: () => Promise<{ message: string } | void>, opts?: UseActionOptions) => {
       setBusyKey(key);

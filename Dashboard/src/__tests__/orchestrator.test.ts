@@ -47,7 +47,7 @@ describe("orchestratorApi", () => {
 
   it("getExecution repassa o AbortSignal para o fetch", async () => {
     const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "X" }) });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
     const controller = new AbortController();
 
     await orchestratorApi.getExecution("EXEC_1", controller.signal);

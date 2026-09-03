@@ -212,7 +212,7 @@ export function BeneficiamentoPage() {
   } = usePolling(orchestratorApi.getBeneficiamentoHealth, 60_000);
 
   const doRefresh = useCallback(() => {
-    runRefresh(
+    void runRefresh(
       "refresh",
       () => orchestratorApi.refreshBeneficiamento(refreshPeriod).then(() => undefined),
       {

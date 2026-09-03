@@ -54,7 +54,7 @@ describe("api.get", () => {
       ok: true,
       json: async () => ({ status: "ok" }),
     });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     await api.get("/api/system/health");
 
@@ -69,7 +69,7 @@ describe("api.get", () => {
       statusText: "Forbidden",
       text: async () => "API key inválida",
     });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     await expect(api.get("/api/system/health")).rejects.toThrow("403 API key inválida");
   });
@@ -80,7 +80,7 @@ describe("api.get", () => {
       status: 500,
       statusText: "Internal Server Error",
       text: async () => "erro interno",
-    }) as unknown as typeof fetch;
+    });
 
     try {
       await api.get("/api/system/health");
@@ -99,7 +99,7 @@ describe("api.get", () => {
       statusText: "Too Many Requests",
       text: async () => "limite excedido",
       headers: { get: (name: string) => (name === "Retry-After" ? "60" : null) },
-    }) as unknown as typeof fetch;
+    });
 
     try {
       await api.get("/api/system/health");
@@ -129,7 +129,7 @@ describe("setUnauthorizedHandler", () => {
       status: 401,
       statusText: "Unauthorized",
       text: async () => "Token expirado",
-    }) as unknown as typeof fetch;
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).toHaveBeenCalledTimes(1);
@@ -145,7 +145,7 @@ describe("setUnauthorizedHandler", () => {
       status: 403,
       statusText: "Forbidden",
       text: async () => "Acesso negado",
-    }) as unknown as typeof fetch;
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).toHaveBeenCalledTimes(1);
@@ -161,7 +161,7 @@ describe("setUnauthorizedHandler", () => {
       status: 500,
       statusText: "Internal Server Error",
       text: async () => "Erro interno",
-    }) as unknown as typeof fetch;
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("setUnauthorizedHandler", () => {
       status: 401,
       statusText: "Unauthorized",
       text: async () => "Token expirado",
-    }) as unknown as typeof fetch;
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).not.toHaveBeenCalled();

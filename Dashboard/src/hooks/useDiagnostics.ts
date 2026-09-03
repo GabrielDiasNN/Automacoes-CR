@@ -43,8 +43,8 @@ export function useDiagnostics(intervalMs = 15_000) {
 
   useEffect(() => {
     mountedRef.current = true;
-    refresh();
-    const id = setInterval(refresh, intervalMs);
+    void refresh();
+    const id = setInterval(() => void refresh(), intervalMs);
     return () => {
       mountedRef.current = false;
       clearInterval(id);

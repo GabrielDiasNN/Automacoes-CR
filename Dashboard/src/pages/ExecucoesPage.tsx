@@ -112,7 +112,7 @@ export function ExecucoesPage() {
   const doStop = useCallback(
     (id: string) => {
       setConfirmStop(null);
-      runExecAction(id, () => orchestratorApi.stopExecution(id), {
+      void runExecAction(id, () => orchestratorApi.stopExecution(id), {
         overrideMessage: `Parada solicitada para ${shortId(id)}`,
         successTone: "amber",
         onDone: load,
@@ -123,7 +123,7 @@ export function ExecucoesPage() {
 
   const doRequeue = useCallback(
     (id: string) => {
-      runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
+      void runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
         overrideMessage: `Reenfileirado: ${shortId(id)}`,
         onDone: load,
       });
@@ -253,7 +253,7 @@ export function ExecucoesPage() {
                   onClick={() => {
                     setAutomationId(undefined);
                     setPageNum(1);
-                    navigate("/execucoes");
+                    void navigate("/execucoes");
                   }}
                   aria-label="Limpar filtro de automação"
                   style={{
@@ -285,7 +285,7 @@ export function ExecucoesPage() {
               ))}
             </Select>
             <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
-            <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
+            <Button size="sm" icon={<RefreshCw size={13} />} onClick={() => void load()}>
               Atualizar
             </Button>
           </div>
@@ -302,7 +302,7 @@ export function ExecucoesPage() {
             columns={columns}
             rows={data?.items ?? []}
             rowKey={(r) => r.id}
-            onRowClick={(r) => openDetail(r.id)}
+            onRowClick={(r) => void openDetail(r.id)}
             rowTone={(r) => (r.operator_attention_required ? toneVar[severityTone(r.operator_severity)] : undefined)}
           />
         )}

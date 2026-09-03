@@ -167,11 +167,11 @@ export function AutomacoesPage() {
   const dispatch = useCallback(
     (a: Automation) => {
       setConfirm(null);
-      run(
+      void run(
         a.id,
         () =>
           orchestratorApi.startAutomation(a.id).then((r) => {
-            if (r.exec_id) setLastExecId((prev) => ({ ...prev, [a.id]: r.exec_id! }));
+            if (r.exec_id) setLastExecId((prev) => ({ ...prev, [a.id]: r.exec_id }));
             return { message: r.exec_id ? `${r.message} (${r.exec_id})` : r.message };
           }),
         { fallbackMessage: `${a.name} disparada`, onDone: load },
@@ -183,7 +183,7 @@ export function AutomacoesPage() {
   const pause = useCallback(
     (a: Automation) => {
       setConfirm(null);
-      run(a.id, () => orchestratorApi.pauseAutomation(a.id), { fallbackMessage: `${a.name} pausada`, onDone: load });
+      void run(a.id, () => orchestratorApi.pauseAutomation(a.id), { fallbackMessage: `${a.name} pausada`, onDone: load });
     },
     [run, load],
   );
@@ -221,7 +221,7 @@ export function AutomacoesPage() {
                 criticidade indisponível
               </StatusTag>
             )}
-            <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
+            <Button size="sm" icon={<RefreshCw size={13} />} onClick={() => void load()}>
               Atualizar
             </Button>
           </div>
@@ -336,7 +336,7 @@ export function AutomacoesPage() {
                     <button
                       type="button"
                       className={styles.linkBtn}
-                      onClick={() => navigate(`/execucoes?automation_id=${a.id}`)}
+                      onClick={() => void navigate(`/execucoes?automation_id=${a.id}`)}
                     >
                       ver execuções
                     </button>
@@ -344,7 +344,7 @@ export function AutomacoesPage() {
                       <button
                         type="button"
                         className={styles.linkBtn}
-                        onClick={() => navigate(`/execucoes?automation_id=${a.id}`)}
+                        onClick={() => void navigate(`/execucoes?automation_id=${a.id}`)}
                       >
                         {execId}
                       </button>
@@ -383,7 +383,7 @@ export function AutomacoesPage() {
                         disabled={busy === a.id}
                         aria-label={`Retomar ${a.name}`}
                         onClick={() =>
-                          run(a.id, () => orchestratorApi.resumeAutomation(a.id), {
+                          void run(a.id, () => orchestratorApi.resumeAutomation(a.id), {
                             fallbackMessage: `${a.name} retomada`,
                             onDone: load,
                           })

@@ -75,12 +75,13 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   if (!open) return null;
 
   const activate = (entry: PaletteEntry) => {
+    // `void`: `navigate` (react-router 7) devolve Promise que não interessa aqui.
     if (entry.kind === "nav") {
-      navigate(entry.to);
+      void navigate(entry.to);
     } else {
       // Leva o nome escolhido para a tela de Automações, que rola até o card e
       // o destaca (antes: ia sempre para /automacoes, ignorando a automação).
-      navigate(`/automacoes?focus=${encodeURIComponent(entry.automation.name)}`);
+      void navigate(`/automacoes?focus=${encodeURIComponent(entry.automation.name)}`);
     }
     onClose();
   };
