@@ -41,10 +41,15 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
   - [x] 1.4 `16d2b18` — ESLint type-aware (3 regras `error` + 4 `warn`; 31 erros de promise, todos `void` no call site)
   - [x] 1.5 `720217f` — unions do backend viram tipos literais (ExecutionStatus, OperationalState, SlaStatus/SlaState, HealthStatus); achado: `attentionRank` comparava `sla_state` contra valores mortos
   - [x] 1.6 `e40e17a` — contract tests getOverview + listExecutions (fixtures reais; 138 testes)
-  - [ ] CHECKPOINT (c): `npm run build` para medir bundle
-  - [ ] CHECKPOINT (d): `pytest -m e2e` (4 screenshots sem regenerar) + `driver.py smoke`
-- **Observação (lint/typecheck/test):** lint 0 erros / 0 warnings, typecheck 0, 138 testes vitest verdes, coverage exit 0
-- **Gaps:** medição de bundle e E2E pendentes de checkpoint humano
+  - [x] `b6f216d` — fix manualChunks p/ forma de função (Vite 8 = rolldown, forma de objeto quebra o build)
+  - [x] MEDIÇÃO DE BUNDLE (build em dir temporário, sem deploy):
+    - `index`: 71,2 KB raw / **22,1 KB gzip** — meta `< 70 KB gzip` ✅ (folgado)
+    - `uplot`: chunk próprio 51,3 KB / 21,9 KB gzip, **ausente do index** (`grep u-cursor` = 0) ✅
+    - `react` 172,8/56,5 · `lucide` 15,7/6,0 · `index.css` 30,2/6,3 (gzip)
+    - `sourcemap: hidden` confirmado (nenhum `sourceMappingURL` nos `.js`)
+  - [ ] CHECKPOINT (d): `pytest -m e2e` (4 screenshots sem regenerar) + `driver.py smoke` — **bloqueado**: E2E serve `Dashboard/dist/` (mesmo dir que produção, `get_dashboard_path()` sem override). E2E real = build em `dist/` = deploy.
+- **Observação (lint/typecheck/test):** lint 0 erros / 0 warnings, typecheck 0, 138 testes vitest verdes, coverage exit 0, build de medição OK
+- **Gaps:** só o E2E dos 4 screenshots. Critérios determinísticos da Onda 1 todos atendidos.
 
 ### Ondas 2–6
 - Não iniciadas. Escopo em `.claude/skills/loop-agentico` / prompt do `/loop-agentico`.
