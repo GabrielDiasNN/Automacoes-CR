@@ -56,14 +56,19 @@ async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData
 
 /** Ordena por atenção — quem precisa de olhar primeiro no topo — em vez da
  *  ordem alfabética que o backend devolve. Critério, em ordem de desempate:
- *  estado operacional "attention" > SLA violado > criticidade > nome. */
+ *  estado operacional "attention" > criticidade > nome.
+ *
+ *  Nota: as comparações `sla_state === "violated" | "at_risk"` que existiam aqui
+ *  eram código morto — o backend (`portfolio_catalog._sla_state`) emite
+ *  `ok | breached | recovering | unknown`, nunca esses valores, então o SLA
+ *  nunca influenciou a ordenação. Removidas ao tipar `sla_state` como `SlaState`.
+ *  Wiring correto de `breached`/`recovering` no rank fica para a Onda 4 (paleta
+ *  e semântica de SLA), junto com `slaTone`. */
 function attentionRank(a: Automation, p: PortfolioHealthItem | undefined): number {
   if (a.operational_state === "attention") return 0;
-  if (p?.sla_state === "violated") return 1;
-  if (p?.criticality === "high") return 2;
-  if (p?.sla_state === "at_risk") return 3;
-  if (p?.criticality === "medium") return 4;
-  return 5;
+  if (p?.criticality === "high") return 1;
+  if (p?.criticality === "medium") return 2;
+  return 3;
 }
 
 function RunbookDrawer({

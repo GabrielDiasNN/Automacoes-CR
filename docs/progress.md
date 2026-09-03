@@ -31,10 +31,19 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 ## Histórico por onda
 
 ### Onda 1 — Gates e fundação de build
-- **Status:** em progresso
+- **Status:** em progresso — 4 de 6 etapas commitadas (branch `escalar/frontend-rodada2-onda1`)
 - **Critério de pronto:** lint verde com `no-floating-promises`/`no-misused-promises`/`await-thenable` em `error`; typecheck verde com `noUncheckedIndexedAccess`+`exactOptionalPropertyTypes`; chunk `index` < 70 KB gzip com `uplot` em chunk próprio; 4 screenshots sem regenerar baseline
-- **Ações tentadas:** —
-- **Gaps:** —
+- **Etapas:**
+  - [x] 1.1 `d71e2c0` — TimeSeries fora do barrel de ui
+  - [x] 1.2 `dd4157b` — vite.config: manualChunks/target/sourcemap/warnLimit
+  - [x] 1.3 `e4deac3` — noUncheckedIndexedAccess + exactOptionalPropertyTypes (71 erros resolvidos; 2 latentes em logParser/useFocusTrap)
+  - [x] 1.4 `16d2b18` — ESLint type-aware (3 regras `error` + 4 `warn`; 31 erros de promise, todos `void` no call site)
+  - [ ] 1.5 — unions do backend viram tipos literais
+  - [ ] 1.6 — contract tests: getOverview, getDiagnostics, listExecutions
+  - [ ] CHECKPOINT (c): `npm run build` para medir bundle
+  - [ ] CHECKPOINT (d): `pytest -m e2e` (4 screenshots sem regenerar) + `driver.py smoke`
+- **Observação (lint/typecheck/test):** lint 0/0, typecheck 0, 130 testes vitest verdes após cada etapa
+- **Gaps:** medição de bundle e E2E pendentes de checkpoint humano
 
 ### Ondas 2–6
 - Não iniciadas. Escopo em `.claude/skills/loop-agentico` / prompt do `/loop-agentico`.

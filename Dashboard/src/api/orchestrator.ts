@@ -32,7 +32,7 @@ export interface Automation {
   created_at: string;
   updated_at: string | null;
   next_run: string | null;
-  last_status: string | null;
+  last_status: ExecutionStatus | null;
   last_execution_id: string | null;
   last_execution_started_at: string | null;
   last_execution_finished_at: string | null;
@@ -50,11 +50,53 @@ export interface Automation {
   error_24h: number; // alias de failures_24h (backend, apply_br_format)
   avg_duration_24h_seconds: number | null;
   pending_count: number;
-  operational_state: string; // idle | running | blocked | ...
+  operational_state: OperationalState;
   validated: boolean;
   backup_path: string | null;
   audit_id: number | null;
 }
+
+// ── Vocabulários de estado (espelham os literais que o backend produz) ───────
+// Curadoria manual: o backend não usa `Literal` do Pydantic, então estes são
+// reconciliados contra o código de serviço que gera cada campo. Tipar como
+// união (em vez de `string`) faz o `tsc` acusar comparação contra valor que o
+// backend nunca emite — a classe de bug que a rodada anterior corrigiu no
+// `getHealth`.
+
+/** `constants.py` `EXECUTION_STATUS_*`. Sem `CLAIMED` (não existe no backend;
+ *  `lib/status.ts executionTone` ainda o tolera por segurança). */
+export type ExecutionStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "SUCCESS"
+  | "PARTIAL"
+  | "ERROR"
+  | "TIMEOUT"
+  | "TERMINATED"
+  | "FAILED_BY_REBOOT"
+  | "REQUEUED"
+  | "EXPIRED";
+
+/** `automation_snapshot._resolve_operational_state` + `not_registered`
+ *  (`portfolio_catalog`). */
+export type OperationalState =
+  | "healthy"
+  | "in_progress"
+  | "attention"
+  | "paused"
+  | "idle"
+  | "not_registered";
+
+/** `system_overview` — SLA agregada por card de automação. */
+export type SlaStatus = "ok" | "at_risk" | "violated" | "unknown";
+
+/** `portfolio_catalog._sla_state` — vocabulário DISTINTO de `SlaStatus` (o
+ *  plano assumia que eram o mesmo; não são). `lib/status.ts slaTone` ainda
+ *  não trata `breached`/`recovering` — corrigir na Onda 4 (paleta de SLA). */
+export type SlaState = "ok" | "breached" | "recovering" | "unknown";
+
+/** `system_diagnostics` `overall_status` / `SystemHealth.status`. */
+export type HealthStatus = "healthy" | "degraded" | "unhealthy" | "ok";
 
 // ── Execuções ───────────────────────────────────────────────────────────────
 
@@ -64,7 +106,7 @@ export interface ExecutionSummary {
   id: string;
   automation_id: number;
   automation_name: string | null;
-  status: string;
+  status: ExecutionStatus;
   priority: string;
   retry_count: number;
   max_retries: number;
@@ -135,7 +177,7 @@ export interface WorkerStatus {
 }
 
 export interface SystemHealth {
-  status: string; // healthy | degraded | unhealthy
+  status: HealthStatus;
   timestamp: string;
   database: string;
   scheduler: string;
@@ -230,13 +272,13 @@ export interface OverviewAutomationCard {
   test_mode: boolean;
   queue_group: string | null;
   sla_minutes: number | null;
-  sla_status: "ok" | "at_risk" | "violated" | "unknown";
+  sla_status: SlaStatus;
   sla_avg_duration_minutes: number | null;
   success_24h: number;
   failures_24h: number;
   timeouts_24h: number;
   avg_duration_24h_seconds: number | null;
-  last_status: string | null;
+  last_status: ExecutionStatus | null;
   last_execution_id: string | null;
   last_execution_started_at: string | null;
   last_execution_duration_seconds: number | null;
@@ -245,7 +287,7 @@ export interface OverviewAutomationCard {
   schedule_summary: string | null;
   active_execution_count: number;
   pending_count: number;
-  operational_state: string;
+  operational_state: OperationalState;
 }
 
 export interface PortfolioSummary {
@@ -320,8 +362,8 @@ export interface PortfolioHealthItem {
   enabled: boolean;
   queue_group: string | null;
   sla_minutes: number | null;
-  health_status: string;
-  sla_state: string; // ok | at_risk | violated | unknown — ver lib/status.ts slaTone()
+  health_status: string; // vocabulário amplo (_health_status): not_registered | not_governed | breached | attention | healthy — Onda 4 cura
+  sla_state: SlaState;
   docs_status: string;
   drift_status: string;
   drift_count: number;
@@ -332,7 +374,7 @@ export interface PortfolioHealthItem {
   schedule_summary: string | null;
   schedule_lag_minutes: number | null;
   schedule_lag_seconds: number | null;
-  last_status: string | null;
+  last_status: ExecutionStatus | null;
   last_success_at: string | null;
   last_failure_at: string | null;
   last_success_age_minutes: number | null;
