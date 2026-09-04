@@ -95,7 +95,6 @@
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
-  --sp-7: 48px;
 
   /* ── Raios (instrumento = cantos duros) ── */
   --radius-sm: 2px;
@@ -182,16 +181,6 @@ a { color: inherit; }
 
 /* ── Texturas de assinatura ── */
 
-/* grade blueprint de baixíssima opacidade — usar com parcimônia no shell */
-.blueprint-grid {
-  background-image:
-    linear-gradient(var(--graphite-700) 1px, transparent 1px),
-    linear-gradient(90deg, var(--graphite-700) 1px, transparent 1px);
-  background-size: 28px 28px;
-  background-position: -1px -1px;
-  opacity: 0.18;
-}
-
 /* faixa de risco — SÓ em zonas que exigem atenção do operador */
 .hazard {
   background-image: repeating-linear-gradient(
@@ -202,12 +191,6 @@ a { color: inherit; }
 }
 
 /* ── Tipografia utilitária ── */
-.nameplate {
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: var(--track-wide);
-  font-weight: 600;
-}
 .label-mono {
   font-family: var(--font-mono);
   font-size: var(--fs-label);
