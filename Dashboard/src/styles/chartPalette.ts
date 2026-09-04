@@ -35,5 +35,8 @@ export function readPalette(): ChartPalette {
     blue: read("--blue", FALLBACK.blue),
     grey: read("--grey", FALLBACK.grey),
   };
-  return { tones, axis: tones.grey, grid: read("--graphite-700", "#29333E") };
+  // --border (não --graphite-700 direto): mesmo valor no escuro, mas
+  // acompanha o tema claro da Onda 4-3 — --graphite-* nunca é redefinido
+  // fora do escuro de propósito (não é um conceito que exista no claro).
+  return { tones, axis: tones.grey, grid: read("--border", "#29333E") };
 }

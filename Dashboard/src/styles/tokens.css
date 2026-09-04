@@ -241,6 +241,90 @@
   /* NOTA: Toast, CommandPalette e LogViewer-fullscreen empatam em 80 — bug latente de empilhamento (o Toast deveria vencer). NÃO resolver aqui: mudar o valor moveria pixel se algum dia se sobrepuserem, e o baseline não pega. Fica para a Onda 4. */
 }
 
+/* ============================================================================
+   Tema claro (Onda 4-3) — só a camada semântica muda. Tipografia,
+   espaçamento, raios, layout, ícones, motion e z-index são theme-agnostic e
+   continuam valendo do :root acima sem redefinição. Não é o escuro
+   invertido: mantém a mesma inclinação azul-acinzentada do grafite (não um
+   cinza puro genérico) e os 6 sinais foram recalculados — preservando matiz
+   e saturação, só escurecidos — até bater ≥4,5:1 contra o pior caso (card
+   claro). Razões de contraste calculadas por cor: ver a proposta aprovada
+   da Onda 4-3 (docs/progress.md).
+
+   `--scrim-color` NÃO é redefinido de propósito: o overlay de modal/gaveta
+   continua escuro nos dois temas — dimerizar o fundo pra focar o conteúdo é
+   o mesmo problema com ou sem tema claro. As duas cópias abaixo ([data-theme]
+   e o espelho em @media) precisam ficar em sincronia manual — são só ~20
+   propriedades, e um terceiro lugar (JS) duplicaria o mesmo risco sem
+   ganhar nada.
+   ========================================================================== */
+[data-theme="light"] {
+  --bg:              #F4F6F8;
+  --surface:         #EAEDF1;
+  --surface-up:      #DEE3E8;
+  --surface-sunken:  #FFFFFF;  /* invertido de propósito: no console de log, contraste máximo importa mais que recuo visual */
+  --surface-shimmer: #DEE3E8;  /* = surface-up: o shimmer do skeleton já se distingue pelo sweep/opacidade, não precisa de degrau de cinza próprio */
+  --border:          #CBD2DA;
+  --border-strong:   #AEB8C4;
+  --track:           #CBD2DA;
+  --track-strong:    #AEB8C4;
+
+  --text-hi:  #141A21;
+  --text-mid: #46536A;
+  --text-lo:  #606B7B;
+
+  --cyan:        #207476;
+  --cyan-bright: #195C5E;  /* hover ESCURECE no claro (mais contraste = mais presente), o oposto do escuro (onde hover clareia) */
+  --amber: #8B620E;
+  --green: #297834;
+  --red:   #D21812;
+  --blue:  #0C60E7;
+  --grey:  #606B7B;
+
+  --shadow-1:        0 1px 2px rgba(20, 26, 33, 0.08);
+  --shadow-2:        0 4px 16px rgba(20, 26, 33, 0.10);
+  --shadow-pop:      0 12px 40px rgba(20, 26, 33, 0.14);
+  --shadow-dropdown: 0 4px 16px rgba(20, 26, 33, 0.08);
+  /* bevel inverte de direção: realce claro em cima, sombra escura embaixo — o oposto do escuro */
+  --engraved: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(20, 26, 33, 0.08);
+}
+
+/* tema "system": só se aplica quando NENHUM data-theme explícito venceu —
+   :not([data-theme="dark"]) deixa a escolha explícita de escuro vencer o
+   SO, mesmo com o SO em modo claro (ThemeContext seta data-theme="dark"
+   nesse caso; "system" não seta o atributo, então cai aqui). */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:              #F4F6F8;
+    --surface:         #EAEDF1;
+    --surface-up:      #DEE3E8;
+    --surface-sunken:  #FFFFFF;
+    --surface-shimmer: #DEE3E8;
+    --border:          #CBD2DA;
+    --border-strong:   #AEB8C4;
+    --track:           #CBD2DA;
+    --track-strong:    #AEB8C4;
+
+    --text-hi:  #141A21;
+    --text-mid: #46536A;
+    --text-lo:  #606B7B;
+
+    --cyan:        #207476;
+    --cyan-bright: #195C5E;
+    --amber: #8B620E;
+    --green: #297834;
+    --red:   #D21812;
+    --blue:  #0C60E7;
+    --grey:  #606B7B;
+
+    --shadow-1:        0 1px 2px rgba(20, 26, 33, 0.08);
+    --shadow-2:        0 4px 16px rgba(20, 26, 33, 0.10);
+    --shadow-pop:      0 12px 40px rgba(20, 26, 33, 0.14);
+    --shadow-dropdown: 0 4px 16px rgba(20, 26, 33, 0.08);
+    --engraved: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(20, 26, 33, 0.08);
+  }
+}
+
 /* ── Reset / base ── */
 *, *::before, *::after { box-sizing: border-box; }
 
