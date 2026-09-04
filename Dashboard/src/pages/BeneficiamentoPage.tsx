@@ -135,12 +135,15 @@ interface RankingSectionProps<T> {
 }
 
 function RankingSection<T>({ title, rows, columns, rowKey, onRowClick }: RankingSectionProps<T>) {
+  // slice memoizado: com `rows` estável (vem de `overview`), o <DataTable memo>
+  // recebe a mesma referência e ignora o re-render por tecla na busca.
+  const visibleRows = useMemo(() => rows.slice(0, 8), [rows]);
   return (
     <Card label={title} padded={rows.length === 0}>
       {rows.length === 0 ? (
         <EmptyState icon={<Factory size={20} />} title="Sem dados" hint="Ajuste os filtros para ver resultados." />
       ) : (
-        <DataTable columns={columns} rows={rows.slice(0, 8)} rowKey={rowKey} onRowClick={onRowClick} />
+        <DataTable columns={columns} rows={visibleRows} rowKey={rowKey} onRowClick={onRowClick} />
       )}
     </Card>
   );
@@ -229,6 +232,82 @@ export function BeneficiamentoPage() {
     [overviewParams],
   );
 
+  // Todas as séries/sparklines derivadas de `overview` num único useMemo — antes
+  // rodavam no corpo do render, recomputando map/slice a cada tecla na busca
+  // (o estado `filters` vive aqui) mesmo sem o overview mudar (achado nº 31).
+  const derived = useMemo(() => {
+    if (!overview) return null;
+    const volumeSeries = overview.series.volume_diario;
+    const efficiencySeries = overview.series.eficiencia_diaria;
+    const xLabels = volumeSeries.map((p) => p.date.slice(5));
+    const kgSparkline = volumeSeries.map((p) => p.kg_total);
+    const efficiencySparkline = efficiencySeries.map((p) => p.eficiencia_tempo_pct);
+    const volumeLine: SeriesLine = { label: "kg/dia", values: kgSparkline, tone: "cyan" };
+    const efficiencyLine: SeriesLine = { label: "eficiência %", values: efficiencySparkline, tone: "green" };
+    return {
+      volumeSeries,
+      efficiencySeries,
+      xLabels,
+      volumeLines: [volumeLine],
+      efficiencyLines: [efficiencyLine],
+      kgHint:
+        kgSparkline.length > 1 ? <Sparkline data={kgSparkline} tone="cyan" width={96} height={24} /> : undefined,
+      efficiencyHint:
+        efficiencySparkline.length > 1 ? (
+          <Sparkline data={efficiencySparkline} tone="green" width={96} height={24} />
+        ) : undefined,
+    };
+  }, [overview]);
+
+  // Handlers estáveis para os <DataTable memo> das seções de ranking
+  // (`setDetailRequest` é setter de estado, estável).
+  const rankingHandlers = useMemo(
+    () => ({
+      setores: {
+        rowKey: (r: BeneficiamentoSetorRanking) => r.setor,
+        onRowClick: (r: BeneficiamentoSetorRanking) =>
+          setDetailRequest({ targetType: "setor", label: r.setor, setor: r.setor }),
+      },
+      fasesCriticas: {
+        rowKey: (r: BeneficiamentoFaseCritica) => r.fase,
+        onRowClick: (r: BeneficiamentoFaseCritica) =>
+          setDetailRequest({ targetType: "fase", label: r.fase, fase: r.fase }),
+      },
+      gargalos: {
+        rowKey: (r: BeneficiamentoGargalo) => `${r.maquina}-${r.fase}`,
+        onRowClick: (r: BeneficiamentoGargalo) =>
+          setDetailRequest({
+            targetType: "maquina_fase",
+            label: `${r.maquina} / ${r.fase}`,
+            maquina: r.maquina,
+            fase: r.fase,
+          }),
+      },
+      produtos: {
+        rowKey: (r: BeneficiamentoProdutoPrincipal) => r.codigo,
+        onRowClick: (r: BeneficiamentoProdutoPrincipal) =>
+          setDetailRequest({ targetType: "produto", label: r.produto, alternativo: r.codigo }),
+      },
+      turnos: {
+        rowKey: (r: BeneficiamentoTurnoRanking) => r.turno_label,
+        onRowClick: (r: BeneficiamentoTurnoRanking) =>
+          setDetailRequest({ targetType: "turno", label: r.turno_label, turno: r.turno_label }),
+      },
+    }),
+    [],
+  );
+
+  const openFaseDetail = useCallback(
+    (cell: { setor: string; fase: string }) =>
+      setDetailRequest({
+        targetType: "fase",
+        label: `${cell.setor} / ${cell.fase}`,
+        setor: cell.setor,
+        fase: cell.fase,
+      }),
+    [],
+  );
+
   if (overviewLoading && !overview) {
     return (
       <div className={page.page}>
@@ -243,16 +322,10 @@ export function BeneficiamentoPage() {
       </div>
     );
   }
-  if (!overview) return null;
+  if (!overview || !derived) return null;
 
   const { kpis } = overview;
-  const volumeSeries = overview.series.volume_diario;
-  const efficiencySeries = overview.series.eficiencia_diaria;
-  const xLabels = volumeSeries.map((p) => p.date.slice(5));
-  const kgSparkline = volumeSeries.map((p) => p.kg_total);
-  const efficiencySparkline = efficiencySeries.map((p) => p.eficiencia_tempo_pct);
-  const volumeLine: SeriesLine = { label: "kg/dia", values: kgSparkline, tone: "cyan" };
-  const efficiencyLine: SeriesLine = { label: "eficiência %", values: efficiencySparkline, tone: "green" };
+  const { volumeSeries, efficiencySeries, xLabels, volumeLines, efficiencyLines, kgHint, efficiencyHint } = derived;
 
   return (
     <div className={page.page}>
@@ -346,17 +419,13 @@ export function BeneficiamentoPage() {
             <StatTile
               label="KG total"
               value={formatNumber(kpis.kg_total)}
-              hint={kgSparkline.length > 1 ? <Sparkline data={kgSparkline} tone="cyan" width={96} height={24} /> : undefined}
+              hint={kgHint}
             />
             <StatTile label="MT total" value={formatNumber(kpis.mt_total)} />
             <StatTile
               label="Eficiência de tempo"
               value={formatPercent(kpis.eficiencia_tempo_pct, 1)}
-              hint={
-                efficiencySparkline.length > 1 ? (
-                  <Sparkline data={efficiencySparkline} tone="green" width={96} height={24} />
-                ) : undefined
-              }
+              hint={efficiencyHint}
             />
             <StatTile
               label="Reprocesso"
@@ -371,12 +440,12 @@ export function BeneficiamentoPage() {
             <div className={page.split}>
               {volumeSeries.length > 1 && (
                 <Card label="volume diário (kg)">
-                  <TimeSeries xLabels={xLabels} lines={[volumeLine]} height={180} />
+                  <TimeSeries xLabels={xLabels} lines={volumeLines} height={180} />
                 </Card>
               )}
               {efficiencySeries.length > 1 && (
                 <Card label="eficiência diária (%)">
-                  <TimeSeries xLabels={xLabels} lines={[efficiencyLine]} height={180} />
+                  <TimeSeries xLabels={xLabels} lines={efficiencyLines} height={180} />
                 </Card>
               )}
             </div>
@@ -384,12 +453,7 @@ export function BeneficiamentoPage() {
 
           {overview.treemap.length > 0 && (
             <Card label="volume por setor → fase → máquina">
-              <Treemap
-                nodes={overview.treemap}
-                onCellClick={({ setor, fase }) =>
-                  setDetailRequest({ targetType: "fase", label: `${setor} / ${fase}`, setor, fase })
-                }
-              />
+              <Treemap nodes={overview.treemap} onCellClick={openFaseDetail} />
             </Card>
           )}
 
@@ -398,43 +462,36 @@ export function BeneficiamentoPage() {
               title="por setor industrial"
               rows={overview.rankings.setores}
               columns={SETOR_COLUMNS}
-              rowKey={(r) => r.setor}
-              onRowClick={(r) => setDetailRequest({ targetType: "setor", label: r.setor, setor: r.setor })}
+              rowKey={rankingHandlers.setores.rowKey}
+              onRowClick={rankingHandlers.setores.onRowClick}
             />
             <RankingSection
               title="fases críticas"
               rows={overview.rankings.fases_criticas}
               columns={FASE_CRITICA_COLUMNS}
-              rowKey={(r) => r.fase}
-              onRowClick={(r) => setDetailRequest({ targetType: "fase", label: r.fase, fase: r.fase })}
+              rowKey={rankingHandlers.fasesCriticas.rowKey}
+              onRowClick={rankingHandlers.fasesCriticas.onRowClick}
             />
             <RankingSection
               title="gargalos (máquina + fase)"
               rows={overview.rankings.gargalos}
               columns={GARGALO_COLUMNS}
-              rowKey={(r) => `${r.maquina}-${r.fase}`}
-              onRowClick={(r) =>
-                setDetailRequest({
-                  targetType: "maquina_fase",
-                  label: `${r.maquina} / ${r.fase}`,
-                  maquina: r.maquina,
-                  fase: r.fase,
-                })
-              }
+              rowKey={rankingHandlers.gargalos.rowKey}
+              onRowClick={rankingHandlers.gargalos.onRowClick}
             />
             <RankingSection
               title="produtos principais"
               rows={overview.rankings.produtos_principais}
               columns={PRODUTO_COLUMNS}
-              rowKey={(r) => r.codigo}
-              onRowClick={(r) => setDetailRequest({ targetType: "produto", label: r.produto, alternativo: r.codigo })}
+              rowKey={rankingHandlers.produtos.rowKey}
+              onRowClick={rankingHandlers.produtos.onRowClick}
             />
             <RankingSection
               title="por turno"
               rows={overview.turnos}
               columns={TURNO_COLUMNS}
-              rowKey={(r) => r.turno_label}
-              onRowClick={(r) => setDetailRequest({ targetType: "turno", label: r.turno_label, turno: r.turno_label })}
+              rowKey={rankingHandlers.turnos.rowKey}
+              onRowClick={rankingHandlers.turnos.onRowClick}
             />
           </div>
         </>
