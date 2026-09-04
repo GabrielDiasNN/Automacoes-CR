@@ -158,6 +158,24 @@ export function ExecucoesPage() {
     [selectedId, toast],
   );
 
+  // ── Outras execuções desta automação ──
+  const relatedFetcher = useCallback(
+    (signal?: AbortSignal) =>
+      detail?.automation_id != null
+        ? orchestratorApi.listExecutionsByAutomation(detail.automation_id, 8, signal)
+        : Promise.resolve<ExecutionSummary[]>([]),
+    [detail?.automation_id],
+  );
+  const { data: relatedData, loading: relatedLoading } = useAsyncResource(
+    detail?.automation_id != null ? relatedFetcher : null,
+    [detail?.automation_id],
+  );
+  // A própria execução aberta não precisa aparecer na própria lista de "outras".
+  const relatedExecutions = useMemo(
+    () => (relatedData ?? []).filter((r) => r.id !== selectedId),
+    [relatedData, selectedId],
+  );
+
   const { run: runExecAction } = useAction<string>();
 
   const doStop = useCallback(
@@ -404,6 +422,9 @@ export function ExecucoesPage() {
               artifacts={artifacts}
               artifactsLoading={artifactsLoading}
               onDownloadArtifact={(filename) => void downloadArtifact(filename)}
+              relatedExecutions={relatedExecutions}
+              relatedLoading={relatedLoading}
+              onSelectRelated={setSelectedId}
               onStop={() => setConfirmStop(selectedId)}
               onRequeue={() => doRequeue(selectedId)}
             />
