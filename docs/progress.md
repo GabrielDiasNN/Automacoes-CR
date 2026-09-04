@@ -68,8 +68,8 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 - **Status:** EM PROGRESSO (branch `escalar/frontend-rodada2-onda3`, de onda2). Modo: executor subagente + verificador subagente + orquestrador (eu) roda o oráculo de screenshot.
 - **Baseline dos gates (grep):** z-index literal em module.css = 10 · `--graphite-` fora de tokens.css = 20 · hex/rgba fora de src/styles = 24 · `@media` px = {560,720,721,900}
 - **Sub-batches:**
-  - [ ] 3A — aditivo + z-index scale (valores idênticos) + breakpoints.ts (JS) + mortos (`--sp-7`, `.blueprint-grid`, `.nameplate`)
-  - [ ] 3B — 22 `--graphite-*` → aliases semânticos; tints/glows `rgba()` → `color-mix()` (cor computada idêntica)
+  - [x] 3A `db36ca0`+`3241059`+`6673aaf`+`456d8ad` — z-index scale (valores idênticos), font-weight scale, tokens aditivos, breakpoints.ts, mortos removidos. **VERIFICADO:** lint 0/0 · tsc 0 · 152 testes · gates grep vazios · 12/12 E2E, 4 screenshots sem regenerar.
+  - [ ] 3B — 20 `--graphite-*` → aliases semânticos; tints/glows + rgba(cor-de-sinal) → `color-mix()` byte-idêntico; scrim → token
   - [ ] 3C — espelho JS dos tokens p/ os 12 hex de TimeSeries.tsx
   - [ ] 3D — consolidação estrutural (6 lâmpadas → `<Lamp>`, 3 overlays, `.field`, tiles, eyebrow, minmax); ApiKeyGate/Gauge/MiniViz → .module.css
   - [ ] decisão pendente: derivação real do breakpoint no CSS (`postcss-custom-media`?) vs. só espelho + comentário
