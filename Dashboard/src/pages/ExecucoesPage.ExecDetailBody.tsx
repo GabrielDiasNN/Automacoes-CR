@@ -1,4 +1,4 @@
-import { RotateCw, Square } from "lucide-react";
+import { Download, RotateCw, Square } from "lucide-react";
 import type { ExecutionDetail } from "../api/orchestrator";
 import { Button, Card, DescriptionList, KeyValue, LogViewer, StatusTag } from "../components/ui";
 import { executionTone, severityTone } from "../lib/status";
@@ -10,6 +10,9 @@ export function ExecDetailBody({
   loading,
   logsText,
   logsLive,
+  artifacts,
+  artifactsLoading,
+  onDownloadArtifact,
   onStop,
   onRequeue,
 }: {
@@ -20,6 +23,9 @@ export function ExecDetailBody({
   logsText: string;
   /** WS de log ao vivo conectado e aberto agora. */
   logsLive: boolean;
+  artifacts: string[];
+  artifactsLoading: boolean;
+  onDownloadArtifact: (filename: string) => void;
   onStop: () => void;
   onRequeue: () => void;
 }) {
@@ -74,6 +80,29 @@ export function ExecDetailBody({
           )}
         </div>
       )}
+
+      <div>
+        <div className={page.sectionLabel}>artefatos</div>
+        {artifactsLoading && artifacts.length === 0 ? (
+          <span style={{ fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>carregando…</span>
+        ) : artifacts.length === 0 ? (
+          <span style={{ fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>nenhum artefato gerado</span>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "var(--sp-1)" }}>
+            {artifacts.map((filename) => (
+              <Button
+                key={filename}
+                size="sm"
+                variant="ghost"
+                icon={<Download size={13} />}
+                onClick={() => onDownloadArtifact(filename)}
+              >
+                {filename}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div>
         <div className={page.toolbar} style={{ marginBottom: "var(--sp-1)" }}>

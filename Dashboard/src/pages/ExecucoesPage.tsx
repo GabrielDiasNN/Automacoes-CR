@@ -25,6 +25,7 @@ import { usePolling } from "../hooks/usePolling";
 import { useAsyncResource } from "../hooks/useAsyncResource";
 import { executionTone, severityTone, toneVar } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
+import { errMessage } from "../lib/errors";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
 import page from "./page.module.css";
 
@@ -125,6 +126,37 @@ export function ExecucoesPage() {
   // não conectou/recebeu nada).
   const logsText = liveLogText !== "" ? liveLogText : (detail?.logs ?? "");
   const logsLive = logWsStatus === "open" && isRunning;
+
+  // ── Artefatos ──
+  const artifactsFetcher = useCallback(
+    (signal?: AbortSignal) =>
+      selectedId ? orchestratorApi.listExecutionArtifacts(selectedId, signal) : Promise.resolve(null),
+    [selectedId],
+  );
+  const { data: artifactsData, loading: artifactsLoading } = useAsyncResource(
+    selectedId ? artifactsFetcher : null,
+    [selectedId],
+  );
+  // Mesma guarda de `detail`: só mostra a lista se corresponder ao alvo atual.
+  const artifacts = artifactsData && artifactsData.exec_id === selectedId ? artifactsData.artifacts : [];
+
+  const downloadArtifact = useCallback(
+    async (filename: string) => {
+      if (!selectedId) return;
+      try {
+        const blob = await orchestratorApi.downloadExecutionArtifact(selectedId, filename);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        toast(errMessage(e), "red");
+      }
+    },
+    [selectedId, toast],
+  );
 
   const { run: runExecAction } = useAction<string>();
 
@@ -369,6 +401,9 @@ export function ExecucoesPage() {
               loading={detailLoading}
               logsText={logsText}
               logsLive={logsLive}
+              artifacts={artifacts}
+              artifactsLoading={artifactsLoading}
+              onDownloadArtifact={(filename) => void downloadArtifact(filename)}
               onStop={() => setConfirmStop(selectedId)}
               onRequeue={() => doRequeue(selectedId)}
             />
