@@ -222,6 +222,18 @@ export interface SystemUptime {
   uptime_human: string;
 }
 
+/** `GET /api/system/audit` — `AuditEntry`. `timestamp` já vem formatado BR
+ *  pelo backend (`AuditEntry.apply_br_format`). */
+export interface AuditEntry {
+  id: number;
+  timestamp: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  actor: string | null;
+  details: string | null;
+}
+
 /** `GET /api/portfolio/drift` — `PortfolioDriftResponse`/`PortfolioDriftItem`/`PortfolioDriftIssue`. */
 export interface PortfolioDriftIssue {
   code: string;
@@ -866,6 +878,10 @@ export const orchestratorApi = {
   reloadScheduler: () => api.post<{ message: string }>("/api/system/scheduler/reload"),
   getVersion: (signal?: AbortSignal) => api.get<SystemVersion>("/api/system/version", signal),
   getUptime: (signal?: AbortSignal) => api.get<SystemUptime>("/api/system/uptime", signal),
+  /** `action` sem uso na UI ainda (só o card de trilha de auditoria, sem
+   *  filtro) — tipado e exposto para quando um filtro por ação for pedido. */
+  getAuditLog: (params?: { limit?: number; action?: string }, signal?: AbortSignal) =>
+    api.get<AuditEntry[]>(`/api/system/audit${qs({ ...params })}`, signal),
 
   // ── Portfólio ──
   getPortfolioHealth: (signal?: AbortSignal) => api.get<PortfolioHealth>("/api/portfolio/health", signal),
