@@ -25,10 +25,20 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 - **Ondas 1, 2, 3, 5, 6:** ✅ VERIFICADAS E FECHADAS (ver seções abaixo). Branches encadeadas: onda1 → onda2 → onda3 → onda5 → onda6 → **onda4** (atual). `git push` BLOQUEADO pelo classificador do harness — usuário precisa pushar ou liberar a permissão (lembrete registrado como task chip).
 - **Onda 4 EM PROGRESSO**, dividida em 3 fases (checkpoint de paleta do plano exige aprovação humana antes de tocar componente com cor nova):
-  - **4-1** (em andamento): consolidação estrutural (item "3D"), mantendo cores atuais, byte-idêntica — mesmo regime de verificação da Onda 3.
-  - **4-2** (depois): a11y restante, responsivo, fontes self-hosted, breakpoint único (gate `@media`).
+  - **4-1 ✅ FECHADA E VERIFICADA** — consolidação estrutural (item "3D"), byte-idêntica, executada direto pelo orquestrador (sem subagente) após o executor anterior bater rate-limit de sessão (working tree ficou limpo, nada perdido; `SendMessage` não está mais disponível nesta sessão para retomar agentes antigos).
+  - **4-2** (próxima): a11y restante, responsivo, fontes self-hosted, breakpoint único (gate `@media`).
   - **4-3** (por último, aguardando aprovação do usuário): paleta/tipografia nova — proposta apresentada antes de tocar componente.
-- **Nota operacional:** um subagente executor rodou as Ondas 1–6 (spawns via `Agent`/`SendMessage`); no início da 4-1 o subagente falhou por rate-limit de sessão (`session limit`, sem commits perdidos — working tree ficou limpo). `SendMessage` não está mais disponível nesta sessão para retomar agentes antigos. A partir daqui a Onda 4 é executada DIRETO pelo orquestrador (eu), sem subagente, mesmo rigor de verificação.
+
+### Onda 4-1 — consolidação estrutural (branch `escalar/frontend-rodada2-onda4`, de onda6)
+8 itens do plano (A-H), cada commit verificado com o oráculo (build+E2E, 4 screenshots sem regenerar) — 4 rodadas de verificação, todas 17/17 E2E:
+- [x] **A** `a0d87e9` — 6 lâmpadas (StatusBar/Annunciator/AutomacoesPage/StatusTag.dot/Mimico×2) → `<Lamp>`. Achado: `AutomacoesPage` construía `var(--graphite-600)` via template literal, invisível ao grep do gate da 3B — corrigido para `var(--track-strong)`.
+- [x] **B** `7128fa0` — overlay compartilhado (Modal/Drawer/CommandPalette) → `.overlay-scrim` em tokens.css.
+- [x] **D** (investigado, não codificado) — só 2 `.tile` existem (StatTile, Annunciator), não 3, e não são intercambiáveis (flex-direction oposto, radius diferente, Annunciator com box-shadow/wrap que StatTile não tem). Não forçado.
+- [x] **E** `7128fa0` — `.eyebrow` (Drawer+Nameplate, duplicado byte a byte) = `.label-mono` + `margin-bottom` — vira `className="label-mono eyebrow"`.
+- [x] **C** `2ccec1b` — Input/Select → `Field.module.css` via `composes`. **Achado real de cascata:** o `composes` inverteu a ordem — `.field` saiu DEPOIS de `.withIcon` no CSS compilado (medido no bundle), o que reverteria a fonte de um input-com-ícone de sans para mono. Corrigido com seletor composto `.input.withIcon` (especificidade vence independente da ordem do bundle) — verificado no CSS gerado antes do oráculo.
+- [x] **F** (investigado, não codificado) — nenhuma "superfície interativa caseira" encontrada: tudo que parecia (`ProductAutocomplete.option`, `Shell.logout`, `AutomacoesPage.linkBtn`, chips do `LogViewer`) já é `<button>` nativo com estilo mínimo intencional; o único `role="button"` real é uma célula SVG do Treemap (não pode virar `<Button>` — está dentro de `<svg>`). Os "7" do plano provavelmente já foram corrigidos na rodada de a11y anterior.
+- [x] **G** `0d924a4` — só os 2 `minmax(140px)` idênticos → `--grid-tiles-min`; os demais (148/150/300/320/340) servem grades de propósito distinto, não forçados.
+- [x] **H** `0d924a4` — `ApiKeyGate`/`Gauge`/`MiniViz` → `.module.css` (só o estático; strokeDasharray/width%/tone continuam inline). **Verificação manual** (fora do oráculo — `ApiKeyGate` nunca renderiza em nenhum E2E, a fixture injeta a chave; `/sistema` não é screenshot): dev server + captura autenticada via mecanismo do `driver.py`, estados normal/erro/gauges conferidos visualmente, idênticos.
 
 ### Onda 5 — Performance de render (branch `escalar/frontend-rodada2-onda5`, de onda3)
 - [x] 5-1 `7f286a1`→`c02aa01` — `React.memo` em DataTable/StatTile/TimeSeries/Treemap + estabilização de props; TimeSeries sem `JSON.stringify`; MonitorPage buffer rAF; Beneficiamento séries em useMemo. **VERIFICADO:** meu oráculo (12/12 E2E, 4 screenshots, 164 testes) + verificador independente PASS-com-ressalvas (memos memoizam de verdade nos call sites quentes; ressalvas menores em call sites de baixa frequência).
