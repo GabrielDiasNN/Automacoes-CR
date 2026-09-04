@@ -37,34 +37,36 @@
      verde = normal · vermelho = alarme · azul = info/teste */
   --cyan:        #38C5C9;
   --cyan-bright: #5FE3E6;
-  --cyan-tint:   rgba(56, 197, 201, 0.12);
-  --cyan-glow:   rgba(56, 197, 201, 0.30);
+  --cyan-tint:   color-mix(in srgb, var(--cyan) 12%, transparent);
+  --cyan-glow:   color-mix(in srgb, var(--cyan) 30%, transparent);
 
   --amber:       #E8A317;
-  --amber-tint:  rgba(232, 163, 23, 0.12);
-  --amber-glow:  rgba(232, 163, 23, 0.30);
+  --amber-tint:  color-mix(in srgb, var(--amber) 12%, transparent);
+  --amber-glow:  color-mix(in srgb, var(--amber) 30%, transparent);
 
   --green:       #3FB950;
-  --green-tint:  rgba(63, 185, 80, 0.12);
-  --green-glow:  rgba(63, 185, 80, 0.30);
+  --green-tint:  color-mix(in srgb, var(--green) 12%, transparent);
+  --green-glow:  color-mix(in srgb, var(--green) 30%, transparent);
 
   --red:         #F0524D;
-  /* 0.07 (não 0.12): sobre --surface, alpha MAIOR aproxima o fundo da própria
-     cor do texto e PIORA o contraste, não melhora — o valor anterior (0.12)
+  /* 7% (não 12%): sobre --surface, alpha MAIOR aproxima o fundo da própria
+     cor do texto e PIORA o contraste, não melhora — o valor anterior (12%)
      dava ratio 4.41:1 e reprovava WCAG AA (mínimo 4.5:1 para texto <18px;
-     StatusTag usa --fs-label, 11px). Ratio real com 0.07: 4.68:1. */
-  --red-tint:    rgba(240, 82, 77, 0.07);
-  --red-glow:    rgba(240, 82, 77, 0.32);
+     StatusTag usa --fs-label, 11px). Ratio real com 7%: 4.68:1.
+     Valor migrado de rgba() para color-mix; cor e ratio inalterados. */
+  --red-tint:    color-mix(in srgb, var(--red) 7%, transparent);
+  --red-glow:    color-mix(in srgb, var(--red) 32%, transparent);
 
   --blue:        #4C8DF6;
-  --blue-tint:   rgba(76, 141, 246, 0.12);
-  --blue-glow:   rgba(76, 141, 246, 0.30);
+  --blue-tint:   color-mix(in srgb, var(--blue) 12%, transparent);
+  --blue-glow:   color-mix(in srgb, var(--blue) 30%, transparent);
 
   --grey:        #7C8A9C;
-  /* 0.05 (não 0.12): mesmo raciocínio do --red-tint acima — o valor anterior
-     dava 4.25:1 (reprova AA). Ratio real com 0.05: 4.68:1. */
-  --grey-tint:   rgba(124, 138, 156, 0.05);
-  --grey-glow:   rgba(124, 138, 156, 0.30);
+  /* 5% (não 12%): mesmo raciocínio do --red-tint acima — o valor anterior
+     dava 4.25:1 (reprova AA). Ratio real com 5%: 4.68:1.
+     Valor migrado de rgba() para color-mix; cor e ratio inalterados. */
+  --grey-tint:   color-mix(in srgb, var(--grey) 5%, transparent);
+  --grey-glow:   color-mix(in srgb, var(--grey) 30%, transparent);
 
   /* ── Tipografia ── */
   --font-display: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
