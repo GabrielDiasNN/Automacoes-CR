@@ -20,7 +20,7 @@
 .state {
   text-transform: uppercase;
   letter-spacing: var(--track-mid);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   font-size: var(--fs-label);
 }
 .ico {
@@ -29,7 +29,7 @@
 .metric {
   font-variant-numeric: tabular-nums;
   color: var(--text-hi);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 .unit {
   color: var(--text-lo);

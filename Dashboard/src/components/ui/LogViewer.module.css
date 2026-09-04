@@ -102,7 +102,7 @@
   white-space: nowrap;
 }
 .level {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   white-space: nowrap;
 }
 .row.info .level { color: var(--blue); }

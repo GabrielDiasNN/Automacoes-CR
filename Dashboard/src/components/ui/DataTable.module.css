@@ -14,7 +14,7 @@
   background: var(--graphite-850);
   font-family: var(--font-mono);
   font-size: var(--fs-label);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: var(--track-mid);
   text-transform: uppercase;
   color: var(--text-lo);

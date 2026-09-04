@@ -82,6 +82,12 @@
   --track-wide: 0.06em;  /* tracking de nameplate */
   --track-mid:  0.04em;
 
+  /* ── Peso tipográfico ── */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
   /* ── Espaçamento ── */
   --sp-1: 4px;
   --sp-2: 8px;
@@ -142,7 +148,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+h1, h2, h3, h4 { margin: 0; font-weight: var(--fw-semibold); }
 button { font-family: inherit; }
 a { color: inherit; }
 

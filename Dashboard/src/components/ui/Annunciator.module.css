@@ -37,7 +37,7 @@
 .legend {
   font-family: var(--font-display);
   font-size: var(--fs-small);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--track-mid);
   text-transform: uppercase;
   color: var(--text-mid);
@@ -59,6 +59,6 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-small);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--tile-color, var(--text-lo));
 }

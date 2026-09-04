@@ -53,7 +53,7 @@
 }
 .brand {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   font-size: 0.95rem;
   letter-spacing: 0.16em;
   color: var(--cyan);
@@ -103,7 +103,7 @@
   border-left-color: var(--cyan);
   background: var(--cyan-tint);
   color: var(--cyan-bright);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 .linkActive .linkIcon {
   color: var(--cyan);
