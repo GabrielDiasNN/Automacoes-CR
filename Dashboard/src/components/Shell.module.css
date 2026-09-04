@@ -142,6 +142,16 @@
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
+/* xnarrow (breakpoints.ts) — sem isto a StatusBar era cortada (ex.: "sinal"
+ * virava "SI"), não só apertada: o topbar tinha altura fixa e nenhum wrap. */
+@media (max-width: 400px) {
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--topbar-h);
+    padding: var(--sp-2) var(--sp-4);
+  }
+}
 .menuBtn {
   display: none;
 }
