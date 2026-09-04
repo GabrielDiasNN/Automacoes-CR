@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.77] - 04/09/2026
+
+Frontend rodada 2, Onda 4-2 — a11y remanescente, responsivo, fontes self-hosted, breakpoint único. Os 4 baselines de screenshot passam sem regeneração a cada commit.
+
+### Corrigido
+
+- **A11y:** Toast (`role="status"` aninhando um filho `role="alert"` causava leitura duplicada em alguns leitores de tela — removido; WCAG 2.2.1, hover agora pausa o timer de 4,2s de sumiço). ConfirmModal (`aria-label` duplicado → `aria-labelledby` apontando pro `<h3>` já visível). CommandPalette (input ganha `role="combobox"`/`aria-expanded`/`aria-controls`/`aria-autocomplete`; cada `<li>` do listbox ganha `role="presentation"`). CommandPalette + ApiKeyGate (`outline: none` sem substituto no input de busca e no campo de senha — removido, `:focus-visible` global volta a aparecer). DataTable e `ClickableTile` (linha clicável só respondia a Enter; Space rolava a página — agora ativa igual, com `role="button"`). AutomacoesPage (motivo de "Disparar" desabilitado só existia no `title` de hover — agora também em `aria-label`).
+- **Responsivo:** topbar cortava conteúdo (não só apertava) abaixo de 400px — breakpoint `xnarrow` novo. Grid de `/automacoes` (`minmax(340px)` sem media query) estourava a página inteira na horizontal abaixo de ~372px — colapsa para 1 coluna abaixo de 560px.
+- **Performance:** fontes IBM Plex self-hosted — `tokens.css` fazia `@import` do Google Fonts (bloqueante e serial: CSS → import → fonte). 10 arquivos `.woff2` (subset latin, cobre acentuação do português) agora em `src/assets/fonts/`, servidos como asset do próprio bundle.
+
+### Investigado, não alterado
+
+- "Zero `<label>` no app": todo `<Input>`/`<Select>`/`<input>` já tem `aria-label` explícito — `<label>` não é a única forma válida de nome acessível.
+- "`title=` como única explicação em 41 lugares": maioria é prop de componente (`Drawer`/`Nameplate`/`ConfirmModal` `title=`, vira `<h3>` visível), não o atributo HTML `title`.
+- `Mimico` "exige ~700px": já contém seu próprio `overflow-x: auto` num scroll interno contido — não vaza pra página, é o padrão correto, não um bug.
+
 ## [1.3.76] - 04/09/2026
 
 Frontend rodada 2, Onda 4-1 — consolidação estrutural (parte do "reformulação visual", executada antes da paleta nova). Byte-idêntica: nenhuma cor ou pixel muda, só origem do CSS. Os 4 baselines de screenshot passam sem regeneração (verificado a cada commit).
