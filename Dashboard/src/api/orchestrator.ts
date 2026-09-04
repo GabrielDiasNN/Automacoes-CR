@@ -197,6 +197,48 @@ export interface ScheduledJob {
   trigger: string;
 }
 
+/** `GET /api/system/version` — `Orchestrator/app/schemas/system.py::SystemVersion`. */
+export interface SystemVersion {
+  version: string;
+  schema_version: string;
+  contract_version: string;
+  python_version: string;
+  started_at: string;
+  uptime_seconds: number;
+  max_workers: number;
+  allowed_origins: string[];
+}
+
+/** `GET /api/system/uptime` — `SystemUptime`. */
+export interface SystemUptime {
+  started_at: string;
+  uptime_seconds: number;
+  uptime_human: string;
+}
+
+/** `GET /api/portfolio/drift` — `PortfolioDriftResponse`/`PortfolioDriftItem`/`PortfolioDriftIssue`. */
+export interface PortfolioDriftIssue {
+  code: string;
+  message: string;
+  severity: string;
+  manifest_value: string | null;
+  runtime_value: string | null;
+}
+
+export interface PortfolioDriftItem {
+  catalog_id: string;
+  automation_id: number | null;
+  name: string;
+  slug: string;
+  issues: PortfolioDriftIssue[];
+}
+
+export interface PortfolioDriftResponse {
+  generated_at: string;
+  summary: { items_with_drift: number; total_issues: number };
+  items: PortfolioDriftItem[];
+}
+
 export interface BaselineStatus {
   evaluated_at: string | null;
   status: "healthy" | "attention" | "incident";
@@ -805,10 +847,14 @@ export const orchestratorApi = {
   runCheckpoint: () => api.post<{ message: string }>("/api/system/checkpoint"),
   runPurge: () => api.post<{ message: string }>("/api/system/purge"),
   recoverWorker: () => api.post<{ message: string }>("/api/system/worker/recover"),
+  wakeupWorker: () => api.post<{ message: string }>("/api/system/worker/wakeup"),
   reloadScheduler: () => api.post<{ message: string }>("/api/system/scheduler/reload"),
+  getVersion: (signal?: AbortSignal) => api.get<SystemVersion>("/api/system/version", signal),
+  getUptime: (signal?: AbortSignal) => api.get<SystemUptime>("/api/system/uptime", signal),
 
   // ── Portfólio ──
   getPortfolioHealth: (signal?: AbortSignal) => api.get<PortfolioHealth>("/api/portfolio/health", signal),
+  getDrift: (signal?: AbortSignal) => api.get<PortfolioDriftResponse>("/api/portfolio/drift", signal),
   getPortfolioRunbook: (catalogId: string, signal?: AbortSignal) =>
     api.getText(`/api/portfolio/runbook/${encodeURIComponent(catalogId)}`, signal),
 
