@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Pause, Play, Trash2 } from "lucide-react";
+import { computeWindow } from "../lib/virtualWindow";
 import { useLiveEvents, useLiveStatus } from "../context/LiveStatusContext";
 import { usePolling } from "../hooks/usePolling";
 import { orchestratorApi, type SystemHistory, type SystemMetricsDaily } from "../api/orchestrator";
@@ -67,6 +68,12 @@ const HISTORY_WINDOWS = [
   { label: "7d", hours: 168 },
 ];
 
+// Virtualização do console: altura do viewport (casa com o `style.height` do
+// container) e folga em linhas renderizadas fora da janela visível.
+const CONSOLE_H = 420;
+const CONSOLE_OVERSCAN = 12;
+const ROW_H_ESTIMATE = 19; // ~ --fs-label (11px) * line-height 1.7; medido no 1º render real
+
 interface ClickableTileProps {
   onClick?: () => void;
   children: React.ReactNode;
@@ -102,6 +109,11 @@ export function MonitorPage() {
   const [execFilter, setExecFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [q, setQ] = useState("");
+
+  // Estado da virtualização do console (janela derivada mais abaixo).
+  const [scrollTop, setScrollTop] = useState(0);
+  const [rowH, setRowH] = useState(ROW_H_ESTIMATE);
+  const firstRowRef = useRef<HTMLDivElement>(null);
 
   // Buffer + flush em requestAnimationFrame: sob rajada de eventos, várias
   // mensagens no mesmo frame viram UM `setLines` (uma cópia O(n), um re-render)
@@ -164,7 +176,13 @@ export function MonitorPage() {
   const lastLine = lines[lines.length - 1];
   const lastLineId = lastLine ? lastLine.id : 0;
   useEffect(() => {
-    if (!paused) consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight });
+    if (paused) return;
+    const el = consoleRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight });
+    // Atualiza a janela virtual no mesmo commit (o evento de scroll do
+    // scrollTo chegaria só no próximo tick).
+    setScrollTop(el.scrollTop);
   }, [lastLineId, paused]);
 
   const wsTone = status === "open" ? "green" : status === "connecting" ? "amber" : "red";
@@ -181,6 +199,27 @@ export function MonitorPage() {
       ),
     [lines, execFilter, typeFilter, q],
   );
+
+  // ── Virtualização do console ──
+  // Até 300 nós de log seriam remontados a cada frame com mensagem. Renderiza
+  // só a janela visível (+ overscan) entre dois espaçadores que preservam a
+  // barra de rolagem. `pre-wrap` é mantido (linhas longas quebram) — `rowH` é
+  // uma ESTIMATIVA medida no 1º render, então o espaçador pode ficar alguns px
+  // impreciso para linhas muito longas, sem buraco visível (overscan cobre).
+  const consoleWindow = computeWindow(scrollTop, rowH, CONSOLE_H, filteredLines.length, CONSOLE_OVERSCAN);
+  const visibleLines = filteredLines.slice(consoleWindow.start, consoleWindow.end);
+
+  useLayoutEffect(() => {
+    const el = firstRowRef.current;
+    if (!el) return;
+    const h = el.getBoundingClientRect().height;
+    if (h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h);
+  }, [visibleLines.length, rowH]);
+
+  const handleConsoleScroll = useCallback(() => {
+    const el = consoleRef.current;
+    if (el) setScrollTop(el.scrollTop);
+  }, []);
 
   const [historyHours, setHistoryHours] = useState(24);
   const fetchHistory = useCallback(
@@ -409,16 +448,19 @@ export function MonitorPage() {
       >
         <div
           ref={consoleRef}
+          onScroll={handleConsoleScroll}
           // `role="log"`: live region própria para stream de mensagens tipo
           // console/chat — sem isso o conteúdo mudava sozinho sob o cursor
           // sem nenhum anúncio a leitor de tela. `aria-relevant="additions"`
           // evita que "Limpar" (esvazia a lista) dispare um anúncio de
-          // remoção em massa.
+          // remoção em massa. Virtualizado: linhas fora da janela saem do DOM,
+          // mas o anúncio a leitor de tela acontece no append (aria-live no
+          // `setLines`), então não regride.
           role="log"
           aria-live="polite"
           aria-relevant="additions"
           style={{
-            height: 420,
+            height: CONSOLE_H,
             overflowY: "auto",
             padding: "var(--sp-3)",
             background: "var(--surface-sunken)",
@@ -432,11 +474,19 @@ export function MonitorPage() {
               {lines.length === 0 ? "aguardando sinal de eventos via websocket…" : "nenhuma linha corresponde aos filtros ativos"}
             </span>
           ) : (
-            filteredLines.map((l) => (
-              <div key={l.id} style={{ color: l.tone, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                <span style={{ color: "var(--cyan)" }}>[{l.execId.slice(0, 10)}]</span> {l.message}
-              </div>
-            ))
+            <>
+              <div style={{ height: consoleWindow.topPad }} aria-hidden="true" />
+              {visibleLines.map((l, i) => (
+                <div
+                  key={l.id}
+                  ref={i === 0 ? firstRowRef : undefined}
+                  style={{ color: l.tone, whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                >
+                  <span style={{ color: "var(--cyan)" }}>[{l.execId.slice(0, 10)}]</span> {l.message}
+                </div>
+              ))}
+              <div style={{ height: consoleWindow.bottomPad }} aria-hidden="true" />
+            </>
           )}
         </div>
       </Card>
