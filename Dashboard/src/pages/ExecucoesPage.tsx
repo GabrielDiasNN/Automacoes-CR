@@ -50,7 +50,10 @@ export function ExecucoesPage() {
   });
   const [pageNum, setPageNum] = useState(1);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Vem do card "últimas execuções" do Painel (`?exec_id=`) — mesmo padrão de
+  // `status`/`automationId` acima: lido uma vez no initializer, a navegação
+  // do Painel para cá sempre monta ExecucoesPage de novo (troca de rota).
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("exec_id"));
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
 
   const fetchExecutions = useCallback(

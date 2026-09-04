@@ -205,7 +205,10 @@ export function PainelPage() {
         </div>
         <div className={page.list}>
           {data.recent.slice(0, 8).map((ex) => (
-            <ExecRow key={ex.id} ex={ex} onClick={() => void navigate("/execucoes")} />
+            // `ex.id`, não a rota genérica: sem o id, a lista inteira navegava
+            // para a mesma /execucoes sem filtro — clicar numa execução
+            // específica não abria o drawer dela (achado de revisão, Onda 6).
+            <ExecRow key={ex.id} ex={ex} onClick={() => void navigate(`/execucoes?exec_id=${ex.id}`)} />
           ))}
           {data.recent.length === 0 && (
             <div style={{ padding: "var(--sp-5)", textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-lo)", fontSize: "var(--fs-small)" }}>
