@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.76] - 04/09/2026
+
+Frontend rodada 2, Onda 4-1 — consolidação estrutural (parte do "reformulação visual", executada antes da paleta nova). Byte-idêntica: nenhuma cor ou pixel muda, só origem do CSS. Os 4 baselines de screenshot passam sem regeneração (verificado a cada commit).
+
+### Alterado
+
+- **6 lâmpadas de status → `<Lamp>`** (`components/ui/Lamp.tsx`). `StatusBar`, `Annunciator`, `AutomacoesPage`, `StatusTag.dot`, `Mimico.laneLamp`/`Mimico.workerLamp` reimplementavam cada uma seu próprio `<span>` com tamanho/forma/animação quase idênticos. A diferença círculo-vs-quadrado é semântica (sinal vs. instrumento) e ficou explícita via prop `shape`. Achado no caminho: `AutomacoesPage` construía `var(--graphite-600)` via template literal — invisível ao gate `--graphite-` por grep da Onda 3B porque o padrão não aparece literalmente no código-fonte. Corrigido para `var(--track-strong)`.
+- **3 overlays (Modal/Drawer/CommandPalette) → base `.overlay-scrim`** compartilhada em `tokens.css`; cada `.overlay` local mantém só o que diverge (z-index, alinhamento, padding).
+- **`.eyebrow` duplicado (Drawer + Nameplate) → `.label-mono` + modificador.**
+- **Input/Select → `Field.module.css` via `composes`.** Achado real durante a verificação: o `composes` inverteu a ordem de cascata que `.withIcon` dependia para vencer `font-family` — medido no CSS compilado, a base ficou depois do modificador no bundle (a ordem no arquivo-fonte não é a ordem no bundle final entre arquivos `.module.css` diferentes). Um input com ícone teria revertido de fonte sans para mono. Corrigido com seletor composto `.input.withIcon` (especificidade vence independente da ordem de bundle).
+- **`ApiKeyGate.tsx` (tela de login, 100% inline), `Gauge.tsx`, `MiniViz.tsx` → `.module.css`.** Só o estático virou classe; valores calculados por render (`strokeDasharray`, largura de barra, cor por tom) continuam inline. Verificação manual fora do oráculo de screenshot — `ApiKeyGate` nunca renderiza em nenhum E2E (a fixture injeta a chave direto em `sessionStorage`) e `/sistema` (Gauge) não é uma das 4 telas de baseline.
+- Token `--grid-tiles-min` para o único `minmax()` litralmente duplicado (140px, 2 arquivos).
+
+### Investigado, não alterado
+
+- **3 "tiles"**: só existem 2 implementações (`StatTile`, `Annunciator`), com `flex-direction` oposto e `border-radius` diferente — propósitos genuinamente distintos, não forçados a uma base comum.
+- **7 "superfícies interativas caseiras"**: busca extensa (`role="button"`, `onClick` fora de componentes compartilhados, `cursor: pointer`) não encontrou nenhuma — tudo já é `<button>` nativo com estilo mínimo intencional, ou está dentro de um `<svg>` (célula do Treemap) e não pode virar `Button`/`IconButton`. Provavelmente já corrigido na rodada de acessibilidade anterior.
+- Escala completa de `minmax()` (148/150/300/320/340px): próximos mas servem grades de propósito distinto — arredondar juntos arrisca mudar quantas colunas cabem em larguras que os 4 baselines não cobrem. Fica para a Onda 4-3 (passe visual).
+
 ## [1.3.75] - 04/09/2026
 
 Frontend rodada 2, Onda 6 — capacidades novas: leitura e controle que o backend já expõe, nada que escreva arquivo em produção. 8 dos 10 itens do plano; itens 9 (editor de cron) e 10 (busca de OB) adiados para a Onda 4, que restila `/automacoes` e `/beneficiamento` e regenera baseline de qualquer forma. Todas as telas novas ficam fora do conjunto de screenshot — os 4 baselines passam sem regeneração.
