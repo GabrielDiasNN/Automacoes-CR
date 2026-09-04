@@ -14,6 +14,7 @@ import {
   EmptyState,
   ErrorState,
   FreshnessTag,
+  Lamp,
   Loading,
   Nameplate,
   RatioBar,
@@ -22,11 +23,11 @@ import {
 } from "../components/ui";
 import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
-import { criticalityTone, executionTone, operationalStateLabel, operationalTone, slaTone } from "../lib/status";
+import { useAsyncResource } from "../hooks/useAsyncResource";
+import { criticalityTone, executionTone, operationalStateLabel, operationalTone, slaTone, toneVar } from "../lib/status";
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
 import styles from "./AutomacoesPage.module.css";
-import { errMessage } from "../lib/errors";
 
 interface AutomacoesData {
   items: Automation[];
@@ -56,47 +57,36 @@ async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData
 
 /** Ordena por atenção — quem precisa de olhar primeiro no topo — em vez da
  *  ordem alfabética que o backend devolve. Critério, em ordem de desempate:
- *  estado operacional "attention" > SLA violado > criticidade > nome. */
-function attentionRank(a: Automation, p: PortfolioHealthItem | undefined): number {
+ *  estado operacional "attention" > SLA rompido (`breached`) > criticidade "high"
+ *  > SLA em recuperação (`recovering`) > criticidade "medium" > resto.
+ *
+ *  Nota: as comparações `sla_state === "violated" | "at_risk"` que existiam aqui
+ *  antes eram código morto — o backend (`portfolio_catalog._sla_state`) emite
+ *  `ok | breached | recovering | unknown`, nunca esses valores, então o SLA
+ *  nunca influenciava a ordenação. Wiring correto de `breached`/`recovering`
+ *  entra aqui, junto com `slaTone` (mesma correção, ver `lib/status.ts`). */
+export function attentionRank(a: Automation, p: PortfolioHealthItem | undefined): number {
   if (a.operational_state === "attention") return 0;
-  if (p?.sla_state === "violated") return 1;
+  if (p?.sla_state === "breached") return 1;
   if (p?.criticality === "high") return 2;
-  if (p?.sla_state === "at_risk") return 3;
+  if (p?.sla_state === "recovering") return 3;
   if (p?.criticality === "medium") return 4;
   return 5;
 }
 
-function RunbookDrawer({
-  target,
-  onClose,
-}: {
-  target: { catalogId: string; name: string } | null;
-  onClose: () => void;
-}) {
-  const [content, setContent] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!target) return;
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    orchestratorApi
-      .getPortfolioRunbook(target.catalogId, controller.signal)
-      .then((text) => setContent(text))
-      .catch((e) => {
-        if (controller.signal.aborted) return;
-        setError(errMessage(e));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [target]);
+/** Corpo interno: `useAsyncResource` (aborto real, guarda de sequência). O pai
+ *  monta com `key={catalogId}` para o estado de loading reiniciar a cada alvo
+ *  — o `.then/.catch/.finally` anterior não cancelava de verdade, só descartava
+ *  o resultado. */
+function RunbookBody({ catalogId }: { catalogId: string }) {
+  const fetcher = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getPortfolioRunbook(catalogId, signal),
+    [catalogId],
+  );
+  const { data: content, loading, error } = useAsyncResource(fetcher, [catalogId]);
 
   return (
-    <Drawer open={!!target} onClose={onClose} eyebrow="// runbook" title={target?.name} width={720}>
+    <>
       {loading && <Loading label="lendo runbook" />}
       {error && <ErrorState message={error} />}
       {!loading && !error && content && (
@@ -114,6 +104,20 @@ function RunbookDrawer({
           {content}
         </pre>
       )}
+    </>
+  );
+}
+
+function RunbookDrawer({
+  target,
+  onClose,
+}: {
+  target: { catalogId: string; name: string } | null;
+  onClose: () => void;
+}) {
+  return (
+    <Drawer open={!!target} onClose={onClose} eyebrow="// runbook" title={target?.name} width={720}>
+      {target && <RunbookBody key={target.catalogId} catalogId={target.catalogId} />}
     </Drawer>
   );
 }
@@ -127,6 +131,7 @@ export function AutomacoesPage() {
     refresh: load,
     lastUpdated,
     rateLimitedUntil,
+    refreshQueued,
   } = usePolling(fetchAutomacoesData, 15_000);
   const items = useMemo(() => data?.items ?? [], [data]);
   const portfolio = data?.portfolio ?? null;
@@ -167,14 +172,14 @@ export function AutomacoesPage() {
   const dispatch = useCallback(
     (a: Automation) => {
       setConfirm(null);
-      run(
+      void run(
         a.id,
         () =>
           orchestratorApi.startAutomation(a.id).then((r) => {
-            if (r.exec_id) setLastExecId((prev) => ({ ...prev, [a.id]: r.exec_id! }));
+            if (r.exec_id) setLastExecId((prev) => ({ ...prev, [a.id]: r.exec_id }));
             return { message: r.exec_id ? `${r.message} (${r.exec_id})` : r.message };
           }),
-        { fallbackMessage: `${a.name} disparada`, onDone: load },
+        { fallbackMessage: `${a.name} disparada`, onDone: load, invalidate: ["overview", "health"] },
       );
     },
     [run, load],
@@ -183,7 +188,7 @@ export function AutomacoesPage() {
   const pause = useCallback(
     (a: Automation) => {
       setConfirm(null);
-      run(a.id, () => orchestratorApi.pauseAutomation(a.id), { fallbackMessage: `${a.name} pausada`, onDone: load });
+      void run(a.id, () => orchestratorApi.pauseAutomation(a.id), { fallbackMessage: `${a.name} pausada`, onDone: load, invalidate: "overview" });
     },
     [run, load],
   );
@@ -215,13 +220,18 @@ export function AutomacoesPage() {
         title="Automações"
         actions={
           <div className={page.toolbar}>
-            <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && err ? err : null}
+              rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
+            />
             {portfolioFailed && (
               <StatusTag tone="grey" dot>
                 criticidade indisponível
               </StatusTag>
             )}
-            <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
+            <Button size="sm" icon={<RefreshCw size={13} />} onClick={() => void load()}>
               Atualizar
             </Button>
           </div>
@@ -253,11 +263,18 @@ export function AutomacoesPage() {
                   style={highlightedId === a.id ? { outline: "2px solid var(--cyan)", outlineOffset: 3, borderRadius: 4 } : undefined}
                 >
                   <div className={styles.top}>
-                    <span
-                      className={styles.lamp}
+                    <Lamp
+                      size={9}
                       role="img"
                       aria-label={`Estado operacional: ${operationalStateLabel(a.operational_state)}`}
-                      style={{ background: `var(--${operationalTone(a.operational_state) === "grey" ? "graphite-600" : operationalTone(a.operational_state)})` }}
+                      // "grey" usa a trilha escura (--track-strong = --graphite-600), não
+                      // --grey (mais claro) — preserva a lâmpada "apagada" original.
+                      color={
+                        operationalTone(a.operational_state) === "grey"
+                          ? "var(--track-strong)"
+                          : toneVar[operationalTone(a.operational_state)]
+                      }
+                      style={{ marginTop: 5 }}
                     />
                     <div className={styles.titleWrap}>
                       <span className={styles.name}>{a.name}</span>
@@ -289,12 +306,16 @@ export function AutomacoesPage() {
                         <span style={{ color: "var(--green)" }}>{a.success_24h}</span>
                         <span className={styles.slash}>/</span>
                         <span style={{ color: a.failures_24h ? "var(--red)" : "var(--text-lo)" }}>{a.failures_24h}</span>
+                        {/* Dentro do <dd> (não como <div> irmão) — um <dl> só aceita
+                         *  <dt>/<dd> (ou <div> agrupando um par) como filho direto;
+                         *  um terceiro <div> ali quebrava a estrutura (achado via
+                         *  axe-core, Onda 4-3). */}
+                        {total24h > 0 && (
+                          <div style={{ marginTop: 4 }}>
+                            <RatioBar success={a.success_24h} failures={a.failures_24h} />
+                          </div>
+                        )}
                       </dd>
-                      {total24h > 0 && (
-                        <div style={{ marginTop: 4 }}>
-                          <RatioBar success={a.success_24h} failures={a.failures_24h} />
-                        </div>
-                      )}
                     </div>
                     <div>
                       <dt className={styles.mLabel}>sla</dt>
@@ -336,7 +357,7 @@ export function AutomacoesPage() {
                     <button
                       type="button"
                       className={styles.linkBtn}
-                      onClick={() => navigate(`/execucoes?automation_id=${a.id}`)}
+                      onClick={() => void navigate(`/execucoes?automation_id=${a.id}`)}
                     >
                       ver execuções
                     </button>
@@ -344,7 +365,7 @@ export function AutomacoesPage() {
                       <button
                         type="button"
                         className={styles.linkBtn}
-                        onClick={() => navigate(`/execucoes?automation_id=${a.id}`)}
+                        onClick={() => void navigate(`/execucoes?automation_id=${a.id}`)}
                       >
                         {execId}
                       </button>
@@ -383,9 +404,10 @@ export function AutomacoesPage() {
                         disabled={busy === a.id}
                         aria-label={`Retomar ${a.name}`}
                         onClick={() =>
-                          run(a.id, () => orchestratorApi.resumeAutomation(a.id), {
+                          void run(a.id, () => orchestratorApi.resumeAutomation(a.id), {
                             fallbackMessage: `${a.name} retomada`,
                             onDone: load,
+                            invalidate: "overview",
                           })
                         }
                       >
@@ -398,7 +420,9 @@ export function AutomacoesPage() {
                       icon={<Zap size={13} />}
                       disabled={busy === a.id || !a.enabled || emExecucao}
                       title={emExecucao ? "Já há uma execução em andamento" : undefined}
-                      aria-label={`Disparar ${a.name}`}
+                      // O motivo de estar desabilitado só existia no `title`
+                      // (hover) — invisível a teclado/toque/leitor de tela.
+                      aria-label={emExecucao ? `Disparar ${a.name} — já há uma execução em andamento` : `Disparar ${a.name}`}
                       onClick={() => setConfirm({ id: a.id, name: a.name, kind: "dispatch" })}
                     >
                       Disparar

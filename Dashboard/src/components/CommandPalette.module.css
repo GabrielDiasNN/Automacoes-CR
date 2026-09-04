@@ -1,10 +1,7 @@
+/* `position/inset/background/backdrop-filter/display` vêm de `.overlay-scrim`
+ * (tokens.css), compartilhada com Modal/Drawer. */
 .overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  background: rgba(7, 10, 13, 0.6);
-  backdrop-filter: blur(3px);
-  display: flex;
+  z-index: var(--z-command-palette);
   align-items: flex-start;
   justify-content: center;
   padding: var(--sp-4);
@@ -39,7 +36,8 @@
   min-width: 0;
   background: transparent;
   border: none;
-  outline: none;
+  /* SEM outline:none — o :focus-visible global (tokens.css) precisa aparecer
+   * aqui; era suprimido sem substituto (WCAG 2.4.7). */
   color: var(--text-hi);
   font-family: var(--font-sans);
   font-size: var(--fs-small);
@@ -83,7 +81,7 @@
   cursor: pointer;
 }
 .itemActive {
-  background: var(--graphite-800);
+  background: var(--surface-up);
   color: var(--text-hi);
 }
 .itemIcon {

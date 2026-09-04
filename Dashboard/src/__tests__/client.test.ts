@@ -54,11 +54,11 @@ describe("api.get", () => {
       ok: true,
       json: async () => ({ status: "ok" }),
     });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     await api.get("/api/system/health");
 
-    const [, init] = mockFetch.mock.calls[0];
+    const [, init] = mockFetch.mock.calls[0]!;
     expect((init.headers as Record<string, string>)["X-API-Key"]).toBe("chave-teste");
   });
 
@@ -69,7 +69,7 @@ describe("api.get", () => {
       statusText: "Forbidden",
       text: async () => "API key inválida",
     });
-    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.fetch = mockFetch;
 
     await expect(api.get("/api/system/health")).rejects.toThrow("403 API key inválida");
   });
@@ -80,7 +80,7 @@ describe("api.get", () => {
       status: 500,
       statusText: "Internal Server Error",
       text: async () => "erro interno",
-    }) as unknown as typeof fetch;
+    });
 
     try {
       await api.get("/api/system/health");
@@ -99,7 +99,7 @@ describe("api.get", () => {
       statusText: "Too Many Requests",
       text: async () => "limite excedido",
       headers: { get: (name: string) => (name === "Retry-After" ? "60" : null) },
-    }) as unknown as typeof fetch;
+    });
 
     try {
       await api.get("/api/system/health");
@@ -129,14 +129,14 @@ describe("setUnauthorizedHandler", () => {
       status: 401,
       statusText: "Unauthorized",
       text: async () => "Token expirado",
-    }) as unknown as typeof fetch;
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith(401);
   });
 
-  it("chama o handler ao receber status 403", async () => {
+  it("chama o handler em 403 de API Key inválida/ausente", async () => {
     const handler = vi.fn();
     setUnauthorizedHandler(handler);
 
@@ -144,12 +144,29 @@ describe("setUnauthorizedHandler", () => {
       ok: false,
       status: 403,
       statusText: "Forbidden",
-      text: async () => "Acesso negado",
-    }) as unknown as typeof fetch;
+      text: async () => "Acesso negado: API Key inválida ou ausente.",
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith(403);
+  });
+
+  it("NÃO chama o handler em 403 de path safety (não é falha de auth)", async () => {
+    // Regressão do surto de 403 de 07/08/2026: um download de artefato barrado
+    // por path traversal jogava o operador na tela de login.
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      text: async () => "Acesso negado ao arquivo.",
+    });
+
+    await expect(api.get("/api/executions/X/download")).rejects.toThrow();
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("não chama o handler para outros erros HTTP (ex: 400 ou 500)", async () => {
@@ -161,7 +178,7 @@ describe("setUnauthorizedHandler", () => {
       status: 500,
       statusText: "Internal Server Error",
       text: async () => "Erro interno",
-    }) as unknown as typeof fetch;
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).not.toHaveBeenCalled();
@@ -177,7 +194,7 @@ describe("setUnauthorizedHandler", () => {
       status: 401,
       statusText: "Unauthorized",
       text: async () => "Token expirado",
-    }) as unknown as typeof fetch;
+    });
 
     await expect(api.get("/api/system/overview")).rejects.toThrow();
     expect(handler).not.toHaveBeenCalled();

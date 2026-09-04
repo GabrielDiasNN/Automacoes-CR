@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Pause, Play, Trash2 } from "lucide-react";
+import { computeWindow } from "../lib/virtualWindow";
 import { useLiveEvents, useLiveStatus } from "../context/LiveStatusContext";
 import { usePolling } from "../hooks/usePolling";
 import { orchestratorApi, type SystemHistory, type SystemMetricsDaily } from "../api/orchestrator";
@@ -13,9 +14,8 @@ import {
   Sparkline,
   StatTile,
   StatusTag,
-  TimeSeries,
-  type SeriesLine,
 } from "../components/ui";
+import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import selectStyles from "../components/ui/Select.module.css";
 import { healthTone, healthLabel, type Tone } from "../lib/status";
 import { extractTimeBr } from "../lib/format";
@@ -68,6 +68,12 @@ const HISTORY_WINDOWS = [
   { label: "7d", hours: 168 },
 ];
 
+// Virtualização do console: altura do viewport (casa com o `style.height` do
+// container) e folga em linhas renderizadas fora da janela visível.
+const CONSOLE_H = 420;
+const CONSOLE_OVERSCAN = 12;
+const ROW_H_ESTIMATE = 19; // ~ --fs-label (11px) * line-height 1.7; medido no 1º render real
+
 interface ClickableTileProps {
   onClick?: () => void;
   children: React.ReactNode;
@@ -81,7 +87,11 @@ function ClickableTile({ onClick, children }: ClickableTileProps) {
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
-        if (e.key === "Enter") onClick();
+        // Space ativa igual a Enter — mesmo contrato de um <button> real.
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
       }}
       style={{ cursor: "pointer" }}
     >
@@ -104,27 +114,81 @@ export function MonitorPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [q, setQ] = useState("");
 
-  const handleMessage = useCallback((evt: MessageEvent) => {
-    if (pausedRef.current) return;
-    try {
-      const parsed = JSON.parse(evt.data as string) as { type?: string; data?: Record<string, unknown> };
-      const type = parsed.type ?? "UNKNOWN";
-      const data = parsed.data ?? {};
-      const execId = String(data.exec_id ?? "—");
-      const { message, tone } = describeEvent(type, data);
-      setLines((prev) => [...prev, { id: (idRef.current += 1), execId, type, message, tone }].slice(-300));
-    } catch {
-      // mensagem não-JSON ignorada
-    }
+  // Estado da virtualização do console (janela derivada mais abaixo).
+  const [scrollTop, setScrollTop] = useState(0);
+  const [rowH, setRowH] = useState(ROW_H_ESTIMATE);
+  const firstRowRef = useRef<HTMLDivElement>(null);
+  const rowHMeasuredRef = useRef(false);
+
+  // Buffer + flush em requestAnimationFrame: sob rajada de eventos, várias
+  // mensagens no mesmo frame viram UM `setLines` (uma cópia O(n), um re-render)
+  // em vez de uma por mensagem (achado nº 32, Onda 5).
+  const lineBufferRef = useRef<LogLine[]>([]);
+  const flushHandleRef = useRef<number | null>(null);
+
+  const flushLines = useCallback(() => {
+    flushHandleRef.current = null;
+    const buffered = lineBufferRef.current;
+    if (buffered.length === 0) return;
+    lineBufferRef.current = [];
+    setLines((prev) => [...prev, ...buffered].slice(-300));
   }, []);
+
+  const clearLines = useCallback(() => {
+    lineBufferRef.current = [];
+    setLines([]);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (flushHandleRef.current != null) cancelAnimationFrame(flushHandleRef.current);
+    };
+  }, []);
+
+  const handleMessage = useCallback(
+    (evt: MessageEvent) => {
+      if (pausedRef.current) return;
+      try {
+        const parsed = JSON.parse(evt.data as string) as { type?: string; data?: Record<string, unknown> };
+        const type = parsed.type ?? "UNKNOWN";
+        const data = parsed.data ?? {};
+        const execId = String(data.exec_id ?? "—");
+        const { message, tone } = describeEvent(type, data);
+        lineBufferRef.current.push({ id: (idRef.current += 1), execId, type, message, tone });
+        // Aba em background suspende o rAF; sem teto o buffer cresceria
+        // indefinidamente. Mantém no máximo os últimos 300 (nº que sobrevive
+        // ao `.slice(-300)` do flush de qualquer forma).
+        if (lineBufferRef.current.length > 600) {
+          lineBufferRef.current.splice(0, lineBufferRef.current.length - 300);
+        }
+        if (flushHandleRef.current == null) {
+          flushHandleRef.current = requestAnimationFrame(flushLines);
+        }
+      } catch {
+        // mensagem não-JSON ignorada
+      }
+    },
+    [flushLines],
+  );
 
   // Uma única conexão `/ws/events` vive no LiveStatusProvider; a página só se
   // inscreve no fan-out de mensagens (achado nº 15).
   useLiveEvents(handleMessage);
 
+  // Só reposiciona quando ENTRA linha nova (id do último item, monotônico) —
+  // não a cada troca de identidade do array. `lines.length` não serve: fica
+  // fixo em 300 depois do teto e o auto-scroll congelaria.
+  const lastLine = lines[lines.length - 1];
+  const lastLineId = lastLine ? lastLine.id : 0;
   useEffect(() => {
-    if (!paused) consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight });
-  }, [lines, paused]);
+    if (paused) return;
+    const el = consoleRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight });
+    // Atualiza a janela virtual no mesmo commit (o evento de scroll do
+    // scrollTo chegaria só no próximo tick).
+    setScrollTop(el.scrollTop);
+  }, [lastLineId, paused]);
 
   const wsTone = status === "open" ? "green" : status === "connecting" ? "amber" : "red";
 
@@ -140,6 +204,40 @@ export function MonitorPage() {
       ),
     [lines, execFilter, typeFilter, q],
   );
+
+  // ── Virtualização do console ──
+  // Até 300 nós de log seriam remontados a cada frame com mensagem. Renderiza
+  // só a janela visível (+ overscan) entre dois espaçadores que preservam a
+  // barra de rolagem. `pre-wrap` é mantido (linhas longas quebram) — `rowH` é
+  // uma ESTIMATIVA medida no 1º render, então o espaçador pode ficar alguns px
+  // impreciso para linhas muito longas, sem buraco visível (overscan cobre).
+  const consoleWindow = computeWindow(scrollTop, rowH, CONSOLE_H, filteredLines.length, CONSOLE_OVERSCAN);
+  const visibleLines = filteredLines.slice(consoleWindow.start, consoleWindow.end);
+
+  // Mede `rowH` UMA ÚNICA VEZ (guarda `rowHMeasuredRef`), nunca de novo depois.
+  // `rowH` é entrada de `computeWindow` acima e determina `start` — ou seja,
+  // reescrever `rowH` muda QUAL linha é a primeira renderizada. Com
+  // `pre-wrap` e linhas de log de comprimentos alternados, medir a primeira
+  // linha a cada mudança de `rowH` é um laço de realimentação: altura A leva a
+  // uma primeira linha de altura B, que reescreve `rowH` para B, que troca a
+  // primeira linha para uma de altura A, e o ciclo não converge. Medir só a
+  // primeira vez é coerente com a premissa acima (rowH é estimativa, overscan
+  // absorve o erro) e elimina a causa da oscilação, não só o sintoma.
+  useLayoutEffect(() => {
+    if (rowHMeasuredRef.current) return;
+    const el = firstRowRef.current;
+    if (!el) return;
+    const h = el.getBoundingClientRect().height;
+    if (h > 0) {
+      rowHMeasuredRef.current = true;
+      if (Math.abs(h - rowH) > 0.5) setRowH(h);
+    }
+  }, [visibleLines.length, rowH]);
+
+  const handleConsoleScroll = useCallback(() => {
+    const el = consoleRef.current;
+    if (el) setScrollTop(el.scrollTop);
+  }, []);
 
   const [historyHours, setHistoryHours] = useState(24);
   const fetchHistory = useCallback(
@@ -157,16 +255,23 @@ export function MonitorPage() {
   // histórico) — sob rajada de eventos, recomputava map/filter/reduce à toa
   // a cada linha de log recebida (achado nº 31, Onda 5).
   const historyItems = useMemo(() => history?.items ?? [], [history]);
-  const { xLabels, pendingSeries, runningSeries, pendingLine, runningLine } = useMemo(() => {
+  const { xLabels, pendingSeries, runningSeries, queueLines } = useMemo(() => {
     const xLabels = historyItems.map((p) => extractTimeBr(p.timestamp));
     const pendingSeries = historyItems.map((p) => p.pending_count);
     const runningSeries = historyItems.map((p) => p.running_count);
     const pendingLine: SeriesLine = { label: "pendentes", values: pendingSeries, tone: "amber" };
     const runningLine: SeriesLine = { label: "em execução", values: runningSeries, tone: "cyan" };
-    return { xLabels, pendingSeries, runningSeries, pendingLine, runningLine };
+    // `queueLines` memoizado aqui — o <TimeSeries memo> só ignora re-render do
+    // pai (cada mensagem de WS) se `lines` vier com referência estável.
+    return { xLabels, pendingSeries, runningSeries, queueLines: [pendingLine, runningLine] };
   }, [historyItems]);
 
-  const goToExecucoes = useCallback((execStatus: string) => navigate(`/execucoes?status=${execStatus}`), [navigate]);
+  // `void`: em react-router 7 `navigate` devolve Promise; o handler de clique
+  // espera `() => void` (gate `no-misused-promises`).
+  const goToExecucoes = useCallback(
+    (execStatus: string) => void navigate(`/execucoes?status=${execStatus}`),
+    [navigate],
+  );
 
   const fetchDailyMetrics = useCallback(
     (signal?: AbortSignal) => orchestratorApi.getSystemMetricsDaily(14, signal),
@@ -179,7 +284,7 @@ export function MonitorPage() {
   } = usePolling<SystemMetricsDaily>(fetchDailyMetrics, 120_000);
 
   const dailyItems = useMemo(() => dailyMetrics?.items ?? [], [dailyMetrics]);
-  const { dailyLabels, successRateLine, avgDurationLine } = useMemo(() => {
+  const { dailyLabels, successRateLines, avgDurationLines } = useMemo(() => {
     const dailyLabels = dailyItems.map((d) => d.date.slice(5));
     const successRateLine: SeriesLine = {
       label: "taxa de sucesso %",
@@ -191,7 +296,7 @@ export function MonitorPage() {
       values: dailyItems.map((d) => d.avg_duration_seconds),
       tone: "blue",
     };
-    return { dailyLabels, successRateLine, avgDurationLine };
+    return { dailyLabels, successRateLines: [successRateLine], avgDurationLines: [avgDurationLine] };
   }, [dailyItems]);
 
   const cutoff7d = useMemo(() => {
@@ -211,6 +316,25 @@ export function MonitorPage() {
     return { errorsTrendHint, errorsTrendTone, currentWeekErrors };
   }, [dailyItems, cutoff7d]);
 
+  // `value`/`hint` em JSX são recriados a cada render — sem memoizar, o
+  // <StatTile memo> re-renderiza a cada frame de log mesmo com os dados iguais.
+  const statusValue = useMemo(
+    () => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)", textTransform: "uppercase" }}>
+        {healthLabel(health?.status)}
+      </span>
+    ),
+    [health?.status],
+  );
+  const pendingHint = useMemo(
+    () => (pendingSeries.length > 1 ? <Sparkline data={pendingSeries} tone="amber" width={96} height={24} /> : undefined),
+    [pendingSeries],
+  );
+  const runningHint = useMemo(
+    () => (runningSeries.length > 1 ? <Sparkline data={runningSeries} tone="cyan" width={96} height={24} /> : undefined),
+    [runningSeries],
+  );
+
   return (
     <div className={page.page}>
       <Nameplate
@@ -224,22 +348,13 @@ export function MonitorPage() {
       />
 
       <div className={page.tiles}>
-        <StatTile
-          label="status geral"
-          value={
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)", textTransform: "uppercase" }}>
-              {healthLabel(health?.status)}
-            </span>
-          }
-          tone={healthTone(health?.status)}
-          big={false}
-        />
+        <StatTile label="status geral" value={statusValue} tone={healthTone(health?.status)} big={false} />
         <ClickableTile onClick={() => goToExecucoes("PENDING")}>
           <StatTile
             label="pendentes"
             value={health?.pending_tasks ?? 0}
             tone={health && health.pending_tasks > 0 ? "amber" : undefined}
-            hint={pendingSeries.length > 1 ? <Sparkline data={pendingSeries} tone="amber" width={96} height={24} /> : undefined}
+            hint={pendingHint}
           />
         </ClickableTile>
         <ClickableTile onClick={() => goToExecucoes("RUNNING")}>
@@ -247,7 +362,7 @@ export function MonitorPage() {
             label="em execução"
             value={worker?.active_tasks ?? 0}
             tone={worker?.active_tasks ? "amber" : undefined}
-            hint={runningSeries.length > 1 ? <Sparkline data={runningSeries} tone="cyan" width={96} height={24} /> : undefined}
+            hint={runningHint}
           />
         </ClickableTile>
         <ClickableTile onClick={() => goToExecucoes("SUCCESS")}>
@@ -279,7 +394,7 @@ export function MonitorPage() {
             </div>
           }
         >
-          <TimeSeries xLabels={xLabels} lines={[pendingLine, runningLine]} height={160} />
+          <TimeSeries xLabels={xLabels} lines={queueLines} height={160} />
         </Card>
       )}
 
@@ -289,10 +404,10 @@ export function MonitorPage() {
             label="taxa de sucesso · 14 dias"
             actions={<FreshnessTag lastUpdated={dailyUpdated} error={dailyMetrics && dailyError ? dailyError : null} />}
           >
-            <TimeSeries xLabels={dailyLabels} lines={[successRateLine]} height={160} />
+            <TimeSeries xLabels={dailyLabels} lines={successRateLines} height={160} />
           </Card>
           <Card label="duração média (s) · 14 dias">
-            <TimeSeries xLabels={dailyLabels} lines={[avgDurationLine]} height={160} />
+            <TimeSeries xLabels={dailyLabels} lines={avgDurationLines} height={160} />
           </Card>
         </div>
       )}
@@ -342,7 +457,7 @@ export function MonitorPage() {
             >
               {paused ? "Retomar" : "Pausar"}
             </Button>
-            <Button size="sm" variant="subtle" icon={<Trash2 size={13} />} onClick={() => setLines([])}>
+            <Button size="sm" variant="subtle" icon={<Trash2 size={13} />} onClick={clearLines}>
               Limpar
             </Button>
           </>
@@ -351,19 +466,22 @@ export function MonitorPage() {
       >
         <div
           ref={consoleRef}
+          onScroll={handleConsoleScroll}
           // `role="log"`: live region própria para stream de mensagens tipo
           // console/chat — sem isso o conteúdo mudava sozinho sob o cursor
           // sem nenhum anúncio a leitor de tela. `aria-relevant="additions"`
           // evita que "Limpar" (esvazia a lista) dispare um anúncio de
-          // remoção em massa.
+          // remoção em massa. Virtualizado: linhas fora da janela saem do DOM,
+          // mas o anúncio a leitor de tela acontece no append (aria-live no
+          // `setLines`), então não regride.
           role="log"
           aria-live="polite"
           aria-relevant="additions"
           style={{
-            height: 420,
+            height: CONSOLE_H,
             overflowY: "auto",
             padding: "var(--sp-3)",
-            background: "var(--graphite-950)",
+            background: "var(--surface-sunken)",
             fontFamily: "var(--font-mono)",
             fontSize: "var(--fs-label)",
             lineHeight: 1.7,
@@ -374,11 +492,19 @@ export function MonitorPage() {
               {lines.length === 0 ? "aguardando sinal de eventos via websocket…" : "nenhuma linha corresponde aos filtros ativos"}
             </span>
           ) : (
-            filteredLines.map((l) => (
-              <div key={l.id} style={{ color: l.tone, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                <span style={{ color: "var(--cyan)" }}>[{l.execId.slice(0, 10)}]</span> {l.message}
-              </div>
-            ))
+            <>
+              <div style={{ height: consoleWindow.topPad }} aria-hidden="true" />
+              {visibleLines.map((l, i) => (
+                <div
+                  key={l.id}
+                  ref={i === 0 ? firstRowRef : undefined}
+                  style={{ color: l.tone, whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                >
+                  <span style={{ color: "var(--cyan)" }}>[{l.execId.slice(0, 10)}]</span> {l.message}
+                </div>
+              ))}
+              <div style={{ height: consoleWindow.bottomPad }} aria-hidden="true" />
+            </>
           )}
         </div>
       </Card>

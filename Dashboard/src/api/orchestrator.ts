@@ -32,7 +32,7 @@ export interface Automation {
   created_at: string;
   updated_at: string | null;
   next_run: string | null;
-  last_status: string | null;
+  last_status: ExecutionStatus | null;
   last_execution_id: string | null;
   last_execution_started_at: string | null;
   last_execution_finished_at: string | null;
@@ -50,11 +50,53 @@ export interface Automation {
   error_24h: number; // alias de failures_24h (backend, apply_br_format)
   avg_duration_24h_seconds: number | null;
   pending_count: number;
-  operational_state: string; // idle | running | blocked | ...
+  operational_state: OperationalState;
   validated: boolean;
   backup_path: string | null;
   audit_id: number | null;
 }
+
+// ── Vocabulários de estado (espelham os literais que o backend produz) ───────
+// Curadoria manual: o backend não usa `Literal` do Pydantic, então estes são
+// reconciliados contra o código de serviço que gera cada campo. Tipar como
+// união (em vez de `string`) faz o `tsc` acusar comparação contra valor que o
+// backend nunca emite — a classe de bug que a rodada anterior corrigiu no
+// `getHealth`.
+
+/** `constants.py` `EXECUTION_STATUS_*`. Sem `CLAIMED` (não existe no backend;
+ *  `lib/status.ts executionTone` ainda o tolera por segurança). */
+export type ExecutionStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "SUCCESS"
+  | "PARTIAL"
+  | "ERROR"
+  | "TIMEOUT"
+  | "TERMINATED"
+  | "FAILED_BY_REBOOT"
+  | "REQUEUED"
+  | "EXPIRED";
+
+/** `automation_snapshot._resolve_operational_state` + `not_registered`
+ *  (`portfolio_catalog`). */
+export type OperationalState =
+  | "healthy"
+  | "in_progress"
+  | "attention"
+  | "paused"
+  | "idle"
+  | "not_registered";
+
+/** `system_overview` — SLA agregada por card de automação. */
+export type SlaStatus = "ok" | "at_risk" | "violated" | "unknown";
+
+/** `portfolio_catalog._sla_state` — vocabulário DISTINTO de `SlaStatus` (o
+ *  plano assumia que eram o mesmo; não são). `lib/status.ts slaTone` trata
+ *  os 4 valores (`breached` -> red, `recovering` -> amber). */
+export type SlaState = "ok" | "breached" | "recovering" | "unknown";
+
+/** `system_diagnostics` `overall_status` / `SystemHealth.status`. */
+export type HealthStatus = "healthy" | "degraded" | "unhealthy" | "ok";
 
 // ── Execuções ───────────────────────────────────────────────────────────────
 
@@ -64,7 +106,7 @@ export interface ExecutionSummary {
   id: string;
   automation_id: number;
   automation_name: string | null;
-  status: string;
+  status: ExecutionStatus;
   priority: string;
   retry_count: number;
   max_retries: number;
@@ -108,6 +150,12 @@ export interface ExecutionLogsResponse {
   lines: string[];
 }
 
+/** `GET /api/executions/{id}/artifacts` — `ExecutionArtifactsResponse`. */
+export interface ExecutionArtifactsResponse {
+  exec_id: string;
+  artifacts: string[];
+}
+
 export interface QueueActionResponse {
   message: string;
   source_exec_id: string;
@@ -135,7 +183,7 @@ export interface WorkerStatus {
 }
 
 export interface SystemHealth {
-  status: string; // healthy | degraded | unhealthy
+  status: HealthStatus;
   timestamp: string;
   database: string;
   scheduler: string;
@@ -153,6 +201,60 @@ export interface ScheduledJob {
   automation_name: string | null;
   next_run_time: string | null;
   trigger: string;
+}
+
+/** `GET /api/system/version` — `Orchestrator/app/schemas/system.py::SystemVersion`. */
+export interface SystemVersion {
+  version: string;
+  schema_version: string;
+  contract_version: string;
+  python_version: string;
+  started_at: string;
+  uptime_seconds: number;
+  max_workers: number;
+  allowed_origins: string[];
+}
+
+/** `GET /api/system/uptime` — `SystemUptime`. */
+export interface SystemUptime {
+  started_at: string;
+  uptime_seconds: number;
+  uptime_human: string;
+}
+
+/** `GET /api/system/audit` — `AuditEntry`. `timestamp` já vem formatado BR
+ *  pelo backend (`AuditEntry.apply_br_format`). */
+export interface AuditEntry {
+  id: number;
+  timestamp: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  actor: string | null;
+  details: string | null;
+}
+
+/** `GET /api/portfolio/drift` — `PortfolioDriftResponse`/`PortfolioDriftItem`/`PortfolioDriftIssue`. */
+export interface PortfolioDriftIssue {
+  code: string;
+  message: string;
+  severity: string;
+  manifest_value: string | null;
+  runtime_value: string | null;
+}
+
+export interface PortfolioDriftItem {
+  catalog_id: string;
+  automation_id: number | null;
+  name: string;
+  slug: string;
+  issues: PortfolioDriftIssue[];
+}
+
+export interface PortfolioDriftResponse {
+  generated_at: string;
+  summary: { items_with_drift: number; total_issues: number };
+  items: PortfolioDriftItem[];
 }
 
 export interface BaselineStatus {
@@ -230,13 +332,13 @@ export interface OverviewAutomationCard {
   test_mode: boolean;
   queue_group: string | null;
   sla_minutes: number | null;
-  sla_status: "ok" | "at_risk" | "violated" | "unknown";
+  sla_status: SlaStatus;
   sla_avg_duration_minutes: number | null;
   success_24h: number;
   failures_24h: number;
   timeouts_24h: number;
   avg_duration_24h_seconds: number | null;
-  last_status: string | null;
+  last_status: ExecutionStatus | null;
   last_execution_id: string | null;
   last_execution_started_at: string | null;
   last_execution_duration_seconds: number | null;
@@ -245,7 +347,7 @@ export interface OverviewAutomationCard {
   schedule_summary: string | null;
   active_execution_count: number;
   pending_count: number;
-  operational_state: string;
+  operational_state: OperationalState;
 }
 
 export interface PortfolioSummary {
@@ -320,8 +422,8 @@ export interface PortfolioHealthItem {
   enabled: boolean;
   queue_group: string | null;
   sla_minutes: number | null;
-  health_status: string;
-  sla_state: string; // ok | at_risk | violated | unknown — ver lib/status.ts slaTone()
+  health_status: string; // vocabulário amplo (_health_status): not_registered | not_governed | breached | attention | healthy — Onda 4 cura
+  sla_state: SlaState;
   docs_status: string;
   drift_status: string;
   drift_count: number;
@@ -332,7 +434,7 @@ export interface PortfolioHealthItem {
   schedule_summary: string | null;
   schedule_lag_minutes: number | null;
   schedule_lag_seconds: number | null;
-  last_status: string | null;
+  last_status: ExecutionStatus | null;
   last_success_at: string | null;
   last_failure_at: string | null;
   last_success_age_minutes: number | null;
@@ -677,26 +779,30 @@ export interface BeneficiamentoDetail {
   raw_records: Record<string, unknown>[];
 }
 
+// `| undefined` explicito em todo campo opcional: os call sites montam o objeto
+// como `{ maquina: filtro.maquina || undefined, ... }` — idioma que
+// `exactOptionalPropertyTypes` rejeita sem o `| undefined`. `qs()` (client.ts)
+// ja descarta undefined/null/"" ao serializar.
 export interface BeneficiamentoOverviewParams {
-  dt_inicio?: string;
-  dt_fim?: string;
-  maquina?: string;
-  fase?: string;
-  turno?: string;
-  alternativo?: string;
-  q?: string;
-  setor?: string;
-  grupo_fase?: string;
-  tipo_maquina?: string;
-  reprocesso?: string;
-  status?: string;
+  dt_inicio?: string | undefined;
+  dt_fim?: string | undefined;
+  maquina?: string | undefined;
+  fase?: string | undefined;
+  turno?: string | undefined;
+  alternativo?: string | undefined;
+  q?: string | undefined;
+  setor?: string | undefined;
+  grupo_fase?: string | undefined;
+  tipo_maquina?: string | undefined;
+  reprocesso?: string | undefined;
+  status?: string | undefined;
 }
 
 export interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams {
   target_type: BeneficiamentoTargetType;
-  ob?: string;
-  page?: number;
-  limit?: number;
+  ob?: string | undefined;
+  page?: number | undefined;
+  limit?: number | undefined;
 }
 
 /* ============================================================================
@@ -727,7 +833,12 @@ export const orchestratorApi = {
 
   // ── Execuções ──
   listExecutions: (
-    params?: { page?: number; per_page?: number; status?: string; automation_id?: number },
+    params?: {
+      page?: number | undefined;
+      per_page?: number | undefined;
+      status?: string | undefined;
+      automation_id?: number | undefined;
+    },
     signal?: AbortSignal,
   ) => api.get<Paginated<ExecutionSummary>>(`/api/executions${qs({ ...params })}`, signal),
   recentExecutions: (limit = 10) =>
@@ -738,9 +849,20 @@ export const orchestratorApi = {
   stopExecution: (id: string) => api.post<{ message: string }>(`/api/executions/${id}/stop`),
   requeueExecution: (id: string, body?: { reason?: string; priority?: string }) =>
     api.post<QueueActionResponse>(`/api/executions/${id}/requeue`, body ?? {}),
+  listExecutionsByAutomation: (automationId: number, limit = 10, signal?: AbortSignal) =>
+    api.get<ExecutionSummary[]>(`/api/executions/by-automation/${automationId}${qs({ limit })}`, signal),
+  listExecutionArtifacts: (id: string, signal?: AbortSignal) =>
+    api.get<ExecutionArtifactsResponse>(`/api/executions/${id}/artifacts`, signal),
+  /** `X-API-Key` viaja no header (via `getBlob`/`doFetch`) — um `<a download
+   *  href>` cru não manda esse header, então o download não pode ser um link
+   *  direto. O consumidor cria um Object URL a partir do Blob e clica nele. */
+  downloadExecutionArtifact: (execId: string, filename: string, signal?: AbortSignal) =>
+    api.getBlob(`/api/executions/${execId}/download${qs({ filename })}`, signal),
 
   // ── Sistema ──
-  getHealth: () => api.get<SystemHealth>("/api/system/health/full"),
+  getHealth: (signal?: AbortSignal) => api.get<SystemHealth>("/api/system/health/full", signal),
+  /** Redundante com `getHealth().worker` — mantido tipado para a Onda 6
+   *  (card do Worker); `useDiagnostics` deixou de chamá-lo. */
   getWorkerStatus: () => api.get<WorkerStatus>("/api/system/worker/status"),
   getOverview: (signal?: AbortSignal) => api.get<SystemOverview>("/api/system/overview", signal),
   getBaseline: () => api.get<BaselineStatus>("/api/system/baseline"),
@@ -752,10 +874,18 @@ export const orchestratorApi = {
   runCheckpoint: () => api.post<{ message: string }>("/api/system/checkpoint"),
   runPurge: () => api.post<{ message: string }>("/api/system/purge"),
   recoverWorker: () => api.post<{ message: string }>("/api/system/worker/recover"),
+  wakeupWorker: () => api.post<{ message: string }>("/api/system/worker/wakeup"),
   reloadScheduler: () => api.post<{ message: string }>("/api/system/scheduler/reload"),
+  getVersion: (signal?: AbortSignal) => api.get<SystemVersion>("/api/system/version", signal),
+  getUptime: (signal?: AbortSignal) => api.get<SystemUptime>("/api/system/uptime", signal),
+  /** `action` sem uso na UI ainda (só o card de trilha de auditoria, sem
+   *  filtro) — tipado e exposto para quando um filtro por ação for pedido. */
+  getAuditLog: (params?: { limit?: number; action?: string }, signal?: AbortSignal) =>
+    api.get<AuditEntry[]>(`/api/system/audit${qs({ ...params })}`, signal),
 
   // ── Portfólio ──
   getPortfolioHealth: (signal?: AbortSignal) => api.get<PortfolioHealth>("/api/portfolio/health", signal),
+  getDrift: (signal?: AbortSignal) => api.get<PortfolioDriftResponse>("/api/portfolio/drift", signal),
   getPortfolioRunbook: (catalogId: string, signal?: AbortSignal) =>
     api.getText(`/api/portfolio/runbook/${encodeURIComponent(catalogId)}`, signal),
 

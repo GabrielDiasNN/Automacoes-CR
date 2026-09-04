@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RotateCw, Square, RefreshCw } from "lucide-react";
-import { orchestratorApi, type ExecutionDetail, type ExecutionSummary, type Paginated } from "../api/orchestrator";
+import { orchestratorApi, type ExecutionStatus, type ExecutionSummary, type Paginated } from "../api/orchestrator";
+import { getApiKey } from "../api/client";
+import { useWebSocket } from "../hooks/useWebSocket";
 import {
   Button,
   Card,
@@ -20,14 +22,49 @@ import {
 } from "../components/ui";
 import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
+import { useAsyncResource } from "../hooks/useAsyncResource";
 import { executionTone, severityTone, toneVar } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
+import { errMessage } from "../lib/errors";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
 import page from "./page.module.css";
-import { errMessage } from "../lib/errors";
 
-const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED", "EXPIRED"];
+// Derivado do union `ExecutionStatus` (não um array literal solto): o objeto
+// abaixo exige uma chave por membro do tipo, então o `tsc` acusa se o backend
+// ganhar/perder um status e este filtro não acompanhar (achado nº 20 da
+// revisão de 04/09/2026 — a lista literal anterior não tinha `PARTIAL`,
+// `REQUEUED` nem `FAILED_BY_REBOOT`).
+const STATUS_LABELS: Record<ExecutionStatus, true> = {
+  PENDING: true,
+  RUNNING: true,
+  SUCCESS: true,
+  PARTIAL: true,
+  ERROR: true,
+  TIMEOUT: true,
+  TERMINATED: true,
+  FAILED_BY_REBOOT: true,
+  REQUEUED: true,
+  EXPIRED: true,
+};
+export const STATUS_OPTIONS = ["", ...Object.keys(STATUS_LABELS)];
 const PER_PAGE = 25;
+
+// Teto de linhas do log ao vivo acumulado em `liveLogText` — sem isso, uma
+// execução longa concatena `evt.data` sem limite enquanto o worker permite até
+// 5 MB de log (MAX_LOG_CHARS), e o `LogViewer` reparseia esse acumulado
+// inteiro a cada linha nova (O(n²) no total). `LogViewer` já descarta o
+// excedente na renderização via `MAX_RENDERED_LINES` (2000) — 3000 aqui dá
+// margem para o parser/filtro trabalharem sobre um pouco mais do que é
+// mostrado, sem deixar o texto subjacente crescer sem limite (achado nº 7 da
+// revisão de 04/09/2026, opção (a): capar no append).
+export const MAX_LIVE_LOG_LINES = 3_000;
+
+export function appendCappedLog(prev: string, chunk: string): string {
+  const combined = prev + chunk;
+  const lines = combined.split("\n");
+  if (lines.length <= MAX_LIVE_LOG_LINES) return combined;
+  return lines.slice(-MAX_LIVE_LOG_LINES).join("\n");
+}
 
 export function ExecucoesPage() {
   const toast = useToast();
@@ -47,17 +84,11 @@ export function ExecucoesPage() {
   });
   const [pageNum, setPageNum] = useState(1);
 
-  const [detail, setDetail] = useState<(Partial<ExecutionDetail> & { id: string }) | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  // Vem do card "últimas execuções" do Painel (`?exec_id=`) — mesmo padrão de
+  // `status`/`automationId` acima: lido uma vez no initializer, a navegação
+  // do Painel para cá sempre monta ExecucoesPage de novo (troca de rota).
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("exec_id"));
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
-
-  // Guarda de sequência + AbortController, mesmo padrão do `usePolling`: sem
-  // isso, clicar em A e depois em B antes da resposta de A chegar podia fazer
-  // `setDetail(dA)` rodar por último — o operador acabava confirmando "Parar" /
-  // "Reenfileirar" sobre A tendo aberto B (ação em automação de produção).
-  const detailSeqRef = useRef(0);
-  const detailAbortRef = useRef<AbortController | null>(null);
-  useEffect(() => () => detailAbortRef.current?.abort(), []);
 
   const fetchExecutions = useCallback(
     (signal?: AbortSignal) =>
@@ -79,32 +110,117 @@ export function ExecucoesPage() {
     refresh: load,
     lastUpdated,
     rateLimitedUntil,
+    refreshQueued,
   } = usePolling<Paginated<ExecutionSummary>>(fetchExecutions, 8_000, [pageNum, status, automationId]);
 
-  const openDetail = useCallback(
-    async (id: string) => {
-      const seq = ++detailSeqRef.current;
-      const isLatest = () => detailSeqRef.current === seq;
-      detailAbortRef.current?.abort();
-      const controller = new AbortController();
-      detailAbortRef.current = controller;
+  // Detalhe da execução via useAsyncResource: aborto e guarda de sequência (o
+  // fetch manual anterior os reimplementava à mão — clicar A depois B antes de
+  // A voltar podia fazer `setDetail(dA)` rodar por último, e o operador
+  // confirmava "Parar"/"Reenfileirar" sobre A tendo B na tela). Fechar o drawer
+  // (`selectedId = null`) zera o `data`, então reabrir B nunca mostra A.
+  const detailFetcher = useCallback(
+    (signal?: AbortSignal) =>
+      selectedId ? orchestratorApi.getExecution(selectedId, signal) : Promise.resolve(null),
+    [selectedId],
+  );
+  const {
+    data: detailData,
+    loading: detailLoading,
+    error: detailError,
+  } = useAsyncResource(selectedId ? detailFetcher : null, [selectedId]);
 
-      setDetailLoading(true);
-      setDetail({ id });
+  useEffect(() => {
+    if (detailError) {
+      toast(detailError, "red");
+      setSelectedId(null);
+    }
+  }, [detailError, toast]);
+
+  // Só renderiza o detalhe que corresponde ao alvo atual.
+  const detail = detailData && detailData.id === selectedId ? detailData : null;
+
+  // ── Log ao vivo (RUNNING) ──
+  // `/ws/logs/{exec_id}` manda TEXTO PURO (não JSON): no connect, o histórico
+  // completo (`db_exec.logs`) num único `send_text`, depois uma linha
+  // separadora, depois cada linha nova ao vivo é outro `send_text`. Basta
+  // concatenar `event.data` — sem parsear nada, diferente do `/ws/events`.
+  const [liveLogText, setLiveLogText] = useState("");
+  useEffect(() => {
+    setLiveLogText("");
+  }, [selectedId]);
+  const onLogMessage = useCallback((evt: MessageEvent) => {
+    setLiveLogText((prev) => appendCappedLog(prev, evt.data as string));
+  }, []);
+  const isRunning = detail?.status === "RUNNING";
+  const { status: logWsStatus } = useWebSocket(
+    selectedId ? `/ws/logs/${selectedId}` : "",
+    getApiKey(),
+    { onMessage: onLogMessage, enabled: !!selectedId && isRunning },
+  );
+  // O replay do histórico é auto-suficiente (o backend manda o log inteiro no
+  // connect) — usa o acumulado do WS assim que algo chegou; senão cai no
+  // `detail.logs` da REST (execuções não-RUNNING, ou RUNNING mas o WS ainda
+  // não conectou/recebeu nada).
+  const logsText = liveLogText !== "" ? liveLogText : (detail?.logs ?? "");
+  const logsLive = logWsStatus === "open" && isRunning;
+
+  // ── Artefatos ──
+  const artifactsFetcher = useCallback(
+    (signal?: AbortSignal) =>
+      selectedId ? orchestratorApi.listExecutionArtifacts(selectedId, signal) : Promise.resolve(null),
+    [selectedId],
+  );
+  const { data: artifactsData, loading: artifactsLoading } = useAsyncResource(
+    selectedId ? artifactsFetcher : null,
+    [selectedId],
+  );
+  // Mesma guarda de `detail`: só mostra a lista se corresponder ao alvo atual.
+  const artifacts = artifactsData && artifactsData.exec_id === selectedId ? artifactsData.artifacts : [];
+
+  const downloadArtifact = useCallback(
+    async (filename: string) => {
+      if (!selectedId) return;
       try {
-        const d = await orchestratorApi.getExecution(id, controller.signal);
-        if (!isLatest()) return;
-        setDetail(d);
+        const blob = await orchestratorApi.downloadExecutionArtifact(selectedId, filename);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        // O link precisa estar no documento e o revoke/remove precisa esperar
+        // o próximo tick: revogar a Object URL no mesmo tick do click() corta
+        // a leitura do blob antes de o navegador começar — falha silenciosa
+        // (sem toast, sem erro no console) no Firefox/Safari e no Chrome sob
+        // carga (achado nº 6 da revisão de 04/09/2026).
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+          a.remove();
+        }, 0);
       } catch (e) {
-        if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
-        if (!isLatest()) return;
         toast(errMessage(e), "red");
-        setDetail(null);
-      } finally {
-        if (isLatest()) setDetailLoading(false);
       }
     },
-    [toast],
+    [selectedId, toast],
+  );
+
+  // ── Outras execuções desta automação ──
+  const relatedFetcher = useCallback(
+    (signal?: AbortSignal) =>
+      detail?.automation_id != null
+        ? orchestratorApi.listExecutionsByAutomation(detail.automation_id, 8, signal)
+        : Promise.resolve<ExecutionSummary[]>([]),
+    [detail?.automation_id],
+  );
+  const { data: relatedData, loading: relatedLoading } = useAsyncResource(
+    detail?.automation_id != null ? relatedFetcher : null,
+    [detail?.automation_id],
+  );
+  // A própria execução aberta não precisa aparecer na própria lista de "outras".
+  const relatedExecutions = useMemo(
+    () => (relatedData ?? []).filter((r) => r.id !== selectedId),
+    [relatedData, selectedId],
   );
 
   const { run: runExecAction } = useAction<string>();
@@ -112,10 +228,11 @@ export function ExecucoesPage() {
   const doStop = useCallback(
     (id: string) => {
       setConfirmStop(null);
-      runExecAction(id, () => orchestratorApi.stopExecution(id), {
+      void runExecAction(id, () => orchestratorApi.stopExecution(id), {
         overrideMessage: `Parada solicitada para ${shortId(id)}`,
         successTone: "amber",
         onDone: load,
+        invalidate: ["overview", "health"],
       });
     },
     [runExecAction, load],
@@ -123,9 +240,10 @@ export function ExecucoesPage() {
 
   const doRequeue = useCallback(
     (id: string) => {
-      runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
+      void runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
         overrideMessage: `Reenfileirado: ${shortId(id)}`,
         onDone: load,
+        invalidate: ["overview", "health"],
       });
     },
     [runExecAction, load],
@@ -236,6 +354,17 @@ export function ExecucoesPage() {
     [doRequeue],
   );
 
+  // Props estáveis para o <DataTable memo> — sem isso, o polling de 8s
+  // reconstruía linha e handlers a cada tick e o memo não segurava nada.
+  const rows = useMemo(() => data?.items ?? [], [data]);
+  const rowKey = useCallback((r: ExecutionSummary) => r.id, []);
+  const openDetail = useCallback((r: ExecutionSummary) => setSelectedId(r.id), []);
+  const rowTone = useCallback(
+    (r: ExecutionSummary) =>
+      r.operator_attention_required ? toneVar[severityTone(r.operator_severity)] : undefined,
+    [],
+  );
+
   const totalPages = data?.pages ?? 1;
 
   return (
@@ -253,7 +382,7 @@ export function ExecucoesPage() {
                   onClick={() => {
                     setAutomationId(undefined);
                     setPageNum(1);
-                    navigate("/execucoes");
+                    void navigate("/execucoes");
                   }}
                   aria-label="Limpar filtro de automação"
                   style={{
@@ -284,8 +413,13 @@ export function ExecucoesPage() {
                 </option>
               ))}
             </Select>
-            <FreshnessTag lastUpdated={lastUpdated} error={data && err ? err : null} rateLimitedUntil={rateLimitedUntil} />
-            <Button size="sm" icon={<RefreshCw size={13} />} onClick={load}>
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && err ? err : null}
+              rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
+            />
+            <Button size="sm" icon={<RefreshCw size={13} />} onClick={() => void load()}>
               Atualizar
             </Button>
           </div>
@@ -300,10 +434,10 @@ export function ExecucoesPage() {
         ) : (
           <DataTable
             columns={columns}
-            rows={data?.items ?? []}
-            rowKey={(r) => r.id}
-            onRowClick={(r) => openDetail(r.id)}
-            rowTone={(r) => (r.operator_attention_required ? toneVar[severityTone(r.operator_severity)] : undefined)}
+            rows={rows}
+            rowKey={rowKey}
+            onRowClick={openDetail}
+            rowTone={rowTone}
           />
         )}
       </Card>
@@ -319,19 +453,27 @@ export function ExecucoesPage() {
       />
 
       <Drawer
-        open={!!detail}
-        onClose={() => setDetail(null)}
-        eyebrow={detail ? shortId(detail.id, 22) : ""}
+        open={!!selectedId}
+        onClose={() => setSelectedId(null)}
+        eyebrow={selectedId ? shortId(selectedId, 22) : ""}
         title={detail?.automation_name ?? "Execução"}
         width={860}
       >
-        {detail &&
-          (detail.started_at ? (
+        {selectedId &&
+          (detail ? (
             <ExecDetailBody
-              detail={detail as ExecutionDetail}
+              detail={detail}
               loading={detailLoading}
-              onStop={() => setConfirmStop(detail.id)}
-              onRequeue={() => doRequeue(detail.id)}
+              logsText={logsText}
+              logsLive={logsLive}
+              artifacts={artifacts}
+              artifactsLoading={artifactsLoading}
+              onDownloadArtifact={(filename) => void downloadArtifact(filename)}
+              relatedExecutions={relatedExecutions}
+              relatedLoading={relatedLoading}
+              onSelectRelated={setSelectedId}
+              onStop={() => setConfirmStop(selectedId)}
+              onRequeue={() => doRequeue(selectedId)}
             />
           ) : (
             <div style={{ padding: "var(--sp-4)" }}>

@@ -4,7 +4,84 @@
    Família tipográfica IBM Plex (engenheirada, coesa).
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+/* Self-hosted (Onda 4-2) — antes era @import do Google Fonts, bloqueante e
+   serial (CSS -> import -> fonte); rede interna não tem por que depender de
+   um CDN externo gratuito. Arquivos em src/assets/fonts/ (não public/): o
+   build usa base "/dashboard/" (vite.config.ts) e um url() absoluto em
+   public/ não ganharia esse prefixo — como asset processado pelo Vite, o
+   caminho relativo é resolvido e reescrito certo em dev e build. Subset
+   latin (cobre acentuação do português: U+0000-00FF inclui ã õ ç é í etc.),
+   mesmos pesos do @import anterior. */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-condensed-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-condensed-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-condensed-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-mono-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-mono-600.woff2') format('woff2');
+}
 
 :root {
   /* ── Grafite (base — gunmetal quente, não preto puro) ── */
@@ -17,11 +94,15 @@
   --graphite-600: #3A4757; /* divisória forte */
 
   /* aliases semânticos de superfície */
-  --bg:            var(--graphite-900);
-  --surface:       var(--graphite-850);
-  --surface-up:    var(--graphite-800);
-  --border:        var(--graphite-700);
-  --border-strong: var(--graphite-600);
+  --bg:              var(--graphite-900);
+  --surface:         var(--graphite-850);
+  --surface-up:      var(--graphite-800);
+  --surface-sunken:  var(--graphite-950);   /* fundo mais fundo (console, body do shell) */
+  --surface-shimmer: var(--graphite-750);   /* realce do skeleton */
+  --border:          var(--graphite-700);
+  --border-strong:   var(--graphite-600);
+  --track:           var(--graphite-700);   /* trilha de instrumento inativa (gauge, lâmpada apagada, mímico) — mesmo valor que --border, semântica distinta */
+  --track-strong:    var(--graphite-600);   /* mesmo valor que --border-strong */
 
   /* ── Texto (contraste verificado ≥ WCAG AA sobre grafite) ── */
   --text-hi:  #E8EDF2; /* primário */
@@ -33,34 +114,41 @@
      verde = normal · vermelho = alarme · azul = info/teste */
   --cyan:        #38C5C9;
   --cyan-bright: #5FE3E6;
-  --cyan-tint:   rgba(56, 197, 201, 0.12);
-  --cyan-glow:   rgba(56, 197, 201, 0.30);
+  --cyan-tint:   color-mix(in srgb, var(--cyan) 12%, transparent);
+  --cyan-glow:   color-mix(in srgb, var(--cyan) 30%, transparent);
 
   --amber:       #E8A317;
-  --amber-tint:  rgba(232, 163, 23, 0.12);
-  --amber-glow:  rgba(232, 163, 23, 0.30);
+  --amber-tint:  color-mix(in srgb, var(--amber) 12%, transparent);
+  --amber-glow:  color-mix(in srgb, var(--amber) 30%, transparent);
 
   --green:       #3FB950;
-  --green-tint:  rgba(63, 185, 80, 0.12);
-  --green-glow:  rgba(63, 185, 80, 0.30);
+  --green-tint:  color-mix(in srgb, var(--green) 12%, transparent);
+  --green-glow:  color-mix(in srgb, var(--green) 30%, transparent);
 
   --red:         #F0524D;
-  /* 0.07 (não 0.12): sobre --surface, alpha MAIOR aproxima o fundo da própria
-     cor do texto e PIORA o contraste, não melhora — o valor anterior (0.12)
+  /* 7% (não 12%): sobre --surface, alpha MAIOR aproxima o fundo da própria
+     cor do texto e PIORA o contraste, não melhora — o valor anterior (12%)
      dava ratio 4.41:1 e reprovava WCAG AA (mínimo 4.5:1 para texto <18px;
-     StatusTag usa --fs-label, 11px). Ratio real com 0.07: 4.68:1. */
-  --red-tint:    rgba(240, 82, 77, 0.07);
-  --red-glow:    rgba(240, 82, 77, 0.32);
+     StatusTag usa --fs-label, 11px). Ratio real com 7%: 4.68:1.
+     Valor migrado de rgba() para color-mix; cor e ratio inalterados. */
+  --red-tint:    color-mix(in srgb, var(--red) 7%, transparent);
+  --red-glow:    color-mix(in srgb, var(--red) 32%, transparent);
 
   --blue:        #4C8DF6;
-  --blue-tint:   rgba(76, 141, 246, 0.12);
-  --blue-glow:   rgba(76, 141, 246, 0.30);
+  --blue-tint:   color-mix(in srgb, var(--blue) 12%, transparent);
+  --blue-glow:   color-mix(in srgb, var(--blue) 30%, transparent);
 
   --grey:        #7C8A9C;
-  /* 0.05 (não 0.12): mesmo raciocínio do --red-tint acima — o valor anterior
-     dava 4.25:1 (reprova AA). Ratio real com 0.05: 4.68:1. */
-  --grey-tint:   rgba(124, 138, 156, 0.05);
-  --grey-glow:   rgba(124, 138, 156, 0.30);
+  /* 5% (não 12%): mesmo raciocínio do --red-tint acima — o valor anterior
+     dava 4.25:1 (reprova AA). Ratio real com 5%: 4.68:1.
+     Valor migrado de rgba() para color-mix; cor e ratio inalterados. */
+  --grey-tint:   color-mix(in srgb, var(--grey) 5%, transparent);
+  --grey-glow:   color-mix(in srgb, var(--grey) 30%, transparent);
+
+  /* ── Scrim (overlay de modal/gaveta) ── */
+  --scrim-color:  #070A0D;  /* fora da rampa grafite de propósito (mais frio) */
+  --scrim:        color-mix(in srgb, var(--scrim-color) 60%, transparent);
+  --scrim-strong: color-mix(in srgb, var(--scrim-color) 75%, transparent);
 
   /* ── Tipografia ── */
   --font-display: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
@@ -82,6 +170,12 @@
   --track-wide: 0.06em;  /* tracking de nameplate */
   --track-mid:  0.04em;
 
+  /* ── Peso tipográfico ── */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
   /* ── Espaçamento ── */
   --sp-1: 4px;
   --sp-2: 8px;
@@ -89,7 +183,15 @@
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
-  --sp-7: 48px;
+
+  /* ── Grades responsivas (minmax) ──
+     Só o valor 140px é literalmente idêntico em 2 arquivos (grade de tiles
+     pequenos) — tokenizado. Os demais (148/150/300/320/340) são próximos mas
+     servem grades de propósito distinto (cards de automação, gráficos,
+     rankings); arredondá-los junto arrisca mudar quantas colunas cabem em
+     larguras que os 4 baselines de screenshot não cobrem. Escala completa
+     fica para a Onda 4-3 (passe visual, onde essa decisão de layout cabe). */
+  --grid-tiles-min: 140px;
 
   /* ── Raios (instrumento = cantos duros) ── */
   --radius-sm: 2px;
@@ -100,17 +202,134 @@
   --shadow-1:   0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-2:   0 4px 16px rgba(0, 0, 0, 0.50);
   --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.60);
+  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.25);
   --engraved:   inset 0 1px 0 rgba(255, 255, 255, 0.03), inset 0 -1px 0 rgba(0, 0, 0, 0.30);
 
   /* ── Layout ── */
   --rail-w:        232px;
   --topbar-h:      52px;
   --brand-rail-h:  3px;
+  --container-max: 1440px;  /* largura máxima do container de página (pages/page.module.css) */
+
+  /* ── Ícones (tamanhos lucide mais comuns) ── */
+  --icon-sm: 13px;  /* consumo na Onda 4 */
+  --icon-md: 16px;  /* consumo na Onda 4 */
+  --icon-lg: 20px;  /* consumo na Onda 4 */
+
+  /* ── Interação / estados ── */
+  --focus-ring:        2px solid var(--cyan);
+  --focus-ring-offset: 2px;  /* sem consumidor ainda — :focus-visible ainda usa o literal */
+  --opacity-disabled:  0.4;  /* dominante em controles desabilitados (Button, IconButton); .off usa 0.7, chipCount 0.75 — fora de escopo */
 
   /* ── Motion ── */
   --ease:     cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 0.12s;
   --dur:      0.2s;
+  --dur-slow: 0.4s;  /* novo — sem consumidor ainda */
+
+  /* ── Empilhamento (z-index) ── */
+  --z-table-header:         1;
+  --z-autocomplete:         20;
+  --z-rail-backdrop:        40;
+  --z-rail-drawer:          50;
+  --z-drawer:               60;
+  --z-modal:                70;
+  --z-toast:                80;
+  --z-command-palette:      80;
+  --z-logviewer-fullscreen: 80;
+  --z-rail:                 90;
+  /* NOTA: Toast, CommandPalette e LogViewer-fullscreen empatam em 80 — bug latente de empilhamento (o Toast deveria vencer). NÃO resolver aqui: mudar o valor moveria pixel se algum dia se sobrepuserem, e o baseline não pega. Fica para a Onda 4. */
+}
+
+/* ============================================================================
+   Tema claro (Onda 4-3) — só a camada semântica muda. Tipografia,
+   espaçamento, raios, layout, ícones, motion e z-index são theme-agnostic e
+   continuam valendo do :root acima sem redefinição. Não é o escuro
+   invertido: mantém a mesma inclinação azul-acinzentada do grafite (não um
+   cinza puro genérico).
+
+   Os 6 sinais foram recalculados DUAS vezes (a segunda depois de auditoria
+   real com axe-core, achado nº 1 da Onda 4-3): a primeira leva só garantia
+   ≥4,5:1 do texto contra a superfície PURA; StatusTag usa `toneTint[tone]`
+   (mesma cor, 12%/7%/5% via color-mix) como FUNDO do próprio badge — texto e
+   fundo compartilham a cor base, e no claro (onde o texto já está perto do
+   piso) isso reprovava AA em 4,0–4,3:1. Cada sinal foi então escurecido até
+   bater ≥4,5:1 mesmo CONTRA O PRÓPRIO TINT (12%/7%/5%, pior caso
+   --surface-up) — não só contra a superfície pura. Preserva matiz/saturação
+   original, só reduz luminância mais que a primeira leva.
+
+   `--scrim-color` NÃO é redefinido de propósito: o overlay de modal/gaveta
+   continua escuro nos dois temas — dimerizar o fundo pra focar o conteúdo é
+   o mesmo problema com ou sem tema claro. As duas cópias abaixo ([data-theme]
+   e o espelho em @media) precisam ficar em sincronia manual — são só ~20
+   propriedades, e um terceiro lugar (JS) duplicaria o mesmo risco sem
+   ganhar nada.
+   ========================================================================== */
+[data-theme="light"] {
+  --bg:              #F4F6F8;
+  --surface:         #EAEDF1;
+  --surface-up:      #DEE3E8;
+  --surface-sunken:  #FFFFFF;  /* invertido de propósito: no console de log, contraste máximo importa mais que recuo visual */
+  --surface-shimmer: #DEE3E8;  /* = surface-up: o shimmer do skeleton já se distingue pelo sweep/opacidade, não precisa de degrau de cinza próprio */
+  --border:          #CBD2DA;
+  --border-strong:   #AEB8C4;
+  --track:           #CBD2DA;
+  --track-strong:    #AEB8C4;
+
+  --text-hi:  #141A21;
+  --text-mid: #46536A;
+  --text-lo:  #556171;
+
+  --cyan:        #1B6264;
+  --cyan-bright: #195C5E;  /* hover ESCURECE no claro (mais contraste = mais presente), o oposto do escuro (onde hover clareia) */
+  --amber: #76530C;
+  --green: #22652C;
+  --red:   #B81510;
+  --blue:  #0A51C3;
+  --grey:  #556171;
+
+  --shadow-1:        0 1px 2px rgba(20, 26, 33, 0.08);
+  --shadow-2:        0 4px 16px rgba(20, 26, 33, 0.10);
+  --shadow-pop:      0 12px 40px rgba(20, 26, 33, 0.14);
+  --shadow-dropdown: 0 4px 16px rgba(20, 26, 33, 0.08);
+  /* bevel inverte de direção: realce claro em cima, sombra escura embaixo — o oposto do escuro */
+  --engraved: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(20, 26, 33, 0.08);
+}
+
+/* tema "system": só se aplica quando NENHUM data-theme explícito venceu —
+   :not([data-theme="dark"]) deixa a escolha explícita de escuro vencer o
+   SO, mesmo com o SO em modo claro (ThemeContext seta data-theme="dark"
+   nesse caso; "system" não seta o atributo, então cai aqui). */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:              #F4F6F8;
+    --surface:         #EAEDF1;
+    --surface-up:      #DEE3E8;
+    --surface-sunken:  #FFFFFF;
+    --surface-shimmer: #DEE3E8;
+    --border:          #CBD2DA;
+    --border-strong:   #AEB8C4;
+    --track:           #CBD2DA;
+    --track-strong:    #AEB8C4;
+
+    --text-hi:  #141A21;
+    --text-mid: #46536A;
+    --text-lo:  #556171;
+
+    --cyan:        #1B6264;
+    --cyan-bright: #195C5E;
+    --amber: #76530C;
+    --green: #22652C;
+    --red:   #B81510;
+    --blue:  #0A51C3;
+    --grey:  #556171;
+
+    --shadow-1:        0 1px 2px rgba(20, 26, 33, 0.08);
+    --shadow-2:        0 4px 16px rgba(20, 26, 33, 0.10);
+    --shadow-pop:      0 12px 40px rgba(20, 26, 33, 0.14);
+    --shadow-dropdown: 0 4px 16px rgba(20, 26, 33, 0.08);
+    --engraved: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(20, 26, 33, 0.08);
+  }
 }
 
 /* ── Reset / base ── */
@@ -129,12 +348,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+h1, h2, h3, h4 { margin: 0; font-weight: var(--fw-semibold); }
 button { font-family: inherit; }
 a { color: inherit; }
 
 /* números tabulares por padrão em mono — telemetria alinhada */
 .tnum, [class*="mono"] { font-variant-numeric: tabular-nums; }
+
+/* Base compartilhada dos 3 overlays de tela cheia (Modal/Drawer/CommandPalette)
+ * — os 5 declarações abaixo eram idênticas nos 3 `.overlay` locais. z-index
+ * (já tokenizado por componente, Onda 3A) e alinhamento/padding continuam em
+ * cada `.module.css`, que não colide em propriedade com esta base. */
+.overlay-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  display: flex;
+}
 
 /* ── Scrollbar instrumento ── */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
@@ -144,22 +375,12 @@ a { color: inherit; }
 
 /* ── Foco visível (ciano) ── */
 :focus-visible {
-  outline: 2px solid var(--cyan);
+  outline: var(--focus-ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
 /* ── Texturas de assinatura ── */
-
-/* grade blueprint de baixíssima opacidade — usar com parcimônia no shell */
-.blueprint-grid {
-  background-image:
-    linear-gradient(var(--graphite-700) 1px, transparent 1px),
-    linear-gradient(90deg, var(--graphite-700) 1px, transparent 1px);
-  background-size: 28px 28px;
-  background-position: -1px -1px;
-  opacity: 0.18;
-}
 
 /* faixa de risco — SÓ em zonas que exigem atenção do operador */
 .hazard {
@@ -171,18 +392,17 @@ a { color: inherit; }
 }
 
 /* ── Tipografia utilitária ── */
-.nameplate {
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: var(--track-wide);
-  font-weight: 600;
-}
 .label-mono {
   font-family: var(--font-mono);
   font-size: var(--fs-label);
   letter-spacing: var(--track-mid);
   text-transform: uppercase;
   color: var(--text-lo);
+}
+/* eyebrow (Drawer/Nameplate): era `.label-mono` duplicada byte a byte em 2
+ * arquivos + 1 declaração extra. Usar junto de `.label-mono`. */
+.eyebrow {
+  margin-bottom: var(--sp-1);
 }
 
 /* ── Keyframes ── */

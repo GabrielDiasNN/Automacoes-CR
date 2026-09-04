@@ -88,4 +88,51 @@ describe("useAction", () => {
     });
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it("invalidate limpa as chaves de cache antes do onDone", async () => {
+    const { invalidateCache, readCache, writeCache, _clearCache } = await import("../lib/resourceCache");
+    _clearCache();
+    writeCache("overview", { velho: true });
+    writeCache("exec:1", "x");
+    const seenDuringOnDone: unknown[] = [];
+
+    const { result } = renderHook(() => useAction<string>(), { wrapper });
+    await act(async () => {
+      await result.current.run("x", () => Promise.resolve({ message: "ok" }), {
+        invalidate: ["overview", "exec:"],
+        onDone: () => {
+          seenDuringOnDone.push(readCache("overview", 30_000), readCache("exec:1", 30_000));
+        },
+      });
+    });
+
+    expect(seenDuringOnDone).toEqual([undefined, undefined]);
+    expect(invalidateCache).toBeTypeOf("function");
+  });
+
+  it("invalida múltiplas chaves de invalidate na ordem declarada, antes do onDone", async () => {
+    const resourceCache = await import("../lib/resourceCache");
+    const invalidateSpy = vi.spyOn(resourceCache, "invalidateCache");
+    const calls: string[] = [];
+    invalidateSpy.mockImplementation((key: string) => calls.push(`invalidate:${key}`));
+
+    const { result } = renderHook(() => useAction<string>(), { wrapper });
+    await act(async () => {
+      await result.current.run("x", () => Promise.resolve({ message: "ok" }), {
+        invalidate: ["overview", "health"],
+        onDone: () => {
+          calls.push("onDone");
+        },
+      });
+    });
+
+    // Achado nº 10 (revisão 04/09/2026): `invalidate` aceita `string | string[]`
+    // desde sempre — o bug real era nenhum call site passar "health" junto de
+    // "overview". Este teste garante o contrato do próprio hook: todas as
+    // chaves são invalidadas, NA ORDEM do array, e sempre antes do onDone —
+    // para uma ação futura que dependa dessa ordem não regredir em silêncio.
+    expect(calls).toEqual(["invalidate:overview", "invalidate:health", "onDone"]);
+
+    invalidateSpy.mockRestore();
+  });
 });

@@ -1,18 +1,38 @@
-import { RotateCw, Square } from "lucide-react";
-import type { ExecutionDetail } from "../api/orchestrator";
-import { Button, Card, DescriptionList, KeyValue, LogViewer, StatusTag } from "../components/ui";
+import { Download, RotateCw, Square } from "lucide-react";
+import type { ExecutionDetail, ExecutionSummary } from "../api/orchestrator";
+import { Button, Card, DescriptionList, KeyValue, ListRow, LogViewer, StatusTag } from "../components/ui";
 import { executionTone, severityTone } from "../lib/status";
-import { formatDuration } from "../lib/format";
+import { formatDuration, shortId } from "../lib/format";
 import page from "./page.module.css";
 
 export function ExecDetailBody({
   detail,
   loading,
+  logsText,
+  logsLive,
+  artifacts,
+  artifactsLoading,
+  onDownloadArtifact,
+  relatedExecutions,
+  relatedLoading,
+  onSelectRelated,
   onStop,
   onRequeue,
 }: {
   detail: ExecutionDetail;
   loading: boolean;
+  /** Texto a mostrar no LogViewer — REST (`detail.logs`) ou o acumulado do
+   *  WebSocket `/ws/logs/{exec_id}` quando a execução está RUNNING. */
+  logsText: string;
+  /** WS de log ao vivo conectado e aberto agora. */
+  logsLive: boolean;
+  artifacts: string[];
+  artifactsLoading: boolean;
+  onDownloadArtifact: (filename: string) => void;
+  /** Últimas execuções da MESMA automação (exclui a própria `detail`). */
+  relatedExecutions: ExecutionSummary[];
+  relatedLoading: boolean;
+  onSelectRelated: (id: string) => void;
   onStop: () => void;
   onRequeue: () => void;
 }) {
@@ -69,8 +89,71 @@ export function ExecDetailBody({
       )}
 
       <div>
-        <div className={page.sectionLabel}>logs</div>
-        <LogViewer text={detail.logs ?? ""} loading={loading} />
+        <div className={page.sectionLabel}>artefatos</div>
+        {artifactsLoading && artifacts.length === 0 ? (
+          <span style={{ fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>carregando…</span>
+        ) : artifacts.length === 0 ? (
+          <span style={{ fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>nenhum artefato gerado</span>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "var(--sp-1)" }}>
+            {artifacts.map((filename) => (
+              <Button
+                key={filename}
+                size="sm"
+                variant="ghost"
+                icon={<Download size={13} />}
+                onClick={() => onDownloadArtifact(filename)}
+              >
+                {filename}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {(relatedLoading || relatedExecutions.length > 0) && (
+        <div>
+          <div className={page.sectionLabel}>outras execuções desta automação</div>
+          {relatedLoading && relatedExecutions.length === 0 ? (
+            <span style={{ fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>carregando…</span>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {relatedExecutions.map((ex) => (
+                <ListRow
+                  key={ex.id}
+                  onClick={() => onSelectRelated(ex.id)}
+                  aria-label={`Abrir execução ${shortId(ex.id)}, status ${ex.status}`}
+                  leading={
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-lo)" }}>
+                      {shortId(ex.id, 12)}
+                    </span>
+                  }
+                  trailing={
+                    <StatusTag tone={executionTone(ex.status)} dot pulse={ex.status === "RUNNING"}>
+                      {ex.status}
+                    </StatusTag>
+                  }
+                >
+                  {ex.started_at}
+                </ListRow>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div>
+        <div className={page.toolbar} style={{ marginBottom: "var(--sp-1)" }}>
+          <div className={page.sectionLabel} style={{ margin: 0 }}>
+            logs
+          </div>
+          {logsLive && (
+            <StatusTag tone="cyan" dot pulse>
+              ao vivo
+            </StatusTag>
+          )}
+        </div>
+        <LogViewer text={logsText} loading={loading} />
       </div>
     </div>
   );

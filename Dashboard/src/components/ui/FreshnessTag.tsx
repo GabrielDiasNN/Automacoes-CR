@@ -12,15 +12,24 @@ interface FreshnessTagProps {
   /** `rateLimitedUntil` de `usePolling`, quando disponível — mensagem própria
    *  em vez de "desatualizado há Xm" (a causa é conhecida e é temporária). */
   rateLimitedUntil?: Date | null;
+  /** `refreshQueued` de `usePolling` — um refresh manual foi pedido durante a
+   *  janela de 429 e vai disparar sozinho quando ela liberar. Sem isto o
+   *  operador clica "atualizar", nada visível acontece e ele acha que travou. */
+  refreshQueued?: boolean;
 }
 
 /** Mostra o horário do último dado válido e, quando o polling está falhando
  *  com dados em tela, avisa em vez de deixar a tela parecer atualizada. */
-export function FreshnessTag({ lastUpdated, error, rateLimitedUntil }: FreshnessTagProps) {
+export function FreshnessTag({
+  lastUpdated,
+  error,
+  rateLimitedUntil,
+  refreshQueued,
+}: FreshnessTagProps) {
   if (error && rateLimitedUntil) {
     return (
       <StatusTag tone="amber" dot>
-        {error}
+        {refreshQueued ? `${error} · atualização enfileirada` : error}
       </StatusTag>
     );
   }

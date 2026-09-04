@@ -4,7 +4,7 @@
   justify-content: center;
   gap: var(--sp-2);
   font-family: var(--font-sans);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   border: 1px solid transparent;
   border-radius: var(--radius);
   cursor: pointer;
@@ -13,7 +13,7 @@
     color var(--dur-fast) var(--ease);
 }
 .btn:disabled {
-  opacity: 0.4;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
 .icon {
@@ -32,21 +32,21 @@
 
 .primary {
   background: var(--cyan-tint);
-  border-color: rgba(56, 197, 201, 0.4);
+  border-color: color-mix(in srgb, var(--cyan) 40%, transparent);
   color: var(--cyan-bright);
 }
 .primary:hover:not(:disabled) {
-  background: rgba(56, 197, 201, 0.22);
+  background: color-mix(in srgb, var(--cyan) 22%, transparent);
   border-color: var(--cyan);
 }
 
 .danger {
   background: var(--red-tint);
-  border-color: rgba(240, 82, 77, 0.4);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
   color: var(--red);
 }
 .danger:hover:not(:disabled) {
-  background: rgba(240, 82, 77, 0.22);
+  background: color-mix(in srgb, var(--red) 22%, transparent);
   border-color: var(--red);
 }
 

@@ -1,11 +1,5 @@
 .input {
-  background: var(--surface-up);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-mid);
-  font-family: var(--font-mono);
-  font-size: var(--fs-small);
-  padding: 6px var(--sp-2);
+  composes: field from "./Field.module.css";
 }
 .input::placeholder {
   color: var(--text-lo);
@@ -24,7 +18,13 @@
   pointer-events: none;
   display: inline-flex;
 }
-.withIcon {
+/* Seletor composto (não só `.withIcon`): precisa vencer `font-family` de
+ * `.field` (composes) por ESPECIFICIDADE — a ordem de `.field` vs. `.withIcon`
+ * no CSS final depende de como o Vite ordena os módulos, não da ordem no
+ * arquivo fonte (medido: `.field` saiu DEPOIS de `.withIcon` no bundle, o que
+ * inverteria a fonte para mono num input com ícone se a regra ficasse só
+ * `.withIcon`). */
+.input.withIcon {
   width: 100%;
   padding-left: 30px;
   font-family: var(--font-sans);

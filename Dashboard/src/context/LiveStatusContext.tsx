@@ -6,27 +6,32 @@ import type { SystemHealth, WorkerStatus } from "../api/orchestrator";
 
 type EventListener = (event: MessageEvent) => void;
 
-interface LiveStatus {
+/** Dados ao vivo — muda a cada tick de polling (10s). */
+interface LiveData {
   health: SystemHealth | null;
   worker: WorkerStatus | null;
-  loading: boolean;
-  error: string | null;
   wsStatus: WsStatus;
-  /** Registra um handler para as mensagens do `/ws/events` compartilhado. Devolve o cancelamento. */
+}
+
+/** Só o `subscribe` do event bus — valor ESTÁVEL entre renders. Separado de
+ *  `LiveData` para que `useLiveEvents` (que só quer `subscribe`) não
+ *  re-renderize a cada tick de 10s do polling de saúde. */
+interface LiveEvents {
   subscribe: (fn: EventListener) => () => void;
 }
 
-const LiveStatusCtx = createContext<LiveStatus | null>(null);
+const LiveDataCtx = createContext<LiveData | null>(null);
+const LiveEventsCtx = createContext<LiveEvents | null>(null);
 
-/** Dono ÚNICO do polling de `health`/`worker/status` e da conexão `/ws/events`.
+/** Dono ÚNICO do polling de `health` e da conexão `/ws/events`.
  *
  *  Montado uma vez no `Shell` (layout route que nunca desmonta). Antes,
- *  `StatusBar` e `MonitorPage` abriam cada um seu `useDiagnostics(10s)` e seu
- *  `useWebSocket`, então entrar em `/monitor` dobrava as chamadas a `health`/
- *  `worker/status` e abria uma segunda conexão ao mesmo event bus — o bucket de
- *  rate limit é recurso escasso e compartilhado (achado nº 15). */
+ *  `StatusBar` e `MonitorPage` abriam cada um seu polling e seu `useWebSocket`,
+ *  então entrar em `/monitor` dobrava as chamadas e abria uma segunda conexão
+ *  ao mesmo event bus — o bucket de rate limit é recurso escasso e
+ *  compartilhado (achado nº 15). */
 export function LiveStatusProvider({ children }: { children: ReactNode }) {
-  const { health, worker, loading, error } = useDiagnostics(10_000);
+  const { health, worker } = useDiagnostics(10_000);
   const key = getApiKey();
 
   const listenersRef = useRef<Set<EventListener>>(new Set());
@@ -43,24 +48,32 @@ export function LiveStatusProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value = useMemo<LiveStatus>(
-    () => ({ health, worker, loading, error, wsStatus, subscribe }),
-    [health, worker, loading, error, wsStatus, subscribe],
+  const dataValue = useMemo<LiveData>(
+    () => ({ health, worker, wsStatus }),
+    [health, worker, wsStatus],
   );
+  // `subscribe` é estável (useCallback []), então este value nunca muda —
+  // consumidores só de eventos não re-renderizam no tick de saúde.
+  const eventsValue = useMemo<LiveEvents>(() => ({ subscribe }), [subscribe]);
 
-  return <LiveStatusCtx.Provider value={value}>{children}</LiveStatusCtx.Provider>;
+  return (
+    <LiveEventsCtx.Provider value={eventsValue}>
+      <LiveDataCtx.Provider value={dataValue}>{children}</LiveDataCtx.Provider>
+    </LiveEventsCtx.Provider>
+  );
 }
 
-export function useLiveStatus(): LiveStatus {
-  const ctx = useContext(LiveStatusCtx);
+export function useLiveStatus(): LiveData {
+  const ctx = useContext(LiveDataCtx);
   if (!ctx) throw new Error("useLiveStatus precisa de <LiveStatusProvider>");
   return ctx;
 }
 
 /** Açúcar para consumidores que só querem reagir a eventos do event bus. */
 export function useLiveEvents(handler: EventListener): void {
-  const { subscribe } = useLiveStatus();
+  const ctx = useContext(LiveEventsCtx);
+  if (!ctx) throw new Error("useLiveEvents precisa de <LiveStatusProvider>");
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
-  useEffect(() => subscribe((event) => handlerRef.current(event)), [subscribe]);
+  useEffect(() => ctx.subscribe((event) => handlerRef.current(event)), [ctx]);
 }

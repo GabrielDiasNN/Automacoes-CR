@@ -1,5 +1,167 @@
 # Changelog
 
+## [1.3.79] - 04/09/2026
+
+Correção dos 21 achados da revisão stateless da rodada 2 (handoff em `scratch/handoff-correcoes-revisao-04092026.md`). Executada por operadores em sessões isoladas, com supervisão e validação central. Nenhuma cor ou baseline de screenshot mudou.
+
+### Corrigido
+
+- **Gráficos uPlot não repintavam ao trocar de tema:** `readPalette()` só rodava no effect de `structureKey`, que não incluía o tema — o `<canvas>` mantinha cores do tema anterior até remontar. `TimeSeries` passa a consumir `useTheme()` e incluir o tema na `structureKey`. Os 4 baselines de tema claro não pegavam isso porque injetam o `localStorage` **antes** do bundle montar: o gráfico nascia no tema certo e a *transição* nunca era exercitada.
+- **`slaTone` pintava SLA rompido de cinza:** tratava `ok|at_risk|violated`, mas `_sla_state` (backend) emite `ok|breached|recovering|unknown`. `breached` e `recovering` caíam no `default`. Falso-verde em painel de instrumentação. Assinaturas de `slaTone`/`executionTone` estreitadas para os unions (`SlaState`/`ExecutionStatus`), que é o que faz o `tsc` acusar a próxima divergência.
+- **`attentionRank` deixou de ordenar por SLA:** os degraus mortos (`violated`/`at_risk`) foram removidos na rodada anterior sem substituição pelos valores reais. Reintroduzidos como `attention > breached > high > recovering > medium`. `breached` vem antes de `high` porque criticidade nominal não é proxy de urgência de SLA (OBP-04 é ALTA com SLA de 20 min; OFST-06/ORB-07 são MÉDIA com 15 min).
+- **`FAILED_BY_REBOOT` caía no tom neutro** — execução morta por reboot ficava indistinguível de reenfileirada. Agora vermelho.
+- **`<tr role="button">` invalidava a semântica da tabela:** sobrescrever o `role="row"` implícito tira a linha do `rowgroup` (`aria-required-children`, impacto *critical*) e o nome acessível vira a concatenação de todas as células. Mantido `role="row"` com `aria-label` por linha (prop `rowLabel` opcional, retrocompatível).
+- **`URL.revokeObjectURL` no mesmo tick do `click()`** — download de artefato podia falhar em silêncio no Firefox/Safari.
+- **Log ao vivo sem teto:** cada mensagem do WebSocket reparseava todo o acumulado (O(n²)) e `liveLogText` crescia sem limite até os 5 MB permitidos pelo worker. Teto de 3.000 linhas no append.
+- **Medição de `rowH` podia oscilar indefinidamente:** `computeWindow` deriva `start` de `rowH`, e o `useLayoutEffect` media a linha `start` e reescrevia `rowH` — laço `A → B → A` com linhas de comprimentos alternados. Agora mede uma vez, com guarda por ref.
+- **Chave `"health"` nunca era invalidada:** as 11 ações passavam só `invalidate: "overview"`, então a `StatusBar` global podia servir o `health` pré-ação do cache e *pular* a requisição real (`skipIfFresh`). `pause`/`resume` de automação seguem sem invalidar `health` de propósito — só mexem em `enabled`, não em `pending_tasks`.
+- **Ciclo de tema duplicado** em `ThemeContext.CYCLE` e `Shell.NEXT_THEME`: divergir fazia o botão anunciar um destino e trocar para outro — mentira dita justamente a quem depende do rótulo. `nextTheme()` agora é fonte única.
+- **`ThemeContext` confiava cegamente no `localStorage`** — valor arbitrário ia direto para `data-theme` e o botão anunciava "Tema: undefined". Validado contra `CYCLE`.
+- **`sourcemap: "hidden"` não impede acesso aos `.map`:** o comentário prometia garantia inexistente. `/dashboard` é montado sem dependência de API Key, então basta acrescentar `.map` ao nome público do `.js`. Comentário corrigido para descrever o comportamento real (risco aceito).
+- Itens menores: `rateLimitedUntil` não era limpo em erro não-429; `readCache` compartilhava instância mutável entre consumidores; `STATUS_OPTIONS` divergia do union `ExecutionStatus`; separador de `structureSignature` colidia com labels contendo vírgula; `id` de DOM do `CommandPalette` derivado de dados.
+
+### Adicionado
+
+- **Auditoria axe-core em `/execucoes` e `/sistema`**, que ficaram de fora da Onda 4-3 e são onde vivem o drawer de execução, artefatos, trilha de auditoria e card de drift. Inclui um teste com o **drawer aberto** (focus trap, `role="dialog"`, botões de download).
+- `ORCHESTRATOR_DASHBOARD_DIST` registra em log qual diretório venceu a resolução.
+
+### Corrigido — testes que não podiam falhar
+
+- **Auditoria de Beneficiamento era falso-verde:** esperava só `text=saúde do snapshot`, nunca os rankings. Se o snapshot viesse vazio, nenhuma `<tr>` clicável chegava ao DOM e o gate acendia sem exercitar nada. Agora aguarda linha populada **ou** estado vazio explícito, e falha dizendo isso em vez de auditar tela vazia.
+- **Dois dos três testes de `get_dashboard_path` passavam de qualquer jeito:** asseriam `endswith("Dashboard/dist") or endswith("Dashboard")`, verdadeiro nos dois ramos do fallback. Reescritos com `PROJECT_ROOT` monkeypatchado e asserção de caminho exato.
+
+### Investigado, não alterado
+
+- **`color-contrast` no drawer não é defeito de token.** Auditar o drawer logo após abri-lo media um frame da animação `animate-in` (`fade-in`, opacity 0→1): com o painel translúcido, o `--scrim` escuro composita através dele e o axe lia `#2a6a34` sobre `#cdd8d4` (4,47:1) em vez de `--green` sobre `--surface`. O teste passou a aguardar as animações do diálogo terminarem, e a regra segue **ligada** — desligá-la esconderia regressão real de cor.
+- **`format_dt_br` é idempotente:** reparseia o padrão BR num `datetime` naive e `to_br_timezone` devolve naive sem converter, então o `health` embutido no `/overview` não diverge do de `/health/full`.
+- **`.audit-state/ultima-auditoria.md` está errado sobre o `.env`.** Afirma "credenciais expostas no `.env` versionado — rotar imediatamente". `git ls-files --error-unmatch .env` não encontra o arquivo e `git log --all -- .env` é vazio: o `.env` nunca esteve em commit nenhum. Não agir sobre aquele achado.
+- `TableDensityContext` tem a mesma leitura não validada de `localStorage` que o `ThemeContext` tinha — pré-existente, fora do escopo desta rodada.
+
+## [1.3.78] - 04/09/2026
+
+Frontend rodada 2, Onda 4-3 — tema claro, `ThemeContext` e auditoria de acessibilidade automatizada. Fecha a Onda 4 (e a rodada 2 inteira: Ondas 1–6 todas verificadas). Paleta aprovada pelo usuário via proposta publicada como Artifact antes de qualquer commit em componente (checkpoint humano do plano).
+
+### Adicionado
+
+- **Tema claro real** (`tokens.css`): `[data-theme="light"]` + espelho em `@media (prefers-color-scheme: light)` redefinem só a camada semântica (superfícies, texto, sinais, sombras, bevel) — o escuro (`:root`) não muda um valor. Não é o escuro invertido: mantém a inclinação azul-acinzentada do grafite; os 6 sinais foram recalculados preservando matiz/saturação, escurecidos até bater ≥4,5:1 mesmo contra o próprio tint (`StatusTag` usa a mesma cor como texto e fundo). `--scrim-color` fica igual nos dois temas de propósito.
+- **`ThemeContext`** (`system|light|dark`, padrão `system`, mesmo mecanismo do `TableDensityContext`): botão novo no topbar, ao lado do de densidade.
+- **Auditoria de acessibilidade automatizada** (axe-core, rodando no DOM real via Playwright — não RTL/jsdom, decisão já registrada no CLAUDE.md) em 4 telas (Painel, Automações, Monitor, Beneficiamento), bloqueante em violações `serious`/`critical`.
+
+### Corrigido
+
+- **`Annunciator`:** `.off { opacity: 0.7 }` amassava o contraste de texto que já roda no piso AA — falhava nos dois temas (achado pela auditoria nova, não é regressão do tema claro). "Apagado" já é comunicado pela lâmpada; texto não precisa ficar ilegível.
+- **`DataTable`:** região de scroll horizontal não era alcançável por teclado — `tabIndex`+`role="region"`.
+- **`AutomacoesPage`:** `<dl>` com filho `<div>` fora do par `dt`/`dd` válido.
+- **`chartPalette.ts`:** grid do uPlot lia `--graphite-700` direto (não acompanharia o tema claro) — trocado para `--border`.
+
+## [1.3.77] - 04/09/2026
+
+Frontend rodada 2, Onda 4-2 — a11y remanescente, responsivo, fontes self-hosted, breakpoint único. Os 4 baselines de screenshot passam sem regeneração a cada commit.
+
+### Corrigido
+
+- **A11y:** Toast (`role="status"` aninhando um filho `role="alert"` causava leitura duplicada em alguns leitores de tela — removido; WCAG 2.2.1, hover agora pausa o timer de 4,2s de sumiço). ConfirmModal (`aria-label` duplicado → `aria-labelledby` apontando pro `<h3>` já visível). CommandPalette (input ganha `role="combobox"`/`aria-expanded`/`aria-controls`/`aria-autocomplete`; cada `<li>` do listbox ganha `role="presentation"`). CommandPalette + ApiKeyGate (`outline: none` sem substituto no input de busca e no campo de senha — removido, `:focus-visible` global volta a aparecer). DataTable e `ClickableTile` (linha clicável só respondia a Enter; Space rolava a página — agora ativa igual, com `role="button"`). AutomacoesPage (motivo de "Disparar" desabilitado só existia no `title` de hover — agora também em `aria-label`).
+- **Responsivo:** topbar cortava conteúdo (não só apertava) abaixo de 400px — breakpoint `xnarrow` novo. Grid de `/automacoes` (`minmax(340px)` sem media query) estourava a página inteira na horizontal abaixo de ~372px — colapsa para 1 coluna abaixo de 560px.
+- **Performance:** fontes IBM Plex self-hosted — `tokens.css` fazia `@import` do Google Fonts (bloqueante e serial: CSS → import → fonte). 10 arquivos `.woff2` (subset latin, cobre acentuação do português) agora em `src/assets/fonts/`, servidos como asset do próprio bundle.
+
+### Investigado, não alterado
+
+- "Zero `<label>` no app": todo `<Input>`/`<Select>`/`<input>` já tem `aria-label` explícito — `<label>` não é a única forma válida de nome acessível.
+- "`title=` como única explicação em 41 lugares": maioria é prop de componente (`Drawer`/`Nameplate`/`ConfirmModal` `title=`, vira `<h3>` visível), não o atributo HTML `title`.
+- `Mimico` "exige ~700px": já contém seu próprio `overflow-x: auto` num scroll interno contido — não vaza pra página, é o padrão correto, não um bug.
+
+## [1.3.76] - 04/09/2026
+
+Frontend rodada 2, Onda 4-1 — consolidação estrutural (parte do "reformulação visual", executada antes da paleta nova). Byte-idêntica: nenhuma cor ou pixel muda, só origem do CSS. Os 4 baselines de screenshot passam sem regeneração (verificado a cada commit).
+
+### Alterado
+
+- **6 lâmpadas de status → `<Lamp>`** (`components/ui/Lamp.tsx`). `StatusBar`, `Annunciator`, `AutomacoesPage`, `StatusTag.dot`, `Mimico.laneLamp`/`Mimico.workerLamp` reimplementavam cada uma seu próprio `<span>` com tamanho/forma/animação quase idênticos. A diferença círculo-vs-quadrado é semântica (sinal vs. instrumento) e ficou explícita via prop `shape`. Achado no caminho: `AutomacoesPage` construía `var(--graphite-600)` via template literal — invisível ao gate `--graphite-` por grep da Onda 3B porque o padrão não aparece literalmente no código-fonte. Corrigido para `var(--track-strong)`.
+- **3 overlays (Modal/Drawer/CommandPalette) → base `.overlay-scrim`** compartilhada em `tokens.css`; cada `.overlay` local mantém só o que diverge (z-index, alinhamento, padding).
+- **`.eyebrow` duplicado (Drawer + Nameplate) → `.label-mono` + modificador.**
+- **Input/Select → `Field.module.css` via `composes`.** Achado real durante a verificação: o `composes` inverteu a ordem de cascata que `.withIcon` dependia para vencer `font-family` — medido no CSS compilado, a base ficou depois do modificador no bundle (a ordem no arquivo-fonte não é a ordem no bundle final entre arquivos `.module.css` diferentes). Um input com ícone teria revertido de fonte sans para mono. Corrigido com seletor composto `.input.withIcon` (especificidade vence independente da ordem de bundle).
+- **`ApiKeyGate.tsx` (tela de login, 100% inline), `Gauge.tsx`, `MiniViz.tsx` → `.module.css`.** Só o estático virou classe; valores calculados por render (`strokeDasharray`, largura de barra, cor por tom) continuam inline. Verificação manual fora do oráculo de screenshot — `ApiKeyGate` nunca renderiza em nenhum E2E (a fixture injeta a chave direto em `sessionStorage`) e `/sistema` (Gauge) não é uma das 4 telas de baseline.
+- Token `--grid-tiles-min` para o único `minmax()` litralmente duplicado (140px, 2 arquivos).
+
+### Investigado, não alterado
+
+- **3 "tiles"**: só existem 2 implementações (`StatTile`, `Annunciator`), com `flex-direction` oposto e `border-radius` diferente — propósitos genuinamente distintos, não forçados a uma base comum.
+- **7 "superfícies interativas caseiras"**: busca extensa (`role="button"`, `onClick` fora de componentes compartilhados, `cursor: pointer`) não encontrou nenhuma — tudo já é `<button>` nativo com estilo mínimo intencional, ou está dentro de um `<svg>` (célula do Treemap) e não pode virar `Button`/`IconButton`. Provavelmente já corrigido na rodada de acessibilidade anterior.
+- Escala completa de `minmax()` (148/150/300/320/340px): próximos mas servem grades de propósito distinto — arredondar juntos arrisca mudar quantas colunas cabem em larguras que os 4 baselines não cobrem. Fica para a Onda 4-3 (passe visual).
+
+## [1.3.75] - 04/09/2026
+
+Frontend rodada 2, Onda 6 — capacidades novas: leitura e controle que o backend já expõe, nada que escreva arquivo em produção. 8 dos 10 itens do plano; itens 9 (editor de cron) e 10 (busca de OB) adiados para a Onda 4, que restila `/automacoes` e `/beneficiamento` e regenera baseline de qualquer forma. Todas as telas novas ficam fora do conjunto de screenshot — os 4 baselines passam sem regeneração.
+
+### Adicionado
+
+- **`SystemPage`:** botão "Acordar worker" (sempre visível) e `ConfirmModal` no "Recuperar worker" (força-reseta estado — merece confirmação). Card de **controle de emergência** — "Pausar todas as automações" / "Retomar todas", cada um atrás de `ConfirmModal`; o E2E que valida **cancela**, nunca confirma (ação de alcance global em produção). Card **runtime** com versão/schema/contrato/Python e uptime do processo (o rodapé global fica para a Onda 4, que mexe no chrome compartilhado). Card de **drift de portfólio**. Card de **trilha de auditoria** (`GET /system/audit`, teto configurável — não é paginação real, o backend não pagina).
+- **Drawer de execução:** **log ao vivo** via `WS /ws/logs/{exec_id}` enquanto a execução está `RUNNING` (o WS manda texto puro, não JSON — diferente do `/ws/events`; replay do histórico + append incremental). Indicador "ao vivo" no cabeçalho. **Artefatos + download**: `<a download href>` não manda o header `X-API-Key`, então o download é via `fetch` → `Blob` → `URL.createObjectURL` → clique sintético. **Timeline** "outras execuções desta automação", clicável (troca o alvo do drawer sem fechá-lo).
+- **Corrigido o bug de navegação do Painel:** clicar numa execução recente jogava o operador em `/execucoes` sem abrir o que ele clicou (`ex.id` descartado no `onClick`). Agora navega para `/execucoes?exec_id=...`, que a página lê no mount e abre o drawer certo.
+- Contract tests (MSW) + fixtures reais (capturadas da instância viva) para `getVersion`, `getUptime`, `getDrift`, `listExecutionsByAutomation`, `getAuditLog`; fixture sintética documentada para `listExecutionArtifacts` (artefatos variam por automação). 5 E2E novos, todos fora do conjunto de screenshot.
+
+### Observado (não corrigido nesta rodada)
+
+- Checklist "nenhum método de `orchestratorApi` sem chamador": 35/45 cobertos. 3 dos 10 restantes são redundância por desenho (dado já embutido em `getOverview()`). **7 são lacunas de UI genuínas** — `getAutomation`/`getAutomationOverview` (sem drawer de detalhe de automação), `getBeneficiamentoDashboard`, `getExecutionLogs` (paginação), `getScheduledJobs`, `setAutomationTestMode`/`setGlobalTestMode` (toggle de sandbox sem UI — mesma classe de risco do pause-all). Registrado para decisão futura.
+
+## [1.3.74] - 03/09/2026
+
+Frontend rodada 2, Onda 5 — performance de render. Invisível: os 4 baselines de screenshot passam sem regeneração; zero mudança de comportamento visível (verificado por oráculo E2E + revisor independente).
+
+### Alterado
+
+- **`React.memo` nos componentes de lista/tile** — `DataTable`, `StatTile`, `TimeSeries`, `Treemap` (o app não tinha nenhum). Acompanhado da estabilização (`useCallback`/`useMemo`) das props nos consumidores, sem a qual o memo é teatro — cada memo tem teste de contagem de render com caso de controle. Nos call sites quentes (polling de `/execucoes`, keystroke de `/beneficiamento`, mensagem de WS no `/monitor`) o bailout acontece de verdade.
+- **`TimeSeries` sem `JSON.stringify` no caminho de render.** Eram 2 serializações por render (6 por mensagem de WS com 3 gráficos no Monitor). `structureSignature` concatena só altura + rótulos do eixo + label/tone das séries; a detecção de mudança de valores passou a ser por referência de `lines` (os consumidores memoizam).
+- **Console do Monitor: buffer + `requestAnimationFrame`.** `handleMessage` acumula em `useRef` e agenda um único `setLines` por frame (era uma cópia O(n) + re-render por mensagem). Teto de 600 no buffer para a aba em background (rAF suspenso). Auto-scroll passou a depender do id da última linha.
+- **Console do Monitor virtualizado** (`src/lib/virtualWindow.ts`, função pura `computeWindow`). Até 300 nós DOM eram remontados a cada frame; agora só a janela visível + overscan, entre dois espaçadores. `white-space: pre-wrap` mantido (linhas longas quebram), estado vazio idêntico. Única lista longa e de alta frequência do app — nenhuma outra foi virtualizada.
+- **`BeneficiamentoPage`: séries de gráfico e hints movidos para `useMemo`** — recalculavam a cada tecla na busca. `TingimentoPanel`: `.slice(0, 50)` defensivo nas 3 tabelas cujo tamanho o backend define.
+
+## [1.3.73] - 03/09/2026
+
+Frontend rodada 2, Onda 3 (parcial — 3A/3B/3C) — fundação de tokens. **Invisível por construção:** os 4 baselines de screenshot passam sem regeneração; toda substituição é byte-idêntica (verificada por oráculo E2E + revisor independente). Consolidação estrutural (3D) e derivação de breakpoint no CSS ficam para decisão.
+
+### Alterado (tokens — sem mudar um pixel)
+
+- **Escala nomeada de z-index** em `tokens.css` (`--z-table-header` … `--z-rail`), valores idênticos aos 10 literais que substituiu. O empate em 80 (Toast / CommandPalette / LogViewer-fullscreen) fica anotado como bug latente para a Onda 4 — mudar o valor moveria pixel se algum dia se sobrepuserem.
+- **Escala de font-weight** (`--fw-regular` … `--fw-bold`); 20 literais em `*.module.css` + o reset trocados por token (mapeamento exato).
+- **Fonte única de breakpoint em JS** (`src/styles/breakpoints.ts`), consumida por `Shell.tsx`. O CSS ainda usa os literais — derivação real (`@custom-media`) é decisão pendente.
+- **20 referências diretas a `--graphite-*`** fora de `tokens.css` → aliases semânticos (`--surface-sunken`, `--surface-shimmer`, `--track`, `--track-strong` + os já existentes). Grep de `--graphite-` fora de `tokens.css`: zero (só o espelho JS de `TimeSeries`).
+- **Tints, glows e `rgba()` de cor-de-sinal → `color-mix(in srgb, var(--cor) N%, transparent)`** — 21 conversões, todas byte-idênticas (revisor independente conferiu canal por canal). Overlay de modal/gaveta tokenizado (`--scrim`, `--scrim-strong`, `--scrim-color: #070A0D` — cor fria fora da rampa, de propósito).
+- **`TimeSeries.tsx` lê a paleta de `tokens.css` via `getComputedStyle`** em vez dos 12 hex fixos (o canvas do uPlot não resolve `var()`). Fallbacks documentados para jsdom. Único ponto do app com hex fora de `src/styles/` — agora só 8 fallbacks de teste.
+- **Tokens aditivos** sem consumidor ainda (para a Onda 4): `--container-max: 1440px` (casou com o `max-width` existente), `--opacity-disabled: 0.4` (dominante em `:disabled`), `--focus-ring`, `--dur-slow`, `--icon-sm/md/lg`.
+- **Código morto removido de `tokens.css`:** `--sp-7`, `.blueprint-grid`, `.nameplate` (0 usos).
+
+## [1.3.72] - 03/09/2026
+
+Frontend rodada 2, Onda 2 — camada de dados: memória e menos requisição, sem framework novo. Os 4 baselines de screenshot passam **sem regeneração**.
+
+### Alterado
+
+- **`useDiagnostics` reescrito sobre `usePolling`.** Era o único hook do app sem `AbortController` nem guarda de sequência — e roda em toda aba aberta (tick de 10 s); uma resposta atrasada sobrescrevia uma mais nova. Agora herda aborto, guarda de sequência e backoff de 429. Cobertura foi de 0 % para 100 %, com teste de corrida (resposta N-1 chegando depois da N não escreve estado).
+- **`getWorkerStatus()` saiu do polling fixo.** `worker` passa a vir de `getHealth().worker` (`SystemHealth` já o carrega). O método fica tipado para a Onda 6.
+- **Dedupe do `/health/full` via `skipIfFresh`.** `getOverview` (Painel/Sistema) já traz `health` no payload; enquanto uma dessas telas está aberta, `useDiagnostics` usa esse valor e não faz a própria requisição. **Aba parada em `/painel`: 18 → 6 req/min** (medido no dev server; teto é 120 req/min por IP). Auto-cura fora dessas telas (o cache vence o TTL).
+- **Cache stale-while-revalidate leve** (`src/lib/resourceCache.ts`): `Map` de módulo com TTL, chave escolhida pelo chamador. `/painel → /sistema → /painel` deixa de refazer `getOverview` do zero com `Loading` de tela cheia — a remontagem semeia `data` da última resposta. `useAction` ganha `invalidate` (chaves a limpar pós-ação, antes do `onDone`); ações que mutam estado do sistema invalidam `"overview"`.
+- **`LiveStatusContext` dividido em dois** — `LiveDataCtx` (health/worker/wsStatus, muda a cada tick) e `LiveEventsCtx` (só `subscribe`, valor estável). `useLiveEvents` consome só o segundo e não re-renderiza no tick de 10 s. `loading`/`error` saem do contexto (sem consumidor).
+- **`usePolling.refresh()` durante backoff de 429** deixa de ser no-op silencioso: enfileira para o fim da janela (dispara sozinho, inclusive com `intervalMs=0`) e expõe `refreshQueued`, que o `FreshnessTag` mostra. O mesmo `return` pulava o `finally` e podia prender `loading` em `true` — corrigido.
+- **403 de path safety não derruba mais a sessão.** `client.ts` chamava o handler de "não autorizado" (→ `clearKey` → tela de login) para qualquer 401/403. O backend nunca retorna 401 e usa 403 também para path traversal em download de artefato — origem do surto de 403 de 07/08/2026. Agora só derruba em 401 ou 403 cujo corpo casa `/api key/i`.
+- Os 2 fetch manuais restantes (`ExecucoesPage` detalhe, `RunbookDrawer` de `AutomacoesPage`) migrados para `useAsyncResource` — nenhum cancelava de verdade a requisição em voo.
+
+## [1.3.71] - 03/09/2026
+
+Frontend rodada 2, Onda 1 — gates e fundação de build (invisível: os 4 baselines de screenshot passam **sem regeneração**).
+
+### Adicionado
+
+- **`ORCHESTRATOR_DASHBOARD_DIST`** sobrepõe `get_dashboard_path()` (`Orchestrator/app/runtime.py`) quando aponta para um diretório existente: `override > Dashboard/dist > Dashboard/`. `Dashboard/dist` é servido ao vivo pela instância de produção desta máquina (`RevalidatedStaticFiles`, `no-cache`), então `npm run build` era efetivamente um deploy e o `pytest -m e2e` não tinha como exercitar um build novo sem trocar a UI de produção. Agora o E2E aponta para um build temporário. 3 testes unitários de precedência.
+- Contract tests (`Dashboard/src/__tests__/contract.test.ts`) para `getOverview` e `listExecutions`, com fixtures capturadas da instância viva. Os arrays `EXECUTION_STATUSES`/`OPERATIONAL_STATES`/`SLA_STATUSES` no teste são o gate: se o backend renomear um estado, o teste falha em vez de a UI cair no ramo cinza.
+
+### Alterado (governança / build)
+
+- **ESLint type-aware ligado.** `parserOptions.projectService` + `@typescript-eslint/no-floating-promises`, `no-misused-promises`, `await-thenable` como `error` (estavam inativos num app inteiro sobre promises); `no-for-in-array`, `no-implied-eval`, `no-unnecessary-type-assertion`, `unbound-method` como `warn`. 31 erros corrigidos — em react-router 7 `navigate()` devolve Promise, e `useAction.run`/`usePolling.refresh` são fire-and-forget (`void` no call site).
+- **`tsconfig.json`:** `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`. 71 erros; 2 bugs latentes reais (`logParser.parseLog` e `useFocusTrap` acessavam índice fora de guarda que o TS não enxergava).
+- **`vite.config.ts`:** `manualChunks` (função — a forma de objeto quebra no Vite 8/rolldown) separa `react`/`uplot`/`lucide`; `target: es2020`, `sourcemap: "hidden"`, `chunkSizeWarningLimit`. `TimeSeries` sai do barrel `components/ui` (reexportá-lo arrastava o uPlot para o chunk inicial via as páginas estáticas). Resultado medido: chunk `index` de ~105 KB → **22,1 KB gzip**, uPlot em chunk próprio ausente do `index`.
+- **Unions do backend viram tipos literais** (`ExecutionStatus`, `OperationalState`, `SlaStatus`, `SlaState`, `HealthStatus`) — o `tsc` passa a acusar comparação contra estado que o backend nunca emite. Achado: `attentionRank` em `/automacoes` comparava `sla_state` contra `"violated"`/`"at_risk"`, valores que `_sla_state` nunca produz (`ok|breached|recovering|unknown`) — o SLA nunca influenciou a ordenação. Comparações mortas removidas (ranks mantidos monotônicos, zero mudança visual); wiring real de `breached`/`recovering` fica para a Onda 4.
+
 ## [1.3.70] - 03/09/2026
 
 ### Corrigido

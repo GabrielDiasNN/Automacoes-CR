@@ -1,10 +1,7 @@
+/* `position/inset/background/backdrop-filter/display` vêm de `.overlay-scrim`
+ * (tokens.css), compartilhada com Modal/CommandPalette. */
 .overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: rgba(7, 10, 13, 0.6);
-  backdrop-filter: blur(3px);
-  display: flex;
+  z-index: var(--z-drawer);
   justify-content: flex-end;
 }
 .panel {
@@ -25,18 +22,10 @@
   border-bottom: 1px solid var(--border);
   box-shadow: var(--engraved);
 }
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  color: var(--text-lo);
-  letter-spacing: var(--track-mid);
-  text-transform: uppercase;
-  margin-bottom: var(--sp-1);
-}
 .title {
   font-family: var(--font-display);
   font-size: var(--fs-display-l);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--track-mid);
   color: var(--text-hi);
   word-break: break-word;

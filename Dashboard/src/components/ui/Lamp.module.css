@@ -1,0 +1,9 @@
+.lamp {
+  flex-shrink: 0;
+}
+.circle {
+  border-radius: 50%;
+}
+.square {
+  border-radius: 2px;
+}

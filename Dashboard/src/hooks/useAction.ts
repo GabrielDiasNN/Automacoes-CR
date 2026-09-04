@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useToast } from "../components/ui/Toast";
 import type { Tone } from "../lib/status";
 import { errMessage } from "../lib/errors";
+import { invalidateCache } from "../lib/resourceCache";
 
 interface UseActionOptions {
   /** SEMPRE usada no lugar de `r.message` — para quando a mensagem do
@@ -17,6 +18,11 @@ interface UseActionOptions {
   /** Roda depois do sucesso — tipicamente `refresh`/`reload` do `usePolling`
    *  da tela, ou `Promise.all` de vários (o valor de retorno é ignorado). */
   onDone?: () => unknown | Promise<unknown>;
+  /** Chave(s) de `resourceCache` a invalidar após o sucesso, ANTES do `onDone`
+   *  — para uma ação que muda estado do sistema não deixar uma tela vizinha
+   *  semear dado pré-ação do cache SWR. Prefixo com `:` no fim casa por
+   *  prefixo. */
+  invalidate?: string | string[];
 }
 
 /** Padrão `busy -> try -> await -> toast de sucesso -> catch -> toast de
@@ -30,6 +36,10 @@ export function useAction<K extends string | number = string>() {
   const toast = useToast();
   const [busyKey, setBusyKey] = useState<K | null>(null);
 
+  // `run` trata todo erro internamente (toast vermelho) e nunca rejeita. Os
+  // chamadores o disparam de dentro de handlers de evento sem `await` — daí o
+  // `void run(...)` nos call sites, exigido pelos gates type-aware
+  // (`no-floating-promises` / `no-misused-promises`).
   const run = useCallback(
     async (key: K, fn: () => Promise<{ message: string } | void>, opts?: UseActionOptions) => {
       setBusyKey(key);
@@ -40,6 +50,10 @@ export function useAction<K extends string | number = string>() {
         // fallback tanto quanto uma que não devolve `message` nenhum.
         const msg = opts?.overrideMessage ?? (backendMsg || opts?.fallbackMessage);
         if (msg) toast(msg, opts?.successTone ?? "cyan");
+        if (opts?.invalidate) {
+          const keys = Array.isArray(opts.invalidate) ? opts.invalidate : [opts.invalidate];
+          for (const k of keys) invalidateCache(k);
+        }
         await opts?.onDone?.();
       } catch (e) {
         toast(errMessage(e), "red");

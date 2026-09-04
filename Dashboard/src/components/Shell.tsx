@@ -1,10 +1,12 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Factory, LayoutDashboard, ListChecks, Menu, Radio, Rows3, Rows4, Search, Server, Workflow, X } from "lucide-react";
+import { Factory, LayoutDashboard, ListChecks, Menu, Monitor, Moon, Radio, Rows3, Rows4, Search, Server, Sun, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
+import { nextTheme, useTheme, type Theme } from "../context/ThemeContext";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { mediaMaxWidth } from "../styles/breakpoints";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -27,17 +29,26 @@ export const NAV: NavItem[] = [
   { to: "/sistema", label: "Sistema", icon: <Server size={16} /> },
 ];
 
+const THEME_LABEL: Record<Theme, string> = { system: "sistema", light: "claro", dark: "escuro" };
+const THEME_ICON: Record<Theme, ReactNode> = {
+  system: <Monitor size={16} />,
+  light: <Sun size={16} />,
+  dark: <Moon size={16} />,
+};
+
 export function Shell() {
   const [open, setOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { clearKey } = useApiKeyContext();
   const { density, toggleDensity } = useTableDensity();
+  const { theme, cycleTheme } = useTheme();
   const location = useLocation();
   const railRef = useRef<HTMLElement>(null);
-  // Mesmo breakpoint de Shell.module.css: só ABAIXO de 900px o rail vira
-  // gaveta fixed+translateX; em desktop ele está sempre visível e `open`
-  // nunca chega a ser lido pelo CSS (o botão hambúrguer nem aparece).
-  const isMobileRail = useMediaQuery("(max-width: 900px)");
+  // Mesmo breakpoint de Shell.module.css (`wide` em styles/breakpoints.ts):
+  // só ABAIXO de 900px o rail vira gaveta fixed+translateX; em desktop ele
+  // está sempre visível e `open` nunca chega a ser lido pelo CSS (o botão
+  // hambúrguer nem aparece).
+  const isMobileRail = useMediaQuery(mediaMaxWidth("wide"));
   const railHidden = isMobileRail && !open;
 
   // Abaixo de 900px o rail fechado é `translateX(-100%)` mas continuava no
@@ -128,6 +139,13 @@ export function Shell() {
               title={density === "compact" ? "Densidade de tabela: compacta" : "Densidade de tabela: confortável"}
             >
               {density === "compact" ? <Rows3 size={16} /> : <Rows4 size={16} />}
+            </IconButton>
+            <IconButton
+              onClick={cycleTheme}
+              aria-label={`Tema: ${THEME_LABEL[theme]} — trocar para ${THEME_LABEL[nextTheme(theme)]}`}
+              title={`Tema: ${THEME_LABEL[theme]}`}
+            >
+              {THEME_ICON[theme]}
             </IconButton>
             <StatusBar />
           </header>

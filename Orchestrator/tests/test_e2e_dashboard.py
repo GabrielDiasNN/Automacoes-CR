@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Generator
@@ -47,6 +48,14 @@ def _inject_api_key(page: Any) -> None:
     """Injeta a API Key no sessionStorage antes do bundle React executar."""
     page.add_init_script(
         f"window.sessionStorage.setItem('orchestrator_api_key', {json.dumps(API_KEY)});"
+    )
+
+
+def _inject_theme(page: Any, theme: str) -> None:
+    """Força o ThemeContext (Onda 4-3) a montar num tema explícito, antes do
+    bundle React executar — mesmo mecanismo de `_inject_api_key`."""
+    page.add_init_script(
+        f"window.localStorage.setItem('orchestrator_theme', {json.dumps(theme)});"
     )
 
 
@@ -366,6 +375,40 @@ def test_e2e_dashboard_executions_detail_and_filter(
 
 
 @pytest.mark.e2e
+def test_e2e_dashboard_execucoes_painel_exec_id_abre_drawer(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Clicar numa execução recente do Painel abre o drawer JÁ naquela execução em /execucoes.
+
+    Fix do bug de nav (Onda 6, item 6): antes o clique descartava `ex.id` e
+    navegava para /execucoes sem parâmetro nenhum — o drawer nunca abria
+    sozinho, o operador tinha que procurar a execução de novo na lista.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/painel")
+    page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
+    page.wait_for_selector("text=últimas execuções")
+
+    if page.get_by_text("nenhuma execução recente").count() > 0:
+        pytest.skip(
+            "Banco de teste sem execuções recentes no card do Painel — "
+            "nada para clicar (setup_test_database não semeou nenhuma)."
+        )
+
+    linha = page.get_by_role("button", name=re.compile(r"^Execução "))
+    linha.first.wait_for(timeout=15_000)
+    linha.first.click()
+
+    page.wait_for_url(
+        re.compile(r".*/execucoes\?exec_id=EXEC_E2E_SUCCESS_001"), timeout=15_000
+    )
+
+    dialog = page.get_by_role("dialog")
+    dialog.wait_for(timeout=15_000)
+    dialog.get_by_text("Receitas Bloqueadas").first.wait_for(timeout=10_000)
+
+
+@pytest.mark.e2e
 def test_e2e_dashboard_automations_visible(uvicorn_server: str, page: Any) -> None:
     """A tela de Automações lista os cadastros semeados com os controles operacionais."""
     _inject_api_key(page)
@@ -389,6 +432,27 @@ def _count_executions() -> int:
         session = sessionmaker(bind=engine)()
         try:
             return session.query(models.Execution).count()
+        finally:
+            session.close()
+    finally:
+        engine.dispose()
+
+
+def _count_enabled_automations() -> int:
+    """Conta automações com `enabled=True` no banco de teste isolado."""
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+        poolclass=NullPool,
+    )
+    try:
+        session = sessionmaker(bind=engine)()
+        try:
+            return (
+                session.query(models.Automation)
+                .filter(models.Automation.enabled.is_(True))
+                .count()
+            )
         finally:
             session.close()
     finally:
@@ -437,6 +501,92 @@ def test_e2e_dashboard_system_instruments(uvicorn_server: str, page: Any) -> Non
     page.wait_for_selector("text=CPU")
     page.wait_for_selector("text=RAM")
     assert page.get_by_role("button", name="WAL Checkpoint").is_visible()
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_system_worker_actions(uvicorn_server: str, page: Any) -> None:
+    """O card do Worker em /sistema expõe "Acordar worker" (wake-up idempotente e benigno).
+
+    Onda 6: só cutuca o worker a checar a fila agora — sem ConfirmModal, pode
+    clicar. Confirma que o toast de sucesso aparece.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+
+    botao = page.get_by_role("button", name="Acordar worker")
+    botao.wait_for(timeout=15_000)
+    assert botao.is_visible()
+
+    botao.click()
+    # `wakeupWorker` responde {"message": "Sinal de wake-up enviado ao worker."}
+    # e `useAction` mostra essa mensagem no toast.
+    page.wait_for_selector("text=Sinal de wake-up enviado ao worker", timeout=10_000)
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_pause_all_confirm_and_cancel(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Pausar tudo exige ConfirmModal; CANCELAR não toca em nenhuma automação.
+
+    Ação de alcance global em produção — este E2E cancela, NUNCA confirma
+    (espelha test_e2e_dashboard_automations_dispatch_confirm_and_cancel).
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+    page.wait_for_selector("text=controle de emergência")
+
+    ativos_antes = _count_enabled_automations()
+
+    page.get_by_role("button", name="Pausar todas as automações").click()
+    dialog = page.get_by_role("alertdialog")
+    dialog.wait_for(timeout=10_000)
+    page.get_by_role("heading", name="Pausar todas as automações").wait_for(
+        timeout=5_000
+    )
+
+    page.get_by_role("button", name="Cancelar").click()
+    dialog.wait_for(state="hidden", timeout=5_000)
+
+    ativos_depois = _count_enabled_automations()
+    assert ativos_depois == ativos_antes, (
+        f"Cancelar 'Pausar tudo' não deve desativar nenhuma automação — "
+        f"antes={ativos_antes} depois={ativos_depois}"
+    )
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_system_drift_card(uvicorn_server: str, page: Any) -> None:
+    """A tela de Sistema mostra o card de drift de portfólio (Onda 6)."""
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+
+    page.wait_for_selector("text=drift de portfólio", timeout=15_000)
+    # O corpo do card é ou o empty state ("Catálogo consistente...") ou a lista
+    # de itens em drift — depende do estado do catálogo semeado, não força um
+    # dos dois. O card existir é o contrato deste teste.
+    card = page.get_by_text("drift de portfólio")
+    assert card.first.is_visible()
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_system_audit_card(uvicorn_server: str, page: Any) -> None:
+    """A tela de Sistema mostra o card de trilha de auditoria (Onda 6, item 7).
+
+    Não força empty state nem tabela preenchida — o histórico de auditoria do
+    banco de teste depende de quais ações os outros testes já dispararam
+    contra a mesma instância (ex.: "Acordar worker"). O card existir + o
+    seletor de teto (50/100/200) é o contrato deste teste.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+
+    page.wait_for_selector("text=trilha de auditoria", timeout=15_000)
+    assert page.get_by_label("Teto de entradas da trilha de auditoria").is_visible()
 
 
 @pytest.mark.e2e
@@ -588,6 +738,12 @@ def test_screenshot_dashboard_overview_estado_healthy(
     uvicorn_server: str, page: Any
 ) -> None:
     _inject_api_key(page)
+    # Explícito (Onda 4-3): antes do ThemeContext existir, qualquer color-scheme
+    # do runner renderizava o único tema que havia. Agora "system" (sem injeção)
+    # resolveria pelo @media do browser — no Playwright, tipicamente "light" —
+    # e faria ESTE baseline (capturado no escuro) divergir ~100%, não por regressão
+    # real, só por depender de um padrão ambiental não determinístico.
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/painel")
     page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
     page.wait_for_selector("text=automações ativas", timeout=15_000)
@@ -597,6 +753,7 @@ def test_screenshot_dashboard_overview_estado_healthy(
 @pytest.mark.e2e
 def test_screenshot_diagnostics_com_findings(uvicorn_server: str, page: Any) -> None:
     _inject_api_key(page)
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/monitor")
     page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
     _assert_matches_baseline(page, "dashboard_monitor")
@@ -605,8 +762,12 @@ def test_screenshot_diagnostics_com_findings(uvicorn_server: str, page: Any) -> 
 @pytest.mark.e2e
 def test_screenshot_automacoes_lista(uvicorn_server: str, page: Any) -> None:
     _inject_api_key(page)
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/automacoes")
     page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    # O heading aparece antes dos cards — sem isto o screenshot pode pegar o
+    # skeleton em vez do conteúdo carregado (achado ao gerar o baseline claro).
+    page.wait_for_selector("text=sucesso / falha 24h", timeout=15_000)
     _assert_matches_baseline(page, "dashboard_automacoes")
 
 
@@ -615,7 +776,327 @@ def test_screenshot_beneficiamento_kpi_carregado(
     uvicorn_server: str, page: Any
 ) -> None:
     _inject_api_key(page)
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
     page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
     _assert_matches_baseline(page, "dashboard_beneficiamento_kpi")
+
+
+# ---------------------------------------------------------------------------
+# Regressão visual — tema claro (Onda 4-3). Mesmas 4 telas, mesmo mecanismo de
+# `_assert_matches_baseline`, só forçando `data-theme="light"` via
+# `_inject_theme` antes do bundle montar. Baselines em arquivo separado
+# (sufixo `_light`) — os 4 escuros acima continuam intocados.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.e2e
+def test_screenshot_dashboard_overview_estado_healthy_light(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/painel")
+    page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
+    page.wait_for_selector("text=automações ativas", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_painel_healthy_light")
+
+
+@pytest.mark.e2e
+def test_screenshot_diagnostics_com_findings_light(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/monitor")
+    page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
+    _assert_matches_baseline(page, "dashboard_monitor_light")
+
+
+@pytest.mark.e2e
+def test_screenshot_automacoes_lista_light(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/automacoes")
+    page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    page.wait_for_selector("text=sucesso / falha 24h", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_automacoes_light")
+
+
+@pytest.mark.e2e
+def test_screenshot_beneficiamento_kpi_carregado_light(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
+    page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
+    page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_beneficiamento_kpi_light")
+
+
+# ---------------------------------------------------------------------------
+# Auditoria de acessibilidade (Onda 4-3) — axe-core rodando contra o DOM real
+# no browser real, não RTL/jsdom sobre `pages/` (decisão do CLAUDE.md: "a
+# delegação ao E2E é deliberada"). axe-core é devDependency do Dashboard
+# (`Dashboard/node_modules/axe-core/axe.min.js`) — injetado via
+# `add_script_tag(path=...)`, sem rede em test-time.
+# ---------------------------------------------------------------------------
+
+AXE_CORE_PATH = (
+    Path(TESTS_DIR).resolve().parents[1]
+    / "Dashboard"
+    / "node_modules"
+    / "axe-core"
+    / "axe.min.js"
+)
+# "serious"/"critical" bloqueiam; "minor"/"moderate" só ficam registrados —
+# mesmo corte que o `-ll` (low level) do bandit neste projeto: sinal real,
+# sem ruído de achados cosméticos. `moderate` é ignorado DE PROPÓSITO (achado
+# nº 9 da revisão de 04/09/2026 apontou que isto não estava documentado e
+# parecia descuido) — não é esquecimento, é a mesma filosofia de corte por
+# severidade adotada no resto da governança deste projeto.
+AXE_BLOCKING_IMPACT = {"serious", "critical"}
+
+
+@lru_cache(maxsize=1)
+def _axe_core_src() -> str:
+    """Lê `axe.min.js` sob demanda, não na importação do módulo.
+
+    O job `testes-python` do CI (`pytest -m "not e2e"`) coleta este arquivo
+    inteiro para achar os markers antes de deselecionar — código de nível de
+    módulo roda na coleta. Sem lazy load, `pytest` falhava a coleção da
+    suíte inteira ali, porque aquele job nunca roda `npm ci` em `Dashboard/`
+    (só o job `frontend` faz isso). Cacheado porque só os testes `e2e`
+    (que exigem `Dashboard/node_modules/` de qualquer forma) chamam isto."""
+    return AXE_CORE_PATH.read_text(encoding="utf-8")
+
+
+def _run_axe(
+    page: Any, ignore_rule_ids: frozenset[str] = frozenset()
+) -> list[dict[str, Any]]:
+    """Injeta axe-core e roda a auditoria completa contra o DOM carregado.
+
+    `add_script_tag(path=...)` embute o conteúdo como <script> INLINE — a CSP
+    de produção (`script-src 'self'`, ver main.py) bloqueia isso. Servido via
+    `page.route` numa URL fake do mesmo origin (intercepta antes de ir à rede,
+    nunca sai do processo de teste) + `add_script_tag(url=...)`, que é um
+    <script src> normal e passa pelo 'self' sem tocar na CSP de produção.
+
+    `ignore_rule_ids` desliga regras específicas via `axe.run({rules: {...,
+    enabled: false}})` — usar só com uma justificativa explícita no
+    call site (ver `test_a11y_execucoes_drawer_aberto_sem_violacoes_serias`);
+    não é para varrer achado novo pra baixo do tapete, é para não deixar um
+    achado JÁ CONHECIDO e rastreado separadamente mascarar cobertura nova.
+    """
+    page.route(
+        "**/__test-axe-core.js",
+        lambda route: route.fulfill(
+            status=200, content_type="application/javascript", body=_axe_core_src()
+        ),
+    )
+    page.add_script_tag(url="/__test-axe-core.js")
+    rules_option = json.dumps(
+        {rule_id: {"enabled": False} for rule_id in ignore_rule_ids}
+    )
+    result = page.evaluate(
+        f"async () => (await axe.run({{ rules: {rules_option} }})).violations"
+    )
+    return result  # type: ignore[no-any-return]
+
+
+def _assert_no_serious_a11y_violations(
+    page: Any, screen_name: str, ignore_rule_ids: frozenset[str] = frozenset()
+) -> None:
+    violations = _run_axe(page, ignore_rule_ids=ignore_rule_ids)
+    serious = [v for v in violations if v.get("impact") in AXE_BLOCKING_IMPACT]
+    if serious:
+        node_lines = []
+        for v in serious:
+            for n in v["nodes"][:6]:
+                summary = n.get("failureSummary", "").replace("\n", " ")
+                node_lines.append(f"      {n['target']}: {summary}")
+        detail = (
+            "\n".join(
+                f"  - [{v['impact']}] {v['id']}: {v['help']} "
+                f"({len(v['nodes'])} nó(s)) — {v['helpUrl']}"
+                for v in serious
+            )
+            + "\n"
+            + "\n".join(node_lines)
+        )
+        pytest.fail(
+            f"{len(serious)} violação(ões) séria(s)/crítica(s) de acessibilidade "
+            f"em '{screen_name}':\n{detail}"
+        )
+
+
+@pytest.mark.e2e
+def test_a11y_painel_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/painel")
+    page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
+    page.wait_for_selector("text=automações ativas", timeout=15_000)
+    _assert_no_serious_a11y_violations(page, "Painel")
+
+
+@pytest.mark.e2e
+def test_a11y_automacoes_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/automacoes")
+    page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    page.wait_for_selector("text=sucesso / falha 24h", timeout=15_000)
+    _assert_no_serious_a11y_violations(page, "Automações")
+
+
+@pytest.mark.e2e
+def test_a11y_monitor_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/monitor")
+    page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
+    _assert_no_serious_a11y_violations(page, "Monitor")
+
+
+def _beneficiamento_ranking_populated(page: Any, timeout_ms: int = 15_000) -> bool:
+    """Aguarda a seção "por setor industrial" resolver para um de dois estados
+    terminais: linha de ranking populada (`<tr>` clicável — é ali que mora o
+    achado nº 3, `<tr role="button">` inválido) ou o estado vazio explícito
+    ("Sem dados" / "Nenhum registro para este recorte").
+
+    Não devolve um terceiro estado silencioso: se nenhum dos dois aparecer
+    dentro do timeout, falha explicitamente em vez de deixar quem chama
+    interpretar "False" como "está tudo bem, só sem dados".
+    """
+    section = page.locator(
+        "section", has=page.locator("h3", has_text="por setor industrial")
+    )
+    section.first.wait_for(timeout=timeout_ms)
+
+    deadline = time.monotonic() + (timeout_ms / 1000)
+    while time.monotonic() < deadline:
+        if section.first.locator("tbody tr").count() > 0:
+            return True
+        if (
+            section.first.get_by_text("Sem dados").count() > 0
+            or page.get_by_text("Nenhum registro para este recorte").count() > 0
+        ):
+            return False
+        time.sleep(0.2)
+
+    # `raise` explícito em vez de `pytest.fail`: o pylint não sabe que
+    # `pytest.fail` é NoReturn e acusa R1710 (inconsistent-return-statements).
+    raise AssertionError(
+        "A seção 'por setor industrial' de Beneficiamento não resolveu para "
+        "linha populada nem para estado vazio explícito dentro do timeout — "
+        "pode estar presa em loading. Investigue antes de considerar a "
+        "auditoria de a11y confiável para esta tela."
+    )
+
+
+@pytest.mark.e2e
+def test_a11y_beneficiamento_sem_violacoes_serias(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Achado nº 9 (revisão 04/09/2026): a versão antiga deste teste só
+    esperava `text=saúde do snapshot` e auditava a tela mesmo se os rankings
+    (onde vive a `<tr>` clicável do achado nº 3) nunca tivessem chegado ao
+    DOM — um falso verde perfeito para exatamente o regressão que a rodada
+    de a11y deveria pegar. Agora o teste espera a seção de ranking resolver
+    e, se o snapshot estiver legitimamente vazio neste ambiente E2E, falha
+    de forma explícita em vez de acender verde numa tela vazia.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
+    page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
+    page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
+
+    if not _beneficiamento_ranking_populated(page):
+        pytest.fail(
+            "Snapshot de Beneficiamento sem dados neste ambiente E2E: os "
+            "rankings (com a <tr> clicável do achado nº 3) nunca chegaram ao "
+            "DOM, então uma auditoria axe-core aqui não teria como pegar "
+            "violação nenhuma na tabela. Popule o snapshot de teste (ou "
+            "aponte BENEFICIAMENTO_SNAPSHOT_DIR / a base histórica usada por "
+            "`obter_overview_historico` para dados de teste) antes de "
+            "confiar neste teste como cobertura real da tela."
+        )
+
+    _assert_no_serious_a11y_violations(page, "Beneficiamento (rankings populados)")
+
+
+@pytest.mark.e2e
+def test_a11y_execucoes_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    """Achado nº 9: `/execucoes` nunca foi auditada — é onde vive a tabela com
+    a `<tr>` clicável do achado nº 3 e o drawer de detalhe (achado nº 6).
+    Espera a linha semeada (`EXEC_E2E_SUCCESS_001` -> "Receitas Bloqueadas")
+    aparecer no DOM antes de auditar, para não repetir o falso verde do
+    Beneficiamento numa tabela ainda vazia."""
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/execucoes")
+    page.get_by_role("heading", name="Execuções").wait_for(timeout=30_000)
+
+    row = page.locator("tr", has_text="Receitas Bloqueadas").first
+    row.wait_for(timeout=15_000)
+
+    _assert_no_serious_a11y_violations(page, "Execuções (tabela populada)")
+
+
+@pytest.mark.e2e
+def test_a11y_execucoes_drawer_aberto_sem_violacoes_serias(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Achado nº 9: o drawer de execução (`Drawer.tsx`) é o componente novo
+    com mais superfície de a11y — focus trap, `role="dialog"`/`aria-modal`,
+    botões de download de artefato — e nunca foi auditado aberto. Audita o
+    DOM inteiro (fundo + drawer), que é o estado real que um leitor de tela
+    encontra quando o operador abre o detalhe de uma execução.
+
+    ATENÇÃO ao auditar overlays: `Drawer.tsx` aplica `animate-in` no painel,
+    que é `@keyframes fade-in` (opacity 0 -> 1, tokens.css). Auditar antes
+    de a animação terminar mede um frame com o painel translúcido, e o
+    `--scrim` escuro composita através dele — o fundo escurece e o texto
+    clareia. Uma primeira versão deste teste, feita assim, acusou
+    `color-contrast` serious em `StatusTag` verde (4.47) e ciano (4.44), o
+    que parecia um defeito de token mas era só o frame intermediário: os
+    valores medidos (`#2a6a34` sobre `#cdd8d4`) são exatamente `--green`
+    (`#22652C`) e `--surface` (`#EAEDF1`) compostos contra o scrim. Os tons
+    da Onda 4-3 estão corretos. Por isso esperamos `opacity == 1` abaixo e
+    mantemos `color-contrast` LIGADA — desligá-la esconderia regressão real
+    de cor. Se este teste voltar a acusar contraste, investigue o token
+    antes de suspeitar da animação: a espera já elimina essa causa."""
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/execucoes")
+    page.get_by_role("heading", name="Execuções").wait_for(timeout=30_000)
+
+    row = page.locator("tr", has_text="Receitas Bloqueadas").first
+    row.wait_for(timeout=15_000)
+    row.click()
+
+    dialog = page.get_by_role("dialog")
+    dialog.wait_for(timeout=10_000)
+    page.wait_for_selector("text=registros processados", timeout=10_000)
+
+    # Espera a animação de entrada assentar (ver docstring): com o painel
+    # ainda translúcido, o scrim composita através dele e o axe mede cores
+    # que não são as que o operador enxerga.
+    dialog.evaluate(
+        "el => Promise.all(el.getAnimations().map(a => a.finished))",
+        timeout=10_000,
+    )
+
+    _assert_no_serious_a11y_violations(page, "Execuções (drawer aberto)")
+
+
+@pytest.mark.e2e
+def test_a11y_sistema_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    """Achado nº 9: `/sistema` nunca foi auditada — é onde vivem os cards
+    novos da Onda 6 (drift de portfólio, trilha de auditoria) além dos
+    instrumentos (gauges) e do card do worker."""
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+    page.wait_for_selector("text=instrumentos", timeout=15_000)
+    page.wait_for_selector("text=trilha de auditoria", timeout=15_000)
+
+    _assert_no_serious_a11y_violations(page, "Sistema")

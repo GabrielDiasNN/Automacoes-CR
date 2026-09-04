@@ -1,41 +1,155 @@
-import { useMemo, useState } from "react";
-import { DatabaseZap, RefreshCw, Trash2, LifeBuoy, RefreshCcw } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  BellRing,
+  DatabaseZap,
+  GitCompareArrows,
+  History,
+  PauseCircle,
+  PlayCircle,
+  RefreshCw,
+  Trash2,
+  LifeBuoy,
+  RefreshCcw,
+} from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
-import { orchestratorApi } from "../api/orchestrator";
+import { writeCache } from "../lib/resourceCache";
+import { orchestratorApi, type AuditEntry } from "../api/orchestrator";
 import {
   Annunciator,
   AnnunciatorGrid,
   Button,
   Card,
   ConfirmModal,
+  DataTable,
   DescriptionList,
+  EmptyState,
   ErrorState,
   FreshnessTag,
   Gauge,
   KeyValue,
   Loading,
   Nameplate,
+  Select,
   StatTile,
   StatusTag,
-  TimeSeries,
-  type SeriesLine,
+  type Column,
 } from "../components/ui";
+import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import { useAction } from "../hooks/useAction";
 import { healthTone, healthLabel } from "../lib/status";
 import { extractTimeBr, formatAge } from "../lib/format";
 import page from "./page.module.css";
 
+// Estático (nenhuma closure sobre estado do componente) — referência estável
+// para o <DataTable memo>, mesmo padrão de *_COLUMNS em BeneficiamentoPage.
+const AUDIT_COLUMNS: Column<AuditEntry>[] = [
+  {
+    key: "timestamp",
+    header: "Quando",
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-mid)", whiteSpace: "nowrap" }}>
+        {r.timestamp}
+      </span>
+    ),
+  },
+  {
+    key: "action",
+    header: "Ação",
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-hi)" }}>{r.action}</span>
+    ),
+  },
+  {
+    key: "entity",
+    header: "Entidade",
+    hideOnNarrow: true,
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-mid)" }}>
+        {r.entity_type.toLowerCase()}
+        {r.entity_id ? `#${r.entity_id}` : ""}
+      </span>
+    ),
+  },
+  {
+    key: "actor",
+    header: "Quem",
+    hideOnNarrow: true,
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-mid)" }}>
+        {r.actor ?? "sistema"}
+      </span>
+    ),
+  },
+  {
+    key: "details",
+    header: "Detalhes",
+    render: (r) =>
+      r.details ? (
+        // JSON serializado pelo backend — exibido cru como texto, truncado
+        // (title carrega o valor completo pro hover).
+        <span
+          title={r.details}
+          style={{
+            display: "inline-block",
+            maxWidth: 320,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontSize: "var(--fs-small)",
+            color: "var(--text-lo)",
+            verticalAlign: "bottom",
+          }}
+        >
+          {r.details}
+        </span>
+      ) : (
+        <span style={{ color: "var(--text-lo)" }}>—</span>
+      ),
+  },
+];
+
+const AUDIT_LIMIT_OPTIONS = [50, 100, 200];
+const AUDIT_ROW_KEY = (r: AuditEntry) => String(r.id);
+
 export function SystemPage() {
-  const { data, loading, error, refresh, lastUpdated, rateLimitedUntil } = usePolling(
+  const { data, loading, error, refresh, lastUpdated, rateLimitedUntil, refreshQueued } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     15_000,
+    [],
+    { cacheKey: "overview", onData: (ov) => writeCache("health", ov.health) },
   );
   const {
     data: history,
     error: historyError,
     lastUpdated: historyUpdated,
   } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
+  // Versão/uptime do processo Orchestrator (não do worker). Polling longo — o
+  // rodapé global de versão fica para a Onda 4 (mudaria o chrome das 4 telas
+  // de baseline de screenshot).
+  const { data: version } = usePolling(orchestratorApi.getVersion, 60_000);
+  const { data: orchestratorUptime } = usePolling(orchestratorApi.getUptime, 60_000);
+  const {
+    data: drift,
+    error: driftError,
+    lastUpdated: driftUpdated,
+  } = usePolling(orchestratorApi.getDrift, 60_000);
+  // Teto crescente (50/100/200), NÃO paginação real — o backend não pagina
+  // /api/system/audit, só aceita `limit` (1-500) + filtro opcional `action`
+  // (sem UI de filtro ainda; exposto no client para uso futuro).
+  const [auditLimit, setAuditLimit] = useState(50);
+  const fetchAuditLog = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getAuditLog({ limit: auditLimit }, signal),
+    [auditLimit],
+  );
+  const {
+    data: auditLog,
+    error: auditError,
+    lastUpdated: auditUpdated,
+  } = usePolling(fetchAuditLog, 60_000, [auditLimit]);
+  const auditRows = useMemo(() => auditLog ?? [], [auditLog]);
   const [confirmPurge, setConfirmPurge] = useState(false);
+  const [confirmRecover, setConfirmRecover] = useState(false);
+  const [confirmEmergency, setConfirmEmergency] = useState<"pause" | "resume" | null>(null);
   const { busyKey: busy, run } = useAction<string>();
 
   const chart = useMemo(() => {
@@ -82,11 +196,12 @@ export function SystemPage() {
               lastUpdated={lastUpdated}
               error={data && error ? error : null}
               rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
             />
             <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
               {healthLabel(health.status)}
             </StatusTag>
-            <Button size="sm" icon={<RefreshCw size={13} />} onClick={refresh}>
+            <Button size="sm" icon={<RefreshCw size={13} />} onClick={() => void refresh()}>
               Atualizar
             </Button>
           </div>
@@ -172,19 +287,54 @@ export function SystemPage() {
               <KeyValue k="Ativas" v={String(worker.active_tasks)} />
               <KeyValue k="Versão" v={worker.version} />
             </DescriptionList>
-            {!worker.is_alive && (
+            <div className={page.toolbar}>
               <Button
-                variant="primary"
-                icon={<LifeBuoy size={13} />}
-                disabled={busy === "recover"}
-                onClick={() => run("recover", orchestratorApi.recoverWorker, { onDone: refresh })}
+                variant="ghost"
+                size="sm"
+                icon={<BellRing size={13} />}
+                disabled={busy === "wakeup"}
+                // Benigno: só cutuca o worker a checar a fila agora. Idempotente,
+                // sem ConfirmModal.
+                onClick={() =>
+                  void run("wakeup", orchestratorApi.wakeupWorker, {
+                    onDone: refresh,
+                    invalidate: ["overview", "health"],
+                  })
+                }
               >
-                Recuperar worker
+                Acordar worker
               </Button>
-            )}
+              {!worker.is_alive && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<LifeBuoy size={13} />}
+                  disabled={busy === "recover"}
+                  onClick={() => setConfirmRecover(true)}
+                >
+                  Recuperar worker
+                </Button>
+              )}
+            </div>
           </div>
         </Card>
       </div>
+
+      {/* Runtime (versão/uptime do processo Orchestrator) */}
+      <Card label="runtime">
+        <DescriptionList>
+          <KeyValue k="Versão" v={version?.version ?? "—"} />
+          <KeyValue k="Schema" v={version?.schema_version ?? "—"} />
+          <KeyValue k="Contrato" v={version?.contract_version ?? "—"} />
+          <KeyValue k="Python" v={version?.python_version ?? "—"} />
+          <KeyValue
+            k="Uptime"
+            v={orchestratorUptime?.uptime_human ?? (version ? formatAge(version.uptime_seconds) : "—")}
+          />
+          <KeyValue k="Iniciado" v={version?.started_at ?? "—"} />
+          <KeyValue k="Workers" v={version ? String(version.max_workers) : "—"} />
+        </DescriptionList>
+      </Card>
 
       {/* Portfólio */}
       {portfolio && (
@@ -205,13 +355,138 @@ export function SystemPage() {
         </Card>
       )}
 
+      {/* Drift de portfólio (manifesto/docs vs runtime) */}
+      {drift && (
+        <Card
+          label="drift de portfólio"
+          alert={drift.summary.items_with_drift > 0}
+          actions={<FreshnessTag lastUpdated={driftUpdated} error={drift && driftError ? driftError : null} />}
+        >
+          {drift.summary.items_with_drift === 0 ? (
+            <EmptyState
+              icon={<GitCompareArrows size={20} />}
+              title="Catálogo consistente com o runtime"
+              hint="Nenhuma divergência entre manifesto, documentação e estado real."
+            />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+              {drift.items.map((item) => (
+                <div key={item.catalog_id}>
+                  <StatusTag tone="amber" dot>
+                    {item.name}
+                  </StatusTag>
+                  <ul
+                    style={{
+                      margin: "var(--sp-2) 0 0",
+                      paddingLeft: "var(--sp-4)",
+                      fontSize: "var(--fs-small)",
+                      color: "var(--text-mid)",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {item.issues.map((iss, i) => (
+                      <li key={i}>
+                        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-hi)" }}>{iss.code}</span>{" "}
+                        {iss.message}
+                        {iss.manifest_value != null && iss.runtime_value != null && (
+                          <span style={{ color: "var(--text-lo)", fontFamily: "var(--font-mono)" }}>
+                            {" "}
+                            ({iss.manifest_value} → {iss.runtime_value})
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Trilha de auditoria */}
+      <Card
+        label="trilha de auditoria"
+        padded={auditRows.length === 0}
+        actions={
+          <div className={page.toolbar}>
+            <FreshnessTag lastUpdated={auditUpdated} error={auditLog && auditError ? auditError : null} />
+            <Select
+              value={auditLimit}
+              onChange={(e) => setAuditLimit(Number(e.target.value))}
+              aria-label="Teto de entradas da trilha de auditoria"
+            >
+              {AUDIT_LIMIT_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  últimas {n}
+                </option>
+              ))}
+            </Select>
+          </div>
+        }
+      >
+        {auditRows.length === 0 ? (
+          <EmptyState
+            icon={<History size={20} />}
+            title="nenhum evento de auditoria registrado ainda"
+            hint="Ações administrativas (disparo, pausa, purge, recuperação de worker...) aparecem aqui."
+          />
+        ) : (
+          <DataTable columns={AUDIT_COLUMNS} rows={auditRows} rowKey={AUDIT_ROW_KEY} />
+        )}
+      </Card>
+
+      {/* Controle de emergência (alcance global) */}
+      <Card label="controle de emergência" alert>
+        <p style={{ margin: "0 0 var(--sp-3)", fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
+          "Pausar todas" desliga o agendamento de todas as automações registradas. As execuções em andamento
+          continuam; nenhuma nova é agendada até "Retomar todas".
+        </p>
+        <div className={page.toolbar}>
+          <Button
+            variant="danger"
+            icon={<PauseCircle size={14} />}
+            disabled={busy === "pause-all"}
+            onClick={() => setConfirmEmergency("pause")}
+          >
+            Pausar todas as automações
+          </Button>
+          <Button
+            variant="ghost"
+            icon={<PlayCircle size={14} />}
+            disabled={busy === "resume-all"}
+            onClick={() => setConfirmEmergency("resume")}
+          >
+            Retomar todas
+          </Button>
+        </div>
+      </Card>
+
       {/* Ações */}
       <Card label="manutenção">
         <div className={page.toolbar}>
-          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => run("ckpt", orchestratorApi.runCheckpoint, { onDone: refresh })}>
+          <Button
+            icon={<DatabaseZap size={14} />}
+            disabled={busy === "ckpt"}
+            onClick={() =>
+              void run("ckpt", orchestratorApi.runCheckpoint, {
+                onDone: refresh,
+                invalidate: ["overview", "health"],
+              })
+            }
+          >
             WAL Checkpoint
           </Button>
-          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => run("sched", orchestratorApi.reloadScheduler, { onDone: refresh })}>
+          <Button
+            icon={<RefreshCcw size={14} />}
+            disabled={busy === "sched"}
+            onClick={() =>
+              void run("sched", orchestratorApi.reloadScheduler, {
+                onDone: refresh,
+                invalidate: ["overview", "health"],
+              })
+            }
+          >
             Recarregar agendador
           </Button>
           <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => setConfirmPurge(true)}>
@@ -228,9 +503,53 @@ export function SystemPage() {
         danger
         onConfirm={() => {
           setConfirmPurge(false);
-          run("purge", orchestratorApi.runPurge, { onDone: refresh });
+          void run("purge", orchestratorApi.runPurge, { onDone: refresh, invalidate: ["overview", "health"] });
         }}
         onCancel={() => setConfirmPurge(false)}
+      />
+
+      <ConfirmModal
+        open={confirmEmergency !== null}
+        title={confirmEmergency === "pause" ? "Pausar todas as automações" : "Retomar todas as automações"}
+        message={
+          confirmEmergency === "pause"
+            ? "Pausa TODAS as automações registradas. Execuções em andamento continuam; nenhuma nova é agendada até 'Retomar tudo'. Confirmar?"
+            : "Reativa o agendamento de TODAS as automações registradas. Confirmar?"
+        }
+        confirmLabel={confirmEmergency === "pause" ? "Pausar tudo" : "Retomar tudo"}
+        danger={confirmEmergency === "pause"}
+        onConfirm={() => {
+          const kind = confirmEmergency;
+          setConfirmEmergency(null);
+          if (kind === "pause") {
+            void run("pause-all", orchestratorApi.pauseAll, {
+              onDone: refresh,
+              invalidate: ["overview", "health"],
+            });
+          } else if (kind === "resume") {
+            void run("resume-all", orchestratorApi.resumeAll, {
+              onDone: refresh,
+              invalidate: ["overview", "health"],
+            });
+          }
+        }}
+        onCancel={() => setConfirmEmergency(null)}
+      />
+
+      <ConfirmModal
+        open={confirmRecover}
+        title="Recuperar worker"
+        message="Recuperar o worker force-reseta o estado de execução do processo (relança a recuperação canônica do Orchestrator). Confirmar?"
+        confirmLabel="Recuperar worker"
+        danger
+        onConfirm={() => {
+          setConfirmRecover(false);
+          void run("recover", orchestratorApi.recoverWorker, {
+            onDone: refresh,
+            invalidate: ["overview", "health"],
+          });
+        }}
+        onCancel={() => setConfirmRecover(false)}
       />
     </div>
   );

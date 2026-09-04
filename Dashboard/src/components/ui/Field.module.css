@@ -1,0 +1,14 @@
+/* Base compartilhada de Input/Select — 7 declarações eram repetidas
+ * byte a byte nos 2 arquivos. `composes` (CSS Modules) em vez de uma classe
+ * global: preserva a ordem de cascata que `.withIcon` (Input.module.css)
+ * depende para vencer `font-family` — uma classe global em tokens.css
+ * arriscaria a ordem de bundling entre arquivos CSS diferentes. */
+.field {
+  background: var(--surface-up);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-mid);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  padding: 6px var(--sp-2);
+}

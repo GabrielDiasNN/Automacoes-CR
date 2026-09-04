@@ -10,11 +10,11 @@
 .table th {
   position: sticky;
   top: 0;
-  z-index: 1;
-  background: var(--graphite-850);
+  z-index: var(--z-table-header);
+  background: var(--surface);
   font-family: var(--font-mono);
   font-size: var(--fs-label);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: var(--track-mid);
   text-transform: uppercase;
   color: var(--text-lo);
@@ -42,7 +42,7 @@
   transition: background var(--dur-fast) var(--ease);
 }
 .clickable:hover {
-  background: var(--graphite-800);
+  background: var(--surface-up);
 }
 .clickable:focus-visible {
   outline: 2px solid var(--cyan);

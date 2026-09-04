@@ -1,6 +1,7 @@
 import { Activity, Cpu, Layers } from "lucide-react";
 import { useLiveStatus } from "../context/LiveStatusContext";
 import { healthTone, healthLabel, toneVar } from "../lib/status";
+import { Lamp } from "./ui/Lamp";
 import styles from "./StatusBar.module.css";
 
 /** Barra de status global ao vivo — estado do sistema, fila, worker, sinal.
@@ -14,13 +15,7 @@ export function StatusBar() {
   return (
     <div className={styles.bar}>
       <div className={styles.group}>
-        <span
-          className={styles.lamp}
-          style={{
-            background: toneVar[tone],
-            animation: health?.status === "unhealthy" ? "blink-alarm 1s steps(1,end) infinite" : undefined,
-          }}
-        />
+        <Lamp size={9} color={toneVar[tone]} blink={health?.status === "unhealthy"} />
         {/* aria-live só neste texto (não na barra inteira, que teria o
          *  leitor de tela repetindo os 4 grupos a cada tick de 10s): o que
          *  importa anunciar é a MUDANÇA de estado do sistema, não o polling. */}

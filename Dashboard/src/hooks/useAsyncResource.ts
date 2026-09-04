@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { usePolling, type PollingState } from "./usePolling";
+import { usePolling, type PollingOptions, type PollingState } from "./usePolling";
 
 /** Fetch sob demanda com cancelamento real — reaproveita toda a lógica já
  *  testada de `usePolling` (guarda de sequência, `AbortController`, mantém
@@ -17,11 +17,12 @@ import { usePolling, type PollingState } from "./usePolling";
 export function useAsyncResource<T>(
   fetcher: ((signal?: AbortSignal) => Promise<T>) | null,
   deps: unknown[] = [],
+  options: PollingOptions = {},
 ): PollingState<T | null> {
   const wrapped = useCallback(
     (signal?: AbortSignal) => (fetcher ? fetcher(signal) : Promise.resolve(null)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fetcher, ...deps],
   );
-  return usePolling<T | null>(wrapped, 0, deps);
+  return usePolling<T | null>(wrapped, 0, deps, options);
 }

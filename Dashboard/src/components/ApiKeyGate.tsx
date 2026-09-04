@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { Button } from "./ui";
+import styles from "./ApiKeyGate.module.css";
 
 export function ApiKeyGate({ children }: { children: React.ReactNode }) {
   const { hasKey, saveKey } = useApiKeyContext();
@@ -20,55 +21,18 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg)" }}>
-      <div className="hazard" style={{ height: "var(--brand-rail-h)", flexShrink: 0 }} aria-hidden="true" />
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--sp-4)" }}>
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-lg)",
-            boxShadow: "var(--shadow-2)",
-            padding: "var(--sp-6) var(--sp-5)",
-            width: 360,
-            maxWidth: "100%",
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--sp-4)",
-          }}
-        >
+    <div className={styles.page}>
+      <div className={`hazard ${styles.rail}`} aria-hidden="true" />
+      <div className={styles.center}>
+        <form onSubmit={handleSubmit} className={styles.form}>
           <div>
-            <div
-              style={{
-                fontFamily: "var(--font-display)",
-                fontWeight: 700,
-                fontSize: "1.05rem",
-                color: "var(--cyan)",
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-              }}
-            >
-              ORQUESTRADOR
-            </div>
-            <div
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "var(--fs-label)",
-                color: "var(--text-lo)",
-                marginTop: 6,
-                letterSpacing: "var(--track-mid)",
-              }}
-            >
-              // autenticação zero-trust
-            </div>
+            <div className={styles.brand}>ORQUESTRADOR</div>
+            <div className={styles.subtitle}>// autenticação zero-trust</div>
           </div>
 
-          <div style={{ height: 1, background: "var(--border)", margin: "0 calc(-1 * var(--sp-5))" }} />
+          <div className={styles.divider} />
 
-          <p style={{ margin: 0, color: "var(--text-mid)", fontSize: "var(--fs-small)", lineHeight: "var(--lh-normal)" }}>
-            Informe a API Key do Orchestrator para acessar a sala de instrumentação.
-          </p>
+          <p className={styles.hint}>Informe a API Key do Orchestrator para acessar a sala de instrumentação.</p>
 
           <input
             type="password"
@@ -87,24 +51,11 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
             // esperado num formulário de login de instrumento único.
             // eslint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
-            style={{
-              padding: "0.65rem 0.8rem",
-              border: `1px solid ${error ? "var(--red)" : "var(--border)"}`,
-              borderRadius: "var(--radius)",
-              background: "var(--bg)",
-              color: "var(--text-hi)",
-              fontSize: "var(--fs-body)",
-              fontFamily: "var(--font-mono)",
-              outline: "none",
-            }}
+            className={[styles.field, error ? styles.fieldError : ""].filter(Boolean).join(" ")}
           />
 
           {error && (
-            <p
-              id="apikey-error"
-              role="alert"
-              style={{ margin: 0, color: "var(--red)", fontSize: "var(--fs-small)", fontFamily: "var(--font-mono)" }}
-            >
+            <p id="apikey-error" role="alert" className={styles.error}>
               ✗ {error}
             </p>
           )}

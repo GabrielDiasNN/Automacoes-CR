@@ -1,4 +1,5 @@
 import { toneVar, type Tone } from "../../lib/status";
+import styles from "./Gauge.module.css";
 
 interface GaugeProps {
   value: number | null | undefined;
@@ -22,7 +23,7 @@ export function Gauge({ value, max = 100, label, unit, tone = "cyan", size = 132
   const color = toneVar[tone];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+    <div className={styles.wrap}>
       <svg viewBox="0 0 128 128" width={size} height={size} role="img" aria-label={`${label}: ${value ?? "—"}${unit ?? ""}`}>
         <g transform="rotate(135 64 64)">
           <circle
@@ -30,7 +31,7 @@ export function Gauge({ value, max = 100, label, unit, tone = "cyan", size = 132
             cy={cy}
             r={r}
             fill="none"
-            stroke="var(--graphite-700)"
+            stroke="var(--track)"
             strokeWidth={9}
             strokeLinecap="round"
             strokeDasharray={`${track} ${C}`}
@@ -44,7 +45,7 @@ export function Gauge({ value, max = 100, label, unit, tone = "cyan", size = 132
             strokeWidth={9}
             strokeLinecap="round"
             strokeDasharray={`${frac * track} ${C}`}
-            style={{ transition: "stroke-dasharray 0.4s var(--ease)" }}
+            className={styles.progress}
           />
         </g>
         <text
@@ -55,7 +56,7 @@ export function Gauge({ value, max = 100, label, unit, tone = "cyan", size = 132
           fontSize="22"
           fontWeight="500"
           fill="var(--text-hi)"
-          style={{ fontVariantNumeric: "tabular-nums" }}
+          className={styles.value}
         >
           {value == null ? "—" : Math.round(v)}
         </text>
@@ -65,17 +66,7 @@ export function Gauge({ value, max = 100, label, unit, tone = "cyan", size = 132
           </text>
         )}
       </svg>
-      <span
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--fs-label)",
-          letterSpacing: "var(--track-mid)",
-          textTransform: "uppercase",
-          color: "var(--text-lo)",
-        }}
-      >
-        {label}
-      </span>
+      <span className={styles.label}>{label}</span>
     </div>
   );
 }

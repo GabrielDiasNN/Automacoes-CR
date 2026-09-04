@@ -20,7 +20,7 @@ export function Nameplate({ eyebrow, title, actions, size = "page" }: NameplateP
   return (
     <header className={styles.head}>
       <div className={styles.left}>
-        {eyebrow && <div className={styles.eyebrow}>{eyebrow}</div>}
+        {eyebrow && <div className="label-mono eyebrow">{eyebrow}</div>}
         <Titulo className={size === "page" ? styles.titlePage : styles.titleSection}>{title}</Titulo>
       </div>
       {actions && <div className={styles.actions}>{actions}</div>}

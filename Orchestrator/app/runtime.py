@@ -34,11 +34,26 @@ def get_project_root() -> str:
 
 
 def get_dashboard_path() -> str:
-    """Retorna Dashboard/dist/ se o build React existir, senão Dashboard/ (vanilla fallback)."""
+    """Retorna o diretório do dashboard servido em ``/dashboard``.
+
+    Ordem: ``ORCHESTRATOR_DASHBOARD_DIST`` (se apontar para um diretório
+    existente) > ``Dashboard/dist`` (build React) > ``Dashboard/`` (fallback
+    vanilla). O override existe para os testes E2E servirem um build de
+    verificação sem sobrescrever o ``Dashboard/dist`` que a instância de
+    produção desta máquina serve ao vivo — os dois compartilham o diretório,
+    então ``npm run build`` é efetivamente um deploy.
+    """
+    override = os.environ.get("ORCHESTRATOR_DASHBOARD_DIST", "").strip()
+    if override and os.path.isdir(override):
+        logger.info("Dashboard resolvido por ORCHESTRATOR_DASHBOARD_DIST: %s", override)
+        return override
     dist = os.path.join(PROJECT_ROOT, "Dashboard", "dist")
     if os.path.isdir(dist):
+        logger.info("Dashboard resolvido por Dashboard/dist: %s", dist)
         return dist
-    return os.path.join(PROJECT_ROOT, "Dashboard")
+    fallback = os.path.join(PROJECT_ROOT, "Dashboard")
+    logger.info("Dashboard resolvido por fallback vanilla: %s", fallback)
+    return fallback
 
 
 def get_lib_path() -> str:

@@ -116,7 +116,7 @@ describe("parseLog", () => {
       ["[t] [s] [ERROR] stack trace a seguir", "  at Foo.bar()", "  at Baz.qux()"].join("\n"),
     );
     expect(linhas).toHaveLength(1);
-    expect(linhas[0].message).toBe("stack trace a seguir\n  at Foo.bar()\n  at Baz.qux()");
+    expect(linhas[0]!.message).toBe("stack trace a seguir\n  at Foo.bar()\n  at Baz.qux()");
   });
 
   it("não funde linhas quando a anterior também é plain", () => {
@@ -127,7 +127,7 @@ describe("parseLog", () => {
   it("aceita CRLF", () => {
     const linhas = parseLog("[t] [s] [INFO] um\r\n[t] [s] [INFO] dois");
     expect(linhas).toHaveLength(2);
-    expect(linhas[1].message).toBe("dois");
+    expect(linhas[1]!.message).toBe("dois");
   });
 });
 
@@ -164,6 +164,6 @@ describe("filterLines", () => {
   it("combina nível e busca", () => {
     const r = filterLines(linhas, new Set<Level>(["info"]), "conexao");
     expect(r).toHaveLength(1);
-    expect(r[0].message).toBe("conexao ok");
+    expect(r[0]!.message).toBe("conexao ok");
   });
 });

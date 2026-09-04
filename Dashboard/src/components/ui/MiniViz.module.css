@@ -1,0 +1,9 @@
+.sparkline {
+  display: block;
+}
+.ratioBar {
+  display: flex;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--track);
+}

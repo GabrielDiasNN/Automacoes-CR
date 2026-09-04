@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
+import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi, type ExecutionSummary } from "../api/orchestrator";
 import {
   Annunciator,
@@ -60,9 +61,13 @@ function ExecRow({ ex, onClick }: { ex: ExecutionSummary; onClick: () => void })
 
 export function PainelPage() {
   const navigate = useNavigate();
-  const { data, loading, error, lastUpdated, rateLimitedUntil } = usePolling(
+  const { data, loading, error, lastUpdated, rateLimitedUntil, refreshQueued } = usePolling(
     (signal) => orchestratorApi.getOverview(signal),
     10_000,
+    [],
+    // `health` do overview alimenta a chave que `useDiagnostics` (StatusBar)
+    // consome via `skipIfFresh` — sem uma 2a requisição a `/health/full`.
+    { cacheKey: "overview", onData: (ov) => writeCache("health", ov.health) },
   );
 
   const lanes: QueueLane[] = useMemo(() => {
@@ -111,7 +116,12 @@ export function PainelPage() {
         title="Painel"
         actions={
           <div className={page.toolbar}>
-            <FreshnessTag lastUpdated={lastUpdated} error={data && error ? error : null} rateLimitedUntil={rateLimitedUntil} />
+            <FreshnessTag
+              lastUpdated={lastUpdated}
+              error={data && error ? error : null}
+              rateLimitedUntil={rateLimitedUntil}
+              refreshQueued={refreshQueued}
+            />
             <StatusTag tone={healthTone(health.status)} dot pulse={health.status === "unhealthy"}>
               sistema {healthLabel(health.status)}
             </StatusTag>
@@ -189,13 +199,16 @@ export function PainelPage() {
             últimas execuções
           </span>
           <span className={page.filler} />
-          <Button size="sm" variant="subtle" icon={<ArrowRight size={14} />} onClick={() => navigate("/execucoes")}>
+          <Button size="sm" variant="subtle" icon={<ArrowRight size={14} />} onClick={() => void navigate("/execucoes")}>
             ver todas
           </Button>
         </div>
         <div className={page.list}>
           {data.recent.slice(0, 8).map((ex) => (
-            <ExecRow key={ex.id} ex={ex} onClick={() => navigate("/execucoes")} />
+            // `ex.id`, não a rota genérica: sem o id, a lista inteira navegava
+            // para a mesma /execucoes sem filtro — clicar numa execução
+            // específica não abria o drawer dela (achado de revisão, Onda 6).
+            <ExecRow key={ex.id} ex={ex} onClick={() => void navigate(`/execucoes?exec_id=${ex.id}`)} />
           ))}
           {data.recent.length === 0 && (
             <div style={{ padding: "var(--sp-5)", textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-lo)", fontSize: "var(--fs-small)" }}>

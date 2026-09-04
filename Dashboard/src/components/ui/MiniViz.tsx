@@ -1,4 +1,5 @@
 import { toneVar, type Tone } from "../../lib/status";
+import styles from "./MiniViz.module.css";
 
 /** Sparkline SVG — tendência compacta de uma série. */
 export function Sparkline({
@@ -28,7 +29,7 @@ export function Sparkline({
   const area = `${line} L${width},${height} L0,${height} Z`;
   const color = toneVar[tone];
   return (
-    <svg width={width} height={height} aria-hidden="true" style={{ display: "block" }}>
+    <svg width={width} height={height} aria-hidden="true" className={styles.sparkline}>
       {fill && <path d={area} fill={color} opacity={0.12} />}
       <path d={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
@@ -50,13 +51,8 @@ export function RatioBar({
   const fPct = total > 0 ? (failures / total) * 100 : 0;
   return (
     <div
-      style={{
-        display: "flex",
-        height,
-        borderRadius: 2,
-        overflow: "hidden",
-        background: "var(--graphite-700)",
-      }}
+      className={styles.ratioBar}
+      style={{ height }}
       role="img"
       aria-label={`${success} sucessos, ${failures} falhas`}
     >

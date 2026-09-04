@@ -6,15 +6,9 @@
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: var(--fs-label);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: var(--track-mid);
   text-transform: uppercase;
   white-space: nowrap;
   line-height: 1.4;
-}
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
 }

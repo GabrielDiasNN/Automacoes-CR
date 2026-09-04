@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { Button } from "./Button";
@@ -28,6 +28,7 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   const ref = useRef<HTMLDivElement>(null);
   useFocusTrap(ref, open, onCancel);
+  const titleId = useId();
 
   if (!open) return null;
 
@@ -36,16 +37,16 @@ export function ConfirmModal({
     // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
     // de stopPropagation no filho. Escape já fecha via useFocusTrap.
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+    <div className={`overlay-scrim ${styles.overlay}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div
         ref={ref}
         className={`${styles.box} animate-in`}
         role="alertdialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         tabIndex={-1}
       >
-        <h3 className={styles.title}>{title}</h3>
+        <h3 id={titleId} className={styles.title}>{title}</h3>
         <div className={styles.message}>{message}</div>
         <div className={styles.actions}>
           <Button variant="subtle" onClick={onCancel}>

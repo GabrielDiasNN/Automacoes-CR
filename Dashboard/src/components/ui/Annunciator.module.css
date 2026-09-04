@@ -11,33 +11,26 @@
   padding: var(--sp-3);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--graphite-850);
+  background: var(--surface);
   box-shadow: var(--engraved);
   text-align: left;
   font: inherit;
   width: 100%;
 }
-.off {
-  opacity: 0.7;
-}
+/* Sem opacity aqui de propósito (achado via axe-core, Onda 4-3): o texto já
+ * roda no piso de contraste AA (--text-lo), então qualquer opacity < 1
+ * reprova mesmo em telas pequenas. "Apagado" já é comunicado pela lâmpada
+ * (cor var(--track) quando off) e pela ausência do destaque de .on — não
+ * precisa apagar o texto também. */
 .on {
   border-color: var(--tile-color);
-  background: color-mix(in srgb, var(--tile-color) 12%, var(--graphite-850));
+  background: color-mix(in srgb, var(--tile-color) 12%, var(--surface));
   box-shadow: var(--engraved), 0 0 0 1px color-mix(in srgb, var(--tile-color) 30%, transparent);
-}
-.lamp {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.blink {
-  animation: blink-alarm 1s steps(1, end) infinite;
 }
 .legend {
   font-family: var(--font-display);
   font-size: var(--fs-small);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: var(--track-mid);
   text-transform: uppercase;
   color: var(--text-mid);
@@ -59,6 +52,6 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-small);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--tile-color, var(--text-lo));
 }

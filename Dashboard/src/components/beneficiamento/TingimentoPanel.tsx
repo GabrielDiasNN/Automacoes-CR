@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Droplet } from "lucide-react";
 import {
   orchestratorApi,
@@ -14,10 +14,9 @@ import {
   ErrorState,
   Loading,
   StatTile,
-  TimeSeries,
   type Column,
-  type SeriesLine,
 } from "../ui";
+import { TimeSeries } from "../ui/TimeSeries";
 import { useAsyncResource } from "../../hooks/useAsyncResource";
 import { formatNumber, formatPercent } from "../../lib/format";
 import styles from "./TingimentoPanel.module.css";
@@ -100,6 +99,39 @@ export function TingimentoPanel() {
   );
   const { data, loading, error } = useAsyncResource(fetchTingimento, [range]);
 
+  // Teto defensivo — o backend deveria limitar o tamanho dos rankings, mas não
+  // garante; `.slice` também memoiza a referência para o <DataTable memo>.
+  const rankings = useMemo(() => {
+    const r = data?.rankings;
+    return {
+      porMaquina: (r?.por_maquina ?? []).slice(0, 50),
+      porCor: (r?.por_cor ?? []).slice(0, 50),
+      porTurno: (r?.por_turno ?? []).slice(0, 50),
+    };
+  }, [data]);
+  const rowKeys = useMemo(
+    () => ({
+      maquina: (r: BeneficiamentoTingimentoPorMaquina) => r.maquina,
+      cor: (r: BeneficiamentoTingimentoPorCor) => r.cor,
+      turno: (r: BeneficiamentoTingimentoPorTurno) => r.turno,
+    }),
+    [],
+  );
+  // Séries diárias memoizadas (xLabels + lines) p/ o <TimeSeries memo> ignorar
+  // o re-render quando o pai (BeneficiamentoPage) re-renderiza por tecla.
+  const diariaChart = useMemo(() => {
+    const pts = data?.series.diaria ?? [];
+    if (pts.length <= 1) return null;
+    const xLabels = pts.map((p) => p.date.slice(5));
+    return {
+      xLabels,
+      kgLines: [{ label: "kg/dia", values: pts.map((p) => p.kg_total), tone: "cyan" as const }],
+      reprocessoLines: [
+        { label: "reprocesso %", values: pts.map((p) => p.reprocesso_kg_pct), tone: "amber" as const },
+      ],
+    };
+  }, [data]);
+
   return (
     <Card
       label="tingimento — reprocesso, setup e eficiência"
@@ -135,47 +167,37 @@ export function TingimentoPanel() {
             <StatTile label="Produtividade" value={`${formatNumber(data.resumo.produtividade_kg_h)} kg/h`} />
           </div>
 
-          {data.series.diaria.length > 1 && (
+          {diariaChart && (
             <div className={styles.charts}>
               <Card label="volume diário (kg)" padded={false}>
-                <TimeSeries
-                  xLabels={data.series.diaria.map((p) => p.date.slice(5))}
-                  lines={[{ label: "kg/dia", values: data.series.diaria.map((p) => p.kg_total), tone: "cyan" } as SeriesLine]}
-                  height={160}
-                />
+                <TimeSeries xLabels={diariaChart.xLabels} lines={diariaChart.kgLines} height={160} />
               </Card>
               <Card label="reprocesso diário (%)" padded={false}>
-                <TimeSeries
-                  xLabels={data.series.diaria.map((p) => p.date.slice(5))}
-                  lines={[
-                    { label: "reprocesso %", values: data.series.diaria.map((p) => p.reprocesso_kg_pct), tone: "amber" } as SeriesLine,
-                  ]}
-                  height={160}
-                />
+                <TimeSeries xLabels={diariaChart.xLabels} lines={diariaChart.reprocessoLines} height={160} />
               </Card>
             </div>
           )}
 
           <div className={styles.rankings}>
-            <Card label="por máquina" padded={data.rankings.por_maquina.length === 0}>
-              {data.rankings.por_maquina.length === 0 ? (
+            <Card label="por máquina" padded={rankings.porMaquina.length === 0}>
+              {rankings.porMaquina.length === 0 ? (
                 <EmptyState icon={<Droplet size={18} />} title="Sem dados" />
               ) : (
-                <DataTable columns={MAQUINA_COLUMNS} rows={data.rankings.por_maquina} rowKey={(r) => r.maquina} />
+                <DataTable columns={MAQUINA_COLUMNS} rows={rankings.porMaquina} rowKey={rowKeys.maquina} />
               )}
             </Card>
-            <Card label="por cor" padded={data.rankings.por_cor.length === 0}>
-              {data.rankings.por_cor.length === 0 ? (
+            <Card label="por cor" padded={rankings.porCor.length === 0}>
+              {rankings.porCor.length === 0 ? (
                 <EmptyState icon={<Droplet size={18} />} title="Sem dados" />
               ) : (
-                <DataTable columns={COR_COLUMNS} rows={data.rankings.por_cor} rowKey={(r) => r.cor} />
+                <DataTable columns={COR_COLUMNS} rows={rankings.porCor} rowKey={rowKeys.cor} />
               )}
             </Card>
-            <Card label="por turno" padded={data.rankings.por_turno.length === 0}>
-              {data.rankings.por_turno.length === 0 ? (
+            <Card label="por turno" padded={rankings.porTurno.length === 0}>
+              {rankings.porTurno.length === 0 ? (
                 <EmptyState icon={<Droplet size={18} />} title="Sem dados" />
               ) : (
-                <DataTable columns={TURNO_COLUMNS} rows={data.rankings.por_turno} rowKey={(r) => r.turno} />
+                <DataTable columns={TURNO_COLUMNS} rows={rankings.porTurno} rowKey={rowKeys.turno} />
               )}
             </Card>
           </div>

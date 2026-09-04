@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePolling } from "../hooks/usePolling";
 import { ApiError } from "../api/client";
+import { _clearCache } from "../lib/resourceCache";
 
 describe("usePolling", () => {
   beforeEach(() => {
@@ -10,6 +11,7 @@ describe("usePolling", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    _clearCache();
   });
 
   it("busca no mount, expõe o dado e sai de loading", async () => {
@@ -240,8 +242,8 @@ describe("usePolling", () => {
     });
 
     expect(sinais).toHaveLength(2);
-    expect(sinais[0].aborted).toBe(true); // o anterior foi cancelado
-    expect(sinais[1].aborted).toBe(false); // o atual segue em voo
+    expect(sinais[0]!.aborted).toBe(true); // o anterior foi cancelado
+    expect(sinais[1]!.aborted).toBe(false); // o atual segue em voo
   });
 
   it("aborta o fetch em voo no unmount", async () => {
@@ -255,7 +257,7 @@ describe("usePolling", () => {
     unmount();
 
     expect(sinais).toHaveLength(1);
-    expect(sinais[0].aborted).toBe(true);
+    expect(sinais[0]!.aborted).toBe(true);
   });
 
   it("não expõe o cancelamento como erro de tela", async () => {
@@ -326,5 +328,123 @@ describe("usePolling", () => {
     expect(fetcher.mock.calls.length).toBeGreaterThan(1);
     expect(result.current.rateLimitedUntil).toBeNull();
     expect(result.current.error).toBeNull();
+  });
+
+  it("com cacheKey, uma remontagem semeia data do cache e não mostra loading", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ n: 1 });
+    const { result, unmount } = renderHook(() =>
+      usePolling(fetcher, 60_000, [], { cacheKey: "ov" }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.data).toEqual({ n: 1 });
+    unmount();
+
+    // Remonta (equivale a /painel -> /sistema -> /painel): antes voltaria a
+    // loading=true / data=null.
+    const remount = renderHook(() => usePolling(fetcher, 60_000, [], { cacheKey: "ov" }));
+    expect(remount.result.current.loading).toBe(false);
+    expect(remount.result.current.data).toEqual({ n: 1 });
+    // ...e ainda revalida por baixo (SWR).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("skipIfFresh: usa o cache e não faz requisição enquanto outra fonte o mantém fresco", async () => {
+    const { writeCache } = await import("../lib/resourceCache");
+    const fetcher = vi.fn().mockResolvedValue("da-rede");
+
+    // Outra tela já gravou a chave há pouco.
+    writeCache("health", "do-cache");
+
+    const { result } = renderHook(() =>
+      usePolling(fetcher, 1_000, [], { cacheKey: "health", cacheTtlMs: 5_000, skipIfFresh: true }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result.current.data).toBe("do-cache");
+    expect(result.current.loading).toBe(false);
+
+    // Passado o TTL sem ninguém renovar, a requisição real volta (auto-cura).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(fetcher).toHaveBeenCalled();
+    expect(result.current.data).toBe("da-rede");
+  });
+
+  it("onData roda a cada sucesso (para derivar chaves de cache de um payload composto)", async () => {
+    const { readCache, writeCache } = await import("../lib/resourceCache");
+    const fetcher = vi.fn().mockResolvedValue({ health: { status: "healthy" }, outra: 1 });
+    renderHook(() =>
+      usePolling(fetcher, 60_000, [], {
+        onData: (d: { health: unknown }) => writeCache("health", d.health),
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(readCache("health", 30_000)).toEqual({ status: "healthy" });
+  });
+
+  it("refresh durante a janela de 429 enfileira em vez de virar no-op silencioso", async () => {
+    const fetcher = vi.fn().mockRejectedValueOnce(new ApiError(429, "limite", 10));
+    const { result } = renderHook(() => usePolling(fetcher, 0)); // sem intervalo
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.current.refreshQueued).toBe(false);
+
+    // Operador dispara um refresh manual DENTRO da janela — antes: no-op mudo.
+    fetcher.mockResolvedValue("fresco");
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1); // não bateu no backend ainda
+    expect(result.current.refreshQueued).toBe(true);
+    expect(result.current.loading).toBe(false); // não ficou preso
+
+    // Passada a janela, o refresh enfileirado dispara sozinho.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_100);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toBe("fresco");
+    expect(result.current.refreshQueued).toBe(false);
+  });
+
+  it("erro não-429 após janela de 429 limpa rateLimitedUntil para não carregar semântica de rate limit", async () => {
+    // Cenário: primeiro um 429 (seta rateLimitedUntil), depois um erro genérico (ex: 500).
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(429, "limite", 5))
+      .mockRejectedValueOnce(new Error("servidor indisponível"));
+
+    const { result } = renderHook(() => usePolling(fetcher, 1_000));
+
+    // Primeiro fetch: 429 — seta rateLimitedUntil e mostra mensagem de limite.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.rateLimitedUntil).toBeInstanceOf(Date);
+    expect(result.current.error).toContain("limite");
+
+    // Espera passar a janela de 429.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100);
+    });
+
+    // Próximo fetch: erro diferente (500, timeout, etc.). Deve limpar rateLimitedUntil
+    // para que FreshnessTag não confunda o novo erro com semântica de rate limit.
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBe("servidor indisponível");
+    expect(result.current.rateLimitedUntil).toBeNull();
   });
 });

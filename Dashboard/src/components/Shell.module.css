@@ -18,7 +18,7 @@
   position: absolute;
   left: var(--sp-3);
   top: -48px;
-  z-index: 90;
+  z-index: var(--z-rail);
   background: var(--surface-up);
   border: 1px solid var(--cyan);
   border-radius: var(--radius);
@@ -35,7 +35,7 @@
 .rail {
   width: var(--rail-w);
   flex-shrink: 0;
-  background: var(--graphite-950);
+  background: var(--surface-sunken);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -53,7 +53,7 @@
 }
 .brand {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   font-size: 0.95rem;
   letter-spacing: 0.16em;
   color: var(--cyan);
@@ -92,7 +92,7 @@
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .link:hover {
-  background: var(--graphite-850);
+  background: var(--surface);
   color: var(--text-hi);
 }
 .linkIcon {
@@ -103,7 +103,7 @@
   border-left-color: var(--cyan);
   background: var(--cyan-tint);
   color: var(--cyan-bright);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 .linkActive .linkIcon {
   color: var(--cyan);
@@ -139,8 +139,18 @@
   height: var(--topbar-h);
   flex-shrink: 0;
   padding: 0 var(--sp-4);
-  background: var(--graphite-900);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
+}
+/* xnarrow (breakpoints.ts) — sem isto a StatusBar era cortada (ex.: "sinal"
+ * virava "SI"), não só apertada: o topbar tinha altura fixa e nenhum wrap. */
+@media (max-width: 400px) {
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--topbar-h);
+    padding: var(--sp-2) var(--sp-4);
+  }
 }
 .menuBtn {
   display: none;
@@ -161,7 +171,7 @@
     top: var(--brand-rail-h);
     bottom: 0;
     left: 0;
-    z-index: 50;
+    z-index: var(--z-rail-drawer);
     transform: translateX(-100%);
     transition: transform var(--dur) var(--ease);
     box-shadow: var(--shadow-pop);
@@ -179,7 +189,7 @@
     display: block;
     position: fixed;
     inset: var(--brand-rail-h) 0 0 0;
-    z-index: 40;
-    background: rgba(7, 10, 13, 0.75);
+    z-index: var(--z-rail-backdrop);
+    background: var(--scrim-strong);
   }
 }
