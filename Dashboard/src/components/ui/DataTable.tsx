@@ -43,8 +43,17 @@ function targetIsInteractive(target: EventTarget, boundary: Element): boolean {
 /** Tabela de dados de telemetria — header fixo, números tabulares. */
 function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataTableProps<T>) {
   const { density } = useTableDensity();
+  // tabIndex={0}+role="region": overflow-x precisa ser alcançável por
+  // teclado (WCAG 2.1.1) quando a tabela é mais larga que o contêiner — sem
+  // isso, um usuário de teclado não conseguia rolar horizontalmente (achado
+  // via axe-core, Onda 4-3). aria-label evita cair na regra de "region sem
+  // nome". jsx-a11y não reconhece "region" como landmark que justifica
+  // tabIndex (só roles de widget) — é o padrão recomendado pelo WAI-ARIA
+  // Authoring Practices pra região com scroll, então o disable é
+  // intencional, não um escape de preguiça.
   return (
-    <div className={styles.scroll}>
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    <div className={styles.scroll} tabIndex={0} role="region" aria-label="tabela com rolagem horizontal">
       <table className={`${styles.table} ${density === "compact" ? styles.compact : ""}`}>
         <thead>
           <tr>

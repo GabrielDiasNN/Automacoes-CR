@@ -304,12 +304,16 @@ export function AutomacoesPage() {
                         <span style={{ color: "var(--green)" }}>{a.success_24h}</span>
                         <span className={styles.slash}>/</span>
                         <span style={{ color: a.failures_24h ? "var(--red)" : "var(--text-lo)" }}>{a.failures_24h}</span>
+                        {/* Dentro do <dd> (não como <div> irmão) — um <dl> só aceita
+                         *  <dt>/<dd> (ou <div> agrupando um par) como filho direto;
+                         *  um terceiro <div> ali quebrava a estrutura (achado via
+                         *  axe-core, Onda 4-3). */}
+                        {total24h > 0 && (
+                          <div style={{ marginTop: 4 }}>
+                            <RatioBar success={a.success_24h} failures={a.failures_24h} />
+                          </div>
+                        )}
                       </dd>
-                      {total24h > 0 && (
-                        <div style={{ marginTop: 4 }}>
-                          <RatioBar success={a.success_24h} failures={a.failures_24h} />
-                        </div>
-                      )}
                     </div>
                     <div>
                       <dt className={styles.mLabel}>sla</dt>

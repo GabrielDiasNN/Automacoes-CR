@@ -17,9 +17,11 @@
   font: inherit;
   width: 100%;
 }
-.off {
-  opacity: 0.7;
-}
+/* Sem opacity aqui de propósito (achado via axe-core, Onda 4-3): o texto já
+ * roda no piso de contraste AA (--text-lo), então qualquer opacity < 1
+ * reprova mesmo em telas pequenas. "Apagado" já é comunicado pela lâmpada
+ * (cor var(--track) quando off) e pela ausência do destaque de .on — não
+ * precisa apagar o texto também. */
 .on {
   border-color: var(--tile-color);
   background: color-mix(in srgb, var(--tile-color) 12%, var(--surface));

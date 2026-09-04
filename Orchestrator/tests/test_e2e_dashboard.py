@@ -833,3 +833,108 @@ def test_screenshot_beneficiamento_kpi_carregado_light(
     page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
     _assert_matches_baseline(page, "dashboard_beneficiamento_kpi_light")
+
+
+# ---------------------------------------------------------------------------
+# Auditoria de acessibilidade (Onda 4-3) — axe-core rodando contra o DOM real
+# no browser real, não RTL/jsdom sobre `pages/` (decisão do CLAUDE.md: "a
+# delegação ao E2E é deliberada"). axe-core é devDependency do Dashboard
+# (`Dashboard/node_modules/axe-core/axe.min.js`) — injetado via
+# `add_script_tag(path=...)`, sem rede em test-time.
+# ---------------------------------------------------------------------------
+
+AXE_CORE_PATH = (
+    Path(TESTS_DIR).resolve().parents[1]
+    / "Dashboard"
+    / "node_modules"
+    / "axe-core"
+    / "axe.min.js"
+)
+# "serious"/"critical" bloqueiam; "minor"/"moderate" só ficam registrados —
+# mesmo corte que o `-ll` (low level) do bandit neste projeto: sinal real,
+# sem ruído de achados cosméticos.
+AXE_BLOCKING_IMPACT = {"serious", "critical"}
+
+
+AXE_CORE_SRC = AXE_CORE_PATH.read_text(encoding="utf-8")
+
+
+def _run_axe(page: Any) -> list[dict[str, Any]]:
+    """Injeta axe-core e roda a auditoria completa contra o DOM carregado.
+
+    `add_script_tag(path=...)` embute o conteúdo como <script> INLINE — a CSP
+    de produção (`script-src 'self'`, ver main.py) bloqueia isso. Servido via
+    `page.route` numa URL fake do mesmo origin (intercepta antes de ir à rede,
+    nunca sai do processo de teste) + `add_script_tag(url=...)`, que é um
+    <script src> normal e passa pelo 'self' sem tocar na CSP de produção.
+    """
+    page.route(
+        "**/__test-axe-core.js",
+        lambda route: route.fulfill(
+            status=200, content_type="application/javascript", body=AXE_CORE_SRC
+        ),
+    )
+    page.add_script_tag(url="/__test-axe-core.js")
+    result = page.evaluate("async () => (await axe.run()).violations")
+    return result  # type: ignore[no-any-return]
+
+
+def _assert_no_serious_a11y_violations(page: Any, screen_name: str) -> None:
+    violations = _run_axe(page)
+    serious = [v for v in violations if v.get("impact") in AXE_BLOCKING_IMPACT]
+    if serious:
+        node_lines = []
+        for v in serious:
+            for n in v["nodes"][:6]:
+                summary = n.get("failureSummary", "").replace("\n", " ")
+                node_lines.append(f"      {n['target']}: {summary}")
+        detail = (
+            "\n".join(
+                f"  - [{v['impact']}] {v['id']}: {v['help']} "
+                f"({len(v['nodes'])} nó(s)) — {v['helpUrl']}"
+                for v in serious
+            )
+            + "\n"
+            + "\n".join(node_lines)
+        )
+        pytest.fail(
+            f"{len(serious)} violação(ões) séria(s)/crítica(s) de acessibilidade "
+            f"em '{screen_name}':\n{detail}"
+        )
+
+
+@pytest.mark.e2e
+def test_a11y_painel_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/painel")
+    page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
+    page.wait_for_selector("text=automações ativas", timeout=15_000)
+    _assert_no_serious_a11y_violations(page, "Painel")
+
+
+@pytest.mark.e2e
+def test_a11y_automacoes_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/automacoes")
+    page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    page.wait_for_selector("text=sucesso / falha 24h", timeout=15_000)
+    _assert_no_serious_a11y_violations(page, "Automações")
+
+
+@pytest.mark.e2e
+def test_a11y_monitor_sem_violacoes_serias(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/monitor")
+    page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
+    _assert_no_serious_a11y_violations(page, "Monitor")
+
+
+@pytest.mark.e2e
+def test_a11y_beneficiamento_sem_violacoes_serias(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
+    page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
+    page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
+    _assert_no_serious_a11y_violations(page, "Beneficiamento")
