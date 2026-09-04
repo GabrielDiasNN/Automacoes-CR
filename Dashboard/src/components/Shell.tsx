@@ -5,6 +5,7 @@ import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { mediaMaxWidth } from "../styles/breakpoints";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -34,10 +35,11 @@ export function Shell() {
   const { density, toggleDensity } = useTableDensity();
   const location = useLocation();
   const railRef = useRef<HTMLElement>(null);
-  // Mesmo breakpoint de Shell.module.css: só ABAIXO de 900px o rail vira
-  // gaveta fixed+translateX; em desktop ele está sempre visível e `open`
-  // nunca chega a ser lido pelo CSS (o botão hambúrguer nem aparece).
-  const isMobileRail = useMediaQuery("(max-width: 900px)");
+  // Mesmo breakpoint de Shell.module.css (`wide` em styles/breakpoints.ts):
+  // só ABAIXO de 900px o rail vira gaveta fixed+translateX; em desktop ele
+  // está sempre visível e `open` nunca chega a ser lido pelo CSS (o botão
+  // hambúrguer nem aparece).
+  const isMobileRail = useMediaQuery(mediaMaxWidth("wide"));
   const railHidden = isMobileRail && !open;
 
   // Abaixo de 900px o rail fechado é `translateX(-100%)` mas continuava no

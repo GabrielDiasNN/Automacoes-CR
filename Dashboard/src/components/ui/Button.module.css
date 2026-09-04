@@ -13,7 +13,7 @@
     color var(--dur-fast) var(--ease);
 }
 .btn:disabled {
-  opacity: 0.4;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
 .icon {

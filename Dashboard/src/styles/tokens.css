@@ -112,11 +112,23 @@
   --rail-w:        232px;
   --topbar-h:      52px;
   --brand-rail-h:  3px;
+  --container-max: 1440px;  /* largura máxima do container de página (pages/page.module.css) */
+
+  /* ── Ícones (tamanhos lucide mais comuns) ── */
+  --icon-sm: 13px;  /* consumo na Onda 4 */
+  --icon-md: 16px;  /* consumo na Onda 4 */
+  --icon-lg: 20px;  /* consumo na Onda 4 */
+
+  /* ── Interação / estados ── */
+  --focus-ring:        2px solid var(--cyan);
+  --focus-ring-offset: 2px;  /* sem consumidor ainda — :focus-visible ainda usa o literal */
+  --opacity-disabled:  0.4;  /* dominante em controles desabilitados (Button, IconButton); .off usa 0.7, chipCount 0.75 — fora de escopo */
 
   /* ── Motion ── */
   --ease:     cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 0.12s;
   --dur:      0.2s;
+  --dur-slow: 0.4s;  /* novo — sem consumidor ainda */
 
   /* ── Empilhamento (z-index) ── */
   --z-table-header:         1;
@@ -163,7 +175,7 @@ a { color: inherit; }
 
 /* ── Foco visível (ciano) ── */
 :focus-visible {
-  outline: 2px solid var(--cyan);
+  outline: var(--focus-ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
