@@ -21,6 +21,22 @@ function toData(xLabels: string[], lines: SeriesLine[]): uPlot.AlignedData {
   return [xLabels.map((_, i) => i), ...lines.map((l) => l.values.map((v) => (v == null ? null : v)))];
 }
 
+/** Assinatura barata da ESTRUTURA do gráfico (altura, nº e rótulos do eixo X,
+ *  nº/rótulo/tom de cada série) — substitui o `JSON.stringify` que serializava
+ *  TAMBÉM os arrays de valores a cada render (no Monitor: 6x por mensagem de WS
+ *  com 3 gráficos montados). Aqui entram só os campos que obrigam a recriar o
+ *  `uPlot`; a mudança de valores é tratada separadamente por `setData`. */
+function structureSignature(height: number, xLabels: string[], lines: SeriesLine[]): string {
+  const parts: string[] = [String(height), String(xLabels.length)];
+  for (const label of xLabels) parts.push(label);
+  parts.push("|series|");
+  for (const line of lines) {
+    parts.push(line.label);
+    parts.push(line.tone);
+  }
+  return parts.join(",");
+}
+
 /** Série temporal de telemetria (uPlot). Eixo X por índice, rótulos mapeados.
  *
  *  Recriar o gráfico (`plot.destroy()` + `new uPlot`) só acontece quando a
@@ -37,14 +53,16 @@ export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 20
   const ref = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
 
-  const structureKey = JSON.stringify({ height, x: xLabels, series: lines.map((l) => [l.label, l.tone]) });
-  const valuesKey = JSON.stringify(lines.map((l) => l.values));
+  const structureKey = structureSignature(height, xLabels, lines);
 
-  // Atualiza só os valores, sem recriar o gráfico.
+  // Atualiza só os valores, sem recriar o gráfico. Depende da REFERÊNCIA de
+  // `lines` — os call sites memoizam `lines`, então nova referência = valores
+  // realmente novos. Nunca perde um update (a ref muda sempre que o conteúdo
+  // muda) e não paga o custo de serializar todos os pontos a cada render.
   useEffect(() => {
     plotRef.current?.setData(toData(xLabels, lines));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valuesKey]);
+  }, [lines]);
 
   // Recria o gráfico apenas quando a estrutura muda.
   useEffect(() => {
