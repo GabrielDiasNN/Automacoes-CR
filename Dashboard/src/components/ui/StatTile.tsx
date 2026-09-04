@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { toneVar, type Tone } from "../../lib/status";
 import styles from "./StatTile.module.css";
 
@@ -13,8 +13,11 @@ interface StatTileProps {
   big?: boolean;
 }
 
-/** Mostrador de leitura única — número grande + legenda gravada. */
-export function StatTile({ label, value, tone, hint, big = true }: StatTileProps) {
+/** Mostrador de leitura única — número grande + legenda gravada.
+ *  `memo`: grades de tiles re-renderizam junto com a página (Monitor a cada
+ *  frame de log, Beneficiamento a cada tecla). Efetivo só para tiles com
+ *  `value`/`hint` primitivos ou memoizados no call site. */
+export const StatTile = memo(function StatTile({ label, value, tone, hint, big = true }: StatTileProps) {
   return (
     <div className={styles.tile}>
       <div className={styles.label}>{label}</div>
@@ -27,4 +30,4 @@ export function StatTile({ label, value, tone, hint, big = true }: StatTileProps
       {hint && <div className={styles.hint}>{hint}</div>}
     </div>
   );
-}
+});

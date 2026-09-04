@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { toneVar, type Tone } from "../../lib/status";
@@ -28,8 +28,12 @@ function toData(xLabels: string[], lines: SeriesLine[]): uPlot.AlignedData {
  *  Mudança só de valores usa `plot.setData`, que redesenha sem recriar o canvas.
  *  Sem isso, como `xLabels`/`lines` chegam como arrays novos a cada render, no
  *  Monitor cada mensagem do WebSocket destruía e reconstruía o gráfico inteiro
- *  (achado nº 14 — mesmo princípio de virtualização do LogViewer). */
-export function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
+ *  (achado nº 14 — mesmo princípio de virtualização do LogViewer).
+ *
+ *  `memo`: no Monitor cada mensagem de WebSocket re-renderiza a página inteira
+ *  (estado `lines` do console) sem relação com os 3 gráficos montados. Exige
+ *  `xLabels`/`lines` referencialmente estáveis nos call sites (useMemo). */
+export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
   const ref = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
 
@@ -123,4 +127,4 @@ export function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
       </div>
     </div>
   );
-}
+});

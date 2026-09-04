@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { BeneficiamentoTreemapNode } from "../../api/orchestrator";
 import { formatNumber } from "../../lib/format";
 import styles from "./Treemap.module.css";
@@ -50,8 +50,11 @@ function groupBySetor(nodes: BeneficiamentoTreemapNode[]): SetorGroup[] {
     .sort((a, b) => b.kg_total - a.kg_total);
 }
 
-/** Treemap slice-and-dice (Setor -> Fase, detalhe de Máquina no tooltip). SVG próprio, sem dependência externa. */
-export function Treemap({ nodes, height = 320, onCellClick }: TreemapProps) {
+/** Treemap slice-and-dice (Setor -> Fase, detalhe de Máquina no tooltip). SVG próprio, sem dependência externa.
+ *  `memo`: Beneficiamento re-renderiza a cada tecla na busca; sem isso o
+ *  slice-and-dice inteiro (reduce + map aninhado) rodava a cada keystroke.
+ *  Exige `nodes` e `onCellClick` estáveis no call site. */
+export const Treemap = memo(function Treemap({ nodes, height = 320, onCellClick }: TreemapProps) {
   const groups = useMemo(() => groupBySetor(nodes), [nodes]);
   const total = groups.reduce((sum, g) => sum + g.kg_total, 0);
 
@@ -143,4 +146,4 @@ export function Treemap({ nodes, height = 320, onCellClick }: TreemapProps) {
       })}
     </svg>
   );
-}
+});
