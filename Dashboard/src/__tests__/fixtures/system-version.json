@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "schema_version": "20260731_02",
+  "contract_version": "2026.05.25.1",
+  "python_version": "3.12.3",
+  "started_at": "03/09/2026 07:58:05",
+  "uptime_seconds": 94225.55,
+  "max_workers": 4,
+  "allowed_origins": [
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000"
+  ]
+}

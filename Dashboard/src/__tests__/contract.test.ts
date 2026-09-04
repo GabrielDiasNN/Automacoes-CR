@@ -25,6 +25,12 @@ import automationsAll from "./fixtures/automations-all.json";
 import portfolioHealth from "./fixtures/portfolio-health.json";
 import systemOverview from "./fixtures/system-overview.json";
 import executionsPage from "./fixtures/executions-page.json";
+import systemVersion from "./fixtures/system-version.json";
+import systemUptime from "./fixtures/system-uptime.json";
+import portfolioDrift from "./fixtures/portfolio-drift.json";
+// item sintético do schema PortfolioDriftItem — a instância viva não tinha drift
+// no momento da captura (summary.items_with_drift === 0).
+import portfolioDriftWithItems from "./fixtures/portfolio-drift-with-items.json";
 
 // Vocabulários que os `switch` de lib/status.ts assumem — se o backend
 // renomear um estado, o teste falha aqui em vez de a UI cair no ramo cinza
@@ -50,6 +56,9 @@ const server = setupServer(
   http.get("/api/portfolio/health", () => HttpResponse.json(portfolioHealth)),
   http.get("/api/system/overview", () => HttpResponse.json(systemOverview)),
   http.get("/api/executions", () => HttpResponse.json(executionsPage)),
+  http.get("/api/system/version", () => HttpResponse.json(systemVersion)),
+  http.get("/api/system/uptime", () => HttpResponse.json(systemUptime)),
+  http.get("/api/portfolio/drift", () => HttpResponse.json(portfolioDrift)),
 );
 
 beforeAll(() => {
@@ -202,5 +211,55 @@ describe("contrato: listExecutions()", () => {
     // decoração do operador (rowTone / drawer)
     expect(ex.operator_severity).toBeTypeOf("string");
     expect(ex).toHaveProperty("operator_attention_required");
+  });
+});
+
+describe("contrato: getVersion() — card runtime do SystemPage (Onda 6)", () => {
+  it("devolve version/schema_version/contract_version/python_version/started_at/max_workers", async () => {
+    const v = await orchestratorApi.getVersion();
+    expect(v.version).toBeTypeOf("string");
+    expect(v.schema_version).toBeTypeOf("string");
+    expect(v.contract_version).toBeTypeOf("string");
+    expect(v.python_version).toBeTypeOf("string");
+    expect(v.started_at).toBeTypeOf("string");
+    expect(v.uptime_seconds).toBeTypeOf("number");
+    expect(v.max_workers).toBeTypeOf("number");
+    expect(Array.isArray(v.allowed_origins)).toBe(true);
+  });
+});
+
+describe("contrato: getUptime() — card runtime (Onda 6)", () => {
+  it("devolve started_at/uptime_seconds/uptime_human", async () => {
+    const u = await orchestratorApi.getUptime();
+    expect(u.started_at).toBeTypeOf("string");
+    expect(u.uptime_seconds).toBeTypeOf("number");
+    expect(u.uptime_human).toBeTypeOf("string");
+  });
+});
+
+describe("contrato: getDrift() — card de drift do SystemPage (Onda 6)", () => {
+  it("envelope com generated_at + summary.items_with_drift/total_issues + items[] (instância viva sem drift)", async () => {
+    const d = await orchestratorApi.getDrift();
+    expect(d.generated_at).toBeTypeOf("string");
+    expect(d.summary.items_with_drift).toBeTypeOf("number");
+    expect(d.summary.total_issues).toBeTypeOf("number");
+    expect(Array.isArray(d.items)).toBe(true);
+  });
+
+  it("item de drift (fixture sintética do schema) tem os campos que o card lê", async () => {
+    server.use(http.get("/api/portfolio/drift", () => HttpResponse.json(portfolioDriftWithItems)));
+    const d = await orchestratorApi.getDrift();
+    expect(d.items.length).toBeGreaterThan(0);
+    const item = d.items[0]!;
+    expect(item.catalog_id).toBeTypeOf("string");
+    expect(item.name).toBeTypeOf("string");
+    expect(Array.isArray(item.issues)).toBe(true);
+    const iss = item.issues[0]!;
+    expect(iss.code).toBeTypeOf("string");
+    expect(iss.message).toBeTypeOf("string");
+    // `manifest_value`/`runtime_value` são string | null — o card só renderiza a
+    // seta quando ambos != null, então basta a propriedade existir.
+    expect(iss).toHaveProperty("manifest_value");
+    expect(iss).toHaveProperty("runtime_value");
   });
 });

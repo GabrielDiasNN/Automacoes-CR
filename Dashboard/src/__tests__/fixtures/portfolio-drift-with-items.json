@@ -1,0 +1,43 @@
+{
+  "generated_at": "04/09/2026 10:08:32",
+  "summary": { "items_with_drift": 2, "total_issues": 3 },
+  "items": [
+    {
+      "catalog_id": "RB-01",
+      "automation_id": 1,
+      "name": "Receitas Bloqueadas",
+      "slug": "receitas-bloqueadas",
+      "issues": [
+        {
+          "code": "SLA_MISMATCH",
+          "message": "SLA do manifesto difere do runtime",
+          "severity": "WARN",
+          "manifest_value": "30",
+          "runtime_value": "45"
+        },
+        {
+          "code": "CRON_MISMATCH",
+          "message": "Expressao cron divergente",
+          "severity": "WARN",
+          "manifest_value": "0 7 * * 1-5",
+          "runtime_value": "30 7 * * 1-5"
+        }
+      ]
+    },
+    {
+      "catalog_id": "MT-02",
+      "automation_id": 2,
+      "name": "Montagem de Terceirizados",
+      "slug": "montagem-terceirizados",
+      "issues": [
+        {
+          "code": "DOC_MISSING",
+          "message": "Runbook obrigatorio ausente",
+          "severity": "ERROR",
+          "manifest_value": null,
+          "runtime_value": null
+        }
+      ]
+    }
+  ]
+}
