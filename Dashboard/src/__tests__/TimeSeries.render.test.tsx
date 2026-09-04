@@ -28,19 +28,21 @@ beforeEach(() => {
   setDataSpy.mockClear();
 });
 
-// `label` é lido no corpo (structureKey + legenda + resumo) — getter com spy.
+// `label` é lido no corpo (structureSignature + legenda + resumo) — getter com
+// spy conta quantas vezes o corpo do componente re-executou.
 const labelReads = vi.fn();
 const XLABELS = ["00:00", "00:01", "00:02"];
-const LINES: SeriesLine[] = [
+const makeLines = (last = 3): SeriesLine[] => [
   {
     get label() {
       labelReads();
       return "pendentes";
     },
     tone: "cyan",
-    values: [1, 2, 3],
+    values: [1, 2, last],
   },
 ];
+const LINES = makeLines();
 
 describe("TimeSeries — React.memo (contagem de renders)", () => {
   it("é um componente memoizado", () => {
@@ -62,22 +64,28 @@ describe("TimeSeries — React.memo (contagem de renders)", () => {
     expect(uplotCtor).toHaveBeenCalledTimes(1); // gráfico não recriado
   });
 
-  it("controle: re-renderiza quando `lines` muda de referência a cada render do pai", () => {
+  it("controle: `lines` instável → corpo RE-EXECUTA e só setData dispara (sem recriar)", () => {
     labelReads.mockClear();
     let bump: () => void = () => {};
 
     function Parent() {
       const [n, setN] = useState(0);
       bump = () => setN((v) => v + 1);
-      const lines: SeriesLine[] = [{ label: "pendentes", tone: "cyan", values: [1, 2, n] }];
+      const lines = makeLines(n); // getter novo a cada render → prop instável
       return <TimeSeries xLabels={XLABELS} lines={lines} height={160} />;
     }
 
     render(<Parent />);
     expect(uplotCtor).toHaveBeenCalledTimes(1);
+    const antesCorpo = labelReads.mock.calls.length;
+    const antesSetData = setDataSpy.mock.calls.length;
+
     act(() => bump());
-    // estrutura (rótulos/tons/height/xLabels) igual → só setData, sem recriar.
+
+    // sem memo efetivo (prop instável): o corpo re-executou...
+    expect(labelReads.mock.calls.length).toBeGreaterThan(antesCorpo);
+    // ...mas a estrutura (rótulos/tons/height/xLabels) é igual → só setData.
+    expect(setDataSpy.mock.calls.length).toBeGreaterThan(antesSetData);
     expect(uplotCtor).toHaveBeenCalledTimes(1);
-    expect(setDataSpy).toHaveBeenCalled();
   });
 });

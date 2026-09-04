@@ -244,12 +244,19 @@ export function BeneficiamentoPage() {
     const efficiencySparkline = efficiencySeries.map((p) => p.eficiencia_tempo_pct);
     const volumeLine: SeriesLine = { label: "kg/dia", values: kgSparkline, tone: "cyan" };
     const efficiencyLine: SeriesLine = { label: "eficiência %", values: efficiencySparkline, tone: "green" };
+    const { kpis } = overview;
     return {
       volumeSeries,
       efficiencySeries,
       xLabels,
       volumeLines: [volumeLine],
       efficiencyLines: [efficiencyLine],
+      planejadoHint:
+        kpis.planejado_pct > 0 ? (
+          <span title={`${formatNumber(kpis.fases_planejadas)} fases ainda planejadas/programadas, não concluídas`}>
+            {formatPercent(kpis.planejado_pct, 1)} planejado
+          </span>
+        ) : undefined,
       kgHint:
         kgSparkline.length > 1 ? <Sparkline data={kgSparkline} tone="cyan" width={96} height={24} /> : undefined,
       efficiencyHint:
@@ -325,7 +332,8 @@ export function BeneficiamentoPage() {
   if (!overview || !derived) return null;
 
   const { kpis } = overview;
-  const { volumeSeries, efficiencySeries, xLabels, volumeLines, efficiencyLines, kgHint, efficiencyHint } = derived;
+  const { volumeSeries, efficiencySeries, xLabels, volumeLines, efficiencyLines, planejadoHint, kgHint, efficiencyHint } =
+    derived;
 
   return (
     <div className={page.page}>
@@ -407,13 +415,7 @@ export function BeneficiamentoPage() {
             <StatTile
               label="Fases concluídas"
               value={formatNumber(kpis.fases_concluidas)}
-              hint={
-                kpis.planejado_pct > 0 ? (
-                  <span title={`${formatNumber(kpis.fases_planejadas)} fases ainda planejadas/programadas, não concluídas`}>
-                    {formatPercent(kpis.planejado_pct, 1)} planejado
-                  </span>
-                ) : undefined
-              }
+              hint={planejadoHint}
               tone={kpis.planejado_pct > 20 ? "amber" : undefined}
             />
             <StatTile

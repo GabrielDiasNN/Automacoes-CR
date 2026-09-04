@@ -138,6 +138,12 @@ export function MonitorPage() {
         const execId = String(data.exec_id ?? "—");
         const { message, tone } = describeEvent(type, data);
         lineBufferRef.current.push({ id: (idRef.current += 1), execId, type, message, tone });
+        // Aba em background suspende o rAF; sem teto o buffer cresceria
+        // indefinidamente. Mantém no máximo os últimos 300 (nº que sobrevive
+        // ao `.slice(-300)` do flush de qualquer forma).
+        if (lineBufferRef.current.length > 600) {
+          lineBufferRef.current.splice(0, lineBufferRef.current.length - 300);
+        }
         if (flushHandleRef.current == null) {
           flushHandleRef.current = requestAnimationFrame(flushLines);
         }
