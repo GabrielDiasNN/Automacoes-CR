@@ -23,9 +23,10 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 ## Estado atual
 
-- **Ondas 1 e 2:** ✅ VERIFICADAS. Branches `escalar/frontend-rodada2-onda1` (`89f3d4f`) e `escalar/frontend-rodada2-onda2` (`6d07ae7`, branchada da onda1). Aguardando push + PR (checkpoint e).
-- **Terminal state:** Success (Ondas 1–2). Próxima: Onda 3 — fundação de tokens (invisível).
+- **Ondas 1, 2, 3(parcial):** ✅ VERIFICADAS. Branches encadeadas: onda1 (`89f3d4f`) → onda2 (`6d07ae7`) → onda3 (`0091d03`). Aguardando push + PR (checkpoint e).
+- **Terminal state:** Success parcial. **DECISÃO PENDENTE:** escopo do 3D (consolidação estrutural) — fazer aqui pixel-a-pixel ou fundir com Onda 4. + gate #4 (@media / `@custom-media`).
 - **Iteração:** 1
+- **Onda 3 até aqui (3A+3B+3C):** o núcleo temável está pronto. Gates: z-index ✓ · `--graphite-` fora de tokens.css = só o espelho JS de `TimeSeries.tsx:48` (por design) · hex fora de styles = só 8 fallbacks documentados em `readPalette` (fecháveis movendo p/ `src/styles/`) · `@media` px ainda {560,720,721,900} (pendente).
 - **Verificação Onda 2:** lint 0/0 · typecheck 0 · 152 vitest · coverage exit 0 · bundle `index` 22,5 KB gzip (uplot separado) · **12/12 E2E, 4 screenshots sem regenerar** · **req/min em `/painel` parado: 18 → 6** (meta ≤ 8) · `useDiagnostics` 0% → 100% com teste de corrida
 
 ## Histórico por onda

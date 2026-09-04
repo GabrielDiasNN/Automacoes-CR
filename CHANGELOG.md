@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.73] - 03/09/2026
+
+Frontend rodada 2, Onda 3 (parcial — 3A/3B/3C) — fundação de tokens. **Invisível por construção:** os 4 baselines de screenshot passam sem regeneração; toda substituição é byte-idêntica (verificada por oráculo E2E + revisor independente). Consolidação estrutural (3D) e derivação de breakpoint no CSS ficam para decisão.
+
+### Alterado (tokens — sem mudar um pixel)
+
+- **Escala nomeada de z-index** em `tokens.css` (`--z-table-header` … `--z-rail`), valores idênticos aos 10 literais que substituiu. O empate em 80 (Toast / CommandPalette / LogViewer-fullscreen) fica anotado como bug latente para a Onda 4 — mudar o valor moveria pixel se algum dia se sobrepuserem.
+- **Escala de font-weight** (`--fw-regular` … `--fw-bold`); 20 literais em `*.module.css` + o reset trocados por token (mapeamento exato).
+- **Fonte única de breakpoint em JS** (`src/styles/breakpoints.ts`), consumida por `Shell.tsx`. O CSS ainda usa os literais — derivação real (`@custom-media`) é decisão pendente.
+- **20 referências diretas a `--graphite-*`** fora de `tokens.css` → aliases semânticos (`--surface-sunken`, `--surface-shimmer`, `--track`, `--track-strong` + os já existentes). Grep de `--graphite-` fora de `tokens.css`: zero (só o espelho JS de `TimeSeries`).
+- **Tints, glows e `rgba()` de cor-de-sinal → `color-mix(in srgb, var(--cor) N%, transparent)`** — 21 conversões, todas byte-idênticas (revisor independente conferiu canal por canal). Overlay de modal/gaveta tokenizado (`--scrim`, `--scrim-strong`, `--scrim-color: #070A0D` — cor fria fora da rampa, de propósito).
+- **`TimeSeries.tsx` lê a paleta de `tokens.css` via `getComputedStyle`** em vez dos 12 hex fixos (o canvas do uPlot não resolve `var()`). Fallbacks documentados para jsdom. Único ponto do app com hex fora de `src/styles/` — agora só 8 fallbacks de teste.
+- **Tokens aditivos** sem consumidor ainda (para a Onda 4): `--container-max: 1440px` (casou com o `max-width` existente), `--opacity-disabled: 0.4` (dominante em `:disabled`), `--focus-ring`, `--dur-slow`, `--icon-sm/md/lg`.
+- **Código morto removido de `tokens.css`:** `--sp-7`, `.blueprint-grid`, `.nameplate` (0 usos).
+
 ## [1.3.72] - 03/09/2026
 
 Frontend rodada 2, Onda 2 — camada de dados: memória e menos requisição, sem framework novo. Os 4 baselines de screenshot passam **sem regeneração**.
