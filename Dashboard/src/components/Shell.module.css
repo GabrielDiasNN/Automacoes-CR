@@ -180,6 +180,6 @@
     position: fixed;
     inset: var(--brand-rail-h) 0 0 0;
     z-index: var(--z-rail-backdrop);
-    background: rgba(7, 10, 13, 0.75);
+    background: var(--scrim-strong);
   }
 }
