@@ -23,10 +23,10 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 ## Estado atual
 
-- **Ondas 1, 2, 3(parcial):** ✅ VERIFICADAS. Branches encadeadas: onda1 (`89f3d4f`) → onda2 (`6d07ae7`) → onda3 (`0091d03`). Aguardando push + PR (checkpoint e).
-- **Terminal state:** Success parcial. **DECISÃO PENDENTE:** escopo do 3D (consolidação estrutural) — fazer aqui pixel-a-pixel ou fundir com Onda 4. + gate #4 (@media / `@custom-media`).
-- **Iteração:** 1
-- **Onda 3 até aqui (3A+3B+3C):** o núcleo temável está pronto. Gates: z-index ✓ · `--graphite-` fora de tokens.css = só o espelho JS de `TimeSeries.tsx:48` (por design) · hex fora de styles = só 8 fallbacks documentados em `readPalette` (fecháveis movendo p/ `src/styles/`) · `@media` px ainda {560,720,721,900} (pendente).
+- **Ondas 1, 2, 3:** ✅ VERIFICADAS E FECHADAS. Branches encadeadas: onda1 → onda2 → onda3 (`e3cfa2b`). `git push` BLOQUEADO pelo classificador do harness — usuário precisa pushar ou liberar a permissão.
+- **Decisões tomadas (usuário delegou):** 3D estrutural → fundido com Onda 4. Gate `@media` → resolvido na Onda 4 (reestruturação de tokens.css). Push/PR → autorizado, mas o harness bloqueia `git push` (pendente ação do usuário).
+- **Próximo:** Onda 5 (performance) — não depende da paleta, mantém baselines. Depois Onda 6 (capacidades). Onda 4 (visual) por último, com checkpoint humano de paleta.
+- **Onda 3 gates (todos ✓):** z-index literal = 0 · `--graphite-` fora de `src/styles/` = 0 · hex/rgba fora de `src/styles/` = 0 (`chartPalette.ts` + `tokens.css` concentram tudo).
 - **Verificação Onda 2:** lint 0/0 · typecheck 0 · 152 vitest · coverage exit 0 · bundle `index` 22,5 KB gzip (uplot separado) · **12/12 E2E, 4 screenshots sem regenerar** · **req/min em `/painel` parado: 18 → 6** (meta ≤ 8) · `useDiagnostics` 0% → 100% com teste de corrida
 
 ## Histórico por onda
@@ -72,8 +72,8 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
   - [x] 3A `db36ca0`+`3241059`+`6673aaf`+`456d8ad` — z-index scale (valores idênticos), font-weight scale, tokens aditivos, breakpoints.ts, mortos removidos. **VERIFICADO:** lint 0/0 · tsc 0 · 152 testes · gates grep vazios · 12/12 E2E, 4 screenshots sem regenerar.
   - [x] 3B `7b32ed2`+`b66ee7b`+`6b6d008`+`b076caf` — 20 `--graphite-*` → aliases; 21 conversões `rgba()`→`color-mix()` byte-idênticas; scrim → token. **VERIFICADO:** meu oráculo (12/12 E2E, 4 screenshots) + verificador independente (PASS, tabela de 21 conversões conferidas canal por canal).
   - [x] 3C `0091d03` — `TimeSeries.tsx` lê paleta de `tokens.css` via `getComputedStyle` (fallbacks documentados p/ jsdom). **VERIFICADO:** 12/12 E2E incl. Monitor+Beneficiamento (gráficos uPlot), 4 screenshots sem regenerar.
-  - [ ] 3D-1 (baixo risco) — eyebrow util, `.field` base p/ Input/Select, escala de minmax, ApiKeyGate/Gauge/MiniViz → .module.css, overlays
-  - [ ] 3D-2 (risco médio) — 6 lâmpadas → `<Lamp>`, 3 tiles → 1, superfícies interativas → Button/IconButton. **Decisão pendente:** fazer aqui com verificação pixel-a-pixel, ou fundir com a Onda 4 (onde o baseline regenera).
+  - [x] closer `e3cfa2b` — `readPalette` movido p/ `src/styles/chartPalette.ts`; gates de hex/rgba fora de `src/styles/` = 0. **VERIFICADO:** 12/12 E2E, 4 screenshots sem regenerar.
+  - [→] 3D (eyebrow/`.field`/minmax/lâmpadas/tiles/superfícies/CSS-modules) + gate `@media` — **FUNDIDO COM A ONDA 4** (decisão do orquestrador, usuário delegou): consolidar pixel-a-pixel agora só p/ redesenhar no turno seguinte joga fora a verificação.
   - [ ] decisão pendente: derivação real do breakpoint no CSS (`postcss-custom-media`?) vs. só espelho + comentário
   - [ ] `.tnum` / `font-variant-numeric` — muda alinhamento de dígitos → **adiado p/ Onda 4** (baseline regenera lá)
 
