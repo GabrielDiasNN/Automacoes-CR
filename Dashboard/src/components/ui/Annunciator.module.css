@@ -11,7 +11,7 @@
   padding: var(--sp-3);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--graphite-850);
+  background: var(--surface);
   box-shadow: var(--engraved);
   text-align: left;
   font: inherit;
@@ -22,7 +22,7 @@
 }
 .on {
   border-color: var(--tile-color);
-  background: color-mix(in srgb, var(--tile-color) 12%, var(--graphite-850));
+  background: color-mix(in srgb, var(--tile-color) 12%, var(--surface));
   box-shadow: var(--engraved), 0 0 0 1px color-mix(in srgb, var(--tile-color) 30%, transparent);
 }
 .lamp {

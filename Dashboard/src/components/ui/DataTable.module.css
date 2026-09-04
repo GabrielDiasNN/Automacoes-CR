@@ -11,7 +11,7 @@
   position: sticky;
   top: 0;
   z-index: var(--z-table-header);
-  background: var(--graphite-850);
+  background: var(--surface);
   font-family: var(--font-mono);
   font-size: var(--fs-label);
   font-weight: var(--fw-medium);
@@ -42,7 +42,7 @@
   transition: background var(--dur-fast) var(--ease);
 }
 .clickable:hover {
-  background: var(--graphite-800);
+  background: var(--surface-up);
 }
 .clickable:focus-visible {
   outline: 2px solid var(--cyan);

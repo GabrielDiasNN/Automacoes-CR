@@ -367,7 +367,7 @@ export function MonitorPage() {
             height: 420,
             overflowY: "auto",
             padding: "var(--sp-3)",
-            background: "var(--graphite-950)",
+            background: "var(--surface-sunken)",
             fontFamily: "var(--font-mono)",
             fontSize: "var(--fs-label)",
             lineHeight: 1.7,

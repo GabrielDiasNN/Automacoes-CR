@@ -54,7 +54,7 @@ export function Mimico({ sources, lanes, worker, outcomes, running }: MimicoProp
               <div key={l.group} className={styles.lane}>
                 <span
                   className={styles.laneLamp}
-                  style={{ background: busy ? "var(--amber)" : "var(--graphite-600)" }}
+                  style={{ background: busy ? "var(--amber)" : "var(--track-strong)" }}
                 />
                 <span className={styles.laneName}>{l.group}</span>
                 <span className={styles.laneCount}>

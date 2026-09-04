@@ -3,7 +3,7 @@
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--graphite-950);
+  background: var(--surface-sunken);
   overflow: hidden;
 }
 .wrap.fullscreen {
@@ -20,7 +20,7 @@
   flex-wrap: wrap;
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--border);
-  background: var(--graphite-900);
+  background: var(--bg);
 }
 .filler {
   flex: 1;
@@ -130,7 +130,7 @@ mark {
   gap: var(--sp-3);
   padding: 5px var(--sp-3);
   border-top: 1px solid var(--border);
-  background: var(--graphite-900);
+  background: var(--bg);
   font-family: var(--font-mono);
   font-size: var(--fs-label);
   color: var(--text-lo);

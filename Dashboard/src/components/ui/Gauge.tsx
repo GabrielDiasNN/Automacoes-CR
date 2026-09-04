@@ -30,7 +30,7 @@ export function Gauge({ value, max = 100, label, unit, tone = "cyan", size = 132
             cy={cy}
             r={r}
             fill="none"
-            stroke="var(--graphite-700)"
+            stroke="var(--track)"
             strokeWidth={9}
             strokeLinecap="round"
             strokeDasharray={`${track} ${C}`}

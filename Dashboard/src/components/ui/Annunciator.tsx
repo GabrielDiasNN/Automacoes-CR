@@ -27,7 +27,7 @@ export function Annunciator({ legend, value, tone, active, blink, statusLabel }:
     >
       <span
         className={`${styles.lamp} ${active && blink ? styles.blink : ""}`}
-        style={{ background: active ? color : "var(--graphite-700)" }}
+        style={{ background: active ? color : "var(--track)" }}
       />
       <span className={styles.legend}>{legend}</span>
       {active && statusLabel && <span className={styles.status}>{statusLabel}</span>}

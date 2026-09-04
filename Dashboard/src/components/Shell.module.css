@@ -35,7 +35,7 @@
 .rail {
   width: var(--rail-w);
   flex-shrink: 0;
-  background: var(--graphite-950);
+  background: var(--surface-sunken);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -92,7 +92,7 @@
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .link:hover {
-  background: var(--graphite-850);
+  background: var(--surface);
   color: var(--text-hi);
 }
 .linkIcon {
@@ -139,7 +139,7 @@
   height: var(--topbar-h);
   flex-shrink: 0;
   padding: 0 var(--sp-4);
-  background: var(--graphite-900);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 .menuBtn {

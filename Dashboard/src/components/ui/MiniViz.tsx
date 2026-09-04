@@ -55,7 +55,7 @@ export function RatioBar({
         height,
         borderRadius: 2,
         overflow: "hidden",
-        background: "var(--graphite-700)",
+        background: "var(--track)",
       }}
       role="img"
       aria-label={`${success} sucessos, ${failures} falhas`}

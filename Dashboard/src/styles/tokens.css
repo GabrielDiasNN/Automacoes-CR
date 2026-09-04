@@ -17,11 +17,15 @@
   --graphite-600: #3A4757; /* divisória forte */
 
   /* aliases semânticos de superfície */
-  --bg:            var(--graphite-900);
-  --surface:       var(--graphite-850);
-  --surface-up:    var(--graphite-800);
-  --border:        var(--graphite-700);
-  --border-strong: var(--graphite-600);
+  --bg:              var(--graphite-900);
+  --surface:         var(--graphite-850);
+  --surface-up:      var(--graphite-800);
+  --surface-sunken:  var(--graphite-950);   /* fundo mais fundo (console, body do shell) */
+  --surface-shimmer: var(--graphite-750);   /* realce do skeleton */
+  --border:          var(--graphite-700);
+  --border-strong:   var(--graphite-600);
+  --track:           var(--graphite-700);   /* trilha de instrumento inativa (gauge, lâmpada apagada, mímico) — mesmo valor que --border, semântica distinta */
+  --track-strong:    var(--graphite-600);   /* mesmo valor que --border-strong */
 
   /* ── Texto (contraste verificado ≥ WCAG AA sobre grafite) ── */
   --text-hi:  #E8EDF2; /* primário */

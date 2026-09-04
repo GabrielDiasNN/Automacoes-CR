@@ -83,7 +83,7 @@
   cursor: pointer;
 }
 .itemActive {
-  background: var(--graphite-800);
+  background: var(--surface-up);
   color: var(--text-hi);
 }
 .itemIcon {
