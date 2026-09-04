@@ -107,6 +107,15 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
+  /* ── Grades responsivas (minmax) ──
+     Só o valor 140px é literalmente idêntico em 2 arquivos (grade de tiles
+     pequenos) — tokenizado. Os demais (148/150/300/320/340) são próximos mas
+     servem grades de propósito distinto (cards de automação, gráficos,
+     rankings); arredondá-los junto arrisca mudar quantas colunas cabem em
+     larguras que os 4 baselines de screenshot não cobrem. Escala completa
+     fica para a Onda 4-3 (passe visual, onde essa decisão de layout cabe). */
+  --grid-tiles-min: 140px;
+
   /* ── Raios (instrumento = cantos duros) ── */
   --radius-sm: 2px;
   --radius:    4px;

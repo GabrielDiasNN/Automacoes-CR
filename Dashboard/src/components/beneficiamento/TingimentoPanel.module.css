@@ -9,7 +9,7 @@
 }
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--grid-tiles-min), 1fr));
   gap: var(--sp-3);
 }
 .charts {
