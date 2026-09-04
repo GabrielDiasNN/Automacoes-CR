@@ -94,6 +94,15 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   return res.text();
 }
 
+/** Como `request`, mas para download de arquivo binário (ex.: artefato de
+ *  execução via `GET /api/executions/{id}/download`). Reaproveita `doFetch`
+ *  — o mesmo caminho de timeout/headers/401-403 — em vez de um `<a download
+ *  href>` cru, que não manda o header `X-API-Key` no handshake. */
+async function requestBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  const res = await doFetch(path, init);
+  return res.blob();
+}
+
 /** Monta query-string a partir de um objeto, omitindo null/undefined. */
 export function qs(params: Record<string, string | number | boolean | undefined | null>): string {
   const sp = new URLSearchParams();
@@ -111,6 +120,7 @@ export const api = {
   // `undefined` sob `exactOptionalPropertyTypes`.
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal: signal ?? null }),
   getText: (path: string, signal?: AbortSignal) => requestText(path, { signal: signal ?? null }),
+  getBlob: (path: string, signal?: AbortSignal) => requestBlob(path, { signal: signal ?? null }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     request<T>(path, {
       method: "POST",

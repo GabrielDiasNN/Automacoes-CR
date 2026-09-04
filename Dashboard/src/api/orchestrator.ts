@@ -150,6 +150,12 @@ export interface ExecutionLogsResponse {
   lines: string[];
 }
 
+/** `GET /api/executions/{id}/artifacts` — `ExecutionArtifactsResponse`. */
+export interface ExecutionArtifactsResponse {
+  exec_id: string;
+  artifacts: string[];
+}
+
 export interface QueueActionResponse {
   message: string;
   source_exec_id: string;
@@ -831,6 +837,15 @@ export const orchestratorApi = {
   stopExecution: (id: string) => api.post<{ message: string }>(`/api/executions/${id}/stop`),
   requeueExecution: (id: string, body?: { reason?: string; priority?: string }) =>
     api.post<QueueActionResponse>(`/api/executions/${id}/requeue`, body ?? {}),
+  listExecutionsByAutomation: (automationId: number, limit = 10, signal?: AbortSignal) =>
+    api.get<ExecutionSummary[]>(`/api/executions/by-automation/${automationId}${qs({ limit })}`, signal),
+  listExecutionArtifacts: (id: string, signal?: AbortSignal) =>
+    api.get<ExecutionArtifactsResponse>(`/api/executions/${id}/artifacts`, signal),
+  /** `X-API-Key` viaja no header (via `getBlob`/`doFetch`) — um `<a download
+   *  href>` cru não manda esse header, então o download não pode ser um link
+   *  direto. O consumidor cria um Object URL a partir do Blob e clica nele. */
+  downloadExecutionArtifact: (execId: string, filename: string, signal?: AbortSignal) =>
+    api.getBlob(`/api/executions/${execId}/download${qs({ filename })}`, signal),
 
   // ── Sistema ──
   getHealth: (signal?: AbortSignal) => api.get<SystemHealth>("/api/system/health/full", signal),
