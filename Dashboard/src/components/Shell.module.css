@@ -18,7 +18,7 @@
   position: absolute;
   left: var(--sp-3);
   top: -48px;
-  z-index: 90;
+  z-index: var(--z-rail);
   background: var(--surface-up);
   border: 1px solid var(--cyan);
   border-radius: var(--radius);
@@ -161,7 +161,7 @@
     top: var(--brand-rail-h);
     bottom: 0;
     left: 0;
-    z-index: 50;
+    z-index: var(--z-rail-drawer);
     transform: translateX(-100%);
     transition: transform var(--dur) var(--ease);
     box-shadow: var(--shadow-pop);
@@ -179,7 +179,7 @@
     display: block;
     position: fixed;
     inset: var(--brand-rail-h) 0 0 0;
-    z-index: 40;
+    z-index: var(--z-rail-backdrop);
     background: rgba(7, 10, 13, 0.75);
   }
 }

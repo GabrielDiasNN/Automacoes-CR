@@ -111,6 +111,19 @@
   --ease:     cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 0.12s;
   --dur:      0.2s;
+
+  /* ── Empilhamento (z-index) ── */
+  --z-table-header:         1;
+  --z-autocomplete:         20;
+  --z-rail-backdrop:        40;
+  --z-rail-drawer:          50;
+  --z-drawer:               60;
+  --z-modal:                70;
+  --z-toast:                80;
+  --z-command-palette:      80;
+  --z-logviewer-fullscreen: 80;
+  --z-rail:                 90;
+  /* NOTA: Toast, CommandPalette e LogViewer-fullscreen empatam em 80 — bug latente de empilhamento (o Toast deveria vencer). NÃO resolver aqui: mudar o valor moveria pixel se algum dia se sobrepuserem, e o baseline não pega. Fica para a Onda 4. */
 }
 
 /* ── Reset / base ── */
