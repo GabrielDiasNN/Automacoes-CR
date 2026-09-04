@@ -87,7 +87,11 @@ function ClickableTile({ onClick, children }: ClickableTileProps) {
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
-        if (e.key === "Enter") onClick();
+        // Space ativa igual a Enter — mesmo contrato de um <button> real.
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
       }}
       style={{ cursor: "pointer" }}
     >

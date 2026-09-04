@@ -27,9 +27,17 @@ const INTERACTIVE_SELECTOR = "button, a[href], input, select, textarea, [role='b
  *  via `stopPropagation` manual no consumidor (ExecucoesPage); um usuário de
  *  teclado que confirmasse "Parar" com Enter também abria o drawer de
  *  detalhe da linha por baixo, numa ação destrutiva em produção (achado
- *  nº 6, Onda 1). Resolvido na origem — o consumidor não precisa lembrar. */
-function targetIsInteractive(target: EventTarget): boolean {
-  return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
+ *  nº 6, Onda 1). Resolvido na origem — o consumidor não precisa lembrar.
+ *
+ *  `boundary` (a própria `<tr>`, via `e.currentTarget`) é excluído do match:
+ *  a linha clicável agora tem `role="button"` (Onda 4-2, suporte a leitor de
+ *  tela), que também casa em `[role='button']` — sem excluir `boundary`, a
+ *  própria linha "detectava a si mesma" como controle aninhado e engolia
+ *  TODO clique silenciosamente. */
+function targetIsInteractive(target: EventTarget, boundary: Element): boolean {
+  if (!(target instanceof Element)) return false;
+  const hit = target.closest(INTERACTIVE_SELECTOR);
+  return hit !== null && hit !== boundary;
 }
 
 /** Tabela de dados de telemetria — header fixo, números tabulares. */
@@ -56,12 +64,16 @@ function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataT
           {rows.map((row) => {
             const tone = rowTone?.(row);
             const handleClick = (e: MouseEvent<HTMLTableRowElement>) => {
-              if (targetIsInteractive(e.target)) return;
+              if (targetIsInteractive(e.target, e.currentTarget)) return;
               onRowClick?.(row);
             };
             const handleKeyDown = (e: KeyboardEvent<HTMLTableRowElement>) => {
-              if (e.key !== "Enter") return;
-              if (targetIsInteractive(e.target)) return;
+              // Space ativa igual a Enter — mesmo contrato de um <button> real
+              // (antes só Enter funcionava; Space rolava a página em vez de
+              // ativar a linha).
+              if (e.key !== "Enter" && e.key !== " ") return;
+              if (targetIsInteractive(e.target, e.currentTarget)) return;
+              e.preventDefault();
               onRowClick?.(row);
             };
             return (
@@ -70,6 +82,7 @@ function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataT
                 className={onRowClick ? styles.clickable : undefined}
                 onClick={onRowClick ? handleClick : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
+                role={onRowClick ? "button" : undefined}
                 onKeyDown={onRowClick ? handleKeyDown : undefined}
                 style={tone ? { boxShadow: `inset 3px 0 0 ${tone}` } : undefined}
               >

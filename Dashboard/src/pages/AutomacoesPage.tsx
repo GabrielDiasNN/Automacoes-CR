@@ -414,7 +414,9 @@ export function AutomacoesPage() {
                       icon={<Zap size={13} />}
                       disabled={busy === a.id || !a.enabled || emExecucao}
                       title={emExecucao ? "Já há uma execução em andamento" : undefined}
-                      aria-label={`Disparar ${a.name}`}
+                      // O motivo de estar desabilitado só existia no `title`
+                      // (hover) — invisível a teclado/toque/leitor de tela.
+                      aria-label={emExecucao ? `Disparar ${a.name} — já há uma execução em andamento` : `Disparar ${a.name}`}
                       onClick={() => setConfirm({ id: a.id, name: a.name, kind: "dispatch" })}
                     >
                       Disparar

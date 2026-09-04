@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Search, Workflow } from "lucide-react";
@@ -31,6 +31,7 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
+  const listboxId = useId();
   const debouncedQuery = useDebouncedValue(query, 250);
   const buscaAtiva = open && debouncedQuery.trim().length >= 2;
 
@@ -121,6 +122,14 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
               }
             }}
             aria-label="Busca global"
+            // `aria-activedescendant` só faz sentido semanticamente num
+            // elemento com `role="combobox"` — sem isso o listbox abaixo não
+            // é anunciado como as opções de UM combobox controlado por este
+            // campo.
+            role="combobox"
+            aria-expanded={entries.length > 0}
+            aria-controls={listboxId}
+            aria-autocomplete="list"
             aria-activedescendant={entries[selected]?.key}
           />
           <kbd className={styles.kbd}>Esc</kbd>
@@ -131,9 +140,12 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
             {debouncedQuery.trim().length >= 2 ? "Nenhum resultado." : "Digite para buscar telas e automações."}
           </div>
         ) : (
-          <ul className={styles.list} role="listbox">
+          <ul className={styles.list} role="listbox" id={listboxId}>
             {entries.map((entry, i) => (
-              <li key={entry.key}>
+              // `role="presentation"`: sem isso o <li> injeta um `listitem`
+              // implícito entre o `listbox` e cada `option` — estrutura que
+              // nenhum leitor de tela espera dentro de um combobox.
+              <li key={entry.key} role="presentation">
                 <button
                   id={entry.key}
                   type="button"

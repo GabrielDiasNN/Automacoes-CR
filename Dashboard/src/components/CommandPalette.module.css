@@ -36,7 +36,8 @@
   min-width: 0;
   background: transparent;
   border: none;
-  outline: none;
+  /* SEM outline:none — o :focus-visible global (tokens.css) precisa aparecer
+   * aqui; era suprimido sem substituto (WCAG 2.4.7). */
   color: var(--text-hi);
   font-family: var(--font-sans);
   font-size: var(--fs-small);
