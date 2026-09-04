@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.75] - 04/09/2026
+
+Frontend rodada 2, Onda 6 — capacidades novas: leitura e controle que o backend já expõe, nada que escreva arquivo em produção. 8 dos 10 itens do plano; itens 9 (editor de cron) e 10 (busca de OB) adiados para a Onda 4, que restila `/automacoes` e `/beneficiamento` e regenera baseline de qualquer forma. Todas as telas novas ficam fora do conjunto de screenshot — os 4 baselines passam sem regeneração.
+
+### Adicionado
+
+- **`SystemPage`:** botão "Acordar worker" (sempre visível) e `ConfirmModal` no "Recuperar worker" (força-reseta estado — merece confirmação). Card de **controle de emergência** — "Pausar todas as automações" / "Retomar todas", cada um atrás de `ConfirmModal`; o E2E que valida **cancela**, nunca confirma (ação de alcance global em produção). Card **runtime** com versão/schema/contrato/Python e uptime do processo (o rodapé global fica para a Onda 4, que mexe no chrome compartilhado). Card de **drift de portfólio**. Card de **trilha de auditoria** (`GET /system/audit`, teto configurável — não é paginação real, o backend não pagina).
+- **Drawer de execução:** **log ao vivo** via `WS /ws/logs/{exec_id}` enquanto a execução está `RUNNING` (o WS manda texto puro, não JSON — diferente do `/ws/events`; replay do histórico + append incremental). Indicador "ao vivo" no cabeçalho. **Artefatos + download**: `<a download href>` não manda o header `X-API-Key`, então o download é via `fetch` → `Blob` → `URL.createObjectURL` → clique sintético. **Timeline** "outras execuções desta automação", clicável (troca o alvo do drawer sem fechá-lo).
+- **Corrigido o bug de navegação do Painel:** clicar numa execução recente jogava o operador em `/execucoes` sem abrir o que ele clicou (`ex.id` descartado no `onClick`). Agora navega para `/execucoes?exec_id=...`, que a página lê no mount e abre o drawer certo.
+- Contract tests (MSW) + fixtures reais (capturadas da instância viva) para `getVersion`, `getUptime`, `getDrift`, `listExecutionsByAutomation`, `getAuditLog`; fixture sintética documentada para `listExecutionArtifacts` (artefatos variam por automação). 5 E2E novos, todos fora do conjunto de screenshot.
+
+### Observado (não corrigido nesta rodada)
+
+- Checklist "nenhum método de `orchestratorApi` sem chamador": 35/45 cobertos. 3 dos 10 restantes são redundância por desenho (dado já embutido em `getOverview()`). **7 são lacunas de UI genuínas** — `getAutomation`/`getAutomationOverview` (sem drawer de detalhe de automação), `getBeneficiamentoDashboard`, `getExecutionLogs` (paginação), `getScheduledJobs`, `setAutomationTestMode`/`setGlobalTestMode` (toggle de sandbox sem UI — mesma classe de risco do pause-all). Registrado para decisão futura.
+
 ## [1.3.74] - 03/09/2026
 
 Frontend rodada 2, Onda 5 — performance de render. Invisível: os 4 baselines de screenshot passam sem regeneração; zero mudança de comportamento visível (verificado por oráculo E2E + revisor independente).
