@@ -35,8 +35,9 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 ### Onda 6 — Capacidades novas (branch `escalar/frontend-rodada2-onda6`, de onda5)
 - [x] **6-A** `03dfa4a`→`c65e0e2` — worker wakeup + confirm no recover, card emergência pausar/retomar tudo (ConfirmModal, E2E cancela), card runtime versão/uptime, card drift de portfólio. **VERIFICADO:** 176 testes, **15/15 E2E** (3 novos: worker_actions, pause_all_confirm_and_cancel, drift_card), 4 screenshots sem regenerar.
-- [ ] 6-B — log ao vivo no drawer (WS), artefatos+download, timeline por automação + fix do bug de nav do Painel (item 6)
-- [ ] 6-C — trilha de auditoria, editor de cron+preview, busca de OB (itens 7, 9, 10 — 9 e 10 tocam telas de screenshot, avaliar posicionamento)
+- [x] **6-B** `37a76a1`→`6dae336` — log ao vivo no drawer (WS `/ws/logs/{exec_id}`, texto puro), artefatos+download (fetch-blob, `<a href>` cru não manda X-API-Key), timeline "outras execuções desta automação", fix do bug de nav do Painel (`ex.id` descartado). **VERIFICADO:** 178 testes, **16/16 E2E** (novo: clicar em execução recente abre o drawer certo), 4 screenshots sem regenerar.
+- [ ] 6-C — trilha de auditoria (item 7, SystemPage, fora do baseline)
+- **Decisão:** itens 9 (editor de cron+preview) e 10 (busca de OB) adicionariam elemento visível novo às telas `/automacoes` e `/beneficiamento` — que SÃO screenshot. **Adiados para a Onda 4**, que já restila essas duas telas e regenera os baselines.
 - **Onda 3 gates (todos ✓):** z-index literal = 0 · `--graphite-` fora de `src/styles/` = 0 · hex/rgba fora de `src/styles/` = 0 (`chartPalette.ts` + `tokens.css` concentram tudo).
 - **Verificação Onda 2:** lint 0/0 · typecheck 0 · 152 vitest · coverage exit 0 · bundle `index` 22,5 KB gzip (uplot separado) · **12/12 E2E, 4 screenshots sem regenerar** · **req/min em `/painel` parado: 18 → 6** (meta ≤ 8) · `useDiagnostics` 0% → 100% com teste de corrida
 
