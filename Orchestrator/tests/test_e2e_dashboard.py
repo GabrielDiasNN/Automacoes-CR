@@ -395,6 +395,27 @@ def _count_executions() -> int:
         engine.dispose()
 
 
+def _count_enabled_automations() -> int:
+    """Conta automações com `enabled=True` no banco de teste isolado."""
+    engine = create_engine(
+        f"sqlite:///{TEST_DB_PATH.as_posix()}",
+        connect_args={"check_same_thread": False},
+        poolclass=NullPool,
+    )
+    try:
+        session = sessionmaker(bind=engine)()
+        try:
+            return (
+                session.query(models.Automation)
+                .filter(models.Automation.enabled.is_(True))
+                .count()
+            )
+        finally:
+            session.close()
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.e2e
 def test_e2e_dashboard_automations_dispatch_confirm_and_cancel(
     uvicorn_server: str, page: Any
@@ -437,6 +458,75 @@ def test_e2e_dashboard_system_instruments(uvicorn_server: str, page: Any) -> Non
     page.wait_for_selector("text=CPU")
     page.wait_for_selector("text=RAM")
     assert page.get_by_role("button", name="WAL Checkpoint").is_visible()
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_system_worker_actions(uvicorn_server: str, page: Any) -> None:
+    """O card do Worker em /sistema expõe "Acordar worker" (wake-up idempotente e benigno).
+
+    Onda 6: só cutuca o worker a checar a fila agora — sem ConfirmModal, pode
+    clicar. Confirma que o toast de sucesso aparece.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+
+    botao = page.get_by_role("button", name="Acordar worker")
+    botao.wait_for(timeout=15_000)
+    assert botao.is_visible()
+
+    botao.click()
+    # `wakeupWorker` responde {"message": "Sinal de wake-up enviado ao worker."}
+    # e `useAction` mostra essa mensagem no toast.
+    page.wait_for_selector("text=Sinal de wake-up enviado ao worker", timeout=10_000)
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_pause_all_confirm_and_cancel(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Pausar tudo exige ConfirmModal; CANCELAR não toca em nenhuma automação.
+
+    Ação de alcance global em produção — este E2E cancela, NUNCA confirma
+    (espelha test_e2e_dashboard_automations_dispatch_confirm_and_cancel).
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+    page.wait_for_selector("text=controle de emergência")
+
+    ativos_antes = _count_enabled_automations()
+
+    page.get_by_role("button", name="Pausar todas as automações").click()
+    dialog = page.get_by_role("alertdialog")
+    dialog.wait_for(timeout=10_000)
+    page.get_by_role("heading", name="Pausar todas as automações").wait_for(
+        timeout=5_000
+    )
+
+    page.get_by_role("button", name="Cancelar").click()
+    dialog.wait_for(state="hidden", timeout=5_000)
+
+    ativos_depois = _count_enabled_automations()
+    assert ativos_depois == ativos_antes, (
+        f"Cancelar 'Pausar tudo' não deve desativar nenhuma automação — "
+        f"antes={ativos_antes} depois={ativos_depois}"
+    )
+
+
+@pytest.mark.e2e
+def test_e2e_dashboard_system_drift_card(uvicorn_server: str, page: Any) -> None:
+    """A tela de Sistema mostra o card de drift de portfólio (Onda 6)."""
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+
+    page.wait_for_selector("text=drift de portfólio", timeout=15_000)
+    # O corpo do card é ou o empty state ("Catálogo consistente...") ou a lista
+    # de itens em drift — depende do estado do catálogo semeado, não força um
+    # dos dois. O card existir é o contrato deste teste.
+    card = page.get_by_text("drift de portfólio")
+    assert card.first.is_visible()
 
 
 @pytest.mark.e2e
