@@ -26,8 +26,16 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 - **Ondas 1, 2, 3, 5, 6:** ✅ VERIFICADAS E FECHADAS (ver seções abaixo). Branches encadeadas: onda1 → onda2 → onda3 → onda5 → onda6 → **onda4** (atual). `git push` BLOQUEADO pelo classificador do harness — usuário precisa pushar ou liberar a permissão (lembrete registrado como task chip).
 - **Onda 4 EM PROGRESSO**, dividida em 3 fases (checkpoint de paleta do plano exige aprovação humana antes de tocar componente com cor nova):
   - **4-1 ✅ FECHADA E VERIFICADA** — consolidação estrutural (item "3D"), byte-idêntica, executada direto pelo orquestrador (sem subagente) após o executor anterior bater rate-limit de sessão (working tree ficou limpo, nada perdido; `SendMessage` não está mais disponível nesta sessão para retomar agentes antigos).
-  - **4-2** (próxima): a11y restante, responsivo, fontes self-hosted, breakpoint único (gate `@media`).
+  - **4-2 EM PROGRESSO** — a11y restante, responsivo, fontes self-hosted, breakpoint único (gate `@media`).
   - **4-3** (por último, aguardando aprovação do usuário): paleta/tipografia nova — proposta apresentada antes de tocar componente.
+
+### Onda 4-2 — a11y remanescente, responsivo, fontes, breakpoint único (branch `escalar/frontend-rodada2-onda4`, de 4-1)
+- [x] a11y `e16a337` (parte 1) — Toast (role duplicado + WCAG 2.2.1 pausa no hover), ConfirmModal (`aria-labelledby`), CommandPalette (`role="combobox"` + listbox correto + outline), ApiKeyGate (outline), DataTable/ClickableTile (Space além de Enter), AutomacoesPage (`aria-label` no motivo de desabilitado). Investigado sem violação real: "zero `<label>`" (todo input já tem `aria-label`) e "`title=` em 41 lugares" (maioria é prop de componente que vira `<h3>` visível, não o atributo HTML).
+- [x] responsivo `c5c514f` — topbar cortava (não só apertava) abaixo de 400px; breakpoint `xnarrow` novo em `breakpoints.ts`, decisão de `postcss-custom-media` registrada como fora de escopo (comentário no arquivo).
+- [x] responsivo `3a80981` — grid de `/automacoes` (`minmax(340px)` sem media query) estourava a página inteira na horizontal abaixo de ~372px; colapsa para 1 coluna no breakpoint `narrow` (560px). Investigado sem alteração: `Mimico` já contém seu overflow num scroll interno próprio (`overflow-x: auto` do componente) — não vaza pra página, padrão correto.
+- [ ] fontes self-hosted (IBM Plex Sans/Sans Condensed/Mono, `tokens.css:7` hoje é `@import` do Google Fonts) — **bloqueado em pedido de permissão ao usuário** (baixar arquivos de fonte é ação que exige confirmação explícita).
+- [ ] gate `@media` px cru fora de `breakpoints.ts` (decisão já tomada: espelho + comentário, sem derivação real) — falta rodar o grep de fechamento depois do item de fontes.
+- [ ] verificação final da 4-2 (lint/typecheck/coverage/build/E2E consolidados) + CHANGELOG.
 
 ### Onda 4-1 — consolidação estrutural (branch `escalar/frontend-rodada2-onda4`, de onda6)
 8 itens do plano (A-H), cada commit verificado com o oráculo (build+E2E, 4 screenshots sem regenerar) — 4 rodadas de verificação, todas 17/17 E2E:
