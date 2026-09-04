@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { memo, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useTableDensity } from "../../context/TableDensityContext";
 import styles from "./DataTable.module.css";
 
@@ -33,7 +33,7 @@ function targetIsInteractive(target: EventTarget): boolean {
 }
 
 /** Tabela de dados de telemetria — header fixo, números tabulares. */
-export function DataTable<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataTableProps<T>) {
+function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataTableProps<T>) {
   const { density } = useTableDensity();
   return (
     <div className={styles.scroll}>
@@ -90,3 +90,10 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, rowTone }: Dat
     </div>
   );
 }
+
+/** `React.memo` — a página de Execuções faz polling a cada 8s e Beneficiamento
+ *  re-renderiza a cada tecla na busca; sem memo cada tick reconstruía todas as
+ *  linhas. O cast preserva a assinatura genérica que `memo()` apaga — exige que
+ *  os consumidores passem `columns`/`rows`/`rowKey`/`onRowClick`/`rowTone`
+ *  referencialmente estáveis (useMemo/useCallback), senão o memo é teatro. */
+export const DataTable = memo(DataTableInner) as typeof DataTableInner;

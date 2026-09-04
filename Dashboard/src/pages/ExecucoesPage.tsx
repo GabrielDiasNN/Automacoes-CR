@@ -230,6 +230,17 @@ export function ExecucoesPage() {
     [doRequeue],
   );
 
+  // Props estáveis para o <DataTable memo> — sem isso, o polling de 8s
+  // reconstruía linha e handlers a cada tick e o memo não segurava nada.
+  const rows = useMemo(() => data?.items ?? [], [data]);
+  const rowKey = useCallback((r: ExecutionSummary) => r.id, []);
+  const openDetail = useCallback((r: ExecutionSummary) => setSelectedId(r.id), []);
+  const rowTone = useCallback(
+    (r: ExecutionSummary) =>
+      r.operator_attention_required ? toneVar[severityTone(r.operator_severity)] : undefined,
+    [],
+  );
+
   const totalPages = data?.pages ?? 1;
 
   return (
@@ -299,10 +310,10 @@ export function ExecucoesPage() {
         ) : (
           <DataTable
             columns={columns}
-            rows={data?.items ?? []}
-            rowKey={(r) => r.id}
-            onRowClick={(r) => setSelectedId(r.id)}
-            rowTone={(r) => (r.operator_attention_required ? toneVar[severityTone(r.operator_severity)] : undefined)}
+            rows={rows}
+            rowKey={rowKey}
+            onRowClick={openDetail}
+            rowTone={rowTone}
           />
         )}
       </Card>

@@ -87,6 +87,9 @@ const RECORD_COLUMNS: Column<BeneficiamentoDetailRecord>[] = [
   { key: "reprocesso", header: "Reproc.", align: "center", render: (r) => (r.reprocesso ? "sim" : "não") },
 ];
 
+/** Estável (fora do componente) p/ o <DataTable memo> não re-renderizar. */
+const recordRowKey = (r: BeneficiamentoDetailRecord) => `${r.ob}-${r.seq}`;
+
 const TRACE_COLUMNS: Column<BeneficiamentoTraceFase>[] = [
   { key: "seq", header: "Seq", render: (f) => f.seq },
   { key: "data_fim", header: "Fim", render: (f) => formatDateTimeBr(f.data_fim) },
@@ -192,7 +195,7 @@ export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerP
             <EmptyState icon={<Factory size={20} />} title="Sem registros" hint="Ajuste os filtros para ver o detalhe." />
           ) : (
             <Card padded={false}>
-              <DataTable columns={RECORD_COLUMNS} rows={visibleData.records} rowKey={(r) => `${r.ob}-${r.seq}`} />
+              <DataTable columns={RECORD_COLUMNS} rows={visibleData.records} rowKey={recordRowKey} />
             </Card>
           )}
 
