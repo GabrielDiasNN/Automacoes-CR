@@ -32,6 +32,11 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 - [x] 5-1b `d4f5d5a` — ressalvas fechadas (hint inline → useMemo, teto do buffer rAF, controle do teste TimeSeries)
 - [x] 5-2 `872b905`+`e8b293a` — console do Monitor virtualizado (`src/lib/virtualWindow.ts` pura + `computeWindow`; `pre-wrap` mantido, estado vazio idêntico). **VERIFICADO:** 172 testes, 12/12 E2E incl. screenshot do Monitor sem regenerar.
 - **Onda 5 FECHADA E VERIFICADA.** Bundle `index` 22,73 KB gzip (inalterado).
+
+### Onda 6 — Capacidades novas (branch `escalar/frontend-rodada2-onda6`, de onda5)
+- [x] **6-A** `03dfa4a`→`c65e0e2` — worker wakeup + confirm no recover, card emergência pausar/retomar tudo (ConfirmModal, E2E cancela), card runtime versão/uptime, card drift de portfólio. **VERIFICADO:** 176 testes, **15/15 E2E** (3 novos: worker_actions, pause_all_confirm_and_cancel, drift_card), 4 screenshots sem regenerar.
+- [ ] 6-B — log ao vivo no drawer (WS), artefatos+download, timeline por automação + fix do bug de nav do Painel (item 6)
+- [ ] 6-C — trilha de auditoria, editor de cron+preview, busca de OB (itens 7, 9, 10 — 9 e 10 tocam telas de screenshot, avaliar posicionamento)
 - **Onda 3 gates (todos ✓):** z-index literal = 0 · `--graphite-` fora de `src/styles/` = 0 · hex/rgba fora de `src/styles/` = 0 (`chartPalette.ts` + `tokens.css` concentram tudo).
 - **Verificação Onda 2:** lint 0/0 · typecheck 0 · 152 vitest · coverage exit 0 · bundle `index` 22,5 KB gzip (uplot separado) · **12/12 E2E, 4 screenshots sem regenerar** · **req/min em `/painel` parado: 18 → 6** (meta ≤ 8) · `useDiagnostics` 0% → 100% com teste de corrida
 
