@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DatabaseZap, RefreshCw, Trash2, LifeBuoy, RefreshCcw } from "lucide-react";
+import { BellRing, DatabaseZap, RefreshCw, Trash2, LifeBuoy, RefreshCcw } from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
 import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi } from "../api/orchestrator";
@@ -38,6 +38,7 @@ export function SystemPage() {
     lastUpdated: historyUpdated,
   } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
+  const [confirmRecover, setConfirmRecover] = useState(false);
   const { busyKey: busy, run } = useAction<string>();
 
   const chart = useMemo(() => {
@@ -175,16 +176,32 @@ export function SystemPage() {
               <KeyValue k="Ativas" v={String(worker.active_tasks)} />
               <KeyValue k="Versão" v={worker.version} />
             </DescriptionList>
-            {!worker.is_alive && (
+            <div className={page.toolbar}>
               <Button
-                variant="primary"
-                icon={<LifeBuoy size={13} />}
-                disabled={busy === "recover"}
-                onClick={() => void run("recover", orchestratorApi.recoverWorker, { onDone: refresh, invalidate: "overview" })}
+                variant="ghost"
+                size="sm"
+                icon={<BellRing size={13} />}
+                disabled={busy === "wakeup"}
+                // Benigno: só cutuca o worker a checar a fila agora. Idempotente,
+                // sem ConfirmModal.
+                onClick={() =>
+                  void run("wakeup", orchestratorApi.wakeupWorker, { onDone: refresh, invalidate: "overview" })
+                }
               >
-                Recuperar worker
+                Acordar worker
               </Button>
-            )}
+              {!worker.is_alive && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<LifeBuoy size={13} />}
+                  disabled={busy === "recover"}
+                  onClick={() => setConfirmRecover(true)}
+                >
+                  Recuperar worker
+                </Button>
+              )}
+            </div>
           </div>
         </Card>
       </div>
@@ -234,6 +251,19 @@ export function SystemPage() {
           void run("purge", orchestratorApi.runPurge, { onDone: refresh, invalidate: "overview" });
         }}
         onCancel={() => setConfirmPurge(false)}
+      />
+
+      <ConfirmModal
+        open={confirmRecover}
+        title="Recuperar worker"
+        message="Recuperar o worker force-reseta o estado de execução do processo (relança a recuperação canônica do Orchestrator). Confirmar?"
+        confirmLabel="Recuperar worker"
+        danger
+        onConfirm={() => {
+          setConfirmRecover(false);
+          void run("recover", orchestratorApi.recoverWorker, { onDone: refresh, invalidate: "overview" });
+        }}
+        onCancel={() => setConfirmRecover(false)}
       />
     </div>
   );
