@@ -16,14 +16,37 @@ interface TimeSeriesProps {
   height?: number;
 }
 
-const CSS_TONE: Record<Tone, string> = {
-  cyan: "#38C5C9",
-  amber: "#E8A317",
-  green: "#3FB950",
-  red: "#F0524D",
-  blue: "#4C8DF6",
-  grey: "#7C8A9C",
-};
+type ToneColors = Record<Tone, string>;
+
+/** Espelho JS dos tokens de cor — o canvas do uPlot desenha em <canvas> e não
+ *  resolve `var(--x)`, então as cores precisam ser strings concretas. Lidas de
+ *  `tokens.css` via getComputedStyle a cada recriação do gráfico (assim a troca
+ *  de tema da Onda 4 é pega). Se o `:root` ainda não tiver as vars (ex.: teste
+ *  em jsdom sem CSS), cai nos hex de fallback — MESMOS valores dos tokens. */
+function readPalette(): { tones: ToneColors; axis: string; grid: string } {
+  const FALLBACK: ToneColors = {
+    cyan: "#38C5C9",
+    amber: "#E8A317",
+    green: "#3FB950",
+    red: "#F0524D",
+    blue: "#4C8DF6",
+    grey: "#7C8A9C",
+  };
+  if (typeof window === "undefined" || !document?.documentElement) {
+    return { tones: FALLBACK, axis: FALLBACK.grey, grid: "#29333E" };
+  }
+  const cs = getComputedStyle(document.documentElement);
+  const read = (name: string, fb: string) => cs.getPropertyValue(name).trim() || fb;
+  const tones: ToneColors = {
+    cyan: read("--cyan", FALLBACK.cyan),
+    amber: read("--amber", FALLBACK.amber),
+    green: read("--green", FALLBACK.green),
+    red: read("--red", FALLBACK.red),
+    blue: read("--blue", FALLBACK.blue),
+    grey: read("--grey", FALLBACK.grey),
+  };
+  return { tones, axis: tones.grey, grid: read("--graphite-700", "#29333E") };
+}
 
 function toData(xLabels: string[], lines: SeriesLine[]): uPlot.AlignedData {
   return [xLabels.map((_, i) => i), ...lines.map((l) => l.values.map((v) => (v == null ? null : v)))];
@@ -55,6 +78,8 @@ export function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
     const el = ref.current;
     if (!el) return;
 
+    const palette = readPalette();
+
     const opts: uPlot.Options = {
       width: el.clientWidth || 600,
       height,
@@ -64,16 +89,16 @@ export function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
       scales: { x: { time: false } },
       axes: [
         {
-          stroke: "#7C8A9C",
-          grid: { stroke: "#29333E", width: 1 },
-          ticks: { stroke: "#29333E", width: 1 },
+          stroke: palette.axis,
+          grid: { stroke: palette.grid, width: 1 },
+          ticks: { stroke: palette.grid, width: 1 },
           font: "10px 'IBM Plex Mono', monospace",
           values: (_u, vals) => vals.map((i) => xLabels[i] ?? ""),
         },
         {
-          stroke: "#7C8A9C",
-          grid: { stroke: "#29333E", width: 1 },
-          ticks: { stroke: "#29333E", width: 1 },
+          stroke: palette.axis,
+          grid: { stroke: palette.grid, width: 1 },
+          ticks: { stroke: palette.grid, width: 1 },
           font: "10px 'IBM Plex Mono', monospace",
           size: 38,
         },
@@ -82,9 +107,9 @@ export function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
         {},
         ...lines.map((l) => ({
           label: l.label,
-          stroke: CSS_TONE[l.tone] ?? toneVar[l.tone],
+          stroke: palette.tones[l.tone],
           width: 1.75,
-          fill: `${CSS_TONE[l.tone]}1f`,
+          fill: `${palette.tones[l.tone]}1f`,
           points: { show: false },
         })),
       ],
@@ -122,7 +147,7 @@ export function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
       <div className={styles.legend} aria-hidden="true">
         {lines.map((l) => (
           <span key={l.label} className={styles.item}>
-            <span className={styles.swatch} style={{ background: CSS_TONE[l.tone] ?? toneVar[l.tone] }} />
+            <span className={styles.swatch} style={{ background: toneVar[l.tone] }} />
             {l.label}
           </span>
         ))}
