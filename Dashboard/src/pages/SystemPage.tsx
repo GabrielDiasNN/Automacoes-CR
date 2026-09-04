@@ -37,6 +37,11 @@ export function SystemPage() {
     error: historyError,
     lastUpdated: historyUpdated,
   } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
+  // Versão/uptime do processo Orchestrator (não do worker). Polling longo — o
+  // rodapé global de versão fica para a Onda 4 (mudaria o chrome das 4 telas
+  // de baseline de screenshot).
+  const { data: version } = usePolling(orchestratorApi.getVersion, 60_000);
+  const { data: orchestratorUptime } = usePolling(orchestratorApi.getUptime, 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
   const [confirmRecover, setConfirmRecover] = useState(false);
   const [confirmEmergency, setConfirmEmergency] = useState<"pause" | "resume" | null>(null);
@@ -206,6 +211,22 @@ export function SystemPage() {
           </div>
         </Card>
       </div>
+
+      {/* Runtime (versão/uptime do processo Orchestrator) */}
+      <Card label="runtime">
+        <DescriptionList>
+          <KeyValue k="Versão" v={version?.version ?? "—"} />
+          <KeyValue k="Schema" v={version?.schema_version ?? "—"} />
+          <KeyValue k="Contrato" v={version?.contract_version ?? "—"} />
+          <KeyValue k="Python" v={version?.python_version ?? "—"} />
+          <KeyValue
+            k="Uptime"
+            v={orchestratorUptime?.uptime_human ?? (version ? formatAge(version.uptime_seconds) : "—")}
+          />
+          <KeyValue k="Iniciado" v={version?.started_at ?? "—"} />
+          <KeyValue k="Workers" v={version ? String(version.max_workers) : "—"} />
+        </DescriptionList>
+      </Card>
 
       {/* Portfólio */}
       {portfolio && (
