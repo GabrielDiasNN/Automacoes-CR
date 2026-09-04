@@ -50,6 +50,14 @@ def _inject_api_key(page: Any) -> None:
     )
 
 
+def _inject_theme(page: Any, theme: str) -> None:
+    """Força o ThemeContext (Onda 4-3) a montar num tema explícito, antes do
+    bundle React executar — mesmo mecanismo de `_inject_api_key`."""
+    page.add_init_script(
+        f"window.localStorage.setItem('orchestrator_theme', {json.dumps(theme)});"
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_database() -> Generator[None, None, None]:
     """Cria e popula o banco de dados SQLite de teste antes de subir o servidor."""
@@ -729,6 +737,12 @@ def test_screenshot_dashboard_overview_estado_healthy(
     uvicorn_server: str, page: Any
 ) -> None:
     _inject_api_key(page)
+    # Explícito (Onda 4-3): antes do ThemeContext existir, qualquer color-scheme
+    # do runner renderizava o único tema que havia. Agora "system" (sem injeção)
+    # resolveria pelo @media do browser — no Playwright, tipicamente "light" —
+    # e faria ESTE baseline (capturado no escuro) divergir ~100%, não por regressão
+    # real, só por depender de um padrão ambiental não determinístico.
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/painel")
     page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
     page.wait_for_selector("text=automações ativas", timeout=15_000)
@@ -738,6 +752,7 @@ def test_screenshot_dashboard_overview_estado_healthy(
 @pytest.mark.e2e
 def test_screenshot_diagnostics_com_findings(uvicorn_server: str, page: Any) -> None:
     _inject_api_key(page)
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/monitor")
     page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
     _assert_matches_baseline(page, "dashboard_monitor")
@@ -746,8 +761,12 @@ def test_screenshot_diagnostics_com_findings(uvicorn_server: str, page: Any) -> 
 @pytest.mark.e2e
 def test_screenshot_automacoes_lista(uvicorn_server: str, page: Any) -> None:
     _inject_api_key(page)
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/automacoes")
     page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    # O heading aparece antes dos cards — sem isto o screenshot pode pegar o
+    # skeleton em vez do conteúdo carregado (achado ao gerar o baseline claro).
+    page.wait_for_selector("text=sucesso / falha 24h", timeout=15_000)
     _assert_matches_baseline(page, "dashboard_automacoes")
 
 
@@ -756,7 +775,61 @@ def test_screenshot_beneficiamento_kpi_carregado(
     uvicorn_server: str, page: Any
 ) -> None:
     _inject_api_key(page)
+    _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
     page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
     _assert_matches_baseline(page, "dashboard_beneficiamento_kpi")
+
+
+# ---------------------------------------------------------------------------
+# Regressão visual — tema claro (Onda 4-3). Mesmas 4 telas, mesmo mecanismo de
+# `_assert_matches_baseline`, só forçando `data-theme="light"` via
+# `_inject_theme` antes do bundle montar. Baselines em arquivo separado
+# (sufixo `_light`) — os 4 escuros acima continuam intocados.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.e2e
+def test_screenshot_dashboard_overview_estado_healthy_light(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/painel")
+    page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
+    page.wait_for_selector("text=automações ativas", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_painel_healthy_light")
+
+
+@pytest.mark.e2e
+def test_screenshot_diagnostics_com_findings_light(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/monitor")
+    page.get_by_role("heading", name="Monitor").wait_for(timeout=30_000)
+    _assert_matches_baseline(page, "dashboard_monitor_light")
+
+
+@pytest.mark.e2e
+def test_screenshot_automacoes_lista_light(uvicorn_server: str, page: Any) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/automacoes")
+    page.get_by_role("heading", name="Automações").wait_for(timeout=30_000)
+    page.wait_for_selector("text=sucesso / falha 24h", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_automacoes_light")
+
+
+@pytest.mark.e2e
+def test_screenshot_beneficiamento_kpi_carregado_light(
+    uvicorn_server: str, page: Any
+) -> None:
+    _inject_api_key(page)
+    _inject_theme(page, "light")
+    page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
+    page.get_by_role("heading", name="Beneficiamento").wait_for(timeout=30_000)
+    page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
+    _assert_matches_baseline(page, "dashboard_beneficiamento_kpi_light")
