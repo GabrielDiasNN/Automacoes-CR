@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   BellRing,
   DatabaseZap,
   GitCompareArrows,
+  History,
   PauseCircle,
   PlayCircle,
   RefreshCw,
@@ -12,13 +13,14 @@ import {
 } from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
 import { writeCache } from "../lib/resourceCache";
-import { orchestratorApi } from "../api/orchestrator";
+import { orchestratorApi, type AuditEntry } from "../api/orchestrator";
 import {
   Annunciator,
   AnnunciatorGrid,
   Button,
   Card,
   ConfirmModal,
+  DataTable,
   DescriptionList,
   EmptyState,
   ErrorState,
@@ -27,14 +29,87 @@ import {
   KeyValue,
   Loading,
   Nameplate,
+  Select,
   StatTile,
   StatusTag,
+  type Column,
 } from "../components/ui";
 import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import { useAction } from "../hooks/useAction";
 import { healthTone, healthLabel } from "../lib/status";
 import { extractTimeBr, formatAge } from "../lib/format";
 import page from "./page.module.css";
+
+// Estático (nenhuma closure sobre estado do componente) — referência estável
+// para o <DataTable memo>, mesmo padrão de *_COLUMNS em BeneficiamentoPage.
+const AUDIT_COLUMNS: Column<AuditEntry>[] = [
+  {
+    key: "timestamp",
+    header: "Quando",
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-mid)", whiteSpace: "nowrap" }}>
+        {r.timestamp}
+      </span>
+    ),
+  },
+  {
+    key: "action",
+    header: "Ação",
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-hi)" }}>{r.action}</span>
+    ),
+  },
+  {
+    key: "entity",
+    header: "Entidade",
+    hideOnNarrow: true,
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-mid)" }}>
+        {r.entity_type.toLowerCase()}
+        {r.entity_id ? `#${r.entity_id}` : ""}
+      </span>
+    ),
+  },
+  {
+    key: "actor",
+    header: "Quem",
+    hideOnNarrow: true,
+    render: (r) => (
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-label)", color: "var(--text-mid)" }}>
+        {r.actor ?? "sistema"}
+      </span>
+    ),
+  },
+  {
+    key: "details",
+    header: "Detalhes",
+    render: (r) =>
+      r.details ? (
+        // JSON serializado pelo backend — exibido cru como texto, truncado
+        // (title carrega o valor completo pro hover).
+        <span
+          title={r.details}
+          style={{
+            display: "inline-block",
+            maxWidth: 320,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontSize: "var(--fs-small)",
+            color: "var(--text-lo)",
+            verticalAlign: "bottom",
+          }}
+        >
+          {r.details}
+        </span>
+      ) : (
+        <span style={{ color: "var(--text-lo)" }}>—</span>
+      ),
+  },
+];
+
+const AUDIT_LIMIT_OPTIONS = [50, 100, 200];
+const AUDIT_ROW_KEY = (r: AuditEntry) => String(r.id);
 
 export function SystemPage() {
   const { data, loading, error, refresh, lastUpdated, rateLimitedUntil, refreshQueued } = usePolling(
@@ -58,6 +133,20 @@ export function SystemPage() {
     error: driftError,
     lastUpdated: driftUpdated,
   } = usePolling(orchestratorApi.getDrift, 60_000);
+  // Teto crescente (50/100/200), NÃO paginação real — o backend não pagina
+  // /api/system/audit, só aceita `limit` (1-500) + filtro opcional `action`
+  // (sem UI de filtro ainda; exposto no client para uso futuro).
+  const [auditLimit, setAuditLimit] = useState(50);
+  const fetchAuditLog = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getAuditLog({ limit: auditLimit }, signal),
+    [auditLimit],
+  );
+  const {
+    data: auditLog,
+    error: auditError,
+    lastUpdated: auditUpdated,
+  } = usePolling(fetchAuditLog, 60_000, [auditLimit]);
+  const auditRows = useMemo(() => auditLog ?? [], [auditLog]);
   const [confirmPurge, setConfirmPurge] = useState(false);
   const [confirmRecover, setConfirmRecover] = useState(false);
   const [confirmEmergency, setConfirmEmergency] = useState<"pause" | "resume" | null>(null);
@@ -311,6 +400,38 @@ export function SystemPage() {
           )}
         </Card>
       )}
+
+      {/* Trilha de auditoria */}
+      <Card
+        label="trilha de auditoria"
+        padded={auditRows.length === 0}
+        actions={
+          <div className={page.toolbar}>
+            <FreshnessTag lastUpdated={auditUpdated} error={auditLog && auditError ? auditError : null} />
+            <Select
+              value={auditLimit}
+              onChange={(e) => setAuditLimit(Number(e.target.value))}
+              aria-label="Teto de entradas da trilha de auditoria"
+            >
+              {AUDIT_LIMIT_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  últimas {n}
+                </option>
+              ))}
+            </Select>
+          </div>
+        }
+      >
+        {auditRows.length === 0 ? (
+          <EmptyState
+            icon={<History size={20} />}
+            title="nenhum evento de auditoria registrado ainda"
+            hint="Ações administrativas (disparo, pausa, purge, recuperação de worker...) aparecem aqui."
+          />
+        ) : (
+          <DataTable columns={AUDIT_COLUMNS} rows={auditRows} rowKey={AUDIT_ROW_KEY} />
+        )}
+      </Card>
 
       {/* Controle de emergência (alcance global) */}
       <Card label="controle de emergência" alert>
