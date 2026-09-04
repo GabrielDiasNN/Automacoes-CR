@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.78] - 04/09/2026
+
+Frontend rodada 2, Onda 4-3 — tema claro, `ThemeContext` e auditoria de acessibilidade automatizada. Fecha a Onda 4 (e a rodada 2 inteira: Ondas 1–6 todas verificadas). Paleta aprovada pelo usuário via proposta publicada como Artifact antes de qualquer commit em componente (checkpoint humano do plano).
+
+### Adicionado
+
+- **Tema claro real** (`tokens.css`): `[data-theme="light"]` + espelho em `@media (prefers-color-scheme: light)` redefinem só a camada semântica (superfícies, texto, sinais, sombras, bevel) — o escuro (`:root`) não muda um valor. Não é o escuro invertido: mantém a inclinação azul-acinzentada do grafite; os 6 sinais foram recalculados preservando matiz/saturação, escurecidos até bater ≥4,5:1 mesmo contra o próprio tint (`StatusTag` usa a mesma cor como texto e fundo). `--scrim-color` fica igual nos dois temas de propósito.
+- **`ThemeContext`** (`system|light|dark`, padrão `system`, mesmo mecanismo do `TableDensityContext`): botão novo no topbar, ao lado do de densidade.
+- **Auditoria de acessibilidade automatizada** (axe-core, rodando no DOM real via Playwright — não RTL/jsdom, decisão já registrada no CLAUDE.md) em 4 telas (Painel, Automações, Monitor, Beneficiamento), bloqueante em violações `serious`/`critical`.
+
+### Corrigido
+
+- **`Annunciator`:** `.off { opacity: 0.7 }` amassava o contraste de texto que já roda no piso AA — falhava nos dois temas (achado pela auditoria nova, não é regressão do tema claro). "Apagado" já é comunicado pela lâmpada; texto não precisa ficar ilegível.
+- **`DataTable`:** região de scroll horizontal não era alcançável por teclado — `tabIndex`+`role="region"`.
+- **`AutomacoesPage`:** `<dl>` com filho `<div>` fora do par `dt`/`dd` válido.
+- **`chartPalette.ts`:** grid do uPlot lia `--graphite-700` direto (não acompanharia o tema claro) — trocado para `--border`.
+
 ## [1.3.77] - 04/09/2026
 
 Frontend rodada 2, Onda 4-2 — a11y remanescente, responsivo, fontes self-hosted, breakpoint único. Os 4 baselines de screenshot passam sem regeneração a cada commit.
