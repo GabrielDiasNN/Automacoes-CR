@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.74] - 03/09/2026
+
+Frontend rodada 2, Onda 5 — performance de render. Invisível: os 4 baselines de screenshot passam sem regeneração; zero mudança de comportamento visível (verificado por oráculo E2E + revisor independente).
+
+### Alterado
+
+- **`React.memo` nos componentes de lista/tile** — `DataTable`, `StatTile`, `TimeSeries`, `Treemap` (o app não tinha nenhum). Acompanhado da estabilização (`useCallback`/`useMemo`) das props nos consumidores, sem a qual o memo é teatro — cada memo tem teste de contagem de render com caso de controle. Nos call sites quentes (polling de `/execucoes`, keystroke de `/beneficiamento`, mensagem de WS no `/monitor`) o bailout acontece de verdade.
+- **`TimeSeries` sem `JSON.stringify` no caminho de render.** Eram 2 serializações por render (6 por mensagem de WS com 3 gráficos no Monitor). `structureSignature` concatena só altura + rótulos do eixo + label/tone das séries; a detecção de mudança de valores passou a ser por referência de `lines` (os consumidores memoizam).
+- **Console do Monitor: buffer + `requestAnimationFrame`.** `handleMessage` acumula em `useRef` e agenda um único `setLines` por frame (era uma cópia O(n) + re-render por mensagem). Teto de 600 no buffer para a aba em background (rAF suspenso). Auto-scroll passou a depender do id da última linha.
+- **Console do Monitor virtualizado** (`src/lib/virtualWindow.ts`, função pura `computeWindow`). Até 300 nós DOM eram remontados a cada frame; agora só a janela visível + overscan, entre dois espaçadores. `white-space: pre-wrap` mantido (linhas longas quebram), estado vazio idêntico. Única lista longa e de alta frequência do app — nenhuma outra foi virtualizada.
+- **`BeneficiamentoPage`: séries de gráfico e hints movidos para `useMemo`** — recalculavam a cada tecla na busca. `TingimentoPanel`: `.slice(0, 50)` defensivo nas 3 tabelas cujo tamanho o backend define.
+
 ## [1.3.73] - 03/09/2026
 
 Frontend rodada 2, Onda 3 (parcial — 3A/3B/3C) — fundação de tokens. **Invisível por construção:** os 4 baselines de screenshot passam sem regeneração; toda substituição é byte-idêntica (verificada por oráculo E2E + revisor independente). Consolidação estrutural (3D) e derivação de breakpoint no CSS ficam para decisão.

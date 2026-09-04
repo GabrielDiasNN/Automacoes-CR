@@ -29,8 +29,9 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 ### Onda 5 — Performance de render (branch `escalar/frontend-rodada2-onda5`, de onda3)
 - [x] 5-1 `7f286a1`→`c02aa01` — `React.memo` em DataTable/StatTile/TimeSeries/Treemap + estabilização de props; TimeSeries sem `JSON.stringify`; MonitorPage buffer rAF; Beneficiamento séries em useMemo. **VERIFICADO:** meu oráculo (12/12 E2E, 4 screenshots, 164 testes) + verificador independente PASS-com-ressalvas (memos memoizam de verdade nos call sites quentes; ressalvas menores em call sites de baixa frequência).
-- [ ] 5-1b — ressalvas do verificador: `BeneficiamentoPage:407` hint inline (re-render por tecla), teto do buffer rAF, controle do teste TimeSeries
-- [ ] 5-2 — virtualizar o console do Monitor (única lista longa/alta-frequência)
+- [x] 5-1b `d4f5d5a` — ressalvas fechadas (hint inline → useMemo, teto do buffer rAF, controle do teste TimeSeries)
+- [x] 5-2 `872b905`+`e8b293a` — console do Monitor virtualizado (`src/lib/virtualWindow.ts` pura + `computeWindow`; `pre-wrap` mantido, estado vazio idêntico). **VERIFICADO:** 172 testes, 12/12 E2E incl. screenshot do Monitor sem regenerar.
+- **Onda 5 FECHADA E VERIFICADA.** Bundle `index` 22,73 KB gzip (inalterado).
 - **Onda 3 gates (todos ✓):** z-index literal = 0 · `--graphite-` fora de `src/styles/` = 0 · hex/rgba fora de `src/styles/` = 0 (`chartPalette.ts` + `tokens.css` concentram tudo).
 - **Verificação Onda 2:** lint 0/0 · typecheck 0 · 152 vitest · coverage exit 0 · bundle `index` 22,5 KB gzip (uplot separado) · **12/12 E2E, 4 screenshots sem regenerar** · **req/min em `/painel` parado: 18 → 6** (meta ≤ 8) · `useDiagnostics` 0% → 100% com teste de corrida
 
