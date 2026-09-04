@@ -23,9 +23,12 @@ Estado do loop agêntico. Fonte canônica de retomada — não depende da memór
 
 ## Estado atual
 
-- **Ondas 1, 2, 3:** ✅ VERIFICADAS E FECHADAS. Branches encadeadas: onda1 → onda2 → onda3 (`e3cfa2b`). `git push` BLOQUEADO pelo classificador do harness — usuário precisa pushar ou liberar a permissão.
-- **Decisões tomadas (usuário delegou):** 3D estrutural → fundido com Onda 4. Gate `@media` → resolvido na Onda 4 (reestruturação de tokens.css). Push/PR → autorizado, mas o harness bloqueia `git push` (pendente ação do usuário).
-- **Próximo:** Onda 5 (performance) — não depende da paleta, mantém baselines. Depois Onda 6 (capacidades). Onda 4 (visual) por último, com checkpoint humano de paleta.
+- **Ondas 1, 2, 3, 5, 6:** ✅ VERIFICADAS E FECHADAS (ver seções abaixo). Branches encadeadas: onda1 → onda2 → onda3 → onda5 → onda6 → **onda4** (atual). `git push` BLOQUEADO pelo classificador do harness — usuário precisa pushar ou liberar a permissão (lembrete registrado como task chip).
+- **Onda 4 EM PROGRESSO**, dividida em 3 fases (checkpoint de paleta do plano exige aprovação humana antes de tocar componente com cor nova):
+  - **4-1** (em andamento): consolidação estrutural (item "3D"), mantendo cores atuais, byte-idêntica — mesmo regime de verificação da Onda 3.
+  - **4-2** (depois): a11y restante, responsivo, fontes self-hosted, breakpoint único (gate `@media`).
+  - **4-3** (por último, aguardando aprovação do usuário): paleta/tipografia nova — proposta apresentada antes de tocar componente.
+- **Nota operacional:** um subagente executor rodou as Ondas 1–6 (spawns via `Agent`/`SendMessage`); no início da 4-1 o subagente falhou por rate-limit de sessão (`session limit`, sem commits perdidos — working tree ficou limpo). `SendMessage` não está mais disponível nesta sessão para retomar agentes antigos. A partir daqui a Onda 4 é executada DIRETO pelo orquestrador (eu), sem subagente, mesmo rigor de verificação.
 
 ### Onda 5 — Performance de render (branch `escalar/frontend-rodada2-onda5`, de onda3)
 - [x] 5-1 `7f286a1`→`c02aa01` — `React.memo` em DataTable/StatTile/TimeSeries/Treemap + estabilização de props; TimeSeries sem `JSON.stringify`; MonitorPage buffer rAF; Beneficiamento séries em useMemo. **VERIFICADO:** meu oráculo (12/12 E2E, 4 screenshots, 164 testes) + verificador independente PASS-com-ressalvas (memos memoizam de verdade nos call sites quentes; ressalvas menores em call sites de baixa frequência).
