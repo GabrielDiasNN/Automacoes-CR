@@ -1,10 +1,7 @@
+/* `position/inset/background/backdrop-filter/display` vêm de `.overlay-scrim`
+ * (tokens.css), compartilhada com Modal/Drawer. */
 .overlay {
-  position: fixed;
-  inset: 0;
   z-index: var(--z-command-palette);
-  background: var(--scrim);
-  backdrop-filter: blur(3px);
-  display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: var(--sp-4);

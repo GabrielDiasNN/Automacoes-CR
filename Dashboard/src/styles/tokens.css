@@ -178,6 +178,18 @@ a { color: inherit; }
 /* números tabulares por padrão em mono — telemetria alinhada */
 .tnum, [class*="mono"] { font-variant-numeric: tabular-nums; }
 
+/* Base compartilhada dos 3 overlays de tela cheia (Modal/Drawer/CommandPalette)
+ * — os 5 declarações abaixo eram idênticas nos 3 `.overlay` locais. z-index
+ * (já tokenizado por componente, Onda 3A) e alinhamento/padding continuam em
+ * cada `.module.css`, que não colide em propriedade com esta base. */
+.overlay-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  display: flex;
+}
+
 /* ── Scrollbar instrumento ── */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -209,6 +221,11 @@ a { color: inherit; }
   letter-spacing: var(--track-mid);
   text-transform: uppercase;
   color: var(--text-lo);
+}
+/* eyebrow (Drawer/Nameplate): era `.label-mono` duplicada byte a byte em 2
+ * arquivos + 1 declaração extra. Usar junto de `.label-mono`. */
+.eyebrow {
+  margin-bottom: var(--sp-1);
 }
 
 /* ── Keyframes ── */

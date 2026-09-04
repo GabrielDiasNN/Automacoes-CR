@@ -91,7 +91,7 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
     // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
     // de stopPropagation no filho. Escape já fecha via useFocusTrap.
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`overlay-scrim ${styles.overlay}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         ref={boxRef}
         className={`${styles.box} animate-in`}

@@ -28,7 +28,7 @@ export function Drawer({ open, onClose, title, eyebrow, children, width = 560 }:
     // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
     // de stopPropagation no filho. Escape já fecha via useFocusTrap.
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`overlay-scrim ${styles.overlay}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <aside
         ref={panelRef}
         className={`${styles.panel} animate-in`}
@@ -40,7 +40,7 @@ export function Drawer({ open, onClose, title, eyebrow, children, width = 560 }:
       >
         <header className={styles.head}>
           <div className={styles.headText}>
-            {eyebrow && <div className={styles.eyebrow}>{eyebrow}</div>}
+            {eyebrow && <div className="label-mono eyebrow">{eyebrow}</div>}
             {title && <h3 className={styles.title}>{title}</h3>}
           </div>
           <IconButton onClick={onClose} aria-label="Fechar painel">
