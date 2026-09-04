@@ -366,6 +366,40 @@ def test_e2e_dashboard_executions_detail_and_filter(
 
 
 @pytest.mark.e2e
+def test_e2e_dashboard_execucoes_painel_exec_id_abre_drawer(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Clicar numa execução recente do Painel abre o drawer JÁ naquela execução em /execucoes.
+
+    Fix do bug de nav (Onda 6, item 6): antes o clique descartava `ex.id` e
+    navegava para /execucoes sem parâmetro nenhum — o drawer nunca abria
+    sozinho, o operador tinha que procurar a execução de novo na lista.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/painel")
+    page.get_by_role("heading", name="Painel").wait_for(timeout=30_000)
+    page.wait_for_selector("text=últimas execuções")
+
+    if page.get_by_text("nenhuma execução recente").count() > 0:
+        pytest.skip(
+            "Banco de teste sem execuções recentes no card do Painel — "
+            "nada para clicar (setup_test_database não semeou nenhuma)."
+        )
+
+    linha = page.get_by_role("button", name=re.compile(r"^Execução "))
+    linha.first.wait_for(timeout=15_000)
+    linha.first.click()
+
+    page.wait_for_url(
+        re.compile(r".*/execucoes\?exec_id=EXEC_E2E_SUCCESS_001"), timeout=15_000
+    )
+
+    dialog = page.get_by_role("dialog")
+    dialog.wait_for(timeout=15_000)
+    dialog.get_by_text("Receitas Bloqueadas").first.wait_for(timeout=10_000)
+
+
+@pytest.mark.e2e
 def test_e2e_dashboard_automations_visible(uvicorn_server: str, page: Any) -> None:
     """A tela de Automações lista os cadastros semeados com os controles operacionais."""
     _inject_api_key(page)
