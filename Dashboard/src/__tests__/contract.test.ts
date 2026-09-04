@@ -31,6 +31,10 @@ import portfolioDrift from "./fixtures/portfolio-drift.json";
 // item sintético do schema PortfolioDriftItem — a instância viva não tinha drift
 // no momento da captura (summary.items_with_drift === 0).
 import portfolioDriftWithItems from "./fixtures/portfolio-drift-with-items.json";
+import executionsByAutomation from "./fixtures/executions-by-automation.json";
+// sintética: artefatos variam muito por automação (a lista real depende de
+// qual robô rodou) — nomes plausíveis, só para exercitar o shape do schema.
+import executionArtifacts from "./fixtures/execution-artifacts.json";
 
 // Vocabulários que os `switch` de lib/status.ts assumem — se o backend
 // renomear um estado, o teste falha aqui em vez de a UI cair no ramo cinza
@@ -59,6 +63,8 @@ const server = setupServer(
   http.get("/api/system/version", () => HttpResponse.json(systemVersion)),
   http.get("/api/system/uptime", () => HttpResponse.json(systemUptime)),
   http.get("/api/portfolio/drift", () => HttpResponse.json(portfolioDrift)),
+  http.get("/api/executions/by-automation/:automationId", () => HttpResponse.json(executionsByAutomation)),
+  http.get("/api/executions/:execId/artifacts", () => HttpResponse.json(executionArtifacts)),
 );
 
 beforeAll(() => {
@@ -261,5 +267,27 @@ describe("contrato: getDrift() — card de drift do SystemPage (Onda 6)", () => 
     // seta quando ambos != null, então basta a propriedade existir.
     expect(iss).toHaveProperty("manifest_value");
     expect(iss).toHaveProperty("runtime_value");
+  });
+});
+
+describe("contrato: listExecutionsByAutomation() — timeline do drawer (Onda 6)", () => {
+  it("bate em /api/executions/by-automation/{id} e devolve ExecutionSummary[]", async () => {
+    const execs = await orchestratorApi.listExecutionsByAutomation(2, 8);
+    expect(execs.length).toBeGreaterThan(0);
+    const ex = execs[0]!;
+    expect(EXECUTION_STATUSES).toContain(ex.status);
+    expect(ex.id).toBeTypeOf("string");
+    expect(ex.automation_id).toBeTypeOf("number");
+    expect(ex.started_at).toBeTypeOf("string");
+  });
+});
+
+describe("contrato: listExecutionArtifacts() — card de artefatos do drawer (Onda 6)", () => {
+  it("devolve exec_id + artifacts[] (fixture sintética — nomes variam por automação)", async () => {
+    const res = await orchestratorApi.listExecutionArtifacts("CRON_2_1788460200_8ea3");
+    expect(res.exec_id).toBeTypeOf("string");
+    expect(Array.isArray(res.artifacts)).toBe(true);
+    expect(res.artifacts.length).toBeGreaterThan(0);
+    expect(res.artifacts[0]).toBeTypeOf("string");
   });
 });
