@@ -246,10 +246,17 @@
    espaçamento, raios, layout, ícones, motion e z-index são theme-agnostic e
    continuam valendo do :root acima sem redefinição. Não é o escuro
    invertido: mantém a mesma inclinação azul-acinzentada do grafite (não um
-   cinza puro genérico) e os 6 sinais foram recalculados — preservando matiz
-   e saturação, só escurecidos — até bater ≥4,5:1 contra o pior caso (card
-   claro). Razões de contraste calculadas por cor: ver a proposta aprovada
-   da Onda 4-3 (docs/progress.md).
+   cinza puro genérico).
+
+   Os 6 sinais foram recalculados DUAS vezes (a segunda depois de auditoria
+   real com axe-core, achado nº 1 da Onda 4-3): a primeira leva só garantia
+   ≥4,5:1 do texto contra a superfície PURA; StatusTag usa `toneTint[tone]`
+   (mesma cor, 12%/7%/5% via color-mix) como FUNDO do próprio badge — texto e
+   fundo compartilham a cor base, e no claro (onde o texto já está perto do
+   piso) isso reprovava AA em 4,0–4,3:1. Cada sinal foi então escurecido até
+   bater ≥4,5:1 mesmo CONTRA O PRÓPRIO TINT (12%/7%/5%, pior caso
+   --surface-up) — não só contra a superfície pura. Preserva matiz/saturação
+   original, só reduz luminância mais que a primeira leva.
 
    `--scrim-color` NÃO é redefinido de propósito: o overlay de modal/gaveta
    continua escuro nos dois temas — dimerizar o fundo pra focar o conteúdo é
@@ -271,15 +278,15 @@
 
   --text-hi:  #141A21;
   --text-mid: #46536A;
-  --text-lo:  #606B7B;
+  --text-lo:  #556171;
 
-  --cyan:        #207476;
+  --cyan:        #1B6264;
   --cyan-bright: #195C5E;  /* hover ESCURECE no claro (mais contraste = mais presente), o oposto do escuro (onde hover clareia) */
-  --amber: #8B620E;
-  --green: #297834;
-  --red:   #D21812;
-  --blue:  #0C60E7;
-  --grey:  #606B7B;
+  --amber: #76530C;
+  --green: #22652C;
+  --red:   #B81510;
+  --blue:  #0A51C3;
+  --grey:  #556171;
 
   --shadow-1:        0 1px 2px rgba(20, 26, 33, 0.08);
   --shadow-2:        0 4px 16px rgba(20, 26, 33, 0.10);
@@ -307,15 +314,15 @@
 
     --text-hi:  #141A21;
     --text-mid: #46536A;
-    --text-lo:  #606B7B;
+    --text-lo:  #556171;
 
-    --cyan:        #207476;
+    --cyan:        #1B6264;
     --cyan-bright: #195C5E;
-    --amber: #8B620E;
-    --green: #297834;
-    --red:   #D21812;
-    --blue:  #0C60E7;
-    --grey:  #606B7B;
+    --amber: #76530C;
+    --green: #22652C;
+    --red:   #B81510;
+    --blue:  #0A51C3;
+    --grey:  #556171;
 
     --shadow-1:        0 1px 2px rgba(20, 26, 33, 0.08);
     --shadow-2:        0 4px 16px rgba(20, 26, 33, 0.10);
