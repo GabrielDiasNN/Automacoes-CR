@@ -1,0 +1,47 @@
+[
+  {
+    "id": 118,
+    "timestamp": "03/09/2026 07:23:32",
+    "action": "AUTO_RETRY",
+    "entity_type": "EXECUTION",
+    "entity_id": "REQ_1788431012_D0C3",
+    "actor": "SYSTEM",
+    "details": "{\"source_exec_id\": \"REQ_1788430292_3D8F\", \"queued_exec_id\": \"REQ_1788431012_D0C3\", \"reason\": \"Retry automatico apos falha transitoria (tentativa 2/2).\", \"retry_count\": 2, \"max_retries\": 2, \"priority\": \"NORMAL\", \"correlation_id\": \"SYSTEM\"}"
+  },
+  {
+    "id": 117,
+    "timestamp": "03/09/2026 07:11:32",
+    "action": "AUTO_RETRY",
+    "entity_type": "EXECUTION",
+    "entity_id": "REQ_1788430292_3D8F",
+    "actor": "SYSTEM",
+    "details": "{\"source_exec_id\": \"CRON_1_1788429600_b21c\", \"queued_exec_id\": \"REQ_1788430292_3D8F\", \"reason\": \"Retry automatico apos falha transitoria (tentativa 1/2).\", \"retry_count\": 1, \"max_retries\": 2, \"priority\": \"NORMAL\", \"correlation_id\": \"SYSTEM\"}"
+  },
+  {
+    "id": 116,
+    "timestamp": "02/09/2026 21:05:42",
+    "action": "CHECKPOINT",
+    "entity_type": "SYSTEM",
+    "entity_id": "GLOBAL",
+    "actor": "127.0.0.1",
+    "details": "{\"mode\": \"PASSIVE\", \"log\": 137, \"checkpointed\": 137, \"wal_size_mb\": 1.67, \"correlation_id\": \"dc438e0b-75f\"}"
+  },
+  {
+    "id": 115,
+    "timestamp": "01/09/2026 22:32:42",
+    "action": "UPDATE",
+    "entity_type": "AUTOMATION",
+    "entity_id": "6",
+    "actor": "127.0.0.1",
+    "details": "{\"changes\": {\"schedule\": \"{\\\"schedule_version\\\":2,\\\"schedule_type\\\":\\\"cron\\\",\\\"timezone\\\":\\\"America/Sao_Paulo\\\",\\\"cron_expression\\\":[\\\"0 5-19 * * 0-4\\\",\\\"0 5-13 * * 5\\\"]}\"}, \"normalized_payload\": {\"name\": \"OBs Restrição Branco\", \"description\": \"Avisa OBs de branco com estoque de peça nas restrições 3 e 4.\", \"script_path\": \"./OBs Restricao Branco/run.ps1\", \"schedule\": \"{\\\"schedule_version\\\":2,\\\"schedule_type\\\":\\\"cron\\\",\\\"timezone\\\":\\\"America/Sao_Paulo\\\",\\\"cron_expression\\\":[\\\"0 5-19 * * 0-4\\\",\\\"0 5-13 * * 5\\\"]}\", \"max_runtime_minutes\": 10, \"max_retries\": 0, \"cooldown_minutes\": 0, \"queue_group\": \"oracle\", \"sla_minutes\": 15, \"enabled\": true, \"test_mode\": false, \"notification_channels\": \"whatsapp\"}, \"warnings\": [], \"correlation_id\": \"f2ad6b50-e83\"}"
+  },
+  {
+    "id": 114,
+    "timestamp": "31/08/2026 16:09:29",
+    "action": "START",
+    "entity_type": "EXECUTION",
+    "entity_id": "EXEC_1788203369_52C0",
+    "actor": "127.0.0.1",
+    "details": "{\"message\": \"Disparado: Receitas Emitidas\", \"correlation_id\": \"481fe2bd-991\"}"
+  }
+]

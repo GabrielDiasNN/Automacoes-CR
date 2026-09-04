@@ -35,6 +35,8 @@ import executionsByAutomation from "./fixtures/executions-by-automation.json";
 // sintética: artefatos variam muito por automação (a lista real depende de
 // qual robô rodou) — nomes plausíveis, só para exercitar o shape do schema.
 import executionArtifacts from "./fixtures/execution-artifacts.json";
+// real — captura de GET /api/system/audit?limit=5 na instância viva.
+import systemAudit from "./fixtures/system-audit.json";
 
 // Vocabulários que os `switch` de lib/status.ts assumem — se o backend
 // renomear um estado, o teste falha aqui em vez de a UI cair no ramo cinza
@@ -65,6 +67,7 @@ const server = setupServer(
   http.get("/api/portfolio/drift", () => HttpResponse.json(portfolioDrift)),
   http.get("/api/executions/by-automation/:automationId", () => HttpResponse.json(executionsByAutomation)),
   http.get("/api/executions/:execId/artifacts", () => HttpResponse.json(executionArtifacts)),
+  http.get("/api/system/audit", () => HttpResponse.json(systemAudit)),
 );
 
 beforeAll(() => {
@@ -289,5 +292,31 @@ describe("contrato: listExecutionArtifacts() — card de artefatos do drawer (On
     expect(Array.isArray(res.artifacts)).toBe(true);
     expect(res.artifacts.length).toBeGreaterThan(0);
     expect(res.artifacts[0]).toBeTypeOf("string");
+  });
+});
+
+describe("contrato: getAuditLog() — card de trilha de auditoria (Onda 6)", () => {
+  it("devolve os campos que o DataTable lê (fixture real: GET /api/system/audit?limit=5)", async () => {
+    const entries = await orchestratorApi.getAuditLog({ limit: 5 });
+    expect(entries.length).toBeGreaterThan(0);
+    const e = entries[0]!;
+    expect(e.id).toBeTypeOf("number");
+    expect(e.timestamp).toBeTypeOf("string"); // já formatado BR pelo backend
+    expect(e.action).toBeTypeOf("string");
+    expect(e.entity_type).toBeTypeOf("string");
+    expect(e).toHaveProperty("entity_id");
+    expect(e).toHaveProperty("actor");
+    // `details` é uma string JSON serializada — a UI só exibe/trunca como
+    // texto cru, não parseia, então basta ser string | null.
+    expect(e).toHaveProperty("details");
+    if (e.details !== null) expect(e.details).toBeTypeOf("string");
+  });
+
+  it("action null/actor null são tolerados (achado real da fixture: SYSTEM/127.0.0.1 sempre presentes, mas o schema permite null)", async () => {
+    const entries = await orchestratorApi.getAuditLog();
+    for (const e of entries) {
+      expect(e.entity_id === null || typeof e.entity_id === "string").toBe(true);
+      expect(e.actor === null || typeof e.actor === "string").toBe(true);
+    }
   });
 });
