@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BellRing, DatabaseZap, RefreshCw, Trash2, LifeBuoy, RefreshCcw } from "lucide-react";
+import { BellRing, DatabaseZap, PauseCircle, PlayCircle, RefreshCw, Trash2, LifeBuoy, RefreshCcw } from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
 import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi } from "../api/orchestrator";
@@ -39,6 +39,7 @@ export function SystemPage() {
   } = usePolling((signal) => orchestratorApi.getHistory(24, signal), 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
   const [confirmRecover, setConfirmRecover] = useState(false);
+  const [confirmEmergency, setConfirmEmergency] = useState<"pause" | "resume" | null>(null);
   const { busyKey: busy, run } = useAction<string>();
 
   const chart = useMemo(() => {
@@ -225,6 +226,32 @@ export function SystemPage() {
         </Card>
       )}
 
+      {/* Controle de emergência (alcance global) */}
+      <Card label="controle de emergência" alert>
+        <p style={{ margin: "0 0 var(--sp-3)", fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
+          "Pausar todas" desliga o agendamento de todas as automações registradas. As execuções em andamento
+          continuam; nenhuma nova é agendada até "Retomar todas".
+        </p>
+        <div className={page.toolbar}>
+          <Button
+            variant="danger"
+            icon={<PauseCircle size={14} />}
+            disabled={busy === "pause-all"}
+            onClick={() => setConfirmEmergency("pause")}
+          >
+            Pausar todas as automações
+          </Button>
+          <Button
+            variant="ghost"
+            icon={<PlayCircle size={14} />}
+            disabled={busy === "resume-all"}
+            onClick={() => setConfirmEmergency("resume")}
+          >
+            Retomar todas
+          </Button>
+        </div>
+      </Card>
+
       {/* Ações */}
       <Card label="manutenção">
         <div className={page.toolbar}>
@@ -251,6 +278,28 @@ export function SystemPage() {
           void run("purge", orchestratorApi.runPurge, { onDone: refresh, invalidate: "overview" });
         }}
         onCancel={() => setConfirmPurge(false)}
+      />
+
+      <ConfirmModal
+        open={confirmEmergency !== null}
+        title={confirmEmergency === "pause" ? "Pausar todas as automações" : "Retomar todas as automações"}
+        message={
+          confirmEmergency === "pause"
+            ? "Pausa TODAS as automações registradas. Execuções em andamento continuam; nenhuma nova é agendada até 'Retomar tudo'. Confirmar?"
+            : "Reativa o agendamento de TODAS as automações registradas. Confirmar?"
+        }
+        confirmLabel={confirmEmergency === "pause" ? "Pausar tudo" : "Retomar tudo"}
+        danger={confirmEmergency === "pause"}
+        onConfirm={() => {
+          const kind = confirmEmergency;
+          setConfirmEmergency(null);
+          if (kind === "pause") {
+            void run("pause-all", orchestratorApi.pauseAll, { onDone: refresh, invalidate: "overview" });
+          } else if (kind === "resume") {
+            void run("resume-all", orchestratorApi.resumeAll, { onDone: refresh, invalidate: "overview" });
+          }
+        }}
+        onCancel={() => setConfirmEmergency(null)}
       />
 
       <ConfirmModal
