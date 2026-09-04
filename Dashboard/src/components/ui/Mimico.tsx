@@ -1,5 +1,6 @@
 import { Cpu, GitBranch, Inbox, ListChecks } from "lucide-react";
 import { RatioBar } from "./MiniViz";
+import { Lamp } from "./Lamp";
 import styles from "./Mimico.module.css";
 
 export interface QueueLane {
@@ -52,10 +53,7 @@ export function Mimico({ sources, lanes, worker, outcomes, running }: MimicoProp
             const busy = l.active > 0;
             return (
               <div key={l.group} className={styles.lane}>
-                <span
-                  className={styles.laneLamp}
-                  style={{ background: busy ? "var(--amber)" : "var(--track-strong)" }}
-                />
+                <Lamp size={8} shape="square" color={busy ? "var(--amber)" : "var(--track-strong)"} />
                 <span className={styles.laneName}>{l.group}</span>
                 <span className={styles.laneCount}>
                   {l.active}▸ <span className={styles.lanePending}>{l.pending}⏳</span>
@@ -74,10 +72,9 @@ export function Mimico({ sources, lanes, worker, outcomes, running }: MimicoProp
           <Cpu size={12} /> worker
         </div>
         <div className={styles.workerRow}>
-          <span
-            className={`${styles.workerLamp} ${running ? styles.pulse : ""}`}
-            style={{ background: worker.online ? "var(--green)" : "var(--red)" }}
-          />
+          {/* sem pulseGlow: preserva o fallback --amber-glow do keyframe
+           *  pulse-ring, igual ao comportamento original. */}
+          <Lamp size={10} color={worker.online ? "var(--green)" : "var(--red)"} pulse={running} />
           <span className={styles.reading} style={{ color: worker.online ? "var(--text-hi)" : "var(--red)" }}>
             {worker.active}
           </span>

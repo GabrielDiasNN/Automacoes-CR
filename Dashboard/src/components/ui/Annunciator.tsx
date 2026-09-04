@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { toneVar, type Tone } from "../../lib/status";
+import { Lamp } from "./Lamp";
 import styles from "./Annunciator.module.css";
 
 interface AnnunciatorProps {
@@ -25,10 +26,7 @@ export function Annunciator({ legend, value, tone, active, blink, statusLabel }:
       className={[styles.tile, active ? styles.on : styles.off].filter(Boolean).join(" ")}
       style={active ? ({ "--tile-color": color } as React.CSSProperties) : undefined}
     >
-      <span
-        className={`${styles.lamp} ${active && blink ? styles.blink : ""}`}
-        style={{ background: active ? color : "var(--track)" }}
-      />
+      <Lamp size={9} shape="square" color={active ? color : "var(--track)"} blink={active && blink} />
       <span className={styles.legend}>{legend}</span>
       {active && statusLabel && <span className={styles.status}>{statusLabel}</span>}
       {value != null && <span className={styles.value}>{value}</span>}

@@ -14,6 +14,7 @@ import {
   EmptyState,
   ErrorState,
   FreshnessTag,
+  Lamp,
   Loading,
   Nameplate,
   RatioBar,
@@ -23,7 +24,7 @@ import {
 import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { useAsyncResource } from "../hooks/useAsyncResource";
-import { criticalityTone, executionTone, operationalStateLabel, operationalTone, slaTone } from "../lib/status";
+import { criticalityTone, executionTone, operationalStateLabel, operationalTone, slaTone, toneVar } from "../lib/status";
 import { formatDuration } from "../lib/format";
 import page from "./page.module.css";
 import styles from "./AutomacoesPage.module.css";
@@ -260,11 +261,18 @@ export function AutomacoesPage() {
                   style={highlightedId === a.id ? { outline: "2px solid var(--cyan)", outlineOffset: 3, borderRadius: 4 } : undefined}
                 >
                   <div className={styles.top}>
-                    <span
-                      className={styles.lamp}
+                    <Lamp
+                      size={9}
                       role="img"
                       aria-label={`Estado operacional: ${operationalStateLabel(a.operational_state)}`}
-                      style={{ background: `var(--${operationalTone(a.operational_state) === "grey" ? "graphite-600" : operationalTone(a.operational_state)})` }}
+                      // "grey" usa a trilha escura (--track-strong = --graphite-600), não
+                      // --grey (mais claro) — preserva a lâmpada "apagada" original.
+                      color={
+                        operationalTone(a.operational_state) === "grey"
+                          ? "var(--track-strong)"
+                          : toneVar[operationalTone(a.operational_state)]
+                      }
+                      style={{ marginTop: 5 }}
                     />
                     <div className={styles.titleWrap}>
                       <span className={styles.name}>{a.name}</span>

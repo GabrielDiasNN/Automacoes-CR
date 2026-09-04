@@ -11,12 +11,6 @@
   align-items: center;
   gap: 6px;
 }
-.lamp {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
 .state {
   text-transform: uppercase;
   letter-spacing: var(--track-mid);

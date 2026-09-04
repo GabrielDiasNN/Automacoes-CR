@@ -1,4 +1,5 @@
 export { Button } from "./Button";
+export { Lamp } from "./Lamp";
 export { IconButton } from "./IconButton";
 export { Input } from "./Input";
 export { Select } from "./Select";

@@ -25,15 +25,6 @@
   background: color-mix(in srgb, var(--tile-color) 12%, var(--surface));
   box-shadow: var(--engraved), 0 0 0 1px color-mix(in srgb, var(--tile-color) 30%, transparent);
 }
-.lamp {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.blink {
-  animation: blink-alarm 1s steps(1, end) infinite;
-}
 .legend {
   font-family: var(--font-display);
   font-size: var(--fs-small);

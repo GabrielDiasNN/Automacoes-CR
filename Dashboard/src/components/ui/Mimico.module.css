@@ -75,12 +75,6 @@
   align-items: center;
   gap: var(--sp-2);
 }
-.laneLamp {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
 .laneName {
   font-family: var(--font-mono);
   font-size: var(--fs-small);
@@ -112,16 +106,6 @@
   align-items: center;
   gap: var(--sp-2);
 }
-.workerLamp {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.pulse {
-  animation: pulse-ring 2s var(--ease) infinite;
-}
-
 /* resultado */
 .outcome {
   font-family: var(--font-mono);
