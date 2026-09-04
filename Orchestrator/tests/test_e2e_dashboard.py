@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Generator
@@ -859,7 +860,17 @@ AXE_CORE_PATH = (
 AXE_BLOCKING_IMPACT = {"serious", "critical"}
 
 
-AXE_CORE_SRC = AXE_CORE_PATH.read_text(encoding="utf-8")
+@lru_cache(maxsize=1)
+def _axe_core_src() -> str:
+    """Lê `axe.min.js` sob demanda, não na importação do módulo.
+
+    O job `testes-python` do CI (`pytest -m "not e2e"`) coleta este arquivo
+    inteiro para achar os markers antes de deselecionar — código de nível de
+    módulo roda na coleta. Sem lazy load, `pytest` falhava a coleção da
+    suíte inteira ali, porque aquele job nunca roda `npm ci` em `Dashboard/`
+    (só o job `frontend` faz isso). Cacheado porque só os testes `e2e`
+    (que exigem `Dashboard/node_modules/` de qualquer forma) chamam isto."""
+    return AXE_CORE_PATH.read_text(encoding="utf-8")
 
 
 def _run_axe(
@@ -882,7 +893,7 @@ def _run_axe(
     page.route(
         "**/__test-axe-core.js",
         lambda route: route.fulfill(
-            status=200, content_type="application/javascript", body=AXE_CORE_SRC
+            status=200, content_type="application/javascript", body=_axe_core_src()
         ),
     )
     page.add_script_tag(url="/__test-axe-core.js")
