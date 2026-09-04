@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RotateCw, Square, RefreshCw } from "lucide-react";
-import { orchestratorApi, type ExecutionSummary, type Paginated } from "../api/orchestrator";
+import { orchestratorApi, type ExecutionStatus, type ExecutionSummary, type Paginated } from "../api/orchestrator";
 import { getApiKey } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
 import {
@@ -29,8 +29,42 @@ import { errMessage } from "../lib/errors";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
 import page from "./page.module.css";
 
-const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "ERROR", "TIMEOUT", "TERMINATED", "EXPIRED"];
+// Derivado do union `ExecutionStatus` (não um array literal solto): o objeto
+// abaixo exige uma chave por membro do tipo, então o `tsc` acusa se o backend
+// ganhar/perder um status e este filtro não acompanhar (achado nº 20 da
+// revisão de 04/09/2026 — a lista literal anterior não tinha `PARTIAL`,
+// `REQUEUED` nem `FAILED_BY_REBOOT`).
+const STATUS_LABELS: Record<ExecutionStatus, true> = {
+  PENDING: true,
+  RUNNING: true,
+  SUCCESS: true,
+  PARTIAL: true,
+  ERROR: true,
+  TIMEOUT: true,
+  TERMINATED: true,
+  FAILED_BY_REBOOT: true,
+  REQUEUED: true,
+  EXPIRED: true,
+};
+export const STATUS_OPTIONS = ["", ...Object.keys(STATUS_LABELS)];
 const PER_PAGE = 25;
+
+// Teto de linhas do log ao vivo acumulado em `liveLogText` — sem isso, uma
+// execução longa concatena `evt.data` sem limite enquanto o worker permite até
+// 5 MB de log (MAX_LOG_CHARS), e o `LogViewer` reparseia esse acumulado
+// inteiro a cada linha nova (O(n²) no total). `LogViewer` já descarta o
+// excedente na renderização via `MAX_RENDERED_LINES` (2000) — 3000 aqui dá
+// margem para o parser/filtro trabalharem sobre um pouco mais do que é
+// mostrado, sem deixar o texto subjacente crescer sem limite (achado nº 7 da
+// revisão de 04/09/2026, opção (a): capar no append).
+export const MAX_LIVE_LOG_LINES = 3_000;
+
+export function appendCappedLog(prev: string, chunk: string): string {
+  const combined = prev + chunk;
+  const lines = combined.split("\n");
+  if (lines.length <= MAX_LIVE_LOG_LINES) return combined;
+  return lines.slice(-MAX_LIVE_LOG_LINES).join("\n");
+}
 
 export function ExecucoesPage() {
   const toast = useToast();
@@ -115,7 +149,7 @@ export function ExecucoesPage() {
     setLiveLogText("");
   }, [selectedId]);
   const onLogMessage = useCallback((evt: MessageEvent) => {
-    setLiveLogText((prev) => prev + (evt.data as string));
+    setLiveLogText((prev) => appendCappedLog(prev, evt.data as string));
   }, []);
   const isRunning = detail?.status === "RUNNING";
   const { status: logWsStatus } = useWebSocket(
@@ -152,8 +186,18 @@ export function ExecucoesPage() {
         const a = document.createElement("a");
         a.href = url;
         a.download = filename;
+        // O link precisa estar no documento e o revoke/remove precisa esperar
+        // o próximo tick: revogar a Object URL no mesmo tick do click() corta
+        // a leitura do blob antes de o navegador começar — falha silenciosa
+        // (sem toast, sem erro no console) no Firefox/Safari e no Chrome sob
+        // carga (achado nº 6 da revisão de 04/09/2026).
+        a.style.display = "none";
+        document.body.appendChild(a);
         a.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+          a.remove();
+        }, 0);
       } catch (e) {
         toast(errMessage(e), "red");
       }
@@ -188,7 +232,7 @@ export function ExecucoesPage() {
         overrideMessage: `Parada solicitada para ${shortId(id)}`,
         successTone: "amber",
         onDone: load,
-        invalidate: "overview",
+        invalidate: ["overview", "health"],
       });
     },
     [runExecAction, load],
@@ -199,7 +243,7 @@ export function ExecucoesPage() {
       void runExecAction(id, () => orchestratorApi.requeueExecution(id, { reason: "Reenfileirado pelo operador" }), {
         overrideMessage: `Reenfileirado: ${shortId(id)}`,
         onDone: load,
-        invalidate: "overview",
+        invalidate: ["overview", "health"],
       });
     },
     [runExecAction, load],

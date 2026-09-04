@@ -147,7 +147,7 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
               // nenhum leitor de tela espera dentro de um combobox.
               <li key={entry.key} role="presentation">
                 <button
-                  id={entry.key}
+                  id={`${listboxId}-${entry.key}`}
                   type="button"
                   className={`${styles.item} ${i === selected ? styles.itemActive : ""}`}
                   onMouseEnter={() => setSelected(i)}

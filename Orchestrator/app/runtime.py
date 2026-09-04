@@ -45,11 +45,15 @@ def get_dashboard_path() -> str:
     """
     override = os.environ.get("ORCHESTRATOR_DASHBOARD_DIST", "").strip()
     if override and os.path.isdir(override):
+        logger.info("Dashboard resolvido por ORCHESTRATOR_DASHBOARD_DIST: %s", override)
         return override
     dist = os.path.join(PROJECT_ROOT, "Dashboard", "dist")
     if os.path.isdir(dist):
+        logger.info("Dashboard resolvido por Dashboard/dist: %s", dist)
         return dist
-    return os.path.join(PROJECT_ROOT, "Dashboard")
+    fallback = os.path.join(PROJECT_ROOT, "Dashboard")
+    logger.info("Dashboard resolvido por fallback vanilla: %s", fallback)
+    return fallback
 
 
 def get_lib_path() -> str:

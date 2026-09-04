@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Factory, LayoutDashboard, ListChecks, Menu, Monitor, Moon, Radio, Rows3, Rows4, Search, Server, Sun, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
-import { useTheme, type Theme } from "../context/ThemeContext";
+import { nextTheme, useTheme, type Theme } from "../context/ThemeContext";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { mediaMaxWidth } from "../styles/breakpoints";
@@ -29,8 +29,6 @@ export const NAV: NavItem[] = [
   { to: "/sistema", label: "Sistema", icon: <Server size={16} /> },
 ];
 
-// Ciclo do ThemeContext: system -> light -> dark -> system.
-const NEXT_THEME: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
 const THEME_LABEL: Record<Theme, string> = { system: "sistema", light: "claro", dark: "escuro" };
 const THEME_ICON: Record<Theme, ReactNode> = {
   system: <Monitor size={16} />,
@@ -144,7 +142,7 @@ export function Shell() {
             </IconButton>
             <IconButton
               onClick={cycleTheme}
-              aria-label={`Tema: ${THEME_LABEL[theme]} — trocar para ${THEME_LABEL[NEXT_THEME[theme]]}`}
+              aria-label={`Tema: ${THEME_LABEL[theme]} — trocar para ${THEME_LABEL[nextTheme(theme)]}`}
               title={`Tema: ${THEME_LABEL[theme]}`}
             >
               {THEME_ICON[theme]}

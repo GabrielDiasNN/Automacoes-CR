@@ -10,8 +10,8 @@ export default defineConfig({
     // Alinhado ao `target` do tsconfig.json (ES2020). Explicito para o build
     // nao seguir o default do Vite, que muda entre versoes.
     target: "es2020",
-    // Gera .map mas sem o comentario `//# sourceMappingURL` nos .js servidos —
-    // erro reportado por operador fica depuravel sem expor o mapa em producao.
+    // Omite o comentario `//# sourceMappingURL` dos .js servidos, mas o arquivo
+    // `.map` continua sendo emitido em dist/ e e servido publicamente.
     sourcemap: "hidden",
     chunkSizeWarningLimit: 700,
     rollupOptions: {

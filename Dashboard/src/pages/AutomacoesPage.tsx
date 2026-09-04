@@ -57,19 +57,21 @@ async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData
 
 /** Ordena por atenção — quem precisa de olhar primeiro no topo — em vez da
  *  ordem alfabética que o backend devolve. Critério, em ordem de desempate:
- *  estado operacional "attention" > criticidade > nome.
+ *  estado operacional "attention" > SLA rompido (`breached`) > criticidade "high"
+ *  > SLA em recuperação (`recovering`) > criticidade "medium" > resto.
  *
  *  Nota: as comparações `sla_state === "violated" | "at_risk"` que existiam aqui
- *  eram código morto — o backend (`portfolio_catalog._sla_state`) emite
+ *  antes eram código morto — o backend (`portfolio_catalog._sla_state`) emite
  *  `ok | breached | recovering | unknown`, nunca esses valores, então o SLA
- *  nunca influenciou a ordenação. Removidas ao tipar `sla_state` como `SlaState`.
- *  Wiring correto de `breached`/`recovering` no rank fica para a Onda 4 (paleta
- *  e semântica de SLA), junto com `slaTone`. */
-function attentionRank(a: Automation, p: PortfolioHealthItem | undefined): number {
+ *  nunca influenciava a ordenação. Wiring correto de `breached`/`recovering`
+ *  entra aqui, junto com `slaTone` (mesma correção, ver `lib/status.ts`). */
+export function attentionRank(a: Automation, p: PortfolioHealthItem | undefined): number {
   if (a.operational_state === "attention") return 0;
-  if (p?.criticality === "high") return 1;
-  if (p?.criticality === "medium") return 2;
-  return 3;
+  if (p?.sla_state === "breached") return 1;
+  if (p?.criticality === "high") return 2;
+  if (p?.sla_state === "recovering") return 3;
+  if (p?.criticality === "medium") return 4;
+  return 5;
 }
 
 /** Corpo interno: `useAsyncResource` (aborto real, guarda de sequência). O pai
@@ -177,7 +179,7 @@ export function AutomacoesPage() {
             if (r.exec_id) setLastExecId((prev) => ({ ...prev, [a.id]: r.exec_id }));
             return { message: r.exec_id ? `${r.message} (${r.exec_id})` : r.message };
           }),
-        { fallbackMessage: `${a.name} disparada`, onDone: load, invalidate: "overview" },
+        { fallbackMessage: `${a.name} disparada`, onDone: load, invalidate: ["overview", "health"] },
       );
     },
     [run, load],

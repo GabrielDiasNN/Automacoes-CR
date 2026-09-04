@@ -17,6 +17,11 @@ interface DataTableProps<T> {
   rowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
   rowTone?: (row: T) => string | undefined;
+  /** Rótulo acessível da linha clicável (lido pelo leitor de tela em vez da
+   *  concatenação do texto de todas as células). Opcional — sem ele o
+   *  fallback usa `rowKey(row)`, que é sempre um identificador estável mas
+   *  pouco descritivo. Ignorado quando `onRowClick` não é passado. */
+  rowLabel?: (row: T) => string;
 }
 
 const INTERACTIVE_SELECTOR = "button, a[href], input, select, textarea, [role='button']";
@@ -29,11 +34,16 @@ const INTERACTIVE_SELECTOR = "button, a[href], input, select, textarea, [role='b
  *  detalhe da linha por baixo, numa ação destrutiva em produção (achado
  *  nº 6, Onda 1). Resolvido na origem — o consumidor não precisa lembrar.
  *
- *  `boundary` (a própria `<tr>`, via `e.currentTarget`) é excluído do match:
- *  a linha clicável agora tem `role="button"` (Onda 4-2, suporte a leitor de
- *  tela), que também casa em `[role='button']` — sem excluir `boundary`, a
+ *  `boundary` (a própria `<tr>`, via `e.currentTarget`) é excluído do match.
+ *  Motivo histórico: a linha clicável chegou a ter `role="button"` (Onda
+ *  4-2), que também casava em `[role='button']` — sem excluir `boundary`, a
  *  própria linha "detectava a si mesma" como controle aninhado e engolia
- *  TODO clique silenciosamente. */
+ *  TODO clique silenciosamente. Esse `role="button"` foi removido (achado
+ *  nº 3 da revisão de 04/09/2026 — invalidava a semântica de tabela para
+ *  leitor de tela); a `<tr>` não corresponde mais a nenhum seletor de
+ *  `INTERACTIVE_SELECTOR`, então a exclusão de `boundary` não tem mais
+ *  motivo ativo conhecido. Mantida mesmo assim por decisão do responsável
+ *  pela revisão — não remover sem confirmação. */
 function targetIsInteractive(target: EventTarget, boundary: Element): boolean {
   if (!(target instanceof Element)) return false;
   const hit = target.closest(INTERACTIVE_SELECTOR);
@@ -41,7 +51,7 @@ function targetIsInteractive(target: EventTarget, boundary: Element): boolean {
 }
 
 /** Tabela de dados de telemetria — header fixo, números tabulares. */
-function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataTableProps<T>) {
+function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone, rowLabel }: DataTableProps<T>) {
   const { density } = useTableDensity();
   // tabIndex={0}+role="region": overflow-x precisa ser alcançável por
   // teclado (WCAG 2.1.1) quando a tabela é mais larga que o contêiner — sem
@@ -91,7 +101,7 @@ function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone }: DataT
                 className={onRowClick ? styles.clickable : undefined}
                 onClick={onRowClick ? handleClick : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
-                role={onRowClick ? "button" : undefined}
+                aria-label={onRowClick ? (rowLabel?.(row) ?? `Abrir detalhes da linha ${rowKey(row)}`) : undefined}
                 onKeyDown={onRowClick ? handleKeyDown : undefined}
                 style={tone ? { boxShadow: `inset 3px 0 0 ${tone}` } : undefined}
               >

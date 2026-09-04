@@ -12,10 +12,20 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+// Única fonte de verdade para a transição do ciclo — usada por cycleTheme
+// e exportada para quem precisa anunciar o próximo tema (ex.: aria-label
+// do botão no Shell) sem reimplementar a sequência.
+export function nextTheme(theme: Theme): Theme {
+  return CYCLE[(CYCLE.indexOf(theme) + 1) % CYCLE.length]!;
+}
+
+function readStoredTheme(): Theme {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return CYCLE.includes(raw as Theme) ? (raw as Theme) : "system";
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system",
-  );
+  const [theme, setTheme] = useState<Theme>(readStoredTheme);
 
   // "system" não seta o atributo — deixa o @media (prefers-color-scheme)
   // do tokens.css decidir. light/dark setam explicitamente e vencem o OS
@@ -30,7 +40,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const cycleTheme = useCallback(() => {
     setTheme((prev) => {
-      const next = CYCLE[(CYCLE.indexOf(prev) + 1) % CYCLE.length]!;
+      const next = nextTheme(prev);
       localStorage.setItem(STORAGE_KEY, next);
       return next;
     });

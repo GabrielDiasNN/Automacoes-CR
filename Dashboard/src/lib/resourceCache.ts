@@ -25,7 +25,14 @@ interface Entry {
 
 const store = new Map<string, Entry>();
 
-/** Retorna o valor em cache só se ele existe e está dentro do TTL. */
+/** Retorna o valor em cache só se ele existe e está dentro do TTL.
+ *
+ *  A referência é ESTÁVEL entre leituras, de propósito. `usePolling` faz
+ *  `setData(cached)` a cada tick do caminho de dedupe (`skipIfFresh`); com uma
+ *  referência estável o React aborta o re-render pelo `Object.is`, e o
+ *  `React.memo` das telas continua valendo. Devolver cópia a cada leitura
+ *  trocaria um risco hipotético de mutação por um re-render garantido a cada
+ *  15s — a proteção contra mutação é feita no `writeCache`, congelando. */
 export function readCache<T>(key: string, ttlMs: number): T | undefined {
   const entry = store.get(key);
   if (!entry) return undefined;
@@ -36,7 +43,13 @@ export function readCache<T>(key: string, ttlMs: number): T | undefined {
   return entry.data as T;
 }
 
+/** Congela o valor (raso) antes de guardar: dois consumidores da mesma chave
+ *  compartilham a instância, então uma mutação em um contaminaria o outro.
+ *  Congelado, a tentativa de mutar lança em vez de corromper silenciosamente
+ *  — módulo ES roda em strict mode. Raso basta: os payloads da API são JSON
+ *  e ninguém muta estrutura aninhada hoje. */
 export function writeCache(key: string, data: unknown): void {
+  if (data !== null && typeof data === "object") Object.freeze(data);
   store.set(key, { data, ts: Date.now() });
 }
 

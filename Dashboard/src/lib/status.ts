@@ -1,6 +1,8 @@
 /** Mapeamento central status/severidade → tom de cor + rótulo.
  *  Fonte única de verdade (antes espalhado em cada página). */
 
+import type { ExecutionStatus, SlaState } from "../api/orchestrator";
+
 export type Tone = "cyan" | "amber" | "green" | "red" | "blue" | "grey";
 
 export const toneVar: Record<Tone, string> = {
@@ -34,15 +36,16 @@ export const toneGlow: Record<Tone, string> = {
 };
 
 /** Estado de execução → tom. */
-export function executionTone(status: string): Tone {
+export function executionTone(status: ExecutionStatus): Tone {
   switch (status?.toUpperCase()) {
     case "SUCCESS":
       return "green";
     case "ERROR":
     case "TIMEOUT":
+    case "FAILED_BY_REBOOT":
       return "red";
     case "RUNNING":
-    case "CLAIMED":
+    case "CLAIMED": // não existe no backend (ver comentário em orchestrator.ts); tolerado por segurança
       return "amber";
     case "PENDING":
       return "cyan";
@@ -94,17 +97,17 @@ export function healthTone(status: string | null | undefined): Tone {
   }
 }
 
-/** Estado de SLA → tom. */
-export function slaTone(state: string | null | undefined): Tone {
+/** Estado de SLA (`portfolio_catalog._sla_state`) → tom. */
+export function slaTone(state: SlaState | null | undefined): Tone {
   switch (state?.toLowerCase()) {
     case "ok":
       return "green";
-    case "at_risk":
-      return "amber";
-    case "violated":
+    case "breached":
       return "red";
+    case "recovering":
+      return "amber";
     default:
-      return "grey";
+      return "grey"; // unknown
   }
 }
 

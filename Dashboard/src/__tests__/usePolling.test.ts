@@ -419,4 +419,32 @@ describe("usePolling", () => {
     expect(result.current.data).toBe("fresco");
     expect(result.current.refreshQueued).toBe(false);
   });
+
+  it("erro não-429 após janela de 429 limpa rateLimitedUntil para não carregar semântica de rate limit", async () => {
+    // Cenário: primeiro um 429 (seta rateLimitedUntil), depois um erro genérico (ex: 500).
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(429, "limite", 5))
+      .mockRejectedValueOnce(new Error("servidor indisponível"));
+
+    const { result } = renderHook(() => usePolling(fetcher, 1_000));
+
+    // Primeiro fetch: 429 — seta rateLimitedUntil e mostra mensagem de limite.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.rateLimitedUntil).toBeInstanceOf(Date);
+    expect(result.current.error).toContain("limite");
+
+    // Espera passar a janela de 429.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100);
+    });
+
+    // Próximo fetch: erro diferente (500, timeout, etc.). Deve limpar rateLimitedUntil
+    // para que FreshnessTag não confunda o novo erro com semântica de rate limit.
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBe("servidor indisponível");
+    expect(result.current.rateLimitedUntil).toBeNull();
+  });
 });

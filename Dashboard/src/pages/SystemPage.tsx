@@ -296,7 +296,10 @@ export function SystemPage() {
                 // Benigno: só cutuca o worker a checar a fila agora. Idempotente,
                 // sem ConfirmModal.
                 onClick={() =>
-                  void run("wakeup", orchestratorApi.wakeupWorker, { onDone: refresh, invalidate: "overview" })
+                  void run("wakeup", orchestratorApi.wakeupWorker, {
+                    onDone: refresh,
+                    invalidate: ["overview", "health"],
+                  })
                 }
               >
                 Acordar worker
@@ -462,10 +465,28 @@ export function SystemPage() {
       {/* Ações */}
       <Card label="manutenção">
         <div className={page.toolbar}>
-          <Button icon={<DatabaseZap size={14} />} disabled={busy === "ckpt"} onClick={() => void run("ckpt", orchestratorApi.runCheckpoint, { onDone: refresh, invalidate: "overview" })}>
+          <Button
+            icon={<DatabaseZap size={14} />}
+            disabled={busy === "ckpt"}
+            onClick={() =>
+              void run("ckpt", orchestratorApi.runCheckpoint, {
+                onDone: refresh,
+                invalidate: ["overview", "health"],
+              })
+            }
+          >
             WAL Checkpoint
           </Button>
-          <Button icon={<RefreshCcw size={14} />} disabled={busy === "sched"} onClick={() => void run("sched", orchestratorApi.reloadScheduler, { onDone: refresh, invalidate: "overview" })}>
+          <Button
+            icon={<RefreshCcw size={14} />}
+            disabled={busy === "sched"}
+            onClick={() =>
+              void run("sched", orchestratorApi.reloadScheduler, {
+                onDone: refresh,
+                invalidate: ["overview", "health"],
+              })
+            }
+          >
             Recarregar agendador
           </Button>
           <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => setConfirmPurge(true)}>
@@ -482,7 +503,7 @@ export function SystemPage() {
         danger
         onConfirm={() => {
           setConfirmPurge(false);
-          void run("purge", orchestratorApi.runPurge, { onDone: refresh, invalidate: "overview" });
+          void run("purge", orchestratorApi.runPurge, { onDone: refresh, invalidate: ["overview", "health"] });
         }}
         onCancel={() => setConfirmPurge(false)}
       />
@@ -501,9 +522,15 @@ export function SystemPage() {
           const kind = confirmEmergency;
           setConfirmEmergency(null);
           if (kind === "pause") {
-            void run("pause-all", orchestratorApi.pauseAll, { onDone: refresh, invalidate: "overview" });
+            void run("pause-all", orchestratorApi.pauseAll, {
+              onDone: refresh,
+              invalidate: ["overview", "health"],
+            });
           } else if (kind === "resume") {
-            void run("resume-all", orchestratorApi.resumeAll, { onDone: refresh, invalidate: "overview" });
+            void run("resume-all", orchestratorApi.resumeAll, {
+              onDone: refresh,
+              invalidate: ["overview", "health"],
+            });
           }
         }}
         onCancel={() => setConfirmEmergency(null)}
@@ -517,7 +544,10 @@ export function SystemPage() {
         danger
         onConfirm={() => {
           setConfirmRecover(false);
-          void run("recover", orchestratorApi.recoverWorker, { onDone: refresh, invalidate: "overview" });
+          void run("recover", orchestratorApi.recoverWorker, {
+            onDone: refresh,
+            invalidate: ["overview", "health"],
+          });
         }}
         onCancel={() => setConfirmRecover(false)}
       />

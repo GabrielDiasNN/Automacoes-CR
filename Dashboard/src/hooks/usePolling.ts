@@ -184,6 +184,7 @@ export function usePolling<T>(
         setError(`limite de requisições atingido — retomando em ${backoffS}s`);
       } else {
         setError(errMessage(e));
+        setRateLimitedUntil(null);
       }
     } finally {
       if (isLatest()) setLoading(false);

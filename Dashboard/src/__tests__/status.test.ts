@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ExecutionStatus } from "../api/orchestrator";
 import {
   criticalityTone,
   executionTone,
@@ -20,7 +21,9 @@ describe("executionTone", () => {
 
   it("mapeia RUNNING e CLAIMED para âmbar", () => {
     expect(executionTone("RUNNING")).toBe("amber");
-    expect(executionTone("CLAIMED")).toBe("amber");
+    // "CLAIMED" não existe em ExecutionStatus (ver comentário em orchestrator.ts)
+    // mas o runtime ainda o tolera por segurança — cast explícito documenta a exceção.
+    expect(executionTone("CLAIMED" as ExecutionStatus)).toBe("amber");
   });
 
   it("mapeia PENDING para ciano", () => {
@@ -28,7 +31,7 @@ describe("executionTone", () => {
   });
 
   it("é case-insensitive", () => {
-    expect(executionTone("success")).toBe("green");
+    expect(executionTone("success" as ExecutionStatus)).toBe("green");
   });
 
   it("usa cinza para status desconhecidos (TERMINATED, REQUEUED, PARTIAL)", () => {
@@ -40,6 +43,31 @@ describe("executionTone", () => {
     const tone = executionTone("EXPIRED");
     expect(tone).not.toBe("grey");
     expect(tone).not.toBe("red");
+  });
+
+  it("mapeia FAILED_BY_REBOOT para vermelho (falha, não estado neutro)", () => {
+    expect(executionTone("FAILED_BY_REBOOT")).toBe("red");
+  });
+
+  // Teste-guarda de contrato: cobre os 10 valores reais de `ExecutionStatus`
+  // (`constants.py` EXECUTION_STATUS_*) para que a próxima adição ao union
+  // seja obrigada a decidir um tom em vez de cair no cinza por omissão.
+  it("cobre os 10 valores de ExecutionStatus com um tom definido", () => {
+    const vocabularioBackend: Record<ExecutionStatus, ReturnType<typeof executionTone>> = {
+      PENDING: "cyan",
+      RUNNING: "amber",
+      SUCCESS: "green",
+      PARTIAL: "grey",
+      ERROR: "red",
+      TIMEOUT: "red",
+      TERMINATED: "grey",
+      FAILED_BY_REBOOT: "red",
+      REQUEUED: "grey",
+      EXPIRED: "blue",
+    };
+    for (const [status, esperado] of Object.entries(vocabularioBackend) as [ExecutionStatus, string][]) {
+      expect(executionTone(status)).toBe(esperado);
+    }
   });
 });
 
@@ -108,14 +136,28 @@ describe("healthTone", () => {
 });
 
 describe("slaTone", () => {
-  it("mapeia ok para verde, at_risk para âmbar, violated para vermelho", () => {
+  // Vocabulário real de `portfolio_catalog._sla_state` (tipo `SlaState` em
+  // orchestrator.ts): ok | breached | recovering | unknown. `at_risk`/`violated`
+  // eram valores mortos (o backend nunca os emite) e foram removidos do switch.
+  it("mapeia ok para verde", () => {
     expect(slaTone("ok")).toBe("green");
-    expect(slaTone("at_risk")).toBe("amber");
-    expect(slaTone("violated")).toBe("red");
   });
 
-  it("usa cinza para estado desconhecido", () => {
+  it("mapeia breached para vermelho (SLA rompido, não pode ser neutro)", () => {
+    expect(slaTone("breached")).toBe("red");
+  });
+
+  it("mapeia recovering para âmbar", () => {
+    expect(slaTone("recovering")).toBe("amber");
+  });
+
+  it("usa cinza para unknown", () => {
     expect(slaTone("unknown")).toBe("grey");
+  });
+
+  it("usa cinza para null/undefined", () => {
+    expect(slaTone(null)).toBe("grey");
+    expect(slaTone(undefined)).toBe("grey");
   });
 });
 

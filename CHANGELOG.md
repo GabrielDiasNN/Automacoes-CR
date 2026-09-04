@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.3.79] - 04/09/2026
+
+Correção dos 21 achados da revisão stateless da rodada 2 (handoff em `scratch/handoff-correcoes-revisao-04092026.md`). Executada por operadores em sessões isoladas, com supervisão e validação central. Nenhuma cor ou baseline de screenshot mudou.
+
+### Corrigido
+
+- **Gráficos uPlot não repintavam ao trocar de tema:** `readPalette()` só rodava no effect de `structureKey`, que não incluía o tema — o `<canvas>` mantinha cores do tema anterior até remontar. `TimeSeries` passa a consumir `useTheme()` e incluir o tema na `structureKey`. Os 4 baselines de tema claro não pegavam isso porque injetam o `localStorage` **antes** do bundle montar: o gráfico nascia no tema certo e a *transição* nunca era exercitada.
+- **`slaTone` pintava SLA rompido de cinza:** tratava `ok|at_risk|violated`, mas `_sla_state` (backend) emite `ok|breached|recovering|unknown`. `breached` e `recovering` caíam no `default`. Falso-verde em painel de instrumentação. Assinaturas de `slaTone`/`executionTone` estreitadas para os unions (`SlaState`/`ExecutionStatus`), que é o que faz o `tsc` acusar a próxima divergência.
+- **`attentionRank` deixou de ordenar por SLA:** os degraus mortos (`violated`/`at_risk`) foram removidos na rodada anterior sem substituição pelos valores reais. Reintroduzidos como `attention > breached > high > recovering > medium`. `breached` vem antes de `high` porque criticidade nominal não é proxy de urgência de SLA (OBP-04 é ALTA com SLA de 20 min; OFST-06/ORB-07 são MÉDIA com 15 min).
+- **`FAILED_BY_REBOOT` caía no tom neutro** — execução morta por reboot ficava indistinguível de reenfileirada. Agora vermelho.
+- **`<tr role="button">` invalidava a semântica da tabela:** sobrescrever o `role="row"` implícito tira a linha do `rowgroup` (`aria-required-children`, impacto *critical*) e o nome acessível vira a concatenação de todas as células. Mantido `role="row"` com `aria-label` por linha (prop `rowLabel` opcional, retrocompatível).
+- **`URL.revokeObjectURL` no mesmo tick do `click()`** — download de artefato podia falhar em silêncio no Firefox/Safari.
+- **Log ao vivo sem teto:** cada mensagem do WebSocket reparseava todo o acumulado (O(n²)) e `liveLogText` crescia sem limite até os 5 MB permitidos pelo worker. Teto de 3.000 linhas no append.
+- **Medição de `rowH` podia oscilar indefinidamente:** `computeWindow` deriva `start` de `rowH`, e o `useLayoutEffect` media a linha `start` e reescrevia `rowH` — laço `A → B → A` com linhas de comprimentos alternados. Agora mede uma vez, com guarda por ref.
+- **Chave `"health"` nunca era invalidada:** as 11 ações passavam só `invalidate: "overview"`, então a `StatusBar` global podia servir o `health` pré-ação do cache e *pular* a requisição real (`skipIfFresh`). `pause`/`resume` de automação seguem sem invalidar `health` de propósito — só mexem em `enabled`, não em `pending_tasks`.
+- **Ciclo de tema duplicado** em `ThemeContext.CYCLE` e `Shell.NEXT_THEME`: divergir fazia o botão anunciar um destino e trocar para outro — mentira dita justamente a quem depende do rótulo. `nextTheme()` agora é fonte única.
+- **`ThemeContext` confiava cegamente no `localStorage`** — valor arbitrário ia direto para `data-theme` e o botão anunciava "Tema: undefined". Validado contra `CYCLE`.
+- **`sourcemap: "hidden"` não impede acesso aos `.map`:** o comentário prometia garantia inexistente. `/dashboard` é montado sem dependência de API Key, então basta acrescentar `.map` ao nome público do `.js`. Comentário corrigido para descrever o comportamento real (risco aceito).
+- Itens menores: `rateLimitedUntil` não era limpo em erro não-429; `readCache` compartilhava instância mutável entre consumidores; `STATUS_OPTIONS` divergia do union `ExecutionStatus`; separador de `structureSignature` colidia com labels contendo vírgula; `id` de DOM do `CommandPalette` derivado de dados.
+
+### Adicionado
+
+- **Auditoria axe-core em `/execucoes` e `/sistema`**, que ficaram de fora da Onda 4-3 e são onde vivem o drawer de execução, artefatos, trilha de auditoria e card de drift. Inclui um teste com o **drawer aberto** (focus trap, `role="dialog"`, botões de download).
+- `ORCHESTRATOR_DASHBOARD_DIST` registra em log qual diretório venceu a resolução.
+
+### Corrigido — testes que não podiam falhar
+
+- **Auditoria de Beneficiamento era falso-verde:** esperava só `text=saúde do snapshot`, nunca os rankings. Se o snapshot viesse vazio, nenhuma `<tr>` clicável chegava ao DOM e o gate acendia sem exercitar nada. Agora aguarda linha populada **ou** estado vazio explícito, e falha dizendo isso em vez de auditar tela vazia.
+- **Dois dos três testes de `get_dashboard_path` passavam de qualquer jeito:** asseriam `endswith("Dashboard/dist") or endswith("Dashboard")`, verdadeiro nos dois ramos do fallback. Reescritos com `PROJECT_ROOT` monkeypatchado e asserção de caminho exato.
+
+### Investigado, não alterado
+
+- **`color-contrast` no drawer não é defeito de token.** Auditar o drawer logo após abri-lo media um frame da animação `animate-in` (`fade-in`, opacity 0→1): com o painel translúcido, o `--scrim` escuro composita através dele e o axe lia `#2a6a34` sobre `#cdd8d4` (4,47:1) em vez de `--green` sobre `--surface`. O teste passou a aguardar as animações do diálogo terminarem, e a regra segue **ligada** — desligá-la esconderia regressão real de cor.
+- **`format_dt_br` é idempotente:** reparseia o padrão BR num `datetime` naive e `to_br_timezone` devolve naive sem converter, então o `health` embutido no `/overview` não diverge do de `/health/full`.
+- **`.audit-state/ultima-auditoria.md` está errado sobre o `.env`.** Afirma "credenciais expostas no `.env` versionado — rotar imediatamente". `git ls-files --error-unmatch .env` não encontra o arquivo e `git log --all -- .env` é vazio: o `.env` nunca esteve em commit nenhum. Não agir sobre aquele achado.
+- `TableDensityContext` tem a mesma leitura não validada de `localStorage` que o `ThemeContext` tinha — pré-existente, fora do escopo desta rodada.
+
 ## [1.3.78] - 04/09/2026
 
 Frontend rodada 2, Onda 4-3 — tema claro, `ThemeContext` e auditoria de acessibilidade automatizada. Fecha a Onda 4 (e a rodada 2 inteira: Ondas 1–6 todas verificadas). Paleta aprovada pelo usuário via proposta publicada como Artifact antes de qualquer commit em componente (checkpoint humano do plano).

@@ -118,6 +118,7 @@ export function MonitorPage() {
   const [scrollTop, setScrollTop] = useState(0);
   const [rowH, setRowH] = useState(ROW_H_ESTIMATE);
   const firstRowRef = useRef<HTMLDivElement>(null);
+  const rowHMeasuredRef = useRef(false);
 
   // Buffer + flush em requestAnimationFrame: sob rajada de eventos, várias
   // mensagens no mesmo frame viram UM `setLines` (uma cópia O(n), um re-render)
@@ -213,11 +214,24 @@ export function MonitorPage() {
   const consoleWindow = computeWindow(scrollTop, rowH, CONSOLE_H, filteredLines.length, CONSOLE_OVERSCAN);
   const visibleLines = filteredLines.slice(consoleWindow.start, consoleWindow.end);
 
+  // Mede `rowH` UMA ÚNICA VEZ (guarda `rowHMeasuredRef`), nunca de novo depois.
+  // `rowH` é entrada de `computeWindow` acima e determina `start` — ou seja,
+  // reescrever `rowH` muda QUAL linha é a primeira renderizada. Com
+  // `pre-wrap` e linhas de log de comprimentos alternados, medir a primeira
+  // linha a cada mudança de `rowH` é um laço de realimentação: altura A leva a
+  // uma primeira linha de altura B, que reescreve `rowH` para B, que troca a
+  // primeira linha para uma de altura A, e o ciclo não converge. Medir só a
+  // primeira vez é coerente com a premissa acima (rowH é estimativa, overscan
+  // absorve o erro) e elimina a causa da oscilação, não só o sintoma.
   useLayoutEffect(() => {
+    if (rowHMeasuredRef.current) return;
     const el = firstRowRef.current;
     if (!el) return;
     const h = el.getBoundingClientRect().height;
-    if (h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h);
+    if (h > 0) {
+      rowHMeasuredRef.current = true;
+      if (Math.abs(h - rowH) > 0.5) setRowH(h);
+    }
   }, [visibleLines.length, rowH]);
 
   const handleConsoleScroll = useCallback(() => {

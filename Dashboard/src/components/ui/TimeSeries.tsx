@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
+import { useTheme } from "../../context/ThemeContext";
 import { toneVar, type Tone } from "../../lib/status";
 import { readPalette } from "../../styles/chartPalette";
 import styles from "./TimeSeries.module.css";
@@ -26,21 +27,24 @@ function toData(xLabels: string[], lines: SeriesLine[]): uPlot.AlignedData {
  *  TAMBÉM os arrays de valores a cada render (no Monitor: 6x por mensagem de WS
  *  com 3 gráficos montados). Aqui entram só os campos que obrigam a recriar o
  *  `uPlot`; a mudança de valores é tratada separadamente por `setData`. */
-function structureSignature(height: number, xLabels: string[], lines: SeriesLine[]): string {
-  const parts: string[] = [String(height), String(xLabels.length)];
+function structureSignature(theme: string, height: number, xLabels: string[], lines: SeriesLine[]): string {
+  const parts: string[] = [theme, String(height), String(xLabels.length)];
   for (const label of xLabels) parts.push(label);
   parts.push("|series|");
   for (const line of lines) {
     parts.push(line.label);
     parts.push(line.tone);
   }
-  return parts.join(",");
+  // Separador "\u0000" (nunca aparece em label/tone/theme) em vez de
+  // "," — um label com vírgula colidiria com outra estrutura e
+  // suprimiria uma recriação legítima (achado nº 18).
+  return parts.join("\u0000");
 }
 
 /** Série temporal de telemetria (uPlot). Eixo X por índice, rótulos mapeados.
  *
  *  Recriar o gráfico (`plot.destroy()` + `new uPlot`) só acontece quando a
- *  ESTRUTURA muda — nº de séries, rótulos/tons, rótulos do eixo X ou altura.
+ *  ESTRUTURA muda — nº de séries, rótulos/tons, rótulos do eixo X, altura ou tema.
  *  Mudança só de valores usa `plot.setData`, que redesenha sem recriar o canvas.
  *  Sem isso, como `xLabels`/`lines` chegam como arrays novos a cada render, no
  *  Monitor cada mensagem do WebSocket destruía e reconstruía o gráfico inteiro
@@ -52,8 +56,13 @@ function structureSignature(height: number, xLabels: string[], lines: SeriesLine
 export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 200 }: TimeSeriesProps) {
   const ref = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
+  const { theme } = useTheme();
 
-  const structureKey = structureSignature(height, xLabels, lines);
+  // `theme` entra na assinatura para que a troca de tema (clique no topbar)
+  // recrie o plot com a paleta nova — sem isso o `<canvas>` do uPlot fica
+  // com as cores lidas na criação, porque desenha em pixels concretos e não
+  // resolve `var(--x)` (achado nº 1).
+  const structureKey = structureSignature(theme, height, xLabels, lines);
 
   // Atualiza só os valores, sem recriar o gráfico. Depende da REFERÊNCIA de
   // `lines` — os call sites memoizam `lines`, então nova referência = valores
@@ -119,8 +128,8 @@ export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 20
       plot.destroy();
       plotRef.current = null;
     };
-    // `structureKey` é a fonte de verdade da recriação; xLabels/lines/height
-    // entram só pelo valor serializado nela.
+    // `structureKey` é a fonte de verdade da recriação; xLabels/lines/height/
+    // theme entram só pelo valor serializado nela.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
 

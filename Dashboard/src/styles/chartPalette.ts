@@ -10,9 +10,12 @@ export interface ChartPalette {
 
 /** Espelho JS dos tokens de cor — o canvas do uPlot desenha em <canvas> e não
  *  resolve `var(--x)`, então as cores precisam ser strings concretas. Lidas de
- *  `tokens.css` via getComputedStyle a cada recriação do gráfico (assim a troca
- *  de tema da Onda 4 é pega). Se o `:root` ainda não tiver as vars (ex.: teste
- *  em jsdom sem CSS), cai nos hex de fallback — MESMOS valores dos tokens. */
+ *  `tokens.css` via getComputedStyle a cada recriação do gráfico. A recriação
+ *  em si só é disparada porque `TimeSeries` inclui `useTheme().theme` na sua
+ *  `structureKey` (achado nº 1) — sem isso a troca de tema no topbar não
+ *  reroda este `readPalette()` e o `<canvas>` fica com as cores da criação.
+ *  Se o `:root` ainda não tiver as vars (ex.: teste em jsdom sem CSS), cai nos
+ *  hex de fallback — MESMOS valores dos tokens. */
 export function readPalette(): ChartPalette {
   const FALLBACK: ToneColors = {
     cyan: "#38C5C9",

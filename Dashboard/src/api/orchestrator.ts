@@ -91,8 +91,8 @@ export type OperationalState =
 export type SlaStatus = "ok" | "at_risk" | "violated" | "unknown";
 
 /** `portfolio_catalog._sla_state` — vocabulário DISTINTO de `SlaStatus` (o
- *  plano assumia que eram o mesmo; não são). `lib/status.ts slaTone` ainda
- *  não trata `breached`/`recovering` — corrigir na Onda 4 (paleta de SLA). */
+ *  plano assumia que eram o mesmo; não são). `lib/status.ts slaTone` trata
+ *  os 4 valores (`breached` -> red, `recovering` -> amber). */
 export type SlaState = "ok" | "breached" | "recovering" | "unknown";
 
 /** `system_diagnostics` `overall_status` / `SystemHealth.status`. */
