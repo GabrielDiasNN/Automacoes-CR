@@ -8,11 +8,18 @@ import page from "./page.module.css";
 export function ExecDetailBody({
   detail,
   loading,
+  logsText,
+  logsLive,
   onStop,
   onRequeue,
 }: {
   detail: ExecutionDetail;
   loading: boolean;
+  /** Texto a mostrar no LogViewer — REST (`detail.logs`) ou o acumulado do
+   *  WebSocket `/ws/logs/{exec_id}` quando a execução está RUNNING. */
+  logsText: string;
+  /** WS de log ao vivo conectado e aberto agora. */
+  logsLive: boolean;
   onStop: () => void;
   onRequeue: () => void;
 }) {
@@ -69,8 +76,17 @@ export function ExecDetailBody({
       )}
 
       <div>
-        <div className={page.sectionLabel}>logs</div>
-        <LogViewer text={detail.logs ?? ""} loading={loading} />
+        <div className={page.toolbar} style={{ marginBottom: "var(--sp-1)" }}>
+          <div className={page.sectionLabel} style={{ margin: 0 }}>
+            logs
+          </div>
+          {logsLive && (
+            <StatusTag tone="cyan" dot pulse>
+              ao vivo
+            </StatusTag>
+          )}
+        </div>
+        <LogViewer text={logsText} loading={loading} />
       </div>
     </div>
   );

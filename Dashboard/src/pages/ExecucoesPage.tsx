@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RotateCw, Square, RefreshCw } from "lucide-react";
 import { orchestratorApi, type ExecutionSummary, type Paginated } from "../api/orchestrator";
+import { getApiKey } from "../api/client";
+import { useWebSocket } from "../hooks/useWebSocket";
 import {
   Button,
   Card,
@@ -98,6 +100,31 @@ export function ExecucoesPage() {
 
   // Só renderiza o detalhe que corresponde ao alvo atual.
   const detail = detailData && detailData.id === selectedId ? detailData : null;
+
+  // ── Log ao vivo (RUNNING) ──
+  // `/ws/logs/{exec_id}` manda TEXTO PURO (não JSON): no connect, o histórico
+  // completo (`db_exec.logs`) num único `send_text`, depois uma linha
+  // separadora, depois cada linha nova ao vivo é outro `send_text`. Basta
+  // concatenar `event.data` — sem parsear nada, diferente do `/ws/events`.
+  const [liveLogText, setLiveLogText] = useState("");
+  useEffect(() => {
+    setLiveLogText("");
+  }, [selectedId]);
+  const onLogMessage = useCallback((evt: MessageEvent) => {
+    setLiveLogText((prev) => prev + (evt.data as string));
+  }, []);
+  const isRunning = detail?.status === "RUNNING";
+  const { status: logWsStatus } = useWebSocket(
+    selectedId ? `/ws/logs/${selectedId}` : "",
+    getApiKey(),
+    { onMessage: onLogMessage, enabled: !!selectedId && isRunning },
+  );
+  // O replay do histórico é auto-suficiente (o backend manda o log inteiro no
+  // connect) — usa o acumulado do WS assim que algo chegou; senão cai no
+  // `detail.logs` da REST (execuções não-RUNNING, ou RUNNING mas o WS ainda
+  // não conectou/recebeu nada).
+  const logsText = liveLogText !== "" ? liveLogText : (detail?.logs ?? "");
+  const logsLive = logWsStatus === "open" && isRunning;
 
   const { run: runExecAction } = useAction<string>();
 
@@ -340,6 +367,8 @@ export function ExecucoesPage() {
             <ExecDetailBody
               detail={detail}
               loading={detailLoading}
+              logsText={logsText}
+              logsLive={logsLive}
               onStop={() => setConfirmStop(selectedId)}
               onRequeue={() => doRequeue(selectedId)}
             />
