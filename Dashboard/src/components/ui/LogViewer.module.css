@@ -88,8 +88,8 @@
   background: var(--surface);
 }
 .row.info { border-left-color: var(--blue); }
-.row.warn { border-left-color: var(--amber); background: rgba(232, 163, 23, 0.05); }
-.row.error { border-left-color: var(--red); background: rgba(240, 82, 77, 0.07); }
+.row.warn { border-left-color: var(--amber); background: color-mix(in srgb, var(--amber) 5%, transparent); }
+.row.error { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 7%, transparent); }
 .row.debug { border-left-color: var(--grey); }
 .row.plain { border-left-color: transparent; }
 

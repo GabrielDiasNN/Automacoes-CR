@@ -7,7 +7,7 @@
   overflow: hidden;
 }
 .alert {
-  border-color: rgba(232, 163, 23, 0.45);
+  border-color: color-mix(in srgb, var(--amber) 45%, transparent);
 }
 .hazardBar {
   height: 3px;
