@@ -1,5 +1,15 @@
 import { useMemo, useState } from "react";
-import { BellRing, DatabaseZap, PauseCircle, PlayCircle, RefreshCw, Trash2, LifeBuoy, RefreshCcw } from "lucide-react";
+import {
+  BellRing,
+  DatabaseZap,
+  GitCompareArrows,
+  PauseCircle,
+  PlayCircle,
+  RefreshCw,
+  Trash2,
+  LifeBuoy,
+  RefreshCcw,
+} from "lucide-react";
 import { usePolling } from "../hooks/usePolling";
 import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi } from "../api/orchestrator";
@@ -10,6 +20,7 @@ import {
   Card,
   ConfirmModal,
   DescriptionList,
+  EmptyState,
   ErrorState,
   FreshnessTag,
   Gauge,
@@ -42,6 +53,11 @@ export function SystemPage() {
   // de baseline de screenshot).
   const { data: version } = usePolling(orchestratorApi.getVersion, 60_000);
   const { data: orchestratorUptime } = usePolling(orchestratorApi.getUptime, 60_000);
+  const {
+    data: drift,
+    error: driftError,
+    lastUpdated: driftUpdated,
+  } = usePolling(orchestratorApi.getDrift, 60_000);
   const [confirmPurge, setConfirmPurge] = useState(false);
   const [confirmRecover, setConfirmRecover] = useState(false);
   const [confirmEmergency, setConfirmEmergency] = useState<"pause" | "resume" | null>(null);
@@ -243,6 +259,55 @@ export function SystemPage() {
               {portfolio.top_issue}
               {portfolio.recommended_action ? ` — ${portfolio.recommended_action}` : ""}
             </p>
+          )}
+        </Card>
+      )}
+
+      {/* Drift de portfólio (manifesto/docs vs runtime) */}
+      {drift && (
+        <Card
+          label="drift de portfólio"
+          alert={drift.summary.items_with_drift > 0}
+          actions={<FreshnessTag lastUpdated={driftUpdated} error={drift && driftError ? driftError : null} />}
+        >
+          {drift.summary.items_with_drift === 0 ? (
+            <EmptyState
+              icon={<GitCompareArrows size={20} />}
+              title="Catálogo consistente com o runtime"
+              hint="Nenhuma divergência entre manifesto, documentação e estado real."
+            />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+              {drift.items.map((item) => (
+                <div key={item.catalog_id}>
+                  <StatusTag tone="amber" dot>
+                    {item.name}
+                  </StatusTag>
+                  <ul
+                    style={{
+                      margin: "var(--sp-2) 0 0",
+                      paddingLeft: "var(--sp-4)",
+                      fontSize: "var(--fs-small)",
+                      color: "var(--text-mid)",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {item.issues.map((iss, i) => (
+                      <li key={i}>
+                        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-hi)" }}>{iss.code}</span>{" "}
+                        {iss.message}
+                        {iss.manifest_value != null && iss.runtime_value != null && (
+                          <span style={{ color: "var(--text-lo)", fontFamily: "var(--font-mono)" }}>
+                            {" "}
+                            ({iss.manifest_value} → {iss.runtime_value})
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
           )}
         </Card>
       )}
