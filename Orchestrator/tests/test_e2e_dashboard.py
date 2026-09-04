@@ -564,6 +564,23 @@ def test_e2e_dashboard_system_drift_card(uvicorn_server: str, page: Any) -> None
 
 
 @pytest.mark.e2e
+def test_e2e_dashboard_system_audit_card(uvicorn_server: str, page: Any) -> None:
+    """A tela de Sistema mostra o card de trilha de auditoria (Onda 6, item 7).
+
+    Não força empty state nem tabela preenchida — o histórico de auditoria do
+    banco de teste depende de quais ações os outros testes já dispararam
+    contra a mesma instância (ex.: "Acordar worker"). O card existir + o
+    seletor de teto (50/100/200) é o contrato deste teste.
+    """
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/sistema")
+    page.get_by_role("heading", name="Sistema").wait_for(timeout=30_000)
+
+    page.wait_for_selector("text=trilha de auditoria", timeout=15_000)
+    assert page.get_by_label("Teto de entradas da trilha de auditoria").is_visible()
+
+
+@pytest.mark.e2e
 def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> None:
     """Garante que o dashboard renderiza datas em BRT (DD/MM/AAAA HH:MM:SS)."""
     import requests
