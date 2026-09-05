@@ -151,6 +151,12 @@ Backups/
 scratch/
 # Estado de loops agenticos (skill loop-agentico) — local, por sessao
 .loop-state/
+# Estado de auditoria/verificacao gerado por ferramenta externa (nao e uma
+# skill deste repo) — relatorio local, nao versionado. Ja apareceu com um
+# achado falso (credenciais no .env versionado; .env nunca esteve em nenhum
+# commit, ver git log --all -- .env) — nao tratar como fonte de verdade sem
+# verificar cada achado contra o codigo antes de agir.
+.audit-state/
 SQL Reference/
 
 # Beneficiamento - artefatos exploratórios e arquivos de refresh local
