@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.80] - 07/09/2026
+
+### Corrigido
+
+- **Resolução dinâmica de `.venv` para worktrees de agentes:** em `Tools/Test-PythonGovernance.ps1`, a função `Get-PythonTool` passou a resolver dinamicamente o diretório comum do Git (`git rev-parse --git-common-dir`) quando executada dentro de um git worktree isolado (como os criados pelo Codex ou outros subagentes). Isso garante que o Mypy e o Pylint utilizem as dependências e stubs do ambiente virtual do repositório principal em vez de degradarem para o Python global do sistema.
+
 ## [1.3.79] - 04/09/2026
 
 Correção dos 21 achados da revisão stateless da rodada 2 (handoff em `scratch/handoff-correcoes-revisao-04092026.md`). Executada por operadores em sessões isoladas, com supervisão e validação central. Nenhuma cor ou baseline de screenshot mudou.

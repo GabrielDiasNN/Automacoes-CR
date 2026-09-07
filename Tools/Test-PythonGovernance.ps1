@@ -43,6 +43,20 @@ function Get-PythonTool {
     param([string]$ToolName)
     $venvTool = Join-Path $RootPath ".venv\Scripts\$ToolName.exe"
     if (Test-Path $venvTool) { return $venvTool }
+
+    try {
+        $commonDir = git -C $RootPath rev-parse --git-common-dir 2>$null
+        if ($commonDir) {
+            $mainRepo = if ([System.IO.Path]::IsPathRooted($commonDir)) {
+                Split-Path $commonDir -Parent
+            } else {
+                Split-Path (Resolve-Path (Join-Path $RootPath $commonDir)).Path -Parent
+            }
+            $mainVenvTool = Join-Path $mainRepo ".venv\Scripts\$ToolName.exe"
+            if (Test-Path $mainVenvTool) { return $mainVenvTool }
+        }
+    } catch [System.Exception] { }
+
     if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $ToolName }
     return $null
 }
