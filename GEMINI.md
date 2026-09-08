@@ -27,7 +27,8 @@ As regras canônicas de encoding estão em `AGENTS.md` (seção "Regras de Encod
    - `SECURITY.md`: guardrails e tratamento de dados sensíveis.
    - `CHANGELOG.md`: histórico completo e auditável de versões.
    - `docs/ai-native-context-monitor.md`: snapshot curado para bootstrap de agentes.
-6. **Skills compartilhadas**: use `.github/skills/` como fonte canônica das skills. O diretório `.gemini/skills/` existe apenas como espelho de compatibilidade para Gemini CLI e Antigravity.
+   - `.agents/rules/`: regras modulares de subsistema (`dashboard.md`, `orchestrator.md`, `lib-powershell.md`, `producao-beneficiamento.md`).
+6. **Skills e Regras compartilhadas**: use `.github/skills/` como fonte canônica das skills (espelhadas em `.gemini/skills/`) e `.agents/rules/` para regras contextuais de subsistema.
 7. **Disciplina global de engenharia com IA**: herdar a skill global `ai-engineering-discipline`; regras locais deste repositório continuam prevalecendo quando houver conflito.
 8. **Validação E2E final com Playwright**: para mudanças em UI/SPA/dashboard, rotas FastAPI consumidas pela UI, fluxos operacionais E2E ou contrato front-back, a validação final obrigatória deve ser Playwright E2E por último, conforme `docs/playwright-e2e-standard.md`.
 
@@ -36,6 +37,7 @@ As regras canônicas de encoding estão em `AGENTS.md` (seção "Regras de Encod
 - [ ] `README.md`, `CONTEXT.md` e `SECURITY.md` permanecem coerentes com a mudança?
 - [ ] `CHANGELOG.md` foi atualizado quando houve mudança de comportamento, governança, arquitetura ou contrato?
 - [ ] `docs/ai-native-context-monitor.md` foi atualizado quando houve mudança de estado operacional relevante para agentes?
+- [ ] As regras modulares em `.agents/rules/` foram consultadas ou atualizadas quando a mudança tocou seus respectivos domínios?
 - [ ] A política de encoding foi preservada (conforme `AGENTS.md`)?
 - [ ] O tom técnico em Português do Brasil foi mantido?
 - [ ] Os princípios comportamentais de `AGENTS.md` foram respeitados?

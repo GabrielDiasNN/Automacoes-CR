@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.84] - 08/09/2026
+
+### Adicionado
+
+- **Hooks de Ciclo de Vida do Antigravity (`.agents/hooks.json`):** implementados hooks nativos para automação de segurança e qualidade no Antigravity:
+  - `PreToolUse-Guard.ps1`: intercepta chamadas de edição (`write_to_file`, `replace_file_content`) e comandos (`run_command`), aplicando bloqueio Zero-Trust para `.env` (com exceção nominal para `.env.example`/`.env.template`/`.env.sample`), bancos SQLite locais (`automacoes.db`, `orchestrator.db`), arquivos de processo (`*.pid`), certificados/chaves e comandos Git destrutivos (`reset --hard`, `clean -fd`, `push --force`). Em `run_command` o bloqueio cobre tanto redirecionamento de saída (`>`, `>>`) quanto cmdlets e binários de escrita/remoção (`Set-Content`, `Out-File`, `Remove-Item`, `rm`, `cp`, `sed -i`); leitura permanece liberada, inclusive com redirecionamento para arquivo não sensível.
+  - `PostToolUse-AutoFix.ps1`: auto-injeção de UTF-8 with BOM para arquivos PowerShell (`.ps1`, `.psm1`), formatação com `black` e `isort` para Python (com checagem de exit code — falha de formatação é reportada em `stderr`, não engolida) e checagem de integridade contra mojibake em Markdown.
+- **Servidor MCP SQLite (`.gemini/settings.json`):** configurado o servidor `sqlite-orchestrator` apontando para `Orchestrator/automacoes.db` com a flag `--read-only`, para consultas analíticas sem concorrência ou riscos de lock no SQLite WAL. **A garantia de somente-leitura ainda não foi verificada nesta máquina** — o suporte à flag na versão instalada de `mcp-server-sqlite` depende de confirmação com acesso ao PyPI; ver a ressalva em `.gemini/README.md` antes de usar.
+- **Trilogia de Workflows Declarativos (`.agents/workflows/`):** criados playbooks padronizados de execução sequencial:
+  - `preflight-gate.md`: bateria pré-commit e pré-PR com **paridade explícita** com `.github/workflows/governanca.yml` — cada passo mapeia um job do CI, e o passo 1 invoca o mesmo `ValidarAutomacoes.ps1 -OnlyGovernance` do pre-commit em vez de reimplementar validações avulsas.
+  - `diagnostico-orquestrador.md`: roteiro de smoke test e recuperação segura do Orchestrator sem interrupções desnecessárias.
+  - `nova-automacao.md`: guia completo de scaffolding com manifesto obrigatório, SLAs e validação de entrypoint. As chamadas às rotas `/api/automations/*` enviam `X-API-Key` lida de `ORCHESTRATOR_API_KEY`.
+  - `fluxo-pr-completo.md`: ciclo branch → commit → PR → CI → merge → cleanup, incluindo a verificação de divergência entre `main` local e `origin/main` antes de criar a branch.
+
+## [1.3.83] - 08/09/2026
+
+### Adicionado
+
+- **Regras de Workspace Modulares para Antigravity e Gemini CLI (`.agents/rules/`):** criação de diretório `.agents/rules/` com regras focadas por subsistema (`dashboard.md`, `orchestrator.md`, `lib-powershell.md` e `producao-beneficiamento.md`), espelhando as diretrizes operacionais de cada domínio para descoberta automática e contextual no Antigravity e Gemini CLI.
+- **Alinhamento de Contratos de Governança (`AGENTS.md` e `GEMINI.md`):** atualização da precedência, descoberta recomendada, hierarquia e checklist local para registrar a descoberta nativa de regras em `.agents/rules/`.
+
 ## [1.3.80] - 07/09/2026
 
 ### Corrigido

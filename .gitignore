@@ -64,7 +64,9 @@ Orchestrator/tests/e2e-evidence/
 .benchmarks/
 **/.pytest_cache/
 .pytest_cache/
-.gemini/
+.gemini/*
+!.gemini/settings.json
+!.gemini/README.md
 # Mirrors de skills sao artefato local reconstruivel, nunca conteudo versionado:
 # `.gemini/skills` espelha `.github/skills` e `.agents/skills` espelha as skills
 # operacionais de `.claude/skills`. Ambos sao recriados por Tools/New-SkillMirrors.ps1.
@@ -147,8 +149,9 @@ Orchestrator/worker.pid
 Orchestrator/worker.shutdown
 Backups/
 
-# Scratch local de investigação
+# Scratch local de investigação e quarentena
 scratch/
+_tmp/
 # Estado de loops agenticos (skill loop-agentico) — local, por sessao
 .loop-state/
 # Estado de auditoria/verificacao gerado por ferramenta externa (nao e uma

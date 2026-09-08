@@ -10,13 +10,14 @@ Quando houver conflito entre instruções, use esta ordem:
 
 1. Instruções explícitas do usuário para a tarefa atual.
 2. Regras nativas do runtime do agente.
-3. Contratos locais do repositório:
+3. Contratos locais e regras do repositório:
    - `AGENTS.md`
    - `CLAUDE.md`
    - `GEMINI.md`
    - `README.md`
    - `CONTEXT.md`
    - `SECURITY.md`
+   - Regras modulares em `.agents/rules/`
 4. Skills canônicas do workspace em `.github/skills/`.
 5. Diretrizes globais compartilhadas da máquina:
    - `%USERPROFILE%\.gemini\GEMINI.md`
@@ -118,7 +119,7 @@ Todos os agentes devem operar com estas regras não negociáveis:
 ## Descoberta Recomendada
 
 - ChatGPT/Codex: ler primeiro `.github/skills/README.md` e depois a skill aplicável.
-- Gemini CLI e Antigravity: podem ler `.gemini/skills/`, mas o conteúdo esperado é o mesmo de `.github/skills/`.
+- Gemini CLI e Antigravity: descobrem regras locais em `.agents/rules/`, contratos de raiz `AGENTS.md`/`GEMINI.md` e skills em `.gemini/skills/` (conteúdo espelhado de `.github/skills/`).
 - Claude Code: além de `CLAUDE.md`, usa `.claude/agents/` (subagentes especializados), `.claude/skills/` (skills locais) e `.claude/settings.json` (hooks/config); GitHub Copilot usa `.github/copilot-instructions.md` como fonte de instruções.
 - Para **rodar e dirigir o app real** (subir, autenticar no dashboard, capturar tela, chamar rotas `/api/*`), a fonte é `.claude/skills/run-orchestrator/` — driver executável, não descrição. Não reimplementar o caminho de login nem reiniciar o Orchestrator sem antes checar se já há instância viva.
 - Para regras globais compartilhadas entre agentes, carregar `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais canônicas.
