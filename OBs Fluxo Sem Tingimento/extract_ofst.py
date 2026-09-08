@@ -266,6 +266,24 @@ def extract() -> None:
         # para conter apenas OBs ainda notificaveis").
         previamente = _read_notified(STATE_FILE)
         if not obs:
+            if resumo.falhas:
+                # Linhas VIERAM da query mas nenhuma sobreviveu a validacao
+                # (`resumo.falhas` so' e' populado por linha rejeitada — query
+                # vazia de verdade nunca o preenche). Sinal de schema/dado fora
+                # do contrato, nao de "nada a notificar": seguir para o exit 2
+                # gravaria um state vazio (merge com avaliacoes=[] devolve {}) e
+                # o `run.ps1` o commitaria no ramo idempotente, apagando TODAS
+                # as marcas de idempotencia vivas e re-anunciando ao grupo as
+                # OBs ja avisadas assim que o dado normalizar. Aborta sem tocar
+                # no state — mesma guarda de extract_orb.py.
+                log(
+                    f"{len(resumo.falhas)} linha(s) retornadas pela query, "
+                    "nenhuma sobreviveu a validacao — abortando sem tocar no "
+                    "state (idempotencia preservada).",
+                    "ERROR",
+                    exec_id,
+                )
+                sys.exit(1)
             notified = merge_notified_state(
                 previamente, [], [], datetime.now().isoformat()
             )

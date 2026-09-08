@@ -694,9 +694,7 @@ def test_extract_grava_state_podado_mesmo_sem_ob_nova_a_notificar(
 
     ob_1001 = v.coerce_ob_row(_ob_row(NUMERO_OB=1001, TOTAL_PECAS=50))
     avaliacao_1001 = _avaliacao(1001, notificar=True)
-    monkeypatch.setattr(
-        extract, "_fetch_obs", lambda creds, exec_id, resumo: [ob_1001]
-    )
+    monkeypatch.setattr(extract, "_fetch_obs", lambda creds, exec_id, resumo: [ob_1001])
     monkeypatch.setattr(extract, "_fetch_estoque", lambda creds, codigos, exec_id: {})
     monkeypatch.setattr(
         extract, "_avaliar_todas", lambda obs, estoques, exec_id: [avaliacao_1001]
@@ -715,6 +713,59 @@ def test_extract_grava_state_podado_mesmo_sem_ob_nova_a_notificar(
     assert gravado["notified"] == {
         "1001": "2026-07-15T10:00:00"
     }, "9999 saiu da query e precisa ser podado do state, mesmo sem OB nova"
+
+
+@pytest.mark.unitario
+def test_extract_aborta_sem_tocar_no_state_quando_todas_as_linhas_falham(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    # pylint: disable=protected-access
+    """A poda incondicional do state não pode zerar a idempotência.
+
+    `resumo.falhas` só é populado por linha REJEITADA na validação — uma query
+    genuinamente vazia nunca o preenche. Então `obs == []` com `falhas` é
+    "vieram linhas e nenhuma sobreviveu", não "nada a notificar": seguir para
+    o `exit(2)` gravaria `merge_notified_state(prev, [], [], ...)`, que devolve
+    `{}`, e o `run.ps1` commitaria esse state vazio no ramo idempotente —
+    apagando todas as marcas vivas e re-anunciando ao grupo as OBs já avisadas
+    assim que o dado normalizasse.
+
+    `extract_orb.py` sempre teve essa guarda; o OFST-06 não, e a correção de
+    poda desta revisão tornou o caminho alcançável. Sem este teste, remover a
+    guarda deixa a suíte inteira verde.
+    """
+    extract = _load_module("extract_ofst_falhas", AUTOMATION_DIR / "extract_ofst.py")
+
+    state_file = tmp_path / "ofst_state.json"
+    state_file.write_text(
+        json.dumps({"notified": {"1001": "2026-07-15T10:00:00"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
+    monkeypatch.setattr(extract, "RESULT_FILE", str(tmp_path / "ofst_result.json"))
+    monkeypatch.setattr(
+        extract, "resolve_oracle_credentials", lambda log, exec_id: object()
+    )
+    monkeypatch.setattr(extract, "init_thick_mode", lambda creds, log, exec_id: None)
+    monkeypatch.setattr(extract.sys, "argv", ["extract_ofst.py", "TESTE"])
+
+    def _fetch_obs_todas_rejeitadas(creds: Any, exec_id: str, resumo: Any) -> list:
+        resumo.total_lidas = 2
+        resumo.falhas.append("OB 1001: campo obrigatorio ausente")
+        resumo.falhas.append("OB 1002: data invalida")
+        return []
+
+    monkeypatch.setattr(extract, "_fetch_obs", _fetch_obs_todas_rejeitadas)
+
+    with pytest.raises(SystemExit) as excinfo:
+        extract.extract()
+
+    assert excinfo.value.code == 1, "lote inteiro rejeitado e erro, nao 'nada a fazer'"
+    assert not (
+        tmp_path / "ofst_state.json.tmp"
+    ).exists(), "o state.tmp nao pode ser escrito: o run.ps1 o commitaria e zeraria a idempotencia"
+    assert json.loads(state_file.read_text(encoding="utf-8"))["notified"] == {
+        "1001": "2026-07-15T10:00:00"
+    }, "o state vivo tem de permanecer intacto"
 
 
 # --------------------------------------------------------------------------

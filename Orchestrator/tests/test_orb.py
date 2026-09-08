@@ -1432,9 +1432,7 @@ def test_extract_grava_state_podado_mesmo_sem_ob_nova_a_notificar(
         return [v.coerce_ob_row(ob_2002)]
 
     _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs, tmp_path)
-    monkeypatch.setattr(
-        extract, "_fetch_finalidades", lambda creds, exec_id: ({}, {})
-    )
+    monkeypatch.setattr(extract, "_fetch_finalidades", lambda creds, exec_id: ({}, {}))
     monkeypatch.setattr(
         extract, "_fetch_estoque", lambda creds, codigos, finalidades, exec_id: {}
     )
