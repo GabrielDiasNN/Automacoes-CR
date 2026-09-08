@@ -10,7 +10,7 @@ Aplica-se ao desenvolvimento e manutenção em `Produção Beneficimento/`.
 ## Estrutura de Módulos (`src/beneficiamento/`)
 
 - `oracle.py`: Único ponto de contato com o banco de dados Oracle. Nenhuma conexão com Oracle deve ser aberta fora deste arquivo.
-- `runner.py`: Orquestra a captura dos dados do Oracle para o histórico em SQLite. Possui orçamento de tempo rígido de 20 segundos.
+- `runner.py`: Orquestra a captura dos dados do Oracle para o histórico em SQLite, sob orçamento de tempo (`WALL_CLOCK_BUDGET_SECONDS` em `settings.py`, padrão **19s**, ajustável por `BENEFICIAMENTO_WALL_CLOCK_SECONDS`).
 - `snapshot_store.py`: Responsável pela leitura e escrita em disco dos snapshots (`snapshots/latest/`).
 - `contracts/`: Implementações canônicas de agregação (`overview.py`, `detail.py`, `tingimento.py`).
   - O código SQL deve permanecer estritamente isolado nos módulos privados `_queries.py`, `_queries_common.py`, `_queries_overview.py` e `_queries_detail.py`.

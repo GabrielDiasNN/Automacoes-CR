@@ -158,12 +158,46 @@ if ($normalizedTool -in @("run_command", "runcommand")) {
         # 'Orchestrator\automacoes.db' sejam avaliados igualmente.
         $normalizedCommand = $commandLine.Replace('/', '\')
 
-        if ($normalizedCommand -match ('(>|>>)\s*.*' + $SensitiveTargetPattern)) {
-            Write-Decision -Decision "deny" -Reason "BLOQUEADO POR ZERO-TRUST: Redirecionamento de saida de comando para arquivo sensivel e proibido."
-        }
+        # A checagem NAO pode avaliar a linha inteira de uma vez: verbo de
+        # escrita e alvo sensivel podem estar em segmentos sem relacao
+        # (`Get-Content .env; Set-Content saida.txt x`) ou o `.*` guloso do
+        # redirecionamento pode atravessar um `;` (`echo ok > log.txt; cat
+        # .env`). Divide em segmentos por ; && || | e quebra de linha, e
+        # dentro de cada segmento trata `>`/`>>` como fronteira entre fonte
+        # (leitura) e alvo (escrita) — mesma abordagem de
+        # .claude\hooks\Assert-SensitiveWriteGuard.ps1.
+        $redirectPattern = '(?<![0-9])>>?(?!\s*[&$])'
+        $segments = $normalizedCommand -split '(\|\||&&|\||;|\r?\n)'
 
-        if (($normalizedCommand -match $WriteVerbPattern) -and ($normalizedCommand -match $SensitiveTargetPattern)) {
-            Write-Decision -Decision "deny" -Reason "BLOQUEADO POR ZERO-TRUST: Escrita ou remocao de arquivo sensivel via terminal e proibida (.env, bancos locais, PIDs e chaves)."
+        foreach ($segment in $segments) {
+            if ([string]::IsNullOrWhiteSpace($segment)) { continue }
+
+            # O conteudo de -Value/-Body e dado, nao alvo: uma mencao ao nome
+            # do arquivo dentro do valor escrito nao deve disparar bloqueio.
+            $inspecionado = [regex]::Replace($segment, '-(Value|Body)\s+("[^"]*"|''[^'']*''|\S+)', '-$1 <omitido>')
+
+            $parts = $inspecionado -split $redirectPattern
+            $fonte = $parts[0]
+            $alvos = @($parts | Select-Object -Skip 1)
+
+            $bloqueia = $false
+
+            # Alvo de redirecionamento sensivel bloqueia sozinho: o proprio
+            # `>` e o verbo.
+            foreach ($alvo in $alvos) {
+                if ($alvo -match $SensitiveTargetPattern) { $bloqueia = $true }
+            }
+
+            # Na fonte, so bloqueia com verbo de escrita explicito no mesmo
+            # segmento — senao qualquer leitura (`Get-Content .env`,
+            # `grep CHAVE .env`) viraria bloqueio.
+            if (-not $bloqueia -and ($fonte -match $SensitiveTargetPattern) -and ($fonte -match $WriteVerbPattern)) {
+                $bloqueia = $true
+            }
+
+            if ($bloqueia) {
+                Write-Decision -Decision "deny" -Reason "BLOQUEADO POR ZERO-TRUST: Escrita ou remocao de arquivo sensivel via terminal e proibida (.env, bancos locais, PIDs e chaves)."
+            }
         }
     }
 }

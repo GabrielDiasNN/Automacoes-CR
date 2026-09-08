@@ -13,6 +13,7 @@ Aplica-se a arquivos em `lib/`, `Infrastructure/` e scripts PowerShell (`.ps1`, 
   - `Get-OrchestratorRuntimeVersion`: Lê `ORCHESTRATOR_VERSION` de `constants.py`.
   - `Get-OrchestratorEnvValue`: Parser de variáveis do `.env`.
   - `Stop-OrchestratorProcesses`: Encerra processos com segurança utilizando `Get-CimInstance Win32_Process`.
+  - `Request-OrchestratorGracefulStop`: Solicita encerramento gracioso antes do encerramento forçado.
   - **Atenção**: Nunca utilize `Get-Process` para filtrar processos por linha de comando no Windows PowerShell 5.1 (a propriedade `CommandLine` não é exposta).
 - `Lib-Config.psm1`: Leitura segura de variáveis de ambiente para automações de domínio.
 
