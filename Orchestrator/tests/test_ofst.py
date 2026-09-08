@@ -748,7 +748,9 @@ def test_extract_aborta_sem_tocar_no_state_quando_todas_as_linhas_falham(
     monkeypatch.setattr(extract, "init_thick_mode", lambda creds, log, exec_id: None)
     monkeypatch.setattr(extract.sys, "argv", ["extract_ofst.py", "TESTE"])
 
-    def _fetch_obs_todas_rejeitadas(creds: Any, exec_id: str, resumo: Any) -> list:
+    def _fetch_obs_todas_rejeitadas(
+        _creds: Any, _exec_id: str, resumo: Any
+    ) -> list[Any]:
         resumo.total_lidas = 2
         resumo.falhas.append("OB 1001: campo obrigatorio ausente")
         resumo.falhas.append("OB 1002: data invalida")
