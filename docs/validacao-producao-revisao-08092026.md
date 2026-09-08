@@ -1,7 +1,9 @@
 # Validação em produção — revisão completa [1.3.81]
 
-> **Status:** PENDENTE. Nenhum item abaixo foi executado.
-> **Branch:** `claude/orchestrated-quality-loop-revision-kbi7b7` (14 commits)
+> **Status:** EXECUTADO em 08/09/2026, 16:00-16:15, na maquina Windows de producao.
+> Os 7 passos rodaram. Resultado por item no checklist; achados na secao
+> "Resultado da execucao".
+> **Branch:** `claude/orchestrated-quality-loop-revision-kbi7b7` (15 commits)
 > **Criado em:** 08/09/2026
 
 ## Por que este documento existe
@@ -143,14 +145,16 @@ bloqueado. Depois desfaça.
 
 ## Checklist
 
-- [ ] 1. `ValidarAutomacoes.ps1 -OnlyGovernance` — 15 checks
-- [ ] 2. `Invoke-Pester -Path .\lib\tests -CI`
-- [ ] 3. `Test-PythonGovernance.ps1` — mypy + pylint
-- [ ] 4. MT-02 contra o Oracle (≥ 2 ciclos, um em horário de pico)
-- [ ] 5. OFST-06 — conferir `ofst_state.json` antes/depois
-- [ ] 6. Frontend (build + Vitest) e E2E Playwright
-- [ ] 7. Pre-commit hook — mensagem de erro visível
-- [ ] Suíte Python de novo na máquina Windows: `cd Orchestrator; ..\.venv\Scripts\pytest`
+- [x] 1. `ValidarAutomacoes.ps1 -OnlyGovernance` — 15 checks. **Reprovou na primeira vez**
+      (Achado 1); passou depois da correção.
+- [x] 2. `Invoke-Pester -Path .\lib\tests -CI` — 200 passed, 0 failed.
+- [x] 3. `Test-PythonGovernance.ps1` — reprovou junto com o item 1; limpo após a correção.
+- [x] 4. MT-02 — 2 ciclos, ambos `ExitCode=0`, 99 registros, nenhuma notificação.
+      **Zero `retry.attempt`**: a mudança não foi exercida (Achado 5).
+- [x] 5. OFST-06 — validado com dado real: o state **encolheu de 1 OB para 0**.
+- [x] 6. Frontend: `npm ci` + build + coverage OK (76,09% stmts). E2E: 28 passed.
+- [x] 7. Pre-commit hook — mensagem apareceu e o commit foi bloqueado. Ressalva no Achado 2.
+- [x] Suíte Python de novo na máquina Windows: `cd Orchestrator; ..\.venv\Scripts\pytest`
 
       **Esperado no Windows: `1088 passed, 0 skipped`** — e não os `1082 passed, 6 skipped` do
       Linux. Os 6 skips são todos condicionais a NÃO estar no Windows: 4 em `test_path_safety.py`
@@ -162,6 +166,70 @@ bloqueado. Depois desfaça.
       exatamente os testes que o container Linux nunca conseguiu executar. O de
       `test_scaffold_governance.py` exercita `Tools/New-Automation.ps1` ponta a ponta; os de
       `test_path_safety.py` cobrem contenção de caminho, que é código de segurança.
+
+## Resultado da execução (08/09/2026)
+
+Executado a partir de um worktree, com `powershell.exe` (5.1) e não `pwsh` — o runbook
+pedia `pwsh`, mas o runtime de produção é o 5.1 deliberadamente, e validar em `pwsh`
+validaria um runtime que não é o desta máquina.
+
+**Resumo:** passos 1 e 3 reprovaram e foram corrigidos; 2, 6 e 7 passaram; 5 foi validado
+com dado real de produção; 4 rodou sem regressão mas **não exerceu** a mudança que deveria
+validar. Suíte Python no Windows: 1088 passed, 0 skipped, como previsto.
+
+### Achado 1 — o branch não commitava (CORRIGIDO)
+
+`Orchestrator/tests/test_ofst.py:751`, introduzido por esta própria revisão, reprovava o
+gate do pre-commit em dois pontos: o mock `_fetch_obs_todas_rejeitadas` declarava `-> list`
+(`type-arg` ausente sob `mypy --strict`) e tinha dois argumentos não usados (`W0613`).
+Como o container Linux não tinha `pwsh`, nem o passo 1 nem o passo 3 rodaram lá — que é
+exatamente a razão de este runbook existir.
+
+### Achado 2 — core.hooksPath é absoluto (NÃO CORRIGIDO, é config local)
+
+`core.hooksPath` aponta para o `.githooks` do repositório principal, por caminho absoluto.
+Worktrees rodam o hook da `main`, não o do branch em revisão — foi preciso forçar
+`git -c core.hooksPath=...` para exercer o hook corrigido. Consequências: a correção do
+`set -eu` só passa a valer após o merge, e todo branch que altere o hook não testa o
+próprio hook por padrão.
+
+### Achado 3 — run.ps1 não resolve o venv da raiz (NÃO CORRIGIDO)
+
+O preflight do MT-02 falhou com `Path inacessivel: python.exe` ao rodar do worktree: o
+`run.ps1` procura o venv relativo à raiz da própria árvore. É a mesma classe de problema
+que o PR #56 resolveu para `Tools/`, mas os 6 `run.ps1` ficaram de fora. Contornado com
+uma junction para o venv real. Enquanto isso não for resolvido, nenhuma automação roda a
+partir de um worktree de agente sem esse contorno.
+
+### Achado 4 — falha de preflight deixa execução órfã RUNNING (PRODUÇÃO)
+
+O ciclo que falhou no preflight (Achado 3) registrou `execution.start` na telemetria e, ao
+abortar, **nunca registrou o fim**. A execução ficou `RUNNING` indefinidamente no
+Orchestrator e passou a rejeitar a telemetria dos ciclos seguintes com
+`conflict: já existe uma execução ativa para esta automação`. Os dois ciclos de MT-02
+seguintes rodaram e concluíram, mas **sem telemetria registrada**.
+
+Isso não é específico do worktree: qualquer falha de preflight em produção — Oracle fora,
+disco cheio, path quebrado — produz o mesmo órfão, e MT-02 roda a cada 30 minutos. O
+`run.ps1` precisa registrar o fim da execução também no caminho de abort do preflight.
+
+### Achado 5 — o caminho de retry do MT-02 continua não exercido
+
+A mudança de comportamento de produção desta revisão é o perfil de retry do MT-02, e ela
+**não foi validada**. Os dois ciclos passaram sem nenhuma falha de rede, e `retry.attempt`
+só é emitido quando há falha. Os ciclos provam que o caminho feliz não regrediu; não dizem
+nada sobre o novo perfil de espera. O critério de rollback da seção 4 continua valendo e
+depende de observação em janela de pico do Oracle, ao longo de dias.
+
+### Sobre o passo 5, que é onde a revisão se prova
+
+O `ofst_state.json` de produção continha uma única OB, `186052`, notificada em
+**05/09 05:00** — presa havia três dias. Partindo desse mesmo state, o ciclo com o código
+novo emitiu `State reconciliado sem necessidade de envio` no step `commit` e gravou
+`notified` vazio com `updated_at` do ciclo. A OB saiu da query (`Linhas retornadas: 0`) e o
+state encolheu para vazio. No código antigo ela permaneceria indefinidamente, porque não
+havia OB nova no mesmo ciclo para disparar a gravação. Nenhum `.tmp` residual foi deixado,
+e o state de produção não foi tocado pelo ciclo do worktree.
 
 ## Achado conhecido, não corrigido
 
