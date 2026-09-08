@@ -29,7 +29,6 @@ $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $projectRoot    = Split-Path -Parent $ScriptDir
-$pythonExe      = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $ExtractScript  = Join-Path $ScriptDir "extract_orb.py"
 $FormatScript   = Join-Path $ScriptDir "format_message.py"
 $MessageFile    = Join-Path $ScriptDir "message.txt"
@@ -52,6 +51,10 @@ Import-Module $libRetry    -Force
 Import-Module $libProcess  -Force
 Import-Module $libConfig   -Force
 Import-Module $libOracle   -Force
+
+# O .venv nao e versionado e vive na raiz do repositorio principal: resolver
+# so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
+$pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 
 $AutomationName = "OBs Restrição Branco"
 

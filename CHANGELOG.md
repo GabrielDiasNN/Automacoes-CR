@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.3.82] - 08/09/2026
+
+Execução do runbook `docs/validacao-producao-revisao-08092026.md` na máquina Windows de produção e correção dos achados. A revisão [1.3.81] rodou num container Linux sem `pwsh`, sem rota para o `dbprd` e sem credenciais: tudo que era PowerShell, Oracle ou navegador tinha sido apenas lido. Os 7 passos rodaram; **dois reprovaram**, e o que reprovou primeiro foi o próprio gate de pre-commit do repositório.
+
+Suíte no Windows: **1103 passed, 0 skipped** (eram 1088; +15 testes). Governança: 15 checks verdes. Pester: 200 passed. E2E: 28 passed.
+
+### Corrigido
+
+- **O branch [1.3.81] não commitava.** `Orchestrator/tests/test_ofst.py:751`, adicionado pela própria revisão, reprovava `Test-PythonGovernance.ps1` — o mypy bloqueante do projeto — em dois pontos: o mock `_fetch_obs_todas_rejeitadas` declarava `-> list` (`type-arg` ausente sob `--strict`) e tinha dois argumentos não usados (`W0613`). Sem `pwsh` no container, nem o passo de governança nem o de mypy/pylint chegaram a rodar lá. É a terceira ocorrência da mesma classe nesta revisão (as duas primeiras estão em [1.3.81]: `black` reprovando no `HEAD` e a regressão do OFST-06): **suíte verde não é gate verde**.
+
+- **Os 6 `run.ps1` não rodavam a partir de um worktree.** `$pythonExe` era derivado só de `$projectRoot`, mas o `.venv` vive na raiz do repositório principal e não é versionado — um worktree de agente não tem cópia própria. Toda automação abortava no pré-flight com `Path inacessivel: python.exe`. É a mesma classe que o PR #56 resolveu para `Tools/`, que deixou os `run.ps1` de fora. Nova `Resolve-HubPythonExe` em `lib/Lib-Process.psm1` replica a cadeia de `Get-PythonTool`: venv local primeiro, senão o do repositório principal via `git rev-parse --git-common-dir`. Verificado com a junction de contorno **removida**: o pré-flight do MT-02 reporta `OK: Path: python.exe`.
+
+- **MT-02 deixava execução órfã `RUNNING` no Orchestrator após falha de pré-flight.** O abort do pré-flight acontece **antes** do `try/finally` que fecha a telemetria, e o `Write-Fim` local só emite o log estruturado — não chama a API. A execução ficava `RUNNING` indefinidamente e passava a rejeitar a telemetria de **todos os ciclos seguintes** com `conflict: já existe uma execução ativa`; os ciclos rodavam e concluíam, mas sem telemetria registrada. Observado em produção: a órfã gerada por um pré-flight falho às 16:08 quebrou a telemetria dos dois ciclos seguintes. Vale só para o MT-02 — as outras 5 saem por `Exit-WithCode`, que encaminha para `Exit-AutomationWithCode` e fecha a telemetria antes do `exit`; MT-02 é o único com `exit` cru, por ter múltiplos pontos de saída. `Close-ExecutionTelemetry -Status "ERROR"` adicionado ao ramo de abort.
+
+- **Mesmo defeito do primeiro item em `test_ofst_orb_parity_unit.py:177`** (dois argumentos não usados num mock, `W0613`) — quarta ocorrência da classe nesta revisão. Encontrado pelo **hook de pre-commit**, que roda a governança Python só sobre o diff; o full scan (`ValidarAutomacoes.ps1 -OnlyGovernance`) passou verde no mesmo commit, quatro execuções seguidas, com o defeito presente. **A causa da discordância entre os dois modos não foi determinada** e está registrada como achado 6 no runbook: enquanto não for explicada, full scan verde não substitui um commit real.
+
+- **`$venvActivate` morto em `Receitas Bloqueadas/run.ps1`.** Atribuído e nunca usado. Encontrado pelo teste de contrato novo, não pela correção manual, que já tinha passado por cima dele.
+
+### Adicionado
+
+- **`Orchestrator/tests/test_run_ps1_bootstrap_unit.py`** — 13 testes que travam os dois contratos de bootstrap dos 6 `run.ps1`: que o interpretador venha de `Resolve-HubPythonExe` (e que ninguém volte a hardcodear o venv em `$projectRoot`), e que todo `run.ps1` que abre telemetria a feche, por helper ou explicitamente. Leem os `.ps1` como texto: não substituem execução — a metade PowerShell segue sem cobertura executável — mas prendem o que a validação encontrou quebrado.
+
+- **Teste que exercita o perfil de retry do MT-02**, em `test_montagem_terceirizados.py`. É o que faltava para validar a mudança de [1.3.81]: os dois ciclos contra o Oracle real rodaram com rede saudável e não emitiram um único `retry.attempt`, porque o evento só aparece sob falha. O teste intercepta `time.sleep`, força três `DatabaseError` e mede a espera acumulada — **1,67s** no perfil atual contra **90,00s** no legado (`wait_initial=30`), medido nos dois. Um segundo teste trava o call site contra a reintrodução do override, ignorando os comentários que descrevem o perfil antigo de propósito.
+
+### Validação em produção
+
+- **OFST-06 validado com dado real, e o dado provou o bug.** O `ofst_state.json` de produção continha a OB `186052`, notificada em 05/09 05:00 e presa havia três dias — exatamente o sintoma que [1.3.81] descreve. Partindo desse mesmo state, o ciclo com o código novo emitiu `State reconciliado sem necessidade de envio` e gravou `notified` vazio. Nenhum `.tmp` residual; o state de produção não foi tocado pelo ciclo do worktree.
+
+- **MT-02: 2 ciclos, `ExitCode=0`, 99 registros lidos, nenhuma notificação** (sem mudança de estado). O caminho de retry não foi exercido — ver o teste acima, que cobre o que o ciclo feliz não cobre. **O critério de rollback de [1.3.81] continua valendo:** o teste mede a espera, não o comportamento do Oracle sob carga. Se o ciclo passar a falhar em segundos onde antes esperava minutos, em horário de pico, o override era necessário.
+
+- **Pre-commit hook: mensagem confirmada.** Commit que viola encoding de propósito, em branch descartável: `[ERRO] Falha na validacao de Governanca. Commit abortado.` apareceu e o commit foi bloqueado.
+
+### Nota operacional (fora do diff)
+
+`core.hooksPath` na máquina de produção aponta para o `.githooks` do repositorio principal por caminho **absoluto**, então worktrees rodam o hook da `main` e não o do branch em revisão. Não é defeito do repositório: `Tools/Install-Hooks.ps1` já configura o valor relativo (`.githooks`) e é idempotente; a máquina ficou com o absoluto por configuração manual antiga. Corrigir com `pwsh -File Tools\Install-Hooks.ps1`. Enquanto não for corrigido, todo branch que altere `.githooks/` não testa o próprio hook.
+
 ## [1.3.81] - 08/09/2026
 
 Revisão completa do repositório em três turnos, com executores por área e verificação independente entre turnos. Escopo: aderência arquitetural, consistência transversal entre automações, integridade dos testes e governança viva. Cada achado abaixo foi validado por comando executável ou por teste de mutação; nenhum foi aceito por alegação de quem o corrigiu.

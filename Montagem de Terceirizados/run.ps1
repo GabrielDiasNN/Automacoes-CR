@@ -60,7 +60,6 @@ $libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
-$pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
 # Scripts
 
@@ -85,6 +84,10 @@ Import-Module $libProcess -Force
 Import-Module $libRetry   -Force
 Import-Module $libOracle  -Force
 Import-Module $libIdempotency -Force
+
+# O .venv nao e versionado e vive na raiz do repositorio principal: resolver
+# so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
+$pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 
 $AutomationName = "Montagem de Terceirizados"
 
@@ -162,6 +165,13 @@ if (-not $preFlightOk) {
 
     Write-Log "FALHA NO PRE-FLIGHT (Python/Oracle/Paths). Abortando execução." -Lvl "ERRO"
     Write-Fim 9 "FALHA NO PRE-FLIGHT (Python/Oracle/Paths)."
+    # Este exit acontece ANTES do try/finally que fecha a telemetria: sem o
+    # Close aqui a execucao fica RUNNING para sempre no Orchestrator e passa a
+    # rejeitar a telemetria de todos os ciclos seguintes com "ja existe uma
+    # execucao ativa". Write-Fim so emite o log estruturado, nao fecha a API.
+    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Close-ExecutionTelemetry -ExecId $ExecId -Status "ERROR" -LogPath $LogFile
+    }
     exit 9
 
 }

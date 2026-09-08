@@ -185,7 +185,7 @@ gate do pre-commit em dois pontos: o mock `_fetch_obs_todas_rejeitadas` declarav
 Como o container Linux não tinha `pwsh`, nem o passo 1 nem o passo 3 rodaram lá — que é
 exatamente a razão de este runbook existir.
 
-### Achado 2 — core.hooksPath é absoluto (NÃO CORRIGIDO, é config local)
+### Achado 2 — core.hooksPath é absoluto (CORRIGÍVEL POR COMANDO, não por código)
 
 `core.hooksPath` aponta para o `.githooks` do repositório principal, por caminho absoluto.
 Worktrees rodam o hook da `main`, não o do branch em revisão — foi preciso forçar
@@ -193,15 +193,32 @@ Worktrees rodam o hook da `main`, não o do branch em revisão — foi preciso f
 `set -eu` só passa a valer após o merge, e todo branch que altere o hook não testa o
 próprio hook por padrão.
 
-### Achado 3 — run.ps1 não resolve o venv da raiz (NÃO CORRIGIDO)
+**Não é um defeito do repositório, e sim drift da configuração local:** o script canônico
+`Tools/Install-Hooks.ps1` já configura o valor RELATIVO (`.githooks`) e é idempotente. A
+máquina ficou com o valor absoluto por configuração manual antiga. Correção:
+
+```powershell
+pwsh -File Tools\Install-Hooks.ps1
+```
+
+Nada a alterar em código — por isso este achado não aparece no diff.
+
+### Achado 3 — run.ps1 não resolve o venv da raiz (CORRIGIDO)
 
 O preflight do MT-02 falhou com `Path inacessivel: python.exe` ao rodar do worktree: o
 `run.ps1` procura o venv relativo à raiz da própria árvore. É a mesma classe de problema
 que o PR #56 resolveu para `Tools/`, mas os 6 `run.ps1` ficaram de fora. Contornado com
-uma junction para o venv real. Enquanto isso não for resolvido, nenhuma automação roda a
-partir de um worktree de agente sem esse contorno.
+uma junction para o venv real, e depois **corrigido**: `Resolve-HubPythonExe`, em
+`lib/Lib-Process.psm1`, replica a cadeia de `Get-PythonTool` do PR #56 — venv local
+primeiro, senão o venv do repositório principal descoberto por
+`git rev-parse --git-common-dir`. Os 6 `run.ps1` passaram a consumi-la.
 
-### Achado 4 — falha de preflight deixa execução órfã RUNNING (PRODUÇÃO)
+Verificado sem o contorno: com a junction REMOVIDA, o pré-flight do MT-02 reporta
+`OK: Path: python.exe`. Travado por `test_run_ps1_bootstrap_unit.py`, que também pegou uma
+segunda ocorrência que a correção manual tinha deixado passar (`$venvActivate` em
+`Receitas Bloqueadas/run.ps1`, atribuído e nunca usado — removido).
+
+### Achado 4 — falha de preflight do MT-02 deixava execução órfã RUNNING (CORRIGIDO)
 
 O ciclo que falhou no preflight (Achado 3) registrou `execution.start` na telemetria e, ao
 abortar, **nunca registrou o fim**. A execução ficou `RUNNING` indefinidamente no
@@ -209,17 +226,37 @@ Orchestrator e passou a rejeitar a telemetria dos ciclos seguintes com
 `conflict: já existe uma execução ativa para esta automação`. Os dois ciclos de MT-02
 seguintes rodaram e concluíram, mas **sem telemetria registrada**.
 
-Isso não é específico do worktree: qualquer falha de preflight em produção — Oracle fora,
-disco cheio, path quebrado — produz o mesmo órfão, e MT-02 roda a cada 30 minutos. O
-`run.ps1` precisa registrar o fim da execução também no caminho de abort do preflight.
+**Correção do diagnóstico inicial:** eu havia descrito isto como valendo para as 6
+automações. Vale só para o MT-02. As outras 5 saem por `Exit-WithCode`, que encaminha
+para `Exit-AutomationWithCode` (lib/Lib-Logging.psm1) e fecha a telemetria antes do
+`exit`. O MT-02 é o único que usa `exit` cru — por ter múltiplos pontos de saída, ele
+trocou o helper por um `Write-Fim` local, que só emite o log estruturado e não fecha a
+API.
 
-### Achado 5 — o caminho de retry do MT-02 continua não exercido
+**CORRIGIDO:** o ramo de abort do pré-flight passou a chamar `Close-ExecutionTelemetry`
+com status `ERROR` antes do `exit 9`. Continua valendo para qualquer falha de pré-flight
+em produção (Oracle fora, disco cheio, path quebrado), não só no worktree.
+
+Travado por dois testes em `test_run_ps1_bootstrap_unit.py`: um específico do ramo do
+MT-02, outro que exige das 6 que quem abre telemetria a feche.
+
+### Achado 5 — o caminho de retry do MT-02 não era exercido (COBERTO POR TESTE)
 
 A mudança de comportamento de produção desta revisão é o perfil de retry do MT-02, e ela
 **não foi validada**. Os dois ciclos passaram sem nenhuma falha de rede, e `retry.attempt`
 só é emitido quando há falha. Os ciclos provam que o caminho feliz não regrediu; não dizem
-nada sobre o novo perfil de espera. O critério de rollback da seção 4 continua valendo e
-depende de observação em janela de pico do Oracle, ao longo de dias.
+nada sobre o novo perfil de espera.
+
+**COBERTO POR TESTE** em `test_montagem_terceirizados.py`, que é o que o ciclo contra o
+Oracle real não substituía: `time.sleep` é interceptado, três `DatabaseError` são
+forçadas e a espera acumulada é medida. Perfil atual: **1,67s**. Perfil legado
+(30/120/0): **90,00s** — o teste é discriminante, não decorativo. Um segundo teste trava
+o call site contra a reintrodução do override.
+
+**O que o teste ainda não substitui:** ele mede a espera, não o comportamento do Oracle
+sob carga real. O critério de rollback da seção 4 continua valendo — se o ciclo passar a
+falhar em segundos onde antes esperava minutos, em horário de pico, o override existia
+por uma razão. Isso só aparece observando produção ao longo de dias.
 
 ### Sobre o passo 5, que é onde a revisão se prova
 
@@ -230,6 +267,23 @@ novo emitiu `State reconciliado sem necessidade de envio` no step `commit` e gra
 state encolheu para vazio. No código antigo ela permaneceria indefinidamente, porque não
 havia OB nova no mesmo ciclo para disparar a gravação. Nenhum `.tmp` residual foi deixado,
 e o state de produção não foi tocado pelo ciclo do worktree.
+
+### Achado 6 — o gate full-scan e o gate de diff discordaram (NÃO EXPLICADO)
+
+`Orchestrator/tests/test_ofst_orb_parity_unit.py:177` tinha o mesmo defeito do Achado 1
+(dois argumentos não usados num mock, `W0613`). O **hook de pre-commit**, que roda
+`Test-PythonGovernance.ps1` apenas sobre os arquivos do diff, reprovou. O **full scan**
+(`ValidarAutomacoes.ps1 -OnlyGovernance`) passou verde no mesmo commit, quatro execuções
+seguidas, com o defeito presente.
+
+O defeito foi corrigido, mas **a causa da discordância não foi determinada**. Nenhum dos
+dois arquivos tem `# pylint: disable` de `unused-argument` no cabeçalho, e o full scan
+havia pegado o defeito equivalente em `test_ofst.py:751` na primeira execução — ou seja,
+não é que ele ignore a regra.
+
+Enquanto isso não for explicado, **o full scan verde não é evidência suficiente**: rode
+também um commit real (ou o hook) antes de considerar o gate satisfeito. Vale investigar
+como `Test-PythonGovernance.ps1` agrupa os alvos nos dois modos.
 
 ## Achado conhecido, não corrigido
 

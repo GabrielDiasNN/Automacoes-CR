@@ -174,7 +174,7 @@ def test_ambos_abortam_sem_tocar_state_quando_falhas_sem_ob(
     monkeypatch.setattr(extract, "init_thick_mode", lambda creds, log, exec_id: None)
     monkeypatch.setattr(extract.sys, "argv", [filename, "TESTE-PARIDADE"])
 
-    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+    def fake_fetch_obs(_creds: Any, _exec_id: str, resumo: Any) -> list[Any]:
         # Sinal de linha REJEITADA na validação (nunca de query vazia de
         # verdade) -- o mesmo gatilho usado pelos testes por-automação.
         resumo.falhas.append("linha rejeitada pela validacao (teste de paridade)")

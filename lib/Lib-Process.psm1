@@ -230,4 +230,47 @@ function Get-WhatsAppAuthPath {
     return & $absolutizar (Join-Path $base "Automacoes\wwebjs_auth")
 }
 
-Export-ModuleMember -Function Invoke-NativeProcess, Get-WhatsAppAuthPath
+function Resolve-HubPythonExe {
+    <#
+    .SYNOPSIS
+        Caminho do python.exe do virtualenv do projeto, valido tambem em worktree.
+
+    .DESCRIPTION
+        O .venv vive na RAIZ do repositorio principal e nao e versionado, entao
+        um worktree de agente nao tem copia propria. Resolver o interpretador
+        apenas como "$ProjectRoot\.venv" faz o pre-flight falhar com
+        "Path inacessivel: python.exe" em toda automacao rodada de um worktree.
+
+        A cadeia e a mesma de Get-PythonTool em Tools/Test-PythonGovernance.ps1
+        (PR #56): venv local primeiro; se ausente, o venv do repositorio
+        principal, descoberto por `git rev-parse --git-common-dir`.
+
+        Devolve o caminho do venv local quando nenhum dos dois existe: quem
+        chama e o pre-flight, e a mensagem de erro deve apontar o caminho
+        esperado, nao uma string vazia.
+
+    .PARAMETER ProjectRoot
+        Raiz da arvore em que a automacao esta rodando.
+    #>
+    param([Parameter(Mandatory = $true)][string]$ProjectRoot)
+
+    $localVenv = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+    if (Test-Path $localVenv) { return $localVenv }
+
+    try {
+        $commonDir = git -C $ProjectRoot rev-parse --git-common-dir 2>$null
+        if ($commonDir) {
+            $mainRepo = if ([System.IO.Path]::IsPathRooted($commonDir)) {
+                Split-Path $commonDir -Parent
+            } else {
+                Split-Path (Resolve-Path (Join-Path $ProjectRoot $commonDir)).Path -Parent
+            }
+            $mainVenv = Join-Path $mainRepo ".venv\Scripts\python.exe"
+            if (Test-Path $mainVenv) { return $mainVenv }
+        }
+    } catch [System.Exception] { }
+
+    return $localVenv
+}
+
+Export-ModuleMember -Function Invoke-NativeProcess, Get-WhatsAppAuthPath, Resolve-HubPythonExe

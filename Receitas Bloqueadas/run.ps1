@@ -96,11 +96,6 @@ $ResultFile  = Join-Path $BasePath "rb_result.json"
 
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
 
-# Activate VENV
-
-$venvActivate = Join-Path $projectRoot ".venv\Scripts\activate.ps1"
-$pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
-
 Import-Module $libLogging  -Force
 Import-Module $libLogEvent -Force
 
@@ -111,6 +106,10 @@ Import-Module $libProcess -Force
 Import-Module $libConfig  -Force
 Import-Module $libOracle  -Force
 Import-Module $libIdempotency -Force
+
+# O .venv nao e versionado e vive na raiz do repositorio principal: resolver
+# so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
+$pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 
 $AutomationName = "Receitas Bloqueadas"
 
