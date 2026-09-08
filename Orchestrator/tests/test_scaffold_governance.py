@@ -7,6 +7,17 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("pwsh") is None,
+    reason=(
+        "Exercita Tools/New-Automation.ps1 via PowerShell real (subprocess "
+        "'pwsh'); em ambiente sem o binário pwsh no PATH o teste não tem como "
+        "rodar — não é uma falha do scaffold, é ausência da ferramenta."
+    ),
+)
+
 
 def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
     tmp_path: Path,

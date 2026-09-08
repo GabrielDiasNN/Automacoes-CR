@@ -372,6 +372,11 @@ def test_extract_sucesso_oracle_mockado(
     sql_content = "SELECT * FROM MONTAGEM"
     mock_file_sql = MagicMock()
     mock_file_sql.read.return_value = sql_content
+    # Sem isto, `with open(...) as f` resolve `f` para um MagicMock diferente
+    # (o retorno padrão de `__enter__`), então `f.read()` nunca era o mock
+    # configurado acima — `sql` virava outro MagicMock, não a string da query,
+    # e nada abaixo notava porque o restante da cadeia Oracle também é mock.
+    mock_file_sql.__enter__.return_value = mock_file_sql
 
     # Mocks de open
     mock_open.side_effect = lambda path, mode="r", encoding=None: (
@@ -395,9 +400,29 @@ def test_extract_sucesso_oracle_mockado(
     with (
         patch("extract_oracle.sys.argv", ["extract_oracle.py", exec_id]),
         patch("extract_oracle.sys.exit") as mock_exit,
+        patch("extract_oracle.json.dump") as mock_json_dump,
     ):
 
         extract_oracle.extract()
 
         # O script de extração deve completar sem erro
         mock_exit.assert_not_called()
+
+        # A asserção original parava em "não chamou sys.exit" — o JSON gravado
+        # no arquivo temporário nunca era conferido, então o teste passava
+        # igual mesmo se serialize_rows()/o dump gravassem lixo ou nada. Aqui
+        # confere-se o conteúdo real gravado, derivado do fetchmany mockado.
+        assert mock_json_dump.call_count == 1
+        dados_gravados, _arquivo = mock_json_dump.call_args.args[:2]
+        assert dados_gravados == [
+            {
+                "NR_OB": "OB-001",
+                "CD_REF_CLT": "123",
+                "QT_PC_NF": "10-123",
+                "OBS_OB": "NF: 123",
+            }
+        ]
+
+        # A query lida do arquivo SQL precisa ter chegado ao fetch — não um
+        # placeholder do mock de `open()`.
+        mock_file_sql.read.assert_called_once()
