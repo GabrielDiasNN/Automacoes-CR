@@ -172,8 +172,10 @@ jobs:
           python -m pip install ruff==0.16.6
           # `lib/python` incluído em 31/07/2026: é o núcleo compartilhado de
           # extração Oracle (resolve_oracle_credentials, init_thick_mode,
-          # fetch_all), usado pelos 5 scripts de extração de domínio, e estava
-          # fora de todo gate bloqueante — uma regressão ali não era detectada.
+          # fetch_all), usado pelos 5 scripts de extração de domínio existentes
+          # à época (hoje são 6, desde 26/08/2026 com
+          # `OBs Restricao Branco/extract_orb.py`), e estava fora de todo gate
+          # bloqueante — uma regressão ali não era detectada.
           # `Produção Beneficimento/src` incluído em 31/07/2026: é o domínio que
           # fala com o Oracle e monta o SQL do histórico, e era o último tronco
           # de Python de produção fora do gate.
