@@ -199,9 +199,7 @@ def _write_counts(resumo: ResumoExecucao, novas_count: int) -> None:
         )
 
 
-def _write_result(
-    novas: list[AvaliacaoOb], resumo: ResumoExecucao, notified: dict[str, str]
-) -> None:
+def _write_result(novas: list[AvaliacaoOb], resumo: ResumoExecucao) -> None:
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         json.dump(
             {
@@ -234,6 +232,10 @@ def _write_result(
             ensure_ascii=False,
             indent=2,
         )
+
+
+def _write_state_tmp(notified: dict[str, str]) -> None:
+    """Prepara o proximo state; o run.ps1 decide quando fazer o commit."""
     with open(STATE_FILE + ".tmp", "w", encoding="utf-8") as f:
         json.dump(
             {"notified": notified, "updated_at": datetime.now().isoformat()},
@@ -257,7 +259,17 @@ def extract() -> None:
     try:
         obs = _fetch_obs(creds, exec_id, resumo)
         resumo.total_obs = len(obs)
+        # Lido ANTES do "not obs": OB que saiu da query (montada) precisa ser
+        # podada do state mesmo quando o lote inteiro fica vazio — sem isto o
+        # ofst_state.json so' encolhe em ciclos que tambem tem OB nova, ao
+        # arrepio do contrato documentado em CONTEXT.md ("o state e' podado
+        # para conter apenas OBs ainda notificaveis").
+        previamente = _read_notified(STATE_FILE)
         if not obs:
+            notified = merge_notified_state(
+                previamente, [], [], datetime.now().isoformat()
+            )
+            _write_state_tmp(notified)
             _write_counts(resumo, 0)
             log("Nenhuma OB de fluxo 204 emitida e nao montada.", "INFO", exec_id)
             sys.exit(2)
@@ -274,11 +286,13 @@ def extract() -> None:
 
         # Idempotencia: poda por presenca na query (OB montada sai da query e
         # some do state), nunca por notificabilidade — ver merge_notified_state.
-        previamente = _read_notified(STATE_FILE)
         novas = [a for a in notificaveis if str(a.ob.id_ob) not in previamente]
         notified = merge_notified_state(
             previamente, avaliacoes, novas, datetime.now().isoformat()
         )
+        # Sempre grava o state podado, mesmo sem OB nova a notificar (ver
+        # comentario acima) — mesmo padrao de extract_orb.py.
+        _write_state_tmp(notified)
 
         if not novas:
             _write_counts(resumo, 0)
@@ -289,7 +303,7 @@ def extract() -> None:
             )
             sys.exit(2)
 
-        _write_result(novas, resumo, notified)
+        _write_result(novas, resumo)
         log(
             f"Extracao concluida: {resumo.total_obs} OBs analisadas, "
             f"{len(novas)} nova(s) a notificar, {resumo.total_sem_estoque} sem estoque, "

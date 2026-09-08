@@ -144,6 +144,10 @@ try {
         Complete-HubStep -Ok ($pyResult.Success -or $pyResult.Idempotent)
 
         if ($pyResult.Idempotent) {
+            if (Test-Path $StateTmp) {
+                Move-Item $StateTmp $StateFile -Force
+                Write-Log "State reconciliado sem necessidade de envio." -Step "commit"
+            }
             Exit-WithCode 2 "Nenhuma OB nova com estoque suficiente — nada a notificar."
         }
         if (-not $pyResult.Success) {

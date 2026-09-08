@@ -1,10 +1,16 @@
 """Núcleo compartilhado de extração Oracle: credenciais, fetch, serialização e idempotência.
 
-Extrai o padrão repetido nos 4 scripts de extração (Receitas Emitidas, OBs
-Paradas Fase, Montagem de Terceirizados, Receitas Bloqueadas): resolver
-credenciais do ambiente, conectar via Thick Mode, buscar linhas em lotes,
-normalizar valores (datetime -> isoformat, strings -> strip) e calcular hash
-sha256 para idempotência via state.json.
+Extrai o padrão repetido nos 6 scripts de extração de domínio (Receitas
+Emitidas, OBs Paradas Fase, Montagem de Terceirizados, Receitas Bloqueadas,
+OBs Fluxo Sem Tingimento, OBs Restrição Branco): resolver credenciais do
+ambiente, conectar via Thick Mode, buscar linhas em lotes e normalizar valores
+(datetime -> isoformat, strings -> strip).
+
+`compute_hash`/`read_last_hash`/`write_state_tmp` cobrem apenas o padrão de
+idempotência por HASH DE LOTE, usado pelos 4 primeiros. OFST-06 e ORB-07 têm
+idempotência por OB individual (schema de state mais rico, com reservas de
+estoque) e implementam essa parte em `validators.py`/`extract_*.py` — ver
+CONTEXT.md de cada uma para o porquê.
 """
 
 from __future__ import annotations
