@@ -6,7 +6,11 @@
     2. Extracao + validacao: extract_ofst.py grava ofst_result.json (exit 2 = nada a notificar).
     3. Mensagem: format_message.py gera message.txt (exit 2 = nenhuma OB).
     4. WhatsApp: envia o texto ao grupo Expedicao Tinturaria (whatsapp-config.json).
-    5. Commit da idempotencia: ofst_state.json.tmp -> ofst_state.json somente apos envio OK.
+    5. Commit da idempotencia: ofst_state.json.tmp -> ofst_state.json apos envio OK
+       ou no ramo idempotente (exit 2), em que nao ha' envio mas o state podado
+       precisa ser persistido — OB que saiu da query some do state mesmo em ciclo
+       sem OB nova. O unico caminho que NAO commita e' o de falha: extracao com
+       linhas rejeitadas aborta sem tocar no state, preservando a idempotencia.
 
     Emite eventos de log estruturados (docs/logging-standard.md): execution.start/end,
     step.start/end, retry.attempt. Exporta HUB_LOG_STRUCTURED/HUB_* para os filhos.
