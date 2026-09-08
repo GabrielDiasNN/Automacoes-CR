@@ -37,6 +37,14 @@ ensure_utf8_streams()
 
 log = make_logger("PY-EXTRACT")
 
+# Unico dos 6 extratores Oracle que sobrescreve o perfil de retry (as demais
+# automacoes usam make_oracle_retry() com os defaults de lib/python/oracle_retry.py:
+# wait_initial=0.1, wait_max=5.0, wait_jitter=1.0). Revisao de qualidade de
+# 08/09/2026 investigou git log -S, CONTEXT.md, CHANGELOG.md, o manifesto e o
+# run.ps1 desta automacao e nao achou razao registrada para wait_initial 300x
+# maior nem para o jitter zerado. Nao alinhado aos defaults por conta propria
+# (mudar politica de retry contra Oracle de producao e decisao de dono, nao de
+# revisao) -- candidata a revisao do dono do sistema.
 _oracle_retry = make_oracle_retry(
     attempts=3, wait_initial=30.0, wait_max=120.0, wait_jitter=0.0
 )

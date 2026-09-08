@@ -59,6 +59,12 @@ A regra `ORM_QUERY_IN_API_ROUTER` (`Tools/Test-ArchitectureStandard.ps1`, allowl
 
 As demais 25 ocorrências (`automation_config.py:107`; `automation_ide.py:107`; `automations.py:329,351,353,417,419,650,685,710,727,752,776,817,827,828`; `executions.py:474,484`; `system.py:156,186,211,254,517,557,662`) são escrita fina sobre payload/estado já validado — a exceção documentada acima.
 
+## Allowlist `python_sqlite_allowlist`
+
+Auditoria de 08/09/2026 encontrou 3 entradas órfãs em `Tools/architecture-standard.rules.json → python_sqlite_allowlist` (isenta caminhos da regra `SQLITE_DIRECT_ACCESS_OUTSIDE_DB_LAYER`, que dispara em `import sqlite3`): `Produção Beneficimento\src\beneficiamento\historico_db.py` e `overview_v1.py` tinham `grep -c "import sqlite3\|sqlite3\." == 0` e nenhum histórico (`git log -S "import sqlite3"`) — são shims de compatibilidade puros (reexportam de `beneficiamento.data`/`beneficiamento.contracts`, já cobertos por outras entradas da mesma allowlist) e nunca usaram `sqlite3` diretamente. Removidas.
+
+`Orchestrator\app\database.py` também deu `grep -c` zero e não tem histórico de `import sqlite3`, mas foi **mantida** na allowlist: é a camada canônica de banco do Orchestrator (`session_scope`, engine SQLAlchemy) e já manipula a conexão SQLite raw por baixo do ORM — o listener `set_sqlite_pragma` (`@event.listens_for(engine, "connect")`) recebe o `dbapi_connection` (uma instância real de `sqlite3.Connection`, só que via SQLAlchemy, não via `import sqlite3` literal) e roda `cursor.execute("PRAGMA ...")` diretamente nela para WAL/synchronous/foreign_keys/busy_timeout/cache_size/temp_store. É o lugar correto, por design, para qualquer futuro uso de `sqlite3` mais direto nesta camada (ex.: uma migração ad-hoc ou introspecção de schema que precise do driver bruto) — isentá-lo antecipadamente evita que o gate barre um uso legítimo da própria camada de banco. Como `rules.json` é JSON e não aceita comentário, a justificativa fica registrada aqui.
+
 ## Canal WhatsApp — Sessão Única e Concorrência
 
 Todas as automações que enviam WhatsApp (`Receitas Bloqueadas`, `OBs Paradas Fase`, `OBs Fluxo Sem Tingimento` e a ORB-07 ativa `OBs Restricao Branco`) e o alerta de falhas do Orchestrator (`Orchestrator/app/notifications.py`) compartilham a mesma sessão autenticada `hub-global`, acionada através do motor único `lib/WhatsApp-Core.js` (invocado sempre via `lib/Send-WhatsApp.ps1`).
