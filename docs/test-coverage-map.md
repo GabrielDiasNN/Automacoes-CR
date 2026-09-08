@@ -1,6 +1,6 @@
 # Mapa de Cobertura de Testes (Test Coverage Map)
 
-> **Versão:** v1.0.1 | **Atualizado:** 27/08/2026
+> **Versão:** v1.0.2 | **Atualizado:** 08/09/2026
 
 Este documento mapeia os módulos críticos do backend do **Orquestrador (FastAPI & SQLite)**, identificando as suites de teste correspondentes, os cenários cobertos e as lacunas (gaps).
 

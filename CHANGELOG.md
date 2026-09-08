@@ -44,7 +44,6 @@ O processo errou duas vezes e as duas foram apanhadas pela verificação indepen
 
 ### Documentado
 
-- **Perfil de retry divergente do MT-02, sem razão encontrada.** `Montagem de Terceirizados/extract_oracle.py` é o único dos 6 extratores que sobrescreve o retry (`wait_initial=30.0` contra 0.1 — 300× — e `wait_jitter=0.0` contra 1.0). Investigados `git log -S`, `CONTEXT.md`, `CHANGELOG.md`, manifesto e `run.ps1`: nenhuma razão registrada. **Não alinhado aos defaults** — mudar política de retry contra Oracle de produção é decisão do dono, não de uma revisão. Documentado no call site como candidata a revisão.
 - **Escrita ORM nos routers passou a ser exceção explícita.** A regra `ORM_QUERY_IN_API_ROUTER` declara que acesso a dados vive em `services/*_repository.py`, mas detecta apenas `db.query(`. As 33 escritas (`db.add`/`commit`/`refresh`/`delete`) nos routers foram auditadas: 25 são escrita fina sobre payload já validado e ficam registradas como exceção aceita em `docs/architecture-standard.md`; as outras 8, concentradas em 5 endpoints, contêm lógica de negócio real e estão listadas com `arquivo:linha` como candidatas a mover numa mudança dedicada. Mover 33 call sites não cabia numa correção cirúrgica.
 - **Escopo não ampliado do lint, com a razão.** `Orchestrator/tests` (59 violações de ruff), `migrations` (7), `tools` (3) e `Produção Beneficimento` (4) seguem fora do gate: incluí-los agora reprovaria o próximo PR por dívida alheia ao diff dele. A decisão e a lista ficaram no próprio workflow.
 

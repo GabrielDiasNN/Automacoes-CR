@@ -89,11 +89,11 @@ O pipeline `.github/workflows/governanca.yml` executa automaticamente em `push` 
 | `app/services/` | ≥ 70% |
 | `app/routers/` | ≥ 60% |
 | `app/schemas/` | ≥ 60% |
-| Total do projeto | ≥ 60% |
+| Total do projeto | **≥ 84%** (gate bloqueante do CI, `--cov-fail-under=84` em `governanca.yml`; medido hoje: 89%) |
 
 Verificar com:
 ```powershell
-..\.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-fail-under=60 -q
+..\.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-fail-under=84 -q
 ```
 
 ---
