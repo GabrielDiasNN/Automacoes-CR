@@ -10,7 +10,7 @@
 # instalacao ausente falharia silenciosamente no proximo cron das automacoes de
 # producao. O custo de uma linha por script e menor que esse risco.
 #
-# O que este teste protege e o que sobrou do achado: as cinco ocorrencias devem
+# O que este teste protege e o que sobrou do achado: as seis ocorrencias devem
 # permanecer IDENTICAS. A proliferacao real (blocos repetidos dentro do mesmo
 # arquivo, variantes divergentes) foi eliminada; o drift e o que traria ela de
 # volta.
@@ -21,7 +21,8 @@ $ScriptsComBootstrap = @(
     "Receitas Emitidas\extract_oracle.py",
     "Montagem de Terceirizados\extract_oracle.py",
     "OBs Paradas Fase\extract_obs.py",
-    "OBs Fluxo Sem Tingimento\extract_ofst.py"
+    "OBs Fluxo Sem Tingimento\extract_ofst.py",
+    "OBs Restricao Branco\extract_orb.py"
 )
 
 BeforeAll {

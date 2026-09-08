@@ -1,4 +1,4 @@
-"""Consistência estrutural dos automation.manifest.json reais das 5 automações.
+"""Consistência estrutural dos automation.manifest.json reais das 6 automações.
 
 Regressão do achado #16 (revisão de design): OBs Fluxo Sem Tingimento tinha
 uma chave `script_path` solta na raiz do manifesto, nunca lida pelo preflight
@@ -18,6 +18,7 @@ _AUTOMATION_DIRS = [
     "Montagem de Terceirizados",
     "OBs Paradas Fase",
     "OBs Fluxo Sem Tingimento",
+    "OBs Restricao Branco",
 ]
 
 

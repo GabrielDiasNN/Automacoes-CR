@@ -359,7 +359,7 @@ function Test-PythonArchitecture {
                 -Severity "critical" `
                 -Rule "ORM_QUERY_IN_API_ROUTER" `
                 -File $relativePath `
-                -Detail "Router FastAPI montando consulta ORM (db.query). Acesso a dados deve viver em services/*_repository.py (revisao arquitetural 26/07/2026, achado nº 6 da revisao Orchestrator/Dashboard)." `
+                -Detail "Router FastAPI montando consulta ORM (db.query). Leitura de dados deve viver em services/*_repository.py (revisao arquitetural 26/07/2026, achado nº 6 da revisao Orchestrator/Dashboard). Esta regra cobre apenas leitura via db.query/session.query; escrita fina (db.add/db.commit/db.refresh/db.delete) sobre payload ja validado por um service e excecao documentada em docs/architecture-standard.md, nao um gap de deteccao (revisao 08/09/2026)." `
                 -RecommendedAction "Mova a consulta para automation_repository / execution_repository / audit_repository, ou declare a excecao em Tools/architecture-standard.rules.json (router_orm_query_allowlist)."
         }
 
