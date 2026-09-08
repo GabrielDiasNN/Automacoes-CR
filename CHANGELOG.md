@@ -18,6 +18,10 @@ Suíte no Windows: **1103 passed, 0 skipped** (eram 1088; +15 testes). Governan�
 
 - **`$venvActivate` morto em `Receitas Bloqueadas/run.ps1`.** Atribuído e nunca usado. Encontrado pelo teste de contrato novo, não pela correção manual, que já tinha passado por cima dele.
 
+- **`_Template/run.ps1` ficou de fora da correção de venv em worktree.** As 6 automações passaram a usar `Resolve-HubPythonExe`, mas o template seguiu com o caminho fixo e o manteve em `$pathsToCheck` — toda automação criada por `Tools/New-Automation.ps1` nasceria com exatamente o bug recém-corrigido nas existentes. O template não importava `Lib-Process`, então o import entrou junto, antes da chamada. Achado de uma revisão stateless do diff.
+
+- **A docstring do `run.ps1` do OFST-06 contradizia o próprio commit.** Continuava afirmando que o state é commitado "somente apos envio OK" depois que o mesmo PR passou a movê-lo também no ramo idempotente (exit 2) — o caso sem envio. É o primeiro lugar que alguém lê ao investigar idempotência. Agora descreve os dois caminhos de commit e nomeia o único que não commita: extração com linhas rejeitadas.
+
 ### Adicionado
 
 - **`Orchestrator/tests/test_run_ps1_bootstrap_unit.py`** — 13 testes que travam os dois contratos de bootstrap dos 6 `run.ps1`: que o interpretador venha de `Resolve-HubPythonExe` (e que ninguém volte a hardcodear o venv em `$projectRoot`), e que todo `run.ps1` que abre telemetria a feche, por helper ou explicitamente. Leem os `.ps1` como texto: não substituem execução — a metade PowerShell segue sem cobertura executável — mas prendem o que a validação encontrou quebrado.
