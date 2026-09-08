@@ -3,10 +3,8 @@
   "python_subprocess_allowlist": [
     "^Orchestrator\\\\worker\\.py$",
     "^Orchestrator\\\\app\\\\notifications\\.py$",
-    "^Orchestrator\\\\app\\\\routers\\\\automations\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\beneficiamento_refresh\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\env_admin\\.py$",
-    "^Orchestrator\\\\app\\\\services\\\\execution_runtime\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\scheduler_runtime\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\system_runtime\\.py$"
   ],
