@@ -80,8 +80,8 @@ Antes de qualquer `git push`, execute a sequência:
 # 4. Verificação de tipos
 & ".venv\Scripts\python.exe" -m mypy Orchestrator/app/ --ignore-missing-imports
 
-# 5. Suite de testes (a partir do diretório Orchestrator/)
-& ".venv\Scripts\python.exe" -m pytest tests/ -q
+# 5. Suite de testes
+& ".venv\Scripts\python.exe" -m pytest Orchestrator/tests/ -q
 
 # 6. Validação de governança canônica
 pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -OnlyGovernance

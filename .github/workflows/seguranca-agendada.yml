@@ -31,8 +31,13 @@ jobs:
       - name: Instalar pip-audit
         shell: pwsh
         run: |
+          # pip-audit e dependencia pinada em requirements-dev.txt (mesmo
+          # padrao usado por black/isort/bandit/pip-audit no job lint-python
+          # de governanca.yml): instalar solto (`pip install pip-audit`, sem
+          # versao) e o mesmo defeito que o ruff tinha ali antes de ser
+          # pinado -- release nova quebraria o gate sem mudanca de codigo.
           python -m pip install --upgrade pip
-          python -m pip install pip-audit
+          python -m pip install -r requirements-dev.txt
 
       - name: Auditar dependencias de runtime
         shell: pwsh

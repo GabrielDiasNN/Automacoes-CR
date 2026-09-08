@@ -7,9 +7,15 @@ ambiente, conectar via Thick Mode, buscar linhas em lotes e normalizar valores
 (datetime -> isoformat, strings -> strip).
 
 `compute_hash`/`read_last_hash`/`write_state_tmp` cobrem apenas o padrão de
-idempotência por HASH DE LOTE, usado pelos 4 primeiros. OFST-06 e ORB-07 têm
-idempotência por OB individual (schema de state mais rico, com reservas de
-estoque) e implementam essa parte em `validators.py`/`extract_*.py` — ver
+idempotência por HASH DE LOTE, usado por Receitas Emitidas e OBs Paradas Fase.
+Receitas Bloqueadas usa `compute_hash` mas grava o state por outro caminho
+(não usa `write_state_tmp` — ver comentário em
+`Receitas Bloqueadas/processar_receitas.py`). Montagem de Terceirizados não
+usa nenhuma das três: sua idempotência é por canal, via
+`lib/Lib-Idempotency.psm1` (PowerShell) — ver `docs/architecture-standard.md`
+§ Idempotência de Entrega e Bootstrap Python das Automações. OFST-06 e ORB-07
+têm idempotência por OB individual (schema de state mais rico, com reservas
+de estoque) e implementam essa parte em `validators.py`/`extract_*.py` — ver
 CONTEXT.md de cada uma para o porquê.
 """
 
@@ -114,9 +120,9 @@ def fetch_all(  # pylint: disable=too-many-arguments
     lote de `fetchmany()` com o arraysize do driver, evitando round-trips
     extras). Valores muito grandes de `batch_size` podem, por isso, inflar o
     consumo de memoria por round-trip em queries com colunas largas
-    (CLOB/BLOB/LONG) — hoje nao e um problema pratico, pois os 5 chamadores
-    usam `batch_size` entre 1000 e 5000 e nenhuma query envolvida traz essas
-    colunas.
+    (CLOB/BLOB/LONG) — hoje nao e um problema pratico, pois os 6 chamadores
+    de producao (mais 2 scripts de simulacao) usam `batch_size` entre 1000 e
+    5000 e nenhuma query envolvida traz essas colunas.
     """
     log(f"Conectando ao Oracle (DSN: {creds.dsn})...", "INFO", exec_id)
     with oracledb.connect(

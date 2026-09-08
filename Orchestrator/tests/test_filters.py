@@ -185,6 +185,114 @@ def test_list_executions_date_filters_can_return_empty_result(
     assert payload["items"] == []
 
 
+def test_list_executions_automation_id_filter_isolates_the_automation(
+    client: TestClient, db_session: Session
+) -> None:
+    """Isola o filtro `automation_id` (achado de auditoria por mutação):
+    as duas execuções são idênticas em todo o resto (status, prioridade,
+    queue_group, requested_by, janela de data) — só o automation_id as
+    distingue. `test_list_executions_supports_all_filters_combined` combina
+    automation_id com queue_group, então a execução "errada" de lá já é
+    excluída pelo queue_group sozinho: uma mutação que neutralize
+    `if automation_id:` em `apply_filters` passa despercebida naquele teste."""
+    auto_alvo = models.Automation(
+        name="Financeiro Alvo",
+        script_path="./test/run.ps1",
+        queue_group="mesmo-grupo",
+    )
+    auto_outra = models.Automation(
+        name="Financeiro Outra",
+        script_path="./test/run1.ps1",
+        queue_group="mesmo-grupo",
+    )
+    db_session.add_all([auto_alvo, auto_outra])
+    db_session.flush()
+
+    now = get_now_local()
+    db_session.add_all(
+        [
+            models.Execution(
+                id="EXEC_AUTOMATION_ALVO",
+                automation_id=auto_alvo.id,
+                status="ERROR",
+                priority="HIGH",
+                queue_group="mesmo-grupo",
+                requested_by="QA",
+                started_at=now - timedelta(hours=1),
+            ),
+            models.Execution(
+                id="EXEC_AUTOMATION_OUTRA",
+                automation_id=auto_outra.id,
+                status="ERROR",
+                priority="HIGH",
+                queue_group="mesmo-grupo",
+                requested_by="QA",
+                started_at=now - timedelta(hours=1),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    res = client.get(
+        f"/api/executions?automation_id={auto_alvo.id}",
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total"] == 1
+    assert [item["id"] for item in data["items"]] == ["EXEC_AUTOMATION_ALVO"]
+
+
+def test_list_executions_date_to_filter_excludes_executions_after_it(
+    client: TestClient, db_session: Session
+) -> None:
+    """Isola o filtro `date_to` (achado de auditoria por mutação): a execução
+    excluída só fica fora da janela por ser POSTERIOR a date_to — sem
+    `date_from` na consulta, nada além de `date_to` pode justificar a
+    exclusão. `test_list_executions_supports_all_filters_combined` e
+    `..._date_filters_can_return_empty_result` combinam date_to com date_from,
+    e nos dois casos a execução "errada" já cai fora de date_from sozinho:
+    uma mutação que neutralize `if date_to:` em `apply_filters` passa
+    despercebida em ambos."""
+    auto = models.Automation(
+        name="Filtro Data Final",
+        script_path="./test/run.ps1",
+        queue_group="data-final",
+    )
+    db_session.add(auto)
+    db_session.flush()
+    now = get_now_local()
+    db_session.add_all(
+        [
+            models.Execution(
+                id="EXEC_DATE_TO_DENTRO",
+                automation_id=auto.id,
+                status="SUCCESS",
+                requested_by="QA",
+                started_at=now - timedelta(days=2),
+            ),
+            models.Execution(
+                id="EXEC_DATE_TO_DEPOIS",
+                automation_id=auto.id,
+                status="SUCCESS",
+                requested_by="QA",
+                started_at=now,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    date_to = (now - timedelta(days=1)).strftime("%Y-%m-%dT23:59:59")
+    res = client.get(
+        f"/api/executions?date_to={date_to}",
+        headers=AUTH_HEADERS,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total"] == 1
+    assert [item["id"] for item in data["items"]] == ["EXEC_DATE_TO_DENTRO"]
+
+
 def test_system_audit_filter_returns_only_requested_action(
     client: TestClient, db_session: Session
 ) -> None:

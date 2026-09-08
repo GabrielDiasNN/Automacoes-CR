@@ -16,6 +16,7 @@ import importlib.util
 import json
 import re
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -1373,6 +1374,93 @@ def test_extract_trata_query_realmente_vazia_como_nada_a_notificar(
     # Prova de que `_write_counts` foi redirecionado: o payload do ciclo saiu em
     # tmp_path, nao por cima do orb_result.json vivo da automacao.
     assert (tmp_path / "orb_result.json").exists()
+
+
+def test_extract_grava_state_podado_mesmo_sem_ob_nova_a_notificar(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """Espelho da correção da ORB-06 nesta revisão (b0efbce alinhou a ORB-07 a
+    esse mesmo contrato): `orb_state.json.tmp` precisa ser gravado PODADO
+    mesmo quando o lote inteiro não produz OB nova a notificar — sem isto, uma
+    OB que saiu da query (montada) nunca seria removida do state.
+
+    `merge_notified_state` já é coberta isoladamente
+    (`test_merge_notified_state_poda_ob_que_saiu_da_query`), mas nada
+    exercitava `extract()` de ponta a ponta para garantir que o resultado dela
+    é de fato *persistido* no ramo sem OB nova: uma mutação que remova a
+    chamada `_write_state_tmp(notified)` do ramo principal de `extract()`
+    deixa a suíte inteira verde sem este teste (achado da auditoria por
+    mutação da revisão — pré-existente aqui, replicado sem teste a partir da
+    ORB-07)."""
+    extract = _load_module("extract_orb_state", AUTOMATION_DIR / "extract_orb.py")
+
+    # Timestamp recente o bastante para nao expirar pela janela de 24h de
+    # `reservas_vivas` (JANELA_RESERVA_HORAS) — o que este teste prova e a
+    # poda por AUSENCIA NA QUERY, nao a expiracao por tempo.
+    recente = (datetime.now() - timedelta(hours=1)).isoformat()
+    # "1001" nao volta na query deste ciclo (OB montada) — precisa ser podada.
+    # "2002" segue notificavel mas ja constava do state — nao e' "nova".
+    state_file = tmp_path / "orb_state.json"
+    state_file.write_text(
+        json.dumps(
+            {
+                "notified": {
+                    "1001": {
+                        "em": recente,
+                        "reduzido": 99999,
+                        "reservado": 10,
+                        "complemento": 0,
+                    },
+                    "2002": {
+                        "em": recente,
+                        "reduzido": 12345,
+                        "reservado": 50,
+                        "complemento": 0,
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
+
+    ob_2002 = _ob_row(NUMERO_OB=2002)
+    avaliacao_2002 = _avaliacao(2002, notificar=True)
+
+    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+        v = _validators()
+        return [v.coerce_ob_row(ob_2002)]
+
+    _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs, tmp_path)
+    monkeypatch.setattr(
+        extract, "_fetch_finalidades", lambda creds, exec_id: ({}, {})
+    )
+    monkeypatch.setattr(
+        extract, "_fetch_estoque", lambda creds, codigos, finalidades, exec_id: {}
+    )
+    monkeypatch.setattr(
+        extract, "_avaliar_todas", lambda *args, **kwargs: [avaliacao_2002]
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        extract.extract()
+
+    # 2002 ja notificada e 1001 sumiu da query -> nada de novo -> exit(2).
+    assert excinfo.value.code == 2
+    tmp_state = tmp_path / "orb_state.json.tmp"
+    assert (
+        tmp_state.exists()
+    ), "sem a correcao, o state.tmp nao seria gravado neste ramo"
+    gravado = json.loads(tmp_state.read_text(encoding="utf-8"))["notified"]
+    assert sorted(gravado) == [
+        "2002"
+    ], "1001 saiu da query e precisa ser podado do state, mesmo sem OB nova"
+    assert gravado["2002"] == {
+        "em": recente,
+        "reduzido": 12345,
+        "reservado": 50,
+        "complemento": 0,
+    }, "2002 ja notificada preserva a reserva original (nao e recalculada)"
 
 
 def test_record_counts_usa_chaves_canonicas_e_read_conta_linhas_cruas() -> None:

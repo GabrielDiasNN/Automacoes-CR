@@ -202,7 +202,12 @@ jobs:
           # é código executável (gate de conformidade de log) que nasceu fora de
           # todo gate bloqueante — mesmo caso do `.claude/skills` em 03/08/2026.
           # Já passava limpo (verificado antes da inclusão).
-          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools
+          # `docs/templates` incluído em 08/09/2026: `automation-smoke-test-template.py`
+          # é `.py` executável (fonte copiada por `Tools/New-Automation.ps1` no
+          # scaffold de automação nova) que ficou fora do inventário de escopo por
+          # lacuna, não por decisão — já passava limpo (verificado antes da
+          # inclusão), então não há violação a corrigir antes de incluir.
+          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools docs/templates
 
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
@@ -241,7 +246,9 @@ jobs:
           # `Tools` (raiz) incluído em 08/09/2026 junto com o ruff: mesma lacuna
           # do `.claude/skills` em 03/08/2026 (código executável fora de todo
           # gate). `Tools/log_event_validator.py` não tem nenhum finding.
-          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools -ll
+          # `docs/templates` incluído em 08/09/2026 junto com o ruff: mesma
+          # lacuna de inventário (ver comentário do ruff acima). Sem finding.
+          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools docs/templates -ll
 
       - name: Auditoria de Dependencias (pip-audit)
         continue-on-error: true
@@ -327,7 +334,7 @@ jobs:
           @"
           ## Cobertura de testes Python
 
-          - Total: **$pctTotal%** (gate de regressao: 82%)
+          - Total: **$pctTotal%** (gate de regressao: 84%)
 
           | Pacote | Cobertura |
           |--------|-----------|
