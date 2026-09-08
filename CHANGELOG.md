@@ -2,7 +2,9 @@
 
 ## [1.3.81] - 08/09/2026
 
-Revisão completa do repositório em dois turnos, com executores por área e verificação independente entre turnos. Escopo: aderência arquitetural, consistência transversal entre automações, integridade dos testes e governança viva. Cada achado abaixo foi validado por comando executável ou por teste de mutação; nenhum foi aceito por alegação.
+Revisão completa do repositório em três turnos, com executores por área e verificação independente entre turnos. Escopo: aderência arquitetural, consistência transversal entre automações, integridade dos testes e governança viva. Cada achado abaixo foi validado por comando executável ou por teste de mutação; nenhum foi aceito por alegação de quem o corrigiu.
+
+O processo errou duas vezes e as duas foram apanhadas pela verificação independente, não por quem escreveu o código — vale registrar, porque é o argumento a favor de manter a separação: (1) a correção do OFST-06 no primeiro turno introduziu uma regressão com consequência de produção, descrita abaixo; (2) o segundo turno rodou a suíte e as mutações mas não rodou o `black`, e deixou o `HEAD` reprovando o gate de estilo do próprio repositório.
 
 ### Corrigido
 
@@ -21,8 +23,20 @@ Revisão completa do repositório em dois turnos, com executores por área e ver
 - **`Tools` e `docs/templates` entraram no escopo bloqueante de ruff e bandit.** `Tools/log_event_validator.py` e o template de smoke test são código executável que nascia fora de todo gate — mesma lacuna que `.claude/skills` teve em 03/08/2026. Ambos já passavam limpos.
 - **`OBs Restricao Branco` entrou em dois contratos de que estava ausente:** `$ScriptsComBootstrap` em `lib/tests/Python-Bootstrap.Tests.ps1` (6 scripts usavam a forma canônica de bootstrap, só 5 estavam travados contra drift) e `_AUTOMATION_DIRS` em `test_automation_manifests_consistency.py` (a automação mais nova era a única fora do contrato de forma do manifesto; o manifesto já estava em conformidade).
 
+### Corrigido (segundo turno da revisão)
+
+- **Regressão introduzida pela própria revisão, no OFST-06.** A correção de poda de state descrita acima tornou a gravação incondicional no ramo `if not obs`. Mas `_fetch_obs` pode devolver `[]` com `resumo.falhas` populado — quando a query **traz** linhas e todas são rejeitadas na validação (falta de coluna obrigatória levanta `SchemaInvalidoError` antes, então não é esse caso). Nesse caminho, `merge_notified_state(previamente, [], [], agora)` devolve `{}`, e o `run.ps1` commitaria esse state vazio no ramo idempotente: `ofst_state.json` zerado e **todas as OBs já avisadas re-anunciadas no grupo de WhatsApp** assim que o dado normalizasse. O `extract_orb.py` sempre teve a guarda contra isso, com um comentário descrevendo exatamente esse risco; a correção portou o bloco visível do `run.ps1` e não a proteção. Guarda equivalente aplicada ao OFST-06, com teste que falha sob mutação. O caminho não existia antes desta revisão.
+- **`black` reprovava no `HEAD`.** `Orchestrator/tests/test_orb.py` e `test_ofst.py` quebrariam o job `lint-python` no primeiro PR — a suíte e as mutações tinham sido rodadas, o gate de estilo do próprio repositório não.
+- **`docs/test-coverage-map.md` ainda tinha números falsos na célula vizinha à corrigida:** `services/execution_runtime.py` está em 93%, não 85%; e os três módulos listados como "Lacunas Prioritárias" não são mais lacuna (`routers/websocket.py` 99%, `scheduler_runtime.py` 83%, `database.py` 87%), enquanto os dois realmente abaixo de 60% não eram nomeados (`routers/beneficiamento.py` 57%, `routers/automation_ide.py` 58%).
+- **Três entradas órfãs em `python_sqlite_allowlist`** — mesma classe já corrigida na allowlist irmã. Duas removidas; `Orchestrator/app/database.py` permaneceu com justificativa registrada, por ser a camada canônica que manipula a conexão SQLite crua (`dbapi_connection`, `PRAGMA journal_mode=WAL`) no listener `set_sqlite_pragma`.
+
+### Adicionado (segundo turno da revisão)
+
+- **Travas para as exceções arquiteturais que só existiam em prosa.** `test_router_orm_write_exception_unit.py` falha quando o total de escritas ORM em routers diverge do documentado — nada impedia a 34ª de entrar em silêncio. `test_ofst_orb_parity_unit.py` prende três invariantes contratuais entre OFST-06 e ORB-07, porque a assimetria entre as duas passou despercebida **duas vezes** nesta mesma revisão e ambas as vezes só foi achada por leitura manual. O que difere por design (`todas_falhas_por_montagem`, reservas com janela, `ClassificacaoNaoResolvidaError`) ficou deliberadamente de fora.
+
 ### Documentado
 
+- **Perfil de retry divergente do MT-02, sem razão encontrada.** `Montagem de Terceirizados/extract_oracle.py` é o único dos 6 extratores que sobrescreve o retry (`wait_initial=30.0` contra 0.1 — 300× — e `wait_jitter=0.0` contra 1.0). Investigados `git log -S`, `CONTEXT.md`, `CHANGELOG.md`, manifesto e `run.ps1`: nenhuma razão registrada. **Não alinhado aos defaults** — mudar política de retry contra Oracle de produção é decisão do dono, não de uma revisão. Documentado no call site como candidata a revisão.
 - **Escrita ORM nos routers passou a ser exceção explícita.** A regra `ORM_QUERY_IN_API_ROUTER` declara que acesso a dados vive em `services/*_repository.py`, mas detecta apenas `db.query(`. As 33 escritas (`db.add`/`commit`/`refresh`/`delete`) nos routers foram auditadas: 25 são escrita fina sobre payload já validado e ficam registradas como exceção aceita em `docs/architecture-standard.md`; as outras 8, concentradas em 5 endpoints, contêm lógica de negócio real e estão listadas com `arquivo:linha` como candidatas a mover numa mudança dedicada. Mover 33 call sites não cabia numa correção cirúrgica.
 - **Escopo não ampliado do lint, com a razão.** `Orchestrator/tests` (59 violações de ruff), `migrations` (7), `tools` (3) e `Produção Beneficimento` (4) seguem fora do gate: incluí-los agora reprovaria o próximo PR por dívida alheia ao diff dele. A decisão e a lista ficaram no próprio workflow.
 
