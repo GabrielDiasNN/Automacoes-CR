@@ -9,7 +9,8 @@ Pipeline único (`.github/workflows/governanca.yml`), roda em push para `main`/`
 
 ## Gates bloqueantes
 
-- **`lint-python`** — `ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills`, mais black/isort/bandit (mesmo escopo de diretórios).
+- **`lint-python`** — `ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools`, mais bandit (mesmo escopo de diretórios); black/isort rodam só sobre os arquivos alterados do PR (`@changedFiles`), não sobre esse escopo fixo.
+- **Fora do escopo do `ruff`/`bandit` bloqueante:** `Orchestrator/tests`, `Orchestrator/migrations`, `Orchestrator/tools`, `Produção Beneficimento/snapshots` e `Produção Beneficimento/analise_producao_diaria_beneficiamento.py` — juntos somam 73 violações (59/7/3/2/2, respectivamente); ampliar exige corrigir antes, coordenado com o dono de cada diretório (decisão registrada no próprio `governanca.yml`, revisão de 08/09/2026).
 - **`testes-python`** — pytest com `--cov-fail-under=84`, mais `diff-cover --fail-under=85` nas linhas alteradas do PR.
 - **`testes-e2e`** — E2E Playwright.
 - Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`).

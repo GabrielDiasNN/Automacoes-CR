@@ -73,7 +73,7 @@ sys.path.insert(
 )
 ```
 
-Empacotar `lib/python` e instalar com `pip install -e .` foi avaliado e **recusado**: tornaria os scripts não executáveis diretamente (`python extract_oracle.py`, como se depura hoje) sem instalação prévia no interpretador, e uma instalação ausente falharia silenciosamente no próximo cron de automações de produção. `lib/tests/Python-Bootstrap.Tests.ps1` garante que as cinco ocorrências permaneçam idênticas — o risco real aqui é o drift entre elas, não a existência da linha.
+Empacotar `lib/python` e instalar com `pip install -e .` foi avaliado e **recusado**: tornaria os scripts não executáveis diretamente (`python extract_oracle.py`, como se depura hoje) sem instalação prévia no interpretador, e uma instalação ausente falharia silenciosamente no próximo cron de automações de produção. `lib/tests/Python-Bootstrap.Tests.ps1` garante que as cinco ocorrências que já existiam em 26/07/2026 permaneçam idênticas — o risco real aqui é o drift entre elas, não a existência da linha. **`OBs Restricao Branco/extract_orb.py` (ORB-07, adicionada em 26/08/2026) declara a mesma linha canônica, mas ainda não entrou na lista `$ScriptsComBootstrap` do teste** — hoje são 6 scripts com a forma canônica, só 5 travados contra drift.
 
 ## Validação (Validacao)
 

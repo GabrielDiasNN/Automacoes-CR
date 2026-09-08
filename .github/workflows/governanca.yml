@@ -162,7 +162,14 @@ jobs:
       - name: Lint Bloqueante (Ruff)
         shell: pwsh
         run: |
-          python -m pip install ruff
+          # Versao pinada explicitamente: `ruff` nao esta em requirements-dev.in
+          # (nao e dependencia de projeto, e sim ferramenta de CI) e antes era
+          # instalado solto (`pip install ruff`, sem versao). Uma release nova
+          # com regra nova quebraria o gate sem nenhuma mudanca de codigo, e o
+          # resultado deixava de ser reproduzivel entre execucoes do pipeline.
+          # Atualizar aqui deliberadamente ao subir de versao (mesmo espirito
+          # do pip-compile para as demais dependencias, sem entrar no lock).
+          python -m pip install ruff==0.16.6
           # `lib/python` incluído em 31/07/2026: é o núcleo compartilhado de
           # extração Oracle (resolve_oracle_credentials, init_thick_mode,
           # fetch_all), usado pelos 5 scripts de extração de domínio, e estava
@@ -183,7 +190,19 @@ jobs:
           # código de produção com cron ativo ficou sem lint bloqueante por meses.
           # Achado em code review; 86 violações de estilo/modernização corrigidas
           # antes da inclusão (ver CHANGELOG.md).
-          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills
+          # Escopo NAO ampliado (revisão de 08/09/2026) para `Orchestrator/tests`,
+          # `Orchestrator/migrations`, `Orchestrator/tools`,
+          # `Produção Beneficimento/snapshots` e
+          # `Produção Beneficimento/analise_producao_diaria_beneficiamento.py`:
+          # juntos somam 73 violações de ruff hoje (59/7/3/2/2, respectivamente).
+          # Incluí-los agora reprovaria o gate no primeiro PR que o disparasse,
+          # sem relação com o diff desse PR. Ampliar exige corrigir as violações
+          # primeiro, coordenado com quem é dono de cada diretório.
+          # `Tools` (raiz) incluído em 08/09/2026: `Tools/log_event_validator.py`
+          # é código executável (gate de conformidade de log) que nasceu fora de
+          # todo gate bloqueante — mesmo caso do `.claude/skills` em 03/08/2026.
+          # Já passava limpo (verificado antes da inclusão).
+          python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools
 
       - name: Validar Estilo Python (Black & Isort)
         shell: pwsh
@@ -219,7 +238,10 @@ jobs:
           # foi corrigido com `usedforsecurity=False` — é hash de conteúdo para
           # deduplicação em cache, não uso criptográfico, então o algoritmo e o
           # valor do hash não mudam.
-          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills -ll
+          # `Tools` (raiz) incluído em 08/09/2026 junto com o ruff: mesma lacuna
+          # do `.claude/skills` em 03/08/2026 (código executável fora de todo
+          # gate). `Tools/log_event_validator.py` não tem nenhum finding.
+          python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools -ll
 
       - name: Auditoria de Dependencias (pip-audit)
         continue-on-error: true

@@ -21,9 +21,11 @@ fi
 echo "=== INICIANDO GOVERNANCA NATIVA AUTOMATIZADA (PRE-COMMIT) ==="
 
 if [ -f "$VALIDAR_AUTO_PATH" ]; then
-  "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VALIDAR_AUTO_PATH" -BasePath "$REPO_ROOT" -OnlyGovernance -StagedOnly
-  
-  if [ $? -ne 0 ]; then
+  # `set -e` aborta o script no proprio comando pwsh se ele sair com erro,
+  # antes de chegar ao `if [ $? -ne 0 ]` que viria depois — a mensagem de erro
+  # abaixo nunca seria exibida (o bloqueio do commit ja acontecia, so a
+  # mensagem ficava muda). O `if ! ...` mantem o bloqueio e restaura a mensagem.
+  if ! "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File "$VALIDAR_AUTO_PATH" -BasePath "$REPO_ROOT" -OnlyGovernance -StagedOnly; then
     echo ""
     echo "[ERRO] Falha na validacao de Governanca. Commit abortado."
     exit 1
