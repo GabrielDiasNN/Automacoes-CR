@@ -25,35 +25,44 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-# Padroes canonicos de alvos sensiveis do repositorio.
-#
-# `.env`: `(?![\w])` impede casar `.environment`/`.envrc`; a alternancia seguinte
-# libera apenas os arquivos-modelo. Bloquear `.env*` e abrir excecao nominal e' o
-# inverso do que se fazia antes (liberar todo sufixo), que deixava passar
-# `.env.local` e `.env.production` — arquivos de segredo reais.
-#
-# Extensoes de credencial: o ponto e' escapado. Sem o escape, `.key` casava
-# "qualquer caractere + key" e bloqueava fontes reais do Dashboard
-# (useApiKey.ts, ApiKeyContext.tsx, ApiKeyGate.tsx).
-$SensitiveTargetPattern = '(' +
-    '\.env(?![\w])(?!\.(?:example|template|sample)(?![\w]))' +
-    '|automacoes\.db|orchestrator\.db' +
-    '|orchestrator\.pid|worker\.pid' +
-    '|\.(?:pem|key|pfx|p12|crt|keystore)(?![\w])' +
-    '|id_rsa' +
-')'
+# Fonte unica de TODA a logica Zero-Trust: HookCommon.psm1 (.claude/hooks) — o
+# padrao de alvos (Get-SensitiveTargetPattern, tambem usado pelo guard de
+# Edit|Write do settings.json) e a deteccao de escrita sensivel em comando
+# (Get-SensitiveWriteInCommand, tambem usada por Assert-SensitiveWriteGuard.ps1).
+# Antes este script tinha copia propria de tudo isso e divergia: liberava
+# .env.local/.env.production, nao cobria .pem/.key/id_rsa e casava verbos
+# diferentes de escrita. Falha ao carregar o modulo bloqueia (fail-closed),
+# como a fiacao inline de settings.json faz no mesmo cenario.
+try {
+    Import-Module (Join-Path $PSScriptRoot '..\..\.claude\hooks\HookCommon.psm1') -Force -DisableNameChecking
+    $SensitiveTargetPattern = Get-SensitiveTargetPattern
+}
+catch [System.Exception] {
+    [Console]::Error.WriteLine(
+        "[WARN PreToolUse] Falha ao carregar padrao canonico de alvos sensiveis: {0}" -f $_.Exception.Message)
+    [Console]::Out.WriteLine('{"decision":"deny","reason":"BLOQUEADO POR FALHA DE GOVERNANCA: nao foi possivel carregar o padrao de alvos sensiveis (HookCommon.psm1)."}')
+    exit 0
+}
 
-# Padrao de comandos Git destrutivos
-$DestructiveGitPattern = 'git\s+(reset\s+--hard|clean\s+.*(-[a-zA-Z]*f[a-zA-Z]*\b|--force\b)|push\s+.*(-[a-zA-Z]*f[a-zA-Z]*\b|--force\b|--force-with-lease\b)|checkout\s+(--\s+\.|\s*-f\b))'
-
-# Verbos de escrita/remocao em terminal. Cobre PowerShell e os equivalentes
-# POSIX disponiveis via Git Bash nesta maquina.
-$WriteVerbPattern = '(' +
-    'Set-Content|Add-Content|Out-File|Tee-Object|Clear-Content' +
-    '|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item' +
-    '|\[System\.IO\.File\]::(?:Write|Append|Delete|Copy|Move)' +
-    '|\brm\b|\bmv\b|\bcp\b|\bdd\b|\btee\b|\btruncate\b|\bdel\b|\berase\b' +
-    '|\bsed\b[^|;]*-i' +
+# Padrao de comandos Git destrutivos.
+#
+# `\bgit(?:\.exe)?` mais um grupo opcional de opcoes globais (`-C <path>`,
+# `-c k=v`, `--no-pager`...) antes do subcomando: sem isso `git -C . push
+# --force` e `git.exe push --force` escapavam, pois o padrao exigia o
+# subcomando colado no `git`. O grupo so' casa tokens que PARECEM opcao
+# (`-x` / `--xxx` / com argumento) — nao texto livre — para nao bloquear
+# `git commit -m "fala em reset --hard"`.
+#
+# A deteccao de flag de forca usa `(?<=\s)` para exigir que o `-` seja INICIO
+# de um token de argumento, nao qualquer hifen dentro da string. Sem essa
+# ancora, `.*(-[A-Za-z]*f[A-Za-z]*\b)` casava como substring livre em nomes de
+# branch comuns: `git push origin feat/novo-fluxo` e `git push origin
+# sync-from-main` eram bloqueados como se fossem `push --force`.
+$DestructiveGitPattern = '\bgit(?:\.exe)?(?:\s+(?:-[cC]\s+\S+|--[A-Za-z][\w-]*=\S+|--[A-Za-z][\w-]*|-[A-Za-z]))*\s+(' +
+    'reset\s+--hard\b' +
+    '|clean\b[^;&|\r\n]*?(?<=\s)-(?:-force\b|[A-Za-z]*f[A-Za-z]*\b)' +
+    '|push\b[^;&|\r\n]*?(?<=\s)-(?:-force(?:-with-lease)?\b|[A-Za-z]*f[A-Za-z]*\b)' +
+    '|checkout\s+(?:--\s+\.|(?<=\s)-f\b)' +
 ')'
 
 function Read-StdinPayload {
@@ -125,6 +134,14 @@ if ($normalizedTool -in @("write_to_file", "replace_file_content", "multi_replac
             $targetFile = [string]$toolArgs.target_file
         } elseif ($toolArgs.PSObject.Properties.Name -contains "file_path") {
             $targetFile = [string]$toolArgs.file_path
+        } else {
+            # Ferramenta reconhecida, mas nenhuma das chaves de alvo
+            # conhecidas apareceu em args: decide "allow" (fail-open, para
+            # nao travar o agente por um schema inesperado), mas avisa —
+            # senao o guard fica desligado para essa chamada sem ninguem
+            # notar, ao contrario do fail-open de payload ilegivel acima.
+            [Console]::Error.WriteLine(
+                "[WARN PreToolUse] Ferramenta '{0}' reconhecida, mas nenhuma chave de alvo conhecida (TargetFile/targetFile/target_file/file_path) encontrada em args. Guard nao pode avaliar este alvo." -f $normalizedTool)
         }
     }
 
@@ -146,6 +163,11 @@ if ($normalizedTool -in @("run_command", "runcommand")) {
             $commandLine = [string]$toolArgs.commandLine
         } elseif ($toolArgs.PSObject.Properties.Name -contains "command") {
             $commandLine = [string]$toolArgs.command
+        } else {
+            # Mesmo raciocinio do bloco de edicao de arquivo acima: fail-open
+            # deliberado, mas avisado.
+            [Console]::Error.WriteLine(
+                "[WARN PreToolUse] Ferramenta '{0}' reconhecida, mas nenhuma chave de comando conhecida (CommandLine/commandLine/command) encontrada em args. Guard nao pode avaliar este comando." -f $normalizedTool)
         }
     }
 
@@ -154,50 +176,14 @@ if ($normalizedTool -in @("run_command", "runcommand")) {
             Write-Decision -Decision "deny" -Reason "BLOQUEADO POR GOVERNANCA: Comando Git destrutivo (reset --hard, clean -fd, push --force) requer autorizacao explicita do usuario."
         }
 
-        # Normaliza separadores para que 'Orchestrator/automacoes.db' e
-        # 'Orchestrator\automacoes.db' sejam avaliados igualmente.
-        $normalizedCommand = $commandLine.Replace('/', '\')
-
-        # A checagem NAO pode avaliar a linha inteira de uma vez: verbo de
-        # escrita e alvo sensivel podem estar em segmentos sem relacao
-        # (`Get-Content .env; Set-Content saida.txt x`) ou o `.*` guloso do
-        # redirecionamento pode atravessar um `;` (`echo ok > log.txt; cat
-        # .env`). Divide em segmentos por ; && || | e quebra de linha, e
-        # dentro de cada segmento trata `>`/`>>` como fronteira entre fonte
-        # (leitura) e alvo (escrita) — mesma abordagem de
-        # .claude\hooks\Assert-SensitiveWriteGuard.ps1.
-        $redirectPattern = '(?<![0-9])>>?(?!\s*[&$])'
-        $segments = $normalizedCommand -split '(\|\||&&|\||;|\r?\n)'
-
-        foreach ($segment in $segments) {
-            if ([string]::IsNullOrWhiteSpace($segment)) { continue }
-
-            # O conteudo de -Value/-Body e dado, nao alvo: uma mencao ao nome
-            # do arquivo dentro do valor escrito nao deve disparar bloqueio.
-            $inspecionado = [regex]::Replace($segment, '-(Value|Body)\s+("[^"]*"|''[^'']*''|\S+)', '-$1 <omitido>')
-
-            $parts = $inspecionado -split $redirectPattern
-            $fonte = $parts[0]
-            $alvos = @($parts | Select-Object -Skip 1)
-
-            $bloqueia = $false
-
-            # Alvo de redirecionamento sensivel bloqueia sozinho: o proprio
-            # `>` e o verbo.
-            foreach ($alvo in $alvos) {
-                if ($alvo -match $SensitiveTargetPattern) { $bloqueia = $true }
-            }
-
-            # Na fonte, so bloqueia com verbo de escrita explicito no mesmo
-            # segmento — senao qualquer leitura (`Get-Content .env`,
-            # `grep CHAVE .env`) viraria bloqueio.
-            if (-not $bloqueia -and ($fonte -match $SensitiveTargetPattern) -and ($fonte -match $WriteVerbPattern)) {
-                $bloqueia = $true
-            }
-
-            if ($bloqueia) {
-                Write-Decision -Decision "deny" -Reason "BLOQUEADO POR ZERO-TRUST: Escrita ou remocao de arquivo sensivel via terminal e proibida (.env, bancos locais, PIDs e chaves)."
-            }
+        # Segmentacao por ; && || |, fronteira `>`/`>>`, verbo de escrita E
+        # alvo sensivel no mesmo segmento: tudo em Get-SensitiveWriteInCommand
+        # (HookCommon.psm1), a MESMA rotina que .claude\hooks\
+        # Assert-SensitiveWriteGuard.ps1 consome. O $SensitiveTargetPattern
+        # ja veio do modulo (bloco de import no topo); o resto da logica
+        # tambem, agora, em vez de reimplementado aqui.
+        if (-not [string]::IsNullOrEmpty((Get-SensitiveWriteInCommand -CommandLine $commandLine))) {
+            Write-Decision -Decision "deny" -Reason ("BLOQUEADO POR ZERO-TRUST: Escrita ou remocao de arquivo sensivel via terminal e proibida ({0})." -f (Get-SensitiveTargetDescription))
         }
     }
 }

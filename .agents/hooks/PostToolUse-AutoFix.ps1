@@ -18,7 +18,11 @@
 [CmdletBinding()]
 param()
 
-$ErrorActionPreference = 'SilentlyContinue'
+# 'Continue', nao 'SilentlyContinue': erro nao-terminante de cmdlet (ex.: a
+# descoberta de $repoRoot abaixo, que nao esta sob nenhum try/catch) fica
+# visivel em stderr em vez de sumir — o mesmo principio do resto do arquivo,
+# que reporta cada falha de auto-fix em vez de engoli-la.
+$ErrorActionPreference = 'Continue'
 
 function Read-StdinPayload {
     try {
@@ -89,12 +93,34 @@ if ($null -ne $payload) {
                     } elseif ($isUtf16Be) {
                         $text = [System.Text.Encoding]::BigEndianUnicode.GetString($bytes, 2, $bytes.Length - 2)
                         [System.IO.File]::WriteAllText($targetFile, $text, [System.Text.UTF8Encoding]::new($true))
+                    } elseif ($bytes.Length -eq 0) {
+                        # Arquivo vazio: nada para carimbar. Prefixar BOM
+                        # sozinho criaria um arquivo de 3 bytes que deixa de
+                        # ser detectavel como vazio por qualquer logica
+                        # downstream que confira Length -eq 0.
                     } else {
-                        $bom = [byte[]]@(0xEF, 0xBB, 0xBF)
-                        $newBytes = New-Object byte[] ($bom.Length + $bytes.Length)
-                        [System.Buffer]::BlockCopy($bom, 0, $newBytes, 0, $bom.Length)
-                        [System.Buffer]::BlockCopy($bytes, 0, $newBytes, $bom.Length, $bytes.Length)
-                        [System.IO.File]::WriteAllBytes($targetFile, $newBytes)
+                        # So' carimba BOM se o corpo ja' decodifica como UTF-8
+                        # valido. Sem esta checagem, um .ps1 gravado por
+                        # `Set-Content` do PS 5.1 sem `-Encoding` (que grava
+                        # acentos como CP-1252 de 1 byte, nao UTF-8) recebia o
+                        # BOM colado na frente sem transcodificar: o arquivo
+                        # passava a se ANUNCIAR UTF-8 com corpo que nao e' —
+                        # pior do que nao ter BOM, porque mascara
+                        # POWERSHELL_BOM_MISSING sem corrigir o encoding real.
+                        # Mesmo decoder estrito de Tools/Test-SourceEncoding.ps1.
+                        $utf8Strict = New-Object System.Text.UTF8Encoding($false, $true)
+                        try {
+                            [void]$utf8Strict.GetString($bytes)
+                            $bom = [byte[]]@(0xEF, 0xBB, 0xBF)
+                            $newBytes = New-Object byte[] ($bom.Length + $bytes.Length)
+                            [System.Buffer]::BlockCopy($bom, 0, $newBytes, 0, $bom.Length)
+                            [System.Buffer]::BlockCopy($bytes, 0, $newBytes, $bom.Length, $bytes.Length)
+                            [System.IO.File]::WriteAllBytes($targetFile, $newBytes)
+                        }
+                        catch [System.Text.DecoderFallbackException] {
+                            [Console]::Error.WriteLine(
+                                ("[WARN PostToolUse] {0} nao decodifica como UTF-8 valido; BOM NAO foi adicionado para nao mascarar a corrupcao de encoding." -f $targetFile))
+                        }
                     }
                 }
             }
@@ -109,11 +135,15 @@ if ($null -ne $payload) {
             try {
                 $py = Join-Path $repoRoot ".venv\Scripts\python.exe"
                 if (Test-Path -LiteralPath $py) {
+                    # Ordem canonica: isort primeiro (ordena imports), black
+                    # depois (formata o resultado). O inverso deixa o black
+                    # reprovar o que o isort ainda vai mexer.
+                    #
                     # Falha de processo nativo nao lanca excecao: sem checar o
                     # exit code, um black que rejeita o arquivo (sintaxe
                     # incompleta no meio de uma sequencia de edicoes) passaria
                     # despercebido justamente quando o aviso importa.
-                    foreach ($tool in @("black", "isort")) {
+                    foreach ($tool in @("isort", "black")) {
                         $toolOut = & $py -m $tool -q $targetFile 2>&1
                         if ($LASTEXITCODE -ne 0) {
                             [Console]::Error.WriteLine(
