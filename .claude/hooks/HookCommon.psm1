@@ -19,9 +19,64 @@ Set-StrictMode -Version Latest
 # modo que a cobertura efetiva dependia de qual ferramenta o agente escolheu.
 # Manter aqui o padrao E o predicado elimina a divergencia por construcao.
 #
-# .env nao pode ser seguido de palavra, ponto ou hifen: protege .env mas libera
-# .env.example. ".venv" nao casa (o ponto e seguido de 'v', nao de 'e').
-$script:SensitiveTargetPattern = '(\.env(?![\w.\-])|automacoes\.db|orchestrator\.db|orchestrator\.pid|worker\.pid)'
+# `.env`: `(?![\w])` impede casar `.environment`/`.envrc`; a alternancia seguinte
+# libera apenas os arquivos-modelo (.env.example/.env.template/.env.sample).
+# Bloquear `.env*` e abrir excecao nominal e' o inverso da versao anterior deste
+# padrao (que liberava todo sufixo via `(?![\w.\-])`) e deixava passar
+# `.env.local`/`.env.production` — arquivos de segredo reais. ".venv" nao casa
+# (o ponto e seguido de 'v', nao de 'e').
+#
+# Extensoes de credencial: o ponto e' escapado e a fronteira exclui outro ponto
+# alem de palavra (`(?![\w.])`), senao `cert.pem.md`/`notes.keystore.txt`
+# seriam bloqueados por engano.
+#
+# `id_rsa` exige inicio de string, separador de caminho OU fronteira de token
+# antes: sem essa ancora a alternativa casa como substring livre e bloqueia
+# arquivos legitimos como `valid_rsa_settings.py` (contem "id_rsa" no meio de
+# "valid_rsa..."). Numa LINHA DE COMANDO `^` e' o inicio do comando inteiro e
+# espaco nao e' separador de caminho, entao `[\s\\/'"]` cobre `rm id_rsa` sem
+# reabrir `valid_rsa` (precedido de `l`, que nao esta na classe).
+$script:SensitiveTargetPattern = '(' +
+    '\.env(?![\w])(?!\.(?:example|template|sample)(?![\w]))' +
+    '|automacoes\.db|orchestrator\.db' +
+    '|orchestrator\.pid|worker\.pid' +
+    '|\.(?:pem|key|pfx|p12|crt|keystore)(?![\w.])' +
+    '|(?:^|[\s\\/''"])id_rsa(?![\w])' +
+')'
+
+# Verbos de escrita/remocao em terminal — uniao dos dois guards que consomem
+# este modulo (`.agents/hooks/PreToolUse-Guard.ps1` e
+# `.claude/hooks/Assert-SensitiveWriteGuard.ps1`). Antes cada guard tinha copia
+# propria e divergente: o do Antigravity cobria aliases nativos (`sc`, `ac`,
+# `ni`...) e `[System.IO.File]::`, o do Claude Code cobria `shred`. Resultado:
+# `sc .env x` passava no Claude Code e `shred .env` passava no Antigravity.
+# Aqui a lista e' uma so'.
+$script:SensitiveWriteVerbPattern = '(' +
+    'Set-Content|Add-Content|Out-File|Tee-Object|Clear-Content' +
+    '|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item' +
+    '|\[System\.IO\.File\]::(?:Write|Append|Delete|Copy|Move)' +
+    '|\bsc\b|\bac\b|\bni\b|\bri\b|\brni\b|\bcpi\b|\bmi\b|\bsi\b|\bclc\b' +
+    '|\brm\b|\bmv\b|\bcp\b|\bdd\b|\btee\b|\btruncate\b|\bshred\b|\bdel\b|\berase\b' +
+    '|\bsed\b[^|;]*-i' +
+')'
+
+# Redirecionamento: `>` ou `>>` NAO seguido de `&` ou `$` (exclui `2>&1` e
+# `>$null`). O lookbehind `(?<![0-9])` que os guards traziam excluia QUALQUER
+# `>` precedido de digito, inclusive `1> .env`/`2> .env` (descritor explicito
+# escrevendo em arquivo real) — o proprio caso que o guard promete cobrir. O
+# lookahead sozinho ja basta para `2>&1`.
+$script:SensitiveRedirectPattern = '>>?(?!\s*[&$])'
+
+# Lista legivel dos alvos protegidos, para a mensagem de bloqueio devolvida ao
+# agente. Fonte unica: se um nome entra em $script:SensitiveTargetPattern, entra
+# aqui tambem, senao a mensagem culpa o Zero-Trust por um arquivo que ela nao
+# lista e o agente conclui (erradamente) que e' falso positivo.
+$script:SensitiveTargetDescription = @(
+    '.env (exceto .env.example/.env.template/.env.sample)',
+    'bancos locais: automacoes.db, orchestrator.db',
+    'PIDs: orchestrator.pid, worker.pid',
+    'chaves/certificados: .pem, .key, .pfx, .p12, .crt, .keystore, id_rsa'
+) -join '; '
 
 function Get-SensitiveTargetPattern {
     <#
@@ -55,6 +110,80 @@ function Test-SensitiveTarget {
     if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
 
     return ($Value -match $script:SensitiveTargetPattern)
+}
+
+function Get-SensitiveTargetDescription {
+    <#
+    .SYNOPSIS
+        Devolve a lista legivel dos alvos protegidos, para mensagens de bloqueio.
+    #>
+    [CmdletBinding()]
+    param()
+
+    return $script:SensitiveTargetDescription
+}
+
+function Get-SensitiveWriteInCommand {
+    <#
+    .SYNOPSIS
+        Se a linha de comando ESCREVE ou REMOVE um alvo sensivel, devolve o
+        segmento ofensor (para a mensagem de bloqueio). Senao, devolve $null.
+
+    .DESCRIPTION
+        Logica unica dos dois guards de terminal (Antigravity e Claude Code).
+        Antes cada um reimplementava esta rotina com pequenas divergencias
+        (separador nao normalizado de um lado, `[regex]::Replace` sensivel a
+        caixa do outro, padrao de verbo/redirecionamento copiado). Aqui e' uma.
+
+        1. Normaliza `/` -> `\` para que `Orchestrator/automacoes.db` e a forma
+           com barra invertida sejam avaliados igual.
+        2. Divide em segmentos por `;` `&&` `||` `|` e quebra de linha: verbo de
+           escrita e alvo sensivel precisam estar NO MESMO segmento, senao
+           `Get-Content .env; Set-Content saida.txt x` seria barrado por engano.
+        3. Descarta o conteudo de `-Value`/`-Body` (case-insensitive): e' dado
+           escrito, nao alvo — uma mencao ao nome do arquivo la' dentro nao deve
+           disparar bloqueio.
+        4. Trata `>`/`>>` como fronteira entre fonte (leitura) e alvo (escrita).
+           Alvo de redirecionamento sensivel bloqueia sozinho; na fonte so'
+           bloqueia com verbo de escrita explicito no mesmo segmento.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$CommandLine
+    )
+
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $null }
+
+    $normalized = $CommandLine.Replace('/', '\')
+    $segments = $normalized -split '(\|\||&&|\||;|\r?\n)'
+
+    foreach ($segment in $segments) {
+        if ([string]::IsNullOrWhiteSpace($segment)) { continue }
+
+        $inspecionado = [regex]::Replace(
+            $segment,
+            '-(Value|Body)\s+("[^"]*"|''[^'']*''|\S+)',
+            '-$1 <omitido>',
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+        $parts = $inspecionado -split $script:SensitiveRedirectPattern
+        $fonte = $parts[0]
+        $alvos = @($parts | Select-Object -Skip 1)
+
+        foreach ($alvo in $alvos) {
+            if ($alvo -match $script:SensitiveTargetPattern) { return $segment.Trim() }
+        }
+
+        if (($fonte -match $script:SensitiveTargetPattern) -and
+            ($fonte -match $script:SensitiveWriteVerbPattern)) {
+            return $segment.Trim()
+        }
+    }
+
+    return $null
 }
 
 function Get-HookPayload {
@@ -336,4 +465,4 @@ function Invoke-GovernedScript {
     }
 }
 
-Export-ModuleMember -Function Get-SensitiveTargetPattern, Test-SensitiveTarget, Get-HookPayload, Get-HookProperty, Get-RepositoryRoot, Invoke-EncodingCheck, Invoke-GovernanceGate, Select-FailureLines
+Export-ModuleMember -Function Get-SensitiveTargetPattern, Test-SensitiveTarget, Get-SensitiveTargetDescription, Get-SensitiveWriteInCommand, Get-HookPayload, Get-HookProperty, Get-RepositoryRoot, Invoke-EncodingCheck, Invoke-GovernanceGate, Select-FailureLines

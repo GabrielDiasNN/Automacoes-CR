@@ -38,22 +38,33 @@ Automatizar com segurança máxima o ciclo de entrega de código: isolar altera�
    ```powershell
    git checkout main; git pull origin main
    ```
-2. Crie e alterne para a branch temática descritiva com base na convenção do repositório:
+2. **Confirme que a `main` local não divergiu do remoto antes de branchar.**
+   Esta máquina acumula commits de outras sessões de agente na `main` local; sem
+   esta checagem a branch nova carrega trabalho de terceiros para dentro do PR.
+   ```powershell
+   git rev-list --left-right --count main...origin/main
+   ```
+   O resultado esperado é `0       0`. Qualquer número diferente de zero à
+   esquerda significa commits locais que o remoto não tem — resolva (push,
+   rebase ou reset consciente) **antes** de continuar.
+3. Crie e alterne para a branch temática descritiva com base na convenção do repositório:
    ```powershell
    git checkout -b <tipo>/<nome-descritivo>
    ```
    *Prefixos recomendados:* `fix/`, `feat/`, `refactor/`, `docs/`, `perf/`, `test/`.
 
 ### 2. Stage Seletivo e Commit Atômico
-3. Valide localmente antes de comitar:
+4. Valide localmente antes de comitar, rodando o **mesmo** gate do pre-commit e
+   do CI (encoding isolado não cobre PowerShell, Zero-Trust, mypy nem manifesto —
+   ver `preflight-gate.md`):
    ```powershell
-   pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SourceEncoding.ps1 -RootPath .
+   pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance
    ```
-4. Adicione seletivamente apenas os arquivos modificados dentro do escopo da demanda:
+5. Adicione seletivamente apenas os arquivos modificados dentro do escopo da demanda:
    ```powershell
    git add <arquivo1> <arquivo2> ...
    ```
-5. Realize o commit com mensagem em **Português do Brasil**, fornecendo contexto claro para auditoria:
+6. Realize o commit com mensagem em **Português do Brasil**, fornecendo contexto claro para auditoria:
    ```powershell
    git commit -m "<tipo>(<escopo>): <descrição clara em PT-BR> [versão/ref]"
    ```
@@ -61,22 +72,22 @@ Automatizar com segurança máxima o ciclo de entrega de código: isolar altera�
    > Para commits com corpo detalhado de múltiplas linhas no Windows/PowerShell, grave a mensagem em um arquivo temporário (`scratch/commit_msg.txt`) e utilize `git commit -F "scratch/commit_msg.txt"`.
 
 ### 3. Publicação e Abertura do PR
-6. Envie a branch para o repositório remoto:
+7. Envie a branch para o repositório remoto:
    ```powershell
    git push -u origin <nome-da-branch>
    ```
-7. Redija a descrição do PR contendo: resumo das alterações, motivação técnica e evidências de testes.
-8. Submeta o PR utilizando a GitHub CLI:
+8. Redija a descrição do PR contendo: resumo das alterações, motivação técnica e evidências de testes.
+9. Submeta o PR utilizando a GitHub CLI:
    ```powershell
    gh pr create --title "<tipo>(<escopo>): <título>" --body-file "scratch/pr_body.md" --base main --head <nome-da-branch>
    ```
 
 ### 4. Acompanhamento Reativo do CI e Auto-Correção
-9. Inicie o loop de acompanhamento das checagens utilizando a ferramenta `schedule` (timers de 30s):
+10. Inicie o loop de acompanhamento das checagens utilizando a ferramenta `schedule` (timers de 30s):
    ```powershell
    gh pr checks <numero-do-pr>
    ```
-10. **Tratamento de Falhas (Feedback Loop)**:
+11. **Tratamento de Falhas (Feedback Loop)**:
     - Se qualquer check falhar (status vermelho), obtenha o log de erro:
       ```powershell
       gh run view --log-failed
@@ -87,18 +98,18 @@ Automatizar com segurança máxima o ciclo de entrega de código: isolar altera�
     - O GitHub Actions reexecutará automaticamente os checks.
 
 ### 5. Merge Governado e Limpeza (Cleanup)
-11. > [!IMPORTANT]
+12. > [!IMPORTANT]
     > **Merge Bloqueado até 100% Verde:** Nunca execute o merge se houver checks de CI falhando ou pendentes.
     
     Com todos os checks aprovados (verde), realize o merge via squash:
     ```powershell
     gh pr merge <numero-do-pr> --squash --delete-branch
     ```
-12. Retorne para a `main`, puxe as atualizações consolidadas e remova referências órfãs:
+13. Retorne para a `main`, puxe as atualizações consolidadas e remova referências órfãs:
     ```powershell
     git checkout main; git pull origin main; git fetch --prune
     ```
-13. Se a branch local ainda existir, remova-a com segurança:
+14. Se a branch local ainda existir, remova-a com segurança:
     ```powershell
     git branch -d <nome-da-branch>
     ```

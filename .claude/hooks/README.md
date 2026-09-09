@@ -73,8 +73,18 @@ Bloqueia **escrita**, não leitura — ler `.env` é operação legítima e docu
 (o `CLAUDE.md` manda ler `ORCHESTRATOR_API_KEY` de lá). Exige verbo de escrita
 **e** alvo sensível no mesmo segmento do comando (separadores: `;`, `&&`, `||`,
 `|`, quebra de linha); sem isso, `Get-Content .env | Set-Content saida.txt` seria
-barrado por engano. O conteúdo de `-Value`/`-Body` é descartado antes da análise,
-senão citar `orchestrator.pid` dentro de um texto viraria bloqueio.
+barrado por engano. O conteúdo de `-Value`/`-Body` é descartado antes da análise
+(case-insensitive), senão citar `orchestrator.pid` dentro de um texto viraria
+bloqueio.
+
+A rotina de detecção — segmentação, fronteira `>`/`>>`, verbo de escrita — vive
+em `Get-SensitiveWriteInCommand` (`HookCommon.psm1`), a **mesma** consumida pelo
+guard do Antigravity (`.agents/hooks/PreToolUse-Guard.ps1`). Não há duas
+implementações: a lista de alvos protegidos vem de `Get-SensitiveTargetDescription`
+e cobre `.env` (exceto os `.env.example`/`.env.template`/`.env.sample`), os
+bancos locais (`automacoes.db`, `orchestrator.db`), os PIDs (`orchestrator.pid`,
+`worker.pid`) e as chaves/certificados (`.pem`, `.key`, `.pfx`, `.p12`, `.crt`,
+`.keystore`, `id_rsa`) — a mensagem de bloqueio lista exatamente esse conjunto.
 
 Dentro do segmento, `>` e `>>` são **fronteira entre fonte e alvo**: o que está à
 esquerda é leitura, o que está à direita é o arquivo escrito. Por isso
@@ -91,10 +101,11 @@ segmento culpado. Dois casos conhecidos:
   que nada seja escrito. Descartar `-Value`/`-Body` cobre o cmdlet; texto livre
   não tem marcador que permita distingui-lo de um comando real.
 - **Cópia/movimentação com o arquivo sensível como origem** — `Copy-Item .env
-  .env.bak` é barrado. Distinguir origem de destino em `Copy-Item`/`Move-Item`
-  exige parser posicional, e errar para o lado permissivo aqui liberaria
-  `Copy-Item qualquer.txt .env`. O bloqueio também não é gratuito: copiar um
-  arquivo de segredos é operação que vale passar pelo usuário.
+  .env.bak` e `docker cp <container>:/app/.env ./copia` são barrados. Distinguir
+  origem de destino em `cp`/`Copy-Item`/`Move-Item` exige parser posicional, e
+  errar para o lado permissivo aqui liberaria `Copy-Item qualquer.txt .env`. O
+  bloqueio também não é gratuito: copiar um arquivo de segredos é operação que
+  vale passar pelo usuário.
 
 Contorne reformulando o comando — não enfraqueça o padrão.
 
@@ -103,11 +114,13 @@ reconhecido, e a lacuna não está fechada — `python -c "open('.env','w')"` pa
 com exit 0. O guard reduz o alcance de um engano, não substitui permissão de
 arquivo; não o trate como fronteira de segurança rígida.
 
-A lista de alvos e o predicado vivem em `Test-SensitiveTarget`
-(`HookCommon.psm1`), consumido tanto por este script quanto pelo guard inline de
-`Edit|Write` no `settings.json` — não há mais duas implementações para manter em
-sincronia. Antes havia: o inline usava `EndsWith('.env')` e o guard um regex, de
-modo que a cobertura efetiva dependia de qual ferramenta o agente escolhia.
+A lista de alvos e o predicado vivem em `Test-SensitiveTarget` /
+`Get-SensitiveWriteInCommand` (`HookCommon.psm1`), consumidos pelo guard inline
+de `Edit|Write` no `settings.json`, por este script **e** pelo guard do
+Antigravity — não há mais implementações paralelas para manter em sincronia.
+Antes havia: o inline usava `EndsWith('.env')`, cada guard de shell trazia sua
+cópia do padrão de verbo/redirecionamento, e a cobertura efetiva dependia de
+qual ferramenta o agente escolhia.
 
 ## Register-GateRun.ps1
 
