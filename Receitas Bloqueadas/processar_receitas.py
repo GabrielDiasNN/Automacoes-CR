@@ -25,11 +25,11 @@ from automation_log import ensure_utf8_streams, make_logger
 from dotenv import load_dotenv
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from oracle_client import init_oracle_thick_mode
 from oracle_extract import (
     OracleCredentials,
     compute_hash,
     fetch_all,
+    init_thick_mode,
     resolve_oracle_credentials,
 )
 from oracle_retry import CircuitBreakerError, make_oracle_retry
@@ -529,11 +529,7 @@ def process() -> None:
         log("Credenciais ou caminhos Oracle invalidos no ambiente.", "ERROR", exec_id)
         sys.exit(1)
 
-    init_oracle_thick_mode(
-        creds.client_lib,
-        creds.tns_admin,
-        lambda msg, lvl="INFO": log(msg, lvl, exec_id),
-    )
+    init_thick_mode(creds, log, exec_id)
 
     try:
         df_raw, df_agreg = _carregar_e_normalizar(creds, exec_id)

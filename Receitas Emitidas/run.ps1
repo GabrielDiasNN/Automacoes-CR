@@ -39,7 +39,6 @@ $libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
-$pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $generatePy = Join-Path $ScriptDir "generate_html_report.py"
 $configPath = Join-Path $ScriptDir "receitas_config.json"
@@ -57,6 +56,10 @@ Import-Module $libProcess  -Force
 Import-Module $libConfig    -Force
 Import-Module $libOracle   -Force
 Import-Module $libIdempotency -Force
+
+# O .venv nao e versionado e vive na raiz do repositorio principal: resolver
+# so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
+$pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 
 $AutomationName = "Receitas Emitidas"
 

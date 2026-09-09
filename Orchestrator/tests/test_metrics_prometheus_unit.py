@@ -93,26 +93,64 @@ def test_get_metrics_response_retorna_bytes_e_content_type() -> None:
     assert b"automacoes_queue_pending_total" in body
 
 
-def test_record_execution_complete_indisponivel_retorna_sem_erro() -> None:
+def test_record_execution_complete_indisponivel_nao_incrementa_counter() -> None:
+    """A guarda `if not _PROMETHEUS_AVAILABLE: return` deve impedir o `.inc()`.
+
+    Os objetos Counter/Gauge do módulo já existem (criados na importação), então
+    sem esta asserção o teste passaria igual mesmo que a guarda fosse removida:
+    o `.labels(...).inc()` funcionaria de qualquer forma e não lançaria erro.
+    """
+    before = _metric_value(
+        metrics.EXEC_TOTAL.labels(status="erro", automation_name="qualquer")
+    )
+
     with patch("app.metrics._PROMETHEUS_AVAILABLE", False):
         metrics.record_execution_complete(
             status="erro", automation_name="qualquer", duration_seconds=1.0
         )
 
+    after = _metric_value(
+        metrics.EXEC_TOTAL.labels(status="erro", automation_name="qualquer")
+    )
+    assert after == before
 
-def test_update_system_gauges_indisponivel_retorna_sem_erro() -> None:
+
+def test_update_system_gauges_indisponivel_nao_altera_gauges() -> None:
+    metrics.update_system_gauges(pending=9, active=9)
+
     with patch("app.metrics._PROMETHEUS_AVAILABLE", False):
         metrics.update_system_gauges(pending=1, active=1)
 
+    assert _metric_value(metrics.QUEUE_PENDING) == 9
+    assert _metric_value(metrics.WORKER_ACTIVE) == 9
 
-def test_update_db_gauges_indisponivel_retorna_sem_erro() -> None:
-    with patch("app.metrics._PROMETHEUS_AVAILABLE", False):
+
+def test_update_db_gauges_indisponivel_nao_consulta_tamanhos() -> None:
+    with (
+        patch("app.database.get_db_size_mb") as mock_db,
+        patch("app.database.get_wal_size_mb") as mock_wal,
+        patch("app.metrics._PROMETHEUS_AVAILABLE", False),
+    ):
         metrics.update_db_gauges()
 
+    mock_db.assert_not_called()
+    mock_wal.assert_not_called()
 
-def test_update_throttle_gauge_indisponivel_retorna_sem_erro() -> None:
-    with patch("app.metrics._PROMETHEUS_AVAILABLE", False):
+
+def test_update_throttle_gauge_indisponivel_nao_altera_gauge() -> None:
+    fake_state = {1: {"count": 1, "last_sent": time.time()}}
+    with patch("app.notifications._alert_state", fake_state):
         metrics.update_throttle_gauge()
+    assert _metric_value(metrics.ALERT_THROTTLE_ACTIVE) == 1
+
+    with (
+        patch("app.notifications._alert_state", {}),
+        patch("app.metrics._PROMETHEUS_AVAILABLE", False),
+    ):
+        metrics.update_throttle_gauge()
+
+    # Se a guarda fosse removida, o estado vazio zeraria o gauge para 0.
+    assert _metric_value(metrics.ALERT_THROTTLE_ACTIVE) == 1
 
 
 def test_get_metrics_response_indisponivel_retorna_none_none() -> None:

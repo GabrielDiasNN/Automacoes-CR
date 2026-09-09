@@ -3,18 +3,14 @@
   "python_subprocess_allowlist": [
     "^Orchestrator\\\\worker\\.py$",
     "^Orchestrator\\\\app\\\\notifications\\.py$",
-    "^Orchestrator\\\\app\\\\routers\\\\automations\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\beneficiamento_refresh\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\env_admin\\.py$",
-    "^Orchestrator\\\\app\\\\services\\\\execution_runtime\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\scheduler_runtime\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\system_runtime\\.py$"
   ],
   "python_sqlite_allowlist": [
     "^Orchestrator\\\\app\\\\database\\.py$",
     "^Orchestrator\\\\tools\\\\diagnostics\\.py$",
-    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\historico_db\\.py$",
-    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\overview_v1\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_common\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_overview\\.py$",

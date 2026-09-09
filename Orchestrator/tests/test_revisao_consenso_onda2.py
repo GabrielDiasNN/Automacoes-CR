@@ -4,6 +4,7 @@ Um teste por defeito, com a âncora do achado no docstring.
 """
 
 import os
+import sys
 from typing import Any, cast
 
 import pytest
@@ -61,6 +62,19 @@ def test_diretorio_irmao_nao_e_considerado_dentro_do_projeto() -> None:
 
 
 @pytest.mark.unitario
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason=(
+        "resolve_real() aplica os.path.normcase(), que só normaliza caixa no "
+        "Windows (sistema de arquivos case-insensitive por padrão); em "
+        "Linux/macOS normcase() é identidade, então o mesmo caminho em "
+        "minúsculas é (corretamente) um caminho diferente e a asserção abaixo "
+        "não se sustenta fora do Windows. Não é uma falha de segurança: em "
+        "sistema case-sensitive, is_contained() ficando mais estrito (rejeita "
+        "por diferença de caixa) nunca amplia o que é aceito como 'dentro do "
+        "projeto' — só a normalização correta para o SO local importa."
+    ),
+)
 def test_contencao_ignora_diferenca_de_caixa() -> None:
     """No Windows a caixa não distingue diretórios; o `startswith` distinguia.
 

@@ -62,7 +62,7 @@ PROJECT_ROOT = get_project_root()
 # ---------------------------------------------------------------------------
 
 
-def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
+def _apply_execution_filters(  # pylint: disable=R0913,R0917
     query: SAQuery[models.Execution],
     status: str | None,
     automation_id: int | None,
@@ -72,7 +72,14 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
     date_from: str | None,
     date_to: str | None,
 ) -> SAQuery[models.Execution]:
-    """Aplica filtros opcionais à query de execuções e valida entradas."""
+    """Valida os filtros da listagem e delega a montagem da query ORM.
+
+    A validação (enum permitido, parse de data, ordem cronológica) é
+    responsabilidade HTTP e permanece aqui; a montagem dos predicados
+    SQLAlchemy vive em `execution_repository.apply_filters` — routers não
+    devem construir query ORM diretamente (achado de aderência arquitetural).
+    """
+    normalized_status: str | None = None
     if status:
         normalized_status = status.upper()
         if normalized_status not in EXECUTION_ALLOWED_STATUSES:
@@ -80,7 +87,7 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
             raise HTTPException(
                 status_code=422, detail=f"status inválido. Use: {allowed}."
             )
-        query = query.filter(models.Execution.status == normalized_status)
+    normalized_priority: str | None = None
     if priority:
         normalized_priority = priority.upper()
         if normalized_priority not in EXECUTION_ALLOWED_PRIORITIES:
@@ -88,27 +95,18 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
             raise HTTPException(
                 status_code=422, detail=f"priority inválida. Use: {allowed}."
             )
-        query = query.filter(models.Execution.priority == normalized_priority)
-    if automation_id:
-        query = query.filter(models.Execution.automation_id == automation_id)
-    if queue_group:
-        query = query.filter(models.Execution.queue_group == queue_group)
-    if requested_by:
-        query = query.filter(models.Execution.requested_by.ilike(f"%{requested_by}%"))
     dt_from: datetime | None = None
-    dt_to: datetime | None = None
     if date_from:
         try:
             dt_from = datetime.fromisoformat(date_from)
-            query = query.filter(models.Execution.started_at >= dt_from)
         except ValueError as exc:
             raise HTTPException(
                 status_code=422, detail="date_from inválido. Use formato ISO-8601."
             ) from exc
+    dt_to: datetime | None = None
     if date_to:
         try:
             dt_to = datetime.fromisoformat(date_to)
-            query = query.filter(models.Execution.started_at <= dt_to)
         except ValueError as exc:
             raise HTTPException(
                 status_code=422, detail="date_to inválido. Use formato ISO-8601."
@@ -117,7 +115,16 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0914,R0917
         raise HTTPException(
             status_code=422, detail="date_from não pode ser maior que date_to."
         )
-    return query
+    return exec_repo.apply_filters(
+        query,
+        status=normalized_status,
+        priority=normalized_priority,
+        automation_id=automation_id,
+        queue_group=queue_group,
+        requested_by=requested_by,
+        date_from=dt_from,
+        date_to=dt_to,
+    )
 
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.ExecutionSummary])

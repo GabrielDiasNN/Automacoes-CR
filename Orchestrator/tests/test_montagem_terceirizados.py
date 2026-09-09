@@ -4,6 +4,7 @@ Suite de Testes Unitários: Automação de Montagem de Terceirizados
 Valida o extrator Oracle Thick Mode e o processador sintático de NF/OB.
 """
 
+import inspect
 import io
 import json
 import os
@@ -11,6 +12,9 @@ import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import oracledb
+import pytest
 
 # Salvar referência real antes de mockar
 real_exists = os.path.exists
@@ -21,8 +25,17 @@ AUTOMATION_PATH = os.path.abspath(
 )
 sys.path.append(AUTOMATION_PATH)
 
+# lib/python: `oracle_retry` é a fonte do perfil de retry compartilhado, exercido
+# nos testes de retry no fim deste arquivo.
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "lib", "python")
+    )
+)
+
 import extract_oracle
 import validate_and_generate_html
+from oracle_retry import make_oracle_retry
 
 
 def test_parse_qt_pc_nf_formats() -> None:
@@ -372,6 +385,11 @@ def test_extract_sucesso_oracle_mockado(
     sql_content = "SELECT * FROM MONTAGEM"
     mock_file_sql = MagicMock()
     mock_file_sql.read.return_value = sql_content
+    # Sem isto, `with open(...) as f` resolve `f` para um MagicMock diferente
+    # (o retorno padrão de `__enter__`), então `f.read()` nunca era o mock
+    # configurado acima — `sql` virava outro MagicMock, não a string da query,
+    # e nada abaixo notava porque o restante da cadeia Oracle também é mock.
+    mock_file_sql.__enter__.return_value = mock_file_sql
 
     # Mocks de open
     mock_open.side_effect = lambda path, mode="r", encoding=None: (
@@ -395,9 +413,96 @@ def test_extract_sucesso_oracle_mockado(
     with (
         patch("extract_oracle.sys.argv", ["extract_oracle.py", exec_id]),
         patch("extract_oracle.sys.exit") as mock_exit,
+        patch("extract_oracle.json.dump") as mock_json_dump,
     ):
 
         extract_oracle.extract()
 
         # O script de extração deve completar sem erro
         mock_exit.assert_not_called()
+
+        # A asserção original parava em "não chamou sys.exit" — o JSON gravado
+        # no arquivo temporário nunca era conferido, então o teste passava
+        # igual mesmo se serialize_rows()/o dump gravassem lixo ou nada. Aqui
+        # confere-se o conteúdo real gravado, derivado do fetchmany mockado.
+        assert mock_json_dump.call_count == 1
+        dados_gravados, _arquivo = mock_json_dump.call_args.args[:2]
+        assert dados_gravados == [
+            {
+                "NR_OB": "OB-001",
+                "CD_REF_CLT": "123",
+                "QT_PC_NF": "10-123",
+                "OBS_OB": "NF: 123",
+            }
+        ]
+
+        # A query lida do arquivo SQL precisa ter chegado ao fetch — não um
+        # placeholder do mock de `open()`.
+        mock_file_sql.read.assert_called_once()
+
+
+# --- Perfil de retry do MT-02 (achado 5 da validacao de 08/09/2026) --------------
+#
+# A revisao [1.3.81] alinhou o MT-02 aos defaults de make_oracle_retry(), mas os
+# dois ciclos rodados contra o Oracle real nao exercitaram o caminho de retry:
+# `retry.attempt` so e emitido quando ha falha, e a rede estava saudavel. Estes
+# testes cobrem o que o ciclo feliz nao cobre, sem depender do dbprd.
+
+
+def test_mt02_usa_o_perfil_padrao_de_retry() -> None:
+    """MT-02 nao pode voltar a sobrescrever o perfil de espera.
+
+    O override legado (wait_initial=30, wait_max=120, jitter=0) fazia a automacao
+    esperar minutos entre tentativas. Se alguem reintroduzi-lo sem registrar a
+    razao no call site, este teste quebra.
+    """
+    # So o codigo executavel: o arquivo comenta o override legado de proposito,
+    # para quem for investigar falha de conexao entender o que mudou.
+    codigo = [
+        linha.split("#", 1)[0]
+        for linha in inspect.getsource(extract_oracle).splitlines()
+    ]
+    fonte = "\n".join(codigo)
+
+    assert "make_oracle_retry()" in fonte, (
+        "MT-02 deve usar os defaults compartilhados de make_oracle_retry(); "
+        "um override precisa vir com a razao documentada no call site"
+    )
+    assert "wait_initial=" not in fonte, (
+        "o perfil de espera do MT-02 voltou a ser sobrescrito; se for "
+        "deliberado, registre a razao no call site e atualize este teste"
+    )
+
+
+def test_retry_do_perfil_padrao_desiste_em_segundos_nao_minutos() -> None:
+    """Exercita o caminho de retry de fato, medindo a espera acumulada.
+
+    Este e o teste que o ciclo contra o Oracle real nao substitui: forca tres
+    falhas de DatabaseError e mede quanto o decorador dorme no total. Com o
+    perfil antigo seriam ~30s + ~60s; com o atual o teto e wait_max=5.0 mais
+    jitter, e na pratica fica na casa de decimos de segundo.
+    """
+    dormidas: list[float] = []
+    retry = make_oracle_retry()
+
+    chamadas = {"n": 0}
+
+    @retry
+    def _sempre_falha() -> None:
+        chamadas["n"] += 1
+        raise oracledb.DatabaseError("indisponivel")
+
+    # O que sai daqui pode ser a DatabaseError original ou a CircuitBreakerError
+    # do pybreaker, dependendo de o breaker ter aberto: o teste mede a espera
+    # acumulada, nao qual das duas venceu a corrida.
+    with (
+        patch("time.sleep", side_effect=dormidas.append),
+        pytest.raises(Exception),
+    ):
+        _sempre_falha()
+
+    assert chamadas["n"] == 3, "attempts=3 deve produzir exatamente 3 chamadas"
+    assert sum(dormidas) < 15.0, (
+        f"espera acumulada de {sum(dormidas):.1f}s indica que o perfil legado "
+        "de minutos voltou; o perfil atual tem teto wait_max=5.0 por tentativa"
+    )

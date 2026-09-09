@@ -33,10 +33,17 @@ if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.P
 $projectRoot = Split-Path -Parent $ScriptDir
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
-$pythonExe   = Join-Path $projectRoot ".venv\Scripts\python.exe"
+$libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
 
 Import-Module $libLogging -Force
 Import-Module $libEmail   -Force
+Import-Module $libProcess -Force
+
+# O .venv nao e versionado e vive na raiz do repositorio principal: resolver
+# so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
+# Mesmo padrao das 6 automacoes de dominio — sem isto, toda automacao nova
+# nasce com o bug que elas ja' corrigiram.
+$pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {

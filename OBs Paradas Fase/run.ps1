@@ -26,7 +26,6 @@ $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $projectRoot      = Split-Path -Parent $ScriptDir
-$pythonExe        = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $ExtractScript    = Join-Path $ScriptDir "extract_obs.py"
 $GenScript        = Join-Path $ScriptDir "generate_phase_cards.py"
 $PhaseCardsFile   = Join-Path $ScriptDir "phase_cards.json"
@@ -50,6 +49,10 @@ Import-Module $libRetry    -Force
 Import-Module $libProcess  -Force
 Import-Module $libConfig    -Force
 Import-Module $libOracle   -Force
+
+# O .venv nao e versionado e vive na raiz do repositorio principal: resolver
+# so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
+$pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 
 $AutomationName = "OBs Paradas Fase"
 

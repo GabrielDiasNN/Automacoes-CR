@@ -71,7 +71,7 @@ O workflow `.github/workflows/governanca.yml` continua sendo o gate autoritativo
 
 1. **Gitleaks Security Scan:** execução paralela da action oficial do Gitleaks para bloquear qualquer commit que contenha senhas, tokens ou chaves secretas (Zero Trust).
 2. **Preparação do diff governado:** o job `preparar-diff` usa o mesmo classificador compartilhado do hook para publicar `selection_mode`, caminhos críticos e alvos de `conformidade-log`.
-3. **Governança completa:** o job `governanca` instala dependências, valida formatação e análise estática, roda a governança agregada e executa suites Python e PowerShell.
+3. **Governança agregada:** o job `governanca-agregada` instala dependências e roda `ValidarAutomacoes.ps1 -OnlyGovernance` (governança estática apenas — as suítes Python e PowerShell rodam em jobs dedicados, `testes-python` e `testes-powershell`).
 4. **Conformidade de log condicional:** o job `conformidade-log` só roda quando o diff contém scripts PowerShell operacionais elegíveis; quando não houver alvo, ele será pulado por contrato.
 5. **Markdown:** o job `markdown` mantém observabilidade separada para o padrão documental.
 

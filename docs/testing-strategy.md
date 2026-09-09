@@ -52,19 +52,19 @@ O ecossistema de testes do Hub de Automações é organizado em três camadas:
 cd Orchestrator
 
 # Suite completa
-.venv\Scripts\python.exe -m pytest tests/ -v
+..\.venv\Scripts\python.exe -m pytest tests/ -v
 
 # Catálogo governado + automações
-.venv\Scripts\python.exe -m pytest tests/test_portfolio.py tests/test_receitas_emitidas.py -q
+..\.venv\Scripts\python.exe -m pytest tests/test_portfolio.py tests/test_receitas_emitidas.py -q
 
 # Apenas unitários (sem banco real)
-.venv\Scripts\python.exe -m pytest tests/ -v -m "not integration"
+..\.venv\Scripts\python.exe -m pytest tests/ -v -m "not integration"
 
 # Com cobertura
-.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-report=term-missing -q
+..\.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-report=term-missing -q
 
 # Parar no primeiro erro
-.venv\Scripts\python.exe -m pytest tests/ -x -q
+..\.venv\Scripts\python.exe -m pytest tests/ -x -q
 ```
 
 ---
@@ -89,11 +89,11 @@ O pipeline `.github/workflows/governanca.yml` executa automaticamente em `push` 
 | `app/services/` | ≥ 70% |
 | `app/routers/` | ≥ 60% |
 | `app/schemas/` | ≥ 60% |
-| Total do projeto | ≥ 60% |
+| Total do projeto | **≥ 84%** (gate bloqueante do CI, `--cov-fail-under=84` em `governanca.yml`; medido hoje: 89%) |
 
 Verificar com:
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-fail-under=60 -q
+..\.venv\Scripts\python.exe -m pytest tests/ --cov=app --cov-fail-under=84 -q
 ```
 
 ---

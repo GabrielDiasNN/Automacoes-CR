@@ -37,9 +37,24 @@ ensure_utf8_streams()
 
 log = make_logger("PY-EXTRACT")
 
-_oracle_retry = make_oracle_retry(
-    attempts=3, wait_initial=30.0, wait_max=120.0, wait_jitter=0.0
-)
+# Alinhado aos defaults em 08/09/2026, como as outras 5 automacoes. Ate entao
+# este era o UNICO dos 6 extratores a sobrescrever o perfil:
+# `attempts=3, wait_initial=30.0, wait_max=120.0, wait_jitter=0.0`.
+#
+# A revisao de qualidade procurou a razao em git log -S, CONTEXT.md,
+# CHANGELOG.md, manifesto e run.ps1 e nao achou nenhuma. O dono do sistema
+# esclareceu a causa raiz: MT-02 foi a PRIMEIRA automacao do repositorio,
+# escrita antes de `lib/python/oracle_retry.py` consolidar um perfil padrao —
+# o override e legado, nao decisao deliberada de resiliencia para esta query.
+#
+# Mudanca de comportamento (importante ao investigar falha de conexao aqui):
+# o pior caso de espera entre tentativas cai de ~30s+60s+120s para ~0.1s+0.2s
+# com teto de 5s e jitter de ate 1s. A automacao passa a desistir em segundos,
+# nao em minutos. Uma indisponibilidade transitoria do Oracle mais longa que o
+# teto agora falha o ciclo em vez de aguardar — que e exatamente o
+# comportamento das outras 5 contra o mesmo banco. O CircuitBreaker externo
+# (fail_max=3, reset_timeout=60) nao muda.
+_oracle_retry = make_oracle_retry()
 
 
 @_oracle_retry
