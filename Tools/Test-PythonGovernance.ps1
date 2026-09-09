@@ -55,7 +55,12 @@ function Get-PythonTool {
             $mainVenvTool = Join-Path $mainRepo ".venv\Scripts\$ToolName.exe"
             if (Test-Path $mainVenvTool) { return $mainVenvTool }
         }
-    } catch [System.Exception] { }
+    } catch [System.Exception] {
+        # Mesma classe que Resolve-HubPythonExe em lib/Lib-Process.psm1: falha
+        # de descoberta do repositorio principal nao pode sumir silenciosa. O
+        # fluxo continua (Get-Command / $null abaixo) — so' passa a ter rastro.
+        Write-Warning "Get-PythonTool ($ToolName): falha ao localizar o venv do repositorio principal via 'git rev-parse --git-common-dir': $($_.Exception.Message)"
+    }
 
     if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $ToolName }
     return $null

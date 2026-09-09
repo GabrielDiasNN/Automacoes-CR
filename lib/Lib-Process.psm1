@@ -268,7 +268,15 @@ function Resolve-HubPythonExe {
             $mainVenv = Join-Path $mainRepo ".venv\Scripts\python.exe"
             if (Test-Path $mainVenv) { return $mainVenv }
         }
-    } catch [System.Exception] { }
+    } catch [System.Exception] {
+        # Sem esta linha, uma falha de `git rev-parse` (fora de repo, git
+        # ausente) ou de `Resolve-Path` some, e o pre-flight so' informa
+        # "Path inacessivel: python.exe" — sem pista de que a descoberta do
+        # venv do repositorio principal foi tentada. O retorno abaixo (venv
+        # local, inexistente) segue correto: e' o caminho que a mensagem de
+        # erro do pre-flight deve apontar.
+        Write-Warning "Resolve-HubPythonExe: falha ao localizar o venv do repositorio principal via 'git rev-parse --git-common-dir': $($_.Exception.Message)"
+    }
 
     return $localVenv
 }

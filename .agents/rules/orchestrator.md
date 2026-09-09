@@ -22,7 +22,7 @@ Aplica-se ao desenvolvimento, testes e manutenção em `Orchestrator/`.
   - **Thread-Safety Crítico**: Use sempre `trigger_worker_wakeup` via `loop.call_soon_threadsafe`. Nunca chame `task_queued_event.set()` diretamente de endpoints síncronos, pois estes rodam em threadpool separado.
 - `database.py`: Engine SQLite WAL e context manager `session_scope`.
   - **Sessões SQLAlchemy**: Fora do contexto direto de endpoints FastAPI, use obrigatoriamente `with session_scope() as session:`.
-  - **Retenção**: `purge_old_executions` preserva as últimas 50 execuções por automação via window function.
+  - **Retenção**: `purge_old_executions` preserva um número fixo de execuções mais recentes por automação via window function — o valor canônico está na própria função (`Orchestrator/app/database.py`), não reproduzido aqui.
 
 ## Manifesto de Automação
 

@@ -120,9 +120,9 @@ def fetch_all(  # pylint: disable=too-many-arguments
     lote de `fetchmany()` com o arraysize do driver, evitando round-trips
     extras). Valores muito grandes de `batch_size` podem, por isso, inflar o
     consumo de memoria por round-trip em queries com colunas largas
-    (CLOB/BLOB/LONG) — hoje nao e um problema pratico, pois os 6 chamadores
-    de producao (mais 2 scripts de simulacao) usam `batch_size` entre 1000 e
-    5000 e nenhuma query envolvida traz essas colunas.
+    (CLOB/BLOB/LONG) — hoje nao e um problema pratico, pois os chamadores
+    usam `batch_size` entre 1000 e 5000 e nenhuma query envolvida traz essas
+    colunas.
     """
     log(f"Conectando ao Oracle (DSN: {creds.dsn})...", "INFO", exec_id)
     with oracledb.connect(
