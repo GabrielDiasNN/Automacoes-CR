@@ -51,12 +51,21 @@ $script:SensitiveTargetPattern = '(' +
 # `ni`...) e `[System.IO.File]::`, o do Claude Code cobria `shred`. Resultado:
 # `sc .env x` passava no Claude Code e `shred .env` passava no Antigravity.
 # Aqui a lista e' uma so'.
+#
+# Aliases e comandos curtos (`sc`, `ni`, `rm`, `cp`...) usam a fronteira
+# `(?<![\w\\/]) ... (?![\w\\/])` em vez de `\b`: `\b` casa o componente `\sc\`
+# de um CAMINHO (`\` e' non-word), entao `Get-Content .env "C:\dir\sc\x"` — um
+# comando que so' le — batia em verbo e alvo no mesmo segmento e era bloqueado.
+# Excluir `\` e `/` da fronteira mantem `sc .env`, `;sc .env` e `| sc .env`
+# como escrita e libera o `sc` que e' pasta. `truncate`/`shred`/`sed` sao
+# distintos o bastante para seguir com `\b`.
 $script:SensitiveWriteVerbPattern = '(' +
     'Set-Content|Add-Content|Out-File|Tee-Object|Clear-Content' +
     '|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item' +
     '|\[System\.IO\.File\]::(?:Write|Append|Delete|Copy|Move)' +
-    '|\bsc\b|\bac\b|\bni\b|\bri\b|\brni\b|\bcpi\b|\bmi\b|\bsi\b|\bclc\b' +
-    '|\brm\b|\bmv\b|\bcp\b|\bdd\b|\btee\b|\btruncate\b|\bshred\b|\bdel\b|\berase\b' +
+    '|(?<![\w\\/])(?:sc|ac|ni|ri|rni|cpi|mi|si|clc)(?![\w\\/])' +
+    '|(?<![\w\\/])(?:rm|mv|cp|dd|tee|del|erase)(?![\w\\/])' +
+    '|\btruncate\b|\bshred\b' +
     '|\bsed\b[^|;]*-i' +
 ')'
 

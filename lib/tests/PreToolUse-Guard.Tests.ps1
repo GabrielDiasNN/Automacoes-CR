@@ -186,6 +186,21 @@ Describe "PreToolUse-Guard: comandos de terminal" {
         Get-CommandDecision -CommandLine $comando | Should -Be "deny"
     }
 
+    It "libera comando de LEITURA cujo caminho tem um alias como componente (<Trecho>)" -ForEach @(
+        # `\bsc\b` casava o componente `\sc\` de um caminho (`\` e' non-word):
+        # `Get-Content .env "C:\dir\sc\x"` — que so' le — batia em verbo E alvo
+        # no mesmo segmento e era bloqueado. A fronteira `(?<![\w\\/])` exclui o
+        # separador de caminho; o alias so' conta como verbo quando e' token de
+        # comando (inicio, `;`, `|`).
+        @{ Trecho = "sc" }
+        @{ Trecho = "ni" }
+        @{ Trecho = "mi" }
+        @{ Trecho = "cp" }
+    ) {
+        $comando = "Get-Content $script:DotEnv `".\projeto\$Trecho\notas.txt`""
+        Get-CommandDecision -CommandLine $comando | Should -Be "allow"
+    }
+
     It "bloqueia escrita sensivel via [System.IO.File]::" {
         $comando = "[System.IO.File]::WriteAllText('$script:DotEnv','x')"
         Get-CommandDecision -CommandLine $comando | Should -Be "deny"

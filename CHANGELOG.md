@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.86] - 09/09/2026
+
+### Corrigido
+
+- **Achados residuais da revisão stateless dos PRs [#57]/[#58]** — nenhum era CRÍTICO/ALTO; corrigidos aqui em vez de ficarem em backlog:
+  - **`catch` vazio na descoberta de venv em worktree.** `Resolve-HubPythonExe` (`lib/Lib-Process.psm1`) e `Get-PythonTool` (`Tools/Test-PythonGovernance.ps1`) engoliam qualquer falha de `git rev-parse --git-common-dir` / `Resolve-Path` num `catch [System.Exception] { }` — o pré-flight só informava "Path inacessível: python.exe", sem pista de que a descoberta do repositório principal foi tentada. Agora emitem `Write-Warning` no `catch`; o valor de retorno (venv local, o caminho que a mensagem de erro deve apontar) não muda. Novo `lib/tests/Lib-Process.Tests.ps1` trava os dois ramos de retorno e o rastro em warning.
+  - **Aliases curtos no padrão de verbo de escrita casavam componente de caminho.** `\bsc\b`/`\bni\b`/`\brm\b`… (`HookCommon.psm1`) casavam o segmento `\sc\` de um caminho (`\` é non-word), então um `Get-Content` de `.env` cujo comando também citasse um caminho com pasta `sc`/`ni`/`mi` — leitura pura — batia em verbo **e** alvo no mesmo segmento e era bloqueado. Trocado `\b` por `(?<![\w\\/]) … (?![\w\\/])` nos aliases e comandos de 2–3 letras: o token só conta como verbo quando é comando (início do segmento, `;`, `|`), não quando é pasta. `truncate`/`shred`/`sed` seguem com `\b` (distintos o bastante). Casos novos em `PreToolUse-Guard.Tests.ps1` e no bloco de convergência de `Hooks-SensitiveWriteGuard.Tests.ps1`.
+  - **`.claude/hooks/README.md`** ganhou dois casos conhecidos: alvo sensível dentro de string posicional de um cmdlet de escrita com redirecionamento (`Set-Content "nota .env" > out.txt` — erra para o lado seguro) e fixtures de certificado/chave (`.pem`/`.key`/`.pfx`/`.p12`/`.crt`/`.keystore`/`id_rsa` não editáveis por `Edit`/`Write`; hoje o repositório não tem nenhum).
+  - **`.agents/rules/orchestrator.md` e `producao-beneficiamento.md`** trocaram constantes literais (retenção de execuções, `WALL_CLOCK_BUDGET_SECONDS`) por ponteiro à fonte — como `.agents/rules/` virou contrato de nível 3 em `AGENTS.md`, um número divergente do código passava a ter peso de regra.
+  - **`lib/python/oracle_extract.py`** — docstring de `fetch_all` deixou de fixar contagem de chamadores.
+
+### Removido
+
+- **`docs/validacao-producao-revisao-08092026.md`** — runbook da validação em produção de 08/09, cujos achados já estão corrigidos e no `CHANGELOG.md` [1.3.82]. Os dois itens que ainda estavam em aberto foram preservados em `docs/ai-native-context-monitor.md`: a discrepância não explicada entre o gate Python full-scan e o de diff, e os 17 `# nosec B608` órfãos em `Produção Beneficimento/src` (este já constava lá).
+
 ## [1.3.85] - 08/09/2026
 
 ### Corrigido

@@ -242,6 +242,9 @@ Describe "Convergencia dos dois guards de shell" {
         @{ Comando = 'grep CHAVE .env > saida.txt' }
         @{ Comando = 'Get-Content .env; Set-Content saida.txt x' }
         @{ Comando = 'Set-Content nota.md -Value "cita orchestrator.pid"' }
+        # Alias como COMPONENTE de caminho num comando de leitura: nao e' verbo.
+        @{ Comando = 'Get-Content .env ".\projeto\sc\notas.txt"' }
+        @{ Comando = 'Get-ChildItem .\tools\ni\bin | Select-String CHAVE .env' }
     ) {
         $claude = if ((Invoke-GuardPorStdin -Command $Comando) -eq 2) { 'deny' } else { 'allow' }
         $antigravity = Invoke-AntigravityGuardDecision -Command $Comando

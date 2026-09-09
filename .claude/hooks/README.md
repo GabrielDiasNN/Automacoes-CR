@@ -94,18 +94,27 @@ operador redirecionasse a saída. O alvo à direita bloqueia **sozinho**, sem
 exigir verbo: `echo x > .env` continua barrado.
 
 Erra para o lado conservador: na dúvida bloqueia, com a mensagem indicando o
-segmento culpado. Dois casos conhecidos:
+segmento culpado. Casos conhecidos:
 
 - **Texto que cita um comando** — uma mensagem de `git commit` ou um trecho de
   documentação que mencione o cmdlet e o arquivo na mesma linha é barrado, ainda
   que nada seja escrito. Descartar `-Value`/`-Body` cobre o cmdlet; texto livre
-  não tem marcador que permita distingui-lo de um comando real.
+  não tem marcador que permita distingui-lo de um comando real. Inclui o caso
+  raro `Set-Content "nota sobre .env" > out.txt`, em que o alvo sensível está
+  numa string posicional e o alvo real (`out.txt`) não é sensível — sintaxe
+  não idiomática; erra para o lado seguro.
 - **Cópia/movimentação com o arquivo sensível como origem** — `Copy-Item .env
   .env.bak` e `docker cp <container>:/app/.env ./copia` são barrados. Distinguir
   origem de destino em `cp`/`Copy-Item`/`Move-Item` exige parser posicional, e
   errar para o lado permissivo aqui liberaria `Copy-Item qualquer.txt .env`. O
   bloqueio também não é gratuito: copiar um arquivo de segredos é operação que
   vale passar pelo usuário.
+- **Fixtures de certificado/chave** — `.pem`, `.key`, `.pfx`, `.p12`, `.crt`,
+  `.keystore` e `id_rsa` entram no padrão de alvo, então uma fixture de teste com
+  uma dessas extensões não pode ser editada por `Edit`/`Write` nem tocada por
+  cmdlet de escrita — peça ao usuário. Hoje o repositório não tem nenhum arquivo
+  assim (`git ls-files` confirma); se surgir um diretório canônico de fixtures
+  (ex.: `Orchestrator/tests/fixtures/`), reavaliar uma exceção de caminho ali.
 
 Contorne reformulando o comando — não enfraqueça o padrão.
 

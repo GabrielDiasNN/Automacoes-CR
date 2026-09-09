@@ -3,7 +3,8 @@
 Estes testes leem os `.ps1` como texto. Não substituem execução — a metade
 PowerShell não tem cobertura executável em nenhuma plataforma — mas travam dois
 contratos que a validação em produção de 08/09/2026 encontrou quebrados
-(`docs/validacao-producao-revisao-08092026.md`, achados 3 e 4).
+(`CHANGELOG.md` [1.3.82]): o interpretador resolvido por `Resolve-HubPythonExe`
+e o fechamento de telemetria em todo ponto de saída precoce.
 """
 
 from pathlib import Path
