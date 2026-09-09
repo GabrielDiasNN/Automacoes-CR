@@ -1,0 +1,23 @@
+{
+  "experimental": {
+    "autoMemory": true
+  },
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ]
+    },
+    "sqlite-orchestrator": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "Orchestrator/automacoes.db",
+        "--read-only"
+      ]
+    }
+  }
+}

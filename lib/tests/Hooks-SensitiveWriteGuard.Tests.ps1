@@ -15,6 +15,8 @@
 BeforeAll {
     $script:RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $script:Guard = Join-Path $script:RepoRoot '.claude\hooks\Assert-SensitiveWriteGuard.ps1'
+    $script:AntigravityGuard = Join-Path $script:RepoRoot '.agents\hooks\PreToolUse-Guard.ps1'
+    $script:HookCommon = Join-Path $script:RepoRoot '.claude\hooks\HookCommon.psm1'
     $script:SettingsPath = Join-Path $script:RepoRoot '.claude\settings.json'
 
     $settings = Get-Content -LiteralPath $script:SettingsPath -Raw | ConvertFrom-Json
@@ -59,6 +61,21 @@ BeforeAll {
         finally {
             $env:CLAUDE_TOOL_INPUT = $anterior
         }
+    }
+
+    function Invoke-AntigravityGuardDecision {
+        <#
+            Executa .agents/hooks/PreToolUse-Guard.ps1 (o guard do Antigravity)
+            com payload por stdin no formato toolCall. Devolve "allow"/"deny".
+            Serve para provar que os DOIS guards de shell decidem igual — a
+            logica agora e' compartilhada (Get-SensitiveWriteInCommand).
+        #>
+        param([Parameter(Mandatory)][string]$Command)
+
+        $payload = @{ toolCall = @{ name = 'run_command'; args = @{ CommandLine = $Command } } } |
+            ConvertTo-Json -Compress
+        $saida = $payload | & $script:HostPath -NoProfile -NonInteractive -File $script:AntigravityGuard 2>$null
+        return ($saida | ConvertFrom-Json).decision
     }
 
     function Invoke-GuardPelaFiacao {
@@ -162,5 +179,72 @@ Describe "Fiacao do settings.json" {
 
         Invoke-GuardPelaFiacao -Command 'Get-ChildItem' -ProjectDir $raizFalsa |
             Should -Be 2
+    }
+}
+
+Describe "Test-SensitiveTarget - alvos canonicos (fonte unica)" {
+    # Espelha a cobertura de alvo de lib/tests/PreToolUse-Guard.Tests.ps1: o
+    # padrao canonico ganhou .env.local/.env.production, .pem/.key/.pfx/.p12/
+    # .crt/.keystore e id_rsa, mas a suite deste lado nao exercitava nada disso
+    # — passava justamente por nao tocar no que mudou.
+    BeforeAll {
+        Import-Module $script:HookCommon -Force -DisableNameChecking
+    }
+
+    It "reconhece como sensivel: <Alvo>" -ForEach @(
+        @{ Alvo = '.env' }
+        @{ Alvo = '.env.local' }
+        @{ Alvo = '.env.production' }
+        @{ Alvo = 'Orchestrator/automacoes.db' }
+        @{ Alvo = 'server.key' }
+        @{ Alvo = 'cert.pem' }
+        @{ Alvo = 'client.pfx' }
+        @{ Alvo = 'store.keystore' }
+        @{ Alvo = 'id_rsa' }
+        @{ Alvo = '.ssh/id_rsa' }
+        @{ Alvo = 'worker.pid' }
+    ) {
+        Test-SensitiveTarget -Value $Alvo | Should -BeTrue
+    }
+
+    It "NAO reconhece como sensivel: <Alvo>" -ForEach @(
+        @{ Alvo = '.env.example' }
+        @{ Alvo = '.env.template' }
+        @{ Alvo = '.env.sample' }
+        @{ Alvo = 'Dashboard/src/hooks/useApiKey.ts' }
+        @{ Alvo = 'Dashboard/src/context/ApiKeyContext.tsx' }
+        @{ Alvo = 'config/valid_rsa_settings.py' }
+        @{ Alvo = 'Orchestrator/tests/fixtures/cert.pem.md' }
+        @{ Alvo = 'notes.keystore.txt' }
+        @{ Alvo = '.venv/Scripts/python.exe' }
+    ) {
+        Test-SensitiveTarget -Value $Alvo | Should -BeFalse
+    }
+}
+
+Describe "Convergencia dos dois guards de shell" {
+    # A logica de deteccao de escrita sensivel em comando agora vive em
+    # Get-SensitiveWriteInCommand (HookCommon.psm1). Este bloco prova que o
+    # guard do Claude Code (exit 2/0) e o do Antigravity (deny/allow) decidem
+    # IGUAL para o mesmo comando — antes divergiam (aliases num, `shred` no
+    # outro, lookbehind de digito so' num).
+    It "decidem igual para: <Comando>" -ForEach @(
+        @{ Comando = 'sc .env x' }
+        @{ Comando = 'ac .env x' }
+        @{ Comando = 'ni .env' }
+        @{ Comando = 'del .env' }
+        @{ Comando = 'clc .env' }
+        @{ Comando = 'echo x 1> .env' }
+        @{ Comando = 'Get-Content a.txt 2> .env' }
+        @{ Comando = 'shred .env' }
+        @{ Comando = 'Set-Content .env x' }
+        @{ Comando = 'Get-Content .env' }
+        @{ Comando = 'grep CHAVE .env > saida.txt' }
+        @{ Comando = 'Get-Content .env; Set-Content saida.txt x' }
+        @{ Comando = 'Set-Content nota.md -Value "cita orchestrator.pid"' }
+    ) {
+        $claude = if ((Invoke-GuardPorStdin -Command $Comando) -eq 2) { 'deny' } else { 'allow' }
+        $antigravity = Invoke-AntigravityGuardDecision -Command $Comando
+        $antigravity | Should -Be $claude
     }
 }
