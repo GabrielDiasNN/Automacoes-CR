@@ -51,7 +51,7 @@ Antes de análise profunda, refatoração estrutural, mudança de skill ou alter
 
 ## Princípios Comportamentais
 
-Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de implementação. Fonte única (não duplicar aqui): `CLAUDE.md § Princípios Comportamentais` e a skill `karpathy-guidelines` (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution).
+Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de implementação. Fonte única (não duplicar aqui): a skill `karpathy-guidelines` (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution); ver também `CLAUDE.md § Princípios Comportamentais`.
 
 ## Regras de Encoding
 

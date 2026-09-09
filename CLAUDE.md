@@ -126,10 +126,4 @@ O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit (15 valida�
 
 ## Princípios Comportamentais
 
-**1. Pensar Antes de Executar** — Declare assunções explicitamente. Se incerto, pergunte. Se existirem múltiplas interpretações, apresente-as — não escolha silenciosamente.
-
-**2. Simplicidade Primeiro** — Mínimo de código que resolve o problema. Sem features além do pedido, sem abstrações para uso único.
-
-**3. Mudanças Cirúrgicas** — Toque apenas o necessário. Não "melhore" código adjacente. Cada linha alterada deve ser rastreável ao pedido.
-
-**4. Execução Orientada a Metas** — Transforme tarefas em metas verificáveis. Para múltiplos passos, declare plano e critérios de sucesso antes de implementar.
+Fonte única: skill `karpathy-guidelines` (carregada automaticamente ao escrever, revisar ou refatorar código) — Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution.

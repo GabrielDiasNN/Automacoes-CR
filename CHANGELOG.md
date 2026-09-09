@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.87] - 09/09/2026
+
+### Alterado
+
+- **`CLAUDE.md § Princípios Comportamentais`** — os 4 princípios reproduzidos no arquivo (Pensar Antes de Executar, Simplicidade Primeiro, Mudanças Cirúrgicas, Execução Orientada a Metas) foram substituídos por um ponteiro para a skill `karpathy-guidelines`, que já os carrega automaticamente ao escrever/revisar/refatorar código. O `~/.claude/CLAUDE.md` global declara essa skill como fonte única e veta reproduzir o conteúdo em outros arquivos de contexto; a duplicação custava ~185 tokens residentes por sessão. `AGENTS.md § Princípios Comportamentais` passou a citar a skill como fonte primária, mantendo o ponteiro para `CLAUDE.md`. Sem mudança de comportamento — os princípios seguem em vigor pela skill. Identificado pelo `/doctor`.
+
 ## [1.3.86] - 09/09/2026
 
 ### Corrigido
