@@ -35,6 +35,7 @@ Logs/
 *.tmp
 *.bak
 Startup_Error.txt
+message.txt
 
 # Cobertura de testes
 .coverage

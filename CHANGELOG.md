@@ -5,6 +5,16 @@
 ### Alterado
 
 - **`CLAUDE.md § Princípios Comportamentais`** — os 4 princípios reproduzidos no arquivo (Pensar Antes de Executar, Simplicidade Primeiro, Mudanças Cirúrgicas, Execução Orientada a Metas) foram substituídos por um ponteiro para a skill `karpathy-guidelines`, que já os carrega automaticamente ao escrever/revisar/refatorar código. O `~/.claude/CLAUDE.md` global declara essa skill como fonte única e veta reproduzir o conteúdo em outros arquivos de contexto; a duplicação custava ~185 tokens residentes por sessão. `AGENTS.md § Princípios Comportamentais` passou a citar a skill como fonte primária, mantendo o ponteiro para `CLAUDE.md`. Sem mudança de comportamento — os princípios seguem em vigor pela skill. Identificado pelo `/doctor`.
+- **`docs/ai-native-context-monitor.md`** — higienizado para podar relatos históricos antigos e repetidos de maio a julho de 2026 que já constam em `CONTEXT.md` (ADRs 001–019) e no changelog, preservando integralmente o estado atual v1.0.0, guardrails, invariantes e armadilhas técnicas ativas.
+- **`.gitignore`** — adicionada regra `message.txt` sob artefatos temporários para evitar tracking acidental de buffers de envio de mensageria.
+
+### Removido
+
+- **Documentação obsoleta e relatórios de PRs passados:**
+  - `docs/playwright-e2e-evidence-1357.md` e `docs/playwright-e2e-evidence-1367.md` — evidências pontuais de PRs passados removidas do rastreamento (o padrão e o template continuam canônicos em `docs/playwright-e2e-standard.md` e `docs/playwright-e2e-evidence-template.md`).
+  - `docs/progress.md` — rastreamento das 6 ondas de frontend da rodada 2 removido após conclusão e fechamento integral de todas as fases.
+  - `docs/plano-supervisao-whatsapp.md` — proposta técnica (RFC) de julho/2026 descontinuada após implementação definitiva do motor WhatsApp nos meses seguintes.
+  - Resíduos operacionais locais limpos do workspace: `.claude/consensus/`, `.audit-state/`, `Logs/driver/` e arquivos temporários `message.txt`.
 
 ## [1.3.86] - 09/09/2026
 
