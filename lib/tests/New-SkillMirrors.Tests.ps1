@@ -31,7 +31,15 @@ BeforeAll {
         New-Item -ItemType Directory -Force -Path (Join-Path $basePath ".github") | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $basePath ".claude") | Out-Null
         Copy-Item -Recurse -Force (Join-Path $script:RepoRoot ".github\skills") (Join-Path $basePath ".github\skills")
-        Copy-Item -Recurse -Force (Join-Path $script:RepoRoot ".claude\skills") (Join-Path $basePath ".claude\skills")
+
+        # `.claude/skills` no repo real carrega os 7 junctions das skills de padrao
+        # (gitignored). Um clone limpo NAO os tem — so' as 6 skills operacionais
+        # reais. A fixture replica o clone limpo: reparse point da fonte fica de fora.
+        $claudeSkillsDst = Join-Path $basePath ".claude\skills"
+        New-Item -ItemType Directory -Force -Path $claudeSkillsDst | Out-Null
+        Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot ".claude\skills") -Directory |
+            Where-Object { -not ($_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint)) } |
+            ForEach-Object { Copy-Item -Recurse -Force $_.FullName (Join-Path $claudeSkillsDst $_.Name) }
 
         return $basePath
     }
@@ -102,6 +110,28 @@ Describe "New-SkillMirrors" {
             $link = Join-Path $fixture ".agents\skills\$skill"
             Register-Junction -Path $link
             (Get-Item -LiteralPath $link -Force).LinkType | Should -Be "Junction"
+        }
+    }
+
+    It "expoe as 7 skills de padrao por junction em .claude/skills, apontando para .github/skills" {
+        $fixture = New-MirrorFixture -Name "exposicao-claude"
+
+        $resultado = Invoke-NewSkillMirrors -BasePath $fixture
+
+        $resultado.ExitCode | Should -Be 0
+
+        foreach ($skill in @("ai-native-development-standard", "automation-runtime-safety",
+                "enterprise-orchestration-contract", "html-css-enterprise-standard",
+                "nodejs-communications", "powershell-automation-monitor", "python-enterprise-standard")) {
+            $link = Join-Path $fixture ".claude\skills\$skill"
+            Register-Junction -Path $link
+            (Get-Item -LiteralPath $link -Force).LinkType | Should -Be "Junction"
+            Get-MirrorTarget -Path $link | Should -Be (Join-Path $fixture ".github\skills\$skill")
+        }
+
+        # As 6 skills operacionais reais convivem intactas no mesmo diretorio.
+        foreach ($op in @("ci-gates", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
+            (Get-Item -LiteralPath (Join-Path $fixture ".claude\skills\$op") -Force).LinkType | Should -BeNullOrEmpty
         }
     }
 
