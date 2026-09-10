@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.88] - 10/09/2026
+
+### Alterado
+
+- **Revisão completa das 7 skills de padrão (`.github/skills/`).** As 7 `SKILL.md` foram reescritas: acentuação PT-BR restaurada em 6 delas (estavam integralmente ASCII-ficadas na prosa, violando `AGENTS.md § Regras de Encoding` sem que nenhum validador pegasse — `Test-SourceEncoding.ps1` só checa BOM/mojibake); listas factuais corrigidas (`enterprise-orchestration-contract` citava 4 automações com `run.ps1`, são 6; `Produção Beneficimento/` — orientada a snapshot, sem `run.ps1` — não aparecia em nenhuma; `powershell-automation-monitor` listava 4 dos 9 módulos `lib/*.psm1`; faltavam `lib/python/oracle_extract.py`, `Lib-OrchestratorRuntime.psm1` e a regra `op.batch_alter_table` do Alembic); densidade elevada ao padrão de `.claude/skills/ci-gates` (cada regra amarrada a um artefato real e a uma decisão); regra transversal duplicada substituída por delegação nomeando arquivo **e** seção (`automation-runtime-safety` reescrevia o contrato de encoding inteiro). Revisão conduzida pela skill `orchestrated-quality-loop` (orquestrador + executores + verificador cego contra rubrica).
+- **As 7 skills de padrão passam a ser descobertas pelo Claude Code.** O Claude Code só lê `.claude/skills/`, então as 7 `SKILL.md` de `.github/skills/` ficavam invisíveis para o agente que mais trabalha no repo — foi por isso que envelheceram sem ninguém notar. `Tools/New-SkillMirrors.ps1` ganhou um terceiro par de mirror (`.github/skills` → `.claude/skills/<nome>`, junction, gitignored) que as expõe sem cópia; as 6 skills operacionais reais convivem no mesmo diretório e não são tocadas. `Tools/Test-SkillsGovernance.ps1` (`Test-AgentsSkillMirrors`) passou a ignorar os reparse points de skill de padrão em `.claude/skills` para não exigir mirror `.agents/` deles. `AGENTS.md § Fonte Canônica de Skills` reescrito para descrever as duas árvores e a exposição. Cobertura Pester nova em `lib/tests/New-SkillMirrors.Tests.ps1` e `lib/tests/Test-SkillsGovernance.Tests.ps1`.
+- **Skills operacionais (`.claude/skills/`) corrigidas.** `preflight` alinhou o escopo de `ruff`/`bandit` aos 13 caminhos reais do CI (rodava só 2) e passou a usar `.venv\Scripts\python` em vez de `python` puro, com seção explícita do que o preflight **não** cobre; `quality-gate` passou a redirecionar a saída para arquivo e checar `$LASTEXITCODE` (ler exit code de `.ps1` por pipe mascara falha); `run-tests` e `new-automation` alinhados ao `.venv` da raiz e ao campo `criticality`.
+
 ## [1.3.87] - 09/09/2026
 
 ### Alterado

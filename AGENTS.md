@@ -62,10 +62,21 @@ Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de i
 
 ## Fonte Canônica de Skills do Repositório
 
-- A fonte canônica das skills do workspace é `.github/skills/`.
-- O diretório `.gemini/skills/` existe apenas como espelho de compatibilidade para Gemini CLI e ferramentas relacionadas.
-- Cada item em `.gemini/skills/` deve apontar para a skill correspondente em `.github/skills/`.
-- Não manter duas cópias editáveis da mesma skill do workspace.
+O repositório tem **duas árvores de skills versionadas**, com responsabilidades distintas:
+
+| Árvore | Conteúdo | Editável? | Validador |
+|---|---|---|---|
+| `.github/skills/` | 7 skills de **padrão** (norma escrita, taxonomia ativa) | sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` (9 seções, frontmatter, discovery) |
+| `.claude/skills/` | skills **operacionais** do projeto (comandos executáveis: `ci-gates`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim — fonte única delas | — |
+
+Cada agente lê de um caminho fixo próprio, então as fontes são expostas por **mirrors não versionados** (ver `.gitignore`), recriados por `pwsh -File Tools\New-SkillMirrors.ps1`:
+
+- `.gemini/skills/` → junctions para `.github/skills/` (Gemini CLI).
+- `.agents/skills/` → junctions para as skills operacionais de `.claude/skills/` (Codex / Antigravity).
+- `.claude/skills/<nome>` (as 7 de padrão) → junctions para `.github/skills/`, porque **o Claude Code só descobre skill em `.claude/skills/`**. As 6 skills operacionais reais convivem no mesmo diretório; o script nunca as toca.
+
+- Cada item de mirror deve apontar para a skill correspondente na fonte canônica; nunca cópia real (a governança reprova).
+- Não manter duas cópias editáveis da mesma skill.
 
 ## Fonte Canônica de Skills Globais Compartilhadas
 
@@ -84,10 +95,12 @@ Skills globais compartilhadas obrigatórias:
 
 ## Regra Operacional para Skills
 
-- Ao alterar skill do workspace, editar somente `.github/skills/`.
+- Ao alterar skill de **padrão**, editar somente `.github/skills/` (nunca o junction em `.claude/skills/` nem o mirror `.gemini/skills/`).
+- Ao alterar skill **operacional**, editar somente `.claude/skills/`.
+- Ao criar ou renomear qualquer skill, rodar `pwsh -File Tools\New-SkillMirrors.ps1` para recriar os mirrors — skill nova sem espelho reprova a governança.
 - Ao alterar skill global compartilhada, editar somente a fonte canônica em `%USERPROFILE%\.gemini\antigravity\skills\`.
 - Preservar mirrors como link simbólico ou junction para evitar drift.
-- Se um agente descobrir a skill via mirror, ele deve tratar o conteúdo como alias da fonte canônica.
+- Se um agente descobrir a skill via mirror ou junction, deve tratar o conteúdo como alias da fonte canônica.
 - Melhorar skill existente antes de propor skill nova.
 
 ## Contrato Compartilhado Entre Agentes

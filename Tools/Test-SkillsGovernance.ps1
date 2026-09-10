@@ -361,6 +361,20 @@ function Test-SkillFile {
         $findings += New-Finding -File $relativePath -Rule "REPO_REFERENCE_MISSING" -Detail "Skill nao referencia artefato real do repo em Repo-Specific Constraints, Validation ou Troubleshooting." -Severity "WARN"
     }
 
+    # Acentuacao PT-BR: a prosa das skills e sempre portugues (regra 6 do README de
+    # skills). ASCII-ficacao deliberada ("nao"/"codigo"/"execucao") passa por
+    # Test-SourceEncoding, que so' checa BOM/mojibake — foi assim que 6 das 7 skills
+    # ficaram sem acento sem nenhum gate pegar. Mede fora de bloco/trecho de codigo
+    # (identificador nao leva acento) e compara com um piso proporcional ao texto.
+    # WARN por enquanto; vira ERROR quando a base estiver estavel.
+    $prose = [regex]::Replace($parts.Body, '(?s)```.*?```', '')
+    $prose = [regex]::Replace($prose, '`[^`]*`', '')
+    $accentCount = ([regex]::Matches($prose, '[À-ÿ]')).Count
+    $wordCount = @([regex]::Matches($prose, '\b[A-Za-zÀ-ÿ]{2,}\b')).Count
+    if ($wordCount -ge 200 -and $accentCount -lt 25) {
+        $findings += New-Finding -File $relativePath -Rule "SKILL_PTBR_ACCENTS_MISSING" -Detail ("Prosa PT-BR sem acentuacao ({0} acentos em {1} palavras). Reescreva com acentuacao real; ver AGENTS.md, secao Regras de Encoding." -f $accentCount, $wordCount) -Severity "WARN"
+    }
+
     return [pscustomobject]@{
         SkillName = $skillName
         Findings  = $findings
@@ -391,7 +405,16 @@ function Test-AgentsSkillMirrors {
     # nenhum, e cobrar mirror de quem nunca o criou seria falso positivo). Existindo,
     # ele tem que estar completo: skill operacional nova sem espelho passava em
     # silencio, que e' exatamente o cenario que Tools\New-SkillMirrors.ps1 resolve.
-    $operationalEntries = @(Get-ChildItem -LiteralPath $operationalRoot -Force -Directory | Sort-Object Name)
+    #
+    # Reparse point em `.claude/skills` e exposicao de skill de PADRAO ao Claude Code
+    # (junction para `.github/skills`, criada por New-SkillMirrors.ps1) — governada
+    # por Test-GeminiSkillMirrors e pelo par `.github/skills`, nao aqui. So' as skills
+    # operacionais REAIS (diretorio comum) precisam de mirror em `.agents/skills`.
+    $operationalEntries = @(
+        Get-ChildItem -LiteralPath $operationalRoot -Force -Directory |
+            Where-Object { -not ($_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint)) } |
+            Sort-Object Name
+    )
     foreach ($skill in $operationalEntries) {
         $mirrorPath = Join-Path $mirrorRoot $skill.Name
         if (-not (Test-Path -LiteralPath $mirrorPath)) {

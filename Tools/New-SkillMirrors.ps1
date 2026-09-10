@@ -18,7 +18,11 @@ Set-StrictMode -Version Latest
     Cada ferramenta de agente le de um caminho fixo proprio, entao as fontes sao
     expostas por mirrors, que NAO sao versionados (ver .gitignore):
       - `.gemini/skills`  -> junctions para `.github/skills`
-      - `.agents/skills`  -> junctions para `.claude/skills`
+      - `.agents/skills`  -> junctions para as skills operacionais de `.claude/skills`
+      - `.claude/skills/<nome>` (as 7 de padrao) -> junctions para `.github/skills`,
+        porque o Claude Code so descobre skill em `.claude/skills`. As 6 skills
+        operacionais REAIS convivem no mesmo diretorio; este script nunca as toca
+        e a varredura de orfaos e pulada para esse par.
 
     Sem este script, um clone limpo nao tem mirror algum e
     `Tools/Test-SkillsGovernance.ps1` reprova com GEMINI_SKILL_MIRROR_MISSING.
@@ -41,16 +45,27 @@ if ([string]::IsNullOrWhiteSpace($BasePath)) {
 $script:ExitCode = 0
 
 # Cada par declara uma fonte versionada e o mirror que a expoe a outro agente.
+# SkipOrphanScan: o mirror tem conteudo proprio legitimo alem dos junctions
+# (`.claude/skills` guarda as 6 skills operacionais reais), entao "diretorio no
+# mirror sem correspondente na fonte" NAO e orfao nesse par.
 $mirrorPairs = @(
     [pscustomobject]@{
         SourceRelative = ".github\skills"
         MirrorRelative = ".gemini\skills"
-        Description    = "skills de padrao"
+        Description    = "skills de padrao -> Gemini CLI"
+        SkipOrphanScan = $false
     },
     [pscustomobject]@{
         SourceRelative = ".claude\skills"
         MirrorRelative = ".agents\skills"
-        Description    = "skills operacionais"
+        Description    = "skills operacionais -> Codex/Antigravity"
+        SkipOrphanScan = $false
+    },
+    [pscustomobject]@{
+        SourceRelative = ".github\skills"
+        MirrorRelative = ".claude\skills"
+        Description    = "skills de padrao -> Claude Code"
+        SkipOrphanScan = $true
     }
 )
 
@@ -132,7 +147,12 @@ foreach ($pair in $mirrorPairs) {
         }
     }
 
-    $skills = @(Get-ChildItem -LiteralPath $sourceRoot -Directory | Sort-Object Name)
+    # Reparse point na fonte nunca e re-espelhado: no par `.claude` -> `.agents` o
+    # diretorio-fonte ja carrega os 7 junctions das skills de padrao, que pertencem
+    # a `.github/skills` e nao devem virar cadeia de junction.
+    $skills = @(Get-ChildItem -LiteralPath $sourceRoot -Directory |
+        Where-Object { -not ($_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint)) } |
+        Sort-Object Name)
     if ($skills.Count -eq 0) {
         Write-Warning ("  nenhuma skill em {0}." -f $pair.SourceRelative)
         continue
@@ -140,6 +160,10 @@ foreach ($pair in $mirrorPairs) {
 
     foreach ($skill in $skills) {
         Sync-SkillMirror -SourceRoot $sourceRoot -MirrorRoot $mirrorRoot -SkillName $skill.Name
+    }
+
+    if ($pair.SkipOrphanScan) {
+        continue
     }
 
     # Mirror sem fonte correspondente vira achado ORPHAN na governanca; sinalizar aqui

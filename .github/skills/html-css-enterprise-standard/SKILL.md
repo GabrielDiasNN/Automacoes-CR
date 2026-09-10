@@ -1,59 +1,67 @@
 ---
 name: html-css-enterprise-standard
-description: Use when changing dashboard templates, HTML reports, or enterprise-facing UI assets that must stay separated from business logic and remain compatible with the repository's dashboard contract and shared frontend assets.
+description: Use when changing the React dashboard SPA, the legacy HTML dashboard template, or enterprise HTML reports that must stay free of business logic and reuse the repository's shared frontend assets.
 ---
 
 ## Purpose
-Definir o contrato visual do hub para dashboards e saidas HTML, mantendo separacao entre apresentacao e regra de negocio, uso consistente de assets compartilhados e aderencia ao validador de template corporativo.
+Definir o contrato visual do hub, a SPA React do dashboard e o template HTML legado, mantendo regra de negócio fora da camada de apresentação, reúso dos assets compartilhados de `lib/assets/` e aderência aos validadores de template e de frontend.
 
 ## When to Use
-- Use ao alterar templates HTML em `.github/templates/`, `Dashboard/` ou relatorios gerados pelas automacoes.
-- Use ao mexer em CSS, design tokens, funcoes de renderizacao de dashboard ou assets compartilhados em `lib/assets/`.
-- Use ao revisar semantica, responsividade, acessibilidade ou legibilidade de interfaces renderizadas pelo hub.
+- Ao alterar fontes da SPA em `Dashboard/src/` (componentes, contexts, estilos, funções de renderização).
+- Ao mexer no template legado `.github/templates/dashboard-modern.html` ou em relatório HTML gerado por automação.
+- Ao editar CSS, design tokens em `:root`, tema claro/escuro ou responsividade de tela servida pelo hub.
+- Ao tocar `Dashboard/src/api/client.ts`, persistência de preferência de UI ou o fluxo de API Key do dashboard.
+- Ao reutilizar ou adicionar asset em `lib/assets/` (fontes, ApexCharts, Lucide).
 
 ## Do Not Use When
-- Nao use para definir regras de negocio, calculos, filtros ou handoff de runtime; esses comportamentos devem permanecer fora do HTML.
-- Nao use para contratos de orquestracao, `ExecId` ou arquivos de estado; nesses casos use `enterprise-orchestration-contract`.
-- Nao use para politicas de seguranca, logs ou encoding; nesses casos use `automation-runtime-safety`.
+- Para cálculo, filtro, agregação ou qualquer regra de negócio que monta o JSON de entrada: use a skill `python-enterprise-standard`.
+- Para contrato de execução, propagação de ExecId ou arquivos de estado que alimentam a UI: use a skill `enterprise-orchestration-contract`.
+- Para política de segredo, log, severidade ou encoding: use a skill `automation-runtime-safety`.
+- Para canal de comunicação headless (WhatsApp) ou bootstrap `.bat`: use a skill `nodejs-communications`.
+- Para sintaxe PowerShell, módulos `.psm1` ou monitoramento central: use a skill `powershell-automation-monitor`.
 
 ## Related Skills
-- `enterprise-orchestration-contract` quando a UI depender de dados produzidos pelo fluxo corporativo.
-- `automation-runtime-safety` quando a saida HTML expuser logs, mensagens de erro ou texto sensivel.
-- `nodejs-communications` se o HTML fizer parte de canal de comunicacao automatizada e nao apenas de dashboard.
+- `enterprise-orchestration-contract` cobre os dados produzidos pelo fluxo corporativo e pelos arquivos de estado que a UI consome.
+- `automation-runtime-safety` cobre o caso em que a tela expõe log, mensagem de erro ou texto sensível.
+- `nodejs-communications` cobre o HTML que faz parte de um canal de comunicação e não do dashboard.
+- `ai-native-development-standard` cobre a atualização de documentação viva quando a experiência final muda de forma estrutural.
 
 ## Non-Negotiable Rules
-- Mantenha regra de negocio fora do template; HTML/CSS devem receber dados prontos para renderizacao.
-- Reutilize assets compartilhados em `lib/assets/` antes de embutir bibliotecas ou fontes novas.
-- Preserve semantica, responsividade e acessibilidade minima exigidas pelo contrato do dashboard.
-- Nao reintroduza referencia conceitual a VBA; o estado atual do projeto e 100% nativo em Python, PowerShell e Node.js.
-- Evite acoplamento visual com strings ou estruturas que so existam em uma automacao especifica sem necessidade clara.
+- Regra de negócio fica fora do template e dos componentes de apresentação; o HTML e o JSX recebem dados prontos para renderizar, e cálculo novo vai para o Python que monta o JSON.
+- A UI ativa do operador é a SPA React + TypeScript + Vite; mudança de UI acontece em `Dashboard/src/`, não no template legado.
+- `.github/templates/dashboard-modern.html` é legado canônico mantido de propósito: preserve os placeholders `__DASHBOARD_JSON__` e `__REFRESH_SECONDS__` e as funções de renderização exigidas por `Tools/Test-DashboardTemplate.ps1`, sem remover nem renomear.
+- Reutilize os assets reais de `lib/assets/` antes de embutir biblioteca ou fonte nova: `css/fonts.css`, `js/apexcharts.min.js`, `js/lucide.min.js` e as fontes `fonts/plus-jakarta-sans-{300,400,500,600,700}.woff2` e `fonts/jetbrains-mono-{400,500}.woff2`.
+- A credencial do dashboard (API Key) vive só em `sessionStorage`; o teste `useApiKey.test.ts` proíbe `localStorage` para a chave. O veto é sobre a credencial: preferência de UI benigna, como densidade de tabela em `Dashboard/src/context/TableDensityContext.tsx`, usa `localStorage` legitimamente e não deve ser migrada para `sessionStorage`.
+- Não reintroduza referência conceitual a VBA; o projeto é 100% nativo em Python, PowerShell e Node.
+- Encoding de `.html`, `.css`, `.ts` e `.tsx`: contrato em `AGENTS.md § Regras de Encoding`, não repetido aqui.
 
 ## Repo-Specific Constraints
-- A UI ativa do operador e a SPA React + TypeScript + Vite: fontes em `Dashboard/src/`, build em `Dashboard/dist/`, servida pelo FastAPI em `http://127.0.0.1:8000/dashboard/`. Mudancas novas de UI acontecem em `Dashboard/src/`.
-- Trate `.github/templates/dashboard-modern.html` como template legado canonico, mantido de proposito e ainda validado por `Tools/Test-DashboardTemplate.ps1`; nao remova nem quebre seu contrato.
-- Reutilize `lib/assets/css/fonts.css`, `lib/assets/js/apexcharts.min.js` e `lib/assets/js/lucide.min.js` quando o requisito ja estiver coberto por esses assets (aplicavel a relatorios HTML e ao template legado).
-- Preserve placeholders e funcoes obrigatorias exigidos por `Tools/Test-DashboardTemplate.ps1`, incluindo `__DASHBOARD_JSON__`, `__REFRESH_SECONDS__` e funcoes de renderizacao.
+- `Dashboard/dist/` é gitignored: sem `npm run build --prefix Dashboard` a rota `http://127.0.0.1:8000/dashboard/` fica sem bundle, porque o FastAPI serve `dist/` via `StaticFiles` com fallback SPA.
+- O job `frontend` do CI é bloqueante quando o diff toca `.js`, `.ts` ou `.tsx`: ele roda `npm ci`, `npm run lint`, `npm run test:coverage` (Vitest com gate de cobertura) e `npm run build` com `working-directory: Dashboard`. Localmente o equivalente é a forma `--prefix Dashboard` (ou rodar a partir da pasta), documentada em `Dashboard/CLAUDE.md`.
+- `Dashboard/src/api/client.ts` lê a API Key no carregamento do módulo, não em `useEffect`; a API responde 403, não 401, sem o header `X-API-Key`.
+- Toda a toolchain de front tem lockfile próprio em `Dashboard/`; rode os comandos com `--prefix Dashboard` ou a partir dessa pasta, nunca pelo `package.json` da raiz.
+- Padrão completo e evidência mínima da validação E2E do dashboard: `docs/playwright-e2e-standard.md`.
 
 ## Validation
-- Para mudancas na SPA, rode `npm run lint` e `npm run build` dentro de `Dashboard/` antes da validacao E2E.
-- Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-DashboardTemplate.ps1 -BasePath .` quando a mudanca tocar o template legado.
-- Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` se a mudanca tocar padroes globais de UI.
-- Execute validacao E2E final com Playwright na interface servida em `http://127.0.0.1:8000/dashboard/`.
-- A validacao Playwright deve ocorrer por ultimo e cobrir, no minimo:
-  - navegacao entre modulos principais;
-  - acao de listagem/refresh em execucoes;
-  - abertura de logs;
-  - ausencia de erro de console.
-- Revise manualmente `Dashboard/index.html` e o template canônico quando houver mudanca na experiencia final.
+- Para mudança na SPA: `npm run lint --prefix Dashboard`, `npm run test:coverage --prefix Dashboard` e `npm run build --prefix Dashboard` antes do E2E.
+- Para mudança no template legado: `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-DashboardTemplate.ps1 -BasePath .`.
+- Para mudança em padrão global de UI: `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance`.
+- E2E Playwright por último, na tela servida em `http://127.0.0.1:8000/dashboard/`, cobrindo no mínimo navegação entre módulos, listagem e refresh de execuções, abertura de logs e ausência de erro de console; detalhes em `docs/playwright-e2e-standard.md`.
+- Registre a evidência com `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PlaywrightEvidence.ps1`.
 
 ## Troubleshooting
-- Se o validador acusar funcao ausente, compare o template com a lista de funcoes obrigatorias em `Tools/Test-DashboardTemplate.ps1`.
-- Se houver regressao de responsividade, procure primeiro wrappers de tabela, media queries e tokens em `:root`.
-- Se o HTML estiver recebendo logica demais, mova o calculo para Python, PowerShell ou para a etapa que monta o JSON de entrada.
-- Se a interface depender de assets novos, valide primeiro se `lib/assets/` ja contem uma alternativa suficiente.
+- Tela em branco ou versão antiga em `/dashboard/`: bundle velho ou ausente em `Dashboard/dist/`; rode `npm run build --prefix Dashboard` (a API não precisa reiniciar, o `StaticFiles` lê do disco a cada request).
+- `Tools/Test-DashboardTemplate.ps1` acusa função ausente: compare `.github/templates/dashboard-modern.html` com a lista de placeholders e funções obrigatórias no próprio script.
+- Gate de login aparece onde não devia em teste: a API Key precisa estar em `sessionStorage` antes do bundle carregar, porque `Dashboard/src/api/client.ts` a lê no import do módulo.
+- Regressão de responsividade: investigue primeiro wrappers de tabela com `overflow-x`, media queries e tokens em `:root` antes da lógica de componente.
+- HTML recebendo lógica demais: mova o cálculo para o Python que monta o JSON de entrada (skill `python-enterprise-standard`).
+- Necessidade de asset novo: confirme antes se `lib/assets/` já cobre o requisito (fonte, ApexCharts, Lucide) para não duplicar biblioteca.
 
 ## Pre-Delivery Checklist
-- Confirme que o HTML continua separado da logica de negocio.
-- Confirme que os assets reutilizados sao os compartilhados do repositorio quando possivel.
-- Confirme que o template continua passando no check de dashboard.
-- Confirme que a mudanca preserva legibilidade em desktop e mobile.
+- Nenhuma regra de negócio entrou no HTML ou no JSX; a camada recebe dados prontos.
+- Assets reaproveitados de `lib/assets/` quando já existia alternativa suficiente.
+- Template legado continua passando em `Tools/Test-DashboardTemplate.ps1` com placeholders e funções intactos.
+- Job `frontend` (lint, test:coverage e build) verde para mudança que toca `.js`, `.ts` ou `.tsx`.
+- API Key só em `sessionStorage`; preferência de UI benigna em `localStorage` preservada.
+- E2E Playwright executado por último e evidência registrada (`docs/playwright-e2e-standard.md`).
+- Sem menção a VBA; encoding conforme `AGENTS.md § Regras de Encoding`.

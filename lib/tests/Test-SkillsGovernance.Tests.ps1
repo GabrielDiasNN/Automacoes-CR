@@ -37,7 +37,15 @@ BeforeAll {
         # encontrada em .github/skills") se a taxonomia canonica nao estiver presente, e
         # e' o conteudo de .claude/skills que define quais mirrors sao legitimos.
         Copy-Item -Recurse -Force (Join-Path $script:RepoRoot ".github\skills") (Join-Path $basePath ".github\skills")
-        Copy-Item -Recurse -Force (Join-Path $script:RepoRoot ".claude\skills") (Join-Path $basePath ".claude\skills")
+
+        # `.claude/skills` no repo real carrega os 7 junctions das skills de padrao
+        # (gitignored). A fixture replica o clone limpo: so' as 6 skills operacionais
+        # reais, sem os reparse points.
+        $claudeSkillsDst = Join-Path $basePath ".claude\skills"
+        New-Item -ItemType Directory -Force -Path $claudeSkillsDst | Out-Null
+        Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot ".claude\skills") -Directory |
+            Where-Object { -not ($_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint)) } |
+            ForEach-Object { Copy-Item -Recurse -Force $_.FullName (Join-Path $claudeSkillsDst $_.Name) }
 
         return $basePath
     }
@@ -113,6 +121,34 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" {
         $resultado.Output | Should -Not -Match "AGENTS_SKILL_MIRROR"
     }
 
+    It "ignora os junctions de skill de padrao expostos em .claude/skills (nao pede mirror .agents deles)" {
+        # As 7 skills de padrao sao expostas ao Claude Code por junction em
+        # .claude/skills -> .github/skills. Test-AgentsSkillMirrors nao pode confundi-las
+        # com skill operacional e exigir espelho em .agents/skills.
+        $fixture = New-SkillsFixture -Name "exposicao-padrao"
+        if ($fixture -match '~') {
+            Set-ItResult -Skipped -Because "TestDrive resolveu para caminho 8.3 e o alvo da junction nao seria comparavel"
+            return
+        }
+
+        foreach ($skill in @("ci-gates", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
+            New-MirrorJunction -BasePath $fixture -MirrorName $skill
+        }
+        foreach ($padrao in @("ai-native-development-standard", "automation-runtime-safety",
+                "enterprise-orchestration-contract", "html-css-enterprise-standard",
+                "nodejs-communications", "powershell-automation-monitor", "python-enterprise-standard")) {
+            New-Item -ItemType Junction `
+                -Path (Join-Path $fixture ".claude\skills\$padrao") `
+                -Target (Join-Path $fixture ".github\skills\$padrao") | Out-Null
+        }
+
+        $resultado = Invoke-SkillsGovernance -BasePath $fixture
+
+        $resultado.Output | Should -Match "GOVERNANCA DE SKILLS"
+        $resultado.Output | Should -Not -Match "AGENTS_SKILL_MIRROR"
+        $resultado.ExitCode | Should -Be 0
+    }
+
     It "nao gera achado quando .agents/skills nao existe (mirror e opcional)" {
         $fixture = New-SkillsFixture -Name "sem-mirror"
         Remove-Item -LiteralPath (Join-Path $fixture ".agents") -Recurse -Force
@@ -181,6 +217,29 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" {
 
         $resultado.Output | Should -Match "AGENTS_SKILL_MIRROR_TARGET_INVALID"
         $resultado.ExitCode | Should -Not -Be 0
+    }
+
+    It "avisa (WARN) quando a prosa PT-BR de uma skill esta ASCII-ficada" {
+        # Foi assim que 6 das 7 skills de padrao ficaram sem acento sem nenhum gate
+        # pegar: Test-SourceEncoding so' checa BOM/mojibake, nao grafia ASCII deliberada.
+        $fixture = New-SkillsFixture -Name "prosa-ascii"
+        # Mirror `.agents/skills` e opcional; sem ele, isola-se o achado de acentuacao
+        # dos AGENTS_SKILL_MIRROR_MISSING que as 6 skills operacionais sem espelho dariam.
+        Remove-Item -LiteralPath (Join-Path $fixture ".agents") -Recurse -Force
+        $alvo = Join-Path $fixture ".github\skills\automation-runtime-safety\SKILL.md"
+        $conteudo = Get-Content -LiteralPath $alvo -Raw
+        # Remove os acentos da prosa (fora de crase/bloco de codigo o suficiente para o teste).
+        $semAcento = $conteudo -replace '[áàâã]', 'a' -replace '[éê]', 'e' -replace '[íì]', 'i' `
+            -replace '[óôõ]', 'o' -replace '[úü]', 'u' -replace 'ç', 'c' `
+            -replace '[ÁÀÂÃ]', 'A' -replace '[ÉÊ]', 'E' -replace '[Í]', 'I' -replace '[ÓÔÕ]', 'O' -replace 'Ç', 'C'
+        Set-Content -LiteralPath $alvo -Value $semAcento -Encoding UTF8 -NoNewline
+
+        $resultado = Invoke-SkillsGovernance -BasePath $fixture
+
+        $resultado.Output | Should -Match "SKILL_PTBR_ACCENTS_MISSING"
+        $resultado.Output | Should -Match "WARNINGS"
+        # WARN nao bloqueia o commit.
+        $resultado.ExitCode | Should -Be 0
     }
 
     It "nao reintroduz a regra LEGACY_SKILL_LOCATION, que mandava mover para .github/skills" {

@@ -72,6 +72,17 @@ Orchestrator/tests/e2e-evidence/
 # `.gemini/skills` espelha `.github/skills` e `.agents/skills` espelha as skills
 # operacionais de `.claude/skills`. Ambos sao recriados por Tools/New-SkillMirrors.ps1.
 .agents/skills/
+# As 7 skills de padrao sao expostas ao Claude Code por junction em `.claude/skills/`
+# (o Claude Code so descobre skill nesse diretorio). Junction e alias de `.github/skills`,
+# nunca conteudo proprio — recriado por Tools/New-SkillMirrors.ps1. As 6 skills
+# operacionais reais do mesmo diretorio seguem versionadas normalmente.
+.claude/skills/ai-native-development-standard/
+.claude/skills/automation-runtime-safety/
+.claude/skills/enterprise-orchestration-contract/
+.claude/skills/html-css-enterprise-standard/
+.claude/skills/nodejs-communications/
+.claude/skills/powershell-automation-monitor/
+.claude/skills/python-enterprise-standard/
 .playwright-mcp/
 .playwright-cli/
 email_body.html
