@@ -31,6 +31,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import re
 import sqlite3
 import sys
@@ -231,7 +232,11 @@ def _sanitize_fts_query(text: str) -> str:
     # FTS5 trata alguns caracteres (- * : ^) como operadores; mantemos so
     # letras/numeros/acentos/espaco para evitar erro de sintaxe da query.
     cleaned = re.sub(r"[^\w\sáéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ]", " ", text, flags=re.UNICODE)
-    return cleaned.strip()
+    # Cada termo vai entre aspas: sem isso, um token como AND/OR/NOT/NEAR e
+    # interpretado como operador do FTS5 (nao como palavra de busca) e quebra
+    # a query com sqlite3.OperationalError.
+    tokens = cleaned.split()
+    return " ".join(f'"{t}"' for t in tokens)
 
 
 def cmd_find(args: argparse.Namespace) -> int:
@@ -417,7 +422,14 @@ def cmd_usage(_args: argparse.Namespace) -> int:
 # ─────────────────────────── guardrails para comandos online ────────────────
 
 
-def _ensure_select_only(sql: str) -> None:
+def _ensure_select_only(sql: str) -> str:
+    """Valida `sql` e retorna a versao pronta para execucao (sem ';' final).
+
+    A validacao roda sobre o SQL com comentarios removidos (para nao deixar
+    passar DML/DDL escondido em comentario), mas o texto retornado preserva
+    o SQL original menos o ';' final — nunca remove comentarios do meio do
+    SQL, que podem ser legitimos.
+    """
     without_comments = re.sub(r"--.*?$", "", sql, flags=re.MULTILINE)
     without_comments = re.sub(r"/\*.*?\*/", "", without_comments, flags=re.DOTALL)
     stripped = without_comments.strip().rstrip(";").strip()
@@ -432,6 +444,7 @@ def _ensure_select_only(sql: str) -> None:
     forbidden = _FORBIDDEN_KEYWORDS.search(stripped)
     if forbidden:
         raise GuardError(f"Palavra-chave nao permitida: {forbidden.group(0).upper()}.")
+    return sql.strip().rstrip(";").rstrip()
 
 
 def _resolve_online_creds() -> OracleCredentials:
@@ -444,11 +457,15 @@ def _resolve_online_creds() -> OracleCredentials:
     return creds
 
 
-def _run_with_timeout(fn: Any, timeout_seconds: int) -> Any:
+def _run_with_timeout(
+    fn: Any, timeout_seconds: int, holder: dict[str, Any] | None = None
+) -> Any:
     """Executa `fn()` com um watchdog: cancela a conexao se estourar o prazo.
 
     O Oracle Client desta maquina (12.2) nao suporta `connection.call_timeout`
     (exige 18.1+), entao o timeout e emulado por thread + `connection.cancel()`.
+    `fn` deve gravar a conexao aberta em `holder["connection"]` assim que
+    conectar, para que o watchdog tenha o que cancelar.
     """
     result: dict[str, Any] = {}
     error: dict[str, BaseException] = {}
@@ -463,6 +480,12 @@ def _run_with_timeout(fn: Any, timeout_seconds: int) -> Any:
     thread.start()
     thread.join(timeout_seconds)
     if thread.is_alive():
+        connection = (holder or {}).get("connection")
+        if connection is not None:
+            with contextlib.suppress(Exception):
+                connection.cancel()
+            # da uma chance da thread desenrolar e fechar a conexao apos o cancel
+            thread.join(5)
         raise TimeoutError(f"Consulta excedeu {timeout_seconds}s e foi cancelada.")
     if "value" in error:
         raise error["value"]
@@ -477,7 +500,10 @@ _oracle_retry = make_oracle_retry()
 
 @_oracle_retry
 def _run_guarded(fn: Any, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> Any:
-    return _run_with_timeout(fn, timeout_seconds)
+    """Roda `fn(holder)` sob timeout/retry. `fn` grava a conexao em
+    `holder["connection"]` assim que conectar, para o watchdog cancelar."""
+    holder: dict[str, Any] = {}
+    return _run_with_timeout(lambda: fn(holder), timeout_seconds, holder=holder)
 
 
 # ─────────────────────────── distinct [online] ────────────────────────────────
@@ -521,17 +547,22 @@ def cmd_distinct(args: argparse.Namespace) -> int:
 
     creds = _resolve_online_creds()
 
-    def _run() -> list[tuple[Any, ...]]:
+    def _run(holder: dict[str, Any]) -> list[tuple[Any, ...]]:
         import oracledb  # pylint: disable=import-outside-toplevel
 
         with oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
         ) as connection:
+            holder["connection"] = connection
             cursor = connection.cursor()
             cursor.execute(sql)
             return list(cursor.fetchall())
 
-    rows = _run_guarded(_run)
+    try:
+        rows = _run_guarded(_run)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        print(f"[ERRO] {exc}")
+        return 1
     for row in rows:
         print(" | ".join(str(v) for v in row))
     return 0
@@ -566,6 +597,14 @@ def _resolve_sample_where_clause(where_arg: str | None) -> tuple[str | None, boo
     """Retorna (clausula ' WHERE ...' ou '', ok). ok=False se o guardrail rejeitou."""
     if not where_arg:
         return "", True
+    if "--" in where_arg or "/*" in where_arg or "*/" in where_arg:
+        # where_arg e concatenado antes do FETCH FIRST no SQL real (nao so na
+        # sonda de validacao abaixo); um comentario aqui comentaria o FETCH
+        # FIRST junto e anularia o limite obrigatorio de linhas.
+        print(
+            "[ERRO] --where rejeitado: comentarios SQL ('--', '/*', '*/') nao sao permitidos."
+        )
+        return None, False
     probe_sql = f"SELECT 1 FROM DUAL WHERE {where_arg}"  # nosec B608 - usado so para validacao, nunca executado
     try:
         _ensure_select_only(probe_sql)
@@ -595,18 +634,23 @@ def cmd_sample(args: argparse.Namespace) -> int:
 
     creds = _resolve_online_creds()
 
-    def _run() -> tuple[list[str], list[tuple[Any, ...]]]:
+    def _run(holder: dict[str, Any]) -> tuple[list[str], list[tuple[Any, ...]]]:
         import oracledb  # pylint: disable=import-outside-toplevel
 
         with oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
         ) as connection:
+            holder["connection"] = connection
             cursor = connection.cursor()
             cursor.execute(sql)
             cols = [d[0] for d in (cursor.description or [])]
             return cols, list(cursor.fetchall())
 
-    cols, rows = _run_guarded(_run)
+    try:
+        cols, rows = _run_guarded(_run)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        print(f"[ERRO] {exc}")
+        return 1
     print(" | ".join(cols))
     for row in rows:
         print(" | ".join(str(v) for v in row))
@@ -625,23 +669,24 @@ def _read_sql_file(path_str: str) -> str | None:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    sql = _read_sql_file(args.arquivo)
-    if sql is None:
+    raw_sql = _read_sql_file(args.arquivo)
+    if raw_sql is None:
         return 1
     try:
-        _ensure_select_only(sql)
+        sql = _ensure_select_only(raw_sql)
     except GuardError as exc:
         print(f"[ERRO] {exc}")
         return 1
 
     creds = _resolve_online_creds()
 
-    def _run() -> None:
+    def _run(holder: dict[str, Any]) -> None:
         import oracledb  # pylint: disable=import-outside-toplevel
 
         with oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
         ) as connection:
+            holder["connection"] = connection
             connection.cursor().parse(sql)
 
     try:
@@ -654,23 +699,24 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_explain(args: argparse.Namespace) -> int:
-    sql = _read_sql_file(args.arquivo)
-    if sql is None:
+    raw_sql = _read_sql_file(args.arquivo)
+    if raw_sql is None:
         return 1
     try:
-        _ensure_select_only(sql)
+        sql = _ensure_select_only(raw_sql)
     except GuardError as exc:
         print(f"[ERRO] {exc}")
         return 1
 
     creds = _resolve_online_creds()
 
-    def _run() -> list[str]:
+    def _run(holder: dict[str, Any]) -> list[str]:
         import oracledb  # pylint: disable=import-outside-toplevel
 
         with oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
         ) as connection:
+            holder["connection"] = connection
             cursor = connection.cursor()
             cursor.execute(f"EXPLAIN PLAN FOR {sql}")
             cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")

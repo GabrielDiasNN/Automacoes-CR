@@ -122,7 +122,7 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" {
     }
 
     It "ignora os junctions de skill de padrao expostos em .claude/skills (nao pede mirror .agents deles)" {
-        # As 7 skills de padrao sao expostas ao Claude Code por junction em
+        # As 9 skills de padrao sao expostas ao Claude Code por junction em
         # .claude/skills -> .github/skills. Test-AgentsSkillMirrors nao pode confundi-las
         # com skill operacional e exigir espelho em .agents/skills.
         $fixture = New-SkillsFixture -Name "exposicao-padrao"

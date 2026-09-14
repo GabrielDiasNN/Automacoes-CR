@@ -113,7 +113,7 @@ Describe "New-SkillMirrors" {
         }
     }
 
-    It "expoe as 7 skills de padrao por junction em .claude/skills, apontando para .github/skills" {
+    It "expoe as 9 skills de padrao por junction em .claude/skills, apontando para .github/skills" {
         $fixture = New-MirrorFixture -Name "exposicao-claude"
 
         $resultado = Invoke-NewSkillMirrors -BasePath $fixture

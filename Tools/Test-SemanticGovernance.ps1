@@ -78,6 +78,76 @@ function Test-TextNotContains {
     }
 }
 
+function Get-ActiveSkillCount {
+    $governanceScript = Get-RepoText -RelativePath "Tools/Test-SkillsGovernance.ps1"
+    if ($governanceScript -match '(?s)\$script:ActiveSkillNames\s*=\s*@\((?<list>.*?)\)') {
+        return ([regex]::Matches($Matches.list, '"[^"]+"')).Count
+    }
+
+    Add-GovernanceIssue -File "Tools/Test-SkillsGovernance.ps1" -Rule "ACTIVE_SKILL_COUNT_NOT_FOUND" -Detail "Nao foi possivel extrair `$script:ActiveSkillNames para derivar a contagem de skills."
+    return $null
+}
+
+# Numeros por extenso usados em prosa PT-BR (ex.: "Nove skills governam...") para
+# pegar drift que a forma numerica ("9 skills") nao cobre.
+$script:SkillCountNumberWords = @{
+    5  = "Cinco"
+    6  = "Seis"
+    7  = "Sete"
+    8  = "Oito"
+    9  = "Nove"
+    10 = "Dez"
+    11 = "Onze"
+    12 = "Doze"
+}
+
+function Test-SkillCountDrift {
+    param(
+        [string[]]$RequiredDocs,
+        [string[]]$SweepDocs
+    )
+
+    $count = Get-ActiveSkillCount
+    if (-not $count) {
+        return
+    }
+
+    foreach ($doc in $RequiredDocs) {
+        Test-TextContains -RelativePath $doc -Needle "$count skills" -Rule "SKILL_TAXONOMY_DRIFT"
+    }
+
+    $allDocs = @($RequiredDocs + $SweepDocs) | Select-Object -Unique
+    foreach ($doc in $allDocs) {
+        $content = Get-RepoText -RelativePath $doc
+
+        foreach ($match in [regex]::Matches($content, '(?<n>\d+)\s+skills\b')) {
+            $n = [int]$match.Groups['n'].Value
+            if ($n -eq $count) {
+                continue
+            }
+            # "N skills operacionais" (as de .claude/skills fora do padrao, hoje 6)
+            # e uma contagem legitima diferente da taxonomia de padrao — nao e drift.
+            $windowStart = [Math]::Max(0, $match.Index - 40)
+            $windowEnd = [Math]::Min($content.Length, $match.Index + $match.Length + 40)
+            $window = $content.Substring($windowStart, $windowEnd - $windowStart)
+            if ($window -match '(?i)operacion') {
+                continue
+            }
+            Add-GovernanceIssue -File $doc -Rule "SKILL_TAXONOMY_DRIFT" -Detail "Contagem de skills desatualizada: '$($match.Value)' (atual: $count skills)."
+        }
+
+        foreach ($wordEntry in $script:SkillCountNumberWords.GetEnumerator()) {
+            if ($wordEntry.Key -eq $count) {
+                continue
+            }
+            $staleNeedle = "$($wordEntry.Value) skills"
+            if ($content.Contains($staleNeedle)) {
+                Add-GovernanceIssue -File $doc -Rule "SKILL_TAXONOMY_DRIFT" -Detail "Contagem de skills desatualizada (por extenso): '$staleNeedle' (atual: $count skills)."
+            }
+        }
+    }
+}
+
 function Test-RootNodeLock {
     $rootPackageJson = Join-Path $base "package.json"
     $rootPackageLock = Join-Path $base "package-lock.json"
@@ -138,11 +208,17 @@ if ($currentVersion) {
     }
 }
 
-Test-TextContains -RelativePath ".github/skills/README.md" -Needle "9 skills" -Rule "SKILL_TAXONOMY_DRIFT"
-Test-TextNotContains -RelativePath ".github/skills/README.md" -Needle "6 skills" -Rule "SKILL_TAXONOMY_DRIFT"
-Test-TextNotContains -RelativePath ".github/skills/README.md" -Needle "7 skills" -Rule "SKILL_TAXONOMY_DRIFT"
-Test-TextNotContains -RelativePath "CONTEXT.md" -Needle "6 skills" -Rule "SKILL_TAXONOMY_DRIFT"
-Test-TextNotContains -RelativePath "CONTEXT.md" -Needle "7 skills" -Rule "SKILL_TAXONOMY_DRIFT"
+Test-SkillCountDrift -RequiredDocs @(
+    ".github/skills/README.md",
+    "CONTEXT.md"
+) -SweepDocs @(
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".github/copilot-instructions.md",
+    ".gemini/README.md",
+    ".github/skills/ai-native-development-standard/SKILL.md"
+)
 Test-RootNodeLock
 Test-CatalogMap
 
