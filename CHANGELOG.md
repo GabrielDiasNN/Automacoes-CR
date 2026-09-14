@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.89] - 14/09/2026
+
+### Adicionado
+
+- **Catálogo local do schema Oracle SGTPRD** (`Tools/build_oracle_catalog.py` + `Tools/oracle_catalog.py`). O schema real tem 3.608 tabelas, 1.729 views, 74.095 colunas, 3.921 FKs — impossível caber em contexto. `build_oracle_catalog.py` extrai o dicionário de dados completo (`ALL_OBJECTS`, `ALL_TAB_COLS`, `ALL_CONSTRAINTS`, `ALL_INDEXES`, `ALL_VIEWS.TEXT`, ...) para `docs/oracle-schema/schema.db` (SQLite + FTS5, ~35MB, gitignored); `oracle_catalog.py` responde perguntas de schema (`table`, `cols`, `find`, `path`, `neighbors`, `view`, `usage`) sem gastar tokens de sessão nem ir ao Oracle, mais quatro subcomandos online com guardrails (`distinct`, `sample`, `check`, `explain` — SELECT-only, LIMIT obrigatório, timeout via watchdog, retry). Substitui `Tools/extract_oracle_schema.py` de uma sessão anterior, que nunca chegou a rodar (log adapter incompatível com `oracle_extract.fetch_all`, sem `load_dotenv`).
+- **Padrão de conexão descoberto**: a rede até o Oracle desta máquina derruba qualquer conexão contínua (ORA-00028/ORA-03113) após poucos segundos, independente de atividade. `build_oracle_catalog.py` e os comandos online de `oracle_catalog.py` abrem uma conexão nova por query — mesmo padrão de `lib/python/oracle_extract.fetch_all` — e usam `make_oracle_retry()`, igual aos 6 extratores de domínio.
+- **`docs/oracle-schema/`**: `domain-map.md` e `schema-graph.md` (curadoria humana de sessão anterior) tiveram os números e um valor de domínio corrigidos contra o catálogo real — `CLASSIFICACAO_COR` estava documentado como "6=CORES CLARAS, 9=BRANCO"; o valor real é 1=CLARA, 6=BRANCO, 9=BRANCO 2 FIBRAS (confirmado contra o uso real em `OBs Restricao Branco/SQL-DiagnosticoClassificacoes.sql`, que filtra `IN (6, 9)` para "branco"). `core-graph.json` (gerado, substitui o `schema-graph.json` anterior que foi escrito à mão com números fictícios) traz a topologia dos ~92 objetos referenciados pelos `.sql` do repo.
+- **Skills `oracle-schema-navigator` e `oracle-sql-patterns`** (`.github/skills/`, de sessão anterior) corrigidas e promovidas à taxonomia ativa: `tags:` removido do frontmatter de `oracle-sql-patterns` (chave não suportada, quebrava `Test-SkillsGovernance.ps1`); `description` reescrita para começar com "Use when"; ambas adicionadas a `$script:ActiveSkillNames`, `.github/skills/README.md` (nova 5ª fronteira "Domínio de Dados (Oracle)") e `.gitignore` (junctions em `.claude/skills/`); seção "Bootstrap de Contexto" reescrita como contrato de economia de tokens (nunca ler o catálogo inteiro; usar o CLI).
+- **MCP `oracledb`** registrado no Claude Code em escopo local (`~/.claude.json`, fora do repositório) — mesmo servidor (MCP Toolbox for Databases) já configurado para o Antigravity/Gemini em `~/.gemini/config/mcp_config.json`. Via secundária para exploração ad-hoc; o catálogo local continua sendo o caminho padrão.
+
 ## [1.3.88] - 10/09/2026
 
 ### Alterado

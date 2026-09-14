@@ -72,7 +72,7 @@ Orchestrator/tests/e2e-evidence/
 # `.gemini/skills` espelha `.github/skills` e `.agents/skills` espelha as skills
 # operacionais de `.claude/skills`. Ambos sao recriados por Tools/New-SkillMirrors.ps1.
 .agents/skills/
-# As 7 skills de padrao sao expostas ao Claude Code por junction em `.claude/skills/`
+# As 9 skills de padrao sao expostas ao Claude Code por junction em `.claude/skills/`
 # (o Claude Code so descobre skill nesse diretorio). Junction e alias de `.github/skills`,
 # nunca conteudo proprio — recriado por Tools/New-SkillMirrors.ps1. As 6 skills
 # operacionais reais do mesmo diretorio seguem versionadas normalmente.
@@ -81,6 +81,8 @@ Orchestrator/tests/e2e-evidence/
 .claude/skills/enterprise-orchestration-contract/
 .claude/skills/html-css-enterprise-standard/
 .claude/skills/nodejs-communications/
+.claude/skills/oracle-schema-navigator/
+.claude/skills/oracle-sql-patterns/
 .claude/skills/powershell-automation-monitor/
 .claude/skills/python-enterprise-standard/
 .playwright-mcp/
@@ -140,6 +142,14 @@ Audit/
 # Assert-StopQualityGate.ps1. Estado por maquina, muda a cada commit e nao tem
 # leitura fora da sessao local.
 .claude/.state/
+
+# Catalogo local do schema Oracle SGTPRD: reconstruivel via
+# Tools/build_oracle_catalog.py, consultado por Tools/oracle_catalog.py.
+# ~35MB, nunca versionar — a camada curada e docs/oracle-schema/*.md/*.json.
+docs/oracle-schema/schema.db
+docs/oracle-schema/schema.db-shm
+docs/oracle-schema/schema.db-wal
+docs/oracle-schema/schema.tmp
 
 # Banco de Dados SQLite (runtime — nao versionar)
 Orchestrator/automacoes.db

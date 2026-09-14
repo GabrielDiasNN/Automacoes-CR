@@ -31,6 +31,8 @@ $script:ActiveSkillNames = @(
     "enterprise-orchestration-contract",
     "html-css-enterprise-standard",
     "nodejs-communications",
+    "oracle-schema-navigator",
+    "oracle-sql-patterns",
     "powershell-automation-monitor",
     "python-enterprise-standard"
 )

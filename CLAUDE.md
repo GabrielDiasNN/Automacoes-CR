@@ -56,6 +56,22 @@ pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 .venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills
 ```
 
+### Catálogo Oracle (schema SGTPRD)
+Antes de escrever SQL novo, consulte o catálogo local em vez de explorar o dicionário de dados do Oracle a cada sessão — ver skill `oracle-schema-navigator`.
+```powershell
+# Reconstruir o catalogo local (schema.db, gitignored) — ~30s, requer Oracle acessivel
+.venv\Scripts\python Tools\build_oracle_catalog.py
+
+# Consultas offline (sem ir ao Oracle)
+.venv\Scripts\python Tools\oracle_catalog.py table OB
+.venv\Scripts\python Tools\oracle_catalog.py find "receita bloqueada"
+.venv\Scripts\python Tools\oracle_catalog.py path OB ITENSPEDIDOGRADE
+
+# Consultas online (SELECT-only, LIMIT obrigatorio, retry)
+.venv\Scripts\python Tools\oracle_catalog.py check meu_arquivo.sql
+.venv\Scripts\python Tools\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
+```
+
 ### Governança, quality gate e scaffolding
 Rodados pelas skills do projeto: `/quality-gate` (ValidarAutomacoes completo), `/preflight` (checklist pré-PR: encoding, skills governance, lint Python) e `/new-automation` (scaffolding com manifesto válido).
 

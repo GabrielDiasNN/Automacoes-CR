@@ -1,6 +1,6 @@
 # Skills Canônicas do Repositório
 
-Este diretório é a fonte canônica das **skills de padrão** do workspace: as 7 normas escritas que governam decisões de implementação. Ele não contém as skills operacionais executáveis do projeto — essas vivem em `.claude/skills/` (ver a seção abaixo).
+Este diretório é a fonte canônica das **skills de padrão** do workspace: as 9 normas escritas que governam decisões de implementação. Ele não contém as skills operacionais executáveis do projeto — essas vivem em `.claude/skills/` (ver a seção abaixo).
 
 O projeto atual é 100% nativo, com stack consolidada em Python, PowerShell e Node.js. Skills legadas de migração para Python ou de runtime VBA não fazem mais parte da taxonomia ativa e não devem ser reintroduzidas em discovery, `Related Skills` ou documentação operacional.
 
@@ -20,12 +20,12 @@ O repositório versiona **duas** árvores de skills, com propósitos, donos e va
 
 | Árvore | Conteúdo | Editável? | Validador |
 |---|---|---|---|
-| `.github/skills/` | 7 skills de **padrão** (norma escrita, taxonomia ativa) | Sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` |
+| `.github/skills/` | 9 skills de **padrão** (norma escrita, taxonomia ativa) | Sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` |
 | `.claude/skills/` | skills **operacionais** executáveis do projeto: ci-gates, run-orchestrator, preflight, quality-gate, run-tests, new-automation (drivers e comandos) | Sim — fonte única | governança agregada de `ValidarAutomacoes.ps1` |
 | `.gemini/skills/` | mirror por junction de `.github/skills/` | Não — alias | reprovado se cópia real |
 | `.agents/skills/` | mirror por junction de `.claude/skills/` | Não — alias | reprovado se cópia real |
 
-**Estado-alvo (mudança em andamento):** o Claude Code — o agente que mais trabalha neste repositório — carrega **somente** `.claude/skills`, nunca `.github/skills`. Para que ele enxergue as 7 skills de padrão, elas passam a ser expostas por junction em `.claude/skills/<nome>`. `.github/skills` continua sendo a **única** árvore editável dessas skills; o junction é apenas um alias de leitura. `Tools\New-SkillMirrors.ps1` cria esses junctions e o `.gitignore` os exclui do versionamento. Na prática: **editar skill de padrão = editar `.github/skills/`, sempre** — independentemente de qual agente a descobriu.
+**Estado-alvo (mudança em andamento):** o Claude Code — o agente que mais trabalha neste repositório — carrega **somente** `.claude/skills`, nunca `.github/skills`. Para que ele enxergue as 9 skills de padrão, elas passam a ser expostas por junction em `.claude/skills/<nome>`. `.github/skills` continua sendo a **única** árvore editável dessas skills; o junction é apenas um alias de leitura. `Tools\New-SkillMirrors.ps1` cria esses junctions e o `.gitignore` os exclui do versionamento. Na prática: **editar skill de padrão = editar `.github/skills/`, sempre** — independentemente de qual agente a descobriu.
 
 Qual árvore cada agente lê:
 
@@ -35,7 +35,7 @@ Qual árvore cada agente lê:
 
 ## Taxonomia Ativa do Workspace
 
-O conjunto ativo de 7 skills está organizado nas seguintes fronteiras de responsabilidade:
+O conjunto ativo de 9 skills está organizado nas seguintes fronteiras de responsabilidade:
 
 1. **Fundação**
    - `ai-native-development-standard`: governança de contexto, documentação AI-Native, discovery e evolução das skills.
@@ -52,7 +52,11 @@ O conjunto ativo de 7 skills está organizado nas seguintes fronteiras de respon
 4. **Apresentação**
    - `html-css-enterprise-standard`: dashboard, HTML corporativo, assets compartilhados e separação entre UI e negócio.
 
-A lista dos 7 nomes ativos também está hardcoded em `$script:ActiveSkillNames` (linha ~28 de `Tools/Test-SkillsGovernance.ps1`): adicionar uma 8a skill de padrão exige editar esse script **e** esta seção, senão a skill nova é tratada como fora da taxonomia (`ACTIVE_SKILL_MISSING_IN_README`).
+5. **Domínio de Dados (Oracle)**
+   - `oracle-schema-navigator`: mapa de domínios do schema SGTPRD, joins canônicos e catálogo local (`Tools/oracle_catalog.py`) para navegar o schema real sem gastar tokens de sessão.
+   - `oracle-sql-patterns`: CTEs reutilizáveis, filtros validados em produção, anti-patterns conhecidos e o fluxo de validação de SQL novo contra o catálogo (`Tools/oracle_catalog.py`).
+
+A lista dos 9 nomes ativos também está hardcoded em `$script:ActiveSkillNames` (linha ~28 de `Tools/Test-SkillsGovernance.ps1`): adicionar uma 10a skill de padrão exige editar esse script **e** esta seção, senão a skill nova é tratada como fora da taxonomia (`ACTIVE_SKILL_MISSING_IN_README`).
 
 ## Estrutura Esperada
 
@@ -98,7 +102,7 @@ Faltar uma seção gera `REQUIRED_SECTION_MISSING`; repetir gera `SECTION_DUPLIC
 - `description` deve começar com `Use when`.
 - `description` deve diferenciar a skill de outra skill próxima.
 - `Do Not Use When` é obrigatória para reduzir overlap e deve citar a skill rival pelo nome.
-- `Related Skills` deve citar apenas skills existentes na taxonomia ativa (as 7 acima); qualquer outro token entre crases nessa seção vira `RELATED_SKILL_INVALID`.
+- `Related Skills` deve citar apenas skills existentes na taxonomia ativa (as 9 acima); qualquer outro token entre crases nessa seção vira `RELATED_SKILL_INVALID`.
 - Regras transversais devem ter fonte única; skills consumidoras devem referenciar nomeando arquivo **e** seção, não duplicar. Encoding é `AGENTS.md § Regras de Encoding`; limites de mypy/pylint são `docs/governance-contracts.md § Contrato Python — mypy \`--strict\`` e `§ Contrato Python — pylint`; escopo do lint bloqueante do CI é a skill operacional em `.claude/skills/ci-gates/SKILL.md`.
 
 ## Regras de Governança
@@ -116,7 +120,7 @@ Crie uma nova skill apenas quando houver:
 
 - fluxo recorrente e especializado;
 - fronteira clara de ownership;
-- dificuldade real de encaixar o conteúdo em uma das 7 skills atuais ou em `references/` associadas.
+- dificuldade real de encaixar o conteúdo em uma das 9 skills atuais ou em `references/` associadas.
 
 Não crie nova skill quando:
 
@@ -126,7 +130,7 @@ Não crie nova skill quando:
 
 ## Fluxo de Manutenção
 
-1. Identificar qual das 4 fronteiras ativas realmente possui a responsabilidade.
+1. Identificar qual das 5 fronteiras ativas realmente possui a responsabilidade.
 2. Atualizar primeiro a fonte principal do contrato e depois as skills consumidoras.
 3. Revisar discovery para garantir que o pedido correto aciona a skill correta.
 4. Se criou ou renomeou skill, rodar `pwsh -File Tools\New-SkillMirrors.ps1` para recriar os junctions dos mirrors.

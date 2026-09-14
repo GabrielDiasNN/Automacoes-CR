@@ -18,7 +18,9 @@
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\overview\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\detail\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\tingimento\\.py$",
-    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\data\\\\(?:schema|writer|queries)\\.py$"
+    "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\data\\\\(?:schema|writer|queries)\\.py$",
+    "^Tools\\\\build_oracle_catalog\\.py$",
+    "^Tools\\\\oracle_catalog\\.py$"
   ],
   "router_orm_query_allowlist": [],
   "automation_exclusions": [
