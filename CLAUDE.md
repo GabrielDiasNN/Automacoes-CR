@@ -99,7 +99,7 @@ Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md`, `Produçã
 Todo script de ciclo de vida do Orchestrator importa `Lib-OrchestratorRuntime.psm1`.
 
 ### Skills canônicas (`.github/skills/`)
-Sete skills governam decisões de implementação. `.gemini/skills/` é apenas mirror. Edite sempre a fonte canônica.
+Nove skills governam decisões de implementação. `.gemini/skills/` é apenas mirror. Edite sempre a fonte canônica.
 
 ## Regras Operacionais Críticas
 

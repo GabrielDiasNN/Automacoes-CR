@@ -322,12 +322,45 @@ class CatalogData:
     view_source: list[tuple[Any, ...]] | None
 
 
+_OBJECT_TYPE_PRIORITY = {
+    "TABLE": 0,
+    "VIEW": 1,
+    "PACKAGE": 2,
+    "PROCEDURE": 3,
+    "FUNCTION": 4,
+    "SEQUENCE": 5,
+    "TRIGGER": 6,
+}
+
+
+def _dedupe_objects_by_name(
+    objects: list[tuple[Any, ...]],
+) -> list[tuple[Any, ...]]:
+    """objects.object_name e PRIMARY KEY, mas ALL_OBJECTS usa namespaces
+    separados (ex.: TRIGGER e TABLE podem compartilhar nome) — mantemos so a
+    entrada de maior prioridade (tabela/view primeiro) por nome."""
+    best: dict[str, tuple[Any, ...]] = {}
+    for obj in objects:
+        name, obj_type = obj[0], obj[1]
+        priority = _OBJECT_TYPE_PRIORITY.get(obj_type, 99)
+        current = best.get(name)
+        if current is None or priority < _OBJECT_TYPE_PRIORITY.get(current[1], 99):
+            best[name] = obj
+    dropped = len(objects) - len(best)
+    if dropped:
+        _log(
+            f"Objetos com nome duplicado entre namespaces: {dropped} descartados",
+            "AVISO",
+        )
+    return list(best.values())
+
+
 def _insert_objects_and_columns(conn: sqlite3.Connection, data: CatalogData) -> None:
     conn.executemany(
         "INSERT INTO objects VALUES (?, ?, ?, ?, ?, ?)",
         [
             (o[0], o[1], o[2], o[3], str(o[4]) if o[4] else None, o[5])
-            for o in data.objects
+            for o in _dedupe_objects_by_name(data.objects)
         ],
     )
     conn.executemany(

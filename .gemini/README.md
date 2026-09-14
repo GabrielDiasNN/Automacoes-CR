@@ -9,7 +9,7 @@
 ## Regra pratica
 
 - Atualize sempre `.github/skills/`.
-- Preserve os links em `.gemini/skills/` apontando para as mesmas 7 skills ativas.
+- Preserve os links em `.gemini/skills/` apontando para as mesmas 9 skills ativas.
 - Se uma skill existir em `.github/skills/` e nao aparecer em `.gemini/skills/`, trate como problema de espelhamento do ambiente.
 
 ## Servidor MCP `sqlite-orchestrator`

@@ -66,14 +66,14 @@ O repositório tem **duas árvores de skills versionadas**, com responsabilidade
 
 | Árvore | Conteúdo | Editável? | Validador |
 |---|---|---|---|
-| `.github/skills/` | 7 skills de **padrão** (norma escrita, taxonomia ativa) | sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` (9 seções, frontmatter, discovery) |
+| `.github/skills/` | 9 skills de **padrão** (norma escrita, taxonomia ativa) | sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` (9 seções, frontmatter, discovery) |
 | `.claude/skills/` | skills **operacionais** do projeto (comandos executáveis: `ci-gates`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim — fonte única delas | — |
 
 Cada agente lê de um caminho fixo próprio, então as fontes são expostas por **mirrors não versionados** (ver `.gitignore`), recriados por `pwsh -File Tools\New-SkillMirrors.ps1`:
 
 - `.gemini/skills/` → junctions para `.github/skills/` (Gemini CLI).
 - `.agents/skills/` → junctions para as skills operacionais de `.claude/skills/` (Codex / Antigravity).
-- `.claude/skills/<nome>` (as 7 de padrão) → junctions para `.github/skills/`, porque **o Claude Code só descobre skill em `.claude/skills/`**. As 6 skills operacionais reais convivem no mesmo diretório; o script nunca as toca.
+- `.claude/skills/<nome>` (as 9 de padrão) → junctions para `.github/skills/`, porque **o Claude Code só descobre skill em `.claude/skills/`**. As 6 skills operacionais reais convivem no mesmo diretório; o script nunca as toca.
 
 - Cada item de mirror deve apontar para a skill correspondente na fonte canônica; nunca cópia real (a governança reprova).
 - Não manter duas cópias editáveis da mesma skill.

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.90] - 14/09/2026
+
+### Corrigido
+
+- **Guardrails do `oracle_catalog.py` (achados do `/code-review` em PR #62).** `sample --where` com comentário (`--`, `/*`) era concatenado antes do `FETCH FIRST` no SQL real e comentava o limite obrigatório de linhas — agora rejeitado antes de montar a query. `check`/`explain` enviavam o SQL cru (com `;` final) ao Oracle depois de validar uma cópia local sem `;`, disparando `ORA-00911` em qualquer arquivo terminado em ponto e vírgula — `_ensure_select_only` agora retorna o SQL já pronto para execução. `find "NOT"`/`"AND"`/`"NEAR"` quebrava com `sqlite3.OperationalError` porque `_sanitize_fts_query` não escapava as palavras-chave do FTS5 — cada termo agora vai entre aspas. O watchdog de timeout dizia cancelar a conexão Oracle mas nunca chamava `.cancel()`; `distinct`/`sample` propagavam traceback bruto em erro de rede em vez do `[ERRO]` padrão dos demais comandos online — ambos corrigidos.
+- **`build_oracle_catalog.py`: colisão de `PRIMARY KEY` entre namespaces do Oracle.** `objects.object_name` é chave primária, mas `ALL_OBJECTS` permite o mesmo nome em namespaces distintos (ex.: `TRIGGER` e `TABLE`); a colisão abortava o build inteiro com `sqlite3.IntegrityError`. Objetos duplicados por nome agora são deduplicados por prioridade (tabela/view antes de trigger/function/procedure/package/sequence) antes do insert.
+- **`Test-SemanticGovernance.ps1`: contagem de skills hardcoded.** O gate de drift de taxonomia comparava contra needles literais (`"7 skills"`, `"9 skills"`) só em `.github/skills/README.md` e `CONTEXT.md`, exigindo edição manual a cada skill nova e deixando passar `"7 skills"`/`"Sete skills"` obsoletos em `CLAUDE.md`, `AGENTS.md`, `README.md`, `.github/copilot-instructions.md`, `.gemini/README.md` e `ai-native-development-standard/SKILL.md`. O gate agora deriva a contagem de `$script:ActiveSkillNames` em `Tools/Test-SkillsGovernance.ps1` (fonte única) e varre todos esses arquivos — o que também pegou um `"6 skills"` obsoleto em `AGENTS.md` que nenhum achado anterior tinha citado. Todas as menções obsoletas corrigidas para 9.
+
 ## [1.3.89] - 14/09/2026
 
 ### Adicionado
