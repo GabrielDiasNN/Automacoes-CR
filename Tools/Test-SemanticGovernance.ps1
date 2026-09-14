@@ -138,9 +138,11 @@ if ($currentVersion) {
     }
 }
 
-Test-TextContains -RelativePath ".github/skills/README.md" -Needle "7 skills" -Rule "SKILL_TAXONOMY_DRIFT"
+Test-TextContains -RelativePath ".github/skills/README.md" -Needle "9 skills" -Rule "SKILL_TAXONOMY_DRIFT"
 Test-TextNotContains -RelativePath ".github/skills/README.md" -Needle "6 skills" -Rule "SKILL_TAXONOMY_DRIFT"
+Test-TextNotContains -RelativePath ".github/skills/README.md" -Needle "7 skills" -Rule "SKILL_TAXONOMY_DRIFT"
 Test-TextNotContains -RelativePath "CONTEXT.md" -Needle "6 skills" -Rule "SKILL_TAXONOMY_DRIFT"
+Test-TextNotContains -RelativePath "CONTEXT.md" -Needle "7 skills" -Rule "SKILL_TAXONOMY_DRIFT"
 Test-RootNodeLock
 Test-CatalogMap
 
