@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.91] - 14/09/2026
+
+### Corrigido
+
+- **Canal WhatsApp (`lib/WhatsApp-Core.js`): bootstrap travava sem nenhum evento do ciclo de vida.** Desde 13/09 23:00, toda execução com mensagem a enviar (OBs Restrição Branco, OBs Paradas Fase, Receitas Bloqueadas) estourava o deadline de 180s × 3 tentativas sem que `qr`, `ready`, `auth_failure` ou `disconnected` chegassem a disparar — o Chromium subia e navegava normalmente (confirmado ao vivo via `LIST_GROUPS`), mas o `whatsapp-web.js@1.34.6` nunca reconhecia o estado da página, o padrão clássico de uma atualização do WhatsApp Web incompatível com a versão instalada da biblioteca. `whatsapp-web.js` atualizado para `1.34.7` (a versão estável mais recente publicada — nada além disso saiu do estágio alpha) resolve o handshake: `ready` volta a disparar e o `dispatch` completa em ~60-70s, contra os 557s de timeout de antes. Validado com disparo manual das 3 automações afetadas (todas `SUCCESS`, lote represado desde 13/09 entregue).
+
 ## [1.3.90] - 14/09/2026
 
 ### Corrigido
