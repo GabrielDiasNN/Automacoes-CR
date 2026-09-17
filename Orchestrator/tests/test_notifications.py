@@ -296,6 +296,43 @@ def test_dispatch_alerts_apenas_email() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _dispatch_infra_whatsapp (isolado de send_infra_alert por conta do limite
+# de variáveis locais do pylint)
+# ---------------------------------------------------------------------------
+
+
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
+def test_dispatch_infra_whatsapp_script_ausente_retorna_false(
+    mock_exists: Any,
+) -> None:
+    mock_exists.return_value = False
+    assert notifications._dispatch_infra_whatsapp("worker_offline", "msg") is False
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
+def test_dispatch_infra_whatsapp_timeout_retorna_false(
+    mock_exists: Any, mock_run: Any
+) -> None:
+    mock_exists.return_value = True
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd="powershell", timeout=60)
+    assert notifications._dispatch_infra_whatsapp("worker_offline", "msg") is False
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
+def test_dispatch_infra_whatsapp_erro_generico_retorna_false(
+    mock_exists: Any, mock_run: Any
+) -> None:
+    mock_exists.return_value = True
+    mock_run.side_effect = RuntimeError("falha inesperada")
+    assert notifications._dispatch_infra_whatsapp("worker_offline", "msg") is False
+
+
+# ---------------------------------------------------------------------------
 # send_infra_alert (alertas de incidente de infraestrutura, fora do ciclo de
 # falha de automação)
 # ---------------------------------------------------------------------------
