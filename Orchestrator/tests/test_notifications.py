@@ -36,6 +36,7 @@ def test_is_throttled_behavior() -> None:
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
 def test_send_whatsapp_alert_success(mock_exists: Any, mock_run: Any) -> None:
     """Garante que send_whatsapp_alert invoca o script PowerShell corretamente."""
     mock_exists.return_value = True
@@ -57,8 +58,17 @@ def test_send_whatsapp_alert_success(mock_exists: Any, mock_run: Any) -> None:
     cmd = args[0]
     assert "powershell.exe" in cmd
     assert "-File" in cmd
+    assert "-Phone" in cmd
+    assert "554700000000@c.us" in cmd
     # Verifica se a mensagem foi construída corretamente
     assert "*Robo:* Robo WhatsApp" in cmd[-1]
+
+
+def test_send_whatsapp_alert_sem_env_configurado_retorna_false(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("AUTOMACAO_ALERT_WHATSAPP", raising=False)
+    assert notifications.send_whatsapp_alert("Robo", "EXEC-1") is False
 
 
 @patch("app.notifications.subprocess.run")
@@ -102,7 +112,13 @@ def test_send_email_alert_success(mock_exists: Any, mock_run: Any) -> None:
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
-@patch.dict(os.environ, {"AUTOMACAO_ALERT_EMAIL": "alertas@example.com"})
+@patch.dict(
+    os.environ,
+    {
+        "AUTOMACAO_ALERT_EMAIL": "alertas@example.com",
+        "AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us",
+    },
+)
 def test_dispatch_alerts_respects_throttle(mock_exists: Any, mock_run: Any) -> None:
     """Garante que dispatch_alerts respeita o throttling de forma ponta a ponta."""
     mock_exists.return_value = True
@@ -166,6 +182,7 @@ def test_reset_alert_state_limpa_contador() -> None:
 
 
 @patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
 def test_send_whatsapp_alert_script_ausente_retorna_false(mock_exists: Any) -> None:
     mock_exists.return_value = False
     assert notifications.send_whatsapp_alert("Robo", "EXEC-1") is False
@@ -173,6 +190,7 @@ def test_send_whatsapp_alert_script_ausente_retorna_false(mock_exists: Any) -> N
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
 def test_send_whatsapp_alert_timeout_retorna_false(
     mock_exists: Any, mock_run: Any
 ) -> None:
@@ -183,6 +201,7 @@ def test_send_whatsapp_alert_timeout_retorna_false(
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
 def test_send_whatsapp_alert_exit_code_nao_zero_retorna_false(
     mock_exists: Any, mock_run: Any
 ) -> None:
@@ -277,6 +296,43 @@ def test_dispatch_alerts_apenas_email() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _dispatch_infra_whatsapp (isolado de send_infra_alert por conta do limite
+# de variáveis locais do pylint)
+# ---------------------------------------------------------------------------
+
+
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
+def test_dispatch_infra_whatsapp_script_ausente_retorna_false(
+    mock_exists: Any,
+) -> None:
+    mock_exists.return_value = False
+    assert notifications._dispatch_infra_whatsapp("worker_offline", "msg") is False
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
+def test_dispatch_infra_whatsapp_timeout_retorna_false(
+    mock_exists: Any, mock_run: Any
+) -> None:
+    mock_exists.return_value = True
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd="powershell", timeout=60)
+    assert notifications._dispatch_infra_whatsapp("worker_offline", "msg") is False
+
+
+@patch("app.notifications.subprocess.run")
+@patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
+def test_dispatch_infra_whatsapp_erro_generico_retorna_false(
+    mock_exists: Any, mock_run: Any
+) -> None:
+    mock_exists.return_value = True
+    mock_run.side_effect = RuntimeError("falha inesperada")
+    assert notifications._dispatch_infra_whatsapp("worker_offline", "msg") is False
+
+
+# ---------------------------------------------------------------------------
 # send_infra_alert (alertas de incidente de infraestrutura, fora do ciclo de
 # falha de automação)
 # ---------------------------------------------------------------------------
@@ -284,6 +340,7 @@ def test_dispatch_alerts_apenas_email() -> None:
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
 def test_send_infra_alert_envia_whatsapp(
     mock_exists: Any, mock_run: Any, monkeypatch: Any
 ) -> None:
@@ -299,12 +356,14 @@ def test_send_infra_alert_envia_whatsapp(
     args, _kwargs = mock_run.call_args
     cmd = args[0]
     assert "-File" in cmd
+    assert "-Phone" in cmd
     assert "worker_offline" in cmd[-1]
     assert "worker_offline" in notifications._infra_alert_state
 
 
 @patch("app.notifications.subprocess.run")
 @patch("app.notifications.os.path.exists")
+@patch.dict(os.environ, {"AUTOMACAO_ALERT_WHATSAPP": "554700000000@c.us"})
 def test_send_infra_alert_respeita_throttle(
     mock_exists: Any, mock_run: Any, monkeypatch: Any
 ) -> None:
@@ -326,6 +385,7 @@ def test_send_infra_alert_sem_canais_nao_marca_throttle(
     mock_exists: Any, monkeypatch: Any
 ) -> None:
     monkeypatch.delenv("AUTOMACAO_ALERT_EMAIL", raising=False)
+    monkeypatch.delenv("AUTOMACAO_ALERT_WHATSAPP", raising=False)
     mock_exists.return_value = False
     notifications.send_infra_alert("orphaned_running", "Execucao orfa detectada.")
     assert "orphaned_running" not in notifications._infra_alert_state
