@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.94] - 17/09/2026
+
+### Corrigido
+
+- **Envio de imagem com menção quebrava com `Data passed to getter must include an id property` (0/5 fases entregues na OBP-04, `EXEC_1789679261_8130`).** Investigação do `whatsapp-web.js` 1.34.7 instalado (`lib/node_modules`) confirmou regressão upstream aberta e sem release corrigida: `window.WWebJS.sendMessage` (`src/util/Injected/Utils.js`) espalha `mediaOptions` — o model interno de mídia retornado por `processMediaData`, que carrega um campo próprio `__x_id` — por cima do objeto da mensagem de saída **depois** de `id: newMsgKey`, sobrescrevendo o `id` real da `Msg` e quebrando `getValidatedSender()` na inicialização. Afeta qualquer envio de mídia (imagem/vídeo/áudio), não é específico de menções — só apareceu agora porque é o primeiro card com `@lid` resolvido enviado desde o upgrade do [1.3.91]. Fix idêntico ao PR upstream ainda aberto ([wwebjs/whatsapp-web.js#201923](https://github.com/wwebjs/whatsapp-web.js/pull/201923), sem merge e sem release que o inclua) aplicado via `patch-package` (`lib/patches/whatsapp-web.js+1.34.7.patch`, `postinstall` novo em `lib/package.json`) em vez de editar `node_modules` direto — sobrevive a `npm ci`/reinstalação, mesmo padrão de "regressão upstream sem fix disponível" do [1.3.93].
+
 ## [1.3.93] - 17/09/2026
 
 ### Corrigido
