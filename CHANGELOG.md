@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.93] - 17/09/2026
+
+### Corrigido
+
+- **`Tools/Get-WhatsAppGroups.ps1` (modo `LIST_GROUPS`) reescrito — sem upgrade disponível para corrigir** (follow-up do achado do [1.3.92]). Confirmado que `whatsapp-web.js` 1.34.7 é a versão estável mais recente publicada no npm (nada além disso saiu do estágio alpha) e que o problema é uma regressão upstream aberta e sem correção dos mantenedores (issues [wwebjs/whatsapp-web.js#201845](https://github.com/wwebjs/whatsapp-web.js/issues/201845) e [#5733](https://github.com/wwebjs/whatsapp-web.js/issues/5733), mesmo erro minificado `r: r`/`t: t`). Investigação do pacote instalado revelou a causa raiz: a 1.34.7 **removeu `window.Store`** por completo — o substituto interno já usado pela própria API pública (`client.getChats()` → `window.WWebJS.getChats()` → `window.require('WAWebCollections').Chat.getModelsArray()`) reproduz o mesmo `TypeError` na sessão `hub-global`. `executarModoListGroups` (`lib/WhatsApp-Core.js`) agora tenta esse caminho interno primeiro (mesma API que `getChats()`, timeout curto de 5s) e, se as coleções não responderem, cai automaticamente para um modo de captura por eventos de protocolo (`message_create` + `group_join`/`group_leave`/`group_admin_changed`/`group_update`, `LIST_GROUPS_CAPTURE_MS`, padrão 20s) — mesma classe de evento que já confirma o despacho de `sendMessage` quando o retorno normal falha. Contrapartida: no modo de captura só aparecem grupos com atividade real durante a janela (sem nome, só ID) — não há enumeração instantânea de todos os grupos sem tocar Store/Collections. Cobertura nova em `lib/tests/WhatsApp-Core.test.js` (colecoes disponíveis, fallback para captura, filtragem de chats individuais).
+
 ## [1.3.92] - 17/09/2026
 
 ### Corrigido
