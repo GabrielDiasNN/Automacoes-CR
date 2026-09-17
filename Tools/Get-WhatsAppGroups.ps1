@@ -39,6 +39,9 @@ Write-Host "  Listando grupos WhatsApp (sessao: $ClientId)" -ForegroundColor Cya
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Aguarde — inicializando cliente Puppeteer..." -ForegroundColor Gray
+Write-Host "Se o WhatsApp Web nao expuser a lista de chats internamente (ver CHANGELOG" -ForegroundColor Gray
+Write-Host "[1.3.93]), o script cai para captura por eventos: envie uma mensagem ou gere" -ForegroundColor Gray
+Write-Host "qualquer atividade em cada grupo que deseja identificar durante a espera." -ForegroundColor Gray
 Write-Host ""
 
 & $NodeExe $CoreJs "list-grupos" "LIST_GROUPS" $ClientId
