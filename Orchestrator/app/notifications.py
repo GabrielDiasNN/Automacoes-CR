@@ -139,6 +139,13 @@ def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = "") -> bo
     if error_msg:
         logger.debug("Detalhe do erro (nao enviado ao WhatsApp): %s", error_msg)
 
+    alert_target = os.environ.get("AUTOMACAO_ALERT_WHATSAPP", "")
+    if not alert_target:
+        logger.warning(
+            "AUTOMACAO_ALERT_WHATSAPP nao configurado. Alerta de WhatsApp suprimido."
+        )
+        return False
+
     wa_script = os.path.join(PROJECT_ROOT, "lib", "Send-WhatsApp.ps1")
     if not os.path.exists(wa_script):
         logger.error("Script de WhatsApp nao encontrado na pasta lib.")
@@ -160,6 +167,8 @@ def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = "") -> bo
                 "Bypass",
                 "-File",
                 wa_script,
+                "-Phone",
+                alert_target,
                 "-Message",
                 message,
             ],
@@ -288,6 +297,54 @@ def reset_infra_alert_state(component: str) -> None:
         _infra_alert_state.pop(component, None)
 
 
+def _dispatch_infra_whatsapp(component: str, full_message: str) -> bool:
+    """Envia o WhatsApp de um alerta de infraestrutura.
+
+    Isolado de `send_infra_alert` para manter a contagem de variáveis locais
+    da função dentro do limite do pylint (R0914).
+    """
+    alert_target = os.environ.get("AUTOMACAO_ALERT_WHATSAPP", "")
+    if not alert_target:
+        logger.warning(
+            "AUTOMACAO_ALERT_WHATSAPP nao configurado. Alerta de WhatsApp suprimido."
+        )
+        return False
+
+    wa_script = os.path.join(PROJECT_ROOT, "lib", "Send-WhatsApp.ps1")
+    if not os.path.exists(wa_script):
+        logger.error("Script de WhatsApp nao encontrado na pasta lib.")
+        return False
+
+    try:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                wa_script,
+                "-Phone",
+                alert_target,
+                "-Message",
+                full_message,
+            ],
+            env=build_subprocess_env(),
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Timeout ao enviar alerta de infraestrutura via WhatsApp: %s", component
+        )
+        return False
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Erro ao enviar alerta de infraestrutura via WhatsApp: %s", e)
+        return False
+
+
 def send_infra_alert(component: str, message: str) -> None:
     """Dispara alerta de incidente de infraestrutura (worker/WAL/fila) fora do
     ciclo de falha de automação — hoje esses incidentes só apareciam no
@@ -303,36 +360,7 @@ def send_infra_alert(component: str, message: str) -> None:
         f"*Detalhe:* {message}"
     )
 
-    wa_script = os.path.join(PROJECT_ROOT, "lib", "Send-WhatsApp.ps1")
-    whatsapp_sent = False
-    if os.path.exists(wa_script):
-        try:
-            result = subprocess.run(
-                [
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    wa_script,
-                    "-Message",
-                    full_message,
-                ],
-                env=build_subprocess_env(),
-                capture_output=True,
-                timeout=60,
-                check=False,
-            )
-            whatsapp_sent = result.returncode == 0
-        except subprocess.TimeoutExpired:
-            logger.error(
-                "Timeout ao enviar alerta de infraestrutura via WhatsApp: %s",
-                component,
-            )
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Erro ao enviar alerta de infraestrutura via WhatsApp: %s", e)
-    else:
-        logger.error("Script de WhatsApp nao encontrado na pasta lib.")
+    whatsapp_sent = _dispatch_infra_whatsapp(component, full_message)
 
     alert_email = os.environ.get("AUTOMACAO_ALERT_EMAIL", "")
     lib_email = os.path.join(PROJECT_ROOT, "lib", "Lib-Email.psm1")

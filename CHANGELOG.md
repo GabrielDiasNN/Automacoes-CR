@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.92] - 17/09/2026
+
+### Corrigido
+
+- **Alertas de falha/incidente do próprio Hub via WhatsApp nunca funcionavam** (`Orchestrator/app/notifications.py`). `send_whatsapp_alert` (disparado quando uma automação falha) e `send_infra_alert` (worker offline / WAL crítico) chamavam `lib/Send-WhatsApp.ps1` sem nunca passar `-Phone` — o script falhava na validação de destino ausente (`Send-WhatsApp.ps1:136`) e saía com `exit 1` em toda tentativa, desde a introdução da funcionalidade (confirmado via `git log -S`: `-Phone` nunca foi passado nesse call site). Diferente das mensagens de negócio das automações (Receitas Bloqueadas, OBs Paradas Fase etc.), que resolvem o destino via `-ConfigPath`/`whatsapp-config.json` e continuavam funcionando normalmente. Nova env var `AUTOMACAO_ALERT_WHATSAPP` (padrão análogo a `AUTOMACAO_ALERT_EMAIL`, não versionada) passada via `-Phone`; sem ela configurada o alerta de WhatsApp é suprimido com warning em vez de falhar silenciosamente. Não afeta o fix de `whatsapp-web.js` 1.34.7 do [1.3.91] (bug distinto, já corrigido).
+- **`Tools/Get-WhatsAppGroups.ps1` (modo `LIST_GROUPS`) quebrado pelo upgrade do `whatsapp-web.js` para 1.34.7**: `window.Store` deixou de ficar disponível a tempo no contexto da página (`Cannot read properties of undefined (reading 'Chat')`), e o mesmo sintoma reproduz com a API pública `client.getChats()` da biblioteca — não é bug específico do script, é regressão da própria lib nessa versão do WhatsApp Web. Não corrigido nesta mudança (fora do escopo do alerta do Hub); ID de grupo necessário para esta correção foi obtido via evento `message_create` (não depende do Store). Ver achado para follow-up.
+
 ## [1.3.91] - 14/09/2026
 
 ### Corrigido
