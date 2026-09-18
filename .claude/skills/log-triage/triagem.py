@@ -38,6 +38,10 @@ STATUS_FALHA = ("ERROR", "TIMEOUT", "TERMINATED", "FAILED_BY_REBOOT")
 LIMITE_LINHAS_LOG = 5000
 LIMITE_POR_PAGINA = 200
 
+# Status que representam entrega efetiva (espelha EXECUTION_DELIVERED_STATUSES).
+# PARTIAL conta: o entregavel principal saiu, so um canal secundario degradou.
+STATUS_ENTREGUE = ("SUCCESS", "PARTIAL")
+
 # Formato em que a API devolve datas (`format_dt_br`, schemas/common.py). Nao e
 # ISO: ordenar essa string direto ordena por dia do mes antes do mes e do ano.
 FORMATO_DATA_API = "%d/%m/%Y %H:%M:%S"
@@ -316,6 +320,80 @@ def _coletar_falhas(
     return falhas, erros
 
 
+def _ultima_entrega(automation_id: int) -> tuple[str | None, str | None]:
+    """Execucao entregue mais recente de uma automacao, sem filtro de janela.
+
+    Devolve `(finished_at, status)`. Deliberadamente SEM `date_from`: a pergunta
+    e "esta automacao voltou a funcionar?", e a resposta pode estar fora da
+    janela triada.
+    """
+    melhor: dict[str, Any] | None = None
+    for status in STATUS_ENTREGUE:
+        rota = (
+            f"/api/executions?automation_id={automation_id}"
+            f"&status={status}&per_page=1&page=1"
+        )
+        try:
+            pagina = _requisicao(rota)
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+            continue
+        itens = pagina.get("items") or []
+        if not itens:
+            continue
+        candidato = itens[0]
+        if melhor is None or _ordenar_por_fim(candidato) > _ordenar_por_fim(melhor):
+            melhor = candidato
+    if melhor is None:
+        return None, None
+    return str(melhor.get("finished_at") or ""), str(melhor.get("status") or "")
+
+
+def _estado_por_automacao(falhas: list[dict[str, Any]]) -> dict[str, Any]:
+    """Cruza cada automacao que falhou na janela com sua ultima entrega.
+
+    Sem isto, o relatorio so mostrava falhas e o agente inferia recuperacao por
+    AUSENCIA de falha nova -- que tambem acontece com automacao desabilitada, com
+    cron que nao disparou ou com worker que nao pegou a tarefa. `recuperada`
+    responde com evidencia positiva: existe entrega posterior a ultima falha.
+    """
+    estado: dict[str, Any] = {}
+    for falha in falhas:
+        nome = str(falha.get("automacao") or "Desconhecido")
+        fim = _ordenar_por_fim(falha)
+        registro = estado.get(nome)
+        if registro is None:
+            estado[nome] = {
+                "automation_id": falha.get("automation_id"),
+                "falhas_na_janela": 1,
+                "ultima_falha": falha.get("finished_at"),
+                "_fim": fim,
+            }
+            continue
+        registro["falhas_na_janela"] += 1
+        if fim > registro["_fim"]:
+            registro["ultima_falha"] = falha.get("finished_at")
+            registro["_fim"] = fim
+
+    for registro in estado.values():
+        automation_id = registro.get("automation_id")
+        ultima_falha = registro.pop("_fim")
+        if not isinstance(automation_id, int):
+            registro["recuperada"] = None
+            registro["ultimo_sucesso"] = None
+            continue
+        entrega, status_entrega = _ultima_entrega(automation_id)
+        registro["ultimo_sucesso"] = entrega
+        registro["ultimo_sucesso_status"] = status_entrega
+        if entrega is None:
+            # Nenhuma entrega registrada: nao e "nao recuperada", e "nunca
+            # entregou" -- distincao que muda o diagnostico.
+            registro["recuperada"] = False
+            continue
+        fim_entrega = _ordenar_por_fim({"finished_at": entrega})
+        registro["recuperada"] = fim_entrega > ultima_falha
+    return estado
+
+
 def _contar_reincidencia(falhas: list[dict[str, Any]]) -> dict[str, int]:
     """Falhas por automacao, da mais reincidente para a menos."""
     reincidencia: dict[str, int] = {}
@@ -363,6 +441,7 @@ def cmd_coletar(horas: int, linhas: int, incluir_bruto: bool) -> int:
         },
         "total_falhas": len(falhas),
         "reincidencia_por_automacao": _contar_reincidencia(falhas),
+        "estado_por_automacao": _estado_por_automacao(falhas),
         "falhas": falhas,
     }
     # Coleta incompleta e dado de primeira classe: sem isto, um relatorio ao qual

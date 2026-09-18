@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.97] - 18/09/2026
+
+### Adicionado
+
+- **`estado_por_automacao` no relatório de triagem: recuperação confirmada por evidência positiva.** A primeira execução real do agendado de plantão expôs o vazio: o `coletar` só retornava falhas, então o agente inferia recuperação por *ausência de falha nova* e escreveu "nenhuma execução mais recente registrada — parece estabilizado" sobre a OBP-04 quando havia três `SUCCESS` posteriores (17/09 18:35, 17/09 22:31, 18/09 05:32) que ele não tinha como ver. A conclusão acertou por sorte; o raciocínio era cego. Ausência de falha também é o que se observa com automação desabilitada, cron que não disparou ou worker que não pegou a tarefa — não é prova de nada. O relatório agora traz, por automação que falhou na janela, `falhas_na_janela`, `ultima_falha`, `ultimo_sucesso` (+ `ultimo_sucesso_status`) e `recuperada`, com o último sucesso buscado **sem filtro de janela** de propósito, porque a evidência de recuperação costuma estar fora dela. `recuperada: true` significa entrega posterior à última falha; `false` com `ultimo_sucesso` preenchido é automação ainda quebrada (onde requeue e PR se justificam); `false` com `ultimo_sucesso: null` é automação que nunca entregou; `null` é indeterminado (sem `automation_id`) e não deve ser lido como recuperada. A `SKILL.md` passou a exigir a checagem desse campo **antes** de aplicar a tabela de `recovery_action` — agir sobre falha de automação já recuperada gasta orçamento de retry e abre PR para defeito já corrigido, que é exatamente o risco que a primeira execução correu.
+
 ## [1.3.96] - 18/09/2026
 
 ### Adicionado
