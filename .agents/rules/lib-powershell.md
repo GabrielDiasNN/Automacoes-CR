@@ -1,3 +1,8 @@
+---
+trigger: glob
+globs: lib/**,Infrastructure/**,**/*.ps1,**/*.psm1
+---
+
 # Regra de Workspace: Bibliotecas PowerShell e Infraestrutura
 
 Aplica-se a arquivos em `lib/`, `Infrastructure/` e scripts PowerShell (`.ps1`, `.psm1`).

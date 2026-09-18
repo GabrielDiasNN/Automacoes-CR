@@ -1,5 +1,12 @@
 ---
-description: Execução ponta a ponta da rotina de versionamento e entrega: criar branch descritiva, commit atômico em PT-BR, abrir PR, acompanhar o CI em tempo real, corrigir eventuais falhas, realizar o merge (squash) e remover a branch.
+name: fluxo-pr-completo
+description: >-
+  Use este workflow para o ciclo ponta a ponta de entrega de Pull Requests no
+  Hub de Automacoes: criar branch descritiva, realizar commit atomico em
+  PT-BR, abrir o PR, acompanhar o CI em tempo real, corrigir eventuais
+  falhas, executar o merge via squash e remover a branch ao final. Aplica-se
+  sempre que for necessario versionar e entregar uma mudanca de codigo do
+  inicio ao fim.
 ---
 
 # Workflow: Ciclo Completo de PR (Branch → Commit → PR → CI → Merge → Cleanup)

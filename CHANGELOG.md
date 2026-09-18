@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.95] - 18/09/2026
+
+### Corrigido
+
+- **Gatilhos das regras de `.agents/rules/` deixavam buracos de cobertura.** As quatro regras modulares ganharam frontmatter `trigger: glob`, trocando carregamento incondicional por carregamento condicional — mas dois globs não cobriam o escopo que as próprias regras declaram. (a) `lib-powershell.md` declara no corpo que se aplica a `lib/`, `Infrastructure/` e **todos** os scripts `.ps1`/`.psm1`, e o glob era só `lib/**`: editar `Infrastructure/Start-Orchestrator.ps1`, `Tools/*.ps1` ou qualquer `run.ps1` de automação de domínio não carregava a regra, perdendo os contratos de `.ps1`/`.psm1` em UTF-8 with BOM e da proibição de `Get-Process` para filtrar por linha de comando no PowerShell 5.1 (`CommandLine` não é exposta). Ampliado para `lib/**,Infrastructure/**,**/*.ps1,**/*.psm1`. (b) `producao-beneficiamento.md` usava `Produção Beneficimento/**`, o único glob do conjunto com espaço literal: o campo `globs` desses formatos é lista delimitada, e um parser que separe por espaço (além de vírgula) fatiaria o padrão em dois pedaços que não casam com nada — a regra simplesmente não dispararia, sem erro visível. Trocado o espaço pelo curinga (`Produção*Beneficimento/**`), que sobrevive a qualquer uma das duas estratégias de parsing; **não** reverter para o espaço literal nem envolver em aspas (aspas são removidas por um parser YAML real e preservadas por um parser por regex, quebrando o casamento no segundo caso).
+
 ## [1.3.94] - 17/09/2026
 
 ### Corrigido

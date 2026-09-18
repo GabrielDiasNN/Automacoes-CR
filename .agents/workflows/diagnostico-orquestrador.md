@@ -1,3 +1,13 @@
+---
+name: diagnostico-orquestrador
+description: >-
+  Use este workflow quando for necessario diagnosticar a saude do Orchestrator
+  (FastAPI + Worker + SQLite WAL) antes de reiniciar processos, quando tarefas
+  ficarem presas em estado running ou pending, ou apos atualizacoes de schema
+  ou alteracoes em Orchestrator/app/. Cobre inspecao de integridade, smoke
+  testing e recuperacao segura do motor de automacao.
+---
+
 # Workflow: Diagnostico e Saude do Orchestrator
 
 Procedimento operacional para inspecao de integridade, smoke testing e recuperacao segura do motor de automacao (FastAPI + Worker + SQLite WAL).

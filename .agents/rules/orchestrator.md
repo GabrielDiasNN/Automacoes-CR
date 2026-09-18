@@ -1,3 +1,8 @@
+---
+trigger: glob
+globs: Orchestrator/**
+---
+
 # Regra de Workspace: Orchestrator (Backend FastAPI)
 
 Aplica-se ao desenvolvimento, testes e manutenção em `Orchestrator/`.
