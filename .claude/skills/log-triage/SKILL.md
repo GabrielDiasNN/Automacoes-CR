@@ -54,6 +54,26 @@ como relatório limpo. **Nenhuma decisão de requeue quando eles aparecem:**
 | `coleta_incompleta` + `erros_parciais` | um ou mais status de falha não foram listados; a contagem de reincidência está **subestimada** |
 | `logs_ilegiveis` | quantas falhas vieram sem log legível (cada uma traz `log_erro`) |
 
+### `estado_por_automacao` — a automação já se recuperou?
+
+Uma entrada por automação que falhou na janela, com `falhas_na_janela`,
+`ultima_falha`, `ultimo_sucesso` (+ `ultimo_sucesso_status`) e `recuperada`.
+O último sucesso é buscado **sem filtro de janela**, porque a evidência de
+recuperação pode estar fora dela.
+
+| `recuperada` | Leitura | O que fazer |
+|---|---|---|
+| `true` | há entrega **posterior** à última falha | a automação voltou a funcionar. Não requeue, não abra PR. Relate a causa e que já está estabilizada |
+| `false` com `ultimo_sucesso` preenchido | a última falha é mais recente que a última entrega | **ainda quebrada** — é aqui que requeue ou PR se justificam |
+| `false` com `ultimo_sucesso: null` | nunca entregou | automação nova ou quebrada desde sempre; escale, não requeue |
+| `null` | `automation_id` ausente, indeterminado | trate como desconhecido, não como recuperada |
+
+Ausência de falha nova **não** é prova de recuperação: também acontece com
+automação desabilitada, cron que não disparou ou worker que não pegou a tarefa.
+Só `recuperada: true` é evidência positiva. Confira este campo **antes** de
+decidir requeue ou PR — agir sobre falha de automação já recuperada gasta
+orçamento de retry e abre PR para defeito que já foi corrigido.
+
 Uma falha com `log_erro` tem `envelope: {}` e `pista: "indefinida"` **porque o
 log não foi lido**, não porque a execução não logou nada — são coisas
 diferentes, e só a primeira exige nova tentativa antes de qualquer decisão.
@@ -83,6 +103,10 @@ consome orçamento de retry.
 | `REVIEW_CHANNEL_STATE_BEFORE_REQUEUE` | `PARTIAL`: o entregável principal saiu. Nunca requeue (duplica entrega) — relate |
 | `REVIEW_WORKER_LOGS` | falha interna do worker; diagnostique e escale |
 | `NONE` | desfecho normal disfarçado de falha; não age |
+
+Antes de aplicar qualquer linha desta tabela, cheque `estado_por_automacao`: se
+`recuperada` é `true`, a automação já voltou a entregar e a `recovery_action`
+descreve um desfecho que **já passou** — relate a causa e pare aí.
 
 Lembre que `auto_retry_transient_failures` (scheduler, a cada 3 min) já
 reenfileira ERROR/TIMEOUT com `max_retries > 0`. Falha que chega à triagem com
