@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.98] - 18/09/2026
+
+### Adicionado
+
+- **Cobertura de bordas do coletor de triagem (`tests/test_log_triage_unit.py`, 39 testes).** O `triagem.py` foi para produção com zero teste: toda a verificação dos seis defeitos achados em review viveu em scripts ad-hoc descartáveis, e uma regressão em qualquer daquelas bordas passaria pelo CI em silêncio. Os testes cobrem o que dados de um dia qualquer não exercitam — ordenação cruzando mês e ano, paginação seguindo `pages`, teto `le=5000` do `limit`, `ge=1` do mínimo, erro de leitura de log distinguível de log vazio, `HTTPError` versus indisponibilidade real, `coleta_incompleta`, os quatro estados de `recuperada`, `PARTIAL` contando como entrega, e a classificação do defeito do engine WhatsApp caindo em `ambigua` (o log carrega `timeout` de handshake junto com o erro determinístico). Dois testes amarram o coletor ao backend: `STATUS_FALHA` e `STATUS_ENTREGUE` são comparados com `EXECUTION_FAILED_STATUSES` e `EXECUTION_DELIVERED_STATUSES` de `app.constants`, porque o coletor é script standalone e duplica as listas — divergência silenciosa ali faria a triagem ignorar uma classe de falha inteira. Nenhum teste toca a API real (toda requisição é substituída), e ficam em `Orchestrator/tests/` porque é o único caminho que o CI executa (`pytest "Orchestrator	ests"`), seguindo o precedente de `test_exit_code_contract.py`, que também audita arquivos de fora do `app/`.
+- **Validação por mutation testing manual.** Reintroduzi os oito defeitos (os seis do review, mais `recuperada` fixo em `True` e a assinatura do engine WhatsApp removida) e exigi que o teste correspondente falhasse. O primeiro ciclo teve um sobrevivente revelador: o teste de `_ordenar_por_fim` isolada continuava passando quando `_coletar_falhas` voltava a ordenar pela string crua — testava a função certa, mas não o ponto de uso, e é a ordem do relatório que o agente lê como "mais recentes primeiro". Coberto por `test_coletar_falhas_ordena_o_relatorio_cronologicamente`; segundo ciclo detectou 8 de 8.
+
 ## [1.3.97] - 18/09/2026
 
 ### Adicionado
