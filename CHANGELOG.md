@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.96] - 18/09/2026
+
+### Adicionado
+
+- **Triagem autônoma de falhas de execução (`log-triage`) + agendado de plantão.** Analisar por que uma automação falhou exigia abrir o dashboard, achar a execução, ler o log JSONL linha por linha e decidir a recuperação na mão — trabalho mecânico que o operador fazia três vezes por dia. Nova skill operacional `.claude/skills/log-triage/` com o coletor `triagem.py` (`coletar` monta relatório JSON da janela, `logs` traz o log cru de uma execução, `requeue` reenfileira pela rota oficial `POST /api/executions/{id}/requeue` com `requested_by=AGENTE_TRIAGEM` na trilha de auditoria). O relatório é construído em cima do que o Orchestrator já classifica — `recovery_action`/`failure_reason` do `EXIT_CODE_MAP`, `retry_count`/`max_retries`, `requeue_allowed`/`requeue_block_reason` — em vez de reinventar taxonomia de falha, e resume o envelope de log estruturado (`outcome_reason`, `steps_falhos`, `record_counts`, `trace_id`, `mensagens_erro`) porque jogar as linhas JSONL cruas (1-2 KB cada) na janela do agente afogava o diagnóstico no ruído; o log bruto virou `--bruto`, opt-in. A fronteira de autonomia está no `SKILL.md` e é ancorada na `recovery_action`: requeue só para causa transiente com `requeue_allowed`, nunca para `PARTIAL` (duplicaria entrega), nunca cego em `PREFLIGHT_FAILED` (o ambiente está quebrado), e defeito determinístico vira branch + PR — nunca commit em `main` nem merge. Reiniciar o Orchestrator, reautenticar sessão WhatsApp (exige QR), pausar automação, mexer no `.env` e `purge`/`backup`/`worker/recover` continuam checkpoint humano. A heurística `pista` nasceu classificando como transitória a falha de envio de mídia do WhatsApp (o log carrega o `timeout` do handshake junto com o `Data passed to getter must include an id property` do [1.3.94]): as assinaturas de defeito do engine foram adicionadas justamente para esse caso cair em `ambigua` e obrigar a leitura do log em vez de convidar a requeue cego.
+
 ## [1.3.95] - 18/09/2026
 
 ### Corrigido
