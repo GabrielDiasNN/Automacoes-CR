@@ -1,3 +1,8 @@
+---
+trigger: glob
+globs: Dashboard/**
+---
+
 # Regra de Workspace: Dashboard (Frontend SPA)
 
 Aplica-se ao desenvolvimento, manutenção e testes na pasta `Dashboard/`.

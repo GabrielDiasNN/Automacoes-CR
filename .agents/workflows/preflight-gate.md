@@ -1,3 +1,13 @@
+---
+name: preflight-gate
+description: >-
+  Use este workflow antes de qualquer git commit ou git push, ou apos concluir
+  refatoracoes ou correcoes de bugs, para executar de forma deterministica a
+  bateria de qualidade e governanca do Hub de Automacoes. Reproduz os jobs de
+  .github/workflows/governanca.yml e serve como gate de qualidade previsivel
+  antes de submeter alteracoes, branches ou Pull Requests.
+---
+
 # Workflow: Preflight e Quality Gate
 
 Workflow padronizado para execucao deterministica da bateria de qualidade e governanca antes de submeter alteracoes, branches ou Pull Requests no Hub de Automacoes.

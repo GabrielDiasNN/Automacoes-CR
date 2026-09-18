@@ -33,6 +33,21 @@ partir de `.agents/`.
 Caminhos absolutos não são alternativa: são proibidos pelo contrato do
 repositório (`CLAUDE.md` § Caminhos).
 
+## Globs das regras — sem espaço literal
+
+Cada arquivo de `rules/` declara `trigger: glob` mais um `globs` delimitado. O
+glob precisa cobrir **todo** o escopo que o corpo da regra diz cobrir: um glob
+mais estreito que o texto não gera erro, só deixa a regra de fora exatamente
+onde ela importa.
+
+`producao-beneficiamento.md` aponta para um diretório cujo nome tem espaço
+(`Produção Beneficimento/`) e usa curinga no lugar dele
+(`Produção*Beneficimento/**`). Isso é deliberado: `globs` é lista delimitada, e
+um parser que separe por espaço além de vírgula fatiaria o padrão em dois
+pedaços que não casam com nada — falha silenciosa, a regra só não dispara.
+Aspas não resolvem: um parser YAML real as remove, um parser por regex as
+preserva dentro do valor e quebra o casamento.
+
 ## Limites conhecidos do `PreToolUse-Guard`
 
 O guard casa nomes de arquivo no texto do comando. Ele **não** resolve

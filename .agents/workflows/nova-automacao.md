@@ -1,3 +1,13 @@
+---
+name: nova-automacao
+description: >-
+  Use este workflow ao criar e registrar uma nova automacao no Hub de
+  Automacoes, garantindo scaffolding valido, manifesto
+  automation.manifest.json estruturado e registro no Orchestrator. Aplica-se
+  sempre que for necessario adicionar uma automacao nova ao repositorio, com
+  entrypoint padrao run.ps1 e leitura de credenciais via .env.
+---
+
 # Workflow: Criacao e Registro de Nova Automacao
 
 Roteiro padronizado para criar uma nova automacao no Hub de Automacoes com scaffolding valido, manifesto estruturado e registro no Orchestrator.

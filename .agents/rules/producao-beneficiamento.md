@@ -1,3 +1,8 @@
+---
+trigger: glob
+globs: Produção*Beneficimento/**
+---
+
 # Regra de Workspace: Produção Beneficiamento
 
 Aplica-se ao desenvolvimento e manutenção em `Produção Beneficimento/`.
