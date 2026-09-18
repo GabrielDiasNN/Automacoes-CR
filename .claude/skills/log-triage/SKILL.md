@@ -41,6 +41,24 @@ JSON no stdout (UTF-8) com `saude`, `total_falhas`,
 | `requeue_allowed`, `requeue_block_reason` | se a rota de requeue vai aceitar; `False` é veto, não obstáculo a contornar |
 | `envelope` | `outcome_reason`, `steps_falhos`, `record_counts`, `trace_id`, `mensagens_erro` do log JSONL |
 | `pista` | heurística de texto: `provavel_transitoria`, `provavel_deterministica`, `ambigua`, `indefinida` |
+| `log_erro` | **presente só quando o log não pôde ser lido** (429, 5xx, transporte) |
+
+### O relatório declara quando está incompleto
+
+Três campos de nível superior existem para que você não trate relatório cego
+como relatório limpo. **Nenhuma decisão de requeue quando eles aparecem:**
+
+| Campo | Significado |
+|---|---|
+| `janela_inicio` | timestamp ISO real do início da janela — confira contra `janela_horas` |
+| `coleta_incompleta` + `erros_parciais` | um ou mais status de falha não foram listados; a contagem de reincidência está **subestimada** |
+| `logs_ilegiveis` | quantas falhas vieram sem log legível (cada uma traz `log_erro`) |
+
+Uma falha com `log_erro` tem `envelope: {}` e `pista: "indefinida"` **porque o
+log não foi lido**, não porque a execução não logou nada — são coisas
+diferentes, e só a primeira exige nova tentativa antes de qualquer decisão.
+`coleta_incompleta` com reincidência aparentemente baixa é o caso clássico:
+requeue ali reenfileira o sintoma de um problema cujo tamanho você não mediu.
 
 `pista` é **pista**, não veredito: leia `envelope.mensagens_erro` antes de
 decidir. Para o log cru de uma execução:

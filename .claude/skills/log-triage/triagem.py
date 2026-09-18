@@ -32,6 +32,16 @@ ROOT = Path(__file__).resolve().parents[3]
 # descartado por congestionamento de queue_group, nao automacao que falhou).
 STATUS_FALHA = ("ERROR", "TIMEOUT", "TERMINATED", "FAILED_BY_REBOOT")
 
+# Tetos dos Query params de GET /api/executions e /{id}/logs
+# (Orchestrator/app/routers/executions.py). Passar acima deles nao e "pedir
+# mais": e 422, que antes virava relatorio silenciosamente cego.
+LIMITE_LINHAS_LOG = 5000
+LIMITE_POR_PAGINA = 200
+
+# Formato em que a API devolve datas (`format_dt_br`, schemas/common.py). Nao e
+# ISO: ordenar essa string direto ordena por dia do mes antes do mes e do ano.
+FORMATO_DATA_API = "%d/%m/%Y %H:%M:%S"
+
 # Assinaturas de log que caracterizam causa transitoria (rede, Oracle, lock).
 # Usadas apenas como PISTA para o agente: nenhuma decisao de requeue e tomada
 # por este script.
@@ -135,21 +145,47 @@ def _linhas_relevantes(linhas: list[str], maximo: int) -> list[str]:
     return uteis[-maximo:]
 
 
-def _buscar_logs(exec_id: str, linhas: int) -> list[str]:
-    janela = max(linhas * 3, linhas)
+def _ordenar_por_fim(falha: dict[str, Any]) -> datetime:
+    """Chave de ordenacao cronologica real a partir do `finished_at` da API.
+
+    `finished_at` chega como `DD/MM/YYYY HH:MM:SS`, entao comparar a string
+    ordenava por dia do mes: 30/09 vinha depois de 01/10, e a falha mais antiga
+    aparecia no topo da lista que o agente le como "mais recentes primeiro".
+    """
+    bruto = str(falha.get("finished_at") or "").strip()
+    try:
+        return datetime.strptime(bruto, FORMATO_DATA_API)
+    except ValueError:
+        # Execucao sem `finished_at` (ou em formato inesperado) vai para o fim
+        # da lista ordenada por recencia, nao para o topo.
+        return datetime.min
+
+
+def _buscar_logs(exec_id: str, linhas: int) -> tuple[list[str], str | None]:
+    """Ultimas linhas do log de uma execucao, mais o erro que impediu a leitura.
+
+    Devolve `(linhas, erro)`. O erro e explicito porque antes qualquer 429, 5xx
+    ou 422 virava lista vazia: o relatorio saia com `envelope: {}` e
+    `pista: "indefinida"`, indistinguivel de execucao que realmente nao logou
+    nada, e o agente concluia "o log nao diz nada" em vez de "nao consegui ler".
+    """
+    # `linhas * 3` estourava o teto `le=5000` do Query acima de 1666 linhas, e
+    # `linhas <= 0` violava `ge=1`; nos dois casos a API respondia 422.
+    janela = min(max(linhas, 1) * 3, LIMITE_LINHAS_LOG)
     try:
         cabeca = _requisicao("/api/executions/" + exec_id + "/logs?offset=0&limit=1")
         total = int(cabeca.get("total_lines", 0))
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-        return []
-    offset = max(0, total - janela)
-    rota = "/api/executions/" + exec_id + f"/logs?offset={offset}&limit={janela}"
-    try:
+        offset = max(0, total - janela)
+        rota = "/api/executions/" + exec_id + f"/logs?offset={offset}&limit={janela}"
         pagina = _requisicao(rota)
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError):
-        return []
+    except urllib.error.HTTPError as exc:
+        return [], f"HTTP {exc.code} ao ler o log ({exc.reason})"
+    except (urllib.error.URLError, OSError) as exc:
+        return [], "transporte ao ler o log: " + str(exc)
+    except ValueError as exc:
+        return [], "resposta invalida ao ler o log: " + str(exc)
     brutas = pagina.get("lines") or []
-    return _linhas_relevantes([str(linha) for linha in brutas], linhas)
+    return _linhas_relevantes([str(linha) for linha in brutas], max(linhas, 1)), None
 
 
 def _resumir_envelope(linhas: list[str]) -> dict[str, Any]:
@@ -192,7 +228,7 @@ def _resumir_envelope(linhas: list[str]) -> dict[str, Any]:
 
 
 def _resumir(
-    item: dict[str, Any], log: list[str], incluir_bruto: bool
+    item: dict[str, Any], log: list[str], log_erro: str | None, incluir_bruto: bool
 ) -> dict[str, Any]:
     """Achata uma execucao da API no registro de triagem."""
     registro: dict[str, Any] = {
@@ -214,6 +250,10 @@ def _resumir(
         "pista": _classificar(log),
         "envelope": _resumir_envelope(log),
     }
+    # Presente somente quando a leitura do log falhou. Sem este campo, "log
+    # ilegivel" e "log vazio" chegavam identicos ao agente.
+    if log_erro:
+        registro["log_erro"] = log_erro
     # O log bruto e opcional de proposito: cada linha JSONL tem 1-2 KB e o
     # `envelope` ja carrega outcome_reason, steps falhos e mensagens de erro.
     # Incluir tudo por padrao enchia a janela do agente agendado de ruido.
@@ -222,19 +262,58 @@ def _resumir(
     return registro
 
 
+def _listar_status(desde: str, status: str) -> tuple[list[dict[str, Any]], str | None]:
+    """Todas as paginas de um status de falha na janela.
+
+    Antes a coleta pedia uma unica pagina com `per_page=200` (o teto do Query) e
+    ignorava `pages`, entao uma automacao em crashloop com 350 falhas rendia 200
+    registros e um `total_falhas` que reportava 200 como se fosse o total --
+    justamente no cenario em que a contagem de reincidencia decide entre
+    requeue e "isto e defeito, abra PR".
+    """
+    itens: list[dict[str, Any]] = []
+    pagina_atual = 1
+    while True:
+        rota = (
+            f"/api/executions?status={status}&per_page={LIMITE_POR_PAGINA}"
+            f"&page={pagina_atual}&date_from={desde}"
+        )
+        try:
+            pagina = _requisicao(rota)
+        except urllib.error.HTTPError as exc:
+            return itens, f"{status}: HTTP {exc.code} ({exc.reason})"
+        except (urllib.error.URLError, OSError) as exc:
+            return itens, f"{status}: transporte ({exc})"
+        itens.extend(pagina.get("items") or [])
+        try:
+            total_paginas = int(pagina.get("pages", 1))
+        except (TypeError, ValueError):
+            total_paginas = 1
+        if pagina_atual >= total_paginas:
+            return itens, None
+        pagina_atual += 1
+
+
 def _coletar_falhas(
     desde: str, linhas: int, incluir_bruto: bool
-) -> list[dict[str, Any]]:
-    """Varre cada status de falha e devolve os registros de triagem."""
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Varre cada status de falha e devolve os registros e os erros parciais.
+
+    Erro em um status nao aborta a coleta dos outros: antes, um 422 pontual
+    descartava tudo que ja tinha sido coletado e o relatorio saia como se a API
+    estivesse fora do ar.
+    """
     falhas: list[dict[str, Any]] = []
+    erros: list[str] = []
     for status in STATUS_FALHA:
-        rota = f"/api/executions?status={status}&per_page=200&date_from={desde}"
-        pagina = _requisicao(rota)
-        for item in pagina.get("items") or []:
-            log = _buscar_logs(str(item.get("id")), linhas)
-            falhas.append(_resumir(item, log, incluir_bruto))
-    falhas.sort(key=lambda falha: str(falha.get("finished_at") or ""), reverse=True)
-    return falhas
+        itens, erro = _listar_status(desde, status)
+        if erro:
+            erros.append(erro)
+        for item in itens:
+            log, log_erro = _buscar_logs(str(item.get("id")), linhas)
+            falhas.append(_resumir(item, log, log_erro, incluir_bruto))
+    falhas.sort(key=_ordenar_por_fim, reverse=True)
+    return falhas, erros
 
 
 def _contar_reincidencia(falhas: list[dict[str, Any]]) -> dict[str, int]:
@@ -248,22 +327,34 @@ def _contar_reincidencia(falhas: list[dict[str, Any]]) -> dict[str, int]:
 
 def cmd_coletar(horas: int, linhas: int, incluir_bruto: bool) -> int:
     """Monta o relatorio de triagem em JSON no stdout."""
-    # `date().isoformat()` e nao `%d/%m/%Y`: este valor nao e exibicao, e o
-    # parametro `date_from` de GET /api/executions, que o backend parseia em
-    # ISO. A regra de datas do repositorio governa data para humano; aqui a
-    # data e contrato de API.
-    desde = (datetime.now() - timedelta(hours=horas)).date().isoformat()
+    # `isoformat()` com a HORA, nao `.date()`: `date_from` e parseado com
+    # `datetime.fromisoformat` no backend e aceita timestamp completo. Cortar a
+    # hora fazia `--horas 14` as 08:00 comecar a meia-noite do dia anterior --
+    # janela real de ~32 h com `janela_horas` reportando 14, e o agente (que tem
+    # requeue autonomo e raciocina sobre "nao reincidente na janela") reavaliando
+    # falha que a execucao das 19:00 ja tinha tratado.
+    inicio = datetime.now() - timedelta(hours=horas)
+    desde = inicio.isoformat(timespec="seconds")
     try:
         saude = _requisicao("/api/system/health/full")
-        falhas = _coletar_falhas(desde, linhas, incluir_bruto)
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
+    except urllib.error.HTTPError as exc:
+        # HTTPError ANTES de URLError, de quem e subclasse: a API RESPONDEU (429
+        # do RateLimitMiddleware, 500 de health degradado). Dizer "nao respondeu"
+        # aqui fazia o agente agendado parar e reportar que o Orchestrator estava
+        # fora do ar -- mesma distincao que driver.py:88 preserva.
+        erro = {"erro": f"API respondeu HTTP {exc.code} ({exc.reason}) em {BASE}"}
+        print(json.dumps(erro, ensure_ascii=False))
+        return 1
+    except (urllib.error.URLError, OSError) as exc:
         erro = {"erro": "API nao respondeu em " + BASE + ": " + str(exc)}
         print(json.dumps(erro, ensure_ascii=False))
         return 1
 
-    relatorio = {
+    falhas, erros_parciais = _coletar_falhas(desde, linhas, incluir_bruto)
+    relatorio: dict[str, Any] = {
         "gerado_em": datetime.now().isoformat(timespec="seconds"),
         "janela_horas": horas,
+        "janela_inicio": desde,
         "saude": {
             "database": saude.get("database"),
             "scheduler": saude.get("scheduler"),
@@ -274,16 +365,28 @@ def cmd_coletar(horas: int, linhas: int, incluir_bruto: bool) -> int:
         "reincidencia_por_automacao": _contar_reincidencia(falhas),
         "falhas": falhas,
     }
+    # Coleta incompleta e dado de primeira classe: sem isto, um relatorio ao qual
+    # faltava um status inteiro era indistinguivel de um relatorio completo, e o
+    # agente decidia requeue sobre contagem de reincidencia subestimada.
+    if erros_parciais:
+        relatorio["coleta_incompleta"] = True
+        relatorio["erros_parciais"] = erros_parciais
+    logs_ilegiveis = sum(1 for falha in falhas if falha.get("log_erro"))
+    if logs_ilegiveis:
+        relatorio["logs_ilegiveis"] = logs_ilegiveis
     print(json.dumps(relatorio, ensure_ascii=False, indent=2))
     return 0
 
 
 def cmd_logs(exec_id: str, linhas: int) -> int:
     """Imprime as ultimas linhas do log de uma execucao."""
-    log = _buscar_logs(exec_id, linhas)
-    if not log:
-        print("[FALHA] sem logs para " + exec_id + " (inexistente ou log vazio)")
+    log, erro = _buscar_logs(exec_id, linhas)
+    if erro:
+        print("[FALHA] " + exec_id + ": " + erro)
         return 1
+    if not log:
+        print("[OK] " + exec_id + " nao registrou log (execucao sem saida).")
+        return 0
     print("\n".join(log))
     return 0
 
@@ -304,14 +407,30 @@ def cmd_requeue(exec_id: str, motivo: str) -> int:
     return 0
 
 
+def _inteiro_positivo(valor: str) -> int:
+    """Valida `--horas`/`--linhas` na borda do CLI.
+
+    Clampar silenciosamente `--linhas 0` para o minimo entregava um relatorio
+    sintaticamente valido e sem diagnostico nenhum (nenhum `execution.end` cabe
+    em 3 linhas). Recusar na entrada diz ao operador o que aconteceu.
+    """
+    try:
+        numero = int(valor)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"'{valor}' nao e um inteiro.") from exc
+    if numero < 1:
+        raise argparse.ArgumentTypeError("deve ser >= 1.")
+    return numero
+
+
 def _construir_parser() -> argparse.ArgumentParser:
     """CLI com os tres subcomandos (coletar, logs, requeue)."""
     parser = argparse.ArgumentParser(description="Triagem de falhas do Orchestrator.")
     sub = parser.add_subparsers(dest="comando", required=True)
 
     p_col = sub.add_parser("coletar", help="Relatorio JSON das falhas da janela.")
-    p_col.add_argument("--horas", type=int, default=24)
-    p_col.add_argument("--linhas", type=int, default=60)
+    p_col.add_argument("--horas", type=_inteiro_positivo, default=24)
+    p_col.add_argument("--linhas", type=_inteiro_positivo, default=60)
     p_col.add_argument(
         "--bruto",
         action="store_true",
@@ -320,7 +439,7 @@ def _construir_parser() -> argparse.ArgumentParser:
 
     p_log = sub.add_parser("logs", help="Ultimas linhas do log de uma execucao.")
     p_log.add_argument("exec_id")
-    p_log.add_argument("--linhas", type=int, default=120)
+    p_log.add_argument("--linhas", type=_inteiro_positivo, default=120)
 
     p_req = sub.add_parser("requeue", help="Reenfileira uma execucao terminal.")
     p_req.add_argument("exec_id")
