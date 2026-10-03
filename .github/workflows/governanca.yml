@@ -651,7 +651,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: preparar-diff
-    if: needs.preparar-diff.outputs.has_md == 'true'
+    # `.gitignore` entra no gatilho porque o gate de diretrizes confere CLAUDE.local.md e TASKS.md nele.
+    if: needs.preparar-diff.outputs.has_md == 'true' || contains(needs.preparar-diff.outputs.changed_files_json, '.gitignore')
     permissions:
       contents: read
 

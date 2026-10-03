@@ -16,7 +16,7 @@ BeforeAll {
     $script:NodeDisponivel = [bool](Get-Command node -ErrorAction SilentlyContinue)
     # Base derivada do ambiente, nunca literal — o gate de portabilidade reprova
     # qualquer "C:\..." engessado no repositorio.
-    $script:BaseTeste = Join-Path $env:TEMP "wa-session-state-tests"
+    $script:BaseTeste = Join-Path ([System.IO.Path]::GetTempPath()) "wa-session-state-tests"
 
     # Argumentos vao por argv, nunca interpolados no literal JS: um %TEMP% com aspas
     # quebraria o script e o teste falharia por sintaxe, nao por regressao.

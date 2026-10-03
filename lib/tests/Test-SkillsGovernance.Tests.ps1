@@ -90,7 +90,9 @@ BeforeAll {
     }
 }
 
-Describe "Test-SkillsGovernance — mirror .agents/skills" {
+# Somente Windows: o contrato testado aqui e o junction (LinkType Junction, New-Item -ItemType Junction)
+# e o powershell.exe. Em Linux/macOS (pwsh Core fora do Windows) o bloco fica Skipped, nao falha.
+Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
     AfterEach {
         # Directory.Delete remove a junction sem seguir o link. Deixar para o cleanup do
         # TestDrive arriscaria um Remove-Item -Recurse atravessando o link ate' a fonte.

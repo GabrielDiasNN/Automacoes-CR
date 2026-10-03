@@ -7,6 +7,14 @@
       "Bash(git push * --force*)",
       "Bash(git push * -f)",
       "Bash(git checkout -- *)",
+      "Bash(git * reset --hard*)",
+      "Bash(git * push * --force*)",
+      "Bash(git * push * -f)",
+      "Bash(git * checkout -- *)",
+      "PowerShell(git * reset --hard*)",
+      "PowerShell(git * push * --force*)",
+      "PowerShell(git * push * -f)",
+      "PowerShell(git * checkout -- *)",
       "PowerShell(git reset --hard*)",
       "PowerShell(git push --force*)",
       "PowerShell(git push -f*)",
@@ -109,7 +117,6 @@
     ]
   },
   "enabledPlugins": {
-    "claude-code-setup@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true

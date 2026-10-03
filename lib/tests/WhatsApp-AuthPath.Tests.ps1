@@ -24,7 +24,9 @@ BeforeAll {
     Import-Module (Join-Path $script:LibRoot "Lib-Process.psm1") -Force
 }
 
-Describe "Get-WhatsAppAuthPath" {
+# Somente Windows: o contrato testado e a resolucao de caminho do Windows (%LOCALAPPDATA%, barra invertida,
+# paridade com o Node). Em Linux/macOS (pwsh Core fora do Windows) o bloco fica Skipped, nao falha.
+Describe "Get-WhatsAppAuthPath" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
 
     It "resolve para fora da arvore do repositorio" {
         $caminho = Get-WhatsAppAuthPath
@@ -78,7 +80,7 @@ Describe "Get-WhatsAppAuthPath" {
     }
 }
 
-Describe "Paridade entre os resolvedores PowerShell e Node" {
+Describe "Paridade entre os resolvedores PowerShell e Node" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
     # A paridade so importa nos casos DEGRADADOS: no default os dois sempre
     # concordaram. Override relativo e override com espaco eram justamente onde
     # divergiam — e divergir significa pedir QR code em producao.
@@ -121,7 +123,7 @@ Describe "Paridade entre os resolvedores PowerShell e Node" {
     }
 }
 
-Describe "Trava anti-regressao do caminho da sessao" {
+Describe "Trava anti-regressao do caminho da sessao" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
 
     It "<_> nao reconstroi o caminho da sessao manualmente" -ForEach $FontesQueResolvemOCaminho {
         $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)

@@ -38,9 +38,14 @@ fi
 
 # Tools/ValidarAutomacoes.ps1 chama `powershell` (PS 5.1 do Windows); no Linux o alias aponta para o pwsh,
 # senão a etapa de skills do gate de governança (inclusive o hook Stop) falha por ambiente.
-if command -v pwsh >/dev/null 2>&1 && ! command -v powershell >/dev/null 2>&1; then
-  ln -s "$(command -v pwsh)" /usr/local/bin/powershell 2>/dev/null \
-    || echo "AVISO: não foi possível criar o alias 'powershell'; o gate de governança falhará nesta sessão." >&2
+# `powershell.exe` também: os testes de lib/tests disparam esse nome via Start-Process.
+if command -v pwsh >/dev/null 2>&1; then
+  for alias_name in powershell powershell.exe; do
+    if ! command -v "$alias_name" >/dev/null 2>&1; then
+      ln -s "$(command -v pwsh)" "/usr/local/bin/$alias_name" 2>/dev/null \
+        || echo "AVISO: não foi possível criar o alias '$alias_name'; o gate de governança e parte dos testes de lib/tests falharão nesta sessão." >&2
+    fi
+  done
 fi
 
 # Módulos PowerShell dos gates: Pester 5.7.1 (versão do CI) e PSScriptAnalyzer (Test-PowerShellGovernance).
