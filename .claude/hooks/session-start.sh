@@ -65,7 +65,7 @@ if command -v pwsh >/dev/null 2>&1; then
       if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
       Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
       Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force" >/dev/null 2>&1 \
-      || echo "AVISO: PSScriptAnalyzer não instalado (powershellgallery.com bloqueado pela rede do ambiente); Test-PowerShellGovernance ficará sem análise estática." >&2
+      || echo "AVISO: PSScriptAnalyzer não instalado (libere www.powershellgallery.com e cdn.powershellgallery.com na rede do ambiente); Test-PowerShellGovernance ficará sem análise estática." >&2
   fi
 fi
 
