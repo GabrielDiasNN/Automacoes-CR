@@ -24,8 +24,9 @@ BeforeAll {
     Import-Module (Join-Path $script:LibRoot "Lib-Process.psm1") -Force
 }
 
-# Somente Windows: o contrato testado e a resolucao de caminho do Windows (%LOCALAPPDATA%, barra invertida,
-# paridade com o Node). Em Linux/macOS (pwsh Core fora do Windows) o bloco fica Skipped, nao falha.
+# Os dois primeiros blocos sao somente Windows: o contrato testado e a resolucao de caminho do Windows
+# (%LOCALAPPDATA%, barra invertida, paridade com o Node). Em Linux/macOS (pwsh Core fora do Windows) ficam
+# Skipped, nao falham. O bloco "Trava anti-regressao" so le fontes e roda em qualquer SO.
 Describe "Get-WhatsAppAuthPath" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
 
     It "resolve para fora da arvore do repositorio" {
@@ -123,7 +124,7 @@ Describe "Paridade entre os resolvedores PowerShell e Node" -Skip:($PSVersionTab
     }
 }
 
-Describe "Trava anti-regressao do caminho da sessao" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
+Describe "Trava anti-regressao do caminho da sessao" {
 
     It "<_> nao reconstroi o caminho da sessao manualmente" -ForEach $FontesQueResolvemOCaminho {
         $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)

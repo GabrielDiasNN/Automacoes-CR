@@ -20,7 +20,27 @@
       "PowerShell(git push -f*)",
       "PowerShell(git push * --force*)",
       "PowerShell(git push * -f)",
-      "PowerShell(git checkout -- *)"
+      "PowerShell(git checkout -- *)",
+      "Bash(git push * +*)",
+      "Bash(git * push * +*)",
+      "Bash(git clean *-f*)",
+      "Bash(git * clean *-f*)",
+      "Bash(git branch -D*)",
+      "Bash(git * branch -D*)",
+      "Bash(git restore .)",
+      "Bash(git restore -- .)",
+      "Bash(git * restore .)",
+      "Bash(git * restore -- .)",
+      "PowerShell(git push * +*)",
+      "PowerShell(git * push * +*)",
+      "PowerShell(git clean *-f*)",
+      "PowerShell(git * clean *-f*)",
+      "PowerShell(git branch -D*)",
+      "PowerShell(git * branch -D*)",
+      "PowerShell(git restore .)",
+      "PowerShell(git restore -- .)",
+      "PowerShell(git * restore .)",
+      "PowerShell(git * restore -- .)"
     ]
   },
   "hooks": {

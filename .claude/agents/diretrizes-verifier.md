@@ -15,6 +15,6 @@ Verifique, nesta ordem:
 3. **Fonte única**: a mudança não duplica conteúdo cuja fonte única é outra (`AGENTS.md § Regras de Encoding`, skill `karpathy-guidelines`, `docs/governance-contracts.md`).
 4. **Não é enforcement**: regra de bloqueio real (permissão, hook) não deve existir só como texto em `CLAUDE.md`; sinalize.
 5. **Sessão do usuário**: o arquivo não pede effort, `/fast`, `ultrathink` ou "pense passo a passo".
-6. **Formato**: UTF-8 sem BOM e EOL igual ao original em `.md`; títulos e ordem das seções preservados.
+6. **Formato**: títulos e ordem das seções preservados. BOM e EOL (UTF-8 sem BOM e EOL igual ao original em `.md`) não se conferem só com Read/Grep/Glob: peça ao agente principal o resultado de `Tools/Test-SourceEncoding.ps1` e marque como não confirmado se ele não vier.
 
 Reporte apenas achados reais, cada um com `arquivo:linha`, a regra violada (número acima) e o que corrigir. Se nada divergir, diga apenas "sem divergências" e liste o que você leu. Marque o que não conseguiu confirmar e onde procurou.

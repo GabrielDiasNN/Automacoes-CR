@@ -114,8 +114,8 @@ Skills globais compartilhadas obrigatórias:
 - Autorização permanente do dono: instale sem perguntar as dependências necessárias para analisar ou validar (pacotes dos locks do repositório, módulos PowerShell dos gates, ferramentas de lint e teste). Limites: fonte oficial (PyPI, npm, NuGet, repositório da Microsoft), versão do lock ou do CI quando existir, escopo de venv, de usuário ou do contêiner em nuvem; nunca instalar fora do venv do projeto na máquina que roda o Orchestrator em produção, nem com credencial no comando. Barreira de rede ou do classificador continua valendo: peça a liberação do host em vez de contornar.
 - Permissão ou ação negada pelo harness, pelo classificador ou pelo usuário é parada, não obstáculo: não refaça o mesmo resultado por outra ferramenta, em partes menores ou com outra sintaxe. Conclua o que não depende dela, registre o bloqueio e peça a decisão.
 - Edição paralela por subagentes só com `isolation: worktree` e escopos de arquivo disjuntos; o agente principal refaz o diff e confere o hash de cada entrega.
-- Para conferir mudança em arquivo de diretriz, use o subagente somente leitura `diretrizes-verifier`; `Tools/Test-AgentGuidelines.ps1` (etapa do `/preflight`) cobre o que é mecânico.
-- Os subagentes revisores de `.claude/agents/` têm `tools:` restrito (somente leitura; o `changelog-reviewer` acrescenta `Bash` só para `git diff`); correção de achado é feita pelo agente principal.
+- Para conferir mudança em arquivo de diretriz, use o subagente somente leitura `diretrizes-verifier`; `Tools/Test-AgentGuidelines.ps1` cobre o que é mecânico (etapa do `/preflight` e gate do CI, job `markdown`).
+- Os subagentes revisores de `.claude/agents/` declaram `tools:` restrito (`Read, Grep, Glob`), sem `Edit` nem `Write`; correção de achado é feita pelo agente principal. Exceção: o `changelog-reviewer` também tem `Bash` para rodar `git diff`, e `Bash` não é restrito por mecanismo a esse comando, então esse agente não é somente leitura por garantia, só por instrução.
 
 ## Contrato Compartilhado Entre Agentes
 
