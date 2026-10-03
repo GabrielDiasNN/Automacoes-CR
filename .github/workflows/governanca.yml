@@ -666,6 +666,13 @@ jobs:
         run: |
           ./Tools/Fix-MarkdownStyle.ps1 -DryRun
 
+      # Diretrizes de agente (CLAUDE.md, AGENTS.md, subagentes): tamanho, frases de
+      # "pensar mais", effort em arquivo de contexto, imports @ e tools: dos subagentes.
+      - name: Validar diretrizes de agente
+        shell: pwsh
+        run: |
+          ./Tools/Test-AgentGuidelines.ps1 -RootPath .
+
   resumo-final:
     name: Resumo final
     runs-on: ubuntu-latest

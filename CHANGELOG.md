@@ -13,14 +13,19 @@
 - **`AGENTS.md § Modo de Trabalho`** ganha quatro regras: autorização permanente do dono para instalar dependências de análise e validação (fonte oficial, versão do lock ou do CI, escopo de venv, usuário ou contêiner; nunca fora do venv na máquina de produção; barreira de rede ou do classificador continua valendo), permissão ou ação negada é parada (não se refaz o resultado por outro caminho; conclui-se o que não depende dela, registra-se o bloqueio e pede-se a decisão), edição paralela só com `isolation: worktree` e escopos disjuntos, e uso do `diretrizes-verifier`.
 - **Alias `powershell` → `pwsh` no `session-start.sh`.** `Tools/ValidarAutomacoes.ps1` chama `powershell` (PS 5.1 do Windows); no Linux só há `pwsh`, e a etapa de skills do gate de governança, inclusive o hook `Stop`, falhava por ambiente. Com o alias, `ValidarAutomacoes.ps1 -OnlyGovernance -StagedOnly` termina com exit 0.
 
+- **Gate `Test-AgentGuidelines.ps1` no CI (job `markdown`).** Roda quando o diff toca `.md`, depois do `Fix-MarkdownStyle -DryRun`, e reprova o PR se uma diretriz violar as regras (tamanho, frases de "pensar mais", effort em arquivo de contexto, import `@` quebrado, subagente sem `tools:`). Documentado em `.claude/skills/ci-gates/SKILL.md`. Mudança só no `.gitignore` não dispara o job.
+- **`docs/governance-contracts.md § vários -Paths`.** Com `pwsh -File x.ps1 -Paths a,b` a lista chega como uma única string, os scripts de `Tools/` não a encontram em disco e aprovam com "nenhum arquivo para validar". Registrada a forma correta (`pwsh -Command "& ./Tools/x.ps1 -Paths 'a','b'"`) e o aviso para desconfiar dessa mensagem.
+
 ### Alterado
 
 - **Os 4 subagentes revisores** passam a declarar `tools:` (`Read, Grep, Glob`; o `changelog-reviewer` acrescenta `Bash` para `git diff`): eram só de revisão, mas herdavam Edit e Write.
 - **`.gitignore`** passa a ignorar `CLAUDE.local.md` (memória pessoal) e `TASKS.md` (checklist local de tarefa longa).
+- **Deriva de contagem de skills corrigida.** `AGENTS.md` e os comentários de `Tools/New-SkillMirrors.ps1` falavam em 6 skills operacionais e 7 de padrão; são 7 operacionais (`log-triage` não estava na lista) e 9 de padrão. A lógica do script já era derivada dos diretórios; só o texto estava desatualizado.
 - **`CLAUDE.md § Princípios Comportamentais`** documenta que `karpathy-guidelines` é skill global da máquina, não versionada aqui. O conteúdo continua sem ser duplicado (decisão do 1.3.58).
 
 ### Observação
 
+- Em Linux, 15 testes de `lib/tests/New-SkillMirrors.Tests.ps1` e `Test-SkillsGovernance.Tests.ps1` falham com `Win32Exception: powershell.exe`: disparam o PowerShell do Windows e criam junctions. É limitação de ambiente, anterior a esta mudança (não toquei na lógica); rodam no CI Windows.
 - Revisão de diretrizes: nenhuma frase de "pensar mais" ou de effort existe nos arquivos de diretriz; nada foi removido.
 
 ## [1.3.98] - 18/09/2026

@@ -19,8 +19,8 @@ Set-StrictMode -Version Latest
     expostas por mirrors, que NAO sao versionados (ver .gitignore):
       - `.gemini/skills`  -> junctions para `.github/skills`
       - `.agents/skills`  -> junctions para as skills operacionais de `.claude/skills`
-      - `.claude/skills/<nome>` (as 7 de padrao) -> junctions para `.github/skills`,
-        porque o Claude Code so descobre skill em `.claude/skills`. As 6 skills
+      - `.claude/skills/<nome>` (as 9 de padrao) -> junctions para `.github/skills`,
+        porque o Claude Code so descobre skill em `.claude/skills`. As 7 skills
         operacionais REAIS convivem no mesmo diretorio; este script nunca as toca
         e a varredura de orfaos e pulada para esse par.
 
@@ -46,7 +46,7 @@ $script:ExitCode = 0
 
 # Cada par declara uma fonte versionada e o mirror que a expoe a outro agente.
 # SkipOrphanScan: o mirror tem conteudo proprio legitimo alem dos junctions
-# (`.claude/skills` guarda as 6 skills operacionais reais), entao "diretorio no
+# (`.claude/skills` guarda as 7 skills operacionais reais), entao "diretorio no
 # mirror sem correspondente na fonte" NAO e orfao nesse par.
 $mirrorPairs = @(
     [pscustomobject]@{
