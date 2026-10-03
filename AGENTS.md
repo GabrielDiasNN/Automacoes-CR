@@ -111,6 +111,9 @@ Skills globais compartilhadas obrigatórias:
 - Em auditorias ou migrações amplas, divida entre subagentes apenas trabalhos independentes e confira a evidência de cada um antes de aceitar.
 - Ao fechar tarefas longas, termine com três títulos: **Bloqueado em mim**, **Alterado**, **Encontrado**.
 - Marque o que não conseguiu confirmar e diga onde procurou.
+- Permissão ou ação negada pelo harness, pelo classificador ou pelo usuário é parada, não obstáculo: não refaça o mesmo resultado por outra ferramenta, em partes menores ou com outra sintaxe. Conclua o que não depende dela, registre o bloqueio e peça a decisão.
+- Edição paralela por subagentes só com `isolation: worktree` e escopos de arquivo disjuntos; o agente principal refaz o diff e confere o hash de cada entrega.
+- Para conferir mudança em arquivo de diretriz, use o subagente somente leitura `diretrizes-verifier`; `Tools/Test-AgentGuidelines.ps1` (etapa do `/preflight`) cobre o que é mecânico.
 - Os subagentes revisores de `.claude/agents/` têm `tools:` restrito (somente leitura; o `changelog-reviewer` acrescenta `Bash` só para `git diff`); correção de achado é feita pelo agente principal.
 
 ## Contrato Compartilhado Entre Agentes

@@ -41,6 +41,12 @@ pre-commit hook; o CI não roda mypy. Limites exatos em `docs/governance-contrac
 pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 ```
 
+**Etapa 7 — Diretrizes de agente** (tamanho dos `CLAUDE.md`, frases de "pensar mais", effort em arquivo de
+contexto, imports `@`, `tools:` dos subagentes, `.gitignore`):
+```
+pwsh -File Tools\Test-AgentGuidelines.ps1 -RootPath .
+```
+
 Ao final, mostre um resumo: quantas etapas passaram e quais falharam, com o que corrigir antes do PR.
 
 **O que este preflight NÃO cobre** (rode à parte quando o diff tocar essas áreas):
