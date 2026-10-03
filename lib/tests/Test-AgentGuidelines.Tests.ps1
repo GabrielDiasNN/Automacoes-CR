@@ -1,5 +1,5 @@
 ﻿BeforeAll {
-    $script:Sut = Join-Path (Split-Path -Parent $PSScriptRoot) "Tools/Test-AgentGuidelines.ps1"
+    $script:Sut = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "Tools/Test-AgentGuidelines.ps1"
 
     function script:New-Fixture {
         param([string]$Dir)
