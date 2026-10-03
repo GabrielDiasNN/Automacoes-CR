@@ -39,7 +39,7 @@ BeforeAll {
         Copy-Item -Recurse -Force (Join-Path $script:RepoRoot ".github\skills") (Join-Path $basePath ".github\skills")
 
         # `.claude/skills` no repo real carrega os 7 junctions das skills de padrao
-        # (gitignored). A fixture replica o clone limpo: so' as 6 skills operacionais
+        # (gitignored). A fixture replica o clone limpo: so' as 7 skills operacionais
         # reais, sem os reparse points.
         $claudeSkillsDst = Join-Path $basePath ".claude\skills"
         New-Item -ItemType Directory -Force -Path $claudeSkillsDst | Out-Null
@@ -111,7 +111,7 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTabl
             return
         }
 
-        foreach ($skill in @("ci-gates", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
+        foreach ($skill in @("ci-gates", "log-triage", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
             New-MirrorJunction -BasePath $fixture -MirrorName $skill
         }
 
@@ -133,7 +133,7 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTabl
             return
         }
 
-        foreach ($skill in @("ci-gates", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
+        foreach ($skill in @("ci-gates", "log-triage", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
             New-MirrorJunction -BasePath $fixture -MirrorName $skill
         }
         foreach ($padrao in @("ai-native-development-standard", "automation-runtime-safety",
@@ -175,7 +175,7 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTabl
             return
         }
 
-        foreach ($skill in @("ci-gates", "new-automation", "quality-gate", "run-orchestrator", "run-tests")) {
+        foreach ($skill in @("ci-gates", "log-triage", "new-automation", "quality-gate", "run-orchestrator", "run-tests")) {
             New-MirrorJunction -BasePath $fixture -MirrorName $skill
         }
         New-MirrorCopy -BasePath $fixture -MirrorName "preflight"
@@ -226,7 +226,7 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTabl
         # pegar: Test-SourceEncoding so' checa BOM/mojibake, nao grafia ASCII deliberada.
         $fixture = New-SkillsFixture -Name "prosa-ascii"
         # Mirror `.agents/skills` e opcional; sem ele, isola-se o achado de acentuacao
-        # dos AGENTS_SKILL_MIRROR_MISSING que as 6 skills operacionais sem espelho dariam.
+        # dos AGENTS_SKILL_MIRROR_MISSING que as 7 skills operacionais sem espelho dariam.
         Remove-Item -LiteralPath (Join-Path $fixture ".agents") -Recurse -Force
         $alvo = Join-Path $fixture ".github\skills\automation-runtime-safety\SKILL.md"
         $conteudo = Get-Content -LiteralPath $alvo -Raw
