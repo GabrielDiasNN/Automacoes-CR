@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.99] - 03/10/2026
+
+### Adicionado
+
+- **`AGENTS.md § Modo de Trabalho`.** Contrato curto e comum aos agentes: continuar sem pedir quando o passo não depende do usuário; parar só antes de ação destrutiva, visível a terceiros ou fora do repositório; `TASKS.md` na raiz para tarefa longa; subagentes só para trabalho independente, com a evidência conferida; fechamento em três títulos (Bloqueado em mim, Alterado, Encontrado); marcar o que não foi confirmado. Vem da revisão de diretrizes (roteiro R3, R5–R8).
+- **`Dashboard/CLAUDE.md § Design — padrões a evitar`.** Cinco padrões a evitar na UI, ancorados em `tokens.css` (cor é sinal, sem gradiente decorativo salvo `.hazard`, sem emoji como ícone, IBM Plex self-hosted, tabela densa em vez de cards). Lista proposta como padrão, editável.
+
+### Alterado
+
+- **Os 4 subagentes revisores** passam a declarar `tools:` (`Read, Grep, Glob`; o `changelog-reviewer` acrescenta `Bash` para `git diff`): eram só de revisão, mas herdavam Edit e Write.
+- **`.gitignore`** passa a ignorar `CLAUDE.local.md` (memória pessoal) e `TASKS.md` (checklist local de tarefa longa).
+- **`CLAUDE.md § Princípios Comportamentais`** documenta que `karpathy-guidelines` é skill global da máquina, não versionada aqui. O conteúdo continua sem ser duplicado (decisão do 1.3.58).
+
+### Pendente (exige decisão ou autorização do dono)
+
+- Hook de ambiente para sessões em nuvem (`.claude/hooks/session-start.sh`): script pronto e validado fora do repositório (Ubuntu 24.04, ~66 s: `.venv` com Python 3.12 porque os locks exigem ≥3.12, `npm install --prefix Dashboard`, `ruff==0.16.6` pinado como no CI e `pwsh` 7.6.6 via repositório da Microsoft). Não foi commitado por falta de autorização; ainda falta versioná-lo e registrá-lo.
+- Registrar o `SessionStart` e criar `permissions.ask` para Git destrutivo (`reset --hard`, `push --force`/`-f`, `checkout --`) em `.claude/settings.json`.
+- Revisão de diretrizes: nenhuma frase de "pensar mais" ou de effort existe nos arquivos de diretriz; nada foi removido.
+
 ## [1.3.98] - 18/09/2026
 
 ### Adicionado

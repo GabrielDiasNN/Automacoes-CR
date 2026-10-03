@@ -103,6 +103,16 @@ Skills globais compartilhadas obrigatórias:
 - Se um agente descobrir a skill via mirror ou junction, deve tratar o conteúdo como alias da fonte canônica.
 - Melhorar skill existente antes de propor skill nova.
 
+## Modo de Trabalho
+
+- Quando um passo não precisar de decisão do usuário, continue; coloque notas de status na mesma mensagem da próxima ação.
+- Pare e pergunte só quando não puder continuar sem o usuário, ou antes de ações destrutivas ou difíceis de reverter: apagar dados ou arquivos, force-push, reset destrutivo, ações visíveis a terceiros (push, comentários, mensagens) ou alterar algo fora do repositório da tarefa.
+- Em tarefas longas (muitas etapas, muitos arquivos ou que possam passar de uma sessão), mantenha a checklist em `TASKS.md` na raiz do repositório (ignorado pelo Git; não commitar salvo pedido), marcando cada item ao concluí-lo e registrando o que descobrir de novo.
+- Em auditorias ou migrações amplas, divida entre subagentes apenas trabalhos independentes e confira a evidência de cada um antes de aceitar.
+- Ao fechar tarefas longas, termine com três títulos: **Bloqueado em mim**, **Alterado**, **Encontrado**.
+- Marque o que não conseguiu confirmar e diga onde procurou.
+- Os subagentes revisores de `.claude/agents/` têm `tools:` restrito (somente leitura; o `changelog-reviewer` acrescenta `Bash` só para `git diff`); correção de achado é feita pelo agente principal.
+
 ## Contrato Compartilhado Entre Agentes
 
 Todos os agentes devem operar com estas regras não negociáveis:

@@ -1,5 +1,6 @@
 ---
 name: alembic-reviewer
+tools: Read, Grep, Glob
 description: Revisor de migrations Alembic para SQLite WAL. Detecta uso de op.drop_column/op.alter_column/op.add_column em tabelas existentes sem o contexto batch_alter_table (obrigatório neste projeto por render_as_batch=True). Use em PRs que criem ou modifiquem arquivos em Orchestrator/migrations/versions/ ou que alterem Orchestrator/app/models.py.
 ---
 
