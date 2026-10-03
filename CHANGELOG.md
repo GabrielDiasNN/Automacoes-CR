@@ -19,10 +19,8 @@
 - **`.gitignore`** passa a ignorar `CLAUDE.local.md` (memória pessoal) e `TASKS.md` (checklist local de tarefa longa).
 - **`CLAUDE.md § Princípios Comportamentais`** documenta que `karpathy-guidelines` é skill global da máquina, não versionada aqui. O conteúdo continua sem ser duplicado (decisão do 1.3.58).
 
-### Pendente
+### Observação
 
-- *(resolvido)* `SessionStart` e `permissions.ask` registrados em `.claude/settings.json`; ver Adicionado.
-- Registrar o `SessionStart` e criar `permissions.ask` para Git destrutivo (`reset --hard`, `push --force`/`-f`, `checkout --`) em `.claude/settings.json`.
 - Revisão de diretrizes: nenhuma frase de "pensar mais" ou de effort existe nos arquivos de diretriz; nada foi removido.
 
 ## [1.3.98] - 18/09/2026
