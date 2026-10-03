@@ -71,7 +71,9 @@ Describe "Get-OrchestratorEnvValue" {
     }
 }
 
-Describe "Stop-OrchestratorProcesses" {
+# Somente Windows: Stop-OrchestratorProcesses usa Get-CimInstance Win32_Process e o teste monta raizes com
+# unidade de disco (Split-Path -Qualifier). Em Linux/macOS (pwsh Core fora do Windows) fica Skipped.
+Describe "Stop-OrchestratorProcesses" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
     BeforeAll {
         # Raizes sinteticas montadas em runtime — o gate de portabilidade proibe
         # caminho absoluto literal, e o teste precisa comparar caminhos absolutos.

@@ -1,5 +1,6 @@
 ---
 name: security-reviewer
+tools: Read, Grep, Glob
 description: Revisor de segurança especializado em FastAPI, SQLAlchemy e PowerShell. Use para auditar routers, queries SQL e scripts .ps1 buscando credenciais hardcoded, SQL injection, command injection, paths absolutos e violações Zero-Trust antes de abrir PRs.
 ---
 

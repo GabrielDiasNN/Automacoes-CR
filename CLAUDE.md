@@ -142,4 +142,4 @@ O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit (15 valida�
 
 ## Princípios Comportamentais
 
-Fonte única: skill `karpathy-guidelines` (carregada automaticamente ao escrever, revisar ou refatorar código) — Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution.
+Fonte única: skill `karpathy-guidelines` (carregada automaticamente ao escrever, revisar ou refatorar código) — Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution. É skill global da máquina, não versionada neste repositório (decisão do CHANGELOG 1.3.58); em ambiente sem ela, como as sessões em nuvem, os quatro nomes acima são o resumo vigente.

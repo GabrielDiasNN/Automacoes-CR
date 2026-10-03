@@ -67,13 +67,13 @@ O repositório tem **duas árvores de skills versionadas**, com responsabilidade
 | Árvore | Conteúdo | Editável? | Validador |
 |---|---|---|---|
 | `.github/skills/` | 9 skills de **padrão** (norma escrita, taxonomia ativa) | sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` (9 seções, frontmatter, discovery) |
-| `.claude/skills/` | skills **operacionais** do projeto (comandos executáveis: `ci-gates`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim — fonte única delas | — |
+| `.claude/skills/` | skills **operacionais** do projeto (comandos executáveis: `ci-gates`, `log-triage`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim — fonte única delas | — |
 
 Cada agente lê de um caminho fixo próprio, então as fontes são expostas por **mirrors não versionados** (ver `.gitignore`), recriados por `pwsh -File Tools\New-SkillMirrors.ps1`:
 
 - `.gemini/skills/` → junctions para `.github/skills/` (Gemini CLI).
 - `.agents/skills/` → junctions para as skills operacionais de `.claude/skills/` (Codex / Antigravity).
-- `.claude/skills/<nome>` (as 9 de padrão) → junctions para `.github/skills/`, porque **o Claude Code só descobre skill em `.claude/skills/`**. As 6 skills operacionais reais convivem no mesmo diretório; o script nunca as toca.
+- `.claude/skills/<nome>` (as 9 de padrão) → junctions para `.github/skills/`, porque **o Claude Code só descobre skill em `.claude/skills/`**. As 7 skills operacionais reais convivem no mesmo diretório; o script nunca as toca.
 
 - Cada item de mirror deve apontar para a skill correspondente na fonte canônica; nunca cópia real (a governança reprova).
 - Não manter duas cópias editáveis da mesma skill.
@@ -102,6 +102,20 @@ Skills globais compartilhadas obrigatórias:
 - Preservar mirrors como link simbólico ou junction para evitar drift.
 - Se um agente descobrir a skill via mirror ou junction, deve tratar o conteúdo como alias da fonte canônica.
 - Melhorar skill existente antes de propor skill nova.
+
+## Modo de Trabalho
+
+- Quando um passo não precisar de decisão do usuário, continue; coloque notas de status na mesma mensagem da próxima ação.
+- Pare e pergunte só quando não puder continuar sem o usuário, ou antes de ações destrutivas ou difíceis de reverter: apagar dados ou arquivos, force-push, reset destrutivo, ações visíveis a terceiros (push, comentários, mensagens) ou alterar algo fora do repositório da tarefa.
+- Em tarefas longas (muitas etapas, muitos arquivos ou que possam passar de uma sessão), mantenha a checklist em `TASKS.md` na raiz do repositório (ignorado pelo Git; não commitar salvo pedido), marcando cada item ao concluí-lo e registrando o que descobrir de novo.
+- Em auditorias ou migrações amplas, divida entre subagentes apenas trabalhos independentes e confira a evidência de cada um antes de aceitar.
+- Ao fechar tarefas longas, termine com três títulos: **Bloqueado em mim**, **Alterado**, **Encontrado**.
+- Marque o que não conseguiu confirmar e diga onde procurou.
+- Autorização permanente do dono: instale sem perguntar as dependências necessárias para analisar ou validar (pacotes dos locks do repositório, módulos PowerShell dos gates, ferramentas de lint e teste). Limites: fonte oficial (PyPI, npm, NuGet, repositório da Microsoft), versão do lock ou do CI quando existir, escopo de venv, de usuário ou do contêiner em nuvem; nunca instalar fora do venv do projeto na máquina que roda o Orchestrator em produção, nem com credencial no comando. Barreira de rede ou do classificador continua valendo: peça a liberação do host em vez de contornar.
+- Permissão ou ação negada pelo harness, pelo classificador ou pelo usuário é parada, não obstáculo: não refaça o mesmo resultado por outra ferramenta, em partes menores ou com outra sintaxe. Conclua o que não depende dela, registre o bloqueio e peça a decisão.
+- Edição paralela por subagentes só com `isolation: worktree` e escopos de arquivo disjuntos; o agente principal refaz o diff e confere o hash de cada entrega.
+- Para conferir mudança em arquivo de diretriz, use o subagente somente leitura `diretrizes-verifier`; `Tools/Test-AgentGuidelines.ps1` cobre o que é mecânico (etapa do `/preflight` e gate do CI, job `markdown`).
+- Os subagentes revisores de `.claude/agents/` declaram `tools:` restrito (`Read, Grep, Glob`), sem `Edit` nem `Write`; correção de achado é feita pelo agente principal. Exceção: o `changelog-reviewer` também tem `Bash` para rodar `git diff`, e `Bash` não é restrito por mecanismo a esse comando, então esse agente não é somente leitura por garantia, só por instrução.
 
 ## Contrato Compartilhado Entre Agentes
 

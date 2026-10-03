@@ -131,6 +131,10 @@ Audit/
 
 # Claude Code — estado local e segredos (não versionar)
 .claude/settings.local.json
+# Memória local pessoal do Claude Code (carrega junto do CLAUDE.md, mas não é do time)
+CLAUDE.local.md
+# Checklist de tarefa longa do agente (AGENTS.md § Modo de Trabalho) — não commitar salvo pedido
+TASKS.md
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 # Artefatos de processo de skills (ex.: /stochastic-consensus) — memória de

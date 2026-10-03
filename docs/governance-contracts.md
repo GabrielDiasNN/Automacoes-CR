@@ -213,6 +213,16 @@ def test_algo():                  # mypy reprova (missing return type)
 
 ---
 
+## Contrato PowerShell — vários `-Paths` num script de governança
+
+Com `pwsh -File Tools\x.ps1 -Paths a,b`, a lista chega ao script como **uma única string** `"a,b"`. Os scripts de `Tools/` fazem `Test-Path` e pulam o que não existe, então o resultado é "nenhum arquivo para validar" e exit 0: o gate aprova sem ter analisado nada. Para passar mais de um caminho, use `-Command` com array de verdade:
+
+```powershell
+pwsh -NoProfile -Command "& ./Tools/Test-PowerShellGovernance.ps1 -RootPath . -Paths 'a.ps1','b.ps1'; exit $LASTEXITCODE"
+```
+
+Desconfie de "nenhum arquivo para validar" quando você sabe que passou arquivos.
+
 ## Verificação rápida antes do commit
 
 ```powershell

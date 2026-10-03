@@ -1,5 +1,6 @@
 ---
 name: changelog-reviewer
+tools: Read, Grep, Glob, Bash
 description: Verifica se o CHANGELOG.md foi atualizado com entrada relevante para as mudanças do PR/branch atual. Use antes de abrir PRs que alterem comportamento, contrato operacional, governança ou arquitetura. Lê o diff do branch e cruza com a entrada mais recente do CHANGELOG.
 ---
 

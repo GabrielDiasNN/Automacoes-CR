@@ -14,3 +14,13 @@ npm run build --prefix Dashboard       # tsc + vite → Dashboard/dist/ (servido
 # Um único arquivo/teste de front
 npm run test --prefix Dashboard -- src/components/Foo.test.tsx -t "nome do teste"
 ```
+
+## Design — padrões a evitar
+
+A identidade está em `src/styles/tokens.css` (grafite + sistema de sinais, IBM Plex self-hosted, tabelas densas com `TableDensityContext`). Ao criar ou alterar UI, evite:
+
+- Cor decorativa ou hex literal fora dos tokens: cor aqui é sinal (status, severidade), nunca enfeite.
+- Gradientes, glassmorphism e sombras pesadas como ornamento (única exceção: a textura `.hazard`, só em zonas que exigem atenção do operador).
+- Emoji como ícone ou indicador de status.
+- Trocar a família IBM Plex por fonte genérica, ou carregar fonte/CDN externo (a rede interna não depende de CDN).
+- "Card para tudo": dado tabular vai em tabela densa, não em grade de cards.
