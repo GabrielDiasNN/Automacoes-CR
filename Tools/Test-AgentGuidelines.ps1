@@ -11,7 +11,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 $maxLines = 200
-$excludedPathRegex = "[\\/](\.venv[^\\/]*|node_modules|\.git)[\\/]"
+# Aplicado ao caminho RELATIVO a raiz (com "/" na frente), para nao excluir tudo quando a propria raiz
+# estiver dentro de um desses diretorios (ex.: uma worktree em .claude/worktrees).
+$excludedPathRegex = "[\\/](\.venv[^\\/]*|node_modules|\.git|\.claude[\\/]worktrees)[\\/]"
 
 # Listas fechadas: pedidos permanentes de "pensar mais" e de "expor raciocinio" nao devem
 # morar em arquivo de contexto; para ajustar profundidade usa-se effort (ajuste de sessao).
@@ -22,7 +24,9 @@ $forbiddenPhrases = @(
     "mostre seu raciocinio", "mostre seu raciocínio", "pense em voz alta",
     "explique seu raciocinio", "explique seu raciocínio"
 )
-$sessionSettingRegex = "(?i)\beffort\b|/fast\b|\bultrathink\b"
+# effort so em contexto de configuracao (nao pega "best-effort"); /fast so como comando de barra isolado
+# (nao pega "api/fast"); ultrathink e sempre ajuste de sessao.
+$sessionSettingRegex = "(?i)(?<![\w-])effort\s*:|(?<![\w-])effort\s+(alto|alta|medio|médio|baixo|baixa|low|medium|high|xhigh|max)\b|--effort\b|(?<![\w/.-])/effort\b|(?<![\w/.-])/fast(?![\w/-])|\bultrathink\b"
 
 $root = (Resolve-Path -LiteralPath $RootPath).Path
 $issues = New-Object System.Collections.Generic.List[object]
@@ -54,7 +58,7 @@ function Get-ProseLine {
 }
 
 $contextFiles = @(Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
-        ($_.Name -in @("CLAUDE.md", "CLAUDE.local.md")) -and ($_.FullName -notmatch $excludedPathRegex)
+        ($_.Name -in @("CLAUDE.md", "CLAUDE.local.md")) -and (("/" + (Get-RelativeName -FullName $_.FullName)) -notmatch $excludedPathRegex)
     })
 $agentsFile = Join-Path $root "AGENTS.md"
 $scanFiles = @($contextFiles | ForEach-Object { $_.FullName })
@@ -82,9 +86,12 @@ foreach ($path in $scanFiles) {
         }
         if ($name -like "*CLAUDE*.md") {
             foreach ($m in [regex]::Matches($prose.Text, '(?<![\w/@])@([\w.\-]+(?:/[\w.\-]+)+|[\w\-]+\.[A-Za-z]{2,4})(?![\w@])')) {
-                $target = Join-Path (Split-Path -Parent $path) $m.Groups[1].Value
+                # Pontuacao final de frase nao faz parte do caminho; "@escopo/pacote" sem extensao e pacote npm, nao import.
+                $importPath = $m.Groups[1].Value.TrimEnd('.', ',', ';', ':', '!', '?')
+                if ($importPath -notmatch '\.[A-Za-z0-9]+$') { continue }
+                $target = Join-Path (Split-Path -Parent $path) $importPath
                 if (-not (Test-Path -LiteralPath $target)) {
-                    Add-GuidelineIssue -File $name -Rule "GUIDELINE_IMPORT_BROKEN" -Detail "linha $($prose.Number): @$($m.Groups[1].Value) nao resolve em disco."
+                    Add-GuidelineIssue -File $name -Rule "GUIDELINE_IMPORT_BROKEN" -Detail "linha $($prose.Number): @$importPath nao resolve em disco."
                 }
             }
         }
@@ -94,9 +101,21 @@ foreach ($path in $scanFiles) {
 $agentsDir = Join-Path $root ".claude/agents"
 if (Test-Path -LiteralPath $agentsDir -PathType Container) {
     foreach ($agent in (Get-ChildItem -LiteralPath $agentsDir -Filter "*.md" -File)) {
-        $head = @(Get-Content -LiteralPath $agent.FullName -Encoding UTF8 -TotalCount 12)
-        if (-not ($head | Where-Object { $_ -match '^tools\s*:' })) {
-            Add-GuidelineIssue -File (Get-RelativeName -FullName $agent.FullName) -Rule "SUBAGENT_TOOLS_MISSING" -Detail "frontmatter sem 'tools:'; sem ele o subagente herda todas as ferramentas, inclusive Edit e Write."
+        # Le o tools: dentro do frontmatter (entre os dois '---') e exige valor (inline ou lista YAML).
+        $agentLines = @(Get-Content -LiteralPath $agent.FullName -Encoding UTF8)
+        $toolsValue = $null
+        if (($agentLines.Count -gt 0) -and ($agentLines[0].TrimStart([char]0xFEFF).Trim() -eq '---')) {
+            for ($i = 1; $i -lt $agentLines.Count; $i++) {
+                if ($agentLines[$i].Trim() -eq '---') { break }
+                if ($agentLines[$i] -match '^tools\s*:\s*(.*)$') {
+                    $toolsValue = $Matches[1].Trim()
+                    if (-not $toolsValue -and ($i + 1 -lt $agentLines.Count) -and ($agentLines[$i + 1] -match '^\s+-\s+\S')) { $toolsValue = 'lista' }
+                    break
+                }
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($toolsValue)) {
+            Add-GuidelineIssue -File (Get-RelativeName -FullName $agent.FullName) -Rule "SUBAGENT_TOOLS_MISSING" -Detail "frontmatter sem 'tools:' preenchido; sem ele o subagente herda todas as ferramentas, inclusive Edit e Write."
         }
     }
 }
