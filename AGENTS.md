@@ -111,6 +111,7 @@ Skills globais compartilhadas obrigatórias:
 - Em auditorias ou migrações amplas, divida entre subagentes apenas trabalhos independentes e confira a evidência de cada um antes de aceitar.
 - Ao fechar tarefas longas, termine com três títulos: **Bloqueado em mim**, **Alterado**, **Encontrado**.
 - Marque o que não conseguiu confirmar e diga onde procurou.
+- Autorização permanente do dono: instale sem perguntar as dependências necessárias para analisar ou validar (pacotes dos locks do repositório, módulos PowerShell dos gates, ferramentas de lint e teste). Limites: fonte oficial (PyPI, npm, NuGet, repositório da Microsoft), versão do lock ou do CI quando existir, escopo de venv, de usuário ou do contêiner em nuvem; nunca instalar fora do venv do projeto na máquina que roda o Orchestrator em produção, nem com credencial no comando. Barreira de rede ou do classificador continua valendo: peça a liberação do host em vez de contornar.
 - Permissão ou ação negada pelo harness, pelo classificador ou pelo usuário é parada, não obstáculo: não refaça o mesmo resultado por outra ferramenta, em partes menores ou com outra sintaxe. Conclua o que não depende dela, registre o bloqueio e peça a decisão.
 - Edição paralela por subagentes só com `isolation: worktree` e escopos de arquivo disjuntos; o agente principal refaz o diff e confere o hash de cada entrega.
 - Para conferir mudança em arquivo de diretriz, use o subagente somente leitura `diretrizes-verifier`; `Tools/Test-AgentGuidelines.ps1` (etapa do `/preflight`) cobre o que é mecânico.
