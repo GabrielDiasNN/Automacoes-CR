@@ -4,6 +4,7 @@
 
 ### Adicionado
 
+- **`.claude/settings.json`: `SessionStart` e `permissions.ask`.** O `SessionStart` (`shell: bash`) chama `.claude/hooks/session-start.sh`, que só age com `CLAUDE_CODE_REMOTE=true`, então a máquina Windows não é afetada. `permissions.ask` pede confirmação para `git reset --hard`, `git push --force`/`-f` e `git checkout --`, nas formas `Bash(...)` e `PowerShell(...)`: transforma em enforcement o que o `AGENTS.md § Governança de Git` só dizia em texto. Validado: JSON válido, 69 testes Pester (inclusive `Hooks-SensitiveWriteGuard`, que lê esse arquivo) e o hook executado de ponta a ponta. A sintaxe `PowerShell(...)` e os padrões de argumento não foram confrontados com a documentação.
 - **`AGENTS.md § Modo de Trabalho`.** Contrato curto e comum aos agentes: continuar sem pedir quando o passo não depende do usuário; parar só antes de ação destrutiva, visível a terceiros ou fora do repositório; `TASKS.md` na raiz para tarefa longa; subagentes só para trabalho independente, com a evidência conferida; fechamento em três títulos (Bloqueado em mim, Alterado, Encontrado); marcar o que não foi confirmado. Vem da revisão de diretrizes (roteiro R3, R5–R8).
 - **`Dashboard/CLAUDE.md § Design — padrões a evitar`.** Cinco padrões a evitar na UI, ancorados em `tokens.css` (cor é sinal, sem gradiente decorativo salvo `.hazard`, sem emoji como ícone, IBM Plex self-hosted, tabela densa em vez de cards). Lista proposta como padrão, editável.
 
@@ -18,9 +19,9 @@
 - **`.gitignore`** passa a ignorar `CLAUDE.local.md` (memória pessoal) e `TASKS.md` (checklist local de tarefa longa).
 - **`CLAUDE.md § Princípios Comportamentais`** documenta que `karpathy-guidelines` é skill global da máquina, não versionada aqui. O conteúdo continua sem ser duplicado (decisão do 1.3.58).
 
-### Pendente (exige decisão ou autorização do dono)
+### Pendente
 
-- Registrar em `.claude/settings.json` o hook `SessionStart` que chama `.claude/hooks/session-start.sh` (já versionado; o `bash` exige `CLAUDE_CODE_REMOTE=true`, então na máquina Windows ele sai sem fazer nada). O hook cria `.venv` com Python 3.12 (os locks exigem ≥3.12, ex.: `numpy 2.5.1`), roda `npm install --prefix Dashboard`, instala `ruff==0.16.6` como no CI, o `pwsh` pelo repositório da Microsoft, o alias `powershell`, o Pester 5.7.1 (via NuGet quando o PSGallery está bloqueado) e o PSScriptAnalyzer (só existe no PSGallery: se `powershellgallery.com` não estiver nos domínios permitidos do ambiente, vira aviso e o `Test-PowerShellGovernance` fica sem análise estática). Validado em Ubuntu 24.04, ~66 s na primeira vez e ~12 s depois. Sem o registro ele não roda sozinho.
+- *(resolvido)* `SessionStart` e `permissions.ask` registrados em `.claude/settings.json`; ver Adicionado.
 - Registrar o `SessionStart` e criar `permissions.ask` para Git destrutivo (`reset --hard`, `push --force`/`-f`, `checkout --`) em `.claude/settings.json`.
 - Revisão de diretrizes: nenhuma frase de "pensar mais" ou de effort existe nos arquivos de diretriz; nada foi removido.
 
