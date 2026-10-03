@@ -56,6 +56,7 @@ jobs:
       has_powershell: ${{ steps.changed-files.outputs.has_powershell }}
       has_js: ${{ steps.changed-files.outputs.has_js }}
       has_md: ${{ steps.changed-files.outputs.has_md }}
+      has_deleted_md: ${{ steps.changed-files.outputs.has_deleted_md }}
       log_target_count: ${{ steps.changed-files.outputs.log_target_count }}
       critical_path_count: ${{ steps.changed-files.outputs.critical_path_count }}
       selection_mode: ${{ steps.changed-files.outputs.selection_mode }}
@@ -89,6 +90,16 @@ jobs:
           }
 
           $changedFiles = @($changedFiles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+          # Remocao de .md fica fora de $changedFiles (ACMR: os demais jobs validam arquivos que existem em disco),
+          # mas o job markdown precisa saber dela: apagar uma diretriz tambem pode quebrar o gate de diretrizes.
+          if ([string]::IsNullOrWhiteSpace($baseSha) -or $baseSha -eq '0000000000000000000000000000000000000000') {
+            $deletedFiles = @(git diff-tree --no-commit-id --name-only --diff-filter=D -r HEAD)
+          }
+          else {
+            $deletedFiles = @(git diff --name-only --diff-filter=D $baseSha HEAD)
+          }
+          $hasDeletedMd = @($deletedFiles | Where-Object { $_ -match '\.md$' }).Count -gt 0
           $summary = ./Tools/Get-GovernanceTargetSummary.ps1 -BasePath "${{ github.workspace }}" -Paths $changedFiles
           $changedFilesJson = if ($changedFiles.Count -gt 0) {
             ConvertTo-Json -InputObject @($changedFiles) -Compress
@@ -107,6 +118,7 @@ jobs:
           "has_powershell=$(& $boolOut $summary.HasPowerShell)" >> $env:GITHUB_OUTPUT
           "has_js=$(& $boolOut $summary.HasJs)" >> $env:GITHUB_OUTPUT
           "has_md=$(& $boolOut $summary.HasMarkdown)" >> $env:GITHUB_OUTPUT
+          "has_deleted_md=$(& $boolOut $hasDeletedMd)" >> $env:GITHUB_OUTPUT
           "log_target_count=$($summary.LogTargetCount)" >> $env:GITHUB_OUTPUT
           "critical_path_count=$($summary.CriticalPathCount)" >> $env:GITHUB_OUTPUT
           "selection_mode=$($summary.SelectionMode)" >> $env:GITHUB_OUTPUT
@@ -651,8 +663,14 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: preparar-diff
-    # `.gitignore` entra no gatilho porque o gate de diretrizes confere CLAUDE.local.md e TASKS.md nele.
-    if: needs.preparar-diff.outputs.has_md == 'true' || contains(needs.preparar-diff.outputs.changed_files_json, '.gitignore')
+    # Gatilhos alem de .md alterado: remocao de .md (has_deleted_md), `.gitignore` (o gate confere CLAUDE.local.md e
+    # TASKS.md nele), `.claude/agents/` (o gate exige `tools:` nos subagentes) e o proprio script do gate.
+    if: >-
+      needs.preparar-diff.outputs.has_md == 'true'
+      || needs.preparar-diff.outputs.has_deleted_md == 'true'
+      || contains(needs.preparar-diff.outputs.changed_files_json, '.gitignore')
+      || contains(needs.preparar-diff.outputs.changed_files_json, '.claude/agents/')
+      || contains(needs.preparar-diff.outputs.changed_files_json, 'Tools/Test-AgentGuidelines.ps1')
     permissions:
       contents: read
 
