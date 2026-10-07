@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.100] - 07/10/2026
+
+### Alterado
+
+- **CI: `Orchestrator/tests`, `Orchestrator/migrations`, `Produção Beneficimento/snapshots` e `analise_producao_diaria_beneficiamento.py` entram em ruff e bandit.** As 72 violações foram zeradas antes (43 por autofix, o resto à mão ou com `noqa` justificado); `per-file-ignores` em `pyproject.toml` para `E402` (testes e `migrations/env.py`) e para migrações já aplicadas. Ver skill `ci-gates`.
+
 ## [1.3.99] - 03/10/2026
 
 ### Adicionado

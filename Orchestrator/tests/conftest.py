@@ -7,14 +7,16 @@ Patch do PROJECT_ROOT para validacao de script_path (Pilar V) funcionar em teste
 """
 
 import atexit
+import contextlib
 import json
 import os
 import shutil
 import sys
 import tempfile
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
@@ -60,7 +62,7 @@ from _pytest.config import Config
 from _pytest.nodes import Item
 
 # Import necessario para registrar as tabelas no Base.metadata.
-from app import models  # pylint: disable=unused-import
+from app import models  # noqa: F401  # pylint: disable=unused-import
 from app.database import Base, get_db
 from app.path_safety import is_contained
 from fastapi.testclient import TestClient
@@ -99,6 +101,9 @@ test_engine = create_engine(
 )
 
 # Diretorio raiz de testes para validacao de script_path
+# getattr/setattr dinamico: mypy --strict rejeita SessionLocal (nao reexportado).
+_SESSION_ATTR = "SessionLocal"
+
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -306,15 +311,15 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     original_project_root = auto_router.PROJECT_ROOT
     original_config_root = config_router.PROJECT_ROOT
     original_ide_root = ide_router.PROJECT_ROOT
-    original_scheduler_session = getattr(scheduler_runtime, "SessionLocal")
-    original_websocket_session = getattr(websocket_router, "SessionLocal")
+    original_scheduler_session = getattr(scheduler_runtime, _SESSION_ATTR)
+    original_websocket_session = getattr(websocket_router, _SESSION_ATTR)
 
     db_module.SessionLocal = testing_session_local
     db_module.engine = test_engine
     db_module.DB_PATH = os.path.join(TESTS_DIR, "test-automacoes.db")
-    setattr(main_module, "SessionLocal", testing_session_local)
-    setattr(scheduler_runtime, "SessionLocal", testing_session_local)
-    setattr(websocket_router, "SessionLocal", testing_session_local)
+    setattr(main_module, _SESSION_ATTR, testing_session_local)
+    setattr(scheduler_runtime, _SESSION_ATTR, testing_session_local)
+    setattr(websocket_router, _SESSION_ATTR, testing_session_local)
     # Redirecionar PROJECT_ROOT para o diretorio de testes (contem /test/*.ps1)
     auto_router.PROJECT_ROOT = TESTS_DIR
     config_router.PROJECT_ROOT = TESTS_DIR
@@ -342,18 +347,16 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     for suffix in ["", "-shm", "-wal"]:
         fp = os.path.join(TESTS_DIR, "test-automacoes.db" + suffix)
         if os.path.exists(fp):
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(fp)
-            except OSError:
-                pass
 
     db_module.DB_PATH = original_db_path
-    setattr(main_module, "SessionLocal", original_session_local)
+    setattr(main_module, _SESSION_ATTR, original_session_local)
     auto_router.PROJECT_ROOT = original_project_root
     config_router.PROJECT_ROOT = original_config_root
     ide_router.PROJECT_ROOT = original_ide_root
-    setattr(scheduler_runtime, "SessionLocal", original_scheduler_session)
-    setattr(websocket_router, "SessionLocal", original_websocket_session)
+    setattr(scheduler_runtime, _SESSION_ATTR, original_scheduler_session)
+    setattr(websocket_router, _SESSION_ATTR, original_websocket_session)
 
 
 @pytest.fixture
@@ -576,9 +579,9 @@ def _governar_cadastros(cliente: TestClient) -> None:
         _preparar(url, kwargs, atual=_buscar_atual(url, kwargs))
         return original_patch(url, **kwargs)
 
-    setattr(cliente, "post", post)
-    setattr(cliente, "put", put)
-    setattr(cliente, "patch", patch_request)
+    setattr(cliente, "post", post)  # noqa: B010
+    setattr(cliente, "put", put)  # noqa: B010
+    setattr(cliente, "patch", patch_request)  # noqa: B010
 
 
 @pytest.fixture(autouse=True)

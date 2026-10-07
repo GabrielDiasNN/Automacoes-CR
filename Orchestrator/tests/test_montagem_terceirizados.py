@@ -497,7 +497,7 @@ def test_retry_do_perfil_padrao_desiste_em_segundos_nao_minutos() -> None:
     # acumulada, nao qual das duas venceu a corrida.
     with (
         patch("time.sleep", side_effect=dormidas.append),
-        pytest.raises(Exception),
+        pytest.raises(Exception),  # noqa: B017 - DatabaseError ou CircuitBreakerError
     ):
         _sempre_falha()
 

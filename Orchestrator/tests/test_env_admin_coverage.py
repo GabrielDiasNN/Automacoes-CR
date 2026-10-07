@@ -38,7 +38,7 @@ def test_sync_sucesso_passa_timeout_e_argv(
 ) -> None:
     capturado: dict[str, Any] = {}
 
-    def fake_run(cmd: Any, **kwargs: Any) -> "subprocess.CompletedProcess[Any]":
+    def fake_run(cmd: Any, **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         capturado["cmd"] = cmd
         capturado["timeout"] = kwargs.get("timeout")
         capturado["check"] = kwargs.get("check")
@@ -59,7 +59,7 @@ def test_sync_remover_acrescenta_flag(
 ) -> None:
     capturado: dict[str, Any] = {}
 
-    def fake_run(cmd: Any, **_kwargs: Any) -> "subprocess.CompletedProcess[Any]":
+    def fake_run(cmd: Any, **_kwargs: Any) -> subprocess.CompletedProcess[Any]:
         capturado["cmd"] = cmd
         return subprocess.CompletedProcess(cmd, 0)
 
@@ -71,7 +71,7 @@ def test_sync_remover_acrescenta_flag(
 def test_sync_timeout_retorna_false(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def estoura(cmd: Any, **_kwargs: Any) -> "subprocess.CompletedProcess[Any]":
+    def estoura(cmd: Any, **_kwargs: Any) -> subprocess.CompletedProcess[Any]:
         raise subprocess.TimeoutExpired(cmd, _TIMEOUT)
 
     monkeypatch.setattr("app.services.env_admin.subprocess.run", estoura)
@@ -84,7 +84,7 @@ def test_sync_timeout_retorna_false(
 def test_sync_erro_generico_retorna_false(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def falha(cmd: Any, **_kwargs: Any) -> "subprocess.CompletedProcess[Any]":
+    def falha(cmd: Any, **_kwargs: Any) -> subprocess.CompletedProcess[Any]:
         raise subprocess.CalledProcessError(1, cmd)
 
     monkeypatch.setattr("app.services.env_admin.subprocess.run", falha)

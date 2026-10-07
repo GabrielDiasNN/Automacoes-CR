@@ -29,6 +29,11 @@ combine-as-imports = true
 [tool.ruff.lint.per-file-ignores]
 "Orchestrator/worker.py" = ["B006", "B008"]
 "Orchestrator/app/notifications.py" = ["B006"]
+# E402: testes que carregam automacoes de dominio por caminho (sys.path.insert antes
+# do import) e o idioma do Alembic em env.py. Migracoes aplicadas nao sao reeditadas.
+"Orchestrator/tests/**" = ["E402"]
+"Orchestrator/migrations/env.py" = ["E402"]
+"Orchestrator/migrations/versions/**" = ["UP007", "UP035"]
 
 [tool.mypy]
 python_version = "3.12"

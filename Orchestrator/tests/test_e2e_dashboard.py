@@ -9,17 +9,19 @@ A autenticação Zero-Trust do novo dashboard é via sessionStorage (chave
 há mais prompt() do navegador.
 """
 
+import contextlib
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from PIL import Image, ImageChops
@@ -65,10 +67,8 @@ def setup_test_database() -> Generator[None, None, None]:
     for suffix in ["", "-shm", "-wal"]:
         fp = Path(str(TEST_DB_PATH) + suffix)
         if fp.exists():
-            try:
+            with contextlib.suppress(OSError):
                 fp.unlink()
-            except OSError:
-                pass
 
     # Aplica as migrações do Alembic para estruturar o banco dinamicamente
     # pylint: disable=import-outside-toplevel
@@ -179,8 +179,9 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
     stdout_log_path = Path(TESTS_DIR) / f"uvicorn-stdout-{os.getpid()}.log"
     stderr_log_path = Path(TESTS_DIR) / f"uvicorn-stderr-{os.getpid()}.log"
 
-    stdout_file = open(stdout_log_path, "w", encoding="utf-8")
-    stderr_file = open(stderr_log_path, "w", encoding="utf-8")
+    # Handles vivem ate o teardown do servidor (fechados la), por isso sem `with`.
+    stdout_file = open(stdout_log_path, "w", encoding="utf-8")  # noqa: SIM115
+    stderr_file = open(stderr_log_path, "w", encoding="utf-8")  # noqa: SIM115
 
     proc = subprocess.Popen(
         cmd,

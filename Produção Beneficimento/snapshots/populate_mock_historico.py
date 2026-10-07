@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 # Adicionar src ao path
@@ -13,7 +13,7 @@ SRC_DIR = BASE_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from beneficiamento.historico_db import salvar_historico, init_db  # noqa: E402
+from beneficiamento.historico_db import init_db, salvar_historico  # noqa: E402
 
 
 def populate() -> None:
@@ -106,9 +106,8 @@ def populate() -> None:
             "REPROCESSO": 0,
             "MIN_REAL": 95.0,
             "MIN_PREV": 75.0,
-            "DESVIO_MIN": 20.0, # Atraso de 20 min
+            "DESVIO_MIN": 20.0,  # Atraso de 20 min
         },
-
         # OB 240126 - Com Reprocesso/Atraso (3 Fases)
         {
             "NUMERO_OB": "240126",
@@ -159,10 +158,10 @@ def populate() -> None:
             "ANO_MES": ontem.strftime("%Y%m"),
             "ANO_SEM": int(ontem.strftime("%Y%W")),
             "OPERADOR_FINAL": "CARLOS SANTOS",
-            "REPROCESSO": 1, # Reprocesso ativo
+            "REPROCESSO": 1,  # Reprocesso ativo
             "MIN_REAL": 310.0,
             "MIN_PREV": 220.0,
-            "DESVIO_MIN": 90.0, # Grande desvio
+            "DESVIO_MIN": 90.0,  # Grande desvio
         },
         {
             "NUMERO_OB": "240126",
@@ -191,7 +190,6 @@ def populate() -> None:
             "MIN_PREV": 70.0,
             "DESVIO_MIN": 0.0,
         },
-
         # OB 240127 - Produção Recente de Hoje (Apenas Preparada)
         {
             "NUMERO_OB": "240127",
@@ -219,7 +217,7 @@ def populate() -> None:
             "MIN_REAL": 50.0,
             "MIN_PREV": 45.0,
             "DESVIO_MIN": 5.0,
-        }
+        },
     ]
 
     inserted = salvar_historico(records)

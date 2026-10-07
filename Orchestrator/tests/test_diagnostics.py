@@ -24,6 +24,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from tests.conftest import AUTH_HEADERS
 
+# getattr/setattr dinamico: mypy --strict rejeita o atributo nao reexportado.
+_WAL_ATTR = "get_wal_size_mb"
+
 
 def test_diagnostics_worker_offline(client: TestClient, db_session: Session) -> None:
     """Garante que um worker sem ping recente seja classificado como offline no diagnóstico."""
@@ -90,9 +93,9 @@ def test_diagnostics_wal_risk(
     # Fazer mock do get_wal_size_mb no router de system
     import app.routers.system as system_router  # pylint: disable=import-outside-toplevel
 
-    original_get_wal = getattr(system_router, "get_wal_size_mb")
+    original_get_wal = getattr(system_router, _WAL_ATTR)
     # Simular WAL gigante com 300 MB (limite para erro é 256 MB)
-    setattr(system_router, "get_wal_size_mb", lambda: 300.0)
+    setattr(system_router, _WAL_ATTR, lambda: 300.0)
 
     try:
         response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)
@@ -113,7 +116,7 @@ def test_diagnostics_wal_risk(
         assert db_findings[0]["action_code"] == ACTION_CODE_CHECKPOINT
     finally:
         # Restaurar a função original
-        setattr(system_router, "get_wal_size_mb", original_get_wal)
+        setattr(system_router, _WAL_ATTR, original_get_wal)
 
 
 def test_diagnostics_running_over_max_runtime(

@@ -210,9 +210,11 @@ def test_cron_ignora_disparo_quando_constraint_barra(
     monkeypatch.setattr(sr, "session_scope", lambda _f: _NoOpScope(db_session))
 
     erro = IntegrityError("stmt", {}, Exception("UNIQUE constraint failed"))
-    with patch.object(db_session, "commit", side_effect=erro):
-        with patch.object(db_session, "rollback") as rollback:
-            sr.scheduled_task_wrapper(int(auto.id))
+    with (
+        patch.object(db_session, "commit", side_effect=erro),
+        patch.object(db_session, "rollback") as rollback,
+    ):
+        sr.scheduled_task_wrapper(int(auto.id))
 
     rollback.assert_called_once()
 

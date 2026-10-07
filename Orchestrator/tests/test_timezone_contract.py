@@ -1,7 +1,7 @@
 """Regressoes de fuso horario e formato de datas do Orchestrator."""
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app import models, timezone as tz_module
@@ -12,7 +12,7 @@ from conftest import AUTH_HEADERS
 
 
 def test_parse_and_format_dt_br_handles_iso_and_brazil_strings() -> None:
-    utc_dt = datetime(2026, 5, 21, 14, 0, 0, tzinfo=timezone.utc)
+    utc_dt = datetime(2026, 5, 21, 14, 0, 0, tzinfo=UTC)
     parsed_utc = parse_dt_br(utc_dt)
     assert parsed_utc is not None
     assert parsed_utc.tzinfo is None
