@@ -19,3 +19,8 @@ Aplica-se ao desenvolvimento e manutenção em `Produção Beneficimento/`.
 - `snapshot_store.py`: Responsável pela leitura e escrita em disco dos snapshots (`snapshots/latest/`).
 - `contracts/`: Implementações canônicas de agregação (`overview.py`, `detail.py`, `tingimento.py`).
   - O código SQL deve permanecer estritamente isolado nos módulos privados `_queries.py`, `_queries_common.py`, `_queries_overview.py` e `_queries_detail.py`.
+
+## SQL de Runtime (`sql/templates/`)
+
+- O runner lê o SQL de `sql/templates/` (`SQL_TEMPLATE_DIR` em `settings.py`). Não mova nem renomeie `bnf_producao_beneficiamento_detalhado.sql` sem ajustar `_PERIOD_CONFIGS`; `test_beneficiamento_sql_template_unit.py` falha se o caminho deixar de existir.
+- O acervo de consultas de referência **não** mora neste domínio: está em `docs/oracle-schema/consultas/` (regra `consultas-oracle.md`). Promover uma consulta do acervo a runtime é **mover** (`git mv`), nunca copiar.

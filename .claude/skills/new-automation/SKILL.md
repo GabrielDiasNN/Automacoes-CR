@@ -1,14 +1,18 @@
 ---
 name: new-automation
-description: "Scaffold de nova automação com manifesto válido via New-Automation.ps1. Uso: /new-automation <Nome> <owner> <criticidade>. Criticidade válida: low | medium | high."
+description: "Scaffold de nova automação com manifesto válido via New-Automation.ps1. Uso: /new-automation <Nome> <owner> <criticidade>. Criticidade válida: critical | high | medium | low."
 disable-model-invocation: true
 ---
 
 Use os três argumentos passados (Nome, owner, criticidade) para executar:
 
 ```
-pwsh -File Tools\New-Automation.ps1 -Name "<Nome>" -Owner "<owner>" -Criticidade "<criticidade>"
+pwsh -File Tools\New-Automation.ps1 -Name "<Nome>" -OwnerArea "<owner>" -Criticality "<criticidade>"
 ```
+
+Os parâmetros são os do script (`-OwnerArea`, `-Criticality`), não os nomes dos argumentos da
+skill. Opcionais: `-WithOracle`, `-WithWhatsApp`, `-WithoutEmail`, `-Runtime powershell|python|node`,
+`-QueueGroup`, `-SlaMinutes`, `-MaxRuntimeMinutes`, `-MaxRetries` e `-DryRun` (mostra o plano sem gravar).
 
 O script copia de `_Template/` e gera o `automation.manifest.json` a partir dele — este é o
 caminho canônico e sempre produz manifesto válido.
@@ -21,6 +25,6 @@ Após o scaffold:
 3. Instrua o usuário a chamar `POST /api/automations/preflight` com o payload do manifesto
    para validação completa (manifesto + docs obrigatórias + smoke tests) antes de registrar.
 4. O campo do manifesto é **`criticality`** (inglês), não `criticidade`. Formato completo e
-   campos obrigatórios em `docs/governance-contracts.md § Contrato — Manifesto de Automação`.
+   campos obrigatórios em `docs/governanca/governance-contracts.md § Contrato — Manifesto de Automação`.
 5. Se a automação tiver `.py` executável, lembre que diretório novo precisa entrar em
    ruff/bandit bloqueantes do CI — ver skill `ci-gates`.

@@ -18,6 +18,7 @@ Domínio dedicado para a API de produção, snapshots analíticos e histórico S
 - O health agora distingue explicitamente `snapshot_missing`, `snapshot_invalid`, `snapshot_stale`, `historico_partial_failure`, `quality_blocked`, `quality_attention`, `oracle_timeout_unapplied`, `snapshot_no_data` e `healthy`.
 - O histórico v2 lê colunas tipadas e índices por padrão; `DADOS_COMPLETOS` só é desserializado quando `include_raw=true`.
 - A migração para o schema v2 recria `beneficiamento_historico.db`. Após promover o código, execute a recarga retroativa descrita no runbook.
+- O acervo SQL de consultas de chão de fábrica e inteligência industrial em `docs/oracle-schema/consultas/` é governado e catalogado em [CATALOGO_QUERIES.md](../docs/oracle-schema/consultas/CATALOGO_QUERIES.md): consultas atômicas organizadas em 13 pastas por domínio industrial, escritas sobre tabelas físicas indexadas em vez de views legadas pesadas. Inventário e status de validação no Oracle ficam só no catálogo, gerado por `Tools/oracle/gerar_catalogo_sql.py`.
 
 ## Estrutura
 
@@ -25,8 +26,10 @@ Domínio dedicado para a API de produção, snapshots analíticos e histórico S
 - `src/beneficiamento/core/`: coerções, aliases, turnos e métricas compartilhadas.
 - `src/beneficiamento/data/`: schema SQLite, writer idempotente e consultas tipadas.
 - `src/beneficiamento/contracts/`: imports canônicos de overview, detail e analytics.
-- `sql/templates/`: SQLs operacionais com binds `:dt_inicio` e `:dt_fim`.
-- `sql/reference/`: views de referência preservadas para auditoria técnica.
+- `sql/templates/`: SQL de runtime do runner (`bnf_producao_beneficiamento_detalhado.sql`). O acervo de consultas (13 pastas, `01_beneficiamento_tingimento` a `13_utilitarios_snippets`) vive em [`docs/oracle-schema/consultas/`](../docs/oracle-schema/consultas/README.md), com o catálogo mestre [CATALOGO_QUERIES.md](../docs/oracle-schema/consultas/CATALOGO_QUERIES.md).
+- `sql/templates/bnf_producao_beneficiamento_detalhado.sql`: consulta mestra analítica consumida pelo runner Python via binds `:dt_inicio` e `:dt_fim`.
+- `docs/oracle-schema/consultas/11_views_referencia_sgt/`: definições DDL de views corporativas preservadas para auditoria e conferência.
+- `docs/oracle-schema/consultas/12_manutencao_dml_restrito/`: scripts de manutenção em quarentena de segurança (Zero DML).
 - `snapshots/latest/`: última versão aprovada dos arquivos `*.analytics.json` e `*.profile.json`.
 - `snapshots/beneficiamento_historico.db`: base SQLite histórica consumida por `/api/beneficiamento/overview`, `/detail` e `/historico`.
 - `docs/`: arquitetura, baseline e runbook operacional.
@@ -39,3 +42,7 @@ Domínio dedicado para a API de produção, snapshots analíticos e histórico S
 
 Períodos válidos: `diario`, `semanal`, `mensal`, `anual`.
 O JSON final do runner inclui `status` e `refresh_status`, e a escrita no histórico SQLite aparece em `snapshot.historico_write_status`.
+
+## Candidata de faturamento mensal por cliente
+
+A [V2.2](../docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_faturamento_mensal_cliente_prazo_expedicao_v2_2.sql) preserva o contrato funcional da V2.1 e está **não promovida por instabilidade operacional** (última série integral 4/5). O [parecer de 04/10/2026](docs/pcp-faturamento-v2-2-validacao-2026-10-04.md) registra oito variantes, equivalência integral e limites. A V2.1 permanece preservada e não promovida.

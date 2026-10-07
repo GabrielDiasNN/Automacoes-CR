@@ -36,7 +36,7 @@ Manter o Node.js do hub restrito ao canal de comunicação (WhatsApp) e ao boots
 - Nenhum segredo hardcoded em `.js`, `.bat` ou JSON auxiliar; a política de segredo é da skill `automation-runtime-safety`.
 
 ## Repo-Specific Constraints
-- `Tools/Test-NodeCommunications.ps1` roda `npm test` em cada diretório com `package.json`, hoje `lib/` e `Receitas Bloqueadas/` (fonte: `docs/governance-contracts.md` item 14).
+- `Tools/Test-NodeCommunications.ps1` roda `npm test` em cada diretório com `package.json`, hoje `lib/` e `Receitas Bloqueadas/` (fonte: `docs/governanca/governance-contracts.md` item 14).
 - `lib/package.json` exige `whatsapp-web.js` real instalado; `node_modules` é gitignored, então após clonar rode `npm ci --prefix lib` uma vez com `PUPPETEER_SKIP_DOWNLOAD=true` para pular o Chromium (~200 MB) do Puppeteer.
 - `Receitas Bloqueadas/package.json` não declara dependências (usa só módulos nativos do Node) e por isso sua suíte sempre roda, mesmo sem `npm ci`.
 - Mantenha a persistência de entrega nos arquivos de estado do domínio em `Receitas Bloqueadas/`, não em estado paralelo apenas no Node.

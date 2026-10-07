@@ -1,0 +1,954 @@
+/* =============================================================================
+OBJETIVO: Consulta Canônica Permanente de Fechamento Mensal do Beneficiamento
+          (Costa Rica Malhas - Gestão Fabril & PCP).
+DOMÍNIO: 09_pcp_kpis_gestao
+DESTINO: Painel Mensal de Gestão Fabril, Fechamento de Resultados & Automações PCP.
+TIPO: SELECT (Painel Analítico / Operacional / Diretoria)
+EXECUÇÃO: Automática no início de cada mês para analisar o último mês encerrado.
+CUIDADOS OPERACIONAIS & DIRETRIZES DE ENGENHARIA ORACLE:
+  - Parametrização Histórica: CTE PARAMETROS no início (NULL = mês anterior fechado;
+    'YYYY-MM' = reprocessamento de qualquer competência histórica).
+  - Janela Centralizada: Todas as fatias consomem exclusivamente limites da CTE JANELA.
+  - Zero Views: Junção direta pelas tabelas físicas com índices operacionais (sem views legadas).
+  - Produção Acabada Oficial: Movimentação oficial por peça (SGTPRD.BD_PRD_MOVPROD,
+    NUM_TIPO_MOVIMENTO = 37, CODIGO IN (1, 8)).
+  - Dias com Movimento (Regra Canônica): COUNT(DISTINCT TRUNC(MVP.PRODUCAO_DATA))
+    calculado pela CTE BASE_ACABADO_DIAS (sem agrupamento de turno). Elimina convenções
+    manuais antigas e artefatos de agregação.
+  - Ritmo Diário Oficial: PRODUCAO_ACABADA_KG / DIAS_COM_MOVIMENTO.
+  - Decomposição Shapley: Reconciliação exata de KG_ATUAL - KG_MOM entre Efeito Calendário
+    ((D_ATU - D_MOM) * ((R_ATU + R_MOM)/2)) e Efeito Ritmo ((R_ATU - R_MOM) * ((D_ATU + D_MOM)/2)).
+  - Produção da Tinturaria: Estritamente DESTINO_RECEITA = 1 em todos os períodos e agregações
+    (sem aplicação de NVL; não foram encontrados DESTINO_RECEITA IS NULL nas populações e competências auditadas utilizadas para a homologação).
+    Reprocessos permanecem rigorosamente segregados em indicadores de qualidade.
+  - Métricas Globais da Tinturaria (Regra Canônica Global): COUNT(DISTINCT TRUNC(UPR.DTPRODFIM))
+    e COUNT(DISTINCT OBF.NUMERO_OB || '-' || TO_CHAR(OBF.SEQUENCIA)) calculados globalmente
+    pela CTE BASE_TING_GLOBAIS com DESTINO_RECEITA = 1 (sem agrupamento de máquina/turno).
+  - Carga Média por Partida: Apresentada EXCLUSIVAMENTE para a Fase 40 — Tinturaria Normal
+    (processo físico de batelada fechada). Nas fases contínuas/administrativas retorna NULL.
+  - Rastreabilidade de Rendimento: Não assume lote cruzado; rotulado como Balanço de Massa.
+  - Produção por Turno (9 Fases Fabris): Ordem do fluxo operacional (Revisão 20,
+    Tinturaria Normal 40, Hidros 50/55, Secadores 60, Felpadeira 65, Calandra Brilho 70,
+    Calandra Compacta 80, Abridor 90, Ramas 100/110).
+  - Paradas da Tinturaria (Interseção Exata): Limita as horas à janela [DT_INICIO, DT_FIM[,
+    eliminando distorções de paradas que atravessam fronteiras mensais.
+  - Curva de Pareto de Paradas: Ordenamento decrescente por horas paradas, participação %,
+    % acumulado e comparativo MoM com mês anterior. Descoberta dinâmica de motivos.
+  - Sem Ranking de Operadores: Foco restrito a produção, turnos, fases, qualidade e paradas.
+============================================================================= */
+
+WITH PARAMETROS AS (
+    SELECT CAST(NULL AS VARCHAR2(7)) AS MES_HISTORICO
+      FROM DUAL
+),
+JANELA AS (
+    SELECT /*+ INLINE */
+           -- Limites da Competência Principal (Atual ou Reprocessada)
+           CASE 
+             WHEN P.MES_HISTORICO IS NOT NULL THEN TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD')
+             ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -1)
+           END AS DT_INICIO,
+           CASE 
+             WHEN P.MES_HISTORICO IS NOT NULL THEN ADD_MONTHS(TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD'), 1)
+             ELSE TRUNC(SYSDATE, 'MM')
+           END AS DT_FIM,
+           -- Limites do Mês Anterior (MoM)
+           CASE 
+             WHEN P.MES_HISTORICO IS NOT NULL THEN ADD_MONTHS(TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD'), -1)
+             ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -2)
+           END AS DT_INICIO_MOM,
+           CASE 
+             WHEN P.MES_HISTORICO IS NOT NULL THEN TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD')
+             ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -1)
+           END AS DT_FIM_MOM,
+           -- Limites do Mesmo Mês do Ano Anterior (YoY)
+           CASE 
+             WHEN P.MES_HISTORICO IS NOT NULL THEN ADD_MONTHS(TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD'), -12)
+             ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -13)
+           END AS DT_INICIO_YOY,
+           CASE 
+             WHEN P.MES_HISTORICO IS NOT NULL THEN ADD_MONTHS(TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD'), -11)
+             ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -12)
+           END AS DT_FIM_YOY,
+           -- Rótulo do Mês de Referência (YYYY-MM)
+           CASE 
+             WHEN P.MES_HISTORICO IS NOT NULL THEN P.MES_HISTORICO
+             ELSE TO_CHAR(ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -1), 'YYYY-MM')
+           END AS MES_REFERENCIA,
+           -- Limites Numéricos YYYYMMDD para filtros em PARADAS_MAQUINA
+           TO_NUMBER(TO_CHAR(CASE WHEN P.MES_HISTORICO IS NOT NULL THEN TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD')
+                                  ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -1) END, 'YYYYMMDD')) AS NUM_INICIO,
+           TO_NUMBER(TO_CHAR(CASE WHEN P.MES_HISTORICO IS NOT NULL THEN ADD_MONTHS(TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD'), 1)
+                                  ELSE TRUNC(SYSDATE, 'MM') END, 'YYYYMMDD')) AS NUM_FIM,
+           TO_NUMBER(TO_CHAR(CASE WHEN P.MES_HISTORICO IS NOT NULL THEN ADD_MONTHS(TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD'), -1)
+                                  ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -2) END, 'YYYYMMDD')) AS NUM_INICIO_MOM,
+           TO_NUMBER(TO_CHAR(CASE WHEN P.MES_HISTORICO IS NOT NULL THEN TO_DATE(P.MES_HISTORICO || '-01', 'YYYY-MM-DD')
+                                  ELSE ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -1) END, 'YYYYMMDD')) AS NUM_FIM_MOM
+      FROM PARAMETROS P
+),
+-- =========================================================================
+-- BASE FASES: Varredura com index range scan otimizado (Atual, MoM e YoY)
+-- =========================================================================
+BASE_FASES_AGR AS (
+    SELECT /*+ LEADING(J UPR) USE_NL(UPR UOM OBF) */
+           'ATUAL' AS PERIODO,
+           OBF.CODIGO_FASE,
+           OBF.DESTINO_RECEITA,
+           TRIM(OBF.GRUPO_DEFEITO)       AS GRUPO_DEFEITO,
+           MAQ.GRUPO                     AS GRUPO_MAQUINA,
+           UPR.NUMERO_MAQUINA,
+           UPR.NRTURNOFIM                AS TURNO,
+           SUM(OBF.KILOS_PRODUZIDOS)     AS KILOS_PRODUZIDOS,
+           COUNT(DISTINCT OBF.NUMERO_OB || '-' || TO_CHAR(OBF.SEQUENCIA)) AS QT_PARTIDAS
+      FROM JANELA J
+      JOIN SGTPRD.UNIDADE_PROGRAMACAO   UPR ON UPR.DTPRODFIM >= J.DT_INICIO AND UPR.DTPRODFIM < J.DT_FIM
+      JOIN SGTPRD.UP_ORDEM_MVTO          UOM ON UOM.NUMEROUP = UPR.NUMEROUP AND UOM.SETOR = UPR.SETOR
+      JOIN SGTPRD.OB_FASES               OBF ON OBF.NUMERO_OB = UOM.NUMEROORDEMREAL
+                                            AND OBF.SEQUENCIA = UOM.SEQUENCIAORDEMREAL
+      LEFT JOIN SGTPRD.MAQUINA           MAQ ON MAQ.NUMERO_MAQUINA = UPR.NUMERO_MAQUINA AND MAQ.SETOR = 5
+     WHERE UPR.SETOR = 5
+       AND UPR.EXCLUIDA = 0
+       AND UPR.TIPOUP = 0
+       AND UPR.STATUS = 0
+       AND OBF.CODIGO_FASE IN (10, 20, 40, 50, 55, 60, 65, 70, 80, 90, 100, 110)
+     GROUP BY OBF.CODIGO_FASE,
+              OBF.DESTINO_RECEITA,
+              TRIM(OBF.GRUPO_DEFEITO),
+              MAQ.GRUPO,
+              UPR.NUMERO_MAQUINA,
+              UPR.NRTURNOFIM
+    UNION ALL
+    SELECT /*+ LEADING(J UPR) USE_NL(UPR UOM OBF) */
+           'MOM' AS PERIODO,
+           OBF.CODIGO_FASE,
+           OBF.DESTINO_RECEITA,
+           TRIM(OBF.GRUPO_DEFEITO)       AS GRUPO_DEFEITO,
+           MAQ.GRUPO                     AS GRUPO_MAQUINA,
+           UPR.NUMERO_MAQUINA,
+           UPR.NRTURNOFIM                AS TURNO,
+           SUM(OBF.KILOS_PRODUZIDOS)     AS KILOS_PRODUZIDOS,
+           COUNT(DISTINCT OBF.NUMERO_OB || '-' || TO_CHAR(OBF.SEQUENCIA)) AS QT_PARTIDAS
+      FROM JANELA J
+      JOIN SGTPRD.UNIDADE_PROGRAMACAO   UPR ON UPR.DTPRODFIM >= J.DT_INICIO_MOM AND UPR.DTPRODFIM < J.DT_FIM_MOM
+      JOIN SGTPRD.UP_ORDEM_MVTO          UOM ON UOM.NUMEROUP = UPR.NUMEROUP AND UOM.SETOR = UPR.SETOR
+      JOIN SGTPRD.OB_FASES               OBF ON OBF.NUMERO_OB = UOM.NUMEROORDEMREAL
+                                            AND OBF.SEQUENCIA = UOM.SEQUENCIAORDEMREAL
+      LEFT JOIN SGTPRD.MAQUINA           MAQ ON MAQ.NUMERO_MAQUINA = UPR.NUMERO_MAQUINA AND MAQ.SETOR = 5
+     WHERE UPR.SETOR = 5
+       AND UPR.EXCLUIDA = 0
+       AND UPR.TIPOUP = 0
+       AND UPR.STATUS = 0
+       AND OBF.CODIGO_FASE IN (10, 40)
+     GROUP BY OBF.CODIGO_FASE,
+              OBF.DESTINO_RECEITA,
+              TRIM(OBF.GRUPO_DEFEITO),
+              MAQ.GRUPO,
+              UPR.NUMERO_MAQUINA,
+              UPR.NRTURNOFIM
+    UNION ALL
+    SELECT /*+ LEADING(J UPR) USE_NL(UPR UOM OBF) */
+           'YOY' AS PERIODO,
+           OBF.CODIGO_FASE,
+           OBF.DESTINO_RECEITA,
+           TRIM(OBF.GRUPO_DEFEITO)       AS GRUPO_DEFEITO,
+           MAQ.GRUPO                     AS GRUPO_MAQUINA,
+           UPR.NUMERO_MAQUINA,
+           UPR.NRTURNOFIM                AS TURNO,
+           SUM(OBF.KILOS_PRODUZIDOS)     AS KILOS_PRODUZIDOS,
+           COUNT(DISTINCT OBF.NUMERO_OB || '-' || TO_CHAR(OBF.SEQUENCIA)) AS QT_PARTIDAS
+      FROM JANELA J
+      JOIN SGTPRD.UNIDADE_PROGRAMACAO   UPR ON UPR.DTPRODFIM >= J.DT_INICIO_YOY AND UPR.DTPRODFIM < J.DT_FIM_YOY
+      JOIN SGTPRD.UP_ORDEM_MVTO          UOM ON UOM.NUMEROUP = UPR.NUMEROUP AND UOM.SETOR = UPR.SETOR
+      JOIN SGTPRD.OB_FASES               OBF ON OBF.NUMERO_OB = UOM.NUMEROORDEMREAL
+                                            AND OBF.SEQUENCIA = UOM.SEQUENCIAORDEMREAL
+      LEFT JOIN SGTPRD.MAQUINA           MAQ ON MAQ.NUMERO_MAQUINA = UPR.NUMERO_MAQUINA AND MAQ.SETOR = 5
+     WHERE UPR.SETOR = 5
+       AND UPR.EXCLUIDA = 0
+       AND UPR.TIPOUP = 0
+       AND UPR.STATUS = 0
+       AND OBF.CODIGO_FASE IN (10, 40)
+     GROUP BY OBF.CODIGO_FASE,
+              OBF.DESTINO_RECEITA,
+              TRIM(OBF.GRUPO_DEFEITO),
+              MAQ.GRUPO,
+              UPR.NUMERO_MAQUINA,
+              UPR.NRTURNOFIM
+),
+-- =========================================================================
+-- BASE ACABADO OFICIAL: Movimentação oficial de peças (SGTPRD.BD_PRD_MOVPROD)
+-- =========================================================================
+BASE_ACABADO_AGR AS (
+    SELECT 'ATUAL' AS PERIODO,
+           MVP.PRODUCAO_TURNO AS TURNO,
+           SUM(MVP.QUANTIDADE_REAL)          AS QUANTIDADE_REAL,
+           COUNT(MVP.IDPECASPRODUTO)         AS QT_PECAS
+      FROM JANELA J
+      JOIN SGTPRD.BD_PRD_MOVPROD MVP ON MVP.PRODUCAO_DATA >= J.DT_INICIO AND MVP.PRODUCAO_DATA < J.DT_FIM
+     WHERE MVP.NUM_TIPO_MOVIMENTO = 37
+       AND MVP.CODIGO IN (1, 8)
+     GROUP BY MVP.PRODUCAO_TURNO
+    UNION ALL
+    SELECT 'MOM' AS PERIODO,
+           MVP.PRODUCAO_TURNO AS TURNO,
+           SUM(MVP.QUANTIDADE_REAL)          AS QUANTIDADE_REAL,
+           COUNT(MVP.IDPECASPRODUTO)         AS QT_PECAS
+      FROM JANELA J
+      JOIN SGTPRD.BD_PRD_MOVPROD MVP ON MVP.PRODUCAO_DATA >= J.DT_INICIO_MOM AND MVP.PRODUCAO_DATA < J.DT_FIM_MOM
+     WHERE MVP.NUM_TIPO_MOVIMENTO = 37
+       AND MVP.CODIGO IN (1, 8)
+     GROUP BY MVP.PRODUCAO_TURNO
+    UNION ALL
+    SELECT 'YOY' AS PERIODO,
+           MVP.PRODUCAO_TURNO AS TURNO,
+           SUM(MVP.QUANTIDADE_REAL)          AS QUANTIDADE_REAL,
+           COUNT(MVP.IDPECASPRODUTO)         AS QT_PECAS
+      FROM JANELA J
+      JOIN SGTPRD.BD_PRD_MOVPROD MVP ON MVP.PRODUCAO_DATA >= J.DT_INICIO_YOY AND MVP.PRODUCAO_DATA < J.DT_FIM_YOY
+     WHERE MVP.NUM_TIPO_MOVIMENTO = 37
+       AND MVP.CODIGO IN (1, 8)
+     GROUP BY MVP.PRODUCAO_TURNO
+),
+-- =========================================================================
+-- MÉTRICAS GLOBAIS DA TINTURARIA NORMAL: Dias e Partidas Globais por Período
+-- =========================================================================
+BASE_TING_GLOBAIS AS (
+    SELECT /*+ LEADING(J UPR) USE_NL(UPR UOM OBF) */
+           'ATUAL' AS PERIODO,
+           COUNT(DISTINCT TRUNC(UPR.DTPRODFIM)) AS DIAS_COM_TINGIMENTO,
+           COUNT(DISTINCT OBF.NUMERO_OB || '-' || TO_CHAR(OBF.SEQUENCIA)) AS PARTIDAS_COM_TINGIMENTO
+      FROM JANELA J
+      JOIN SGTPRD.UNIDADE_PROGRAMACAO UPR ON UPR.DTPRODFIM >= J.DT_INICIO AND UPR.DTPRODFIM < J.DT_FIM
+      JOIN SGTPRD.UP_ORDEM_MVTO       UOM ON UOM.NUMEROUP = UPR.NUMEROUP AND UOM.SETOR = UPR.SETOR
+      JOIN SGTPRD.OB_FASES            OBF ON OBF.NUMERO_OB = UOM.NUMEROORDEMREAL
+                                         AND OBF.SEQUENCIA = UOM.SEQUENCIAORDEMREAL
+     WHERE UPR.SETOR = 5
+       AND UPR.EXCLUIDA = 0
+       AND UPR.TIPOUP = 0
+       AND UPR.STATUS = 0
+       AND OBF.CODIGO_FASE = 40
+       AND OBF.DESTINO_RECEITA = 1
+    UNION ALL
+    SELECT /*+ LEADING(J UPR) USE_NL(UPR UOM OBF) */
+           'MOM' AS PERIODO,
+           COUNT(DISTINCT TRUNC(UPR.DTPRODFIM)) AS DIAS_COM_TINGIMENTO,
+           COUNT(DISTINCT OBF.NUMERO_OB || '-' || TO_CHAR(OBF.SEQUENCIA)) AS PARTIDAS_COM_TINGIMENTO
+      FROM JANELA J
+      JOIN SGTPRD.UNIDADE_PROGRAMACAO UPR ON UPR.DTPRODFIM >= J.DT_INICIO_MOM AND UPR.DTPRODFIM < J.DT_FIM_MOM
+      JOIN SGTPRD.UP_ORDEM_MVTO       UOM ON UOM.NUMEROUP = UPR.NUMEROUP AND UOM.SETOR = UPR.SETOR
+      JOIN SGTPRD.OB_FASES            OBF ON OBF.NUMERO_OB = UOM.NUMEROORDEMREAL
+                                         AND OBF.SEQUENCIA = UOM.SEQUENCIAORDEMREAL
+     WHERE UPR.SETOR = 5
+       AND UPR.EXCLUIDA = 0
+       AND UPR.TIPOUP = 0
+       AND UPR.STATUS = 0
+       AND OBF.CODIGO_FASE = 40
+       AND OBF.DESTINO_RECEITA = 1
+    UNION ALL
+    SELECT /*+ LEADING(J UPR) USE_NL(UPR UOM OBF) */
+           'YOY' AS PERIODO,
+           COUNT(DISTINCT TRUNC(UPR.DTPRODFIM)) AS DIAS_COM_TINGIMENTO,
+           COUNT(DISTINCT OBF.NUMERO_OB || '-' || TO_CHAR(OBF.SEQUENCIA)) AS PARTIDAS_COM_TINGIMENTO
+      FROM JANELA J
+      JOIN SGTPRD.UNIDADE_PROGRAMACAO UPR ON UPR.DTPRODFIM >= J.DT_INICIO_YOY AND UPR.DTPRODFIM < J.DT_FIM_YOY
+      JOIN SGTPRD.UP_ORDEM_MVTO       UOM ON UOM.NUMEROUP = UPR.NUMEROUP AND UOM.SETOR = UPR.SETOR
+      JOIN SGTPRD.OB_FASES            OBF ON OBF.NUMERO_OB = UOM.NUMEROORDEMREAL
+                                         AND OBF.SEQUENCIA = UOM.SEQUENCIAORDEMREAL
+     WHERE UPR.SETOR = 5
+       AND UPR.EXCLUIDA = 0
+       AND UPR.TIPOUP = 0
+       AND UPR.STATUS = 0
+       AND OBF.CODIGO_FASE = 40
+       AND OBF.DESTINO_RECEITA = 1
+),
+TOT_TING_GLOBAIS AS (
+    SELECT MAX(CASE WHEN PERIODO = 'ATUAL' THEN DIAS_COM_TINGIMENTO END) AS DIAS_TING_ATU,
+           MAX(CASE WHEN PERIODO = 'MOM'   THEN DIAS_COM_TINGIMENTO END) AS DIAS_TING_MOM,
+           MAX(CASE WHEN PERIODO = 'YOY'   THEN DIAS_COM_TINGIMENTO END) AS DIAS_TING_YOY,
+           MAX(CASE WHEN PERIODO = 'ATUAL' THEN PARTIDAS_COM_TINGIMENTO END) AS PART_TING_ATU,
+           MAX(CASE WHEN PERIODO = 'MOM'   THEN PARTIDAS_COM_TINGIMENTO END) AS PART_TING_MOM,
+           MAX(CASE WHEN PERIODO = 'YOY'   THEN PARTIDAS_COM_TINGIMENTO END) AS PART_TING_YOY
+      FROM BASE_TING_GLOBAIS
+),
+-- =========================================================================
+-- DIAS COM MOVIMENTO DO ACABADO: Contagem global objetiva por período
+-- =========================================================================
+BASE_ACABADO_DIAS AS (
+    SELECT 'ATUAL' AS PERIODO,
+           COUNT(DISTINCT TRUNC(MVP.PRODUCAO_DATA)) AS DIAS_COM_MOVIMENTO
+      FROM JANELA J
+      JOIN SGTPRD.BD_PRD_MOVPROD MVP ON MVP.PRODUCAO_DATA >= J.DT_INICIO AND MVP.PRODUCAO_DATA < J.DT_FIM
+     WHERE MVP.NUM_TIPO_MOVIMENTO = 37
+       AND MVP.CODIGO IN (1, 8)
+    UNION ALL
+    SELECT 'MOM' AS PERIODO,
+           COUNT(DISTINCT TRUNC(MVP.PRODUCAO_DATA)) AS DIAS_COM_MOVIMENTO
+      FROM JANELA J
+      JOIN SGTPRD.BD_PRD_MOVPROD MVP ON MVP.PRODUCAO_DATA >= J.DT_INICIO_MOM AND MVP.PRODUCAO_DATA < J.DT_FIM_MOM
+     WHERE MVP.NUM_TIPO_MOVIMENTO = 37
+       AND MVP.CODIGO IN (1, 8)
+    UNION ALL
+    SELECT 'YOY' AS PERIODO,
+           COUNT(DISTINCT TRUNC(MVP.PRODUCAO_DATA)) AS DIAS_COM_MOVIMENTO
+      FROM JANELA J
+      JOIN SGTPRD.BD_PRD_MOVPROD MVP ON MVP.PRODUCAO_DATA >= J.DT_INICIO_YOY AND MVP.PRODUCAO_DATA < J.DT_FIM_YOY
+     WHERE MVP.NUM_TIPO_MOVIMENTO = 37
+       AND MVP.CODIGO IN (1, 8)
+),
+-- =========================================================================
+-- BASE PARADAS TINTURARIA: Interseção exata no mês nas barcas
+-- =========================================================================
+PARADAS_RAW AS (
+    SELECT 'ATUAL' AS PERIODO,
+           P.NUMERO_MAQUINA,
+           MAQ.GRUPO AS GRUPO_MAQUINA,
+           P.TURNO,
+           P.CODIGO_PARADA,
+           NVL(TRIM(M.DESCRICAO), 'MOTIVO DESCONHECIDO') AS MOTIVO_DESC,
+           (LEAST(TO_DATE(TO_CHAR(P.DATA_TERMINO), 'YYYYMMDD') + P.HORA_TERMINO / 1440, J.DT_FIM) -
+            GREATEST(TO_DATE(TO_CHAR(P.DATA_INICIO), 'YYYYMMDD') + P.HORA_INICIO / 1440, J.DT_INICIO)) * 24 AS HORAS_PARADAS
+      FROM JANELA J
+      JOIN SGTPRD.PARADAS_MAQUINA P ON P.DATA_INICIO < J.NUM_FIM AND P.DATA_TERMINO >= J.NUM_INICIO
+      JOIN SGTPRD.MAQUINA MAQ ON MAQ.NUMERO_MAQUINA = P.NUMERO_MAQUINA
+      LEFT JOIN SGTPRD.MOTIVOS_PARADAS M ON M.SETOR = P.SETOR AND M.CODIGO_PARADA = P.CODIGO_PARADA
+     WHERE MAQ.SETOR = 5
+       AND MAQ.GRUPO IN ('TG001', 'TG002', 'TG003')
+    UNION ALL
+    SELECT 'MOM' AS PERIODO,
+           P.NUMERO_MAQUINA,
+           MAQ.GRUPO AS GRUPO_MAQUINA,
+           P.TURNO,
+           P.CODIGO_PARADA,
+           NVL(TRIM(M.DESCRICAO), 'MOTIVO DESCONHECIDO') AS MOTIVO_DESC,
+           (LEAST(TO_DATE(TO_CHAR(P.DATA_TERMINO), 'YYYYMMDD') + P.HORA_TERMINO / 1440, J.DT_FIM_MOM) -
+            GREATEST(TO_DATE(TO_CHAR(P.DATA_INICIO), 'YYYYMMDD') + P.HORA_INICIO / 1440, J.DT_INICIO_MOM)) * 24 AS HORAS_PARADAS
+      FROM JANELA J
+      JOIN SGTPRD.PARADAS_MAQUINA P ON P.DATA_INICIO < J.NUM_FIM_MOM AND P.DATA_TERMINO >= J.NUM_INICIO_MOM
+      JOIN SGTPRD.MAQUINA MAQ ON MAQ.NUMERO_MAQUINA = P.NUMERO_MAQUINA
+      LEFT JOIN SGTPRD.MOTIVOS_PARADAS M ON M.SETOR = P.SETOR AND M.CODIGO_PARADA = P.CODIGO_PARADA
+     WHERE MAQ.SETOR = 5
+       AND MAQ.GRUPO IN ('TG001', 'TG002', 'TG003')
+),
+TOTAIS_PARADAS AS (
+    SELECT NVL(SUM(CASE WHEN PERIODO = 'ATUAL' THEN HORAS_PARADAS END), 0) AS HORAS_PARADAS_TINT_ATU,
+           NVL(SUM(CASE WHEN PERIODO = 'MOM'   THEN HORAS_PARADAS END), 0) AS HORAS_PARADAS_TINT_MOM
+      FROM PARADAS_RAW
+),
+TOT_ACABADO AS (
+    SELECT SUM(CASE WHEN A.PERIODO = 'ATUAL' THEN A.QUANTIDADE_REAL END) AS KG_EMB_ATU,
+           SUM(CASE WHEN A.PERIODO = 'MOM'   THEN A.QUANTIDADE_REAL END) AS KG_EMB_MOM,
+           SUM(CASE WHEN A.PERIODO = 'YOY'   THEN A.QUANTIDADE_REAL END) AS KG_EMB_YOY,
+           SUM(CASE WHEN A.PERIODO = 'ATUAL' THEN A.QT_PECAS END)        AS PECAS_EMB_ATU,
+           SUM(CASE WHEN A.PERIODO = 'MOM'   THEN A.QT_PECAS END)        AS PECAS_EMB_MOM,
+           SUM(CASE WHEN A.PERIODO = 'YOY'   THEN A.QT_PECAS END)        AS PECAS_EMB_YOY,
+           MAX(CASE WHEN D.PERIODO = 'ATUAL' THEN D.DIAS_COM_MOVIMENTO END) AS DIAS_EMB_ATU,
+           MAX(CASE WHEN D.PERIODO = 'MOM'   THEN D.DIAS_COM_MOVIMENTO END) AS DIAS_EMB_MOM,
+           MAX(CASE WHEN D.PERIODO = 'YOY'   THEN D.DIAS_COM_MOVIMENTO END) AS DIAS_EMB_YOY
+      FROM BASE_ACABADO_AGR A
+      JOIN BASE_ACABADO_DIAS D ON D.PERIODO = A.PERIODO
+),
+TOT_FASES AS (
+    SELECT SUM(CASE WHEN F.PERIODO = 'ATUAL' AND F.CODIGO_FASE = 10 THEN F.KILOS_PRODUZIDOS END) AS KG_MONT_ATU,
+           SUM(CASE WHEN F.PERIODO = 'MOM'   AND F.CODIGO_FASE = 10 THEN F.KILOS_PRODUZIDOS END) AS KG_MONT_MOM,
+           SUM(CASE WHEN F.PERIODO = 'YOY'   AND F.CODIGO_FASE = 10 THEN F.KILOS_PRODUZIDOS END) AS KG_MONT_YOY,
+           SUM(CASE WHEN F.PERIODO = 'ATUAL' AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA = 1 THEN F.KILOS_PRODUZIDOS END) AS KG_TING_NORM_ATU,
+           SUM(CASE WHEN F.PERIODO = 'MOM'   AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA = 1 THEN F.KILOS_PRODUZIDOS END) AS KG_TING_NORM_MOM,
+           SUM(CASE WHEN F.PERIODO = 'YOY'   AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA = 1 THEN F.KILOS_PRODUZIDOS END) AS KG_TING_NORM_YOY,
+           SUM(CASE WHEN F.PERIODO = 'ATUAL' AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA IN (2, 4) AND F.GRUPO_DEFEITO IN ('1', '3', '4') THEN F.KILOS_PRODUZIDOS END) AS KG_TING_REP_INT_ATU,
+           SUM(CASE WHEN F.PERIODO = 'MOM'   AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA IN (2, 4) AND F.GRUPO_DEFEITO IN ('1', '3', '4') THEN F.KILOS_PRODUZIDOS END) AS KG_TING_REP_INT_MOM,
+           SUM(CASE WHEN F.PERIODO = 'YOY'   AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA IN (2, 4) AND F.GRUPO_DEFEITO IN ('1', '3', '4') THEN F.KILOS_PRODUZIDOS END) AS KG_TING_REP_INT_YOY,
+           SUM(CASE WHEN F.PERIODO = 'ATUAL' AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA IN (2, 4) AND NVL(F.GRUPO_DEFEITO, ' ') NOT IN ('1', '3', '4') THEN F.KILOS_PRODUZIDOS END) AS KG_TING_REP_EXT_ATU,
+           SUM(CASE WHEN F.PERIODO = 'MOM'   AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA IN (2, 4) AND NVL(F.GRUPO_DEFEITO, ' ') NOT IN ('1', '3', '4') THEN F.KILOS_PRODUZIDOS END) AS KG_TING_REP_EXT_MOM,
+           SUM(CASE WHEN F.PERIODO = 'YOY'   AND F.CODIGO_FASE = 40 AND F.DESTINO_RECEITA IN (2, 4) AND NVL(F.GRUPO_DEFEITO, ' ') NOT IN ('1', '3', '4') THEN F.KILOS_PRODUZIDOS END) AS KG_TING_REP_EXT_YOY,
+           SUM(CASE WHEN F.PERIODO = 'ATUAL' AND F.CODIGO_FASE = 40 THEN F.KILOS_PRODUZIDOS END) AS KG_TING_TOT_ATU,
+           SUM(CASE WHEN F.PERIODO = 'MOM'   AND F.CODIGO_FASE = 40 THEN F.KILOS_PRODUZIDOS END) AS KG_TING_TOT_MOM,
+           SUM(CASE WHEN F.PERIODO = 'YOY'   AND F.CODIGO_FASE = 40 THEN F.KILOS_PRODUZIDOS END) AS KG_TING_TOT_YOY
+      FROM BASE_FASES_AGR F
+),
+REFS AS (
+    SELECT KG_MONT_ATU,
+           KG_MONT_MOM,
+           KG_MONT_YOY,
+           KG_TING_NORM_ATU,
+           KG_TING_NORM_MOM,
+           KG_TING_NORM_YOY,
+           KG_TING_REP_INT_ATU,
+           KG_TING_REP_INT_MOM,
+           KG_TING_REP_INT_YOY,
+           KG_TING_REP_EXT_ATU,
+           KG_TING_REP_EXT_MOM,
+           KG_TING_REP_EXT_YOY,
+           KG_TING_TOT_ATU,
+           KG_TING_TOT_MOM,
+           KG_TING_TOT_YOY,
+           KG_EMB_ATU,
+           KG_EMB_MOM,
+           KG_EMB_YOY,
+           PECAS_EMB_ATU,
+           PECAS_EMB_MOM,
+           PECAS_EMB_YOY,
+           DIAS_EMB_ATU,
+           DIAS_EMB_MOM,
+           DIAS_EMB_YOY,
+           HORAS_PARADAS_TINT_ATU,
+           HORAS_PARADAS_TINT_MOM,
+           DIAS_TING_ATU,
+           DIAS_TING_MOM,
+           DIAS_TING_YOY,
+           PART_TING_ATU,
+           PART_TING_MOM,
+           PART_TING_YOY
+      FROM TOT_FASES
+     CROSS JOIN TOT_ACABADO
+     CROSS JOIN TOTAIS_PARADAS
+     CROSS JOIN TOT_TING_GLOBAIS
+),
+-- =========================================================================
+-- BLOCO 1: GESTÃO & VOLUMES CONSOLIDADOS (MoM e YoY)
+-- =========================================================================
+BLOCO_1_KPIS AS (
+    SELECT '01_KPIS_CONSOLIDADOS' AS BLOCO_CODIGO,
+           '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)' AS BLOCO_DESCRICAO,
+           '01.01' AS ORDEM,
+           'ACABADO_KG' AS CODIGO_ITEM,
+           'Producao Acabada Oficial (kg)' AS DESCRICAO_ITEM,
+           NULL AS EQUIPAMENTO_GRUPO,
+           NULL AS EQUIPAMENTO_MAQUINA,
+           NULL AS TURNO_APONTADO,
+           TO_NUMBER(NULL) AS TURNO_1_VALOR,
+           TO_NUMBER(NULL) AS TURNO_2_VALOR,
+           TO_NUMBER(NULL) AS TURNO_3_VALOR,
+           ROUND(REF.KG_EMB_ATU, 2) AS VALOR_ATUAL,
+           ROUND(REF.KG_EMB_MOM, 2) AS VALOR_MOM,
+           ROUND((REF.KG_EMB_ATU - REF.KG_EMB_MOM) / NULLIF(REF.KG_EMB_MOM, 0) * 100, 2) AS VAR_MOM_PCT,
+           ROUND(REF.KG_EMB_YOY, 2) AS VALOR_YOY,
+           ROUND((REF.KG_EMB_ATU - REF.KG_EMB_YOY) / NULLIF(REF.KG_EMB_YOY, 0) * 100, 2) AS VAR_YOY_PCT,
+           REF.PECAS_EMB_ATU AS QT_PARTIDAS_OCORRENCIAS,
+           REF.PECAS_EMB_MOM AS QT_MOM,
+           ROUND(REF.KG_EMB_ATU / NULLIF(REF.PECAS_EMB_ATU, 0), 2) AS METRICA_MEDIA,
+           TO_NUMBER(NULL) AS PARTICIPACAO_PCT,
+           TO_NUMBER(NULL) AS PARETO_ACUM_PCT,
+           'Movimento 37 oficial (SGTPRD.BD_PRD_MOVPROD)' AS OBSERVACOES
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.02', 'ACABADO_PECAS', 'Producao Acabada Oficial (Pecas / Rolos)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           REF.PECAS_EMB_ATU, REF.PECAS_EMB_MOM,
+           ROUND((REF.PECAS_EMB_ATU - REF.PECAS_EMB_MOM) / NULLIF(REF.PECAS_EMB_MOM, 0) * 100, 2),
+           REF.PECAS_EMB_YOY,
+           ROUND((REF.PECAS_EMB_ATU - REF.PECAS_EMB_YOY) / NULLIF(REF.PECAS_EMB_YOY, 0) * 100, 2),
+           REF.PECAS_EMB_ATU, REF.PECAS_EMB_MOM,
+           NULL, NULL, NULL,
+           'Pecas embaladas registradas no mes'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.03', 'ACABADO_PESO_MEDIO', 'Peso Medio por Peca Acabada (kg/peca)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_EMB_ATU / NULLIF(REF.PECAS_EMB_ATU, 0), 2),
+           ROUND(REF.KG_EMB_MOM / NULLIF(REF.PECAS_EMB_MOM, 0), 2),
+           ROUND(((REF.KG_EMB_ATU / NULLIF(REF.PECAS_EMB_ATU, 0)) - (REF.KG_EMB_MOM / NULLIF(REF.PECAS_EMB_MOM, 0))) / NULLIF(REF.KG_EMB_MOM / NULLIF(REF.PECAS_EMB_MOM, 0), 0) * 100, 2),
+           ROUND(REF.KG_EMB_YOY / NULLIF(REF.PECAS_EMB_YOY, 0), 2),
+           ROUND(((REF.KG_EMB_ATU / NULLIF(REF.PECAS_EMB_ATU, 0)) - (REF.KG_EMB_YOY / NULLIF(REF.PECAS_EMB_YOY, 0))) / NULLIF(REF.KG_EMB_YOY / NULLIF(REF.PECAS_EMB_YOY, 0), 0) * 100, 2),
+           NULL, NULL, NULL, NULL, NULL,
+           'kg total / pecas totais'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.04', 'ACABADO_RITMO_DIA', 'Ritmo Diario Produto Acabado (kg/dia)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_EMB_ATU / NULLIF(REF.DIAS_EMB_ATU, 0), 2),
+           ROUND(REF.KG_EMB_MOM / NULLIF(REF.DIAS_EMB_MOM, 0), 2),
+           ROUND(((REF.KG_EMB_ATU / NULLIF(REF.DIAS_EMB_ATU, 0)) - (REF.KG_EMB_MOM / NULLIF(REF.DIAS_EMB_MOM, 0))) / NULLIF(REF.KG_EMB_MOM / NULLIF(REF.DIAS_EMB_MOM, 0), 0) * 100, 2),
+           ROUND(REF.KG_EMB_YOY / NULLIF(REF.DIAS_EMB_YOY, 0), 2),
+           ROUND(((REF.KG_EMB_ATU / NULLIF(REF.DIAS_EMB_ATU, 0)) - (REF.KG_EMB_YOY / NULLIF(REF.DIAS_EMB_YOY, 0))) / NULLIF(REF.KG_EMB_YOY / NULLIF(REF.DIAS_EMB_YOY, 0), 0) * 100, 2),
+           REF.DIAS_EMB_ATU, REF.DIAS_EMB_MOM,
+           NULL, NULL, NULL,
+           'kg produzido / DIAS_COM_MOVIMENTO (datas civis com apontamento do Movimento 37)'
+      FROM REFS REF
+      UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.04A', 'ACABADO_EFEITO_CALENDARIO_KG', 'Decomposicao Shapley — Efeito Calendario (kg)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND((REF.DIAS_EMB_ATU - REF.DIAS_EMB_MOM) *
+                 (((REF.KG_EMB_ATU / NULLIF(REF.DIAS_EMB_ATU, 0)) + (REF.KG_EMB_MOM / NULLIF(REF.DIAS_EMB_MOM, 0))) / 2), 2),
+           TO_NUMBER(NULL),
+           TO_NUMBER(NULL),
+           TO_NUMBER(NULL),
+           TO_NUMBER(NULL),
+           REF.DIAS_EMB_ATU - REF.DIAS_EMB_MOM,
+           NULL,
+           NULL,
+           ROUND(
+               ((REF.DIAS_EMB_ATU - REF.DIAS_EMB_MOM) *
+                (((REF.KG_EMB_ATU / NULLIF(REF.DIAS_EMB_ATU, 0)) + (REF.KG_EMB_MOM / NULLIF(REF.DIAS_EMB_MOM, 0))) / 2))
+               / NULLIF(REF.KG_EMB_ATU - REF.KG_EMB_MOM, 0) * 100, 2),
+           TO_NUMBER(NULL),
+           'Shapley: (D_ATU - D_MOM) * ((R_ATU + R_MOM) / 2) sobre variacao MoM do Acabado'
+      FROM REFS REF
+      UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.04B', 'ACABADO_EFEITO_RITMO_KG', 'Decomposicao Shapley — Efeito Ritmo Diario (kg)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(((REF.KG_EMB_ATU / NULLIF(REF.DIAS_EMB_ATU, 0)) - (REF.KG_EMB_MOM / NULLIF(REF.DIAS_EMB_MOM, 0))) *
+                 ((REF.DIAS_EMB_ATU + REF.DIAS_EMB_MOM) / 2), 2),
+           TO_NUMBER(NULL),
+           TO_NUMBER(NULL),
+           TO_NUMBER(NULL),
+           TO_NUMBER(NULL),
+           NULL,
+           NULL,
+           NULL,
+           ROUND(
+               (((REF.KG_EMB_ATU / NULLIF(REF.DIAS_EMB_ATU, 0)) - (REF.KG_EMB_MOM / NULLIF(REF.DIAS_EMB_MOM, 0))) *
+                ((REF.DIAS_EMB_ATU + REF.DIAS_EMB_MOM) / 2))
+               / NULLIF(REF.KG_EMB_ATU - REF.KG_EMB_MOM, 0) * 100, 2),
+           TO_NUMBER(NULL),
+           'Shapley: (R_ATU - R_MOM) * ((D_ATU + D_MOM) / 2) sobre variacao MoM do Acabado'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.05', 'TING_NORMAL_KG', 'Tinturaria — Producao Normal (kg)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_NORM_ATU, 2),
+           ROUND(REF.KG_TING_NORM_MOM, 2),
+           ROUND((REF.KG_TING_NORM_ATU - REF.KG_TING_NORM_MOM) / NULLIF(REF.KG_TING_NORM_MOM, 0) * 100, 2),
+           ROUND(REF.KG_TING_NORM_YOY, 2),
+           ROUND((REF.KG_TING_NORM_ATU - REF.KG_TING_NORM_YOY) / NULLIF(REF.KG_TING_NORM_YOY, 0) * 100, 2),
+           REF.PART_TING_ATU, REF.PART_TING_MOM,
+           ROUND(REF.KG_TING_NORM_ATU / NULLIF(REF.PART_TING_ATU, 0), 0),
+           NULL, NULL,
+           'Estritamente DESTINO_RECEITA = 1 (Sem reprocessos)'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.06', 'TING_NORMAL_PART', 'Tinturaria — Partidas Tingimento Normal',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           REF.PART_TING_ATU, REF.PART_TING_MOM,
+           ROUND((REF.PART_TING_ATU - REF.PART_TING_MOM) / NULLIF(REF.PART_TING_MOM, 0) * 100, 2),
+           REF.PART_TING_YOY,
+           ROUND((REF.PART_TING_ATU - REF.PART_TING_YOY) / NULLIF(REF.PART_TING_YOY, 0) * 100, 2),
+           REF.PART_TING_ATU, REF.PART_TING_MOM,
+           NULL, NULL, NULL,
+           'Quantidade de partidas distintas tingidas com DESTINO_RECEITA = 1'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.07', 'TING_CARGA_MEDIA', 'Tinturaria — Carga Media Normal (kg/partida)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_NORM_ATU / NULLIF(REF.PART_TING_ATU, 0), 0),
+           ROUND(REF.KG_TING_NORM_MOM / NULLIF(REF.PART_TING_MOM, 0), 0),
+           ROUND(((REF.KG_TING_NORM_ATU / NULLIF(REF.PART_TING_ATU, 0)) - (REF.KG_TING_NORM_MOM / NULLIF(REF.PART_TING_MOM, 0))) / NULLIF(REF.KG_TING_NORM_MOM / NULLIF(REF.PART_TING_MOM, 0), 0) * 100, 2),
+           ROUND(REF.KG_TING_NORM_YOY / NULLIF(REF.PART_TING_YOY, 0), 0),
+           ROUND(((REF.KG_TING_NORM_ATU / NULLIF(REF.PART_TING_ATU, 0)) - (REF.KG_TING_NORM_YOY / NULLIF(REF.PART_TING_YOY, 0))) / NULLIF(REF.KG_TING_NORM_YOY / NULLIF(REF.PART_TING_YOY, 0), 0) * 100, 2),
+           REF.PART_TING_ATU, REF.PART_TING_MOM,
+           ROUND(REF.KG_TING_NORM_ATU / NULLIF(REF.PART_TING_ATU, 0), 0),
+           NULL, NULL,
+           'Exclusivo DESTINO_RECEITA = 1 para todos os periodos'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.08', 'TING_RITMO_DIA', 'Tinturaria — Ritmo Diario Normal (kg/dia)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_NORM_ATU / NULLIF(REF.DIAS_TING_ATU, 0), 2),
+           ROUND(REF.KG_TING_NORM_MOM / NULLIF(REF.DIAS_TING_MOM, 0), 2),
+           ROUND(((REF.KG_TING_NORM_ATU / NULLIF(REF.DIAS_TING_ATU, 0)) - (REF.KG_TING_NORM_MOM / NULLIF(REF.DIAS_TING_MOM, 0))) / NULLIF(REF.KG_TING_NORM_MOM / NULLIF(REF.DIAS_TING_MOM, 0), 0) * 100, 2),
+           ROUND(REF.KG_TING_NORM_YOY / NULLIF(REF.DIAS_TING_YOY, 0), 2),
+           ROUND(((REF.KG_TING_NORM_ATU / NULLIF(REF.DIAS_TING_ATU, 0)) - (REF.KG_TING_NORM_YOY / NULLIF(REF.DIAS_TING_YOY, 0))) / NULLIF(REF.KG_TING_NORM_YOY / NULLIF(REF.DIAS_TING_YOY, 0), 0) * 100, 2),
+           REF.DIAS_TING_ATU, REF.DIAS_TING_MOM,
+           NULL, NULL, NULL,
+           'Producao normal / dias efetivos globais de tingimento (sem agregacao por maquina/turno)'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.09', 'TING_REP_INTERNO_KG', 'Tinturaria — Reprocesso Beneficiamento (kg)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_REP_INT_ATU, 2),
+           ROUND(REF.KG_TING_REP_INT_MOM, 2),
+           ROUND((REF.KG_TING_REP_INT_ATU - REF.KG_TING_REP_INT_MOM) / NULLIF(REF.KG_TING_REP_INT_MOM, 0) * 100, 2),
+           ROUND(REF.KG_TING_REP_INT_YOY, 2),
+           ROUND((REF.KG_TING_REP_INT_ATU - REF.KG_TING_REP_INT_YOY) / NULLIF(REF.KG_TING_REP_INT_YOY, 0) * 100, 2),
+           NULL, NULL, NULL,
+           ROUND(REF.KG_TING_REP_INT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100, 2),
+           NULL,
+           'DESTINO_RECEITA IN (2, 4) e GRUPO_DEFEITO IN (1, 3, 4)'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.10', 'TING_REP_INTERNO_PCT', 'Tinturaria — Reprocesso Beneficiamento (%)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_REP_INT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100, 2),
+           ROUND(REF.KG_TING_REP_INT_MOM / NULLIF(REF.KG_TING_NORM_MOM, 0) * 100, 2),
+           ROUND((REF.KG_TING_REP_INT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100) - (REF.KG_TING_REP_INT_MOM / NULLIF(REF.KG_TING_NORM_MOM, 0) * 100), 2),
+           ROUND(REF.KG_TING_REP_INT_YOY / NULLIF(REF.KG_TING_NORM_YOY, 0) * 100, 2),
+           ROUND((REF.KG_TING_REP_INT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100) - (REF.KG_TING_REP_INT_YOY / NULLIF(REF.KG_TING_NORM_YOY, 0) * 100), 2),
+           NULL, NULL, NULL, NULL, NULL,
+           '% Reprocesso Interno sobre Producao Normal'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.11', 'TING_REP_EXTERNO_KG', 'Tinturaria — Reprocesso Malharia / Fiacao (kg)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_REP_EXT_ATU, 2),
+           ROUND(REF.KG_TING_REP_EXT_MOM, 2),
+           ROUND((REF.KG_TING_REP_EXT_ATU - REF.KG_TING_REP_EXT_MOM) / NULLIF(REF.KG_TING_REP_EXT_MOM, 0) * 100, 2),
+           ROUND(REF.KG_TING_REP_EXT_YOY, 2),
+           ROUND((REF.KG_TING_REP_EXT_ATU - REF.KG_TING_REP_EXT_YOY) / NULLIF(REF.KG_TING_REP_EXT_YOY, 0) * 100, 2),
+           NULL, NULL, NULL,
+           ROUND(REF.KG_TING_REP_EXT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100, 2),
+           NULL,
+           'DESTINO_RECEITA IN (2, 4) e GRUPO_DEFEITO NOT IN (1, 3, 4)'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.12', 'TING_REP_EXTERNO_PCT', 'Tinturaria — Reprocesso Malharia / Fiacao (%)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_REP_EXT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100, 2),
+           ROUND(REF.KG_TING_REP_EXT_MOM / NULLIF(REF.KG_TING_NORM_MOM, 0) * 100, 2),
+           ROUND((REF.KG_TING_REP_EXT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100) - (REF.KG_TING_REP_EXT_MOM / NULLIF(REF.KG_TING_NORM_MOM, 0) * 100), 2),
+           ROUND(REF.KG_TING_REP_EXT_YOY / NULLIF(REF.KG_TING_NORM_YOY, 0) * 100, 2),
+           ROUND((REF.KG_TING_REP_EXT_ATU / NULLIF(REF.KG_TING_NORM_ATU, 0) * 100) - (REF.KG_TING_REP_EXT_YOY / NULLIF(REF.KG_TING_NORM_YOY, 0) * 100), 2),
+           NULL, NULL, NULL, NULL, NULL,
+           '% Reprocesso Externo sobre Producao Normal'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.13', 'TING_RFT_PCT', 'Tinturaria — Acerto de 1ª (RFT %)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_TING_NORM_ATU / NULLIF(REF.KG_TING_TOT_ATU, 0) * 100, 2),
+           ROUND(REF.KG_TING_NORM_MOM / NULLIF(REF.KG_TING_TOT_MOM, 0) * 100, 2),
+           ROUND((REF.KG_TING_NORM_ATU / NULLIF(REF.KG_TING_TOT_ATU, 0) * 100) - (REF.KG_TING_NORM_MOM / NULLIF(REF.KG_TING_TOT_MOM, 0) * 100), 2),
+           ROUND(REF.KG_TING_NORM_YOY / NULLIF(REF.KG_TING_TOT_YOY, 0) * 100, 2),
+           ROUND((REF.KG_TING_NORM_ATU / NULLIF(REF.KG_TING_TOT_ATU, 0) * 100) - (REF.KG_TING_NORM_YOY / NULLIF(REF.KG_TING_TOT_YOY, 0) * 100), 2),
+           NULL, NULL, NULL, NULL, NULL,
+           'Normal / Total Tingido (Normal + Reprocesso)'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.14', 'RELACAO_EMB_CRU', 'Relacao Acabado / Cru — Balanco de Massa (%)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_EMB_ATU / NULLIF(REF.KG_MONT_ATU, 0) * 100, 2),
+           ROUND(REF.KG_EMB_MOM / NULLIF(REF.KG_MONT_MOM, 0) * 100, 2),
+           ROUND((REF.KG_EMB_ATU / NULLIF(REF.KG_MONT_ATU, 0) * 100) - (REF.KG_EMB_MOM / NULLIF(REF.KG_MONT_MOM, 0) * 100), 2),
+           ROUND(REF.KG_EMB_YOY / NULLIF(REF.KG_MONT_YOY, 0) * 100, 2),
+           ROUND((REF.KG_EMB_ATU / NULLIF(REF.KG_MONT_ATU, 0) * 100) - (REF.KG_EMB_YOY / NULLIF(REF.KG_MONT_YOY, 0) * 100), 2),
+           NULL, NULL, NULL, NULL, NULL,
+           'Balanco de massa mensal (sem rastreabilidade por lote individual)'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.15', 'ESCOAMENTO_EMB_TING', 'Escoamento Acabado / Tingido (%)',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.KG_EMB_ATU / NULLIF(REF.KG_TING_TOT_ATU, 0) * 100, 2),
+           ROUND(REF.KG_EMB_MOM / NULLIF(REF.KG_TING_TOT_MOM, 0) * 100, 2),
+           ROUND((REF.KG_EMB_ATU / NULLIF(REF.KG_TING_TOT_ATU, 0) * 100) - (REF.KG_EMB_MOM / NULLIF(REF.KG_TING_TOT_MOM, 0) * 100), 2),
+           ROUND(REF.KG_EMB_YOY / NULLIF(REF.KG_TING_TOT_YOY, 0) * 100, 2),
+           ROUND((REF.KG_EMB_ATU / NULLIF(REF.KG_TING_TOT_ATU, 0) * 100) - (REF.KG_EMB_YOY / NULLIF(REF.KG_TING_TOT_YOY, 0) * 100), 2),
+           NULL, NULL, NULL, NULL, NULL,
+           'Volume acabado embalado / Volume total tingido'
+      FROM REFS REF
+     UNION ALL
+    SELECT '01_KPIS_CONSOLIDADOS', '1. GESTAO E VOLUMES CONSOLIDADOS (MoM e YoY)',
+           '01.16', 'HORAS_PARADAS_TINT', 'Tinturaria — Horas Totais Paradas',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           ROUND(REF.HORAS_PARADAS_TINT_ATU, 2),
+           ROUND(REF.HORAS_PARADAS_TINT_MOM, 2),
+           ROUND((REF.HORAS_PARADAS_TINT_ATU - REF.HORAS_PARADAS_TINT_MOM) / NULLIF(REF.HORAS_PARADAS_TINT_MOM, 0) * 100, 2),
+           TO_NUMBER(NULL), TO_NUMBER(NULL),
+           NULL, NULL, NULL, NULL, NULL,
+           'Horas na intersecao exata do mes nas barcas (Setor 5, TG001/TG002/TG003)'
+      FROM REFS REF
+),
+-- =========================================================================
+-- BLOCO 2: QUADRO PERMANENTE DE PRODUÇÃO POR TURNO (9 FASES FABRIS)
+-- =========================================================================
+BASE_TURNOS_9FASES AS (
+    SELECT CASE 
+             WHEN CODIGO_FASE = 20 THEN '02.01'
+             WHEN CODIGO_FASE = 40 AND DESTINO_RECEITA = 1 THEN '02.02'
+             WHEN CODIGO_FASE IN (50, 55) THEN '02.03'
+             WHEN CODIGO_FASE = 60 THEN '02.04'
+             WHEN CODIGO_FASE = 65 THEN '02.05'
+             WHEN CODIGO_FASE = 70 THEN '02.06'
+             WHEN CODIGO_FASE = 80 THEN '02.07'
+             WHEN CODIGO_FASE = 90 THEN '02.08'
+             WHEN CODIGO_FASE IN (100, 110) THEN '02.09'
+           END AS ORDEM,
+           CASE 
+             WHEN CODIGO_FASE = 20 THEN 'FASE_20'
+             WHEN CODIGO_FASE = 40 AND DESTINO_RECEITA = 1 THEN 'FASE_40_NORM'
+             WHEN CODIGO_FASE IN (50, 55) THEN 'FASES_50_55'
+             WHEN CODIGO_FASE = 60 THEN 'FASE_60'
+             WHEN CODIGO_FASE = 65 THEN 'FASE_65'
+             WHEN CODIGO_FASE = 70 THEN 'FASE_70'
+             WHEN CODIGO_FASE = 80 THEN 'FASE_80'
+             WHEN CODIGO_FASE = 90 THEN 'FASE_90'
+             WHEN CODIGO_FASE IN (100, 110) THEN 'FASES_100_110'
+           END AS CODIGO_ITEM,
+           CASE 
+             WHEN CODIGO_FASE = 20 THEN 'Revisao de Malha Crua'
+             WHEN CODIGO_FASE = 40 AND DESTINO_RECEITA = 1 THEN 'Tinturaria — Producao Normal'
+             WHEN CODIGO_FASE IN (50, 55) THEN 'Hidroextratores'
+             WHEN CODIGO_FASE = 60 THEN 'Secadores'
+             WHEN CODIGO_FASE = 65 THEN 'Felpadeira'
+             WHEN CODIGO_FASE = 70 THEN 'Calandra de Brilho'
+             WHEN CODIGO_FASE = 80 THEN 'Calandra Compacta'
+             WHEN CODIGO_FASE = 90 THEN 'Abridor'
+             WHEN CODIGO_FASE IN (100, 110) THEN 'Ramas'
+           END AS DESCRICAO_ITEM,
+           TURNO,
+           KILOS_PRODUZIDOS,
+           QT_PARTIDAS
+      FROM BASE_FASES_AGR
+     WHERE PERIODO = 'ATUAL'
+       AND (
+            CODIGO_FASE IN (20, 50, 55, 60, 65, 70, 80, 90, 100, 110)
+            OR (CODIGO_FASE = 40 AND DESTINO_RECEITA = 1)
+           )
+),
+BLOCO_2_TURNOS AS (
+    SELECT '02_QUADRO_TURNOS_FASES' AS BLOCO_CODIGO,
+           '2. QUADRO PERMANENTE DE PRODUCAO POR TURNO' AS BLOCO_DESCRICAO,
+           ORDEM,
+           CODIGO_ITEM,
+           DESCRICAO_ITEM,
+           NULL AS EQUIPAMENTO_GRUPO,
+           NULL AS EQUIPAMENTO_MAQUINA,
+           NULL AS TURNO_APONTADO,
+           ROUND(SUM(CASE WHEN TURNO = 1 THEN KILOS_PRODUZIDOS ELSE 0 END), 2) AS TURNO_1_VALOR,
+           ROUND(SUM(CASE WHEN TURNO = 2 THEN KILOS_PRODUZIDOS ELSE 0 END), 2) AS TURNO_2_VALOR,
+           ROUND(SUM(CASE WHEN TURNO = 3 THEN KILOS_PRODUZIDOS ELSE 0 END), 2) AS TURNO_3_VALOR,
+           ROUND(SUM(KILOS_PRODUZIDOS), 2) AS VALOR_ATUAL,
+           TO_NUMBER(NULL) AS VALOR_MOM,
+           TO_NUMBER(NULL) AS VAR_MOM_PCT,
+           TO_NUMBER(NULL) AS VALOR_YOY,
+           TO_NUMBER(NULL) AS VAR_YOY_PCT,
+           SUM(QT_PARTIDAS) AS QT_PARTIDAS_OCORRENCIAS,
+           TO_NUMBER(NULL) AS QT_MOM,
+           -- Carga média somente onde o conceito de lote/batelada física é aplicável (Tinturaria)
+           CASE 
+             WHEN CODIGO_ITEM = 'FASE_40_NORM' THEN
+                  ROUND(SUM(KILOS_PRODUZIDOS) / NULLIF(SUM(QT_PARTIDAS), 0), 0)
+             ELSE TO_NUMBER(NULL)
+           END AS METRICA_MEDIA,
+           TO_NUMBER(NULL) AS PARTICIPACAO_PCT,
+           TO_NUMBER(NULL) AS PARETO_ACUM_PCT,
+           CASE 
+             WHEN CODIGO_ITEM = 'FASE_40_NORM' THEN 'Somente DESTINO_RECEITA = 1 (Sem reprocessos) - Carga media valida por batelada'
+             WHEN CODIGO_ITEM = 'FASE_20' THEN 'Volume revisado (operacao manual rolo a rolo - sem conceito de batelada)'
+             WHEN CODIGO_ITEM = 'FASE_65' THEN 'Equipamento FE01 (Grupo FE001) - Fluxo continuo'
+             WHEN CODIGO_ITEM = 'FASE_90' THEN 'Equipamento AB01 (Grupo AB001) - Fluxo continuo (sem conceito de carga media)'
+             ELSE 'Apontamento oficial em kg'
+           END AS OBSERVACOES
+      FROM BASE_TURNOS_9FASES
+     GROUP BY ORDEM, CODIGO_ITEM, DESCRICAO_ITEM
+),
+-- =========================================================================
+-- BLOCO 3: CONSOLIDADO E PARETO DE PARADAS DA TINTURARIA (MoM)
+-- =========================================================================
+AGR_PARADAS_MOTIVO AS (
+    SELECT P.CODIGO_PARADA,
+           P.MOTIVO_DESC,
+           SUM(CASE WHEN P.PERIODO = 'ATUAL' THEN 1 ELSE 0 END) AS OCORRENCIAS_ATU,
+           SUM(CASE WHEN P.PERIODO = 'ATUAL' THEN P.HORAS_PARADAS ELSE 0 END) AS HORAS_ATU,
+           SUM(CASE WHEN P.PERIODO = 'MOM'   THEN 1 ELSE 0 END) AS OCORRENCIAS_MOM,
+           SUM(CASE WHEN P.PERIODO = 'MOM'   THEN P.HORAS_PARADAS ELSE 0 END) AS HORAS_MOM
+      FROM PARADAS_RAW P
+     GROUP BY P.CODIGO_PARADA, P.MOTIVO_DESC
+    HAVING SUM(CASE WHEN P.PERIODO = 'ATUAL' THEN P.HORAS_PARADAS ELSE 0 END) > 0
+),
+BLOCO_3_PARETO AS (
+    SELECT '03_PARETO_PARADAS_TINTURARIA' AS BLOCO_CODIGO,
+           '3. CONSOLIDADO E PARETO DE PARADAS DA TINTURARIA (MoM)' AS BLOCO_DESCRICAO,
+           '03.' || LPAD(ROW_NUMBER() OVER (ORDER BY M.HORAS_ATU DESC), 2, '0') AS ORDEM,
+           M.CODIGO_PARADA AS CODIGO_ITEM,
+           M.MOTIVO_DESC AS DESCRICAO_ITEM,
+           NULL AS EQUIPAMENTO_GRUPO,
+           NULL AS EQUIPAMENTO_MAQUINA,
+           NULL AS TURNO_APONTADO,
+           TO_NUMBER(NULL) AS TURNO_1_VALOR,
+           TO_NUMBER(NULL) AS TURNO_2_VALOR,
+           TO_NUMBER(NULL) AS TURNO_3_VALOR,
+           ROUND(M.HORAS_ATU, 2) AS VALOR_ATUAL,
+           ROUND(M.HORAS_MOM, 2) AS VALOR_MOM,
+           ROUND((M.HORAS_ATU - M.HORAS_MOM) / NULLIF(M.HORAS_MOM, 0) * 100, 2) AS VAR_MOM_PCT,
+           TO_NUMBER(NULL) AS VALOR_YOY,
+           TO_NUMBER(NULL) AS VAR_YOY_PCT,
+           M.OCORRENCIAS_ATU AS QT_PARTIDAS_OCORRENCIAS,
+           M.OCORRENCIAS_MOM AS QT_MOM,
+           ROUND(M.HORAS_ATU / NULLIF(M.OCORRENCIAS_ATU, 0), 2) AS METRICA_MEDIA,
+           ROUND(M.HORAS_ATU / NULLIF(TP.HORAS_PARADAS_TINT_ATU, 0) * 100, 2) AS PARTICIPACAO_PCT,
+           ROUND(SUM(M.HORAS_ATU) OVER (ORDER BY M.HORAS_ATU DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                 / NULLIF(TP.HORAS_PARADAS_TINT_ATU, 0) * 100, 2) AS PARETO_ACUM_PCT,
+           'Motivo apontado no ERP (nao deduz causa raiz fisica automaticamente)' AS OBSERVACOES
+      FROM AGR_PARADAS_MOTIVO M
+     CROSS JOIN TOTAIS_PARADAS TP
+),
+-- =========================================================================
+-- BLOCO 4: DETALHAMENTO DE PARADAS POR MOTIVO, MÁQUINA E TURNO
+-- =========================================================================
+AGR_PARADAS_DETALHE AS (
+    SELECT P.CODIGO_PARADA,
+           P.MOTIVO_DESC,
+           P.GRUPO_MAQUINA,
+           P.NUMERO_MAQUINA,
+           P.TURNO,
+           COUNT(*) AS OCORRENCIAS_ATU,
+           SUM(P.HORAS_PARADAS) AS HORAS_ATU
+      FROM PARADAS_RAW P
+     WHERE P.PERIODO = 'ATUAL'
+     GROUP BY P.CODIGO_PARADA, P.MOTIVO_DESC, P.GRUPO_MAQUINA, P.NUMERO_MAQUINA, P.TURNO
+),
+BLOCO_4_DETALHE AS (
+    SELECT '04_PARADAS_MAQUINA_TURNO' AS BLOCO_CODIGO,
+           '4. DETALHAMENTO DE PARADAS POR MAQUINA E TURNO' AS BLOCO_DESCRICAO,
+           '04.' || LPAD(ROW_NUMBER() OVER (ORDER BY D.CODIGO_PARADA, D.HORAS_ATU DESC), 2, '0') AS ORDEM,
+           D.CODIGO_PARADA AS CODIGO_ITEM,
+           D.MOTIVO_DESC AS DESCRICAO_ITEM,
+           D.GRUPO_MAQUINA AS EQUIPAMENTO_GRUPO,
+           D.NUMERO_MAQUINA AS EQUIPAMENTO_MAQUINA,
+           TO_CHAR(D.TURNO) AS TURNO_APONTADO,
+           TO_NUMBER(NULL) AS TURNO_1_VALOR,
+           TO_NUMBER(NULL) AS TURNO_2_VALOR,
+           TO_NUMBER(NULL) AS TURNO_3_VALOR,
+           ROUND(D.HORAS_ATU, 2) AS VALOR_ATUAL,
+           TO_NUMBER(NULL) AS VALOR_MOM,
+           TO_NUMBER(NULL) AS VAR_MOM_PCT,
+           TO_NUMBER(NULL) AS VALOR_YOY,
+           TO_NUMBER(NULL) AS VAR_YOY_PCT,
+           D.OCORRENCIAS_ATU AS QT_PARTIDAS_OCORRENCIAS,
+           TO_NUMBER(NULL) AS QT_MOM,
+           ROUND(D.HORAS_ATU / NULLIF(D.OCORRENCIAS_ATU, 0), 2) AS METRICA_MEDIA,
+           ROUND(D.HORAS_ATU / NULLIF(TP.HORAS_PARADAS_TINT_ATU, 0) * 100, 2) AS PARTICIPACAO_PCT,
+           TO_NUMBER(NULL) AS PARETO_ACUM_PCT,
+           'Detalhamento operacional da parada por equipamento e turno apontado' AS OBSERVACOES
+      FROM AGR_PARADAS_DETALHE D
+     CROSS JOIN TOTAIS_PARADAS TP
+),
+-- =========================================================================
+-- UNIFICAÇÃO FINAL DE TODOS OS BLOCOS
+-- =========================================================================
+TODOS_BLOCOS AS (
+    SELECT BLOCO_CODIGO,
+           BLOCO_DESCRICAO,
+           ORDEM,
+           CODIGO_ITEM,
+           DESCRICAO_ITEM,
+           EQUIPAMENTO_GRUPO,
+           EQUIPAMENTO_MAQUINA,
+           TURNO_APONTADO,
+           TURNO_1_VALOR,
+           TURNO_2_VALOR,
+           TURNO_3_VALOR,
+           VALOR_ATUAL,
+           VALOR_MOM,
+           VAR_MOM_PCT,
+           VALOR_YOY,
+           VAR_YOY_PCT,
+           QT_PARTIDAS_OCORRENCIAS,
+           QT_MOM,
+           METRICA_MEDIA,
+           PARTICIPACAO_PCT,
+           PARETO_ACUM_PCT,
+           OBSERVACOES
+      FROM BLOCO_1_KPIS
+    UNION ALL
+    SELECT BLOCO_CODIGO,
+           BLOCO_DESCRICAO,
+           ORDEM,
+           CODIGO_ITEM,
+           DESCRICAO_ITEM,
+           EQUIPAMENTO_GRUPO,
+           EQUIPAMENTO_MAQUINA,
+           TURNO_APONTADO,
+           TURNO_1_VALOR,
+           TURNO_2_VALOR,
+           TURNO_3_VALOR,
+           VALOR_ATUAL,
+           VALOR_MOM,
+           VAR_MOM_PCT,
+           VALOR_YOY,
+           VAR_YOY_PCT,
+           QT_PARTIDAS_OCORRENCIAS,
+           QT_MOM,
+           METRICA_MEDIA,
+           PARTICIPACAO_PCT,
+           PARETO_ACUM_PCT,
+           OBSERVACOES
+      FROM BLOCO_2_TURNOS
+    UNION ALL
+    SELECT BLOCO_CODIGO,
+           BLOCO_DESCRICAO,
+           ORDEM,
+           CODIGO_ITEM,
+           DESCRICAO_ITEM,
+           EQUIPAMENTO_GRUPO,
+           EQUIPAMENTO_MAQUINA,
+           TURNO_APONTADO,
+           TURNO_1_VALOR,
+           TURNO_2_VALOR,
+           TURNO_3_VALOR,
+           VALOR_ATUAL,
+           VALOR_MOM,
+           VAR_MOM_PCT,
+           VALOR_YOY,
+           VAR_YOY_PCT,
+           QT_PARTIDAS_OCORRENCIAS,
+           QT_MOM,
+           METRICA_MEDIA,
+           PARTICIPACAO_PCT,
+           PARETO_ACUM_PCT,
+           OBSERVACOES
+      FROM BLOCO_3_PARETO
+    UNION ALL
+    SELECT BLOCO_CODIGO,
+           BLOCO_DESCRICAO,
+           ORDEM,
+           CODIGO_ITEM,
+           DESCRICAO_ITEM,
+           EQUIPAMENTO_GRUPO,
+           EQUIPAMENTO_MAQUINA,
+           TURNO_APONTADO,
+           TURNO_1_VALOR,
+           TURNO_2_VALOR,
+           TURNO_3_VALOR,
+           VALOR_ATUAL,
+           VALOR_MOM,
+           VAR_MOM_PCT,
+           VALOR_YOY,
+           VAR_YOY_PCT,
+           QT_PARTIDAS_OCORRENCIAS,
+           QT_MOM,
+           METRICA_MEDIA,
+           PARTICIPACAO_PCT,
+           PARETO_ACUM_PCT,
+           OBSERVACOES
+      FROM BLOCO_4_DETALHE
+)
+SELECT JAN.MES_REFERENCIA AS COMPETENCIA,
+       TO_CHAR(JAN.DT_INICIO, 'DD/MM/YYYY') || ' a ' || TO_CHAR(JAN.DT_FIM - 1, 'DD/MM/YYYY') AS PERIODO_REFERENCIA,
+       B.BLOCO_CODIGO,
+       B.BLOCO_DESCRICAO,
+       B.ORDEM,
+       B.CODIGO_ITEM,
+       B.DESCRICAO_ITEM,
+       B.EQUIPAMENTO_GRUPO,
+       B.EQUIPAMENTO_MAQUINA,
+       B.TURNO_APONTADO,
+       B.TURNO_1_VALOR,
+       B.TURNO_2_VALOR,
+       B.TURNO_3_VALOR,
+       B.VALOR_ATUAL,
+       B.VALOR_MOM,
+       B.VAR_MOM_PCT,
+       B.VALOR_YOY,
+       B.VAR_YOY_PCT,
+       B.QT_PARTIDAS_OCORRENCIAS,
+       B.QT_MOM,
+       B.METRICA_MEDIA,
+       B.PARTICIPACAO_PCT,
+       B.PARETO_ACUM_PCT,
+       B.OBSERVACOES
+  FROM TODOS_BLOCOS B
+ CROSS JOIN JANELA JAN
+ ORDER BY B.ORDEM

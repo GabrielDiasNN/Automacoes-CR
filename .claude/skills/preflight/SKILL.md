@@ -21,12 +21,12 @@ pwsh -File Tools\Test-SkillsGovernance.ps1 -BasePath .
 **Etapa 3 — Lint bloqueante do CI (ruff)** — escopo idêntico a `.github/workflows/governanca.yml`
 (mantido em sincronia pela skill `ci-gates`; se divergir, `ci-gates` é a fonte):
 ```
-.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools docs/templates
+.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools docs/templates docs/oracle-schema/consultas Orchestrator/tests Orchestrator/migrations "Produção Beneficimento/snapshots" "Produção Beneficimento/analise_producao_diaria_beneficiamento.py"
 ```
 
 **Etapa 4 — Segurança estática (bandit)** — mesmo escopo do ruff, `-ll`:
 ```
-.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools docs/templates -ll
+.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" "OBs Restricao Branco" "Receitas Bloqueadas" "Montagem de Terceirizados" "Receitas Emitidas" "OBs Paradas Fase" "OBs Fluxo Sem Tingimento" .claude/skills Tools docs/templates docs/oracle-schema/consultas Orchestrator/tests Orchestrator/migrations "Produção Beneficimento/snapshots" "Produção Beneficimento/analise_producao_diaria_beneficiamento.py" -ll
 ```
 
 **Etapa 5 — Formatação e imports (black + isort)** — o CI roda só sobre os `.py` alterados no PR
@@ -36,7 +36,7 @@ pwsh -Command "$py = git diff --name-only --diff-filter=d main...HEAD -- '*.py';
 ```
 
 **Etapa 6 — Governança Python (mypy `--strict` + pylint)** — este é o mypy **bloqueante** do
-pre-commit hook; o CI não roda mypy. Limites exatos em `docs/governance-contracts.md`:
+pre-commit hook; o CI não roda mypy. Limites exatos em `docs/governanca/governance-contracts.md`:
 ```
 pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 ```

@@ -1,11 +1,12 @@
 # Schema Graph — Oracle SGTPRD
 
 > Curadoria humana sobre dados reais, verificados em 13/09/2026 via
-> `Tools/build_oracle_catalog.py` + `Tools/oracle_catalog.py`.
+> `Tools/oracle/build_oracle_catalog.py` + `Tools/oracle/oracle_catalog.py`.
 > Mostra os objetos SGTPRD **usados pelas automações ativas** com suas relações.
-> Para o subgrafo em JSON (mesmos objetos, formato programático) veja
-> `core-graph.json`. Para o schema real completo (3.608 tabelas, 1.729 views),
-> use o catálogo local — `Tools/oracle_catalog.py table/find/path/neighbors`.
+> Para o subgrafo em JSON veja `core-graph.json` (gerado por
+> `Tools/oracle/gerar_core_graph.py`; cobre também o acervo `docs/oracle-schema/consultas/`,
+> portanto mais objetos que este grafo das automações). Para o schema real completo (3.608 tabelas, 1.729 views),
+> use o catálogo local — `Tools/oracle/oracle_catalog.py table/find/path/neighbors`.
 
 ---
 

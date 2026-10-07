@@ -264,7 +264,7 @@ function Test-ArchitectureDocumentation {
         }
     }
 
-    foreach ($doc in @("README.md", "CONTEXT.md", "docs\repository-governance.md")) {
+    foreach ($doc in @("README.md", "CONTEXT.md", "docs\governanca\repository-governance.md")) {
         $content = Get-RepoText -BasePath $BasePath -RelativePath $doc
         if ($null -eq $content) {
             Add-ArchitectureFinding `

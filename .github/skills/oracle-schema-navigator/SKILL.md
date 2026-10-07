@@ -9,7 +9,7 @@ Fornecer o mapa do schema Oracle SGTPRD para que qualquer agente (Gemini, Codex,
 possa escrever SQL correto sem precisar explorar o dicionario de dados do Oracle manualmente
 a cada sessao. O schema real tem 3.608 tabelas, 1.729 views e 74.095 colunas (medido em
 13/09/2026); esta skill documenta os ~55 objetos criticos para as automações ativas E aponta
-para o catalogo local (`Tools/oracle_catalog.py`) quando a pergunta e sobre outro objeto.
+para o catalogo local (`Tools/oracle/oracle_catalog.py`) quando a pergunta e sobre outro objeto.
 
 ## When to Use
 
@@ -25,6 +25,7 @@ Ativar sempre que precisar:
 - Para padrões de implementação Python (imports, oracle_extract, batch): use `python-enterprise-standard`.
 - Para seguranca de runtime, segredos e logging estruturado: use `automation-runtime-safety`.
 - Para padrões de SQL com CTEs e anti-patterns detalhados: use `oracle-sql-patterns`.
+- Consultas já escritas e validadas para o ERP: `docs/oracle-schema/consultas/CATALOGO_QUERIES.md` (só as ✅ são referência canônica).
 
 ## Bootstrap de Contexto
 
@@ -38,17 +39,17 @@ para evitar. Em vez disso:
    tipo? PK? FK?), rode o CLI contra o catalogo local — cada chamada custa
    dezenas de linhas, não megabytes:
    ```powershell
-   .venv\Scripts\python Tools\oracle_catalog.py table <NOME>
-   .venv\Scripts\python Tools\oracle_catalog.py find "<termo>"
-   .venv\Scripts\python Tools\oracle_catalog.py path <DE> <PARA>
-   .venv\Scripts\python Tools\oracle_catalog.py cols <TABELA> --like <PADRAO>
+   .venv\Scripts\python Tools\oracle\oracle_catalog.py table <NOME>
+   .venv\Scripts\python Tools\oracle\oracle_catalog.py find "<termo>"
+   .venv\Scripts\python Tools\oracle\oracle_catalog.py path <DE> <PARA>
+   .venv\Scripts\python Tools\oracle\oracle_catalog.py cols <TABELA> --like <PADRAO>
    ```
 3. Para a topologia dos objetos das automações em JSON (mesmo escopo do
    `domain-map.md`, formato programatico): `docs/oracle-schema/core-graph.json`.
 4. Para diagramas Mermaid navegaveis: `docs/oracle-schema/schema-graph.md`.
 
 O catalogo (`docs/oracle-schema/schema.db`, ~35MB, gitignored) e gerado por
-`Tools/build_oracle_catalog.py` e nunca deve ser lido diretamente — sempre via
+`Tools/oracle/build_oracle_catalog.py` e nunca deve ser lido diretamente — sempre via
 o CLI. Se `table`/`find`/`path` falharem com "Catalogo não encontrado", rode o
 build (ver Repo-Specific Constraints).
 
@@ -65,9 +66,10 @@ no texto curado.
 | **Produção/OB**        | `OB`, `OB_FASES`, `OB_PRODUTO`, `FASES_FLUXO`                                                                |
 | **Programacao**        | `UNIDADE_PROGRAMACAO`, `UP_ORDEM_MVTO`                                                                       |
 | **Pecas**              | `GERAPECASPRODUTO` (13M!), `GERAPECAORIGEMOB`, `GERAPECADESTINOOB`                                           |
-| **Qualidade/Receitas** | `MOVTO_RECEITA`, `CADASTRO_RECEITAS`, `LIGA_CADREC_ITEMREC`, `LABRECEITA_BLOQUEADA`                          |
+| **Qualidade/Receitas** | `MOVTO_RECEITA`, `CADASTRO_RECEITAS`, `LIGA_CADREC_ITEMREC`, `LABRECEITA_BLOQUEADA`, `DESTINO`, `GRUPO_DESTINO` |
 | **Classificacao**      | `CLASSIFICACAO_COR` (1=CLARA, 6=BRANCO, 9=BRANCO 2 FIBRAS), `COR_FINALIDADE`                                 |
 | **Estoque/Cadastro**   | `ITENS_ESTOQUE`, `BD_BAS_MASCPRODACAB`, `PESSOASFJ`                                                          |
+| **Entrada/Lotes NFe**  | `LOTE_ITENS_NOTA_ENTR`, `GERAPECANOTAENTRADA`, `ITENS_NOTA_ENTRADA`, `MESTRE_NOTA_ENTRADA`                   |
 | **Comercial/Pedidos**  | `PEDPRODUCAOOB` - `OFORDENS` - `OFPEDIDO` - `ITENSPEDIDOQTDES` - `ITENSPEDIDOGRADE` - `ITENSPEDIDOCOMERCIAL` |
 | **Engenharia**         | `ENG_PRODG_ACABADO`, `MAQUINA`, `VARIANTE_DESENHO`                                                           |
 
@@ -105,20 +107,83 @@ JOIN SGTPRD.VW_ENU_STATUS_OB_FASES ENS ON ENS.STATUS = OBF.STATUS
 
 -- 9. Lookup de usuario
 LEFT JOIN SGTPRD.VW_SIS_SENHA_USUARIO VSU ON VSU.CODREDUSUARIO = LCR.USUARIO_ALTEROU
+
+-- 10. Genealogia Física de Peças entre Ordens (Mãe -> Filha / Desdobro / Rastreabilidade)
+-- Semântica comprovada no SGT:
+--   GERAPECADESTINOOB: OB Mãe/Geradora (onde a peça foi gerada como destino)
+--   GERAPECAORIGEMOB:   OB Filha/Consumidora (onde a peça entrou como origem)
+-- Continuidade (mesmo IDPECASPRODUTO):
+JOIN SGTPRD.GERAPECADESTINOOB DO ON DO.IDPECASPRODUTO = GPO.IDPECASPRODUTO AND DO.NUMERO_OB <> OB.NUMERO_OB
+-- Transformação / Desdobro de peças (IDPECASPRODUTOORIGEM -> IDPECASPRODUTO):
+LEFT JOIN SGTPRD.GERAPECAORIGEM GO ON GO.IDPECASPRODUTO = GPO.IDPECASPRODUTO
+LEFT JOIN SGTPRD.GERAPECADESTINOOB DOM ON DOM.IDPECASPRODUTO = GO.IDPECASPRODUTOORIGEM AND DOM.NUMERO_OB <> OB.NUMERO_OB
+
+-- 11. Produção de Fase de Acabamento / Beneficiamento (BD_BNF_PRODUCAO_FASE)
+-- CHAVE FÍSICA MÍNIMA (Grão Físico): NUMEROUP + NUMERO_OB + SEQUENCIA
+--   - Chave composta única para contagem de partidas físicas: TO_CHAR(NUMEROUP) || '|' || TO_CHAR(NUMERO_OB) || '|' || TO_CHAR(SEQUENCIA)
+-- OPERADOR: Coluna 'OPERADOR' genérica NÃO existe na tabela!
+--   - OPERADOR_INICIO: Operador que efetuou a abertura da ordem no terminal.
+--   - OPERADOR_FINAL: Operador oficial responsável pelo encerramento, pesagem e validação da partida (padrão ERP).
+--   - Join de Operador: JOIN SGTPRD.OPERADOR OP ON OP.CODIGO = VPF.OPERADOR_FINAL
+-- PESO / VOLUME: Coluna 'PESO_PADRAO' ou 'QUANT_PROD' NÃO existem na tabela!
+--   - A coluna oficial do ERP de quilos apontados é VPF.KILOS (FLOAT).
+-- MÁQUINA / EQUIPAMENTO: Coluna 'CODIGO_MAQUINA' NÃO existe na tabela!
+--   - A coluna oficial é VPF.NUMERO_MAQUINA (VARCHAR2(10), com zeros à esquerda, ex: '000000SC01').
+--   - Join de Máquina: JOIN SGTPRD.MAQUINA MAQ ON MAQ.NUMERO_MAQUINA = VPF.NUMERO_MAQUINA
+--   - Exibição amigável: TRIM(LTRIM(VPF.NUMERO_MAQUINA, '0')) (ex: 'SC01', 'HD02')
+-- CRONOLOGIA: DATA_FIM é truncada (00:00:00); usar DATA_HORA_FIM para desempate cronológico exato.
+JOIN SGTPRD.BD_BNF_PRODUCAO_FASE VPF ON VPF.NUMERO_OB = OB.NUMERO_OB AND VPF.STATUS = 0
+
+-- 12. Rastreabilidade de Peça ao Lote de Entrada de Nota Fiscal (Facção / Terceirização)
+-- A filiação e origem histórica são estritamente determinadas por IDLOTEITENSNFE = LOT.ID.
+-- NUNCA filtrar por GERAPECASPRODUTO.PADRAO_QUALIDADE_SIN = 1 no join de filiação:
+-- o atributo é sintético e reflete o estado mutável atual (peças reclassificadas para 2ª qualidade
+-- continuam pertencendo historicamente ao lote de entrada e devem deduzir seu saldo).
+JOIN SGTPRD.GERAPECANOTAENTRADA GPN ON GPN.IDLOTEITENSNFE = LOT.ID
+JOIN SGTPRD.GERAPECASPRODUTO GPP ON GPP.IDPECASPRODUTO = GPN.IDPECASPRODUTO
+
+-- 13. Cadastro Oficial de Motivos de Paradas de Máquina (MOTIVOS_PARADAS)
+-- Chave natural/composta estritamente 1:1 (auditada: zero duplicidades no ERP): (SETOR, CODIGO_PARADA)
+-- Previne rótulos hardcoded manuais e assegura alinhamento com os relatórios oficiais do ERP.
+JOIN SGTPRD.MOTIVOS_PARADAS MP 
+  ON MP.SETOR = PAR.SETOR 
+ AND MP.CODIGO_PARADA = PAR.MOTIVO_PARADA
+
+-- 14. Classificação Cadastral de Destinos e Reprocessos de Tingimento (DESTINO e GRUPO_DESTINO)
+-- O campo OBF.DESTINO_RECEITA liga com SGTPRD.DESTINO.DESTINO.
+-- GDX.TIPO_DESTINO classifica o fluxo fabril no ERP SGT:
+--   0 = Produção Normal (DESTINO=1 'PRODUCAO')
+--   1 = Reprocesso (DESTINO=2 'REPROCESSOS FORA DE COR', DESTINO=4 'REPROCESSOS PARA RECLASSIFICACAO')
+--   4 = Limpeza de Máquina (DESTINO=3 'LIMPEZA DE MAQUINA')
+-- OBS: Apontamentos com DESTINO_RECEITA = 0 ou NULL são classificados como Produção Normal via NVL(GDX.TIPO_DESTINO, 0) = 0.
+-- Cardinalidade Chão de Fábrica (UP x OB_FASES):
+--   UNIDADE_PROGRAMACAO (UPR) -> UP_ORDEM_MVTO (UOM) é 1:N (uma barca/UP pode agrupar até 15 ordens na mesma partida).
+--   OB_FASES (OBF) -> UP_ORDEM_MVTO (UOM) é 1:1 por (NUMERO_OB, SEQUENCIA) em fases concluídas (STATUS = 4).
+-- O grão de agregação de volume (kg) deve ser OBF.KILOS_PRODUZIDOS para evitar distorção ou multiplicação indevida.
+LEFT JOIN SGTPRD.DESTINO DEX 
+  ON DEX.DESTINO = OBF.DESTINO_RECEITA
+LEFT JOIN SGTPRD.GRUPO_DESTINO GDX 
+  ON GDX.CODIGO_GRUPO = DEX.CODIGO_GRUPO
 ```
 
 ## Volumes de Produção
 
-| Tabela              | Linhas | Aviso                                               |
-| ------------------- | ------ | --------------------------------------------------- |
-| `GERAPECASPRODUTO`  | 13.4M  | Sempre filtrar antes via GERAPECAORIGEMOB/DESTINOOB |
-| `GERAPECAORIGEMOB`  | 5.1M   | Filtrar por NUMERO_OB                               |
-| `GERAPECADESTINOOB` | 5.1M   | Filtrar por NUMERO_OB                               |
-| `UP_ORDEM_MVTO`     | 1.5M   | Filtrar por NUMEROORDEMREAL                         |
-| `MOVTO_RECEITA`     | 1.3M   | Filtrar por NUMEROORDEM                             |
-| `OB_FASES`          | 1.3M   | Filtrar por NUMERO_OB                               |
-| `OB`                | 177K   | Filtrar por SITUACAO ou data                        |
+| Tabela                 | Linhas | Aviso                                               |
+| ---------------------- | ------ | --------------------------------------------------- |
+| `BD_PRD_MOVPROD`       | ~60M   | Movimentação de estoque/produção (Mov. 37). Filtro temporal indexado obrigatório via `DATA` |
+| `GERAPECASPRODUTO`     | 13.4M  | Sempre filtrar antes via GERAPECAORIGEMOB/DESTINOOB |
+| `GERAPECAORIGEM`       | 5.5M   | Linhagem de peças (`IDPECASPRODUTOORIGEM` gerada -> `IDPECASPRODUTO` consumida) |
+| `GERAPECAORIGEMOB`     | 5.1M   | OB Filha/Consumidora. Filtrar por `NUMERO_OB`       |
+| `GERAPECADESTINOOB`    | 5.1M   | OB Mãe/Geradora. Filtrar por `NUMERO_OB`           |
+| `BD_BNF_PRODUCAO_FASE` | 3.7M   | Fato produção de acabamento/tingimento. Filtrar por `NUMERO_OB` e `TIPO_MAQUINA` |
+| `GERAPECANOTAENTRADA`  | 2.8M   | Vínculo peça x lote de entrada (`IDLOTEITENSNFE = LOT.ID`). Filtrar pelo lote      |
+| `UP_ORDEM_MVTO`        | 1.5M   | Filtrar por NUMEROORDEMREAL                         |
+| `MOVTO_RECEITA`        | 1.3M   | Filtrar por NUMEROORDEM                             |
+| `OB_FASES`             | 1.3M   | Filtrar por NUMERO_OB                               |
+| `LOTE_ITENS_NOTA_ENTR` | 275K   | Lotes de NF de entrada. `STFINALIZACAO = 2` indica finalizado (peças geradas)       |
+| `OB`                   | 177K   | Tabela mestre de OB (OB_EXPEDICAO NÃO existe). Filtrar por `STATUS` ou data |
 | `ITENS_ESTOQUE`     | 24.9K  | Master pequeno, JOIN seguro                         |
+| `MOTIVOS_PARADAS`   | ~500   | Cadastro oficial de paradas. Chave única `(SETOR, CODIGO_PARADA)` |
 | `FASES_FLUXO`       | 38     | Tabela referência, JOIN sempre seguro               |
 
 ## Funcoes Built-in Uteis
@@ -140,7 +205,8 @@ SEMPRE:
   - Usar arraysize >= batch_size para reduzir round-trips
 
 NUNCA:
-  - Acessar GERAPECASPRODUTO sem filtro previo por NUMERO_OB
+  - Acessar GERAPECASPRODUTO sem filtro previo por NUMERO_OB ou por IDLOTEITENSNFE
+  - Usar PADRAO_QUALIDADE_SIN para decidir filiação da peça ao lote de entrada (usar GPN.IDLOTEITENSNFE = LOT.ID)
   - Assumir que NUMERO_OB = NUMEROOB (depende da tabela!)
   - SELECT * em tabelas de alto volume
   - Esquecer o prefixo SGTPRD. (causa ORA-00942)
@@ -194,11 +260,11 @@ data = serialize_rows(cols, rows)
 
 - Camada curada (versionada): `docs/oracle-schema/domain-map.md`, `schema-graph.md`,
   `core-graph.json`. Camada completa (gitignored, ~35MB): `docs/oracle-schema/schema.db`.
-- Para reconstruir o catalogo apos mudancas no ERP: `.venv\Scripts\python Tools\build_oracle_catalog.py`
+- Para reconstruir o catalogo apos mudancas no ERP: `.venv\Scripts\python Tools\oracle\build_oracle_catalog.py`
   (usa `lib/python/oracle_extract.py` + `oracle_retry.py` — mesma conexão/retry dos 6 extratores de produção;
   a rede ate o Oracle e instavel o bastante para exigir uma conexão nova por query, ja tratado no script).
 - Mirrors desta skill estão em `.gemini/skills/oracle-schema-navigator/` e `.claude/skills/oracle-schema-navigator/` (junctions, não editar).
-- O schema real (3.608 tabelas) so e consultavel via `Tools/oracle_catalog.py` contra `schema.db`; as skills documentam apenas os ~55 objetos usados pelas automações ativas.
+- O schema real (3.608 tabelas) so e consultavel via `Tools/oracle/oracle_catalog.py` contra `schema.db`; as skills documentam apenas os ~55 objetos usados pelas automações ativas.
 - Automações usam a lib em `lib/python/oracle_extract.py` - nunca recriar a lógica de conexão.
 - Ha tambem um MCP `oracledb` (MCP Toolbox for Databases) configurado no Antigravity
   (`~/.gemini/config/mcp_config.json`), mesmo banco. Pode ser registrado no Claude Code em
@@ -215,10 +281,10 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/New-SkillMirrors.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SkillsGovernance.ps1 -BasePath .
 
 # Confirmar que o catalogo local responde (sem ir ao Oracle)
-.venv\Scripts\python Tools\oracle_catalog.py table OB
+.venv\Scripts\python Tools\oracle\oracle_catalog.py table OB
 
 # Reconstruir o catalogo contra o Oracle (online, ~30s)
-.venv\Scripts\python Tools\build_oracle_catalog.py
+.venv\Scripts\python Tools\oracle\build_oracle_catalog.py
 ```
 
 ## Troubleshooting
@@ -226,5 +292,6 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SkillsGovernance.ps1 -B
 - **ORA-00942**: prefixo SGTPRD. ausente. Adicionar `SGTPRD.` antes do objeto.
 - **ORA-01031**: usuario sem privilegio em `ALL_*` views. Verificar permissoes com DBA.
 - **Resultado vazio em GERAPECASPRODUTO**: filtro por CODIGO_REDUZIDO_PROD sem passar antes por GERAPECAORIGEMOB - ver "Volumes de Produção" acima.
+- **Peças de NF desaparecem da rastreabilidade**: não filtrar por `PADRAO_QUALIDADE_SIN = 1` no join de peças do lote. Peças reclassificadas (troca para 2ª qualidade via movimento 695) continuam pertencendo historicamente ao lote de entrada.
 - **Campo NUMEROORDEMREAL não encontrado**: está em `UP_ORDEM_MVTO`, não em `OB` - ver "Joins Canonicos".
 - **Erro de connexao Thick Mode**: verificar `ORACLE_CLIENT_PATH` no `.env` e se o Instant Client está instalado.

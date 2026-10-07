@@ -18,7 +18,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       // components/ e pages/ ficam fora: validados via Playwright E2E
-      // (docs/playwright-e2e-standard.md), nao por teste unitario Vitest.
+      // (docs/qualidade/playwright-e2e-standard.md), nao por teste unitario Vitest.
       include: ["src/api/**", "src/hooks/**", "src/lib/**", "src/context/**"],
       exclude: [
         "src/components/**",

@@ -15,38 +15,49 @@ tabelas, 1.729 views, 74.095 colunas) para escrever SQL novo.
 
 `schema.db` nunca deve ser lido diretamente por um agente — é grande demais
 para caber em contexto com proveito. A interface é sempre
-`Tools/oracle_catalog.py`, que devolve só o que foi pedido.
+`Tools/oracle/oracle_catalog.py`, que devolve só o que foi pedido.
+
+## Consultas de referência
+
+O acervo de consultas SQL validadas e catalogadas (13 pastas por processo, catálogo gerado, evidência de validação no Oracle) vive em [`consultas/`](consultas/README.md), junto deste catálogo do schema. Comece pelo `consultas/CATALOGO_QUERIES.md`: só as consultas ✅ são referência canônica; as demais são inventário não validado.
 
 ## Como reconstruir
 
 ```powershell
 # Catalogo completo (schema.db) — ~30s, uma conexao Oracle por query
-.venv\Scripts\python Tools\build_oracle_catalog.py
+.venv\Scripts\python Tools\oracle\build_oracle_catalog.py
 
 # Build rapido, sem o texto das views
-.venv\Scripts\python Tools\build_oracle_catalog.py --skip-view-source
+.venv\Scripts\python Tools\oracle\build_oracle_catalog.py --skip-view-source
 
-# Regenerar core-graph.json a partir do schema.db + .sql do repo
-# (nao ha script dedicado ainda; hoje e feito ad-hoc lendo schema.db e
-# Tools/oracle_catalog.py usage — ver a secao "usage" do CLI)
+# Regenerar core-graph.json a partir do schema.db + .sql versionaveis do repo
+.venv\Scripts\python Tools\oracle\gerar_core_graph.py
+# Antes do PR que adiciona/altera .sql: falha se o JSON nao refletir o repo
+.venv\Scripts\python Tools\oracle\gerar_core_graph.py --check
 ```
 
+`core-graph.json` conta toda ocorrência de `SGTPRD.<nome>` nos `.sql` rastreados
+ou não ignorados pelo git — inclusive em comentários (ex.: um
+`--CREATE OR REPLACE VIEW` desativado). Nomes que não existem no `schema.db`
+vão para `unknown_references` em vez de virarem nós; confira cada um antes de
+tratá-lo como drift real do ERP.
+
 Rode o rebuild quando o ERP mudar de forma perceptível (nova automação usa
-tabela desconhecida, `Tools/oracle_catalog.py usage` reporta drift, ou uma
+tabela desconhecida, `Tools/oracle/oracle_catalog.py usage` reporta drift, ou uma
 coluna/tabela documentada em `domain-map.md` não é encontrada pelo CLI).
 
 ## Como consultar
 
-Ver `Tools/oracle_catalog.py --help` e a skill `oracle-schema-navigator`
+Ver `Tools/oracle/oracle_catalog.py --help` e a skill `oracle-schema-navigator`
 (`.github/skills/oracle-schema-navigator/SKILL.md`) para o contrato completo.
 Resumo:
 
 ```powershell
-.venv\Scripts\python Tools\oracle_catalog.py table OB
-.venv\Scripts\python Tools\oracle_catalog.py find "receita bloqueada"
-.venv\Scripts\python Tools\oracle_catalog.py path OB ITENSPEDIDOGRADE
-.venv\Scripts\python Tools\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
-.venv\Scripts\python Tools\oracle_catalog.py usage
+.venv\Scripts\python Tools\oracle\oracle_catalog.py table OB
+.venv\Scripts\python Tools\oracle\oracle_catalog.py find "receita bloqueada"
+.venv\Scripts\python Tools\oracle\oracle_catalog.py path OB ITENSPEDIDOGRADE
+.venv\Scripts\python Tools\oracle\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
+.venv\Scripts\python Tools\oracle\oracle_catalog.py usage
 ```
 
 ## Nota sobre a rede até o Oracle

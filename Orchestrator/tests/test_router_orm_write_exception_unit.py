@@ -1,10 +1,10 @@
 """Trava a exceção de escrita ORM em routers documentada em `docs/architecture-standard.md`.
 
 `docs/architecture-standard.md` § "Leitura vs. Escrita ORM nos Routers"
-documenta 33 ocorrências de escrita ORM (`db.add`/`db.commit`/`db.refresh`/
+documenta 31 ocorrências de escrita ORM (`db.add`/`db.commit`/`db.refresh`/
 `db.delete`) em `Orchestrator/app/routers/*.py` como exceção arquitetural
-aceita (25 "escrita fina" + 8 "com lógica de negócio", cada uma listada com
-`arquivo:linha`). Sem este teste, nada impede que uma 34ª escrita entre sem
+aceita (todas "escrita fina": desde 07/10/2026 a lógica de negócio dos 5
+endpoints que a continham vive em services). Sem este teste, nada impede que uma 34ª escrita entre sem
 revisão consciente, e a tabela de `arquivo:linha` da doc pode envelhecer sem
 que ninguém perceba.
 
@@ -23,7 +23,7 @@ falsos positivos a cada edição.
 Ao falhar, o teste aponta a ação certa: revisar a escrita nova (é "escrita
 fina" sobre payload já validado, ou é lógica de negócio que deveria estar em
 um service?) e então atualizar CONSCIENTEMENTE `docs/architecture-standard.md`
-(a tabela de `arquivo:linha` e a contagem de 33/25/8) e o número esperado
+(a lista de ocorrências e a contagem de 31) e o número esperado
 abaixo — nunca ajustar só o número deste teste sem revisar a doc.
 """
 
@@ -33,9 +33,10 @@ import re
 from pathlib import Path
 
 # Ocorrências totais documentadas em `docs/architecture-standard.md`
-# § "Leitura vs. Escrita ORM nos Routers" (25 escrita fina + 8 com lógica de
-# negócio movível para service = 33).
-TOTAL_ESCRITA_ORM_DOCUMENTADO = 33
+# § "Leitura vs. Escrita ORM nos Routers" (31, todas escrita fina; eram 33
+# antes de `start_automation` e `telemetry_start` delegarem o commit a
+# `execution_runtime.commit_or_conflict`).
+TOTAL_ESCRITA_ORM_DOCUMENTADO = 31
 
 _PADRAO_ESCRITA_ORM = re.compile(r"\bdb\.(?:add|commit|refresh|delete)\(")
 

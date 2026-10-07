@@ -1,0 +1,1797 @@
+{
+  "schema": "sql-catalog-status/v1",
+  "files": {
+    "01_beneficiamento_tingimento/bnf_acumulado_montagem_tingimento_por_dia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2200.7,
+      "sha8": "ac583ffe",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_acumulado_montagem_tingimento_por_turno.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1791.7,
+      "sha8": "fa03a6ea",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_consulta_receita.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3.4,
+      "sha8": "aa7f189a",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_consumo_quimico_por_kg_tingido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 159.5,
+      "sha8": "c5cf26b4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_fechamento_mes_obs_em_aberto_com_origens.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 362.3,
+      "sha8": "923844ed",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_fila_programada_por_maquina_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 143.1,
+      "sha8": "7b8eb0c9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_gargalo_receitas_obs_aguardando.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2111.8,
+      "sha8": "e2ce4462",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_lavacao_de_maquina_ultimas_lavacoes_feitas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 733.0,
+      "sha8": "d7c2a76d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_lavacao_maquinas_historico.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 289.0,
+      "sha8": "08634d50",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_lavacao_maquinas_ultimas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 288.4,
+      "sha8": "c1bd0908",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_maiores_producoes_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3207.4,
+      "sha8": "e98df1ea",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_monitora_montagem_de_lote.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 916.4,
+      "sha8": "de0b0b93",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_monitora_tingimento_e_reprocesso.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3728.3,
+      "sha8": "9c189025",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_monitora_tingimento_e_reprocesso_detalhado.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 611.9,
+      "sha8": "e6e18dad",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_monitoramento_atributos_produtos_quimicos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 251.0,
+      "sha8": "7b7f3b2f",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_monitoramento_maquinas_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3.5,
+      "sha8": "a364bc2e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_monitoramento_previsao_vs_realizado_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 373.2,
+      "sha8": "2804a6a0",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5180.1,
+      "sha8": "45ffd48c",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_obs_abertas_por_codigo_reduzido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1640.8,
+      "sha8": "4ffc69fd",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_obs_abertas_por_processo_corante.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 29.2,
+      "sha8": "e1732cb6",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_ocupacao_diaria_maquina_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 291.1,
+      "sha8": "77a15ba0",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_painel_executivo_kpis_tingimento_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1269.3,
+      "sha8": "be35170f",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_posicao_atual_obs_em_aberto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 50.0,
+      "sha8": "f2375d6d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_posicao_producao_fase_nativa_m019.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2659.4,
+      "sha8": "75bf13a5",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_primeiro_uso_receitas_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 0.6,
+      "sha8": "127f5611",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_quimico_valor_media_comparado_ao_preco_de_faturamento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 502.5,
+      "sha8": "59fd4d5f",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_receitas_abertas_hidroextracao.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 8.0,
+      "sha8": "904c6236",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_receitas_bloqueadas_eps.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 14.7,
+      "sha8": "e9f63502",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_receitas_bloqueadas_por_ob.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1434.4,
+      "sha8": "8ff77c2b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_receitas_bloqueadas_reduzidos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 17.0,
+      "sha8": "e8d99fef",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_receitas_pendentes_emissao_por_ob.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 412.3,
+      "sha8": "db1b9473",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_receitas_pesadas_detalhes_inventario.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 216.0,
+      "sha8": "646cf054",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_receitas_pesadas_por_ob.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 190.4,
+      "sha8": "16f0c9e0",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_relacao_de_banho_calculo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1.8,
+      "sha8": "d8318aaa",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_tingimento_confirmado_consumo_produtos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 37.3,
+      "sha8": "7eed5460",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_tingimento_confirmado_por_processo_corante.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1204.3,
+      "sha8": "cd8961df",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_tipos_maquinas_setor_lista.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1.1,
+      "sha8": "c1e7bfef",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_ultimo_lote_tinto_por_maquina_reduzido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 222.3,
+      "sha8": "9a178ee9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_up_ordem_movimento_vinculo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5.6,
+      "sha8": "aa33ea38",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_up_ordem_mvto_por_tipo_maquina.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1868.3,
+      "sha8": "e690064f",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_acumulado_rama.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1706.8,
+      "sha8": "b338b102",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_acumulado_tubular.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 7257.2,
+      "sha8": "20ba4be9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_alterar_grupo_de_programacao_engenharia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 6.6,
+      "sha8": "b4c1a1f6",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_conferencia_pecas_embaladeira.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 1737.4,
+      "sha8": "a6b41069",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_consulta_producao_de_artigos_ramados_de_acordo_configuracao_malharia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 18.1,
+      "sha8": "e2e23314",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_entrada_de_nfs_dos_terceirizados_passar_a_programacao_da_semana.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 39.2,
+      "sha8": "7f919a72",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_mix_programacoes.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 217.4,
+      "sha8": "fed11df4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_monitora_felpadeira_quanto_precisa_fazer_para_fechar_o_mes.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 11.8,
+      "sha8": "7786c75f",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_monitora_rama_quanto_precisa_fazer_para_fechar_o_mes.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 983.8,
+      "sha8": "d4e825f1",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_ordens_de_manutencao_programadas_e_planejadas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.5,
+      "sha8": "71d8293e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_programacoes_em_aberto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1316.6,
+      "sha8": "5167486d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_rama_fila_risco_expedicao_pedidos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 103.3,
+      "sha8": "482f1089",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_rama_perda_artigos_desvio_engenharia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 196.6,
+      "sha8": "ef94331b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_rama_producao_mensal_sem_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2371.5,
+      "sha8": "867ffb98",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_rama_pulmao_buffer_vs_pipeline.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 251.8,
+      "sha8": "6925afb7",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_rama_ritmo_liquido_setups_gaps.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 29.8,
+      "sha8": "b67c0228",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "02_acabamento_preparacao/acb_trocar_grupo_de_programacao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.5,
+      "sha8": "59a6fd83",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_conferencia_ob_montada_teares_e_lotes_alocados.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 11.8,
+      "sha8": "e50256e2",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_consulta_finura_dos_teares.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.4,
+      "sha8": "b29ac8a9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 884.0,
+      "sha8": "c6114f15",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_eficiencia_global_engenharia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 9.5,
+      "sha8": "00cda150",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_eficiencia_ordens_em_aberto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5.4,
+      "sha8": "a2255a2a",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_eficiencia_por_grupo_maquinas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5.3,
+      "sha8": "df1369e6",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_estoque_por_agulhas_tear.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3.9,
+      "sha8": "a562ca45",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_estoque_por_lote_produto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 10.1,
+      "sha8": "36198126",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_estoque_por_tear_maquina.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 10.2,
+      "sha8": "80317742",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_meta_malharia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 76.2,
+      "sha8": "2921dd97",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_necessidade_balanco_faltas_sobras.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 217.7,
+      "sha8": "fa9bd1b0",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_necessidade_critica_somente_faltas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 120.1,
+      "sha8": "dbb99c16",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_obs_lotes_teares_misturados.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 45.9,
+      "sha8": "c9a02e29",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "03_malharia_teares/mal_ordens_de_malharia_em_aberto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1.8,
+      "sha8": "9fd0c0a2",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_consulta_lotes_de_fios_e_cor_dos_cones.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 80.7,
+      "sha8": "c9ed87a4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_consumo_fios_movimento_estoque.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.3,
+      "sha8": "37307eee",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_consumo_fios_reserva_baixa.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.8,
+      "sha8": "45860b70",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_estoque_de_fibras_disponiveis_atual.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 729.3,
+      "sha8": "14d9650e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_estoque_de_fios_disponiveis_atual.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 7060.8,
+      "sha8": "3c9292b6",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_fios_consumos_ficha_tecnica.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.2,
+      "sha8": "b567d2ea",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_lotes_fios_fornecedor.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 500.8,
+      "sha8": "7e37dddb",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_lotes_fios_por_deposito.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 87.6,
+      "sha8": "ac005df4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_ob_s_que_usaram_fio_vortex.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1024.7,
+      "sha8": "ceda6c6c",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_pecas_no_estoque_que_foram_usados_fio_com_residuo.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 16.4,
+      "sha8": "9d9a106a",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_producao_fiacao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 31.6,
+      "sha8": "230569cf",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "04_fiacao_fios/fia_top_5_producao_diaria_fiacao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 250.7,
+      "sha8": "42389cab",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_conferencia_furo_estoque_peca_peca.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 2375.5,
+      "sha8": "650bfd92",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_conferencia_furo_estoque_por_ob.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2413.3,
+      "sha8": "7ff91d0c",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_conferencia_ob_montada_deposito_90_direto_para_o_100.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1148.7,
+      "sha8": "779179ce",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_falta_pesar_peca_peca.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 330.5,
+      "sha8": "9a1cf25b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_pecas_com_restricoes_estoque.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 30.4,
+      "sha8": "9b6e79c5",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_pecas_com_status_normal.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 14.1,
+      "sha8": "7270305c",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_pecas_para_restringir_verificando_estoque_disponivel_e_em_processo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 292.9,
+      "sha8": "8b2e1b82",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_posicao_acumulada_estoque_total.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1096.5,
+      "sha8": "0fd69965",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_transferencias_deposito_por_artigo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 198.8,
+      "sha8": "1c8ea912",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/est_transferencias_deposito_total_geral.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 372.9,
+      "sha8": "1cbb43cb",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/estoque_total_de_malha_crua.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5223.0,
+      "sha8": "a4947d83",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "05_estoque_armazenagem/estoques_totais.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 89.3,
+      "sha8": "6236a48d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_auditoria_cadastros_maquinas_familias.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 13.5,
+      "sha8": "d8640892",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_auditoria_detalhada_peca_rama_sem_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2069.3,
+      "sha8": "f0b0c57e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_auditoria_grupos_maquinas_layout.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 9.6,
+      "sha8": "125a768f",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_auditoria_historica_rama_sem_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2403.1,
+      "sha8": "25e3ca23",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_composicao_acabado_x_cru.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 96.7,
+      "sha8": "da630794",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_entrada_de_nf_x_pesagem_das_pecas_data_entrada_x_pesagem.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1010.3,
+      "sha8": "4b3b8339",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_grupoitem_gerargrupodinamico_no_pedidocomercial.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.0,
+      "sha8": "0afdfb30",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_ob_montada_conferir_se_usaram_as_pecas_com_restricao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 149.5,
+      "sha8": "3d7a59b0",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_ob_montada_consulta_nf_de_entrada_das_pecas_faccao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.4,
+      "sha8": "3f939b49",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_ob_montada_status_peca_e_ob_s_alocadas_por_nf.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 755.9,
+      "sha8": "f2fffc37",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_pecas_com_peso_menor_que_17kg.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 460.9,
+      "sha8": "0d66a071",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_pecas_faturadas_acima_do_padrao_zimmermann.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 490.4,
+      "sha8": "d5a3d14f",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_pecas_usadas_atender_pedido_comercial_pecas_alocadas_no_pedido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 6.1,
+      "sha8": "175f8ab7",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_pesos_carregamento_faccao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.7,
+      "sha8": "81fe914a",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_reduzidos_que_faltam_incluir_no_contrato_de_industrializacao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 15.6,
+      "sha8": "8320f77e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_reduzidos_que_faltam_sku.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 26.4,
+      "sha8": "e56ea314",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_sku_alternativo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1648.6,
+      "sha8": "615178d8",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_sku_composicao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 66.8,
+      "sha8": "ce6fd58b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_sku_reduzido_agrupador.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 0.6,
+      "sha8": "ca0d6d68",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_testes_qualidade_artigo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 41.3,
+      "sha8": "51d5b54b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_testes_qualidade_ob.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1.8,
+      "sha8": "0e480f46",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_tubetes_plasticos_reduzido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 29.5,
+      "sha8": "b18b2329",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_conferencia_tubetes_plasticos_romaneio.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 28.2,
+      "sha8": "19748868",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_first_pass_yield_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 30.7,
+      "sha8": "e397622d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_monitoramento_nf_entrada_ciclo_completo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1027.5,
+      "sha8": "a21c210e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_ob_s_com_peso_20_maior_ou_menor_comparado_a_peca_crua.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2465.8,
+      "sha8": "75fede57",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_ob_s_com_peso_maior_que_a_carga_maquina.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 128.5,
+      "sha8": "b1e09069",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_ob_s_com_peso_menor_que_8kg.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3156.7,
+      "sha8": "e00871da",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_ob_s_com_pesos_iguais_nas_pecas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 690.7,
+      "sha8": "1616251b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "06_qualidade_auditoria_obs/qld_obs_montadas_fora_da_regra_de_separacao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 50.2,
+      "sha8": "2f8d4758",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_acondicionamento_grade_quantidades.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 309.0,
+      "sha8": "7a2728d2",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_acondicionamento_itens_pedido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.8,
+      "sha8": "629c4bce",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_acondicionamento_pipeline_completo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 747.3,
+      "sha8": "91e4ef4d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_consulta_pedidos_atrasados.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 188.2,
+      "sha8": "f1b63844",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_consulta_pedidos_e_romaneios.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 574.5,
+      "sha8": "ef143531",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_consulta_peso_bruto_e_liquido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.9,
+      "sha8": "e2c4b491",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_liga_ob_no_pedido_comercial.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 12.5,
+      "sha8": "ba3597d0",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_liga_romaneio_na_nota_fiscal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 853.1,
+      "sha8": "80fc5d13",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_monitoramento_programacoes_clientes_analitico.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 303.8,
+      "sha8": "f006c426",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_monitoramento_programacoes_clientes_sintetico.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 178.6,
+      "sha8": "e032fd90",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_ob_s_disponiveis_para_montar_cores_criticas_por_pedido_comercial.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 197.0,
+      "sha8": "c1fe80a9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_obs_e_romaneios_em_aberto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 57.1,
+      "sha8": "034e5560",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_obs_e_romaneios_historico_completo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5944.5,
+      "sha8": "46b1b3f3",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_pecas_destino_ob_romaneio.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 795.1,
+      "sha8": "f4b10b81",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_precos_carteira_pedidos_abertos.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 69.0,
+      "sha8": "0a5aefba",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_rastreabilidade_ob_romaneio_nfe.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 859.5,
+      "sha8": "abab13e9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_romaneados_artigos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 191.1,
+      "sha8": "effa3747",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_romaneados_pecas_e_kg.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 680.7,
+      "sha8": "46fcd073",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_saldo_kgs_acabados_pendentes_faturamento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 584.4,
+      "sha8": "3fae65e2",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_tabela_precos_comunicacao_comercial.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 291.1,
+      "sha8": "35987826",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_tabela_precos_itens_servico_tingimento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 17.3,
+      "sha8": "b0f3c997",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_tipos_romaneios_classificacao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1.8,
+      "sha8": "770ec845",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_vendas_lojas_mensal_faturamento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 18.6,
+      "sha8": "ab72d4a9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "07_expedicao_pedidos_comercial/com_vendas_lojas_por_pedido.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.7,
+      "sha8": "e3727da4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "08_faccao_terceirizacao/fac_desenho_estamparia.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 1.5,
+      "sha8": "f82e6766",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "08_faccao_terceirizacao/fac_diagnostico_programacao_ambigua.sql": {
+      "status": "validated",
+      "sample_rows": 0,
+      "execute_ms": 5252.2,
+      "sha8": "2f1aafc4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "08_faccao_terceirizacao/fac_faltas_e_sobras_faccao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 842.1,
+      "sha8": "d18424d0",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "08_faccao_terceirizacao/fac_saldo_nf_faccao.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5198.0,
+      "sha8": "0aa1c8f8",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "08_faccao_terceirizacao/fac_tabela_reduzidos_com_servicos_em_terceiros.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 51.7,
+      "sha8": "78f57d4c",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_aging_obs_por_fase_vs_sla.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 42.3,
+      "sha8": "463ab161",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_balanco_fluxo_cru_facao_processo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 119.6,
+      "sha8": "2c7eb77b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_calendario_planejamento_horas_trabalhadas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.4,
+      "sha8": "b1516520",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_consulta_paradas_de_maquinas_por_numero.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.3,
+      "sha8": "c51f784d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_consulta_status_peca.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1.0,
+      "sha8": "866c0671",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_faturamento_mensal_cliente_prazo_expedicao_v2_2.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3231.9,
+      "sha8": "8f8180b4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_fechamento_mensal_beneficiamento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2288.3,
+      "sha8": "69d1763a",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_lead_time_obs_encerradas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 171.2,
+      "sha8": "81859577",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_liga_reduzido_nas_classes_e_sub_grupos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 8.1,
+      "sha8": "c46821d3",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_12m_fato_serie_temporal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5490.2,
+      "sha8": "b533a137",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_12m_matriz_pivotada.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 5464.4,
+      "sha8": "2fcaff5d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_acabado_mensal_atual.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 41.7,
+      "sha8": "048b05e5",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_mensal_pecas_kg_mov37.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 617.8,
+      "sha8": "e702a13e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_mensal_por_fase_comparativo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3216.5,
+      "sha8": "332f1c40",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_mensal_por_idpfj.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1285.6,
+      "sha8": "0273ea50",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_mensal_por_operador.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 105.0,
+      "sha8": "da2bec0d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_mensal_produdo_acabado.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 452.0,
+      "sha8": "3de46f8d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_por_fases_diario.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 123.5,
+      "sha8": "5983a068",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_producao_por_fases_e_turnos_diario.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.5,
+      "sha8": "c6fdc94d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_quantidade_de_kgs_em_cada_fase.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1455.8,
+      "sha8": "a96041d9",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_quantidade_de_kgs_em_cada_fase_antigo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 406.9,
+      "sha8": "b843defd",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_sincronismo_malha_ribana.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4269.9,
+      "sha8": "bedad777",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_top5_faturamento_matriz_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 655.6,
+      "sha8": "ac126b50",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_top5_producao_diaria_por_data.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 401.8,
+      "sha8": "83c4183c",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_top5_producao_diaria_por_operador.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 286.3,
+      "sha8": "8767efbb",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_top5_producao_mensal_media_diaria.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 354.5,
+      "sha8": "50b7ee2d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_top5_producao_mensal_media_kg_dia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 428.2,
+      "sha8": "c40a4158",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_top5_producao_mensal_volume_bruto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 405.7,
+      "sha8": "c51f0ffa",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_top5_producao_por_processo_industrial.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 135.8,
+      "sha8": "2b887015",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "10_engenharia_custos/eng_auditoria_fixador_receita_acabamento.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 171.7,
+      "sha8": "a159c545",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "10_engenharia_custos/eng_custo_real_materia_prima_fechamento_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 524.8,
+      "sha8": "fa98ca1a",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "10_engenharia_custos/eng_peso_padrao_cru_e_acabado.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 53.8,
+      "sha8": "69443708",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "10_engenharia_custos/eng_valida_ficha_tecnica_mct_bnt.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 30.5,
+      "sha8": "4721d51c",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "10_engenharia_custos/eng_verifica_composicao_dos_itens.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.8,
+      "sha8": "24a2070e",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "10_engenharia_custos/eng_verifica_largura_ob_engenharia.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 17.2,
+      "sha8": "57d3eaf8",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_ajuste_operadores.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 4.5,
+      "sha8": "0865d374",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_consulta_tabelas_do_oracle.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 6.6,
+      "sha8": "d621897d",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_formatar_numeros_inteiros_em_data_ou_hora_min.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1.0,
+      "sha8": "c3797680",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_formatar_numeros_no_sql.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 0.9,
+      "sha8": "cbbf1737",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_grupos_seguranca_usuarios_ativos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3.3,
+      "sha8": "f2253098",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_listagg_unir_linhas_moderno.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 0.6,
+      "sha8": "578aae73",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_optstraggr_unir_linhas_legado.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 0.8,
+      "sha8": "eb4f0684",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_permissoes_atividades_usuarios.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 0.9,
+      "sha8": "14d75874",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_tabelas_de_monitoramento_rapida_performace.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2.2,
+      "sha8": "6e46fd9b",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "13_utilitarios_snippets/util_usuarios_ativos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 3.0,
+      "sha8": "e7a037a4",
+      "validated_at": "2026-10-07",
+      "validator_version": "2.1.0",
+      "cancelled": false
+    }
+  },
+  "validated_on": "2026-10-07"
+}

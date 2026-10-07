@@ -1,0 +1,64 @@
+/* =============================================================================
+OBJETIVO: Conferência de pesos no carregamento para facção (versão analítica)
+DOMÍNIO: 06_qualidade_auditoria_obs
+ARQUIVO ORIGINAL: 06_qualidade_auditoria_obs/qld_conferencia_pesos_nos_carregamentos_para_terceiros_faccao.sql (Query #1)
+TIPO: SELECT (Consulta Somente Leitura)
+PARÂMETROS / BINDS: Nenhum
+TABELAS PRINCIPAIS: SGTPRD.GERAPECAORIGEMOB, SGTPRD.GRUPO_MAQUINAS, SGTPRD.MAQUINA, SGTPRD.OB_FASES, SGTPRD.OB_PRODUTO, SGTPRD.PECAS_ROMANEIO_SAIDA, SGTPRD.PRODUTO_ROMANEIO, SGTPRD.UNIDADE_FABRIL
+CUIDADOS OPERACIONAIS: Consulta atômica desmembrada para execução individual.
+REVISÃO (20/09/2026 - Onda 4): (+) de PRS migrado para LEFT JOIN ANSI.
+  guard_sql.py: exit 0.
+============================================================================= */
+
+SELECT OBF.NUMERO_OB,
+       PRR.NUMERO_ROMANEIO,
+       OBF.CODIGO_FASE,
+       OBF.STATUS,
+       OBF.NUMERO_MAQUINA,
+       CASE
+         WHEN OBF.KILOS_PRODUZIDOS <
+              (SELECT OBP.KILOS
+                 FROM SGTPRD.OB_PRODUTO OBP
+                WHERE OBP.NUMERO_OB = OBF.NUMERO_OB) THEN
+          OBF.KILOS_PRODUZIDOS
+         ELSE
+          (SELECT OBP.KILOS
+             FROM SGTPRD.OB_PRODUTO OBP
+            WHERE OBP.NUMERO_OB = OBF.NUMERO_OB)
+       END QT_NF,
+       OBF.KILOS_PRODUZIDOS QT_PESADA,
+       (SELECT OBP.KILOS
+          FROM SGTPRD.OB_PRODUTO OBP
+         WHERE OBP.NUMERO_OB = OBF.NUMERO_OB) QT_ORIG,
+       OBF.KILOS_PRODUZIDOS -
+       (SELECT OBP.KILOS
+          FROM SGTPRD.OB_PRODUTO OBP
+         WHERE OBP.NUMERO_OB = OBF.NUMERO_OB) DIF,
+       
+       (SELECT MAX(UFA.CODIGO_UNIDADE_FABRI) || ' - ' ||
+               TRIM(UFA.NOME_UNIDADE_FABRIL)
+          FROM SGTPRD.OB_FASES       VPF,
+               SGTPRD.MAQUINA        MAQ,
+               SGTPRD.GRUPO_MAQUINAS GPR,
+               SGTPRD.UNIDADE_FABRIL UFA
+         WHERE VPF.NUMERO_OB = OBF.NUMERO_OB
+           AND MAQ.NUMERO_MAQUINA = VPF.NUMERO_MAQUINA
+           AND GPR.GRUPO = MAQ.GRUPO
+           AND GPR.SETOR = MAQ.SETOR
+           AND UFA.CODIGO_UNIDADE_FABRI = GPR.UNIDADE_FABRIL
+           AND UFA.EH_FACCAO = 'S'
+         GROUP BY UFA.NOME_UNIDADE_FABRIL) FACCAO
+
+  FROM SGTPRD.OB_FASES             OBF
+  JOIN SGTPRD.GERAPECAORIGEMOB     GPO ON GPO.NUMERO_OB           = OBF.NUMERO_OB
+  LEFT JOIN SGTPRD.PECAS_ROMANEIO_SAIDA PRS ON PRS.IDPECASPRODUTO = GPO.IDPECASPRODUTO
+  JOIN SGTPRD.PRODUTO_ROMANEIO     PRR ON PRR.IDPRODUTO_ROMANEIO   = PRS.IDPRODUTO_ROMANEIO
+ WHERE OBF.CODIGO_FASE = 25
+   AND OBF.NUMERO_OB IN (64674, 64675, 65043, 65429, 64676, 65386, 64716)
+ GROUP BY OBF.NUMERO_OB,
+          OBF.CODIGO_FASE,
+          OBF.STATUS,
+          OBF.NUMERO_MAQUINA,
+          OBF.KILOS_PRODUZIDOS,
+          PRR.NUMERO_ROMANEIO
+ ORDER BY OBF.NUMERO_OB;

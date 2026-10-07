@@ -27,190 +27,25 @@ Pre-requisito: ler `oracle-schema-navigator` para entender os domínios.
 - Para configuração de conexão Python, oracle_extract.py e batch: use `python-enterprise-standard`.
 - Para seguranca de runtime, bind variables e segredos: use `automation-runtime-safety`.
 
-## CTEs Canonicas Reutilizaveis
+## Referências (carregue só o que o caso pede)
 
-### CTE: Fase Atual de OBs
+| Arquivo | Quando ler |
+|---|---|
+| `references/ctes-canonicas.md` | Precisa de fase atual de OB, UP, pedido comercial, produto decodificado, classificação de cor, genealogia de peças, rastreio de lote de NF ou janelas temporais longas: copie a CTE do caso |
+| `references/filtros-e-subqueries.md` | Vai filtrar por status/fase/destino/reprocesso ou montar subquery de tupla atômica, turno principal ou prazo comercial |
+| `references/performance-e-anti-patterns.md` | Consulta lenta, `ORA-00028`, ou revisão final de SQL novo: tabela completa de anti-patterns e protocolo de benchmark |
 
-```sql
--- Preferir a view: JOIN SGTPRD.VW_BNF_FASEATUALOB FAS ON FAS.NUMERO_OB = OB.NUMERO_OB
--- Se precisar implementar manualmente com ROW_NUMBER:
-WITH FASE_ATUAL AS (
-  SELECT NUMERO_OB, SEQUENCIA, CODIGO_FASE, STATUS, TIPO_DESTINO,
-         ROW_NUMBER() OVER (PARTITION BY NUMERO_OB ORDER BY SEQUENCIA DESC) AS RN
-  FROM SGTPRD.OB_FASES
-  WHERE NUMERO_OB IN (SELECT NUMERO_OB FROM SGTPRD.OB WHERE SITUACAO = :situacao)
-)
-SELECT * FROM FASE_ATUAL WHERE RN = 1
-```
+## Regras de Ouro (resumo dos anti-patterns mais caros)
 
-### CTE: UP Associada a OBs
-
-```sql
--- NUMEROORDEMREAL liga UP a OB (não se chama NUMERO_OB!)
-WITH UP_OB AS (
-  SELECT UPO.NUMEROORDEMREAL AS NUMERO_OB,
-         UPO.NUMEROUP,
-         UNP.DESCRICAO AS DS_UP
-  FROM SGTPRD.UP_ORDEM_MVTO UPO
-  JOIN SGTPRD.UNIDADE_PROGRAMACAO UNP ON UNP.NUMEROUP = UPO.NUMEROUP
-  WHERE UPO.NUMEROORDEMREAL IN (:ob_list)
-)
-```
-
-### CTE: Pedido Comercial de uma OB (cadeia completa)
-
-```sql
-WITH PEDIDO_OB AS (
-  SELECT OB.NUMERO_OB, IPG.PEDIDO, IPG.ITEMPEDIDO
-  FROM SGTPRD.OB OB
-  JOIN SGTPRD.PEDPRODUCAOOB PPOB ON PPOB.NUMEROOB = OB.NUMERO_OB
-  JOIN SGTPRD.OFORDENS OFO
-    ON OFO.NUMEROPEDPRODUCAO = PPOB.NUMERO
-   AND OFO.REDUZIDO = PPOB.REDUZIDO
-  JOIN SGTPRD.OFPEDIDO OFP ON OFP.NUMEROOF = OFO.NUMEROOF
-  JOIN SGTPRD.ITENSPEDIDOQTDES IPQ ON IPQ.IDITENSPEDIDOQTDES = OFP.IDITENSPEDIDOQTDES
-  JOIN SGTPRD.ITENSPEDIDOGRADE IPG ON IPG.IDITEMPEDGRADE = IPQ.IDITEMPEDGRADE
-  WHERE OB.NUMERO_OB = :numero_ob
-    AND ROWNUM = 1
-)
-```
-
-### CTE: Produto Decodificado
-
-```sql
--- BD_BAS_MASCPRODACAB mapeia CODIGO_REDUZIDO para campos semanticos legiveis
-WITH PROD_DEC AS (
-  SELECT BP.CODIGO_REDUZIDO,
-         LPAD(BP.ARTIGO, 3, '0')  AS ARTIGO_3D,
-         LPAD(BP.COR, 2, '0')     AS COR_2D,
-         BP.DESCR_COR,
-         BP.ESTRUTURA,
-         BP.DESCR_CLASSIF_COR
-  FROM SGTPRD.BD_BAS_MASCPRODACAB BP
-)
-```
-
-### CTE: OBs com Classificacao de Cor (ORB-07)
-
-```sql
-WITH OBS_COR AS (
-  SELECT V.NUMERO_OB, V.CD_CLASSIFICACAO_COR
-  FROM SGTPRD.VW_EXC_OB_PROD_CLASS_COR V
-  WHERE V.CD_CLASSIFICACAO_COR IN (6, 9)  -- 6=BRANCO, 9=BRANCO 2 FIBRAS
-)
-```
-
-## Filtros Validados em Produção
-
-```sql
--- OBs Abertas
-WHERE OB.SITUACAO = 'A'
-
--- Receitas bloqueadas atualmente
-WHERE NVL(LRB.CBRECEITALIBERADA, 'N') = 'N'
-
--- Receitas ativas em produção
-WHERE CR.PROCESSO_ATIVO_PRODU = 'S'
-
--- Deposito 95 (fio externo) com finalidades claras/branco
-WHERE GPP.CODIGO_DEPOSITO = 95
-  AND TFF.IDFINALIDADE IN (3, 4)
-```
-
-## Padrões de Subquery
-
-```sql
--- MAX com ROWNUM (compativel Oracle 11g+)
-(SELECT OB3.TOTAL_PECAS_CONFIRM
- FROM SGTPRD.OB_PRODUTO OB3
- WHERE OB3.NUMERO_OB = OBE.NUMERO_OB
- AND ROWNUM = 1)
-
--- DECODE (sintaxe Oracle legada)
-DECODE(O3.TOTAL_PECAS_CONFIRM, 0,
-  ROUND(O3.KILOS_PROGRAMADOS / NVL(PESO_PAD, 1), 0),
-  O3.TOTAL_PECAS_CONFIRM)
-
--- CASE WHEN (mais legivel para lógica nova)
-CASE WHEN SGTPRD.FNC_ESP_REC_PES(BASE.NUMERO_OB) = 0 THEN 'NAO' ELSE 'SIM' END AS PESADA
-
--- Agregacao de strings (padrão do projeto)
-(SELECT SGTPRD.optstraggrsemvirgula(TRIM(UPPER(C.TEXTO)))
- FROM SGTPRD.OBSERVACAO C
- WHERE C.CODIGO = OBE.CODIGO_OBSERVACAO) AS OBS_OB
-```
-
-## Dicas de Performance
-
-```sql
--- RUIM: full scan de 13M linhas
-SELECT * FROM SGTPRD.GERAPECASPRODUTO WHERE CODIGO_REDUZIDO_PROD = :red
-
--- BOM: via GERAPECAORIGEMOB filtrado por OB
-SELECT GPP.*
-FROM SGTPRD.GERAPECAORIGEMOB GPO
-JOIN SGTPRD.GERAPECASPRODUTO GPP ON GPP.IDPECASPRODUTO = GPO.IDPECASPRODUTO
-WHERE GPO.NUMERO_OB = :numero_ob
-```
-
-```python
-# Sempre sincronizar arraysize e fetchmany para reduzir round-trips
-cursor.arraysize = batch_size  # padrão do projeto: 5000
-cursor.execute(sql, params)
-rows = cursor.fetchmany(batch_size)  # 1 round-trip por batch
-```
-
-## Template: OBs com Status de Fase
-
-```sql
-SELECT
-  OB.NUMERO_OB,
-  OB.CODPRO_REDUZIDO,
-  ITE.DESCRICAO AS DS_PRODUTO,
-  OBF.SEQUENCIA,
-  OBF.CODIGO_FASE,
-  FFL.DESCRICAO AS DS_FASE,
-  ENS.DESCRICAO AS DS_STATUS,
-  OBF.CODIGO_PLACA AS NR_KANBAN
-FROM SGTPRD.OB OB
-JOIN SGTPRD.OB_FASES OBF ON OBF.NUMERO_OB = OB.NUMERO_OB
-JOIN SGTPRD.ITENS_ESTOQUE ITE ON ITE.CODIGO_REDUZIDO = OB.CODPRO_REDUZIDO
-LEFT JOIN SGTPRD.FASES_FLUXO FFL ON FFL.CODIGO_FASE = OBF.CODIGO_FASE
-LEFT JOIN SGTPRD.VW_ENU_STATUS_OB_FASES ENS ON ENS.STATUS = OBF.STATUS
-WHERE OB.SITUACAO = 'A'
-  AND OBF.CODIGO_FASE IN (:fases)
-ORDER BY OB.NUMERO_OB, OBF.SEQUENCIA
-```
-
-## Anti-Patterns Conhecidos
-
-| Anti-Pattern                                                   | Problema                                | Correcao                                          |
-| -------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------- |
-| `FROM SGTPRD.GERAPECASPRODUTO WHERE CODIGO_REDUZIDO_PROD = :x` | Full scan 13M                           | Filtrar via `GERAPECAORIGEMOB.NUMERO_OB` primeiro |
-| `WHERE NUMERO_OB = '12345'` (string)                           | Conversao implicita, inibicao de índice | `WHERE NUMERO_OB = 12345` (NUMBER)                |
-| `LISTAGG` sem limite                                           | ORA-01489 se resultado > 4000 chars     | Usar `SGTPRD.OPTSTRAGGRSEMVIRGULA`                |
-| `SELECT *` em OB_FASES                                         | 1.3M x 30+ colunas = overhead           | Selecionar apenas colunas necessarias             |
-| `NUMEROORDEMREAL = NUMERO_OB` no código                        | Confusao de nomes                       | `UP_ORDEM_MVTO.NUMEROORDEMREAL = OB.NUMERO_OB`    |
-
-## Non-Negotiable Rules
-
-- Toda query DEVE prefixar com `SGTPRD.<objeto>` - ausencia causa ORA-00942 em produção.
-- Toda query DEVE usar bind variables (`:`) - nunca interpolação de valores em strings.
-- Nunca acessar `GERAPECASPRODUTO` sem filtro previo via `GERAPECAORIGEMOB` ou `GERAPECADESTINOOB` - 13M linhas.
-- O campo `NUMERO_OB` em `OB` corresponde a `NUMEROOB` em `PEDPRODUCAOOB` e a `NUMEROORDEMREAL` em `UP_ORDEM_MVTO` - não assumir nome igual.
-- O campo `OB_FASES.NUMEROORDEMMOVIMENTO` liga a `MOVTO_RECEITA.NUMEROORDEM` - campos com nomes diferentes.
-- Agregacao de strings: usar `SGTPRD.OPTSTRAGGRSEMVIRGULA` em vez de `LISTAGG` para compatibilidade legada.
-- Conexão Oracle DEVE usar a lib `lib/python/oracle_extract.py` - nunca recriar a lógica de conexão.
-
-## Pre-Delivery Checklist
-
-- O SQL usa prefixo `SGTPRD.` em todos os objetos?
-- Os parâmetros usam bind variables (`:`) em vez de interpolação?
-- Se acessa `GERAPECASPRODUTO`: existe filtro previo por `NUMERO_OB`?
-- Os campos `NUMERO_OB`/`NUMEROOB`/`NUMEROORDEMREAL` estão corretos para cada tabela?
-- O campo `NUMEROORDEMMOVIMENTO` foi mapeado corretamente para `NUMEROORDEM`?
-- A query foi testada com `--filter-automations` no extrator ou equivalente?
-- O arquivo `.py` que usa o SQL passa no gate de lint da skill `ci-gates`?
+- Nunca `TRUNC`/`TO_CHAR`/`TRIM`/`TO_DATE` sobre a coluna em `WHERE`/`JOIN`: faixa direta na coluna. Datas NUMBER `YYYYMMDD` (ex.: `DATA_DA_ENTRADA_PECA`) comparam com `TO_NUMBER(TO_CHAR(data, 'YYYYMMDD'))`.
+- Janela de data **dentro** de cada CTE de fato, nunca só no calendário final: senão a CTE agrega o histórico inteiro (`BD_PRD_MOVPROD` tem ~56 mi linhas).
+- CTEs de **um consumidor** cada, unidas por `LEFT JOIN`: o CBO as funde num plano pior — `/*+ MATERIALIZE */` em cada uma. Com **2+ consumidores**, não force o hint (o CBO já materializa).
+- `BD_BNF_PRODUCAO_FASE` não tem índice por `NUMERO_OB`: nada de `EXISTS` correlacionado por OB; monte o conjunto pequeno antes e cheque uma vez com `IN`.
+- Agregue movimentos antes de juntar cadastro (`ITENS_ESTOQUE`, `ENGEITEMESTONIVELGE9`, `LIKE`).
+- `x / NULLIF(y, 0)` sempre; `LISTAGG(... ON OVERFLOW TRUNCATE)`; `NUMERO_OB` é NUMBER (sem aspas).
+- "0 linhas" não é conformidade; `FETCH FIRST N` em auditoria trunca anomalias em silêncio.
+- Unidade de tempo: `OB`/`OB_FASES` a partir de 01/01/1996; `UNIDADE_PROGRAMACAO` a partir de 30/12/1899.
+- A rede derruba a sessão em ~4-6 s: a consulta inteira precisa caber nisso.
 
 ## Related Skills
 
@@ -219,12 +54,22 @@ ORDER BY OB.NUMERO_OB, OBF.SEQUENCIA
 - `automation-runtime-safety` para seguranca de runtime, tratamento de erros e logging estruturado.
 - `enterprise-orchestration-contract` para o papel das queries dentro do fluxo de execucao.
 
+## Non-Negotiable Rules
+
+- Toda query DEVE prefixar com `SGTPRD.<objeto>` - ausencia causa ORA-00942 em produção.
+- Toda query DEVE usar bind variables (`:`) - nunca interpolação de valores em strings.
+- Nunca acessar `GERAPECASPRODUTO` sem filtro seletivo indexado - 13M linhas: por OB via `GERAPECAORIGEMOB`/`GERAPECADESTINOOB`, ou por faixa de `DATA_DA_ENTRADA_PECA` (NUMBER `YYYYMMDD`, índice `GRPCPROD_INDIDATAENTRPECA`; compare com `TO_NUMBER(TO_CHAR(data, 'YYYYMMDD'))`, nunca aplique `TO_DATE` na coluna).
+- O campo `NUMERO_OB` em `OB` corresponde a `NUMEROOB` em `PEDPRODUCAOOB` e a `NUMEROORDEMREAL` em `UP_ORDEM_MVTO` - não assumir nome igual.
+- O campo `OB_FASES.NUMEROORDEMMOVIMENTO` liga a `MOVTO_RECEITA.NUMEROORDEM` - campos com nomes diferentes.
+- Agregacao de strings: `LISTAGG(... ON OVERFLOW TRUNCATE)`; `SGTPRD.OPTSTRAGGR*` só ao manter código legado que já o usa (ver anti-pattern de `LISTAGG`).
+- Conexão Oracle DEVE usar a lib `lib/python/oracle_extract.py` - nunca recriar a lógica de conexão.
+
 ## Repo-Specific Constraints
 
 - SQLs das automações ficam nos arquivos `extract_oracle.py`, `extract_obs.py`, `extract_ofst.py`, `extract_orb.py`, `processar_receitas.py` de cada automação, e em `Produção Beneficimento/src/beneficiamento/contracts/_queries*.py`.
 - Não espalhar SQL inline nos runners PowerShell nem nos routers FastAPI.
 - CTEs complexas podem ser pre-definidas como strings em `contracts/_queries*.py` e importadas.
-- Toda query nova deve passar pelo linter SQL da skill `ci-gates` antes do merge.
+- Toda query nova do acervo (`docs/oracle-schema/consultas/`) passa por `Tools/oracle/validar_sql_oracle.py --file <arquivo>` (guard + parse + execução de 1 linha) e entra no catálogo com `gerar_catalogo_sql.py --evidencia <saida.json>`; o `--check` do catálogo roda no pytest do CI. O `.py` que embute SQL passa pelo ruff/bandit/mypy descritos na skill `ci-gates` (não existe linter de SQL no CI).
 
 ## Validation
 
@@ -234,11 +79,23 @@ dados:
 
 ```powershell
 # Nomes e sintaxe (cursor.parse, não executa a query)
-.venv\Scripts\python Tools\oracle_catalog.py check meu_arquivo.sql
+.venv\Scripts\python Tools\oracle\oracle_catalog.py check meu_arquivo.sql
 
 # Plano de execucao (EXPLAIN PLAN, não executa a query) — confirma que não vai
 # fazer full scan numa tabela grande antes de rodar de verdade
-.venv\Scripts\python Tools\oracle_catalog.py explain meu_arquivo.sql
+.venv\Scripts\python Tools\oracle\oracle_catalog.py explain meu_arquivo.sql
+
+# Custo real: fetch completo, mediana de 5 execuções (conexão nova em cada), dump do resultado
+.venv\Scripts\python Tools\oracle\medir_sql_oracle.py meu_arquivo.sql --runs 5 --dump base.json --out base.report.json
+
+# Depois da reescrita: mesma medição + decisão contra a baseline (MELHORA/NEUTRO/PIOR)
+.venv\Scripts\python Tools\oracle\medir_sql_oracle.py meu_arquivo.sql --runs 5 --dump nova.json --baseline base.report.json
+
+# Provar que a reescrita não mudou o resultado (exige --chaves ou --metricas)
+.venv\Scripts\python Tools\oracle\comparar_equivalencia.py --controle base.json --candidata nova.json --chaves NUMERO_OB
+
+# Varredura do acervo: FALHA, LENTA, VAZIA, TETO_ATINGIDO...
+.venv\Scripts\python Tools\oracle\auditar_acervo_sql.py --out varredura.json
 
 # Verificar governança de skills apos modificar esta skill
 pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SkillsGovernance.ps1 -BasePath .
@@ -250,11 +107,29 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SkillsGovernance.ps1 -B
 .venv\Scripts\python -c "from oracle_extract import resolve_oracle_credentials; print(resolve_oracle_credentials(None, 'test'))"
 ```
 
+Limites do ambiente (medidos em 29/09/2026): o usuário de leitura **não enxerga** `V$SQL`,
+`V$MYSTAT` nem `DBMS_XPLAN.DISPLAY_CURSOR` (ORA-00942), então `buffer_gets` não existe e a métrica
+de performance é o tempo de parede do fetch completo; `EXPLAIN PLAN` é só hipótese. O banco é
+Oracle 12.2 Standard Edition, o client é 12.2 (sem `call_timeout`) e a rede derruba sessões longas
+(`ORA-00028`/`DPY-1001`, em ~4 a 6 s): abra conexão nova por medição e repita em queda de rede.
+
 ## Troubleshooting
 
-- **ORA-01489 (result too long)**: substituir `LISTAGG` por `SGTPRD.OPTSTRAGGRSEMVIRGULA`.
+- **ORA-01489 (result too long)**: acrescentar `ON OVERFLOW TRUNCATE` ao `LISTAGG`.
 - **ORA-00932 (inconsistent datatypes)**: NUMERO_OB eh NUMBER, não VARCHAR2 - remover aspas.
 - **Query lenta em GERAPECASPRODUTO**: ver regra de performance acima - sempre filtrar por OB antes.
 - **Campo não encontrado em OB_FASES**: `oracle_catalog.py cols OB_FASES --like <padrão>` confirma se existe e o nome exato.
 - **NVL em campo DATE não funciona**: usar `COALESCE` ou garantir que o tipo do literal seja compativel.
-- **ORA-00028 / ORA-03113 (sessao/conexão encerrada) ao rodar `sample`/`check`/`explain`**: a rede ate o Oracle desta máquina derruba conexoes continuas apos poucos segundos — normal, o comando ja tenta de novo automaticamente (mesmo retry dos extratores de produção); se persistir, rode de novo.
+- **ORA-00028 / ORA-03113 (sessao/conexão encerrada)**:
+  - *Em comandos rápidos (`sample`/`check`/`explain`)*: a rede até o Oracle desta máquina derruba conexões contínuas após poucos segundos — o comando já tenta de novo automaticamente (mesmo retry dos extratores); se persistir, rode de novo.
+  - *Em queries analíticas com range longo (ex.: faturamento 12+ meses sob concorrência)*: o CBO acumula recursos e a sessão é morta intermitentemente na 4ª/5ª execução. Mitigação arquitetural validada: aplicar a **Decomposição Temporal Disjunta via UNION ALL** na CTE de fatos (`[DT_INICIO, DT_CORTE) UNION ALL [DT_CORTE, DT_FIM)`), que reduz o custo unitário por branch e eleva o sucesso a 100% (5/5).
+  - *Em CTEs de parâmetros consumidas por múltiplos fatos analíticos*: se o CBO materializar a CTE de parâmetros (`TEMP TABLE TRANSFORMATION`), ele desativa o pushdown de predicados temporais nas transacionais massivas (`BD_PRD_MOVPROD`), gerando varreduras desnecessárias de milhões de linhas e estouro de sessão (`ORA-00028`). Solução: injetar `/*+ INLINE */` diretamente na CTE de parâmetros e forçar `/*+ LEADING(J UPR) USE_NL(UPR) */` nos blocos consumidores.
+## Pre-Delivery Checklist
+
+- O SQL usa prefixo `SGTPRD.` em todos os objetos?
+- Os parâmetros usam bind variables (`:`) em vez de interpolação?
+- Se acessa `GERAPECASPRODUTO`: existe filtro previo por `NUMERO_OB`?
+- Os campos `NUMERO_OB`/`NUMEROOB`/`NUMEROORDEMREAL` estão corretos para cada tabela?
+- O campo `NUMEROORDEMMOVIMENTO` foi mapeado corretamente para `NUMEROORDEM`?
+- A query foi testada com `--filter-automations` no extrator ou equivalente?
+- O arquivo `.py` que usa o SQL passa no gate de lint da skill `ci-gates`?

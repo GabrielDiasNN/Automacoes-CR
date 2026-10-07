@@ -33,7 +33,7 @@ Centralizar os guardrails operacionais do hub que não pertencem a um runtime ú
 - Todo log operacional relevante carrega `trace_id` (Python) ou `ExecId` (PowerShell) e severidade explícita `INFO` / `WARN` / `ERROR`. Evento fora de `docs/log-event.schema.json` reprova em `Tools/Test-LogEventSchema.ps1`. Não esconda falha operacional em mensagem neutra de `INFO`.
 - Classifique como recuperável apenas o erro que pode ser repetido sem risco de duplicidade, perda de rastreabilidade ou vazamento; o resto é terminal e aborta o fluxo. Envio de e-mail ou WhatsApp já confirmado nunca é recuperável — reenviar duplica.
 - Caminho absoluto (`C:\`, `D:\`) é proibido; use `$PSScriptRoot`, caminho relativo à raiz ou função de config. `Tools/Test-PortablePaths.ps1` bloqueia.
-- Limites de mypy / pylint e o contrato de `catch` tipado NÃO ficam aqui: consulte `docs/governance-contracts.md § Contrato Python — pylint` e `§ Contrato PowerShell — catch tipado`. O escopo de diretórios em `ruff` / `bandit` bloqueante do CI está na skill `ci-gates`.
+- Limites de mypy / pylint e o contrato de `catch` tipado NÃO ficam aqui: consulte `docs/governanca/governance-contracts.md § Contrato Python — pylint` e `§ Contrato PowerShell — catch tipado`. O escopo de diretórios em `ruff` / `bandit` bloqueante do CI está na skill `ci-gates`.
 
 ## Repo-Specific Constraints
 - `.env` na raiz é a única fonte de credencial; scripts Python e `lib/Lib-Config.psm1` consomem esse contexto sem duplicar valor. Para DSN Oracle fixo, `resolve_oracle_credentials(force_dsn="dbprd")` em `lib/python/oracle_extract.py`.
@@ -66,4 +66,4 @@ Centralizar os guardrails operacionais do hub que não pertencem a um runtime ú
 - Todo log novo tem severidade e `trace_id` / `ExecId`; passa `Tools/Test-LogEventSchema.ps1`.
 - Falha recuperável e terminal diferenciadas de forma defensável; canal já confirmado tratado como terminal.
 - Nenhum caminho absoluto; `Test-PortablePaths` verde.
-- Limites mypy / pylint conferidos em `docs/governance-contracts.md § Contrato Python — pylint`, não reescritos aqui.
+- Limites mypy / pylint conferidos em `docs/governanca/governance-contracts.md § Contrato Python — pylint`, não reescritos aqui.

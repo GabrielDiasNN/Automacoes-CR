@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import case
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, notifications
@@ -27,6 +28,7 @@ from ..constants import (
     EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TERMINATED,
     EXECUTION_STATUS_TIMEOUT,
+    EXECUTION_TERMINAL_STATUSES,
     EXIT_CODE_MAP,
     FAILURE_REASON_AUTOMATION_NOT_FOUND,
     FAILURE_REASON_INTERNAL_WORKER_ERROR,
@@ -50,6 +52,8 @@ from ..constants import (
 from ..middleware import request_id_var
 from ..security import sanitize_log_payload, truncate_log_payload
 from ..timezone import get_now_local
+from . import automation_repository as automation_repo
+from .domain_errors import DomainRuleError
 
 
 def generate_execution_id(prefix: str) -> str:
@@ -592,13 +596,8 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
     return len(zombies)
 
 
-class RequeueValidationError(Exception):
+class RequeueValidationError(DomainRuleError):
     """Erro de validacao de negocio do requeue, com status HTTP correspondente."""
-
-    def __init__(self, status_code: int, detail: str) -> None:
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
 
 
 def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
@@ -727,3 +726,157 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
         "priority": priority,
     }
     return new_exec, audit_payload
+
+
+# ---------------------------------------------------------------------------
+# Ciclo de vida manual / telemetria (regras que antes viviam nos routers)
+# ---------------------------------------------------------------------------
+
+
+def compute_duration_seconds(started_at: Any, finished_at: Any) -> float | None:
+    """Duração em segundos (>= 0), ou None se as datas faltam ou são incomparáveis."""
+    if not started_at or not finished_at:
+        return None
+    try:
+        seconds: float = round((finished_at - started_at).total_seconds(), 2)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, seconds)
+
+
+def commit_or_conflict(db: Session, conflict_detail: str) -> None:
+    """Commit que traduz a violação do índice único de execução ativa em 409.
+
+    O índice único parcial (migration 20260731_01) vence a corrida entre a
+    checagem prévia e o commit; antes dele, as duas inserções passavam.
+    """
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise DomainRuleError(409, conflict_detail) from exc
+
+
+def prepare_manual_start(
+    db: Session, db_auto: models.Automation, *, requested_by: str
+) -> models.Execution:
+    """Valida execução ativa, grupo operacional e cooldown e monta a execução
+    enfileirada (não commitada). Levanta `DomainRuleError` (409) se alguma
+    regra de concorrência for violada."""
+    automation_id = cast(int, db_auto.id)
+    running = automation_repo.get_active_execution(db, automation_id)
+    if running:
+        raise DomainRuleError(
+            409, f"Automação já possui uma execução ativa (ID: {running.id})."
+        )
+
+    group_running = get_group_active_execution(
+        db,
+        str(db_auto.queue_group) if db_auto.queue_group else None,
+        exclude_automation_id=automation_id,
+    )
+    if group_running:
+        raise DomainRuleError(
+            409,
+            "Grupo operacional já possui execução ativa "
+            f"(Execução: {group_running.id}, Grupo: {db_auto.queue_group}).",
+        )
+
+    if db_auto.cooldown_minutes and db_auto.cooldown_minutes > 0:
+        latest_exec = automation_repo.get_latest_execution(db, automation_id)
+        remaining = cooldown_remaining_minutes(
+            cast(datetime | None, latest_exec.started_at) if latest_exec else None,
+            cast(int, db_auto.cooldown_minutes),
+            get_now_local(),
+        )
+        if remaining is not None:
+            raise DomainRuleError(
+                409,
+                "Cooldown operacional ativo para esta automação. "
+                f"Aguarde aproximadamente {remaining} minuto(s).",
+            )
+
+    return build_queued_execution(
+        automation=db_auto,
+        exec_id=generate_execution_id("EXEC"),
+        requested_by=requested_by,
+        priority=PRIORITY_NORMAL,
+    )
+
+
+def terminate_execution(db_exec: models.Execution) -> str:
+    """Marca a execução ativa como TERMINATED (duração e linha `[STOP]` no log).
+
+    Devolve o status anterior. Levanta `DomainRuleError` (400) se já terminou.
+    """
+    if db_exec.status not in EXECUTION_ACTIVE_STATUSES:
+        raise DomainRuleError(400, "Execução já finalizada.")
+
+    previous_status = str(db_exec.status)
+    db_exec.status = EXECUTION_STATUS_TERMINATED  # type: ignore[assignment]
+    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    duration = compute_duration_seconds(db_exec.started_at, db_exec.finished_at)
+    if duration is not None:
+        db_exec.duration_seconds = duration  # type: ignore[assignment]
+    stop_log: str = (
+        str(db_exec.logs or "")
+        + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
+    )
+    db_exec.logs = stop_log  # type: ignore[assignment]
+    return previous_status
+
+
+def build_telemetry_execution(db_auto: models.Automation) -> models.Execution:
+    """Execução RUNNING registrada por cliente externo (terminal/VS Code)."""
+    return models.Execution(
+        id=f"TEL_{int(time.time())}_{uuid.uuid4().hex[:6]}",
+        automation_id=db_auto.id,
+        status=EXECUTION_STATUS_RUNNING,
+        requested_by="TERMINAL",
+        started_at=get_now_local(),
+        max_retries=db_auto.max_retries or 0,
+        queue_group=db_auto.queue_group,
+    )
+
+
+def finish_telemetry_execution(  # pylint: disable=too-many-arguments
+    db_exec: models.Execution,
+    *,
+    status: str,
+    exit_code: int | None,
+    logs: str | None,
+    artifacts: Any,
+) -> None:
+    """Encerra a execução de telemetria externa.
+
+    Aceita somente status TERMINAIS (422 caso contrário): validar contra um
+    conjunto que inclua PENDING/RUNNING devolvia a execução ao pool, onde o
+    worker a reivindicava e rodava a automação de novo, ignorando cooldown,
+    `max_retries`, `queue_group` e a checagem de execução ativa.
+    """
+    status_upper = str(status).upper()
+    if status_upper not in EXECUTION_TERMINAL_STATUSES:
+        permitidos = ", ".join(sorted(EXECUTION_TERMINAL_STATUSES))
+        raise DomainRuleError(
+            422,
+            f"Status de encerramento inválido: {status}. "
+            f"Use um status terminal: {permitidos}.",
+        )
+
+    db_exec.status = status_upper  # type: ignore[assignment]
+    if exit_code is not None:
+        db_exec.exit_code = int(exit_code)  # type: ignore[assignment]
+    if logs is not None:
+        # `truncate_log_payload` também aqui: `logs` é CompressedText e cada
+        # leitura descomprime a coluna inteira; um payload de dezenas de MB de
+        # cliente externo inflava toda listagem que tocasse a execução.
+        db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+            sanitize_log_payload(logs)
+        )
+    if artifacts is not None:
+        db_exec.artifacts = artifacts
+
+    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    duration = compute_duration_seconds(db_exec.started_at, db_exec.finished_at)
+    if duration is not None:
+        db_exec.duration_seconds = duration  # type: ignore[assignment]

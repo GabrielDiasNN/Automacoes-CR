@@ -66,23 +66,23 @@ function Test-RequiredPattern {
 }
 
 $resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
-$docsPath = Join-Path $resolvedRoot "docs"
+$docsPath = Join-Path (Join-Path $resolvedRoot "docs") "qualidade"
 $standardPath = Join-Path $docsPath "playwright-e2e-standard.md"
 $templatePath = Join-Path $docsPath "playwright-e2e-evidence-template.md"
 $findings = New-Object System.Collections.Generic.List[object]
 
 if (-not (Test-Path -LiteralPath $standardPath)) {
-    $findings.Add((New-Finding -File "docs/playwright-e2e-standard.md" -Rule "STANDARD_MISSING" -Detail "Padrao oficial de Playwright E2E nao encontrado."))
+    $findings.Add((New-Finding -File "docs/qualidade/playwright-e2e-standard.md" -Rule "STANDARD_MISSING" -Detail "Padrao oficial de Playwright E2E nao encontrado."))
 }
 
 if (-not (Test-Path -LiteralPath $templatePath)) {
-    $findings.Add((New-Finding -File "docs/playwright-e2e-evidence-template.md" -Rule "TEMPLATE_MISSING" -Detail "Template oficial de evidencia Playwright nao encontrado."))
+    $findings.Add((New-Finding -File "docs/qualidade/playwright-e2e-evidence-template.md" -Rule "TEMPLATE_MISSING" -Detail "Template oficial de evidencia Playwright nao encontrado."))
 }
 
 if (Test-Path -LiteralPath $standardPath) {
     $standard = Get-Utf8FileText -FilePath $standardPath
-    Test-RequiredPattern -Findings $findings -File "docs/playwright-e2e-standard.md" -Content $standard -Pattern "Playwright.*(ultima|última|ultimo|último).*etapa|etapa.*Playwright" -Rule "FINAL_STEP_NOT_DOCUMENTED" -Detail "Padrao deve declarar Playwright E2E como ultima etapa."
-    Test-RequiredPattern -Findings $findings -File "docs/playwright-e2e-standard.md" -Content $standard -Pattern "http://127\.0\.0\.1:8000/dashboard/" -Rule "DASHBOARD_URL_MISSING" -Detail "Padrao deve apontar para a tela real servida pelo Orchestrator."
+    Test-RequiredPattern -Findings $findings -File "docs/qualidade/playwright-e2e-standard.md" -Content $standard -Pattern "Playwright.*(ultima|última|ultimo|último).*etapa|etapa.*Playwright" -Rule "FINAL_STEP_NOT_DOCUMENTED" -Detail "Padrao deve declarar Playwright E2E como ultima etapa."
+    Test-RequiredPattern -Findings $findings -File "docs/qualidade/playwright-e2e-standard.md" -Content $standard -Pattern "http://127\.0\.0\.1:8000/dashboard/" -Rule "DASHBOARD_URL_MISSING" -Detail "Padrao deve apontar para a tela real servida pelo Orchestrator."
 }
 
 $evidenceFiles = @(

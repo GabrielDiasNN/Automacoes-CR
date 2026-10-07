@@ -100,7 +100,7 @@ class SystemLiveness(BaseModel):
     """Payload público de liveness — só o veredito, sem métricas internas.
 
     Servido por ``GET /api/system/health`` (rota pública, ver
-    ``docs/security-policy.md``). O detalhamento (DB, scheduler, worker, disco,
+    ``docs/governanca/security-policy.md``). O detalhamento (DB, scheduler, worker, disco,
     WAL, CPU, RAM) vive em ``GET /api/system/health/full``, autenticada.
     """
 

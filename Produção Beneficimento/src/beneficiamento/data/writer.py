@@ -46,7 +46,7 @@ def _date_iso(value: Any) -> str | None:
 
 
 # OBF.STATUS_FASE=4 corresponde a DS_STATUS_FASE='CONFIRMADA' na query Oracle
-# (ver CASE OBF.STATUS_FASE em sql/templates/detalhado.sql); demais valores
+# (ver CASE OBF.STATUS_FASE em sql/templates/bnf_producao_beneficiamento_detalhado.sql); demais valores
 # (PROGRAMADA/EMITIDA/PESADA/EM EXECUCAO) sao producao ainda nao concluida.
 _STATUS_FASE_CONFIRMADA = 4
 

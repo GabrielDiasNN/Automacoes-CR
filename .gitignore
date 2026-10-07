@@ -148,7 +148,7 @@ TASKS.md
 .claude/.state/
 
 # Catalogo local do schema Oracle SGTPRD: reconstruivel via
-# Tools/build_oracle_catalog.py, consultado por Tools/oracle_catalog.py.
+# Tools/oracle/build_oracle_catalog.py, consultado por Tools/oracle/oracle_catalog.py.
 # ~35MB, nunca versionar — a camada curada e docs/oracle-schema/*.md/*.json.
 docs/oracle-schema/schema.db
 docs/oracle-schema/schema.db-shm
@@ -180,6 +180,9 @@ scratch/
 _tmp/
 # Estado de loops agenticos (skill loop-agentico) — local, por sessao
 .loop-state/
+# Diario de progresso do loop em andamento — removido ao fechar a rodada
+# (precedente no CHANGELOG), nunca versionado.
+docs/progress.md
 # Estado de auditoria/verificacao gerado por ferramenta externa (nao e uma
 # skill deste repo) — relatorio local, nao versionado. Ja apareceu com um
 # achado falso (credenciais no .env versionado; .env nunca esteve em nenhum
@@ -241,3 +244,6 @@ testResults.xml
 .claude/.state/
 Orchestrator/tests/test/automation.manifest.json
 Orchestrator/tests/test/whatsapp-config.json
+
+# Saída local de execuções manuais dos validadores do acervo SQL
+Tools/evidencias/

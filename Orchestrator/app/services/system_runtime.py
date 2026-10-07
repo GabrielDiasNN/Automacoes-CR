@@ -38,7 +38,7 @@ def build_liveness_payload(
     """Liveness público: só o veredito, sem métricas internas nem exceção crua.
 
     Contraparte reduzida de ``build_health_payload``, servida por
-    ``GET /api/system/health`` (rota pública — ver ``docs/security-policy.md``).
+    ``GET /api/system/health`` (rota pública — ver ``docs/governanca/security-policy.md``).
     """
     db_ok = _probe_database(db)
     if not db_ok or not scheduler.running:

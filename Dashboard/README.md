@@ -39,7 +39,7 @@ npm run typecheck      # tsc --noEmit
 `src/api/`, `src/hooks/`, `src/lib/` e `src/context/` — a lógica que faz
 sentido testar isoladamente. `src/components/` e `src/pages/` ficam
 deliberadamente fora: são validados via Playwright E2E contra o Dashboard
-rodando de verdade (ver `../docs/playwright-e2e-standard.md`), que é a
+rodando de verdade (ver `../docs/qualidade/playwright-e2e-standard.md`), que é a
 validação final obrigatória para qualquer mudança em `Dashboard/src/`.
 
 ## Estrutura de pastas

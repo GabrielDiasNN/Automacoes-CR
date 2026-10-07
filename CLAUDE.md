@@ -39,37 +39,37 @@ cd Orchestrator && ..\.venv\Scripts\pytest tests\test_worker_wakeup_unit.py::tes
 # (npm run build) antes, porque o FastAPI serve a SPA a partir dele.
 cd Orchestrator && ..\.venv\Scripts\pytest -m e2e -v
 
-# Lint Python (black, isort, bandit, mypy, pylint) — ferramentas via requirements-dev.txt
-.venv\Scripts\python -m black --check Orchestrator .claude/skills
-.venv\Scripts\python -m isort --check-only Orchestrator .claude/skills
-.venv\Scripts\python -m bandit -r Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills -ll
+# Lint Python bloqueante do CI (ruff, bandit, black/isort no diff): use /preflight, que
+# reproduz o escopo exato de `.github/workflows/governanca.yml` (fonte: skill `ci-gates`).
+# Não copie a lista de diretórios para cá — ela muda e a cópia fica desatualizada.
 # mypy + pylint: usar o script de governança (aplica flags corretas por arquivo)
 pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 
-# Recompilar dependências pinadas (pip-tools)
+# Recompilar dependências pinadas (pip-tools). ATENÇÃO: rodado no Windows, o pip-compile
+# gera um lock que quebra o CI Linux (marcadores de plataforma) — revise o diff antes de commitar.
 .venv\Scripts\pip-compile requirements.in -o requirements.txt
 
 # Sincronizar o ambiente com o lock (após pull que altere requirements*.txt)
 .venv\Scripts\python -m pip install -r requirements.txt -r requirements-test.txt -r requirements-dev.txt
-
-# Lint que roda no CI (bloqueante) — reproduzir localmente antes do push
-.venv\Scripts\python -m ruff check Orchestrator/app Orchestrator/worker.py lib/python "Produção Beneficimento/src" .claude/skills
 ```
 
 ### Catálogo Oracle (schema SGTPRD)
 Antes de escrever SQL novo, consulte o catálogo local em vez de explorar o dicionário de dados do Oracle a cada sessão — ver skill `oracle-schema-navigator`.
 ```powershell
+# O acervo de consultas de referencia (catalogo gerado) fica em docs/oracle-schema/consultas/
+# (README.md la explica dono e regra de promocao). SQL de runtime do Beneficiamento: Produção Beneficimento/sql/templates/.
+
 # Reconstruir o catalogo local (schema.db, gitignored) — ~30s, requer Oracle acessivel
-.venv\Scripts\python Tools\build_oracle_catalog.py
+.venv\Scripts\python Tools\oracle\build_oracle_catalog.py
 
 # Consultas offline (sem ir ao Oracle)
-.venv\Scripts\python Tools\oracle_catalog.py table OB
-.venv\Scripts\python Tools\oracle_catalog.py find "receita bloqueada"
-.venv\Scripts\python Tools\oracle_catalog.py path OB ITENSPEDIDOGRADE
+.venv\Scripts\python Tools\oracle\oracle_catalog.py table OB
+.venv\Scripts\python Tools\oracle\oracle_catalog.py find "receita bloqueada"
+.venv\Scripts\python Tools\oracle\oracle_catalog.py path OB ITENSPEDIDOGRADE
 
 # Consultas online (SELECT-only, LIMIT obrigatorio, retry)
-.venv\Scripts\python Tools\oracle_catalog.py check meu_arquivo.sql
-.venv\Scripts\python Tools\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
+.venv\Scripts\python Tools\oracle\oracle_catalog.py check meu_arquivo.sql
+.venv\Scripts\python Tools\oracle\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
 ```
 
 ### Governança, quality gate e scaffolding
@@ -82,7 +82,7 @@ Monorepo com três camadas principais:
 
 1. **Orchestrator** (`Orchestrator/`) — FastAPI v5 + APScheduler + SQLite WAL. Motor de execução central.
 2. **Dashboard** (`Dashboard/`) — SPA React + TypeScript + Vite (fontes em `Dashboard/src/`, build em `Dashboard/dist/`) servido pelo próprio FastAPI via `StaticFiles` com fallback SPA para rotas client-side. Roda em `http://127.0.0.1:8000/dashboard/`.
-3. **Automações de domínio** — diretórios independentes. As seis automações registradas com manifesto (`Receitas Bloqueadas/` RB-01, `Montagem de Terceirizados/` MT-02, `Receitas Emitidas/` RE-03, `OBs Paradas Fase/` OBP-04, `OBs Fluxo Sem Tingimento/` OFST-06, `OBs Restricao Branco/` ORB-07) usam `run.ps1` como entrypoint. `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo). Criticidade, SLA e cadência canônicas: `docs/automation-criticality-map.md`.
+3. **Automações de domínio** — diretórios independentes. As seis automações registradas com manifesto (`Receitas Bloqueadas/` RB-01, `Montagem de Terceirizados/` MT-02, `Receitas Emitidas/` RE-03, `OBs Paradas Fase/` OBP-04, `OBs Fluxo Sem Tingimento/` OFST-06, `OBs Restricao Branco/` ORB-07) usam `run.ps1` como entrypoint. `Produção Beneficimento/` é orientada a snapshot (sem `run.ps1`, ver abaixo). Criticidade, SLA e cadência canônicas: `docs/governanca/automation-criticality-map.md`.
 
 Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md`, `Produção Beneficimento/CLAUDE.md`, `Dashboard/CLAUDE.md` (toolchain e comandos do front) e `lib/CLAUDE.md` (Pester).
 
@@ -124,7 +124,7 @@ Fonte única (não duplicar aqui): `AGENTS.md § Regras de Encoding`. Aplicado m
 - Atualizar `docs/ai-native-context-monitor.md` quando a mudança alterar estado que futuros agentes precisam conhecer para decidir corretamente.
 
 ### Validação E2E
-- Quando o Playwright é obrigatório e como validar: `AGENTS.md § Validação`. Padrão completo (critérios, evidência mínima): `docs/playwright-e2e-standard.md`.
+- Quando o Playwright é obrigatório e como validar: `AGENTS.md § Validação`. Padrão completo (critérios, evidência mínima): `docs/qualidade/playwright-e2e-standard.md`.
 - Registrar evidência com `Tools/Test-PlaywrightEvidence.ps1`.
 - Para validação visual ad-hoc via navegador (fora do Playwright formal, ex.: conferir uma UI nova com dados reais), o login do dashboard exige a API Key — sempre lê-la de `ORCHESTRATOR_API_KEY` em `.env` (nunca peça a chave ao usuário nem a hardcode).
 
@@ -138,7 +138,7 @@ Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes,
 
 ## Contratos de Governança (Pre-Commit Hook)
 
-O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit (15 validações: zero-trust, SQL, mypy/pylint, PowerShell, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node, schema de evento de log). Regras detalhadas (limites exatos de mypy/pylint, formato de manifesto, contratos PowerShell, snippets corretos/errados) estão em **[docs/governance-contracts.md](docs/governance-contracts.md)** — consulte antes de escrever código Python/PowerShell novo ou editar `automation.manifest.json`.
+O hook executa `ValidarAutomacoes.ps1 -OnlyGovernance` a cada commit (15 validações: zero-trust, SQL, mypy/pylint, PowerShell, encoding, JSON, Playwright, manifesto, arquitetura, datas, semântica, Node, schema de evento de log). Regras detalhadas (limites exatos de mypy/pylint, formato de manifesto, contratos PowerShell, snippets corretos/errados) estão em **[docs/governanca/governance-contracts.md](docs/governanca/governance-contracts.md)** — consulte antes de escrever código Python/PowerShell novo ou editar `automation.manifest.json`.
 
 ## Princípios Comportamentais
 

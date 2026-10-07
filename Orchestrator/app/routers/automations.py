@@ -11,15 +11,12 @@ import logging
 import math
 import threading
 import time
-from datetime import datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import PRIORITY_NORMAL
 from ..database import get_db
 from ..middleware import get_api_key
 from ..runtime import get_project_root, scheduler, trigger_worker_wakeup
@@ -30,12 +27,8 @@ from ..services.automation_snapshot import (
     build_automation_response_batch,
     load_snapshot_dependencies,
 )
-from ..services.execution_runtime import (
-    build_queued_execution,
-    cooldown_remaining_minutes,
-    generate_execution_id,
-    get_group_active_execution,
-)
+from ..services.domain_errors import DomainRuleError
+from ..services.execution_runtime import commit_or_conflict, prepare_manual_start
 from ..services.metrics_queries import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
@@ -44,7 +37,6 @@ from ..services.scheduler_runtime import (
     extract_automation_id_from_job,
     reload_scheduled_tasks,
 )
-from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
 logger = logging.getLogger("orchestrator")
@@ -489,24 +481,10 @@ def delete_automation(
 
     auto_name = db_auto.name
 
-    # Bloqueia a remoção enquanto houver execução ativa. `start_automation` já
-    # validava isso; `delete_automation` não fazia checagem nenhuma — e com
-    # `cascade="all, delete-orphan"` no ORM mais `ondelete="CASCADE"` na FK
-    # (com PRAGMA foreign_keys=ON), apagar a automação removia a linha da
-    # execução RUNNING enquanto o processo PowerShell continuava vivo. O worker
-    # então chamava `complete_process_execution`, que faz `.first()` e devolve
-    # None em silêncio: o processo terminava sem registro, sem artefato
-    # catalogado e sem alerta.
-    execucao_ativa = repo.get_active_execution(db, automation_id)
-    if execucao_ativa:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Automação possui execução ativa ({execucao_ativa.id}, "
-                f"status {execucao_ativa.status}). Aguarde o término ou pare a "
-                "execução antes de remover."
-            ),
-        )
+    try:
+        repo.ensure_deletable(db, automation_id)
+    except DomainRuleError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     log_audit(
         db,
@@ -548,75 +526,21 @@ def start_automation(
 
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
-    # Protecao contra execucao duplicada
-
-    running = repo.get_active_execution(db, automation_id)
-
-    if running:
-
-        raise HTTPException(
-            status_code=409,
-            detail=f"Automação já possui uma execução ativa (ID: {running.id}).",
-        )
-
-    group_running = get_group_active_execution(
-        db,
-        str(db_auto.queue_group) if db_auto.queue_group else None,
-        exclude_automation_id=automation_id,
-    )
-    if group_running:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Grupo operacional já possui execução ativa "
-                f"(Execução: {group_running.id}, Grupo: {db_auto.queue_group})."
-            ),
-        )
-
-    if db_auto.cooldown_minutes and db_auto.cooldown_minutes > 0:
-        latest_exec = repo.get_latest_execution(db, automation_id)
-        remaining = cooldown_remaining_minutes(
-            cast(datetime | None, latest_exec.started_at) if latest_exec else None,
-            cast(int, db_auto.cooldown_minutes),
-            get_now_local(),
-        )
-        if remaining is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cooldown operacional ativo para esta automação. "
-                    f"Aguarde aproximadamente {remaining} minuto(s)."
-                ),
-            )
-
-    exec_id = generate_execution_id("EXEC")
-
     client_ip = get_client_ip(request)
 
-    db_exec = build_queued_execution(
-        automation=db_auto,
-        exec_id=exec_id,
-        requested_by=client_ip,
-        priority=PRIORITY_NORMAL,
-    )
-
-    db.add(db_exec)
-
-    log_audit(
-        db, "START", "EXECUTION", exec_id, client_ip, f"Disparado: {db_auto.name}"
-    )
-
     try:
-        db.commit()
-    except IntegrityError as exc:
-        # O índice único parcial (migration 20260731_01) venceu a corrida entre
-        # a checagem acima e este commit. Antes da constraint, as duas inserções
-        # passavam e a automação rodava duas vezes.
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="Já existe uma execução ativa para esta automação.",
-        ) from exc
+        db_exec = prepare_manual_start(db, db_auto, requested_by=client_ip)
+        exec_id = cast(str, db_exec.id)
+
+        db.add(db_exec)
+
+        log_audit(
+            db, "START", "EXECUTION", exec_id, client_ip, f"Disparado: {db_auto.name}"
+        )
+
+        commit_or_conflict(db, "Já existe uma execução ativa para esta automação.")
+    except DomainRuleError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     trigger_worker_wakeup()
 
