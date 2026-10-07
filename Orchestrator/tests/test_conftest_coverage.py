@@ -4,7 +4,11 @@ que silenciosamente tocariam o banco real de produção."""
 
 import os
 
-from conftest import TESTS_DIR, testing_session_local as _testing_session_local
+from conftest import (
+    _SESSION_ATTR,
+    TESTS_DIR,
+    testing_session_local as _testing_session_local,
+)
 from fastapi.testclient import TestClient
 
 # Módulos que importam `SessionLocal` diretamente de app.database (fora de
@@ -57,6 +61,6 @@ def test_todos_os_modulos_conhecidos_usam_test_engine(client: TestClient) -> Non
     from app.services import scheduler_runtime as sched
 
     assert db.SessionLocal is _testing_session_local
-    assert getattr(main_module, "SessionLocal") is _testing_session_local
-    assert getattr(sched, "SessionLocal") is _testing_session_local
-    assert getattr(ws, "SessionLocal") is _testing_session_local
+    assert getattr(main_module, _SESSION_ATTR) is _testing_session_local
+    assert getattr(sched, _SESSION_ATTR) is _testing_session_local
+    assert getattr(ws, _SESSION_ATTR) is _testing_session_local

@@ -1,6 +1,7 @@
 # pylint: disable=protected-access
 """Testes unitários de app/services/scheduler_runtime.py e app/runtime.py (wakeup)."""
 
+import contextlib
 import json
 import os
 import subprocess
@@ -203,13 +204,18 @@ def test_run_file_cleanup_tem_timeout() -> None:
 
 def test_run_file_cleanup_nao_repassa_segredos() -> None:
     """O subprocesso recebe a allowlist, não `os.environ` inteiro."""
-    with patch.dict(
-        os.environ,
-        {"ORCHESTRATOR_API_KEY": "chave-secreta", "ORACLE_READONLY_PASSWORD": "senha"},
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "ORCHESTRATOR_API_KEY": "chave-secreta",
+                "ORACLE_READONLY_PASSWORD": "senha",
+            },
+        ),
+        patch("app.services.scheduler_runtime.subprocess.run") as mock_run,
     ):
-        with patch("app.services.scheduler_runtime.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            sr.run_file_cleanup()
+        mock_run.return_value = MagicMock(returncode=0)
+        sr.run_file_cleanup()
 
     _args, kwargs = mock_run.call_args
     env = kwargs.get("env")
@@ -364,10 +370,8 @@ def test_reload_preserva_next_run_time_do_interval_no_dispatch_real(
         # `next_run_time` preservado (tolerância de 2s para o custo do reload).
         assert abs((recriado.next_run_time - esperado).total_seconds()) < 2
     finally:
-        try:
+        with contextlib.suppress(Exception):
             scheduler.remove_job(job_id)
-        except Exception:  # pylint: disable=broad-exception-caught
-            pass
         sr._pending_interval_resume.clear()
 
 

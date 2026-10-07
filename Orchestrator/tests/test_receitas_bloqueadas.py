@@ -183,9 +183,7 @@ def test_process_sem_alteracoes_exit_2(
             return True  # ORACLE_CLIENT_LIB_DIR, checado por resolve_oracle_credentials
         if "SQL-ReceitasBloqueadas.sql" in path:
             return True
-        if "receitas_state.json" in path and ".tmp" not in path:
-            return True
-        return False
+        return "receitas_state.json" in path and ".tmp" not in path
 
     mock_exists.side_effect = side_exists
 
@@ -233,9 +231,9 @@ def test_process_sem_alteracoes_exit_2(
     with (
         patch("processar_receitas.sys.argv", ["processar_receitas.py", "test_idem"]),
         patch("processar_receitas.sys.exit", side_effect=SystemExit(2)) as mock_exit,
+        pytest.raises(SystemExit) as excinfo,
     ):
-        with pytest.raises(SystemExit) as excinfo:
-            processar_receitas.process()
+        processar_receitas.process()
 
     assert excinfo.value.code == 2
     mock_exit.assert_called_once_with(2)
@@ -263,9 +261,8 @@ def test_process_sucesso_com_novos_bloqueios(
             return True  # ORACLE_CLIENT_LIB_DIR, checado por resolve_oracle_credentials
         if "SQL-ReceitasBloqueadas.sql" in path:
             return True
-        if "receitas_state.json" in path:
-            return True  # Simula que existe estado anterior
-        return False
+        # Simula que existe estado anterior
+        return "receitas_state.json" in path
 
     mock_exists.side_effect = side_exists
 

@@ -2,7 +2,8 @@
 Testes unitários focados no loop principal e comportamento de backoff do Worker (worker.py).
 """
 
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -125,10 +126,12 @@ def test_worker_consumes_task_and_resets_backoff(  # pylint: disable=too-many-ar
 
         return False
 
-    with patch.object(worker.wakeup_event, "wait", side_effect_wait):
-        with patch("worker.ThreadPoolExecutor"):
-            # Mock do executor para rodar de forma síncrona/mockada
-            worker.main_loop()
+    with (
+        patch.object(worker.wakeup_event, "wait", side_effect_wait),
+        # Mock do executor para rodar de forma síncrona/mockada
+        patch("worker.ThreadPoolExecutor"),
+    ):
+        worker.main_loop()
 
     assert call_count == 2
     assert mock_claim.call_count == 2

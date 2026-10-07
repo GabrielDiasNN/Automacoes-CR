@@ -85,9 +85,8 @@ def test_where_do_tingimento_nunca_recebe_valor(carga: str) -> None:
 @pytest.mark.parametrize("carga", _CARGAS)
 def test_target_filter_nunca_recebe_valor(target_type: str, carga: str) -> None:
     """`_target_filter` é concatenado ao WHERE do drill-down."""
-    normalized: dict[str, Any] = {
-        chave: carga
-        for chave in (
+    normalized: dict[str, Any] = dict.fromkeys(
+        (
             "alternativo",
             "maquina",
             "fase",
@@ -99,8 +98,9 @@ def test_target_filter_nunca_recebe_valor(target_type: str, carga: str) -> None:
             "q",
             "status",
             "reprocesso",
-        )
-    }
+        ),
+        carga,
+    )
 
     target_sql, params, _label = _target_filter(
         target_type, {"codigo": carga}, normalized

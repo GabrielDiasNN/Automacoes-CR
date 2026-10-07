@@ -241,7 +241,7 @@ class _ExecutorSincrono:  # pylint: disable=too-few-public-methods
     def submit(
         self, fn: Any, *args: Any, **kwargs: Any
     ) -> "concurrent.futures.Future[Any]":
-        future: "concurrent.futures.Future[Any]" = concurrent.futures.Future()
+        future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         try:
             future.set_result(fn(*args, **kwargs))
         except Exception as exc:  # pylint: disable=broad-except

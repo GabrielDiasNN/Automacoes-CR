@@ -92,7 +92,7 @@ def test_subprocess_env_exec_id_e_correlation_id_iguais() -> None:
 
 
 def test_drain_cap_linhas_para_em_max_log_lines() -> None:
-    queue: "Queue[str]" = Queue()
+    queue: Queue[str] = Queue()
     for _ in range(5):
         queue.put("linha\n")
     logs: list[str] = []
@@ -104,7 +104,7 @@ def test_drain_cap_linhas_para_em_max_log_lines() -> None:
 
 
 def test_drain_cap_chars_para_em_max_log_chars() -> None:
-    queue: "Queue[str]" = Queue()
+    queue: Queue[str] = Queue()
     for _ in range(10):
         queue.put("x" * 10)
     logs: list[str] = []
@@ -116,7 +116,7 @@ def test_drain_cap_chars_para_em_max_log_chars() -> None:
 
 
 def test_drain_retorna_total_de_chars_acumulado() -> None:
-    queue: "Queue[str]" = Queue()
+    queue: Queue[str] = Queue()
     for _ in range(3):
         queue.put("x" * 10)
     logs: list[str] = []
@@ -133,7 +133,7 @@ def test_drain_com_total_recebido_nao_recalcula_do_zero() -> None:
     Passar um total já próximo do cap deve barrar a acumulação mesmo com `logs`
     curto — prova de que o valor recebido é usado, e não recalculado da lista.
     """
-    queue: "Queue[str]" = Queue()
+    queue: Queue[str] = Queue()
     for _ in range(3):
         queue.put("x" * 10)
     logs: list[str] = []
@@ -147,7 +147,7 @@ def test_drain_com_total_recebido_nao_recalcula_do_zero() -> None:
 
 
 def test_drain_acima_do_cap_continua_broadcast_mas_nao_acumula() -> None:
-    queue: "Queue[str]" = Queue()
+    queue: Queue[str] = Queue()
     for _ in range(5):
         queue.put("linha\n")
 
