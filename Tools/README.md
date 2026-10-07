@@ -43,12 +43,12 @@ Exigem Orchestrator no ar (e `ORCHESTRATOR_API_KEY` no ambiente). Por isso ficam
 `ValidarAutomacoes.ps1`, que precisa rodar offline no pre-commit. Invoque manualmente após subir o
 serviço, ou em validação pós-deploy.
 
-- **Test-OrchestratorIntegrity.ps1:** Smoke pós-deploy — processos ativos, API online, contratos operacionais (`diagnostics`/`baseline`/`history`/`portfolio`) e suíte PyTest completa. Referenciado por `docs/operational-improvement-baseline.md`.
+- **Test-OrchestratorIntegrity.ps1:** Smoke pós-deploy — processos ativos, API online, contratos operacionais (`diagnostics`/`baseline`/`history`/`portfolio`) e suíte PyTest completa. Referenciado por `docs/qualidade/operational-improvement-baseline.md`.
 - **Test-EncodingResilience.ps1:** Trava de regressão para acentuação PT-BR ponta a ponta (logs, API, DB). Requer `-ApiKey` ou `ORCHESTRATOR_API_KEY` no ambiente; falha imediatamente sem ela.
 
 ### Ferramentas manuais de estilo
 
-- **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/playwright-e2e-standard.md`.
+- **Padrão E2E com Playwright:** A validação final para mudanças de UI/fluxo operacional deve seguir `docs/qualidade/playwright-e2e-standard.md`.
 
 ### Operação e Utilitários
 - **New-Automation.ps1:** Scaffold governado para criar pasta de automação com `README.md`, `CONTEXT.md`, `run.ps1`, `automation.manifest.json`, runbook inicial e smoke test mínimo em `Orchestrator/tests/`, com parâmetros para owner, criticidade, fila e dependências básicas.

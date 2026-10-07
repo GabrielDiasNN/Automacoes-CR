@@ -7,7 +7,7 @@ BeforeAll {
     function New-ArchitectureFixture {
         param([string]$BasePath)
 
-        New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "docs") | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "docs\governanca") | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Tools") | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Orchestrator\app\routers") | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $BasePath "Orchestrator\app\services") | Out-Null
@@ -30,7 +30,7 @@ Contrato minimo.
 
         "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "README.md") -Encoding UTF8
         "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "CONTEXT.md") -Encoding UTF8
-        "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "docs\repository-governance.md") -Encoding UTF8
+        "Referencia docs/architecture-standard.md" | Set-Content -LiteralPath (Join-Path $BasePath "docs\governanca\repository-governance.md") -Encoding UTF8
 
         @"
 {

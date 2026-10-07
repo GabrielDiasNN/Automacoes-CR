@@ -9,10 +9,8 @@ import json
 import logging
 import math
 import os
-import time
-import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -22,28 +20,27 @@ from sqlalchemy.orm import Query as SAQuery, Session
 
 from .. import models, schemas
 from ..constants import (
-    EXECUTION_ACTIVE_STATUSES,
     EXECUTION_ALLOWED_PRIORITIES,
     EXECUTION_ALLOWED_STATUSES,
-    EXECUTION_STATUS_RUNNING,
-    EXECUTION_STATUS_TERMINATED,
-    EXECUTION_TERMINAL_STATUSES,
 )
 from ..database import get_db
 from ..middleware import get_api_key
 from ..path_safety import is_contained
 from ..runtime import get_project_root, trigger_worker_wakeup
-from ..security import sanitize_log_payload, truncate_log_payload
 from ..services import execution_repository as exec_repo
+from ..services.domain_errors import DomainRuleError
 from ..services.execution_decoration import (
     build_active_execution_maps,
     decorate_execution_summary,
 )
 from ..services.execution_runtime import (
     RequeueValidationError,
+    build_telemetry_execution,
+    commit_or_conflict,
+    finish_telemetry_execution,
     prepare_requeue,
+    terminate_execution,
 )
-from ..timezone import get_now_local
 from ..utils import get_client_ip, log_audit
 
 # `SAQuery` é o `sqlalchemy.orm.Query` sob alias, usado só como anotação de tipo.
@@ -415,24 +412,10 @@ def stop_execution(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    if db_exec.status not in EXECUTION_ACTIVE_STATUSES:
-        raise HTTPException(status_code=400, detail="Execução já finalizada.")
-
-    previous_status = db_exec.status
-    db_exec.status = EXECUTION_STATUS_TERMINATED  # type: ignore[assignment]
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-    if db_exec.started_at and db_exec.finished_at:
-        try:
-            delta = db_exec.finished_at - db_exec.started_at
-            delta_seconds = round(delta.total_seconds(), 2)
-            db_exec.duration_seconds = max(0.0, delta_seconds)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            pass
-    _stop_log: str = (
-        str(db_exec.logs or "")
-        + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
-    )
-    db_exec.logs = _stop_log  # type: ignore[assignment]
+    try:
+        terminate_execution(db_exec)
+    except DomainRuleError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     log_audit(db, "STOP", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
@@ -522,35 +505,21 @@ def telemetry_start(
             detail=f"Automação '{payload.automation_name}' não encontrada.",
         )
 
-    # Gerar ID único
-    exec_id = f"TEL_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-
-    new_exec = models.Execution(
-        id=exec_id,
-        automation_id=db_auto.id,
-        status=EXECUTION_STATUS_RUNNING,
-        requested_by="TERMINAL",
-        started_at=get_now_local(),
-        max_retries=db_auto.max_retries or 0,
-        queue_group=db_auto.queue_group,
-    )
+    new_exec = build_telemetry_execution(db_auto)
+    exec_id = cast(str, new_exec.id)
     db.add(new_exec)
 
     log_audit(db, "START_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
     try:
-        db.commit()
-    except IntegrityError as exc:
-        # Este endpoint não checava execução ativa nenhuma — inseria direto em
-        # RUNNING. O índice único parcial (migration 20260731_01) passa a
-        # aplicar aqui a mesma invariante dos demais produtores.
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Já existe uma execução ativa para esta automação. "
-                "Finalize-a antes de registrar telemetria."
-            ),
-        ) from exc
+        # Este endpoint não checa execução ativa: insere direto em RUNNING e o
+        # índice único parcial aplica a mesma invariante dos demais produtores.
+        commit_or_conflict(
+            db,
+            "Já existe uma execução ativa para esta automação. "
+            "Finalize-a antes de registrar telemetria.",
+        )
+    except DomainRuleError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     logger.info(
         "Telemetria iniciada: %s para automacao %s", exec_id, payload.automation_name
@@ -571,52 +540,25 @@ def telemetry_end(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    # Somente status TERMINAIS: o endpoint é o "/end" da telemetria. Validar
-    # contra EXECUTION_ALLOWED_STATUSES (que inclui PENDING e RUNNING) abria um
-    # caminho de reexecução fora da fila — `status: "PENDING"` gravava
-    # `finished_at`/`duration_seconds` e devolvia a execução ao pool, onde o
-    # worker a reivindicava e rodava a automação de novo, ignorando cooldown,
-    # `max_retries`, `queue_group` e a checagem de execução ativa.
-    status_upper = str(payload.status).upper()
-    if status_upper not in EXECUTION_TERMINAL_STATUSES:
-        permitidos = ", ".join(sorted(EXECUTION_TERMINAL_STATUSES))
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Status de encerramento inválido: {payload.status}. "
-                f"Use um status terminal: {permitidos}."
-            ),
+    erro: DomainRuleError | None = None
+    try:
+        finish_telemetry_execution(
+            db_exec,
+            status=payload.status,
+            exit_code=payload.exit_code,
+            logs=payload.logs,
+            artifacts=payload.artifacts,
         )
+    except DomainRuleError as exc:
+        erro = exc
+    if erro is not None and erro.status_code != 409:
+        raise HTTPException(status_code=erro.status_code, detail=erro.detail)
 
-    db_exec.status = status_upper  # type: ignore[assignment]
-    if payload.exit_code is not None:
-        db_exec.exit_code = int(payload.exit_code)  # type: ignore[assignment]
-    if payload.logs is not None:
-        # `truncate_log_payload` também aqui: era o ÚNICO caminho de escrita de
-        # log que ignorava MAX_DB_LOGS_CHARS (todo o worker o respeita). Como
-        # `logs` é CompressedText, cada leitura descomprime a coluna inteira em
-        # memória — um payload de dezenas de MB vindo de um cliente externo
-        # ficava permanentemente no SQLite e inflava toda listagem que tocasse
-        # aquela execução.
-        db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
-            sanitize_log_payload(payload.logs)
-        )
-    if payload.artifacts is not None:
-        db_exec.artifacts = payload.artifacts  # type: ignore[assignment]
-
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-
-    # Calcular duração
-    if db_exec.started_at and db_exec.finished_at:
-        try:
-            delta = db_exec.finished_at - db_exec.started_at
-            delta_seconds = round(delta.total_seconds(), 2)
-            db_exec.duration_seconds = max(0.0, delta_seconds)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            pass
-
+    # 409 (fim tardio) também persiste: o log real foi anexado à execução.
     log_audit(db, "END_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
+    if erro is not None:
+        raise HTTPException(status_code=erro.status_code, detail=erro.detail)
 
     logger.info("Telemetria finalizada: %s com status %s", exec_id, payload.status)
     return {"message": "Telemetria registrada com sucesso.", "exec_id": exec_id}

@@ -1,6 +1,6 @@
 # Padrão Arquitetural do Hub de Automações
 
-> **Versão:** v1.0.0 | **Atualizado:** 07/06/2026
+> **Versão:** v1.0.0 | **Atualizado:** 07/10/2026
 
 Este documento define o contrato arquitetural mínimo do Hub de Automações. Ele complementa `AGENTS.md`, `CONTEXT.md`, `SECURITY.md` e as skills canônicas em `.github/skills/`, sem substituir regras mais específicas desses artefatos.
 
@@ -14,6 +14,17 @@ O Hub mantém fronteiras explícitas entre apresentação, API, runtime, automa�
 - **Automações governadas:** iniciam por `run.ps1`, declaram `automation.manifest.json`, runbook e smoke test antes de promoção recorrente.
 - **Tools e lib:** mantêm validadores, scaffold, módulos PowerShell compartilhados e guardrails de qualidade.
 - **Documentação viva e skills:** descrevem o estado real do Hub e devem evoluir junto de mudanças arquiteturais.
+
+### Fronteiras de dados e código de apoio (07/10/2026)
+
+| O quê | Onde mora | Dono / regra |
+| --- | --- | --- |
+| Regra de negócio do ciclo de vida de execuções e automações | `Orchestrator/app/services/` (`execution_runtime`, `automation_repository`); erro de regra em `services/domain_errors.DomainRuleError` | Routers só validam payload, traduzem `DomainRuleError` em `HTTPException`, persistem e auditam |
+| Acervo de consultas SQL de referência (catálogo gerado, evidência de validação) | `docs/oracle-schema/consultas/` | Material de referência sobre o ERP, ao lado do catálogo do schema; só as consultas ✅ valem como referência canônica; promover a runtime é **mover**, nunca copiar |
+| SQL de runtime do Beneficiamento | `Produção Beneficimento/sql/templates/` | Dono: o runner; `test_beneficiamento_sql_template_unit.py` falha se o caminho configurado em `settings.py` deixar de existir |
+| Ferramentas Python de Oracle (catálogo, validação, medição, guard) | `Tools/oracle/` | `CONSULTAS_ROOT` em `validar_sql_oracle.py` é a fonte única do caminho do acervo; guard = `Tools/oracle/guard_sql.py` → guard canônico externo |
+| Governança, scaffold e hooks | `Tools/*.ps1`, `Tools/log_event_validator.py` | Pre-commit executa `ValidarAutomacoes.ps1 -OnlyGovernance` |
+| Documentação transversal | `docs/governanca/`, `docs/qualidade/`, `docs/operacao/`; ficam na raiz de `docs/` os arquivos cujo caminho é contrato de hook/validador | Referências por caminho completo; mover exige atualizar `Tools/Test-*.ps1` |
 
 ## Severidade
 
@@ -35,7 +46,7 @@ Se o ruleset estiver ausente ou inválido, o validador deve retornar `RULESET_MI
 
 - Routers FastAPI não devem abrir Oracle diretamente; contratos como Beneficiamento permanecem snapshot-first para endpoints `GET`.
 - Uso direto de `sqlite3` deve ficar restrito à camada de banco/runtime autorizada, diagnóstico local ou leitura histórica SQLite do Beneficiamento.
-- Novos usos de `subprocess` fora da allowlist de runtime geram aviso para evitar ownership opaco de processos; testes automatizados não são tratados como runtime operacional.
+- Novos usos de `subprocess` fora da allowlist de runtime geram aviso para evitar ownership opaco de processos; testes automatizados não são tratados como runtime operacional. Exceções de CLI standalone (24/09/2026): `Tools\oracle\gerar_core_graph.py` (chama `git ls-files`), `Tools\oracle\auditar_acervo_sql.py` (chama `medir_sql_oracle.py` por consulta), `Tools\oracle\validar_sql_oracle.py` e `Tools\oracle\validar_partes_oracle.py` (chamam o wrapper versionado `Tools\oracle\guard_sql.py`, que delega ao `guard_sql.py` canônico da skill `oracle-sql`; este **não** está no repositório: é uma skill externa instalada no perfil do usuário. `ORACLE_SQL_GUARD` substitui a cadeia inteira; sem o wrapper ou sem o canônico o validador aborta como erro de ferramenta) — processos curtos e síncronos, com saída capturada, disparados manualmente fora do runtime do Hub; nenhum processo sobrevive ao script.
 - Diretórios operacionais com `run.ps1` devem possuir manifesto governado, runbook e smoke test declarados.
 - Caminhos informados via `-Paths` devem resolver dentro de `RootPath`; entradas fora da raiz são bloqueadas sem leitura do arquivo externo.
 - Documentos centrais devem apontar para este padrão para manter discovery consistente entre Codex, Gemini CLI e Antigravity.
@@ -43,21 +54,23 @@ Se o ruleset estiver ausente ou inválido, o validador deve retornar `RULESET_MI
 
 ## Leitura vs. Escrita ORM nos Routers
 
-A regra `ORM_QUERY_IN_API_ROUTER` (`Tools/Test-ArchitectureStandard.ps1`, allowlist vazia em `Tools/architecture-standard.rules.json → router_orm_query_allowlist`) detecta apenas o literal `db.query(`/`session.query(`. Escrita ORM (`db.add`, `db.commit`, `db.refresh`, `db.delete`) continua nos routers e **não é falha de detecção**: é uma exceção arquitetural deliberada, registrada aqui na revisão de 08/09/2026 após auditoria das 33 ocorrências em `Orchestrator/app/routers/*.py`.
+A regra `ORM_QUERY_IN_API_ROUTER` (`Tools/Test-ArchitectureStandard.ps1`, allowlist vazia em `Tools/architecture-standard.rules.json → router_orm_query_allowlist`) detecta apenas o literal `db.query(`/`session.query(`. Escrita ORM (`db.add`, `db.commit`, `db.refresh`, `db.delete`) continua nos routers e **não é falha de detecção**: é uma exceção arquitetural deliberada, registrada aqui na revisão de 08/09/2026 após auditoria das 33 ocorrências em `Orchestrator/app/routers/*.py` (31 desde 07/10/2026, ver abaixo).
 
 **Escrita fina é aceita no router** quando o router apenas persiste um payload já validado por uma camada de service/schema (preflight de automação, `env_admin`, `system_runtime`, um schema Pydantic) e grava o log de auditoria — por exemplo `create_automation`, `update_automation`, `pause_automation`/`resume_automation`, `clone_automation`, `set_*_test_mode`, `manual_backup`, `manual_checkpoint`, `manual_purge`, `update_env_content`, `update_automation_config`, `update_automation_script`, `requeue_execution` (a lógica de retry vive em `prepare_requeue`, o router só persiste). Não é necessário mover esses `db.add`/`db.commit`/`db.refresh`/`db.delete` para um `*_repository.py`.
 
-**Lógica de negócio real dentro do router segue proibida** e a auditoria de 08/09/2026 encontrou 8 ocorrências (de 33) que a contêm, concentradas em 5 endpoints — candidatas a mover para services em uma mudança dedicada, não corrigidas aqui por serem fora do escopo de uma correção cirúrgica:
+**Lógica de negócio real dentro do router segue proibida.** A auditoria de 08/09/2026 encontrou 8 ocorrências (de 33) que a continham, em 5 endpoints. **Resolvido em 07/10/2026**: a regra foi para services e o router só traduz `DomainRuleError` em `HTTPException`, persiste e grava a auditoria.
 
-| Arquivo:linha | Endpoint | O que deveria mover |
-| --- | --- | --- |
-| `Orchestrator/app/routers/automations.py:520-522` | `delete_automation` | Bloqueio de remoção com execução ativa (`execucao_ativa`) é regra de negócio, não guarda de payload — mover para `execution_repository`/`automation_repository`. |
-| `Orchestrator/app/routers/automations.py:603-610` | `start_automation` | Checagem de execução em grupo (`get_group_active_execution`), cálculo de cooldown restante e tratamento de `IntegrityError` como corrida de concorrência orquestram múltiplas entidades (`Automation`, `Execution`, grupo) — mover para um service de enfileiramento. |
-| `Orchestrator/app/routers/executions.py:438` | `stop_execution` | Cálculo de `duration_seconds` a partir de `started_at`/`finished_at` e composição da mensagem `[STOP]` no log são lógica de domínio, não persistência — mover para `execution_repository` ou um service de transição de status. |
-| `Orchestrator/app/routers/executions.py:537-541` | `telemetry_start` | Construção do `models.Execution` inline (status inicial, `requested_by`, `max_retries` herdado da automação) duplica a responsabilidade que `build_queued_execution` já cobre para `start_automation` — mover para o mesmo builder ou um equivalente em `execution_repository`. |
-| `Orchestrator/app/routers/executions.py:619` | `telemetry_end` | Validação de status terminal (`EXECUTION_TERMINAL_STATUSES`) e cálculo de `duration_seconds` são regra de domínio sobre o ciclo de vida da execução — mover para o mesmo service de transição de status sugerido para `stop_execution`. |
+| Endpoint | Onde a regra vive agora |
+| --- | --- |
+| `delete_automation` | `automation_repository.ensure_deletable` (bloqueio de remoção com execução ativa, 409) |
+| `start_automation` | `execution_runtime.prepare_manual_start` (execução ativa, grupo operacional e cooldown) + `commit_or_conflict` (corrida no índice único parcial vira 409) |
+| `stop_execution` | `execution_runtime.terminate_execution` (transição para TERMINATED, duração e linha `[STOP]`) |
+| `telemetry_start` | `execution_runtime.build_telemetry_execution` + `commit_or_conflict` |
+| `telemetry_end` | `execution_runtime.finish_telemetry_execution` (somente status terminais, 422; duração e truncagem de log) |
 
-As demais 25 ocorrências (`automation_config.py:107`; `automation_ide.py:107`; `automations.py:329,351,353,417,419,650,685,710,727,752,776,817,827,828`; `executions.py:474,484`; `system.py:156,186,211,254,517,557,662`) são escrita fina sobre payload/estado já validado — a exceção documentada acima.
+`execution_runtime.compute_duration_seconds` é o cálculo único de duração desses fluxos. O erro de regra é `services/domain_errors.DomainRuleError(status_code, detail)`; `RequeueValidationError` herda dele.
+
+Restam 31 escritas ORM nos routers, todas "escrita fina" sobre payload/estado já validado (a exceção documentada acima): `automation_config.py:107`; `automation_ide.py:107`; `automations.py` (create/update/pause/resume/clone/test-mode e a persistência de `delete_automation` e `start_automation`); `executions.py` (`requeue_execution` e a persistência de `stop_execution`, `telemetry_start` e `telemetry_end`); `system.py` (backup, checkpoint, purge, env). Quem acrescentar uma 32ª escrita precisa revisar se é fina ou se pertence a um service, e atualizar este número junto com `tests/test_router_orm_write_exception_unit.py`.
 
 ## Allowlist `python_sqlite_allowlist`
 
@@ -65,7 +78,7 @@ Auditoria de 08/09/2026 encontrou 3 entradas órfãs em `Tools/architecture-stan
 
 `Orchestrator\app\database.py` também deu `grep -c` zero e não tem histórico de `import sqlite3`, mas foi **mantida** na allowlist: é a camada canônica de banco do Orchestrator (`session_scope`, engine SQLAlchemy) e já manipula a conexão SQLite raw por baixo do ORM — o listener `set_sqlite_pragma` (`@event.listens_for(engine, "connect")`) recebe o `dbapi_connection` (uma instância real de `sqlite3.Connection`, só que via SQLAlchemy, não via `import sqlite3` literal) e roda `cursor.execute("PRAGMA ...")` diretamente nela para WAL/synchronous/foreign_keys/busy_timeout/cache_size/temp_store. É o lugar correto, por design, para qualquer futuro uso de `sqlite3` mais direto nesta camada (ex.: uma migração ad-hoc ou introspecção de schema que precise do driver bruto) — isentá-lo antecipadamente evita que o gate barre um uso legítimo da própria camada de banco. Como `rules.json` é JSON e não aceita comentário, a justificativa fica registrada aqui.
 
-`Tools\build_oracle_catalog.py` e `Tools\oracle_catalog.py` (14/09/2026) também estão na allowlist, por um motivo diferente: `docs/oracle-schema/schema.db` **não é dado de aplicação do Orchestrator** — é um catálogo local, gitignored e reconstruível, do dicionário de dados do Oracle SGTPRD (3.608 tabelas), usado só para consulta de schema por ferramentas de linha de comando fora do runtime do Hub. Não há `session_scope` nem engine SQLAlchemy para essa base porque ela nunca é lida ou escrita pelo Orchestrator — só por esses dois scripts standalone, um builder e um CLI de consulta.
+`Tools\oracle\build_oracle_catalog.py` e `Tools\oracle\oracle_catalog.py` (14/09/2026) também estão na allowlist, por um motivo diferente: `docs/oracle-schema/schema.db` **não é dado de aplicação do Orchestrator** — é um catálogo local, gitignored e reconstruível, do dicionário de dados do Oracle SGTPRD (3.608 tabelas), usado só para consulta de schema por ferramentas de linha de comando fora do runtime do Hub. Não há `session_scope` nem engine SQLAlchemy para essa base porque ela nunca é lida ou escrita pelo Orchestrator — só por scripts standalone: o builder, o CLI de consulta e `Tools\oracle\gerar_core_graph.py` (24/09/2026), que abre a base em modo somente leitura (`mode=ro`) para regenerar `docs/oracle-schema/core-graph.json`.
 
 ## Canal WhatsApp — Sessão Única e Concorrência
 
@@ -117,4 +130,4 @@ O validador também roda dentro do gate agregado:
 pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance
 ```
 
-Para mudanças de UI, rotas consumidas pela UI ou contratos front-back, a validação Playwright E2E continua sendo a última etapa obrigatória, conforme `docs/playwright-e2e-standard.md`.
+Para mudanças de UI, rotas consumidas pela UI ou contratos front-back, a validação Playwright E2E continua sendo a última etapa obrigatória, conforme `docs/qualidade/playwright-e2e-standard.md`.

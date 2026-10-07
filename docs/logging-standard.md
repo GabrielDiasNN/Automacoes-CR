@@ -16,7 +16,7 @@
 | `OBs Restricao Branco/{run.ps1,extract_orb.py,format_message.py}` | Piloto migrado ponta a ponta |
 | `Dashboard/src/lib/logParser.ts` | Aceita envelope JSON + formato legado |
 
-Define o contrato único de log para **todas** as camadas do Hub: `run.ps1`, scripts Python de domínio (`lib/python`, `*/extract_*.py`, `*/format_message.py`), motor Node (`lib/WhatsApp-Core.js`) e o próprio Orchestrator (`Orchestrator/app/**`, `worker.py`, scheduler). Complementa `AGENTS.md`, `docs/architecture-standard.md` e `docs/governance-contracts.md`.
+Define o contrato único de log para **todas** as camadas do Hub: `run.ps1`, scripts Python de domínio (`lib/python`, `*/extract_*.py`, `*/format_message.py`), motor Node (`lib/WhatsApp-Core.js`) e o próprio Orchestrator (`Orchestrator/app/**`, `worker.py`, scheduler). Complementa `AGENTS.md`, `docs/architecture-standard.md` e `docs/governanca/governance-contracts.md`.
 
 Objetivo primário: **um agente de IA deve conseguir diagnosticar qualquer execução lendo o log, sem heurística de texto livre** — saber em qual etapa quebrou, se é infra ou dado, se exige intervenção humana ou se o retry/cron cobre, e qual foi o resultado quantitativo.
 

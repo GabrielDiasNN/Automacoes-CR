@@ -1,0 +1,52 @@
+/* =============================================================================
+OBJETIVO: Estoque de fios disponiveis atual
+DOMÍNIO: 04_fiacao_fios
+ARQUIVO ORIGINAL: Comandos SQL - CR\Estoque de fios disponiveis atual.sql
+TIPO: Fiação e Fios
+PARÂMETROS / BINDS: Nenhum (filtros diretos na query)
+TABELAS PRINCIPAIS: SGTPRD.GERAMOVIMENTOESTOQUE, SGTPRD.GERAPARAMSISTFILIAL, SGTPRD.ITENS_ESTOQUE
+CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitura salvo se DML restrito.
+============================================================================= */
+
+WITH SALDO_ESTOQUE AS (
+    SELECT M.CDREDUZIDO,
+           M.CDDEPOSITO,
+           M.IDGERAATRIESTO,
+           ROUND(SUM(CASE
+                         WHEN M.STGERAESTOBLOQ = '0' AND M.STMOVIMENTO = 0
+                         THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.QTMOVIMENTO ELSE M.QTMOVIMENTO END
+                         ELSE 0
+                     END), 6) AS QTDISPONIVEL,
+           ROUND(SUM(CASE
+                         WHEN M.STGERAESTOBLOQ = '1' AND M.STMOVIMENTO = 0
+                         THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.QTMOVIMENTO ELSE M.QTMOVIMENTO END
+                         ELSE 0
+                     END), 6) AS QTBLOQUEADA,
+           TRUNC(GREATEST(0, SUM(CASE
+                                      WHEN M.STGERAESTOBLOQ = '0' AND M.STMOVIMENTO = 0
+                                      THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.NRVOLUMES ELSE M.NRVOLUMES END
+                                      ELSE 0
+                                  END))) AS NRVOLUMES
+      FROM SGTPRD.GERAMOVIMENTOESTOQUE M
+      JOIN SGTPRD.GERAPARAMSISTFILIAL G
+        ON G.CDFILIAL = M.CDFILIAL
+     WHERE M.CDDEPOSITO IN (114, 314, 324, 317, 327)
+       AND ((M.DTDOCUMENTO > G.DATA_FECHAMENTO_EST) OR G.DATA_FECHAMENTO_EST IS NULL)
+       AND M.DTDOCUMENTO > (SELECT MIN(X.DATA_FECHAMENTO_EST)
+                               FROM SGTPRD.GERAPARAMSISTFILIAL X)
+       AND NOT (M.NRTIPOMOVIMENTO = 999
+                AND M.DTDOCUMENTO > G.DATA_FECHAMENTO_EST + 2)
+     GROUP BY M.CDREDUZIDO, M.CDDEPOSITO, M.IDGERAATRIESTO
+)
+SELECT TRIM(ITE.CODIGO_ALTERNATIVO) ALTERNATIVO,
+       GSE.CDREDUZIDO REDUZIDO,
+       TRIM(ITE.DESCRICAO) DESCRICAO,
+       SUM(GSE.QTDISPONIVEL+GSE.QTBLOQUEADA) QT_ESTOQUE,
+       SUM(GSE.NRVOLUMES) NR_VOLUMES
+  FROM SALDO_ESTOQUE GSE, SGTPRD.ITENS_ESTOQUE ITE
+ WHERE ITE.CODIGO_REDUZIDO = GSE.CDREDUZIDO
+   AND GSE.CDDEPOSITO IN (114, 314, 324,317,327)
+   --AND GSE.cdreduzido IN (5653,5460,5461,5462,5463,8537)
+   --AND GSE.DATA = TRUNC(SYSDATE)
+ GROUP BY ITE.CODIGO_ALTERNATIVO, GSE.CDREDUZIDO, ITE.DESCRICAO
+ ORDER BY ITE.DESCRICAO

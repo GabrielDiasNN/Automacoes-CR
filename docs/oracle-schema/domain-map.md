@@ -1,7 +1,7 @@
 # Mapa de Domínios Semânticos — Schema Oracle SGTPRD
 
 > Curadoria humana sobre dados reais do dicionário Oracle, verificados em
-> 13/09/2026 via `Tools/build_oracle_catalog.py` + `Tools/oracle_catalog.py`.
+> 13/09/2026 via `Tools/oracle/build_oracle_catalog.py` + `Tools/oracle/oracle_catalog.py`.
 > Schema real: 3.608 tabelas, 1.729 views, 74.095 colunas, 3.921 FKs — este
 > documento cobre só os ~55 objetos críticos das automações ativas.
 
@@ -16,16 +16,16 @@ pontual (uma coluna existe? qual o tipo? quais os valores de um código?),
 o banco de verdade e não fica desatualizado silenciosamente:
 
 ```powershell
-.venv\Scripts\python Tools\oracle_catalog.py table OB
-.venv\Scripts\python Tools\oracle_catalog.py find "receita bloqueada"
-.venv\Scripts\python Tools\oracle_catalog.py path OB ITENSPEDIDOGRADE
-.venv\Scripts\python Tools\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
+.venv\Scripts\python Tools\oracle\oracle_catalog.py table OB
+.venv\Scripts\python Tools\oracle\oracle_catalog.py find "receita bloqueada"
+.venv\Scripts\python Tools\oracle\oracle_catalog.py path OB ITENSPEDIDOGRADE
+.venv\Scripts\python Tools\oracle\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
 ```
 
-`docs/oracle-schema/core-graph.json` traz a mesma topologia em JSON (objetos
-+ FKs entre eles) para leitura programática. Nenhum dos dois documentos aqui
-é gerado automaticamente — se o schema mudar, rode o build e revise este
-texto; ele já continha pelo menos um valor de domínio errado (ver nota na
+`docs/oracle-schema/core-graph.json` traz a topologia em JSON (objetos citados
+pelos `.sql` do repo + FKs entre eles) para leitura programática, e é gerado por
+`Tools/oracle/gerar_core_graph.py`. Este documento não é gerado — se o schema mudar,
+rode o build e revise este texto; ele já continha pelo menos um valor de domínio errado (ver nota na
 seção Qualidade/Receitas) que só foi pego comparando com o catálogo real.
 
 **Regra de segurança**: sempre prefixe com `SGTPRD.` e use bind variables —

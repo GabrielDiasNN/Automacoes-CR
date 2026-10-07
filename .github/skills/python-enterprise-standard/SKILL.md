@@ -31,7 +31,7 @@ Fixar as decisões de implementação Python do monorepo: qual interpretador rod
 - Acesso a Oracle vive apenas no `oracle.py` de cada domínio (Beneficiamento: `Produção Beneficimento/src/beneficiamento/oracle.py`); router ou `service` que importa `oracledb` reprova na revisão arquitetural.
 - Schema do banco do Orchestrator muda só por Alembic. Como `render_as_batch=True`, toda operação de coluna passa por `op.batch_alter_table` (o subagente `alembic-reviewer` verifica).
 - O mypy bloqueante é o do pre-commit (`Tools/Test-PythonGovernance.ps1`), não o do CI. Passar o `governanca.yml` não substitui rodar o hook antes do commit.
-- Os limites numéricos exatos de mypy e pylint que reprovam estão em `docs/governance-contracts.md § Contrato Python — mypy \`--strict\`` e `§ Contrato Python — pylint` — consulte antes de refatorar; não presuma os valores.
+- Os limites numéricos exatos de mypy e pylint que reprovam estão em `docs/governanca/governance-contracts.md § Contrato Python — mypy \`--strict\`` e `§ Contrato Python — pylint` — consulte antes de refatorar; não presuma os valores.
 
 ## Repo-Specific Constraints
 - O hook invoca mypy com `--strict --explicit-package-bases --namespace-packages` e `MYPYPATH=Orchestrator;.;lib\python`. Módulo que importa `app` ou `oracle_extract` só tipa com esse MYPYPATH — reproduza pelo script, não chamando `mypy` cru.
@@ -56,7 +56,7 @@ Fixar as decisões de implementação Python do monorepo: qual interpretador rod
 - `pytest` usando pacotes defasados: confirme que chamou `.venv\Scripts\pytest`, não o do sistema.
 
 ## Pre-Delivery Checklist
-- `Test-PythonGovernance.ps1` verde (mypy `--strict` + pylint dentro dos limites de `docs/governance-contracts.md § Contrato Python — pylint`).
+- `Test-PythonGovernance.ps1` verde (mypy `--strict` + pylint dentro dos limites de `docs/governanca/governance-contracts.md § Contrato Python — pylint`).
 - `ruff` + `bandit` verdes sobre o escopo da skill `ci-gates`, não só sobre os arquivos que você alterou.
 - Suíte `pytest` verde rodada de `Orchestrator/` com o interpretador do `.venv`.
 - Nenhuma cópia nova de fetch/serialize/hash — `lib/python/oracle_extract.py` reutilizado; sessão fora do FastAPI via `session_scope`.

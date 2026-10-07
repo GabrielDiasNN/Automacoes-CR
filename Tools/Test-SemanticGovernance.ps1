@@ -158,7 +158,7 @@ function Test-RootNodeLock {
 }
 
 function Test-CatalogMap {
-    $mapPath = "docs/automation-criticality-map.md"
+    $mapPath = "docs/governanca/automation-criticality-map.md"
     $map = Get-RepoText -RelativePath $mapPath
     $manifestFiles = Get-ChildItem -LiteralPath $base -Directory |
         Where-Object { $_.Name -notlike ".*" -and $_.Name -ne "_Template" } |
@@ -189,12 +189,12 @@ if ($currentVersion) {
     foreach ($doc in @(
             "README.md",
             "CONTEXT.md",
-            "docs/quality-dashboard.md",
-            "docs/testing-strategy.md",
-            "docs/test-coverage-map.md",
-            "docs/repository-governance.md",
-            "docs/security-policy.md",
-            "docs/release-checklist.md"
+            "docs/qualidade/quality-dashboard.md",
+            "docs/qualidade/testing-strategy.md",
+            "docs/qualidade/test-coverage-map.md",
+            "docs/governanca/repository-governance.md",
+            "docs/governanca/security-policy.md",
+            "docs/operacao/release-checklist.md"
         )) {
         Test-TextContains -RelativePath $doc -Needle "v$currentVersion" -Rule "VERSION_DRIFT"
     }

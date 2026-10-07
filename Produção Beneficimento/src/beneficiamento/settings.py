@@ -10,6 +10,12 @@ from pathlib import Path
 
 DOMAIN_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = DOMAIN_ROOT.parent
+# Biblioteca compartilhada (`oracle_session`), resolvida pelo próprio pacote.
+LIB_PYTHON_DIR = REPO_ROOT / "lib" / "python"
+# SQL de RUNTIME: o runner lê `bnf_producao_beneficiamento_detalhado.sql` daqui.
+# O acervo de consultas de referência vive em `docs/oracle-schema/consultas/` e
+# não é lido pelo runner. Mudar o nome do arquivo exige ajustar `_PERIOD_CONFIGS`
+# (protegido por `test_beneficiamento_sql_template_unit.py`).
 SQL_TEMPLATE_DIR = DOMAIN_ROOT / "sql" / "templates"
 SNAPSHOT_DIR = DOMAIN_ROOT / "snapshots" / "latest"
 SNAPSHOT_ARCHIVE_DIR = DOMAIN_ROOT / "snapshots" / "archive"
@@ -49,14 +55,14 @@ _PERIOD_CONFIGS = {
     "diario": PeriodConfig(
         key="diario",
         label="Diario",
-        sql_template="detalhado.sql",
+        sql_template="bnf_producao_beneficiamento_detalhado.sql",
         refresh_minutes=2,
         max_age_minutes=5,
     ),
     "mensal": PeriodConfig(
         key="mensal",
         label="Mensal",
-        sql_template="detalhado.sql",
+        sql_template="bnf_producao_beneficiamento_detalhado.sql",
         refresh_minutes=10,
         max_age_minutes=30,
     ),

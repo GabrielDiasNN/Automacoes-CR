@@ -39,6 +39,7 @@ graph TD
 - **Zero-Trust Auth**: O Dashboard solicita a API Key dinamicamente, eliminando segredos no código.
 - **Beneficiamento Snapshot-First**: `/api/beneficiamento/*` consome snapshots locais em `Produção Beneficimento/snapshots/latest`, mantendo leitura de Dashboard sem consulta Oracle em tempo real.
 - **Beneficiamento com Histórico Tipado v2**: consultas operacionais usam colunas e índices SQLite; o blob JSON completo fica reservado a auditoria e detalhe sob demanda.
+- **Parque de Queries SQL Governado e Otimizado**: consultas do chão de fábrica organizadas em 13 pastas por processo industrial em `docs/oracle-schema/consultas/`, com atomicidade (1 query por arquivo), acesso a tabelas físicas indexadas (`BD_BNF_PRODUCAO_FASE`, `GERAPECASPRODUTO`, `OB`) e catálogo gerado (`CATALOGO_QUERIES.md`, via `Tools/oracle/gerar_catalogo_sql.py`) com o status de validação Oracle de cada arquivo.
 - **Sessões e WAL Endurecidos**: worker e scheduler usam escopo centralizado de sessão, enquanto o checkpoint periódico opera em modo `PASSIVE` para evitar bloqueio de writers.
 - **Observabilidade Acionável**: `/api/system/diagnostics` consolida saúde, fila, worker, scheduler, banco/WAL e achados com ação sugerida.
 - **Histórico Operacional**: `/api/system/history` mantém snapshots leves de saúde para tendência de fila, heartbeat, WAL e violações recentes sem depender apenas de leitura manual de log.
@@ -51,7 +52,7 @@ graph TD
 - **Contrato Operacional Versionado**: `overview`, `diagnostics` e `version` agora expõem `contract_version`, checks mínimos de runtime e recovery em camadas para evolução controlada do front-back.
 - **Ownership de Execução**: Execuções `RUNNING` passam a registrar `claimed_at`, `worker_instance_id` e `worker_pid`, permitindo diferenciar backlog legítimo de execução órfã.
 - **Console Operacional de Recovery**: Diagnósticos agora expõem impacto, prioridade, ação estruturada e atalhos para checkpoint, sincronização de agenda, wake-up/recovery e triagem de execuções.
-- **Runbook de Incidente e Rollback**: Procedimento operacional oficial para triagem, contenção, recuperação forte e rollback com validação E2E final em `docs/orchestrator-incident-rollback-runbook.md`.
+- **Runbook de Incidente e Rollback**: Procedimento operacional oficial para triagem, contenção, recuperação forte e rollback com validação E2E final em `docs/operacao/orchestrator-incident-rollback-runbook.md`.
 - **Runtime Compartilhado**: estado de scheduler, wake-up do worker, helpers de execução e criação base de jobs/executions foram centralizados para reduzir acoplamento entre `main.py`, routers e worker.
 - **Fila Operacional Auditável**: Execuções agora carregam `retry_count`, `max_retries`, `failure_reason`, `recovery_action` e `queue_group`, habilitando requeue seguro e rastreável.
 - **Recovery com Lock de Grupo**: Requeue manual respeita `queue_group` ativo para evitar concorrência entre automações que disputam o mesmo canal, banco ou recurso operacional.

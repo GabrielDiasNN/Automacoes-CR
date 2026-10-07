@@ -6,11 +6,14 @@
     "^Orchestrator\\\\app\\\\services\\\\beneficiamento_refresh\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\env_admin\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\scheduler_runtime\\.py$",
-    "^Orchestrator\\\\app\\\\services\\\\system_runtime\\.py$"
+    "^Orchestrator\\\\app\\\\services\\\\system_runtime\\.py$",
+    "^Tools\\\\oracle\\\\gerar_core_graph\\.py$",
+    "^Tools\\\\oracle\\\\auditar_acervo_sql\\.py$",
+    "^Tools\\\\oracle\\\\validar_partes_oracle\\.py$",
+    "^Tools\\\\oracle\\\\validar_sql_oracle\\.py$"
   ],
   "python_sqlite_allowlist": [
     "^Orchestrator\\\\app\\\\database\\.py$",
-    "^Orchestrator\\\\tools\\\\diagnostics\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_common\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\_queries_overview\\.py$",
@@ -19,8 +22,9 @@
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\detail\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\contracts\\\\tingimento\\.py$",
     "^Produção Beneficimento\\\\src\\\\beneficiamento\\\\data\\\\(?:schema|writer|queries)\\.py$",
-    "^Tools\\\\build_oracle_catalog\\.py$",
-    "^Tools\\\\oracle_catalog\\.py$"
+    "^Tools\\\\oracle\\\\build_oracle_catalog\\.py$",
+    "^Tools\\\\oracle\\\\gerar_core_graph\\.py$",
+    "^Tools\\\\oracle\\\\oracle_catalog\\.py$"
   ],
   "router_orm_query_allowlist": [],
   "automation_exclusions": [

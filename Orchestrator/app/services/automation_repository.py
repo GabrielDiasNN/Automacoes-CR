@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..constants import EXECUTION_ACTIVE_STATUSES
 from ..timezone import get_now_local
+from .domain_errors import DomainRuleError
 
 # Campos aceitos na ordenação da listagem paginada. O router valida contra este
 # conjunto antes de chamar `paginate` — manter aqui mantém o contrato junto da query.
@@ -151,3 +152,22 @@ def set_test_mode_for_all(db: Session, enabled: bool) -> None:
         models.Automation.updated_at: get_now_local(),
     }
     db.query(models.Automation).update(values)
+
+
+def ensure_deletable(db: Session, automation_id: int) -> None:
+    """Bloqueia a remoção enquanto houver execução ativa (409).
+
+    Com `cascade="all, delete-orphan"` no ORM e `ondelete="CASCADE"` na FK (com
+    `PRAGMA foreign_keys=ON`), apagar a automação removia a linha da execução
+    RUNNING enquanto o processo PowerShell seguia vivo: o worker chamava
+    `complete_process_execution`, que faz `.first()` e devolve None em silêncio,
+    e o processo terminava sem registro, sem artefato e sem alerta.
+    """
+    execucao_ativa = get_active_execution(db, automation_id)
+    if execucao_ativa:
+        raise DomainRuleError(
+            409,
+            f"Automação possui execução ativa ({execucao_ativa.id}, "
+            f"status {execucao_ativa.status}). Aguarde o término ou pare a "
+            "execução antes de remover.",
+        )

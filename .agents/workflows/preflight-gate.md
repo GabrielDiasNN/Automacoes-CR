@@ -154,7 +154,7 @@ Se os browsers do Playwright ainda nao estiverem instalados nesta maquina:
 ```
 
 Registre a evidencia com `Tools/Test-PlaywrightEvidence.ps1` conforme
-`docs/playwright-e2e-standard.md` — o Passo 1 (governanca agregada) ja invoca
+`docs/qualidade/playwright-e2e-standard.md` — o Passo 1 (governanca agregada) ja invoca
 esse checker sobre os artefatos elegiveis, mas so' depois que a suite acima
 os gerou.
 

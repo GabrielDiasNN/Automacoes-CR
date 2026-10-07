@@ -40,13 +40,13 @@ Definir o contrato visual do hub, a SPA React do dashboard e o template HTML leg
 - O job `frontend` do CI é bloqueante quando o diff toca `.js`, `.ts` ou `.tsx`: ele roda `npm ci`, `npm run lint`, `npm run test:coverage` (Vitest com gate de cobertura) e `npm run build` com `working-directory: Dashboard`. Localmente o equivalente é a forma `--prefix Dashboard` (ou rodar a partir da pasta), documentada em `Dashboard/CLAUDE.md`.
 - `Dashboard/src/api/client.ts` lê a API Key no carregamento do módulo, não em `useEffect`; a API responde 403, não 401, sem o header `X-API-Key`.
 - Toda a toolchain de front tem lockfile próprio em `Dashboard/`; rode os comandos com `--prefix Dashboard` ou a partir dessa pasta, nunca pelo `package.json` da raiz.
-- Padrão completo e evidência mínima da validação E2E do dashboard: `docs/playwright-e2e-standard.md`.
+- Padrão completo e evidência mínima da validação E2E do dashboard: `docs/qualidade/playwright-e2e-standard.md`.
 
 ## Validation
 - Para mudança na SPA: `npm run lint --prefix Dashboard`, `npm run test:coverage --prefix Dashboard` e `npm run build --prefix Dashboard` antes do E2E.
 - Para mudança no template legado: `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-DashboardTemplate.ps1 -BasePath .`.
 - Para mudança em padrão global de UI: `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance`.
-- E2E Playwright por último, na tela servida em `http://127.0.0.1:8000/dashboard/`, cobrindo no mínimo navegação entre módulos, listagem e refresh de execuções, abertura de logs e ausência de erro de console; detalhes em `docs/playwright-e2e-standard.md`.
+- E2E Playwright por último, na tela servida em `http://127.0.0.1:8000/dashboard/`, cobrindo no mínimo navegação entre módulos, listagem e refresh de execuções, abertura de logs e ausência de erro de console; detalhes em `docs/qualidade/playwright-e2e-standard.md`.
 - Registre a evidência com `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-PlaywrightEvidence.ps1`.
 
 ## Troubleshooting
@@ -63,5 +63,5 @@ Definir o contrato visual do hub, a SPA React do dashboard e o template HTML leg
 - Template legado continua passando em `Tools/Test-DashboardTemplate.ps1` com placeholders e funções intactos.
 - Job `frontend` (lint, test:coverage e build) verde para mudança que toca `.js`, `.ts` ou `.tsx`.
 - API Key só em `sessionStorage`; preferência de UI benigna em `localStorage` preservada.
-- E2E Playwright executado por último e evidência registrada (`docs/playwright-e2e-standard.md`).
+- E2E Playwright executado por último e evidência registrada (`docs/qualidade/playwright-e2e-standard.md`).
 - Sem menção a VBA; encoding conforme `AGENTS.md § Regras de Encoding`.

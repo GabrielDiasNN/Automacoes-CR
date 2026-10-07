@@ -21,11 +21,11 @@ O repositório versiona **duas** árvores de skills, com propósitos, donos e va
 | Árvore | Conteúdo | Editável? | Validador |
 |---|---|---|---|
 | `.github/skills/` | 9 skills de **padrão** (norma escrita, taxonomia ativa) | Sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` |
-| `.claude/skills/` | skills **operacionais** executáveis do projeto: ci-gates, run-orchestrator, preflight, quality-gate, run-tests, new-automation (drivers e comandos) | Sim — fonte única | governança agregada de `ValidarAutomacoes.ps1` |
+| `.claude/skills/` | skills **operacionais** executáveis do projeto: ci-gates, run-orchestrator, log-triage, preflight, quality-gate, run-tests, new-automation (drivers e comandos) | Sim — fonte única | governança agregada de `ValidarAutomacoes.ps1` |
 | `.gemini/skills/` | mirror por junction de `.github/skills/` | Não — alias | reprovado se cópia real |
 | `.agents/skills/` | mirror por junction de `.claude/skills/` | Não — alias | reprovado se cópia real |
 
-**Estado-alvo (mudança em andamento):** o Claude Code — o agente que mais trabalha neste repositório — carrega **somente** `.claude/skills`, nunca `.github/skills`. Para que ele enxergue as 9 skills de padrão, elas passam a ser expostas por junction em `.claude/skills/<nome>`. `.github/skills` continua sendo a **única** árvore editável dessas skills; o junction é apenas um alias de leitura. `Tools\New-SkillMirrors.ps1` cria esses junctions e o `.gitignore` os exclui do versionamento. Na prática: **editar skill de padrão = editar `.github/skills/`, sempre** — independentemente de qual agente a descobriu.
+**Estado atual (junctions criados em 10/09/2026 e 13/09/2026):** o Claude Code — o agente que mais trabalha neste repositório — carrega **somente** `.claude/skills`, nunca `.github/skills`. Para que ele enxergue as 9 skills de padrão, elas são expostas por junction em `.claude/skills/<nome>`. `.github/skills` continua sendo a **única** árvore editável dessas skills; o junction é apenas um alias de leitura. `Tools\New-SkillMirrors.ps1` cria esses junctions e o `.gitignore` os exclui do versionamento. Na prática: **editar skill de padrão = editar `.github/skills/`, sempre** — independentemente de qual agente a descobriu.
 
 Qual árvore cada agente lê:
 
@@ -53,8 +53,8 @@ O conjunto ativo de 9 skills está organizado nas seguintes fronteiras de respon
    - `html-css-enterprise-standard`: dashboard, HTML corporativo, assets compartilhados e separação entre UI e negócio.
 
 5. **Domínio de Dados (Oracle)**
-   - `oracle-schema-navigator`: mapa de domínios do schema SGTPRD, joins canônicos e catálogo local (`Tools/oracle_catalog.py`) para navegar o schema real sem gastar tokens de sessão.
-   - `oracle-sql-patterns`: CTEs reutilizáveis, filtros validados em produção, anti-patterns conhecidos e o fluxo de validação de SQL novo contra o catálogo (`Tools/oracle_catalog.py`).
+   - `oracle-schema-navigator`: mapa de domínios do schema SGTPRD, joins canônicos e catálogo local (`Tools/oracle/oracle_catalog.py`) para navegar o schema real sem gastar tokens de sessão.
+   - `oracle-sql-patterns`: CTEs reutilizáveis, filtros validados em produção, anti-patterns conhecidos e o fluxo de validação de SQL novo contra o catálogo (`Tools/oracle/oracle_catalog.py`).
 
 A lista dos 9 nomes ativos também está hardcoded em `$script:ActiveSkillNames` (linha ~28 de `Tools/Test-SkillsGovernance.ps1`): adicionar uma 10a skill de padrão exige editar esse script **e** esta seção, senão a skill nova é tratada como fora da taxonomia (`ACTIVE_SKILL_MISSING_IN_README`).
 
@@ -103,7 +103,7 @@ Faltar uma seção gera `REQUIRED_SECTION_MISSING`; repetir gera `SECTION_DUPLIC
 - `description` deve diferenciar a skill de outra skill próxima.
 - `Do Not Use When` é obrigatória para reduzir overlap e deve citar a skill rival pelo nome.
 - `Related Skills` deve citar apenas skills existentes na taxonomia ativa (as 9 acima); qualquer outro token entre crases nessa seção vira `RELATED_SKILL_INVALID`.
-- Regras transversais devem ter fonte única; skills consumidoras devem referenciar nomeando arquivo **e** seção, não duplicar. Encoding é `AGENTS.md § Regras de Encoding`; limites de mypy/pylint são `docs/governance-contracts.md § Contrato Python — mypy \`--strict\`` e `§ Contrato Python — pylint`; escopo do lint bloqueante do CI é a skill operacional em `.claude/skills/ci-gates/SKILL.md`.
+- Regras transversais devem ter fonte única; skills consumidoras devem referenciar nomeando arquivo **e** seção, não duplicar. Encoding é `AGENTS.md § Regras de Encoding`; limites de mypy/pylint são `docs/governanca/governance-contracts.md § Contrato Python — mypy \`--strict\`` e `§ Contrato Python — pylint`; escopo do lint bloqueante do CI é a skill operacional em `.claude/skills/ci-gates/SKILL.md`.
 
 ## Regras de Governança
 

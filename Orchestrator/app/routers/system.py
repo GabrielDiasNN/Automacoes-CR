@@ -67,7 +67,7 @@ def health_check(db: Session = Depends(get_db)) -> schemas.SystemLiveness:
     Rota deliberadamente sem ``Depends(get_api_key)`` — probe operacional usado
     pelo driver da skill ``run-orchestrator`` e pelos runbooks. Não expõe
     métricas internas nem mensagem de exceção; o detalhamento vive em
-    ``GET /api/system/health/full`` (autenticada). Ver ``docs/security-policy.md``.
+    ``GET /api/system/health/full`` (autenticada). Ver ``docs/governanca/security-policy.md``.
     """
     return system_runtime.build_liveness_payload(db, _get_worker_status(db))
 

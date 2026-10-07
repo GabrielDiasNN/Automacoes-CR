@@ -27,11 +27,11 @@ Fixar as decisões de PowerShell do hub: qual runtime é alvo (5.1, não 7), com
 ## Non-Negotiable Rules
 - Compatibilidade com PowerShell 5.1 é regra, não preferência. O runtime de produção usa `powershell.exe`; `pwsh` 7 já causou falha silenciosa no cron das 02:00. Não use sintaxe exclusiva do 7 em script consumido pela esteira.
 - Todo `catch` precisa de tipo. `catch {` genérico reprova no pre-commit; use no mínimo `catch [System.Exception]`, e a exceção específica quando ela for previsível (`catch [System.IO.IOException]`).
-- Para inspecionar linha de comando de processo, use `Get-CimInstance Win32_Process`, **nunca `Get-Process`** — ele não expõe `CommandLine` no PS 5.1 (contrato em `docs/governance-contracts.md § PowerShell 5.1 — inspeção de processos`). `Lib-OrchestratorRuntime.psm1` (`Stop-OrchestratorProcesses`) já faz assim; reutilize.
+- Para inspecionar linha de comando de processo, use `Get-CimInstance Win32_Process`, **nunca `Get-Process`** — ele não expõe `CommandLine` no PS 5.1 (contrato em `docs/governanca/governance-contracts.md § PowerShell 5.1 — inspeção de processos`). `Lib-OrchestratorRuntime.psm1` (`Stop-OrchestratorProcesses`) já faz assim; reutilize.
 - Nada de caminho absoluto com letra de drive — `Tools/Test-PortablePaths.ps1` reprova; use `$PSScriptRoot` ou caminho relativo.
 - Só verbos aprovados — `Tools/Test-PowerShellApprovedVerbs.ps1` valida a nomeação de função.
 - `.ps1` e `.psm1` são a exceção do repo ao padrão sem-BOM: exigem BOM. O contrato por extensão está em `AGENTS.md § Regras de Encoding` e é aplicado por `Assert-FileEncoding.ps1` a cada Edit/Write — se seu editor grava sem BOM por padrão, ajuste antes de salvar `.ps1`.
-- Os snippets exatos de catch tipado, formato de `param` e demais contratos PowerShell do hook estão em `docs/governance-contracts.md § Contrato PowerShell — catch tipado` e `docs/governance-contracts.md § Contrato PowerShell — paths portáveis` — consulte antes de escrever código novo.
+- Os snippets exatos de catch tipado, formato de `param` e demais contratos PowerShell do hook estão em `docs/governanca/governance-contracts.md § Contrato PowerShell — catch tipado` e `docs/governanca/governance-contracts.md § Contrato PowerShell — paths portáveis` — consulte antes de escrever código novo.
 
 ## Repo-Specific Constraints
 - Módulos compartilhados de `lib/` — cheque antes de duplicar função: `Lib-Config.psm1`, `Lib-Logging.psm1`, `Lib-LogEvent.psm1`, `Lib-Process.psm1`, `Lib-Retry.psm1`, `Lib-Email.psm1`, `Lib-Idempotency.psm1`, `Lib-Oracle.psm1`, `Lib-OrchestratorRuntime.psm1`.

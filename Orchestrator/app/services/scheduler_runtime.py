@@ -42,6 +42,7 @@ from .beneficiamento_refresh import run_beneficiamento_refresh
 from .execution_runtime import (
     RequeueValidationError,
     build_queued_execution,
+    compute_duration_seconds,
     cooldown_remaining_minutes,
     prepare_requeue,
 )
@@ -683,10 +684,9 @@ def reap_orphaned_telemetry() -> None:
                 execucao.finished_at = agora  # type: ignore[assignment]
                 execucao.failure_reason = FAILURE_REASON_TELEMETRY_ABANDONED  # type: ignore[assignment]
                 execucao.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE  # type: ignore[assignment]
-                if execucao.started_at:
-                    execucao.duration_seconds = round(
-                        (agora - execucao.started_at).total_seconds(), 2
-                    )
+                execucao.duration_seconds = compute_duration_seconds(  # type: ignore[assignment]
+                    execucao.started_at, agora
+                )
                 nota_reaper = (
                     str(execucao.logs or "")
                     + f"\n[REAPER] Telemetria externa sem /end apos "

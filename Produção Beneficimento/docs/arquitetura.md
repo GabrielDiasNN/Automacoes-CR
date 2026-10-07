@@ -99,3 +99,13 @@ No estado atual, `attention` no health não deve mais ser tratado como alerta ge
 Manter prioridade para `STATUS_*`, `QT_KG`, `QT_MT`, `MIN_REAL`, `MIN_PREV`, `EFIC_TEMPO`, `REPROCESSO`, `ANO_SEM`, máquina, fase, produto, artigo, cor, `LOCAL_PRODUCAO`, `UND_FAB` e `NOME_UNIDADE_FABRIL`.
 
 Campos constantes ou quase sem sinal devem ser removidos do payload público quando não forem necessários para KPI, Power BI ou análise Python.
+
+## Governança do Parque de Queries SQL
+
+O acervo de consultas SQL do domínio têxtil, em `docs/oracle-schema/consultas/` desde 06/10/2026 (o runner lê só `sql/templates/`), foi unificado em 13 diretórios temáticos (`01_beneficiamento_tingimento` a `13_utilitarios_snippets`), catalogado em `CATALOGO_QUERIES.md` — gerado por `Tools/oracle/gerar_catalogo_sql.py` a partir do disco, dos cabeçalhos `OBJETIVO:`/`TIPO:` e da evidência de `Tools/oracle/validar_sql_oracle.py` (`docs/oracle-schema/consultas/validacao_status.json`); nunca editado à mão, e contagens e status não são repetidos em outros documentos:
+
+- **Atomicidade Canônica:** exatamente 1 consulta executável por arquivo `.sql` nas pastas de consulta; os roteiros manuais de `12_manutencao_dml_restrito/` são a exceção documentada.
+- **Desmonte de Views Corporativas Pesadas:** consultas que antes utilizavam views como `VW_PI_CBPAP02_PRODBENEF` e `VW_PI_CFATC01_FAT` foram reescritas para acessar tabelas físicas indexadas (`BD_BNF_PRODUCAO_FASE`, `GERAPECASPRODUTO`, `OB`, `NOTAFISCALCAPA`), eliminando os timeouts de carga pesada; o status e o tempo de execução por consulta ficam em `docs/oracle-schema/consultas/CATALOGO_QUERIES.md` (gerado), sem repetir números aqui.
+- **Index Range Scans em Peças e Pedidos:** uso do índice numérico B-Tree `GRPCPROD_INDIDATAENTRPECA` em `GERAPECASPRODUTO` e condução de queries de chão de fábrica via `OB.STATUS <> 0` (restringindo às OBs ativas em vez de todo o histórico de ordens; o volume muda com a produção e não é fixado aqui).
+- **Zero DML Guardrail:** scripts com comandos `UPDATE`, `DELETE` ou `INSERT` permanecem isolados na pasta `12_manutencao_dml_restrito/` e são bloqueados para execução automatizada.
+- **Encoding Obrigatório:** todo o repositório SQL opera estritamente em `UTF-8 sem BOM`.

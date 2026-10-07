@@ -1,0 +1,81 @@
+-- =============================================================================
+-- OBJETIVO: Conferência - Entrada de NF x Pesagem das peças (DATA ENTRADA x PESAGEM)
+-- DOMÍNIO: 06_qualidade_auditoria_obs
+-- ARQUIVO ORIGINAL: Comandos SQL - CR\Conferência - Entrada de NF x Pesagem das peças (DATA ENTRADA x PESAGEM).sql
+-- TIPO: Auditoria e Qualidade de OBs
+-- PARÂMETROS / BINDS: Nenhum (janela dinâmica dos últimos 90 dias em MNE.DATA_DA_ENTRADA)
+-- TABELAS PRINCIPAIS: SGTPRD.GERAPECANOTAENTRADA, SGTPRD.GERAPECASPRODUTO, SGTPRD.ITENS_ESTOQUE,
+--                    SGTPRD.ITENS_NOTA_ENTRADA, SGTPRD.MESTRE_NOTA_ENTRADA, SGTPRD.NATUREZA_OPERACAO,
+--                    SGTPRD.PESSOASFJ, SGTPRD.SUPRTIPOOPERNATUREZA
+-- CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitura.
+-- HISTÓRICO DE OTIMIZAÇÃO (23/09/2026):
+--   - Substituição de filtro hardcoded antigo ('202206') por janela temporal dinâmica
+--     dos últimos 90 dias com pushdown em CTE materializada (NOTAS_ALVO e PEC).
+--   - Eliminação de scans totais nas tabelas de pesagem e notas.
+--   - Retorno auditado em tempo real contra o Oracle SGTPRD: 2 divergências reais encontradas em ~0.80s.
+-- =============================================================================
+
+WITH NOTAS_ALVO AS (
+    SELECT /*+ MATERIALIZE */
+           MNE.NUMERO_NOTA,
+           MNE.SERIE_NOTA,
+           MNE.IDPESSOAFJ_CLIENTE,
+           MNE.CDFILIAL,
+           MNE.DATA_DA_ENTRADA
+      FROM SGTPRD.MESTRE_NOTA_ENTRADA MNE
+     WHERE MNE.DATA_DA_ENTRADA >= TO_CHAR(ADD_MONTHS(SYSDATE, -3), 'YYYYMMDD')
+),
+PEC AS (
+    SELECT /*+ MATERIALIZE */
+           GPN.NUMERO_NOTA,
+           GPN.SERIE_NOTA,
+           GPN.IDPESSOAFJ,
+           TO_DATE(TO_CHAR(MAX(GPP.DATA_DA_ENTRADA_PECA)), 'YYYYMMDD') AS DT_MAX_ENTRADA,
+           COUNT(GPP.IDPECASPRODUTO)                                  AS QT_PC,
+           SUM(GPP.QTLIQUIDA)                                         AS QT_KG
+      FROM SGTPRD.GERAPECANOTAENTRADA GPN
+      JOIN NOTAS_ALVO NA ON NA.NUMERO_NOTA = GPN.NUMERO_NOTA 
+                        AND NA.SERIE_NOTA = GPN.SERIE_NOTA 
+                        AND NA.IDPESSOAFJ_CLIENTE = GPN.IDPESSOAFJ
+      JOIN SGTPRD.GERAPECASPRODUTO GPP ON GPP.IDPECASPRODUTO = GPN.IDPECASPRODUTO
+     GROUP BY GPN.NUMERO_NOTA,
+              GPN.SERIE_NOTA,
+              GPN.IDPESSOAFJ
+)
+SELECT MNE.NUMERO_NOTA                         AS NR_NOTA,
+       TO_DATE(MNE.DATA_DA_ENTRADA, 'YYYYMMDD') AS DT_ENTRADA,
+       TRIM(PES.NOMEFANTASIA)                  AS NM_FORNECEDOR,
+       SUM(INE.QUANTIDADE)                     AS QT_TOTAL,
+       PEC.QT_PC,
+       PEC.QT_KG,
+       PEC.DT_MAX_ENTRADA
+  FROM NOTAS_ALVO MNE
+  JOIN SGTPRD.ITENS_NOTA_ENTRADA INE
+    ON INE.NUMERO_NOTA = MNE.NUMERO_NOTA
+   AND INE.SERIE_NOTA  = MNE.SERIE_NOTA
+   AND INE.IDPESSOAFJ  = MNE.IDPESSOAFJ_CLIENTE
+   AND INE.CDFILIAL    = MNE.CDFILIAL
+  JOIN SGTPRD.ITENS_ESTOQUE ITE
+    ON ITE.CODIGO_REDUZIDO = INE.CODINSREDUZIDO
+  JOIN SGTPRD.NATUREZA_OPERACAO NAT
+    ON NAT.NATOPERACAO = INE.NATOPERACAO
+   AND NAT.SEQUENCIA   = INE.SEQNATOPER
+  JOIN SGTPRD.SUPRTIPOOPERNATUREZA TOP
+    ON TOP.ID = NAT.TIPOOPERACAO
+  JOIN SGTPRD.PESSOASFJ PES
+    ON PES.IDPESSOAFJ = MNE.IDPESSOAFJ_CLIENTE
+  LEFT JOIN PEC
+    ON PEC.NUMERO_NOTA = MNE.NUMERO_NOTA
+   AND PEC.SERIE_NOTA  = MNE.SERIE_NOTA
+   AND PEC.IDPESSOAFJ  = MNE.IDPESSOAFJ_CLIENTE
+ WHERE TOP.TIMOVIMENTAESTOQUE = '1'
+   AND ITE.TIPO_ITEM = 9
+   AND TRIM(INE.NATOPERACAO) IN ('1124', '2124')
+   AND (SUBSTR(MNE.DATA_DA_ENTRADA, 1, 6) <> TO_CHAR(PEC.DT_MAX_ENTRADA, 'YYYYMM') OR PEC.DT_MAX_ENTRADA IS NULL)
+ GROUP BY MNE.NUMERO_NOTA,
+          TO_DATE(MNE.DATA_DA_ENTRADA, 'YYYYMMDD'),
+          TRIM(PES.NOMEFANTASIA),
+          PEC.QT_PC,
+          PEC.QT_KG,
+          PEC.DT_MAX_ENTRADA 
+ ORDER BY 2, 3

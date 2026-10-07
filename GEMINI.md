@@ -30,7 +30,7 @@ As regras canônicas de encoding estão em `AGENTS.md` (seção "Regras de Encod
    - `.agents/rules/`: regras modulares de subsistema (`dashboard.md`, `orchestrator.md`, `lib-powershell.md`, `producao-beneficiamento.md`).
 6. **Skills e Regras compartilhadas**: use `.github/skills/` como fonte canônica das skills (espelhadas em `.gemini/skills/`) e `.agents/rules/` para regras contextuais de subsistema.
 7. **Disciplina global de engenharia com IA**: herdar a skill global `ai-engineering-discipline`; regras locais deste repositório continuam prevalecendo quando houver conflito.
-8. **Validação E2E final com Playwright**: para mudanças em UI/SPA/dashboard, rotas FastAPI consumidas pela UI, fluxos operacionais E2E ou contrato front-back, a validação final obrigatória deve ser Playwright E2E por último, conforme `docs/playwright-e2e-standard.md`.
+8. **Validação E2E final com Playwright**: para mudanças em UI/SPA/dashboard, rotas FastAPI consumidas pela UI, fluxos operacionais E2E ou contrato front-back, a validação final obrigatória deve ser Playwright E2E por último, conforme `docs/qualidade/playwright-e2e-standard.md`.
 
 ## Checklist Local
 

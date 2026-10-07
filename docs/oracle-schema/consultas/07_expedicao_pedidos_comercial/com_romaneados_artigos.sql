@@ -1,0 +1,40 @@
+/* =============================================================================
+OBJETIVO: Romaneados - Artigos
+DOMÍNIO: 07_expedicao_pedidos_comercial
+ARQUIVO ORIGINAL: Comandos SQL - CR\Romaneados - Artigos.sql
+TIPO: Comercial, Pedidos e Expedição
+PARÂMETROS / BINDS: Nenhum (filtros diretos na query)
+TABELAS PRINCIPAIS: SGTPRD.ITENSPEDIDOCOMERCIAL, SGTPRD.ITENS_ESTOQUE, SGTPRD.PEDIDOCOMERCIAL, SGTPRD.PRODUTO_ROMANEIO, SGTPRD.ROMANEIO
+CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitura salvo se DML restrito.
+============================================================================= */
+
+SELECT ITP.PEDIDO,
+       PED.PEDIDOCLIENTE PROG,
+       ROM.STATUS,
+       PRO.CODIGO_PRODUTO_REDUZ REDUZ,
+       ITE.DESCRICAO,
+       SUM(PRO.QUILOS_ORIGINAIS) PESO,
+       SUM(PRO.PECAS_ORIGINAIS) PEAS
+
+  FROM SGTPRD.ROMANEIO             ROM,
+       SGTPRD.PRODUTO_ROMANEIO     PRO,
+       SGTPRD.ITENSPEDIDOCOMERCIAL ITP,
+       SGTPRD.PEDIDOCOMERCIAL      PED,
+       SGTPRD.ITENS_ESTOQUE        ITE
+
+ WHERE PRO.NUMERO_ROMANEIO = ROM.NUMERO_ROMANEIO
+   AND ITP.PEDIDO = PRO.NUMERO_PEDIDO
+   AND ITP.ITEMPEDIDO = PRO.ITEM_PEDIDO
+   AND ITE.CODIGO_REDUZIDO = PRO.CODIGO_PRODUTO_REDUZ
+   AND PED.PEDIDO = ITP.PEDIDO
+      
+   AND ROM.STATUS IN (0, 1, 3, 8)
+   AND ROM.IDTIPOROMA IN (1000)
+
+ GROUP BY ITP.PEDIDO,
+          PED.PEDIDOCLIENTE,
+          ROM.STATUS,
+          PRO.CODIGO_PRODUTO_REDUZ,
+          ITE.DESCRICAO
+
+ ORDER BY PED.PEDIDOCLIENTE, ROM.STATUS
