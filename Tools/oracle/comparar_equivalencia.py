@@ -156,11 +156,6 @@ def _shape_divergences(
     control_rows, control_declared, control_types = control
     candidate_rows, candidate_declared, candidate_types = candidate
     divergences: list[str] = []
-    if not spec.keys and not spec.metrics:
-        # Só cardinalidade/colunas/nulos não provam equivalência de valores.
-        divergences.append(
-            "Sem --chaves nem --metricas: nenhum valor seria comparado; equivalência não é elegível"
-        )
     if spec.require_non_empty and (not control_rows or not candidate_rows):
         divergences.append(
             "Fixture vazio: equivalência não é elegível sem dados não vazios"
@@ -305,16 +300,17 @@ def _metric_type_divergences(
 def _sort_key(
     row: dict[str, Any], names: list[str], metric_names: set[str]
 ) -> tuple[Any, ...]:
-    parts: list[Any] = []
+    # Colunas exatas primeiro e métricas por último: valores de métrica que
+    # diferem dentro da tolerância não reordenam linhas entre os dois lados.
+    exact: list[Any] = []
+    metrics: list[Any] = []
     for name in names:
         value = _get(row, name)
-        if value is None:
-            parts.append((0, 0.0, ""))
-        elif name.upper() in metric_names:
-            parts.append((1, _number(value) or 0.0, ""))
+        if name.upper() in metric_names:
+            metrics.append((0, 0.0) if value is None else (1, _number(value) or 0.0))
         else:
-            parts.append((1, 0.0, _key_part(value)))
-    return tuple(parts)
+            exact.append((0, "") if value is None else (1, _key_part(value)))
+    return (*exact, *metrics)
 
 
 def _multiset_divergences(

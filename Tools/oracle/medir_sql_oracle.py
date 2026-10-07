@@ -22,7 +22,6 @@ import csv
 import json
 import statistics
 import sys
-import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -35,9 +34,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(ROOT / "Produção Beneficimento" / "src"))
 
-from beneficiamento.oracle import SESSION_DROP_MARKERS  # noqa: E402
 from oracle_catalog import GuardError  # noqa: E402
 from oracle_extract import (  # noqa: E402
     compute_hash,
@@ -45,11 +42,18 @@ from oracle_extract import (  # noqa: E402
     resolve_oracle_credentials,
     serialize_rows,
 )
+from oracle_session import (  # noqa: E402
+    connect_within,
+    is_session_drop,
+    run_with_cancel,
+)
 from validar_sql_oracle import (  # noqa: E402
     _bind_names,
+    _connect,
     _default_binds,
     _error_summary,
     _guard,
+    _has_multiple_statements,
     _parse_bind_args,
     _single_statement,
     resolve_guard,
@@ -62,9 +66,6 @@ DEFAULT_TIMEOUT = 20
 DEFAULT_ARRAYSIZE = 500
 DEFAULT_MIN_GAIN_PCT = 2.0
 MAX_ATTEMPTS = 3
-# Erros de rede/sessão: repetir com conexão nova. Lista única em
-# `beneficiamento/oracle.py` (o runner do Beneficiamento).
-TRANSIENT_MARKERS = SESSION_DROP_MARKERS
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ class MeasureOptions:
 
 def is_transient(message: str) -> bool:
     """True se o erro é queda de rede/sessão, e não defeito da consulta."""
-    return any(marker in message for marker in TRANSIENT_MARKERS)
+    return is_session_drop(message)
 
 
 def summarize(times_ms: list[float]) -> dict[str, float | int]:
@@ -184,31 +185,30 @@ def _timed_fetch(
     }
 
 
-def _run_watched(
+def _run_watched(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     connection: Any,
     sql: str,
     binds: dict[str, Any],
     options: MeasureOptions,
     keep: bool,
+    timeout: float,
 ) -> dict[str, Any]:
     """Executa numa thread e cancela a sessão se passar do prazo."""
-    result: dict[str, Any] = {}
-
-    def target() -> None:
-        try:
-            result.update(_timed_fetch(connection, sql, binds, options, keep))
-        except (oracledb.Error, AttributeError, RuntimeError, ValueError) as exc:
-            result.update(_failure(exc))
-
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(options.timeout)
-    if thread.is_alive():
-        with contextlib.suppress(oracledb.Error):  # cancelamento best effort
-            connection.cancel()
-        thread.join(5)
+    outcome = run_with_cancel(
+        lambda: _timed_fetch(connection, sql, binds, options, keep),
+        lambda: connection,
+        timeout,
+    )
+    if outcome.timed_out:
         # Thread ainda viva: o chamador não pode fechar a conexão debaixo dela.
-        return {"status": "timeout", "abandoned": thread.is_alive()}
+        return {"status": "timeout", "abandoned": outcome.abandoned}
+    if outcome.error is not None:
+        if isinstance(
+            outcome.error, (oracledb.Error, AttributeError, RuntimeError, ValueError)
+        ):
+            return _failure(outcome.error)
+        raise outcome.error
+    result: dict[str, Any] = outcome.value
     return result
 
 
@@ -219,18 +219,21 @@ def _attempt(
     options: MeasureOptions,
     keep: bool,
 ) -> dict[str, Any]:
+    started = time.perf_counter()
     try:
-        connection = oracledb.connect(
-            user=creds.user, password=creds.password, dsn=creds.dsn
-        )
+        connection = connect_within(lambda: _connect(creds), options.timeout)
+    except TimeoutError:
+        return {"status": "timeout"}
     except oracledb.Error as exc:
         return _failure(exc)
     outcome: dict[str, Any] = {}
     try:
-        outcome = _run_watched(connection, sql, binds, options, keep)
+        # Conexão e execução dividem o mesmo `--timeout`, não um cada.
+        remaining = options.timeout - (time.perf_counter() - started)
+        outcome = _run_watched(connection, sql, binds, options, keep, remaining)
         return outcome
     finally:
-        if not outcome.pop("abandoned", False):
+        if not outcome.get("abandoned", False):
             with contextlib.suppress(oracledb.Error):  # limpeza best effort
                 connection.close()
 
@@ -309,24 +312,38 @@ def write_dump(dump: dict[str, Any], path: Path) -> dict[str, Any]:
     }
 
 
-def explain_plan(creds: Any, sql: str, binds: dict[str, Any]) -> list[str]:
+def explain_plan(
+    creds: Any, sql: str, binds: dict[str, Any], timeout: float = DEFAULT_TIMEOUT
+) -> list[str]:
     """Plano estimado (EXPLAIN PLAN + DBMS_XPLAN.DISPLAY): hipótese, não métrica."""
+    started = time.perf_counter()
     try:
-        connection = oracledb.connect(
-            user=creds.user, password=creds.password, dsn=creds.dsn
-        )
-    except oracledb.Error as exc:
+        connection = connect_within(lambda: _connect(creds), timeout)
+    except (oracledb.Error, TimeoutError) as exc:
         return [f"plano indisponível: {_error_summary(exc)}"]
-    try:
+
+    def _plan() -> list[str]:
         cursor = connection.cursor()
         cursor.execute("EXPLAIN PLAN FOR " + sql, binds)
         cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")
         return [str(row[0]) for row in cursor.fetchall()]
-    except oracledb.Error as exc:
+
+    # Sem `call_timeout` no Client 12.2: o plano também roda sob watchdog.
+    # Conexão e plano dividem o mesmo `--timeout`.
+    remaining = timeout - (time.perf_counter() - started)
+    outcome = run_with_cancel(_plan, lambda: connection, remaining)
+    if not outcome.abandoned:
+        with contextlib.suppress(oracledb.Error):  # limpeza best effort
+            connection.close()
+    if outcome.timed_out:
+        return [f"plano indisponível: excedeu {timeout}s"]
+    if isinstance(outcome.error, oracledb.Error):
         # Usuário de leitura pode não ter PLAN_TABLE; não derruba a medição pronta.
-        return [f"plano indisponível: {_error_summary(exc)}"]
-    finally:
-        connection.close()
+        return [f"plano indisponível: {_error_summary(outcome.error)}"]
+    if outcome.error is not None:
+        raise outcome.error
+    plan: list[str] = outcome.value
+    return plan
 
 
 def _load_sql(path: Path) -> str:
@@ -370,6 +387,8 @@ def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
         sql = _load_sql(path)
     except (UnicodeDecodeError, GuardError) as exc:
         raise SystemExit(f"SQL ilegível: {_error_summary(exc)}") from exc
+    if _has_multiple_statements(sql):
+        raise SystemExit("SQL bloqueado: mais de uma instrução no arquivo")
     binds = _default_binds(sql)
     explicit = _parse_bind_args(args.bind)
     binds.update({k: v for k, v in explicit.items() if k in binds})
@@ -410,7 +429,7 @@ def main() -> int:
     if args.dump is not None and result["dump"] is not None:
         report["dump"] = write_dump(result["dump"], args.dump)
     if args.explain:
-        report["plan"] = explain_plan(creds, sql, binds)
+        report["plan"] = explain_plan(creds, sql, binds, args.timeout)
     if args.baseline is not None and result["summary"] is not None:
         base = json.loads(args.baseline.read_text(encoding="utf-8"))
         if not base.get("summary"):

@@ -10,7 +10,9 @@ pelos `.sql` versionáveis do repositório, lido do catálogo local `schema.db`.
   e no checkout de outra pessoa. `--include-untracked` usa `git ls-files -co`
   (índice + não rastreados não ignorados) e serve para regenerar localmente o
   grafo do working tree que ainda vai ser commitado (antes do `git add`);
-  `--check` sem a flag é o modo canônico de CI/pre-commit;
+  `--check` sem a flag é o modo canônico local (exige o `schema.db`
+  gitignored; o JSON embute a data de extração do catálogo, então só compara
+  com o mesmo catálogo — não roda no CI);
 - nós: tipo, linhas, comentário e colunas `nome:tipo` de cada objeto citado;
 - arestas: FKs entre objetos citados (não expande vizinhança, ver `note`).
 

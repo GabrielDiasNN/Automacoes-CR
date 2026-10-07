@@ -7,9 +7,10 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import sys
 import threading
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,30 +21,29 @@ from dotenv import load_dotenv
 from .settings import (
     FETCH_ARRAY_SIZE,
     FETCH_BATCH_SIZE,
+    LIB_PYTHON_DIR,
     ORACLE_CALL_TIMEOUT_MS,
     REPO_ROOT,
     WALL_CLOCK_BUDGET_SECONDS,
 )
 
+# `oracle_session` vive em `lib/python`: o pacote resolve o caminho sozinho, sem
+# depender de cada entrypoint (runner, API, testes, CLI) lembrar de injetá-lo.
+if str(LIB_PYTHON_DIR) not in sys.path:
+    sys.path.append(str(LIB_PYTHON_DIR))
+
+from oracle_session import (  # noqa: E402  pylint: disable=wrong-import-position
+    cancel_after,
+    connect_within,
+    is_session_drop,
+)
+
 logger = logging.getLogger(__name__)
 
-# A rede até o Oracle desta máquina derruba sessões em ~4-6 s (ORA-00028 /
-# ORA-03113), com ou sem atividade. No período mensal o fetch de ~17 mil linhas
-# leva 5-7 s e caía nessa janela em ~2 de 5 execuções; os extratores de domínio
-# já tentam de novo com conexão nova, o runner não tentava.
-# Fonte única: `Tools/oracle/medir_sql_oracle.py` e `Tools/oracle/validar_partes_oracle.py`
-# importam esta lista. DPY-1001/DPI-1010 ("not connected") são a mesma classe
-# (conexão já perdida). O cancelamento do watchdog (ORA-01013) não entra: é
-# prazo estourado, não rede.
-SESSION_DROP_MARKERS = (
-    "ORA-00028",
-    "ORA-03113",
-    "ORA-03135",
-    "DPY-1001",
-    "DPY-4011",
-    "DPI-1010",
-    "DPI-1080",
-)
+# A rede até o Oracle desta máquina derruba sessões em ~4-6 s. No período
+# mensal o fetch de ~17 mil linhas leva 5-7 s e caía nessa janela em ~2 de 5
+# execuções: sessão derrubada é tentada de novo com conexão nova. Marcadores de
+# queda e prazos para o Client 12.2: `lib/python/oracle_session.py`.
 MAX_QUERY_ATTEMPTS = 3
 # O Orchestrator mata o subprocesso do runner em 45 s. O orçamento de wall clock
 # vale para o conjunto das tentativas: cada uma recebe só o que sobrou dele, e
@@ -110,11 +110,6 @@ def connect_readonly() -> Any:
     return oracledb.connect(user=user, password=password, dsn=dsn)
 
 
-def _is_session_drop(exc: BaseException) -> bool:
-    message = str(exc)
-    return any(marker in message for marker in SESSION_DROP_MARKERS)
-
-
 def execute_query(
     sql: str,
     parameters: Mapping[str, Any] | None = None,
@@ -147,7 +142,7 @@ def execute_query(
             elapsed = time.perf_counter() - started
             remaining = wall_clock_budget_seconds - elapsed
             if (
-                not _is_session_drop(exc)
+                not is_session_drop(exc)
                 or attempt >= MAX_QUERY_ATTEMPTS
                 or remaining < MIN_RETRY_REMAINING_SECONDS
             ):
@@ -166,70 +161,8 @@ def execute_query(
 
 
 def _connect_within(seconds: float) -> Any:
-    """`connect_readonly()` com prazo: o driver não impõe um no client 12.2.
-
-    A conexão roda numa thread daemon. Se o prazo estoura, levanta
-    `TimeoutError`; a thread abandonada fecha a conexão sozinha se ela ainda
-    vier a se estabelecer, sem vazar sessão nem ser usada por outra thread.
-    """
-    holder: dict[str, Any] = {}
-    lock = threading.Lock()
-    abandoned = False
-
-    def target() -> None:
-        try:
-            connection = connect_readonly()
-        except BaseException as exc:  # pylint: disable=broad-exception-caught
-            holder["error"] = exc
-            return
-        with lock:
-            late = connection if abandoned else None
-            if late is None:
-                holder["connection"] = connection
-        if late is not None:
-            with contextlib.suppress(oracledb.Error):  # limpeza best effort
-                late.close()
-
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(max(seconds, 0.05))
-    with lock:
-        if "connection" in holder:
-            return holder["connection"]
-        if "error" not in holder:
-            abandoned = True
-            raise TimeoutError(
-                f"Conexão Oracle do Beneficiamento excedeu {seconds:g}s."
-            )
-    raise holder["error"]
-
-
-@contextlib.contextmanager
-def _cancel_after(
-    connection: Any, seconds: float, fired: threading.Event
-) -> Iterator[None]:
-    """Cancela a chamada em curso da conexão quando o prazo estoura.
-
-    Substitui o `call_timeout` (indisponível no Oracle Client 12.2): um timer
-    chama `connection.cancel()`, que interrompe `execute`/`fetch` no servidor.
-    `fired` distingue o cancelamento do watchdog de um erro qualquer do Oracle.
-    """
-
-    def fire() -> None:
-        fired.set()
-        with contextlib.suppress(oracledb.Error):  # cancelamento best effort
-            connection.cancel()
-
-    timer = threading.Timer(max(seconds, 0.05), fire)
-    timer.daemon = True
-    timer.start()
-    try:
-        yield
-    finally:
-        timer.cancel()
-        # Se `fire` já estava rodando, espera o `cancel()` terminar antes de a
-        # conexão ser fechada: `cancel` e `close` concorrentes não são seguros.
-        timer.join(5)
+    """`connect_readonly()` com prazo (ver `oracle_session.connect_within`)."""
+    return connect_within(connect_readonly, seconds)
 
 
 def _execute_once(
@@ -255,7 +188,7 @@ def _execute_once(
             # Oracle Client 12.2 não suporta call_timeout (DPI-1050): sem isto o
             # execute ficaria sem prazo e passaria dos 45 s do Orchestrator.
             guards.enter_context(
-                _cancel_after(
+                cancel_after(
                     connection,
                     wall_clock_budget_seconds
                     - (time.perf_counter() - query_started_at),
@@ -305,7 +238,7 @@ def _execute_once(
                             break
                     else:
                         rows.extend(batch)
-        except oracledb.DatabaseError as exc:
+        except oracledb.Error as exc:
             if watchdog_fired.is_set():
                 raise TimeoutError(
                     f"Consulta Beneficiamento excedeu {wall_clock_budget_seconds:g}s "

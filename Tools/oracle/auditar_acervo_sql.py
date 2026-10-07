@@ -113,7 +113,19 @@ def audit_file(path: Path, runs: int, timeout: int) -> dict[str, Any]:
 
     Estouro do prazo do medidor vira FALHA deste arquivo; a varredura segue.
     """
-    sql = path.read_text(encoding="utf-8")
+    try:
+        sql = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return {
+            "file": path.relative_to(ROOT).as_posix(),
+            "flags": ["FALHA"],
+            "median_ms": None,
+            "noise_ms": None,
+            "rows": None,
+            "row_cap": None,
+            "valid_runs": 0,
+            "error": "encoding_error (arquivo nao e UTF-8)",
+        }
     cap = detect_row_cap(sql)
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "relatorio.json"

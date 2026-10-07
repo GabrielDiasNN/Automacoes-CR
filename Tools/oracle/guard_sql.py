@@ -22,8 +22,27 @@ from typing import Any
 CANONICAL_MODULE_NAME = "guard_sql_canonico"
 
 
+def _dotenv_value(name: str) -> str | None:
+    """Lê `name` do `.env` da raiz quando o wrapper roda direto (sem validador pai)."""
+    try:
+        from dotenv import dotenv_values  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return None
+    value = dotenv_values(Path(__file__).resolve().parents[2] / ".env").get(name)
+    return value or None
+
+
 def canonical_guard_file() -> Path:
-    """Caminho do guard canônico da skill oracle-sql, no perfil do usuário."""
+    """Caminho do guard canônico da skill oracle-sql.
+
+    `ORACLE_SQL_GUARD_CANONICAL` (no `.env`) tem precedência; sem ela, o local
+    padrão de instalação da skill no perfil do usuário.
+    """
+    configured = os.environ.get("ORACLE_SQL_GUARD_CANONICAL") or _dotenv_value(
+        "ORACLE_SQL_GUARD_CANONICAL"
+    )
+    if configured:
+        return Path(configured)
     return (
         Path(os.environ.get("USERPROFILE", "~")).expanduser()
         / ".gemini"

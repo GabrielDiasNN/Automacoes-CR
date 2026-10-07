@@ -257,3 +257,16 @@ def test_telemetria_sem_campos_opcionais_preserva_os_existentes() -> None:
 
     assert execucao.logs == "orig"
     assert execucao.exit_code == 9
+
+
+def test_telemetria_em_execucao_ja_finalizada_falha_com_409() -> None:
+    terminal = sorted(EXECUTION_TERMINAL_STATUSES)[0]
+    execucao = models.Execution(id="T1", automation_id=1, status="FAILED")
+
+    with pytest.raises(DomainRuleError) as erro:
+        runtime.finish_telemetry_execution(
+            execucao, status=terminal, exit_code=0, logs=None, artifacts=None
+        )
+
+    assert erro.value.status_code == 409
+    assert execucao.status == "FAILED"

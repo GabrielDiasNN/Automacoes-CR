@@ -10,6 +10,8 @@ from pathlib import Path
 
 DOMAIN_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = DOMAIN_ROOT.parent
+# Biblioteca compartilhada (`oracle_session`), resolvida pelo próprio pacote.
+LIB_PYTHON_DIR = REPO_ROOT / "lib" / "python"
 # SQL de RUNTIME: o runner lê `bnf_producao_beneficiamento_detalhado.sql` daqui.
 # O acervo de consultas de referência vive em `docs/oracle-schema/consultas/` e
 # não é lido pelo runner. Mudar o nome do arquivo exige ajustar `_PERIOD_CONFIGS`

@@ -204,19 +204,6 @@ def test_tenta_de_novo_quando_o_restante_e_exatamente_o_minimo(
     )
 
 
-@pytest.mark.parametrize("marcador", ["ORA-03113", "ORA-03135", "DPY-1001", "DPI-1010"])
-def test_is_session_drop_reconhece_a_lista_compartilhada(marcador: str) -> None:
-    assert oracle._is_session_drop(  # pylint: disable=protected-access
-        oracledb.DatabaseError(f"{marcador}: conexao perdida")
-    )
-
-
-def test_is_session_drop_ignora_erro_de_sql() -> None:
-    assert not oracle._is_session_drop(  # pylint: disable=protected-access
-        oracledb.DatabaseError("ORA-00942: tabela ou view nao existe")
-    )
-
-
 class _ConexaoSemCallTimeout:
     """Simula o Oracle Client 12.2: `call_timeout` não existe; `execute` só
     volta quando `cancel()` é chamado (ou nunca, se ninguém cancelar)."""
@@ -283,6 +270,22 @@ def test_watchdog_cancela_execute_travado_e_vira_timeout_error(
     with pytest.raises(TimeoutError, match="watchdog"):
         oracle.execute_query("select 1", wall_clock_budget_seconds=0.3)
     assert conexao.cancelada.is_set()
+
+
+def test_dpy_1001_apos_cancelamento_vira_timeout_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """InterfaceError (não DatabaseError) após o cancel do watchdog é prazo, não queda."""
+    conexao = _ConexaoSemCallTimeout(bloqueia=True)
+
+    def execute(*_a: Any, **_k: Any) -> None:
+        assert conexao.cancelada.wait(timeout=5), "watchdog nunca cancelou"
+        raise oracledb.InterfaceError("DPY-1001: not connected to database")
+
+    monkeypatch.setattr(conexao.cursor_falso, "execute", execute)
+    monkeypatch.setattr(oracle, "connect_readonly", lambda: conexao)
+    with pytest.raises(TimeoutError, match="watchdog"):
+        oracle.execute_query("select 1", wall_clock_budget_seconds=0.3)
 
 
 def test_watchdog_nao_atrapalha_consulta_rapida(
@@ -360,20 +363,3 @@ def test_connect_com_erro_repassa_a_excecao_original(
     monkeypatch.setattr(oracle, "connect_readonly", falha)
     with pytest.raises(oracledb.DatabaseError, match="DPY-4011"):
         oracle._connect_within(2)  # pylint: disable=protected-access
-
-
-def test_watchdog_espera_o_cancel_em_curso_antes_de_liberar_a_conexao() -> None:
-    ordem: list[str] = []
-
-    class Conexao:  # pylint: disable=too-few-public-methods
-        def cancel(self) -> None:
-            ordem.append("cancel-inicio")
-            threading.Event().wait(0.3)
-            ordem.append("cancel-fim")
-
-    disparou = threading.Event()
-    # pylint: disable-next=protected-access
-    with oracle._cancel_after(Conexao(), 0.05, disparou):
-        assert disparou.wait(timeout=2)  # o timer já entrou no cancel()
-    ordem.append("saiu")
-    assert ordem == ["cancel-inicio", "cancel-fim", "saiu"]

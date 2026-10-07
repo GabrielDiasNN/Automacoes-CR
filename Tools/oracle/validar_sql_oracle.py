@@ -18,7 +18,6 @@ import os
 import re
 import subprocess
 import sys
-import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -31,9 +30,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(ROOT / "Produção Beneficimento" / "src"))
 
-from beneficiamento.oracle import SESSION_DROP_MARKERS  # noqa: E402
 from guard_sql import canonical_guard_file  # noqa: E402
 from oracle_catalog import (  # noqa: E402
     GuardError,
@@ -43,6 +40,11 @@ from oracle_catalog import (  # noqa: E402
 from oracle_extract import (  # noqa: E402
     init_thick_mode,
     resolve_oracle_credentials,
+)
+from oracle_session import (  # noqa: E402
+    connect_within,
+    is_session_drop,
+    run_with_cancel,
 )
 
 # Fonte única do caminho do acervo de consultas: as demais ferramentas importam daqui.
@@ -211,6 +213,14 @@ def _parse_bind_args(values: list[str] | None) -> dict[str, Any]:
         name = name.strip().upper()
         if not name:
             raise ValueError(f"Bind inválido, nome vazio: {item}")
+        # Zero à esquerda é código (VARCHAR2), não número: "0012" fica texto.
+        if (
+            len(value.strip()) > 1
+            and value.strip().startswith("0")
+            and value.strip()[1] != "."
+        ):
+            parsed[name] = value
+            continue
         try:
             parsed[name] = int(value)
         except ValueError:
@@ -248,6 +258,12 @@ def _files(root: Path, part: int, parts: int) -> list[Path]:
     return candidates[(part - 1) * size : part * size]
 
 
+def _has_multiple_statements(sql: str) -> bool:
+    """True se há mais de uma instrução (';' fora de literais que não é o terminal)."""
+    count, trailing = _statement_terminators(sql)
+    return count > 1 or bool(count and not trailing)
+
+
 def _connect(creds: Any) -> Any:
     return oracledb.connect(
         user=creds.user,
@@ -257,66 +273,68 @@ def _connect(creds: Any) -> Any:
 
 
 def _run_with_watchdog(
-    connection: Any, sql: str, timeout: int, binds: dict[str, Any]
+    connection: Any,
+    sql: str,
+    timeout: float,
+    binds: dict[str, Any],
+    execute: bool = True,
 ) -> dict[str, Any]:
-    """Parseia e executa o smoke; cancela a sessão se exceder o prazo."""
+    """Parseia e (se `execute`) roda o smoke; cancela a sessão se exceder o prazo."""
 
     result: dict[str, Any] = {}
-    error: dict[str, BaseException] = {}
 
     def target() -> None:
+        cursor = connection.cursor()
+        started = time.perf_counter()
+        cursor.parse(sql)
+        parse_ms = round((time.perf_counter() - started) * 1000, 1)
+        result.update({"parse": "pass", "parse_ms": parse_ms})
+        if not execute:
+            return
+
+        # Executa o SQL original (embrulhar em SELECT * FROM (...) dava
+        # ORA-00918 com colunas duplicadas e quebrava WITH FUNCTION) e
+        # busca so a primeira linha.
+        cursor.prefetchrows = 1
+        cursor.arraysize = 1
+        started = time.perf_counter()
         try:
-            cursor = connection.cursor()
-            started = time.perf_counter()
-            cursor.parse(sql)
-            parse_ms = round((time.perf_counter() - started) * 1000, 1)
-            result.update({"parse": "pass", "parse_ms": parse_ms})
+            cursor.execute(sql, binds)
+            description = cursor.description or []
+            rows = cursor.fetchmany(1)
+        finally:
+            cursor.close()
+        execute_ms = round((time.perf_counter() - started) * 1000, 1)
+        result.update(
+            {
+                "smoke": "pass",
+                "execute_ms": execute_ms,
+                "rows": len(rows),
+                "columns": len(description),
+            }
+        )
 
-            # Executa o SQL original (embrulhar em SELECT * FROM (...) dava
-            # ORA-00918 com colunas duplicadas e quebrava WITH FUNCTION) e
-            # busca so a primeira linha.
-            cursor.prefetchrows = 1
-            cursor.arraysize = 1
-            started = time.perf_counter()
-            try:
-                cursor.execute(sql, binds)
-                description = cursor.description or []
-                rows = cursor.fetchmany(1)
-            finally:
-                cursor.close()
-            execute_ms = round((time.perf_counter() - started) * 1000, 1)
-            result.update(
-                {
-                    "smoke": "pass",
-                    "execute_ms": execute_ms,
-                    "rows": len(rows),
-                    "columns": len(description),
-                }
-            )
-        except (
-            oracledb.Error,
-            AttributeError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-        ) as exc:
-            error["value"] = exc
-
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(timeout)
-    if thread.is_alive():
-        with contextlib.suppress(oracledb.Error):  # cancelamento best effort
-            connection.cancel()
-        thread.join(5)
+    outcome = run_with_cancel(target, lambda: connection, timeout)
+    if outcome.timed_out:
         # Thread ainda viva: o chamador não pode fechar a conexão debaixo dela.
+        if result.get("parse") == "pass":
+            return {
+                "parse": "pass",
+                "parse_ms": result.get("parse_ms"),
+                "smoke": "timeout",
+                "abandoned": outcome.abandoned,
+            }
         return {
             "parse": "unknown",
             "smoke": "timeout",
-            "abandoned": thread.is_alive(),
+            "abandoned": outcome.abandoned,
         }
-    if "value" in error:
-        exc = error["value"]
+    exc = outcome.error
+    if exc is not None and not isinstance(
+        exc, (oracledb.Error, AttributeError, RuntimeError, TypeError, ValueError)
+    ):
+        raise exc
+    if exc is not None:
         if result.get("parse") == "pass":
             result.update({"smoke": "error", "error": _error_summary(exc)})
             return result
@@ -337,15 +355,30 @@ def _oracle_stage(
     connection = None
     abandoned = False
     try:
-        connection = _connect(creds)
+        # O Client 12.2 não impõe prazo de conexão: sem isto, uma sessão
+        # travada pela rede prendia a rodada inteira do acervo.
+        started = time.perf_counter()
+        connection = connect_within(lambda: _connect(creds), options.timeout)
+        # Conexão e execução dividem o mesmo `--timeout`, não um cada.
+        remaining = options.timeout - (time.perf_counter() - started)
         if not options.execute or guard_code == 3:
-            cursor = connection.cursor()
-            started = time.perf_counter()
-            cursor.parse(sql)
+            outcome = _run_with_watchdog(connection, sql, remaining, {}, False)
+            abandoned = bool(outcome.pop("abandoned", False))
+            if outcome.get("parse") != "pass":
+                # Smoke não foi pedido: não registrar falha de smoke.
+                outcome.pop("smoke", None)
+                outcome["status"] = (
+                    # Mesmo status de antes do watchdog: erro de parse era
+                    # exceção do driver, contabilizada como `oracle_error`.
+                    "timeout"
+                    if outcome.get("parse") == "unknown"
+                    else "oracle_error"
+                )
+                return outcome
             blocked = guard_code == 3
             return {
                 "parse": "pass",
-                "parse_ms": round((time.perf_counter() - started) * 1000, 1),
+                "parse_ms": outcome["parse_ms"],
                 "smoke": "blocked_custom_function" if blocked else "not_requested",
                 "status": "blocked_custom_function" if blocked else "parse_ok",
             }
@@ -353,7 +386,7 @@ def _oracle_stage(
         # `--bind` vale para a rodada inteira; só entra no arquivo que tem o
         # placeholder — o driver rejeita bind sobrando (DPY-4008).
         binds.update({k: v for k, v in options.explicit_binds.items() if k in binds})
-        outcome = _run_with_watchdog(connection, sql, options.timeout, binds)
+        outcome = _run_with_watchdog(connection, sql, remaining, binds)
         abandoned = bool(outcome.pop("abandoned", False))
         if outcome.get("smoke") == "pass":
             outcome["status"] = "validated"
@@ -362,6 +395,8 @@ def _oracle_stage(
         else:
             outcome["status"] = str(outcome.get("smoke", "error"))
         return outcome
+    except TimeoutError as exc:
+        return {"status": "timeout", "error": _error_summary(exc)}
     except (oracledb.Error, OSError, RuntimeError, ValueError) as exc:
         return {"status": "oracle_error", "error": _error_summary(exc)}
     finally:
@@ -381,7 +416,7 @@ def _oracle_stage_with_retry(
         error = str(outcome.get("error", ""))
         # A queda pode vir no parse (`error`), no smoke (`parse_ok_smoke_error`)
         # ou na conexão (`oracle_error`): decide pela mensagem, não pelo status.
-        if not any(marker in error for marker in SESSION_DROP_MARKERS):
+        if not is_session_drop(error):
             break
     return outcome
 
@@ -424,8 +459,7 @@ def _validate_one(path: Path, creds: Any, options: RunOptions) -> dict[str, Any]
         result["status"] = "blocked_guard"
         return _finish(result, started_clock)
 
-    count, trailing = _statement_terminators(sql)
-    if count > 1 or (count and not trailing):
+    if _has_multiple_statements(sql):
         result["status"] = "blocked_multiple_statements"
         return _finish(result, started_clock)
 

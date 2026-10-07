@@ -31,7 +31,6 @@ Uso:
 from __future__ import annotations
 
 import argparse
-import contextlib
 import re
 import sqlite3
 import sys
@@ -50,7 +49,7 @@ try:
         init_thick_mode,
         resolve_oracle_credentials,
     )
-    from oracle_retry import make_oracle_retry
+    from oracle_session import is_session_drop, run_with_cancel
 except ImportError as exc:
     print(f"[ERRO] Nao foi possivel importar dependencias: {exc}")
     print(
@@ -583,43 +582,51 @@ def _run_with_timeout(
     `fn` deve gravar a conexao aberta em `holder["connection"]` assim que
     conectar, para que o watchdog tenha o que cancelar.
     """
-    result: dict[str, Any] = {}
-    error: dict[str, BaseException] = {}
-
-    def target() -> None:
-        try:
-            result["value"] = fn()
-        except BaseException as exc:  # pylint: disable=broad-exception-caught
-            error["value"] = exc
-
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(timeout_seconds)
-    if thread.is_alive():
-        connection = (holder or {}).get("connection")
-        if connection is not None:
-            with contextlib.suppress(Exception):
-                connection.cancel()
-            # da uma chance da thread desenrolar e fechar a conexao apos o cancel
-            thread.join(5)
+    expired = threading.Event()
+    if holder is not None:
+        holder["expired"] = expired
+    outcome = run_with_cancel(
+        fn,
+        lambda: (holder or {}).get("connection"),
+        timeout_seconds,
+        owns_connection=True,
+        abandoned_event=expired,
+    )
+    if outcome.timed_out:
         raise TimeoutError(f"Consulta excedeu {timeout_seconds}s e foi cancelada.")
-    if "value" in error:
-        raise error["value"]
-    return result.get("value")
+    if outcome.error is not None:
+        raise outcome.error
+    return outcome.value
+
+
+def _raise_if_expired(holder: dict[str, Any]) -> None:
+    """Conexao que chegou depois do prazo nao executa: ninguem mais a vigia."""
+    expired = holder.get("expired")
+    if expired is not None and expired.is_set():
+        raise TimeoutError("Conexao chegou depois do prazo; consulta nao executada.")
 
 
 # Mesmo padrao dos 6 extratores de dominio e de `build_oracle_catalog.py`: a rede
 # ate o Oracle desta maquina derruba conexoes continuas (ORA-00028/ORA-03113) com
 # frequencia suficiente para exigir retry em toda chamada online.
-_oracle_retry = make_oracle_retry()
+# Retry so em queda de sessao (`is_session_drop`, fonte unica): erro de SQL
+# falha na hora, e DPY-1001 (InterfaceError) tambem e repetido.
+_MAX_ATTEMPTS = 3
 
 
-@_oracle_retry
 def _run_guarded(fn: Any, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> Any:
     """Roda `fn(holder)` sob timeout/retry. `fn` grava a conexao em
     `holder["connection"]` assim que conectar, para o watchdog cancelar."""
-    holder: dict[str, Any] = {}
-    return _run_with_timeout(lambda: fn(holder), timeout_seconds, holder=holder)
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        holder: dict[str, Any] = {}
+        try:
+            return _run_with_timeout(
+                lambda h=holder: fn(h), timeout_seconds, holder=holder
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            if attempt >= _MAX_ATTEMPTS or not is_session_drop(exc):
+                raise
+    raise AssertionError("inalcancavel")
 
 
 # ─────────────────────────── distinct [online] ────────────────────────────────
@@ -666,13 +673,15 @@ def cmd_distinct(args: argparse.Namespace) -> int:
     def _run(holder: dict[str, Any]) -> list[tuple[Any, ...]]:
         import oracledb  # pylint: disable=import-outside-toplevel
 
-        with oracledb.connect(
+        # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
+        connection = oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
-        ) as connection:
-            holder["connection"] = connection
-            cursor = connection.cursor()
-            cursor.execute(sql)
-            return list(cursor.fetchall())
+        )
+        holder["connection"] = connection
+        _raise_if_expired(holder)
+        cursor = connection.cursor()
+        cursor.execute(sql)
+        return list(cursor.fetchall())
 
     try:
         rows = _run_guarded(_run)
@@ -753,14 +762,16 @@ def cmd_sample(args: argparse.Namespace) -> int:
     def _run(holder: dict[str, Any]) -> tuple[list[str], list[tuple[Any, ...]]]:
         import oracledb  # pylint: disable=import-outside-toplevel
 
-        with oracledb.connect(
+        # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
+        connection = oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
-        ) as connection:
-            holder["connection"] = connection
-            cursor = connection.cursor()
-            cursor.execute(sql)
-            cols = [d[0] for d in (cursor.description or [])]
-            return cols, list(cursor.fetchall())
+        )
+        holder["connection"] = connection
+        _raise_if_expired(holder)
+        cursor = connection.cursor()
+        cursor.execute(sql)
+        cols = [d[0] for d in (cursor.description or [])]
+        return cols, list(cursor.fetchall())
 
     try:
         cols, rows = _run_guarded(_run)
@@ -799,11 +810,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     def _run(holder: dict[str, Any]) -> None:
         import oracledb  # pylint: disable=import-outside-toplevel
 
-        with oracledb.connect(
+        # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
+        connection = oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
-        ) as connection:
-            holder["connection"] = connection
-            connection.cursor().parse(sql)
+        )
+        holder["connection"] = connection
+        _raise_if_expired(holder)
+        connection.cursor().parse(sql)
 
     try:
         _run_guarded(_run)
@@ -829,14 +842,16 @@ def cmd_explain(args: argparse.Namespace) -> int:
     def _run(holder: dict[str, Any]) -> list[str]:
         import oracledb  # pylint: disable=import-outside-toplevel
 
-        with oracledb.connect(
+        # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
+        connection = oracledb.connect(
             user=creds.user, password=creds.password, dsn=creds.dsn
-        ) as connection:
-            holder["connection"] = connection
-            cursor = connection.cursor()
-            cursor.execute(f"EXPLAIN PLAN FOR {sql}")
-            cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")
-            return [row[0] for row in cursor.fetchall()]
+        )
+        holder["connection"] = connection
+        _raise_if_expired(holder)
+        cursor = connection.cursor()
+        cursor.execute(f"EXPLAIN PLAN FOR {sql}")
+        cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")
+        return [row[0] for row in cursor.fetchall()]
 
     try:
         linhas = _run_guarded(_run)

@@ -372,14 +372,9 @@ def mark_task_as_failed(  # pylint: disable=too-many-arguments,too-many-position
     db_exec.failure_reason = failure_reason or FAILURE_REASON_AUTOMATION_NOT_FOUND  # type: ignore[assignment]
     db_exec.recovery_action = recovery_action or RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY  # type: ignore[assignment]
     db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-    if db_exec.started_at and db_exec.finished_at:
-        delta_seconds = round(
-            (
-                cast(Any, db_exec.finished_at) - cast(Any, db_exec.started_at)
-            ).total_seconds(),
-            2,
-        )
-        db_exec.duration_seconds = max(0.0, delta_seconds)  # type: ignore[arg-type]
+    duration = compute_duration_seconds(db_exec.started_at, db_exec.finished_at)
+    if duration is not None:
+        db_exec.duration_seconds = duration  # type: ignore[assignment]
     db.commit()
 
 
@@ -584,7 +579,7 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
         task.status = "FAILED_BY_REBOOT"  # type: ignore[assignment]
         task.finished_at = now  # type: ignore[assignment]
         if task.started_at and task.duration_seconds is None:
-            task.duration_seconds = round((now - task.started_at).total_seconds(), 2)
+            task.duration_seconds = compute_duration_seconds(task.started_at, now)
         task.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT  # type: ignore[assignment]
         task.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE  # type: ignore[assignment]
         reboot_audit_line = (
@@ -804,13 +799,22 @@ def prepare_manual_start(
     )
 
 
+def _ensure_active(db_exec: models.Execution, status_code: int) -> None:
+    """Levanta `DomainRuleError` se a execução já terminou.
+
+    O código HTTP fica com o chamador: `terminate` devolve 400 e o fim de
+    telemetria 409 (este desde 07/10/2026; antes sobrescrevia execução finalizada).
+    """
+    if db_exec.status not in EXECUTION_ACTIVE_STATUSES:
+        raise DomainRuleError(status_code, "Execução já finalizada.")
+
+
 def terminate_execution(db_exec: models.Execution) -> str:
     """Marca a execução ativa como TERMINATED (duração e linha `[STOP]` no log).
 
     Devolve o status anterior. Levanta `DomainRuleError` (400) se já terminou.
     """
-    if db_exec.status not in EXECUTION_ACTIVE_STATUSES:
-        raise DomainRuleError(400, "Execução já finalizada.")
+    _ensure_active(db_exec, 400)
 
     previous_status = str(db_exec.status)
     db_exec.status = EXECUTION_STATUS_TERMINATED  # type: ignore[assignment]
@@ -854,6 +858,17 @@ def finish_telemetry_execution(  # pylint: disable=too-many-arguments
     worker a reivindicava e rodava a automação de novo, ignorando cooldown,
     `max_retries`, `queue_group` e a checagem de execução ativa.
     """
+    if db_exec.status not in EXECUTION_ACTIVE_STATUSES:
+        # Fim tardio (reaper/operador já encerraram): o status fica, mas o log
+        # real é anexado para a revisão que a ação de recuperação pede. 409.
+        if logs is not None:
+            db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+                str(db_exec.logs or "")
+                + f"\n[TELEMETRY_END_TARDIO] status={str(status).upper()} "
+                f"exit_code={exit_code}\n" + sanitize_log_payload(logs)
+            )
+        raise DomainRuleError(409, "Execução já finalizada.")
+
     status_upper = str(status).upper()
     if status_upper not in EXECUTION_TERMINAL_STATUSES:
         permitidos = ", ".join(sorted(EXECUTION_TERMINAL_STATUSES))

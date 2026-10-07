@@ -540,6 +540,7 @@ def telemetry_end(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
+    erro: DomainRuleError | None = None
     try:
         finish_telemetry_execution(
             db_exec,
@@ -549,10 +550,15 @@ def telemetry_end(
             artifacts=payload.artifacts,
         )
     except DomainRuleError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        erro = exc
+    if erro is not None and erro.status_code != 409:
+        raise HTTPException(status_code=erro.status_code, detail=erro.detail)
 
+    # 409 (fim tardio) também persiste: o log real foi anexado à execução.
     log_audit(db, "END_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))
     db.commit()
+    if erro is not None:
+        raise HTTPException(status_code=erro.status_code, detail=erro.detail)
 
     logger.info("Telemetria finalizada: %s com status %s", exec_id, payload.status)
     return {"message": "Telemetria registrada com sucesso.", "exec_id": exec_id}

@@ -9,7 +9,6 @@ Cada instrução passa pelo ``guard_sql.py`` antes de chegar ao banco.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import hashlib
 import json
 import subprocess
@@ -25,12 +24,11 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(ROOT / "Produção Beneficimento" / "src"))
 
-from beneficiamento.oracle import SESSION_DROP_MARKERS  # noqa: E402
-from oracle_catalog import _run_with_timeout  # noqa: E402
+from oracle_catalog import _raise_if_expired, _run_with_timeout  # noqa: E402
 from oracle_extract import init_thick_mode, resolve_oracle_credentials  # noqa: E402
-from validar_sql_oracle import resolve_guard  # noqa: E402
+from oracle_session import connect_within, is_session_drop  # noqa: E402
+from validar_sql_oracle import portable_command, resolve_guard  # noqa: E402
 
 VALIDATOR_VERSION = "2.1.0"
 
@@ -61,8 +59,7 @@ def _sha256(value: bytes) -> str:
 
 
 def _retryable(exc: BaseException) -> bool:
-    message = str(exc).upper()
-    return any(marker in message for marker in SESSION_DROP_MARKERS)
+    return is_session_drop(exc)
 
 
 def _case(name: str, file: str, sql: str, timeout_ms: int = 15000) -> dict[str, Any]:
@@ -799,32 +796,35 @@ def _cases() -> list[dict[str, Any]]:
     ]
 
 
-def _execute_case(sql: str, creds: Any, holder: dict[str, Any]) -> dict[str, Any]:
+def _execute_case(
+    sql: str, creds: Any, holder: dict[str, Any], timeout_s: float
+) -> dict[str, Any]:
     """Parse + execução limitada. Grava a conexão em `holder` para o watchdog
     de `_run_with_timeout` poder cancelá-la."""
-    connection = oracledb.connect(
-        user=creds.user, password=creds.password, dsn=creds.dsn
+    connection = connect_within(
+        lambda: oracledb.connect(
+            user=creds.user, password=creds.password, dsn=creds.dsn
+        ),
+        timeout_s,
     )
+    # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
     holder["connection"] = connection
-    try:
-        cursor = connection.cursor()
-        started = time.perf_counter()
-        cursor.parse(sql)
-        holder["parse_ms"] = round((time.perf_counter() - started) * 1000, 1)
-        started = time.perf_counter()
-        cursor.execute(sql)
-        rows = cursor.fetchmany(1)
-        return {
-            "parse": "pass",
-            "parse_ms": holder["parse_ms"],
-            "status": "validated",
-            "execute_ms": round((time.perf_counter() - started) * 1000, 1),
-            "rows": len(rows),
-            "columns": len(cursor.description or []),
-        }
-    finally:
-        with contextlib.suppress(oracledb.Error):
-            connection.close()
+    _raise_if_expired(holder)
+    cursor = connection.cursor()
+    started = time.perf_counter()
+    cursor.parse(sql)
+    holder["parse_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    started = time.perf_counter()
+    cursor.execute(sql)
+    rows = cursor.fetchmany(1)
+    return {
+        "parse": "pass",
+        "parse_ms": holder["parse_ms"],
+        "status": "validated",
+        "execute_ms": round((time.perf_counter() - started) * 1000, 1),
+        "rows": len(rows),
+        "columns": len(cursor.description or []),
+    }
 
 
 def _attempt(
@@ -836,7 +836,9 @@ def _attempt(
     try:
         timeout_s = max(1, timeout_ms // 1000)
         outcome: dict[str, Any] = _run_with_timeout(
-            lambda: _execute_case(sql, creds, holder), timeout_s, holder=holder
+            lambda: _execute_case(sql, creds, holder, timeout_s),
+            timeout_s,
+            holder=holder,
         )
         return outcome, None
     except TimeoutError as exc:
@@ -848,7 +850,7 @@ def _attempt(
 
 
 def _run_one(case: dict[str, Any], creds: Any, guard: Path) -> dict[str, Any]:
-    sql = " ".join(str(case["sql"]).split())
+    sql = str(case["sql"]).strip()
     started_clock = time.perf_counter()
     sql_hash = _sha256(sql.encode("utf-8"))
     guard_code, guard_output = _guard(sql, guard)
@@ -901,7 +903,7 @@ def main() -> int:
         "validator_version": VALIDATOR_VERSION,
         "status": "complete",
         "generated_at_utc": datetime.now(UTC).isoformat(),
-        "command": [sys.executable, *sys.argv],
+        "command": portable_command(sys.argv),
         "summary": summary,
         "results": results,
     }

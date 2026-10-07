@@ -4,11 +4,13 @@ import argparse
 import importlib.util
 import json
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import oracle_session
 import pytest
 
 _TOOLS = Path(__file__).resolve().parents[2] / "Tools" / "oracle"
@@ -390,12 +392,10 @@ def test_bind_de_data_iso_vira_datetime_e_texto_comum_continua_texto() -> None:
 
 
 def test_lista_de_queda_de_sessao_e_unica_entre_runner_e_ferramentas() -> None:
-    runner = sys.modules["beneficiamento.oracle"]
-
-    assert mm.TRANSIENT_MARKERS is runner.SESSION_DROP_MARKERS
     validar_partes = _carregar("validar_partes_oracle")
     retryable = _priv(validar_partes, "_retryable")
-    for marcador in runner.SESSION_DROP_MARKERS:
+    for marcador in oracle_session.SESSION_DROP_MARKERS:
+        assert mm.is_transient(f"erro {marcador} qualquer")
         assert retryable(RuntimeError(f"erro {marcador} qualquer"))
     assert not retryable(RuntimeError("ORA-00942: tabela nao existe"))
 
@@ -416,7 +416,11 @@ def test_medir_nao_fecha_conexao_de_thread_abandonada(
     monkeypatch.setattr(
         mm, "_run_watched", lambda *_a: {"status": "timeout", "abandoned": True}
     )
-    assert attempt(creds, "select 1", {}, _opcoes(), False) == {"status": "timeout"}
+    # `abandoned` chega ao chamador: o relatório registra a sessão abandonada.
+    assert attempt(creds, "select 1", {}, _opcoes(), False) == {
+        "status": "timeout",
+        "abandoned": True,
+    }
     assert not fechadas
 
     monkeypatch.setattr(mm, "_run_watched", lambda *_a: {"status": "timeout"})
@@ -452,3 +456,47 @@ def test_validar_nao_fecha_conexao_de_thread_abandonada(
     )
     estagio("select 1 from dual", 0, None, opcoes)
     assert fechadas == [True]
+
+
+def test_validar_parse_sem_execucao_respeita_o_prazo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vs = sys.modules["validar_sql_oracle"]
+    liberar = threading.Event()
+
+    class Cursor:  # pylint: disable=too-few-public-methods
+        def parse(self, _sql: str) -> None:
+            liberar.wait(timeout=5)
+            raise RuntimeError("ORA-01013: cancelado")
+
+    class Conexao:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+        def cancel(self) -> None:
+            liberar.set()
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(vs, "_connect", lambda _c: Conexao())
+    opcoes = argparse.Namespace(execute=False, explicit_binds={}, timeout=0.1)
+    resultado = _priv(vs, "_oracle_stage")("select 1 from dual", 0, None, opcoes)
+    assert resultado["status"] == "timeout"
+
+
+def test_validar_conexao_travada_vira_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    vs = sys.modules["validar_sql_oracle"]
+    liberar = threading.Event()
+
+    def conecta_devagar(_c: Any) -> Any:
+        liberar.wait(timeout=5)
+        return argparse.Namespace(close=lambda: None)
+
+    monkeypatch.setattr(vs, "_connect", conecta_devagar)
+    opcoes = argparse.Namespace(execute=True, explicit_binds={}, timeout=0.1)
+    try:
+        resultado = _priv(vs, "_oracle_stage")("select 1 from dual", 0, None, opcoes)
+    finally:
+        liberar.set()
+    assert resultado["status"] == "timeout"

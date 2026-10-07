@@ -26,7 +26,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from oracle_session import is_session_drop  # noqa: E402
 from validar_sql_oracle import (  # noqa: E402
     CONSULTAS_ROOT,
     _bind_names,
@@ -112,6 +114,23 @@ def _load_status() -> dict[str, Any]:
     return data
 
 
+_STATUS_RANK = {"validated": 2, "parse_ok": 1}
+
+
+def _should_replace(current: dict[str, Any] | None, result: dict[str, Any]) -> bool:
+    """Evidência mais antiga, ou mais fraca para o MESMO conteúdo, não rebaixa."""
+    if current is None:
+        return True
+    new_date = str(result.get("started_at_utc", ""))[:10]
+    if new_date < str(current.get("validated_at", "")):
+        return False
+    same_sha = current.get("sha8") == str(result.get("raw_sha256", ""))[:8]
+    weaker = _STATUS_RANK.get(str(result.get("status")), 0) < _STATUS_RANK.get(
+        str(current.get("status")), 0
+    )
+    return not (same_sha and weaker)
+
+
 def _merge_evidence(status: dict[str, Any], evidence_path: Path) -> dict[str, Any]:
     """Incorpora a saída do validar_sql_oracle.py, sem caminhos absolutos nem
     dados retornados — só o necessário para o catálogo."""
@@ -120,6 +139,8 @@ def _merge_evidence(status: dict[str, Any], evidence_path: Path) -> dict[str, An
     for result in evidence.get("results", []):
         # Evidências gravadas antes da mudança do acervo usam o prefixo antigo.
         key = str(result["file"]).removeprefix(LEGACY_PREFIX).removeprefix(prefix)
+        if not _should_replace(status["files"].get(key), result):
+            continue
         status["files"][key] = {
             "status": result.get("status", "unknown"),
             "sample_rows": result.get("rows"),
@@ -127,7 +148,7 @@ def _merge_evidence(status: dict[str, Any], evidence_path: Path) -> dict[str, An
             "sha8": str(result.get("raw_sha256", ""))[:8],
             "validated_at": str(result.get("started_at_utc", ""))[:10],
             "validator_version": result.get("validator_version"),
-            "cancelled": "ORA-00028" in str(result.get("error", "")),
+            "cancelled": is_session_drop(str(result.get("error", ""))),
         }
     status["files"] = dict(sorted(status["files"].items()))
     status["validated_on"] = str(evidence.get("generated_at_utc", ""))[:10]
@@ -161,9 +182,7 @@ def _status_cell(
     label = STATUS_LABELS.get(record["status"], record["status"])
     if record.get("cancelled"):
         stage = "a execução" if record["status"].startswith("parse_ok") else "o parse"
-        label = (
-            f"⏳ inconclusiva: sessão cancelada pelo Oracle (ORA-00028) durante {stage}"
-        )
+        label = f"⏳ inconclusiva: sessão derrubada pela rede durante {stage}"
     label += NOTES.get(item["key"], "")
     rows = record.get("sample_rows")
     sample = "—" if rows is None else ("com dados" if rows else "vazia")
