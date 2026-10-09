@@ -92,7 +92,8 @@ def test_bind_so_em_comentario_nao_conta_como_bind() -> None:
 def test_marcador_de_comentario_dentro_de_literal_nao_engole_os_binds(
     trecho: str,
 ) -> None:
-    sql = f"SELECT a FROM t WHERE {trecho} AND d >= :dt_inicio AND d < :dt_fim"
+    # Fixture estático para o validador textual; nunca é executado no banco.
+    sql = f"SELECT a FROM t WHERE {trecho} AND d >= :dt_inicio AND d < :dt_fim"  # nosec B608
 
     assert not sql_repository.validate_static_sql(sql)
 
@@ -117,7 +118,8 @@ def test_bind_depois_de_comentario_de_bloco_continua_valendo() -> None:
     ids=["ambos_em_literal", "inicio_em_literal", "fim_em_literal", "q_literal"],
 )
 def test_bind_so_em_literal_nao_conta_como_bind(where: str) -> None:
-    sql = f"SELECT a FROM t WHERE {where}"
+    # Fixture estático para o validador textual; nunca é executado no banco.
+    sql = f"SELECT a FROM t WHERE {where}"  # nosec B608
 
     assert sql_repository.validate_static_sql(sql) == [BINDS_AUSENTES]
 
@@ -131,7 +133,8 @@ def test_bind_so_em_literal_nao_conta_como_bind(where: str) -> None:
     ids=["aspas_sem_fechamento", "q_literal_sem_fechamento"],
 )
 def test_literal_sem_fechamento_faz_acusar_bind_ausente(trecho: str) -> None:
-    sql = f"SELECT a FROM t WHERE {trecho}"
+    # Fixture estático para o validador textual; nunca é executado no banco.
+    sql = f"SELECT a FROM t WHERE {trecho}"  # nosec B608
 
     assert sql_repository.validate_static_sql(sql) == [BINDS_AUSENTES]
 
