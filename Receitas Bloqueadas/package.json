@@ -2,7 +2,6 @@
   "name": "receitas-bloqueadas",
   "version": "1.0.0",
   "description": "Projeto para automacao de receitas bloqueadas e envio de notificacoes via WhatsApp. As dependencias do motor WhatsApp compartilhado vivem em lib/package.json.",
-  "main": "index.js",
   "scripts": {
     "test": "node tests/whatsapp-offline.test.js"
   },

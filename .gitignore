@@ -74,7 +74,7 @@ Orchestrator/tests/e2e-evidence/
 .agents/skills/
 # As 9 skills de padrao sao expostas ao Claude Code por junction em `.claude/skills/`
 # (o Claude Code so descobre skill nesse diretorio). Junction e alias de `.github/skills`,
-# nunca conteudo proprio — recriado por Tools/New-SkillMirrors.ps1. As 6 skills
+# nunca conteudo proprio — recriado por Tools/New-SkillMirrors.ps1. As 7 skills
 # operacionais reais do mesmo diretorio seguem versionadas normalmente.
 .claude/skills/ai-native-development-standard/
 .claude/skills/automation-runtime-safety/
@@ -199,7 +199,6 @@ Produção Beneficimento/snapshots/*.db
 Produção Beneficimento/snapshots/*.db-shm
 Produção Beneficimento/snapshots/*.db-wal
 Produção Beneficimento/snapshots/latest/*.json
-!Produção Beneficimento/snapshots/latest/manifest.json
 
 # Estados runtime por automacao (nao versionar)
 Montagem de Terceirizados/delivery_state.json

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import os
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -69,19 +67,3 @@ def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
         if tmp_path.exists():
             with contextlib.suppress(OSError):
                 tmp_path.unlink()
-
-
-def file_sha256(path: Path) -> str | None:
-    if not path.exists():
-        return None
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def file_mtime(path: Path) -> datetime | None:
-    if not path.exists():
-        return None
-    return datetime.fromtimestamp(path.stat().st_mtime)

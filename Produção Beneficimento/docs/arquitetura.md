@@ -17,7 +17,7 @@ O Beneficiamento é um domínio dedicado dentro do repositório, consumido pelo 
 
 ## Otimização do Histórico
 
-O schema v2 separa o domínio em `core/`, `data/` e `contracts/`. A implementação de overview, detalhe e analytics vive em `contracts/`; `overview_v1.py` reexporta esses contratos somente para consumidores legados. O histórico SQLite mantém colunas tipadas e derivadas persistidas para acelerar os filtros mais usados pela UI:
+O schema v2 separa o domínio em `core/`, `data/` e `contracts/`. A implementação de overview e detalhe vive em `contracts/`; o shim `overview_v1.py`, que reexportava esses contratos por compatibilidade, foi removido em 09/10/2026 por não ter importadores. O histórico SQLite mantém colunas tipadas e derivadas persistidas para acelerar os filtros mais usados pela UI:
 
 - `TURNO_ID` e `TURNO_LABEL`
 - `MAQUINA_KEY`
@@ -72,9 +72,9 @@ A resposta expõe:
 
 O turno de operação deve ser extraído preferencialmente de `TURNO_DESC` e, quando necessário, reconstruído a partir de `TURNO_PROD`. O contrato público não deve depender mais de `turno`/`TURNO` legados se esses campos estiverem vazios no histórico.
 
-## Baseline Atual
+## Baseline de 31/05/2026 (histórico)
 
-Os snapshots promovidos em 31/05/2026 estavam com status `ok`:
+Os snapshots promovidos em 31/05/2026 estavam com status `ok`. Semanal e anual foram removidos depois (v9.4.0): as linhas abaixo são registro histórico, não períodos vigentes; os vigentes são diário e mensal (ver `README.md`).
 
 | Período | Linhas | Colunas | Tempo Oracle | Observação |
 | --- | ---: | ---: | ---: | --- |

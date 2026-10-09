@@ -6,7 +6,7 @@ Fornecer visibilidade operacional near-real-time da produção de Beneficiamento
 ## Arquitetura Snapshot-First
 - **Oracle isolado:** toda comunicação Oracle passa exclusivamente por `src/beneficiamento/oracle.py`. Nenhum outro módulo abre conexão.
 - **Runner:** `src/beneficiamento/runner.py` orquestra o ciclo Oracle → snapshot JSON → SQLite histórico, com orçamento rígido de 20s imposto pelo DBA.
-- **Snapshots:** `snapshots/latest/` armazena `*.analytics.json` e `manifest.json`. A API **nunca** consulta Oracle diretamente — consome apenas esses arquivos.
+- **Snapshots:** `snapshots/latest/` armazena `*.analytics.json`. A API **nunca** consulta Oracle diretamente — consome apenas esses arquivos.
 - **Histórico:** `snapshots/beneficiamento_historico.db` (SQLite) mantém o histórico de produções para consultas de períodos passados.
 - **Refresh automático:** jobs APScheduler `beneficiamento_live_diario` (~90s) e `beneficiamento_mensal_rollup` (~10min) em subprocesso isolado.
 - **Refresh on-demand:** `POST /api/beneficiamento/refresh?period=diario|mensal`.

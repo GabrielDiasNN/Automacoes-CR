@@ -45,25 +45,26 @@ class PeriodConfig:
     key: str
     label: str
     sql_template: str
-    refresh_minutes: int
     max_age_minutes: int
 
 
 _PERIOD_CONFIGS = {
-    # Cadência ao vivo: o diário é reprocessado em loop curto (~90s) pelo
-    # Orquestrador, então a idade operacional aceitável é baixa.
+    # A cadência real de refresh é definida no Orquestrador
+    # (Orchestrator/app/services/scheduler_runtime.py), pelas variáveis
+    # BENEFICIAMENTO_LIVE_INTERVAL_SECONDS (diário, 90 s) e
+    # BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS (mensal, 600 s).
+    # Cadência ao vivo: o diário é reprocessado em loop curto pelo Orquestrador,
+    # então a idade operacional aceitável é baixa.
     "diario": PeriodConfig(
         key="diario",
         label="Diario",
         sql_template="bnf_producao_beneficiamento_detalhado.sql",
-        refresh_minutes=2,
         max_age_minutes=5,
     ),
     "mensal": PeriodConfig(
         key="mensal",
         label="Mensal",
         sql_template="bnf_producao_beneficiamento_detalhado.sql",
-        refresh_minutes=10,
         max_age_minutes=30,
     ),
 }

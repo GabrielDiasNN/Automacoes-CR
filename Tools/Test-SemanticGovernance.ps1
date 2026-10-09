@@ -65,19 +65,6 @@ function Test-TextContains {
     }
 }
 
-function Test-TextNotContains {
-    param(
-        [string]$RelativePath,
-        [string]$Needle,
-        [string]$Rule
-    )
-
-    $content = Get-RepoText -RelativePath $RelativePath
-    if ($content.Contains($Needle)) {
-        Add-GovernanceIssue -File $RelativePath -Rule $Rule -Detail "Texto obsoleto encontrado: $Needle"
-    }
-}
-
 function Get-ActiveSkillCount {
     $governanceScript = Get-RepoText -RelativePath "Tools/Test-SkillsGovernance.ps1"
     if ($governanceScript -match '(?s)\$script:ActiveSkillNames\s*=\s*@\((?<list>.*?)\)') {
@@ -125,7 +112,7 @@ function Test-SkillCountDrift {
             if ($n -eq $count) {
                 continue
             }
-            # "N skills operacionais" (as de .claude/skills fora do padrao, hoje 6)
+            # "N skills operacionais" (as de .claude/skills fora do padrao, hoje 7)
             # e uma contagem legitima diferente da taxonomia de padrao — nao e drift.
             $windowStart = [Math]::Max(0, $match.Index - 40)
             $windowEnd = [Math]::Min($content.Length, $match.Index + $match.Length + 40)
