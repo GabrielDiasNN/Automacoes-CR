@@ -7,7 +7,7 @@ from typing import Any
 from .. import schemas
 from ..utils import validate_script_path
 from .portfolio_catalog import CatalogManifest
-from .portfolio_manifest import _channels_to_csv
+from .portfolio_manifest import channels_to_csv
 
 
 def _is_reserved_cleanup_script(resolved_script_path: str, project_root: str) -> bool:
@@ -111,7 +111,7 @@ def _manifest_field_mismatches(
             )
         )
 
-    if (payload.get("notification_channels") or None) != _channels_to_csv(
+    if (payload.get("notification_channels") or None) != channels_to_csv(
         manifest.channels
     ):
         blocking_issues.append(

@@ -107,8 +107,8 @@ def _fim_de_literal(sql: str, i: int) -> int | None:
     return len(sql) if fim == -1 else fim + len(fechamento)
 
 
-def _sem_comentarios(sql: str, *, sem_literais: bool = False) -> str:
-    """Remove comentários `--` e `/* */`; literais e identificadores ficam intactos.
+def _sem_comentarios(sql: str) -> str:
+    """Remove comentários `--` e `/* */` e troca cada literal ou identificador por espaço.
 
     Assim `'--'` ou `q'[/*]'` não começam comentário e não engolem os binds que
     vêm depois na mesma linha. Com `sem_literais`, cada literal ou identificador
@@ -119,7 +119,7 @@ def _sem_comentarios(sql: str, *, sem_literais: bool = False) -> str:
     while i < len(sql):
         fim = _fim_de_literal(sql, i)
         if fim is not None:
-            partes.append(" " if sem_literais else sql[i:fim])
+            partes.append(" ")
             i = fim
         elif sql.startswith("--", i):
             fim_da_linha = sql.find("\n", i)
@@ -153,7 +153,7 @@ def validate_static_sql(sql: str) -> list[str]:
         issues.append(
             "Janela hardcoded com SYSDATE encontrada; use binds :dt_inicio/:dt_fim."
         )
-    executavel = _sem_comentarios(sql, sem_literais=True).upper()
+    executavel = _sem_comentarios(sql).upper()
     if not (_BIND_INICIO.search(executavel) and _BIND_FIM.search(executavel)):
         issues.append("Template deve possuir binds :dt_inicio e :dt_fim.")
     return issues

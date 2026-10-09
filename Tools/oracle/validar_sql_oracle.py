@@ -55,8 +55,8 @@ CONSULTAS_ROOT = ROOT / "docs" / "oracle-schema" / "consultas"
 # acervo pesado. Pior caso do estágio Oracle por arquivo: MAX_ATTEMPTS x (timeout
 # + 5 s) + backoffs (5+10+15+20 = 50 s) = 5 x 125 + 50 = 675 s (~11 min). Esse
 # número não inclui o guard (`_guard`, subprocesso sem prazo, uma vez por arquivo)
-# nem os `connection.close()` das tentativas, que também não têm prazo. Não há teto
-# global da rodada: os arquivos rodam em sequência, cada um com seu próprio estágio.
+# nem os `connection.close()` das tentativas, que também não têm prazo. O teto da
+# rodada inteira é --max-total-seconds (DEFAULT_MAX_TOTAL_SECONDS), checado entre arquivos.
 DEFAULT_TIMEOUT = 120
 VALIDATOR_VERSION = "2.2.0"
 # Status que contam como aprovação. Qualquer outro (timeout, guard, erro de
@@ -69,6 +69,9 @@ MAX_ATTEMPTS = 5
 # Espera antes da nova tentativa, multiplicada pelo número da tentativa. Queda de
 # rede costuma ser um pico curto: repetir na hora tende a cair de novo.
 RETRY_BACKOFF_SECONDS = 5
+# Teto da rodada inteira: estourado, os arquivos restantes não rodam e a rodada reprova.
+# 0 desliga o teto.
+DEFAULT_MAX_TOTAL_SECONDS = 3600
 
 
 def portable_command(argv: list[str]) -> list[str]:
@@ -512,6 +515,12 @@ def main() -> int:
         default=MAX_ATTEMPTS,
         help="Tentativas em queda de sessão pela rede (com espera crescente)",
     )
+    parser.add_argument(
+        "--max-total-seconds",
+        type=int,
+        default=DEFAULT_MAX_TOTAL_SECONDS,
+        help="Teto da rodada; os arquivos restantes ficam sem validar (0 = sem teto)",
+    )
     parser.add_argument("--parse-only", action="store_true")
     parser.add_argument(
         "--bind",
@@ -550,7 +559,16 @@ def main() -> int:
         paths = [path]
     else:
         paths = _files(args.root, args.part, args.parts)
-    results = [_validate_one(path, creds, options) for path in paths]
+    deadline = (
+        time.monotonic() + args.max_total_seconds if args.max_total_seconds > 0 else None
+    )
+    results: list[dict[str, Any]] = []
+    skipped: list[str] = []
+    for path in paths:
+        if deadline is not None and time.monotonic() >= deadline:
+            skipped.append(str(path.relative_to(ROOT)).replace("\\", "/"))
+            continue
+        results.append(_validate_one(path, creds, options))
     summary: dict[str, int] = {}
     for item in results:
         status = str(item.get("status", "unknown"))
@@ -569,6 +587,8 @@ def main() -> int:
         "timeout_seconds": args.timeout,
         "max_attempts": options.attempts,
         "retry_backoff_seconds": RETRY_BACKOFF_SECONDS,
+        "max_total_seconds": args.max_total_seconds,
+        "skipped_by_budget": skipped,
         "parse_only": args.parse_only,
         "bind_names": sorted(explicit_binds),
         "generated_at_utc": datetime.now(UTC).isoformat(),
@@ -580,8 +600,13 @@ def main() -> int:
     args.out.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    print(json.dumps({"status": "complete", "summary": summary}, ensure_ascii=False))
-    return 0 if results and set(summary) <= PASSING_STATUSES else 1
+    print(
+        json.dumps(
+            {"status": "complete", "summary": summary, "skipped_by_budget": len(skipped)},
+            ensure_ascii=False,
+        )
+    )
+    return 0 if results and not skipped and set(summary) <= PASSING_STATUSES else 1
 
 
 if __name__ == "__main__":

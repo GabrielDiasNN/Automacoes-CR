@@ -352,7 +352,7 @@ def test_merge_evidence_persiste_tentativas_e_queda_inconclusiva(
     assert queda["network_inconclusive"] is True
     assert queda["cancelled"] is True
     ok = resultado["files"]["01_teste/ok.sql"]
-    assert ok["attempts"] == 1
+    assert "attempts" not in ok
     assert "network_inconclusive" not in ok
 
 

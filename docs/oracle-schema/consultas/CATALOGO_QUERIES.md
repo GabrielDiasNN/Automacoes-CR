@@ -14,10 +14,11 @@
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 210 |
+| ✅ validada | 209 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
 | ⏳ inconclusiva: sessão derrubada pela rede durante a execução | 2 |
+| ⬜ alterada após validação de 09/10/2026 | 1 |
 
 Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros padrão (sentinelas de anomalia ou filtros sem dados no momento — não é erro).
 
@@ -98,7 +99,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `mal_calendario_producao_diaria.sql` | Calendário diário da malharia interna - máquinas com produção, kg | Monitoramento operacional | — | ⏳ inconclusiva: sessão derrubada pela rede durante a execução | — | — |
 | `mal_conferencia_ob_montada_teares_e_lotes_alocados.sql` | Conferência - OB montada (teares e lotes alocados) | Malharia e Teares | — | ✅ validada | com dados | 5 ms |
 | `mal_consulta_finura_dos_teares.sql` | Consulta Finura dos Teares | Malharia e Teares | — | ✅ validada | com dados | 2 ms |
-| `mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql` | Consulta - Peças com restrição geradas na Malharia | Malharia e Teares | — | ✅ validada | com dados | 2186 ms |
+| `mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql` | Consulta - Peças com restrição geradas na Malharia | Malharia e Teares | — | ⬜ alterada após validação de 09/10/2026 | — | — |
 | `mal_disponibilidade_por_maquina.sql` | Proxy de tempo parado por tear interno do setor 4 = 1 - paradas / horas de | Painel/KPI | — | ✅ validada | com dados | 60 ms |
 | `mal_eficiencia_global_engenharia.sql` | Produção e Eficiência da Malharia (Engenharia) | Malharia e Teares | — | ✅ validada | com dados | 10 ms |
 | `mal_eficiencia_ordens_em_aberto.sql` | Produção e Eficiência da Malharia (Engenharia) ordens em aberto | Malharia e Teares | — | ✅ validada | com dados | 7 ms |

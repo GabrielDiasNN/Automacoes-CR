@@ -152,7 +152,7 @@ def _merge_evidence(status: dict[str, Any], evidence_path: Path) -> dict[str, An
         }
         # Tentativas e queda esgotada só existem no resultado bruto. Entram no registro
         # só quando presentes: o catálogo não os exibe, então o Markdown não muda.
-        if "attempts" in result:
+        if int(result.get("attempts") or 1) > 1:
             record["attempts"] = result["attempts"]
         if result.get("network_inconclusive") is True:
             record["network_inconclusive"] = True

@@ -21,7 +21,14 @@ TOOLS_ORACLE = Path(__file__).resolve().parents[2] / "Tools" / "oracle"
 
 
 def carregar_tool_oracle(nome: str) -> ModuleType:
-    """Carrega Tools/oracle/<nome>.py e o registra em sys.modules sob o nome curto."""
+    """Carrega Tools/oracle/<nome>.py e o registra em sys.modules sob o nome curto.
+
+    Reaproveita a instância já registrada (inclusive por import de outra ferramenta):
+    reexecutar criaria uma segunda cópia, e um monkeypatch numa não alcançaria a outra.
+    """
+    cached = sys.modules.get(nome)
+    if cached is not None:
+        return cached
     spec = importlib.util.spec_from_file_location(nome, TOOLS_ORACLE / f"{nome}.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
