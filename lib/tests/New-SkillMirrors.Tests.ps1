@@ -11,17 +11,11 @@ BeforeAll {
     function Get-LongPath {
         param([string]$Path)
 
-        # $TestDrive cai sob %TEMP%, que responde em formato 8.3 nesta maquina
-        # (C:\Users\GABRIE~1.DIA\...). O alvo de uma junction sempre volta expandido,
-        # entao sem normalizar aqui a comparacao mirror-vs-fonte daria falso negativo.
-        try {
-            $fso = New-Object -ComObject Scripting.FileSystemObject
-            return $fso.GetFolder($Path).Path
-        } catch [System.Exception] {
-            # Sem COM disponivel (ou caminho inexistente) o formato curto nao e um
-            # problema: o teste segue com o caminho como veio.
-            return $Path
-        }
+        # $TestDrive pode vir em formato 8.3 (C:\Users\GABRIE~1.DIA\...) quando deriva de %TEMP%.
+        # O alvo de uma junction sempre volta expandido, entao a comparacao mirror-vs-fonte exige
+        # o caminho longo. Get-Item(...).FullName expande (Resolve-Path nao). Sem fallback
+        # silencioso: se o caminho nao existir, o erro sobe e o teste reprova, nao pula.
+        return (Get-Item -LiteralPath $Path).FullName
     }
 
     function New-MirrorFixture {
@@ -33,7 +27,7 @@ BeforeAll {
         Copy-Item -Recurse -Force (Join-Path $script:RepoRoot ".github\skills") (Join-Path $basePath ".github\skills")
 
         # `.claude/skills` no repo real carrega os 7 junctions das skills de padrao
-        # (gitignored). Um clone limpo NAO os tem — so' as 6 skills operacionais
+        # (gitignored). Um clone limpo NAO os tem — so' as 7 skills operacionais
         # reais. A fixture replica o clone limpo: reparse point da fonte fica de fora.
         $claudeSkillsDst = Join-Path $basePath ".claude\skills"
         New-Item -ItemType Directory -Force -Path $claudeSkillsDst | Out-Null
@@ -131,7 +125,7 @@ Describe "New-SkillMirrors" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -no
             Get-MirrorTarget -Path $link | Should -Be (Join-Path $fixture ".github\skills\$skill")
         }
 
-        # As 6 skills operacionais reais convivem intactas no mesmo diretorio.
+        # As 7 skills operacionais reais convivem intactas no mesmo diretorio.
         foreach ($op in @("ci-gates", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
             (Get-Item -LiteralPath (Join-Path $fixture ".claude\skills\$op") -Force).LinkType | Should -BeNullOrEmpty
         }
@@ -197,10 +191,6 @@ Describe "New-SkillMirrors" -Skip:($PSVersionTable.PSEdition -eq 'Core' -and -no
 
     It "deixa a governanca de skills verde apos rodar num clone limpo" {
         $fixture = New-MirrorFixture -Name "governanca-verde"
-        if ($fixture -match '~') {
-            Set-ItResult -Skipped -Because "TestDrive resolveu para caminho 8.3 e o alvo da junction nao seria comparavel"
-            return
-        }
 
         Invoke-NewSkillMirrors -BasePath $fixture | Out-Null
         foreach ($skill in @(Get-ChildItem -LiteralPath (Join-Path $fixture ".github\skills") -Directory)) {
