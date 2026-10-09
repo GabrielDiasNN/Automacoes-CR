@@ -6,6 +6,11 @@ TIPO: Malharia e Teares
 PARÂMETROS / BINDS: Nenhum (filtros diretos na query)
 TABELAS PRINCIPAIS: SGTPRD.ENGEITEMESTOARTCRU, SGTPRD.ENG_PRODG_ACABADO, SGTPRD.ENG_PRODG_CRU, SGTPRD.FICHA_MALHA, SGTPRD.FICHA_RETILINEA, SGTPRD.FIOS_FICHA_MALHARIA_, SGTPRD.GERAPECACOMPLPECA, SGTPRD.GERAPECASPRODUTO, SGTPRD.ITENSPEDIDOGRADE, SGTPRD.ITENSPEDIDOQTDES, SGTPRD.ITENS_COMPLEMENTO_FI, SGTPRD.ITENS_ESTOQUE, SGTPRD.MAQUINA, SGTPRD.OB, SGTPRD.OB_PRODUTO, SGTPRD.OFORDENS, SGTPRD.OFPEDIDO, SGTPRD.ORDEM_PRODUCAO_MALHA, SGTPRD.PEDIDOCOMERCIAL, SGTPRD.PEDPRODUCAO, SGTPRD.PEDPRODUCAOOB, SGTPRD.PESO_PADRAO_PECA
 CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. 100% nativa sem views.
+GRÃO: no escopo (STATUS <> 0, sem montada) cada OB tem no máximo 1 linha de PDC_SUB e 1 de OB_PRODUTO,
+verificado em 08/10/2026 no Oracle SGTPRD (somente leitura). Soma original = soma deduplicada (razão 1,000000).
+Unicidade empírica, não estrutural: revalidar se PDC_SUB ganhar novas fontes de pedido.
+NEGÓCIO (08/10/2026): 58 OBs (39.076,00 kg) saem da demanda por inteiro porque a única linha de PDC
+falha o filtro de TIPOPEDIDO (2 ou 3) ou de cliente terminado em T, S ou R. Confirmar com a área se é intencional.
 ============================================================================= */
 
 WITH

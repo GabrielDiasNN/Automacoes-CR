@@ -10,6 +10,17 @@ REVISÃO (20/09/2026 - Onda 3): cadeia de ficha/produção e relação externa
   migradas para LEFT/INNER JOIN ANSI; cardinalidade deve ser confirmada no Oracle.
 ============================================================================= */
 
+-- GARANTIA DE CHAVE (verificado em 08/10/2026 por leitura, sem alterar a lógica):
+--   PRO é único por (CODIGO_REDUZIDO, GRUPO): FICHA_MALHA tem PK (CODPROREDUZIDO, GRUPO) e
+--   FICHA_RETILINEA tem PK (CODIGO_PRODUTO, GRUPO_MAQUINA); ITENS_COMPLEMENTO_FI, ITENS_COMPLEMENTO,
+--   ENG_AGRUPAITENSESTOQ e ENG_PRODG_CRU têm chave única nos joins. Medido: 317 linhas e 317 chaves em PRO,
+--   nenhuma chave repetida e nenhuma sobreposição entre malha e retilínea. Na junção com OPM, 90 linhas
+--   = 90 ordens distintas, portanto sem fan-out. Não acrescentar joins sobre PRO sem reverificar essa unicidade.
+-- ATENÇÃO: o fator 68 (KG_HORA_EFIC, ramificações de malha e retilínea) é fixo e não vem de PERCPRODUCAOPREVISTO
+--   nem de EFICIENCIA_ESTIMADA. REGRAS_NEGOCIO.md (seção 5.3) define a meta pelo percentual do produto. Não há
+--   regra explícita de 68% no documento. Medido em 08/10/2026: KG_DIA_EFIC68 = 50.040 kg/dia; com o percentual
+--   do produto seria 47.309 kg/dia (cerca de 5,5% menor). Decisão de negócio da engenharia pendente.
+
 -- PRODUÇÃO COM ORDEM EM ABERTO NA MALHARIA ATUALMENTE (68% DE EFICIÊNCIA)
 WITH OPM_REL AS (
     SELECT M.NUMERO_MAQUINA,

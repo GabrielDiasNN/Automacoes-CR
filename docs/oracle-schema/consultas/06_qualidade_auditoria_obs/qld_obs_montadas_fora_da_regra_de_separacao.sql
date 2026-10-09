@@ -4,23 +4,45 @@ DOMÍNIO: 06_qualidade_auditoria_obs
 ARQUIVO ORIGINAL: Comandos SQL - CR\OBs montadas fora da regra de separação.sql
 TIPO: Auditoria e Qualidade de OBs
 PARÂMETROS / BINDS: Nenhum (filtros diretos na query)
-TABELAS PRINCIPAIS: SGTPRD.ENGEITEMESTOARTCRU, SGTPRD.ENGEITEMESTOCOR, SGTPRD.FASES_FLUXO, SGTPRD.GERAPECACOMPLPECA, SGTPRD.GERAPECACRU, SGTPRD.GERAPECAORIGEMOB, SGTPRD.GERAPECASPRODUTO, SGTPRD.GRUPO_MAQUINAS, SGTPRD.LOTES_FIO_PRODUTO, SGTPRD.MAQUINA, SGTPRD.OB, SGTPRD.OBSERVACAO, SGTPRD.OB_FASES, SGTPRD.OPERADOR, SGTPRD.OPTSTRAGGR, SGTPRD.PKGUTIL0001
+TABELAS PRINCIPAIS: SGTPRD.ENGEITEMESTOARTCRU, SGTPRD.ENGEITEMESTOCOR, SGTPRD.FASES_FLUXO, SGTPRD.GERAPECACOMPLPECA, SGTPRD.GERAPECACRU, SGTPRD.GERAPECAORIGEMOB, SGTPRD.GERAPECASPRODUTO, SGTPRD.GRUPO_MAQUINAS, SGTPRD.LOTES_FIO_PRODUTO, SGTPRD.MAQUINA, SGTPRD.OB, SGTPRD.OBSERVACAO, SGTPRD.OB_FASES, SGTPRD.OPERADOR
 CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitura salvo se DML restrito.
 OTIMIZAÇÃO (20/09/2026): View VW_BNF_FASEATUALOB substituída pela resolução física nativa em OB_FASES + FASES_FLUXO.
 REVISÃO (20/09/2026 - Onda 4): OPTSTRAGGR substituído por LISTAGG nativo.
   FNC_DATATEMPO substituído por expressão inline (LPAD + TO_DATE + TO_CHAR) — mesma técnica
   usada em est_conferencia_ob_montada_deposito_90_direto_para_o_100.sql.
   guard_sql.py: exit 0.
+REVISÃO (08/10/2026): a subconsulta GRP juntava GRUPO_MAQUINAS só por GRUPO. A chave é (SETOR, GRUPO),
+  e os grupos 0G020 e 0G021 existem nos setores 4 e 7. Com a junção antiga, cada máquina desses grupos
+  recebia também a linha do setor 7 (agulhas 0), o que inflava COUNT(DISTINCT agulhas) e podia marcar
+  REGRA_AGULHAS = 1 sem motivo. Join corrigido com GRM.SETOR = MQ.SETOR (GRP 95 -> 87 linhas).
+  Efeito medido em 09/10/2026 no Oracle: a saída final tem 35 linhas e 35 OBs com o join corrigido e com o
+  join antigo (só GRUPO), registros idênticos; nenhuma OB entra nem sai. Em 08/10/2026 a mesma saída tinha 40
+  linhas (REGRAS_NEGOCIO.md, seção 5.1; a diferença não foi investigada). Sem o filtro externo (65 linhas
+  nas duas versões), só REGRA_AGULHAS muda, em 3 linhas do artigo 00149 (OBs 189157, 190111 e 190112), de 1
+  para 0; as 3 continuam fora da saída, pois 00149 só usa REGRA_FABRICANTE_MODELO. Nenhuma linha do artigo
+  00044 muda REGRA_AGULHAS.
+  TP_ORDEM: DECODE alinhado a mal_obs_lotes_teares_misturados.sql (cadastro SGTPRD.DESTINO). Os rótulos
+  1, 2 e 4 não mudam; 0 e NULO viram 'Sem destino cadastrado'; 3 e 10 são mapeados; o resto vira
+  'Não mapeado'. Medido em 09/10/2026: a saída tem 'Produção' (34) e 'Reclassificação' (1), então nenhuma
+  linha troca de rótulo.
+  REVISÃO (09/10/2026): OB sem nenhuma linha em OB_FASES não entra em TP_ORDEM_CTE e saía com
+  TP_ORDEM NULL no LEFT JOIN, sem o rótulo 'Sem destino cadastrado' (0 e NULO de DESTINO_RECEITA).
+  O SELECT final usa NVL(TP.TP_ORDEM, 'Sem destino cadastrado'), como mal_obs_lotes_teares_misturados.sql.
+  Medido em 09/10/2026 (06:38): saída de 38 OBs (Produção 37, Reclassificação 1) idêntica em bytes
+  antes e depois da troca. Efeito só se a OB não tiver OB_FASES, caso não observado na saída.
 ============================================================================= */
 
 WITH TP_ORDEM_CTE AS (
     SELECT
         OBFXX.NUMERO_OB,
-        DECODE(MAX(OBFXX.DESTINO_RECEITA),
+        DECODE(NVL(MAX(OBFXX.DESTINO_RECEITA), 0),
+               0, 'Sem destino cadastrado',
                1, 'Produção',
                2, 'Reprocesso',
+               3, 'Limpeza de máquina',
                4, 'Reclassificação',
-               0) AS TP_ORDEM
+               10, 'Consumo',
+               'Não mapeado') AS TP_ORDEM
     FROM SGTPRD.OB_FASES OBFXX
     GROUP BY OBFXX.NUMERO_OB
 ),
@@ -111,7 +133,7 @@ ANALISE_CTE AS (
                 GRM.NUMERO_AGULHAS_DISCO,
                 TRIM(MQ.FABRICANTE) || ' - ' || TRIM(MQ.MODELO) FABRICANTE_MODELO
             FROM SGTPRD.MAQUINA MQ
-            JOIN SGTPRD.GRUPO_MAQUINAS GRM ON MQ.GRUPO = GRM.GRUPO
+            JOIN SGTPRD.GRUPO_MAQUINAS GRM ON MQ.GRUPO = GRM.GRUPO AND GRM.SETOR = MQ.SETOR
             WHERE MQ.TIPO_MAQUINA = 145
               AND MQ.CODIGO_UNIDADE_FABRI = '00005'
             GROUP BY MQ.NUMERO_MAQUINA, GRM.NUMERO_AGULHAS_CILIN, GRM.NUMERO_AGULHAS_DISCO,
@@ -152,7 +174,7 @@ ANALISE_CTE AS (
 )
 SELECT
     A.NUMERO_OB,
-    TP.TP_ORDEM,
+    NVL(TP.TP_ORDEM, 'Sem destino cadastrado') AS TP_ORDEM,
     A.ARTIGO,
     COR.COR,
     --A.REGRA_FINALIDADE,

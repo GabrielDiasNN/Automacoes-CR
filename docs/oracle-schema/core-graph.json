@@ -12,9 +12,9 @@
     "total_indexes": 10873
   },
   "stats": {
-    "sql_files_with_refs": 219,
-    "core_objects": 210,
-    "fk_edges_among_core_objects": 266,
+    "sql_files_with_refs": 232,
+    "core_objects": 211,
+    "fk_edges_among_core_objects": 268,
     "unknown_references": 7
   },
   "referenced_by_file": {
@@ -758,6 +758,24 @@
       "GRUPO_PRODUTO",
       "ITENS_ESTOQUE"
     ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_agulhas_por_tonelada.sql": [
+      "GERAPECAORDEMMALHA",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "ORDEM_PRODUCAO_MALHA",
+      "QUEBRA_AGULHA_MALHAR",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_calendario_producao_diaria.sql": [
+      "GERAPECAORDEMMALHA",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "ORDEM_PRODUCAO_MALHA",
+      "TB_ESP_PROD_TEOR_MAL",
+      "UNIDADE_FABRIL"
+    ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_conferencia_ob_montada_teares_e_lotes_alocados.sql": [
       "ENGEITEMESTOARTCRU",
       "GERAPECACOMPLPECA",
@@ -779,12 +797,19 @@
     "docs/oracle-schema/consultas/03_malharia_teares/mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql": [
       "GERAPECACOMPLPECA",
       "GERAPECACRU",
+      "GERAPECAORDEMMALHA",
       "GERAPECAORIGEMOB",
       "GERAPECASPRODUTO",
       "ITENS_ESTOQUE",
       "TIPO_FINALIDADE_FIO",
       "XX2_ENUMERATES",
       "XX2_ENUMITEM"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_disponibilidade_por_maquina.sql": [
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "PARADAS_MAQUINA",
+      "UNIDADE_FABRIL"
     ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_eficiencia_global_engenharia.sql": [
       "ENGEITEMESTOARTCRU",
@@ -817,6 +842,19 @@
       "FIOS_FICHA_MALHARIA_",
       "ITENS_COMPLEMENTO",
       "ITENS_COMPLEMENTO_FI"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_eficiencia_teorico_vs_realizado.sql": [
+      "FICHA_MALHA",
+      "FIOS_FICHA_MALHARIA_",
+      "GERAPECAORDEMMALHA",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "ITENS_COMPLEMENTO_FI",
+      "ITENS_ESTOQUE",
+      "MAQUINA",
+      "ORDEM_PRODUCAO_MALHA",
+      "PARADAS_MAQUINA",
+      "UNIDADE_FABRIL"
     ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_estoque_por_agulhas_tear.sql": [
       "GERAPECACOMPLPECA",
@@ -893,6 +931,7 @@
       "PESO_PADRAO_PECA"
     ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_obs_lotes_teares_misturados.sql": [
+      "DESTINO",
       "ENGEITEMESTOARTCRU",
       "ENGEITEMESTOCOR",
       "FASES_FLUXO",
@@ -907,10 +946,88 @@
       "OB_FASES",
       "OPERADOR"
     ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_oee_aproximado_grupo.sql": [
+      "FICHA_MALHA",
+      "FIOS_FICHA_MALHARIA_",
+      "GERAPECAORDEMMALHA",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "ITENS_COMPLEMENTO_FI",
+      "MAQUINA",
+      "ORDEM_PRODUCAO_MALHA",
+      "PARADAS_MAQUINA",
+      "UNIDADE_FABRIL"
+    ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_ordens_de_malharia_em_aberto.sql": [
       "ORDEM_PRODUCAO_MALHA",
       "XX2_ENUMERATES",
       "XX2_ENUMITEM"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_paradas_categoria_mes.sql": [
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "MOTIVOS_PARADAS",
+      "PARADAS_MAQUINA",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_paradas_longas_eventos.sql": [
+      "GERAPECAORDEMMALHA",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "MOTIVOS_PARADAS",
+      "ORDEM_PRODUCAO_MALHA",
+      "PARADAS_MAQUINA",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_pareto_paradas_internas.sql": [
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "MOTIVOS_PARADAS",
+      "PARADAS_MAQUINA",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_producao_malha_por_maquina_mes.sql": [
+      "GERAPECAORDEMMALHA",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "MOTIVOS_PARADAS",
+      "ORDEM_PRODUCAO_MALHA",
+      "PARADAS_MAQUINA",
+      "TB_ESP_PROD_TEOR_MAL",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_proporcao_corretiva_maquina.sql": [
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "PARADAS_MAQUINA",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_qualidade_registro_paradas.sql": [
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "PARADAS_MAQUINA",
+      "QUEBRA_AGULHA_MALHAR",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_quebra_agulha_mes.sql": [
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "QUEBRA_AGULHA_MALHAR",
+      "UNIDADE_FABRIL"
+    ],
+    "docs/oracle-schema/consultas/03_malharia_teares/mal_scorecard_maquina_12m.sql": [
+      "GERAPECAORDEMMALHA",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "MAQUINA",
+      "MOTIVOS_PARADAS",
+      "ORDEM_PRODUCAO_MALHA",
+      "PARADAS_MAQUINA",
+      "QUEBRA_AGULHA_MALHAR",
+      "TB_ESP_PROD_TEOR_MAL",
+      "UNIDADE_FABRIL"
     ],
     "docs/oracle-schema/consultas/04_fiacao_fios/fia_consulta_lotes_de_fios_e_cor_dos_cones.sql": [
       "BD_PRD_MOVPROD",
@@ -1437,6 +1554,7 @@
       "GERAPECASPRODUTO"
     ],
     "docs/oracle-schema/consultas/06_qualidade_auditoria_obs/qld_obs_montadas_fora_da_regra_de_separacao.sql": [
+      "DESTINO",
       "ENGEITEMESTOARTCRU",
       "ENGEITEMESTOCOR",
       "FASES_FLUXO",
@@ -1450,9 +1568,7 @@
       "OB",
       "OBSERVACAO",
       "OB_FASES",
-      "OPERADOR",
-      "OPTSTRAGGR",
-      "PKGUTIL0001"
+      "OPERADOR"
     ],
     "docs/oracle-schema/consultas/07_expedicao_pedidos_comercial/com_acondicionamento_grade_quantidades.sql": [
       "GERAPECACOMPLPECA",
@@ -8225,6 +8341,22 @@
       ]
     },
     {
+      "id": "QUEBRA_AGULHA_MALHAR",
+      "type": "TABLE",
+      "num_rows": 102619,
+      "columns": [
+        "DATA_QUEBRA:NUMBER",
+        "CODIGO_REDUZIDO:NUMBER",
+        "NUMERO_MAQUINA:VARCHAR2",
+        "TURNO:NUMBER",
+        "OPERADOR:VARCHAR2",
+        "REDUZIDO_FIO:NUMBER",
+        "COD_QUEBRA:VARCHAR2",
+        "COD_AGULHA:VARCHAR2",
+        "QUANTIDADE_AGULHAS:NUMBER"
+      ]
+    },
+    {
       "id": "RELACAO_BANHO_EP",
       "type": "TABLE",
       "num_rows": 931,
@@ -12032,6 +12164,22 @@
       "fk_name": "FKPRODUROMANEIO_UNIDADEMEDIDA",
       "columns": [
         "IDUMFATURAMENTO"
+      ]
+    },
+    {
+      "from": "QUEBRA_AGULHA_MALHAR",
+      "to": "ITENS_ESTOQUE",
+      "fk_name": "FK_QUEBRA_AGULHA_ITENS",
+      "columns": [
+        "CODIGO_REDUZIDO"
+      ]
+    },
+    {
+      "from": "QUEBRA_AGULHA_MALHAR",
+      "to": "MAQUINA",
+      "fk_name": "FK_QUEBRA_AGULHA_MAQUINA",
+      "columns": [
+        "NUMERO_MAQUINA"
       ]
     },
     {
