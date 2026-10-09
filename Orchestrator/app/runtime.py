@@ -56,10 +56,6 @@ def get_dashboard_path() -> str:
     return fallback
 
 
-def get_lib_path() -> str:
-    return os.path.join(PROJECT_ROOT, "lib")
-
-
 def ensure_beneficiamento_on_path() -> bool:
     """Registra `Produção Beneficimento/src` no `sys.path` do runtime FastAPI.
 

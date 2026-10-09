@@ -477,17 +477,3 @@ def get_latest_execution_snapshot_by_automation(
         for row in rows
         if row.automation_id is not None
     }
-
-
-def get_last_execution_status_by_automation(db: Session) -> dict[int, str]:
-    """
-    Retorna o status da última execução de cada automação.
-    Evita queries N+1 (A1) ao buscar tudo de uma vez.
-    """
-    return {
-        automation_id: str(snapshot["status"])
-        for automation_id, snapshot in get_latest_execution_snapshot_by_automation(
-            db
-        ).items()
-        if snapshot.get("status") is not None
-    }

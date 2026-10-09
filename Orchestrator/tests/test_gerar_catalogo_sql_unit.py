@@ -1,30 +1,14 @@
 """Testes unitários de Tools/oracle/gerar_catalogo_sql.py (sem tocar o Oracle)."""
 
-import importlib.util
 import json
 import sys
 from pathlib import Path
-from types import ModuleType
-from typing import Any
 
 import pytest
-
-_TOOLS = Path(__file__).resolve().parents[2] / "Tools" / "oracle"
-
-
-def _carregar(nome: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(nome, _TOOLS / f"{nome}.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[nome] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def _priv(modulo: ModuleType, nome: str) -> Any:
-    """Acessa membro privado do módulo sob teste sem `protected-access`."""
-    return getattr(modulo, nome)
-
+from tests.carregadores_modulos import (
+    acessar_privado as _priv,
+    carregar_tool_oracle as _carregar,
+)
 
 gc = _carregar("gerar_catalogo_sql")
 
@@ -331,6 +315,67 @@ def test_merge_evidence_aceita_prefixo_legado_do_acervo(
     resultado = _merge_evidence({"schema": "x", "files": {}}, evidence_file)
 
     assert list(resultado["files"]) == ["02_pasta/arquivo.sql"]
+
+
+def test_merge_evidence_persiste_tentativas_e_queda_inconclusiva(
+    mini_ambiente: dict[str, Path],
+) -> None:
+    """attempts e network_inconclusive (só no bruto) entram no registro mesclado."""
+    evidence_file = mini_ambiente["sql_root"] / "evidence.json"
+    evidence = {
+        "results": [
+            {
+                "file": "Produção Beneficimento/sql/01_teste/queda.sql",
+                "status": "oracle_error",
+                "raw_sha256": "abcdef0123456789",
+                "started_at_utc": "2026-10-08T10:00:00",
+                "error": "DatabaseError: ORA-00028: sessao eliminada",
+                "attempts": 5,
+                "network_inconclusive": True,
+            },
+            {
+                "file": "Produção Beneficimento/sql/01_teste/ok.sql",
+                "status": "validated",
+                "raw_sha256": "1234567890abcdef",
+                "started_at_utc": "2026-10-08T10:00:00",
+                "attempts": 1,
+            },
+        ],
+        "generated_at_utc": "2026-10-08T10:00:00",
+    }
+    evidence_file.write_text(json.dumps(evidence), encoding="utf-8")
+
+    resultado = _merge_evidence({"schema": "x", "files": {}}, evidence_file)
+
+    queda = resultado["files"]["01_teste/queda.sql"]
+    assert queda["attempts"] == 5
+    assert queda["network_inconclusive"] is True
+    assert queda["cancelled"] is True
+    ok = resultado["files"]["01_teste/ok.sql"]
+    assert ok["attempts"] == 1
+    assert "network_inconclusive" not in ok
+
+
+@pytest.mark.usefixtures("mini_ambiente")
+def test_status_cell_nao_muda_com_tentativas_gravadas() -> None:
+    """attempts e network_inconclusive não alteram o status exibido no catálogo."""
+    item = {
+        "folder": "01_teste",
+        "file": "query.sql",
+        "key": "01_teste/query.sql",
+        "sha8": "abcd1234",
+    }
+    base = {
+        "status": "oracle_error",
+        "sha8": "abcd1234",
+        "validated_at": "2026-10-08",
+        "sample_rows": None,
+        "execute_ms": None,
+        "cancelled": True,
+    }
+    com_tentativas = {**base, "attempts": 5, "network_inconclusive": True}
+
+    assert _status_cell(item, com_tentativas) == _status_cell(item, base)
 
 
 @pytest.mark.usefixtures("mini_ambiente")

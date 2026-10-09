@@ -24,6 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response as StarletteResponse
 
+# Força o carregamento dos modelos (registro em Base.metadata).
 from . import models  # noqa: F401 pylint: disable=unused-import
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
 from .database import (

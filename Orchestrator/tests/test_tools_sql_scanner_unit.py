@@ -1,31 +1,15 @@
 """Testes unitarios do scanner SQL compartilhado por oracle_catalog e validar_sql_oracle."""
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
-from typing import Any
 
 import pytest
-
-_TOOLS = Path(__file__).resolve().parents[2] / "Tools" / "oracle"
-
-
-def _carregar(nome: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(nome, _TOOLS / f"{nome}.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[nome] = module
-    spec.loader.exec_module(module)
-    return module
-
+from tests.carregadores_modulos import (
+    acessar_privado as _priv,
+    carregar_tool_oracle as _carregar,
+)
 
 oc = _carregar("oracle_catalog")
 vs = _carregar("validar_sql_oracle")
-
-
-def _priv(modulo: ModuleType, nome: str) -> Any:
-    return getattr(modulo, nome)
 
 
 _bind_names = _priv(vs, "_bind_names")

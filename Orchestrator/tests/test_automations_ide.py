@@ -4,6 +4,7 @@ Testes focados nas operações de Web IDE de Automações (Scripts e Configs).
 
 import json
 from pathlib import Path
+from typing import Any
 
 import app.routers.automation_config as config_router
 import app.routers.automation_ide as ide_router
@@ -105,3 +106,46 @@ def test_update_automation_script_rejects_path_escape(
     )
 
     assert res.status_code in (400, 404)
+
+
+def test_list_scripts_logs_and_skips_unreadable_file(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    bot_dir = tmp_path / "Bot"
+    bot_dir.mkdir()
+    (bot_dir / "run.ps1").write_text("Write-Host 'ok'", encoding="utf-8")
+    (bot_dir / "trancado.py").write_text("print('x')", encoding="utf-8")
+
+    abrir_original = open
+
+    def abrir_com_falha(file: Any, *args: Any, **kwargs: Any) -> Any:
+        if Path(str(file)).name == "trancado.py":
+            raise OSError(f"Permission denied: {file}")
+        return abrir_original(file, *args, **kwargs)
+
+    _patch_project_root(monkeypatch, str(tmp_path))
+    # `open` é resolvido como global do módulo antes do builtin: o patch atinge só o router.
+    monkeypatch.setattr(ide_router, "open", abrir_com_falha, raising=False)
+    client.post(
+        "/api/automations",
+        json={"name": "Scripts Ilegivel", "script_path": "./Bot/run.ps1"},
+        headers=AUTH_HEADERS,
+    )
+
+    with caplog.at_level("WARNING", logger="orchestrator"):
+        res = client.get("/api/automations/1/scripts", headers=AUTH_HEADERS)
+
+    assert res.status_code == 200
+    assert [item["filename"] for item in res.json()] == ["run.ps1"]
+
+    avisos = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "orchestrator" and r.levelname == "WARNING"
+    ]
+    assert any("trancado.py" in aviso and "OSError" in aviso for aviso in avisos)
+    # Nenhum aviso pode carregar o caminho absoluto do diretório de teste.
+    assert all(str(tmp_path) not in aviso for aviso in avisos)

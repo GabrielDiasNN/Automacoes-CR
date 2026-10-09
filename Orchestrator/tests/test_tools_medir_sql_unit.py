@@ -1,34 +1,19 @@
 """Testes unitarios de Tools/oracle/medir_sql_oracle.py (sem tocar o Oracle)."""
 
 import argparse
-import importlib.util
 import json
 import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import oracle_session
 import pytest
-
-_TOOLS = Path(__file__).resolve().parents[2] / "Tools" / "oracle"
-
-
-def _carregar(nome: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(nome, _TOOLS / f"{nome}.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[nome] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def _priv(modulo: ModuleType, nome: str) -> Any:
-    """Acessa membro privado do módulo sob teste sem `protected-access`."""
-    return getattr(modulo, nome)
-
+from tests.carregadores_modulos import (
+    acessar_privado as _priv,
+    carregar_tool_oracle as _carregar,
+)
 
 mm = _carregar("medir_sql_oracle")
 ce = _carregar("comparar_equivalencia")

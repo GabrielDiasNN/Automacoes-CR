@@ -12,7 +12,6 @@ manual, via "OBs Restricao Branco/test_orb_simulation.py".
 # (creds, exec_id, resumo) mesmo quando ignoram os parametros.
 # pylint: disable=protected-access, unused-argument
 
-import importlib.util
 import json
 import re
 import sys
@@ -22,6 +21,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from tests.carregadores_modulos import carregar_modulo_automacao as _load_module
 
 ROOT = Path(__file__).parent.parent.parent
 AUTOMATION_DIR = ROOT / "OBs Restricao Branco"
@@ -36,25 +36,6 @@ _GENERIC_MODULE_NAMES = (
     "format_message",
     "extract_orb_state",
 )
-
-
-def _load_module(name: str, path: Path) -> ModuleType:
-    """Carrega um módulo da automação sob o seu nome canônico.
-
-    O nome importa: validators.py faz `from errors import DadoIncompletoError`, então
-    carregar errors.py sob um apelido criaria uma SEGUNDA classe de exceção e o
-    pytest.raises nunca casaria com a que validators realmente levanta. Reaproveitar
-    sys.modules garante uma instância só por módulo.
-    """
-    cached = sys.modules.get(name)
-    if cached is not None:
-        return cached
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture(scope="module", autouse=True)

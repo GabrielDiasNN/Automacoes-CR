@@ -7,6 +7,7 @@ from typing import Any
 from .. import schemas
 from ..utils import validate_script_path
 from .portfolio_catalog import CatalogManifest
+from .portfolio_manifest import _channels_to_csv
 
 
 def _is_reserved_cleanup_script(resolved_script_path: str, project_root: str) -> bool:
@@ -22,14 +23,6 @@ def _resolve_script_candidate(script_path: str, project_root: str) -> str:
     if not os.path.isabs(script_path):
         return os.path.abspath(os.path.join(project_root, script_path))
     return os.path.abspath(script_path)
-
-
-def _channels_to_csv(channels: list[str]) -> str | None:
-    if not channels:
-        return None
-    allowed_order = ["email", "whatsapp"]
-    normalized = [item for item in allowed_order if item in channels]
-    return ",".join(normalized) if normalized else None
 
 
 def _issue(

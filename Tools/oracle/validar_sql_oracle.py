@@ -49,13 +49,26 @@ from oracle_session import (  # noqa: E402
 
 # Fonte única do caminho do acervo de consultas: as demais ferramentas importam daqui.
 CONSULTAS_ROOT = ROOT / "docs" / "oracle-schema" / "consultas"
-DEFAULT_TIMEOUT = 20
-VALIDATOR_VERSION = "2.1.0"
+# Prazo POR TENTATIVA (conexão + primeira linha dividem este orçamento; o cancel
+# ganha CANCEL_GRACE_SECONDS = 5 s de tolerância em oracle_session.py). 20 s cortava
+# consultas que agregam milhões de linhas antes do primeiro resultado; 120 s cobre o
+# acervo pesado. Pior caso do estágio Oracle por arquivo: MAX_ATTEMPTS x (timeout
+# + 5 s) + backoffs (5+10+15+20 = 50 s) = 5 x 125 + 50 = 675 s (~11 min). Esse
+# número não inclui o guard (`_guard`, subprocesso sem prazo, uma vez por arquivo)
+# nem os `connection.close()` das tentativas, que também não têm prazo. Não há teto
+# global da rodada: os arquivos rodam em sequência, cada um com seu próprio estágio.
+DEFAULT_TIMEOUT = 120
+VALIDATOR_VERSION = "2.2.0"
 # Status que contam como aprovação. Qualquer outro (timeout, guard, erro de
 # smoke, encoding...) reprova a rodada: exit 0 só com evidência positiva.
 PASSING_STATUSES = frozenset({"validated", "parse_ok"})
 # Queda de sessão pela rede (ORA-00028/DPY-4011...): repetir com conexão nova.
-MAX_ATTEMPTS = 3
+# 5 tentativas: a rede até o Oracle oscila e uma consulta que passa em 10 s pode
+# cair na primeira tentativa e passar na terceira (ver evidência de 2026-10).
+MAX_ATTEMPTS = 5
+# Espera antes da nova tentativa, multiplicada pelo número da tentativa. Queda de
+# rede costuma ser um pico curto: repetir na hora tende a cair de novo.
+RETRY_BACKOFF_SECONDS = 5
 
 
 def portable_command(argv: list[str]) -> list[str]:
@@ -109,6 +122,7 @@ class RunOptions:
     execute: bool
     explicit_binds: dict[str, Any]
     guard: Path
+    attempts: int = MAX_ATTEMPTS
 
 
 def _log(*_args: Any, **_kwargs: Any) -> None:
@@ -408,9 +422,16 @@ def _oracle_stage(
 def _oracle_stage_with_retry(
     sql: str, guard_code: int, creds: Any, options: RunOptions
 ) -> dict[str, Any]:
-    """`_oracle_stage` repetido com conexão nova em queda de sessão pela rede."""
+    """`_oracle_stage` repetido com conexão nova em queda de sessão pela rede.
+
+    Só repete erro com marcador de queda (`SESSION_DROP_MARKERS`). Timeout de
+    execução (consulta lenta) ou de conexão (sessão travada), sem marcador de queda,
+    é DELIBERADAMENTE não retentado: prazo estourado não prova queda de rede, e
+    retentar multiplicaria o prazo por arquivo (ver `DEFAULT_TIMEOUT`). Não mudar
+    isso sem rever esse pior caso.
+    """
     outcome: dict[str, Any] = {}
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for attempt in range(1, options.attempts + 1):
         outcome = _oracle_stage(sql, guard_code, creds, options)
         outcome["attempts"] = attempt
         error = str(outcome.get("error", ""))
@@ -418,6 +439,13 @@ def _oracle_stage_with_retry(
         # ou na conexão (`oracle_error`): decide pela mensagem, não pelo status.
         if not is_session_drop(error):
             break
+        if attempt < options.attempts:
+            # Espera crescente: dá tempo para a rede voltar antes da nova sessão.
+            time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+    # Queda de rede esgotou as tentativas: o flag marca a queda na evidência, mas a
+    # rodada segue reprovada (exit 1), pois o status não está em PASSING_STATUSES.
+    if is_session_drop(str(outcome.get("error", ""))):
+        outcome["network_inconclusive"] = True
     return outcome
 
 
@@ -478,6 +506,12 @@ def main() -> int:
     parser.add_argument("--part", type=int, default=1)
     parser.add_argument("--parts", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
+    parser.add_argument(
+        "--attempts",
+        type=int,
+        default=MAX_ATTEMPTS,
+        help="Tentativas em queda de sessão pela rede (com espera crescente)",
+    )
     parser.add_argument("--parse-only", action="store_true")
     parser.add_argument(
         "--bind",
@@ -498,6 +532,7 @@ def main() -> int:
         execute=not args.parse_only,
         explicit_binds=explicit_binds,
         guard=resolve_guard(),
+        attempts=max(1, args.attempts),
     )
 
     creds = resolve_oracle_credentials(_log, "validar-acervo-sql")
@@ -532,6 +567,8 @@ def main() -> int:
             else None
         ),
         "timeout_seconds": args.timeout,
+        "max_attempts": options.attempts,
+        "retry_backoff_seconds": RETRY_BACKOFF_SECONDS,
         "parse_only": args.parse_only,
         "bind_names": sorted(explicit_binds),
         "generated_at_utc": datetime.now(UTC).isoformat(),
