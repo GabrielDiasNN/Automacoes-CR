@@ -1,8 +1,8 @@
 import { type Tone } from "../lib/status";
 
-export type ToneColors = Record<Tone, string>;
+type ToneColors = Record<Tone, string>;
 
-export interface ChartPalette {
+interface ChartPalette {
   tones: ToneColors;
   axis: string;
   grid: string;

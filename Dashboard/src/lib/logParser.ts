@@ -26,7 +26,7 @@ export interface LogLine {
 }
 
 // Ex.: [30/07/2026 08:30:05] [PS] [INFO] [ExecId:CRON_2_1785411000] mensagem...
-export const LINE_RE =
+const LINE_RE =
   /^\[([^\]]+)\]\s*\[([^\]]+)\]\s*\[(INFO|WARN|WARNING|ERROR|ERRO|DEBUG)\]\s*(?:\[[^\]]*\]\s*)*(.*)$/i;
 
 const COMPONENT_TAG: Record<string, string> = {

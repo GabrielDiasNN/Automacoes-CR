@@ -25,12 +25,12 @@ Domínio dedicado para a API de produção, snapshots analíticos e histórico S
 - `src/beneficiamento/`: código Python modular do domínio.
 - `src/beneficiamento/core/`: coerções, aliases, turnos e métricas compartilhadas.
 - `src/beneficiamento/data/`: schema SQLite, writer idempotente e consultas tipadas.
-- `src/beneficiamento/contracts/`: imports canônicos de overview, detail e analytics.
+- `src/beneficiamento/contracts/`: imports canônicos de overview, detail e tingimento.
 - `sql/templates/`: SQL de runtime do runner (`bnf_producao_beneficiamento_detalhado.sql`). O acervo de consultas (13 pastas, `01_beneficiamento_tingimento` a `13_utilitarios_snippets`) vive em [`docs/oracle-schema/consultas/`](../docs/oracle-schema/consultas/README.md), com o catálogo mestre [CATALOGO_QUERIES.md](../docs/oracle-schema/consultas/CATALOGO_QUERIES.md).
 - `sql/templates/bnf_producao_beneficiamento_detalhado.sql`: consulta mestra analítica consumida pelo runner Python via binds `:dt_inicio` e `:dt_fim`.
 - `docs/oracle-schema/consultas/11_views_referencia_sgt/`: definições DDL de views corporativas preservadas para auditoria e conferência.
 - `docs/oracle-schema/consultas/12_manutencao_dml_restrito/`: scripts de manutenção em quarentena de segurança (Zero DML).
-- `snapshots/latest/`: última versão aprovada dos arquivos `*.analytics.json` e `*.profile.json`.
+- `snapshots/latest/`: última versão aprovada dos arquivos `*.analytics.json`. O `*.profile.json` não é mais gerado nem servido (ver [runbook](docs/runbook-refresh.md)).
 - `snapshots/beneficiamento_historico.db`: base SQLite histórica consumida por `/api/beneficiamento/overview`, `/detail` e `/historico`.
 - `docs/`: arquitetura, baseline e runbook operacional.
 
@@ -40,9 +40,11 @@ Domínio dedicado para a API de produção, snapshots analíticos e histórico S
 .\.venv\Scripts\python.exe '.\Produção Beneficimento\analise_producao_diaria_beneficiamento.py' --period diario
 ```
 
-Períodos válidos: `diario`, `semanal`, `mensal`, `anual`.
+Períodos válidos: `diario` e `mensal`. `semanal` e `anual` foram descontinuados (ver [runbook](docs/runbook-refresh.md)).
 O JSON final do runner inclui `status` e `refresh_status`, e a escrita no histórico SQLite aparece em `snapshot.historico_write_status`.
+
+A política de cadência do refresh, o orçamento do Oracle e a validação pós-refresh estão no [runbook de refresh](docs/runbook-refresh.md).
 
 ## Candidata de faturamento mensal por cliente
 
-A [V2.2](../docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_faturamento_mensal_cliente_prazo_expedicao_v2_2.sql) preserva o contrato funcional da V2.1 e está **não promovida por instabilidade operacional** (última série integral 4/5). O [parecer de 04/10/2026](docs/pcp-faturamento-v2-2-validacao-2026-10-04.md) registra oito variantes, equivalência integral e limites. A V2.1 permanece preservada e não promovida.
+A [V2.2](../docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_faturamento_mensal_cliente_prazo_expedicao_v2_2.sql) preserva o contrato funcional da V2.1 e está **não promovida por instabilidade operacional** (última série integral 4/5). A V2.1 permanece preservada e não promovida.

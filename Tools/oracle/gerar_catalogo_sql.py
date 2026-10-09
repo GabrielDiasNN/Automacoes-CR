@@ -141,7 +141,7 @@ def _merge_evidence(status: dict[str, Any], evidence_path: Path) -> dict[str, An
         key = str(result["file"]).removeprefix(LEGACY_PREFIX).removeprefix(prefix)
         if not _should_replace(status["files"].get(key), result):
             continue
-        status["files"][key] = {
+        record: dict[str, Any] = {
             "status": result.get("status", "unknown"),
             "sample_rows": result.get("rows"),
             "execute_ms": result.get("execute_ms"),
@@ -150,6 +150,13 @@ def _merge_evidence(status: dict[str, Any], evidence_path: Path) -> dict[str, An
             "validator_version": result.get("validator_version"),
             "cancelled": is_session_drop(str(result.get("error", ""))),
         }
+        # Tentativas e queda esgotada só existem no resultado bruto. Entram no registro
+        # só quando presentes: o catálogo não os exibe, então o Markdown não muda.
+        if int(result.get("attempts") or 1) > 1:
+            record["attempts"] = result["attempts"]
+        if result.get("network_inconclusive") is True:
+            record["network_inconclusive"] = True
+        status["files"][key] = record
     status["files"] = dict(sorted(status["files"].items()))
     status["validated_on"] = str(evidence.get("generated_at_utc", ""))[:10]
     return status

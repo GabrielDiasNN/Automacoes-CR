@@ -23,12 +23,12 @@ from .metrics_queries import (
 )
 from .portfolio_manifest import (  # pylint: disable=useless-import-alias; noqa: F401
     CatalogManifest as CatalogManifest,
-    _channels_to_csv,
     _format_value,
     _normalize_repo_relative,
     _path_exists,
     _resolve_repo_path,
     _slugify,
+    channels_to_csv,
     load_catalog_manifests,
 )
 from .scheduler_runtime import list_scheduled_jobs
@@ -210,7 +210,7 @@ def _manifest_runtime_mismatches(
                 runtime_value=runtime_sla_minutes,
             )
         )
-    manifest_channels = _channels_to_csv(manifest.channels)
+    manifest_channels = channels_to_csv(manifest.channels)
     runtime_channels = cast(str | None, auto.notification_channels) or None
     if manifest_channels != runtime_channels:
         issues.append(

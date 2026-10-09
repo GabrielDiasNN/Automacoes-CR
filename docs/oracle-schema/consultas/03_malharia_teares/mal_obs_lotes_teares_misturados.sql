@@ -1,21 +1,43 @@
 /* =============================================================================
 OBJETIVO: OB_s com finalidade, lotes ou teares misturados
 DOMÍNIO: 03_malharia_teares
-ARQUIVO ORIGINAL: Comandos SQL - CR\OB_s com finalidade, lotes ou teares misturados.sql
+ARQUIVO ORIGINAL: (referência histórica) arquivo de origem fora deste repositório, não versionado aqui.
 TIPO: Malharia e Teares
 PARÂMETROS / BINDS: Nenhum (filtros diretos na query)
 TABELAS PRINCIPAIS: SGTPRD.ENGEITEMESTOARTCRU, SGTPRD.ENGEITEMESTOCOR, SGTPRD.FASES_FLUXO, SGTPRD.GERAPECACOMPLPECA, SGTPRD.GERAPECACRU, SGTPRD.GERAPECAORIGEMOB, SGTPRD.GERAPECASPRODUTO, SGTPRD.GRUPO_MAQUINAS, SGTPRD.MAQUINA, SGTPRD.OB, SGTPRD.OBSERVACAO, SGTPRD.OB_FASES, SGTPRD.OPERADOR
 CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. 100% nativa sem views. Execução somente leitura salvo se DML restrito.
 ============================================================================= */
 
+-- TP_ORDEM: rótulos de saída. OB_FASES.DESTINO_RECEITA é numérico; o cadastro do ERP
+--   (SGTPRD.DESTINO) define: 1 PRODUCAO, 2 REPROCESSOS FORA DE COR, 3 LIMPEZA DE MAQUINA,
+--   4 REPROCESSOS PARA RECLASSIFICACAO, 10 CONSUMO. Valores distintos em OB_FASES, lidos em
+--   08/10/2026: 0, 1, 2, 3, 4 e 10. O valor 0 não existe no cadastro: 0 e NULO (via NVL) saem como
+--   'Sem destino cadastrado'; qualquer outro valor sai como 'Não mapeado'.
+--   REVISÃO (08/10/2026): antes, 3 e 10 caíam em 0 e os rótulos tinham grafia errada ('Produo',
+--   'Reclassificao'). Medido em 08/10/2026: a consulta retorna 27 linhas, todas com DESTINO = 1
+--   (rótulo 'Produção'); a mudança de TP_ORDEM nessas linhas é só a grafia.
+--   REVISÃO (09/10/2026): OB sem nenhuma linha em OB_FASES não entra em TP_ORDEM_CTE e saía com
+--   TP_ORDEM NULL (LEFT JOIN). O SELECT final agora usa NVL(TP.TP_ORDEM, 'Sem destino cadastrado'),
+--   o mesmo rótulo de destino 0. Medido em 09/10/2026 (04:37): 140 OBs no universo desta consulta,
+--   0 sem linha em OB_FASES; a saída (23 linhas) não muda.
+--   REVISÃO (08/10/2026), GRP: a subconsulta GRP juntava GRUPO_MAQUINAS só por GRUPO. A chave é (SETOR, GRUPO),
+--   e os grupos 0G020 e 0G021 existem nos setores 4 e 7. Join corrigido com GRM.SETOR = MQ.SETOR
+--   (GRP 95 -> 87 linhas). Medido: a saída final (27 linhas) não muda.
+--   ATENÇÃO: outras consultas do acervo (ex.: bnf_maiores_producoes_tingimento.sql) leem o mesmo
+--   OB_FASES.DESTINO_RECEITA e tratam 0 e NULO (sem linha em SGTPRD.DESTINO) como Produção Normal, via
+--   NVL(GDX.TIPO_DESTINO, 0). Esta consulta rotula 0 e NULO como 'Sem destino cadastrado'. Divergência
+--   pendente de decisão (REGRAS_NEGOCIO.md, seção 4, item 10).
 WITH TP_ORDEM_CTE AS (
     SELECT 
         OBFXX.NUMERO_OB,
-        DECODE(MAX(OBFXX.DESTINO_RECEITA),
-               1, 'Produo',
+        DECODE(NVL(MAX(OBFXX.DESTINO_RECEITA), 0),
+               0, 'Sem destino cadastrado',
+               1, 'Produção',
                2, 'Reprocesso',
-               4, 'Reclassificao',
-               0) AS TP_ORDEM
+               3, 'Limpeza de máquina',
+               4, 'Reclassificação',
+               10, 'Consumo',
+               'Não mapeado') AS TP_ORDEM
     FROM SGTPRD.OB_FASES OBFXX
     GROUP BY OBFXX.NUMERO_OB
 ),
@@ -105,7 +127,7 @@ ANALISE_CTE AS (
             GRM.NUMERO_AGULHAS_DISCO,
             TRIM(MQ.FABRICANTE)||' - '||TRIM(MQ.MODELO) FABRICANTE_MODELO
         FROM SGTPRD.MAQUINA MQ
-        JOIN SGTPRD.GRUPO_MAQUINAS GRM ON MQ.GRUPO = GRM.GRUPO
+        JOIN SGTPRD.GRUPO_MAQUINAS GRM ON MQ.GRUPO = GRM.GRUPO AND GRM.SETOR = MQ.SETOR
         WHERE MQ.TIPO_MAQUINA = 145
         AND MQ.CODIGO_UNIDADE_FABRI = '00005'
         GROUP BY MQ.NUMERO_MAQUINA, GRM.NUMERO_AGULHAS_CILIN, GRM.NUMERO_AGULHAS_DISCO, TRIM(MQ.FABRICANTE)||' - '||TRIM(MQ.MODELO)
@@ -131,7 +153,7 @@ OBE_CTE AS (
 )
 SELECT
     OBE.NUMERO_OB,
-    TP.TP_ORDEM,
+    NVL(TP.TP_ORDEM, 'Sem destino cadastrado') AS TP_ORDEM,
     ART.ARTIGO,
     COR.COR,
     A.FINALIDADE,

@@ -112,6 +112,62 @@ describe("api.get", () => {
   });
 });
 
+describe("api.post / api.put", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    setApiKey("chave-teste");
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    setApiKey("");
+  });
+
+  it("post envia POST com corpo JSON, Content-Type e X-API-Key, e devolve o JSON", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ message: "ok" }) });
+    globalThis.fetch = mockFetch;
+
+    const res = await api.post<{ message: string }>("/api/automations/1/test-mode", { enabled: true });
+
+    const [url, init] = mockFetch.mock.calls[0]!;
+    expect(url).toBe("/api/automations/1/test-mode");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ enabled: true }));
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect((init.headers as Record<string, string>)["X-API-Key"]).toBe("chave-teste");
+    expect(res).toEqual({ message: "ok" });
+  });
+
+  it("put envia PUT com corpo JSON, Content-Type e X-API-Key, e devolve o JSON", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ saved: true }) });
+    globalThis.fetch = mockFetch;
+
+    const res = await api.put<{ saved: boolean }>("/api/config/x", { valor: 3 });
+
+    const [url, init] = mockFetch.mock.calls[0]!;
+    expect(url).toBe("/api/config/x");
+    expect(init.method).toBe("PUT");
+    expect(init.body).toBe(JSON.stringify({ valor: 3 }));
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect((init.headers as Record<string, string>)["X-API-Key"]).toBe("chave-teste");
+    expect(res).toEqual({ saved: true });
+  });
+
+  it("sem corpo, post e put enviam body null (não a string 'undefined')", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    globalThis.fetch = mockFetch;
+
+    await api.post("/api/system/checkpoint");
+    await api.put("/api/system/checkpoint");
+
+    expect(mockFetch.mock.calls[0]![1].method).toBe("POST");
+    expect(mockFetch.mock.calls[0]![1].body).toBeNull();
+    expect(mockFetch.mock.calls[1]![1].method).toBe("PUT");
+    expect(mockFetch.mock.calls[1]![1].body).toBeNull();
+  });
+});
+
 describe("setUnauthorizedHandler", () => {
   const originalFetch = globalThis.fetch;
 

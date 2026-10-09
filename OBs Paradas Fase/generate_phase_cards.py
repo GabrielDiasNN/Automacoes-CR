@@ -119,27 +119,6 @@ def fmt_entrega(dt_entrega: Any) -> str:
         return "—"
 
 
-def _wrap_text(
-    text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.ImageDraw
-) -> list[str]:
-    """Quebra texto em linhas que cabem em max_width."""
-    words = text.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        test = (current + " " + word).strip()
-        bbox = draw.textbbox((0, 0), test, font=font)
-        if bbox[2] - bbox[0] <= max_width:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines or [""]
-
-
 # ── Helpers de desenho ────────────────────────────────────────────────────────
 
 

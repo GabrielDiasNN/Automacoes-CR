@@ -514,14 +514,36 @@
       "validator_version": "2.1.0",
       "cancelled": false
     },
+    "03_malharia_teares/mal_agulhas_por_tonelada.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 7986.4,
+      "sha8": "9a290b96",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_calendario_producao_diaria.sql": {
+      "status": "parse_ok_smoke_error",
+      "sample_rows": null,
+      "execute_ms": null,
+      "sha8": "a83acd93",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": true,
+      "attempts": 5,
+      "network_inconclusive": true
+    },
     "03_malharia_teares/mal_conferencia_ob_montada_teares_e_lotes_alocados.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 11.8,
-      "sha8": "e50256e2",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 5.1,
+      "sha8": "28153e62",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_consulta_finura_dos_teares.sql": {
       "status": "validated",
@@ -534,12 +556,23 @@
     },
     "03_malharia_teares/mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql": {
       "status": "validated",
-      "sample_rows": 0,
-      "execute_ms": 884.0,
-      "sha8": "c6114f15",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "sample_rows": 1,
+      "execute_ms": 2185.9,
+      "sha8": "f419b95f",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_disponibilidade_por_maquina.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 59.5,
+      "sha8": "21d0efc7",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_eficiencia_global_engenharia.sql": {
       "status": "validated",
@@ -553,11 +586,12 @@
     "03_malharia_teares/mal_eficiencia_ordens_em_aberto.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 5.4,
-      "sha8": "a2255a2a",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 7.1,
+      "sha8": "79d24df6",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_eficiencia_por_grupo_maquinas.sql": {
       "status": "validated",
@@ -568,32 +602,45 @@
       "validator_version": "2.1.0",
       "cancelled": false
     },
+    "03_malharia_teares/mal_eficiencia_teorico_vs_realizado.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 8621.4,
+      "sha8": "219c7878",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
     "03_malharia_teares/mal_estoque_por_agulhas_tear.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 3.9,
-      "sha8": "a562ca45",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 3.0,
+      "sha8": "01476253",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_estoque_por_lote_produto.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 10.1,
-      "sha8": "36198126",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 6.1,
+      "sha8": "465121c7",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_estoque_por_tear_maquina.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 10.2,
-      "sha8": "80317742",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 7.6,
+      "sha8": "b4773d87",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_meta_malharia.sql": {
       "status": "validated",
@@ -607,29 +654,42 @@
     "03_malharia_teares/mal_necessidade_balanco_faltas_sobras.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 217.7,
-      "sha8": "fa9bd1b0",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 283.8,
+      "sha8": "fc11f3c4",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_necessidade_critica_somente_faltas.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 120.1,
-      "sha8": "dbb99c16",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 124.4,
+      "sha8": "df249e10",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "03_malharia_teares/mal_obs_lotes_teares_misturados.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 45.9,
-      "sha8": "c9a02e29",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 63.2,
+      "sha8": "d3d63624",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_oee_aproximado_grupo.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 8392.3,
+      "sha8": "212ab5a9",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 5
     },
     "03_malharia_teares/mal_ordens_de_malharia_em_aberto.sql": {
       "status": "validated",
@@ -639,6 +699,87 @@
       "validated_at": "2026-10-07",
       "validator_version": "2.1.0",
       "cancelled": false
+    },
+    "03_malharia_teares/mal_paradas_categoria_mes.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 66.8,
+      "sha8": "367d78c5",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_paradas_longas_eventos.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 8736.7,
+      "sha8": "28583dbb",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 5
+    },
+    "03_malharia_teares/mal_pareto_paradas_internas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 60.0,
+      "sha8": "4e23a34d",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_producao_malha_por_maquina_mes.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 8285.1,
+      "sha8": "0f14a2dd",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_proporcao_corretiva_maquina.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 30.9,
+      "sha8": "eccebfb7",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_qualidade_registro_paradas.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 103.2,
+      "sha8": "610ccadf",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_quebra_agulha_mes.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 68.7,
+      "sha8": "666947e4",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
+    },
+    "03_malharia_teares/mal_scorecard_maquina_12m.sql": {
+      "status": "parse_ok_smoke_error",
+      "sample_rows": null,
+      "execute_ms": null,
+      "sha8": "1203ef26",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": true,
+      "attempts": 5,
+      "network_inconclusive": true
     },
     "04_fiacao_fios/fia_consulta_lotes_de_fios_e_cor_dos_cones.sql": {
       "status": "validated",
@@ -688,11 +829,12 @@
     "04_fiacao_fios/fia_fios_consumos_ficha_tecnica.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 2.2,
-      "sha8": "b567d2ea",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 2.8,
+      "sha8": "e5607dc3",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "04_fiacao_fios/fia_lotes_fios_fornecedor.sql": {
       "status": "validated",
@@ -1120,11 +1262,12 @@
     "06_qualidade_auditoria_obs/qld_obs_montadas_fora_da_regra_de_separacao.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 50.2,
-      "sha8": "2f8d4758",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
-      "cancelled": false
+      "execute_ms": 73.1,
+      "sha8": "9c985532",
+      "validated_at": "2026-10-09",
+      "validator_version": "2.2.0",
+      "cancelled": false,
+      "attempts": 1
     },
     "07_expedicao_pedidos_comercial/com_acondicionamento_grade_quantidades.sql": {
       "status": "validated",
@@ -1793,5 +1936,5 @@
       "cancelled": false
     }
   },
-  "validated_on": "2026-10-07"
+  "validated_on": "2026-10-09"
 }

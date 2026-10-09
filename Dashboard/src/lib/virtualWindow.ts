@@ -1,4 +1,4 @@
-export interface VirtualWindow {
+interface VirtualWindow {
   /** índice da primeira linha a renderizar (inclusive). */
   start: number;
   /** índice logo após a última linha a renderizar (exclusive). */

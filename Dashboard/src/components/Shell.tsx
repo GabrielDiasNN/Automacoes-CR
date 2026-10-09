@@ -20,7 +20,7 @@ interface NavItem {
   section?: string;
 }
 
-export const NAV: NavItem[] = [
+const NAV: NavItem[] = [
   { to: "/painel", label: "Painel", icon: <LayoutDashboard size={16} />, section: "Operação" },
   { to: "/execucoes", label: "Execuções", icon: <ListChecks size={16} /> },
   { to: "/monitor", label: "Monitor", icon: <Radio size={16} /> },

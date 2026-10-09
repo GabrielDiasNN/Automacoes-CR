@@ -49,7 +49,7 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
             // Única tela do app antes de qualquer navegação — não há contexto
             // de leitura em andamento para o autofoco atropelar, e é o padrão
             // esperado num formulário de login de instrumento único.
-            // eslint-disable-next-line jsx-a11y/no-autofocus
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- tela única de login de instrumento: não há leitura em andamento para o foco atropelar
             autoFocus
             className={[styles.field, error ? styles.fieldError : ""].filter(Boolean).join(" ")}
           />

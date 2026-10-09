@@ -58,8 +58,15 @@ def get_automation_scripts(
             with open(jf, encoding="utf-8") as f:
                 content = f.read()
             scripts.append(schemas.ManagedFileEntry(filename=filename, content=content))
-        except OSError:
-            pass
+        except (OSError, UnicodeDecodeError) as e:
+            # Só o nome gerenciado e o tipo do erro: str(e) carrega o caminho absoluto.
+            # UnicodeDecodeError: script salvo fora de UTF-8 (ex.: .bat em ANSI).
+            logger.warning(
+                "Falha ao ler script gerenciado %s da automação %s: %s",
+                filename,
+                auto_id,
+                type(e).__name__,
+            )
 
     return scripts
 

@@ -11,18 +11,12 @@ BeforeAll {
     function Get-LongPath {
         param([string]$Path)
 
-        # $TestDrive costuma cair sob %TEMP%, que nesta maquina responde em formato 8.3
-        # (C:\Users\GABRIE~1.DIA\...). Test-SkillsGovernance compara o alvo do link com
-        # Resolve-Path do diretorio fonte, e o alvo de uma junction sempre volta expandido:
-        # sem normalizar aqui, o caminho feliz acusaria AGENTS_SKILL_MIRROR_TARGET_INVALID.
-        try {
-            $fso = New-Object -ComObject Scripting.FileSystemObject
-            return $fso.GetFolder($Path).Path
-        } catch [System.Exception] {
-            # Sem COM disponivel (ou caminho inexistente) o formato curto nao e um
-            # problema: o teste segue com o caminho como veio.
-            return $Path
-        }
+        # $TestDrive pode vir em formato 8.3 (C:\Users\GABRIE~1.DIA\...) quando deriva de %TEMP%.
+        # Test-SkillsGovernance compara o alvo do link com o caminho fonte, e o alvo de uma junction
+        # sempre volta expandido: sem o caminho longo, o caminho feliz acusaria
+        # AGENTS_SKILL_MIRROR_TARGET_INVALID. Get-Item(...).FullName expande (Resolve-Path nao).
+        # Sem fallback silencioso: caminho inexistente reprova, nao pula.
+        return (Get-Item -LiteralPath $Path).FullName
     }
 
     function New-SkillsFixture {
@@ -106,10 +100,6 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTabl
 
     It "aprova mirror inteiro apontando por junction para .claude/skills" {
         $fixture = New-SkillsFixture -Name "mirror-valido"
-        if ($fixture -match '~') {
-            Set-ItResult -Skipped -Because "TestDrive resolveu para caminho 8.3 e o alvo da junction nao seria comparavel"
-            return
-        }
 
         foreach ($skill in @("ci-gates", "log-triage", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
             New-MirrorJunction -BasePath $fixture -MirrorName $skill
@@ -128,10 +118,6 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTabl
         # .claude/skills -> .github/skills. Test-AgentsSkillMirrors nao pode confundi-las
         # com skill operacional e exigir espelho em .agents/skills.
         $fixture = New-SkillsFixture -Name "exposicao-padrao"
-        if ($fixture -match '~') {
-            Set-ItResult -Skipped -Because "TestDrive resolveu para caminho 8.3 e o alvo da junction nao seria comparavel"
-            return
-        }
 
         foreach ($skill in @("ci-gates", "log-triage", "new-automation", "preflight", "quality-gate", "run-orchestrator", "run-tests")) {
             New-MirrorJunction -BasePath $fixture -MirrorName $skill
@@ -170,10 +156,6 @@ Describe "Test-SkillsGovernance — mirror .agents/skills" -Skip:($PSVersionTabl
         # sem isso, os outros mirrors ausentes disparariam AGENTS_SKILL_MIRROR_MISSING
         # (ERROR) e mascarariam o exit code que este teste verifica.
         $fixture = New-SkillsFixture -Name "copia-real"
-        if ($fixture -match '~') {
-            Set-ItResult -Skipped -Because "TestDrive resolveu para caminho 8.3 e o alvo da junction nao seria comparavel"
-            return
-        }
 
         foreach ($skill in @("ci-gates", "log-triage", "new-automation", "quality-gate", "run-orchestrator", "run-tests")) {
             New-MirrorJunction -BasePath $fixture -MirrorName $skill

@@ -26,11 +26,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function New-BatchExecId {
-    param([string]$Prefix)
-    return ("{0}_{1}" -f $Prefix, (Get-Date -Format "yyyyMMdd_HHmmss"))
-}
-
 function Add-StepTiming {
     param(
         [System.Collections.Generic.List[object]]$Collector,

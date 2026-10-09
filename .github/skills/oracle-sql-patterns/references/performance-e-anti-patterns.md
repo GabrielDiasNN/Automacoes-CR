@@ -54,7 +54,8 @@ Em ambiente produtivo com usuário `CONSULTA` (sem acesso a `V$SQL`, `V$MYSTAT` 
 | Somar `OB.TEMPO_* / 1440` à data de 30/12/1899                 | Data de 1930 (época errada), filtros que nunca casam | Usar 01/01/1996 para OB e OB_FASES; 1899 só em UNIDADE_PROGRAMACAO |
 | `CRE.PROCESSO_ATIVO_PRODU = 1` ou `= 'S'`                      | Coluna VARCHAR2 '0'/'1': conversão implícita na coluna ou zero linhas | `= '1'` |
 | `TRUNC(col)`, `TO_CHAR(col)` ou `TRIM(col)` em `WHERE`/`JOIN`  | Inibe índice                            | Faixa direta na coluna (`col >= :ini AND col < :fim + 1`) |
-| `JOIN` interno com tabela que não alimenta nenhuma coluna      | Pode zerar o resultado (GRUPO_MAQUINAS em `fia_top_5...`) | Remover, ou `LEFT JOIN` se for opcional |
+| `JOIN` interno com tabela que não alimenta nenhuma coluna      | Pode zerar o resultado: em `fia_top_5_producao_diaria_fiacao` a junção com `GRUPO_MAQUINAS` por `GRUPO` zerava a consulta (`LPM_TECELAGEM.GRUPO` é vazio); junção removida em 29/09/2026 | Remover, ou `LEFT JOIN` se for opcional |
+| `JOIN` em `GRUPO_MAQUINAS` só por `GRUPO` | A chave é (`SETOR`, `GRUPO`): os grupos 0G020 e 0G021 existem nos setores 4 e 7 e duplicam linhas | Usar `GRM.SETOR = MQ.SETOR AND GRM.GRUPO = MQ.GRUPO` (exemplo: `mal_conferencia_ob_montada_teares_e_lotes_alocados.sql`) |
 | Dividir sem `NULLIF(divisor, 0)`                               | ORA-01476 no fim do mês/sem produção    | `x / NULLIF(y, 0)` |
 | Aceitar "0 linhas" como conformidade                           | Filtro quebrado escondeu 58 OBs (`qld_ob_s_com_peso_menor_que_8kg`) | Provar com uma variante relaxada que retorne linhas |
 | `FETCH FIRST N ROWS ONLY` em consulta de auditoria             | Truncamento silencioso de anomalias     | Devolver tudo, ou avisar o teto no cabeçalho (`Tools/oracle/auditar_acervo_sql.py` marca TETO_ATINGIDO) |

@@ -5,8 +5,7 @@ import { usePolling } from "../hooks/usePolling";
 import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi, type ExecutionSummary } from "../api/orchestrator";
 import {
-  Annunciator,
-  AnnunciatorGrid,
+  BaselineAnnunciators,
   Button,
   Card,
   ErrorState,
@@ -19,13 +18,9 @@ import {
   StatusTag,
   type QueueLane,
 } from "../components/ui";
-import { executionTone, healthLabel, healthTone, severityTone, type Tone } from "../lib/status";
+import { executionTone, healthLabel, healthTone, severityTone } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
 import page from "./page.module.css";
-
-function baselineTone(status: string): Tone {
-  return healthTone(status);
-}
 
 function ExecRow({ ex, onClick }: { ex: ExecutionSummary; onClick: () => void }) {
   const tone = ex.operator_attention_required ? severityTone(ex.operator_severity) : executionTone(ex.status);
@@ -162,19 +157,7 @@ export function PainelPage() {
               </span>
             </div>
           ) : (
-            <AnnunciatorGrid>
-              {baseline.metrics.map((m) => (
-                <Annunciator
-                  key={m.code}
-                  legend={m.label}
-                  value={m.current_value ?? undefined}
-                  tone={baselineTone(m.status)}
-                  active={m.status !== "healthy"}
-                  blink={m.status === "incident"}
-                  statusLabel={healthLabel(m.status)}
-                />
-              ))}
-            </AnnunciatorGrid>
+            <BaselineAnnunciators metrics={baseline.metrics} />
           )}
         </Card>
 

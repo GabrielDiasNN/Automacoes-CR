@@ -1,7 +1,7 @@
 import { orchestratorApi, type SystemHealth, type WorkerStatus } from "../api/orchestrator";
 import { usePolling } from "./usePolling";
 
-export interface DiagnosticsState {
+interface DiagnosticsState {
   health: SystemHealth | null;
   worker: WorkerStatus | null;
   loading: boolean;
@@ -18,9 +18,9 @@ export interface DiagnosticsState {
  *  Agora é `usePolling` puro: herda aborto, guarda de sequência e backoff de
  *  429, e a semente de cache evita o flash ao remontar o Shell.
  *
- *  `worker` sai de `health.worker` (`SystemHealth` já o carrega) — a chamada
- *  separada a `getWorkerStatus()` era um terço do tráfego fixo, desperdiçado
- *  contra o teto de 120 req/min por IP.
+ *  `worker` sai de `health.worker` (`SystemHealth` já o carrega): o hook faz
+ *  uma única requisição por tick, sem chamada extra para o worker, respeitando
+ *  o teto de 120 req/min por IP.
  *
  *  `skipIfFresh`: `getOverview` (Painel/Sistema) já traz `health` no payload e
  *  o grava na chave `"health"`. Enquanto uma dessas telas está aberta,

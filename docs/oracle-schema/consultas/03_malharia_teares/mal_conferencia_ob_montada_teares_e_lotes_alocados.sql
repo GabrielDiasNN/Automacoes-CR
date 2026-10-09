@@ -9,6 +9,10 @@ CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitu
 REVISÃO (21/09/2026): junções legadas migradas para ANSI JOIN, preservando OBS
   como relação opcional, com parse Oracle atual aprovado. Equivalência formal
   do controle legado permanece pendente; não homologar como 100% sem fixture.
+REVISÃO (08/10/2026): GRUPO_MAQUINAS é único por (SETOR, GRUPO). Sem o SETOR, os grupos 0G020 e 0G021
+  (existem no setor 4 e no setor 7) duplicavam as peças das máquinas TC066-TC067, TC076-TC077, TC082-TC083
+  e TC088-TC089: a mesma peça aparecia também com QT_AGULHAS = 0. Junção corrigida por (SETOR, GRUPO).
+  'Validada' no catálogo = guard SELECT-only + parse + execução limitada a 1 linha; NÃO é homologação da regra de negócio.
 ============================================================================= */
 
 SELECT GPO.NUMERO_OB,
@@ -46,7 +50,7 @@ SELECT GPO.NUMERO_OB,
               GRM.NUMERO_AGULHAS_CILIN,
               GRM.NUMERO_AGULHAS_DISCO
          FROM SGTPRD.MAQUINA MQ
-         JOIN SGTPRD.GRUPO_MAQUINAS GRM ON GRM.GRUPO = MQ.GRUPO
+         JOIN SGTPRD.GRUPO_MAQUINAS GRM ON GRM.SETOR = MQ.SETOR AND GRM.GRUPO = MQ.GRUPO
         WHERE MQ.TIPO_MAQUINA = 145
           AND MQ.CODIGO_UNIDADE_FABRI = '00005'
         GROUP BY MQ.NUMERO_MAQUINA,

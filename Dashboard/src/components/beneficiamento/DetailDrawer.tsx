@@ -162,10 +162,6 @@ export function DetailDrawer({ request, contextFilters, onClose }: DetailDrawerP
     (signal?: AbortSignal) => orchestratorApi.getBeneficiamentoDetail(buildDetailParams(request!, contextFilters, page), signal),
     [request, contextFilters, page],
   );
-  // `contextFilters` agora entra nas deps — antes (eslint-disable manual)
-  // mudar o filtro de contexto com o drawer aberto não refazia o fetch
-  // (achado nº 14, Onda 4). `fetcher: null` (não `request` como argumento)
-  // é o que desliga o fetch quando o drawer está fechado.
   const { data, loading, error, lastUpdated } = useAsyncResource(request ? fetchDetail : null, [request, contextFilters, page]);
 
   // `data` só corresponde ao `request` atual se a última resposta chegou

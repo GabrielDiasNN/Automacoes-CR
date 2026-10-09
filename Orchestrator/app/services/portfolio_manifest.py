@@ -129,7 +129,7 @@ def _format_value(value: Any) -> str | None:
     return str(value)
 
 
-def _channels_to_csv(channels: list[str]) -> str | None:
+def channels_to_csv(channels: list[str]) -> str | None:
     if not channels:
         return None
     allowed = ["email", "whatsapp"]

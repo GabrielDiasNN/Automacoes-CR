@@ -16,6 +16,11 @@
 --   - Cabeçalho padronizado em '-- ' preservando hints do CBO.
 --   - Validação com dados reais de produção no Oracle SGTPRD: 25 linhas em ~0.81s.
 -- =============================================================================
+-- GRÃO: no escopo (STATUS <> 0, sem montada) cada OB tem no máximo 1 linha de PDC_SUB e 1 de OB_PRODUTO,
+-- verificado em 08/10/2026 no Oracle SGTPRD (somente leitura). Soma original = soma deduplicada (razão 1,000000).
+-- Unicidade empírica, não estrutural: revalidar se PDC_SUB ganhar novas fontes de pedido.
+-- NEGÓCIO (08/10/2026): 58 OBs (39.076,00 kg) saem da demanda por inteiro porque a única linha de PDC
+-- falha o filtro de TIPOPEDIDO (2 ou 3) ou de cliente terminado em T, S ou R. Confirmar com a área se é intencional.
 
 WITH
 OPM_REL AS (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,8 +16,32 @@ if str(SRC_DIR) not in sys.path:
 
 from beneficiamento.historico_db import init_db, salvar_historico  # noqa: E402
 
+# Mesmo caminho que data.schema.resolve_db_path usa como default (banco de produção).
+PRODUCTION_DB = BASE_DIR / "snapshots" / "beneficiamento_historico.db"
+
+
+def exigir_banco_isolado() -> Path:
+    """Recusa a execução sem um banco de teste explícito.
+
+    Sem ``BENEFICIAMENTO_HISTORICO_DB`` o mock gravaria no banco de produção.
+    """
+    raw = os.environ.get("BENEFICIAMENTO_HISTORICO_DB", "").strip()
+    if not raw:
+        raise SystemExit(
+            "Recusado: defina BENEFICIAMENTO_HISTORICO_DB apontando para um banco "
+            "de teste. Sem essa variável o mock gravaria no banco de produção."
+        )
+    alvo = Path(raw).expanduser().resolve()
+    if os.path.normcase(str(alvo)) == os.path.normcase(str(PRODUCTION_DB.resolve())):
+        raise SystemExit(
+            "Recusado: BENEFICIAMENTO_HISTORICO_DB aponta para o banco de produção "
+            f"({alvo})."
+        )
+    return alvo
+
 
 def populate() -> None:
+    exigir_banco_isolado()
     # Garantir que o banco esteja inicializado
     db_path = init_db()
     print(f"Banco SQLite inicializado em: {db_path}")

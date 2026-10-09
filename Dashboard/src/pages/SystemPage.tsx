@@ -15,8 +15,7 @@ import { usePolling } from "../hooks/usePolling";
 import { writeCache } from "../lib/resourceCache";
 import { orchestratorApi, type AuditEntry } from "../api/orchestrator";
 import {
-  Annunciator,
-  AnnunciatorGrid,
+  BaselineAnnunciators,
   Button,
   Card,
   ConfirmModal,
@@ -259,19 +258,7 @@ export function SystemPage() {
       {/* Baseline + Worker */}
       <div className={page.two}>
         <Card label="anunciador · baseline operacional" alert={baseline.status === "incident"}>
-          <AnnunciatorGrid>
-            {baseline.metrics.map((m) => (
-              <Annunciator
-                key={m.code}
-                legend={m.label}
-                value={m.current_value ?? undefined}
-                tone={healthTone(m.status)}
-                active={m.status !== "healthy"}
-                blink={m.status === "incident"}
-                statusLabel={healthLabel(m.status)}
-              />
-            ))}
-          </AnnunciatorGrid>
+          <BaselineAnnunciators metrics={baseline.metrics} />
         </Card>
 
         <Card label="worker">

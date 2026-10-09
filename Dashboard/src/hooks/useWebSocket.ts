@@ -3,7 +3,7 @@ import { api, ApiError } from "../api/client";
 
 export type WsStatus = "connecting" | "open" | "closed" | "unauthorized";
 
-export interface UseWebSocketOptions {
+interface UseWebSocketOptions {
   onMessage?: (event: MessageEvent) => void;
   enabled?: boolean;
 }

@@ -19,6 +19,7 @@ import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import selectStyles from "../components/ui/Select.module.css";
 import { healthTone, healthLabel, type Tone } from "../lib/status";
 import { extractTimeBr } from "../lib/format";
+import { onActivationKey } from "../lib/keyboard";
 import page from "./page.module.css";
 
 interface LogLine {
@@ -86,13 +87,8 @@ function ClickableTile({ onClick, children }: ClickableTileProps) {
       role="button"
       tabIndex={0}
       onClick={onClick}
-      onKeyDown={(e) => {
-        // Space ativa igual a Enter — mesmo contrato de um <button> real.
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
+      // Enter e Space ativam, como um <button> real.
+      onKeyDown={onActivationKey(onClick)}
       style={{ cursor: "pointer" }}
     >
       {children}

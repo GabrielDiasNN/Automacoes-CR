@@ -70,7 +70,7 @@ export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 20
   // muda) e não paga o custo de serializar todos os pontos a cada render.
   useEffect(() => {
     plotRef.current?.setData(toData(xLabels, lines));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só valores: xLabels entra na recriação (structureKey); a atualização depende da referência de lines
   }, [lines]);
 
   // Recria o gráfico apenas quando a estrutura muda.
@@ -130,7 +130,7 @@ export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 20
     };
     // `structureKey` é a fonte de verdade da recriação; xLabels/lines/height/
     // theme entram só pelo valor serializado nela.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- structureKey é a fonte de verdade: xLabels, lines, height e theme entram serializados nela
   }, [structureKey]);
 
   // O canvas do uPlot não é exposto pela árvore de acessibilidade e

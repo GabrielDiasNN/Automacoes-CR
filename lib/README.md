@@ -40,6 +40,14 @@ Wrapper PowerShell para o motor Node.js. Gerencia concorrencia e sessao (Pairing
 
 ---
 
+## 📦 Dependências Node do motor WhatsApp (`package.json`)
+
+O `postinstall` aplica `lib/patches/*.patch` por `scripts/aplicar-patches.js` (sem dependências e idempotente), no lugar do `patch-package`. `extract-zip` usa o fork vendorizado em `lib/vendor/extract-zip` (`2.0.2-automacoes.1`, com as correções de CVE-2026-19693 e CVE-2026-56876). O procedimento de regeneração do lock e a guarda de dependências estão em `lib/CLAUDE.md`.
+
+**Pendência operacional:** o `lib/node_modules` instalado nesta máquina continua com a árvore antiga. Produção só passa a usar as novas dependências depois de `npm ci` em `lib/`, com o canal WhatsApp em janela de manutenção.
+
+---
+
 ## 🧪 Testes de Qualidade (Pester)
 
 Para garantir a resiliência industrial, a biblioteca conta com testes automatizados utilizando o framework **Pester**.

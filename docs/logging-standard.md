@@ -220,7 +220,7 @@ O runtime mascara **antes** de gravar em disco/`stdout`. O Orchestrator revalida
 | **PR6 — gate + âncora** ✅ | `docs/log-event.samples.jsonl` (golden, âncora do CI); `Test-LogEventSchema.ps1` v2.0.0 default `blocking`. |
 | **PR7 — correções da validação em produção** ✅ | Achados do 1º ciclo real (27/08): hook do stamina emite `retry.attempt` em vez de `stamina.retry_scheduled`; `validate_and_generate_html.py` (MT-02) migrado para `make_logger`; `record_counts` com núcleo canônico (`read` = linhas cruas, `failures`→`rejected`, `+validated`); `phases_pending`→`phases_attempted` (OBP-04); MT-02 emite `record_counts` no caminho "sem mudança" e move o log pós-`execution.end` para `DEBUG`; `WhatsApp-Core.js` não duplica mais cada evento no `.jsonl`. |
 | Follow-up | Alinhar `OrchestratorJsonFormatter` (`app/logger_setup.py`) ao envelope + propagar `trace_id` via header `X-Trace-Id`. |
-| **PR Orchestrator** | `Orchestrator/app/**`, `worker.py`, scheduler e `Produção Beneficimento/src/runner.py` no mesmo envelope. |
+| **PR Orchestrator** | `Orchestrator/app/**`, `worker.py`, scheduler e `Produção Beneficimento/src/beneficiamento/runner.py` no mesmo envelope. |
 | **PR final** | Gate `Test-LogEventSchema.ps1` → `blocking`; entrada no `CHANGELOG.md`. **`Get-ForwardedLogLevel` permanece** (é usada internamente por `Write-HubForwardedLine`). O parser legado de `logParser.ts`/worker **permanece** enquanto houver logs históricos no formato antigo no DB (retenção 90 dias). |
 
 ---

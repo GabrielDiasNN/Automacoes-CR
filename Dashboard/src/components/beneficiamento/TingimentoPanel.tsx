@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Droplet } from "lucide-react";
+import { AlertTriangle, Droplet } from "lucide-react";
 import {
   orchestratorApi,
   type BeneficiamentoTingimentoPorCor,
@@ -42,6 +42,24 @@ function amostraLabel(insuficiente: boolean, value: string): string {
   return insuficiente ? `${value} (amostra baixa)` : value;
 }
 
+/** Célula "Reproc. %" das tabelas por máquina e por cor. Amostra baixa aparece
+ *  como ícone de aviso com rótulo acessível; o `title` traz o texto completo. */
+function reprocessoCell(r: { fases: number; reprocesso_kg_pct: number; amostra_insuficiente: boolean }) {
+  return (
+    <span title={amostraLabel(r.amostra_insuficiente, `${r.fases} lotes`)}>
+      {formatPercent(r.reprocesso_kg_pct, 1)}
+      {r.amostra_insuficiente && (
+        <AlertTriangle
+          role="img"
+          aria-label="amostra baixa"
+          size={12}
+          style={{ color: "var(--amber)", marginLeft: "var(--sp-1)", verticalAlign: "-2px" }}
+        />
+      )}
+    </span>
+  );
+}
+
 const MAQUINA_COLUMNS: Column<BeneficiamentoTingimentoPorMaquina>[] = [
   { key: "maquina", header: "Máquina", render: (r) => r.maquina },
   { key: "fases", header: "Lotes", align: "right", render: (r) => formatNumber(r.fases) },
@@ -52,12 +70,7 @@ const MAQUINA_COLUMNS: Column<BeneficiamentoTingimentoPorMaquina>[] = [
     key: "reprocesso_kg_pct",
     header: "Reproc. %",
     align: "right",
-    render: (r) => (
-      <span title={amostraLabel(r.amostra_insuficiente, `${r.fases} lotes`)}>
-        {formatPercent(r.reprocesso_kg_pct, 1)}
-        {r.amostra_insuficiente ? " ⚠" : ""}
-      </span>
-    ),
+    render: reprocessoCell,
   },
 ];
 
@@ -69,12 +82,7 @@ const COR_COLUMNS: Column<BeneficiamentoTingimentoPorCor>[] = [
     key: "reprocesso_kg_pct",
     header: "Reproc. %",
     align: "right",
-    render: (r) => (
-      <span title={amostraLabel(r.amostra_insuficiente, `${r.fases} lotes`)}>
-        {formatPercent(r.reprocesso_kg_pct, 1)}
-        {r.amostra_insuficiente ? " ⚠" : ""}
-      </span>
-    ),
+    render: reprocessoCell,
   },
 ];
 

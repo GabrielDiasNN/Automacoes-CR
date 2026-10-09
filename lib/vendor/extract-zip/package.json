@@ -1,0 +1,37 @@
+{
+  "name": "extract-zip",
+  "version": "2.0.2-automacoes.1",
+  "description": "Fork do extract-zip 2.0.1 com correção de segurança para symlinks e caminhos (CVE-2026-19693, CVE-2026-56876). Uso interno do Automações; não é a versão oficial.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "extract-zip": "cli.js"
+  },
+  "files": [
+    "cli.js",
+    "index.d.ts",
+    "index.js",
+    "LICENSE",
+    "README.md"
+  ],
+  "private": true,
+  "author": "max ogden",
+  "license": "BSD-2-Clause",
+  "repository": "maxogden/extract-zip",
+  "keywords": [
+    "unzip",
+    "zip",
+    "extract"
+  ],
+  "engines": {
+    "node": ">= 10.17.0"
+  },
+  "dependencies": {
+    "debug": "^4.1.1",
+    "get-stream": "^5.1.0",
+    "yauzl": "^2.10.0"
+  },
+  "optionalDependencies": {
+    "@types/yauzl": "^2.9.1"
+  }
+}

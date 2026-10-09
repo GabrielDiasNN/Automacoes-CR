@@ -65,9 +65,8 @@ except ImportError as e:
     print(f"CRITICAL: Falha ao importar componentes do app: {e}")
     sys.exit(1)
 
-# Compatibilidade de testes e chamadas legadas durante a refatoração.
+# Alias de compatibilidade para os testes (test_worker_queue.py) durante a refatoração.
 _finalize_terminated_task = finalize_terminated_task
-_mark_task_as_failed = mark_task_as_failed
 
 # ---------------------------------------------------------------------------
 # Configuracao de Ambiente
