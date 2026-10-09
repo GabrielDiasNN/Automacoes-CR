@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDiagnostics } from "../hooks/useDiagnostics";
+import { api } from "../api/client";
 import { orchestratorApi } from "../api/orchestrator";
 import { _clearCache } from "../lib/resourceCache";
 
@@ -24,9 +25,11 @@ describe("useDiagnostics", () => {
     vi.restoreAllMocks();
   });
 
-  it("deriva worker de health.worker e NÃO chama getWorkerStatus", async () => {
+  it("deriva worker de health.worker e NÃO chama /api/system/worker/status", async () => {
     const getHealth = vi.spyOn(orchestratorApi, "getHealth").mockResolvedValue(health() as never);
-    const getWorkerStatus = vi.spyOn(orchestratorApi, "getWorkerStatus");
+    // Espiona o transporte: qualquer GET do hook passa por `api.get`, então a
+    // ausência do path prova que não há requisição separada ao worker.
+    const apiGet = vi.spyOn(api, "get");
 
     const { result } = renderHook(() => useDiagnostics(10_000));
     await act(async () => {
@@ -34,7 +37,7 @@ describe("useDiagnostics", () => {
     });
 
     expect(getHealth).toHaveBeenCalledTimes(1);
-    expect(getWorkerStatus).not.toHaveBeenCalled();
+    expect(apiGet.mock.calls.map(([path]) => path)).not.toContain("/api/system/worker/status");
     expect(result.current.health?.status).toBe("healthy");
     expect(result.current.worker).toEqual({ is_alive: true, active_tasks: 2, pid: 42 });
     expect(result.current.loading).toBe(false);

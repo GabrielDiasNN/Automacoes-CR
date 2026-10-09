@@ -197,7 +197,7 @@ export function usePolling<T>(
     if (intervalMs <= 0) return;
     const id = setInterval(() => void refresh(), intervalMs);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps do chamador entram como array dinâmico (spread); refresh é estável (useCallback)
   }, [refresh, intervalMs, ...deps]);
 
   return { data, loading, error, lastUpdated, rateLimitedUntil, refreshQueued, refresh };

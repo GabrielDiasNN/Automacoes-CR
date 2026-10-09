@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import type { BeneficiamentoTreemapNode } from "../../api/orchestrator";
 import { formatNumber } from "../../lib/format";
+import { onActivationKey } from "../../lib/keyboard";
 import styles from "./Treemap.module.css";
 
 interface TreemapProps {
@@ -106,16 +107,7 @@ export const Treemap = memo(function Treemap({ nodes, height = 320, onCellClick 
                   role={onCellClick ? "button" : undefined}
                   tabIndex={onCellClick ? 0 : undefined}
                   aria-label={onCellClick ? celulaLabel : undefined}
-                  onKeyDown={
-                    onCellClick
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            abrirDrillDown();
-                          }
-                        }
-                      : undefined
-                  }
+                  onKeyDown={onCellClick ? onActivationKey(abrirDrillDown) : undefined}
                 >
                   <title>{`${group.setor} / ${fase.fase} — ${formatNumber(fase.kg_total)} kg\n${topMaquinas}`}</title>
                   <rect

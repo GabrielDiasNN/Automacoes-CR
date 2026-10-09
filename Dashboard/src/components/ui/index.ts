@@ -13,6 +13,7 @@ export { ConfirmModal } from "./Modal";
 export { ToastProvider, useToast } from "./Toast";
 export { EmptyState, Loading, ErrorState, Skeleton } from "./Feedback";
 export { Annunciator, AnnunciatorGrid } from "./Annunciator";
+export { BaselineAnnunciators } from "./BaselineAnnunciators";
 export { Gauge } from "./Gauge";
 export { Sparkline, RatioBar } from "./MiniViz";
 // `TimeSeries` NÃO é reexportado aqui de propósito: ele importa `uplot` (e um

@@ -38,7 +38,7 @@ const INTERACTIVE_SELECTOR = "button, a[href], input, select, textarea, [role='b
  *  Motivo histórico: a linha clicável chegou a ter `role="button"` (Onda
  *  4-2), que também casava em `[role='button']` — sem excluir `boundary`, a
  *  própria linha "detectava a si mesma" como controle aninhado e engolia
- *  TODO clique silenciosamente. Esse `role="button"` foi removido (achado
+ *  todo clique silenciosamente. Esse `role="button"` foi removido (achado
  *  nº 3 da revisão de 04/09/2026 — invalidava a semântica de tabela para
  *  leitor de tela); a `<tr>` não corresponde mais a nenhum seletor de
  *  `INTERACTIVE_SELECTOR`, então a exclusão de `boundary` não tem mais
@@ -62,7 +62,7 @@ function DataTableInner<T>({ columns, rows, rowKey, onRowClick, rowTone, rowLabe
   // Authoring Practices pra região com scroll, então o disable é
   // intencional, não um escape de preguiça.
   return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- região com rolagem horizontal focável (WAI-ARIA APG); o aria-label dá nome à região
     <div className={styles.scroll} tabIndex={0} role="region" aria-label="tabela com rolagem horizontal">
       <table className={`${styles.table} ${density === "compact" ? styles.compact : ""}`}>
         <thead>

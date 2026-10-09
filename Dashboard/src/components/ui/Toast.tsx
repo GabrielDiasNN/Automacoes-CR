@@ -66,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   // ToastProvider está acima do router (App.tsx) — sem useMemo, `value` era
   // um objeto novo a cada render, e como o provider re-renderiza a cada
-  // toast (push, e de novo 4,2s depois na expiração), TODO consumidor de
+  // toast (push, e de novo 4,2s depois na expiração), todo consumidor de
   // useToast() — páginas inteiras — re-renderizava com ele (achado nº 30,
   // Onda 5).
   const value = useMemo(() => ({ push }), [push]);

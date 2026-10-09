@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import styles from "./Lamp.module.css";
 
-export interface LampProps {
+interface LampProps {
   /** px — os 4 tamanhos hoje em uso: 7 (StatusTag), 8 (Mimico · fila), 9
    *  (StatusBar/Annunciator/AutomacoesPage), 10 (Mimico · worker). */
   size: 7 | 8 | 9 | 10;

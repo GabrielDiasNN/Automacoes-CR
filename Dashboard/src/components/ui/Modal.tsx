@@ -36,7 +36,7 @@ export function ConfirmModal({
     // Overlay de clique-fora do modal (padrão sem equivalente nativo).
     // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
     // de stopPropagation no filho. Escape já fecha via useFocusTrap.
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- overlay de clique-fora: padrão sem equivalente nativo, o alvo é checado no próprio overlay
     <div className={`overlay-scrim ${styles.overlay}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div
         ref={ref}

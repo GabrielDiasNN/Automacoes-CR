@@ -79,7 +79,7 @@ export type ExecutionStatus =
 
 /** `automation_snapshot._resolve_operational_state` + `not_registered`
  *  (`portfolio_catalog`). */
-export type OperationalState =
+type OperationalState =
   | "healthy"
   | "in_progress"
   | "attention"
@@ -88,7 +88,7 @@ export type OperationalState =
   | "not_registered";
 
 /** `system_overview` — SLA agregada por card de automação. */
-export type SlaStatus = "ok" | "at_risk" | "violated" | "unknown";
+type SlaStatus = "ok" | "at_risk" | "violated" | "unknown";
 
 /** `portfolio_catalog._sla_state` — vocabulário DISTINTO de `SlaStatus` (o
  *  plano assumia que eram o mesmo; não são). `lib/status.ts slaTone` trata
@@ -96,11 +96,11 @@ export type SlaStatus = "ok" | "at_risk" | "violated" | "unknown";
 export type SlaState = "ok" | "breached" | "recovering" | "unknown";
 
 /** `system_diagnostics` `overall_status` / `SystemHealth.status`. */
-export type HealthStatus = "healthy" | "degraded" | "unhealthy" | "ok";
+type HealthStatus = "healthy" | "degraded" | "unhealthy" | "ok";
 
 // ── Execuções ───────────────────────────────────────────────────────────────
 
-export type OperatorSeverity = "CRITICAL" | "HIGH" | "MODERATE" | "NORMAL";
+type OperatorSeverity = "CRITICAL" | "HIGH" | "MODERATE" | "NORMAL";
 
 export interface ExecutionSummary {
   id: string;
@@ -142,21 +142,13 @@ export interface ExecutionDetail extends ExecutionSummary {
   worker_pid: number | null;
 }
 
-export interface ExecutionLogsResponse {
-  exec_id: string;
-  total_lines: number;
-  offset: number;
-  limit: number;
-  lines: string[];
-}
-
 /** `GET /api/executions/{id}/artifacts` — `ExecutionArtifactsResponse`. */
-export interface ExecutionArtifactsResponse {
+interface ExecutionArtifactsResponse {
   exec_id: string;
   artifacts: string[];
 }
 
-export interface QueueActionResponse {
+interface QueueActionResponse {
   message: string;
   source_exec_id: string;
   queued_exec_id: string;
@@ -195,7 +187,7 @@ export interface SystemHealth {
   ram_usage_percent: number | null;
 }
 
-export interface ScheduledJob {
+interface ScheduledJob {
   id: string;
   automation_id: number | null;
   automation_name: string | null;
@@ -204,7 +196,7 @@ export interface ScheduledJob {
 }
 
 /** `GET /api/system/version` — `Orchestrator/app/schemas/system.py::SystemVersion`. */
-export interface SystemVersion {
+interface SystemVersion {
   version: string;
   schema_version: string;
   contract_version: string;
@@ -216,7 +208,7 @@ export interface SystemVersion {
 }
 
 /** `GET /api/system/uptime` — `SystemUptime`. */
-export interface SystemUptime {
+interface SystemUptime {
   started_at: string;
   uptime_seconds: number;
   uptime_human: string;
@@ -235,7 +227,7 @@ export interface AuditEntry {
 }
 
 /** `GET /api/portfolio/drift` — `PortfolioDriftResponse`/`PortfolioDriftItem`/`PortfolioDriftIssue`. */
-export interface PortfolioDriftIssue {
+interface PortfolioDriftIssue {
   code: string;
   message: string;
   severity: string;
@@ -251,13 +243,13 @@ export interface PortfolioDriftItem {
   issues: PortfolioDriftIssue[];
 }
 
-export interface PortfolioDriftResponse {
+interface PortfolioDriftResponse {
   generated_at: string;
   summary: { items_with_drift: number; total_issues: number };
   items: PortfolioDriftItem[];
 }
 
-export interface BaselineStatus {
+interface BaselineStatus {
   evaluated_at: string | null;
   status: "healthy" | "attention" | "incident";
   attention_count: number;
@@ -300,7 +292,7 @@ export interface SystemHistory {
   items: SystemHistoryPoint[];
 }
 
-export interface DailyExecutionMetric {
+interface DailyExecutionMetric {
   date: string;
   total: number;
   success: number;
@@ -316,7 +308,7 @@ export interface SystemMetricsDaily {
   items: DailyExecutionMetric[];
 }
 
-export interface SystemKpis {
+interface SystemKpis {
   active_automations: number;
   success_24h: number;
   errors_24h: number;
@@ -324,7 +316,7 @@ export interface SystemKpis {
   next_window: string | null;
 }
 
-export interface OverviewAutomationCard {
+interface OverviewAutomationCard {
   id: number;
   name: string;
   description: string | null;
@@ -350,7 +342,7 @@ export interface OverviewAutomationCard {
   operational_state: OperationalState;
 }
 
-export interface PortfolioSummary {
+interface PortfolioSummary {
   total_items: number;
   governed_items: number;
   enabled_items: number;
@@ -365,7 +357,7 @@ export interface PortfolioSummary {
   recommended_action: string | null;
 }
 
-export interface DiagnosticFinding {
+interface DiagnosticFinding {
   severity: "CRITICAL" | "HIGH" | "MODERATE" | "INFO" | string;
   component: string;
   message: string;
@@ -376,13 +368,13 @@ export interface DiagnosticFinding {
   priority: number;
 }
 
-export interface QueueOverview {
+interface QueueOverview {
   active_count: number;
   by_status: Record<string, number>;
   active_by_priority: Record<string, number>;
 }
 
-export interface SystemOverview {
+interface SystemOverview {
   generated_at: string;
   version: string;
   kpis: SystemKpis;
@@ -405,7 +397,7 @@ export interface SystemOverview {
 
 // ── Portfólio ───────────────────────────────────────────────────────────────
 
-export interface PortfolioDependencyStatus {
+interface PortfolioDependencyStatus {
   oracle: string;
   outlook: string;
   whatsapp: string;
@@ -446,7 +438,7 @@ export interface PortfolioHealthItem {
   dependency_status: PortfolioDependencyStatus;
 }
 
-export interface PortfolioHealth {
+interface PortfolioHealth {
   generated_at: string;
   summary: PortfolioSummary;
   items: PortfolioHealthItem[];
@@ -454,14 +446,14 @@ export interface PortfolioHealth {
 
 // ── Beneficiamento (tipagem ampliada na Fase 4) ──────────────────────────────
 
-export interface BeneficiamentoLatestPeriod {
+interface BeneficiamentoLatestPeriod {
   period: string;
   label: string;
   status: string;
   updated_at: string | null;
 }
 
-export interface BeneficiamentoHealth {
+interface BeneficiamentoHealth {
   status: string;
   reason_code: string | null;
   recommended_action: string | null;
@@ -469,29 +461,6 @@ export interface BeneficiamentoHealth {
   latest_period: BeneficiamentoLatestPeriod | null;
   generated_at: string;
   [k: string]: unknown;
-}
-
-export interface BeneficiamentoPeriodPayload {
-  key: string;
-  label: string;
-  available: boolean;
-  status: string;
-  updated_at: string | null;
-  reason_message: string | null;
-  recommended_action: string | null;
-  metrics: Record<string, unknown>;
-  quality: Record<string, unknown>;
-  rankings: Record<string, unknown>;
-  highlights: Record<string, unknown>;
-}
-
-export interface BeneficiamentoDashboard {
-  generated_at: string;
-  default_period: string;
-  overall: Record<string, unknown>;
-  comparison: Record<string, unknown>[];
-  periods: Record<string, BeneficiamentoPeriodPayload>;
-  health: BeneficiamentoHealth;
 }
 
 // ── Beneficiamento — overview/detail (filtros dinâmicos sobre SQLite histórico) ──
@@ -505,7 +474,7 @@ export interface BeneficiamentoFilterOptions {
   tipos_maquina: string[];
 }
 
-export interface BeneficiamentoEffectiveFilters {
+interface BeneficiamentoEffectiveFilters {
   dt_inicio: string | null;
   dt_fim: string | null;
   maquina: string | null;
@@ -520,7 +489,7 @@ export interface BeneficiamentoEffectiveFilters {
   status: string | null;
 }
 
-export interface BeneficiamentoKpis {
+interface BeneficiamentoKpis {
   ob_distintas: number;
   fases_concluidas: number;
   kg_total: number;
@@ -587,7 +556,7 @@ export interface BeneficiamentoSetorRanking {
   eficiencia_tempo_pct: number;
 }
 
-export interface BeneficiamentoRankings {
+interface BeneficiamentoRankings {
   gargalos: BeneficiamentoGargalo[];
   fases_criticas: BeneficiamentoFaseCritica[];
   produtos_principais: BeneficiamentoProdutoPrincipal[];
@@ -602,13 +571,7 @@ export interface BeneficiamentoTreemapNode {
   kg_total: number;
 }
 
-export interface BeneficiamentoSeriesPoint {
-  date: string;
-  kg_total?: number;
-  eficiencia_tempo_pct?: number;
-}
-
-export interface BeneficiamentoTingimentoResumo {
+interface BeneficiamentoTingimentoResumo {
   ob_distintas: number;
   fases: number;
   kg_total: number;
@@ -621,7 +584,7 @@ export interface BeneficiamentoTingimentoResumo {
   produtividade_kg_h: number;
 }
 
-export interface BeneficiamentoTingimentoSeriePonto {
+interface BeneficiamentoTingimentoSeriePonto {
   date: string;
   kg_total: number;
   eficiencia_tempo_pct: number;
@@ -668,7 +631,7 @@ export interface BeneficiamentoTingimento {
   };
 }
 
-export interface BeneficiamentoSeries {
+interface BeneficiamentoSeries {
   volume_diario: { date: string; kg_total: number }[];
   eficiencia_diaria: { date: string; eficiencia_tempo_pct: number }[];
 }
@@ -692,12 +655,12 @@ export interface BeneficiamentoOverview {
   interaction: { detail_endpoint: string; clickable_targets: string[] };
 }
 
-export interface BeneficiamentoProdutoOption {
+interface BeneficiamentoProdutoOption {
   codigo: string | null;
   produto: string;
 }
 
-export interface BeneficiamentoProdutosResponse {
+interface BeneficiamentoProdutosResponse {
   items: BeneficiamentoProdutoOption[];
 }
 
@@ -751,12 +714,12 @@ export interface BeneficiamentoTraceFase {
   reprocesso: number;
 }
 
-export interface BeneficiamentoTraceOb {
+interface BeneficiamentoTraceOb {
   ob: string;
   fases: BeneficiamentoTraceFase[];
 }
 
-export interface BeneficiamentoDetailSummary {
+interface BeneficiamentoDetailSummary {
   target_type: string;
   ob_distintas: number;
   fases_concluidas: number;
@@ -798,7 +761,7 @@ export interface BeneficiamentoOverviewParams {
   status?: string | undefined;
 }
 
-export interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams {
+interface BeneficiamentoDetailParams extends BeneficiamentoOverviewParams {
   target_type: BeneficiamentoTargetType;
   ob?: string | undefined;
   page?: number | undefined;
@@ -816,18 +779,9 @@ export const orchestratorApi = {
     signal?: AbortSignal,
   ) => api.get<Paginated<Automation>>(`/api/automations${qs({ ...params })}`, signal).then((r) => r.items),
   listAllAutomations: (signal?: AbortSignal) => api.get<Automation[]>("/api/automations/all", signal),
-  getAutomation: (id: number) => api.get<Automation>(`/api/automations/${id}`),
-  getAutomationOverview: (id: number) =>
-    api.get<{ automation: Automation; metrics_24h: Record<string, number>; recent_executions: ExecutionSummary[] }>(
-      `/api/automations/${id}/overview`,
-    ),
   startAutomation: (id: number) => api.post<{ message: string; exec_id: string }>(`/api/automations/${id}/start`),
   pauseAutomation: (id: number) => api.post<{ message: string }>(`/api/automations/${id}/pause`),
   resumeAutomation: (id: number) => api.post<{ message: string }>(`/api/automations/${id}/resume`),
-  setAutomationTestMode: (id: number, enabled: boolean) =>
-    api.post<{ message: string }>(`/api/automations/${id}/test-mode`, { enabled }),
-  setGlobalTestMode: (enabled: boolean) =>
-    api.post<{ message: string }>(`/api/automations/test-mode/global`, { enabled }),
   pauseAll: () => api.post<{ message: string }>("/api/automations/control/pause-all"),
   resumeAll: () => api.post<{ message: string }>("/api/automations/control/resume-all"),
 
@@ -841,11 +795,7 @@ export const orchestratorApi = {
     },
     signal?: AbortSignal,
   ) => api.get<Paginated<ExecutionSummary>>(`/api/executions${qs({ ...params })}`, signal),
-  recentExecutions: (limit = 10) =>
-    api.get<ExecutionSummary[]>(`/api/executions/recent${qs({ limit })}`),
   getExecution: (id: string, signal?: AbortSignal) => api.get<ExecutionDetail>(`/api/executions/${id}`, signal),
-  getExecutionLogs: (id: string, params?: { offset?: number; limit?: number }) =>
-    api.get<ExecutionLogsResponse>(`/api/executions/${id}/logs${qs({ ...params })}`),
   stopExecution: (id: string) => api.post<{ message: string }>(`/api/executions/${id}/stop`),
   requeueExecution: (id: string, body?: { reason?: string; priority?: string }) =>
     api.post<QueueActionResponse>(`/api/executions/${id}/requeue`, body ?? {}),
@@ -861,16 +811,11 @@ export const orchestratorApi = {
 
   // ── Sistema ──
   getHealth: (signal?: AbortSignal) => api.get<SystemHealth>("/api/system/health/full", signal),
-  /** Redundante com `getHealth().worker` — mantido tipado para a Onda 6
-   *  (card do Worker); `useDiagnostics` deixou de chamá-lo. */
-  getWorkerStatus: () => api.get<WorkerStatus>("/api/system/worker/status"),
   getOverview: (signal?: AbortSignal) => api.get<SystemOverview>("/api/system/overview", signal),
-  getBaseline: () => api.get<BaselineStatus>("/api/system/baseline"),
   getHistory: (hours = 24, signal?: AbortSignal) =>
     api.get<SystemHistory>(`/api/system/history${qs({ hours })}`, signal),
   getSystemMetricsDaily: (days = 14, signal?: AbortSignal) =>
     api.get<SystemMetricsDaily>(`/api/system/metrics/daily${qs({ days })}`, signal),
-  getScheduledJobs: () => api.get<ScheduledJob[]>("/api/system/scheduler/jobs"),
   runCheckpoint: () => api.post<{ message: string }>("/api/system/checkpoint"),
   runPurge: () => api.post<{ message: string }>("/api/system/purge"),
   recoverWorker: () => api.post<{ message: string }>("/api/system/worker/recover"),
@@ -890,7 +835,6 @@ export const orchestratorApi = {
     api.getText(`/api/portfolio/runbook/${encodeURIComponent(catalogId)}`, signal),
 
   // ── Beneficiamento ──
-  getBeneficiamentoDashboard: () => api.get<BeneficiamentoDashboard>("/api/beneficiamento/dashboard"),
   getBeneficiamentoHealth: (signal?: AbortSignal) =>
     api.get<BeneficiamentoHealth>("/api/beneficiamento/health", signal),
   getBeneficiamentoOverview: (params?: BeneficiamentoOverviewParams, signal?: AbortSignal) =>

@@ -21,7 +21,7 @@ export function useAsyncResource<T>(
 ): PollingState<T | null> {
   const wrapped = useCallback(
     (signal?: AbortSignal) => (fetcher ? fetcher(signal) : Promise.resolve(null)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps do chamador entram como array dinâmico (spread); fetcher já está explícito
     [fetcher, ...deps],
   );
   return usePolling<T | null>(wrapped, 0, deps, options);

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-export type TableDensity = "comfortable" | "compact";
+type TableDensity = "comfortable" | "compact";
 
 const STORAGE_KEY = "orchestrator_table_density";
 
