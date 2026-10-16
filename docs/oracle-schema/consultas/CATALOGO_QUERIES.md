@@ -227,7 +227,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 |---|---|---|---|---|---|---|
 | `fac_desenho_estamparia.sql` | Desenho Estamparia | Facção e Serviços Terceiros | — | ✅ validada | vazia | 2 ms |
 | `fac_diagnostico_programacao_ambigua.sql` | Diagnóstico contábil de ordens de programação de terceirização com ambiguidade ativa de NF | Auditoria/Sentinela | — | ✅ validada | vazia | 5252 ms |
-| `fac_faltas_e_sobras_faccao.sql` | Faltas e Sobras (Facção) | Facção e Serviços Terceiros (Consulta Somente Leitura) | — | ✅ validada | com dados | 842 ms |
+| `fac_faltas_e_sobras_faccao.sql` | Faltas e Sobras (Facção - Fluxo Interno) | Facção e Serviços Terceiros (Consulta Somente Leitura) | — | ✅ validada | com dados | 683 ms |
 | `fac_saldo_nf_faccao.sql` | Controle consolidado de saldo físico e disponível de NFs de terceirização/facção | Monitoramento operacional | — | ✅ validada | com dados | 5198 ms |
 | `fac_tabela_reduzidos_com_servicos_em_terceiros.sql` | Tabela - Reduzidos com serviços em terceiros | Facção e Serviços Terceiros | — | ✅ validada | com dados | 52 ms |
 

@@ -241,6 +241,97 @@ Write-Warning "Falha ao fechar telemetria: $_"
 }
 
 # ------------------------------------------------------------------------------
+# Endpoint do Oracle para o pre-flight (alias do tnsnames.ora ou EZ Connect)
+# ------------------------------------------------------------------------------
+
+function Get-OracleTnsnamesPath {
+    # Procura tnsnames.ora na ordem do cliente Oracle: TNS_ADMIN e depois ORACLE_CLIENT_PATH
+    # (variavel de ambiente ou .env do projeto).
+    [CmdletBinding()]
+    param()
+
+    $candidatos = @()
+    if ($env:TNS_ADMIN) { $candidatos += $env:TNS_ADMIN }
+
+    $clientePath = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_PATH", "Process")
+    if ([string]::IsNullOrWhiteSpace($clientePath)) {
+        $envFile = Join-Path $script:ProjectRoot ".env"
+        if (Test-Path $envFile) {
+            $match = Select-String -Path $envFile -Pattern '^\s*ORACLE_CLIENT_PATH\s*=\s*(.+)$' | Select-Object -First 1
+            if ($match) { $clientePath = $match.Matches[0].Groups[1].Value.Trim().Trim('"') }
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($clientePath)) {
+        $candidatos += (Join-Path $clientePath "network\admin")
+    }
+
+    foreach ($pasta in $candidatos) {
+        $arquivo = Join-Path $pasta "tnsnames.ora"
+        if (Test-Path -LiteralPath $arquivo) { return $arquivo }
+    }
+    return $null
+}
+
+function Resolve-OracleEndpoint {
+    # Devolve Servidor e Porta para um alias do tnsnames.ora ou para EZ Connect (host[:porta][/servico]).
+    # Devolve $null quando nada resolve. Nao le nem devolve credenciais.
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$ConnectString)
+
+    $texto = $ConnectString.Trim()
+    if ([string]::IsNullOrWhiteSpace($texto)) { return $null }
+
+    $tns = Get-OracleTnsnamesPath
+    if ($tns) {
+        $conteudo = Get-Content -LiteralPath $tns -Raw
+        $alias = [regex]::Escape($texto)
+        $bloco = [regex]::Match($conteudo, "(?ims)^\s*$alias\s*=(?<corpo>.*?)(?=^\s*[A-Za-z0-9_.\-]+\s*=|\z)")
+        if ($bloco.Success) {
+            $corpo = $bloco.Groups['corpo'].Value
+            $hostMatch = [regex]::Match($corpo, "(?i)HOST\s*=\s*([^\)\s]+)")
+            $portaMatch = [regex]::Match($corpo, "(?i)PORT\s*=\s*(\d+)")
+            if ($hostMatch.Success) {
+                $porta = if ($portaMatch.Success) { [int]$portaMatch.Groups[1].Value } else { 1521 }
+                return [pscustomobject]@{ Servidor = $hostMatch.Groups[1].Value; Porta = $porta; Origem = "TNS" }
+            }
+        }
+    }
+
+    $ezConnect = [regex]::Match($texto, '^(?<host>[A-Za-z0-9.\-_]+)(:(?<porta>\d+))?(/[^/\s]*)?$')
+    if ($ezConnect.Success) {
+        $porta = if ($ezConnect.Groups['porta'].Success) { [int]$ezConnect.Groups['porta'].Value } else { 1521 }
+        return [pscustomobject]@{ Servidor = $ezConnect.Groups['host'].Value; Porta = $porta; Origem = "EZConnect" }
+    }
+    return $null
+}
+
+function Test-OracleTcpEndpoint {
+    # Abre uma conexao TCP com timeout. Ping (ICMP) nao serve: pode estar bloqueado mesmo com o banco no ar.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Servidor,
+        [Parameter(Mandatory = $true)][int]$Porta,
+        [int]$TimeoutMs = 3000
+    )
+
+    $cliente = New-Object System.Net.Sockets.TcpClient
+    try {
+        $async = $cliente.BeginConnect($Servidor, $Porta, $null, $null)
+        if (-not $async.AsyncWaitHandle.WaitOne($TimeoutMs)) { return $false }
+        $cliente.EndConnect($async)
+        return [bool]$cliente.Connected
+    } catch [System.Net.Sockets.SocketException] {
+        return $false
+    } catch [System.ObjectDisposedException] {
+        return $false
+    } catch [System.ArgumentException] {
+        return $false
+    } finally {
+        $cliente.Close()
+    }
+}
+
+# ------------------------------------------------------------------------------
 
 # Test-AutomationPreFlight
 
@@ -367,13 +458,25 @@ if ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
 
 $results += "WARN: Oracle host nao configurado (ORACLE_CONNECT_STRING ausente)"
 
-} elseif (Test-Connection -ComputerName $oracleHostResolved -Count 1 -Quiet) {
+} else {
 
-$results += "OK: Oracle ($oracleHostResolved) On"
+# O alias do TNS nao resolve por DNS e o ping (ICMP) pode estar bloqueado: mede a porta TCP do endpoint real.
+$enderecoOracle = if ($connStr) { $connStr } else { $oracleHostResolved }
+$endpointOracle = Resolve-OracleEndpoint -ConnectString $enderecoOracle
+
+if ($null -eq $endpointOracle) {
+
+$results += "WARN: Oracle ($oracleHostResolved) sem endpoint resolvido (alias ausente no tnsnames.ora)"
+
+} elseif (Test-OracleTcpEndpoint -Servidor $endpointOracle.Servidor -Porta $endpointOracle.Porta) {
+
+$results += "OK: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) On"
 
 } else {
 
-$results += "WARN: Oracle ($oracleHostResolved) Off"
+$results += "WARN: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) Off (porta TCP sem resposta em 3 s)"
+
+}
 
 }
 
@@ -892,6 +995,6 @@ $script:AutomationMutex = $null
 
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
+Export-ModuleMember -Function Resolve-OracleEndpoint, Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
 
 

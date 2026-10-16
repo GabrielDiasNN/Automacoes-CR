@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -14,12 +15,22 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import ORCHESTRATOR_VERSION
+from ..constants import (
+    ORCHESTRATOR_VERSION,
+    WORKER_MAX_CONCURRENCY_PADRAO,
+    get_worker_max_concurrency,
+)
 from ..database import get_db_size_mb, get_schema_version, get_wal_size_mb
 from ..runtime import get_allowed_origins, scheduler
 from ..timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")
+
+# Backups gerados por perform_manual_backup. A retenção só mexe em arquivos com este
+# nome exato; qualquer outro .db da pasta Backups (cópia manual, arquivo de trabalho)
+# é preservado.
+PADRAO_BACKUP_AUTOMATICO = re.compile(r"automacoes_backup_\d{8}_\d{6}\.db")
+RETENCAO_BACKUPS = 7
 
 
 def _probe_database(db: Session) -> bool:
@@ -158,16 +169,7 @@ def perform_manual_backup(db: Session, project_root: str) -> dict[str, Any]:
     db.execute(text(f"VACUUM INTO '{backup_path}'"))
     size_mb = round(os.path.getsize(backup_path) / (1024 * 1024), 2)
 
-    backups = sorted(
-        [
-            os.path.join(backup_dir, item)
-            for item in os.listdir(backup_dir)
-            if item.endswith(".db")
-        ]
-    )
-    if len(backups) > 7:
-        for old_backup in backups[:-7]:
-            os.remove(old_backup)
+    aplicar_retencao_backups(backup_dir)
 
     return {
         "message": "Backup realizado com sucesso.",
@@ -176,9 +178,43 @@ def perform_manual_backup(db: Session, project_root: str) -> dict[str, Any]:
     }
 
 
+def aplicar_retencao_backups(
+    backup_dir: str, retencao: int = RETENCAO_BACKUPS
+) -> list[str]:
+    """Mantém só os `retencao` backups automáticos mais recentes; devolve o que removeu.
+
+    O nome tem timestamp de largura fixa, então a ordem alfabética é a cronológica.
+    Falha ao remover um arquivo (ex.: bloqueado no Windows) vira aviso e não derruba
+    o backup que acabou de ser gravado.
+    """
+    automaticos = sorted(
+        item
+        for item in os.listdir(backup_dir)
+        if PADRAO_BACKUP_AUTOMATICO.fullmatch(item)
+    )
+    removidos: list[str] = []
+    for antigo in automaticos[: max(0, len(automaticos) - retencao)]:
+        caminho = os.path.join(backup_dir, antigo)
+        try:
+            os.remove(caminho)
+        except OSError as exc:
+            logger.warning(
+                "Não foi possível remover backup antigo %s: %s", caminho, exc
+            )
+            continue
+        logger.info("Backup antigo removido pela retenção: %s", caminho)
+        removidos.append(antigo)
+    return removidos
+
+
 def build_version_payload(startup_time: datetime) -> schemas.SystemVersion:
     uptime = get_now_local() - startup_time
-    max_workers = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
+    try:
+        max_workers = get_worker_max_concurrency()
+    except ValueError as exc:
+        # A rota de versão não cai por configuração inválida; o diagnóstico a aponta.
+        logger.warning("%s Usando %s.", exc, WORKER_MAX_CONCURRENCY_PADRAO)
+        max_workers = WORKER_MAX_CONCURRENCY_PADRAO
     return schemas.SystemVersion(
         version=ORCHESTRATOR_VERSION,
         schema_version=get_schema_version(),

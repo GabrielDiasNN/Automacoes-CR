@@ -48,11 +48,13 @@ from oracle_session import (  # noqa: E402
     run_with_cancel,
 )
 from validar_sql_oracle import (  # noqa: E402
+    GUARD_LIBERADO,
+    GUARD_SO_PARSE,
     _bind_names,
     _connect,
     _default_binds,
     _error_summary,
-    _guard,
+    _guard_texto,
     _has_multiple_statements,
     _parse_bind_args,
     _single_statement,
@@ -370,23 +372,105 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--explain", action="store_true", help="Plano estimado")
     parser.add_argument("--out", type=Path, help="Relatório JSON da medição")
     parser.add_argument(
+        "--aceitar-funcoes-somente-leitura",
+        type=Path,
+        metavar="PRIVILEGIOS_JSON",
+        help=(
+            "Exceção ao guard para SQL que chama função de pacote/schema, com a "
+            "evidência de privilégios do usuário (sem escrita em SGTPRD). Só libera "
+            "quando o único motivo do guard é a chamada de função."
+        ),
+    )
+    parser.add_argument(
         "--baseline", type=Path, help="Relatório anterior para decidir MELHORA/NEUTRO"
     )
     parser.add_argument("--min-gain", type=float, default=DEFAULT_MIN_GAIN_PCT)
     return parser
 
 
+# Privilégios de objeto que permitem gravar, e roles cujo conteúdo é conhecido sem
+# expansão (CONNECT: CREATE SESSION; RESOURCE: só cria objetos no próprio schema).
+_PRIVILEGIOS_ESCRITA = frozenset(
+    {"INSERT", "UPDATE", "DELETE", "MERGE", "ALTER", "DROP"}
+)
+_ROLES_CONHECIDAS = frozenset({"CONNECT", "RESOURCE"})
+
+
+def _problema_na_evidencia(evidencia: Path) -> str | None:
+    """Lê o dump de `pendencias/priv-escrita.sql` e diz por que ele não prova leitura.
+
+    Devolve None só quando o JSON tem linhas e nenhuma concede escrita: privilégio
+    de escrita em objeto, privilégio de sistema `ANY` ou role não expandida (a
+    consulta não abre o conteúdo de roles, então uma role desconhecida não prova nada).
+    """
+    try:
+        linhas = json.loads(evidencia.read_text(encoding="utf-8"))["rows"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return f"JSON ilegível ou sem 'rows' ({exc})"
+    if not isinstance(linhas, list) or not linhas:
+        return "nenhuma linha de privilégio"
+    for linha in linhas:
+        tipo = str(linha.get("TIPO", "")).upper()
+        privilegio = str(linha.get("PRIVILEGIO", "")).upper()
+        if tipo == "OBJETO" and privilegio in _PRIVILEGIOS_ESCRITA:
+            return f"{privilegio} em {linha.get('ESQUEMA')}.{linha.get('OBJETO')}"
+        if tipo == "SISTEMA" and " ANY " in f" {privilegio} ":
+            return f"privilégio de sistema {privilegio}"
+        if tipo == "ROLE" and privilegio not in _ROLES_CONHECIDAS:
+            return f"role não expandida {privilegio}"
+    return None
+
+
+def _excecao_funcoes(
+    guard_code: int, guard_output: str, evidencia: Path | None
+) -> dict[str, Any] | None:
+    """Exceção auditável ao guard para SQL que só chama função de pacote/schema.
+
+    Libera somente quando o guard devolve o veredito "só parse" e o único motivo é
+    a chamada de função, e exige o JSON de privilégios do usuário como evidência
+    (sem privilégio de escrita em SGTPRD a função não consegue gravar lá). Qualquer
+    outro motivo continua bloqueado.
+    """
+    if evidencia is None or guard_code != GUARD_SO_PARSE:
+        return None
+    if not evidencia.is_file():
+        raise SystemExit(f"evidência de privilégios não encontrada: {evidencia}")
+    problema = _problema_na_evidencia(evidencia)
+    if problema:
+        raise SystemExit(f"evidência de privilégios recusada ({evidencia}): {problema}")
+    try:
+        veredito = json.loads(guard_output)
+    except json.JSONDecodeError:
+        return None
+    motivos = veredito.get("motivos", [])
+    if not motivos or any("chamada a função" not in motivo for motivo in motivos):
+        return None
+    return {
+        "guard_exit": guard_code,
+        "motivos": motivos,
+        "evidencia_privilegios": str(evidencia),
+    }
+
+
 def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
     """Guard, SQL normalizado, binds e credenciais; SystemExit se algo bloquear."""
     load_dotenv(ROOT / ".env")
     path = args.file.resolve()
-    guard_code, guard_output = _guard(path, resolve_guard())
-    if guard_code != 0:
-        raise SystemExit(f"guard_sql.py bloqueou (exit {guard_code}): {guard_output}")
     try:
         sql = _load_sql(path)
     except (UnicodeDecodeError, GuardError) as exc:
         raise SystemExit(f"SQL ilegível: {_error_summary(exc)}") from exc
+    # O guard classifica o mesmo texto que vai ao Oracle (o normalizado), como no validar.
+    guard_code, guard_output = _guard_texto(sql, resolve_guard())
+    args.excecao_guard = None
+    if guard_code != GUARD_LIBERADO:
+        args.excecao_guard = _excecao_funcoes(
+            guard_code, guard_output, args.aceitar_funcoes_somente_leitura
+        )
+        if args.excecao_guard is None:
+            raise SystemExit(
+                f"guard_sql.py bloqueou (exit {guard_code}): {guard_output}"
+            )
     if _has_multiple_statements(sql):
         raise SystemExit("SQL bloqueado: mais de uma instrução no arquivo")
     binds = _default_binds(sql)
@@ -430,6 +514,9 @@ def main() -> int:
         report["dump"] = write_dump(result["dump"], args.dump)
     if args.explain:
         report["plan"] = explain_plan(creds, sql, binds, args.timeout)
+    excecao = getattr(args, "excecao_guard", None)
+    if excecao is not None:
+        report["excecao_guard"] = excecao
     if args.baseline is not None and result["summary"] is not None:
         base = json.loads(args.baseline.read_text(encoding="utf-8"))
         if not base.get("summary"):

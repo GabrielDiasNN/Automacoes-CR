@@ -1,5 +1,5 @@
 -- =============================================================================
--- OBJETIVO: Faltas e Sobras (Facção)
+-- OBJETIVO: Faltas e Sobras (Facção - Fluxo Interno)
 -- DOMÍNIO: 08_faccao_terceirizacao
 -- ARQUIVO ORIGINAL: Comandos SQL - CR\Faltas e Sobras (Facção).sql
 -- TIPO: Facção e Serviços Terceiros (Consulta Somente Leitura)
@@ -17,7 +17,9 @@
 -- CUIDADOS OPERACIONAIS: Pushdown de fornecedor de facção (IDCATEGORIFORNECEDOR=1) e janela
 --                        de 6 meses em PESAGEM_ENTRADA e FPES_FISICO. Filtro de OBs abertas
 --                        em OB_ABERTO_BASE e unificação de produtos em ITENS_ATIVOS.
---                        Elimina timeout crítico e ORA-00028.
+--                        Restrição canônica a tecido próprio/interno (IDMASCARATIPOINSUMO
+--                        IN ('MCP', 'MCR')), depósito 95 e exclusão estrita de ordens e
+--                        malhas de clientes/prestação de serviços (BNT/MCT).
 -- =============================================================================
 
 WITH
@@ -91,6 +93,8 @@ WITH
             ON INE.NUMERO_NOTA = MNE.NUMERO_NOTA
            AND INE.SERIE_NOTA = MNE.SERIE_NOTA
            AND INE.IDPESSOAFJ = MNE.IDPESSOAFJ_CLIENTE
+          JOIN SGTPRD.ITENS_ESTOQUE ITE_CRU
+            ON ITE_CRU.CODIGO_REDUZIDO = INE.CODINSREDUZIDO
           JOIN SGTPRD.LOTE_ITENS_NOTA_ENTR LTI
             ON LTI.NUMERO_NOTA = INE.NUMERO_NOTA
            AND LTI.SERIE_NOTA = INE.SERIE_NOTA
@@ -111,12 +115,14 @@ WITH
            AND PES.IDCATEGORIFORNECEDOR = 1
            AND LTI.QUALIDADE = 1
            AND LTI.STFINALIZACAO <> 3
+           AND INE.DEPOSITO = 95
            AND INE.GERA_ESTOQUE_BLOQUEA <> '0'
            AND INE.DEPOSITO IN (
                  SELECT DEP.CODIGO_DEPOSITO
                    FROM SGTPRD.DEPOSITO DEP
                   WHERE DEP.SOCONTROLAQUILOS = '0'
                )
+           AND TRIM(ITE_CRU.IDMASCARATIPOINSUMO) IN ('MCP', 'MCR')
            AND NVL(PESO.QT_TOTAL, 0) = 0
          GROUP BY INE.CODINSREDUZIDO
     ),
@@ -128,8 +134,12 @@ WITH
             NVL(OBP.KILOS_PROGRAMADOS, 0) AS KILOS_PROGRAMADOS
         FROM SGTPRD.OB OB
         JOIN SGTPRD.OB_PRODUTO OBP ON OBP.NUMERO_OB = OB.NUMERO_OB
+        JOIN SGTPRD.ITENS_ESTOQUE ITE_ACA ON ITE_ACA.CODIGO_REDUZIDO = OB.CODIGO_REDUZIDO
+        JOIN SGTPRD.ITENS_ESTOQUE ITE_CRU ON ITE_CRU.CODIGO_REDUZIDO = OB.CODIGO_REDUZIDO_CRU
         WHERE OB.STATUS IN (1, 2, 3)
           AND OB.DTENCERORDEM IS NULL
+          AND TRIM(ITE_ACA.IDMASCARATIPOINSUMO) NOT IN ('BNT')
+          AND TRIM(ITE_CRU.IDMASCARATIPOINSUMO) IN ('MCP', 'MCR')
           AND NOT EXISTS (
               SELECT 1 FROM SGTPRD.GERAPECAORIGEMOB ORI WHERE ORI.NUMERO_OB = OB.NUMERO_OB
           )
@@ -182,6 +192,14 @@ WITH
           AND GPP.PADRAO_QUALIDADE_SIN = 1
           AND GPP.CODIGO_DEPOSITO = 95
           AND GPP.TIDOCUMENTOENTRADA = 8
+          AND TRIM(ITE.IDMASCARATIPOINSUMO) IN ('MCP', 'MCR')
+          AND EXISTS (
+              SELECT 1
+              FROM SGTPRD.GERAPECANOTAENTRADA GPN
+              JOIN SGTPRD.PESSOASFJ PES ON PES.IDPESSOAFJ = GPN.IDPESSOAFJ
+              WHERE GPN.IDPECASPRODUTO = GPP.IDPECASPRODUTO
+                AND PES.IDCATEGORIFORNECEDOR = 1
+          )
         GROUP BY
             GPP.CODIGO_REDUZIDO_PROD,
             ART.CDARTIGOCRU
@@ -208,4 +226,6 @@ LEFT JOIN EST_TINTURARIA_CTE EST_T ON EST_T.REDUZ = IFAC.CODIGO_REDUZIDO
 LEFT JOIN FPES_FISICO FPES ON FPES.CD_REDUZIDO = IFAC.CODIGO_REDUZIDO
 WHERE (NVL(OB_A.QTD_PECAS, 0) + NVL(EST_T.QTD_PECAS, 0) + NVL(FPES.QT_PC_FALTA_PESAR, 0)) > 0
   AND IFAC.TIPO_ITEM = 9
+  AND TRIM(IFAC.IDMASCARATIPOINSUMO) IN ('MCP', 'MCR')
 ORDER BY TRIM(IFAC.CODIGO_ALTERNATIVO), IFAC.CODIGO_REDUZIDO
+

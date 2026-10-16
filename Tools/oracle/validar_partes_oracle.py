@@ -25,16 +25,27 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from oracle_catalog import _raise_if_expired, _run_with_timeout  # noqa: E402
-from oracle_extract import init_thick_mode, resolve_oracle_credentials  # noqa: E402
+from oracle_catalog import (  # noqa: E402
+    _raise_if_expired,
+    _run_with_timeout,
+    log_avisos_stderr,
+)
+from oracle_extract import (  # noqa: E402
+    connect_from_creds,
+    init_thick_mode,
+    resolve_oracle_credentials,
+)
 from oracle_session import connect_within, is_session_drop  # noqa: E402
-from validar_sql_oracle import portable_command, resolve_guard  # noqa: E402
+from validar_sql_oracle import (  # noqa: E402
+    GUARD_LIBERADO,
+    portable_command,
+    resolve_guard,
+)
 
 VALIDATOR_VERSION = "2.1.0"
 
 
-def _log(*_args: Any, **_kwargs: Any) -> None:
-    """Não imprime DSN, usuário ou dados retornados."""
+_log = log_avisos_stderr
 
 
 def _guard(sql: str, guard: Path) -> tuple[int, str]:
@@ -66,6 +77,21 @@ def _case(name: str, file: str, sql: str, timeout_ms: int = 15000) -> dict[str, 
     return {"name": name, "file": file, "sql": sql, "timeout_ms": timeout_ms}
 
 
+def _soma_saldo(bloqueio: str) -> str:
+    """Soma com sinal dos movimentos de um estado: '0' disponível, '1' bloqueado.
+
+    Saída negativa para TIOPERACAO = 2, a mesma regra da view legada GERASALDOESTOQUE.
+    Única fonte da expressão, usada pelos casos de saldo de estoque.
+    """
+    return (
+        "ROUND(SUM(CASE\n"
+        f"    WHEN M.STGERAESTOBLOQ = '{bloqueio}' AND M.STMOVIMENTO = 0\n"
+        "    THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.QTMOVIMENTO ELSE M.QTMOVIMENTO END\n"
+        "    ELSE 0\n"
+        "END), 6)"
+    )
+
+
 def _saldo_case(name: str, file: str, filtro: str) -> dict[str, Any]:
     """Valida o núcleo físico que substitui GERASALDOESTOQUE.
 
@@ -78,16 +104,8 @@ def _saldo_case(name: str, file: str, filtro: str) -> dict[str, Any]:
             SELECT M.CDREDUZIDO,
                    M.CDDEPOSITO,
                    M.IDGERAATRIESTO,
-                   ROUND(SUM(CASE
-                                 WHEN M.STGERAESTOBLOQ = '0' AND M.STMOVIMENTO = 0
-                                 THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.QTMOVIMENTO ELSE M.QTMOVIMENTO END
-                                 ELSE 0
-                             END), 6) AS QTDISPONIVEL,
-                   ROUND(SUM(CASE
-                                 WHEN M.STGERAESTOBLOQ = '1' AND M.STMOVIMENTO = 0
-                                 THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.QTMOVIMENTO ELSE M.QTMOVIMENTO END
-                                 ELSE 0
-                             END), 6) AS QTBLOQUEADA,
+                   {_soma_saldo('0')} AS QTDISPONIVEL,
+                   {_soma_saldo('1')} AS QTBLOQUEADA,
                    TRUNC(GREATEST(0, SUM(CASE
                                               WHEN M.STGERAESTOBLOQ = '0' AND M.STMOVIMENTO = 0
                                               THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.NRVOLUMES ELSE M.NRVOLUMES END
@@ -140,7 +158,7 @@ def _cases() -> list[dict[str, Any]]:
         _case(
             "stock_saldo_fornecedor",
             "04_fiacao_fios/fia_lotes_fios_fornecedor.sql",
-            """
+            f"""
             WITH LOTES_ALVO AS (
                 SELECT /*+ MATERIALIZE */ DISTINCT L.CODIGO_REDUZIDO_FIO
                   FROM SGTPRD.LOTES_FIO_PRODUTO L
@@ -148,16 +166,8 @@ def _cases() -> list[dict[str, Any]]:
             ), SALDO_ESTOQUE AS (
                 SELECT /*+ LEADING(A M G) USE_NL(M) INDEX(M GME_IND_GERAMOVIESTOREDU) */
                        M.CDREDUZIDO,
-                       ROUND(SUM(CASE
-                                     WHEN M.STGERAESTOBLOQ = '0' AND M.STMOVIMENTO = 0
-                                     THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.QTMOVIMENTO ELSE M.QTMOVIMENTO END
-                                     ELSE 0
-                                 END), 6) AS QTDISPONIVEL,
-                       ROUND(SUM(CASE
-                                     WHEN M.STGERAESTOBLOQ = '1' AND M.STMOVIMENTO = 0
-                                     THEN CASE WHEN M.TIOPERACAO = 2 THEN -M.QTMOVIMENTO ELSE M.QTMOVIMENTO END
-                                     ELSE 0
-                                 END), 6) AS QTBLOQUEADA
+                       {_soma_saldo('0')} AS QTDISPONIVEL,
+                       {_soma_saldo('1')} AS QTBLOQUEADA
                   FROM LOTES_ALVO A
                   JOIN SGTPRD.GERAMOVIMENTOESTOQUE M
                     ON M.CDREDUZIDO = A.CODIGO_REDUZIDO_FIO
@@ -175,7 +185,7 @@ def _cases() -> list[dict[str, Any]]:
               JOIN SALDO_ESTOQUE S ON S.CDREDUZIDO = L.CODIGO_REDUZIDO_FIO
              WHERE TRIM(L.LOTE_FIO) IN ('C053SI0006', 'CO535I0006')
              FETCH FIRST 1 ROWS ONLY
-            """,
+            """,  # nosec B608 - só literais de lote fixos aqui; as somas vêm de _soma_saldo
             timeout_ms=30000,
         ),
         _case(
@@ -802,9 +812,7 @@ def _execute_case(
     """Parse + execução limitada. Grava a conexão em `holder` para o watchdog
     de `_run_with_timeout` poder cancelá-la."""
     connection = connect_within(
-        lambda: oracledb.connect(
-            user=creds.user, password=creds.password, dsn=creds.dsn
-        ),
+        lambda: connect_from_creds(creds),
         timeout_s,
     )
     # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
@@ -866,7 +874,9 @@ def _run_one(case: dict[str, Any], creds: Any, guard: Path) -> dict[str, Any]:
         "guard_exit": guard_code,
         "guard_output": guard_output,
     }
-    if guard_code != 0:
+    # Só GUARD_LIBERADO executa. Diferente de validar_sql, aqui não há nível só-parse:
+    # qualquer outro veredito bloqueia (fail-closed por desenho).
+    if guard_code != GUARD_LIBERADO:
         result["status"] = "blocked_guard"
     else:
         for attempt in range(1, 4):

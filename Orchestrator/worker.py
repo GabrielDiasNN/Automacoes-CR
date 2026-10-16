@@ -35,6 +35,7 @@ try:
         EXECUTION_STATUS_TERMINATED,
         EXECUTION_STATUS_TIMEOUT,
         WORKER_VERSION,
+        get_worker_max_concurrency,
     )
     from app.database import SessionLocal, session_scope
     from app.logger_setup import setup_json_logger as _setup_json_logger
@@ -75,7 +76,7 @@ _finalize_terminated_task = finalize_terminated_task
 project_root: str = get_project_root()
 load_dotenv(os.path.join(project_root, ".env"))
 
-MAX_WORKERS: int = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
+MAX_WORKERS: int = get_worker_max_concurrency()
 HEARTBEAT_INTERVAL: int = 15  # segundos
 POLL_INTERVAL: float = 2.0
 MAX_POLL_INTERVAL: float = 15.0

@@ -1,6 +1,7 @@
 """Testes unitarios do scanner SQL compartilhado por oracle_catalog e validar_sql_oracle."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from tests.carregadores_modulos import (
@@ -103,7 +104,7 @@ def test_guard_codigo_4_bloqueia(
     f = tmp_path / "a.sql"
     f.write_text("SELECT 1 FROM dual", encoding="utf-8")
     monkeypatch.setattr(vs, "ROOT", tmp_path)
-    monkeypatch.setattr(vs, "_guard", lambda _p, _g: (4, "x"))
+    monkeypatch.setattr(vs, "_guard_texto", lambda _t, _g: (4, "x"))
     opts = vs.RunOptions(timeout=1, execute=True, explicit_binds={}, guard=f)
     assert _validate_one(f, None, opts)["status"] == "blocked_guard"
 
@@ -114,7 +115,131 @@ def test_guard_codigo_0_segue_para_oracle(
     f = tmp_path / "a.sql"
     f.write_text("SELECT 1 FROM dual", encoding="utf-8")
     monkeypatch.setattr(vs, "ROOT", tmp_path)
-    monkeypatch.setattr(vs, "_guard", lambda _p, _g: (0, ""))
+    monkeypatch.setattr(vs, "_guard_texto", lambda _t, _g: (0, ""))
     monkeypatch.setattr(vs, "_oracle_stage", lambda *_a: {"status": "validated"})
     opts = vs.RunOptions(timeout=1, execute=True, explicit_binds={}, guard=f)
     assert _validate_one(f, None, opts)["status"] == "validated"
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "1=1 AND SGTPRD.PKG_X.GRAVA_LOG('x') IS NULL",
+        "1=1 AND SGTPRD.PKG_X.SEQ.NEXTVAL > 0",
+    ],
+)
+def test_sample_where_com_funcao_com_efeito_colateral_e_rejeitado(where: str) -> None:
+    # Sem o guard canonico disponivel o resultado tambem e rejeicao (fail-closed).
+    assert _priv(oc, "_resolve_sample_where_clause")(where) == (None, False)
+
+
+def test_guard_recebe_o_texto_executado_pela_entrada_padrao(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chamada: dict[str, Any] = {}
+
+    class _Concluido:  # pylint: disable=too-few-public-methods
+        returncode = 0
+        stdout = "{}"
+        stderr = ""
+
+    def _run_falso(args: list[str], **kwargs: Any) -> _Concluido:
+        chamada["args"] = args
+        chamada.update(kwargs)
+        return _Concluido()
+
+    monkeypatch.setattr(vs.subprocess, "run", _run_falso)
+    codigo, _ = _priv(vs, "_guard_texto")("SELECT 'ação' FROM dual", Path("guard.py"))
+
+    assert codigo == 0
+    assert chamada["input"] == "SELECT 'ação' FROM dual"
+    assert "--arquivo" not in chamada["args"]
+    assert "--sql" not in chamada["args"]
+    assert chamada["env"]["PYTHONUTF8"] == "1"
+
+
+def test_hash_do_guard_e_do_texto_executado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = tmp_path / "a.sql"
+    f.write_text("SELECT 1 FROM dual\n", encoding="utf-8")
+    visto: list[str] = []
+    monkeypatch.setattr(vs, "ROOT", tmp_path)
+
+    def _guard_gravador(texto: str, _g: Path) -> tuple[int, str]:
+        visto.append(texto)
+        return 0, ""
+
+    monkeypatch.setattr(vs, "_guard_texto", _guard_gravador)
+    monkeypatch.setattr(vs, "_oracle_stage", lambda *_a: {"status": "validated"})
+    opts = vs.RunOptions(timeout=1, execute=True, explicit_binds={}, guard=f)
+    resultado = _validate_one(f, None, opts)
+
+    assert visto == ["SELECT 1 FROM dual"]
+    assert resultado["guard_input_sha256"] == _priv(vs, "_sha256")(
+        b"SELECT 1 FROM dual"
+    )
+
+
+def test_codigos_de_saida_do_guard_sao_nomeados() -> None:
+    assert vs.GUARD_LIBERADO == 0
+    assert vs.GUARD_SO_PARSE == 3
+
+
+def test_arquivo_dentro_da_raiz_aceita_raiz_relativa(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pasta").mkdir()
+    arquivo = tmp_path / "pasta" / "a.sql"
+    arquivo.write_text("SELECT 1 FROM dual", encoding="utf-8")
+
+    resolvido = _priv(vs, "_arquivo_dentro_da_raiz")(Path("pasta/a.sql"), Path("pasta"))
+
+    assert resolvido == arquivo.resolve()
+
+
+def test_rotulo_do_arquivo_fora_do_repositorio_nao_quebra(tmp_path: Path) -> None:
+    arquivo = tmp_path / "a.sql"
+
+    assert _priv(vs, "_rotulo_do_arquivo")(arquivo) == str(arquivo).replace("\\", "/")
+
+
+def test_rotulo_do_arquivo_dentro_do_repositorio_e_relativo() -> None:
+    dentro = vs.ROOT / "Tools" / "oracle" / "validar_sql_oracle.py"
+
+    assert (
+        _priv(vs, "_rotulo_do_arquivo")(dentro) == "Tools/oracle/validar_sql_oracle.py"
+    )
+
+
+def test_arquivo_fora_da_raiz_relativa_e_rejeitado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pasta").mkdir()
+    (tmp_path / "outra").mkdir()
+    (tmp_path / "outra" / "b.sql").write_text("SELECT 1 FROM dual", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="dentro de --root"):
+        _priv(vs, "_arquivo_dentro_da_raiz")(Path("outra/b.sql"), Path("pasta"))
+
+
+_SQL_COM_FUNCAO = "SELECT SGTPRD.PKGBENF0001.FNC_RETORNA_ULT_CONF_OB(1) FROM DUAL"
+
+
+def test_check_e_explain_aceitam_chamada_de_funcao_so_parse() -> None:
+    """Sem execução, chamada de função é o nível 'só parse' do guard, não bloqueio."""
+    assert (
+        _ensure_select_only(_SQL_COM_FUNCAO, permitir_funcoes=True) == _SQL_COM_FUNCAO
+    )
+
+
+def test_comandos_que_executam_continuam_bloqueando_funcao() -> None:
+    with pytest.raises(oc.GuardError, match="chamada a função"):
+        _ensure_select_only(_SQL_COM_FUNCAO)
+
+
+def test_permitir_funcoes_nao_libera_mutacao() -> None:
+    with pytest.raises(oc.GuardError):
+        _ensure_select_only("SELECT 1 FROM DUAL FOR UPDATE", permitir_funcoes=True)

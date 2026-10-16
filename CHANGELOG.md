@@ -2,6 +2,29 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.103] - 16/10/2026
+
+### Adicionado
+
+- **Servidor MCP Oracle somente leitura** (`Tools/oracle/mcp_server.py`, registrado em `.mcp.json`): ferramentas `execute_sql`, `get_query_plan`, `list_tables`, `describe_table` e `check_connection`, com o `guard_sql` em modo fail-closed, SessionPool com fallback para conexão dedicada, prazo por chamada (`call_deadline`) e identificação da sessão em `V$SESSION`. Mensagem JSON-RPC sem `id` é notificação e nunca recebe resposta. Testes em `test_oracle_mcp_caracterizacao_unit.py`, `test_oracle_mcp_dual_mode_unit.py` e `test_oracle_mcp_robustez_unit.py`.
+- **Conexão Oracle adaptativa** (`lib/python/oracle_client.connect_adaptive`): `ORACLE_DRIVER_MODE=auto` (padrão) abre em Thin Mode e só ativa o Thick Mode quando o servidor exige o verificador legado (DPY-3015); `thick` força o Thick Mode (rollback sem deploy). A variável entra na allowlist de `subprocess_env.py`. Falha real ao iniciar o Oracle Client passa a ser propagada; caminho de cliente vazio vira `None`.
+- **`Tools/oracle/Test-Porta1521.ps1`** (varredura da porta 1521 em lotes de 256 sockets; exit 2 para parâmetro inválido) e **`Tools/oracle/Install-InstantClient19c.ps1`** (exige `-ExpectedSha256`, salvo `-SkipHashCheck` explícito; o backup do `.env` fica com ACL só do usuário atual).
+- **`test_sql_cost_regression.py`:** EXPLAIN PLAN real dos SQLs de produção, só com `ORACLE_EXPLAIN_REAL=1` (o `.env` local aponta para o dbprd).
+- **`medir_sql_oracle.py`:** passa a aceitar `--aceitar-funcoes-somente-leitura <PRIVILEGIOS_JSON>`, exceção auditável ao guard para SQL que só chama função de pacote. A evidência de privilégios é lida e recusada se trouxer privilégio de escrita em objeto, privilégio de sistema `ANY` ou role além de `CONNECT` e `RESOURCE` (a consulta não expande o conteúdo de roles).
+- **Workflows `auditoria-acervo-queries` e `revisao-sql-producao-oracle`** (`.claude/workflows/`): o primeiro exige `args.data` (DD-MM-YYYY) e `args.repo` e casa o escopo de cada achado por caminho normalizado (barras, prefixo da raiz, forma Unicode), para que achado de produção não perca a severidade crítica nem o veto a patch; o segundo restaura o HEAD com `git restore --source=HEAD`, nunca de cópia em disco.
+
+### Alterado
+
+- **SQL de produção** (revisão de 14/10/2026): Receitas Bloqueadas v2, Obs Paradas Fase v2 e Montagem de Terceirizados versão D. Na Obs Paradas Fase, `TO_DATE(EXPEDIREM, 'YYYYMMDD')` continua sem `DEFAULT NULL ON CONVERSION ERROR`: data inválida falha alto, como no HEAD.
+- **`fetch_all`:** identifica a sessão em `V$SESSION`, sincroniza `arraysize` e `prefetchrows` com o lote pedido e registra a saúde da rota WAN (1 conexão TCP de teste, antes de conectar, com o nome resolvido uma vez; alias TNS sem `ORACLE_HOST` não é medido). O lote nunca é reduzido pela telemetria: em link lento isso só multiplicaria os round-trips. A conexão não usa `retry_count` do driver: com o banco fora do ar o connect para em ~15 s e o retry de quem chama decide. DSN vazio (`ORACLE_CONNECT_STRING=` ou `force_dsn=""`) passa a ser recusado na resolução de credenciais, com erro registrado.
+- **Beneficiamento:** o watchdog de tempo total é armado em toda tentativa, também quando `call_timeout` está disponível (o metadado `oracle_watchdog_applied` passa a ser sempre verdadeiro); o `call_timeout` de cada tentativa é limitado ao orçamento restante. O limite de linhas usa `FETCH FIRST n ROWS ONLY`.
+- **`WORKER_MAX_CONCURRENCY`:** lido por `constants.get_worker_max_concurrency()`, que recusa valor não inteiro ou menor que 1 (antes `0` era aceito). O worker não sobe com valor inválido; o diagnóstico registra um finding de erro e a rota de versão segue respondendo com o padrão (4).
+- **Retenção de backups:** só remove arquivos `automacoes_backup_YYYYMMDD_HHMMSS.db` (cópias manuais na pasta `Backups` são preservadas) e falha ao remover vira aviso.
+- **Guard SQL nas ferramentas de `Tools/oracle`:** `validar_sql_oracle` e `medir_sql_oracle` passam a classificar exatamente o texto executado (o SQL normalizado, enviado ao guard pela entrada padrão), e não o arquivo bruto. Os subcomandos online do `oracle_catalog.py` passam também pelo guard canônico; `check` e `explain`, que não executam a consulta, aceitam chamada de função de pacote (nível só-parse), e `distinct`/`sample` a recusam.
+- **Pré-check Oracle (`lib/Lib-Logging.psm1`):** `Test-AutomationPreFlight` deixa de fazer ping (ICMP) no alias do `tnsnames.ora`, que dava `WARN: Oracle (dbprd) Off` falso. Passa a resolver o alias (`Resolve-OracleEndpoint`) e medir a porta TCP real (`Test-OracleTcpEndpoint`). O exit code não muda: esse aviso nunca bloqueou a execução.
+- **Beneficiamento, `runner.py --oracle-timeout-ms`:** recusa valor menor ou igual a zero (antes `0` desligava o prazo por chamada).
+- **`fac_faltas_e_sobras_faccao.sql`:** escopo restrito ao depósito 95, às máscaras MCP/MCR, à categoria de fornecedor 1 e sem item acabado `BNT`. Validada manualmente no Oracle pelo responsável e revalidada pelo validador em 16/10/2026 (`validacao_status.json` e catálogo atualizados, `status: validated`).
+
 ## [1.3.102] - 09/10/2026
 
 ### Adicionado

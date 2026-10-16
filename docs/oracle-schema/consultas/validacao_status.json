@@ -1506,10 +1506,10 @@
     "08_faccao_terceirizacao/fac_faltas_e_sobras_faccao.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 842.1,
-      "sha8": "d18424d0",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
+      "execute_ms": 682.8,
+      "sha8": "8a4b3589",
+      "validated_at": "2026-10-16",
+      "validator_version": "2.2.0",
       "cancelled": false
     },
     "08_faccao_terceirizacao/fac_saldo_nf_faccao.sql": {
@@ -1936,5 +1936,5 @@
       "cancelled": false
     }
   },
-  "validated_on": "2026-10-09"
+  "validated_on": "2026-10-16"
 }

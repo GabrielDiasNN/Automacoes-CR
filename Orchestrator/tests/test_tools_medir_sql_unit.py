@@ -338,7 +338,9 @@ def test_explain_plan_negado_nao_derruba_a_medicao(
 
     conexao = Conexao()
     monkeypatch.setattr(mm.oracledb, "connect", lambda **_k: conexao)
-    creds = argparse.Namespace(user=None, password=None, dsn=None)
+    creds = argparse.Namespace(
+        user=None, password=None, dsn=None, client_lib=None, tns_admin=None
+    )
     plano = mm.explain_plan(creds, "select 1", {})
     assert len(plano) == 1 and plano[0].startswith("plano indisponível")
     assert conexao.closed
@@ -385,6 +387,21 @@ def test_lista_de_queda_de_sessao_e_unica_entre_runner_e_ferramentas() -> None:
     assert not retryable(RuntimeError("ORA-00942: tabela nao existe"))
 
 
+def test_consumidores_delegam_para_a_fonte_unica_de_queda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Se algum consumidor tiver lista própria de marcadores, ele continua dando
+    # True aqui, e o teste falha. Só delegação faz o resultado mudar.
+    validar_partes = _carregar("validar_partes_oracle")
+    monkeypatch.setattr(mm, "is_session_drop", lambda _e: False)
+    monkeypatch.setattr(validar_partes, "is_session_drop", lambda _e: False)
+    marcador = oracle_session.SESSION_DROP_MARKERS[0]
+    assert not mm.is_transient(f"erro {marcador} qualquer")
+    assert not _priv(validar_partes, "_retryable")(
+        RuntimeError(f"erro {marcador} qualquer")
+    )
+
+
 def test_medir_nao_fecha_conexao_de_thread_abandonada(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -395,7 +412,9 @@ def test_medir_nao_fecha_conexao_de_thread_abandonada(
             fechadas.append(True)
 
     monkeypatch.setattr(mm.oracledb, "connect", lambda **_k: Conexao())
-    creds = argparse.Namespace(user=None, password=None, dsn=None)
+    creds = argparse.Namespace(
+        user=None, password=None, dsn=None, client_lib=None, tns_admin=None
+    )
     attempt = _priv(mm, "_attempt")
 
     monkeypatch.setattr(
@@ -485,3 +504,65 @@ def test_validar_conexao_travada_vira_timeout(monkeypatch: pytest.MonkeyPatch) -
     finally:
         liberar.set()
     assert resultado["status"] == "timeout"
+
+
+_excecao_funcoes = _priv(mm, "_excecao_funcoes")
+_VEREDITO_FUNCAO = json.dumps({"motivos": ["chamada a função PKGBENF0001.FNC_X"]})
+
+
+def _evidencia(tmp_path: Path, linhas: Any) -> Path:
+    caminho = tmp_path / "dump-priv.json"
+    caminho.write_text(json.dumps({"rows": linhas}), encoding="utf-8")
+    return caminho
+
+
+def test_excecao_funcoes_aceita_evidencia_so_com_execute(tmp_path: Path) -> None:
+    evidencia = _evidencia(
+        tmp_path,
+        [
+            {
+                "TIPO": "OBJETO",
+                "PRIVILEGIO": "EXECUTE",
+                "ESQUEMA": "SGTPRD",
+                "OBJETO": "PKGBENF0001",
+            },
+            {"TIPO": "SISTEMA", "PRIVILEGIO": "CREATE SESSION"},
+            {"TIPO": "ROLE", "PRIVILEGIO": "CONNECT"},
+            {"TIPO": "ROLE", "PRIVILEGIO": "RESOURCE"},
+        ],
+    )
+    resultado = _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, evidencia)
+    assert resultado is not None
+    assert resultado["evidencia_privilegios"] == str(evidencia)
+
+
+@pytest.mark.parametrize(
+    "linhas",
+    [
+        [],
+        [
+            {
+                "TIPO": "OBJETO",
+                "PRIVILEGIO": "UPDATE",
+                "ESQUEMA": "SGTPRD",
+                "OBJETO": "OB",
+            }
+        ],
+        [{"TIPO": "SISTEMA", "PRIVILEGIO": "INSERT ANY TABLE"}],
+        [{"TIPO": "ROLE", "PRIVILEGIO": "DBA"}],
+    ],
+)
+def test_excecao_funcoes_recusa_evidencia_que_nao_prova_leitura(
+    tmp_path: Path, linhas: Any
+) -> None:
+    with pytest.raises(SystemExit, match="evidência de privilégios recusada"):
+        _excecao_funcoes(
+            mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, _evidencia(tmp_path, linhas)
+        )
+
+
+def test_excecao_funcoes_recusa_arquivo_que_nao_e_o_dump(tmp_path: Path) -> None:
+    qualquer = tmp_path / "qualquer.txt"
+    qualquer.write_text("não é JSON", encoding="utf-8")
+    with pytest.raises(SystemExit, match="ilegível"):
+        _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, qualquer)
