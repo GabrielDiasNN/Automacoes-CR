@@ -14,11 +14,9 @@
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 209 |
+| ✅ validada | 212 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
-| ⏳ inconclusiva: sessão derrubada pela rede durante a execução | 2 |
-| ⬜ alterada após validação de 09/10/2026 | 1 |
 
 Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros padrão (sentinelas de anomalia ou filtros sem dados no momento — não é erro).
 
@@ -96,18 +94,18 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
 | `mal_agulhas_por_tonelada.sql` | Consumo de agulhas por tonelada produzida e por máquina-dia, por tear | Painel/KPI | — | ✅ validada | com dados | 7986 ms |
-| `mal_calendario_producao_diaria.sql` | Calendário diário da malharia interna - máquinas com produção, kg | Monitoramento operacional | — | ⏳ inconclusiva: sessão derrubada pela rede durante a execução | — | — |
+| `mal_calendario_producao_diaria.sql` | Calendário diário da malharia interna - máquinas com produção, kg | Monitoramento operacional | — | ✅ validada | com dados | 2564 ms |
 | `mal_conferencia_ob_montada_teares_e_lotes_alocados.sql` | Conferência - OB montada (teares e lotes alocados) | Malharia e Teares | — | ✅ validada | com dados | 5 ms |
 | `mal_consulta_finura_dos_teares.sql` | Consulta Finura dos Teares | Malharia e Teares | — | ✅ validada | com dados | 2 ms |
-| `mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql` | Consulta - Peças com restrição geradas na Malharia | Malharia e Teares | — | ⬜ alterada após validação de 09/10/2026 | — | — |
+| `mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql` | Consulta - Peças com restrição geradas na Malharia | Malharia e Teares | — | ✅ validada | com dados | 2816 ms |
 | `mal_disponibilidade_por_maquina.sql` | Proxy de tempo parado por tear interno do setor 4 = 1 - paradas / horas de | Painel/KPI | — | ✅ validada | com dados | 60 ms |
-| `mal_eficiencia_global_engenharia.sql` | Produção e Eficiência da Malharia (Engenharia) | Malharia e Teares | — | ✅ validada | com dados | 10 ms |
-| `mal_eficiencia_ordens_em_aberto.sql` | Produção e Eficiência da Malharia (Engenharia) ordens em aberto | Malharia e Teares | — | ✅ validada | com dados | 7 ms |
-| `mal_eficiencia_por_grupo_maquinas.sql` | Produção e Eficiência da Malharia (Engenharia) por grupo de máquinas | Malharia e Teares | — | ✅ validada | com dados | 5 ms |
-| `mal_eficiencia_teorico_vs_realizado.sql` | Teórico (engenharia do reduzido) x realizado por produto e grupo de | Conferência pontual | — | ✅ validada | com dados | 8621 ms |
-| `mal_estoque_por_agulhas_tear.sql` | Estoque de malha crua agrupado por número de agulhas do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 3 ms |
-| `mal_estoque_por_lote_produto.sql` | Estoque de malha crua agrupado por lote | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 6 ms |
-| `mal_estoque_por_tear_maquina.sql` | Estoque de malha crua agrupado por número do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 8 ms |
+| `mal_eficiencia_global_engenharia.sql` | Produção e Eficiência da Malharia (Engenharia) | Malharia e Teares | — | ✅ validada | com dados | 13 ms |
+| `mal_eficiencia_ordens_em_aberto.sql` | Produção e Eficiência da Malharia (Engenharia) ordens em aberto | Malharia e Teares | — | ✅ validada | com dados | 11 ms |
+| `mal_eficiencia_por_grupo_maquinas.sql` | Produção e Eficiência da Malharia (Engenharia) por grupo de máquinas | Malharia e Teares | — | ✅ validada | com dados | 10 ms |
+| `mal_eficiencia_teorico_vs_realizado.sql` | Teórico (engenharia do reduzido) x realizado por produto e grupo de | Conferência pontual | — | ✅ validada | com dados | 2879 ms |
+| `mal_estoque_por_agulhas_tear.sql` | Estoque de malha crua agrupado por número de agulhas do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 13 ms |
+| `mal_estoque_por_lote_produto.sql` | Estoque de malha crua agrupado por lote | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 10 ms |
+| `mal_estoque_por_tear_maquina.sql` | Estoque de malha crua agrupado por número do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 12 ms |
 | `mal_meta_malharia.sql` | Meta Malharia | Malharia e Teares | — | ✅ validada | com dados | 76 ms |
 | `mal_necessidade_balanco_faltas_sobras.sql` | Necessidade Malharia (Faltas e Sobras) | Malharia e Teares | — | ✅ validada | com dados | 284 ms |
 | `mal_necessidade_critica_somente_faltas.sql` | Necessidade Malharia (Somente Faltas) | Malharia e Teares | — | ✅ validada | com dados | 124 ms |
@@ -121,7 +119,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `mal_proporcao_corretiva_maquina.sql` | Proporção de manutenção corretiva por tear interno, com minutos médios por | Painel/KPI | — | ✅ validada | com dados | 31 ms |
 | `mal_qualidade_registro_paradas.sql` | Testes de qualidade do registro de paradas e quebras de agulha da | Auditoria/Sentinela | — | ✅ validada | com dados | 103 ms |
 | `mal_quebra_agulha_mes.sql` | Quebra de agulha em teares internos por mês e máquina, com agulhas | Auditoria/Sentinela | — | ✅ validada | com dados | 69 ms |
-| `mal_scorecard_maquina_12m.sql` | Scorecard de teares internos (12 meses) - produção, meta, paradas, | Painel/KPI | — | ⏳ inconclusiva: sessão derrubada pela rede durante a execução | — | — |
+| `mal_scorecard_maquina_12m.sql` | Scorecard de teares internos (12 meses) - produção, meta, paradas, | Painel/KPI | — | ✅ validada | com dados | 3527 ms |
 
 ### 04_fiacao_fios (12)
 
