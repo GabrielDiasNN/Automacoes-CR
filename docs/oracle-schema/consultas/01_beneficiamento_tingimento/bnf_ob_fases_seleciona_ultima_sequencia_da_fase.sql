@@ -6,6 +6,9 @@ TIPO: Tingimento e Tinturaria
 PARÂMETROS / BINDS: Nenhum (filtros diretos na query)
 TABELAS PRINCIPAIS: SGTPRD.OB_FASES
 CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitura salvo se DML restrito.
+VOLUME: histórico completo de OB_FASES, ~1,33 milhão de linhas e ~16 s de mediana (16/10/2026).
+  Para o estado das fases das OBs emitidas nos últimos 365 dias, use
+  bnf_ob_fases_ultima_sequencia_fase_ultimos_365d.sql (~214 mil linhas, ~2,9 s; mesmas colunas e valores).
 ============================================================================= */
 
 SELECT

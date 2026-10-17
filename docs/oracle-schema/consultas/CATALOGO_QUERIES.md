@@ -10,11 +10,11 @@
 
 ## Resumo
 
-**226 arquivos `.sql` em 13 pastas.**
+**233 arquivos `.sql` em 13 pastas.**
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 212 |
+| ✅ validada | 219 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
 
@@ -22,7 +22,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 
 ## Inventário por pasta
 
-### 01_beneficiamento_tingimento (40)
+### 01_beneficiamento_tingimento (41)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -43,7 +43,8 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `bnf_monitoramento_atributos_produtos_quimicos.sql` | Monitorar Atributo Estoque (Produto Químico) | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 251 ms |
 | `bnf_monitoramento_maquinas_tingimento.sql` | Monitoramento Máquinas de Tingimento | Tingimento e Tinturaria | — | ✅ validada | com dados | 4 ms |
 | `bnf_monitoramento_previsao_vs_realizado_tingimento.sql` | Monitoramento mensal de previsões de tingimento versus realizado | SELECT (Template Analítico / Operacional) | — | ✅ validada | com dados | 373 ms |
-| `bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql` | OB_FASES - seleciona última sequência da fase | Tingimento e Tinturaria | — | ✅ validada | com dados | 5180 ms |
+| `bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql` | OB_FASES - seleciona última sequência da fase | Tingimento e Tinturaria | — | ✅ validada | com dados | 1863 ms |
+| `bnf_ob_fases_ultima_sequencia_fase_ultimos_365d.sql` | OB_FASES - última sequência por fase, apenas OBs emitidas nos últimos 365 dias | Tingimento e Tinturaria | — | ✅ validada | com dados | 692 ms |
 | `bnf_obs_abertas_por_codigo_reduzido.sql` | OB_s em aberto pelo Reduzido | Tingimento e Tinturaria | — | ✅ validada | com dados | 1641 ms |
 | `bnf_obs_abertas_por_processo_corante.sql` | OB_s em aberto de determinado (processo ou corante) | Tingimento e Tinturaria | — | ✅ validada | com dados | 29 ms |
 | `bnf_ocupacao_diaria_maquina_tingimento.sql` | Ocupação diária das máquinas de tingimento nos últimos 30 dias: minutos em produção, limpeza, manutenção, ajuste de planejamento, outras paradas e ocioso | Painel/KPI | — | ✅ validada | com dados | 291 ms |
@@ -229,10 +230,16 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `fac_saldo_nf_faccao.sql` | Controle consolidado de saldo físico e disponível de NFs de terceirização/facção | Monitoramento operacional | — | ✅ validada | com dados | 5198 ms |
 | `fac_tabela_reduzidos_com_servicos_em_terceiros.sql` | Tabela - Reduzidos com serviços em terceiros | Facção e Serviços Terceiros | — | ✅ validada | com dados | 52 ms |
 
-### 09_pcp_kpis_gestao (29)
+### 09_pcp_kpis_gestao (35)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
+| `kpi_custo_nao_conformidade_reprocesso_mensal.sql` | KPI mensal de custo de não conformidade (NC) e reprocesso por setor produtivo (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 26 ms |
+| `kpi_manutencao_backlog_om_aberta.sql` | Backlog de OMs de manutenção mecânica ainda não executadas, por família e faixa de idade. | Painel/KPI (fotografia do momento, sem recorte mensal) | — | ✅ validada | com dados | 12 ms |
+| `kpi_manutencao_mttr_mensal.sql` | KPI mensal de manutenção: OMs solicitadas, concluídas e MTTR (horas) por família (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 22 ms |
+| `kpi_otif_compras_mensal.sql` | OTIF de compras por mês de entrega programada (12 meses + mês aberto): no prazo e completo. | Painel/KPI | — | ✅ validada | com dados | 149 ms |
+| `kpi_paradas_uniao_fontes_mensal.sql` | Paradas de máquina por mês e setor, unindo as duas fontes oficiais sem contar o mesmo evento duas vezes (12 meses + mês aberto). | Painel/KPI | — | ✅ validada | com dados | 13282 ms |
+| `kpi_reprocesso_montagem_mensal.sql` | KPI mensal de reprocesso na montagem de lote (fase 10), 12 meses + mês aberto: fases e kg reprocessados sobre o total. | Painel/KPI | — | ✅ validada | com dados | 516 ms |
 | `pcp_aging_obs_por_fase_vs_sla.sql` | Aging das OBs montadas em aberto por fase atual, em faixas de dias parados, com quantidade fora do SLA | Painel/KPI | — | ✅ validada | com dados | 42 ms |
 | `pcp_balanco_fluxo_cru_facao_processo.sql` | Balanço e Proporção de Fluxo de Malha (Cru, Facção Pendente e Em Processo) | PCP / Gestão de Fluxo e Pipeline Produtivo | — | ✅ validada | com dados | 120 ms |
 | `pcp_calendario_planejamento_horas_trabalhadas.sql` | Calendario Planejamento (horas trabalhadas) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 4 ms |
@@ -243,7 +250,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `pcp_lead_time_obs_encerradas.sql` | Lead time das OBs encerradas nos últimos 90 dias por mês de encerramento, fluxo e tipo de ordem: média, mediana, P90, e divisão em espera até o primeiro início e tempo de processo | Painel/KPI | — | ✅ validada | com dados | 171 ms |
 | `pcp_liga_reduzido_nas_classes_e_sub_grupos.sql` | Liga Reduzido nas Classes e Sub-Grupos | PCP e Produção | — | ✅ validada | com dados | 8 ms |
 | `pcp_producao_12m_fato_serie_temporal.sql` | Série Temporal Histórica de Produção por Fase e Indicadores Fabris (Últimos 12 Meses + Mês Aberto) | SELECT (Painel Analítico / Histórico Contínuo) | — | ✅ validada | com dados | 5490 ms |
-| `pcp_producao_12m_matriz_pivotada.sql` | Matriz Pivotada Executiva de Produção por Fases e KPIs Fabris (Últimos 12 Meses + Mês Aberto) | SELECT (Painel Analítico / Matriz Comparativa) | — | ✅ validada | com dados | 5464 ms |
+| `pcp_producao_12m_matriz_pivotada.sql` | Matriz Pivotada Executiva de Produção por Fases e KPIs Fabris (Últimos 12 Meses + Mês Aberto) | SELECT (Painel Analítico / Matriz Comparativa) | — | ✅ validada | com dados | 2974 ms |
 | `pcp_producao_acabado_mensal_atual.sql` | Produção Acabado Mensal (atual) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 42 ms |
 | `pcp_producao_mensal_pecas_kg_mov37.sql` | Produção Mensal por Peça e KG - Movimento 37 (Produto Acabado) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 618 ms |
 | `pcp_producao_mensal_por_fase_comparativo.sql` | Consulta Mensal de Produção por Fase (Comparativo Mês Atual vs Mesmo Mês Ano Anterior - YoY) | SELECT (Painel Analítico / Operacional) | — | ✅ validada | com dados | 3216 ms |

@@ -157,10 +157,19 @@
     "01_beneficiamento_tingimento/bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 5180.1,
-      "sha8": "45ffd48c",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
+      "execute_ms": 1863.0,
+      "sha8": "dd119243",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_ob_fases_ultima_sequencia_fase_ultimos_365d.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 691.9,
+      "sha8": "a019489e",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
       "cancelled": false
     },
     "01_beneficiamento_tingimento/bnf_obs_abertas_por_codigo_reduzido.sql": {
@@ -1520,6 +1529,60 @@
       "validator_version": "2.1.0",
       "cancelled": false
     },
+    "09_pcp_kpis_gestao/kpi_custo_nao_conformidade_reprocesso_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 26.4,
+      "sha8": "d55c1182",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/kpi_manutencao_backlog_om_aberta.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 11.9,
+      "sha8": "5bae01d6",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/kpi_manutencao_mttr_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 21.9,
+      "sha8": "8a72ec63",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/kpi_otif_compras_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 148.9,
+      "sha8": "415ee310",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/kpi_paradas_uniao_fontes_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 13281.5,
+      "sha8": "d28885f9",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/kpi_reprocesso_montagem_mensal.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 515.9,
+      "sha8": "33a77069",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
     "09_pcp_kpis_gestao/pcp_aging_obs_por_fase_vs_sla.sql": {
       "status": "validated",
       "sample_rows": 1,
@@ -1613,10 +1676,10 @@
     "09_pcp_kpis_gestao/pcp_producao_12m_matriz_pivotada.sql": {
       "status": "validated",
       "sample_rows": 1,
-      "execute_ms": 5464.4,
-      "sha8": "2fcaff5d",
-      "validated_at": "2026-10-07",
-      "validator_version": "2.1.0",
+      "execute_ms": 2973.8,
+      "sha8": "05f3824a",
+      "validated_at": "2026-10-16",
+      "validator_version": "2.2.0",
       "cancelled": false
     },
     "09_pcp_kpis_gestao/pcp_producao_acabado_mensal_atual.sql": {
@@ -1926,5 +1989,5 @@
       "cancelled": false
     }
   },
-  "validated_on": "2026-10-16"
+  "validated_on": "2026-10-17"
 }
