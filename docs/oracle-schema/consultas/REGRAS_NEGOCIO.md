@@ -247,3 +247,14 @@ Foto do momento, medida no Oracle em 08/10/2026. O depósito muda a todo instant
   - Necessidade somente faltas: as 20 linhas são idênticas a linhas de `mal_necessidade_balanco_faltas_sobras`. O sinal negativo em `QT_PC_FALTA_*` é convenção (`LEAST(0, alocado − programado)`); a sobra fica em `QT_PC_SOBRANDO`.
 - **Anomalia para a engenharia (não é erro de consulta).** A máquina TC090 (grupo 0G026) atinge 313% da meta: a meta do dia fica em cerca de 120 kg, e o realizado médio é de 292 kg/dia. A meta ou a ficha do produto podem estar desatualizadas. Há um caso parecido na retilínea do produto 21 no grupo 0G021 (110% do teórico), que o responsável pela ficha vai ajustar.
 - **Divergência latente de guarda de título (sem efeito hoje).** A eficiência usa `0,00001` quando o título é nulo, o que infla o kg. A necessidade usa `NULLIF(título, 0), 1`. O teórico marca NULL explícito. Nas 303 fichas de malha não há título nulo ou zero, nem fibra incompleta. Padrão recomendado: NULL explícito. Não alterado, porque não muda nenhum resultado.
+
+## 6. Químicos de tinturaria — regras verificadas no banco (17/10/2026)
+
+Verificadas por SELECT no SGTPRD em 17/10/2026. Detalhe e evidências em [`docs/oracle-schema/quimicos/mapeamento_regras_consumo_quimicos.md`](../quimicos/mapeamento_regras_consumo_quimicos.md).
+
+- **Consumo real (pesagem confirmada):** `SUM(MOVTO_RECEITA.QUANTIDADEPESADA)` com `MOVCONFIRMADO = 1` e `STATUSPESAGEMRECEITA = 3`, em kg. `PESADA = 0` não significa "não pesada": há 1,53 M kg com `PESADA = 0` e `STATUS = 3` em 12 meses. Não use `PESADA` como critério.
+- **Lançamento pesado mas sem confirmação:** `STATUSPESAGEMRECEITA = 0` com `PESADA = 1` soma 63,7 mil kg em 12 meses. Fica fora do consumo real até o processo confirmar.
+- **Previsto da receita:** `MOVTO_RECEITA.QUANTIDADE` (kg emitido). Não é consumo teórico validado: `QUANTIDADE = CONSUMO_UNITARIO × KILOS_PRODUZIDOS / 100` bate em 51% dos lançamentos com `FATORCALCULO = 11` e 40% com `FATORCALCULO = 22`. Outras bases testadas batem em menos de 1%.
+- **Estoque químico:** `VW_ESTO_SALDO` por `CD_REDUZIDO` e `CODIGO_DEPOSITO` (depósito 20 nos dados observados). `QT_ESTOQUE_DISP` é igual a `QT_SALDO` nos itens observados, e `QT_PED_ABERTO` é zero: não há reserva descontada no disponível. Unidade de estoque: `UNIDADE_MEDIDA.DSSIGLA` = `KG`.
+- **Compras:** `ITENS_PEDIDO_COMPRA.PRAZOENTREGA` é zero em todas as 84.964 linhas: não existe prazo de reposição no banco. `ENTREGAS_PEDIDO_COMP.DATAENTREGA` é número AAAAMMDD e é a data prometida, não a de recebimento. Entrega pendente com data vencida (111.560 kg em 17/10/2026) não é entrada futura.
+- **Status de pedido:** `PEDIDO_COMPRA.STATUS` com valores 0, 1 e 2 em pedidos com entrega pendente. Significado não confirmado.
