@@ -28,6 +28,24 @@
       "validator_version": "2.1.0",
       "cancelled": false
     },
+    "01_beneficiamento_tingimento/bnf_consumo_quimico_historico_mensal_produto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1022.3,
+      "sha8": "47cc2fdf",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
+    "01_beneficiamento_tingimento/bnf_consumo_quimico_historico_partida_produto.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 1049.2,
+      "sha8": "386227d3",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
+      "cancelled": false
+    },
     "01_beneficiamento_tingimento/bnf_consumo_quimico_por_kg_tingido.sql": {
       "status": "validated",
       "sample_rows": 1,
@@ -1770,6 +1788,15 @@
       "sha8": "b843defd",
       "validated_at": "2026-10-07",
       "validator_version": "2.1.0",
+      "cancelled": false
+    },
+    "09_pcp_kpis_gestao/pcp_sentinela_quimicos_ruptura_compra.sql": {
+      "status": "validated",
+      "sample_rows": 1,
+      "execute_ms": 2490.8,
+      "sha8": "74b26a9e",
+      "validated_at": "2026-10-17",
+      "validator_version": "2.2.0",
       "cancelled": false
     },
     "09_pcp_kpis_gestao/pcp_sincronismo_malha_ribana.sql": {

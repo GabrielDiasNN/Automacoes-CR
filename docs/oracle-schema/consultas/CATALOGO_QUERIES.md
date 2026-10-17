@@ -10,25 +10,28 @@
 
 ## Resumo
 
-**233 arquivos `.sql` em 13 pastas.**
+**238 arquivos `.sql` em 13 pastas.**
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 219 |
+| ✅ validada | 222 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
+| ⬜ não validada | 2 |
 
 Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros padrão (sentinelas de anomalia ou filtros sem dados no momento — não é erro).
 
 ## Inventário por pasta
 
-### 01_beneficiamento_tingimento (41)
+### 01_beneficiamento_tingimento (43)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
 | `bnf_acumulado_montagem_tingimento_por_dia.sql` | Acumulado (Montagem-Tingimento) - Por Dia | Tingimento e Tinturaria | — | ✅ validada | com dados | 2201 ms |
 | `bnf_acumulado_montagem_tingimento_por_turno.sql` | Acumulado (Montagem-Tingimento) - Por Turno | Tingimento e Tinturaria | — | ✅ validada | com dados | 1792 ms |
 | `bnf_consulta_receita.sql` | Consulta Receita | Tingimento e Tinturaria | — | ✅ validada | com dados | 3 ms |
+| `bnf_consumo_quimico_historico_mensal_produto.sql` | Consolidado mensal de consumo de quimicos por produto. Soma kg e divide depois (nunca media g/kg). | Painel/KPI | — | ✅ validada | com dados | 1022 ms |
+| `bnf_consumo_quimico_historico_partida_produto.sql` | Historico de consumo de quimicos por partida de tingimento e produto (rastreio/auditoria): consumo real pesado x quantidade emitida na receita, com desvio. | Auditoria/Sentinela | — | ✅ validada | com dados | 1049 ms |
 | `bnf_consumo_quimico_por_kg_tingido.sql` | Consumo de produtos químicos por kg de tecido tingido, por partida de tingimento confirmada nos últimos 30 dias (g/kg), com cor, artigo e máquina para agregação | Painel/KPI | — | ✅ validada | com dados | 160 ms |
 | `bnf_fechamento_mes_obs_em_aberto_com_origens.sql` | Acompanhamento de Fechamento do Mês no Beneficiamento - Monitoramento de OBs em Aberto por Grupo de Programação, Estágio Produtivo, Macro-Setor, Origens, Avanço de Fases, Pesagem Real e Risco Operacional | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 362 ms |
 | `bnf_fila_programada_por_maquina_tingimento.sql` | Fila programada por máquina de tingimento (UPs ainda não iniciadas): quantidade de partidas, kg, horas previstas à frente e atrasadas | Monitoramento operacional | — | ✅ validada | com dados | 143 ms |
@@ -230,10 +233,12 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `fac_saldo_nf_faccao.sql` | Controle consolidado de saldo físico e disponível de NFs de terceirização/facção | Monitoramento operacional | — | ✅ validada | com dados | 5198 ms |
 | `fac_tabela_reduzidos_com_servicos_em_terceiros.sql` | Tabela - Reduzidos com serviços em terceiros | Facção e Serviços Terceiros | — | ✅ validada | com dados | 52 ms |
 
-### 09_pcp_kpis_gestao (35)
+### 09_pcp_kpis_gestao (38)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
+| `fechamento_mensal_quimicos_cavaco_producao.sql` | Fechamento mensal (dia 01 ao ultimo dia do mes) do mes de referencia: | Relatorio de fechamento (uma linha por categoria; contexto de producao em todas as linhas) | `:mes_ref` | ⬜ não validada | — | — |
+| `fechamento_quinzena_quimicos_cavaco_producao.sql` | Fechamento da 1a quinzena (dias 01 a 15, inclusive) do mes de referencia: | Relatorio de fechamento (uma linha por categoria; contexto de producao em todas as linhas) | `:mes_ref` | ⬜ não validada | — | — |
 | `kpi_custo_nao_conformidade_reprocesso_mensal.sql` | KPI mensal de custo de não conformidade (NC) e reprocesso por setor produtivo (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 26 ms |
 | `kpi_manutencao_backlog_om_aberta.sql` | Backlog de OMs de manutenção mecânica ainda não executadas, por família e faixa de idade. | Painel/KPI (fotografia do momento, sem recorte mensal) | — | ✅ validada | com dados | 12 ms |
 | `kpi_manutencao_mttr_mensal.sql` | KPI mensal de manutenção: OMs solicitadas, concluídas e MTTR (horas) por família (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 22 ms |
@@ -261,6 +266,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `pcp_producao_por_fases_e_turnos_diario.sql` | Produção por fases e turnos (diário) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 4 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase.sql` | Quantidade de KGs em cada fase | PCP e Indicadores Fabris | — | ✅ validada | com dados | 1456 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase_antigo.sql` | Quantidade de KGs em cada fase (antigo) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 407 ms |
+| `pcp_sentinela_quimicos_ruptura_compra.sql` | Sentinela de quimicos: estoque, consumo previsto, ruptura projetada e necessidade de compra por produto | Auditoria/Sentinela | — | ✅ validada | com dados | 2491 ms |
 | `pcp_sincronismo_malha_ribana.sql` | Monitoramento analítico e operacional do sincronismo entre malha principal e ribana para rede de lojas | SELECT (Painel Analítico / Operacional PCP) | — | ✅ validada | com dados | 4270 ms |
 | `pcp_top5_faturamento_matriz_mensal.sql` | TOP 5 - Faturamento Matriz Mensal | PCP e Indicadores Fabris | — | ✅ validada | com dados | 656 ms |
 | `pcp_top5_producao_diaria_por_data.sql` | TOP 5 - Produção Diária por Data | PCP e Indicadores Fabris | — | ✅ validada | com dados | 402 ms |
