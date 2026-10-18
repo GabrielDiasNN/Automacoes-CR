@@ -5,9 +5,10 @@ WITH
     OB_FASES_CALC AS (
         SELECT /*+ MATERIALIZE */
             OBF.NUMERO_OB,
-            -- Fase atual (REGRAS_NEGOCIO.md): menor SEQUENCIA com status 1, 2 ou 3; sem
-            -- nenhuma nesse conjunto, a última sequência.
-            NVL(MIN(CASE WHEN OBF.STATUS IN (1, 2, 3) THEN OBF.SEQUENCIA END), MAX(OBF.SEQUENCIA)) AS SEQ_ATUAL,
+            -- Fase atual pela regra do ERP (PKGBENF0001.FNC_RETORNA_SEQUENCIA_OB): menor
+            -- SEQUENCIA com status 0, 1, 2 ou 3; sem nenhuma, a última. Conferido em
+            -- 17/10/2026 contra VW_BNF_FASEATUALOB: 759 de 759 OBs abertas iguais.
+            NVL(MIN(CASE WHEN OBF.STATUS IN (0, 1, 2, 3) THEN OBF.SEQUENCIA END), MAX(OBF.SEQUENCIA)) AS SEQ_ATUAL,
             -- Última confirmação, mesma regra de PKGBENF0001.FNC_RETORNA_ULT_CONF_OB conferida
             -- em 17/10/2026 contra VW_BNF_OBMONTADA (760 de 760 OBs iguais): fase confirmada
             -- (4) usa o fim da UP; pesada/em execução (2, 3) usam TEMPO_*_CONFIR (minutos desde
