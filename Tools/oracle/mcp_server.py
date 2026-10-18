@@ -199,8 +199,9 @@ CABECALHO_COLUNAS = ["#", "COLUNA", "TIPO", "ANULÁVEL", "COMENTÁRIO"]
 
 
 def _canonico_do_guard() -> Any:
-    """Canônico do guard com patch aplicado; relido do disco só quando o módulo muda.
+    """Canônico do guard com patch aplicado, carregado uma vez por processo.
 
+    `_guard_sql` é fixado no import, então o canônico só muda após reiniciar o MCP.
     Uma falha ao carregar não grava nada no cache, então a chamada seguinte repete a
     validação e continua fail-closed.
     """
@@ -762,6 +763,9 @@ class OracleMcpTools:
     ) -> dict[str, Any]:
         """Classifica a falha da execução: timeout, queda de sessão ou erro do banco."""
         if fired.is_set():
+            # Depois de cancelar no meio de um round-trip, a sessão pode ficar
+            # inutilizável (DPI-1067/ORA-03156 no Thick): descarta em vez de devolver ao pool.
+            self.conn_mgr.discard_connection(conn)
             return {
                 "error": True,
                 "message": (

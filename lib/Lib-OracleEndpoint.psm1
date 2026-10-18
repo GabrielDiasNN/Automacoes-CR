@@ -20,7 +20,11 @@ function Get-OracleTnsnamesPath {
     param()
 
     $candidatos = @()
-    if ($env:TNS_ADMIN) { $candidatos += $env:TNS_ADMIN }
+    $tnsAdmin = [System.Environment]::GetEnvironmentVariable("TNS_ADMIN", "Process")
+    if ([string]::IsNullOrWhiteSpace($tnsAdmin)) {
+        $tnsAdmin = Get-EnvFileValue -Key "TNS_ADMIN"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($tnsAdmin)) { $candidatos += $tnsAdmin }
 
     $clientePath = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_PATH", "Process")
     if ([string]::IsNullOrWhiteSpace($clientePath)) {
@@ -66,8 +70,12 @@ function Resolve-OracleEndpoint {
         }
     }
 
-    if ($texto -notmatch '[:/]') { return $null }
-    $ezConnect = [regex]::Match($texto, '^(//)?(?<host>[A-Za-z0-9.\-_]+)(:(?<porta>\d+))?(/[^/\s]*)?$')
+    # Easy Connect Plus: o protocolo (tcps://) e os parametros (?wallet_location=...) nao
+    # fazem parte do endereco. Sem tirar isso, "tcps://host:2484/svc" nao casava.
+    $semProtocolo = $texto -replace '^[A-Za-z][A-Za-z0-9+.\-]*://', ''
+    $enderecoEzConnect = ($semProtocolo -split '\?', 2)[0]
+    if ($enderecoEzConnect -notmatch '[:/]') { return $null }
+    $ezConnect = [regex]::Match($enderecoEzConnect, '^(//)?(?<host>[A-Za-z0-9.\-_]+)(:(?<porta>\d+))?(/[^/\s]*)?$')
     if ($ezConnect.Success) {
         $porta = if ($ezConnect.Groups['porta'].Success) { [int]$ezConnect.Groups['porta'].Value } else { 1521 }
         return [pscustomobject]@{ Servidor = $ezConnect.Groups['host'].Value; Porta = $porta; Origem = "EZConnect" }
@@ -100,11 +108,5 @@ function Test-OracleTcpEndpoint {
         $cliente.Close()
     }
 }
-
-# ------------------------------------------------------------------------------
-
-# Test-AutomationPreFlight
-
-# ------------------------------------------------------------------------------
 
 Export-ModuleMember -Function Get-OracleTnsnamesPath, Resolve-OracleEndpoint, Test-OracleTcpEndpoint

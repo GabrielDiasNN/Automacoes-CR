@@ -63,4 +63,17 @@ DOMINIO.WORLD =
         $r.Porta | Should -Be 1600
         $r.Origem | Should -Be "EZConnect"
     }
+
+    It "Tira o protocolo do Easy Connect Plus (tcps://)" {
+        $r = Resolve-OracleEndpoint -ConnectString "tcps://banco.exemplo.local:2484/SVC"
+        $r.Servidor | Should -Be "banco.exemplo.local"
+        $r.Porta | Should -Be 2484
+        $r.Origem | Should -Be "EZConnect"
+    }
+
+    It "Ignora os parametros de query no Easy Connect Plus" {
+        $r = Resolve-OracleEndpoint -ConnectString "banco.exemplo.local:1600/SVC?transport_connect_timeout=5&retry_count=3"
+        $r.Servidor | Should -Be "banco.exemplo.local"
+        $r.Porta | Should -Be 1600
+    }
 }

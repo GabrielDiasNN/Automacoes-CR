@@ -357,7 +357,7 @@ if ($match) { $connStr = $match.Matches[0].Groups[1].Value.Trim() }
 
 }
 
-if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ($connStr -split '[:/]')[0].Trim() }
+if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = (($connStr -replace '^[A-Za-z][A-Za-z0-9+.\-]*://', '') -split '[:/]')[0].Trim() }
 
 }
 

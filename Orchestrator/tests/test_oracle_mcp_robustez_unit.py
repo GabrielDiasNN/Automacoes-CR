@@ -113,6 +113,8 @@ def test_timeout_de_execucao_diz_que_o_prazo_e_por_chamada() -> None:
 
     assert resultado["error"] is True
     assert "uma chamada ao banco excedeu o limite de 10s" in resultado["message"]
+    # Sessão cancelada no meio de um round-trip não volta ao pool.
+    mgr.discard_connection.assert_called_once_with(conn)
 
 
 def test_run_sobrevive_a_argumentos_nao_textuais(

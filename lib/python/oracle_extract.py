@@ -100,7 +100,9 @@ def probe_wan_health(
     """Testa a saúde da rota WAN via TCP ping de abertura de socket.
 
     Mede latência média (RTT), desvio e taxa de sucesso em milissegundos.
-    Execução ultra-rápida (< 50ms no link normal) e 100% não-bloqueante/segura.
+    Execução rápida (< 50 ms no link normal). Não levanta exceção: cada amostra tem
+    prazo de `timeout` s, e a resolução do nome não tem prazo próprio (DNS lento pode
+    atrasar a chamada). O chamador decide o que fazer com o resultado.
     """
     total_samples = max(1, samples)
     rtts: list[float] = []
