@@ -530,7 +530,7 @@ def test_mais_de_quinhentos_nomes_bloqueia_sem_conectar() -> None:
     mgr = MagicMock()
 
     resultado = OracleMcpTools(mgr, _config()).execute_sql(
-        f"SELECT {colunas} FROM DUAL"
+        f"SELECT {colunas} FROM DUAL"  # nosec B608 - colunas sintéticas C0..C500; nada vai ao banco
     )
 
     assert resultado["error"] is True
