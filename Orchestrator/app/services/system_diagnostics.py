@@ -2,7 +2,6 @@
 
 # pylint: disable=relative-beyond-top-level
 
-import os
 from collections.abc import Callable
 from time import perf_counter
 from typing import Any
@@ -26,6 +25,8 @@ from ..constants import (
     EXECUTION_ACTIVE_STATUSES,
     ORCHESTRATOR_CONTRACT_VERSION,
     ORCHESTRATOR_VERSION,
+    SEVERITY_ERROR,
+    WORKER_MAX_CONCURRENCY_PADRAO,
 )
 from ..database import (
     DB_PATH,
@@ -34,6 +35,7 @@ from ..database import (
     get_wal_size_mb,
     validate_database_schema,
 )
+from ..runtime import get_worker_max_concurrency
 from ..timezone import get_now_local
 from . import metrics_queries as metrics
 from .diagnostic_checks import (
@@ -49,6 +51,7 @@ from .diagnostic_checks import (
     check_worker_saturation,
 )
 from .diagnostic_collectors import (
+    add_finding,
     coerce_datetime,
     collect_oldest_queue_items,
     collect_orphaned_running,
@@ -355,7 +358,22 @@ def build_diagnostics_payload(  # pylint: disable=too-many-locals,too-many-state
     findings.extend(check_orphaned_running(orphaned_running))
     findings.extend(check_failure_hotspots(failure_hotspots))
     findings.extend(check_sla_breaches(sla_breaches))
-    max_workers = int(os.environ.get("WORKER_MAX_CONCURRENCY", "4"))
+    try:
+        max_workers = get_worker_max_concurrency()
+    except ValueError as exc:
+        # Configuração inválida vira finding: o diagnóstico é justamente a tela que
+        # precisa apontá-la, então não pode responder 500.
+        add_finding(
+            findings,
+            SEVERITY_ERROR,
+            "worker",
+            str(exc),
+            {
+                "action_hint": "Corrigir WORKER_MAX_CONCURRENCY no .env (inteiro maior que zero) e reiniciar o worker.",
+                "priority": 1,
+            },
+        )
+        max_workers = WORKER_MAX_CONCURRENCY_PADRAO
     findings.extend(
         check_worker_saturation(
             getattr(worker_status, "pool_saturated_seconds", None), max_workers

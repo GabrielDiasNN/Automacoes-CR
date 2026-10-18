@@ -1,4 +1,3 @@
-# pylint: disable=line-too-long, broad-exception-caught, import-error, wrong-import-position
 """Testes dedicados de equivalência para a correção de performance de
 vw_sql_px015.sql (20/09/2026).
 
@@ -23,9 +22,12 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT / "lib" / "python"))
-import oracledb  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
-from oracle_extract import init_thick_mode, resolve_oracle_credentials  # noqa: E402
+from oracle_extract import (  # noqa: E402
+    connect_from_creds,
+    init_thick_mode,
+    resolve_oracle_credentials,
+)
 
 FAILURES: list[str] = []
 CREDS: Any = None
@@ -37,10 +39,11 @@ def _log(msg: str, level: str = "INFO", exec_id: str = "teste-px015") -> None:
 
 
 def _connect() -> Any:
-    return oracledb.connect(user=CREDS.user, password=CREDS.password, dsn=CREDS.dsn)
+    return connect_from_creds(CREDS, _log)
 
 
 def _scalar(sql: str) -> Any:
+    """Valor escalar da consulta. None vem de agregado sem linhas ou de coluna NULL."""
     with _connect() as conn:
         cur = conn.cursor()
         cur.execute(sql)
@@ -52,13 +55,20 @@ def _record(
     nome: str, label: str, value: Any, pair: tuple[Any, Any], lados: tuple[str, str]
 ) -> None:
     left, right = pair
-    status = "OK" if left == right else "DIVERGENTE"
+    # None de qualquer lado é falta de dado de referência, não equivalência: sem
+    # isto, None == None passava sem testar nada (caso 18439, ver DEFP).
+    if left is None or right is None:
+        status = "SEM DADOS"
+    elif left == right:
+        status = "OK"
+    else:
+        status = "DIVERGENTE"
     print(
         f"  [{status}] {nome} ({label}={value}): {lados[0]}={left!r} {lados[1]}={right!r}"
     )
-    if left != right:
+    if status != "OK":
         FAILURES.append(
-            f"{nome} ({label}={value}): {lados[0]}={left!r} != {lados[1]}={right!r}"
+            f"{nome} ({label}={value}) [{status}]: {lados[0]}={left!r} != {lados[1]}={right!r}"
         )
 
 

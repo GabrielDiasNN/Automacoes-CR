@@ -59,6 +59,25 @@ function Import-HubEnv {
     }
 }
 
+function Get-EnvFileValue {
+    <#
+    .SYNOPSIS
+        Le UMA chave do .env do projeto sem carregar o arquivo no ambiente do processo.
+        Devolve $null se o arquivo ou a chave nao existirem.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory = $true)][string]$Key)
+
+    $envPath = Join-Path $script:ProjectRoot ".env"
+    if (-not (Test-Path -LiteralPath $envPath)) { return $null }
+    foreach ($linha in Get-Content -LiteralPath $envPath) {
+        $parsed = ConvertFrom-EnvLine -Line $linha
+        if ($parsed -and $parsed.Key -eq $Key) { return $parsed.Value.Trim('"') }
+    }
+    return $null
+}
+
 function Get-HubConfig {
     [CmdletBinding()]
     param(
@@ -110,5 +129,5 @@ function Resolve-WhatsAppTarget {
     return $placeholder
 }
 
-Export-ModuleMember -Function Get-HubConfig, Import-HubEnv, Resolve-WhatsAppTarget
+Export-ModuleMember -Function Get-HubConfig, Get-EnvFileValue, Import-HubEnv, Resolve-WhatsAppTarget
 

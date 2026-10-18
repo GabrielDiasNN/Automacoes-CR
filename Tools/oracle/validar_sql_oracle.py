@@ -34,10 +34,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from guard_sql import canonical_guard_file  # noqa: E402
 from oracle_catalog import (  # noqa: E402
     GuardError,
+    log_avisos_stderr,
     sql_guard_text,
     strip_sql_comments,
 )
 from oracle_extract import (  # noqa: E402
+    connect_from_creds,
     init_thick_mode,
     resolve_oracle_credentials,
 )
@@ -128,8 +130,18 @@ class RunOptions:
     attempts: int = MAX_ATTEMPTS
 
 
-def _log(*_args: Any, **_kwargs: Any) -> None:
-    """Logger silencioso: nunca expõe DSN, usuário ou dados retornados."""
+# Códigos de saída do guard_sql. 0 = leitura liberada. 3 = veredito não permitido.
+# Só o caso de função customizada (`classe` == "chamada_funcao") vai a parse no
+# Oracle. DML, DDL, PL/SQL e transação bloqueiam: o parse de DDL executa o DDL com
+# commit implícito. Qualquer outro código bloqueia (fail-closed).
+GUARD_LIBERADO = 0
+GUARD_SO_PARSE = 3
+GUARD_CLASSE_SO_PARSE = "chamada_funcao"
+# Teto da saída do guard gravada na evidência JSON.
+GUARD_OUTPUT_MAX_CHARS = 1000
+
+
+_log = log_avisos_stderr
 
 
 def _strip_comments(sql: str) -> str:
@@ -248,17 +260,46 @@ def _parse_bind_args(values: list[str] | None) -> dict[str, Any]:
     return parsed
 
 
-def _guard(path: Path, guard: Path) -> tuple[int, str]:
+def _arquivo_dentro_da_raiz(arquivo: Path, raiz: Path) -> Path:
+    """Caminho resolvido de `arquivo`, que precisa estar dentro de `raiz` (também resolvida).
+
+    Resolver os dois lados faz `--root` relativo funcionar. Sem isto, um caminho
+    absoluto nunca estaria "dentro" de uma raiz relativa.
+    """
+    caminho = arquivo.resolve()
+    try:
+        caminho.relative_to(raiz.resolve())
+    except ValueError as exc:
+        raise SystemExit("--file deve estar dentro de --root") from exc
+    return caminho
+
+
+def _guard_texto(texto: str, guard: Path) -> tuple[int, str]:
+    """Roda o guard sobre `texto` pela entrada padrão, sem reabrir o arquivo.
+
+    O texto validado é o mesmo que é executado. PYTHONUTF8=1 faz o filho ler a
+    entrada em UTF-8; no Windows a codificação local corromperia os acentos.
+    """
     completed = subprocess.run(
-        [sys.executable, str(guard), "--arquivo", str(path)],
+        [sys.executable, str(guard)],
         cwd=ROOT,
+        input=texto,
         capture_output=True,
         text=True,
         encoding="utf-8",
         check=False,
+        env={**os.environ, "PYTHONUTF8": "1"},
     )
     output = (completed.stdout or completed.stderr).strip()
-    return completed.returncode, output[-1000:]
+    # Saída inteira: o veredito JSON do guard é lido por `medir_sql_oracle` (exceção de
+    # funções), e um corte no meio do JSON desligaria a exceção em silêncio. O limite
+    # de tamanho fica só onde a saída vai para a evidência.
+    return completed.returncode, output
+
+
+def _guard(path: Path, guard: Path) -> tuple[int, str]:
+    """Guard sobre o conteúdo de `path`, lido uma vez."""
+    return _guard_texto(path.read_text(encoding="utf-8"), guard)
 
 
 def _files(root: Path, part: int, parts: int) -> list[Path]:
@@ -282,11 +323,7 @@ def _has_multiple_statements(sql: str) -> bool:
 
 
 def _connect(creds: Any) -> Any:
-    return oracledb.connect(
-        user=creds.user,
-        password=creds.password,
-        dsn=creds.dsn,
-    )
+    return connect_from_creds(creds)
 
 
 def _run_with_watchdog(
@@ -378,7 +415,7 @@ def _oracle_stage(
         connection = connect_within(lambda: _connect(creds), options.timeout)
         # Conexão e execução dividem o mesmo `--timeout`, não um cada.
         remaining = options.timeout - (time.perf_counter() - started)
-        if not options.execute or guard_code == 3:
+        if not options.execute or guard_code == GUARD_SO_PARSE:
             outcome = _run_with_watchdog(connection, sql, remaining, {}, False)
             abandoned = bool(outcome.pop("abandoned", False))
             if outcome.get("parse") != "pass":
@@ -392,7 +429,7 @@ def _oracle_stage(
                     else "oracle_error"
                 )
                 return outcome
-            blocked = guard_code == 3
+            blocked = guard_code == GUARD_SO_PARSE
             return {
                 "parse": "pass",
                 "parse_ms": outcome["parse_ms"],
@@ -452,12 +489,37 @@ def _oracle_stage_with_retry(
     return outcome
 
 
+def _so_parse_permitido(guard_code: int, guard_output: str) -> bool:
+    """True se o veredito do guard autoriza o nível "só parse" no Oracle.
+
+    Sem exit 3 o caso não é de "só parse" e a decisão fica com o chamador. Com exit 3,
+    só vale para função customizada: qualquer outra classe, ou JSON ilegível, bloqueia.
+    """
+    if guard_code != GUARD_SO_PARSE:
+        return True
+    try:
+        veredito = json.loads(guard_output)
+    except ValueError:
+        return False
+    return (
+        isinstance(veredito, dict) and veredito.get("classe") == GUARD_CLASSE_SO_PARSE
+    )
+
+
+def _rotulo_do_arquivo(path: Path) -> str:
+    """Caminho do arquivo relativo ao repositório; fora dele, o caminho como foi dado."""
+    try:
+        return str(path.relative_to(ROOT)).replace("\\", "/")
+    except ValueError:
+        return str(path).replace("\\", "/")
+
+
 def _validate_one(path: Path, creds: Any, options: RunOptions) -> dict[str, Any]:
     started_clock = time.perf_counter()
     raw_bytes = path.read_bytes()
     raw_hash = content_sha256(raw_bytes)
     result: dict[str, Any] = {
-        "file": str(path.relative_to(ROOT)).replace("\\", "/"),
+        "file": _rotulo_do_arquivo(path),
         "bytes": len(raw_bytes),
         "raw_sha256": raw_hash,
         "guard_input_sha256": raw_hash,
@@ -473,20 +535,27 @@ def _validate_one(path: Path, creds: Any, options: RunOptions) -> dict[str, Any]
         result.update({"status": "sql_scan_error", "error": _error_summary(exc)})
         return _finish(result, started_clock)
 
+    # O guard recebe o mesmo texto que sera executado (`sql`), e o hash gravado e
+    # o do texto que foi de fato enviado ao guard.
     normalized_hash = _sha256(sql.encode("utf-8"))
-    guard_code, guard_output = _guard(path, options.guard)
+    guard_code, guard_output = _guard_texto(sql, options.guard)
     result.update(
         {
+            "guard_input_sha256": normalized_hash,
             "normalized_sha256": normalized_hash,
             "parse_input_sha256": normalized_hash,
             "bind_names": _bind_names(sql),
             "guard_exit": guard_code,
-            "guard_output": guard_output,
+            "guard_output": guard_output[-GUARD_OUTPUT_MAX_CHARS:],
         }
     )
-    # 0 = liberado; 3 = so parse (funcao customizada); qualquer outro codigo
-    # diferente de zero e bloqueio (fail-closed).
-    if guard_code not in (0, 3):
+    # Qualquer codigo fora de GUARD_LIBERADO / GUARD_SO_PARSE e bloqueio (fail-closed).
+    if guard_code not in (GUARD_LIBERADO, GUARD_SO_PARSE):
+        result["status"] = "blocked_guard"
+        return _finish(result, started_clock)
+    # Exit 3 só segue para parse quando o veredito é função customizada. O JSON é lido
+    # inteiro: `guard_output` acima já está truncado para a evidência.
+    if not _so_parse_permitido(guard_code, guard_output):
         result["status"] = "blocked_guard"
         return _finish(result, started_clock)
 
@@ -551,16 +620,13 @@ def main() -> int:
     init_thick_mode(creds, _log, "validar-acervo-sql")
 
     if args.file is not None:
-        path = args.file.resolve()
-        try:
-            path.relative_to(args.root)
-        except ValueError as exc:
-            raise SystemExit("--file deve estar dentro de --root") from exc
-        paths = [path]
+        paths = [_arquivo_dentro_da_raiz(args.file, args.root)]
     else:
         paths = _files(args.root, args.part, args.parts)
     deadline = (
-        time.monotonic() + args.max_total_seconds if args.max_total_seconds > 0 else None
+        time.monotonic() + args.max_total_seconds
+        if args.max_total_seconds > 0
+        else None
     )
     results: list[dict[str, Any]] = []
     skipped: list[str] = []
@@ -576,13 +642,11 @@ def main() -> int:
     payload = {
         "schema": "oracle-sql-validation/v2",
         "validator_version": VALIDATOR_VERSION,
-        "root": str(args.root.relative_to(ROOT)).replace("\\", "/"),
+        "root": _rotulo_do_arquivo(args.root.resolve()),
         "part": args.part,
         "parts": args.parts,
         "file": (
-            str(args.file.resolve().relative_to(ROOT)).replace("\\", "/")
-            if args.file is not None
-            else None
+            _rotulo_do_arquivo(args.file.resolve()) if args.file is not None else None
         ),
         "timeout_seconds": args.timeout,
         "max_attempts": options.attempts,
@@ -602,7 +666,11 @@ def main() -> int:
     )
     print(
         json.dumps(
-            {"status": "complete", "summary": summary, "skipped_by_budget": len(skipped)},
+            {
+                "status": "complete",
+                "summary": summary,
+                "skipped_by_budget": len(skipped),
+            },
             ensure_ascii=False,
         )
     )

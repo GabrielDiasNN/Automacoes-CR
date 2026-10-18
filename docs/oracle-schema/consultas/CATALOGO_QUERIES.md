@@ -10,27 +10,28 @@
 
 ## Resumo
 
-**226 arquivos `.sql` em 13 pastas.**
+**238 arquivos `.sql` em 13 pastas.**
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 209 |
+| ✅ validada | 222 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
-| ⏳ inconclusiva: sessão derrubada pela rede durante a execução | 2 |
-| ⬜ alterada após validação de 09/10/2026 | 1 |
+| ⬜ não validada | 2 |
 
 Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros padrão (sentinelas de anomalia ou filtros sem dados no momento — não é erro).
 
 ## Inventário por pasta
 
-### 01_beneficiamento_tingimento (40)
+### 01_beneficiamento_tingimento (43)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
 | `bnf_acumulado_montagem_tingimento_por_dia.sql` | Acumulado (Montagem-Tingimento) - Por Dia | Tingimento e Tinturaria | — | ✅ validada | com dados | 2201 ms |
 | `bnf_acumulado_montagem_tingimento_por_turno.sql` | Acumulado (Montagem-Tingimento) - Por Turno | Tingimento e Tinturaria | — | ✅ validada | com dados | 1792 ms |
 | `bnf_consulta_receita.sql` | Consulta Receita | Tingimento e Tinturaria | — | ✅ validada | com dados | 3 ms |
+| `bnf_consumo_quimico_historico_mensal_produto.sql` | Consolidado mensal de consumo de quimicos por produto. Soma kg e divide depois (nunca media g/kg). | Painel/KPI | — | ✅ validada | com dados | 1022 ms |
+| `bnf_consumo_quimico_historico_partida_produto.sql` | Historico de consumo de quimicos por partida de tingimento e produto (rastreio/auditoria): consumo real pesado x quantidade emitida na receita, com desvio. | Auditoria/Sentinela | — | ✅ validada | com dados | 1049 ms |
 | `bnf_consumo_quimico_por_kg_tingido.sql` | Consumo de produtos químicos por kg de tecido tingido, por partida de tingimento confirmada nos últimos 30 dias (g/kg), com cor, artigo e máquina para agregação | Painel/KPI | — | ✅ validada | com dados | 160 ms |
 | `bnf_fechamento_mes_obs_em_aberto_com_origens.sql` | Acompanhamento de Fechamento do Mês no Beneficiamento - Monitoramento de OBs em Aberto por Grupo de Programação, Estágio Produtivo, Macro-Setor, Origens, Avanço de Fases, Pesagem Real e Risco Operacional | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 362 ms |
 | `bnf_fila_programada_por_maquina_tingimento.sql` | Fila programada por máquina de tingimento (UPs ainda não iniciadas): quantidade de partidas, kg, horas previstas à frente e atrasadas | Monitoramento operacional | — | ✅ validada | com dados | 143 ms |
@@ -45,7 +46,8 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `bnf_monitoramento_atributos_produtos_quimicos.sql` | Monitorar Atributo Estoque (Produto Químico) | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 251 ms |
 | `bnf_monitoramento_maquinas_tingimento.sql` | Monitoramento Máquinas de Tingimento | Tingimento e Tinturaria | — | ✅ validada | com dados | 4 ms |
 | `bnf_monitoramento_previsao_vs_realizado_tingimento.sql` | Monitoramento mensal de previsões de tingimento versus realizado | SELECT (Template Analítico / Operacional) | — | ✅ validada | com dados | 373 ms |
-| `bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql` | OB_FASES - seleciona última sequência da fase | Tingimento e Tinturaria | — | ✅ validada | com dados | 5180 ms |
+| `bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql` | OB_FASES - seleciona última sequência da fase | Tingimento e Tinturaria | — | ✅ validada | com dados | 1863 ms |
+| `bnf_ob_fases_ultima_sequencia_fase_ultimos_365d.sql` | OB_FASES - última sequência por fase, apenas OBs emitidas nos últimos 365 dias | Tingimento e Tinturaria | — | ✅ validada | com dados | 692 ms |
 | `bnf_obs_abertas_por_codigo_reduzido.sql` | OB_s em aberto pelo Reduzido | Tingimento e Tinturaria | — | ✅ validada | com dados | 1641 ms |
 | `bnf_obs_abertas_por_processo_corante.sql` | OB_s em aberto de determinado (processo ou corante) | Tingimento e Tinturaria | — | ✅ validada | com dados | 29 ms |
 | `bnf_ocupacao_diaria_maquina_tingimento.sql` | Ocupação diária das máquinas de tingimento nos últimos 30 dias: minutos em produção, limpeza, manutenção, ajuste de planejamento, outras paradas e ocioso | Painel/KPI | — | ✅ validada | com dados | 291 ms |
@@ -96,18 +98,18 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
 | `mal_agulhas_por_tonelada.sql` | Consumo de agulhas por tonelada produzida e por máquina-dia, por tear | Painel/KPI | — | ✅ validada | com dados | 7986 ms |
-| `mal_calendario_producao_diaria.sql` | Calendário diário da malharia interna - máquinas com produção, kg | Monitoramento operacional | — | ⏳ inconclusiva: sessão derrubada pela rede durante a execução | — | — |
+| `mal_calendario_producao_diaria.sql` | Calendário diário da malharia interna - máquinas com produção, kg | Monitoramento operacional | — | ✅ validada | com dados | 2564 ms |
 | `mal_conferencia_ob_montada_teares_e_lotes_alocados.sql` | Conferência - OB montada (teares e lotes alocados) | Malharia e Teares | — | ✅ validada | com dados | 5 ms |
 | `mal_consulta_finura_dos_teares.sql` | Consulta Finura dos Teares | Malharia e Teares | — | ✅ validada | com dados | 2 ms |
-| `mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql` | Consulta - Peças com restrição geradas na Malharia | Malharia e Teares | — | ⬜ alterada após validação de 09/10/2026 | — | — |
+| `mal_consulta_pecas_com_restricao_geradas_na_malharia_ultimos_60d.sql` | Consulta - Peças com restrição geradas na Malharia | Malharia e Teares | — | ✅ validada | com dados | 2816 ms |
 | `mal_disponibilidade_por_maquina.sql` | Proxy de tempo parado por tear interno do setor 4 = 1 - paradas / horas de | Painel/KPI | — | ✅ validada | com dados | 60 ms |
-| `mal_eficiencia_global_engenharia.sql` | Produção e Eficiência da Malharia (Engenharia) | Malharia e Teares | — | ✅ validada | com dados | 10 ms |
-| `mal_eficiencia_ordens_em_aberto.sql` | Produção e Eficiência da Malharia (Engenharia) ordens em aberto | Malharia e Teares | — | ✅ validada | com dados | 7 ms |
-| `mal_eficiencia_por_grupo_maquinas.sql` | Produção e Eficiência da Malharia (Engenharia) por grupo de máquinas | Malharia e Teares | — | ✅ validada | com dados | 5 ms |
-| `mal_eficiencia_teorico_vs_realizado.sql` | Teórico (engenharia do reduzido) x realizado por produto e grupo de | Conferência pontual | — | ✅ validada | com dados | 8621 ms |
-| `mal_estoque_por_agulhas_tear.sql` | Estoque de malha crua agrupado por número de agulhas do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 3 ms |
-| `mal_estoque_por_lote_produto.sql` | Estoque de malha crua agrupado por lote | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 6 ms |
-| `mal_estoque_por_tear_maquina.sql` | Estoque de malha crua agrupado por número do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 8 ms |
+| `mal_eficiencia_global_engenharia.sql` | Produção e Eficiência da Malharia (Engenharia) | Malharia e Teares | — | ✅ validada | com dados | 13 ms |
+| `mal_eficiencia_ordens_em_aberto.sql` | Produção e Eficiência da Malharia (Engenharia) ordens em aberto | Malharia e Teares | — | ✅ validada | com dados | 11 ms |
+| `mal_eficiencia_por_grupo_maquinas.sql` | Produção e Eficiência da Malharia (Engenharia) por grupo de máquinas | Malharia e Teares | — | ✅ validada | com dados | 10 ms |
+| `mal_eficiencia_teorico_vs_realizado.sql` | Teórico (engenharia do reduzido) x realizado por produto e grupo de | Conferência pontual | — | ✅ validada | com dados | 2879 ms |
+| `mal_estoque_por_agulhas_tear.sql` | Estoque de malha crua agrupado por número de agulhas do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 13 ms |
+| `mal_estoque_por_lote_produto.sql` | Estoque de malha crua agrupado por lote | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 10 ms |
+| `mal_estoque_por_tear_maquina.sql` | Estoque de malha crua agrupado por número do tear | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 12 ms |
 | `mal_meta_malharia.sql` | Meta Malharia | Malharia e Teares | — | ✅ validada | com dados | 76 ms |
 | `mal_necessidade_balanco_faltas_sobras.sql` | Necessidade Malharia (Faltas e Sobras) | Malharia e Teares | — | ✅ validada | com dados | 284 ms |
 | `mal_necessidade_critica_somente_faltas.sql` | Necessidade Malharia (Somente Faltas) | Malharia e Teares | — | ✅ validada | com dados | 124 ms |
@@ -121,7 +123,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `mal_proporcao_corretiva_maquina.sql` | Proporção de manutenção corretiva por tear interno, com minutos médios por | Painel/KPI | — | ✅ validada | com dados | 31 ms |
 | `mal_qualidade_registro_paradas.sql` | Testes de qualidade do registro de paradas e quebras de agulha da | Auditoria/Sentinela | — | ✅ validada | com dados | 103 ms |
 | `mal_quebra_agulha_mes.sql` | Quebra de agulha em teares internos por mês e máquina, com agulhas | Auditoria/Sentinela | — | ✅ validada | com dados | 69 ms |
-| `mal_scorecard_maquina_12m.sql` | Scorecard de teares internos (12 meses) - produção, meta, paradas, | Painel/KPI | — | ⏳ inconclusiva: sessão derrubada pela rede durante a execução | — | — |
+| `mal_scorecard_maquina_12m.sql` | Scorecard de teares internos (12 meses) - produção, meta, paradas, | Painel/KPI | — | ✅ validada | com dados | 3527 ms |
 
 ### 04_fiacao_fios (12)
 
@@ -227,14 +229,20 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 |---|---|---|---|---|---|---|
 | `fac_desenho_estamparia.sql` | Desenho Estamparia | Facção e Serviços Terceiros | — | ✅ validada | vazia | 2 ms |
 | `fac_diagnostico_programacao_ambigua.sql` | Diagnóstico contábil de ordens de programação de terceirização com ambiguidade ativa de NF | Auditoria/Sentinela | — | ✅ validada | vazia | 5252 ms |
-| `fac_faltas_e_sobras_faccao.sql` | Faltas e Sobras (Facção) | Facção e Serviços Terceiros (Consulta Somente Leitura) | — | ✅ validada | com dados | 842 ms |
+| `fac_faltas_e_sobras_faccao.sql` | Faltas e Sobras (Facção - Fluxo Interno) | Facção e Serviços Terceiros (Consulta Somente Leitura) | — | ✅ validada | com dados | 683 ms |
 | `fac_saldo_nf_faccao.sql` | Controle consolidado de saldo físico e disponível de NFs de terceirização/facção | Monitoramento operacional | — | ✅ validada | com dados | 5198 ms |
 | `fac_tabela_reduzidos_com_servicos_em_terceiros.sql` | Tabela - Reduzidos com serviços em terceiros | Facção e Serviços Terceiros | — | ✅ validada | com dados | 52 ms |
 
-### 09_pcp_kpis_gestao (29)
+### 09_pcp_kpis_gestao (38)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
+| `kpi_custo_nao_conformidade_reprocesso_mensal.sql` | KPI mensal de custo de não conformidade (NC) e reprocesso por setor produtivo (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 26 ms |
+| `kpi_manutencao_backlog_om_aberta.sql` | Backlog de OMs de manutenção mecânica ainda não executadas, por família e faixa de idade. | Painel/KPI (fotografia do momento, sem recorte mensal) | — | ✅ validada | com dados | 12 ms |
+| `kpi_manutencao_mttr_mensal.sql` | KPI mensal de manutenção: OMs solicitadas, concluídas e MTTR (horas) por família (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 22 ms |
+| `kpi_otif_compras_mensal.sql` | OTIF de compras por mês de entrega programada (12 meses + mês aberto): no prazo e completo. | Painel/KPI | — | ✅ validada | com dados | 149 ms |
+| `kpi_paradas_uniao_fontes_mensal.sql` | Paradas de máquina por mês e setor, unindo as duas fontes oficiais sem contar o mesmo evento duas vezes (12 meses + mês aberto). | Painel/KPI | — | ✅ validada | com dados | 13282 ms |
+| `kpi_reprocesso_montagem_mensal.sql` | KPI mensal de reprocesso na montagem de lote (fase 10), 12 meses + mês aberto: fases e kg reprocessados sobre o total. | Painel/KPI | — | ✅ validada | com dados | 516 ms |
 | `pcp_aging_obs_por_fase_vs_sla.sql` | Aging das OBs montadas em aberto por fase atual, em faixas de dias parados, com quantidade fora do SLA | Painel/KPI | — | ✅ validada | com dados | 42 ms |
 | `pcp_balanco_fluxo_cru_facao_processo.sql` | Balanço e Proporção de Fluxo de Malha (Cru, Facção Pendente e Em Processo) | PCP / Gestão de Fluxo e Pipeline Produtivo | — | ✅ validada | com dados | 120 ms |
 | `pcp_calendario_planejamento_horas_trabalhadas.sql` | Calendario Planejamento (horas trabalhadas) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 4 ms |
@@ -242,10 +250,12 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `pcp_consulta_status_peca.sql` | Consulta Status Peça | PCP e Produção | — | ✅ validada | com dados | 1 ms |
 | `pcp_faturamento_mensal_cliente_prazo_expedicao_v2_2.sql` | Faturamento mensal por comprador com atendimento ao prazo de expedicao fisica | Painel/KPI | — | ✅ validada | com dados | 3232 ms |
 | `pcp_fechamento_mensal_beneficiamento.sql` | Consulta Canônica Permanente de Fechamento Mensal do Beneficiamento | SELECT (Painel Analítico / Operacional / Diretoria) | — | ✅ validada | com dados | 2288 ms |
+| `pcp_fechamento_mensal_quimicos_cavaco_producao.sql` | Fechamento mensal (dia 01 ao ultimo dia do mes) do mes de referencia: producao, produtos quimicos por categoria e cavaco (quantidades e valores). | Painel/KPI | `:mes_ref` | ⬜ não validada | — | — |
+| `pcp_fechamento_quinzena_quimicos_cavaco_producao.sql` | Fechamento da 1a quinzena (dias 01 a 15, inclusive) do mes de referencia: producao, produtos quimicos por categoria e cavaco (quantidades e valores). | Painel/KPI | `:mes_ref` | ⬜ não validada | — | — |
 | `pcp_lead_time_obs_encerradas.sql` | Lead time das OBs encerradas nos últimos 90 dias por mês de encerramento, fluxo e tipo de ordem: média, mediana, P90, e divisão em espera até o primeiro início e tempo de processo | Painel/KPI | — | ✅ validada | com dados | 171 ms |
 | `pcp_liga_reduzido_nas_classes_e_sub_grupos.sql` | Liga Reduzido nas Classes e Sub-Grupos | PCP e Produção | — | ✅ validada | com dados | 8 ms |
 | `pcp_producao_12m_fato_serie_temporal.sql` | Série Temporal Histórica de Produção por Fase e Indicadores Fabris (Últimos 12 Meses + Mês Aberto) | SELECT (Painel Analítico / Histórico Contínuo) | — | ✅ validada | com dados | 5490 ms |
-| `pcp_producao_12m_matriz_pivotada.sql` | Matriz Pivotada Executiva de Produção por Fases e KPIs Fabris (Últimos 12 Meses + Mês Aberto) | SELECT (Painel Analítico / Matriz Comparativa) | — | ✅ validada | com dados | 5464 ms |
+| `pcp_producao_12m_matriz_pivotada.sql` | Matriz Pivotada Executiva de Produção por Fases e KPIs Fabris (Últimos 12 Meses + Mês Aberto) | SELECT (Painel Analítico / Matriz Comparativa) | — | ✅ validada | com dados | 2974 ms |
 | `pcp_producao_acabado_mensal_atual.sql` | Produção Acabado Mensal (atual) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 42 ms |
 | `pcp_producao_mensal_pecas_kg_mov37.sql` | Produção Mensal por Peça e KG - Movimento 37 (Produto Acabado) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 618 ms |
 | `pcp_producao_mensal_por_fase_comparativo.sql` | Consulta Mensal de Produção por Fase (Comparativo Mês Atual vs Mesmo Mês Ano Anterior - YoY) | SELECT (Painel Analítico / Operacional) | — | ✅ validada | com dados | 3216 ms |
@@ -256,6 +266,7 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `pcp_producao_por_fases_e_turnos_diario.sql` | Produção por fases e turnos (diário) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 4 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase.sql` | Quantidade de KGs em cada fase | PCP e Indicadores Fabris | — | ✅ validada | com dados | 1456 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase_antigo.sql` | Quantidade de KGs em cada fase (antigo) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 407 ms |
+| `pcp_sentinela_quimicos_ruptura_compra.sql` | Sentinela de quimicos: estoque, consumo previsto, ruptura projetada e necessidade de compra por produto | Auditoria/Sentinela | — | ✅ validada | com dados | 2491 ms |
 | `pcp_sincronismo_malha_ribana.sql` | Monitoramento analítico e operacional do sincronismo entre malha principal e ribana para rede de lojas | SELECT (Painel Analítico / Operacional PCP) | — | ✅ validada | com dados | 4270 ms |
 | `pcp_top5_faturamento_matriz_mensal.sql` | TOP 5 - Faturamento Matriz Mensal | PCP e Indicadores Fabris | — | ✅ validada | com dados | 656 ms |
 | `pcp_top5_producao_diaria_por_data.sql` | TOP 5 - Produção Diária por Data | PCP e Indicadores Fabris | — | ✅ validada | com dados | 402 ms |

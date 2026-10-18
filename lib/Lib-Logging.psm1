@@ -24,6 +24,13 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $script:Lib_Utf8WithBom = [System.Text.Encoding]::UTF8
 
+# Resolucao do endpoint Oracle (tnsnames/EZ Connect) e teste TCP vivem em Lib-OracleEndpoint.psm1;
+# o pre-flight daqui so chama Resolve-OracleEndpoint e Test-OracleTcpEndpoint.
+Import-Module (Join-Path $PSScriptRoot 'Lib-OracleEndpoint.psm1')
+# Get-EnvFileValue (ORACLE_CONNECT_STRING do .env) precisa estar visivel aqui: o import aninhado
+# de Lib-OracleEndpoint nao expoe Lib-Config para este modulo.
+Import-Module (Join-Path $PSScriptRoot 'Lib-Config.psm1')
+
 # Identifica a raiz do repositorio no momento da importacao
 
 try {
@@ -240,12 +247,6 @@ Write-Warning "Falha ao fechar telemetria: $_"
 
 }
 
-# ------------------------------------------------------------------------------
-
-# Test-AutomationPreFlight
-
-# ------------------------------------------------------------------------------
-
 function Test-AutomationPreFlight {
 
 [CmdletBinding()]
@@ -347,19 +348,11 @@ $connStr = [System.Environment]::GetEnvironmentVariable("ORACLE_CONNECT_STRING",
 
 if ([string]::IsNullOrWhiteSpace($connStr)) {
 
-$envFile = Join-Path $script:ProjectRoot ".env"
-
-if (Test-Path $envFile) {
-
-$match = Select-String -Path $envFile -Pattern '^\s*ORACLE_CONNECT_STRING\s*=\s*(.+)$' | Select-Object -First 1
-
-if ($match) { $connStr = $match.Matches[0].Groups[1].Value.Trim() }
+$connStr = Get-EnvFileValue -Key "ORACLE_CONNECT_STRING"
 
 }
 
-}
-
-if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ($connStr -split '[:/]')[0].Trim() }
+if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ((($connStr -replace '^[A-Za-z][A-Za-z0-9+.\-]*://', '') -replace '^//', '') -split '[:/]')[0].Trim() }
 
 }
 
@@ -367,13 +360,31 @@ if ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
 
 $results += "WARN: Oracle host nao configurado (ORACLE_CONNECT_STRING ausente)"
 
-} elseif (Test-Connection -ComputerName $oracleHostResolved -Count 1 -Quiet) {
+} else {
 
-$results += "OK: Oracle ($oracleHostResolved) On"
+# O alias do TNS nao resolve por DNS e o ping (ICMP) pode estar bloqueado: mede a porta TCP do endpoint real.
+$enderecoOracle = if ($connStr) { $connStr } else { $oracleHostResolved }
+$endpointOracle = Resolve-OracleEndpoint -ConnectString $enderecoOracle
+
+# -OracleHost informado explicitamente como host simples (sem ':' nem '/'): nao e alias de tnsnames,
+# entao testa o proprio host na porta 1521 em vez de cair no aviso de alias ausente.
+if ($null -eq $endpointOracle -and -not [string]::IsNullOrWhiteSpace($OracleHost)) {
+$endpointOracle = [pscustomobject]@{ Servidor = $OracleHost; Porta = 1521; Origem = "Parametro" }
+}
+
+if ($null -eq $endpointOracle) {
+
+$results += "WARN: Oracle ($oracleHostResolved) sem endpoint resolvido (alias ausente no tnsnames.ora)"
+
+} elseif (Test-OracleTcpEndpoint -Servidor $endpointOracle.Servidor -Porta $endpointOracle.Porta) {
+
+$results += "OK: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) On"
 
 } else {
 
-$results += "WARN: Oracle ($oracleHostResolved) Off"
+$results += "WARN: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) Off (porta TCP sem resposta em 3 s)"
+
+}
 
 }
 

@@ -226,3 +226,6 @@ DEGRADED_CHANNEL_EXIT_CODES = {
 
 # Limite máximo de caracteres de logs persistidos no banco de dados para evitar inchaço
 MAX_DB_LOGS_CHARS = 200_000
+
+
+WORKER_MAX_CONCURRENCY_PADRAO = 4

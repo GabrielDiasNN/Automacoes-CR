@@ -338,7 +338,9 @@ def test_explain_plan_negado_nao_derruba_a_medicao(
 
     conexao = Conexao()
     monkeypatch.setattr(mm.oracledb, "connect", lambda **_k: conexao)
-    creds = argparse.Namespace(user=None, password=None, dsn=None)
+    creds = argparse.Namespace(
+        user=None, password=None, dsn=None, client_lib=None, tns_admin=None
+    )
     plano = mm.explain_plan(creds, "select 1", {})
     assert len(plano) == 1 and plano[0].startswith("plano indisponível")
     assert conexao.closed
@@ -385,6 +387,21 @@ def test_lista_de_queda_de_sessao_e_unica_entre_runner_e_ferramentas() -> None:
     assert not retryable(RuntimeError("ORA-00942: tabela nao existe"))
 
 
+def test_consumidores_delegam_para_a_fonte_unica_de_queda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Se algum consumidor tiver lista própria de marcadores, ele continua dando
+    # True aqui, e o teste falha. Só delegação faz o resultado mudar.
+    validar_partes = _carregar("validar_partes_oracle")
+    monkeypatch.setattr(mm, "is_session_drop", lambda _e: False)
+    monkeypatch.setattr(validar_partes, "is_session_drop", lambda _e: False)
+    marcador = oracle_session.SESSION_DROP_MARKERS[0]
+    assert not mm.is_transient(f"erro {marcador} qualquer")
+    assert not _priv(validar_partes, "_retryable")(
+        RuntimeError(f"erro {marcador} qualquer")
+    )
+
+
 def test_medir_nao_fecha_conexao_de_thread_abandonada(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -395,7 +412,9 @@ def test_medir_nao_fecha_conexao_de_thread_abandonada(
             fechadas.append(True)
 
     monkeypatch.setattr(mm.oracledb, "connect", lambda **_k: Conexao())
-    creds = argparse.Namespace(user=None, password=None, dsn=None)
+    creds = argparse.Namespace(
+        user=None, password=None, dsn=None, client_lib=None, tns_admin=None
+    )
     attempt = _priv(mm, "_attempt")
 
     monkeypatch.setattr(
@@ -485,3 +504,97 @@ def test_validar_conexao_travada_vira_timeout(monkeypatch: pytest.MonkeyPatch) -
     finally:
         liberar.set()
     assert resultado["status"] == "timeout"
+
+
+_excecao_funcoes = _priv(mm, "_excecao_funcoes")
+_VEREDITO_FUNCAO = json.dumps({"motivos": ["chamada a função PKGBENF0001.FNC_X"]})
+_SQL_FUNCAO = "select pkgbenf0001.fnc_x(o.ob) /* nada.aqui( */ from ob o"
+
+
+def _allowlist(tmp_path: Path, nomes: list[str]) -> Path:
+    caminho = tmp_path / "funcoes_auditadas.json"
+    entradas = [
+        {"nome": n, "evidencia": "ALL_SOURCE lido em 17/10/2026"} for n in nomes
+    ]
+    caminho.write_text(json.dumps({"funcoes": entradas}), encoding="utf-8")
+    return caminho
+
+
+def test_excecao_funcoes_libera_so_funcao_auditada(tmp_path: Path) -> None:
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        _SQL_FUNCAO,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is not None
+    assert resultado["funcoes_auditadas"] == ["PKGBENF0001.FNC_X"]
+
+
+def test_excecao_funcoes_recusa_funcao_fora_da_allowlist(tmp_path: Path) -> None:
+    """Regressão: privilégio do usuário nunca libera execução (AUTHID DEFINER)."""
+    with pytest.raises(SystemExit, match="fora da allowlist"):
+        _excecao_funcoes(
+            mm.GUARD_SO_PARSE,
+            _VEREDITO_FUNCAO,
+            _SQL_FUNCAO + " where sgtprd.pkg_grava.fnc_y(1) = 1",
+            _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+        )
+
+
+def test_excecao_funcoes_sem_flag_nao_libera() -> None:
+    assert (
+        _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, _SQL_FUNCAO, None) is None
+    )
+
+
+def test_excecao_funcoes_aspas_duplas_na_chamada_fecha_a_excecao(
+    tmp_path: Path,
+) -> None:
+    """Regressão (achado 9): `"PKG"."FN"(` escapa da regex; a exceção não se aplica."""
+    sql = 'select pkgbenf0001.fnc_x(1), "PKG"."FN_OUTRA"(1) from dual'
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        sql,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is None
+
+
+def test_excecao_funcoes_literal_q_fecha_a_excecao(tmp_path: Path) -> None:
+    sql = "select pkgbenf0001.fnc_x(q'[a(b]') from dual"
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        sql,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is None
+
+
+def test_excecao_funcoes_aspas_so_em_literal_nao_fecham_a_excecao(
+    tmp_path: Path,
+) -> None:
+    """Aspas dentro de literal simples são removidas antes da checagem: não bloqueiam."""
+    sql = "select pkgbenf0001.fnc_x(1), 'a\"b' from dual"
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        sql,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is not None
+
+
+def test_excecao_funcoes_exige_evidencia_na_allowlist(tmp_path: Path) -> None:
+    caminho = tmp_path / "a.json"
+    caminho.write_text(
+        json.dumps({"funcoes": [{"nome": "PKGBENF0001.FNC_X"}]}), encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="sem evidência"):
+        _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, _SQL_FUNCAO, caminho)
+
+
+def test_allowlist_versionada_e_legivel() -> None:
+    assert isinstance(_priv(mm, "_funcoes_auditadas")(mm.ALLOWLIST_FUNCOES), frozenset)

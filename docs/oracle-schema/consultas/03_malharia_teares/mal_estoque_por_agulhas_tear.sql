@@ -24,8 +24,8 @@ REGRA DO FILTRO DE STATUS (conferida no Oracle em 09/10/2026):
     com status 0; 0 filhas de reagrupamento e 0 mães no escopo. Nenhuma dupla contagem nesta consulta.
   - Status 16 ou 18 no histórico do depósito 95 (CODIGO_REGISTRO = 1): zero peças (medido em 09/10/2026, 04:36).
     O status 18 não altera o resultado hoje. Se o depósito ou o reduzido mudar, reconferir.
-  - Pendência de negócio (não é erro de contagem): confirmar se a reserva para romaneio de transferência tira a peça do estoque.
-    Se tirar, o status 18 sai do filtro, do mesmo modo que o 13.
+  - Decisão da área (16/10/2026): o status 18 continua no estoque. É a reserva para romaneio de transferência,
+    a peça segue física no depósito, por isso entra no filtro. Não é pendência de contagem.
   - REGRA DO FILTRO DE FINALIDADE (conferida no Oracle em 09/10/2026): FINALIDADE IN (1, 8) = sem restrição, como em
     mal_necessidade_balanco_faltas_sobras.sql. Antes era FINALIDADE = 1; a troca não muda o resultado hoje (impacto abaixo).
   - FINALIDADE 8 é decisão de negócio em aberto (REGRAS_NEGOCIO.md, seção 5.11): o cadastro TIPO_FINALIDADE_FIO a

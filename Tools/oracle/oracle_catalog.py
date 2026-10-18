@@ -13,8 +13,8 @@ Subcomandos offline (so leem o catalogo local):
     view <NOME>               Fonte SQL de uma view
     usage                     Cruza os .sql do repo com o catalogo (drift)
 
-Subcomandos online (abrem 1 conexao Oracle — SELECT-only, LIMIT obrigatorio,
-timeout, retry — nunca escrevem no banco):
+Subcomandos online (abrem 1 conexao Oracle; todo SQL passa pelo guard_sql canonico,
+fail-closed, e os comandos tem LIMIT obrigatorio, timeout e retry. Nao escrevem no banco):
     distinct <TABELA> <COLUNA>   Valores distintos de uma coluna de codigo
     sample <TABELA>              Amostra de ate 100 linhas
     check <ARQUIVO.sql>          Valida sintaxe/nomes sem executar
@@ -46,6 +46,7 @@ try:
     from dotenv import load_dotenv
     from oracle_extract import (
         OracleCredentials,
+        connect_from_creds,
         init_thick_mode,
         resolve_oracle_credentials,
     )
@@ -531,13 +532,58 @@ def sql_guard_text(sql: str) -> str:
     return _split_sql(sql)[1]
 
 
-def _ensure_select_only(sql: str) -> str:
+def _carregar_guard() -> Any:
+    """Modulo do guard SQL do acervo (wrapper versionado). Ausente = fail-closed."""
+    try:
+        import guard_sql  # pylint: disable=import-outside-toplevel
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        raise GuardError(
+            f"guard_sql indisponivel ({type(exc).__name__}: {exc}); "
+            "consulta bloqueada por seguranca (fail-closed)."
+        ) from exc
+    return guard_sql
+
+
+def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> None:
+    """Mesma autoridade de leitura do MCP: so passa o que o guard classifica como leitura.
+
+    Pega o que a lista de palavras-chave nao pega, como chamada de funcao de pacote
+    (`SGTPRD.PKG_X.FN(...)`) com efeito colateral. Levanta GuardError (fail-closed).
+    """
+    guard = _carregar_guard()
+    try:
+        canon = guard.patch_canonical(guard.load_canonical())
+        classificacao = canon.classificar(sql, exigir_limite=False)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        raise GuardError(f"guard_sql falhou ao validar (fail-closed): {exc}") from exc
+    if (
+        not classificacao.get("permitido", False)
+        or classificacao.get("classe") != "leitura"
+    ):
+        motivos_lista = list(classificacao.get("motivos", []))
+        # `check`/`explain` só fazem parse ou EXPLAIN PLAN, sem executar: chamada de
+        # função de pacote é o nível "só parse" do guard (exit 3), não bloqueio.
+        if (
+            permitir_funcoes
+            and motivos_lista
+            and all("chamada a função" in motivo for motivo in motivos_lista)
+        ):
+            return
+        motivos = (
+            ", ".join(classificacao.get("motivos", []))
+            or "classificada como mutacao/DDL"
+        )
+        raise GuardError(f"Bloqueado pelo guard_sql: {motivos}")
+
+
+def _ensure_select_only(sql: str, permitir_funcoes: bool = False) -> str:
     """Valida `sql` e retorna a versao pronta para execucao (sem ';' final).
 
-    A validacao roda sobre o texto de guarda de `_split_sql` (sem comentarios
-    nem conteudo de literais). O texto retornado preserva hints e literais e
-    descarta apenas comentarios — inclusive os que vem depois do `;` final,
-    que o driver rejeitaria.
+    Duas camadas: a estrutural (um statement, SELECT/WITH, lista de palavras-chave)
+    e o guard_sql canonico, que e a autoridade de leitura. A validacao roda sobre o
+    texto de guarda de `_split_sql` (sem comentarios nem conteudo de literais). O
+    texto retornado preserva hints e literais e descarta apenas comentarios,
+    inclusive os que vem depois do `;` final, que o driver rejeitaria.
     """
     executable, guard = _split_sql(sql)
     stripped = guard.strip().rstrip(";").strip()
@@ -559,12 +605,24 @@ def _ensure_select_only(sql: str) -> str:
     forbidden = _FORBIDDEN_KEYWORDS.search(guard_text)
     if forbidden:
         raise GuardError(f"Palavra-chave nao permitida: {forbidden.group(0).upper()}.")
-    return executable.strip().rstrip(";").rstrip()
+    executavel = executable.strip().rstrip(";").rstrip()
+    _validar_guard_canonico(executavel, permitir_funcoes)
+    return executavel
+
+
+def log_avisos_stderr(msg: str, level: str = "INFO", _exec_id: str = "") -> None:
+    """ERROR e WARN de credencial e driver vão para stderr, sem DSN, usuário ou dados.
+
+    INFO fica fora do stderr para não poluir a saída. Fonte única do logger das
+    ferramentas de `Tools/oracle` (validar_sql_oracle e validar_partes_oracle).
+    """
+    if level in ("ERROR", "WARN", "WARNING"):
+        print(f"[{level}] {msg}", file=sys.stderr)
 
 
 def _resolve_online_creds() -> OracleCredentials:
     load_dotenv(ROOT / ".env")
-    creds = resolve_oracle_credentials(lambda *a, **k: None, EXEC_ID)
+    creds = resolve_oracle_credentials(log_avisos_stderr, EXEC_ID)
     if creds is None:
         print("[ERRO] Credenciais Oracle ausentes ou invalidas. Verifique .env.")
         sys.exit(1)
@@ -577,8 +635,9 @@ def _run_with_timeout(
 ) -> Any:
     """Executa `fn()` com um watchdog: cancela a conexao se estourar o prazo.
 
-    O Oracle Client desta maquina (12.2) nao suporta `connection.call_timeout`
-    (exige 18.1+), entao o timeout e emulado por thread + `connection.cancel()`.
+    E um watchdog de tempo TOTAL: `connection.call_timeout` limita so cada
+    round-trip, entao o orcamento da consulta inteira segue emulado por thread +
+    `connection.cancel()`, em qualquer modo do driver.
     `fn` deve gravar a conexao aberta em `holder["connection"]` assim que
     conectar, para que o watchdog tenha o que cancelar.
     """
@@ -667,16 +726,17 @@ def cmd_distinct(args: argparse.Namespace) -> int:
         f"SELECT DISTINCT {select_cols} FROM {owner}.{table} "  # nosec B608 - identificadores validados contra o catalogo, nunca texto livre do usuario
         f"WHERE {column} IS NOT NULL ORDER BY 1 FETCH FIRST {limit} ROWS ONLY"
     )
+    try:
+        sql = _ensure_select_only(sql)  # mesma validacao do SQL que sera executado
+    except GuardError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
 
     creds = _resolve_online_creds()
 
     def _run(holder: dict[str, Any]) -> list[tuple[Any, ...]]:
-        import oracledb  # pylint: disable=import-outside-toplevel
-
         # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
-        connection = oracledb.connect(
-            user=creds.user, password=creds.password, dsn=creds.dsn
-        )
+        connection = connect_from_creds(creds)
         holder["connection"] = connection
         _raise_if_expired(holder)
         cursor = connection.cursor()
@@ -753,19 +813,20 @@ def cmd_sample(args: argparse.Namespace) -> int:
     owner = _catalog_owner(conn)
     max_rows = min(args.max_rows, MAX_SAMPLE_ROWS)
     sql = (
-        f"SELECT {select_cols} FROM {owner}.{table}{where_clause} "  # nosec B608 - tabela/colunas validadas contra o catalogo; --where documentado como guardrail parcial
+        f"SELECT {select_cols} FROM {owner}.{table}{where_clause} "  # nosec B608 - tabela/colunas validadas contra o catalogo; --where validado pelo guard_sql
         f"FETCH FIRST {max_rows} ROWS ONLY"
     )
+    try:
+        sql = _ensure_select_only(sql)  # valida o SQL final, com o FETCH FIRST
+    except GuardError as exc:
+        print(f"[ERRO] --where rejeitado: {exc}")
+        return 1
 
     creds = _resolve_online_creds()
 
     def _run(holder: dict[str, Any]) -> tuple[list[str], list[tuple[Any, ...]]]:
-        import oracledb  # pylint: disable=import-outside-toplevel
-
         # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
-        connection = oracledb.connect(
-            user=creds.user, password=creds.password, dsn=creds.dsn
-        )
+        connection = connect_from_creds(creds)
         holder["connection"] = connection
         _raise_if_expired(holder)
         cursor = connection.cursor()
@@ -800,7 +861,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     if raw_sql is None:
         return 1
     try:
-        sql = _ensure_select_only(raw_sql)
+        sql = _ensure_select_only(raw_sql, permitir_funcoes=True)  # sem execução
     except GuardError as exc:
         print(f"[ERRO] {exc}")
         return 1
@@ -808,12 +869,8 @@ def cmd_check(args: argparse.Namespace) -> int:
     creds = _resolve_online_creds()
 
     def _run(holder: dict[str, Any]) -> None:
-        import oracledb  # pylint: disable=import-outside-toplevel
-
         # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
-        connection = oracledb.connect(
-            user=creds.user, password=creds.password, dsn=creds.dsn
-        )
+        connection = connect_from_creds(creds)
         holder["connection"] = connection
         _raise_if_expired(holder)
         connection.cursor().parse(sql)
@@ -832,7 +889,7 @@ def cmd_explain(args: argparse.Namespace) -> int:
     if raw_sql is None:
         return 1
     try:
-        sql = _ensure_select_only(raw_sql)
+        sql = _ensure_select_only(raw_sql, permitir_funcoes=True)  # sem execução
     except GuardError as exc:
         print(f"[ERRO] {exc}")
         return 1
@@ -840,12 +897,8 @@ def cmd_explain(args: argparse.Namespace) -> int:
     creds = _resolve_online_creds()
 
     def _run(holder: dict[str, Any]) -> list[str]:
-        import oracledb  # pylint: disable=import-outside-toplevel
-
         # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
-        connection = oracledb.connect(
-            user=creds.user, password=creds.password, dsn=creds.dsn
-        )
+        connection = connect_from_creds(creds)
         holder["connection"] = connection
         _raise_if_expired(holder)
         cursor = connection.cursor()
@@ -914,7 +967,11 @@ def _add_online_subparsers(sub: Any) -> None:
 
     p_sample = sub.add_parser("sample", help="[online] Amostra de ate 100 linhas")
     p_sample.add_argument("table")
-    p_sample.add_argument("--where", default=None)
+    p_sample.add_argument(
+        "--where",
+        default=None,
+        help="Condicao SQL opcional; validada pelo guard_sql (sem comentarios)",
+    )
     p_sample.add_argument("--columns", default=None, help="Lista separada por virgula")
     p_sample.add_argument("--max-rows", type=int, default=DEFAULT_SAMPLE_ROWS)
     p_sample.set_defaults(func=cmd_sample)

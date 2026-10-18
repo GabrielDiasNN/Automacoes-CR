@@ -20,6 +20,7 @@ import argparse
 import contextlib
 import csv
 import json
+import re
 import statistics
 import sys
 import time
@@ -48,11 +49,13 @@ from oracle_session import (  # noqa: E402
     run_with_cancel,
 )
 from validar_sql_oracle import (  # noqa: E402
+    GUARD_LIBERADO,
+    GUARD_SO_PARSE,
     _bind_names,
     _connect,
     _default_binds,
     _error_summary,
-    _guard,
+    _guard_texto,
     _has_multiple_statements,
     _parse_bind_args,
     _single_statement,
@@ -370,23 +373,121 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--explain", action="store_true", help="Plano estimado")
     parser.add_argument("--out", type=Path, help="Relatório JSON da medição")
     parser.add_argument(
+        "--aceitar-funcoes-auditadas",
+        action="store_true",
+        help=(
+            "Exceção ao guard para SQL que chama função de pacote/schema: só libera "
+            "quando o único motivo do guard é a chamada de função e TODAS as funções "
+            f"chamadas estão na allowlist versionada ({ALLOWLIST_FUNCOES.name}). "
+            "Privilégio do usuário não prova nada: a função roda com os direitos do "
+            "dono (AUTHID DEFINER) e pode gravar em transação autônoma."
+        ),
+    )
+    parser.add_argument(
         "--baseline", type=Path, help="Relatório anterior para decidir MELHORA/NEUTRO"
     )
     parser.add_argument("--min-gain", type=float, default=DEFAULT_MIN_GAIN_PCT)
     return parser
 
 
+# Funções cujo código-fonte foi lido e auditado (sem DML, sem transação autônoma,
+# sem SQL dinâmico). Só entram por revisão humana com a evidência registrada.
+ALLOWLIST_FUNCOES = Path(__file__).resolve().with_name("funcoes_auditadas.json")
+_CHAMADA_QUALIFICADA = re.compile(
+    r"\b([A-Za-z_][\w$#]*(?:\s*\.\s*[A-Za-z_][\w$#]*){1,2})\s*\("
+)
+_COMENTARIO_OU_LITERAL = re.compile(r"/\*.*?\*/|--[^\n]*|'(?:[^']|'')*'", re.S)
+# Literal q'...' (delimitado): a regex de chamadas não o interpreta, então com ele no
+# SQL a exceção não se aplica.
+_LITERAL_Q = re.compile(r"(?<![\w$#])[nN]?[qQ]'")
+
+
+def _funcoes_auditadas(caminho: Path) -> frozenset[str]:
+    """Nomes (`ESQUEMA.PACOTE.FUNCAO` ou `PACOTE.FUNCAO`, maiúsculos) da allowlist."""
+    try:
+        entradas = json.loads(caminho.read_text(encoding="utf-8"))["funcoes"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise SystemExit(f"allowlist de funções ilegível ({caminho}): {exc}") from exc
+    nomes: set[str] = set()
+    for entrada in entradas:
+        if not isinstance(entrada, dict) or not entrada.get("evidencia"):
+            raise SystemExit(f"entrada sem evidência de auditoria em {caminho}")
+        nomes.add(re.sub(r"\s+", "", str(entrada["nome"])).upper())
+    return frozenset(nomes)
+
+
+def _chamadas_qualificadas(sql: str) -> set[str]:
+    """Chamadas `A.B(` / `A.B.C(` fora de comentários e literais."""
+    limpo = _COMENTARIO_OU_LITERAL.sub(" ", sql)
+    return {
+        re.sub(r"\s+", "", m.group(1)).upper()
+        for m in _CHAMADA_QUALIFICADA.finditer(limpo)
+    }
+
+
+def _excecao_funcoes(
+    guard_code: int,
+    guard_output: str,
+    sql: str,
+    allowlist: Path | None,
+) -> dict[str, Any] | None:
+    """Exceção auditável ao guard para SQL que só chama função auditada.
+
+    Libera somente quando o guard devolve "só parse", o único motivo é a chamada
+    de função qualificada e toda chamada do texto está na allowlist. Qualquer
+    função fora dela mantém o bloqueio (fail-closed).
+    """
+    if allowlist is None or guard_code != GUARD_SO_PARSE:
+        return None
+    try:
+        veredito = json.loads(guard_output)
+    except json.JSONDecodeError:
+        return None
+    motivos = veredito.get("motivos", [])
+    if not motivos or any("chamada a função" not in motivo for motivo in motivos):
+        return None
+    # Fail-closed: identificador entre aspas (`"PKG"."FN"(`) e literal q'...' escapam da
+    # regex de chamadas; com qualquer um dos dois, a exceção não se aplica.
+    if '"' in _COMENTARIO_OU_LITERAL.sub(" ", sql) or _LITERAL_Q.search(sql):
+        return None
+    chamadas = _chamadas_qualificadas(sql)
+    if not chamadas:
+        return None
+    fora = sorted(chamadas - _funcoes_auditadas(allowlist))
+    if fora:
+        raise SystemExit(
+            f"funções fora da allowlist auditada ({allowlist.name}): {', '.join(fora)}"
+        )
+    return {
+        "guard_exit": guard_code,
+        "motivos": motivos,
+        "funcoes_auditadas": sorted(chamadas),
+        "allowlist": str(allowlist),
+    }
+
+
 def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
     """Guard, SQL normalizado, binds e credenciais; SystemExit se algo bloquear."""
     load_dotenv(ROOT / ".env")
     path = args.file.resolve()
-    guard_code, guard_output = _guard(path, resolve_guard())
-    if guard_code != 0:
-        raise SystemExit(f"guard_sql.py bloqueou (exit {guard_code}): {guard_output}")
     try:
         sql = _load_sql(path)
     except (UnicodeDecodeError, GuardError) as exc:
         raise SystemExit(f"SQL ilegível: {_error_summary(exc)}") from exc
+    # O guard classifica o mesmo texto que vai ao Oracle (o normalizado), como no validar.
+    guard_code, guard_output = _guard_texto(sql, resolve_guard())
+    args.excecao_guard = None
+    if guard_code != GUARD_LIBERADO:
+        args.excecao_guard = _excecao_funcoes(
+            guard_code,
+            guard_output,
+            sql,
+            ALLOWLIST_FUNCOES if args.aceitar_funcoes_auditadas else None,
+        )
+        if args.excecao_guard is None:
+            raise SystemExit(
+                f"guard_sql.py bloqueou (exit {guard_code}): {guard_output}"
+            )
     if _has_multiple_statements(sql):
         raise SystemExit("SQL bloqueado: mais de uma instrução no arquivo")
     binds = _default_binds(sql)
@@ -430,6 +531,9 @@ def main() -> int:
         report["dump"] = write_dump(result["dump"], args.dump)
     if args.explain:
         report["plan"] = explain_plan(creds, sql, binds, args.timeout)
+    excecao = getattr(args, "excecao_guard", None)
+    if excecao is not None:
+        report["excecao_guard"] = excecao
     if args.baseline is not None and result["summary"] is not None:
         base = json.loads(args.baseline.read_text(encoding="utf-8"))
         if not base.get("summary"):

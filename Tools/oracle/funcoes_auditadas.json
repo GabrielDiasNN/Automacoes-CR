@@ -1,0 +1,4 @@
+{
+  "descricao": "Funções de pacote/schema cujo código-fonte foi lido e auditado (sem DML, sem PRAGMA AUTONOMOUS_TRANSACTION, sem SQL dinâmico, sem UTL_/DBMS_SQL). Só estas liberam a execução de SQL que as chama em medir_sql_oracle.py --aceitar-funcoes-auditadas. Privilégio do usuário não basta: a função roda como o dono (AUTHID DEFINER). PKGBENF0001 fica de fora: em 17/10/2026 o corpo do pacote não é legível por ALL_SOURCE com a conta de leitura, então não há como auditá-lo.",
+  "funcoes": []
+}

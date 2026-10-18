@@ -9,6 +9,8 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 
+from .constants import WORKER_MAX_CONCURRENCY_PADRAO
+
 logger = logging.getLogger("orchestrator")
 
 PROJECT_ROOT = os.path.dirname(
@@ -101,3 +103,23 @@ async def wait_for_task_signal(timeout_seconds: int = 30) -> str:
         return "wakeup"
     except TimeoutError:
         return "timeout"
+
+
+def get_worker_max_concurrency() -> int:
+    """Concorrência máxima do worker, lida de WORKER_MAX_CONCURRENCY (padrão 4).
+
+    Chamada no ponto de uso, depois que o .env foi carregado, e não como constante
+    de importação. Valor que não seja inteiro positivo levanta ValueError com a causa.
+    """
+    bruto = os.environ.get("WORKER_MAX_CONCURRENCY", str(WORKER_MAX_CONCURRENCY_PADRAO))
+    try:
+        valor = int(bruto)
+    except ValueError as exc:
+        raise ValueError(
+            f"WORKER_MAX_CONCURRENCY inválido: {bruto!r} (use um inteiro maior que zero)."
+        ) from exc
+    if valor <= 0:
+        raise ValueError(
+            f"WORKER_MAX_CONCURRENCY inválido: {bruto!r} (use um inteiro maior que zero)."
+        )
+    return valor

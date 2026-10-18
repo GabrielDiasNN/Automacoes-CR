@@ -217,6 +217,14 @@ def run_historical_range(
     }
 
 
+def _inteiro_positivo(valor: str) -> int:
+    """Tipo do argparse para prazos em ms: 0 viraria 1 ms no driver e a consulta falharia."""
+    numero = int(valor)
+    if numero <= 0:
+        raise argparse.ArgumentTypeError(f"precisa ser maior que zero: {valor}")
+    return numero
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Gera snapshots locais de producao do Beneficiamento e alimenta historico SQLite."
@@ -225,7 +233,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sql-file", type=Path, default=None)
     parser.add_argument("--analytics-json", type=Path, default=None)
     parser.add_argument("--snapshot-dir", type=Path, default=SNAPSHOT_DIR)
-    parser.add_argument("--oracle-timeout-ms", type=int, default=ORACLE_CALL_TIMEOUT_MS)
+    parser.add_argument(
+        "--oracle-timeout-ms", type=_inteiro_positivo, default=ORACLE_CALL_TIMEOUT_MS
+    )
     parser.add_argument("--sample-limit", type=int, default=3)
     parser.add_argument("--max-rows", type=int, default=0)
     parser.add_argument("--use-rownum-limit", action="store_true")

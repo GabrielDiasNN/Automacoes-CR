@@ -49,17 +49,18 @@ def bind_parameters(period: str, reference: date | None = None) -> dict[str, Any
     }
 
 
-def apply_rownum_limit(sql: str, max_rows: int | None) -> str:
-    """Envelopa a query com limite de linhas.
+# `;` final seguido só de espaços e comentários de linha (--) ou de bloco (/* */).
+_PONTO_VIRGULA_FINAL = re.compile(r";(\s*(--[^\n]*|/\*.*?\*/))*\s*$", re.S)
 
-    `sql` vem de `load_sql_template`, que lê um arquivo de `SQL_TEMPLATE_DIR`
-    escolhido por `get_period_config` — nome fixo por período validado, não
-    caminho de request. `max_rows` é coagido a `int`. Nenhuma das duas partes
-    é entrada de usuário.
-    """
+
+def apply_rownum_limit(sql: str, max_rows: int | None) -> str:
+    """Aplica limite de linhas ANSI Oracle 19c (FETCH FIRST n ROWS ONLY)."""
     if not max_rows or max_rows <= 0:
         return sql
-    return f"SELECT * FROM (\n{sql}\n) WHERE ROWNUM <= {int(max_rows)}"  # nosec B608
+    # `;` final, mesmo seguido de comentários de linha, quebraria a subconsulta.
+    clean_sql = _PONTO_VIRGULA_FINAL.sub("", sql.rstrip())
+    # Envelopa: a quebra de linha antes do ")" encerra um comentário final do template.
+    return f"SELECT * FROM (\n{clean_sql}\n) FETCH FIRST {int(max_rows)} ROWS ONLY"  # nosec B608
 
 
 _FECHAMENTO_Q = {"[": "]", "{": "}", "(": ")", "<": ">"}

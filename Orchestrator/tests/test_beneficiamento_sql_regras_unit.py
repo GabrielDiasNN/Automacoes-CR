@@ -21,6 +21,8 @@ from beneficiamento import (  # noqa: E402  pylint: disable=wrong-import-positio
     sql_repository,
 )
 
+pytestmark = pytest.mark.unitario
+
 _TEMPLATES = sorted(settings.SQL_TEMPLATE_DIR.glob("*.sql"))
 
 
@@ -149,3 +151,46 @@ def test_bind_fora_de_literal_conta_mesmo_com_literal_no_sql() -> None:
     sql = "SELECT a FROM t WHERE x = 'abc' AND d >= :dt_inicio AND d < :dt_fim"
 
     assert not sql_repository.validate_static_sql(sql)
+
+
+def test_apply_rownum_limit_acrescenta_fetch_first_sem_ponto_e_virgula() -> None:
+    sql = "SELECT A FROM T ORDER BY A;\n"
+    assert sql_repository.apply_rownum_limit(sql, 50) == (
+        "SELECT * FROM (\nSELECT A FROM T ORDER BY A\n) FETCH FIRST 50 ROWS ONLY"
+    )
+
+
+def test_apply_rownum_limit_nao_engole_limite_em_comentario_final() -> None:
+    sql = "SELECT A FROM T ORDER BY A -- obs\n"
+    assert sql_repository.apply_rownum_limit(sql, 5).endswith(
+        "-- obs\n) FETCH FIRST 5 ROWS ONLY"
+    )
+
+
+def test_apply_rownum_limit_remove_ponto_e_virgula_antes_de_comentario() -> None:
+    sql = "SELECT A FROM T; -- fim\n"
+    assert sql_repository.apply_rownum_limit(sql, 5) == (
+        "SELECT * FROM (\nSELECT A FROM T\n) FETCH FIRST 5 ROWS ONLY"
+    )
+
+
+def test_apply_rownum_limit_sem_limite_devolve_o_sql_original() -> None:
+    sql = "SELECT A FROM T"
+    assert sql_repository.apply_rownum_limit(sql, None) == sql
+    assert sql_repository.apply_rownum_limit(sql, 0) == sql
+
+
+def test_apply_rownum_limit_coage_max_rows_para_inteiro() -> None:
+    assert sql_repository.apply_rownum_limit("SELECT 1 FROM DUAL", 7.9).endswith(
+        "FETCH FIRST 7 ROWS ONLY"
+    )
+
+
+def test_apply_rownum_limit_remove_ponto_e_virgula_antes_de_comentario_de_bloco() -> (
+    None
+):
+    """Regressão (achado 21): `;` seguido de /* */ quebrava a subconsulta."""
+    sql = "SELECT 1 FROM DUAL; /* fim do template */\n-- rodape"
+    limitado = sql_repository.apply_rownum_limit(sql, 10)
+    assert ";" not in limitado
+    assert limitado.endswith(") FETCH FIRST 10 ROWS ONLY")

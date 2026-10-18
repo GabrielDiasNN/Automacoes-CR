@@ -12,7 +12,6 @@ import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import oracledb
@@ -32,10 +31,14 @@ from .settings import (
 if str(LIB_PYTHON_DIR) not in sys.path:
     sys.path.append(str(LIB_PYTHON_DIR))
 
+from oracle_client import (  # noqa: E402  pylint: disable=wrong-import-position
+    connect_adaptive,
+)
 from oracle_session import (  # noqa: E402  pylint: disable=wrong-import-position
-    cancel_after,
     connect_within,
+    is_call_timeout,
     is_session_drop,
+    query_deadline,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,15 +62,6 @@ class QueryResult:
     metadata: dict[str, Any]
 
 
-def _path_exists(path_value: str | None) -> bool:
-    if not path_value:
-        return False
-    try:
-        return Path(path_value).exists()
-    except OSError:
-        return False
-
-
 def _make_unique_names(raw_names: list[str]) -> tuple[list[str], dict[str, list[int]]]:
     seen: dict[str, int] = {}
     unique_names: list[str] = []
@@ -78,6 +72,14 @@ def _make_unique_names(raw_names: list[str]) -> tuple[list[str], dict[str, list[
         unique_names.append(name if seen[name] == 1 else f"{name}__{seen[name]}")
     duplicates = {name: idxs for name, idxs in positions.items() if len(idxs) > 1}
     return unique_names, duplicates
+
+
+def _log_driver(message: str, level: str = "INFO") -> None:
+    """Mensagens do driver adaptativo para o logger do runner."""
+    if level == "WARN":
+        logger.warning("%s", message)
+    else:
+        logger.info("%s", message)
 
 
 def connect_readonly() -> Any:
@@ -96,18 +98,14 @@ def connect_readonly() -> Any:
             "ORACLE_READONLY_PASSWORD e ORACLE_CONNECT_STRING."
         )
 
-    if _path_exists(client_lib):
-        try:
-            oracledb.init_oracle_client(
-                lib_dir=client_lib,
-                config_dir=tns_admin if _path_exists(tns_admin) else None,
-            )
-        except Exception as e:
-            logger.warning(
-                "Falha ao inicializar Oracle Thick Mode (seguindo em Thin Mode): %s", e
-            )
-
-    return oracledb.connect(user=user, password=password, dsn=dsn)
+    return connect_adaptive(
+        user=user,
+        password=password,
+        dsn=dsn,
+        client_lib=client_lib,
+        tns_admin=tns_admin,
+        log_fn=_log_driver,
+    )
 
 
 def execute_query(
@@ -177,24 +175,23 @@ def _execute_once(
     watchdog_fired = threading.Event()
     connection = _connect_within(wall_clock_budget_seconds)
     with connection, contextlib.ExitStack() as guards:
-        timeout_applied = False
-        timeout_warning = ""
-        try:
-            connection.call_timeout = int(oracle_timeout_ms)
-            timeout_applied = True
-        except Exception as exc:
-            timeout_warning = str(exc)
-        if not timeout_applied:
-            # Oracle Client 12.2 não suporta call_timeout (DPI-1050): sem isto o
-            # execute ficaria sem prazo e passaria dos 45 s do Orchestrator.
-            guards.enter_context(
-                cancel_after(
-                    connection,
-                    wall_clock_budget_seconds
-                    - (time.perf_counter() - query_started_at),
-                    watchdog_fired,
-                )
+        # O orçamento corre desde o início da tentativa, então o tempo de conexão
+        # (Thin/Thick, às vezes segundos na WAN) já sai do que resta para a consulta.
+        remaining = wall_clock_budget_seconds - (time.perf_counter() - query_started_at)
+        if remaining <= 0:
+            raise TimeoutError(
+                f"Orçamento de {wall_clock_budget_seconds:g}s esgotado antes da consulta."
             )
+        # `call_timeout` limita cada round-trip; o watchdog limita o total da consulta.
+        # Em Oracle Client 12.2 (DPI-1050) o watchdog é o único prazo. Fonte única
+        # em oracle_session.query_deadline, que também zera o call_timeout ao sair.
+        prazo = guards.enter_context(
+            query_deadline(
+                connection, oracle_timeout_ms / 1000, remaining, watchdog_fired
+            )
+        )
+        timeout_applied = prazo.applied
+        timeout_warning = prazo.warning
 
         try:
             with connection.cursor() as cursor:
@@ -239,10 +236,13 @@ def _execute_once(
                     else:
                         rows.extend(batch)
         except oracledb.Error as exc:
-            if watchdog_fired.is_set():
+            # `is_call_timeout` cobre o prazo por chamada do driver: o `fired` de
+            # query_deadline só é setado depois que este bloco termina, então sozinho
+            # ele não veria o DPY-4024 desta mesma exceção.
+            if watchdog_fired.is_set() or is_call_timeout(exc):
                 raise TimeoutError(
                     f"Consulta Beneficiamento excedeu {wall_clock_budget_seconds:g}s "
-                    "(cancelada pelo watchdog)."
+                    "(prazo da chamada ou watchdog)."
                 ) from exc
             raise
 
@@ -255,7 +255,8 @@ def _execute_once(
             "oracle_timeout_ms": int(oracle_timeout_ms),
             "oracle_timeout_applied": timeout_applied,
             "oracle_timeout_warning": timeout_warning,
-            "oracle_watchdog_applied": not timeout_applied,
+            # O watchdog (query_deadline) é armado em toda tentativa, com ou sem `call_timeout`.
+            "oracle_watchdog_applied": True,
             "elapsed_seconds": round(elapsed, 4),
             "row_count": len(rows),
             "max_rows_limit": max_rows if max_rows and max_rows > 0 else None,

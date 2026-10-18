@@ -63,6 +63,14 @@ REVISÃO (08/10/2026), sem alteração de lógica:
   - A CTE TEO usa só FICHA_MALHA: produtos de FICHA_RETILINEA (14 linhas) ficam fora do COMPARADO (JOIN com TEO).
     Decisão de negócio pendente: incluir ou não a retilínea no teórico.
   - FICHA_MALHA tem PK (CODPROREDUZIDO, GRUPO); por isso MAX(PERCPRODUCAOPREVISTO) e MAX(RPM) não alteram o resultado.
+REVISÃO (16/10/2026), com alteração de lógica (decisão da área: a meta é o previsto da engenharia):
+  - Retilínea entra no teórico. A CTE TEO_RET usa FICHA_RETILINEA pela fórmula da malha: PASSADAS_MINUTO,
+    QUANTIDADE_CARROS, NUMERO_PISTAS e PESO_PECA de ENG_PRODG_CRU, sobre (NUMERO_PASSADAS + NRPASSADAS_VAZIAS).
+    A previsão é EFICIENCIA_ESTIMADA da ficha. Máquinas retilíneas já estavam em INTERNAS (setor 7, tipo 146).
+  - Produto com ficha de malha no mesmo grupo fica só com a malha (NOT EXISTS), sem dupla contagem.
+  - Peso da retilínea por ITENS_ESTOQUE.REDUZIDO_AGRUPADOR (ENG_AGRUPAITENSESTOQ retirada: descontinuada e sem cobertura total).
+    Produtos 19482, 20337 e 20428 têm agrupador em ITENS_ESTOQUE e peso em ENG_PRODG_CRU. Eles aparecem no resultado
+    quando passam nos filtros de dias com produto único.
 REVISÃO (09/10/2026), com alteração de lógica:
   - TEO: NULL explícito por fibra e por produto (ver TEORICO_KG_H_100). Produto com ficha
     completa mantém o teórico de antes; muda só o produto com fibra incompleta ou com zero
@@ -75,6 +83,7 @@ REVISÃO (09/10/2026), com alteração de lógica:
     Sem efeito nos resultados: N_MAQUINAS é maior que zero e a parada não chega a 100%.
 ============================================================================= */
 
+-- REVISÃO (16/10/2026): peso da retilínea por ITENS_ESTOQUE.REDUZIDO_AGRUPADOR. ENG_AGRUPAITENSESTOQ foi retirada: descontinuada e sem cobertura total (19482, 20337 e 20428 não estavam nela).
 WITH PARAM AS (
     SELECT TO_NUMBER(TO_CHAR(ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -12), 'YYYYMMDD')) AS D_INI,
            TO_NUMBER(TO_CHAR(TRUNC(SYSDATE, 'MM'), 'YYYYMMDD'))                  AS D_FIM,
@@ -124,6 +133,31 @@ TEO AS (
            END AS TEORICO_KG_H_100
       FROM FIBRA_TEO
      GROUP BY REDUZIDO, GRUPO
+),
+/* Retilínea (16/10/2026): teórico pela ficha retilínea, na mesma fórmula da malha, com PESO_PECA de
+   ENG_PRODG_CRU (gramas; /1000 dá kg/h) e (NUMERO_PASSADAS + NRPASSADAS_VAZIAS) como ciclo de passadas.
+   Previsão = EFICIENCIA_ESTIMADA da ficha. Produto com ficha de malha no mesmo grupo fica só com a malha. */
+TEO_RET AS (
+    SELECT FR.CODIGO_PRODUTO AS REDUZIDO,
+           FR.GRUPO_MAQUINA  AS GRUPO,
+           FR.EFICIENCIA_ESTIMADA AS EFIC_PREV_PCT,
+           CASE WHEN EPC.PESO_PECA > 0 AND FR.PASSADAS_MINUTO > 0 AND FR.NUMERO_PISTAS > 0
+                     AND FR.QUANTIDADE_CARROS > 0 AND (FR.NUMERO_PASSADAS + FR.NRPASSADAS_VAZIAS) > 0
+                THEN ROUND(FR.PASSADAS_MINUTO * FR.QUANTIDADE_CARROS * FR.NUMERO_PISTAS * EPC.PESO_PECA * 60
+                           / ((FR.NUMERO_PASSADAS + FR.NRPASSADAS_VAZIAS) * 1000), 2)
+           END AS TEORICO_KG_H_100
+      FROM SGTPRD.FICHA_RETILINEA FR
+      LEFT JOIN SGTPRD.ITENS_ESTOQUE ITM ON ITM.CODIGO_REDUZIDO = FR.CODIGO_PRODUTO
+      LEFT JOIN SGTPRD.ENG_PRODG_CRU EPC
+        ON EPC.REDUZIDO_AGRUPADOR = ITM.REDUZIDO_AGRUPADOR
+     WHERE NOT EXISTS (SELECT 1 FROM SGTPRD.FICHA_MALHA FM
+                        WHERE FM.CODPROREDUZIDO = FR.CODIGO_PRODUTO
+                          AND FM.GRUPO = FR.GRUPO_MAQUINA)
+),
+TEO_TODOS AS (
+    SELECT REDUZIDO, GRUPO, EFIC_PREV_PCT, TEORICO_KG_H_100 FROM TEO
+    UNION ALL
+    SELECT REDUZIDO, GRUPO, EFIC_PREV_PCT, TEORICO_KG_H_100 FROM TEO_RET
 ),
 PRODUCAO_MAQ_DIA AS (
     SELECT /*+ MATERIALIZE */ ORD.NUMERO_MAQUINA,
@@ -189,7 +223,7 @@ COMPARADO AS (
        AND U.DIA = PMD.DIA
       JOIN SGTPRD.MAQUINA M
         ON M.NUMERO_MAQUINA = PMD.NUMERO_MAQUINA
-      JOIN TEO
+      JOIN TEO_TODOS TEO
         ON TEO.REDUZIDO = PMD.REDUZIDO
        AND TEO.GRUPO = M.GRUPO
      GROUP BY PMD.REDUZIDO, M.GRUPO

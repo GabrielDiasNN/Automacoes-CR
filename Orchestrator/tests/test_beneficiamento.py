@@ -1087,3 +1087,12 @@ def test_beneficiamento_runner_marks_partial_failure_when_history_write_fails(
     assert analytics["snapshot"]["refresh_status"] == "partial_failure"
     assert analytics["snapshot"]["historico_write_status"] == "partial_failure"
     assert analytics["snapshot"]["historico_rows_saved"] == 0
+
+
+@pytest.mark.parametrize("valor", ["0", "-5"])
+def test_runner_recusa_oracle_timeout_ms_nao_positivo(valor: str) -> None:
+    """0 ms viraria 1 ms no driver (o piso) e toda consulta estouraria o prazo."""
+    from beneficiamento import runner  # pylint: disable=import-outside-toplevel
+
+    with pytest.raises(SystemExit):
+        runner.main(["--oracle-timeout-ms", valor])

@@ -8,6 +8,8 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.unitario
+
 _TOOLS = Path(__file__).resolve().parents[2] / "Tools" / "oracle"
 
 
@@ -110,6 +112,34 @@ def test_wrapper_libera_cte_com_lista_de_colunas_no_canonico_real() -> None:
     assert analise["permitido"] is True
 
 
+_GROUPING = "SELECT F, COUNT(*) FROM T GROUP BY GROUPING SETS ((F), ())"
+
+
+def _classificar_no_canonico_real() -> Any:
+    canonico = wrapper.canonical_guard_file()
+    if not canonico.is_file():
+        pytest.skip("guard canônico da skill oracle-sql não instalado nesta máquina")
+    return wrapper.patch_canonical(wrapper.load_canonical()).classificar
+
+
+def test_canonico_libera_grouping_sets_no_group_by() -> None:
+    assert _classificar_no_canonico_real()(_GROUPING)["permitido"] is True
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT F FROM T GROUP BY GROUPING SETS ((F)); DELETE FROM T",
+        "SELECT SGTPRD.PKG.FN(F) FROM T GROUP BY GROUPING SETS ((F))",
+        "SELECT MEU_FN(F) FROM T GROUP BY GROUPING SETS ((F))",
+        "SELECT F FROM T GROUP BY GROUPING SETS ((F)) FOR UPDATE",
+        "SELECT GROUPING SETS (A) FROM T",
+    ],
+)
+def test_canonico_nao_libera_grouping_sets_fora_de_dml_ou_funcao(sql: str) -> None:
+    assert _classificar_no_canonico_real()(sql)["permitido"] is False
+
+
 def test_comando_da_evidencia_nao_vaza_caminho_absoluto(tmp_path: Path) -> None:
     raiz = validador.ROOT
     argv = [
@@ -134,3 +164,32 @@ def test_comando_da_evidencia_nao_vaza_caminho_absoluto(tmp_path: Path) -> None:
         "20",
     ]
     assert all(":\\" not in parte and not parte.startswith("/") for parte in comando)
+
+
+def test_copia_versionada_do_guard_bate_com_o_canonico_do_perfil() -> None:
+    """Drift: a cópia em Tools/oracle/guard_canonico deve ser idêntica ao canônico do perfil.
+
+    Só roda onde o perfil existe (máquina de desenvolvimento). No CI é pulado; a
+    cópia versionada é o que o CI executa, então é ela que precisa ficar atualizada.
+    """
+    import hashlib  # pylint: disable=import-outside-toplevel
+    import os  # pylint: disable=import-outside-toplevel
+
+    raiz = Path(__file__).resolve().parents[2]
+    copia = raiz / "lib" / "vendor" / "oracle-sql-guard" / "guard_sql.py"
+    perfil = (
+        Path(os.environ.get("USERPROFILE", "~")).expanduser()
+        / ".gemini"
+        / "antigravity"
+        / "skills"
+        / "oracle-sql"
+        / "scripts"
+        / "guard_sql.py"
+    )
+    if not perfil.is_file():
+        pytest.skip("canônico do perfil ausente nesta máquina (CI): sem comparação")
+
+    assert (
+        hashlib.sha256(copia.read_bytes()).hexdigest()
+        == hashlib.sha256(perfil.read_bytes()).hexdigest()
+    ), "cópia versionada divergiu do canônico; atualize lib/vendor/oracle-sql-guard/"

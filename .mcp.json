@@ -3,6 +3,13 @@
     "sqlite-local": {
       "command": "uvx",
       "args": ["mcp-server-sqlite", "--db-path", "Orchestrator/automacoes.db"]
+    },
+    "oracle": {
+      "command": ".venv/Scripts/python.exe",
+      "args": ["Tools/oracle/mcp_server.py"],
+      "env": {
+        "ORACLE_DRIVER_MODE": "thick"
+      }
     }
   }
 }
