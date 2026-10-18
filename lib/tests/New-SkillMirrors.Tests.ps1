@@ -28,11 +28,14 @@ BeforeAll {
 
         # `.claude/skills` no repo real carrega os 7 junctions das skills de padrao
         # (gitignored). Um clone limpo NAO os tem — so' as 7 skills operacionais
-        # reais. A fixture replica o clone limpo: reparse point da fonte fica de fora.
+        # reais. A fixture replica o clone limpo: reparse point da fonte fica de fora, e
+        # tambem as skills de padrao (nome presente em .github/skills) que existam como
+        # copia real no worktree, senao o teste dependeria do estado local da maquina.
         $claudeSkillsDst = Join-Path $basePath ".claude\skills"
         New-Item -ItemType Directory -Force -Path $claudeSkillsDst | Out-Null
         Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot ".claude\skills") -Directory |
             Where-Object { -not ($_.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint)) } |
+            Where-Object { -not (Test-Path -LiteralPath (Join-Path $script:RepoRoot ".github\skills\$($_.Name)")) } |
             ForEach-Object { Copy-Item -Recurse -Force $_.FullName (Join-Path $claudeSkillsDst $_.Name) }
 
         return $basePath
