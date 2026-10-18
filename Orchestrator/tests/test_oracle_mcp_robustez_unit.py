@@ -7,10 +7,13 @@ mensagem de timeout prometia um limite total que o call_timeout não garante; e
 ORACLE_MCP_TIMEOUT=0 desligava o prazo. Nenhum teste conecta ao Oracle.
 """
 
+import functools
 import io
 import json
 import os
+import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -88,10 +91,14 @@ def test_ferramenta_aplica_prazo_por_chamada(ferramenta: str) -> None:
     assert all(valor == PRAZO_CONFIG * 1000 for valor in registros), registros
 
 
-def test_ping_de_reuso_tem_prazo() -> None:
+def test_ping_de_reuso_tem_prazo(monkeypatch: pytest.MonkeyPatch) -> None:
     registros: list[Any] = []
     conn = MagicMock(name="conexao")
     conn.ping.side_effect = lambda: registros.append(conn.call_timeout)
+    # A sondagem do modo não pode abrir conexão real neste teste de ping.
+    monkeypatch.setattr(
+        mcp_server, "connect_adaptive", MagicMock(return_value=MagicMock())
+    )
     mgr = OracleConnectionManager(_config())
     mgr._conn = conn  # pylint: disable=protected-access
 
@@ -223,8 +230,10 @@ def test_get_query_plan_queda_de_sessao_fecha_conexao() -> None:
     resultado = OracleMcpTools(mgr, _config()).get_query_plan("SELECT 1 FROM DUAL")
 
     assert resultado["message"].startswith("Falha ao obter plano de execução: ")
-    # Regressão: queda de uma sessão não derruba o pool inteiro.
-    mgr.discard_connection.assert_called_once_with(None)
+    # Regressão: queda de uma sessão não derruba o pool inteiro. A conexão do pool que
+    # caiu é descartada (não devolvida); o `None` do decorador só toca a dedicada.
+    mgr.discard_connection.assert_any_call(conn)
+    mgr.release_connection.assert_not_called()
     mgr.close.assert_not_called()
 
 
@@ -441,3 +450,211 @@ def test_requisicao_nao_objeto_vira_32600() -> None:
     assert resposta is not None
     assert resposta["error"]["code"] == -32600
     assert resposta["id"] is None
+
+
+# ------------------------------------------ função sem parênteses no guard (achado 1)
+
+SQL_COM_FUNCAO = "SELECT SGTPRD.PKG.FN FROM DUAL"
+
+
+def _mgr_com_conexao(conn: Any) -> MagicMock:
+    mgr = MagicMock()
+    mgr.get_connection.return_value = conn
+    return mgr
+
+
+def _conexao_com_cursor(cursor: MagicMock) -> MagicMock:
+    conn = MagicMock(name="conexao")
+    conn.cursor.return_value = cursor
+    return conn
+
+
+def _sqls_executados(cursor: MagicMock) -> list[str]:
+    return [str(chamada.args[0]) for chamada in cursor.execute.call_args_list]
+
+
+def test_funcao_sem_parenteses_bloqueada_sem_executar_o_sql() -> None:
+    """Regressão (achado 1): `SELECT PKG.FN FROM DUAL` passava no guard e executava a função.
+
+    A consulta de verificação de catálogo acusa a função, e o SQL do usuário não roda.
+    """
+    cursor = MagicMock(name="cursor")
+    cursor.description = [("X", None)]
+    cursor.fetchall.return_value = [("SGTPRD", "FN", "FUNCTION")]
+    conn = _conexao_com_cursor(cursor)
+    mgr = _mgr_com_conexao(conn)
+
+    resultado = OracleMcpTools(mgr, _config()).execute_sql(SQL_COM_FUNCAO)
+
+    assert resultado["error"] is True
+    assert resultado["message"].startswith(
+        "Segurança MCP (Read-Only Violation): a consulta referencia função"
+    )
+    assert "SGTPRD.FN (FUNCTION)" in resultado["message"]
+    executados = _sqls_executados(cursor)
+    assert len(executados) == 1
+    assert "ALL_OBJECTS" in executados[0].upper()
+    # Sessão saudável: a conexão volta ao pool.
+    mgr.release_connection.assert_called_once_with(conn)
+    mgr.discard_connection.assert_not_called()
+
+
+def test_verificacao_sem_linhas_executa_a_consulta() -> None:
+    cursor = MagicMock(name="cursor")
+    cursor.description = [("X", None)]
+    cursor.fetchall.return_value = []
+    cursor.fetchmany.return_value = [(1,)]
+    mgr = _mgr_com_conexao(_conexao_com_cursor(cursor))
+
+    resultado = OracleMcpTools(mgr, _config()).execute_sql(SQL_COM_FUNCAO)
+
+    assert "text" in resultado
+    assert _sqls_executados(cursor)[-1] == SQL_COM_FUNCAO
+
+
+def test_falha_da_verificacao_bloqueia_a_consulta_fail_closed() -> None:
+    cursor = MagicMock(name="cursor")
+    cursor.execute.side_effect = Exception("ORA-00942: tabela ou view nao existe")
+    mgr = _mgr_com_conexao(_conexao_com_cursor(cursor))
+
+    resultado = OracleMcpTools(mgr, _config()).execute_sql(SQL_COM_FUNCAO)
+
+    assert resultado["error"] is True
+    assert "ORA-00942" in resultado["message"]
+    assert SQL_COM_FUNCAO not in _sqls_executados(cursor)
+
+
+def test_mais_de_quinhentos_nomes_bloqueia_sem_conectar() -> None:
+    """Acima do limite da verificação não há como provar a ausência de função."""
+    colunas = ", ".join(f"C{i}" for i in range(mcp_server.LIMITE_NOMES_VERIFICADOS + 1))
+    mgr = MagicMock()
+
+    resultado = OracleMcpTools(mgr, _config()).execute_sql(
+        f"SELECT {colunas} FROM DUAL"
+    )
+
+    assert resultado["error"] is True
+    assert "fail-closed" in resultado["message"]
+    mgr.get_connection.assert_not_called()
+
+
+# ------------------------------------------------------ stdin UTF-8 (achado 2)
+
+
+def test_stdin_do_processo_aceita_utf8_com_acento() -> None:
+    """Regressão (achado 2): o stdin em pipe no Windows ficava em cp1252 e corrompia acentos.
+
+    Roda o servidor como processo, sem PYTHONUTF8/PYTHONIOENCODING, para medir o
+    comportamento real do stdin. Nenhum teste conecta ao Oracle.
+    """
+    requisicao = {"jsonrpc": "2.0", "id": 1, "method": "método_ção"}
+    entrada = json.dumps(requisicao, ensure_ascii=False).encode("utf-8") + b"\n"
+    ambiente = {
+        chave: valor
+        for chave, valor in os.environ.items()
+        if chave not in ("PYTHONUTF8", "PYTHONIOENCODING")
+    }
+
+    processo = subprocess.run(
+        [sys.executable, str(_TOOLS / "mcp_server.py")],
+        input=entrada,
+        capture_output=True,
+        timeout=120,
+        check=False,
+        env=ambiente,
+    )
+
+    assert processo.returncode == 0
+    linhas = processo.stdout.decode("utf-8").splitlines()
+    resposta = json.loads(next(linha for linha in linhas if linha.startswith("{")))
+    assert resposta["error"]["message"] == "Método não suportado: 'método_ção'"
+
+
+# -------------------------------------------- queda e pool (achado 7)
+
+
+@pytest.mark.parametrize(
+    "ferramenta", ["list_tables", "describe_table", "check_connection"]
+)
+def test_queda_na_ferramenta_descarta_a_conexao_do_pool(ferramenta: str) -> None:
+    """Regressão (achado 7): a conexão que caiu sai do pool; não volta a ele."""
+    cursor = MagicMock(name="cursor")
+    cursor.execute.side_effect = Exception(
+        "ORA-03113: end-of-file on communication channel"
+    )
+    conn = _conexao_com_cursor(cursor)
+    mgr = _mgr_com_conexao(conn)
+    tools = OracleMcpTools(mgr, _config())
+    chamadas: dict[str, Callable[[], dict[str, Any]]] = {
+        "list_tables": tools.list_tables,
+        "describe_table": functools.partial(tools.describe_table, "cad_x"),
+        "check_connection": tools.check_connection,
+    }
+
+    resultado = chamadas[ferramenta]()
+
+    assert resultado["error"] is True
+    mgr.discard_connection.assert_called_once_with(conn)
+    mgr.release_connection.assert_not_called()
+
+
+def test_cursor_que_falha_por_queda_descarta_a_conexao() -> None:
+    conn = MagicMock(name="conexao")
+    conn.cursor.side_effect = Exception("DPY-1001: not connected")
+    mgr = _mgr_com_conexao(conn)
+
+    resultado = OracleMcpTools(mgr, _config()).list_tables()
+
+    assert resultado["error"] is True
+    mgr.discard_connection.assert_called_once_with(conn)
+    mgr.release_connection.assert_not_called()
+
+
+def test_describe_table_sem_falha_devolve_a_conexao_ao_pool() -> None:
+    cursor = MagicMock(name="cursor")
+    cursor.fetchall.return_value = []
+    conn = _conexao_com_cursor(cursor)
+    mgr = _mgr_com_conexao(conn)
+
+    OracleMcpTools(mgr, _config()).describe_table("cad_x")
+
+    mgr.release_connection.assert_called_once_with(conn)
+    mgr.discard_connection.assert_not_called()
+
+
+# ------------------------------------------------- `;` final e cursor (achados 12 e 14)
+
+
+def test_ponto_e_virgula_final_nao_chega_ao_oracle() -> None:
+    """Regressão (achado 12): o guard aceita `;` final, mas o Oracle rejeita (ORA-00933)."""
+    cursor = MagicMock(name="cursor")
+    cursor.description = [("X", None)]
+    cursor.fetchmany.return_value = [(1,)]
+    mgr = _mgr_com_conexao(_conexao_com_cursor(cursor))
+
+    OracleMcpTools(mgr, _config()).execute_sql("SELECT 1 FROM DUAL;  ;")
+
+    assert _sqls_executados(cursor)[-1] == "SELECT 1 FROM DUAL"
+
+
+def test_get_query_plan_tira_ponto_e_virgula_antes_do_explain() -> None:
+    cursor = MagicMock(name="cursor")
+    cursor.fetchall.return_value = [("PLAN",)]
+    mgr = _mgr_com_conexao(_conexao_com_cursor(cursor))
+
+    OracleMcpTools(mgr, _config()).get_query_plan("SELECT 1 FROM DUAL;")
+
+    assert _sqls_executados(cursor)[0].endswith("FOR SELECT 1 FROM DUAL")
+
+
+def test_arraysize_acompanha_max_rows_mais_uma() -> None:
+    """Regressão (achado 14): buscar max_rows + 1 não pode pedir lote maior que isso."""
+    cursor = MagicMock(name="cursor")
+    cursor.description = [("X", None)]
+    cursor.fetchmany.return_value = [(1,)]
+    mgr = _mgr_com_conexao(_conexao_com_cursor(cursor))
+
+    OracleMcpTools(mgr, _config()).execute_sql("SELECT 1 FROM DUAL", max_rows=2)
+
+    assert cursor.arraysize == 3
+    assert cursor.prefetchrows == 3

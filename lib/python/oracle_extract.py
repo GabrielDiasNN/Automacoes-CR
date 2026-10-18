@@ -43,6 +43,9 @@ from oracle_client import (
 
 LogFn = Callable[..., None]
 
+# Rotas (host, porta) já sondadas neste processo: a sonda WAN não se repete por rota.
+_ROTAS_SONDADAS: set[tuple[str, int]] = set()
+
 
 @dataclass(frozen=True)
 class OracleCredentials:
@@ -310,6 +313,11 @@ def _registrar_saude_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> No
     round-trips de fetch e alonga a consulta, que é o oposto do desejado numa rede
     que derruba sessões em poucos segundos. Uma amostra só, para não somar conexões
     TCP extras no listener a cada extração.
+
+    A sonda roda no máximo uma vez por processo e por (host, porta): o build do
+    catálogo chama `fetch_all` centenas de vezes, e a rota não muda nesse intervalo.
+    A rota entra em `_ROTAS_SONDADAS` antes da sonda, para que uma falha dela não
+    seja repetida.
     """
     if ":" not in dsn and not os.environ.get("ORACLE_HOST"):
         # Alias TNS sem host conhecido: medir o IP padrão não diria nada da rota real.
@@ -318,6 +326,10 @@ def _registrar_saude_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> No
         probe_host, probe_port = _extrair_host_porta_dsn(dsn)
         if not probe_host:
             return
+        rota = (probe_host, probe_port)
+        if rota in _ROTAS_SONDADAS:
+            return
+        _ROTAS_SONDADAS.add(rota)
         probe = probe_wan_health(probe_host, probe_port, samples=1, timeout=0.5)
         if not (probe.get("reachable") and probe.get("rtt_ms") is not None):
             return

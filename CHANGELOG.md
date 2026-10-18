@@ -27,6 +27,17 @@ Correção dos 23 achados da revisão stateless do diff `otimizacao/kpi-acervo-r
 - **PowerShell:** resolução do endpoint Oracle saiu de `Lib-Logging.psm1` para o novo `lib/Lib-OracleEndpoint.psm1`; leitura de uma chave do `.env` em `Lib-Config.psm1` (`Get-EnvFileValue`). Alias fora do `tnsnames.ora` não vira mais host EZ Connect (dava `Oracle Off` falso) e alias com sufixo de domínio (`.WORLD`) é aceito.
 - **Worker:** `get_worker_max_concurrency` mudou para `app/runtime.py`; valor inválido de `WORKER_MAX_CONCURRENCY` emite evento JSON `config.invalid` no stderr e sai com código 78.
 
+### Corrigido (revisão do PR 77)
+
+- **MCP Oracle, segurança:** `execute_sql` roda a `consulta_verificacao` do guard (`ALL_OBJECTS`/`ALL_SYNONYMS`) antes do SQL do usuário e recusa a consulta que cita função, pacote, procedimento ou tipo. Função chamada sem parênteses (`SELECT PKG.FN FROM DUAL`) passava no guard e executava. Acima de 500 nomes, ou se a verificação falhar, a consulta é recusada (fail-closed).
+- **MCP Oracle:** o stdin é lido em UTF-8 (no Windows o pipe ficava em cp1252 e corrompia os acentos do SQL); no modo auto, uma conexão de sondagem decide Thin ou Thick antes do `create_pool`, porque em Thin o DPY-3015 só aparecia no `acquire()`, com o modo já fixado; conexão do pool que caiu ou estourou o prazo é descartada em todas as ferramentas, não devolvida; `;` final é removido antes de validar e executar; o lote de busca cabe a linha extra do truncamento.
+- **`validar_sql_oracle.py`:** com exit 3 do guard, só função customizada (`classe` = `chamada_funcao`) vai a parse. DDL, DML, PL/SQL e transação bloqueiam: o parse de DDL executa o DDL com commit implícito.
+- **`medir_sql_oracle.py`:** a exceção de funções auditadas não se aplica a SQL com identificador entre aspas ou literal `q'...'`, que a extração de chamadas não interpreta.
+- **Prazo de consulta:** `query_deadline` sinaliza o estouro do `call_timeout` nativo (DPY-4024/DPI-1067), e o runner do Beneficiamento o converte em `TimeoutError`. `apply_call_timeout`, sem uso, saiu de `oracle_session`.
+- **`oracle_extract`:** a sondagem TCP da rota WAN roda uma vez por processo e por (host, porta), não a cada `fetch_all`.
+- **SQL de produção:** em MT-02 as linhas de `OBSERVACAO` são concatenadas na ordem de `UN_TEMP` (a sequência da linha, índice `OBSER_IND_CODIGO_SEQORACLE`), não de `ROWID`, que não garante essa ordem; hoje toda observação do relatório tem uma linha, então a saída não muda. Em OBP-04 e MT-02 o enumerado de status usa `LIKE 'TOBFASESSTATUS%'`, o mesmo filtro da antiga `VW_ENU_STATUS_OB_FASES` (antes era `=`); no MT-02 a subconsulta escalar usa `MAX` para não voltar mais de uma linha.
+- **Pre-flight (`Lib-Logging.psm1`):** `ORACLE_CONNECT_STRING` do `.env` é lido por `Get-EnvFileValue`, sem aspas nem comentário inline; `-OracleHost` com host simples é testado na porta 1521; `//host:porta/servico` não gera mais o aviso falso de host não configurado.
+
 ## [1.3.103] - 16/10/2026
 
 ### Adicionado

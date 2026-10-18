@@ -288,6 +288,21 @@ def test_dpy_1001_apos_cancelamento_vira_timeout_error(
         oracle.execute_query("select 1", wall_clock_budget_seconds=0.3)
 
 
+def test_dpy_4024_do_call_timeout_vira_timeout_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão (achado 8): prazo por chamada do driver é prazo, não erro Oracle."""
+    conexao = _ConexaoSemCallTimeout(bloqueia=False)
+
+    def execute(*_a: Any, **_k: Any) -> None:
+        raise oracledb.DatabaseError("DPY-4024: call timeout of 1000 ms exceeded")
+
+    monkeypatch.setattr(conexao.cursor_falso, "execute", execute)
+    monkeypatch.setattr(oracle, "connect_readonly", lambda: conexao)
+    with pytest.raises(TimeoutError, match="prazo da chamada ou watchdog"):
+        oracle.execute_query("select 1", wall_clock_budget_seconds=5)
+
+
 def test_watchdog_nao_atrapalha_consulta_rapida(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

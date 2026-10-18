@@ -548,6 +548,45 @@ def test_excecao_funcoes_sem_flag_nao_libera() -> None:
     )
 
 
+def test_excecao_funcoes_aspas_duplas_na_chamada_fecha_a_excecao(
+    tmp_path: Path,
+) -> None:
+    """Regressão (achado 9): `"PKG"."FN"(` escapa da regex; a exceção não se aplica."""
+    sql = 'select pkgbenf0001.fnc_x(1), "PKG"."FN_OUTRA"(1) from dual'
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        sql,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is None
+
+
+def test_excecao_funcoes_literal_q_fecha_a_excecao(tmp_path: Path) -> None:
+    sql = "select pkgbenf0001.fnc_x(q'[a(b]') from dual"
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        sql,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is None
+
+
+def test_excecao_funcoes_aspas_so_em_literal_nao_fecham_a_excecao(
+    tmp_path: Path,
+) -> None:
+    """Aspas dentro de literal simples são removidas antes da checagem: não bloqueiam."""
+    sql = "select pkgbenf0001.fnc_x(1), 'a\"b' from dual"
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        sql,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is not None
+
+
 def test_excecao_funcoes_exige_evidencia_na_allowlist(tmp_path: Path) -> None:
     caminho = tmp_path / "a.json"
     caminho.write_text(

@@ -130,12 +130,13 @@ class RunOptions:
     attempts: int = MAX_ATTEMPTS
 
 
-# Códigos de saída do guard_sql. 0 = leitura liberada. 3 = veredito não permitido
-# (DML, DDL, PL/SQL, transação, múltiplas instruções, função customizada): a consulta
-# não é executada, e o validador faz só o parse no Oracle. Qualquer outro código
-# bloqueia (fail-closed).
+# Códigos de saída do guard_sql. 0 = leitura liberada. 3 = veredito não permitido.
+# Só o caso de função customizada (`classe` == "chamada_funcao") vai a parse no
+# Oracle. DML, DDL, PL/SQL e transação bloqueiam: o parse de DDL executa o DDL com
+# commit implícito. Qualquer outro código bloqueia (fail-closed).
 GUARD_LIBERADO = 0
 GUARD_SO_PARSE = 3
+GUARD_CLASSE_SO_PARSE = "chamada_funcao"
 # Teto da saída do guard gravada na evidência JSON.
 GUARD_OUTPUT_MAX_CHARS = 1000
 
@@ -488,6 +489,23 @@ def _oracle_stage_with_retry(
     return outcome
 
 
+def _so_parse_permitido(guard_code: int, guard_output: str) -> bool:
+    """True se o veredito do guard autoriza o nível "só parse" no Oracle.
+
+    Sem exit 3 o caso não é de "só parse" e a decisão fica com o chamador. Com exit 3,
+    só vale para função customizada: qualquer outra classe, ou JSON ilegível, bloqueia.
+    """
+    if guard_code != GUARD_SO_PARSE:
+        return True
+    try:
+        veredito = json.loads(guard_output)
+    except ValueError:
+        return False
+    return (
+        isinstance(veredito, dict) and veredito.get("classe") == GUARD_CLASSE_SO_PARSE
+    )
+
+
 def _rotulo_do_arquivo(path: Path) -> str:
     """Caminho do arquivo relativo ao repositório; fora dele, o caminho como foi dado."""
     try:
@@ -533,6 +551,11 @@ def _validate_one(path: Path, creds: Any, options: RunOptions) -> dict[str, Any]
     )
     # Qualquer codigo fora de GUARD_LIBERADO / GUARD_SO_PARSE e bloqueio (fail-closed).
     if guard_code not in (GUARD_LIBERADO, GUARD_SO_PARSE):
+        result["status"] = "blocked_guard"
+        return _finish(result, started_clock)
+    # Exit 3 só segue para parse quando o veredito é função customizada. O JSON é lido
+    # inteiro: `guard_output` acima já está truncado para a evidência.
+    if not _so_parse_permitido(guard_code, guard_output):
         result["status"] = "blocked_guard"
         return _finish(result, started_clock)
 

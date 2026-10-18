@@ -125,4 +125,58 @@ Exit-AutomationWithCode -Code $Code -ExecId 'test' -LogPath '$logLiteral' $EndMe
             $result.Log | Should -Not -Match ([regex]::Escape("FIM - Finalizado."))
         }
     }
+
+    Context "Test-AutomationPreFlight (Oracle)" {
+        BeforeEach {
+            # Isola o teste do .env real e do ambiente: sem ORACLE_CONNECT_STRING no processo.
+            Remove-Item Env:\ORACLE_CONNECT_STRING -ErrorAction SilentlyContinue
+            $script:logPreflight = Join-Path $TestDrive ("preflight-" + [guid]::NewGuid().ToString("N") + ".log")
+            Mock Test-OracleTcpEndpoint -ModuleName Lib-Logging { return $true }
+        }
+
+        AfterEach {
+            Remove-Item Env:\ORACLE_CONNECT_STRING -ErrorAction SilentlyContinue
+        }
+
+        It "Com -OracleHost de host simples sem alias, testa o proprio host na porta 1521" {
+            Mock Resolve-OracleEndpoint -ModuleName Lib-Logging { return $null }
+
+            $null = Test-AutomationPreFlight -ExecId "teste" -LogPath $script:logPreflight -CheckOracle -OracleHost "srv-oracle-teste"
+
+            Should -Invoke Test-OracleTcpEndpoint -ModuleName Lib-Logging -Times 1 -Exactly -ParameterFilter {
+                $Servidor -eq "srv-oracle-teste" -and $Porta -eq 1521
+            }
+        }
+
+        It "Com ORACLE_CONNECT_STRING //host:porta/servico, nao avisa host nao configurado e testa o host real" {
+            $env:ORACLE_CONNECT_STRING = "//banco.exemplo.local:1521/SVC"
+
+            $null = Test-AutomationPreFlight -ExecId "teste" -LogPath $script:logPreflight -CheckOracle
+
+            Should -Invoke Test-OracleTcpEndpoint -ModuleName Lib-Logging -Times 1 -Exactly -ParameterFilter {
+                $Servidor -eq "banco.exemplo.local" -and $Porta -eq 1521
+            }
+        }
+
+        It "Le ORACLE_CONNECT_STRING do .env via Get-EnvFileValue quando nao ha variavel de ambiente" {
+            Mock Get-EnvFileValue -ModuleName Lib-Logging { return "banco.exemplo.local:1600/SVC" }
+
+            $null = Test-AutomationPreFlight -ExecId "teste" -LogPath $script:logPreflight -CheckOracle
+
+            Should -Invoke Get-EnvFileValue -ModuleName Lib-Logging -Times 1 -Exactly -ParameterFilter {
+                $Key -eq "ORACLE_CONNECT_STRING"
+            }
+            Should -Invoke Test-OracleTcpEndpoint -ModuleName Lib-Logging -Times 1 -Exactly -ParameterFilter {
+                $Servidor -eq "banco.exemplo.local" -and $Porta -eq 1600
+            }
+        }
+
+        It "Sem ORACLE_CONNECT_STRING em lugar nenhum, avisa host nao configurado e nao testa TCP" {
+            Mock Get-EnvFileValue -ModuleName Lib-Logging { return $null }
+
+            $null = Test-AutomationPreFlight -ExecId "teste" -LogPath $script:logPreflight -CheckOracle
+
+            Should -Invoke Test-OracleTcpEndpoint -ModuleName Lib-Logging -Times 0 -Exactly
+        }
+    }
 }

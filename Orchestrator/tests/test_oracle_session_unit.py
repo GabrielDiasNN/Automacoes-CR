@@ -285,13 +285,6 @@ def test_aplicar_metadados_oci_falha_do_driver_vira_mensagem_sem_excecao() -> No
     assert "recusado" in erro
 
 
-def test_apply_call_timeout_nunca_grava_zero(monkeypatch: pytest.MonkeyPatch) -> None:
-    _modo(monkeypatch, DriverMode("thin", "Thin", None))
-    conexao = _Conexao()
-    assert oracle_session.apply_call_timeout(conexao, 0.0001) is True
-    assert conexao.call_timeout == 1
-
-
 def test_cancel_after_consome_break_quando_o_prazo_coincide_com_o_fim() -> None:
     """Prazo estourado no instante em que a chamada terminou: o ping limpa o break."""
 
@@ -357,4 +350,27 @@ def test_query_deadline_arma_watchdog_e_zera_call_timeout() -> None:
         assert info.applied is True
         assert conexao.call_timeout == 3000  # o menor dos dois prazos
     assert conexao.call_timeout == 0
+    assert not disparou.is_set()
+
+
+def test_query_deadline_marca_disparo_no_prazo_por_chamada_do_driver() -> None:
+    """Regressão (achado 8): DPY-4024 do call_timeout nativo seta `fired` como o watchdog."""
+    conexao = MagicMock()
+    disparou = threading.Event()
+    with (
+        pytest.raises(oracledb.Error, match="DPY-4024"),
+        oracle_session.query_deadline(conexao, 1.0, 3.0, disparou),
+    ):
+        raise oracledb.DatabaseError("DPY-4024: call timeout of 1000 ms exceeded")
+    assert disparou.is_set()
+
+
+def test_query_deadline_nao_marca_disparo_em_erro_comum() -> None:
+    conexao = MagicMock()
+    disparou = threading.Event()
+    with (
+        pytest.raises(oracledb.Error, match="ORA-00942"),
+        oracle_session.query_deadline(conexao, 1.0, 3.0, disparou),
+    ):
+        raise oracledb.DatabaseError("ORA-00942: tabela ou view nao existe")
     assert not disparou.is_set()

@@ -16,6 +16,7 @@ sys.path.insert(
     ),
 )
 
+import oracle_extract  # noqa: E402  pylint: disable=wrong-import-position
 from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position
     OracleCredentials,
     _extrair_host_porta_dsn,
@@ -30,6 +31,12 @@ from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-positio
 )
 
 pytestmark = pytest.mark.unitario
+
+
+@pytest.fixture(autouse=True)
+def _limpa_rotas_sondadas(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A sonda WAN é uma vez por processo: cada teste começa sem rotas já sondadas."""
+    monkeypatch.setattr(oracle_extract, "_ROTAS_SONDADAS", set())
 
 
 def _noop_log(*_args: Any, **_kwargs: Any) -> None:
@@ -330,6 +337,27 @@ def test_ajuste_wan_pula_probe_de_alias_sem_host(monkeypatch: Any) -> None:
     monkeypatch.setattr("oracle_extract.probe_wan_health", chamado)
     _registrar_saude_wan("dbprd", 5000, lambda *a: None, "X")
     chamado.assert_not_called()
+
+
+def test_registrar_saude_wan_sonda_a_rota_uma_vez_por_processo(
+    monkeypatch: Any,
+) -> None:
+    """Regressão (achado 13): o build do catálogo chama fetch_all centenas de vezes."""
+    chamado = MagicMock(return_value={"reachable": True, "rtt_ms": 10.0})
+    monkeypatch.setattr("oracle_extract.probe_wan_health", chamado)
+    _registrar_saude_wan("h:1521/dbprd", 5000, lambda *a: None, "X")
+    _registrar_saude_wan("h:1521/dbprd", 5000, lambda *a: None, "X")
+    chamado.assert_called_once()
+
+
+def test_registrar_saude_wan_sonda_rota_nova_mesmo_depois_da_primeira(
+    monkeypatch: Any,
+) -> None:
+    chamado = MagicMock(return_value={"reachable": True, "rtt_ms": 10.0})
+    monkeypatch.setattr("oracle_extract.probe_wan_health", chamado)
+    _registrar_saude_wan("h:1521/dbprd", 5000, lambda *a: None, "X")
+    _registrar_saude_wan("outro:1521/dbprd", 5000, lambda *a: None, "X")
+    assert chamado.call_count == 2
 
 
 def test_ajuste_wan_ignora_uma_amostra_perdida(monkeypatch: Any) -> None:

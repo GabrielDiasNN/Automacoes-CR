@@ -34,7 +34,6 @@ __all__ = [
     "SESSION_DROP_MARKERS",
     "CallTimeoutInfo",
     "WatchdogOutcome",
-    "apply_call_timeout",
     "call_deadline",
     "call_timeout_aplicado",
     "cancel_after",
@@ -242,15 +241,6 @@ def supports_native_call_timeout() -> bool:
     )
 
 
-def apply_call_timeout(connection: Any, seconds: float) -> bool:
-    """Define `connection.call_timeout` (ms) quando o driver suporta. Devolve True se aplicou."""
-    if not supports_native_call_timeout():
-        return False
-    # Piso de 1 ms: `call_timeout = 0` desliga o prazo no driver.
-    connection.call_timeout = max(1, int(seconds * 1000))
-    return True
-
-
 def is_call_timeout(error: BaseException | str) -> bool:
     """True se o erro é o prazo por chamada do driver (DPY-4024 no Thin, DPI-1067 no Thick)."""
     message = str(error).upper()
@@ -304,7 +294,14 @@ def query_deadline(
             call_timeout_aplicado(connection, min(per_call_seconds, total_seconds))
         )
         pilha.enter_context(cancel_after(connection, total_seconds, fired))
-        yield info
+        try:
+            yield info
+        except oracledb.Error as exc:
+            # Prazo por chamada do driver (DPY-4024/DPI-1067): mesmo sinal do
+            # watchdog para o chamador, que converte em TimeoutError.
+            if is_call_timeout(exc):
+                fired.set()
+            raise
 
 
 @contextlib.contextmanager

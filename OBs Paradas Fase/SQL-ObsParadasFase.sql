@@ -148,15 +148,15 @@ INNER JOIN SGTPRD.OB_FASES OBF
    AND OBF.SEQUENCIA = OBA.SEQ_ATUAL
 INNER JOIN SGTPRD.FASES_FLUXO FFL 
     ON FFL.CODIGO_FASE = OBF.CODIGO_FASE
--- Descrição do status pelo enumerado do ERP (TOBFASESSTATUS). Subconsulta agregada
--- por SEQUENCE: uma linha por código, mesmo se o enumerado tiver mais de um registro
--- com o mesmo NAME, e o mesmo filtro de status do antigo VW_ENU_STATUS_OB_FASES.
+-- Descrição do status pelo enumerado do ERP. Usa o mesmo filtro LIKE 'TOBFASESSTATUS%'
+-- da antiga VW_ENU_STATUS_OB_FASES. Subconsulta agregada por SEQUENCE com MAX(DESCRIPTION):
+-- uma linha por código, mesmo se o enumerado tiver mais de um registro que case com o filtro.
 INNER JOIN (
     SELECT ENI.SEQUENCE, MAX(ENI.DESCRIPTION) AS DESCRIPTION
     FROM SGTPRD.XX2_ENUMERATES ENU
     INNER JOIN SGTPRD.XX2_ENUMITEM ENI
         ON ENI.IDENUMERATE = ENU.ID
-    WHERE ENU.NAME = 'TOBFASESSTATUS'
+    WHERE ENU.NAME LIKE 'TOBFASESSTATUS%'
     GROUP BY ENI.SEQUENCE
 ) ENS
     ON ENS.SEQUENCE = OBF.STATUS

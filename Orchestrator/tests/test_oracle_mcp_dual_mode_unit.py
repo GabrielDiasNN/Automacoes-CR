@@ -160,4 +160,103 @@ def test_execute_sql_timeout_nativo_marca_watchdog(
 
     assert resultado["error"] is True
     assert "Timeout da consulta" in resultado["message"]
+    assert "(prazo da chamada ou watchdog)" in resultado["message"]
     assert conn.call_timeout == 0
+
+
+# ----------------------------------------------- sondagem do modo antes do pool (achado 6)
+
+
+def _sonda_que_registra(eventos: list[str]) -> MagicMock:
+    sonda = MagicMock(name="sonda")
+    sonda.close.side_effect = lambda: eventos.append("fecha_sonda")
+    return sonda
+
+
+def test_modo_auto_sonda_o_driver_antes_de_criar_o_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão (achado 6): DPY-3015 só aparece no acquire; a sondagem vem antes do pool."""
+    eventos: list[str] = []
+    sonda = _sonda_que_registra(eventos)
+
+    def sondagem(**_kwargs: object) -> MagicMock:
+        eventos.append("sonda")
+        return sonda
+
+    def criar_pool(**_kwargs: object) -> MagicMock:
+        eventos.append("create_pool")
+        return MagicMock(name="pool")
+
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "auto")
+    monkeypatch.setattr(mcp_server, "connect_adaptive", sondagem)
+    monkeypatch.setattr("oracledb.create_pool", criar_pool)
+    mgr = OracleConnectionManager(_config())
+
+    assert mgr.pool is not None
+    assert eventos == ["sonda", "fecha_sonda", "create_pool"]
+
+
+@pytest.mark.parametrize(
+    ("thin", "com_config_dir"),
+    [(True, True), (False, False)],
+)
+def test_pool_so_recebe_config_dir_quando_o_modo_e_thin(
+    monkeypatch: pytest.MonkeyPatch, thin: bool, com_config_dir: bool
+) -> None:
+    """O config_dir é do Thin: depois da sondagem, um Thick ativo não o recebe."""
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "auto")
+    monkeypatch.setattr(
+        mcp_server, "connect_adaptive", MagicMock(return_value=MagicMock())
+    )
+    monkeypatch.setattr("oracledb.is_thin_mode", lambda: thin)
+    criar = MagicMock(return_value=MagicMock(name="pool"))
+    monkeypatch.setattr("oracledb.create_pool", criar)
+    mgr = OracleConnectionManager(_config())
+
+    assert mgr.pool is not None
+    assert ("config_dir" in criar.call_args.kwargs) is com_config_dir
+
+
+def test_modo_thick_pedido_ativa_o_cliente_e_nao_sonda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    eventos: list[str] = []
+
+    def init_falso(*_a: object, **_k: object) -> None:
+        eventos.append("init_thick")
+
+    def criar_pool(**_k: object) -> MagicMock:
+        eventos.append("create_pool")
+        return MagicMock(name="pool")
+
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "thick")
+    monkeypatch.setattr(mcp_server, "init_oracle_thick_mode", init_falso)
+    monkeypatch.setattr(
+        mcp_server,
+        "connect_adaptive",
+        MagicMock(side_effect=AssertionError("sondagem não roda no thick pedido")),
+    )
+    monkeypatch.setattr("oracledb.create_pool", criar_pool)
+    mgr = OracleConnectionManager(_config())
+
+    assert mgr.pool is not None
+    assert eventos == ["init_thick", "create_pool"]
+
+
+def test_falha_da_sondagem_marca_pool_falho_sem_levantar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "auto")
+    monkeypatch.setattr(
+        mcp_server,
+        "connect_adaptive",
+        MagicMock(side_effect=RuntimeError("DPY-4011: rede fechou")),
+    )
+    criar = MagicMock()
+    monkeypatch.setattr("oracledb.create_pool", criar)
+    mgr = OracleConnectionManager(_config())
+
+    assert mgr.pool is None
+    criar.assert_not_called()
+    assert mgr._pool_failed is True  # pylint: disable=protected-access

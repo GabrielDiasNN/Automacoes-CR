@@ -36,6 +36,7 @@ from oracle_client import (  # noqa: E402  pylint: disable=wrong-import-position
 )
 from oracle_session import (  # noqa: E402  pylint: disable=wrong-import-position
     connect_within,
+    is_call_timeout,
     is_session_drop,
     query_deadline,
 )
@@ -235,10 +236,13 @@ def _execute_once(
                     else:
                         rows.extend(batch)
         except oracledb.Error as exc:
-            if watchdog_fired.is_set():
+            # `is_call_timeout` cobre o prazo por chamada do driver: o `fired` de
+            # query_deadline só é setado depois que este bloco termina, então sozinho
+            # ele não veria o DPY-4024 desta mesma exceção.
+            if watchdog_fired.is_set() or is_call_timeout(exc):
                 raise TimeoutError(
                     f"Consulta Beneficiamento excedeu {wall_clock_budget_seconds:g}s "
-                    "(cancelada pelo watchdog)."
+                    "(prazo da chamada ou watchdog)."
                 ) from exc
             raise
 

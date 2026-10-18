@@ -500,6 +500,10 @@ def test_connection_manager_usa_session_pool(monkeypatch: pytest.MonkeyPatch) ->
     pool.busy = 1
     pool.max = 4
     monkeypatch.setattr("oracledb.create_pool", MagicMock(return_value=pool))
+    # Sondagem do modo (modo auto) não pode abrir conexão real nos testes.
+    monkeypatch.setattr(
+        "mcp_server.connect_adaptive", MagicMock(return_value=MagicMock())
+    )
 
     mgr = OracleConnectionManager(_config(dsn="host-teste:1521/dbprd"))
     assert mgr.acquire_connection() is conn
@@ -522,12 +526,17 @@ def test_connection_manager_cai_para_conexao_avulsa_sem_pool(
         MagicMock(side_effect=Exception("Driver não suporta pool neste ambiente")),
     )
     conn = MagicMock()
-    monkeypatch.setattr("mcp_server.connect_adaptive", MagicMock(return_value=conn))
+    # Primeira chamada: a sondagem do modo (fechada logo). Segunda: a conexão avulsa.
+    sonda = MagicMock(name="sonda")
+    monkeypatch.setattr(
+        "mcp_server.connect_adaptive", MagicMock(side_effect=[sonda, conn])
+    )
 
     mgr = OracleConnectionManager(_config(dsn="host-teste:1521/dbprd"))
     assert mgr.acquire_connection() is conn
     assert mgr.get_pool_status()["active"] is False
 
+    sonda.close.assert_called_once()
     mgr.close()
     conn.close.assert_called_once()
 
@@ -540,6 +549,9 @@ def test_discard_connection_descarta_so_a_conexao_do_pool(
     conn = MagicMock(name="conn")
     pool.acquire.return_value = conn
     monkeypatch.setattr("oracledb.create_pool", MagicMock(return_value=pool))
+    monkeypatch.setattr(
+        "mcp_server.connect_adaptive", MagicMock(return_value=MagicMock())
+    )
     mgr = OracleConnectionManager(_config(dsn="host-teste:1521/dbprd"))
     assert mgr.acquire_connection() is conn
 
@@ -558,6 +570,9 @@ def test_pool_falho_tenta_de_novo_depois_da_janela(
 
     criar = MagicMock(side_effect=[RuntimeError("rede fora"), MagicMock(name="pool")])
     monkeypatch.setattr("oracledb.create_pool", criar)
+    monkeypatch.setattr(
+        "mcp_server.connect_adaptive", MagicMock(return_value=MagicMock())
+    )
     relogio = [1000.0]
     monkeypatch.setattr(mcp_server.time, "monotonic", lambda: relogio[0])
     mgr = OracleConnectionManager(_config(dsn="host-teste:1521/dbprd"))

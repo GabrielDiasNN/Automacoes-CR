@@ -397,6 +397,9 @@ _CHAMADA_QUALIFICADA = re.compile(
     r"\b([A-Za-z_][\w$#]*(?:\s*\.\s*[A-Za-z_][\w$#]*){1,2})\s*\("
 )
 _COMENTARIO_OU_LITERAL = re.compile(r"/\*.*?\*/|--[^\n]*|'(?:[^']|'')*'", re.S)
+# Literal q'...' (delimitado): a regex de chamadas não o interpreta, então com ele no
+# SQL a exceção não se aplica.
+_LITERAL_Q = re.compile(r"(?<![\w$#])[nN]?[qQ]'")
 
 
 def _funcoes_auditadas(caminho: Path) -> frozenset[str]:
@@ -442,6 +445,10 @@ def _excecao_funcoes(
         return None
     motivos = veredito.get("motivos", [])
     if not motivos or any("chamada a função" not in motivo for motivo in motivos):
+        return None
+    # Fail-closed: identificador entre aspas (`"PKG"."FN"(`) e literal q'...' escapam da
+    # regex de chamadas; com qualquer um dos dois, a exceção não se aplica.
+    if '"' in _COMENTARIO_OU_LITERAL.sub(" ", sql) or _LITERAL_Q.search(sql):
         return None
     chamadas = _chamadas_qualificadas(sql)
     if not chamadas:

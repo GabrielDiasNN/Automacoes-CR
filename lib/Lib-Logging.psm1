@@ -27,6 +27,9 @@ $script:Lib_Utf8WithBom = [System.Text.Encoding]::UTF8
 # Resolucao do endpoint Oracle (tnsnames/EZ Connect) e teste TCP vivem em Lib-OracleEndpoint.psm1;
 # o pre-flight daqui so chama Resolve-OracleEndpoint e Test-OracleTcpEndpoint.
 Import-Module (Join-Path $PSScriptRoot 'Lib-OracleEndpoint.psm1')
+# Get-EnvFileValue (ORACLE_CONNECT_STRING do .env) precisa estar visivel aqui: o import aninhado
+# de Lib-OracleEndpoint nao expoe Lib-Config para este modulo.
+Import-Module (Join-Path $PSScriptRoot 'Lib-Config.psm1')
 
 # Identifica a raiz do repositorio no momento da importacao
 
@@ -345,19 +348,11 @@ $connStr = [System.Environment]::GetEnvironmentVariable("ORACLE_CONNECT_STRING",
 
 if ([string]::IsNullOrWhiteSpace($connStr)) {
 
-$envFile = Join-Path $script:ProjectRoot ".env"
-
-if (Test-Path $envFile) {
-
-$match = Select-String -Path $envFile -Pattern '^\s*ORACLE_CONNECT_STRING\s*=\s*(.+)$' | Select-Object -First 1
-
-if ($match) { $connStr = $match.Matches[0].Groups[1].Value.Trim() }
+$connStr = Get-EnvFileValue -Key "ORACLE_CONNECT_STRING"
 
 }
 
-}
-
-if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = (($connStr -replace '^[A-Za-z][A-Za-z0-9+.\-]*://', '') -split '[:/]')[0].Trim() }
+if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ((($connStr -replace '^[A-Za-z][A-Za-z0-9+.\-]*://', '') -replace '^//', '') -split '[:/]')[0].Trim() }
 
 }
 
@@ -370,6 +365,12 @@ $results += "WARN: Oracle host nao configurado (ORACLE_CONNECT_STRING ausente)"
 # O alias do TNS nao resolve por DNS e o ping (ICMP) pode estar bloqueado: mede a porta TCP do endpoint real.
 $enderecoOracle = if ($connStr) { $connStr } else { $oracleHostResolved }
 $endpointOracle = Resolve-OracleEndpoint -ConnectString $enderecoOracle
+
+# -OracleHost informado explicitamente como host simples (sem ':' nem '/'): nao e alias de tnsnames,
+# entao testa o proprio host na porta 1521 em vez de cair no aviso de alias ausente.
+if ($null -eq $endpointOracle -and -not [string]::IsNullOrWhiteSpace($OracleHost)) {
+$endpointOracle = [pscustomobject]@{ Servidor = $OracleHost; Porta = 1521; Origem = "Parametro" }
+}
 
 if ($null -eq $endpointOracle) {
 
