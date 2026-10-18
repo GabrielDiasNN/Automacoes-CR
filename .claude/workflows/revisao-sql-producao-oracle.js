@@ -46,11 +46,10 @@ function promptValidar(u, dir) {
   const head = u.head_path || `${dir}/evidencia/head/${u.nome}.sql`
   const wt = u.wt_path || `${dir}/evidencia/wt/${u.nome}.sql`
   const binds = (u.binds || []).map((b) => `--bind ${b}`).join(' ')
-  const priv = `${dir}/evidencia/dump-priv.json`
   const saida = `${dir}/evidencia/unidades/${u.id}`
   const medir = (arq, rel, dump, extra) =>
     `PYTHONUTF8=1 ${PY} Tools/oracle/medir_sql_oracle.py "${arq}" --runs 7 --timeout 900 ${extra} ${binds} --dump "${dump}" --out "${rel}"`
-  const extraFuncao = u.funcoes ? `--aceitar-funcoes-somente-leitura "${priv}"` : ''
+  const extraFuncao = u.funcoes ? `--aceitar-funcoes-auditadas` : ''
   const comparacao = u.tem_wt_diferente
     ? `PYTHONUTF8=1 ${PY} Tools/oracle/comparar_equivalencia.py --controle "${saida}-head-dump.json" --candidata "${saida}-wt-dump.json"${u.colunas_comparadas ? ` --colunas "${u.colunas_comparadas}"` : ''} --relatorio "${saida}-equivalencia.json"`
     : 'nao se aplica (HEAD e versao de trabalho sao identicos)'
@@ -70,7 +69,8 @@ Passos, nesta ordem:
 3. Comparar a saida (somente se a versao de trabalho for diferente):
    ${comparacao}
    Leia o relatorio: equivalente = true se nao houver divergencia; divergencias = numero de divergencias.
-4. veredito_medicao: copie o campo de veredito do relatorio da versao de trabalho quando existir (MELHORA, NEUTRO ou PIORA), senao "nao medido".
+4. Decisao deterministica (le os JSONs acima em disco): PYTHONUTF8=1 ${PY} Tools/oracle/decidir_revisao_sql.py --prefixo "${saida}" --sql-wt "${wt}"${u.tem_wt_diferente ? ' --tem-wt-diferente' : ''}${u.correcao_aprovada ? ' --correcao-aprovada' : ''}
+   Copie o JSON impresso em observacoes. veredito_medicao = "MELHORA" se acao = manter_wt, senao o motivo impresso.
 
 Preencha o objeto com os valores lidos dos arquivos. Nao estime valores.`
 }
@@ -90,7 +90,7 @@ ${REGRAS_COMUNS}
 3. Responda: parse_ok, guard_ok e observacoes com o que falhou, se houver.`
 }
 
-  // args: { aplicar: boolean, unidades: [{id, nome, arquivo, arquivo_repo, funcoes, tem_wt_diferente, colunas_ignoradas}], dir }
+  // args: { aplicar: boolean, unidades: [{id, nome, arquivo, arquivo_repo, funcoes, tem_wt_diferente, colunas_comparadas, correcao_aprovada}], dir }
   const cfg = args || {}
   const dir = cfg.dir
   if (!dir || !Array.isArray(cfg.unidades) || cfg.unidades.length === 0) {
@@ -110,18 +110,24 @@ ${REGRAS_COMUNS}
     log(`${u.id}: ${r ? (r.equivalente === false ? 'DIVERGE' : 'ok') : 'sem resultado'}`)
   }
 
-  // Decidir: regra fixa, sem opiniao. Manter a versao de trabalho so com prova de paridade e ganho medido.
+  // Decidir: previa da regra fixa a partir do objeto do agente, so para exibicao. A fonte
+  // de verdade e Tools/oracle/decidir_revisao_sql.py, que le os JSONs de evidencia em disco:
+  // o passo Aplicar so reverte quando o script sai com 0 em --exigir reverter_head.
   phase('Decidir')
   const decisoes = resultados.map(({ unidade: u, resultado: r }) => {
     if (!r) return { id: u.id, acao: 'pendente', motivo: 'agente nao devolveu resultado' }
     if (!u.tem_wt_diferente) return { id: u.id, acao: 'manter', motivo: 'HEAD e versao de trabalho identicos' }
     if (r.sem_ponto_e_virgula_final !== true) return { id: u.id, acao: 'reverter_head', motivo: 'texto cru termina com ponto e virgula: o runner de producao falha com ORA-00933' }
     if (!r.parse_ok || !r.guard_ok) return { id: u.id, acao: 'reverter_head', motivo: 'versao de trabalho nao passa parse ou guard' }
+    // Correcao aprovada pelo DBA muda a saida de proposito (ex.: determinismo do pedido): a
+    // paridade nao se aplica e o teto e 2x a mediana do HEAD. Por isso vem antes da paridade.
+    if (u.correcao_aprovada) {
+      return r.mediana_wt_ms <= 2 * r.mediana_head_ms
+        ? { id: u.id, acao: 'manter_wt', motivo: 'correcao aprovada, custo dentro de 2x' }
+        : { id: u.id, acao: 'reverter_head', motivo: 'correcao aprovada, mas custo acima de 2x' }
+    }
     if (r.equivalente !== true) return { id: u.id, acao: 'reverter_head', motivo: `saida diverge do HEAD (${r.divergencias} divergencias)` }
     if (r.veredito_medicao === 'MELHORA') return { id: u.id, acao: 'manter_wt', motivo: 'saida igual ao HEAD e ganho medido' }
-    // Obs.: quando a versao de trabalho muda a saida por dado vivo, a comparacao deve ser feita com as duas versoes em sequencia (ver evidencia de back-to-back).
-    // Correcao aprovada pelo DBA: aceita custo de ate 2x a mediana do HEAD (ex.: determinismo do pedido).
-    if (u.correcao_aprovada && r.mediana_wt_ms <= 2 * r.mediana_head_ms) return { id: u.id, acao: 'manter_wt', motivo: 'saida igual ao HEAD, correcao aprovada, custo dentro de 2x' }
     return { id: u.id, acao: 'reverter_head', motivo: `sem ganho medido (veredito: ${r.veredito_medicao})` }
   })
 
@@ -141,7 +147,7 @@ ${REGRAS_COMUNS}
     const r = await agent(
       `Restaurar o HEAD no working tree para a unidade ${u.id} (${u.arquivo_repo}). Diretorio: a raiz do repositorio.
 ${REGRAS_COMUNS}
-Passos: (1) confira que ${dir}/evidencia/wt/${u.nome}.sql e identico ao arquivo atual ${u.arquivo_repo} (sha256). Se nao for identico, pare e responda erros. (2) Restaure o conteudo do proprio Git, nunca de copia em disco (uma copia antiga sobrescreveria o arquivo com outra versao): git restore --source=HEAD --worktree -- '${u.arquivo_repo}'. Nao use redirecionamento (git show > arquivo): no PowerShell o '>' regrava o arquivo em UTF-16 ou troca os fins de linha. (3) Confirme com "git diff --quiet -- '${u.arquivo_repo}'" que o arquivo voltou ao HEAD. Nao use git checkout nem git reset.`,
+Passos: (0) Decisao deterministica, lida dos JSONs de evidencia: PYTHONUTF8=1 ${PY} Tools/oracle/decidir_revisao_sql.py --prefixo "${dir}/evidencia/unidades/${u.id}" --sql-wt "${u.wt_path || `${dir}/evidencia/wt/${u.nome}.sql`}"${u.tem_wt_diferente ? ' --tem-wt-diferente' : ''}${u.correcao_aprovada ? ' --correcao-aprovada' : ''} --exigir reverter_head. Se o exit code nao for 0, NAO reverta: pare e copie a saida em erros. (1) confira que ${dir}/evidencia/wt/${u.nome}.sql e identico ao arquivo atual ${u.arquivo_repo} (sha256). Se nao for identico, pare e responda erros. (2) Restaure o conteudo do proprio Git, nunca de copia em disco (uma copia antiga sobrescreveria o arquivo com outra versao): git restore --source=HEAD --worktree -- '${u.arquivo_repo}'. Nao use redirecionamento (git show > arquivo): no PowerShell o '>' regrava o arquivo em UTF-16 ou troca os fins de linha. (3) Confirme com "git diff --quiet -- '${u.arquivo_repo}'" que o arquivo voltou ao HEAD. Nao use git checkout nem git reset.`,
       { label: `aplicar:${u.id}`, phase: 'Aplicar', schema: SCHEMA_UNIDADE }
     )
     aplicacoes.push({ id: d.id, acao: 'reverter_head', ok: !!r && !r.erros })

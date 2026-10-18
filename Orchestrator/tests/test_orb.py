@@ -233,9 +233,12 @@ def test_sql_obs_respeita_o_contrato_de_negocio() -> None:
     assert "CODIGO_FLUXO = 204" not in sql
     assert "OB.STATUS = 1" in sql
     assert "OBMONTADA = '0'" in sql
-    assert "VW_EXC_OB_PROD_CLASS_COR" in sql
+    # Classificação das tabelas da antiga VW_EXC_OB_PROD_CLASS_COR (SQL só com tabelas).
+    assert "FROM SGTPRD.VW_EXC_OB_PROD_CLASS_COR" not in sql
+    assert "SGTPRD.CADASTRO_RECEITAS REC" in sql
+    assert "SGTPRD.CLASSIFICACAO_COR CCC" in sql
     assert "CD_CLASSIFICACAO_COR IN (6, 9)" in sql
-    assert "GROUP BY V.NR_OB" in sql
+    assert "GROUP BY OBF.NUMERO_OB" in sql
     assert "CODIGO_COR_TINGIMENTO" in sql
     assert "TOTAL_PECAS" in sql
     assert "CODIGO_ARTIGO_CRU" in sql

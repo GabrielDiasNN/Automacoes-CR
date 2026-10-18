@@ -20,6 +20,7 @@ import argparse
 import contextlib
 import csv
 import json
+import re
 import statistics
 import sys
 import time
@@ -372,13 +373,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--explain", action="store_true", help="Plano estimado")
     parser.add_argument("--out", type=Path, help="Relatório JSON da medição")
     parser.add_argument(
-        "--aceitar-funcoes-somente-leitura",
-        type=Path,
-        metavar="PRIVILEGIOS_JSON",
+        "--aceitar-funcoes-auditadas",
+        action="store_true",
         help=(
-            "Exceção ao guard para SQL que chama função de pacote/schema, com a "
-            "evidência de privilégios do usuário (sem escrita em SGTPRD). Só libera "
-            "quando o único motivo do guard é a chamada de função."
+            "Exceção ao guard para SQL que chama função de pacote/schema: só libera "
+            "quando o único motivo do guard é a chamada de função e TODAS as funções "
+            f"chamadas estão na allowlist versionada ({ALLOWLIST_FUNCOES.name}). "
+            "Privilégio do usuário não prova nada: a função roda com os direitos do "
+            "dono (AUTHID DEFINER) e pode gravar em transação autônoma."
         ),
     )
     parser.add_argument(
@@ -388,56 +390,52 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# Privilégios de objeto que permitem gravar, e roles cujo conteúdo é conhecido sem
-# expansão (CONNECT: CREATE SESSION; RESOURCE: só cria objetos no próprio schema).
-_PRIVILEGIOS_ESCRITA = frozenset(
-    {"INSERT", "UPDATE", "DELETE", "MERGE", "ALTER", "DROP"}
+# Funções cujo código-fonte foi lido e auditado (sem DML, sem transação autônoma,
+# sem SQL dinâmico). Só entram por revisão humana com a evidência registrada.
+ALLOWLIST_FUNCOES = Path(__file__).resolve().with_name("funcoes_auditadas.json")
+_CHAMADA_QUALIFICADA = re.compile(
+    r"\b([A-Za-z_][\w$#]*(?:\s*\.\s*[A-Za-z_][\w$#]*){1,2})\s*\("
 )
-_ROLES_CONHECIDAS = frozenset({"CONNECT", "RESOURCE"})
+_COMENTARIO_OU_LITERAL = re.compile(r"/\*.*?\*/|--[^\n]*|'(?:[^']|'')*'", re.S)
 
 
-def _problema_na_evidencia(evidencia: Path) -> str | None:
-    """Lê o dump de `pendencias/priv-escrita.sql` e diz por que ele não prova leitura.
-
-    Devolve None só quando o JSON tem linhas e nenhuma concede escrita: privilégio
-    de escrita em objeto, privilégio de sistema `ANY` ou role não expandida (a
-    consulta não abre o conteúdo de roles, então uma role desconhecida não prova nada).
-    """
+def _funcoes_auditadas(caminho: Path) -> frozenset[str]:
+    """Nomes (`ESQUEMA.PACOTE.FUNCAO` ou `PACOTE.FUNCAO`, maiúsculos) da allowlist."""
     try:
-        linhas = json.loads(evidencia.read_text(encoding="utf-8"))["rows"]
+        entradas = json.loads(caminho.read_text(encoding="utf-8"))["funcoes"]
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        return f"JSON ilegível ou sem 'rows' ({exc})"
-    if not isinstance(linhas, list) or not linhas:
-        return "nenhuma linha de privilégio"
-    for linha in linhas:
-        tipo = str(linha.get("TIPO", "")).upper()
-        privilegio = str(linha.get("PRIVILEGIO", "")).upper()
-        if tipo == "OBJETO" and privilegio in _PRIVILEGIOS_ESCRITA:
-            return f"{privilegio} em {linha.get('ESQUEMA')}.{linha.get('OBJETO')}"
-        if tipo == "SISTEMA" and " ANY " in f" {privilegio} ":
-            return f"privilégio de sistema {privilegio}"
-        if tipo == "ROLE" and privilegio not in _ROLES_CONHECIDAS:
-            return f"role não expandida {privilegio}"
-    return None
+        raise SystemExit(f"allowlist de funções ilegível ({caminho}): {exc}") from exc
+    nomes: set[str] = set()
+    for entrada in entradas:
+        if not isinstance(entrada, dict) or not entrada.get("evidencia"):
+            raise SystemExit(f"entrada sem evidência de auditoria em {caminho}")
+        nomes.add(re.sub(r"\s+", "", str(entrada["nome"])).upper())
+    return frozenset(nomes)
+
+
+def _chamadas_qualificadas(sql: str) -> set[str]:
+    """Chamadas `A.B(` / `A.B.C(` fora de comentários e literais."""
+    limpo = _COMENTARIO_OU_LITERAL.sub(" ", sql)
+    return {
+        re.sub(r"\s+", "", m.group(1)).upper()
+        for m in _CHAMADA_QUALIFICADA.finditer(limpo)
+    }
 
 
 def _excecao_funcoes(
-    guard_code: int, guard_output: str, evidencia: Path | None
+    guard_code: int,
+    guard_output: str,
+    sql: str,
+    allowlist: Path | None,
 ) -> dict[str, Any] | None:
-    """Exceção auditável ao guard para SQL que só chama função de pacote/schema.
+    """Exceção auditável ao guard para SQL que só chama função auditada.
 
-    Libera somente quando o guard devolve o veredito "só parse" e o único motivo é
-    a chamada de função, e exige o JSON de privilégios do usuário como evidência
-    (sem privilégio de escrita em SGTPRD a função não consegue gravar lá). Qualquer
-    outro motivo continua bloqueado.
+    Libera somente quando o guard devolve "só parse", o único motivo é a chamada
+    de função qualificada e toda chamada do texto está na allowlist. Qualquer
+    função fora dela mantém o bloqueio (fail-closed).
     """
-    if evidencia is None or guard_code != GUARD_SO_PARSE:
+    if allowlist is None or guard_code != GUARD_SO_PARSE:
         return None
-    if not evidencia.is_file():
-        raise SystemExit(f"evidência de privilégios não encontrada: {evidencia}")
-    problema = _problema_na_evidencia(evidencia)
-    if problema:
-        raise SystemExit(f"evidência de privilégios recusada ({evidencia}): {problema}")
     try:
         veredito = json.loads(guard_output)
     except json.JSONDecodeError:
@@ -445,10 +443,19 @@ def _excecao_funcoes(
     motivos = veredito.get("motivos", [])
     if not motivos or any("chamada a função" not in motivo for motivo in motivos):
         return None
+    chamadas = _chamadas_qualificadas(sql)
+    if not chamadas:
+        return None
+    fora = sorted(chamadas - _funcoes_auditadas(allowlist))
+    if fora:
+        raise SystemExit(
+            f"funções fora da allowlist auditada ({allowlist.name}): {', '.join(fora)}"
+        )
     return {
         "guard_exit": guard_code,
         "motivos": motivos,
-        "evidencia_privilegios": str(evidencia),
+        "funcoes_auditadas": sorted(chamadas),
+        "allowlist": str(allowlist),
     }
 
 
@@ -465,7 +472,10 @@ def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
     args.excecao_guard = None
     if guard_code != GUARD_LIBERADO:
         args.excecao_guard = _excecao_funcoes(
-            guard_code, guard_output, args.aceitar_funcoes_somente_leitura
+            guard_code,
+            guard_output,
+            sql,
+            ALLOWLIST_FUNCOES if args.aceitar_funcoes_auditadas else None,
         )
         if args.excecao_guard is None:
             raise SystemExit(

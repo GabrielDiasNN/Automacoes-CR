@@ -2,6 +2,31 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.104] - 17/10/2026
+
+Correção dos 23 achados da revisão stateless do diff `otimizacao/kpi-acervo-revisao` → `main`.
+
+### Alterado (saída de SQL de produção)
+
+- **SQL de produção só com tabelas indexadas:** nenhuma view (`VW_*`) nem função de pacote nova; as que existiam saíram com paridade medida no Oracle em 17/10/2026.
+  - **Receitas Bloqueadas (RB-01):** `VW_SIS_SENHA_USUARIO` → `CRISTAL` (571 de 571 usuários, 0 diferenças) e `VW_LAC_RECPRD_RECLAB` → as tabelas da view, com `LISTAGG` ordenado por `ROWID` de `RECEITAS_ALTERAR` no lugar de `OPTSTRAGGR` (944 de 944 gráficos iguais). Equivalência total contra o HEAD: 31 de 31 linhas, mediana 49,8 → 50,7 ms. **Mudança de saída já presente na v2:** sem o `INNER JOIN UP_ORDEM_MVTO` redundante a consulta deixou de repetir linhas — contra o `main`, 167 → 31 linhas, mesmo conjunto distinto, 829 → 54 ms. Cabeçalho sem a afirmação "58.7% MAIS RÁPIDA".
+  - **Montagem de Terceirizados (MT-02):** `VW_ESP_PESO_PADRAO` → `PESO_PADRAO_PECA`/`ENG_PRODG_ACABADO` (228 de 228 reduzidos iguais), `VW_ENU_STATUS_OB_FASES` → `XX2_ENUMERATES`/`XX2_ENUMITEM` (os 5 status presentes em `OB_FASES`, 0 diferenças), `PKGBENF0001.FNC_RETORNA_ULT_CONF_OB` → fase confirmada (4) pelo fim da UP (`UNIDADE_PROGRAMACAO.DTTEMPOFINAL`) e fases 2 e 3 por `TEMPO_*_CONFIR` em minutos desde 01/01/1996 (760 de 760 OBs abertas iguais a `VW_BNF_OBMONTADA.DATA_ULT_CONF`, que chama a função), `OPTSTRAGGR` → `LISTAGG(..., ',')` e `OPTSTRAGGRSEMVIRGULA` → `LISTAGG(..., '')` em ordem de `ROWID` (separador e ordem conferidos contra `VW_LAC_RECPRD_RECLAB` e `VW_ESP_ETQ_MALHARIA`: 944 de 944 e 261 de 261). Hoje nenhuma OB do relatório tem mais de uma NF e todas as observações têm uma linha, então a saída não muda. Pedido e item do cliente saem sempre da mesma fonte e da mesma linha (764 OBs, 0 diferenças). Mediana 1.525 ms, 102 linhas.
+  - **Receitas Emitidas (RE-03):** `VW_BNF_FASEATUALOB` → fase atual de `OB_FASES` pela regra da função do ERP (status 0 a 3; 759 de 759 OBs iguais à view) e `FNC_ESP_REC_PES` (que lê `VW_ESP_OB_REC_PES`, sem acesso para a conta de leitura) → existe item de `MOVTO_RECEITA` da fase 40 com quantidade pesada (27 de 27, 49 de 49 e 53 de 53 OBs iguais nas três views que chamam a função; nenhum caso nulo). Equivalência total contra o HEAD com a view: 27 de 27 linhas. Mediana 705 ms.
+  - **OBs Restrição Branco (ORB-07):** `VW_EXC_OB_PROD_CLASS_COR` → as tabelas da view, no SQL de produção e no de diagnóstico (504 de 504 OBs com a mesma classificação; diagnóstico 5 de 5 linhas).
+  - **OBs Paradas Fase (OBP-04):** fase atual pela regra de `REGRAS_NEGOCIO.md` (menor sequência com status 1, 2 ou 3; senão a última), como pedido, e descrição do status por `XX2_ENUMITEM` (4 = `CONFIRMADA`; 5 e 6 deixam de sair nulos). Última confirmação pela mesma regra da função (760 de 760). **Atenção:** a função do ERP usa status 0 a 3 (759 de 759) e a regra 1 a 3 bate com só 108 de 759; contra o HEAD, 254 → 317 OBs e cerca de 150 mudam de fase, a maioria para `EXP` (150). O `REGRAS_NEGOCIO.md` ganhou nota com essa evidência.
+- **Trava:** `Orchestrator/tests/test_sql_producao_so_tabelas_unit.py` reprova SQL de produção (automações e templates do Beneficiamento) que use `VW_*`, função de pacote, `FNC_*` ou `OPTSTRAGG*` fora de comentário.
+- **Catálogo de consultas:** `CATALOGO_QUERIES.md` regenerado (os fechamentos de químicos tinham sido renomeados com prefixo `pcp_` sem regenerar).
+
+### Alterado
+
+- **`medir_sql_oracle.py`:** `--aceitar-funcoes-somente-leitura <PRIVILEGIOS_JSON>` foi substituído por `--aceitar-funcoes-auditadas`, que só libera a execução quando toda chamada qualificada do SQL está em `Tools/oracle/funcoes_auditadas.json` com evidência de auditoria. Privilégio do usuário não prova leitura: a função roda como o dono (`AUTHID DEFINER`) e pode gravar em transação autônoma. A allowlist começa vazia (o corpo do `PKGBENF0001` não é legível pela conta de leitura).
+- **Workflow `revisao-sql-producao-oracle`:** decisão por regra fixa lida dos JSONs de evidência por `Tools/oracle/decidir_revisao_sql.py`; o passo Aplicar só reverte quando o script confirma (`--exigir reverter_head`). A correção aprovada é avaliada antes da paridade (antes era inalcançável).
+- **MCP Oracle:** queda de uma conexão descarta só ela (`pool.drop`), sem fechar o pool; `close()` usa `force=True`; falha ao criar o pool tenta de novo após 300 s; `tools/call` sem `id` não é executado nem respondido; `describe_table` usa `ALL_TAB_COLUMNS`; sem caminho padrão do Client 12.2 (Thick exige `ORACLE_CLIENT_LIB_DIR`).
+- **`oracle_extract`/`oracle_client`:** no modo auto (Thin) `ORACLE_CLIENT_LIB_DIR` deixa de ser obrigatório; sem host no DSN não há IP fixo de fallback nem sondagem; `ORACLE_DRIVER_MODE=thick` depois de conexão Thin falha com a orientação de reinício; `_ajustar_lote_por_wan` virou `_registrar_saude_wan`; `aplicar_metadados_oci` mudou para `oracle_client`.
+- **Prazo de consulta:** `oracle_session.call_timeout_aplicado` e `query_deadline` são a fonte única de `call_timeout` (sempre zerado ao sair), usada por `call_deadline` e pelo runner do Beneficiamento. O `;` final seguido de comentário `/* */` também é removido antes do `FETCH FIRST`.
+- **PowerShell:** resolução do endpoint Oracle saiu de `Lib-Logging.psm1` para o novo `lib/Lib-OracleEndpoint.psm1`; leitura de uma chave do `.env` em `Lib-Config.psm1` (`Get-EnvFileValue`). Alias fora do `tnsnames.ora` não vira mais host EZ Connect (dava `Oracle Off` falso) e alias com sufixo de domínio (`.WORLD`) é aceito.
+- **Worker:** `get_worker_max_concurrency` mudou para `app/runtime.py`; valor inválido de `WORKER_MAX_CONCURRENCY` emite evento JSON `config.invalid` no stderr e sai com código 78.
+
 ## [1.3.103] - 16/10/2026
 
 ### Adicionado

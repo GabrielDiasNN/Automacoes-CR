@@ -35,11 +35,10 @@ try:
         EXECUTION_STATUS_TERMINATED,
         EXECUTION_STATUS_TIMEOUT,
         WORKER_VERSION,
-        get_worker_max_concurrency,
     )
     from app.database import SessionLocal, session_scope
     from app.logger_setup import setup_json_logger as _setup_json_logger
-    from app.runtime import get_project_root
+    from app.runtime import get_project_root, get_worker_max_concurrency
     from app.security import sanitize_log_payload
     from app.subprocess_env import ALLOWED_ENV_KEYS, build_subprocess_env
 
@@ -76,7 +75,33 @@ _finalize_terminated_task = finalize_terminated_task
 project_root: str = get_project_root()
 load_dotenv(os.path.join(project_root, ".env"))
 
-MAX_WORKERS: int = get_worker_max_concurrency()
+# Código de saída de configuração inválida (EX_CONFIG do sysexits.h), distinto de
+# queda comum. O logger JSON ainda não existe aqui, então o evento estruturado vai
+# direto para o stderr.
+EXIT_CONFIG_INVALIDA = 78
+
+
+def _ler_max_workers() -> int:
+    try:
+        return get_worker_max_concurrency()
+    except ValueError as exc:
+        print(
+            json.dumps(
+                {
+                    "level": "CRITICAL",
+                    "component": "worker",
+                    "event": "config.invalid",
+                    "message": str(exc),
+                    "exit_code": EXIT_CONFIG_INVALIDA,
+                },
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_CONFIG_INVALIDA) from exc
+
+
+MAX_WORKERS: int = _ler_max_workers()
 HEARTBEAT_INTERVAL: int = 15  # segundos
 POLL_INTERVAL: float = 2.0
 MAX_POLL_INTERVAL: float = 15.0

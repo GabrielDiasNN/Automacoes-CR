@@ -27,7 +27,6 @@ from ..constants import (
     ORCHESTRATOR_VERSION,
     SEVERITY_ERROR,
     WORKER_MAX_CONCURRENCY_PADRAO,
-    get_worker_max_concurrency,
 )
 from ..database import (
     DB_PATH,
@@ -36,6 +35,7 @@ from ..database import (
     get_wal_size_mb,
     validate_database_schema,
 )
+from ..runtime import get_worker_max_concurrency
 from ..timezone import get_now_local
 from . import metrics_queries as metrics
 from .diagnostic_checks import (

@@ -49,7 +49,8 @@ def bind_parameters(period: str, reference: date | None = None) -> dict[str, Any
     }
 
 
-_PONTO_VIRGULA_FINAL = re.compile(r";(\s*--[^\n]*)*\s*$")
+# `;` final seguido só de espaços e comentários de linha (--) ou de bloco (/* */).
+_PONTO_VIRGULA_FINAL = re.compile(r";(\s*(--[^\n]*|/\*.*?\*/))*\s*$", re.S)
 
 
 def apply_rownum_limit(sql: str, max_rows: int | None) -> str:

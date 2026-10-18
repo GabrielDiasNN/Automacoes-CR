@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
-from app.constants import get_worker_max_concurrency
+from app.runtime import get_worker_max_concurrency
 from app.services import system_runtime
 
 pytestmark = pytest.mark.unitario
@@ -89,3 +89,20 @@ def test_rota_de_versao_nao_cai_com_concorrencia_invalida(
     monkeypatch.setattr(system_runtime, "get_schema_version", lambda: "teste")
     payload = system_runtime.build_version_payload(datetime.now())
     assert payload.max_workers == 4
+
+
+def test_worker_concorrencia_invalida_sai_com_codigo_definido_e_log_estruturado(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Regressão (achado 22): valor inválido não derruba a importação com traceback cru."""
+    import json  # pylint: disable=import-outside-toplevel
+
+    import worker  # pylint: disable=import-outside-toplevel
+
+    monkeypatch.setenv("WORKER_MAX_CONCURRENCY", "abc")
+    with pytest.raises(SystemExit) as info:
+        worker._ler_max_workers()  # pylint: disable=protected-access
+    assert info.value.code == worker.EXIT_CONFIG_INVALIDA
+    evento = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+    assert evento["event"] == "config.invalid"
+    assert "WORKER_MAX_CONCURRENCY" in evento["message"]

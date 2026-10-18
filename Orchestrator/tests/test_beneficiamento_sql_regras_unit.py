@@ -184,3 +184,13 @@ def test_apply_rownum_limit_coage_max_rows_para_inteiro() -> None:
     assert sql_repository.apply_rownum_limit("SELECT 1 FROM DUAL", 7.9).endswith(
         "FETCH FIRST 7 ROWS ONLY"
     )
+
+
+def test_apply_rownum_limit_remove_ponto_e_virgula_antes_de_comentario_de_bloco() -> (
+    None
+):
+    """Regressão (achado 21): `;` seguido de /* */ quebrava a subconsulta."""
+    sql = "SELECT 1 FROM DUAL; /* fim do template */\n-- rodape"
+    limitado = sql_repository.apply_rownum_limit(sql, 10)
+    assert ";" not in limitado
+    assert limitado.endswith(") FETCH FIRST 10 ROWS ONLY")

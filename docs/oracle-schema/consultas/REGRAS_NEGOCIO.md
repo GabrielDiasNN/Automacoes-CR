@@ -27,6 +27,8 @@ O código 2 (Pré OB) existe no cadastro, mas não há OB com ele. **OB aberta =
 
 Os códigos 5 (Cancelada) e 6 (Consumo Estamparia) existem no cadastro, mas não há fase com eles. **Fase pendente = `STATUS <> 4`**; **fase atual** da OB = menor `SEQUENCIA` com status 1, 2 ou 3, ou a última sequência se nenhuma estiver nesse conjunto (definição de `bnf_posicao_atual_obs_em_aberto.sql`).
 
+> **Atenção (17/10/2026):** a fase atual do ERP (`PKGBENF0001.FNC_RETORNA_SEQUENCIA_OB(ob, 0)`, usada por `VW_BNF_FASEATUALOB`) é a menor `SEQUENCIA` com status **0, 1, 2 ou 3** (equivale a `STATUS <> 4`), ou a última. Conferido contra a view nas OBs abertas: 759 de 759 iguais com 0–3 e só 108 de 759 com 1–3. A definição acima (1, 2, 3) não é a do ERP: OB cuja próxima fase ainda está programada (0) cai na última sequência.
+
 ### `UNIDADE_PROGRAMACAO.STATUS` (UPs de tingimento, `SETOR = 5`, `CODIGOFASE = 40`)
 
 | Código | Significado observado |

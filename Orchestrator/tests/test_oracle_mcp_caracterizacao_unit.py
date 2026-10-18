@@ -180,7 +180,8 @@ def test_execute_sql_queda_de_sessao_fecha_conexao() -> None:
     assert resultado["message"].endswith(
         "A conexão com o Data Center da Unifique será restabelecida na próxima chamada."
     )
-    mgr.close.assert_called_once()
+    mgr.discard_connection.assert_called_once()
+    mgr.close.assert_not_called()
 
 
 def test_execute_sql_erro_generico_do_banco() -> None:
@@ -510,7 +511,7 @@ def test_connection_manager_usa_session_pool(monkeypatch: pytest.MonkeyPatch) ->
     mgr.release_connection(conn)
     pool.release.assert_called_once_with(conn)
     mgr.close()
-    pool.close.assert_called_once()
+    pool.close.assert_called_once_with(force=True)
 
 
 def test_connection_manager_cai_para_conexao_avulsa_sem_pool(
@@ -529,3 +530,74 @@ def test_connection_manager_cai_para_conexao_avulsa_sem_pool(
 
     mgr.close()
     conn.close.assert_called_once()
+
+
+def test_discard_connection_descarta_so_a_conexao_do_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão (achado 7): queda de uma conexão usa pool.drop, sem fechar o pool."""
+    pool = MagicMock(name="pool")
+    conn = MagicMock(name="conn")
+    pool.acquire.return_value = conn
+    monkeypatch.setattr("oracledb.create_pool", MagicMock(return_value=pool))
+    mgr = OracleConnectionManager(_config(dsn="host-teste:1521/dbprd"))
+    assert mgr.acquire_connection() is conn
+
+    mgr.discard_connection(conn)
+
+    pool.drop.assert_called_once_with(conn)
+    pool.close.assert_not_called()
+    assert mgr.pool is pool
+
+
+def test_pool_falho_tenta_de_novo_depois_da_janela(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão (achado 19): _pool_failed não é permanente."""
+    import mcp_server  # pylint: disable=import-outside-toplevel
+
+    criar = MagicMock(side_effect=[RuntimeError("rede fora"), MagicMock(name="pool")])
+    monkeypatch.setattr("oracledb.create_pool", criar)
+    relogio = [1000.0]
+    monkeypatch.setattr(mcp_server.time, "monotonic", lambda: relogio[0])
+    mgr = OracleConnectionManager(_config(dsn="host-teste:1521/dbprd"))
+
+    assert mgr.pool is None
+    assert mgr.pool is None  # dentro da janela: não tenta de novo
+    assert criar.call_count == 1
+    relogio[0] += mcp_server.JANELA_NOVA_TENTATIVA_POOL_SEGUNDOS + 1
+    assert mgr.pool is not None
+    assert criar.call_count == 2
+
+
+def test_tools_call_sem_id_nao_executa_nem_responde() -> None:
+    """Regressão (achado 17): notificação JSON-RPC nunca recebe resposta."""
+    servidor = McpServer()
+    servidor.tools = MagicMock()
+    notificacao = {
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {"name": "execute_sql", "arguments": {"sql": "SELECT 1 FROM DUAL"}},
+    }
+    assert servidor.handle_request(notificacao) is None
+    servidor.tools.execute_sql.assert_not_called()
+
+
+def test_describe_table_usa_all_tab_columns() -> None:
+    """Regressão (achado 18): ALL_TAB_COLS traria colunas ocultas e virtuais."""
+    cursor = MagicMock(name="cursor")
+    cursor.fetchall.return_value = []
+    conexao = MagicMock(name="conexao")
+    conexao.cursor.return_value = cursor
+    _tools(conexao).describe_table("OB")
+    sqls = " ".join(str(c.args[0]) for c in cursor.execute.call_args_list)
+    assert "ALL_TAB_COLUMNS" in sqls
+    assert "ALL_TAB_COLS " not in sqls
+
+
+def test_sem_caminho_padrao_do_client_12_2() -> None:
+    """Regressão (achado 8): sem adivinhar 12.2 enquanto a máquina pode ter o 19c."""
+    import mcp_server  # pylint: disable=import-outside-toplevel
+
+    assert mcp_server.DEFAULT_LIB_DIR == ""
+    assert "12.2" not in mcp_server.DEFAULT_TNS_ADMIN

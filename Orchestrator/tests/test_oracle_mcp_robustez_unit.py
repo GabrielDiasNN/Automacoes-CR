@@ -221,7 +221,9 @@ def test_get_query_plan_queda_de_sessao_fecha_conexao() -> None:
     resultado = OracleMcpTools(mgr, _config()).get_query_plan("SELECT 1 FROM DUAL")
 
     assert resultado["message"].startswith("Falha ao obter plano de execução: ")
-    mgr.close.assert_called_once()
+    # Regressão: queda de uma sessão não derruba o pool inteiro.
+    mgr.discard_connection.assert_called_once_with(None)
+    mgr.close.assert_not_called()
 
 
 class _Lob:  # pylint: disable=too-few-public-methods
@@ -309,7 +311,8 @@ def test_rollback_que_falha_descarta_a_conexao() -> None:
     resultado = OracleMcpTools(mgr, _config()).get_query_plan("SELECT 1 FROM DUAL")
 
     assert resultado == {"text": "PLAN"}
-    mgr.close.assert_called_once()
+    mgr.discard_connection.assert_called_once_with(conn)
+    mgr.close.assert_not_called()
     mgr.release_connection.assert_not_called()
 
 

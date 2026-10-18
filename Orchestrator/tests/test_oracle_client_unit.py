@@ -215,3 +215,16 @@ def test_dpy3015_depois_de_thin_consolidado_propaga_causa_com_orientacao(
 
     assert "Reinicie o processo" in str(info.value)
     assert driver.chamadas == ["connect", "connect"], "não deveria inicializar o Thick"
+
+
+def test_modo_thick_depois_de_thin_consolidado_orienta_reinicio(
+    driver: _Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regressão (achado 11): thick após Thin consolidado tem a mesma orientação do DPY-3015."""
+    assert _conectar() == "CONEXAO"
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "thick")
+
+    with pytest.raises(oracledb.NotSupportedError, match="Reinicie o processo"):
+        _conectar()
+
+    assert driver.chamadas == ["connect"], "não deveria tentar o init do Thick"

@@ -18,8 +18,8 @@ sys.path.insert(
 
 from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position
     OracleCredentials,
-    _ajustar_lote_por_wan,
     _extrair_host_porta_dsn,
+    _registrar_saude_wan,
     compute_hash,
     fetch_all,
     probe_wan_health,
@@ -231,8 +231,9 @@ def test_extrair_host_porta_dsn() -> None:
     assert host == "unifique.lan"
     assert port == 1526
 
+    # Regressão (achado 12): sem host no DSN não há IP fixo de fallback.
     host, port = _extrair_host_porta_dsn("dbprd")
-    assert host == "10.62.0.2"
+    assert host == ""
     assert port == 1521
 
 
@@ -327,14 +328,14 @@ def test_ajuste_wan_pula_probe_de_alias_sem_host(monkeypatch: Any) -> None:
     monkeypatch.delenv("ORACLE_HOST", raising=False)
     chamado = MagicMock()
     monkeypatch.setattr("oracle_extract.probe_wan_health", chamado)
-    assert _ajustar_lote_por_wan("dbprd", 5000, lambda *a: None, "X") == 5000
+    _registrar_saude_wan("dbprd", 5000, lambda *a: None, "X")
     chamado.assert_not_called()
 
 
 def test_ajuste_wan_ignora_uma_amostra_perdida(monkeypatch: Any) -> None:
     probe = {"reachable": True, "rtt_ms": 10.0, "packet_loss_pct": 33.3}
     monkeypatch.setattr("oracle_extract.probe_wan_health", lambda *a, **k: probe)
-    assert _ajustar_lote_por_wan("h:1521/dbprd", 5000, lambda *a: None, "X") == 5000
+    _registrar_saude_wan("h:1521/dbprd", 5000, lambda *a: None, "X")
 
 
 @pytest.mark.parametrize(
@@ -383,3 +384,23 @@ def test_probe_wan_health_dns_falho_nao_tenta_conectar(monkeypatch: Any) -> None
     assert res["reachable"] is False
     assert "resolução de nome" in res["error"]
     criar_socket.assert_not_called()
+
+
+def test_modo_auto_nao_exige_client_lib(monkeypatch: Any) -> None:
+    """Regressão (achado 10): Thin (auto) não depende de ORACLE_CLIENT_LIB_DIR."""
+    monkeypatch.setenv("ORACLE_READONLY_USER", "user")
+    monkeypatch.setenv("ORACLE_READONLY_PASSWORD", "pass")
+    monkeypatch.delenv("ORACLE_DRIVER_MODE", raising=False)
+    monkeypatch.delenv("ORACLE_CLIENT_LIB_DIR", raising=False)
+    monkeypatch.delenv("ORACLE_CLIENT_PATH", raising=False)
+    creds = resolve_oracle_credentials(_noop_log, "EXEC-1")
+    assert creds is not None
+    assert creds.client_lib == ""
+
+
+def test_modo_thick_exige_client_lib_existente(monkeypatch: Any, tmp_path: Any) -> None:
+    monkeypatch.setenv("ORACLE_READONLY_USER", "user")
+    monkeypatch.setenv("ORACLE_READONLY_PASSWORD", "pass")
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "thick")
+    monkeypatch.setenv("ORACLE_CLIENT_LIB_DIR", str(tmp_path / "nao_existe"))
+    assert resolve_oracle_credentials(_noop_log, "EXEC-1") is None

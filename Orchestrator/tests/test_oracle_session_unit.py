@@ -4,6 +4,7 @@ import threading
 from typing import Any
 from unittest.mock import MagicMock
 
+import oracle_client
 import oracle_session
 import oracledb
 import pytest
@@ -257,7 +258,7 @@ class _ConexaoOci:  # pylint: disable=too-few-public-methods
 
 def test_aplicar_metadados_oci_trunca_nos_limites_do_oracle() -> None:
     conexao = _ConexaoOci()
-    erro = oracle_session.aplicar_metadados_oci(
+    erro = oracle_client.aplicar_metadados_oci(
         conexao,
         modulo="M" * 100,
         acao="A" * 100,
@@ -277,7 +278,7 @@ def test_aplicar_metadados_oci_falha_do_driver_vira_mensagem_sem_excecao() -> No
         def __setattr__(self, nome: str, valor: Any) -> None:
             raise AttributeError(f"atributo {nome} recusado pelo servidor")
 
-    erro = oracle_session.aplicar_metadados_oci(
+    erro = oracle_client.aplicar_metadados_oci(
         _Recusa(), modulo="m", acao="a", identificador="i", db_op="d"
     )
     assert erro is not None
@@ -323,3 +324,37 @@ def test_cancel_after_sem_disparo_nao_faz_ping() -> None:
     with oracle_session.cancel_after(conexao, 5, threading.Event()):
         pass
     assert conexao.pings == 0
+
+
+def test_call_timeout_aplicado_zera_ao_sair() -> None:
+    """Regressão (achado 14): fonte única aplica e zera o call_timeout."""
+    conexao = MagicMock()
+    with oracle_session.call_timeout_aplicado(conexao, 2.5) as info:
+        assert info.applied is True
+        assert conexao.call_timeout == 2500
+    assert conexao.call_timeout == 0
+
+
+def test_call_timeout_aplicado_devolve_aviso_quando_driver_recusa() -> None:
+    class _Client122:  # pylint: disable=too-few-public-methods
+        @property
+        def call_timeout(self) -> int:
+            return 0
+
+        @call_timeout.setter
+        def call_timeout(self, _valor: int) -> None:
+            raise RuntimeError("DPI-1050: Oracle Client library is at version 12.2")
+
+    with oracle_session.call_timeout_aplicado(_Client122(), 1.0) as info:
+        assert info.applied is False
+        assert "DPI-1050" in info.warning
+
+
+def test_query_deadline_arma_watchdog_e_zera_call_timeout() -> None:
+    conexao = MagicMock()
+    disparou = threading.Event()
+    with oracle_session.query_deadline(conexao, 10.0, 3.0, disparou) as info:
+        assert info.applied is True
+        assert conexao.call_timeout == 3000  # o menor dos dois prazos
+    assert conexao.call_timeout == 0
+    assert not disparou.is_set()

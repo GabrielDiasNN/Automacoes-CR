@@ -20,6 +20,7 @@ processo para trocar de modo).
 from __future__ import annotations
 
 import os
+import platform
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -66,6 +67,32 @@ def get_driver_mode() -> str:
             f"{DRIVER_MODE_ENV} inválido: {value!r} (use 'auto' ou 'thick')."
         )
     return value
+
+
+def aplicar_metadados_oci(
+    connection: Any,
+    *,
+    modulo: str,
+    acao: str,
+    identificador: str,
+    db_op: str,
+) -> str | None:
+    """Identifica a sessão em V$SESSION (module, action, client_identifier, client_info, db_op).
+
+    Cada valor é truncado ao limite que o Oracle aceita (64 bytes, db_op 32). Falha do
+    driver ou do servidor é não-bloqueante: devolve a mensagem de erro, e quem chama
+    decide como registrar. Devolve None quando tudo foi aplicado.
+    """
+    try:
+        node = platform.node() or "localhost"
+        connection.module = modulo[:64]
+        connection.action = acao[:64]
+        connection.client_identifier = identificador[:64]
+        connection.client_info = f"PID:{os.getpid()}|HOST:{node}"[:64]
+        connection.db_op = db_op[:32]
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return str(exc)
+    return None
 
 
 def describe_driver_mode() -> DriverMode:
@@ -121,6 +148,12 @@ def _connect_once(
     )
 
 
+_MSG_THIN_FIXO = (
+    "Este processo já concluiu uma conexão Thin, então o modo ficou fixo em Thin. "
+    "Reinicie o processo para usar o Thick Mode."
+)
+
+
 def connect_adaptive(  # pylint: disable=too-many-arguments
     *,
     user: str,
@@ -132,6 +165,12 @@ def connect_adaptive(  # pylint: disable=too-many-arguments
 ) -> oracledb.Connection:
     """Abre uma conexão no modo adaptativo (ver a docstring do módulo)."""
     if get_driver_mode() == DRIVER_MODE_THICK:
+        if oracledb.is_thin_mode() and _ESTADO["thin_consolidado"]:
+            # ORACLE_DRIVER_MODE=thick depois de uma conexão Thin: o init falharia com
+            # erro genérico do driver. Mesma orientação do ramo DPY-3015.
+            raise oracledb.NotSupportedError(
+                f"ORACLE_DRIVER_MODE=thick pedido. {_MSG_THIN_FIXO}"
+            )
         init_oracle_thick_mode(client_lib, tns_admin, log_fn)
     try:
         conexao = _connect_once(user, password, dsn, tns_admin)
@@ -141,10 +180,7 @@ def connect_adaptive(  # pylint: disable=too-many-arguments
         if _ESTADO["thin_consolidado"]:
             # Modo já fixado em Thin neste processo: sem reinício não há como trocar.
             # Propaga a causa original em vez de falhar no init com outra mensagem.
-            raise oracledb.NotSupportedError(
-                f"{exc} Este processo já concluiu uma conexão Thin, então o modo ficou "
-                "fixo em Thin. Reinicie o processo para usar o Thick Mode."
-            ) from exc
+            raise oracledb.NotSupportedError(f"{exc} {_MSG_THIN_FIXO}") from exc
     else:
         _ESTADO["thin_consolidado"] = oracledb.is_thin_mode()
         return conexao

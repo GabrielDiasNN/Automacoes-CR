@@ -22,8 +22,6 @@ conexão que chega depois do prazo, então a thread continua necessária.
 from __future__ import annotations
 
 import contextlib
-import os
-import platform
 import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -34,13 +32,16 @@ from oracle_client import describe_driver_mode
 
 __all__ = [
     "SESSION_DROP_MARKERS",
+    "CallTimeoutInfo",
     "WatchdogOutcome",
     "apply_call_timeout",
     "call_deadline",
+    "call_timeout_aplicado",
     "cancel_after",
     "connect_within",
     "is_call_timeout",
     "is_session_drop",
+    "query_deadline",
     "run_with_cancel",
     "supports_native_call_timeout",
 ]
@@ -64,32 +65,6 @@ SESSION_DROP_MARKERS = (
 # por abandonada.
 CANCEL_GRACE_SECONDS = 5.0
 _MIN_WAIT_SECONDS = 0.05
-
-
-def aplicar_metadados_oci(
-    connection: Any,
-    *,
-    modulo: str,
-    acao: str,
-    identificador: str,
-    db_op: str,
-) -> str | None:
-    """Identifica a sessão em V$SESSION (module, action, client_identifier, client_info, db_op).
-
-    Cada valor é truncado ao limite que o Oracle aceita (64 bytes, db_op 32). Falha do
-    driver ou do servidor é não-bloqueante: devolve a mensagem de erro, e quem chama
-    decide como registrar. Devolve None quando tudo foi aplicado.
-    """
-    try:
-        node = platform.node() or "localhost"
-        connection.module = modulo[:64]
-        connection.action = acao[:64]
-        connection.client_identifier = identificador[:64]
-        connection.client_info = f"PID:{os.getpid()}|HOST:{node}"[:64]
-        connection.db_op = db_op[:32]
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        return str(exc)
-    return None
 
 
 def is_session_drop(error: BaseException | str) -> bool:
@@ -284,6 +259,54 @@ def is_call_timeout(error: BaseException | str) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class CallTimeoutInfo:
+    """Resultado da tentativa de aplicar `call_timeout`: aplicado e, se não, o motivo."""
+
+    applied: bool
+    warning: str = ""
+
+
+@contextlib.contextmanager
+def call_timeout_aplicado(connection: Any, seconds: float) -> Iterator[CallTimeoutInfo]:
+    """Fonte única de `call_timeout`: aplica (piso de 1 ms) e zera ao sair.
+
+    Falha do driver (DPI-1050 no Client 12.2) não é exceção: volta em `warning`, e
+    quem chama decide o prazo alternativo. Zerar na saída evita prazo residual no
+    próximo uso da conexão (pool/sessão reaproveitada).
+    """
+    try:
+        connection.call_timeout = max(1, int(seconds * 1000))
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        yield CallTimeoutInfo(applied=False, warning=str(exc))
+        return
+    try:
+        yield CallTimeoutInfo(applied=True)
+    finally:
+        with contextlib.suppress(Exception):
+            connection.call_timeout = 0
+
+
+@contextlib.contextmanager
+def query_deadline(
+    connection: Any,
+    per_call_seconds: float,
+    total_seconds: float,
+    fired: threading.Event,
+) -> Iterator[CallTimeoutInfo]:
+    """Prazo por chamada (`call_timeout`, quando o driver aceita) + watchdog do total.
+
+    `call_timeout` limita cada round-trip; `cancel_after` limita a consulta inteira e
+    é o único prazo no Client 12.2. `fired` indica que o watchdog cancelou.
+    """
+    with contextlib.ExitStack() as pilha:
+        info = pilha.enter_context(
+            call_timeout_aplicado(connection, min(per_call_seconds, total_seconds))
+        )
+        pilha.enter_context(cancel_after(connection, total_seconds, fired))
+        yield info
+
+
 @contextlib.contextmanager
 def call_deadline(
     connection: Any, seconds: float, fired: threading.Event
@@ -293,17 +316,18 @@ def call_deadline(
     `fired` é setado quando o prazo estoura, nos dois caminhos, para o chamador
     distinguir o timeout de um erro comum.
     """
-    if not apply_call_timeout(connection, seconds):
+    if not supports_native_call_timeout():
         with cancel_after(connection, seconds, fired):
             yield
         return
-    try:
-        yield
-    except oracledb.Error as exc:
-        if is_call_timeout(exc):
-            fired.set()
-        raise
-    finally:
-        # 0 desliga o prazo; o próximo uso da conexão começa sem limite residual.
-        with contextlib.suppress(oracledb.Error):
-            connection.call_timeout = 0
+    with call_timeout_aplicado(connection, seconds) as info:
+        if not info.applied:
+            with cancel_after(connection, seconds, fired):
+                yield
+            return
+        try:
+            yield
+        except oracledb.Error as exc:
+            if is_call_timeout(exc):
+                fired.set()
+            raise

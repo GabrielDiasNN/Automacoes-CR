@@ -508,61 +508,54 @@ def test_validar_conexao_travada_vira_timeout(monkeypatch: pytest.MonkeyPatch) -
 
 _excecao_funcoes = _priv(mm, "_excecao_funcoes")
 _VEREDITO_FUNCAO = json.dumps({"motivos": ["chamada a função PKGBENF0001.FNC_X"]})
+_SQL_FUNCAO = "select pkgbenf0001.fnc_x(o.ob) /* nada.aqui( */ from ob o"
 
 
-def _evidencia(tmp_path: Path, linhas: Any) -> Path:
-    caminho = tmp_path / "dump-priv.json"
-    caminho.write_text(json.dumps({"rows": linhas}), encoding="utf-8")
+def _allowlist(tmp_path: Path, nomes: list[str]) -> Path:
+    caminho = tmp_path / "funcoes_auditadas.json"
+    entradas = [
+        {"nome": n, "evidencia": "ALL_SOURCE lido em 17/10/2026"} for n in nomes
+    ]
+    caminho.write_text(json.dumps({"funcoes": entradas}), encoding="utf-8")
     return caminho
 
 
-def test_excecao_funcoes_aceita_evidencia_so_com_execute(tmp_path: Path) -> None:
-    evidencia = _evidencia(
-        tmp_path,
-        [
-            {
-                "TIPO": "OBJETO",
-                "PRIVILEGIO": "EXECUTE",
-                "ESQUEMA": "SGTPRD",
-                "OBJETO": "PKGBENF0001",
-            },
-            {"TIPO": "SISTEMA", "PRIVILEGIO": "CREATE SESSION"},
-            {"TIPO": "ROLE", "PRIVILEGIO": "CONNECT"},
-            {"TIPO": "ROLE", "PRIVILEGIO": "RESOURCE"},
-        ],
+def test_excecao_funcoes_libera_so_funcao_auditada(tmp_path: Path) -> None:
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        _SQL_FUNCAO,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
     )
-    resultado = _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, evidencia)
     assert resultado is not None
-    assert resultado["evidencia_privilegios"] == str(evidencia)
+    assert resultado["funcoes_auditadas"] == ["PKGBENF0001.FNC_X"]
 
 
-@pytest.mark.parametrize(
-    "linhas",
-    [
-        [],
-        [
-            {
-                "TIPO": "OBJETO",
-                "PRIVILEGIO": "UPDATE",
-                "ESQUEMA": "SGTPRD",
-                "OBJETO": "OB",
-            }
-        ],
-        [{"TIPO": "SISTEMA", "PRIVILEGIO": "INSERT ANY TABLE"}],
-        [{"TIPO": "ROLE", "PRIVILEGIO": "DBA"}],
-    ],
-)
-def test_excecao_funcoes_recusa_evidencia_que_nao_prova_leitura(
-    tmp_path: Path, linhas: Any
-) -> None:
-    with pytest.raises(SystemExit, match="evidência de privilégios recusada"):
+def test_excecao_funcoes_recusa_funcao_fora_da_allowlist(tmp_path: Path) -> None:
+    """Regressão: privilégio do usuário nunca libera execução (AUTHID DEFINER)."""
+    with pytest.raises(SystemExit, match="fora da allowlist"):
         _excecao_funcoes(
-            mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, _evidencia(tmp_path, linhas)
+            mm.GUARD_SO_PARSE,
+            _VEREDITO_FUNCAO,
+            _SQL_FUNCAO + " where sgtprd.pkg_grava.fnc_y(1) = 1",
+            _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
         )
 
 
-def test_excecao_funcoes_recusa_arquivo_que_nao_e_o_dump(tmp_path: Path) -> None:
-    qualquer = tmp_path / "qualquer.txt"
-    qualquer.write_text("não é JSON", encoding="utf-8")
-    with pytest.raises(SystemExit, match="ilegível"):
-        _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, qualquer)
+def test_excecao_funcoes_sem_flag_nao_libera() -> None:
+    assert (
+        _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, _SQL_FUNCAO, None) is None
+    )
+
+
+def test_excecao_funcoes_exige_evidencia_na_allowlist(tmp_path: Path) -> None:
+    caminho = tmp_path / "a.json"
+    caminho.write_text(
+        json.dumps({"funcoes": [{"nome": "PKGBENF0001.FNC_X"}]}), encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="sem evidência"):
+        _excecao_funcoes(mm.GUARD_SO_PARSE, _VEREDITO_FUNCAO, _SQL_FUNCAO, caminho)
+
+
+def test_allowlist_versionada_e_legivel() -> None:
+    assert isinstance(_priv(mm, "_funcoes_auditadas")(mm.ALLOWLIST_FUNCOES), frozenset)

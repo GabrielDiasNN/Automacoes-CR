@@ -1,7 +1,5 @@
 """Constantes compartilhadas do Orchestrator."""
 
-import os
-
 ORCHESTRATOR_VERSION = "1.0.0"
 WORKER_VERSION = "1.0.0"
 ORCHESTRATOR_SCHEMA_VERSION = "20260731_02"
@@ -231,23 +229,3 @@ MAX_DB_LOGS_CHARS = 200_000
 
 
 WORKER_MAX_CONCURRENCY_PADRAO = 4
-
-
-def get_worker_max_concurrency() -> int:
-    """Concorrência máxima do worker, lida de WORKER_MAX_CONCURRENCY (padrão 4).
-
-    Chamada no ponto de uso, depois que o .env foi carregado, e não como constante
-    de importação. Valor que não seja inteiro positivo levanta ValueError com a causa.
-    """
-    bruto = os.environ.get("WORKER_MAX_CONCURRENCY", str(WORKER_MAX_CONCURRENCY_PADRAO))
-    try:
-        valor = int(bruto)
-    except ValueError as exc:
-        raise ValueError(
-            f"WORKER_MAX_CONCURRENCY inválido: {bruto!r} (use um inteiro maior que zero)."
-        ) from exc
-    if valor <= 0:
-        raise ValueError(
-            f"WORKER_MAX_CONCURRENCY inválido: {bruto!r} (use um inteiro maior que zero)."
-        )
-    return valor

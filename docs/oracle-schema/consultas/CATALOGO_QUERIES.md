@@ -237,8 +237,6 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
-| `fechamento_mensal_quimicos_cavaco_producao.sql` | Fechamento mensal (dia 01 ao ultimo dia do mes) do mes de referencia: | Relatorio de fechamento (uma linha por categoria; contexto de producao em todas as linhas) | `:mes_ref` | ⬜ não validada | — | — |
-| `fechamento_quinzena_quimicos_cavaco_producao.sql` | Fechamento da 1a quinzena (dias 01 a 15, inclusive) do mes de referencia: | Relatorio de fechamento (uma linha por categoria; contexto de producao em todas as linhas) | `:mes_ref` | ⬜ não validada | — | — |
 | `kpi_custo_nao_conformidade_reprocesso_mensal.sql` | KPI mensal de custo de não conformidade (NC) e reprocesso por setor produtivo (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 26 ms |
 | `kpi_manutencao_backlog_om_aberta.sql` | Backlog de OMs de manutenção mecânica ainda não executadas, por família e faixa de idade. | Painel/KPI (fotografia do momento, sem recorte mensal) | — | ✅ validada | com dados | 12 ms |
 | `kpi_manutencao_mttr_mensal.sql` | KPI mensal de manutenção: OMs solicitadas, concluídas e MTTR (horas) por família (12 meses + mês aberto). | SELECT (Painel/KPI) | — | ✅ validada | com dados | 22 ms |
@@ -252,6 +250,8 @@ Amostra vazia: 10 consulta(s) validadas não retornaram linhas na janela/filtros
 | `pcp_consulta_status_peca.sql` | Consulta Status Peça | PCP e Produção | — | ✅ validada | com dados | 1 ms |
 | `pcp_faturamento_mensal_cliente_prazo_expedicao_v2_2.sql` | Faturamento mensal por comprador com atendimento ao prazo de expedicao fisica | Painel/KPI | — | ✅ validada | com dados | 3232 ms |
 | `pcp_fechamento_mensal_beneficiamento.sql` | Consulta Canônica Permanente de Fechamento Mensal do Beneficiamento | SELECT (Painel Analítico / Operacional / Diretoria) | — | ✅ validada | com dados | 2288 ms |
+| `pcp_fechamento_mensal_quimicos_cavaco_producao.sql` | Fechamento mensal (dia 01 ao ultimo dia do mes) do mes de referencia: producao, produtos quimicos por categoria e cavaco (quantidades e valores). | Painel/KPI | `:mes_ref` | ⬜ não validada | — | — |
+| `pcp_fechamento_quinzena_quimicos_cavaco_producao.sql` | Fechamento da 1a quinzena (dias 01 a 15, inclusive) do mes de referencia: producao, produtos quimicos por categoria e cavaco (quantidades e valores). | Painel/KPI | `:mes_ref` | ⬜ não validada | — | — |
 | `pcp_lead_time_obs_encerradas.sql` | Lead time das OBs encerradas nos últimos 90 dias por mês de encerramento, fluxo e tipo de ordem: média, mediana, P90, e divisão em espera até o primeiro início e tempo de processo | Painel/KPI | — | ✅ validada | com dados | 171 ms |
 | `pcp_liga_reduzido_nas_classes_e_sub_grupos.sql` | Liga Reduzido nas Classes e Sub-Grupos | PCP e Produção | — | ✅ validada | com dados | 8 ms |
 | `pcp_producao_12m_fato_serie_temporal.sql` | Série Temporal Histórica de Produção por Fase e Indicadores Fabris (Últimos 12 Meses + Mês Aberto) | SELECT (Painel Analítico / Histórico Contínuo) | — | ✅ validada | com dados | 5490 ms |

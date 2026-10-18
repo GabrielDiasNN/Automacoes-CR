@@ -5,7 +5,7 @@ fornecer ferramentas de inspeção e consulta seguras ao Oracle do ERP SGT.
 
 Arquitetura e Contrato Operacional:
 1. Data Center Unifique:
-   - Conecta ao Oracle no Data Center Unifique (IP 10.62.0.2:1521/dbprd)
+   - Conecta ao Oracle do Data Center Unifique pelo DSN configurado (ORACLE_CONNECT_STRING, padrão dbprd)
      preferencialmente via alias TNS 'dbprd' com SDU = 65535 e ENABLE = BROKEN.
 2. Driver adaptativo (lib/python/oracle_client.py):
    - Thin Mode por padrão. Se o servidor oferecer só o verificador de senha legado
@@ -65,13 +65,13 @@ from oracle_client import (  # noqa: E402
     CONNECT_PARAMS,
     DRIVER_MODE_THICK,
     LEGACY_VERIFIER_MARKER,
+    aplicar_metadados_oci,
     connect_adaptive,
     describe_driver_mode,
     get_driver_mode,
     init_oracle_thick_mode,
 )
 from oracle_session import (  # noqa: E402
-    aplicar_metadados_oci,
     call_deadline,
     connect_within,
     is_session_drop,
@@ -92,22 +92,19 @@ SERVER_NAME = "oracledb"
 SERVER_VERSION = "2.0.0"
 PROTOCOL_VERSION = "2024-11-05"
 
-# Raiz do Oracle Client 12.2 derivada do SystemDrive do Windows. Fora do Windows fica
-# vazia e ORACLE_CLIENT_LIB_DIR / ORACLE_CLIENT_PATH / TNS_ADMIN passam a ser necessárias.
-_UNIDADE_SISTEMA = os.environ.get("SYSTEMDRIVE")
-DEFAULT_LIB_DIR = (
-    os.path.join(_UNIDADE_SISTEMA, "\\", "ORACLE", "product", "12.2.0", "client_2")
-    if _UNIDADE_SISTEMA
-    else ""
-)
-DEFAULT_TNS_ADMIN = (
-    os.path.join(DEFAULT_LIB_DIR, "Network", "Admin") if DEFAULT_LIB_DIR else ""
-)
+# Sem caminho padrão do Oracle Client: a máquina pode ter o 12.2 legado ou o Instant
+# Client 19c (Tools/oracle/Install-InstantClient19c.ps1, destino escolhido na instalação),
+# e adivinhar um deles carregaria o cliente errado em silêncio. Em Thick Mode,
+# ORACLE_CLIENT_LIB_DIR (ou ORACLE_CLIENT_PATH) e TNS_ADMIN vêm do ambiente/.env.
+DEFAULT_LIB_DIR = ""
+DEFAULT_TNS_ADMIN = ""
 DEFAULT_DSN = "dbprd"
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_ARRAYSIZE = 1000
 # Teto do ping ao reutilizar a sessão: sessão morta não pode travar o servidor inteiro.
 PRAZO_PING_SEGUNDOS = 15.0
+# Depois de falhar ao criar o SessionPool, espera esta janela antes de tentar de novo.
+JANELA_NOVA_TENTATIVA_POOL_SEGUNDOS = 300.0
 # Teto do rollback que desfaz o EXPLAIN PLAN: socket travado não pode prender o loop STDIO.
 PRAZO_ROLLBACK_SEGUNDOS = 15.0
 # Depois de falha de conexão avulsa, novas tentativas são recusadas por esta janela,
@@ -160,6 +157,11 @@ def load_config() -> OracleConfig:
         or DEFAULT_LIB_DIR
     )
     tns_admin = os.environ.get("TNS_ADMIN") or DEFAULT_TNS_ADMIN
+    if get_driver_mode() == DRIVER_MODE_THICK and not client_lib:
+        log_stderr(
+            "ORACLE_DRIVER_MODE=thick sem ORACLE_CLIENT_LIB_DIR: defina no .env o "
+            "diretório do Oracle Client (12.2 ou Instant Client 19c)."
+        )
 
     try:
         timeout = float(os.environ.get("ORACLE_MCP_TIMEOUT", DEFAULT_TIMEOUT))
@@ -331,13 +333,25 @@ class OracleConnectionManager:
         self._conn: Any | None = None
         self._lock = threading.Lock()
         self._pool_failed = False
+        self._pool_failed_em: float | None = None
         self._falha_conexao: tuple[float, str] | None = None
         atexit.register(self.close)
 
     def _init_pool_if_needed(self) -> None:
         """Inicializa o SessionPool com Thick/Thin adaptativo de forma idempotente."""
-        if self._pool is not None or self._pool_failed:
+        if self._pool is not None:
             return
+        if self._pool_failed:
+            # Falha do pool não é permanente: após a janela, tenta de novo (a rede
+            # do Data Center derruba e volta). Sem instante registrado, não expira.
+            if (
+                self._pool_failed_em is None
+                or time.monotonic() - self._pool_failed_em
+                < JANELA_NOVA_TENTATIVA_POOL_SEGUNDOS
+            ):
+                return
+            self._pool_failed = False
+            self._pool_failed_em = None
 
         if not self.config.user or not self.config.password:
             return
@@ -395,17 +409,21 @@ class OracleConnectionManager:
                     log_stderr(
                         f"Falha ao recriar pool em Thick Mode ({inner_exc}). Fallback para conexões dedicadas."
                     )
-                    self._pool_failed = True
+                    self._marcar_pool_falho()
             else:
                 log_stderr(
                     f"Aviso: Não foi possível criar SessionPool ({exc}). Fallback para conexões dedicadas."
                 )
-                self._pool_failed = True
+                self._marcar_pool_falho()
         except Exception as exc:  # pylint: disable=broad-exception-caught
             log_stderr(
                 f"Aviso: Não foi possível criar SessionPool ({exc}). Fallback para conexões dedicadas."
             )
-            self._pool_failed = True
+            self._marcar_pool_falho()
+
+    def _marcar_pool_falho(self) -> None:
+        self._pool_failed = True
+        self._pool_failed_em = time.monotonic()
 
     @property
     def pool(self) -> Any | None:
@@ -518,12 +536,36 @@ class OracleConnectionManager:
                 "max": 1,
             }
 
+    def discard_connection(self, conn: Any | None) -> None:
+        """Descarta só a conexão afetada por uma falha, sem derrubar o pool.
+
+        Conexão do pool sai com `pool.drop` (o pool repõe sob demanda); a dedicada é
+        fechada. `None` descarta a dedicada, quando quem falhou não tem a conexão.
+        """
+        with self._lock:
+            alvo: Any = self._conn if conn is None else conn
+            if alvo is None:
+                return
+            if alvo is self._conn:
+                self._conn = None
+            elif self._pool is not None:
+                try:
+                    self._pool.drop(alvo)
+                    return
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    log_stderr(f"pool.drop falhou ({exc}); fechando a conexão.")
+            with contextlib.suppress(Exception):
+                alvo.close()
+
     def close(self) -> None:
-        """Encerra o SessionPool e a conexão avulsa de forma graciosa."""
+        """Encerra o SessionPool e a conexão avulsa (no encerramento do servidor)."""
         with self._lock:
             if self._pool is not None:
-                with contextlib.suppress(Exception):
-                    self._pool.close()
+                try:
+                    # force=True: conexões ocupadas não podem impedir o fechamento.
+                    self._pool.close(force=True)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    log_stderr(f"Falha ao fechar o SessionPool: {exc}")
                 self._pool = None
             if self._conn is not None:
                 with contextlib.suppress(Exception):
@@ -551,7 +593,7 @@ def _fronteira_de_ferramenta(
                 return funcao(self, *args, **kwargs)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 if fecha_em_queda and is_session_drop(exc):
-                    self.conn_mgr.close()
+                    self.conn_mgr.discard_connection(None)
                 return {"error": True, "message": f"{prefixo}{exc}"}
 
         return envolvida
@@ -665,7 +707,7 @@ class OracleMcpTools:
                 truncado,
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            return self._falha_execucao(exc, fired)
+            return self._falha_execucao(exc, fired, conn)
         finally:
             with contextlib.suppress(Exception):
                 cursor.close()
@@ -716,7 +758,7 @@ class OracleMcpTools:
         return {"text": table_md + meta}
 
     def _falha_execucao(
-        self, exc: BaseException, fired: threading.Event
+        self, exc: BaseException, fired: threading.Event, conn: Any | None = None
     ) -> dict[str, Any]:
         """Classifica a falha da execução: timeout, queda de sessão ou erro do banco."""
         if fired.is_set():
@@ -728,7 +770,7 @@ class OracleMcpTools:
                 ),
             }
         if is_session_drop(exc):
-            self.conn_mgr.close()
+            self.conn_mgr.discard_connection(conn)
             return {
                 "error": True,
                 "message": (
@@ -792,7 +834,7 @@ class OracleMcpTools:
         with contextlib.suppress(Exception):
             cursor.close()
         if descartar:
-            self.conn_mgr.close()
+            self.conn_mgr.discard_connection(conn)
         else:
             self._liberar_conexao(conn)
 
@@ -867,7 +909,7 @@ class OracleMcpTools:
             "       END AS FORMATTED_TYPE, "
             "       c.NULLABLE, "
             "       comm.COMMENTS "
-            "FROM ALL_TAB_COLS c "
+            "FROM ALL_TAB_COLUMNS c "
             "LEFT JOIN ALL_COL_COMMENTS comm "
             "       ON comm.OWNER = c.OWNER AND comm.TABLE_NAME = c.TABLE_NAME AND comm.COLUMN_NAME = c.COLUMN_NAME "
             "WHERE c.OWNER = :owner AND c.TABLE_NAME = :tbl "
@@ -1125,13 +1167,14 @@ class McpServer:
         method = req.get("method")
         params = req.get("params") or {}
 
-        if method == "tools/call":
-            return self._responder_tools_call(req_id, params)
-
         # Mensagem sem "id" é notificação (JSON-RPC 2.0 §4.1): nunca recebe resposta,
-        # nem de erro. Cobre notifications/initialized, notifications/cancelled etc.
+        # nem de erro. Vem antes de tools/call: uma chamada de ferramenta sem id não
+        # é executada (não há a quem devolver o resultado).
         if "id" not in req:
             return None
+
+        if method == "tools/call":
+            return self._responder_tools_call(req_id, params)
 
         if method == "ping":
             return {"jsonrpc": "2.0", "id": req_id, "result": {}}

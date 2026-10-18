@@ -35,11 +35,11 @@ from typing import Any
 import oracledb
 from oracle_client import (
     DRIVER_MODE_THICK,
+    aplicar_metadados_oci,
     connect_adaptive,
     get_driver_mode,
     init_oracle_thick_mode,
 )
-from oracle_session import aplicar_metadados_oci
 
 LogFn = Callable[..., None]
 
@@ -149,9 +149,13 @@ def probe_wan_health(
 
 
 def _extrair_host_porta_dsn(
-    dsn: str, default_host: str = "10.62.0.2", default_port: int = 1521
+    dsn: str, default_host: str = "", default_port: int = 1521
 ) -> tuple[str, int]:
-    """Extrai host e porta de uma string DSN (Easy Connect, Easy Connect Plus ou TNS)."""
+    """Extrai host e porta de uma string DSN (Easy Connect, Easy Connect Plus ou TNS).
+
+    Sem host no DSN nem em ORACLE_HOST devolve `default_host` (vazio por padrão):
+    não há IP fixo de fallback, e quem chama não sonda nada sem host.
+    """
     # A query string sai primeiro: um parâmetro como `wallet_location=file://...`
     # não pode ser confundido com o protocolo do endereço.
     clean = dsn.strip().split("?")[0]
@@ -234,9 +238,24 @@ def resolve_oracle_credentials(
         # cair em silêncio no padrão apontaria para produção sem ninguém pedir.
         log("DSN Oracle vazio (ORACLE_CONNECT_STRING ou force_dsn).", "ERROR", exec_id)
         return None
-    if not client_lib or not os.path.exists(client_lib):
-        log("ORACLE_CLIENT_LIB_DIR invalido.", "ERROR", exec_id)
+    # Só o Thick Mode explícito exige o Client já no bootstrap. No modo auto (Thin) a
+    # biblioteca só é usada no fallback do verificador legado, que valida o caminho
+    # ao ativar o Thick e falha com orientação (oracle_client.init_oracle_thick_mode).
+    if get_driver_mode() == DRIVER_MODE_THICK and (
+        not client_lib or not os.path.exists(client_lib)
+    ):
+        log(
+            "ORACLE_CLIENT_LIB_DIR invalido (obrigatorio com ORACLE_DRIVER_MODE=thick).",
+            "ERROR",
+            exec_id,
+        )
         return None
+    if client_lib and not os.path.exists(client_lib):
+        log(
+            "ORACLE_CLIENT_LIB_DIR inexistente: Thin segue; o fallback Thick falhara se for preciso.",
+            "WARN",
+            exec_id,
+        )
     if require_tns_admin and not tns_admin:
         log("TNS_ADMIN ausente no ambiente.", "ERROR", exec_id)
         return None
@@ -245,7 +264,7 @@ def resolve_oracle_credentials(
         user=user,
         password=password,
         dsn=dsn,
-        client_lib=client_lib,
+        client_lib=client_lib or "",
         tns_admin=tns_admin,
     )
 
@@ -282,8 +301,8 @@ def _nome_da_automacao(automacao: str | None) -> str:
     )
 
 
-def _ajustar_lote_por_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> int:
-    """Pré-voo de WAN: registra a saúde da rota. Nunca bloqueia nem muda o lote.
+def _registrar_saude_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> None:
+    """Pré-voo de WAN: só registra a saúde da rota. Nunca bloqueia nem muda o lote.
 
     O lote pedido é mantido de propósito: em link lento, lote menor multiplica os
     round-trips de fetch e alonga a consulta, que é o oposto do desejado numa rede
@@ -292,12 +311,14 @@ def _ajustar_lote_por_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> i
     """
     if ":" not in dsn and not os.environ.get("ORACLE_HOST"):
         # Alias TNS sem host conhecido: medir o IP padrão não diria nada da rota real.
-        return tamanho
+        return
     try:
         probe_host, probe_port = _extrair_host_porta_dsn(dsn)
+        if not probe_host:
+            return
         probe = probe_wan_health(probe_host, probe_port, samples=1, timeout=0.5)
         if not (probe.get("reachable") and probe.get("rtt_ms") is not None):
-            return tamanho
+            return
         rtt = probe["rtt_ms"]
         loss = probe.get("packet_loss_pct", 0.0)
         if rtt > 80.0:
@@ -306,7 +327,7 @@ def _ajustar_lote_por_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> i
                 "WARN",
                 exec_id,
             )
-            return tamanho
+            return
         log(
             f"Telemetria WAN saudável: {probe_host}:{probe_port} RTT {rtt:.1f}ms (perda: {loss:.0f}%).",
             "DEBUG",
@@ -314,7 +335,6 @@ def _ajustar_lote_por_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> i
         )
     except Exception as exc:  # pylint: disable=broad-exception-caught
         log(f"Aviso não-bloqueante no pre-flight WAN: {exc}", "DEBUG", exec_id)
-    return tamanho
 
 
 def fetch_all(  # pylint: disable=too-many-arguments
@@ -351,7 +371,8 @@ def fetch_all(  # pylint: disable=too-many-arguments
     # O pré-voo de WAN roda antes de conectar: a rede derruba sessões ociosas em
     # poucos segundos, então a sessão não pode esperar pelo probe.
     tamanho_pedido = cursor_arraysize if cursor_arraysize is not None else batch_size
-    effective_size = _ajustar_lote_por_wan(creds.dsn, tamanho_pedido, log, exec_id)
+    _registrar_saude_wan(creds.dsn, tamanho_pedido, log, exec_id)
+    effective_size = tamanho_pedido
 
     log(f"Conectando ao Oracle (DSN: {creds.dsn})...", "INFO", exec_id)
     connection: oracledb.Connection = connect_adaptive(

@@ -18,10 +18,9 @@ from .. import models, schemas
 from ..constants import (
     ORCHESTRATOR_VERSION,
     WORKER_MAX_CONCURRENCY_PADRAO,
-    get_worker_max_concurrency,
 )
 from ..database import get_db_size_mb, get_schema_version, get_wal_size_mb
-from ..runtime import get_allowed_origins, scheduler
+from ..runtime import get_allowed_origins, get_worker_max_concurrency, scheduler
 from ..timezone import get_now_local
 
 logger = logging.getLogger("orchestrator")

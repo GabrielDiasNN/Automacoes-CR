@@ -35,9 +35,9 @@ from oracle_client import (  # noqa: E402  pylint: disable=wrong-import-position
     connect_adaptive,
 )
 from oracle_session import (  # noqa: E402  pylint: disable=wrong-import-position
-    cancel_after,
     connect_within,
     is_session_drop,
+    query_deadline,
 )
 
 logger = logging.getLogger(__name__)
@@ -181,18 +181,16 @@ def _execute_once(
             raise TimeoutError(
                 f"Orçamento de {wall_clock_budget_seconds:g}s esgotado antes da consulta."
             )
-        # Piso de 1 ms: 0 desliga o prazo no driver.
-        attempt_timeout_ms = max(1, min(int(oracle_timeout_ms), int(remaining * 1000)))
-        timeout_applied = False
-        timeout_warning = ""
-        try:
-            connection.call_timeout = attempt_timeout_ms
-            timeout_applied = True
-        except Exception as exc:
-            timeout_warning = str(exc)
         # `call_timeout` limita cada round-trip; o watchdog limita o total da consulta.
-        # Em Oracle Client 12.2 (DPI-1050) o watchdog é o único prazo.
-        guards.enter_context(cancel_after(connection, remaining, watchdog_fired))
+        # Em Oracle Client 12.2 (DPI-1050) o watchdog é o único prazo. Fonte única
+        # em oracle_session.query_deadline, que também zera o call_timeout ao sair.
+        prazo = guards.enter_context(
+            query_deadline(
+                connection, oracle_timeout_ms / 1000, remaining, watchdog_fired
+            )
+        )
+        timeout_applied = prazo.applied
+        timeout_warning = prazo.warning
 
         try:
             with connection.cursor() as cursor:
@@ -253,7 +251,7 @@ def _execute_once(
             "oracle_timeout_ms": int(oracle_timeout_ms),
             "oracle_timeout_applied": timeout_applied,
             "oracle_timeout_warning": timeout_warning,
-            # `cancel_after` é armado em toda tentativa, com ou sem `call_timeout`.
+            # O watchdog (query_deadline) é armado em toda tentativa, com ou sem `call_timeout`.
             "oracle_watchdog_applied": True,
             "elapsed_seconds": round(elapsed, 4),
             "row_count": len(rows),
