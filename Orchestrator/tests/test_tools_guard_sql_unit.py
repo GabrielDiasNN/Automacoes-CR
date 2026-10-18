@@ -164,3 +164,32 @@ def test_comando_da_evidencia_nao_vaza_caminho_absoluto(tmp_path: Path) -> None:
         "20",
     ]
     assert all(":\\" not in parte and not parte.startswith("/") for parte in comando)
+
+
+def test_copia_versionada_do_guard_bate_com_o_canonico_do_perfil() -> None:
+    """Drift: a cópia em Tools/oracle/guard_canonico deve ser idêntica ao canônico do perfil.
+
+    Só roda onde o perfil existe (máquina de desenvolvimento). No CI é pulado; a
+    cópia versionada é o que o CI executa, então é ela que precisa ficar atualizada.
+    """
+    import hashlib  # pylint: disable=import-outside-toplevel
+    import os  # pylint: disable=import-outside-toplevel
+
+    raiz = Path(__file__).resolve().parents[2]
+    copia = raiz / "lib" / "vendor" / "oracle-sql-guard" / "guard_sql.py"
+    perfil = (
+        Path(os.environ.get("USERPROFILE", "~")).expanduser()
+        / ".gemini"
+        / "antigravity"
+        / "skills"
+        / "oracle-sql"
+        / "scripts"
+        / "guard_sql.py"
+    )
+    if not perfil.is_file():
+        pytest.skip("canônico do perfil ausente nesta máquina (CI): sem comparação")
+
+    assert (
+        hashlib.sha256(copia.read_bytes()).hexdigest()
+        == hashlib.sha256(perfil.read_bytes()).hexdigest()
+    ), "cópia versionada divergiu do canônico; atualize lib/vendor/oracle-sql-guard/"

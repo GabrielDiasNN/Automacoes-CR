@@ -32,18 +32,29 @@ def _dotenv_value(name: str) -> str | None:
     return value or None
 
 
+COPIA_VERSIONADA = (
+    Path(__file__).resolve().parents[2]
+    / "lib"
+    / "vendor"
+    / "oracle-sql-guard"
+    / "guard_sql.py"
+)
+
+
 def canonical_guard_file() -> Path:
     """Caminho do guard canônico da skill oracle-sql.
 
-    `ORACLE_SQL_GUARD_CANONICAL` (no `.env`) tem precedência; sem ela, o local
-    padrão de instalação da skill no perfil do usuário.
+    Ordem: `ORACLE_SQL_GUARD_CANONICAL` (ambiente ou `.env`); o local de instalação
+    da skill no perfil do usuário, quando existe; e a cópia versionada em
+    `lib/vendor/oracle-sql-guard/` (CI, onde o perfil não existe). Sem nenhum dos três, devolve
+    o caminho do perfil, e o validador falha fechado com o caminho na mensagem.
     """
     configured = os.environ.get("ORACLE_SQL_GUARD_CANONICAL") or _dotenv_value(
         "ORACLE_SQL_GUARD_CANONICAL"
     )
     if configured:
         return Path(configured)
-    return (
+    perfil = (
         Path(os.environ.get("USERPROFILE", "~")).expanduser()
         / ".gemini"
         / "antigravity"
@@ -52,6 +63,11 @@ def canonical_guard_file() -> Path:
         / "scripts"
         / "guard_sql.py"
     )
+    if perfil.is_file():
+        return perfil
+    if COPIA_VERSIONADA.is_file():
+        return COPIA_VERSIONADA
+    return perfil
 
 
 def load_canonical() -> Any:
