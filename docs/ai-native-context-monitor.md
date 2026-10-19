@@ -43,7 +43,7 @@ Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arq
 - **"0 linhas" não é aprovação**: prove com uma variante relaxada (29/09/2026).
 - **Reescrita só vale com prova**: `medir_sql_oracle.py --dump` antes/depois + `comparar_equivalencia.py`, ou comparação das CTEs isoladas quando a original não roda; padrões e anti-patterns de performance na skill `oracle-sql-patterns` (29/09 e 07/10/2026).
 - **Filiação de peça ao lote de NF é `GERAPECANOTAENTRADA.IDLOTEITENSNFE`, nunca `PADRAO_QUALIDADE_SIN`** (mutável por reclassificação, mov. 695) (02/10/2026).
-- **Guard SQL**: código de saída 3 do guard canônico significa "só parse", não erro de ferramenta (06/10/2026).
+- **Guard SQL**: código de saída 3 do guard canônico significa "só parse", não erro de ferramenta (06/10/2026). O canônico carregado é a cópia versionada em `lib/vendor/oracle-sql-guard/` (o perfil da skill só entra por `ORACLE_SQL_GUARD_CANONICAL`); "só função" é a classe `chamada_funcao`, nunca o texto do motivo; e todo executor de SQL roda a `consulta_verificacao` do veredito antes da primeira execução (`guard_sql.verificar_objetos`), porque função sem parênteses passa no texto (19/10/2026).
 
 ### Dashboard
 - **`LiveStatusProvider` é o dono único do polling de health e do WebSocket**; componente novo consome `useLiveStatus`/`useLiveEvents` (28/08/2026).

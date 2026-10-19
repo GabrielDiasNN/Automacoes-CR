@@ -2,6 +2,21 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.105] - 19/10/2026
+
+Correção dos 8 achados da revisão xhigh do PR 77 e do diff do DML de pontos de controle.
+
+### Corrigido
+
+- **Função sem parênteses nas CLIs Oracle (segurança):** `medir_sql_oracle`, `validar_sql_oracle` (smoke), `validar_partes_oracle` e `oracle_catalog` (`distinct`, `sample --where`) rodam a `consulta_verificacao` do guard antes de executar o SQL, como o MCP já fazia. `SELECT PKG.FN FROM DUAL` saía do guard com exit 0 e executava (no `medir`, N vezes). Veredito ilegível, ou falha da verificação, bloqueia (fail-closed). Fonte única em `Tools/oracle/guard_sql.py` (`verificar_objetos`), usada também pelo MCP.
+- **Prazo total no MCP:** `execute_sql`, `get_query_plan`, `list_tables`, `describe_table` e `check_connection` usam `query_deadline` (`call_timeout` por chamada e watchdog do total, ambos `ORACLE_MCP_TIMEOUT`). Com `call_timeout` nativo, a soma dos round-trips não tinha teto: um fetch com CLOB podia prender o loop STDIO por minutos.
+- **Conexão presa no MCP:** a configuração de `arraysize`/`prefetchrows` saiu de antes do `try`. Se ela falhasse, a conexão não voltava ao pool (`max=4`, `GETMODE_WAIT`).
+- **Precedência do guard:** a cópia versionada `lib/vendor/oracle-sql-guard/` vence o guard do perfil do usuário, que não é versionado. Assim a trava de leitura é a mesma que o CI testa. `ORACLE_SQL_GUARD_CANONICAL` continua tendo precedência.
+- **Regra "só função" única:** `guard_sql.so_chamada_de_funcao` (classe `chamada_funcao`) substitui as três versões anteriores, uma por classe e duas pelo texto "chamada a função" do motivo. `oracle_catalog check/explain` passa a aceitar UDF sem pacote no parse, como o `validar`. A exceção de funções auditadas do `medir` reclassifica o SQL com as auditadas trocadas por `NVL(`: qualquer outra função (sem pacote, entre aspas, `TABLE(fn)`) mantém o bloqueio, e literal `q'...'` deixa de fechar a exceção por precaução.
+- **`decidir_revisao_sql.sem_ponto_e_virgula`:** usa o texto de guarda do catálogo, que trata `q'[...]'`. `;` dentro desse literal mandava reverter uma reescrita válida.
+- **DML de pontos de controle (`dml_alterar_grupo_de_programacao_pontos_de_controle.sql`):** `FLUXO` e `FLUXOGRUPO` voltaram a ser `INNER JOIN` no `SELECT` e no `UPDATE`. O `LEFT JOIN` da edição ampliava em silêncio o escopo do `UPDATE` para pontos sem fluxo ou sem grupo, e os joins viraram filtros de existência documentados. As colunas novas do `SELECT` de conferência foram mantidas. Conferido no Oracle em 19/10/2026: 187 linhas no escopo, igual à versão anterior.
+- **`validar_partes_oracle`:** usa o `_guard_texto` do `validar_sql_oracle` (saída inteira, para ler o veredito) e saiu da allowlist de `subprocess` em `Tools/architecture-standard.rules.json`.
+
 ## [1.3.104] - 17/10/2026
 
 Correção dos 23 achados da revisão stateless do diff `otimizacao/kpi-acervo-revisao` → `main`.

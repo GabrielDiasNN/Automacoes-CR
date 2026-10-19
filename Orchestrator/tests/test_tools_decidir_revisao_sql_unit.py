@@ -74,3 +74,25 @@ def test_exigir_sai_com_1_quando_decisao_difere(tmp_path: Path) -> None:
     argv = ["--prefixo", str(prefixo), "--sql-wt", str(sql_wt), "--tem-wt-diferente"]
     assert dr.main([*argv, "--exigir", "reverter_head"]) == 1
     assert dr.main([*argv, "--exigir", "manter_wt"]) == 0
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "select q'[a;b]' from dual",
+        "select nq'{a;b}' from dual",
+        "select 'a;b' from dual -- fim; comentario",
+        "select 1 from dual /* ; */",
+    ],
+)
+def test_ponto_e_virgula_em_literal_ou_comentario_nao_conta(sql: str) -> None:
+    """Regressão (revisão do PR #77): `;` dentro de `q'[...]'` revertia a reescrita."""
+    assert dr.sem_ponto_e_virgula(sql) is True
+
+
+def test_ponto_e_virgula_real_conta() -> None:
+    assert dr.sem_ponto_e_virgula("select q'[a]' from dual;") is False
+
+
+def test_literal_sem_fechamento_conta_como_invalido() -> None:
+    assert dr.sem_ponto_e_virgula("select 'abc from dual") is False

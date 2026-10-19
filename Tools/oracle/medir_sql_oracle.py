@@ -36,7 +36,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from oracle_catalog import GuardError  # noqa: E402
+from guard_sql import (  # noqa: E402
+    ler_veredito,
+    so_chamada_de_funcao,
+    verificar_objetos,
+)
+from oracle_catalog import (  # noqa: E402
+    GuardError,
+    sql_guard_text,
+)
 from oracle_extract import (  # noqa: E402
     compute_hash,
     init_thick_mode,
@@ -59,6 +67,7 @@ from validar_sql_oracle import (  # noqa: E402
     _has_multiple_statements,
     _parse_bind_args,
     _single_statement,
+    consulta_verificacao_do_guard,
     resolve_guard,
 )
 
@@ -396,10 +405,8 @@ ALLOWLIST_FUNCOES = Path(__file__).resolve().with_name("funcoes_auditadas.json")
 _CHAMADA_QUALIFICADA = re.compile(
     r"\b([A-Za-z_][\w$#]*(?:\s*\.\s*[A-Za-z_][\w$#]*){1,2})\s*\("
 )
-_COMENTARIO_OU_LITERAL = re.compile(r"/\*.*?\*/|--[^\n]*|'(?:[^']|'')*'", re.S)
-# Literal q'...' (delimitado): a regex de chamadas não o interpreta, então com ele no
-# SQL a exceção não se aplica.
-_LITERAL_Q = re.compile(r"(?<![\w$#])[nN]?[qQ]'")
+# Função nativa de leitura que substitui a chamada auditada na reclassificação.
+_SUBSTITUTO_NATIVO = "NVL("
 
 
 def _funcoes_auditadas(caminho: Path) -> frozenset[str]:
@@ -416,13 +423,40 @@ def _funcoes_auditadas(caminho: Path) -> frozenset[str]:
     return frozenset(nomes)
 
 
-def _chamadas_qualificadas(sql: str) -> set[str]:
-    """Chamadas `A.B(` / `A.B.C(` fora de comentários e literais."""
-    limpo = _COMENTARIO_OU_LITERAL.sub(" ", sql)
-    return {
-        re.sub(r"\s+", "", m.group(1)).upper()
-        for m in _CHAMADA_QUALIFICADA.finditer(limpo)
-    }
+def _nome_da_chamada(match: re.Match[str]) -> str:
+    return re.sub(r"\s+", "", match.group(1)).upper()
+
+
+def _chamadas_qualificadas(texto_guarda: str) -> set[str]:
+    """Chamadas `A.B(` / `A.B.C(` do texto de guarda (sem comentários nem literais)."""
+    return {_nome_da_chamada(m) for m in _CHAMADA_QUALIFICADA.finditer(texto_guarda)}
+
+
+def _sem_chamadas_auditadas(texto_guarda: str, auditadas: frozenset[str]) -> str:
+    """Troca cada chamada auditada por uma função nativa de leitura (`NVL(`)."""
+    return _CHAMADA_QUALIFICADA.sub(
+        lambda m: (
+            _SUBSTITUTO_NATIVO if _nome_da_chamada(m) in auditadas else m.group(0)
+        ),
+        texto_guarda,
+    )
+
+
+def _candidata_a_excecao(
+    guard_code: int, guard_output: str, sql: str, allowlist: Path | None
+) -> tuple[dict[str, Any], str, set[str]] | None:
+    """(veredito, texto de guarda, chamadas qualificadas) quando a exceção pode valer."""
+    if allowlist is None or guard_code != GUARD_SO_PARSE:
+        return None
+    try:
+        veredito = ler_veredito(guard_output)
+        texto_guarda = sql_guard_text(sql)
+    except (ValueError, GuardError):
+        return None
+    chamadas = _chamadas_qualificadas(texto_guarda)
+    if not so_chamada_de_funcao(veredito) or not chamadas:
+        return None
+    return veredito, texto_guarda, chamadas
 
 
 def _excecao_funcoes(
@@ -430,40 +464,71 @@ def _excecao_funcoes(
     guard_output: str,
     sql: str,
     allowlist: Path | None,
+    guard: Path | None = None,
 ) -> dict[str, Any] | None:
     """Exceção auditável ao guard para SQL que só chama função auditada.
 
-    Libera somente quando o guard devolve "só parse", o único motivo é a chamada
-    de função qualificada e toda chamada do texto está na allowlist. Qualquer
-    função fora dela mantém o bloqueio (fail-closed).
+    Libera somente quando o guard bloqueou só por chamada de função
+    (`guard_sql.so_chamada_de_funcao`), toda chamada qualificada está na allowlist e,
+    com as auditadas trocadas por função nativa, o guard libera o texto que sobra.
+    A reclassificação é a prova de que não há outra função (sem qualificação, entre
+    aspas, `TABLE(fn)`): qualquer resto mantém o bloqueio (fail-closed). Devolve a
+    `consulta_verificacao` dessa reclassificação, que ainda precisa rodar no banco.
     """
-    if allowlist is None or guard_code != GUARD_SO_PARSE:
+    candidata = _candidata_a_excecao(guard_code, guard_output, sql, allowlist)
+    if candidata is None or allowlist is None:
         return None
-    try:
-        veredito = json.loads(guard_output)
-    except json.JSONDecodeError:
-        return None
-    motivos = veredito.get("motivos", [])
-    if not motivos or any("chamada a função" not in motivo for motivo in motivos):
-        return None
-    # Fail-closed: identificador entre aspas (`"PKG"."FN"(`) e literal q'...' escapam da
-    # regex de chamadas; com qualquer um dos dois, a exceção não se aplica.
-    if '"' in _COMENTARIO_OU_LITERAL.sub(" ", sql) or _LITERAL_Q.search(sql):
-        return None
-    chamadas = _chamadas_qualificadas(sql)
-    if not chamadas:
-        return None
-    fora = sorted(chamadas - _funcoes_auditadas(allowlist))
+    veredito, texto_guarda, chamadas = candidata
+    auditadas = _funcoes_auditadas(allowlist)
+    fora = sorted(chamadas - auditadas)
     if fora:
         raise SystemExit(
             f"funções fora da allowlist auditada ({allowlist.name}): {', '.join(fora)}"
         )
+    resto_code, resto_output = _guard_texto(
+        _sem_chamadas_auditadas(texto_guarda, auditadas), guard or resolve_guard()
+    )
+    try:
+        if resto_code != GUARD_LIBERADO:
+            raise ValueError(f"resto bloqueado pelo guard (exit {resto_code})")
+        consulta = consulta_verificacao_do_guard(resto_output)
+    except ValueError:
+        return None
     return {
         "guard_exit": guard_code,
-        "motivos": motivos,
+        "motivos": veredito.get("motivos", []),
         "funcoes_auditadas": sorted(chamadas),
         "allowlist": str(allowlist),
+        "consulta_verificacao": consulta,
     }
+
+
+def verificar_funcoes_no_oracle(
+    creds: Any, consulta: str | None, timeout: float
+) -> str | None:
+    """Roda a `consulta_verificacao` do guard numa conexão própria, sob watchdog.
+
+    Devolve o motivo do bloqueio quando algum nome é função/pacote/tipo, ou None.
+    Prazo estourado ou erro do banco levantam: sem a prova, nada é medido.
+    """
+    if consulta is None:
+        return None
+    started = time.perf_counter()
+    connection = connect_within(lambda: _connect(creds), timeout)
+    outcome = run_with_cancel(
+        lambda: verificar_objetos(connection.cursor(), consulta),
+        lambda: connection,
+        timeout - (time.perf_counter() - started),
+    )
+    if not outcome.abandoned:
+        with contextlib.suppress(oracledb.Error):  # limpeza best effort
+            connection.close()
+    if outcome.timed_out:
+        raise TimeoutError(f"verificação de funções excedeu {timeout}s")
+    if outcome.error is not None:
+        raise outcome.error
+    motivo: str | None = outcome.value
+    return motivo
 
 
 def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
@@ -475,19 +540,27 @@ def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
     except (UnicodeDecodeError, GuardError) as exc:
         raise SystemExit(f"SQL ilegível: {_error_summary(exc)}") from exc
     # O guard classifica o mesmo texto que vai ao Oracle (o normalizado), como no validar.
-    guard_code, guard_output = _guard_texto(sql, resolve_guard())
+    guard = resolve_guard()
+    guard_code, guard_output = _guard_texto(sql, guard)
     args.excecao_guard = None
-    if guard_code != GUARD_LIBERADO:
+    if guard_code == GUARD_LIBERADO:
+        try:
+            args.consulta_verificacao = consulta_verificacao_do_guard(guard_output)
+        except ValueError as exc:
+            raise SystemExit(f"veredito do guard ilegível: {guard_output}") from exc
+    else:
         args.excecao_guard = _excecao_funcoes(
             guard_code,
             guard_output,
             sql,
             ALLOWLIST_FUNCOES if args.aceitar_funcoes_auditadas else None,
+            guard,
         )
         if args.excecao_guard is None:
             raise SystemExit(
                 f"guard_sql.py bloqueou (exit {guard_code}): {guard_output}"
             )
+        args.consulta_verificacao = args.excecao_guard["consulta_verificacao"]
     if _has_multiple_statements(sql):
         raise SystemExit("SQL bloqueado: mais de uma instrução no arquivo")
     binds = _default_binds(sql)
@@ -519,6 +592,12 @@ def _report(
 def main() -> int:
     args = _build_parser().parse_args()
     sql, binds, creds = _prepare(args)
+    # Antes da primeira execução: função sem parênteses (`PKG.FN`) passa no guard.
+    motivo = verificar_funcoes_no_oracle(
+        creds, getattr(args, "consulta_verificacao", None), args.timeout
+    )
+    if motivo is not None:
+        raise SystemExit(f"SQL bloqueado: {motivo}")
     options = MeasureOptions(
         runs=args.runs,
         timeout=args.timeout,

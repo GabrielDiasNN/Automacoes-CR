@@ -77,6 +77,7 @@ from oracle_session import (  # noqa: E402
     call_deadline,
     connect_within,
     is_session_drop,
+    query_deadline,
     supports_native_call_timeout,
 )
 
@@ -770,6 +771,18 @@ class OracleMcpTools:
             self._encerrar_uso(conn, exc, threading.Event())
             raise
 
+    def _prazo(
+        self, conn: Any, fired: threading.Event
+    ) -> contextlib.AbstractContextManager[Any]:
+        """Prazo da ferramenta: `call_timeout` por chamada + watchdog do total.
+
+        `call_timeout` sozinho limita cada round-trip, não a soma: um fetch de 5000
+        linhas com CLOB (uma leitura por célula) passaria muito do limite e prenderia
+        o loop STDIO. O orçamento total é o mesmo ORACLE_MCP_TIMEOUT, nos dois modos
+        do driver (no Client 12.2 o watchdog é o único prazo).
+        """
+        return query_deadline(conn, self.config.timeout, self.config.timeout, fired)
+
     def _configurar_cursor(self, cursor: Any) -> None:
         """Tamanho de busca igual em arraysize e prefetchrows (ORACLE_MCP_ARRAYSIZE)."""
         cursor.arraysize = cursor.prefetchrows = self.config.arraysize
@@ -817,15 +830,16 @@ class OracleMcpTools:
         """Roda o pedido no cursor da conexão, dentro do prazo, e encerra o uso da conexão."""
         start_time = time.perf_counter()
         cursor = self._abrir_cursor(conn)
-        # `+ 1`: a linha extra que `_buscar_linhas` busca para marcar o truncamento cabe no lote.
-        cursor.arraysize = cursor.prefetchrows = min(
-            self.config.arraysize, pedido.max_rows + 1
-        )
 
         fired = threading.Event()
         falha: BaseException | None = None
         try:
-            with call_deadline(conn, self.config.timeout, fired):
+            # Dentro do try: se a configuração falhar, o `finally` ainda devolve a conexão.
+            # `+ 1`: a linha extra que `_buscar_linhas` busca para marcar o truncamento cabe no lote.
+            cursor.arraysize = cursor.prefetchrows = min(
+                self.config.arraysize, pedido.max_rows + 1
+            )
+            with self._prazo(conn, fired):
                 # Antes do SQL do usuário: função sem parênteses executa sem ser vista pelo texto.
                 bloqueio = self._verificar_funcoes(cursor, pedido.resultado)
                 if bloqueio is not None:
@@ -860,14 +874,12 @@ class OracleMcpTools:
         """
         if resultado.consulta_verificacao is None:
             return None
-        cursor.execute(resultado.consulta_verificacao)
-        encontrados = list(cursor.fetchall())
-        if not encontrados:
-            return None
-        nomes = ", ".join(
-            f"{owner}.{nome} ({tipo})" for owner, nome, tipo in encontrados
+        # Fonte única com as CLIs de Tools/oracle. Só roda depois que o guard aprovou,
+        # então `_guard_sql` está carregado.
+        motivo: str | None = _guard_sql.verificar_objetos(
+            cursor, resultado.consulta_verificacao
         )
-        return f"a consulta referencia função/pacote/procedimento/tipo: {nomes}"
+        return motivo
 
     @staticmethod
     def _buscar_linhas(
@@ -962,12 +974,12 @@ class OracleMcpTools:
             return erro
 
         cursor = self._abrir_cursor(conn)
-        self._configurar_cursor(cursor)
 
         fired = threading.Event()
         falha: BaseException | None = None
         try:
-            with call_deadline(conn, self.config.timeout, fired):
+            self._configurar_cursor(cursor)
+            with self._prazo(conn, fired):
                 # 1. EXPLAIN PLAN: as linhas ficam pendentes na transação da sessão.
                 cursor.execute(f"EXPLAIN PLAN SET STATEMENT_ID = '{stmt_id}' FOR {sql}")
                 # 2. Plano formatado pelo DBMS_XPLAN, na mesma sessão.
@@ -1050,12 +1062,12 @@ class OracleMcpTools:
             return erro
 
         cursor = self._abrir_cursor(conn)
-        self._configurar_cursor(cursor)
 
         fired = threading.Event()
         falha: BaseException | None = None
         try:
-            with call_deadline(conn, self.config.timeout, fired):
+            self._configurar_cursor(cursor)
+            with self._prazo(conn, fired):
                 cursor.execute(sql, params)
                 rows = cursor.fetchall()
             cols = ["OWNER", "TABLE_NAME", "TYPE", "NUM_ROWS", "TABLESPACE"]
@@ -1100,12 +1112,12 @@ class OracleMcpTools:
             return erro
 
         cursor = self._abrir_cursor(conn)
-        self._configurar_cursor(cursor)
 
         fired = threading.Event()
         falha: BaseException | None = None
         try:
-            with call_deadline(conn, self.config.timeout, fired):
+            self._configurar_cursor(cursor)
+            with self._prazo(conn, fired):
                 cursor.execute(sql, {"owner": target_owner, "tbl": clean_name})
                 rows = cursor.fetchall()
             if not rows:
@@ -1152,7 +1164,7 @@ class OracleMcpTools:
         fired = threading.Event()
         falha: BaseException | None = None
         try:
-            with call_deadline(conn, self.config.timeout, fired):
+            with self._prazo(conn, fired):
                 cursor.execute(
                     "SELECT SYS_CONTEXT('USERENV', 'CURRENT_USER'), "
                     "       SYS_CONTEXT('USERENV', 'DB_NAME'), "

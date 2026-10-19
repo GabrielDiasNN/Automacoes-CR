@@ -193,3 +193,80 @@ def test_copia_versionada_do_guard_bate_com_o_canonico_do_perfil() -> None:
         hashlib.sha256(copia.read_bytes()).hexdigest()
         == hashlib.sha256(perfil.read_bytes()).hexdigest()
     ), "cópia versionada divergiu do canônico; atualize lib/vendor/oracle-sql-guard/"
+
+
+def test_copia_versionada_vence_o_perfil(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regressão (revisão do PR #77): a trava de leitura é a cópia que o CI testa,
+    nunca o arquivo não versionado do perfil, mesmo quando ele existe."""
+    perfil = tmp_path / ".gemini" / "antigravity" / "skills" / "oracle-sql" / "scripts"
+    perfil.mkdir(parents=True)
+    (perfil / "guard_sql.py").write_text("# versão divergente", encoding="utf-8")
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("ORACLE_SQL_GUARD_CANONICAL", raising=False)
+    monkeypatch.setattr(wrapper, "_dotenv_value", lambda _n: None)
+
+    assert wrapper.canonical_guard_file() == wrapper.COPIA_VERSIONADA
+
+
+def test_variavel_de_ambiente_ainda_vence_a_copia_versionada(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    alvo = tmp_path / "outro_guard.py"
+    monkeypatch.setenv("ORACLE_SQL_GUARD_CANONICAL", str(alvo))
+    assert wrapper.canonical_guard_file() == alvo
+
+
+@pytest.mark.parametrize(
+    ("classe", "esperado"),
+    [("chamada_funcao", True), ("mutacao", False), ("leitura", False), (None, False)],
+)
+def test_so_chamada_de_funcao_le_a_classe(classe: Any, esperado: bool) -> None:
+    """A regra única não lê o texto dos motivos: só a classe do veredito."""
+    veredito = {"classe": classe, "motivos": ["chamada a função X"]}
+    assert wrapper.so_chamada_de_funcao(veredito) is esperado
+
+
+def test_ler_veredito_recusa_o_que_nao_e_objeto() -> None:
+    with pytest.raises(ValueError):
+        wrapper.ler_veredito("[1, 2]")
+    with pytest.raises(ValueError):
+        wrapper.ler_veredito("nao e json")
+
+
+def test_classe_de_udf_sem_pacote_e_chamada_funcao_no_canonico_real() -> None:
+    """Contrato que as CLIs assumem: UDF sem pacote também é classe `chamada_funcao`
+    (o motivo tem outro texto, por isso a regra não pode ler o motivo)."""
+    canon = wrapper.patch_canonical(wrapper.load_canonical())
+    veredito = canon.classificar("SELECT minhafn(1) FROM DUAL")
+    assert wrapper.so_chamada_de_funcao(veredito)
+    assert all("chamada a função" not in m for m in veredito["motivos"])
+
+
+class _CursorCatalogo:
+    def __init__(self, linhas: list[tuple[str, str, str]]) -> None:
+        self.linhas = linhas
+        self.executados: list[str] = []
+
+    def execute(self, sql: str) -> None:
+        self.executados.append(sql)
+
+    def fetchall(self) -> list[tuple[str, str, str]]:
+        return self.linhas
+
+
+def test_verificar_objetos_sem_consulta_nao_toca_o_banco() -> None:
+    cursor = _CursorCatalogo([("SGTPRD", "PKG", "PACKAGE")])
+    assert wrapper.verificar_objetos(cursor, None) is None
+    assert not cursor.executados
+
+
+def test_verificar_objetos_nomeia_o_que_achou() -> None:
+    cursor = _CursorCatalogo(
+        [("SGTPRD", "PKG", "PACKAGE"), ("SGTPRD", "FN", "FUNCTION")]
+    )
+    motivo = wrapper.verificar_objetos(cursor, "SELECT v")
+    assert motivo is not None
+    assert "SGTPRD.PKG (PACKAGE)" in motivo and "SGTPRD.FN (FUNCTION)" in motivo
+    assert cursor.executados == ["SELECT v"]

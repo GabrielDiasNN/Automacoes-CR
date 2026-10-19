@@ -5,14 +5,19 @@ para reconhecer Common Table Expressions (CTEs) recursivas ANSI com listas de
 colunas (ex.: WITH NomeCte (col1, col2) AS (...)).
 
 É o guard padrão dos validadores (`validar_sql_oracle.resolve_guard`). A cadeia é
-validador -> este wrapper -> guard canônico (fora do repositório, na skill
-oracle-sql). Importar o módulo não tem efeito colateral: o canônico só é
-carregado em `main()`.
+validador -> este wrapper -> guard canônico (cópia versionada em
+`lib/vendor/oracle-sql-guard/`, espelho da skill oracle-sql). Importar o módulo não
+tem efeito colateral: o canônico só é carregado em `main()`.
+
+Também é a fonte única de duas regras que todo executor de SQL do repositório
+segue: o que conta como "só chamada de função" (`so_chamada_de_funcao`) e a
+verificação no catálogo antes da primeira execução (`verificar_objetos`).
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import sys
@@ -44,17 +49,20 @@ COPIA_VERSIONADA = (
 def canonical_guard_file() -> Path:
     """Caminho do guard canônico da skill oracle-sql.
 
-    Ordem: `ORACLE_SQL_GUARD_CANONICAL` (ambiente ou `.env`); o local de instalação
-    da skill no perfil do usuário, quando existe; e a cópia versionada em
-    `lib/vendor/oracle-sql-guard/` (CI, onde o perfil não existe). Sem nenhum dos três, devolve
-    o caminho do perfil, e o validador falha fechado com o caminho na mensagem.
+    Ordem: `ORACLE_SQL_GUARD_CANONICAL` (ambiente ou `.env`); a cópia versionada em
+    `lib/vendor/oracle-sql-guard/`; e o local de instalação da skill no perfil do
+    usuário. A cópia versionada vem antes do perfil: a trava de leitura precisa ser a
+    mesma que o CI testa, e o perfil não é versionado. Sem nenhum dos três, devolve o
+    caminho do perfil, e o validador falha fechado com o caminho na mensagem.
     """
     configured = os.environ.get("ORACLE_SQL_GUARD_CANONICAL") or _dotenv_value(
         "ORACLE_SQL_GUARD_CANONICAL"
     )
     if configured:
         return Path(configured)
-    perfil = (
+    if COPIA_VERSIONADA.is_file():
+        return COPIA_VERSIONADA
+    return (
         Path(os.environ.get("USERPROFILE", "~")).expanduser()
         / ".gemini"
         / "antigravity"
@@ -63,11 +71,46 @@ def canonical_guard_file() -> Path:
         / "scripts"
         / "guard_sql.py"
     )
-    if perfil.is_file():
-        return perfil
-    if COPIA_VERSIONADA.is_file():
-        return COPIA_VERSIONADA
-    return perfil
+
+
+# Classe do veredito quando o único bloqueio é chamada de função/pacote/tipo. Fonte
+# única da regra "só função": o texto dos motivos muda, a classe é o contrato.
+CLASSE_CHAMADA_FUNCAO = "chamada_funcao"
+
+
+def ler_veredito(saida: str) -> dict[str, Any]:
+    """Veredito JSON impresso pelo guard. ValueError se não for um objeto JSON."""
+    veredito = json.loads(saida)
+    if not isinstance(veredito, dict):
+        raise ValueError("saída do guard não é um objeto JSON")
+    return veredito
+
+
+def so_chamada_de_funcao(veredito: dict[str, Any]) -> bool:
+    """True se o guard bloqueou só por chamada de função (classe `chamada_funcao`)."""
+    return veredito.get("classe") == CLASSE_CHAMADA_FUNCAO
+
+
+def motivo_objetos_executaveis(linhas: list[Any]) -> str | None:
+    """Motivo do bloqueio a partir das linhas da `consulta_verificacao`; None se vazia."""
+    if not linhas:
+        return None
+    nomes = ", ".join(f"{owner}.{nome} ({tipo})" for owner, nome, tipo in linhas)
+    return f"a consulta referencia função/pacote/procedimento/tipo: {nomes}"
+
+
+def verificar_objetos(cursor: Any, consulta: str | None) -> str | None:
+    """Roda a `consulta_verificacao` do guard (só leitura) no cursor dado.
+
+    O guard só vê o texto: `SELECT PKG.FN FROM DUAL` parece coluna e executa a função.
+    Esta consulta ao catálogo tira a dúvida e precisa rodar antes da primeira execução
+    do SQL. Devolve o motivo do bloqueio, ou None se nenhum nome é executável. Erro do
+    banco propaga: quem chama não executa o SQL (fail-closed).
+    """
+    if consulta is None:
+        return None
+    cursor.execute(consulta)
+    return motivo_objetos_executaveis(list(cursor.fetchall()))
 
 
 def load_canonical() -> Any:

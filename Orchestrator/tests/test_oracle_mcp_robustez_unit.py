@@ -658,3 +658,72 @@ def test_arraysize_acompanha_max_rows_mais_uma() -> None:
 
     assert cursor.arraysize == 3
     assert cursor.prefetchrows == 3
+
+
+# --------------------------- prazo total e cursor fora do try (revisão do PR #77)
+
+
+def test_execute_sql_tem_prazo_total_alem_do_por_chamada() -> None:
+    """Regressão: com `call_timeout` nativo, cada round-trip cabia no prazo e a soma não
+    tinha teto. O watchdog do total cancela a sessão e a ferramenta responde timeout."""
+    import threading  # pylint: disable=import-outside-toplevel
+
+    cancelada = threading.Event()
+    cursor = MagicMock(name="cursor")
+    cursor.description = [("X",)]
+
+    def _fetch_lento(_n: int) -> list[Any]:
+        # Cada "round-trip" é curto, mas a busca só termina quando a sessão é cancelada.
+        if not cancelada.wait(5):
+            return [("nunca",)]
+        raise oracledb.DatabaseError("ORA-01013: user requested cancel")
+
+    cursor.fetchmany.side_effect = _fetch_lento
+    conn = _conexao_com_cursor(cursor)
+    conn.cancel.side_effect = cancelada.set
+    mgr = _mgr_com_conexao(conn)
+    config = OracleConfig(**{**_config().__dict__, "timeout": 0.2})
+
+    resultado = OracleMcpTools(mgr, config).execute_sql("SELECT x FROM t_x")
+
+    assert cancelada.is_set(), "o watchdog do total deveria ter cancelado a sessão"
+    assert resultado["error"] is True
+    assert "Timeout" in resultado["message"]
+    mgr.discard_connection.assert_called_once_with(conn)
+
+
+class _CursorQueRecusaArraysize:  # pylint: disable=too-few-public-methods
+    """Cursor cuja configuração falha (ex.: cursor já inválido)."""
+
+    @property
+    def arraysize(self) -> int:
+        return 0
+
+    @arraysize.setter
+    def arraysize(self, _valor: int) -> None:
+        raise oracledb.InterfaceError("DPY-1006: cursor is not open")
+
+    prefetchrows = 0
+
+    def close(self) -> None:
+        return None
+
+
+@pytest.mark.parametrize("ferramenta", ["execute_sql", "list_tables", "describe_table"])
+def test_falha_ao_configurar_o_cursor_devolve_a_conexao(ferramenta: str) -> None:
+    """Regressão: a configuração ficava fora do try; a conexão nunca voltava ao pool
+    (max=4, GETMODE_WAIT) e o quinto acquire travava o servidor."""
+    conn = MagicMock(name="conexao")
+    conn.cursor.return_value = _CursorQueRecusaArraysize()
+    mgr = _mgr_com_conexao(conn)
+    tools = OracleMcpTools(mgr, _config())
+    chamadas: dict[str, Callable[[], dict[str, Any]]] = {
+        "execute_sql": lambda: tools.execute_sql("SELECT 1 FROM DUAL"),
+        "list_tables": tools.list_tables,
+        "describe_table": lambda: tools.describe_table("cad_x"),
+    }
+
+    resultado = chamadas[ferramenta]()
+
+    assert resultado["error"] is True
+    assert mgr.release_connection.called or mgr.discard_connection.called

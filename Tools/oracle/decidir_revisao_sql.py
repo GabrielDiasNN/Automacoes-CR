@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,8 +19,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from medir_sql_oracle import DEFAULT_MIN_GAIN_PCT, decide  # noqa: E402
-
-_COMENTARIO_OU_LITERAL = re.compile(r"/\*.*?\*/|--[^\n]*|'(?:[^']|'')*'", re.S)
+from oracle_catalog import GuardError, sql_guard_text  # noqa: E402
 
 
 def _ler_json(caminho: Path) -> dict[str, Any] | None:
@@ -33,8 +31,16 @@ def _ler_json(caminho: Path) -> dict[str, Any] | None:
 
 
 def sem_ponto_e_virgula(sql: str) -> bool:
-    """True se não houver ';' fora de comentários e literais (o runner falharia)."""
-    return ";" not in _COMENTARIO_OU_LITERAL.sub(" ", sql)
+    """True se não houver ';' fora de comentários e literais (o runner falharia).
+
+    O texto de guarda do catálogo já trata literais `q'[...]'`, aspas duplas e hints.
+    Comentário ou literal sem fechamento conta como inválido (False): o runner
+    também falharia.
+    """
+    try:
+        return ";" not in sql_guard_text(sql)
+    except GuardError:
+        return False
 
 
 def _d(acao: str, motivo: str) -> dict[str, str]:

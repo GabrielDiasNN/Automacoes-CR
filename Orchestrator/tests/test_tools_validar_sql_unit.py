@@ -53,7 +53,7 @@ def _sem_oracle(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Troca `_oracle_stage` por um espião: a chamada registra e devolve status fixo."""
     chamadas: list[str] = []
 
-    def espiao(sql: str, *_a: Any) -> dict[str, Any]:
+    def espiao(sql: str, *_a: Any, **_k: Any) -> dict[str, Any]:
         chamadas.append(sql)
         return {"status": "parse_ok"}
 
@@ -118,3 +118,103 @@ def test_veredito_ilegivel_com_exit_3_bloqueia(
 
     assert _validate_one(f, None, _opcoes(f))["status"] == "blocked_guard"
     assert not chamadas
+
+
+class _Cursor:
+    """Cursor falso: registra o que executa e devolve `linhas` na verificação."""
+
+    def __init__(self, linhas: list[tuple[str, str, str]]) -> None:
+        self.linhas = linhas
+        self.executados: list[str] = []
+        self.description: list[Any] = []
+        self.prefetchrows = 0
+        self.arraysize = 0
+
+    def parse(self, _sql: str) -> None:
+        return None
+
+    def execute(self, sql: str, *_a: Any) -> None:
+        self.executados.append(sql)
+
+    def fetchall(self) -> list[tuple[str, str, str]]:
+        return self.linhas
+
+    def fetchmany(self, _n: int) -> list[Any]:
+        return []
+
+    def close(self) -> None:
+        return None
+
+
+class _Conexao:  # pylint: disable=too-few-public-methods
+    def __init__(self, cursor: _Cursor) -> None:
+        self._cursor = cursor
+
+    def cursor(self) -> _Cursor:
+        return self._cursor
+
+    def cancel(self) -> None:
+        return None
+
+
+def test_smoke_nao_executa_quando_o_catalogo_acha_funcao() -> None:
+    """Regressão (revisão do PR #77): `SELECT PKG.FN FROM DUAL` sai do guard com exit 0;
+    a `consulta_verificacao` roda antes do smoke e impede a execução."""
+    cursor = _Cursor([("SGTPRD", "PKG", "PACKAGE")])
+    resultado = _priv(vs, "_run_with_watchdog")(
+        _Conexao(cursor),
+        "select pkg.fn from dual",
+        5,
+        {},
+        consulta_verificacao="SELECT verificacao",
+    )
+    assert resultado["smoke"] == "blocked_custom_function"
+    assert "SGTPRD.PKG (PACKAGE)" in resultado["error"]
+    assert cursor.executados == ["SELECT verificacao"]
+
+
+def test_smoke_executa_quando_o_catalogo_nao_acha_funcao() -> None:
+    cursor = _Cursor([])
+    resultado = _priv(vs, "_run_with_watchdog")(
+        _Conexao(cursor),
+        "select col from t",
+        5,
+        {},
+        consulta_verificacao="SELECT verificacao",
+    )
+    assert resultado["smoke"] == "pass"
+    assert cursor.executados == ["SELECT verificacao", "select col from t"]
+
+
+def test_guard_liberado_com_veredito_ilegivel_bloqueia_sem_oracle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sem o JSON do guard não há `consulta_verificacao`: não executa (fail-closed)."""
+    f = tmp_path / "a.sql"
+    f.write_text("SELECT 1 FROM dual", encoding="utf-8")
+    monkeypatch.setattr(vs, "ROOT", tmp_path)
+    monkeypatch.setattr(vs, "_guard_texto", lambda _t, _g: (0, "saida truncada {"))
+    chamadas = _sem_oracle(monkeypatch)
+
+    assert _validate_one(f, None, _opcoes(f))["status"] == "blocked_guard"
+    assert not chamadas
+
+
+def test_guard_liberado_repassa_a_consulta_de_verificacao(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = tmp_path / "a.sql"
+    f.write_text("SELECT 1 FROM dual", encoding="utf-8")
+    monkeypatch.setattr(vs, "ROOT", tmp_path)
+    veredito = json.dumps({"classe": "leitura", "consulta_verificacao": "SELECT v"})
+    monkeypatch.setattr(vs, "_guard_texto", lambda _t, _g: (0, veredito))
+    recebidas: list[Any] = []
+
+    def espiao(*_a: Any, **kwargs: Any) -> dict[str, Any]:
+        recebidas.append(kwargs.get("consulta"))
+        return {"status": "validated"}
+
+    monkeypatch.setattr(vs, "_oracle_stage", espiao)
+
+    assert _validate_one(f, None, _opcoes(f))["status"] == "validated"
+    assert recebidas == ["SELECT v"]
