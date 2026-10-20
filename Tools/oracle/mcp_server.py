@@ -1172,6 +1172,7 @@ class OracleMcpTools:
                     "FROM DUAL"
                 )
                 user, db_name, host = cursor.fetchone()
+            versao = getattr(conn, "version", "N/D")
             rtt_ms = round((time.perf_counter() - query_start) * 1000, 2)
         except Exception as exc:
             falha = exc
@@ -1184,7 +1185,7 @@ class OracleMcpTools:
             user=user,
             db_name=db_name,
             host=host,
-            versao=getattr(conn, "version", "N/D"),
+            versao=versao,
             connect_ms=connect_ms,
             rtt_ms=rtt_ms,
         )
