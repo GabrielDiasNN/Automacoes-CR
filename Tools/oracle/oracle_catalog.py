@@ -544,11 +544,13 @@ def _carregar_guard() -> Any:
     return guard_sql
 
 
-def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> None:
+def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> str | None:
     """Mesma autoridade de leitura do MCP: so passa o que o guard classifica como leitura.
 
     Pega o que a lista de palavras-chave nao pega, como chamada de funcao de pacote
     (`SGTPRD.PKG_X.FN(...)`) com efeito colateral. Levanta GuardError (fail-closed).
+    Devolve a `consulta_verificacao` do guard, que quem executa o SQL precisa rodar
+    antes (`guard_sql.verificar_objetos`).
     """
     guard = _carregar_guard()
     try:
@@ -560,20 +562,31 @@ def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> None:
         not classificacao.get("permitido", False)
         or classificacao.get("classe") != "leitura"
     ):
-        motivos_lista = list(classificacao.get("motivos", []))
         # `check`/`explain` só fazem parse ou EXPLAIN PLAN, sem executar: chamada de
-        # função de pacote é o nível "só parse" do guard (exit 3), não bloqueio.
-        if (
-            permitir_funcoes
-            and motivos_lista
-            and all("chamada a função" in motivo for motivo in motivos_lista)
-        ):
-            return
+        # função é o nível "só parse" do guard (exit 3), não bloqueio. A regra é a
+        # mesma do validar_sql_oracle (fonte única em guard_sql).
+        if permitir_funcoes and guard.so_chamada_de_funcao(classificacao):
+            return None
         motivos = (
             ", ".join(classificacao.get("motivos", []))
             or "classificada como mutacao/DDL"
         )
         raise GuardError(f"Bloqueado pelo guard_sql: {motivos}")
+    consulta = classificacao.get("consulta_verificacao")
+    return str(consulta) if consulta else None
+
+
+def _preparar_para_execucao(sql: str) -> tuple[str, str | None]:
+    """`_ensure_select_only` mais a `consulta_verificacao`, para quem executa o SQL."""
+    executavel = _ensure_select_only(sql)
+    return executavel, _validar_guard_canonico(executavel)
+
+
+def _sem_funcao_no_catalogo(cursor: Any, consulta: str | None) -> None:
+    """Roda a `consulta_verificacao` antes do SQL; GuardError se algum nome for função."""
+    motivo = _carregar_guard().verificar_objetos(cursor, consulta)
+    if motivo is not None:
+        raise GuardError(f"Bloqueado: {motivo}")
 
 
 def _ensure_select_only(sql: str, permitir_funcoes: bool = False) -> str:
@@ -718,16 +731,16 @@ def cmd_distinct(args: argparse.Namespace) -> int:
         )
         return 1
 
-    owner = _catalog_owner(conn)
     desc_col = _find_description_column(conn, table, column) if args.with_desc else None
     select_cols = f"{column}, {desc_col}" if desc_col else column
     limit = min(args.limit, DEFAULT_DISTINCT_ROWS * 4)
     sql = (
-        f"SELECT DISTINCT {select_cols} FROM {owner}.{table} "  # nosec B608 - identificadores validados contra o catalogo, nunca texto livre do usuario
+        f"SELECT DISTINCT {select_cols} FROM {_catalog_owner(conn)}.{table} "  # nosec B608 - identificadores validados contra o catalogo, nunca texto livre do usuario
         f"WHERE {column} IS NOT NULL ORDER BY 1 FETCH FIRST {limit} ROWS ONLY"
     )
     try:
-        sql = _ensure_select_only(sql)  # mesma validacao do SQL que sera executado
+        # mesma validacao do SQL que sera executado
+        sql, consulta = _preparar_para_execucao(sql)
     except GuardError as exc:
         print(f"[ERRO] {exc}")
         return 1
@@ -740,6 +753,7 @@ def cmd_distinct(args: argparse.Namespace) -> int:
         holder["connection"] = connection
         _raise_if_expired(holder)
         cursor = connection.cursor()
+        _sem_funcao_no_catalogo(cursor, consulta)
         cursor.execute(sql)
         return list(cursor.fetchall())
 
@@ -810,14 +824,14 @@ def cmd_sample(args: argparse.Namespace) -> int:
     if not ok:
         return 1
 
-    owner = _catalog_owner(conn)
     max_rows = min(args.max_rows, MAX_SAMPLE_ROWS)
     sql = (
-        f"SELECT {select_cols} FROM {owner}.{table}{where_clause} "  # nosec B608 - tabela/colunas validadas contra o catalogo; --where validado pelo guard_sql
+        f"SELECT {select_cols} FROM {_catalog_owner(conn)}.{table}{where_clause} "  # nosec B608 - tabela/colunas validadas contra o catalogo; --where validado pelo guard_sql
         f"FETCH FIRST {max_rows} ROWS ONLY"
     )
     try:
-        sql = _ensure_select_only(sql)  # valida o SQL final, com o FETCH FIRST
+        # valida o SQL final, com o FETCH FIRST
+        sql, consulta = _preparar_para_execucao(sql)
     except GuardError as exc:
         print(f"[ERRO] --where rejeitado: {exc}")
         return 1
@@ -830,6 +844,8 @@ def cmd_sample(args: argparse.Namespace) -> int:
         holder["connection"] = connection
         _raise_if_expired(holder)
         cursor = connection.cursor()
+        # `--where` livre: `PKG.FN = 1` (função sem parênteses) passa no guard.
+        _sem_funcao_no_catalogo(cursor, consulta)
         cursor.execute(sql)
         cols = [d[0] for d in (cursor.description or [])]
         return cols, list(cursor.fetchall())

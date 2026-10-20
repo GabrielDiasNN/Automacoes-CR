@@ -31,7 +31,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from guard_sql import canonical_guard_file  # noqa: E402
+from guard_sql import (  # noqa: E402
+    canonical_guard_file,
+    ler_veredito,
+    so_chamada_de_funcao,
+    verificar_objetos,
+)
 from oracle_catalog import (  # noqa: E402
     GuardError,
     log_avisos_stderr,
@@ -131,12 +136,11 @@ class RunOptions:
 
 
 # Códigos de saída do guard_sql. 0 = leitura liberada. 3 = veredito não permitido.
-# Só o caso de função customizada (`classe` == "chamada_funcao") vai a parse no
+# Só o caso de função customizada (`guard_sql.so_chamada_de_funcao`) vai a parse no
 # Oracle. DML, DDL, PL/SQL e transação bloqueiam: o parse de DDL executa o DDL com
 # commit implícito. Qualquer outro código bloqueia (fail-closed).
 GUARD_LIBERADO = 0
 GUARD_SO_PARSE = 3
-GUARD_CLASSE_SO_PARSE = "chamada_funcao"
 # Teto da saída do guard gravada na evidência JSON.
 GUARD_OUTPUT_MAX_CHARS = 1000
 
@@ -326,14 +330,20 @@ def _connect(creds: Any) -> Any:
     return connect_from_creds(creds)
 
 
-def _run_with_watchdog(
+def _run_with_watchdog(  # pylint: disable=too-many-arguments
     connection: Any,
     sql: str,
     timeout: float,
     binds: dict[str, Any],
     execute: bool = True,
+    *,
+    consulta_verificacao: str | None = None,
 ) -> dict[str, Any]:
-    """Parseia e (se `execute`) roda o smoke; cancela a sessão se exceder o prazo."""
+    """Parseia e (se `execute`) roda o smoke; cancela a sessão se exceder o prazo.
+
+    Antes do smoke, a `consulta_verificacao` do guard confere no catálogo se algum nome
+    é função/pacote/tipo (função sem argumentos dispensa parênteses e o guard não a vê).
+    """
 
     result: dict[str, Any] = {}
 
@@ -344,6 +354,10 @@ def _run_with_watchdog(
         parse_ms = round((time.perf_counter() - started) * 1000, 1)
         result.update({"parse": "pass", "parse_ms": parse_ms})
         if not execute:
+            return
+        motivo = verificar_objetos(cursor, consulta_verificacao)
+        if motivo is not None:
+            result.update({"smoke": "blocked_custom_function", "error": motivo})
             return
 
         # Executa o SQL original (embrulhar em SELECT * FROM (...) dava
@@ -403,9 +417,18 @@ def _finish(result: dict[str, Any], started_clock: float) -> dict[str, Any]:
 
 
 def _oracle_stage(
-    sql: str, guard_code: int, creds: Any, options: RunOptions
+    sql: str,
+    guard_code: int,
+    creds: Any,
+    options: RunOptions,
+    *,
+    consulta: str | None = None,
 ) -> dict[str, Any]:
-    """Parse (e smoke, se pedido e permitido pelo guard) numa conexão nova."""
+    """Parse (e smoke, se pedido e permitido pelo guard) numa conexão nova.
+
+    `consulta` é a `consulta_verificacao` do guard: roda antes do smoke, e nome que
+    seja função/pacote/tipo impede a execução (`blocked_custom_function`).
+    """
     connection = None
     abandoned = False
     try:
@@ -440,9 +463,13 @@ def _oracle_stage(
         # `--bind` vale para a rodada inteira; só entra no arquivo que tem o
         # placeholder — o driver rejeita bind sobrando (DPY-4008).
         binds.update({k: v for k, v in options.explicit_binds.items() if k in binds})
-        outcome = _run_with_watchdog(connection, sql, remaining, binds)
+        outcome = _run_with_watchdog(
+            connection, sql, remaining, binds, consulta_verificacao=consulta
+        )
         abandoned = bool(outcome.pop("abandoned", False))
-        if outcome.get("smoke") == "pass":
+        if outcome.get("smoke") == "blocked_custom_function":
+            outcome["status"] = "blocked_custom_function"
+        elif outcome.get("smoke") == "pass":
             outcome["status"] = "validated"
         elif outcome.get("parse") == "pass":
             outcome["status"] = "parse_ok_smoke_" + str(outcome.get("smoke", "error"))
@@ -460,7 +487,12 @@ def _oracle_stage(
 
 
 def _oracle_stage_with_retry(
-    sql: str, guard_code: int, creds: Any, options: RunOptions
+    sql: str,
+    guard_code: int,
+    creds: Any,
+    options: RunOptions,
+    *,
+    consulta: str | None = None,
 ) -> dict[str, Any]:
     """`_oracle_stage` repetido com conexão nova em queda de sessão pela rede.
 
@@ -472,7 +504,7 @@ def _oracle_stage_with_retry(
     """
     outcome: dict[str, Any] = {}
     for attempt in range(1, options.attempts + 1):
-        outcome = _oracle_stage(sql, guard_code, creds, options)
+        outcome = _oracle_stage(sql, guard_code, creds, options, consulta=consulta)
         outcome["attempts"] = attempt
         error = str(outcome.get("error", ""))
         # A queda pode vir no parse (`error`), no smoke (`parse_ok_smoke_error`)
@@ -498,12 +530,38 @@ def _so_parse_permitido(guard_code: int, guard_output: str) -> bool:
     if guard_code != GUARD_SO_PARSE:
         return True
     try:
-        veredito = json.loads(guard_output)
+        return bool(so_chamada_de_funcao(ler_veredito(guard_output)))
     except ValueError:
         return False
-    return (
-        isinstance(veredito, dict) and veredito.get("classe") == GUARD_CLASSE_SO_PARSE
-    )
+
+
+def _veredito_para_oracle(
+    guard_code: int, guard_output: str
+) -> tuple[bool, str | None]:
+    """(segue para o Oracle, `consulta_verificacao`) a partir do veredito do guard.
+
+    Qualquer código fora de GUARD_LIBERADO / GUARD_SO_PARSE bloqueia (fail-closed).
+    Exit 3 só segue para parse quando o veredito é função customizada. Exit 0 segue com
+    a consulta de verificação; sem o JSON do guard, bloqueia.
+    """
+    if guard_code == GUARD_SO_PARSE:
+        return _so_parse_permitido(guard_code, guard_output), None
+    if guard_code != GUARD_LIBERADO:
+        return False, None
+    try:
+        return True, consulta_verificacao_do_guard(guard_output)
+    except ValueError:
+        return False, None
+
+
+def consulta_verificacao_do_guard(guard_output: str) -> str | None:
+    """`consulta_verificacao` do veredito (exit 0), a rodar antes de executar o SQL.
+
+    Levanta ValueError se a saída não for o JSON do guard: sem ela não há como provar
+    que nenhum nome é função, e quem chama não executa (fail-closed).
+    """
+    consulta = ler_veredito(guard_output).get("consulta_verificacao")
+    return str(consulta) if consulta else None
 
 
 def _rotulo_do_arquivo(path: Path) -> str:
@@ -549,13 +607,9 @@ def _validate_one(path: Path, creds: Any, options: RunOptions) -> dict[str, Any]
             "guard_output": guard_output[-GUARD_OUTPUT_MAX_CHARS:],
         }
     )
-    # Qualquer codigo fora de GUARD_LIBERADO / GUARD_SO_PARSE e bloqueio (fail-closed).
-    if guard_code not in (GUARD_LIBERADO, GUARD_SO_PARSE):
-        result["status"] = "blocked_guard"
-        return _finish(result, started_clock)
-    # Exit 3 só segue para parse quando o veredito é função customizada. O JSON é lido
-    # inteiro: `guard_output` acima já está truncado para a evidência.
-    if not _so_parse_permitido(guard_code, guard_output):
+    # O JSON é lido inteiro: `guard_output` acima já está truncado para a evidência.
+    segue, consulta = _veredito_para_oracle(guard_code, guard_output)
+    if not segue:
         result["status"] = "blocked_guard"
         return _finish(result, started_clock)
 
@@ -563,7 +617,9 @@ def _validate_one(path: Path, creds: Any, options: RunOptions) -> dict[str, Any]
         result["status"] = "blocked_multiple_statements"
         return _finish(result, started_clock)
 
-    result.update(_oracle_stage_with_retry(sql, guard_code, creds, options))
+    result.update(
+        _oracle_stage_with_retry(sql, guard_code, creds, options, consulta=consulta)
+    )
     return _finish(result, started_clock)
 
 

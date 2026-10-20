@@ -9,7 +9,6 @@
     "^Orchestrator\\\\app\\\\services\\\\system_runtime\\.py$",
     "^Tools\\\\oracle\\\\gerar_core_graph\\.py$",
     "^Tools\\\\oracle\\\\auditar_acervo_sql\\.py$",
-    "^Tools\\\\oracle\\\\validar_partes_oracle\\.py$",
     "^Tools\\\\oracle\\\\validar_sql_oracle\\.py$"
   ],
   "python_sqlite_allowlist": [

@@ -115,8 +115,8 @@ def test_guard_codigo_0_segue_para_oracle(
     f = tmp_path / "a.sql"
     f.write_text("SELECT 1 FROM dual", encoding="utf-8")
     monkeypatch.setattr(vs, "ROOT", tmp_path)
-    monkeypatch.setattr(vs, "_guard_texto", lambda _t, _g: (0, ""))
-    monkeypatch.setattr(vs, "_oracle_stage", lambda *_a: {"status": "validated"})
+    monkeypatch.setattr(vs, "_guard_texto", lambda _t, _g: (0, "{}"))
+    monkeypatch.setattr(vs, "_oracle_stage", lambda *_a, **_k: {"status": "validated"})
     opts = vs.RunOptions(timeout=1, execute=True, explicit_binds={}, guard=f)
     assert _validate_one(f, None, opts)["status"] == "validated"
 

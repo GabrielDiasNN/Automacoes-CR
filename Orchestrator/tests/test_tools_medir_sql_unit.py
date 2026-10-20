@@ -449,14 +449,16 @@ def test_validar_nao_fecha_conexao_de_thread_abandonada(
     monkeypatch.setattr(
         vs,
         "_run_with_watchdog",
-        lambda *_a: {"parse": "unknown", "smoke": "timeout", "abandoned": True},
+        lambda *_a, **_k: {"parse": "unknown", "smoke": "timeout", "abandoned": True},
     )
     resultado = estagio("select 1 from dual", 0, None, opcoes)
     assert resultado["status"] == "timeout" and "abandoned" not in resultado
     assert not fechadas
 
     monkeypatch.setattr(
-        vs, "_run_with_watchdog", lambda *_a: {"parse": "unknown", "smoke": "timeout"}
+        vs,
+        "_run_with_watchdog",
+        lambda *_a, **_k: {"parse": "unknown", "smoke": "timeout"},
     )
     estagio("select 1 from dual", 0, None, opcoes)
     assert fechadas == [True]
@@ -507,7 +509,9 @@ def test_validar_conexao_travada_vira_timeout(monkeypatch: pytest.MonkeyPatch) -
 
 
 _excecao_funcoes = _priv(mm, "_excecao_funcoes")
-_VEREDITO_FUNCAO = json.dumps({"motivos": ["chamada a função PKGBENF0001.FNC_X"]})
+_VEREDITO_FUNCAO = json.dumps(
+    {"classe": "chamada_funcao", "motivos": ["chamada a função PKGBENF0001.FNC_X"]}
+)
 _SQL_FUNCAO = "select pkgbenf0001.fnc_x(o.ob) /* nada.aqui( */ from ob o"
 
 
@@ -562,7 +566,8 @@ def test_excecao_funcoes_aspas_duplas_na_chamada_fecha_a_excecao(
     assert resultado is None
 
 
-def test_excecao_funcoes_literal_q_fecha_a_excecao(tmp_path: Path) -> None:
+def test_excecao_funcoes_literal_q_nao_confunde_a_regex(tmp_path: Path) -> None:
+    """O texto de guarda do catálogo trata `q'[...]'`: o `(` do literal não é chamada."""
     sql = "select pkgbenf0001.fnc_x(q'[a(b]') from dual"
     resultado = _excecao_funcoes(
         mm.GUARD_SO_PARSE,
@@ -570,7 +575,75 @@ def test_excecao_funcoes_literal_q_fecha_a_excecao(tmp_path: Path) -> None:
         sql,
         _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
     )
+    assert resultado is not None
+    assert resultado["funcoes_auditadas"] == ["PKGBENF0001.FNC_X"]
+
+
+def test_excecao_funcoes_funcao_sem_qualificacao_fecha_a_excecao(
+    tmp_path: Path,
+) -> None:
+    """Regressão (revisão do PR #77): UDF sem pacote (`minhafn(`) também é classe
+    `chamada_funcao`, mas não aparece na lista de chamadas qualificadas. A
+    reclassificação sem as auditadas a pega, e a exceção não se aplica."""
+    sql = "select pkgbenf0001.fnc_x(1), minhafn(2) from dual"
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        sql,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
     assert resultado is None
+
+
+def test_excecao_funcoes_exige_classe_do_veredito(tmp_path: Path) -> None:
+    """A regra é a classe `chamada_funcao` (fonte única em guard_sql), não o texto."""
+    veredito = json.dumps({"classe": "mutacao", "motivos": ["chamada a função X"]})
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        veredito,
+        _SQL_FUNCAO,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is None
+
+
+def test_excecao_funcoes_devolve_a_consulta_de_verificacao(tmp_path: Path) -> None:
+    """A verificação no catálogo usa o texto sem as auditadas: o pacote auditado não
+    entra na lista de nomes (senão a própria exceção seria bloqueada)."""
+    resultado = _excecao_funcoes(
+        mm.GUARD_SO_PARSE,
+        _VEREDITO_FUNCAO,
+        _SQL_FUNCAO,
+        _allowlist(tmp_path, ["PKGBENF0001.FNC_X"]),
+    )
+    assert resultado is not None
+    consulta = resultado["consulta_verificacao"]
+    assert consulta is not None and "'OB'" in consulta
+    assert "PKGBENF0001" not in consulta and "FNC_X" not in consulta
+
+
+def test_main_bloqueia_antes_de_medir_quando_o_catalogo_acha_funcao(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão (revisão do PR #77): `SELECT PKG.FN FROM DUAL` passa no guard com exit
+    0; a `consulta_verificacao` roda antes da primeira execução e impede a medição."""
+    medidas: list[str] = []
+
+    def _prepare(args: Any) -> tuple[str, dict[str, Any], Any]:
+        args.consulta_verificacao = "SELECT 1 FROM DUAL"
+        return "select pkg.fn from dual", {}, None
+
+    monkeypatch.setattr(mm, "_prepare", _prepare)
+    monkeypatch.setattr(
+        mm,
+        "verificar_funcoes_no_oracle",
+        lambda _c, consulta, _t: "SGTPRD.PKG (PACKAGE)" if consulta else None,
+    )
+    monkeypatch.setattr(mm, "measure", lambda *_a: medidas.append("x"))
+    monkeypatch.setattr(sys, "argv", ["medir", "a.sql"])
+    with pytest.raises(SystemExit, match="SGTPRD.PKG"):
+        mm.main()
+    assert not medidas
 
 
 def test_excecao_funcoes_aspas_so_em_literal_nao_fecham_a_excecao(

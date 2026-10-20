@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import subprocess
 import sys
 import time
 from datetime import UTC, datetime
@@ -25,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from guard_sql import verificar_objetos  # noqa: E402
 from oracle_catalog import (  # noqa: E402
     _raise_if_expired,
     _run_with_timeout,
@@ -38,6 +38,9 @@ from oracle_extract import (  # noqa: E402
 from oracle_session import connect_within, is_session_drop  # noqa: E402
 from validar_sql_oracle import (  # noqa: E402
     GUARD_LIBERADO,
+    GUARD_OUTPUT_MAX_CHARS,
+    _guard_texto,
+    consulta_verificacao_do_guard,
     portable_command,
     resolve_guard,
 )
@@ -48,17 +51,8 @@ VALIDATOR_VERSION = "2.1.0"
 _log = log_avisos_stderr
 
 
-def _guard(sql: str, guard: Path) -> tuple[int, str]:
-    result = subprocess.run(
-        [sys.executable, str(guard), "--sql", sql],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    output = (result.stdout or result.stderr).strip()
-    return result.returncode, output[-1000:]
+class FuncaoNoCatalogo(RuntimeError):
+    """A `consulta_verificacao` achou função/pacote/tipo: o caso não é executado."""
 
 
 def _summary(exc: BaseException) -> str:
@@ -807,10 +801,17 @@ def _cases() -> list[dict[str, Any]]:
 
 
 def _execute_case(
-    sql: str, creds: Any, holder: dict[str, Any], timeout_s: float
+    sql: str,
+    creds: Any,
+    holder: dict[str, Any],
+    timeout_s: float,
+    consulta: str | None = None,
 ) -> dict[str, Any]:
-    """Parse + execução limitada. Grava a conexão em `holder` para o watchdog
-    de `_run_with_timeout` poder cancelá-la."""
+    """Parse, verificação de funções no catálogo e execução limitada.
+
+    Grava a conexão em `holder` para o watchdog de `_run_with_timeout` poder
+    cancelá-la. `consulta` é a `consulta_verificacao` do guard.
+    """
     connection = connect_within(
         lambda: connect_from_creds(creds),
         timeout_s,
@@ -822,6 +823,9 @@ def _execute_case(
     started = time.perf_counter()
     cursor.parse(sql)
     holder["parse_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    motivo = verificar_objetos(cursor, consulta)
+    if motivo is not None:
+        raise FuncaoNoCatalogo(motivo)
     started = time.perf_counter()
     cursor.execute(sql)
     rows = cursor.fetchmany(1)
@@ -836,7 +840,7 @@ def _execute_case(
 
 
 def _attempt(
-    sql: str, creds: Any, timeout_ms: int
+    sql: str, creds: Any, timeout_ms: int, consulta: str | None = None
 ) -> tuple[dict[str, Any], BaseException | None]:
     """Uma tentativa. O Oracle Client 12.2 desta máquina não suporta
     `connection.call_timeout` (exige 18.1+): o prazo é imposto por watchdog."""
@@ -844,13 +848,15 @@ def _attempt(
     try:
         timeout_s = max(1, timeout_ms // 1000)
         outcome: dict[str, Any] = _run_with_timeout(
-            lambda: _execute_case(sql, creds, holder, timeout_s),
+            lambda: _execute_case(sql, creds, holder, timeout_s, consulta),
             timeout_s,
             holder=holder,
         )
         return outcome, None
     except TimeoutError as exc:
         return {"status": "timeout", "error": _summary(exc)}, None
+    except FuncaoNoCatalogo as exc:
+        return {"status": "blocked_custom_function", "error": _summary(exc)}, None
     except (oracledb.Error, OSError, RuntimeError, TypeError, ValueError) as exc:
         parsed = "parse_ms" in holder
         status = "parse_ok_smoke_error" if parsed else "oracle_error"
@@ -861,7 +867,7 @@ def _run_one(case: dict[str, Any], creds: Any, guard: Path) -> dict[str, Any]:
     sql = str(case["sql"]).strip()
     started_clock = time.perf_counter()
     sql_hash = _sha256(sql.encode("utf-8"))
-    guard_code, guard_output = _guard(sql, guard)
+    guard_code, guard_output = _guard_texto(sql, guard)
     result: dict[str, Any] = {
         "name": case["name"],
         "file": case["file"],
@@ -872,15 +878,22 @@ def _run_one(case: dict[str, Any], creds: Any, guard: Path) -> dict[str, Any]:
         "started_at_utc": datetime.now(UTC).isoformat(),
         "validator_version": VALIDATOR_VERSION,
         "guard_exit": guard_code,
-        "guard_output": guard_output,
+        "guard_output": guard_output[-GUARD_OUTPUT_MAX_CHARS:],
     }
     # Só GUARD_LIBERADO executa. Diferente de validar_sql, aqui não há nível só-parse:
     # qualquer outro veredito bloqueia (fail-closed por desenho).
-    if guard_code != GUARD_LIBERADO:
+    consulta: str | None = None
+    liberado = guard_code == GUARD_LIBERADO
+    if liberado:
+        try:
+            consulta = consulta_verificacao_do_guard(guard_output)
+        except ValueError:
+            liberado = False  # veredito ilegível: sem a verificação, não executa
+    if not liberado:
         result["status"] = "blocked_guard"
     else:
         for attempt in range(1, 4):
-            outcome, exc = _attempt(sql, creds, int(case["timeout_ms"]))
+            outcome, exc = _attempt(sql, creds, int(case["timeout_ms"]), consulta)
             result.update(outcome)
             result["attempts"] = attempt
             if exc is None or attempt == 3 or not _retryable(exc):
