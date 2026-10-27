@@ -65,6 +65,8 @@ $libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 
+$extractJs  = Join-Path $ScriptDir "extract_oracle.js"
+
 $validatePy = Join-Path $ScriptDir "validate_and_generate_html.py"
 
 $CacheFile  = Join-Path $ScriptDir ".cache_erros.json"
@@ -88,6 +90,9 @@ Import-Module $libIdempotency -Force
 # O .venv nao e versionado e vive na raiz do repositorio principal: resolver
 # so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
 $pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
+
+# Motor JS so com ORACLE_DRIVER_MODE=bridge (opt-in explicito); senao, Python.
+$nodeExe   = if ("$env:ORACLE_DRIVER_MODE".Trim() -eq "bridge") { (Get-Command node -ErrorAction SilentlyContinue).Source } else { $null }
 
 $AutomationName = "Montagem de Terceirizados"
 
@@ -191,17 +196,22 @@ try {
 
     if (Test-Path $dataFile) { Remove-Item $dataFile -Force }
 
-    # 1. Extração Nativa (Pure-Python via Oracle)
-    Start-HubStep -Step "extract" -Message "Extração nativa direta do Oracle"
+    # 1. Extração Nativa Direta do Oracle
+    $useJsExtractor = (Test-Path $extractJs) -and (-not [string]::IsNullOrWhiteSpace($nodeExe))
+    $extractorExe   = if ($useJsExtractor) { $nodeExe } else { $pythonExe }
+    $extractorPath  = if ($useJsExtractor) { $extractJs } else { $extractPy }
+    $engineName     = if ($useJsExtractor) { "Node.js (Oracle OCI 19c)" } else { "Python (Direct Oracle)" }
 
-    $extractResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $extractPy `
+    Start-HubStep -Step "extract" -Message "Extração nativa via $engineName"
+
+    $extractResult = Invoke-OraclePythonScript -PythonExe $extractorExe -ScriptPath $extractorPath `
         -ExecId $ExecId -LogPath $LogFile -Step "extract" `
-        -OperationName "Extracao Oracle (extract_oracle.py)" `
+        -OperationName "Extracao Oracle ($([System.IO.Path]::GetFileName($extractorPath)))" `
         -MaxAttempts 3 -BackoffSeconds @(30, 60, 120)
     Complete-HubStep -Ok $extractResult.Success
 
     if (-not $extractResult.Success) {
-        throw "Falha definitiva na extracao nativa apos 3 tentativas."
+        throw "Falha definitiva na extracao nativa ($engineName) apos 3 tentativas."
     }
 
     if (-not (Test-Path $dataFile)) {

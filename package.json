@@ -2,8 +2,11 @@
   "name": "automacoes-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "Ferramentas de qualidade do monorepo. O lint do Dashboard (React/TypeScript) delega ao projeto em Dashboard/, que tem seu proprio toolchain. Dependencias de runtime Node.js vivem nos projetos (ex.: Receitas Bloqueadas).",
+  "description": "Ferramentas de qualidade do monorepo. O lint do Dashboard (React/TypeScript) delega ao projeto em Dashboard/, que tem seu proprio toolchain. Dependencias de runtime Node.js vivem nos projetos (ex.: Receitas Bloqueadas), exceto o oracledb do motor Oracle compartilhado (lib/node/oracle_common.js), resolvido a partir da raiz.",
   "scripts": {
     "lint:js": "npm --prefix Dashboard run lint"
+  },
+  "dependencies": {
+    "oracledb": "^26.0.0"
   }
 }

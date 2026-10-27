@@ -2,6 +2,29 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.106] - 27/10/2026
+
+Motor Oracle opcional em Node.js (`ORACLE_DRIVER_MODE=bridge`) e correção dos 15 achados da revisão xhigh do diff que o introduziu. Sem validação contra o Oracle: o banco estava inacessível (migração de data center) em 27/10/2026.
+
+### Adicionado
+
+- **`ORACLE_DRIVER_MODE=bridge`:** node-oracledb em Thick Mode (`oracledb` no `package.json` da raiz). Só por configuração explícita: falha da conexão Python **não** cai no bridge (dobraria logins inválidos e trocaria o formato do dado entre ciclos).
+  - **Bridge Python → Node (`oracle_extract.run_node_bridge`):** fonte única para `fetch_all` e para o Beneficiamento. Recebe as `creds` do chamador pelo ambiente do filho, o SQL por arquivo temporário (limite de 32.767 caracteres da linha de comando do Windows), datas em `{"$date": ISO local}` nos dois sentidos e prazo (o processo Node encerra a si e à sessão; o Python mata o filho logo depois).
+  - **Beneficiamento:** o bridge passa pelo mesmo laço de nova tentativa e orçamento de `execute_query`, com `_make_unique_names`, `max_rows` no próprio fetch e o mesmo metadata do caminho nativo.
+  - **Extratores JS de MT-02, OBP-04 e RE-03:** só rodam com o modo `bridge` (o `run.ps1` volta ao Python em qualquer outro modo); núcleo único em `lib/node/oracle_common.js`, com datas em ISO local, hash igual ao `compute_hash` do Python, regras de credencial/DSN de `resolve_oracle_credentials` (sem IP fixo, DSN vazio é erro, MT-02 mantém o alias `dbprd` com `TNS_ADMIN`) e prazo total (`ORACLE_JS_DEADLINE_SECONDS`, padrão 300 s).
+
+### Corrigido (em relação ao diff revisado)
+
+- Hash do RE-03 calculado só sobre a contagem de linhas (replacer com as chaves do array): notificações reais saíam como idempotentes.
+- Datas em UTC (`toISOString`) nos extratores e no bridge: horários +3h nos relatórios e produção das 21:00-23:59 contada no dia seguinte no histórico do Beneficiamento. Parâmetro `"YYYY-MM-DD"` virava meia-noite UTC (dia anterior).
+- `maxRows: 5000` truncava o RE-03 em silêncio; backoff do `run.ps1` voltou a 30/60/120 s.
+- `load_dotenv(override=True)` no import de `beneficiamento.oracle` sobrescrevia o ambiente do processo inteiro.
+
+### Pendente
+
+- Validar o modo `bridge` contra o Oracle real (paridade de dado e hash com o Python) quando o banco voltar. Hash pode divergir se coluna decimal devolver valor inteiro (`10.0` no Python, `10` no Node).
+- Os extratores JS não têm nova tentativa interna em queda de sessão; dependem das 3 tentativas do `run.ps1`.
+
 ## [1.3.105] - 19/10/2026
 
 Correção dos 8 achados da revisão xhigh do PR 77 e do diff do DML de pontos de controle.

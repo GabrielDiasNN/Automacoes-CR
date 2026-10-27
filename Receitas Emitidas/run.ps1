@@ -40,6 +40,7 @@ $libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
 $libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
+$extractJs  = Join-Path $ScriptDir "extract_oracle.js"
 $generatePy = Join-Path $ScriptDir "generate_html_report.py"
 $configPath = Join-Path $ScriptDir "receitas_config.json"
 $StatePath  = Join-Path $ScriptDir "receitas_state.json"
@@ -60,6 +61,8 @@ Import-Module $libIdempotency -Force
 # O .venv nao e versionado e vive na raiz do repositorio principal: resolver
 # so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
 $pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
+# Motor JS so com ORACLE_DRIVER_MODE=bridge (opt-in explicito); senao, Python.
+$nodeExe   = if ("$env:ORACLE_DRIVER_MODE".Trim() -eq "bridge") { (Get-Command node -ErrorAction SilentlyContinue).Source } else { $null }
 
 $AutomationName = "Receitas Emitidas"
 
@@ -145,21 +148,26 @@ try {
 
     try {
         # 1. Extracao de Dados
-        Start-HubStep -Step "extract" -Message "Extraindo dados via Python (Direct Oracle CTE)"
+        $useJsExtractor = (Test-Path $extractJs) -and (-not [string]::IsNullOrWhiteSpace($nodeExe))
+        $extractorExe   = if ($useJsExtractor) { $nodeExe } else { $pythonExe }
+        $extractorPath  = if ($useJsExtractor) { $extractJs } else { $extractPy }
+        $engineName     = if ($useJsExtractor) { "Node.js (Oracle OCI 19c)" } else { "Python (Direct Oracle CTE)" }
 
-        $extractResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $extractPy `
+        Start-HubStep -Step "extract" -Message "Extraindo dados via $engineName"
+
+        $extractResult = Invoke-OraclePythonScript -PythonExe $extractorExe -ScriptPath $extractorPath `
             -ExecId $ExecId -LogPath $LogFile -OperationName "Extracao Oracle" -Step "extract" `
             -StdoutIsData -MaxAttempts 3 -BackoffSeconds @(30, 60, 120)
         Complete-HubStep -Ok ($extractResult.Success -or $extractResult.Idempotent)
 
         if ($extractResult.Idempotent) {
-            Write-Log "Python detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
-            Exit-WithCode 0 "Processo finalizado (Idempotencia Python)."
+            Write-Log "Extrator detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
+            Exit-WithCode 0 "Processo finalizado (Idempotencia Extrator)."
         }
 
         if (-not $extractResult.Success) {
             Send-AlertaFalhaDefinitiva -TaskName "Receitas Emitidas" -ExecId $ExecId -UltimoErro "Falha na extracao Oracle." -Tentativas 3 -LogPath $LogFile
-            throw "Falha definitiva na extracao Python."
+            throw "Falha definitiva na extracao Oracle ($engineName)."
         }
 
         if ([string]::IsNullOrWhiteSpace($extractResult.Output)) { throw "Extracao retornou dados vazios." }

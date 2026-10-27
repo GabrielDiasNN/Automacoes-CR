@@ -32,7 +32,14 @@ if str(LIB_PYTHON_DIR) not in sys.path:
     sys.path.append(str(LIB_PYTHON_DIR))
 
 from oracle_client import (  # noqa: E402  pylint: disable=wrong-import-position
+    DRIVER_MODE_BRIDGE,
     connect_adaptive,
+    get_driver_mode,
+)
+from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position
+    OracleBridgeError,
+    OracleCredentials,
+    run_node_bridge,
 )
 from oracle_session import (  # noqa: E402  pylint: disable=wrong-import-position
     connect_within,
@@ -82,7 +89,7 @@ def _log_driver(message: str, level: str = "INFO") -> None:
         logger.info("%s", message)
 
 
-def connect_readonly() -> Any:
+def _readonly_credentials() -> OracleCredentials:
     load_dotenv(REPO_ROOT / ".env", override=True)
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
@@ -97,14 +104,65 @@ def connect_readonly() -> Any:
             "Ambiente Oracle incompleto. Verifique ORACLE_READONLY_USER, "
             "ORACLE_READONLY_PASSWORD e ORACLE_CONNECT_STRING."
         )
-
-    return connect_adaptive(
+    return OracleCredentials(
         user=user,
         password=password,
         dsn=dsn,
-        client_lib=client_lib,
+        client_lib=client_lib or "",
         tns_admin=tns_admin,
+    )
+
+
+def connect_readonly() -> Any:
+    creds = _readonly_credentials()
+    return connect_adaptive(
+        user=creds.user,
+        password=creds.password,
+        dsn=creds.dsn,
+        client_lib=creds.client_lib or None,
+        tns_admin=creds.tns_admin,
         log_fn=_log_driver,
+    )
+
+
+def _execute_once_bridge(
+    sql: str,
+    parameters: Mapping[str, Any] | None,
+    *,
+    oracle_timeout_ms: int,
+    wall_clock_budget_seconds: float,
+    max_rows: int | None,
+) -> QueryResult:
+    """Mesmo contrato de `_execute_once`, pelo bridge Node (`ORACLE_DRIVER_MODE=bridge`).
+
+    O orçamento restante vira o prazo do processo Node (que encerra a si e à
+    sessão) e o `max_rows` é aplicado no próprio fetch.
+    """
+    query_started_at = time.perf_counter()
+    raw_names, rows = run_node_bridge(
+        _readonly_credentials(),
+        sql,
+        dict(parameters or {}),
+        timeout_seconds=wall_clock_budget_seconds,
+        max_rows=max_rows,
+    )
+    columns, duplicate_columns = _make_unique_names(raw_names)
+    elapsed = time.perf_counter() - query_started_at
+    return QueryResult(
+        columns=columns,
+        rows=rows,
+        duplicate_columns=duplicate_columns,
+        metadata={
+            "oracle_timeout_ms": int(oracle_timeout_ms),
+            "oracle_timeout_applied": False,
+            "oracle_timeout_warning": False,
+            # O prazo do processo Node faz o papel do watchdog.
+            "oracle_watchdog_applied": True,
+            "elapsed_seconds": round(elapsed, 4),
+            "row_count": len(rows),
+            "max_rows_limit": max_rows if max_rows and max_rows > 0 else None,
+            "bridge": True,
+        },
     )
 
 
@@ -121,13 +179,14 @@ def execute_query(
     (`TimeoutError`) falham na hora. `wall_clock_budget_seconds` limita o total
     de todas as tentativas: cada uma recebe apenas o orçamento restante (e um
     `call_timeout` no máximo igual a ele)."""
+    bridge = get_driver_mode() == DRIVER_MODE_BRIDGE
     started = time.perf_counter()
     attempt = 1
     remaining = float(wall_clock_budget_seconds)
     attempt_timeout_ms = int(oracle_timeout_ms)
     while True:
         try:
-            result = _execute_once(
+            result = (_execute_once_bridge if bridge else _execute_once)(
                 sql,
                 parameters,
                 oracle_timeout_ms=attempt_timeout_ms,
@@ -136,7 +195,7 @@ def execute_query(
             )
         # `oracledb.Error`, não só DatabaseError: DPY-1001 (e DPI-1010, remapeado
         # para ele) chega como InterfaceError, que não é subclasse de DatabaseError.
-        except oracledb.Error as exc:
+        except (oracledb.Error, OracleBridgeError) as exc:
             elapsed = time.perf_counter() - started
             remaining = wall_clock_budget_seconds - elapsed
             if (

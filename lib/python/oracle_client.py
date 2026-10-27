@@ -8,6 +8,9 @@ Política, controlada pela variável `ORACLE_DRIVER_MODE`:
   outro erro é propagado, sem fallback.
 - `thick`: ativa o Thick Mode antes da primeira conexão. Serve de rollback sem
   deploy, caso o Thin Mode apresente problema.
+- `bridge`: as consultas de `oracle_extract.fetch_all` e do Beneficiamento vão
+  pelo node-oracledb (`oracle_extract.run_node_bridge`). Para quem chama
+  `connect_adaptive` diretamente, equivale a `auto`.
 
 Uma tentativa thin que falha não trava o modo do driver: o gerenciador do
 python-oracledb só registra o modo quando o bloco de conexão termina sem
@@ -32,6 +35,7 @@ LogFn = Callable[..., None]
 DRIVER_MODE_ENV = "ORACLE_DRIVER_MODE"
 DRIVER_MODE_AUTO = "auto"
 DRIVER_MODE_THICK = "thick"
+DRIVER_MODE_BRIDGE = "bridge"
 
 # Verificador de senha que o Thin Mode não suporta (ex.: 0x939, legado).
 LEGACY_VERIFIER_MARKER = "DPY-3015"
@@ -62,9 +66,9 @@ class DriverMode:
 def get_driver_mode() -> str:
     """Modo pedido pelo ambiente. Valor inválido levanta ValueError (falha alta)."""
     value = (os.environ.get(DRIVER_MODE_ENV) or DRIVER_MODE_AUTO).strip().lower()
-    if value not in (DRIVER_MODE_AUTO, DRIVER_MODE_THICK):
+    if value not in (DRIVER_MODE_AUTO, DRIVER_MODE_THICK, DRIVER_MODE_BRIDGE):
         raise ValueError(
-            f"{DRIVER_MODE_ENV} inválido: {value!r} (use 'auto' ou 'thick')."
+            f"{DRIVER_MODE_ENV} inválido: {value!r} (use 'auto', 'thick' ou 'bridge')."
         )
     return value
 
