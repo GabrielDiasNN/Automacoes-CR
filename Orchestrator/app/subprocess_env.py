@@ -33,7 +33,7 @@ ALLOWED_ENV_KEYS = frozenset(
         "USERNAME",
         "ORACLE_CLIENT_LIB_DIR",
         "ORACLE_CLIENT_PATH",
-        # Modo do driver Oracle (auto/thick). Sem esta chave o subprocesso
+        # Modo do driver Oracle (auto/thick/bridge). Sem esta chave o subprocesso
         # ignoraria o rollback para Thick configurado no .env.
         "ORACLE_DRIVER_MODE",
         # Caminho do tnsnames.ora, não credencial. Lido por
