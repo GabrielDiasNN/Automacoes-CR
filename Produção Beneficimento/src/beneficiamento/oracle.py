@@ -33,6 +33,7 @@ if str(LIB_PYTHON_DIR) not in sys.path:
 
 from oracle_client import (  # noqa: E402  pylint: disable=wrong-import-position
     DRIVER_MODE_BRIDGE,
+    DRIVER_MODE_QUEUE,
     connect_adaptive,
     get_driver_mode,
 )
@@ -40,6 +41,10 @@ from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-positio
     OracleBridgeError,
     OracleCredentials,
     run_node_bridge,
+)
+from oracle_queue import (  # noqa: E402  pylint: disable=wrong-import-position
+    OracleQueueTransientError,
+    execute_query as queue_execute_query,
 )
 from oracle_session import (  # noqa: E402  pylint: disable=wrong-import-position
     connect_within,
@@ -166,6 +171,51 @@ def _execute_once_bridge(
     )
 
 
+def _execute_once_queue(
+    sql: str,
+    parameters: Mapping[str, Any] | None,
+    *,
+    oracle_timeout_ms: int,
+    wall_clock_budget_seconds: float,
+    max_rows: int | None,
+) -> QueryResult:
+    """Mesmo contrato de `_execute_once`, pela fila SMB do worker no TSplus
+    (`ORACLE_DRIVER_MODE=queue`): a estação não tem rota direta para o Oracle.
+
+    O orçamento restante vira o prazo de espera da resposta. Os parâmetros vão
+    como bind variables. O worker já roda em transação somente leitura.
+    """
+    query_started_at = time.perf_counter()
+    result = queue_execute_query(
+        sql,
+        timeout_seconds=max(wall_clock_budget_seconds, 1.0),
+        params=dict(parameters or {}),
+    )
+    rows = result.rows
+    if max_rows and max_rows > 0:
+        rows = rows[:max_rows]
+    columns, duplicate_columns = _make_unique_names(result.columns)
+    elapsed = time.perf_counter() - query_started_at
+    return QueryResult(
+        columns=columns,
+        rows=rows,
+        duplicate_columns=duplicate_columns,
+        metadata={
+            "oracle_timeout_ms": int(oracle_timeout_ms),
+            "oracle_timeout_applied": False,
+            "oracle_timeout_warning": False,
+            # O prazo da fila só limita a espera: a consulta não é cancelada no Oracle.
+            "oracle_watchdog_applied": False,
+            "elapsed_seconds": round(elapsed, 4),
+            "row_count": len(rows),
+            "max_rows_limit": max_rows if max_rows and max_rows > 0 else None,
+            "queue": True,
+            "worker": result.worker,
+            "worker_elapsed_ms": result.elapsed_ms,
+        },
+    )
+
+
 def execute_query(
     sql: str,
     parameters: Mapping[str, Any] | None = None,
@@ -179,14 +229,18 @@ def execute_query(
     (`TimeoutError`) falham na hora. `wall_clock_budget_seconds` limita o total
     de todas as tentativas: cada uma recebe apenas o orçamento restante (e um
     `call_timeout` no máximo igual a ele)."""
-    bridge = get_driver_mode() == DRIVER_MODE_BRIDGE
+    modo = get_driver_mode()
+    executar = {
+        DRIVER_MODE_BRIDGE: _execute_once_bridge,
+        DRIVER_MODE_QUEUE: _execute_once_queue,
+    }.get(modo, _execute_once)
     started = time.perf_counter()
     attempt = 1
     remaining = float(wall_clock_budget_seconds)
     attempt_timeout_ms = int(oracle_timeout_ms)
     while True:
         try:
-            result = (_execute_once_bridge if bridge else _execute_once)(
+            result = executar(
                 sql,
                 parameters,
                 oracle_timeout_ms=attempt_timeout_ms,
@@ -195,11 +249,15 @@ def execute_query(
             )
         # `oracledb.Error`, não só DatabaseError: DPY-1001 (e DPI-1010, remapeado
         # para ele) chega como InterfaceError, que não é subclasse de DatabaseError.
-        except (oracledb.Error, OracleBridgeError) as exc:
+        except (oracledb.Error, OracleBridgeError, OracleQueueTransientError) as exc:
             elapsed = time.perf_counter() - started
             remaining = wall_clock_budget_seconds - elapsed
+            # Falha transitória da fila (SMB, worker) equivale à queda de sessão.
+            transitoria = isinstance(exc, OracleQueueTransientError) or is_session_drop(
+                exc
+            )
             if (
-                not is_session_drop(exc)
+                not transitoria
                 or attempt >= MAX_QUERY_ATTEMPTS
                 or remaining < MIN_RETRY_REMAINING_SECONDS
             ):

@@ -81,6 +81,22 @@ def test_configuracao_do_beneficiamento_chega_ao_subprocesso() -> None:
 
 
 @pytest.mark.unitario
+def test_configuracao_da_fila_oracle_chega_ao_subprocesso() -> None:
+    """Modo queue: sem a pasta e o prazo, o refresh do Beneficiamento usava a
+    pasta padrão da fila enquanto as extrações usavam a configurada."""
+    configuracao = {
+        "ORACLE_DRIVER_MODE": "queue",
+        "ORACLE_QUEUE_DIR": "fila_configurada",
+        "ORACLE_QUEUE_TIMEOUT_SECONDS": "600",
+    }
+    with patch.dict(os.environ, configuracao):
+        env = build_subprocess_env()
+
+    for chave, valor in configuracao.items():
+        assert env.get(chave) == valor, f"{chave} não chegou ao subprocesso"
+
+
+@pytest.mark.unitario
 def test_allowlist_nao_contem_segredo_conhecido() -> None:
     """Guarda contra alguém adicionar uma chave sensível à allowlist."""
     proibidos = {"KEY", "PASSWORD", "SECRET", "TOKEN", "PASSWD", "CREDENTIAL"}

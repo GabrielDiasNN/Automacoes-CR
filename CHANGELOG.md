@@ -2,6 +2,26 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.107] - 08/11/2026
+
+Motor Oracle por fila SMB (`ORACLE_DRIVER_MODE=queue`) para a estação sem rota ao Oracle, com as correções de duas revisões do diff. O E2E contra o worker real é `Tools/oracle/teste_e2e_fila_oracle.py`.
+
+### Adicionado
+
+- **`lib/python/oracle_queue.py`:** grava `req_<id>.sql`, o worker no TSplus executa em transação somente leitura e devolve `res_<id>.csv` tipado. Parâmetros viajam como bind variables (`--#param:`), nunca no texto do SQL.
+- **Consumidores:** `fetch_all` e `init_thick_mode` (`oracle_extract.py`), `execute_query` do Beneficiamento, preflight do RE-03 (`run.ps1`) e health check do `Lib-Logging.psm1`. `Tools/oracle` (CLIs e MCP) segue com conexão direta.
+- **Configuração:** `ORACLE_QUEUE_DIR` (vazio = pasta padrão) e `ORACLE_QUEUE_TIMEOUT_SECONDS` (padrão 1.800 s nas extrações; o driver nativo não tinha teto).
+
+### Corrigido (em relação ao diff revisado)
+
+- Erros da fila escapavam do retry. Agora `OracleQueueTransientError` (share inalcançável, resposta truncada) entra no `make_oracle_retry` e no laço do Beneficiamento. Erro reportado pelo worker, resposta malformada, pasta inexistente num share alcançável (`config`) e prazo esgotado não são repetidos, porque cada tentativa reexecutaria a consulta no Oracle.
+- `res_` publicada depois do prazo ficava órfã na pasta compartilhada. Agora uma varredura remove as respostas com mais de 1 h, no máximo uma vez a cada 5 min por processo. O Beneficiamento registra `oracle_watchdog_applied=False`, porque o prazo da fila não cancela a consulta.
+- O SQL era gravado em cp1252 com `errors="replace"` e mudava em silêncio. Agora um caractere fora do cp1252 é erro `request`.
+- `ORACLE_QUEUE_DIR=` vazio virava pasta vazia no Python e pasta padrão no PowerShell.
+- Binds que só diferem na caixa e `datetime` com fuso agora são recusados com mensagem clara.
+- `ORACLE_QUEUE_DIR` e `ORACLE_QUEUE_TIMEOUT_SECONDS` ficavam fora da allowlist de `Orchestrator/app/subprocess_env.py`, então o refresh do Beneficiamento gravava na pasta padrão da fila.
+- O serial OLE negativo (antes de 30/12/1899) era lido e codificado como deslocamento linear, e trocava dia e hora. Agora a hora do dia segue sempre positiva, como na especificação OLE que o VBScript usa.
+
 ## [1.3.106] - 27/10/2026
 
 Motor Oracle opcional em Node.js (`ORACLE_DRIVER_MODE=bridge`) e correção dos 15 achados da revisão xhigh do diff que o introduziu. Sem validação contra o Oracle: o banco estava inacessível (migração de data center) em 27/10/2026.

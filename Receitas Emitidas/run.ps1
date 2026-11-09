@@ -110,7 +110,13 @@ $oracleClientLib = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_L
 $oracleClientFallback = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_PATH", "Process")
 if ([string]::IsNullOrWhiteSpace($oracleClientLib)) { $oracleClientLib = $oracleClientFallback }
 $oraClientPreFlightOk = $true
-if ([string]::IsNullOrWhiteSpace($oracleClientLib)) {
+$driverMode = [System.Environment]::GetEnvironmentVariable("ORACLE_DRIVER_MODE", "Process")
+if ([string]::IsNullOrWhiteSpace($driverMode)) { $driverMode = Get-EnvFileValue -Key "ORACLE_DRIVER_MODE" }
+
+if ($driverMode -eq "queue") {
+    Write-Log "PRE-FLIGHT OK: Oracle Driver Mode em modo QUEUE (TSplus SMB Worker)."
+    $oraClientPreFlightOk = $true
+} elseif ([string]::IsNullOrWhiteSpace($oracleClientLib)) {
     Write-Log "PRE-FLIGHT WARN: ORACLE_CLIENT_LIB_DIR/ORACLE_CLIENT_PATH nao definido. Thick Mode pode falhar." -Lvl "WARN"
     $oraClientPreFlightOk = $false
 } elseif (-not (Test-Path $oracleClientLib)) {

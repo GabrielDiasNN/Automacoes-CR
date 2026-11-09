@@ -356,7 +356,19 @@ if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ((($con
 
 }
 
-if ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
+$driverMode = [System.Environment]::GetEnvironmentVariable("ORACLE_DRIVER_MODE", "Process")
+if ([string]::IsNullOrWhiteSpace($driverMode)) { $driverMode = Get-EnvFileValue -Key "ORACLE_DRIVER_MODE" }
+
+if ($driverMode -eq "queue") {
+    $queueDir = [System.Environment]::GetEnvironmentVariable("ORACLE_QUEUE_DIR", "Process")
+    if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = Get-EnvFileValue -Key "ORACLE_QUEUE_DIR" }
+    if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = "\\192.168.62.1\Dados\Planilhas_Conexao\Automacoes_Fila\_fila\pedidos" }
+    if (Test-Path -LiteralPath $queueDir) {
+        $results += "OK: Oracle Queue ($queueDir) On"
+    } else {
+        $results += "WARN: Oracle Queue ($queueDir) Off (pasta inacessivel)"
+    }
+} elseif ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
 
 $results += "WARN: Oracle host nao configurado (ORACLE_CONNECT_STRING ausente)"
 
