@@ -2,6 +2,20 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.108] - 09/11/2026
+
+Correções da revisão do PR 82 (motor Oracle por fila SMB). Validado só por testes unitários, sem execução contra o worker real no TSplus.
+
+### Corrigido
+
+- **`lib/python/oracle_queue.py`:** share SMB que caía durante a espera da resposta era tratado como "resposta ainda não publicada", girava até o prazo (1.800 s nas extrações) e terminava em `TimeoutError`, que não é repetido. Agora, depois de 30 s seguidos sem conseguir listar a pasta (`SMB_OUTAGE_GRACE_SECONDS`), a espera termina em `OracleQueueTransientError('smb')`. Falha mais curta não derruba a consulta.
+- **`lib/python/oracle_client.py`:** `connect_adaptive` ignorava `ORACLE_DRIVER_MODE=queue` e tentava a conexão direta, com as credenciais vazias que `resolve_oracle_credentials` aceita nesse modo. Agora recusa com `NotSupportedError` e mensagem clara antes do login. Afeta `Tools/oracle` (CLIs e MCP), que seguem sem suporte à fila.
+- **`Receitas Emitidas/extract_oracle.py`:** `OracleQueueError` escapava do `except` final e o processo morria com traceback cru, sem o log estruturado de erro fatal.
+
+### Pendente
+
+- Tipo numérico da fila: o worker informa só `number`, sem a escala, então coluna decimal com valor inteiro chega como `int` (o driver nativo devolve `float`). Pode mudar o hash ao trocar de modo. A correção depende do worker no TSplus.
+
 ## [1.3.107] - 08/11/2026
 
 Motor Oracle por fila SMB (`ORACLE_DRIVER_MODE=queue`) para a estação sem rota ao Oracle, com as correções de duas revisões do diff. O E2E contra o worker real é `Tools/oracle/teste_e2e_fila_oracle.py`.

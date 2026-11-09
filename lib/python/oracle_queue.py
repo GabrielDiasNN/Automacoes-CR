@@ -42,6 +42,9 @@ ORPHAN_MAX_AGE_SECONDS = 3600.0
 # pasta neste intervalo, não uma por consulta.
 SWEEP_INTERVAL_SECONDS = 300.0
 _last_sweep: dict[str, float] = {}
+# Tempo seguido sem conseguir listar a pasta, durante a espera da resposta, a partir
+# do qual o share é dado como fora do ar (falha transitória).
+SMB_OUTAGE_GRACE_SECONDS = 30.0
 POLL_INTERVAL_MIN_SECONDS = 0.02
 POLL_INTERVAL_MAX_SECONDS = 0.1
 
@@ -378,14 +381,13 @@ def _try_take(path: str) -> bytes | None:
     por 5 s (FileNotFoundCacheLifetime): medido, cada consulta ficava ~5,1 s parada
     mesmo com a resposta pronta em ~0,1 s. Com a listagem: ~0,3 s.
     PermissionError = o worker está concluindo o rename; tenta de novo no próximo ciclo.
+    Falha ao listar a pasta (OSError) sobe para `execute_query`, que decide se o
+    share caiu de vez.
     """
     name = os.path.basename(path)
-    try:
-        with os.scandir(os.path.dirname(path)) as entries:
-            if not any(entry.name == name for entry in entries):
-                return None
-    except OSError:
-        return None
+    with os.scandir(os.path.dirname(path)) as entries:
+        if not any(entry.name == name for entry in entries):
+            return None
     try:
         with open(path, "rb") as f:
             data = f.read()
@@ -432,9 +434,26 @@ def execute_query(
         sql = f"{_encode_params(params)}\n{sql}"
     final_req_path = _submit(base_dir, req_id, sql)
     res_path = os.path.join(base_dir, f"res_{req_id}.csv")
+    falha_desde: float | None = None
     try:
         for _ in _poll(timeout_seconds):
-            data = _try_take(res_path)
+            try:
+                data = _try_take(res_path)
+            except OSError as e:
+                # Soluço de rede não derruba a espera (repetir reexecutaria a consulta);
+                # share fora do ar além da tolerância vira falha transitória, em vez de
+                # girar até o prazo e acabar num TimeoutError que ninguém repete.
+                agora = time.monotonic()
+                if falha_desde is None:
+                    falha_desde = agora
+                if agora - falha_desde >= SMB_OUTAGE_GRACE_SECONDS:
+                    raise OracleQueueTransientError(
+                        "smb",
+                        f"Pasta da fila Oracle inacessível há {agora - falha_desde:.0f}s "
+                        f"durante a espera da resposta: {e}",
+                    ) from e
+                continue
+            falha_desde = None
             if data is not None:
                 return _parse_response(data)
         raise TimeoutError(_TIMEOUT_MSG.format(timeout=timeout_seconds))

@@ -213,6 +213,47 @@ def test_prazo_da_extracao_vem_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> N
         oracle_queue.get_queue_timeout()
 
 
+def test_share_fora_do_ar_na_espera_vira_falha_transitoria(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Share que cai depois do envio não pode girar até o prazo e virar TimeoutError."""
+
+    def sem_share(_path: str) -> bytes | None:
+        raise OSError("rede indisponivel")
+
+    monkeypatch.setattr(oracle_queue, "_try_take", sem_share)
+    monkeypatch.setattr(oracle_queue, "SMB_OUTAGE_GRACE_SECONDS", 0.05)
+    inicio = time.monotonic()
+    with pytest.raises(OracleQueueTransientError) as erro:
+        execute_query("SELECT 1 FROM DUAL", timeout_seconds=30, queue_dir=str(tmp_path))
+    assert erro.value.kind == "smb"
+    assert time.monotonic() - inicio < 5, "não deve esperar o prazo inteiro"
+
+
+def test_soluco_de_rede_na_espera_nao_derruba_a_consulta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = oracle_queue._try_take  # pylint: disable=protected-access
+    falhas = iter([OSError("solucao"), OSError("solucao")])
+
+    def instavel(path: str) -> bytes | None:
+        falha = next(falhas, None)
+        if falha is not None:
+            raise falha
+        return original(path)
+
+    monkeypatch.setattr(oracle_queue, "_try_take", instavel)
+    parar = threading.Event()
+    _worker_falso(tmp_path, RESPOSTA_OK, parar)
+    try:
+        r = execute_query(
+            "SELECT 1 FROM DUAL", timeout_seconds=5, queue_dir=str(tmp_path)
+        )
+    finally:
+        parar.set()
+    assert r.rows == [(1, "a")]
+
+
 def test_fetch_all_na_fila_usa_prazo_configurado(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

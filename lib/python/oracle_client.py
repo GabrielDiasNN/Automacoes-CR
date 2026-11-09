@@ -174,6 +174,15 @@ def connect_adaptive(  # pylint: disable=too-many-arguments
     log_fn: LogFn,
 ) -> oracledb.Connection:
     """Abre uma conexão no modo adaptativo (ver a docstring do módulo)."""
+    if get_driver_mode() == DRIVER_MODE_QUEUE:
+        # No modo queue a estação não tem rota para o Oracle e as credenciais locais
+        # podem estar vazias (`resolve_oracle_credentials` não as exige): tentar a
+        # conexão direta daria erro de rede ou de login sem dizer a causa.
+        raise oracledb.NotSupportedError(
+            f"{DRIVER_MODE_ENV}=queue não abre conexão direta com o Oracle: as consultas "
+            "vão pela fila SMB (oracle_queue.execute_query). Para usar esta ferramenta, "
+            "rode-a com 'auto' ou 'thick' numa máquina com rota para o banco."
+        )
     if get_driver_mode() == DRIVER_MODE_THICK:
         if oracledb.is_thin_mode() and _ESTADO["thin_consolidado"]:
             # ORACLE_DRIVER_MODE=thick depois de uma conexão Thin: o init falharia com

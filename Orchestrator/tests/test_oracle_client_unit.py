@@ -74,6 +74,16 @@ def _conectar() -> Any:
     )
 
 
+def test_modo_queue_recusa_conexao_direta(
+    driver: _Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Na fila não há rota nem credencial local: falha clara, sem tentar o login."""
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "queue")
+    with pytest.raises(oracledb.NotSupportedError, match="fila SMB"):
+        _conectar()
+    assert not driver.chamadas
+
+
 def test_thin_sucesso_nao_ativa_thick_e_usa_prazos_de_rede(driver: _Driver) -> None:
     assert _conectar() == "CONEXAO"
     assert driver.chamadas == ["connect"]
