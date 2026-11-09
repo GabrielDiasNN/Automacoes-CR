@@ -36,6 +36,7 @@ DRIVER_MODE_ENV = "ORACLE_DRIVER_MODE"
 DRIVER_MODE_AUTO = "auto"
 DRIVER_MODE_THICK = "thick"
 DRIVER_MODE_BRIDGE = "bridge"
+DRIVER_MODE_QUEUE = "queue"
 
 # Verificador de senha que o Thin Mode não suporta (ex.: 0x939, legado).
 LEGACY_VERIFIER_MARKER = "DPY-3015"
@@ -66,9 +67,9 @@ class DriverMode:
 def get_driver_mode() -> str:
     """Modo pedido pelo ambiente. Valor inválido levanta ValueError (falha alta)."""
     value = (os.environ.get(DRIVER_MODE_ENV) or DRIVER_MODE_AUTO).strip().lower()
-    if value not in (DRIVER_MODE_AUTO, DRIVER_MODE_THICK, DRIVER_MODE_BRIDGE):
+    if value not in (DRIVER_MODE_AUTO, DRIVER_MODE_THICK, DRIVER_MODE_BRIDGE, DRIVER_MODE_QUEUE):
         raise ValueError(
-            f"{DRIVER_MODE_ENV} inválido: {value!r} (use 'auto', 'thick' ou 'bridge')."
+            f"{DRIVER_MODE_ENV} inválido: {value!r} (use 'auto', 'thick', 'bridge' ou 'queue')."
         )
     return value
 

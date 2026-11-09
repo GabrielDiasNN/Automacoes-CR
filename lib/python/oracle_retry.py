@@ -14,6 +14,7 @@ import oracledb
 import pybreaker
 import stamina
 import stamina.instrumentation
+from oracle_queue import OracleQueueTransientError
 from pybreaker import CircuitBreakerError  # noqa: F401
 from stamina.instrumentation import RetryDetails
 
@@ -110,7 +111,8 @@ def make_oracle_retry(
     """Returns a decorator that applies CircuitBreaker + stamina.retry to an Oracle function.
 
     Outer layer: pybreaker.CircuitBreaker (opens after fail_max consecutive failures).
-    Inner layer: stamina.retry (retries on oracledb.DatabaseError up to `attempts` times).
+    Inner layer: stamina.retry (retries on oracledb.DatabaseError and
+    OracleQueueTransientError up to `attempts` times).
 
     Efeito colateral: registra o hook de instrumentacao do stamina que traduz a
     retentativa interna do Oracle no evento `retry.attempt` do padrao de logging.
@@ -125,7 +127,10 @@ def make_oracle_retry(
     def decorator(fn: F) -> F:
         _MAX_ATTEMPTS_BY_CALLABLE[_callable_key(fn)] = attempts
         retrying = stamina.retry(
-            on=oracledb.DatabaseError,
+            # Falha transitória da fila SMB (ORACLE_DRIVER_MODE=queue) equivale à
+            # queda de sessão do driver nativo. Prazo esgotado não entra: a consulta
+            # pode seguir no Oracle, e repetir dobraria a carga.
+            on=(oracledb.DatabaseError, OracleQueueTransientError),
             attempts=attempts,
             wait_initial=wait_initial,
             wait_max=wait_max,

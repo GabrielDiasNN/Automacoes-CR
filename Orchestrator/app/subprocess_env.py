@@ -33,9 +33,14 @@ ALLOWED_ENV_KEYS = frozenset(
         "USERNAME",
         "ORACLE_CLIENT_LIB_DIR",
         "ORACLE_CLIENT_PATH",
-        # Modo do driver Oracle (auto/thick/bridge). Sem esta chave o subprocesso
+        # Modo do driver Oracle (auto/thick/bridge/queue). Sem esta chave o subprocesso
         # ignoraria o rollback para Thick configurado no .env.
         "ORACLE_DRIVER_MODE",
+        # Pasta e prazo da fila SMB (modo queue): caminho e número, não segredo.
+        # Filtradas, o refresh do Beneficiamento gravava na pasta padrão enquanto as
+        # extrações usavam a configurada.
+        "ORACLE_QUEUE_DIR",
+        "ORACLE_QUEUE_TIMEOUT_SECONDS",
         # Caminho do tnsnames.ora, não credencial. Lido por
         # `beneficiamento/oracle.py`; usuário/senha/DSN vêm do `.env` via
         # `load_dotenv(override=True)`, nunca do ambiente herdado.

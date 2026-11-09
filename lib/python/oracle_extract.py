@@ -39,6 +39,7 @@ from typing import Any
 import oracledb
 from oracle_client import (
     DRIVER_MODE_BRIDGE,
+    DRIVER_MODE_QUEUE,
     DRIVER_MODE_THICK,
     aplicar_metadados_oci,
     connect_adaptive,
@@ -240,6 +241,17 @@ def resolve_oracle_credentials(
     )
     tns_admin = os.environ.get("TNS_ADMIN")
 
+    if get_driver_mode() == DRIVER_MODE_QUEUE:
+        # Na fila quem conecta é o worker do TSplus, com a credencial dele: usuário,
+        # senha, TNS_ADMIN e Oracle Client desta máquina não são usados nem exigidos.
+        return OracleCredentials(
+            user=user or "",
+            password=password or "",
+            dsn=dsn or default_dsn,
+            client_lib=client_lib or "",
+            tns_admin=tns_admin,
+        )
+
     if not user or not password:
         log("Credenciais Oracle ausentes no ambiente.", "ERROR", exec_id)
         return None
@@ -291,6 +303,13 @@ def init_thick_mode(creds: OracleCredentials, log: LogFn, exec_id: str) -> None:
     if get_driver_mode() == DRIVER_MODE_BRIDGE:
         log(
             "Modo Oracle: bridge (node-oracledb em Thick Mode).",
+            "INFO",
+            exec_id,
+        )
+        return
+    if get_driver_mode() == DRIVER_MODE_QUEUE:
+        log(
+            "Modo Oracle: queue (fila SMB atendida pelo worker no TSplus; sem driver local).",
             "INFO",
             exec_id,
         )
@@ -464,6 +483,27 @@ def run_node_bridge(
     ]
 
 
+def _fetch_all_queue(
+    sql: str, exec_id: str, log: LogFn, params: dict[str, Any] | None
+) -> tuple[list[str], list[Any]]:
+    """`fetch_all` pela fila SMB do worker no TSplus (`ORACLE_DRIVER_MODE=queue`)."""
+    log("Executando consulta via Oracle Queue SMB (TSplus Worker)...", "INFO", exec_id)
+    # pylint: disable-next=import-outside-toplevel
+    from oracle_queue import execute_query, get_queue_timeout
+
+    # Tipos iguais aos do driver nativo (int/float, datetime, None). Os params
+    # viajam à parte e o worker os passa ao Oracle como bind variables. O prazo
+    # vem de ORACLE_QUEUE_TIMEOUT_SECONDS (o driver nativo não tinha teto).
+    resultado_q = execute_query(sql, timeout_seconds=get_queue_timeout(), params=params)
+    log(
+        f"Query executada com sucesso via Queue. Linhas retornadas: {resultado_q.row_count} "
+        f"(worker {resultado_q.worker}, {resultado_q.elapsed_ms} ms no TSplus)",
+        "INFO",
+        exec_id,
+    )
+    return resultado_q.columns, list(resultado_q.rows)
+
+
 def fetch_all(  # pylint: disable=too-many-arguments
     creds: OracleCredentials,
     sql: str,
@@ -495,6 +535,9 @@ def fetch_all(  # pylint: disable=too-many-arguments
     `automacao` define o nome da automação para observabilidade OCI (V$SESSION).
     Se omitido, recupera de HUB_AUTOMATION ou AUTOMATION_NAME do ambiente.
     """
+    if get_driver_mode() == DRIVER_MODE_QUEUE:
+        return _fetch_all_queue(sql, exec_id, log, params)
+
     # O pré-voo de WAN roda antes de conectar: a rede derruba sessões ociosas em
     # poucos segundos, então a sessão não pode esperar pelo probe.
     effective_size = cursor_arraysize if cursor_arraysize is not None else batch_size
