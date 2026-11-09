@@ -53,8 +53,8 @@ def caso(nome: str) -> Callable[[Callable[[], Any]], None]:
     return deco
 
 
-def q(sql: str) -> QueueResult:
-    return execute_query(sql, timeout_seconds=TIMEOUT)
+def q(sql: str, params: dict[str, Any] | None = None) -> QueueResult:
+    return execute_query(sql, timeout_seconds=TIMEOUT, params=params)
 
 
 def espera(sql: str, exc: type[OracleQueueError], kind: str) -> str:
@@ -154,7 +154,7 @@ def _() -> str:
 @caso("8 requisicoes simultaneas, cada uma com seu resultado")
 def _() -> str:
     def um(i: int) -> tuple[int, Any]:
-        return i, q(f"SELECT {i} AS ID FROM DUAL").rows
+        return i, q("SELECT :ID AS ID FROM DUAL", {"ID": i}).rows
 
     with ThreadPoolExecutor(8) as ex:
         res = list(ex.map(um, range(1, 9)))
@@ -165,7 +165,7 @@ def _() -> str:
 
 SQL_VOLUME = (
     "SELECT LEVEL AS N, 'texto da linha ' || LEVEL AS TXT, LEVEL / 3 AS FRAC, "
-    "SYSDATE - LEVEL / 1440 AS DT FROM DUAL CONNECT BY LEVEL <= {n}"
+    "SYSDATE - LEVEL / 1440 AS DT FROM DUAL CONNECT BY LEVEL <= :N"
 )
 
 if "--bench" in sys.argv:
@@ -184,7 +184,7 @@ if "--bench" in sys.argv:
         medidas: list[tuple[float, QueueResult]] = []
         for _ in range(3):
             t0 = time.perf_counter()
-            r = q(SQL_VOLUME.format(n=n))
+            r = q(SQL_VOLUME, {"N": n})
             medidas.append((time.perf_counter() - t0, r))
             assert (
                 r.row_count == n
