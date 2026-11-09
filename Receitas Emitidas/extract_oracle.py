@@ -28,6 +28,7 @@ from oracle_extract import (
     serialize_rows,
     write_state_tmp,
 )
+from oracle_queue import OracleQueueError
 from oracle_retry import CircuitBreakerError, make_oracle_retry
 
 ensure_utf8_streams()
@@ -138,7 +139,15 @@ def extract() -> None:
             exec_id,
         )
         sys.exit(1)
-    except (oracledb.Error, OSError, json.JSONDecodeError, ValueError, TypeError) as e:
+    # OracleQueueError: erro reportado pelo worker da fila (ORACLE_DRIVER_MODE=queue).
+    except (
+        oracledb.Error,
+        OracleQueueError,
+        OSError,
+        json.JSONDecodeError,
+        ValueError,
+        TypeError,
+    ) as e:
         log(f"Erro fatal na extracao: {e}", "ERROR", exec_id)
         sys.exit(1)
 
