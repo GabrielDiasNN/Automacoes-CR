@@ -44,8 +44,6 @@ from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-positio
 )
 from oracle_queue import (  # noqa: E402  pylint: disable=wrong-import-position
     OracleQueueTransientError,
-)
-from oracle_queue import (  # noqa: E402  pylint: disable=wrong-import-position
     execute_query as queue_execute_query,
 )
 from oracle_session import (  # noqa: E402  pylint: disable=wrong-import-position
@@ -101,7 +99,9 @@ def _readonly_credentials() -> OracleCredentials:
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = os.environ.get("ORACLE_CONNECT_STRING")
-    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get("ORACLE_CLIENT_PATH")
+    client_lib = os.environ.get("ORACLE_CLIENT_LIB_DIR") or os.environ.get(
+        "ORACLE_CLIENT_PATH"
+    )
     tns_admin = os.environ.get("TNS_ADMIN")
 
     if not user or not password or not dsn:
@@ -253,7 +253,9 @@ def execute_query(
             elapsed = time.perf_counter() - started
             remaining = wall_clock_budget_seconds - elapsed
             # Falha transitória da fila (SMB, worker) equivale à queda de sessão.
-            transitoria = isinstance(exc, OracleQueueTransientError) or is_session_drop(exc)
+            transitoria = isinstance(exc, OracleQueueTransientError) or is_session_drop(
+                exc
+            )
             if (
                 not transitoria
                 or attempt >= MAX_QUERY_ATTEMPTS
@@ -301,7 +303,9 @@ def _execute_once(
         # Em Oracle Client 12.2 (DPI-1050) o watchdog é o único prazo. Fonte única
         # em oracle_session.query_deadline, que também zera o call_timeout ao sair.
         prazo = guards.enter_context(
-            query_deadline(connection, oracle_timeout_ms / 1000, remaining, watchdog_fired)
+            query_deadline(
+                connection, oracle_timeout_ms / 1000, remaining, watchdog_fired
+            )
         )
         timeout_applied = prazo.applied
         timeout_warning = prazo.warning
@@ -330,7 +334,9 @@ def _execute_once(
                 rows: list[tuple[Any, ...]] = []
 
                 while True:
-                    if (time.perf_counter() - query_started_at) > wall_clock_budget_seconds:
+                    if (
+                        time.perf_counter() - query_started_at
+                    ) > wall_clock_budget_seconds:
                         raise TimeoutError(
                             f"Consulta Beneficiamento excedeu {wall_clock_budget_seconds:g}s."
                         )
