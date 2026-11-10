@@ -128,14 +128,19 @@ Exit-AutomationWithCode -Code $Code -ExecId 'test' -LogPath '$logLiteral' $EndMe
 
     Context "Test-AutomationPreFlight (Oracle)" {
         BeforeEach {
-            # Isola o teste do .env real e do ambiente: sem ORACLE_CONNECT_STRING no processo.
+            # Isola o teste do .env real e do ambiente: sem ORACLE_CONNECT_STRING no processo e
+            # com driver direto (ORACLE_DRIVER_MODE=queue no .env pularia o teste de TCP).
             Remove-Item Env:\ORACLE_CONNECT_STRING -ErrorAction SilentlyContinue
+            $script:driverModeAnterior = $env:ORACLE_DRIVER_MODE
+            $env:ORACLE_DRIVER_MODE = "thin"
             $script:logPreflight = Join-Path $TestDrive ("preflight-" + [guid]::NewGuid().ToString("N") + ".log")
             Mock Test-OracleTcpEndpoint -ModuleName Lib-Logging { return $true }
         }
 
         AfterEach {
             Remove-Item Env:\ORACLE_CONNECT_STRING -ErrorAction SilentlyContinue
+            if ($null -eq $script:driverModeAnterior) { Remove-Item Env:\ORACLE_DRIVER_MODE -ErrorAction SilentlyContinue }
+            else { $env:ORACLE_DRIVER_MODE = $script:driverModeAnterior }
         }
 
         It "Com -OracleHost de host simples sem alias, testa o proprio host na porta 1521" {

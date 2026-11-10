@@ -286,7 +286,9 @@ def validate_ob_query(
 
 
 def validate_finalidades_query(
-    classificacoes: Sequence[int], rows: Sequence[Mapping[str, Any]]
+    classificacoes: Sequence[int],
+    rows: Sequence[Mapping[str, Any]],
+    finalidades_relevantes: Sequence[int] | None = None,
 ) -> dict[int, str]:
     """Resolve as finalidades de peça compatíveis com as classificações alvo.
 
@@ -297,6 +299,11 @@ def validate_finalidades_query(
     e não sabe a classificação da OB, então um conjunto por classe tornaria o
     saldo ambíguo. Divergência é falha observável, não degradação silenciosa
     (guardrail do CONTEXT.md: mudança nas classes 6/9 exige nova confrontação).
+
+    ``finalidades_relevantes`` limita essa comparação às finalidades que entram
+    no saldo (``FINALIDADES_PECA_ALVO``): o cadastro pode ganhar numa classe só
+    uma finalidade que a automação ignora (em 09/11/2026 a 7 apareceu apenas na
+    classe 6) sem tornar o saldo ambíguo. ``None`` compara o conjunto inteiro.
     """
     if not classificacoes:
         raise SchemaInvalidoError("nenhuma classificacao alvo informada")
@@ -335,6 +342,9 @@ def validate_finalidades_query(
         )
 
     conjuntos = {c: frozenset(m) for c, m in por_classe.items()}
+    if finalidades_relevantes is not None:
+        relevantes = frozenset(int(f) for f in finalidades_relevantes)
+        conjuntos = {c: s & relevantes for c, s in conjuntos.items()}
     if len(set(conjuntos.values())) > 1:
         detalhe = "; ".join(f"{c}={sorted(conjuntos[c])}" for c in sorted(conjuntos))
         raise DadoIncompletoError(

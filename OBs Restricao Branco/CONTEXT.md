@@ -33,10 +33,14 @@ envio.
    inverso: uma mesma finalidade (3, 4) também é compatível com as classes 10,
    17 e 18, fora do escopo desta automação, então partir da finalidade traria
    OBs indevidas. Partir das classes 6 e 9 é o que dá o conjunto correto.
-   `validate_finalidades_query` exige que 6 e 9 devolvam conjuntos
-   **idênticos**: a consulta de estoque é agregada por reduzido e não conhece a
-   classificação da OB, então conjuntos divergentes tornariam o saldo ambíguo —
-   nesse caso a execução falha de forma observável em vez de degradar.
+   `validate_finalidades_query` exige que 6 e 9 **coincidam nas finalidades do
+   saldo** (`FINALIDADES_PECA_ALVO`, 3 e 4): a consulta de estoque é agregada por
+   reduzido e não conhece a classificação da OB, então divergência nelas tornaria
+   o saldo ambíguo — nesse caso a execução falha de forma observável em vez de
+   degradar. Até 09/11/2026 a exigência era de conjuntos idênticos por inteiro;
+   nesse dia o cadastro passou a listar a finalidade 7 só na classe 6 e a
+   extração parou, embora a 7 seja ignorada pela automação. Divergência em
+   finalidade fora do saldo não reprova mais.
 5. Todos os fluxos são aceitos; a seleção exige `STATUS=1`, `OBMONTADA='0'` e
    exclui pedidos terminados em R/S.
 6. Estoque é alocado por reduzido em **duas passadas** sobre a fila já

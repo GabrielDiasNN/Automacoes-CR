@@ -15,9 +15,9 @@
     Emite eventos de log estruturados (docs/logging-standard.md): execution.start/end,
     step.start/end, retry.attempt. Exporta HUB_LOG_STRUCTURED/HUB_* para os filhos.
 .NOTES
-    Version: 1.1.0
+    Version: 1.1.1
     Skill: protocolo-valeg, ai-native-development-standard
-    O agendamento (a cada 60 min) NAO esta aqui: vem do campo "schedule" do
+    O agendamento NAO esta aqui: vem do campo "schedule" do
     automation.manifest.json, consumido pelo APScheduler do Orchestrator central.
 #>
 
@@ -52,7 +52,7 @@ Import-Module $libLogging  -Force
 Import-Module $libLogEvent -Force
 Import-Module $libRetry    -Force
 Import-Module $libProcess  -Force
-Import-Module $libConfig    -Force
+Import-Module $libConfig   -Force
 Import-Module $libOracle   -Force
 
 # O .venv nao e versionado e vive na raiz do repositorio principal: resolver
@@ -118,7 +118,7 @@ if (-not $preFlight) {
 try {
     # --- LOCK ---
     Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
     Complete-HubStep
 
     try {
@@ -210,7 +210,7 @@ try {
             # Lock/cooldown do motor WhatsApp: comportamento normal (sessao
             # hub-global compartilhada com OBP-04/RB-01), nao um erro
             # operacional. State NAO commitado — mesma OB e reavaliada no
-            # proximo ciclo horario, sem gerar falso incidente.
+            # proximo ciclo agendado, sem gerar falso incidente.
             $motivo = if ($waExit -eq 40) { "lock ativo" } else { "cooldown" }
             Exit-WithCode 22 "WhatsApp pendente por $motivo (comportamento normal). State NAO commitado — as OBs serao reavaliadas na proxima execucao."
         }

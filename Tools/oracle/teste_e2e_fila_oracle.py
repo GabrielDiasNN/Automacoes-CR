@@ -30,7 +30,7 @@ from oracle_queue import (  # noqa: E402
 )
 
 TIMEOUT = 110
-VERSAO_ESPERADA = os.environ.get("WORKER_VERSAO", "2.4.0")
+VERSAO_ESPERADA = os.environ.get("WORKER_VERSAO", "2.5.4")
 resultados: list[tuple[str, bool]] = []
 
 
@@ -149,6 +149,29 @@ def _() -> str:
 @caso("requisicao vazia -> kind=request")
 def _() -> str:
     return espera("", OracleQueueError, "request")
+
+
+@caso("comentarios no inicio do SQL (-- e /* */) e binds n/s/d/None")
+def _() -> str:
+    r = q("-- titulo\n/* bloco */\nSELECT 1 AS X FROM DUAL -- fim")
+    assert r.rows == [(1,)], r.rows
+    dt = datetime(2026, 11, 8, 17, 5, 9)
+    r = q(
+        "SELECT :N AS N, :S AS S, :D AS D, :Z AS Z FROM DUAL",
+        {"N": -1.5, "S": "ação, \"x\"", "D": dt, "Z": None},
+    )
+    assert r.rows == [(-1.5, "ação, \"x\"", dt, None)], r.rows
+    return str(r.rows[0])
+
+
+@caso("comentario '--' no meio com LF (derrubava o OraOLEDB) e LF dentro de texto")
+def _() -> str:
+    r = q(
+        "WITH\n-- 1. primeira CTE\nA AS (SELECT 1 AS X FROM DUAL), -- fim\n"
+        "B AS (SELECT 'l1\nl2' AS T FROM DUAL)\nSELECT A.X, B.T -- colunas\nFROM A, B\n"
+    )
+    assert r.rows == [(1, "l1\nl2")], r.rows
+    return repr(r.rows[0])
 
 
 @caso("8 requisicoes simultaneas, cada uma com seu resultado")

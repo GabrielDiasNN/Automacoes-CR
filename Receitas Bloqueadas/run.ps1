@@ -1,110 +1,68 @@
 ﻿<#
-
 .SYNOPSIS
-
     Orquestrador PS-Nativo para Receitas Bloqueadas.
 
 .DESCRIPTION
-
     Este script coordena o processamento de receitas retidas e sua distribuicao multicanal:
-
     1. Pre-Flight: Diagnostico de saude (Python, WhatsApp Config, Espaco em Disco).
-
     2. Python: Processa a logica de negocio, consulta Oracle e gera artefatos de saida (.xlsx e .html).
-
     3. E-mail: Envia o HTML gerado para os destinatarios configurados.
-
     4. WhatsApp Bridge: Dispara notificacoes via Node.js utilizando idempotencia.
-
-.NOTES
-
-    Version: 2.4.0
-
-    Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract, protocolo-valeg
-
-    Contract: retry-on-failure, structured-logging, granular-idempotency
 
     Emite eventos de log estruturados (docs/logging-standard.md): execution.start/end,
     step.start/end, retry.attempt. Exporta HUB_LOG_STRUCTURED/HUB_* para os filhos.
 
+.NOTES
+    Version: 2.4.1
+    Skill: ai-native-development-standard, enterprise-local-automation-stack, automation-execution-contract, protocolo-valeg
+    Contract: retry-on-failure, structured-logging, granular-idempotency
 #>
 
-# {
-
-#   "name": "orchestrator-receitas-bloqueadas",
-
-#   "version": "2.3.0",
-
-#   "skill": "powershell-automation-monitor",
-
-#   "description": "Use when orchestrating the multi-channel distribution of blocked recipes (Email/WhatsApp)."
-
-# }
-
 [CmdletBinding()]
-
 param([string]$ExecId = "")
 
 $ErrorActionPreference = "Stop"
 
 # Configuracao Global de Encoding
-
 $OutputEncoding = [System.Text.Encoding]::UTF8
-
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ScriptDir = $PSScriptRoot
-
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $BasePath = $ScriptDir
-
 $PythonScript = Join-Path $BasePath "processar_receitas.py"
-
 $ExcelPath = Join-Path $BasePath "Receitas Bloqueadas.xlsx"
-
 $HtmlPath = Join-Path $BasePath "email_body.html"
-
 $EmailConfigPath = Join-Path $BasePath "receitas_config.json"
-
-$LogDir     = Join-Path $BasePath "Logs"
-
+$LogDir = Join-Path $BasePath "Logs"
 $PythonStatePath = Join-Path $BasePath "receitas_state.json"
-
 $PythonStateTmp  = $PythonStatePath + ".tmp"
-
 $EmailStatePath = Join-Path $BasePath "email_state.json"
-
 $MaxTimeoutSec = 300
 
 # Bibliotecas e Caminhos
-
 $projectRoot = Split-Path -Parent $ScriptDir
 
 $libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libLogEvent = Join-Path $projectRoot "lib\Lib-LogEvent.psm1"
-
-$libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
-
-$libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
-$libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
-$libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
-$libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
+$libEmail = Join-Path $projectRoot "lib\Lib-Email.psm1"
+$libRetry       = Join-Path $projectRoot "lib\Lib-Retry.psm1"
+$libProcess     = Join-Path $projectRoot "lib\Lib-Process.psm1"
+$libConfig      = Join-Path $projectRoot "lib\Lib-Config.psm1"
+$libOracle      = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
-$ResultFile  = Join-Path $BasePath "rb_result.json"
-
+$ResultFile = Join-Path $BasePath "rb_result.json"
 $WhatsAppConfig = Join-Path $BasePath "whatsapp-config.json"
 
 Import-Module $libLogging  -Force
 Import-Module $libLogEvent -Force
-
-Import-Module $libEmail   -Force
-
-Import-Module $libRetry   -Force
-Import-Module $libProcess -Force
-Import-Module $libConfig  -Force
-Import-Module $libOracle  -Force
+Import-Module $libEmail -Force
+Import-Module $libRetry       -Force
+Import-Module $libProcess     -Force
+Import-Module $libConfig      -Force
+Import-Module $libOracle      -Force
 Import-Module $libIdempotency -Force
 
 # O .venv nao e versionado e vive na raiz do repositorio principal: resolver
@@ -114,13 +72,9 @@ $pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 $AutomationName = "Receitas Bloqueadas"
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
-
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
-
         Register-ExecutionTelemetry -AutomationName $AutomationName
-
     } elseif (Get-Command New-ExecId -ErrorAction SilentlyContinue) { New-ExecId } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
-
 }
 
 $LogFile = Get-AutomacaoLogPath -Slug "ReceitasBloqueadas" -LogDir $LogDir
@@ -138,363 +92,254 @@ $script:RunSw = [System.Diagnostics.Stopwatch]::StartNew()
 Remove-Item $ResultFile -Force -ErrorAction SilentlyContinue
 
 function Write-Log {
-
     param([string]$Msg, [string]$Lvl = "INFO", [string]$Step = "")
-
     Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile -Step $Step
-
 }
 
 # Start-HubStep / Complete-HubStep vem de lib/Lib-LogEvent.psm1.
 
+# Codes que NAO representam falha operacional: 2 = idempotencia (nada a enviar).
+$NonFailureCodes = @(0, 2)
+
 function Exit-WithCode {
-
     param([int]$Code, [string]$Msg = "")
-
-    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes @(0, 2) `
+    Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile -NonFailureCodes $NonFailureCodes `
         -RecordCountsPath $ResultFile -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
-
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
-
 # Housekeeping: Limpa artefatos temporarios orfaos (caso existam)
-
 Get-ChildItem -Path $ScriptDir -Filter ".tmp_*.json" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } | Remove-Item -Force -ErrorAction SilentlyContinue
 
 Write-HubExecutionStart -Message "INICIO — $AutomationName (RB-01). ExecId=$ExecId"
 Start-HubStep -Step "preflight" -Message "Python, WhatsApp, e-mail e disco"
 
-$preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($PythonScript, $SendWhatsAppScript, $WhatsAppConfig, $EmailConfigPath)
-
+$preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($pythonExe, $PythonScript, $SendWhatsAppScript, $WhatsAppConfig, $EmailConfigPath)
 Complete-HubStep -Ok $preFlight
 
 if (-not $preFlight) {
-
     Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
-
 }
 
 if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
-
     Invoke-LogRotation -LogPath $LogFile -KeepDays 15
-
 }
 
+try {
+    $channelFailureExitCode = 0
+    $channelFailureMessage = ""
+
+    # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
+    Start-HubStep -Step "lock" -Message "Adquirindo lock global"
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
+    Complete-HubStep
+
     try {
-
-        $channelFailureExitCode = 0
-        $channelFailureMessage = ""
-
-        # 0. Bloqueio de Concorrencia (Pilar A - Valeg)
-
-        Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-        Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
-        Complete-HubStep
-
         try {
-
-            try {
-
-                Import-HubEnv
-
-            } catch [System.Exception] {
-
-                Write-Log "Falha ao carregar .env: $_" -Lvl "WARN"
-
-            }
-
-            # 1. Executar Python Script com Retry
-
-            if (-not (Test-Path $pythonExe)) {
-
-                Exit-WithCode 2 "Python do ambiente virtual nao encontrado em $pythonExe."
-
-            }
-
-            Start-HubStep -Step "extract" -Message "Processamento Python (processar_receitas.py)"
-
-            try {
-
-                $pyResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $PythonScript `
-                    -ExecId $ExecId -LogPath $LogFile -Step "extract" `
-                    -OperationName "Processamento Python (processar_receitas.py)" `
-                    -MaxAttempts 3 -BackoffSeconds @(60, 120, 300)
-
-                if ($pyResult.Idempotent) {
-                    Complete-HubStep -Ok $true
-                    Write-Log "Python detectou idempotencia (ExitCode 2). Suprimindo notificacoes." -Step "commit"
-                    Exit-WithCode 2 "Processo finalizado (Idempotencia Python)."
-                }
-
-                if (-not $pyResult.Success) {
-                    Complete-HubStep -Ok $false
-                    Send-AlertaFalhaDefinitiva -TaskName "Receitas Bloqueadas" -ExecId $ExecId -UltimoErro "Falha definitiva no processamento Python apos 3 tentativas." -Tentativas 3 -LogPath $LogFile
-                    Exit-WithCode 3 "Falha definitiva no script Python. Alerta de falha enviado."
-                }
-                Complete-HubStep -Ok $true
-            } catch [System.Exception] {
-                if ($_.Exception.Message -match "Processo finalizado") { throw }
-                Complete-HubStep -Ok $false
-                Exit-WithCode 4 "Falha ao invocar script Python: $_"
-            }
-
-            # 2. Resolucao de Idempotencia Granular (ADR-013) + envio multicanal
-
-            Start-HubStep -Step "dispatch" -Message "Idempotencia granular + envio E-mail/WhatsApp"
-            Write-Log "Verificando estado de notificacoes (Idempotencia Granular)..." -Step "dispatch"
-
-            if (Test-Path $HtmlPath) {
-
-                $currentHash = Get-LastContentHash -StateTmpPath $PythonStateTmp -StatePath $PythonStatePath -OnWarning {
-                    param($mensagem)
-                    Write-Log $mensagem -Lvl "WARN"
-                }
-
-                # Leitura Resiliente do Estado
-
-                $deliveryState = Read-DeliveryState -Path $EmailStatePath -Channels @("email", "whatsapp") -OnWarning {
-                    param($mensagem)
-                    Write-Log $mensagem -Lvl "WARN"
-                }
-                # exit_code e diagnostico exclusivo deste canal: preservado no
-                # formato do arquivo, fora do contrato generico da Lib-Idempotency.
-                if (-not $deliveryState.delivery_status.whatsapp.ContainsKey("exit_code")) {
-                    $deliveryState.delivery_status.whatsapp.exit_code = $null
-                }
-
-                if (Update-DeliveryStateHash -State $deliveryState -CurrentHash $currentHash) {
-                    Write-Log "Novo Hash detectado ($currentHash). Resetando status de entrega."
-                }
-
-                $skipEmail = -not (Test-DeliveryPending -State $deliveryState -Channel "email" -CurrentHash $currentHash)
-
-                $skipWhatsApp = -not (Test-DeliveryPending -State $deliveryState -Channel "whatsapp" -CurrentHash $currentHash)
-
-                if ($skipEmail -and $skipWhatsApp) {
-
-                    Write-Log "Conteudo identico ao ultimo envio (Hash match) e canais entregues. Suprimindo E-mail e WhatsApp."
-
-                    # Consolidar Python State mesmo se pular notificacoes (caso nao tenha sido consolidado antes)
-
-                    if (Test-Path $PythonStateTmp) {
-
-                        Move-Item -Path $PythonStateTmp -Destination $PythonStatePath -Force
-
-                        Write-Log "Estado Python atualizado: $PythonStatePath"
-
-                    }
-
-                } else {
-
-                    $htmlBody = Get-Content $HtmlPath -Raw -Encoding UTF8
-
-                    $emailConfig = Get-Content $EmailConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-
-                    # Destinatarios: .env (RB_EMAIL_TO/CC) tem prioridade; config.json e apenas fallback/placeholder.
-                    $to = if (-not [string]::IsNullOrWhiteSpace($env:RB_EMAIL_TO)) { $env:RB_EMAIL_TO } else { $emailConfig.email.to -join ";" }
-
-                    $cc = if (-not [string]::IsNullOrWhiteSpace($env:RB_EMAIL_CC)) { $env:RB_EMAIL_CC } elseif ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
-
-                    $bcc = if ($emailConfig.email.bcc) { $emailConfig.email.bcc -join ";" } else { $null }
-
-                    $subject = "Alerta: Receitas Bloqueadas - $(Get-Date -Format 'dd/MM/yyyy')"
-
-                    # --- Envio de E-mail ---
-
-                    if (-not $skipEmail) {
-
-                        if ([string]::IsNullOrWhiteSpace($to)) {
-
-                            Write-Log "Destinatarios 'to' nao configurados. Pulando e-mail." -Lvl "WARN"
-
-                            # Nada foi entregue, mas o canal e marcado para nao reprocessar
-                            # o mesmo conteudo a cada execucao enquanto a config nao mudar.
-                            Set-DeliverySuccess -State $deliveryState -Channel "email"
-
-                        } else {
-
-                            # Verificar Modo Teste (Hierarquia: Orquestrador > VS Code)
-
-                            $globalTestEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
-
-                            $isTestMode = $false
-
-                            if ($env:ORCHESTRATOR_TEST_MODE -eq "true") {
-
-                                $isTestMode = $true
-
-                            } elseif ($env:ORCHESTRATOR_TEST_MODE -eq "false") {
-
-                                $isTestMode = $false
-
-                            } else {
-
-                                if (-not [string]::IsNullOrWhiteSpace($globalTestEmail)) { $isTestMode = $true }
-
-                            }
-
-                            $effectiveTo = $to
-                            $effectiveCc = $cc
-
-                            if ($isTestMode) {
-
-                                $effectiveTo = if (-not [string]::IsNullOrWhiteSpace($globalTestEmail)) { $globalTestEmail } else { $env:AUTOMACAO_ALERT_EMAIL }
-                                $effectiveCc = $null
-
-                                Write-Log "MODO TESTE ATIVO: Redirecionando e-mail para $effectiveTo" -Lvl "WARN"
-
-                            }
-
-                            Write-Log "Enviando e-mail para $effectiveTo..."
-
-                            $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -Step "dispatch" -ExecId $ExecId -LogPath $LogFile -Action {
-                                $sent = Send-OutlookEmail -To $effectiveTo -Cc $effectiveCc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
-                                if (-not $sent) { throw "Send-OutlookEmail retornou false." }
-                                return $true
-                            }
-
-                            if ($emailOk) {
-
-                                Write-Log "E-mail enviado com sucesso. Consolidando estado parcial (E-mail)."
-
-                                Set-DeliverySuccess -State $deliveryState -Channel "email"
-
-                                Save-DeliveryState -State $deliveryState -Path $EmailStatePath
-
-                            } else {
-
-                                Write-Log "Falha definitiva no envio de e-mail. Canal pendente para retentativa." -Lvl "ERRO"
-                                $channelFailureExitCode = 25
-                                $channelFailureMessage = "Execucao concluida com falha parcial no canal E-mail. Revise os logs do canal antes de novo requeue."
-
-                            }
-
-                        }
-
-                    } else {
-
-                        Write-Log "E-mail ja entregue para este lote. Pulando envio."
-
-                    }
-
-                    # --- Envio de WhatsApp ---
-
-                    if (-not $skipWhatsApp) {
-
-                        Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
-
-                        try {
-
-                            $waArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO -ConfigPath `"$WhatsAppConfig`""
-                            $waResult = Invoke-NativeProcess -FilePath "powershell.exe" -Arguments $waArgs -WorkingDirectory $BasePath -LogAction {
-                                param($msg, $lvl)
-                                if (-not [string]::IsNullOrWhiteSpace($msg)) {
-                                    Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "dispatch"
-                                }
-                            }
-                            $whatsAppExit = $waResult.ExitCode
-
-                            Write-Log "Send-WhatsApp.ps1 finalizado. ExitCode=$whatsAppExit"
-
-                            $deliveryState.delivery_status.whatsapp.exit_code = $whatsAppExit
-
-                            $whatsappSuccess = $false
-
-                            if ($whatsAppExit -eq 0) {
-
-                                $whatsappSuccess = $true
-
-                            } elseif ($whatsAppExit -eq 40 -or $whatsAppExit -eq 23) {
-
-                                if ($whatsAppExit -eq 40) { Write-Log "WhatsApp ignorado por lock ativo (comportamento normal). Canal permanece pendente para a proxima execucao." -Lvl "INFO" }
-
-                                if ($whatsAppExit -eq 23) { Write-Log "WhatsApp em cooldown (comportamento normal). Canal permanece pendente para a proxima execucao." -Lvl "INFO" }
-
-                            } elseif ($whatsAppExit -eq 21) {
-
-                                Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN"
-                                $channelFailureExitCode = 21
-                                $channelFailureMessage = "Execucao concluida com falha parcial: WhatsApp requer reautenticacao antes de nova tentativa."
-
-                            } else {
-
-                                Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit. Notificacao incompleta." -Lvl "WARN"
-                                $channelFailureExitCode = if ($whatsAppExit -gt 0) { $whatsAppExit } else { 24 }
-                                $channelFailureMessage = "Execucao concluida com falha parcial no canal WhatsApp. Revise os logs do canal antes de novo requeue."
-
-                            }
-
-                            if ($whatsappSuccess) {
-
-                                Write-Log "WhatsApp concluido com sucesso. Consolidando estado parcial (WhatsApp)."
-
-                                Set-DeliverySuccess -State $deliveryState -Channel "whatsapp"
-
-                                Save-DeliveryState -State $deliveryState -Path $EmailStatePath
-
-                            }
-
-                        } catch [System.Exception] {
-
-                            Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
-                            $deliveryState.delivery_status.whatsapp.exit_code = 24
-                            $channelFailureExitCode = 24
-                            $channelFailureMessage = "Execucao concluida com falha parcial no canal WhatsApp. O wrapper nao conseguiu completar a notificacao."
-
-                        }
-
-                    } else {
-
-                        Write-Log "WhatsApp ja entregue para este lote. Pulando envio."
-
-                    }
-
-                    # --- SAFE-STATE COMMIT (Python Engine) ---
-                    # So consolida quando TODOS os canais foram entregues (ou permanecem pendentes sem erro,
-                    # ex.: lock/cooldown do WhatsApp). Com falha de canal, o commit fica pendente para a
-                    # proxima execucao reavaliar o mesmo lote (evita perda silenciosa de notificacao).
-
-                    if ($channelFailureExitCode -eq 0 -and (Test-Path $PythonStateTmp)) {
-
-                        Move-Item -Path $PythonStateTmp -Destination $PythonStatePath -Force
-
-                        Write-Log "Estado Python atualizado: $PythonStatePath"
-
-                    } elseif ($channelFailureExitCode -ne 0 -and (Test-Path $PythonStateTmp)) {
-
-                        Write-Log "Commit de estado adiado: canal com falha parcial (ExitCode=$channelFailureExitCode). Lote sera reavaliado na proxima execucao." -Lvl "WARN"
-
-                    }
-
-                }
-
-            }
-
-            Complete-HubStep -Ok ($channelFailureExitCode -eq 0)
-
-            if ($channelFailureExitCode -ne 0) {
-
-                Exit-WithCode $channelFailureExitCode $channelFailureMessage
-
-            }
-
-            Exit-WithCode 0 "Execucao concluida com sucesso."
-
-        } finally {
-
-            # Liberacao do bloqueio global INDEPENDENTE de erro interno
-
-            Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
-
+            Import-HubEnv
+        } catch [System.Exception] {
+            Write-Log "Falha ao carregar .env: $_" -Lvl "WARN"
         }
 
-    } catch [System.Exception] {
+        # 1. Executar Python Script com Retry
+        Start-HubStep -Step "extract" -Message "Processamento Python (processar_receitas.py)"
 
-        if ($_.Exception.Message -match "Processo finalizado") { throw }
+        try {
+            $pyResult = Invoke-OraclePythonScript -PythonExe $pythonExe -ScriptPath $PythonScript `
+                -ExecId $ExecId -LogPath $LogFile -Step "extract" `
+                -OperationName "Processamento Python (processar_receitas.py)" `
+                -MaxAttempts 3 -BackoffSeconds @(60, 120, 300)
 
-        Exit-WithCode 4 "Falha critica na orquestracao: $_"
+            if ($pyResult.Idempotent) {
+                Complete-HubStep -Ok $true
+                Write-Log "Python detectou idempotencia (ExitCode 2). Suprimindo notificacoes." -Step "commit"
+                Exit-WithCode 2 "Processo finalizado (Idempotencia Python)."
+            }
 
+            if (-not $pyResult.Success) {
+                Complete-HubStep -Ok $false
+                Send-AlertaFalhaDefinitiva -TaskName "Receitas Bloqueadas" -ExecId $ExecId -UltimoErro "Falha definitiva no processamento Python apos 3 tentativas." -Tentativas 3 -LogPath $LogFile
+                Exit-WithCode 3 "Falha definitiva no script Python. Alerta de falha enviado."
+            }
+            Complete-HubStep -Ok $true
+        } catch [System.Exception] {
+            Complete-HubStep -Ok $false
+            Exit-WithCode 4 "Falha ao invocar script Python: $_"
+        }
+
+        # 2. Resolucao de Idempotencia Granular (ADR-013) + envio multicanal
+        Start-HubStep -Step "dispatch" -Message "Idempotencia granular + envio E-mail/WhatsApp"
+        Write-Log "Verificando estado de notificacoes (Idempotencia Granular)..." -Step "dispatch"
+
+        if (Test-Path $HtmlPath) {
+            $currentHash = Get-LastContentHash -StateTmpPath $PythonStateTmp -StatePath $PythonStatePath -OnWarning {
+                param($mensagem)
+                Write-Log $mensagem -Lvl "WARN"
+            }
+
+            # Leitura Resiliente do Estado
+            $deliveryState = Read-DeliveryState -Path $EmailStatePath -Channels @("email", "whatsapp") -OnWarning {
+                param($mensagem)
+                Write-Log $mensagem -Lvl "WARN"
+            }
+            # exit_code e diagnostico exclusivo deste canal: preservado no
+            # formato do arquivo, fora do contrato generico da Lib-Idempotency.
+            if (-not $deliveryState.delivery_status.whatsapp.ContainsKey("exit_code")) {
+                $deliveryState.delivery_status.whatsapp.exit_code = $null
+            }
+
+            if (Update-DeliveryStateHash -State $deliveryState -CurrentHash $currentHash) {
+                Write-Log "Novo Hash detectado ($currentHash). Resetando status de entrega."
+            }
+
+            $skipEmail = -not (Test-DeliveryPending -State $deliveryState -Channel "email" -CurrentHash $currentHash)
+            $skipWhatsApp = -not (Test-DeliveryPending -State $deliveryState -Channel "whatsapp" -CurrentHash $currentHash)
+
+            if ($skipEmail -and $skipWhatsApp) {
+                Write-Log "Conteudo identico ao ultimo envio (Hash match) e canais entregues. Suprimindo E-mail e WhatsApp."
+
+                # Consolidar Python State mesmo se pular notificacoes (caso nao tenha sido consolidado antes)
+                if (Test-Path $PythonStateTmp) {
+                    Move-Item -Path $PythonStateTmp -Destination $PythonStatePath -Force
+                    Write-Log "Estado Python atualizado: $PythonStatePath"
+                }
+            } else {
+                $htmlBody = Get-Content $HtmlPath -Raw -Encoding UTF8
+                $emailConfig = Get-Content $EmailConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+                # Destinatarios: .env (RB_EMAIL_TO/CC) tem prioridade; config.json e apenas fallback/placeholder.
+                $to = if (-not [string]::IsNullOrWhiteSpace($env:RB_EMAIL_TO)) { $env:RB_EMAIL_TO } else { $emailConfig.email.to -join ";" }
+
+                $cc = if (-not [string]::IsNullOrWhiteSpace($env:RB_EMAIL_CC)) { $env:RB_EMAIL_CC } elseif ($emailConfig.email.cc) { $emailConfig.email.cc -join ";" } else { $null }
+                $bcc = if ($emailConfig.email.bcc) { $emailConfig.email.bcc -join ";" } else { $null }
+                $subject = "Alerta: Receitas Bloqueadas - $(Get-Date -Format 'dd/MM/yyyy')"
+
+                # --- Envio de E-mail ---
+                if (-not $skipEmail) {
+                    if ([string]::IsNullOrWhiteSpace($to)) {
+                        Write-Log "Destinatarios 'to' nao configurados. Pulando e-mail." -Lvl "WARN"
+
+                        # Nada foi entregue, mas o canal e marcado para nao reprocessar
+                        # o mesmo conteudo a cada execucao enquanto a config nao mudar.
+                        Set-DeliverySuccess -State $deliveryState -Channel "email"
+                    } else {
+                        # Verificar Modo Teste (Hierarquia: Orquestrador > VS Code)
+                        $globalTestEmail = [Environment]::GetEnvironmentVariable("AUTOMACAO_TEST_EMAIL", "User")
+                        $isTestMode = $false
+
+                        if ($env:ORCHESTRATOR_TEST_MODE -eq "true") {
+                            $isTestMode = $true
+                        } elseif ($env:ORCHESTRATOR_TEST_MODE -eq "false") {
+                            $isTestMode = $false
+                        } else {
+                            if (-not [string]::IsNullOrWhiteSpace($globalTestEmail)) { $isTestMode = $true }
+                        }
+
+                        $effectiveTo = $to
+                        $effectiveCc = $cc
+
+                        if ($isTestMode) {
+                            $effectiveTo = if (-not [string]::IsNullOrWhiteSpace($globalTestEmail)) { $globalTestEmail } else { $env:AUTOMACAO_ALERT_EMAIL }
+                            $effectiveCc = $null
+
+                            Write-Log "MODO TESTE ATIVO: Redirecionando e-mail para $effectiveTo" -Lvl "WARN"
+                        }
+
+                        Write-Log "Enviando e-mail para $effectiveTo..."
+
+                        $emailOk = Invoke-WithRetry -MaxAttempts 2 -BackoffSeconds @(15, 30) -OperationName "Envio E-mail Outlook" -Step "dispatch" -ExecId $ExecId -LogPath $LogFile -Action {
+                            $sent = Send-OutlookEmail -To $effectiveTo -Cc $effectiveCc -Bcc $bcc -Subject $subject -HtmlBody $htmlBody -Attachments @($ExcelPath) -ExecId $ExecId -LogPath $LogFile
+                            if (-not $sent) { throw "Send-OutlookEmail retornou false." }
+                            return $true
+                        }
+
+                        if ($emailOk) {
+                            Write-Log "E-mail enviado com sucesso. Consolidando estado parcial (E-mail)."
+                            Set-DeliverySuccess -State $deliveryState -Channel "email"
+                            Save-DeliveryState -State $deliveryState -Path $EmailStatePath
+                        } else {
+                            Write-Log "Falha definitiva no envio de e-mail. Canal pendente para retentativa." -Lvl "ERRO"
+                            $channelFailureExitCode = 25
+                            $channelFailureMessage = "Execucao concluida com falha parcial no canal E-mail. Revise os logs do canal antes de novo requeue."
+                        }
+                    }
+                } else {
+                    Write-Log "E-mail ja entregue para este lote. Pulando envio."
+                }
+
+                # --- Envio de WhatsApp ---
+                if (-not $skipWhatsApp) {
+                    Write-Log "Disparando Send-WhatsApp.ps1. ExecId=$ExecId Mode=AUTO"
+
+                    try {
+                        $waArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -Mode AUTO -ConfigPath `"$WhatsAppConfig`""
+                        $waResult = Invoke-NativeProcess -FilePath "powershell.exe" -Arguments $waArgs -WorkingDirectory $BasePath -LogAction {
+                            param($msg, $lvl)
+                            if (-not [string]::IsNullOrWhiteSpace($msg)) {
+                                Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "dispatch"
+                            }
+                        }
+                        $whatsAppExit = $waResult.ExitCode
+
+                        Write-Log "Send-WhatsApp.ps1 finalizado. ExitCode=$whatsAppExit"
+                        $deliveryState.delivery_status.whatsapp.exit_code = $whatsAppExit
+                        $whatsappSuccess = $false
+
+                        if ($whatsAppExit -eq 0) {
+                            $whatsappSuccess = $true
+                        } elseif ($whatsAppExit -eq 40 -or $whatsAppExit -eq 23) {
+                            if ($whatsAppExit -eq 40) { Write-Log "WhatsApp ignorado por lock ativo (comportamento normal). Canal permanece pendente para a proxima execucao." -Lvl "INFO" }
+
+                            if ($whatsAppExit -eq 23) { Write-Log "WhatsApp em cooldown (comportamento normal). Canal permanece pendente para a proxima execucao." -Lvl "INFO" }
+                        } elseif ($whatsAppExit -eq 21) {
+                            Write-Log "WhatsApp requer reautenticacao. Verifique o QR Code." -Lvl "WARN"
+                            $channelFailureExitCode = 21
+                            $channelFailureMessage = "Execucao concluida com falha parcial: WhatsApp requer reautenticacao antes de nova tentativa."
+                        } else {
+                            Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit. Notificacao incompleta." -Lvl "WARN"
+                            $channelFailureExitCode = if ($whatsAppExit -gt 0) { $whatsAppExit } else { 24 }
+                            $channelFailureMessage = "Execucao concluida com falha parcial no canal WhatsApp. Revise os logs do canal antes de novo requeue."
+                        }
+
+                        if ($whatsappSuccess) {
+                            Write-Log "WhatsApp concluido com sucesso. Consolidando estado parcial (WhatsApp)."
+                            Set-DeliverySuccess -State $deliveryState -Channel "whatsapp"
+                            Save-DeliveryState -State $deliveryState -Path $EmailStatePath
+                        }
+                    } catch [System.Exception] {
+                        Write-Log "Falha ao iniciar processo WhatsApp: $_" -Lvl "WARN"
+                        $deliveryState.delivery_status.whatsapp.exit_code = 24
+                        $channelFailureExitCode = 24
+                        $channelFailureMessage = "Execucao concluida com falha parcial no canal WhatsApp. O wrapper nao conseguiu completar a notificacao."
+                    }
+                } else {
+                    Write-Log "WhatsApp ja entregue para este lote. Pulando envio."
+                }
+
+                # --- SAFE-STATE COMMIT (Python Engine) ---
+                # So consolida quando TODOS os canais foram entregues (ou permanecem pendentes sem erro,
+                # ex.: lock/cooldown do WhatsApp). Com falha de canal, o commit fica pendente para a
+                # proxima execucao reavaliar o mesmo lote (evita perda silenciosa de notificacao).
+                if ($channelFailureExitCode -eq 0 -and (Test-Path $PythonStateTmp)) {
+                    Move-Item -Path $PythonStateTmp -Destination $PythonStatePath -Force
+                    Write-Log "Estado Python atualizado: $PythonStatePath"
+                } elseif ($channelFailureExitCode -ne 0 -and (Test-Path $PythonStateTmp)) {
+                    Write-Log "Commit de estado adiado: canal com falha parcial (ExitCode=$channelFailureExitCode). Lote sera reavaliado na proxima execucao." -Lvl "WARN"
+                }
+            }
+        }
+
+        Complete-HubStep -Ok ($channelFailureExitCode -eq 0)
+
+        if ($channelFailureExitCode -ne 0) {
+            Exit-WithCode $channelFailureExitCode $channelFailureMessage
+        }
+
+        Exit-WithCode 0 "Execucao concluida com sucesso."
+    } finally {
+        # Liberacao do bloqueio global INDEPENDENTE de erro interno
+        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
     }
-
-
+} catch [System.Exception] {
+    Exit-WithCode 4 "Falha critica na orquestracao: $_"
+}

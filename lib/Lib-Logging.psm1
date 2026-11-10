@@ -362,7 +362,7 @@ if ([string]::IsNullOrWhiteSpace($driverMode)) { $driverMode = Get-EnvFileValue 
 if ($driverMode -eq "queue") {
     $queueDir = [System.Environment]::GetEnvironmentVariable("ORACLE_QUEUE_DIR", "Process")
     if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = Get-EnvFileValue -Key "ORACLE_QUEUE_DIR" }
-    if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = "\\192.168.62.1\Dados\Planilhas_Conexao\Automacoes_Fila\_fila\pedidos" }
+    if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = "\\192.168.62.1\Dados\Planilhas_Conexao\5-Automacoes_Fila\_fila\pedidos" }
     if (Test-Path -LiteralPath $queueDir) {
         $results += "OK: Oracle Queue ($queueDir) On"
     } else {

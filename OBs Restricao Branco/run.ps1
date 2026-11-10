@@ -8,13 +8,12 @@
     4. WhatsApp: envia o texto ao grupo Expedicao Tinturaria (whatsapp-config.json).
     5. Commit da idempotencia: orb_state.json.tmp -> orb_state.json somente apos envio OK.
 
-    Automacao PILOTO do padrao de logging estruturado (docs/logging-standard.md):
-    emite eventos JSON (execution.start/end, step.start/end, retry.attempt) em
-    stdout e no .jsonl. Exporta HUB_LOG_STRUCTURED/HUB_* para os processos filhos.
+    Emite eventos de log estruturados (docs/logging-standard.md): execution.start/end,
+    step.start/end, retry.attempt. Exporta HUB_LOG_STRUCTURED/HUB_* para os filhos.
 .NOTES
-    Version: 1.1.0
+    Version: 1.1.1
     Skill: protocolo-valeg, ai-native-development-standard
-    O agendamento (a cada 120 min) NAO esta aqui: vem do campo "schedule" do
+    O agendamento NAO esta aqui: vem do campo "schedule" do
     automation.manifest.json, consumido pelo APScheduler do Orchestrator central.
 #>
 
@@ -117,7 +116,7 @@ if (-not $preFlight) {
 try {
     # --- LOCK ---
     Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
     Complete-HubStep
 
     try {

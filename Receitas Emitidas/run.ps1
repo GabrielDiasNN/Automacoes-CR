@@ -13,7 +13,7 @@
     usam stdout como canal de dados (IPC stdio) e por isso NAO recebem
     HUB_LOG_STRUCTURED — seguem logando em stderr, encaminhado pelo run.ps1.
 .NOTES
-    Version: 2.8.0
+    Version: 2.8.1
     Skill: ai-native-development-standard, python-oracle-migration, protocolo-valeg
     Contract: ipc-stdio, structured-logging, retry-on-failure, granular-idempotency
 #>
@@ -31,13 +31,13 @@ $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $projectRoot = Split-Path -Parent $ScriptDir
-$libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
-$libLogEvent = Join-Path $projectRoot "lib\Lib-LogEvent.psm1"
-$libEmail    = Join-Path $projectRoot "lib\Lib-Email.psm1"
-$libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
-$libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
-$libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
-$libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
+$libLogging     = Join-Path $projectRoot "lib\Lib-Logging.psm1"
+$libLogEvent    = Join-Path $projectRoot "lib\Lib-LogEvent.psm1"
+$libEmail       = Join-Path $projectRoot "lib\Lib-Email.psm1"
+$libRetry       = Join-Path $projectRoot "lib\Lib-Retry.psm1"
+$libProcess     = Join-Path $projectRoot "lib\Lib-Process.psm1"
+$libConfig      = Join-Path $projectRoot "lib\Lib-Config.psm1"
+$libOracle      = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 $libIdempotency = Join-Path $projectRoot "lib\Lib-Idempotency.psm1"
 $extractPy  = Join-Path $ScriptDir "extract_oracle.py"
 $extractJs  = Join-Path $ScriptDir "extract_oracle.js"
@@ -49,13 +49,13 @@ $DeliveryStatePath = Join-Path $ScriptDir "delivery_state.json"
 $ResultFile = Join-Path $ScriptDir "re_result.json"
 $LogDir     = Join-Path $ScriptDir "Logs"
 
-Import-Module $libLogging  -Force
-Import-Module $libLogEvent -Force
-Import-Module $libEmail    -Force
-Import-Module $libRetry    -Force
-Import-Module $libProcess  -Force
-Import-Module $libConfig    -Force
-Import-Module $libOracle   -Force
+Import-Module $libLogging     -Force
+Import-Module $libLogEvent    -Force
+Import-Module $libEmail       -Force
+Import-Module $libRetry       -Force
+Import-Module $libProcess     -Force
+Import-Module $libConfig      -Force
+Import-Module $libOracle      -Force
 Import-Module $libIdempotency -Force
 
 # O .venv nao e versionado e vive na raiz do repositorio principal: resolver
@@ -94,9 +94,13 @@ function Write-Log {
     Write-AutomacaoLog -Message $Msg -Level $Lvl -ExecId $ExecId -LogPath $LogFile -Step $Step
 }
 
+# Codes que NAO representam falha operacional (apenas 0: esta automacao nao usa exit 2).
+$NonFailureCodes = @(0)
+
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
     Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile `
+        -NonFailureCodes $NonFailureCodes `
         -RecordCountsPath $ResultFile -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
 }
 
@@ -146,10 +150,7 @@ if (-not $preFlight) {
 
 try {
     Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-    if (-not (Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile)) {
-        Complete-HubStep -Ok $false
-        Exit-WithCode 0 "Execucao abortada: Mutex ja retido por outra instancia deste ExecId."
-    }
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
     Complete-HubStep
 
     try {
@@ -241,7 +242,6 @@ try {
         Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
     }
 } catch [System.Exception] {
-    if ($_.Exception.Message -match "Processo finalizado") { throw }
     Exit-WithCode 1 "ERRO FATAL: $_"
 } finally {
     [System.GC]::Collect()

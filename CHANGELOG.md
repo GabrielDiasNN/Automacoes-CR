@@ -2,6 +2,52 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.110] - 09/11/2026
+
+Padronização dos seis `run.ps1` e do `_Template/run.ps1`, validada com as automações rodando pelo Orchestrator contra o worker real (v2.5.4). Mudanças só de formato foram conferidas por comparação de tokens do PowerShell (idênticos aos originais).
+
+### Corrigido
+
+- **`OBs Paradas Fase/run.ps1` (3.1.3):** com uma única fase pendente, `$batchInput | ConvertTo-Json` gerava um objeto em vez de array; o motor Node (`WhatsApp-Core.js`) respondia "Lote vazio — nada a enviar" com `ExitCode=0`, a fase virava FALHA e a execução saía com `4` (ocorreu em 09/11/2026 com só "Controle De Qualidade" pendente). Agora usa `ConvertTo-Json -InputObject @($batchInput)`; a fase pendente foi entregue em seguida (1/1).
+- **`Receitas Bloqueadas/run.ps1` (2.4.1):** o Python não entrava em `-CheckPaths`; um venv ausente caía em `Exit-WithCode 2`, que é código de não-falha, e a execução parecia sucesso. Agora o pré-flight o valida e falha com `9`, como nas demais.
+- **`lib/tests/Lib-Logging.Tests.ps1`:** os testes de pré-flight Oracle liam `ORACLE_DRIVER_MODE=queue` do `.env` real e falhavam (3 casos); passam a fixar o driver no teste e a restaurá-lo (Pester: 325/325).
+
+### Alterado
+
+- **Esqueleto único:** `$NonFailureCodes` declarado em todos (RB, OBP e RE passaram a usar a variável em vez de lista literal); `Enter-AutomationLock ... | Out-Null` (o `$true` vazava como linha `True` no log da etapa `lock`); `Import-Module`/`$lib*` alinhados e na mesma ordem; RB e MT sem linhas em branco de preenchimento e RB com o bloco principal na indentação correta; "Emite eventos de log estruturados" na `.DESCRIPTION` de todos.
+- **Código morto removido:** guarda `-match "Processo finalizado"` em RB e RE (`exit` não é capturável por `catch`, testado nos PowerShell 5.1 e 7), teste de booleano em `Enter-AutomationLock` no RE (a função lança exceção, nunca devolve `$false`) e comentários desatualizados (JSON de metadados do RB, bloco de contexto de maio no MT, "PILOTO" no ORB).
+- **Comentários de agendamento incorretos:** ORB dizia "a cada 120 min" e OFST "a cada 60 min", mas o cadastro é de hora em hora (ORB) e de 2 em 2 horas (OFST); o número saiu, o `schedule` do manifesto é a fonte.
+- **`_Template/run.ps1` (3.0.0):** reescrito no esqueleto das seis (log estruturado, `Exit-WithCode`, etapas nomeadas, lock, `Import-HubEnv`), com o exemplo de e-mail trocado pelos helpers de `Lib-Idempotency`. Os parâmetros `EmailPreviewOnly/EmailToTest/EmailCcTest` saíram da assinatura base (o modo teste é aplicado por `Send-OutlookEmail`). Validado com uma instância descartável e com `New-Automation.ps1 -DryRun`.
+- **MT-02 (2.3.2):** módulos importados na ordem padrão (Retry antes de Process e Config).
+
+### Adicionado
+
+- **`Orchestrator/tests/test_run_ps1_bootstrap_unit.py`:** contratos para lock sem vazamento, `$NonFailureCodes`, ausência da guarda morta, Python no pré-flight e o lote do OBP sempre como array (37 testes no arquivo).
+
+### Pendente
+
+- Código morto herdado: ORB, OFST e RB ainda tratam os códigos `40`/`23` (lock/cooldown) do WhatsApp, mas o motor (`lib/WhatsApp-Core.js`) só encerra com `0`, `21` e `24`, e `40`/`23` não constam em `EXIT_CODE_MAP`. Os ramos nunca executam; remover exige tirar também o `22` do ORB/OFST e atualizar `test_exit_code_contract.py`, então ficou fora desta rodada.
+- Não é divergência a corrigir: erro fatal `4` (ORB, OFST, OBP, RB) e `1` (RE, MT) são códigos distintos e ambos mapeados como ERROR em `EXIT_CODE_MAP` (`1` = erro fatal genérico do script, `4` = falha de orquestração/canal principal).
+- Extrair o esqueleto comum (ORB e OFST diferem em menos de 20 linhas) para uma função compartilhada em `lib/` reduziria a repetição, mas é refatoração maior.
+
+## [1.3.109] - 09/11/2026
+
+Retomada da fila Oracle depois da renomeação da pasta de rede e primeira validação de ponta a ponta contra o worker real (v2.5.4, TSplus). O worker (`oracle_worker.vbs`) vive na pasta de rede, fora deste repositório; cópias das versões em `_tmp/fila_oracle_20261108`.
+
+### Corrigido
+
+- **Pasta da fila:** `Automacoes_Fila` virou `5-Automacoes_Fila` na rede. Atualizados `DEFAULT_QUEUE_DIR` (`lib/python/oracle_queue.py`) e o health check de `lib/Lib-Logging.psm1`; no worker, `basePath`, `GERENCIAR_TAREFA.bat` e `LEIA-ME.txt`. O worker passou a avisar "Pasta base nao encontrada" (código 5) em vez de "Outro worker ja esta ativo".
+- **Worker v2.5.3/v2.5.4 — fim de linha:** o cliente grava o pedido só com LF e o OraOLEDB não encerra comentário `--` no LF. Todo pedido com `params` (linhas `--#param`) e todo SQL com comentário de linha falhava com ORA-00900/ORA-01036; o SQL do MT-02 derrubava o `cscript` sem resposta. O worker tira comentários do início e converte LF em CRLF fora de textos antes de executar. Na partida, responde com erro os `req_*.proc` órfãos, para o cliente não esperar até o prazo.
+- **ORB-07 (`validators.py`, `extract_orb.py`):** a extração parou porque `SGTPRD.COR_FINALIDADE` passou a listar a finalidade 7 só na classe 6 e `validate_finalidades_query` exigia conjuntos idênticos entre 6 e 9. A comparação agora se limita às finalidades do saldo (`FINALIDADES_PECA_ALVO`); divergência em 3 ou 4 continua reprovando.
+
+### Alterado
+
+- **`Tools/oracle/teste_e2e_fila_oracle.py`:** versão esperada 2.5.4 e casos novos para comentário no início, binds `n/s/d/None` e comentário `--` no meio com LF (15 casos, 17 com `--bench`).
+
+### Pendente
+
+- Limite do OraOLEDB: apóstrofo ímpar dentro de comentário, seguido de texto com quebra de linha, troca a quebra por espaço. Nenhum SQL atual cai nisso (resultados iguais com e sem comentários).
+
 ## [1.3.108] - 09/11/2026
 
 Correções da revisão do PR 82 (motor Oracle por fila SMB). Validado só por testes unitários, sem execução contra o worker real no TSplus.

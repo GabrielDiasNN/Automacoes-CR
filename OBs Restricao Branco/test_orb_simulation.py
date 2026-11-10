@@ -131,7 +131,9 @@ def _fetch_finalidades(creds: OracleCredentials) -> dict[int, str]:
     sql, params = build_finalidades_sql(CLASSIFICACOES_BRANCO_ALVO)
     columns, rows = fetch_all(creds, sql, EXEC_ID, log, batch_size=1000, params=params)
     cadastro = validate_finalidades_query(
-        CLASSIFICACOES_BRANCO_ALVO, serialize_rows(columns, rows)
+        CLASSIFICACOES_BRANCO_ALVO,
+        serialize_rows(columns, rows),
+        finalidades_relevantes=FINALIDADES_PECA_ALVO,
     )
     return {f: cadastro[f] for f in FINALIDADES_PECA_ALVO if f in cadastro}
 
