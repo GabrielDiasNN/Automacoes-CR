@@ -143,7 +143,20 @@ if (-not $preFlightOk) {
 }
 
 Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
+try {
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
+} catch [System.Exception] {
+    # Concorrencia: Enter-AutomationLock lanca excecao. Fora do try/finally
+    # principal (que libera um lock que aqui nao foi adquirido), entao fecha a
+    # telemetria localmente para a execucao nao ficar RUNNING.
+    Complete-HubStep -Ok $false
+    Write-Log "Falha ao adquirir lock global: $_" -Lvl "ERRO"
+    Write-Fim 1 "Falha ao adquirir lock global: $_"
+    if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
+        Close-ExecutionTelemetry -ExecId $ExecId -Status "ERROR" -LogPath $LogFile
+    }
+    exit 1
+}
 Complete-HubStep
 
 $execStatus = "ERROR"

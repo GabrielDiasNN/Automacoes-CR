@@ -10,6 +10,9 @@ Padronização dos seis `run.ps1` e do `_Template/run.ps1`, validada com as auto
 
 - **`OBs Paradas Fase/run.ps1` (3.1.3):** com uma única fase pendente, `$batchInput | ConvertTo-Json` gerava um objeto em vez de array; o motor Node (`WhatsApp-Core.js`) respondia "Lote vazio — nada a enviar" com `ExitCode=0`, a fase virava FALHA e a execução saía com `4` (ocorreu em 09/11/2026 com só "Controle De Qualidade" pendente). Agora usa `ConvertTo-Json -InputObject @($batchInput)`; a fase pendente foi entregue em seguida (1/1).
 - **`Receitas Bloqueadas/run.ps1` (2.4.1):** o Python não entrava em `-CheckPaths`; um venv ausente caía em `Exit-WithCode 2`, que é código de não-falha, e a execução parecia sucesso. Agora o pré-flight o valida e falha com `9`, como nas demais.
+- **`Montagem de Terceirizados/run.ps1`:** `Enter-AutomationLock` ficava fora do `try/finally` que fecha a telemetria; em concorrência a exceção encerrava o script e a execução ficava RUNNING. O lock agora tem `catch` próprio que emite `execution.end`, fecha a telemetria e sai com `1` (revisão do PR 85).
+- **`Receitas Bloqueadas/run.ps1`:** código de saída desconhecido do `Send-WhatsApp.ps1` era repassado tal qual; se fosse `2`, a falha do canal virava sucesso. Agora todo código em `$NonFailureCodes` vira `24`.
+- **`lib/Lib-Logging.psm1`:** o caminho padrão da fila no pré-flight passa a ser lido de `DEFAULT_QUEUE_DIR` em `lib/python/oracle_queue.py`, em vez de um literal duplicado.
 - **`lib/tests/Lib-Logging.Tests.ps1`:** os testes de pré-flight Oracle liam `ORACLE_DRIVER_MODE=queue` do `.env` real e falhavam (3 casos); passam a fixar o driver no teste e a restaurá-lo (Pester: 325/325).
 
 ### Alterado

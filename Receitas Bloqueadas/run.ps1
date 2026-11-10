@@ -297,7 +297,9 @@ try {
                             $channelFailureMessage = "Execucao concluida com falha parcial: WhatsApp requer reautenticacao antes de nova tentativa."
                         } else {
                             Write-Log "Send-WhatsApp.ps1 retornou ExitCode $whatsAppExit. Notificacao incompleta." -Lvl "WARN"
-                            $channelFailureExitCode = if ($whatsAppExit -gt 0) { $whatsAppExit } else { 24 }
+                            # Codigo desconhecido nunca e repassado: se coincidisse com $NonFailureCodes
+                            # (ex.: 2), a falha do canal seria registrada como sucesso.
+                            $channelFailureExitCode = if ($whatsAppExit -gt 0 -and $NonFailureCodes -notcontains $whatsAppExit) { $whatsAppExit } else { 24 }
                             $channelFailureMessage = "Execucao concluida com falha parcial no canal WhatsApp. Revise os logs do canal antes de novo requeue."
                         }
 
