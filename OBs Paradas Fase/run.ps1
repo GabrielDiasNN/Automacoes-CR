@@ -11,7 +11,7 @@
     Emite eventos de log estruturados (docs/logging-standard.md): execution.start/end,
     step.start/end, retry.attempt. Exporta HUB_LOG_STRUCTURED/HUB_* para os filhos.
 .NOTES
-    Version: 3.1.1
+    Version: 3.1.3
     Skill: protocolo-valeg, ai-native-development-standard
 #>
 
@@ -48,7 +48,7 @@ Import-Module $libLogging  -Force
 Import-Module $libLogEvent -Force
 Import-Module $libRetry    -Force
 Import-Module $libProcess  -Force
-Import-Module $libConfig    -Force
+Import-Module $libConfig   -Force
 Import-Module $libOracle   -Force
 
 # O .venv nao e versionado e vive na raiz do repositorio principal: resolver
@@ -87,6 +87,9 @@ function Write-Log {
 
 # Start-HubStep / Complete-HubStep vem de lib/Lib-LogEvent.psm1.
 
+# Codes que NAO representam falha operacional: 2 = idempotencia (nada a enviar).
+$NonFailureCodes = @(0, 2)
+
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "", [hashtable]$Counts)
     $endArgs = @{
@@ -94,7 +97,7 @@ function Exit-WithCode {
         Msg             = $Msg
         ExecId          = $ExecId
         LogPath         = $LogFile
-        NonFailureCodes = @(0, 2)
+        NonFailureCodes = $NonFailureCodes
         EndMessage      = "FIM - ExitCode=$Code"
         RecordCountsPath = $ResultFile
         DurationMs      = [int]$script:RunSw.Elapsed.TotalMilliseconds
@@ -117,7 +120,7 @@ if (-not $preFlight) {
 try {
     # --- LOCK ---
     Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
     Complete-HubStep
 
     try {
@@ -252,7 +255,9 @@ try {
         $BatchInputFile  = Join-Path $ScriptDir "batch_input.json"
         $BatchResultFile = Join-Path $ScriptDir "batch_result.json"
         $utf8NoBOM = [System.Text.UTF8Encoding]::new($false)
-        [System.IO.File]::WriteAllText($BatchInputFile, ($batchInput | ConvertTo-Json -Depth 5), $utf8NoBOM)
+        # -InputObject @(...) e obrigatorio: pelo pipeline, um unico item vira objeto (nao array) e o
+        # motor Node (WhatsApp-Core.js) descarta o lote como vazio, marcando a fase como falha.
+        [System.IO.File]::WriteAllText($BatchInputFile, (ConvertTo-Json -InputObject @($batchInput) -Depth 5), $utf8NoBOM)
 
         # Ler chatId: contactIdEnv (OBP_WHATSAPP_TARGET) tem prioridade; config.json e apenas
         # fallback/placeholder. Resolve-WhatsAppTarget falha cedo se a env var estiver ausente,

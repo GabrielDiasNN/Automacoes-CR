@@ -193,7 +193,9 @@ def _fetch_finalidades(
     sql, params = build_finalidades_sql(CLASSIFICACOES_BRANCO_ALVO)
     columns, rows = _fetch(creds, sql, exec_id, params)
     cadastro = validate_finalidades_query(
-        CLASSIFICACOES_BRANCO_ALVO, serialize_rows(columns, rows)
+        CLASSIFICACOES_BRANCO_ALVO,
+        serialize_rows(columns, rows),
+        finalidades_relevantes=FINALIDADES_PECA_ALVO,
     )
 
     ausentes = [f for f in FINALIDADES_PECA_ALVO if f not in cadastro]

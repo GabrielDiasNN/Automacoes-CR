@@ -33,6 +33,8 @@ Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arq
 ### Automações e WhatsApp
 - **Os `run.ps1` resolvem o Python por `Resolve-HubPythonExe`** (funciona em worktree); não hardcode o venv (08/09/2026).
 - **OFST-06 e ORB-07 são irmãs, não simétricas**: a guarda que aborta sem tocar no state quando todas as linhas falham evita re-anunciar todas as OBs no WhatsApp; `test_ofst_orb_parity_unit.py` prende as invariantes (08/09/2026).
+- **Padrão dos `run.ps1` (09/11/2026):** os 6 e o `_Template/run.ps1` seguem o mesmo esqueleto (log estruturado, `Exit-WithCode` com `$NonFailureCodes`, `Enter-AutomationLock ... | Out-Null`, `$pythonExe` no pré-flight). `exit` não é capturável por `catch`, então não use guarda por mensagem ("Processo finalizado"). Pelo pipeline, um único item vira objeto em `ConvertTo-Json`: use `-InputObject @(...)` quando o consumidor espera array (o OBP-04 mandava "Lote vazio" com uma só fase). Contratos em `Orchestrator/tests/test_run_ps1_bootstrap_unit.py`.
+- **Códigos de saída:** `1` (erro fatal genérico, RE/MT) e `4` (falha de orquestração/canal, ORB/OFST/OBP/RB) são contratos distintos, ambos ERROR em `EXIT_CODE_MAP`; não unifique. Os ramos `40`/`23` (lock/cooldown do WhatsApp) em ORB/OFST/RB são código morto: `WhatsApp-Core.js` só sai com `0`, `21` e `24`.
 - **MT-02 sai com `exit` cru** e precisa fechar a telemetria em cada saída precoce, senão deixa execução `RUNNING` órfã (08/09/2026).
 - **Sessão WhatsApp vive em `%LOCALAPPDATA%\Automacoes\wwebjs_auth\`** (credencial da conta; nunca na árvore do repo). Perda de sessão sai com `ExitCode 21` (27-28/07/2026).
 - **Sucesso de envio é decidido pelo dispatch, não pelo ACK** do `whatsapp-web.js` (15/07/2026).

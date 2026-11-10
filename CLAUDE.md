@@ -28,13 +28,6 @@ cd Orchestrator && ..\.venv\Scripts\alembic upgrade head
 # Depende de `pythonpath = .` no pytest.ini: sem essa linha o conftest não acha `app`.
 cd Orchestrator && ..\.venv\Scripts\pytest
 
-# Rodar testes por marcador (unitario | integracao | e2e | benchmark)
-cd Orchestrator && ..\.venv\Scripts\pytest -m integracao -v
-
-# Rodar um único arquivo / um único teste
-cd Orchestrator && ..\.venv\Scripts\pytest tests\test_worker_wakeup_unit.py -v
-cd Orchestrator && ..\.venv\Scripts\pytest tests\test_worker_wakeup_unit.py::test_log_flusher_nao_envia_buffer_vazio -v
-
 # E2E Playwright — `-m e2e` sobrescreve o addopts. Exige `Dashboard/dist/` buildado
 # (npm run build) antes, porque o FastAPI serve a SPA a partir dele.
 cd Orchestrator && ..\.venv\Scripts\pytest -m e2e -v
@@ -54,23 +47,7 @@ pwsh -File Tools\Test-PythonGovernance.ps1 -RootPath .
 ```
 
 ### Catálogo Oracle (schema SGTPRD)
-Antes de escrever SQL novo, consulte o catálogo local em vez de explorar o dicionário de dados do Oracle a cada sessão — ver skill `oracle-schema-navigator`.
-```powershell
-# O acervo de consultas de referencia (catalogo gerado) fica em docs/oracle-schema/consultas/
-# (README.md la explica dono e regra de promocao). SQL de runtime do Beneficiamento: Produção Beneficimento/sql/templates/.
-
-# Reconstruir o catalogo local (schema.db, gitignored) — ~30s, requer Oracle acessivel
-.venv\Scripts\python Tools\oracle\build_oracle_catalog.py
-
-# Consultas offline (sem ir ao Oracle)
-.venv\Scripts\python Tools\oracle\oracle_catalog.py table OB
-.venv\Scripts\python Tools\oracle\oracle_catalog.py find "receita bloqueada"
-.venv\Scripts\python Tools\oracle\oracle_catalog.py path OB ITENSPEDIDOGRADE
-
-# Consultas online (SELECT-only, LIMIT obrigatorio, retry)
-.venv\Scripts\python Tools\oracle\oracle_catalog.py check meu_arquivo.sql
-.venv\Scripts\python Tools\oracle\oracle_catalog.py distinct CLASSIFICACAO_COR CODIGO_CLASSIFICACAO --with-desc
-```
+Antes de escrever SQL novo, consulte o catálogo local (`Tools\oracle\oracle_catalog.py`) em vez de explorar o dicionário de dados do Oracle a cada sessão. Comandos e fluxo: skill `oracle-schema-navigator`. Acervo de consultas de referência: `docs/oracle-schema/consultas/`; SQL de runtime do Beneficiamento: `Produção Beneficimento/sql/templates/`.
 
 ### Governança, quality gate e scaffolding
 Rodados pelas skills do projeto: `/quality-gate` (ValidarAutomacoes completo), `/preflight` (checklist pré-PR: encoding, skills governance, lint Python) e `/new-automation` (scaffolding com manifesto válido).
@@ -95,9 +72,6 @@ Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md`, `Produçã
 ### Biblioteca compartilhada PowerShell (`lib/`)
 - `Lib-OrchestratorRuntime.psm1` — fonte única para scripts de Infrastructure: `Get-OrchestratorRuntimeVersion` (lê `ORCHESTRATOR_VERSION` de `constants.py`), `Get-OrchestratorEnvValue` (parser de `.env`), `Stop-OrchestratorProcesses` (usa `Get-CimInstance Win32_Process` — **nunca** `Get-Process`, que não expõe `CommandLine` no PS 5.1). Todo script de `Infrastructure/` que precise de versão de runtime, leitura de `.env` ou encerramento de processos deve consumi-lo em vez de reimplementar (`Install-OrchestratorTask.ps1` é exceção legítima: só registra a tarefa agendada e não usa nenhuma dessas capacidades).
 - `Lib-Config.psm1` — leitura de `.env` para scripts de automação de domínio.
-
-### Infrastructure (`Infrastructure/`)
-Todo script de ciclo de vida do Orchestrator importa `Lib-OrchestratorRuntime.psm1`.
 
 ### Skills canônicas (`.github/skills/`)
 Nove skills governam decisões de implementação. `.gemini/skills/` é apenas mirror. Edite sempre a fonte canônica.

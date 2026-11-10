@@ -7,6 +7,7 @@ contratos que a validação em produção de 08/09/2026 encontrou quebrados
 e o fechamento de telemetria em todo ponto de saída precoce.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,72 @@ def test_run_ps1_nao_sai_sem_fechar_telemetria(automacao: str) -> None:
         f"{automacao}/run.ps1 abre telemetria mas nunca a fecha: a execução "
         "ficaria RUNNING indefinidamente no Orchestrator"
     )
+
+
+# --------------------------------------------------------------------------
+# Padronização dos run.ps1 (CHANGELOG [1.3.110])
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("automacao", AUTOMACOES)
+def test_run_ps1_adquire_o_lock_sem_vazar_true_no_log(automacao: str) -> None:
+    """`Enter-AutomationLock` devolve `$true`; sem descarte, o `True` sai no log
+    de cada execução como linha própria da etapa `lock`."""
+    fonte = _run_ps1(automacao)
+
+    assert "Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null" in fonte, (
+        f"{automacao}/run.ps1 deve descartar a saída de Enter-AutomationLock"
+    )
+    assert "if (-not (Enter-AutomationLock" not in fonte, (
+        f"{automacao}/run.ps1 usa o retorno de Enter-AutomationLock como booleano: "
+        "a função lança exceção em concorrência e nunca devolve $false"
+    )
+
+
+@pytest.mark.parametrize(
+    "automacao",
+    [a for a in AUTOMACOES if a != "Montagem de Terceirizados"],
+)
+def test_run_ps1_declara_os_codigos_de_nao_falha(automacao: str) -> None:
+    """Cada `Exit-WithCode` declara a lista de códigos que não são falha em
+    `$NonFailureCodes`, em vez de repetir literais (que já divergiram)."""
+    fonte = _run_ps1(automacao)
+
+    assert "$NonFailureCodes = @(" in fonte, (
+        f"{automacao}/run.ps1 deve declarar $NonFailureCodes"
+    )
+    assert re.search(r"NonFailureCodes\s*=?\s*\$NonFailureCodes", fonte), (
+        f"{automacao}/run.ps1 deve repassar $NonFailureCodes a Exit-AutomationWithCode"
+    )
+    assert "-NonFailureCodes @(" not in fonte, (
+        f"{automacao}/run.ps1 voltou a usar a lista literal em vez de $NonFailureCodes"
+    )
+
+
+@pytest.mark.parametrize("automacao", AUTOMACOES)
+def test_run_ps1_nao_usa_guarda_processo_finalizado(automacao: str) -> None:
+    """`exit` não é capturável por `catch` (Windows PowerShell 5.1 e 7), então a
+    guarda por mensagem "Processo finalizado" é código morto."""
+    assert '-match "Processo finalizado"' not in _run_ps1(automacao)
+
+
+@pytest.mark.parametrize("automacao", AUTOMACOES)
+def test_run_ps1_valida_o_python_no_preflight(automacao: str) -> None:
+    """O interpretador entra em `-CheckPaths` (ou `$pathsToCheck`): sem isso, o
+    RB-01 tratava Python ausente como `exit 2` (sucesso)."""
+    fonte = _run_ps1(automacao)
+
+    assert re.search(
+        r"(-CheckPaths\s+@\(\$pythonExe|\$pathsToCheck\s*=\s*@\(\$pythonExe)", fonte
+    ), f"{automacao}/run.ps1 deve validar $pythonExe no pré-flight"
+
+
+def test_obp04_serializa_o_lote_sempre_como_array() -> None:
+    """Com uma única fase pendente, `$lote | ConvertTo-Json` (pipeline) gera um
+    objeto, não um array; o motor Node descarta como "Lote vazio", a fase vira
+    FALHA e a execução sai com 4 (ocorreu em 09/11/2026 com só "Controle De
+    Qualidade" pendente)."""
+    fonte = _run_ps1("OBs Paradas Fase")
+
+    assert "ConvertTo-Json -InputObject @($batchInput)" in fonte
+    assert "$batchInput | ConvertTo-Json" not in fonte

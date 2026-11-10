@@ -362,8 +362,19 @@ if ([string]::IsNullOrWhiteSpace($driverMode)) { $driverMode = Get-EnvFileValue 
 if ($driverMode -eq "queue") {
     $queueDir = [System.Environment]::GetEnvironmentVariable("ORACLE_QUEUE_DIR", "Process")
     if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = Get-EnvFileValue -Key "ORACLE_QUEUE_DIR" }
-    if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = "\\192.168.62.1\Dados\Planilhas_Conexao\Automacoes_Fila\_fila\pedidos" }
-    if (Test-Path -LiteralPath $queueDir) {
+    if ([string]::IsNullOrWhiteSpace($queueDir)) {
+        # Fonte unica do padrao: DEFAULT_QUEUE_DIR em lib/python/oracle_queue.py
+        # (o cliente que de fato usa a pasta). Duplicar o literal aqui ja exigiu
+        # renomear a pasta em dois lugares.
+        $queuePy = Join-Path $PSScriptRoot "python\oracle_queue.py"
+        if (Test-Path -LiteralPath $queuePy) {
+            $m = [regex]::Match((Get-Content -LiteralPath $queuePy -Raw -Encoding UTF8), 'DEFAULT_QUEUE_DIR\s*=\s*\(?\s*r"([^"]+)"')
+            if ($m.Success) { $queueDir = $m.Groups[1].Value }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($queueDir)) {
+        $results += "FAIL: Oracle Queue (DEFAULT_QUEUE_DIR nao encontrado em lib/python/oracle_queue.py; defina ORACLE_QUEUE_DIR)"
+    } elseif (Test-Path -LiteralPath $queueDir) {
         $results += "OK: Oracle Queue ($queueDir) On"
     } else {
         $results += "WARN: Oracle Queue ($queueDir) Off (pasta inacessivel)"

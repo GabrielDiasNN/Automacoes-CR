@@ -27,7 +27,7 @@ from decimal import Decimal
 from typing import Any
 
 DEFAULT_QUEUE_DIR = (
-    r"\\192.168.62.1\Dados\Planilhas_Conexao\Automacoes_Fila\_fila\pedidos"
+    r"\\192.168.62.1\Dados\Planilhas_Conexao\5-Automacoes_Fila\_fila\pedidos"
 )
 DEFAULT_TIMEOUT_SECONDS = 120.0
 # Extrações de domínio (fetch_all) não tinham teto no driver nativo; na fila o

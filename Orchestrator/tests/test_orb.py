@@ -765,6 +765,30 @@ def test_validate_finalidades_query_reprova_conjuntos_divergentes() -> None:
         v.validate_finalidades_query((6, 9), rows)
 
 
+def test_validate_finalidades_query_tolera_divergencia_fora_do_saldo() -> None:
+    """Em 09/11/2026 o cadastro ganhou a finalidade 7 só na classe 6 e derrubou a
+    extração, embora o saldo use apenas 3 e 4. Divergência em finalidade ignorada
+    não é ambiguidade; divergência em finalidade do saldo continua reprovando."""
+    v, e = _validators(), _errors()
+    extra = [
+        {
+            "CODCLASSIFICACAO_COR": 6,
+            "CODFINALIDADE": 7,
+            "DESCRICAO_FINALIDADE": "FINALIDADE SO NA CLASSE 6",
+        }
+    ]
+    cadastro = v.validate_finalidades_query(
+        (6, 9), _finalidades_rows() + extra, finalidades_relevantes=(3, 4)
+    )
+    assert 7 in cadastro and 3 in cadastro and 4 in cadastro
+
+    so_na_6 = _finalidades_rows(classificacoes=(6,)) + _finalidades_rows(
+        classificacoes=(9,), finalidades={1: "SEM RESTRIÇÃO", 3: "CORES CLARAS"}
+    )
+    with pytest.raises(e.DadoIncompletoError):
+        v.validate_finalidades_query((6, 9), so_na_6, finalidades_relevantes=(3, 4))
+
+
 def test_validate_finalidades_query_reprova_descricao_vazia() -> None:
     v, e = _validators(), _errors()
     rows = _finalidades_rows(finalidades={1: "   "})
