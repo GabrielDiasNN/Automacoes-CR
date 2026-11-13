@@ -18,7 +18,8 @@ param(
     [string]$ClientId = "hub-global",
     [string]$LogFile = "",
     [string]$BatchInputFile = "",  # Obrigatorio quando -Mode BATCH: JSON com itens {phase_key,image_path,caption}
-    [string]$BatchResultFile = "" # Obrigatorio quando -Mode BATCH: caminho de saida do resultado por item
+    [string]$BatchResultFile = "", # Obrigatorio quando -Mode BATCH: caminho de saida do resultado por item
+    [int]$SessionLockTimeoutMs = 180000
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,11 +58,14 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
     $resolvedConfig = Convert-Path $ConfigPath
     $base = Split-Path -Parent $resolvedConfig
 
-    $appDisabled = ($null -ne $json.app) -and ($null -ne $json.app.PSObject.Properties["enabled"]) -and (-not [bool]$json.app.enabled)
-    $targetDisabled = ($null -ne $json.target) -and ($null -ne $json.target.PSObject.Properties["enabled"]) -and (-not [bool]$json.target.enabled)
-    if ($appDisabled -or $targetDisabled) {
-        Write-Host "Envio WhatsApp desabilitado na configuracao ($resolvedConfig). Encerrando sem enviar." -ForegroundColor Yellow
-        exit 0
+    if (-not (Test-WhatsAppConfigEnabled -Config $json)) {
+        if ($Mode -eq "BATCH" -and -not [string]::IsNullOrWhiteSpace($BatchResultFile)) {
+            Write-Host "Envio WhatsApp desabilitado na configuracao ($resolvedConfig) em modo BATCH (BatchResultFile='$BatchResultFile' nao gravado com success: true). Encerrando com exit 22." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "Envio WhatsApp desabilitado na configuracao ($resolvedConfig). Encerrando com exit 22 sem enviar." -ForegroundColor Yellow
+        }
+        exit 22
     }
 
     # Resolve o destino real (contactId/contactPhone do JSON, ou o override via .env em
@@ -140,9 +144,6 @@ function Clear-StaleWhatsAppLocksAndProcesses {
     }
 }
 
-# Executar a limpeza antes do início da inicialização do canal
-Clear-StaleWhatsAppLocksAndProcesses
-
 $isBatchMode = $Mode -eq "BATCH"
 
 # --- Validacao ---
@@ -162,83 +163,122 @@ if ([string]::IsNullOrWhiteSpace($LogFile)) {
     $LogFile = Join-Path $root "Logs\WhatsApp_Global.log"
 }
 
-# --- Execucao ---
-Write-Host "Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
+$lockKeySource = if ([string]::IsNullOrWhiteSpace($finalClientId)) { "default" } else { $finalClientId }
+$safeClientId = $lockKeySource -replace '[^A-Za-z0-9_.-]', '_'
+$sessionMutexName = "Global\AutomationHub_WA_$safeClientId"
+$sessionMutex = New-Object System.Threading.Mutex($false, $sessionMutexName)
+$sessionMutexOwned = $false
+$lockTimedOut = $false
+$result = $null
 
-$nodeArgs = if ($isBatchMode) {
-    @(
-        "`"$NodeScript`"",
-        "`"$ExecId`"",
-        "`"$Mode`"",
-        "`"$finalClientId`"",
-        "`"$finalPhone`"",
-        "`"$BatchInputFile`"",
-        "`"$BatchResultFile`"",
-        "`"$LogFile`""
-    )
-}
-else {
-    @(
-        "`"$NodeScript`"",
-        "`"$ExecId`"",
-        "`"$Mode`"",
-        "`"$finalClientId`"",
-        "`"$finalPhone`"",
-        $(if ($finalAttachment) { "`"$finalAttachment`"" } else { '""' }),
-        '""',
-        "`"$LogFile`""
-    )
-}
-
-$WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
-    $resolvedPath = Convert-Path $ConfigPath
-    $parent = Split-Path -Parent $resolvedPath
-    if ([string]::IsNullOrWhiteSpace($parent)) { (Get-Location).Path } else { $parent }
-}
-else {
-    (Get-Location).Path
-}
-# Resolve node_modules: usa WorkDir quando existe, senão fallback para o motor compartilhado em lib/
-$candidateNodePath = Join-Path $WorkDir "node_modules"
-$fallbackNodePath = Join-Path $LibDir "node_modules"
-$env:NODE_PATH = if (Test-Path $candidateNodePath) { $candidateNodePath } else { $fallbackNodePath }
-
-# Legenda em modo AUTO vai via arquivo UTF-8 temporario (HUB_WA_CAPTION_FILE) para
-# evitar truncamento/corrupcao de aspas, quebras de linha e limite CreateProcess no argv.
-$captionTempFile = $null
-$prevCaptionEnv = $env:HUB_WA_CAPTION_FILE
-$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 try {
-    if (-not $isBatchMode) {
-        $safeExec = $ExecId -replace '[^A-Za-z0-9_.-]', '_'
-        $captionTempFile = Join-Path ([System.IO.Path]::GetTempPath()) ("wa_caption_{0}_{1}.txt" -f $safeExec, [guid]::NewGuid().ToString("N"))
-        [System.IO.File]::WriteAllText($captionTempFile, $finalMessage, $utf8NoBom)
-        $env:HUB_WA_CAPTION_FILE = $captionTempFile
+    try {
+        $sessionMutexOwned = $sessionMutex.WaitOne($SessionLockTimeoutMs)
+    }
+    catch [System.Threading.AbandonedMutexException] {
+        Write-Host "Mutex de sessao WhatsApp anterior foi abandonado ($sessionMutexName). Reciclando lock..." -ForegroundColor Yellow
+        $sessionMutexOwned = $true
+    }
+
+    if (-not $sessionMutexOwned) {
+        Write-Host "Outra automacao esta usando a sessao WhatsApp '$finalClientId' (Mutex: $sessionMutexName, timeout=${SessionLockTimeoutMs}ms). Adiando envio com exit 22 sem encerrar processos." -ForegroundColor Yellow
+        $lockTimedOut = $true
     }
     else {
-        Remove-Item Env:\HUB_WA_CAPTION_FILE -ErrorAction SilentlyContinue
-    }
+        # Executar a limpeza antes do inicio da inicializacao do canal (somente apos adquirir o mutex da sessao)
+        Clear-StaleWhatsAppLocksAndProcesses
 
-    $result = Invoke-NativeProcess -FilePath $NodeExe -Arguments ($nodeArgs -join " ") -WorkingDirectory $WorkDir -LogAction {
-        param($msg, $lvl)
-        if ($lvl -eq "WARN") {
-            Write-Host $msg -ForegroundColor Yellow
+        # --- Execucao ---
+        Write-Host "Acionando Motor de WhatsApp Global..." -ForegroundColor Cyan
+
+        $nodeArgs = if ($isBatchMode) {
+            @(
+                "`"$NodeScript`"",
+                "`"$ExecId`"",
+                "`"$Mode`"",
+                "`"$finalClientId`"",
+                "`"$finalPhone`"",
+                "`"$BatchInputFile`"",
+                "`"$BatchResultFile`"",
+                "`"$LogFile`""
+            )
         }
         else {
-            Write-Host $msg
+            @(
+                "`"$NodeScript`"",
+                "`"$ExecId`"",
+                "`"$Mode`"",
+                "`"$finalClientId`"",
+                "`"$finalPhone`"",
+                $(if ($finalAttachment) { "`"$finalAttachment`"" } else { '""' }),
+                '""',
+                "`"$LogFile`""
+            )
+        }
+
+        $WorkDir = if ($ConfigPath -and (Test-Path $ConfigPath)) {
+            $resolvedPath = Convert-Path $ConfigPath
+            $parent = Split-Path -Parent $resolvedPath
+            if ([string]::IsNullOrWhiteSpace($parent)) { (Get-Location).Path } else { $parent }
+        }
+        else {
+            (Get-Location).Path
+        }
+        # Resolve node_modules: usa WorkDir quando existe, senão fallback para o motor compartilhado em lib/
+        $candidateNodePath = Join-Path $WorkDir "node_modules"
+        $fallbackNodePath = Join-Path $LibDir "node_modules"
+        $env:NODE_PATH = if (Test-Path $candidateNodePath) { $candidateNodePath } else { $fallbackNodePath }
+
+        # Legenda em modo AUTO vai via arquivo UTF-8 temporario (HUB_WA_CAPTION_FILE) para
+        # evitar truncamento/corrupcao de aspas, quebras de linha e limite CreateProcess no argv.
+        $captionTempFile = $null
+        $prevCaptionEnv = $env:HUB_WA_CAPTION_FILE
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        try {
+            if (-not $isBatchMode) {
+                $safeExec = $ExecId -replace '[^A-Za-z0-9_.-]', '_'
+                $captionTempFile = Join-Path ([System.IO.Path]::GetTempPath()) ("wa_caption_{0}_{1}.txt" -f $safeExec, [guid]::NewGuid().ToString("N"))
+                [System.IO.File]::WriteAllText($captionTempFile, $finalMessage, $utf8NoBom)
+                $env:HUB_WA_CAPTION_FILE = $captionTempFile
+            }
+            else {
+                Remove-Item Env:\HUB_WA_CAPTION_FILE -ErrorAction SilentlyContinue
+            }
+
+            $result = Invoke-NativeProcess -FilePath $NodeExe -Arguments ($nodeArgs -join " ") -WorkingDirectory $WorkDir -LogAction {
+                param($msg, $lvl)
+                if ($lvl -eq "WARN") {
+                    Write-Host $msg -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host $msg
+                }
+            }
+        }
+        finally {
+            if ($null -eq $prevCaptionEnv) {
+                Remove-Item Env:\HUB_WA_CAPTION_FILE -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:HUB_WA_CAPTION_FILE = $prevCaptionEnv
+            }
+            if ($captionTempFile -and (Test-Path -LiteralPath $captionTempFile)) {
+                Remove-Item -LiteralPath $captionTempFile -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 }
 finally {
-    if ($null -eq $prevCaptionEnv) {
-        Remove-Item Env:\HUB_WA_CAPTION_FILE -ErrorAction SilentlyContinue
+    if ($sessionMutexOwned) {
+        try { $sessionMutex.ReleaseMutex() } catch [System.ApplicationException] {}
     }
-    else {
-        $env:HUB_WA_CAPTION_FILE = $prevCaptionEnv
+    if ($null -ne $sessionMutex) {
+        $sessionMutex.Dispose()
     }
-    if ($captionTempFile -and (Test-Path -LiteralPath $captionTempFile)) {
-        Remove-Item -LiteralPath $captionTempFile -Force -ErrorAction SilentlyContinue
-    }
+}
+
+if ($lockTimedOut) {
+    exit 22
 }
 
 if ($result.ExitCode -eq 0) {

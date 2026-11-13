@@ -1230,3 +1230,38 @@ def test_format_message_remove_cards_paginados_ao_voltar_para_uma_pagina(
     assert len(manifest) == 1
     assert manifest[0]["image_path"] == "card.png"
     assert manifest[0]["ob_ids"] == ["5001", "5002"]
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {},
+        {"NUMERO_OB": ""},
+        {"NUMERO_OB": "   ", "ob": None, "id_ob": ""},
+    ],
+)
+def test_extract_ob_id_lanca_value_error_sem_identificador(row: dict[str, Any]) -> None:
+    """card_pagination.extract_ob_id deve falhar explicitamente quando nao houver ID de OB."""
+    card_pagination = _load_module(
+        "card_pagination", ROOT / "lib" / "python" / "card_pagination.py"
+    )
+    with pytest.raises(ValueError, match="OB"):
+        card_pagination.extract_ob_id(row)
+
+
+def test_card_render_sanitize_text_e_monkeypatch_max_chars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Modulo compartilhado card_render expoe sanitize_text e OFST preserva monkeypatch de MAX_MESSAGE_CHARS."""
+    card_render = _load_module(
+        "card_render", ROOT / "lib" / "python" / "card_render.py"
+    )
+    assert card_render.sanitize_text("  linha\r\tlimpa  ") == "linha limpa"
+    assert card_render.sanitize_text("") == "—"
+
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    rows = [_row_mensagem(NUMERO_OB=7001 + i) for i in range(6)]
+    monkeypatch.setattr(module, "MAX_MESSAGE_CHARS", 260)
+    msg = module.build_message({"rows": rows})
+    assert len(msg) <= 260
+    assert "… e mais" in msg

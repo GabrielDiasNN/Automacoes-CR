@@ -129,5 +129,72 @@ function Resolve-WhatsAppTarget {
     return $placeholder
 }
 
-Export-ModuleMember -Function Get-HubConfig, Get-EnvFileValue, Import-HubEnv, Resolve-WhatsAppTarget
+function Test-WhatsAppFlagEnabled {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param($Section)
+
+    if ($null -eq $Section) { return $true }
+
+    $hasProp = $false
+    $rawVal = $null
+    if ($Section -is [System.Collections.IDictionary]) {
+        if ($Section.Contains("enabled")) {
+            $hasProp = $true
+            $rawVal = $Section["enabled"]
+        }
+    }
+    else {
+        $prop = $Section.PSObject.Properties["enabled"]
+        if ($null -ne $prop) {
+            $hasProp = $true
+            $rawVal = $prop.Value
+        }
+    }
+
+    if (-not $hasProp -or $null -eq $rawVal) { return $true }
+    if ($rawVal -is [bool]) { return $rawVal }
+    if ($rawVal -is [int] -or $rawVal -is [long] -or $rawVal -is [double] -or $rawVal -is [decimal]) {
+        return ($rawVal -ne 0)
+    }
+
+    $strVal = ([string]$rawVal).Trim().ToLowerInvariant()
+    if ($strVal -in @("false", "0", "no")) { return $false }
+    return $true
+}
+
+function Test-WhatsAppConfigEnabled {
+    <#
+    .SYNOPSIS
+        Verifica se a configuracao de WhatsApp (`app.enabled` e `target.enabled`) esta habilitada.
+    .DESCRIPTION
+        Ausencia da secao ou da propriedade `enabled` equivale a habilitado ($true).
+        Valor booleano `$false` ou strings "false", "0" e "no" (case-insensitive) desabilitam ($false).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $false)]
+        $Config
+    )
+
+    if ($null -eq $Config) { return $true }
+
+    $appSection = $null
+    $targetSection = $null
+    if ($Config -is [System.Collections.IDictionary]) {
+        if ($Config.Contains("app")) { $appSection = $Config["app"] }
+        if ($Config.Contains("target")) { $targetSection = $Config["target"] }
+    }
+    else {
+        $appProp = $Config.PSObject.Properties["app"]
+        if ($null -ne $appProp) { $appSection = $appProp.Value }
+        $targetProp = $Config.PSObject.Properties["target"]
+        if ($null -ne $targetProp) { $targetSection = $targetProp.Value }
+    }
+
+    return (Test-WhatsAppFlagEnabled -Section $appSection) -and (Test-WhatsAppFlagEnabled -Section $targetSection)
+}
+
+Export-ModuleMember -Function Get-HubConfig, Get-EnvFileValue, Import-HubEnv, Resolve-WhatsAppTarget, Test-WhatsAppConfigEnabled
 

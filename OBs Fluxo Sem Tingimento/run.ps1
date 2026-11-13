@@ -88,6 +88,7 @@ $env:HUB_TRACE_ID = $TraceId
 
 $script:RunSw = [System.Diagnostics.Stopwatch]::StartNew()
 $script:ExecutionEnded = $false
+$script:HasFreshResult = $false
 $waConfirmed = $false
 
 # OBs Fluxo Sem Tingimento usa somente $ResultFile/$StateFile frescos dentro do lock.
@@ -105,9 +106,10 @@ $NonFailureCodes = @(0, 2)
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
     $script:ExecutionEnded = $true
+    $countsPath = if ($script:HasFreshResult) { $ResultFile } else { "" }
     Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile `
         -NonFailureCodes $NonFailureCodes -EndMessage "FIM - ExitCode=$Code" `
-        -RecordCountsPath $ResultFile -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
+        -RecordCountsPath $countsPath -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
 }
 
 Write-HubExecutionStart -Message "INICIO — $AutomationName (OFST-06). ExecId=$ExecId"
@@ -159,7 +161,11 @@ try {
             -Step "extract" `
             -MaxAttempts 3 `
             -BackoffSeconds @(30, 60, 120)
-        Complete-HubStep -Ok ($pyResult.Success -or $pyResult.Idempotent)
+        $extractOk = ($pyResult.Success -or $pyResult.Idempotent)
+        if ($extractOk) {
+            $script:HasFreshResult = $true
+        }
+        Complete-HubStep -Ok $extractOk
 
         if ($pyResult.Idempotent) {
             if (Test-Path $StateTmp) {
@@ -206,6 +212,12 @@ try {
         # Send-WhatsApp.ps1 via target.contactIdEnv — nunca do config versionado.
         Start-HubStep -Step "dispatch" -Message "Enviando $($cards.Count) card(s) ao grupo Expedicao Tinturaria"
 
+        if (-not (Test-WhatsAppConfigEnabled -Config $waConfig)) {
+            Write-Log "Envio WhatsApp desabilitado na configuracao ($WaConfigPath). State NAO commitado." -Lvl "WARN" -Step "dispatch"
+            Complete-HubStep -Ok $true
+            Exit-WithCode 2 "Envio WhatsApp desabilitado na configuracao — nada enviado e state preservado."
+        }
+
         $SendWhatsAppScript = Join-Path $projectRoot "lib\Send-WhatsApp.ps1"
         if ($cards.Count -eq 1) {
             $waArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$SendWhatsAppScript`" -ExecId `"$ExecId`" -ConfigPath `"$WaConfigPath`" -LogFile `"$LogFile`""
@@ -249,6 +261,15 @@ try {
                     $waConfirmed = $true
                     Write-Log "State parcial commitado: $($batchOutcome.SentCount)/$($batchOutcome.TotalCount) pagina(s) entregue(s); $($batchOutcome.FailedObCount) OB(s) mantida(s) para reenvio." -Lvl "WARN" -Step "commit"
                     Complete-HubStep
+                }
+                try {
+                    Update-WhatsAppResultRecordCounts -ResultPath $ResultFile `
+                        -DeliveredObCount $batchOutcome.DeliveredObCount `
+                        -SentPages $batchOutcome.SentCount `
+                        -TotalPages $batchOutcome.TotalCount
+                }
+                catch [System.Exception] {
+                    Write-Log "Aviso: falha ao ajustar record_counts parcial em ${ResultFile}: $_" -Lvl "WARN" -Step "dispatch"
                 }
                 if ($waExit -eq 21) {
                     Exit-WithCode 21 "WhatsApp requer reautenticacao apos envio parcial ($($batchOutcome.SentCount)/$($batchOutcome.TotalCount) paginas)."

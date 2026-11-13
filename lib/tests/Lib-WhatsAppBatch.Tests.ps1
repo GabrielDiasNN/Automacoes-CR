@@ -104,6 +104,7 @@ Describe "Lib-WhatsAppBatch" {
             $outcome.ShouldCommitState | Should -BeTrue
             $outcome.SentCount | Should -Be 1
             $outcome.TotalCount | Should -Be 2
+            $outcome.DeliveredObCount | Should -Be 1
             $outcome.FailedObCount | Should -Be 1
 
             $updatedBytes = [System.IO.File]::ReadAllBytes($stateTmp)
@@ -135,8 +136,94 @@ Describe "Lib-WhatsAppBatch" {
             $outcome = Resolve-WhatsAppBatchDelivery -Cards $cards -BatchResultFile $batchResult -StateTmpPath $stateTmp -WaExitCode 4
 
             $outcome.Status | Should -Be "NoneSent"
+            $outcome.DeliveredObCount | Should -Be 0
             $outcome.ShouldCommitState | Should -BeFalse
             ([System.IO.File]::ReadAllText($stateTmp, [System.Text.Encoding]::UTF8)) | Should -Be $orig
+        }
+        finally {
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "rejeita manifesto com phase_key duplicado" {
+        $dir = New-TempDir
+        try {
+            $png1 = Join-Path $dir "card_01.png"
+            $png2 = Join-Path $dir "card_02.png"
+            [System.IO.File]::WriteAllBytes($png1, @(137, 80, 78, 71))
+            [System.IO.File]::WriteAllBytes($png2, @(137, 80, 78, 71))
+
+            $manifestPath = Join-Path $dir "cards_manifest.json"
+            $manifestJson = ConvertTo-Json -InputObject @(
+                @{ page = 1; total_pages = 2; phase_key = "page_01"; image_path = "card_01.png"; caption = "Pag 1"; ob_ids = @("101") },
+                @{ page = 2; total_pages = 2; phase_key = "page_01"; image_path = "card_02.png"; caption = "Pag 2"; ob_ids = @("102") }
+            ) -Depth 5
+            [System.IO.File]::WriteAllText($manifestPath, $manifestJson, (New-Object System.Text.UTF8Encoding $false))
+
+            $res = Read-CardsManifest -ManifestPath $manifestPath -BaseDir $dir
+            $res.Valid | Should -BeFalse
+            $res.Error | Should -Match "phase_key duplicado"
+        }
+        finally {
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "rejeita manifesto quando ob_ids esta ausente, vazio ou contem item vazio" {
+        $dir = New-TempDir
+        try {
+            $png1 = Join-Path $dir "card_01.png"
+            [System.IO.File]::WriteAllBytes($png1, @(137, 80, 78, 71))
+            $manifestPath = Join-Path $dir "cards_manifest.json"
+
+            foreach ($caso in @(
+                '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1"}]',
+                '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1","ob_ids":[]}]',
+                '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1","ob_ids":["101","  "]}]'
+            )) {
+                [System.IO.File]::WriteAllText($manifestPath, $caso, (New-Object System.Text.UTF8Encoding $false))
+                $res = Read-CardsManifest -ManifestPath $manifestPath -BaseDir $dir
+                $res.Valid | Should -BeFalse
+                $res.Error | Should -Match "ob_ids"
+            }
+        }
+        finally {
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "conta OBs unicas entregues em DeliveredObCount e atualiza record_counts sem BOM" {
+        $dir = New-TempDir
+        try {
+            $resultPath = Join-Path $dir "orb_result.json"
+            $resultRaw = '{"rows":[],"total":3,"record_counts":{"read":10,"validated":10,"rejected":0,"qualified":3,"notified":3,"skipped":7,"suppressed":0}}'
+            [System.IO.File]::WriteAllText($resultPath, $resultRaw, (New-Object System.Text.UTF8Encoding $false))
+
+            $batchResult = Join-Path $dir "batch_result.json"
+            $batchJson = ConvertTo-Json -InputObject @(
+                @{ phase_key = "page_01"; success = $true; error = $null },
+                @{ phase_key = "page_02"; success = $true; error = $null },
+                @{ phase_key = "page_03"; success = $false; error = "timeout" }
+            ) -Depth 5
+            [System.IO.File]::WriteAllText($batchResult, $batchJson, (New-Object System.Text.UTF8Encoding $false))
+
+            $cards = @(
+                [pscustomobject]@{ phase_key = "page_01"; ob_ids = @("101", "102") },
+                [pscustomobject]@{ phase_key = "page_02"; ob_ids = @("102", "103") },
+                [pscustomobject]@{ phase_key = "page_03"; ob_ids = @("104") }
+            )
+
+            $outcome = Resolve-WhatsAppBatchDelivery -Cards $cards -BatchResultFile $batchResult -StateTmpPath (Join-Path $dir "inexistente.tmp") -WaExitCode 4
+            $outcome.Status | Should -Be "PartialSent"
+            $outcome.DeliveredObCount | Should -Be 3
+
+            Update-WhatsAppResultRecordCounts -ResultPath $resultPath -DeliveredObCount $outcome.DeliveredObCount -SentPages $outcome.SentCount -TotalPages $outcome.TotalCount
+            $bytes = [System.IO.File]::ReadAllBytes($resultPath)
+            (($bytes[0] -eq 239) -and ($bytes[1] -eq 187) -and ($bytes[2] -eq 191)) | Should -BeFalse
+            $updated = (Get-Content -LiteralPath $resultPath -Raw -Encoding UTF8) | ConvertFrom-Json
+            $updated.record_counts.notified | Should -Be 3
+            $updated.record_counts.pages_sent | Should -Be 2
+            $updated.record_counts.pages_total | Should -Be 3
         }
         finally {
             Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue

@@ -51,7 +51,7 @@ def extract_ob_id(row: dict[str, Any]) -> str:
         val = row.get(key)
         if val is not None and str(val).strip():
             return str(val).strip()
-    return ""
+    raise ValueError("Linha sem identificador de OB valido (NUMERO_OB, ob ou id_ob).")
 
 
 def write_atomic_text(path: str, content: str) -> None:

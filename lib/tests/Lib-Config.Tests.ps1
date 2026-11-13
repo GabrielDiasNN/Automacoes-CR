@@ -51,4 +51,46 @@ Describe "Lib-Config Tests" {
             }
         }
     }
+
+    Context "Test-WhatsAppConfigEnabled" {
+        It "retorna true quando config ou propriedades enabled estao ausentes" {
+            Test-WhatsAppConfigEnabled -Config $null | Should -BeTrue
+            Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{}) | Should -BeTrue
+            Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
+                app    = [pscustomobject]@{ name = "WA" }
+                target = [pscustomobject]@{ contactIdEnv = "X" }
+            }) | Should -BeTrue
+        }
+
+        It "retorna false quando app.enabled ou target.enabled e false booleano" {
+            Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
+                app    = [pscustomobject]@{ enabled = $false }
+                target = [pscustomobject]@{ enabled = $true }
+            }) | Should -BeFalse
+            Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
+                app    = [pscustomobject]@{ enabled = $true }
+                target = [pscustomobject]@{ enabled = $false }
+            }) | Should -BeFalse
+        }
+
+        It "retorna false para strings 'false', '0' e 'no' case-insensitive" {
+            foreach ($val in @("false", "FALSE", " False ", "0", "no", "NO")) {
+                Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
+                    app    = [pscustomobject]@{ enabled = $val }
+                    target = [pscustomobject]@{ enabled = $true }
+                }) | Should -BeFalse
+                Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
+                    app    = [pscustomobject]@{ enabled = $true }
+                    target = [pscustomobject]@{ enabled = $val }
+                }) | Should -BeFalse
+            }
+        }
+
+        It "retorna true quando ambos app.enabled e target.enabled estao ativos" {
+            Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
+                app    = [pscustomobject]@{ enabled = $true }
+                target = [pscustomobject]@{ enabled = "true" }
+            }) | Should -BeTrue
+        }
+    }
 }

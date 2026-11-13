@@ -207,3 +207,37 @@ def test_orb_e_ofst_isolam_lock_batch_e_rotacao_sem_codigos_mortos(
     pos_lock = fonte.index("Enter-AutomationLock")
     pos_remove = fonte.index("Remove-Item $ResultFile")
     assert pos_remove > pos_lock
+
+
+@pytest.mark.parametrize(
+    "automacao",
+    [
+        "OBs Restricao Branco",
+        "OBs Fluxo Sem Tingimento",
+    ],
+)
+def test_orb_e_ofst_protegem_result_file_obsoleto_config_desabilitada_e_telemetria_parcial(
+    automacao: str,
+) -> None:
+    """Contrato: $HasFreshResult protege record_counts antes da extracao,
+    Test-WhatsAppConfigEnabled encerra com Exit-WithCode 2 antes do envio e
+    PartialSent ajusta contadores com DeliveredObCount."""
+    fonte = _run_ps1(automacao)
+
+    assert "$script:HasFreshResult = $false" in fonte
+    assert "$script:HasFreshResult = $true" in fonte
+    assert (
+        'if ($script:HasFreshResult) { $ResultFile } else { "" }' in fonte
+        or "if ($script:HasFreshResult) { $ResultFile } else { '' }" in fonte
+    )
+
+    assert "Test-WhatsAppConfigEnabled -Config $waConfig" in fonte
+    pos_cfg_check = fonte.index("Test-WhatsAppConfigEnabled -Config $waConfig")
+    pos_dispatch_send = fonte.index("$SendWhatsAppScript =")
+    assert pos_cfg_check < pos_dispatch_send
+    assert "Complete-HubStep -Ok $true" in fonte[pos_cfg_check:pos_dispatch_send]
+    assert "Exit-WithCode 2" in fonte[pos_cfg_check:pos_dispatch_send]
+
+    pos_partial = fonte.index("PartialSent")
+    assert "DeliveredObCount" in fonte[pos_partial:]
+    assert "Update-WhatsAppResultRecordCounts" in fonte[pos_partial:]

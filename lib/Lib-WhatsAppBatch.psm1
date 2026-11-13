@@ -80,6 +80,7 @@ function Read-CardsManifest {
         return [pscustomobject]@{ Valid = $false; Cards = @(); Error = "cards_manifest.json sem paginas." }
     }
 
+    $seenPhaseKeys = @{}
     foreach ($card in $cards) {
         $phaseKey = [string](Get-JsonPropValue $card "phase_key")
         $imageRel = [string](Get-JsonPropValue $card "image_path")
@@ -89,6 +90,36 @@ function Read-CardsManifest {
             [string]::IsNullOrWhiteSpace($imageRel) -or
             [string]::IsNullOrWhiteSpace($caption)) {
             return [pscustomobject]@{ Valid = $false; Cards = @(); Error = "Entrada invalida em cards_manifest.json (phase_key/image_path/caption)." }
+        }
+
+        if ($seenPhaseKeys.ContainsKey($phaseKey)) {
+            return [pscustomobject]@{ Valid = $false; Cards = @(); Error = "phase_key duplicado em cards_manifest.json: $phaseKey" }
+        }
+        $seenPhaseKeys[$phaseKey] = $true
+
+        $obIdsRaw = $null
+        if ($card -is [System.Collections.IDictionary]) {
+            if ($card.Contains("ob_ids")) {
+                $obIdsRaw = $card["ob_ids"]
+            }
+        }
+        else {
+            $obIdsProp = $card.PSObject.Properties["ob_ids"]
+            if ($null -ne $obIdsProp) {
+                $obIdsRaw = $obIdsProp.Value
+            }
+        }
+        if ($null -eq $obIdsRaw -or ($obIdsRaw -is [string]) -or ($obIdsRaw -is [System.Collections.IDictionary]) -or -not ($obIdsRaw -is [System.Collections.IEnumerable])) {
+            return [pscustomobject]@{ Valid = $false; Cards = @(); Error = "Entrada invalida em cards_manifest.json: ob_ids ausente ou invalido em '$phaseKey'." }
+        }
+        $obIdsList = @($obIdsRaw)
+        if ($obIdsList.Count -lt 1) {
+            return [pscustomobject]@{ Valid = $false; Cards = @(); Error = "Entrada invalida em cards_manifest.json: ob_ids vazio em '$phaseKey'." }
+        }
+        foreach ($obId in $obIdsList) {
+            if ($null -eq $obId -or [string]::IsNullOrWhiteSpace([string]$obId)) {
+                return [pscustomobject]@{ Valid = $false; Cards = @(); Error = "Entrada invalida em cards_manifest.json: ob_ids contem ID vazio em '$phaseKey'." }
+            }
         }
 
         $imageFull = if ([System.IO.Path]::IsPathRooted($imageRel)) { $imageRel } else { Join-Path $BaseDir $imageRel }
@@ -202,16 +233,6 @@ function Resolve-WhatsAppBatchDelivery {
     $totalCount = $Cards.Count
     $sentCount = $sentPages.Count
 
-    if ($WaExitCode -eq 0 -and $failedPages.Count -eq 0) {
-        return [pscustomobject]@{
-            Status            = "AllSent"
-            SentCount         = $sentCount
-            TotalCount        = $totalCount
-            FailedObCount     = 0
-            ShouldCommitState = $true
-        }
-    }
-
     $deliveredObSet = @{}
     foreach ($sp in $sentPages) {
         $ids = Get-JsonPropValue $sp "ob_ids"
@@ -222,6 +243,18 @@ function Resolve-WhatsAppBatchDelivery {
                     $deliveredObSet[$obKey] = $true
                 }
             }
+        }
+    }
+    $deliveredObCount = $deliveredObSet.Count
+
+    if ($WaExitCode -eq 0 -and $failedPages.Count -eq 0) {
+        return [pscustomobject]@{
+            Status            = "AllSent"
+            SentCount         = $sentCount
+            TotalCount        = $totalCount
+            DeliveredObCount  = $deliveredObCount
+            FailedObCount     = 0
+            ShouldCommitState = $true
         }
     }
 
@@ -244,6 +277,7 @@ function Resolve-WhatsAppBatchDelivery {
             Status            = "NoneSent"
             SentCount         = 0
             TotalCount        = $totalCount
+            DeliveredObCount  = 0
             FailedObCount     = $failedObIds.Count
             ShouldCommitState = $false
         }
@@ -266,10 +300,49 @@ function Resolve-WhatsAppBatchDelivery {
         Status            = "PartialSent"
         SentCount         = $sentCount
         TotalCount        = $totalCount
+        DeliveredObCount  = $deliveredObCount
         FailedObCount     = $failedObIds.Count
         ShouldCommitState = $true
     }
 }
 
-Export-ModuleMember -Function Read-CardsManifest, Write-WhatsAppBatchInput, Resolve-WhatsAppBatchDelivery
+function Update-WhatsAppResultRecordCounts {
+    <#
+    .SYNOPSIS
+        Atualiza `record_counts` em `*_result.json` apos envio parcial em lote, mantendo UTF-8 sem BOM.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ResultPath,
+
+        [Parameter(Mandatory)]
+        [int]$DeliveredObCount,
+
+        [Parameter(Mandatory)]
+        [int]$SentPages,
+
+        [Parameter(Mandatory)]
+        [int]$TotalPages
+    )
+
+    if (-not (Test-Path -LiteralPath $ResultPath)) { return }
+    $raw = Get-Content -LiteralPath $ResultPath -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($raw)) { return }
+    $resultObj = $raw | ConvertFrom-Json
+    $rc = Get-JsonPropValue $resultObj "record_counts"
+    if ($null -eq $rc) { return }
+
+    $rc | Add-Member -NotePropertyName "notified" -NotePropertyValue $DeliveredObCount -Force
+    if ($null -ne $rc.PSObject.Properties["sent"]) {
+        $rc.sent = $DeliveredObCount
+    }
+    $rc | Add-Member -NotePropertyName "pages_sent" -NotePropertyValue $SentPages -Force
+    $rc | Add-Member -NotePropertyName "pages_total" -NotePropertyValue $TotalPages -Force
+
+    $json = $resultObj | ConvertTo-Json -Depth 10
+    Write-Utf8NoBomFile -Path $ResultPath -Content $json
+}
+
+Export-ModuleMember -Function Read-CardsManifest, Write-WhatsAppBatchInput, Resolve-WhatsAppBatchDelivery, Update-WhatsAppResultRecordCounts
 

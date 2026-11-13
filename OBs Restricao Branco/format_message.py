@@ -1,6 +1,6 @@
 # pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
-#   "version": "2.2.0",
+#   "version": "2.3.0",
 #   "contract": "exit-0=cards-e-manifesto-gerados, exit-2=nada-a-enviar, exit-1=erro",
 #   "description": "Le orb_result.json e gera card(s) PNG e cards_manifest.json"
 # }
@@ -12,8 +12,6 @@ com legenda pesquisavel no WhatsApp e grava `cards_manifest.json`.
 O envio em si e do run.ps1 via lib/Send-WhatsApp.ps1.
 """
 
-import contextlib
-import json
 import os
 import sys
 from datetime import datetime
@@ -27,12 +25,56 @@ sys.path.insert(
 
 from automation_log import ensure_utf8_streams, make_logger
 from card_pagination import (
+    DEFAULT_MAX_MESSAGE_CHARS,
     MAX_OBS_PER_PAGE,
     ArtifactTargets,
     PaginationConfig,
-    build_paginated_artifacts,
     write_atomic_text,
 )
+from card_render import (
+    CARD_W,
+    COL_GAP,
+    DIVIDER_COLOR,
+    DOT_GAP,
+    DOT_RADIUS,
+    FOOTER_BG,
+    FOOTER_H,
+    HEADER_H,
+    HEADER_TEXT,
+    MAX_CARD_ROWS,
+    OB_ROW_H,
+    PAD,
+    SUMMARY_ROW_H,
+    TEXT_DIM,
+    TEXT_MAIN,
+    FontType,
+    FormatMainConfig,
+    center_text_y,
+    coerce_nonneg_int,
+    draw_summary_banner,
+    fit_prefixed_detail,
+    fmt_entrega,
+    load_card_fonts,
+    load_font,
+    load_validated_payload,
+    resolve_manifest_path,
+    run_format_main,
+    sanitize_text,
+    save_card_image_atomic,
+    text_width,
+    truncate_message,
+    truncate_text,
+)
+
+__all__ = [
+    "Image",
+    "ImageDraw",
+    "ImageFont",
+    "MAX_MESSAGE_CHARS",
+    "build_card_image",
+    "build_message",
+    "main",
+]
 
 ensure_utf8_streams()
 
@@ -45,74 +87,32 @@ CARDS_MANIFEST_FILE = os.path.join(SCRIPT_DIR, "cards_manifest.json")
 log = make_logger("ORB-FORMAT")
 
 # ── Layout e paleta do card visual ────────────────────────────────────────────
-BG_COLOR = (30, 30, 46)
 HEADER_COLOR = (56, 189, 248)
-HEADER_TEXT = (15, 23, 42)
-TEXT_MAIN = (236, 234, 228)
-TEXT_DIM = (160, 160, 180)
-DIVIDER_COLOR = (60, 60, 80)
-FOOTER_BG = (20, 20, 36)
 ACCENT_COMPLETE = (34, 197, 94)
 ACCENT_PARTIAL = (245, 158, 11)
+MAX_MESSAGE_CHARS = DEFAULT_MAX_MESSAGE_CHARS
 
-CARD_W = 860
-PAD = 28
-HEADER_H = 72
-OB_ROW_H = 54
-SUMMARY_ROW_H = 40
-FOOTER_H = 50
-DOT_RADIUS = 5
-DOT_GAP = 10
-COL_GAP = 16
-MAX_CARD_ROWS = 85
-MAX_MESSAGE_CHARS = 3500
-
-FontType = ImageFont.FreeTypeFont | ImageFont.ImageFont
-
-
-def _load_font(size: int, bold: bool = False) -> FontType:
-    windir = os.environ.get("WINDIR", "C:/Windows")
-    candidates = (
-        [
-            os.path.join(windir, "Fonts", "arialbd.ttf"),
-            "DejaVuSans-Bold.ttf",
-        ]
-        if bold
-        else [
-            os.path.join(windir, "Fonts", "arial.ttf"),
-            os.path.join(windir, "Fonts", "Arial.ttf"),
-            "DejaVuSans.ttf",
-        ]
-    )
-    for path in candidates:
-        try:
-            font: ImageFont.FreeTypeFont = ImageFont.truetype(path, size)
-            return font
-        except OSError:
-            continue
-    return ImageFont.load_default(size=size)
+# Reexportacoes de retrocompatibilidade para callers e testes unitarios
+_load_font = load_font
+_sanitize_text = sanitize_text
+_coerce_nonneg_int = coerce_nonneg_int
+_fmt_entrega = fmt_entrega
+_text_width = text_width
+_center_text_y = center_text_y
+_truncate_text = truncate_text
+_fit_prefixed_detail = fit_prefixed_detail
+_draw_summary_banner = draw_summary_banner
+_load_card_fonts = load_card_fonts
+_write_atomic_text = write_atomic_text
+_load_validated_payload = load_validated_payload
 
 
-def _sanitize_text(valor: Any, default: str = "—") -> str:
-    """Normaliza campo textual para legenda e card, protegendo argv de aspas e quebras."""
-    if valor is None:
-        return default
-    texto = " ".join(str(valor).split()).replace('"', "'")
-    return texto or default
+def _truncate_message(titulo: str, linhas: list[str]) -> str:
+    return truncate_message(titulo, linhas, max_chars=MAX_MESSAGE_CHARS)
 
 
-def _coerce_nonneg_int(valor: Any) -> int:
-    if isinstance(valor, bool) or valor is None:
-        return 0
-    if isinstance(valor, int):
-        return max(valor, 0)
-    texto = str(valor).strip()
-    if texto.isascii() and texto.isdigit():
-        return int(texto)
-    try:
-        return max(int(float(texto)), 0)
-    except (TypeError, ValueError):
-        return 0
+def _resolve_manifest_path() -> str:
+    return resolve_manifest_path(CARD_FILE, CARDS_MANIFEST_FILE)
 
 
 def _fmt_reduzido(row: dict[str, Any]) -> str:
@@ -156,19 +156,6 @@ def _fmt_restricoes(row: dict[str, Any]) -> tuple[str, str]:
         return "Restrição da peça", "—"
     rotulo = "Restrição da peça" if len(restricoes) == 1 else "Restrições da peça"
     return rotulo, "; ".join(restricoes)
-
-
-def _fmt_entrega(valor: Any) -> str:
-    """DT_ENTREGA chega em isoformat (serialize_rows); exibe dd/mm/aaaa ou '—'."""
-    if valor is None:
-        return "—"
-    texto = str(valor).strip()
-    if not texto:
-        return "—"
-    try:
-        return datetime.fromisoformat(texto).strftime("%d/%m/%Y")
-    except ValueError:
-        return "—"
 
 
 def _pecas_alocadas_e_faltantes(row: dict[str, Any]) -> tuple[int, int, int]:
@@ -239,27 +226,6 @@ def _build_message_header(
     return f"{titulo}\n_{len(rows)} OBs prontas para montagem_"
 
 
-def _truncate_message(titulo: str, linhas: list[str]) -> str:
-    selecionadas: list[str] = []
-    for idx, linha in enumerate(linhas):
-        restantes = len(linhas) - idx - 1
-        rodape = (
-            f"\n… e mais {restantes} OB(s) (consulte os logs)" if restantes > 0 else ""
-        )
-        candidato = f"{titulo}\n\n" + "\n".join([*selecionadas, linha]) + f"{rodape}\n"
-        if len(candidato) <= MAX_MESSAGE_CHARS or not selecionadas:
-            selecionadas.append(linha)
-        else:
-            break
-
-    restantes = len(linhas) - len(selecionadas)
-    rodape = f"\n… e mais {restantes} OB(s) (consulte os logs)" if restantes > 0 else ""
-    resumo = f"{titulo}\n\n" + "\n".join(selecionadas) + f"{rodape}\n"
-    if len(resumo) > MAX_MESSAGE_CHARS:
-        resumo = resumo[: MAX_MESSAGE_CHARS - 2].rstrip() + "…\n"
-    return resumo.replace('"', "'")
-
-
 def build_message(
     payload: dict[str, Any],
     *,
@@ -277,63 +243,6 @@ def build_message(
     if not truncate or len(mensagem) <= MAX_MESSAGE_CHARS:
         return mensagem
     return _truncate_message(titulo, linhas)
-
-
-def _text_width(draw: ImageDraw.ImageDraw, text: str, font: FontType) -> int:
-    bbox = draw.textbbox((0, 0), text, font=font)
-    return int(bbox[2] - bbox[0])
-
-
-def _center_text_y(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: FontType,
-    box_y: int,
-    box_h: int,
-) -> int:
-    if not text:
-        return box_y
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_h = bbox[3] - bbox[1]
-    return int(box_y + (box_h - text_h) / 2 - bbox[1])
-
-
-def _truncate_text(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: FontType,
-    max_width: int,
-) -> str:
-    if max_width <= 0 or not text:
-        return ""
-    if _text_width(draw, text, font) <= max_width:
-        return text
-    atual = text[:240]
-    while len(atual) > 1:
-        atual = atual[:-1]
-        candidato = atual.rstrip() + "…"
-        if _text_width(draw, candidato, font) <= max_width:
-            return candidato
-    return ""
-
-
-def _fit_prefixed_detail(
-    draw: ImageDraw.ImageDraw,
-    prefix: str,
-    content: str,
-    font: FontType,
-    max_width: int,
-) -> str:
-    """Ajusta `<prefix><content>` sem deixar apenas prefixo + reticências."""
-    if max_width <= 0 or not content:
-        return ""
-    completo = prefix + content
-    if _text_width(draw, completo, font) <= max_width:
-        return completo
-    fitted = _truncate_text(draw, completo, font, max_width)
-    if not fitted or len(fitted.removesuffix("…").rstrip()) <= len(prefix.rstrip()):
-        return ""
-    return fitted
 
 
 def _draw_header(
@@ -483,28 +392,6 @@ def _draw_ob_row(
         )
 
 
-def _draw_summary_banner(
-    draw: ImageDraw.ImageDraw,
-    y0: int,
-    omitted: int,
-    font: FontType,
-) -> None:
-    draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
-    aviso = _truncate_text(
-        draw,
-        f"… e mais {omitted} OB(s) omitidas do card (limite visual de {MAX_CARD_ROWS} linhas)",
-        font,
-        CARD_W - 2 * PAD,
-    )
-    if aviso:
-        draw.text(
-            (PAD, _center_text_y(draw, aviso, font, y0, SUMMARY_ROW_H)),
-            aviso,
-            font=font,
-            fill=TEXT_DIM,
-        )
-
-
 def _draw_footer(
     draw: ImageDraw.ImageDraw,
     rows: list[dict[str, Any]],
@@ -541,18 +428,6 @@ def _draw_footer(
         )
 
 
-def _load_card_fonts() -> dict[str, FontType]:
-    return {
-        "header": _load_font(20, bold=True),
-        "header_sub": _load_font(13, bold=True),
-        "ob": _load_font(13, bold=True),
-        "detalhe": _load_font(12, bold=False),
-        "acao": _load_font(13, bold=True),
-        "secundaria": _load_font(11, bold=False),
-        "footer": _load_font(12, bold=False),
-    }
-
-
 def build_card_image(
     payload: dict[str, Any],
     out_path: str = CARD_FILE,
@@ -569,139 +444,51 @@ def build_card_image(
     )
     fonts = _load_card_fonts()
 
-    tmp_path = f"{out_path}.tmp"
-    try:
-        with Image.new("RGB", (CARD_W, footer_y + FOOTER_H), BG_COLOR) as img:
-            draw: ImageDraw.ImageDraw = ImageDraw.Draw(img)
-            _draw_header(
+    def _draw(draw: ImageDraw.ImageDraw) -> None:
+        _draw_header(
+            draw,
+            rows,
+            fonts,
+            page_info=page_info,
+            total_batch_obs=total_batch_obs,
+        )
+        for index, row in enumerate(visible_rows):
+            _draw_ob_row(draw, row, index, fonts)
+        if omitted > 0:
+            _draw_summary_banner(
                 draw,
-                rows,
-                fonts,
-                page_info=page_info,
-                total_batch_obs=total_batch_obs,
+                HEADER_H + OB_ROW_H * len(visible_rows),
+                omitted,
+                fonts["detalhe"],
             )
-            for index, row in enumerate(visible_rows):
-                _draw_ob_row(draw, row, index, fonts)
-            if omitted > 0:
-                _draw_summary_banner(
-                    draw,
-                    HEADER_H + OB_ROW_H * len(visible_rows),
-                    omitted,
-                    fonts["detalhe"],
-                )
-            _draw_footer(draw, rows, fonts["footer"], footer_y, page_info=page_info)
-            img.save(tmp_path, "PNG", optimize=True)
-        os.replace(tmp_path, out_path)
-    except Exception:
-        if os.path.exists(tmp_path):
-            with contextlib.suppress(OSError):
-                os.remove(tmp_path)
-        raise
+        _draw_footer(draw, rows, fonts["footer"], footer_y, page_info=page_info)
 
-
-def _write_atomic_text(path: str, content: str) -> None:
-    write_atomic_text(path, content)
-
-
-def _load_validated_payload(result_path: str) -> dict[str, Any]:
-    with open(result_path, encoding="utf-8") as f:
-        payload: Any = json.load(f)
-    if not isinstance(payload, dict):
-        raise ValueError("Payload JSON deve ser um objeto")
-    rows = payload.get("rows")
-    if rows is None:
-        return {"rows": []}
-    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-        raise ValueError("Campo 'rows' deve ser uma lista de objetos")
-    return payload
-
-
-def _resolve_manifest_path() -> str:
-    card_dir = os.path.dirname(os.path.abspath(CARD_FILE))
-    default_manifest_dir = os.path.dirname(os.path.abspath(CARDS_MANIFEST_FILE))
-    if card_dir == default_manifest_dir:
-        return CARDS_MANIFEST_FILE
-    return os.path.join(card_dir, "cards_manifest.json")
+    save_card_image_atomic(out_path, footer_y + FOOTER_H, _draw)
 
 
 def main() -> None:
     """Lê o resultado validado e grava o(s) card(s) PNG, legenda e manifesto."""
-    exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
-
-    if not os.path.exists(RESULT_FILE):
-        log("orb_result.json nao encontrado.", "ERROR", exec_id)
-        sys.exit(1)
-
-    try:
-        payload = _load_validated_payload(RESULT_FILE)
-    except (OSError, json.JSONDecodeError, ValueError) as e:
-        log(f"Falha ao ler orb_result.json: {e}", "ERROR", exec_id)
-        sys.exit(1)
-
-    rows = payload.get("rows", [])
-    if not rows:
-        log("Nenhuma OB a notificar.", "INFO", exec_id)
-        sys.exit(2)
-
-    def _render_caption(
-        page_rows: list[dict[str, Any]],
-        page_info: tuple[int, int] | None,
-        total_obs: int | None,
-    ) -> str:
-        page_payload = {**payload, "rows": page_rows, "total": len(page_rows)}
-        return build_message(
-            page_payload,
-            page_info=page_info,
-            total_batch_obs=total_obs,
-            truncate=False,
-        )
-
-    def _render_image(
-        page_rows: list[dict[str, Any]],
-        out_png: str,
-        page_info: tuple[int, int] | None,
-        total_obs: int | None,
-    ) -> None:
-        page_payload = {**payload, "rows": page_rows, "total": len(page_rows)}
-        build_card_image(
-            page_payload,
-            out_png,
-            page_info=page_info,
-            total_batch_obs=total_obs,
-        )
-
-    try:
-        manifest = build_paginated_artifacts(
-            rows,
-            _render_caption,
-            _render_image,
-            ArtifactTargets(
+    run_format_main(
+        FormatMainConfig(
+            result_file=RESULT_FILE,
+            targets=ArtifactTargets(
                 card_file=CARD_FILE,
                 message_file=MESSAGE_FILE,
                 manifest_file=_resolve_manifest_path(),
             ),
-            PaginationConfig(
+            pagination=PaginationConfig(
                 per_page=MAX_OBS_PER_PAGE,
                 max_chars=MAX_MESSAGE_CHARS,
             ),
+            render_caption=lambda p, pi, tot: build_message(
+                p, page_info=pi, total_batch_obs=tot, truncate=False
+            ),
+            render_image=lambda p, out_png, pi, tot: build_card_image(
+                p, out_png, page_info=pi, total_batch_obs=tot
+            ),
+            log_fn=log,
         )
-    except Exception as e:
-        log(f"Falha ao gerar artefatos de mensagem/card: {e}", "ERROR", exec_id)
-        sys.exit(1)
-
-    if len(manifest) == 1:
-        log(
-            f"message.txt, card.png e cards_manifest.json gerados com {len(rows)} OB(s).",
-            "INFO",
-            exec_id,
-        )
-    else:
-        log(
-            f"cards_manifest.json e {len(manifest)} card(s) paginados gerados para {len(rows)} OB(s).",
-            "INFO",
-            exec_id,
-        )
-    sys.exit(0)
+    )
 
 
 if __name__ == "__main__":
