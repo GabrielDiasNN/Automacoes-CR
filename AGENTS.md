@@ -64,10 +64,10 @@ Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de i
 
 O repositório tem **duas árvores de skills versionadas**, com responsabilidades distintas:
 
-| Árvore | Conteúdo | Editável? | Validador |
-|---|---|---|---|
-| `.github/skills/` | 9 skills de **padrão** (norma escrita, taxonomia ativa) | sim — fonte canônica | `Tools/Test-SkillsGovernance.ps1` (9 seções, frontmatter, discovery) |
-| `.claude/skills/` | skills **operacionais** do projeto (comandos executáveis: `ci-gates`, `log-triage`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim — fonte única delas | — |
+| Árvore            | Conteúdo                                                                                                                                                            | Editável?               | Validador                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
+| `.github/skills/` | 9 skills de **padrão** (norma escrita, taxonomia ativa)                                                                                                             | sim — fonte canônica    | `Tools/Test-SkillsGovernance.ps1` (9 seções, frontmatter, discovery) |
+| `.claude/skills/` | skills **operacionais** do projeto (comandos executáveis: `ci-gates`, `log-triage`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim — fonte única delas | —                                                                    |
 
 Cada agente lê de um caminho fixo próprio, então as fontes são expostas por **mirrors não versionados** (ver `.gitignore`), recriados por `pwsh -File Tools\New-SkillMirrors.ps1`:
 
@@ -135,6 +135,11 @@ Todos os agentes devem operar com estas regras não negociáveis:
 - Antes de comando mutável relevante, inspecionar estado com comandos como `git status`, `git log` ou `git reflog`, conforme o caso.
 - Não recomendar nem executar `git reset --hard`, `git checkout --`, `git push --force` ou equivalente destrutivo sem pedido explícito do usuário e aviso claro de impacto.
 - Commits devem ser atômicos, com mensagem clara e contexto suficiente para auditoria.
+- **Padrão de Commit, PR, CI e Limpeza de Branch** (autorização permanente do dono quando a entrega por PR for solicitada, sem precisar reconfirmar cada etapa):
+  1. **Commit local:** validar escopo via `git status`/`git diff`, fazer stage seletivo apenas dos arquivos da tarefa e criar commit atômico em PT-BR (título descritivo + bullets de auditoria; incluir `[1.3.xxx]` quando alterar `CHANGELOG.md`), respeitando integralmente o hook `pre-commit` (nunca usar `--no-verify`). Se o usuário pedir apenas commit, encerrar aqui sem `push`.
+  2. **Abertura de PR:** quando o usuário solicitar abrir/subir PR ou concluir entrega no GitHub em branch de trabalho (nunca direto em `main`), checar `gh auth status` com saída descartada, executar `git push -u origin <branch>` e abrir o PR contra `main` via `gh pr create` preenchendo `.github/pull_request_template.md` com as evidências locais reais executadas na sessão.
+  3. **Acompanhamento e correção de CI:** monitorar todos os checks via `gh pr checks <n> --json name,state,bucket,link` (resumindo com `resumir_checks.py` quando disponível) usando timers (`schedule`) em vez de `sleep` em shell. Em caso de falha, inspecionar `gh run view <id> --log-failed`, corrigir na mesma branch, validar localmente o escopo equivalente, commitar, dar `push` e acompanhar o novo run até `0` falhas e `0` pendentes.
+  4. **Merge e limpeza pós-CI verde:** com `100%` dos checks verdes e PR `MERGEABLE`/`CLEAN` (sem conflito ou bloqueio), finalizar automaticamente com `gh pr merge <n> --squash --delete-branch`, voltar para `main` atualizada (`git pull --ff-only` se necessário), executar `git fetch --prune` e confirmar branch local/remota removida e worktree limpo. Se surgir conflito, falha persistente no CI ou diff fora do escopo, parar e reportar antes de mergear.
 
 ## Colaboração com Documentação AI-Native
 
