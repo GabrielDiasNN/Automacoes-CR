@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from ..core import normalize_shift, safe_strip, to_float
-from .schema import COLUMN_NAMES, apply_pragmas, init_db
+from .schema import COLUMN_NAMES, SQLITE_TIMEOUT_SECONDS, apply_pragmas, init_db
 
 
 def _text_or_none(value: Any) -> str | None:
@@ -166,7 +166,7 @@ def salvar_historico(
     if not rows:
         return 0
 
-    with sqlite3.connect(path) as conn:
+    with sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS) as conn:
         apply_pragmas(conn)
         conn.executemany(_INSERT_SQL, rows)
         conn.commit()

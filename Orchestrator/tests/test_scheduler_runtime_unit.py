@@ -632,3 +632,57 @@ def test_dispatch_infra_alerts_sem_breaches_nao_dispara() -> None:
         sr._dispatch_infra_alerts_from_payload({"slo_breaches": {}})
 
     mock_notifications.send_infra_alert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# register_beneficiamento_live_jobs / _live_interval_seconds
+# ---------------------------------------------------------------------------
+
+
+def test_live_interval_seconds_loga_aviso_em_valor_invalido(
+    monkeypatch: Any, caplog: Any
+) -> None:
+    monkeypatch.delenv("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", raising=False)
+    assert sr._live_interval_seconds("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", 90) == 90
+
+    monkeypatch.setenv("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", "1800")
+    assert sr._live_interval_seconds("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", 90) == 1800
+
+    with caplog.at_level("WARNING", logger="orchestrator"):
+        monkeypatch.setenv("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", "30m")
+        assert (
+            sr._live_interval_seconds("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", 90) == 90
+        )
+        monkeypatch.setenv("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", "0")
+        assert (
+            sr._live_interval_seconds("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", 90) == 90
+        )
+
+    warnings = [
+        r.message
+        for r in caplog.records
+        if "BENEFICIAMENTO_LIVE_INTERVAL_SECONDS" in r.message
+    ]
+    assert len(warnings) == 2
+
+
+def test_register_beneficiamento_live_jobs_escalona_e_preserva_timezone(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", "1800")
+    monkeypatch.setenv("BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS", "86400")
+    scheduler = app_runtime.scheduler
+    try:
+        sr.register_beneficiamento_live_jobs()
+        diario = scheduler.get_job("beneficiamento_live_diario")
+        mensal = scheduler.get_job("beneficiamento_mensal_rollup")
+        assert diario is not None and mensal is not None
+        assert diario.next_run_time is not None and mensal.next_run_time is not None
+        assert (mensal.next_run_time - diario.next_run_time).total_seconds() >= 100
+        assert diario.misfire_grace_time >= 120
+        assert str(diario.trigger.timezone) == str(scheduler.timezone)
+        assert str(mensal.trigger.timezone) == str(scheduler.timezone)
+    finally:
+        for job_id in ("beneficiamento_live_diario", "beneficiamento_mensal_rollup"):
+            with contextlib.suppress(Exception):
+                scheduler.remove_job(job_id)

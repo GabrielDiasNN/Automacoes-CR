@@ -8,7 +8,7 @@ Fornecer visibilidade operacional near-real-time da produção de Beneficiamento
 - **Runner:** `src/beneficiamento/runner.py` orquestra o ciclo Oracle → snapshot JSON → SQLite histórico, com orçamento rígido de 20s imposto pelo DBA.
 - **Snapshots:** `snapshots/latest/` armazena `*.analytics.json`. A API **nunca** consulta Oracle diretamente — consome apenas esses arquivos.
 - **Histórico:** `snapshots/beneficiamento_historico.db` (SQLite) mantém o histórico de produções para consultas de períodos passados.
-- **Refresh automático:** jobs APScheduler `beneficiamento_live_diario` (~90s) e `beneficiamento_mensal_rollup` (~10min) em subprocesso isolado.
+- **Refresh automático:** jobs APScheduler `beneficiamento_live_diario` e `beneficiamento_mensal_rollup` em subprocesso isolado, configuráveis por `BENEFICIAMENTO_LIVE_INTERVAL_SECONDS` (`.env`: 1800 s; padrão: 90 s) e `BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS` (`.env`: 86400 s; padrão: 600 s).
 - **Refresh on-demand:** `POST /api/beneficiamento/refresh?period=diario|mensal`.
 
 ## Estrutura de Código e Dados

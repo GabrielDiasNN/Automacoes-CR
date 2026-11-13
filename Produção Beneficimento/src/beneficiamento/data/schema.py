@@ -113,11 +113,16 @@ def resolve_db_path(override: Path | str | None = None) -> Path:
     return folder / "beneficiamento_historico.db"
 
 
+SQLITE_TIMEOUT_SECONDS = 15.0
+SQLITE_BUSY_TIMEOUT_MS = 15000
+
+
 def apply_pragmas(conn: sqlite3.Connection) -> None:
     """Pragmas de resiliencia/performance de I/O (WAL + synchronous NORMAL)."""
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA temp_store=MEMORY;")
+    conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS};")
 
 
 def init_db(db_path: Path | str | None = None) -> Path:
@@ -125,7 +130,7 @@ def init_db(db_path: Path | str | None = None) -> Path:
     path = resolve_db_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    with sqlite3.connect(path) as conn:
+    with sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS) as conn:
         apply_pragmas(conn)
         current_version = int(conn.execute("PRAGMA user_version;").fetchone()[0] or 0)
         table_exists = (
