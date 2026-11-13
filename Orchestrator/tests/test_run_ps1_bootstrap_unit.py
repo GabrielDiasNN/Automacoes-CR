@@ -110,9 +110,10 @@ def test_run_ps1_adquire_o_lock_sem_vazar_true_no_log(automacao: str) -> None:
     de cada execução como linha própria da etapa `lock`."""
     fonte = _run_ps1(automacao)
 
-    assert "Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null" in fonte, (
-        f"{automacao}/run.ps1 deve descartar a saída de Enter-AutomationLock"
-    )
+    assert re.search(
+        r"Enter-AutomationLock\s+-ExecId\s+\$ExecId\s+-LogPath\s+\$LogFile(?:\s+[^\r\n|]*)?\s*\|\s*Out-Null",
+        fonte,
+    ), f"{automacao}/run.ps1 deve descartar a saída de Enter-AutomationLock"
     assert "if (-not (Enter-AutomationLock" not in fonte, (
         f"{automacao}/run.ps1 usa o retorno de Enter-AutomationLock como booleano: "
         "a função lança exceção em concorrência e nunca devolve $false"
@@ -128,15 +129,15 @@ def test_run_ps1_declara_os_codigos_de_nao_falha(automacao: str) -> None:
     `$NonFailureCodes`, em vez de repetir literais (que já divergiram)."""
     fonte = _run_ps1(automacao)
 
-    assert "$NonFailureCodes = @(" in fonte, (
-        f"{automacao}/run.ps1 deve declarar $NonFailureCodes"
-    )
-    assert re.search(r"NonFailureCodes\s*=?\s*\$NonFailureCodes", fonte), (
-        f"{automacao}/run.ps1 deve repassar $NonFailureCodes a Exit-AutomationWithCode"
-    )
-    assert "-NonFailureCodes @(" not in fonte, (
-        f"{automacao}/run.ps1 voltou a usar a lista literal em vez de $NonFailureCodes"
-    )
+    assert (
+        "$NonFailureCodes = @(" in fonte
+    ), f"{automacao}/run.ps1 deve declarar $NonFailureCodes"
+    assert re.search(
+        r"NonFailureCodes\s*=?\s*\$NonFailureCodes", fonte
+    ), f"{automacao}/run.ps1 deve repassar $NonFailureCodes a Exit-AutomationWithCode"
+    assert (
+        "-NonFailureCodes @(" not in fonte
+    ), f"{automacao}/run.ps1 voltou a usar a lista literal em vez de $NonFailureCodes"
 
 
 @pytest.mark.parametrize("automacao", AUTOMACOES)
@@ -166,3 +167,43 @@ def test_obp04_serializa_o_lote_sempre_como_array() -> None:
 
     assert "ConvertTo-Json -InputObject @($batchInput)" in fonte
     assert "$batchInput | ConvertTo-Json" not in fonte
+
+
+def test_lib_whatsapp_batch_serializa_o_lote_sempre_como_array() -> None:
+    """Garante no helper compartilhado de ORB-07/OFST-06 a mesma protecao
+    contra o unwrap de array unitario do ConvertTo-Json."""
+    modulo = (REPO_ROOT / "lib" / "Lib-WhatsAppBatch.psm1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert "ConvertTo-Json -InputObject @($batchInput)" in modulo
+    assert "$batchInput | ConvertTo-Json" not in modulo
+
+
+@pytest.mark.parametrize(
+    ("automacao", "lock_key"),
+    [
+        ("OBs Restricao Branco", "ORB-07"),
+        ("OBs Fluxo Sem Tingimento", "OFST-06"),
+    ],
+)
+def test_orb_e_ofst_isolam_lock_batch_e_rotacao_sem_codigos_mortos(
+    automacao: str, lock_key: str
+) -> None:
+    """Contrato Lote 2: lock nomeado por automacao, rotacao 15d ativa, sem
+    cleanup pre-Oracle de chrome.exe e sem ramos mortos 40/23/22."""
+    fonte = _run_ps1(automacao)
+
+    assert f'-LockKey "{lock_key}"' in fonte
+    assert "Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile -LockKey" in fonte
+    assert "Invoke-LogRotation -LogPath $LogFile -KeepDays 15" in fonte
+    assert "chrome.exe" not in fonte
+    assert "Lib-WhatsAppBatch.psm1" in fonte
+    assert "-Mode BATCH" in fonte
+    assert "$waExit -eq 40" not in fonte
+    assert "$waExit -eq 23" not in fonte
+    assert "22" not in re.findall(r"\$NonFailureCodes\s*=\s*@\(([^)]+)\)", fonte)[0]
+
+    pos_lock = fonte.index("Enter-AutomationLock")
+    pos_remove = fonte.index("Remove-Item $ResultFile")
+    assert pos_remove > pos_lock

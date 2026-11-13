@@ -15,7 +15,7 @@ depósito 95 por reduzido -> priorização e alocação -> orb_result.json.
 
 Idempotencia por OB, nao por lote: `orb_state.json` guarda, para cada OB ja
 notificada, o carimbo do aviso e a RESERVA de estoque criada por ele (reduzido +
-quantidade). Com execucao a cada 120 min, um hash do lote inteiro re-notificaria
+quantidade). Com execucao a cada 60 min, um hash do lote inteiro re-notificaria
 a mesma OB a cada flutuacao de estoque — aqui so entra na mensagem OB que ainda
 nao foi avisada, e o saldo dela segue descontado nos ciclos seguintes (ver
 `reservas_vivas`/`JANELA_RESERVA_HORAS` em validators.py). O commit do state e

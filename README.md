@@ -67,8 +67,8 @@ graph TD
 - **Skills Compartilhadas**: `.github/skills/` é a fonte canônica das 9 skills ativas; `.gemini/skills/` é apenas o espelho de compatibilidade para Gemini CLI e Antigravity.
 - **Dashboard React "Sala de Instrumentação"**: identidade visual industrial (grafite + ciano/âmbar), IBM Plex, react-router com deep-links, design system em `Dashboard/src/components/ui/`, uPlot para time series.
 - **OBs Paradas Fase (OBP-04)**: automação de visibilidade de OBs paradas por fase, cards PNG via WhatsApp, cron diário às 05:30 e 14:00, com terceiro disparo às 22:30 (Seg-Sáb) ou 23:00 (Dom).
-- **OBs Fluxo Sem Tingimento (OFST-06)**: automação de visibilidade de OBs de fluxo 204 prontas para montagem no depósito 95, mensagem de texto via WhatsApp para a Expedição Tinturaria, a cada 2 h das 05:00 às 19:00 (Seg-Sex) e das 05:00 às 13:00 (Sáb).
-- **OBs Restrição Branco (ORB-07)**: automação ativa no Orchestrator (`id=6`) que avisa a Expedição Tinturaria quando uma OB aberta e não montada, de qualquer fluxo, estiver classificada como `BRANCO` (6) ou `BRANCO 2 FIBRAS` (9) e houver peça cru disponível no depósito 95 com finalidade 3 (`CORES CLARAS`) ou 4 (`BRANCO`). A mensagem exibe artigo com 3 dígitos e cor com 2 dígitos; o primeiro envio foi confirmado no grupo em 25/08/2026.
+- **OBs Fluxo Sem Tingimento (OFST-06)**: automação de visibilidade de OBs de fluxo 204 prontas para montagem no depósito 95, card PNG + legenda enxuta via WhatsApp para a Expedição Tinturaria, a cada 2 h das 05:00 às 19:00 (Seg-Sex) e das 05:00 às 13:00 (Sáb).
+- **OBs Restrição Branco (ORB-07)**: automação ativa no Orchestrator (`id=6`) que avisa a Expedição Tinturaria quando uma OB aberta e não montada, de qualquer fluxo, estiver classificada como `BRANCO` (6) ou `BRANCO 2 FIBRAS` (9) e houver peça cru disponível no depósito 95 com finalidade 3 (`CORES CLARAS`) ou 4 (`BRANCO`). O aviso vai em card PNG + legenda enxuta com artigo normalizado para 3 dígitos (enquanto `CODIGO_COR_TINGIMENTO` fica apenas em `orb_result.json` para auditoria); o primeiro envio foi confirmado no grupo em 25/08/2026.
 
 ---
 Mantido pela equipe de Automações

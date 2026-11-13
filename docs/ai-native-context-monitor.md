@@ -16,6 +16,7 @@ Snapshot curado para bootstrap de agentes no Hub de Automações: o estado vigen
 Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arquivo de histórico.
 
 ### Ambiente e gates
+
 - **`.venv` fica na raiz do repositório**; de dentro de `Orchestrator/` é `..\.venv\Scripts\`. O Python do sistema dá falso verde (08/09/2026).
 - **Suíte verde não é gate verde**: rode `/preflight` (ruff/bandit no escopo exato do CI, black/isort no diff, mypy/pylint) antes de dar trabalho por pronto (08/09/2026).
 - **`Test-PythonGovernance.ps1` só enxerga arquivos rastreados** (`git ls-files`): para `.py` novo, passe `-Paths` explícito antes do `git add` (06/10/2026).
@@ -24,6 +25,7 @@ Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arq
 - **`ruff` é pinado no workflow**, não em `requirements-dev.in` (08/09/2026). `ruff --fix` em lote já removeu imports usados por teste via `importlib` e quebrou `mypy --strict` (B009/B010) — revise o diff (26/08 e 07/10/2026).
 
 ### Orchestrator
+
 - **Regra de negócio vive em `services/`, não em routers**: o service levanta `DomainRuleError(status, detail)` e o router só traduz em `HTTPException`. `db.query(...)` em router é bloqueado por gate (`ORM_QUERY_IN_API_ROUTER`); escritas ORM restantes são exceção documentada em `docs/architecture-standard.md` (07/10/2026).
 - **`GET /api/system/health` é liveness público reduzido**; o payload completo é `GET /api/system/health/full`, autenticada (28/08/2026).
 - **`EXIT_CODE_MAP`**: `3` é ERROR (`DATA_EXTRACTION_FAILED`, requeue seguro) e `22` é SUCCESS (adiamento) — semântica mudou em 31/07/2026.
@@ -31,15 +33,17 @@ Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arq
 - **Editar `.py` não muda o processo em produção** até reiniciar o Orchestrator; cheque `driver.py health` antes de reiniciar (esta máquina roda produção) (02/09/2026).
 
 ### Automações e WhatsApp
+
 - **Os `run.ps1` resolvem o Python por `Resolve-HubPythonExe`** (funciona em worktree); não hardcode o venv (08/09/2026).
 - **OFST-06 e ORB-07 são irmãs, não simétricas**: a guarda que aborta sem tocar no state quando todas as linhas falham evita re-anunciar todas as OBs no WhatsApp; `test_ofst_orb_parity_unit.py` prende as invariantes (08/09/2026).
 - **Padrão dos `run.ps1` (09/11/2026):** os 6 e o `_Template/run.ps1` seguem o mesmo esqueleto (log estruturado, `Exit-WithCode` com `$NonFailureCodes`, `Enter-AutomationLock ... | Out-Null`, `$pythonExe` no pré-flight). `exit` não é capturável por `catch`, então não use guarda por mensagem ("Processo finalizado"). Pelo pipeline, um único item vira objeto em `ConvertTo-Json`: use `-InputObject @(...)` quando o consumidor espera array (o OBP-04 mandava "Lote vazio" com uma só fase). Contratos em `Orchestrator/tests/test_run_ps1_bootstrap_unit.py`.
-- **Códigos de saída:** `1` (erro fatal genérico, RE/MT) e `4` (falha de orquestração/canal, ORB/OFST/OBP/RB) são contratos distintos, ambos ERROR em `EXIT_CODE_MAP`; não unifique. Os ramos `40`/`23` (lock/cooldown do WhatsApp) em ORB/OFST/RB são código morto: `WhatsApp-Core.js` só sai com `0`, `21` e `24`.
+- **Códigos de saída:** `1` (erro fatal genérico, RE/MT) e `4` (falha de orquestração/canal, ORB/OFST/OBP/RB) são contratos distintos, ambos ERROR em `EXIT_CODE_MAP`; não unifique. Os ramos mortos `40`/`23`/`22` (lock/cooldown do WhatsApp) foram removidos de ORB-07 e OFST-06 (`13/11/2026`), permanecendo apenas como guarda legada em RB-01: `WhatsApp-Core.js` só sai com `0`, `21` e `24`.
 - **MT-02 sai com `exit` cru** e precisa fechar a telemetria em cada saída precoce, senão deixa execução `RUNNING` órfã (08/09/2026).
 - **Sessão WhatsApp vive em `%LOCALAPPDATA%\Automacoes\wwebjs_auth\`** (credencial da conta; nunca na árvore do repo). Perda de sessão sai com `ExitCode 21` (27-28/07/2026).
 - **Sucesso de envio é decidido pelo dispatch, não pelo ACK** do `whatsapp-web.js` (15/07/2026).
 
 ### Oracle e SQL
+
 - **Use o catálogo local antes de escrever SQL** (`Tools/oracle/oracle_catalog.py`, skill `oracle-schema-navigator`); documentação curada já teve valor de domínio errado — confirme valores no catálogo (14/09/2026).
 - **A unidade de tempo depende da tabela**: `OB.TEMPO_*`/`OB_FASES.TEMPO_*` contam a partir de 01/01/1996; `UNIDADE_PROGRAMACAO.TEMPO*` a partir de 30/12/1899. Dicionário verificado: `docs/oracle-schema/consultas/REGRAS_NEGOCIO.md` (29/09/2026).
 - **"0 linhas" não é aprovação**: prove com uma variante relaxada (29/09/2026).
@@ -48,6 +52,7 @@ Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arq
 - **Guard SQL**: código de saída 3 do guard canônico significa "só parse", não erro de ferramenta (06/10/2026). O canônico carregado é a cópia versionada em `lib/vendor/oracle-sql-guard/` (o perfil da skill só entra por `ORACLE_SQL_GUARD_CANONICAL`); "só função" é a classe `chamada_funcao`, nunca o texto do motivo; e todo executor de SQL roda a `consulta_verificacao` do veredito antes da primeira execução (`guard_sql.verificar_objetos`), porque função sem parênteses passa no texto (19/10/2026).
 
 ### Dashboard
+
 - **`LiveStatusProvider` é o dono único do polling de health e do WebSocket**; componente novo consome `useLiveStatus`/`useLiveEvents` (28/08/2026).
 - **Use `useAction` e `useAsyncResource`** em vez de reimplementar busy/toast/fetch; trate `ApiError` (tem `status`/`retryAfter`) (02/09/2026).
 - **`eslint-plugin-jsx-a11y` é gate**; não use `role="img"` em contêiner com conteúdo real (02/09/2026).

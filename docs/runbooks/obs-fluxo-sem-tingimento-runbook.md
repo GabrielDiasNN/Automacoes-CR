@@ -24,23 +24,18 @@ A simulação é a ferramenta de diagnóstico principal: ela é somente leitura 
 
 ## Formato da mensagem
 
-Cada OB aparece na mensagem WhatsApp com este bloco (desde 17/07/2026):
+Desde 13/11/2026 o aviso vai como **card(s) visual(is) em PNG paginado(s)** (`MAX_OBS_PER_PAGE = 15`, sem truncar OBs: `card.png` + `message.txt` em 1 página via `AUTO`, ou `card_01.png`..`card_NN.png` + `cards_manifest.json` via `-Mode BATCH` quando acima de 15 OBs ou do teto de legenda), mantendo todos os números de OB pesquisáveis no WhatsApp:
 
-```
-🎯 Depósito 95 - OBs Fluxo Sem Tingimento
+```text
+🎯 *Depósito 95 - OBs Fluxo Sem Tingimento*
+_2 OBs prontas para montagem_
 
-OB: 179605
-Artigo: 489
-Reduzido: 152
-Quantidade necessária: 50 peças
-Estoque disponível: 60 peças
-Data de entrega: 21/07/2026
-Filial destino: CR-LOJA BLUMENAU
-Status: ✅ Pronta para montagem
+• *OB 179605* (Art. 489 · Red. 152) — 50 pçs → pronta p/ montagem
+• *OB 181323* (Art. — · Red. 12345) — 40 pçs → pronta p/ montagem
 ```
 
-- **Data de entrega** = `ITENSPEDIDOCOMERCIAL.EXPEDIREM`; **Filial destino** = `PESSOASFJ.NOMEFANTASIA` da filial responsável do pedido (mesmos campos da CTE `ENTREGA_OB` de OBs Paradas Fase). OB sem pedido comercial associado mostra `—` nos dois campos.
-- As linhas "Tempo de consulta" e "Grupo" foram removidas da mensagem — eram observabilidade interna. O tempo segue em `ofst_result.json` (`resumo.tempo_consulta_ms`) e nos logs (`Logs/Ofst.jsonl`).
+- O card PNG exibe por OB (`Pillow` com fontes TrueType `Arial`/`DejaVuSans` e fallback proporcional): `OB`, `Art.`, `Red.`, `Fluxo 204 (s/ tingimento)`, ação à direita (`N pçs → pronta p/ montagem`) e sublinha com **Filial destino** (`PESSOASFJ.NOMEFANTASIA`) e **Data de entrega** (`ITENSPEDIDOCOMERCIAL.EXPEDIREM`). OB sem pedido comercial associado mostra `—` nos dois campos.
+- `Estoque disponível` bruto e `Tempo de consulta` ficam fora do aviso visual (seguem em `ofst_result.json` e nos logs `Logs/Ofst.jsonl`).
 
 ## Priorização e alocação de estoque
 
@@ -71,7 +66,7 @@ O extrator já tenta 3 vezes com backoff (30s/60s/120s) e tem circuit breaker. S
 
 ### ExitCode=4 — Falha no envio WhatsApp
 
-O state **não** é commitado quando o envio falha — as OBs entram de novo na próxima execução. Não há risco de aviso perdido. Verifique Chrome zumbi:
+Em falha total (envio único ou `0` páginas entregues em lote `BATCH`), o state **não** é commitado — todas as OBs entram de novo na próxima execução. Em falha **parcial** de lote paginado (`Lib-WhatsAppBatch.psm1`), apenas as páginas efetivamente confirmadas em `batch_result.json` permanecem em `ofst_state.json`, enquanto as OBs das páginas com falha voltam para reavaliação no próximo ciclo sem duplicar páginas já enviadas. O cleanup de Chrome zumbi do motor WhatsApp é gerenciado pelo próprio `lib/Send-WhatsApp.ps1`; se precisar inspecionar manualmente:
 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like "*wwebjs_auth*" }
@@ -108,7 +103,7 @@ pwsh -File "OBs Fluxo Sem Tingimento\run.ps1"
 
 ## Ativação (checklist) — concluída em 16/07/2026
 
-1. [x] Descobrir o ID do grupo: `node lib\WhatsApp-Core.js manual LIST_GROUPS hub-global` — `554796989039-1616873564@g.us` (16/07/2026)
+1. [x] Descobrir o ID do grupo: `node lib\WhatsApp-Core.js manual LIST_GROUPS hub-global` (quando `getChats()`/`Collections` falhar em sessões antigas, o motor faz fallback para captura por eventos por `LIST_GROUPS_CAPTURE_MS`) — `<id-do-grupo>@g.us` do grupo *Expedição Tinturaria* (16/07/2026)
 2. [x] Gravar `OFST_WHATSAPP_TARGET=<id>@g.us` no `.env` (gravado na máquina local; repetir em outras máquinas — `.env` não é versionado)
 3. [x] Rodar `test_ofst_simulation.py` e validar o relatório com o Gabriel — dados confirmados OK em 16/07/2026, sem fan-out (query de OBs e query de artigo/pedido comercial)
 4. [x] Confirmar a janela do cron com a operação da Expedição Tinturaria — `05:00–20:00`, Seg–Sáb (`0 5-20 * * 0-5`; convenção do runtime é `0=Segunda`, não Vixie)

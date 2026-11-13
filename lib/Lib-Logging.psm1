@@ -858,23 +858,22 @@ Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
 # ------------------------------------------------------------------------------
 
 function Enter-AutomationLock {
-
 [CmdletBinding()]
-
 param(
-
 [Parameter(Mandatory = $true)][string]$ExecId,
-
-[string]$LogPath = ""
-
+[string]$LogPath = "",
+[string]$LockKey = "",
+[int]$TimeoutMs = 5000
 )
 
-$mutexName = "Global\AutomationHub_$ExecId"
+$keySource = if ([string]::IsNullOrWhiteSpace($LockKey)) { $ExecId } else { $LockKey }
+$safeKey = $keySource -replace '[^A-Za-z0-9_.-]', '_'
+$mutexName = "Global\AutomationHub_$safeKey"
 $script:AutomationMutex = New-Object System.Threading.Mutex($false, $mutexName)
 
 try {
-    if (-not $script:AutomationMutex.WaitOne(5000)) {
-        $msg = "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId. Abortando para evitar corrupcao."
+    if (-not $script:AutomationMutex.WaitOne($TimeoutMs)) {
+        $msg = "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId (chave: $safeKey, Mutex: $mutexName). Abortando para evitar corrupcao."
         if ([string]::IsNullOrWhiteSpace($LogPath)) {
             Write-Warning $msg
         } else {
@@ -893,37 +892,25 @@ if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
 }
 
 return $true
-
 }
 
 # ------------------------------------------------------------------------------
-
 # Exit-AutomationLock
-
 # ------------------------------------------------------------------------------
 
 function Exit-AutomationLock {
-
 [CmdletBinding()]
-
 param(
-
 [string]$ExecId = "",
-
-[string]$LogPath = ""
-
+[string]$LogPath = "",
+[string]$LockKey = ""
 )
 
 if ($script:AutomationMutex) {
-
-$script:AutomationMutex.ReleaseMutex()
-
-$script:AutomationMutex.Dispose()
-
-$script:AutomationMutex = $null
-
+    try { $script:AutomationMutex.ReleaseMutex() } catch [System.ApplicationException] {}
+    $script:AutomationMutex.Dispose()
+    $script:AutomationMutex = $null
 }
-
 }
 
 Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast

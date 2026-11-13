@@ -184,4 +184,65 @@ Exit-AutomationWithCode -Code $Code -ExecId 'test' -LogPath '$logLiteral' $EndMe
             Should -Invoke Test-OracleTcpEndpoint -ModuleName Lib-Logging -Times 0 -Exactly
         }
     }
+
+    Context "Enter-AutomationLock (-LockKey)" {
+        It "Serializa execucoes com ExecIds distintos usando o mesmo LockKey" {
+            $moduleLiteral = ((Split-Path -Parent $PSScriptRoot) + "\Lib-Logging.psm1") -replace "'", "''"
+            $lockKey = "UNIT_LOCK_" + [guid]::NewGuid().ToString("N")
+            $readyFlag = Join-Path $TestDrive ("lock-ready-" + [guid]::NewGuid().ToString("N") + ".txt")
+            $releaseFlag = Join-Path $TestDrive ("lock-release-" + [guid]::NewGuid().ToString("N") + ".txt")
+
+            $holderScript = Join-Path $TestDrive ("holder-" + [guid]::NewGuid().ToString("N") + ".ps1")
+            $contenderScript = Join-Path $TestDrive ("contender-" + [guid]::NewGuid().ToString("N") + ".ps1")
+
+            $holderCode = @"
+Import-Module '$moduleLiteral' -Force
+Enter-AutomationLock -ExecId 'exec-1' -LockKey '$lockKey' -TimeoutMs 2000 | Out-Null
+Set-Content -LiteralPath '$($readyFlag -replace "'", "''")' -Value 'ready' -Encoding UTF8
+try {
+    `$deadline = (Get-Date).AddSeconds(10)
+    while (-not (Test-Path -LiteralPath '$($releaseFlag -replace "'", "''")') -and (Get-Date) -lt `$deadline) {
+        Start-Sleep -Milliseconds 100
+    }
+} finally {
+    Exit-AutomationLock -ExecId 'exec-1' -LockKey '$lockKey'
+}
+"@
+            Set-Content -LiteralPath $holderScript -Value $holderCode -Encoding UTF8
+
+            $contenderCode = @"
+Import-Module '$moduleLiteral' -Force
+Enter-AutomationLock -ExecId 'exec-2' -LockKey '$lockKey' -TimeoutMs 150 | Out-Null
+Exit-AutomationLock -ExecId 'exec-2' -LockKey '$lockKey'
+"@
+            Set-Content -LiteralPath $contenderScript -Value $contenderCode -Encoding UTF8
+
+            $holderProc = Start-Process -FilePath "powershell.exe" `
+                -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $holderScript) `
+                -PassThru -NoNewWindow
+
+            try {
+                $waitDeadline = (Get-Date).AddSeconds(8)
+                while (-not (Test-Path -LiteralPath $readyFlag) -and (Get-Date) -lt $waitDeadline) {
+                    Start-Sleep -Milliseconds 50
+                }
+                (Test-Path -LiteralPath $readyFlag) | Should -BeTrue
+
+                # Mesmo com ExecId diferente ('exec-2'), a mesma chave LockKey bloqueia
+                $contenderSame = Start-Process -FilePath "powershell.exe" `
+                    -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $contenderScript) `
+                    -Wait -PassThru -NoNewWindow
+                $contenderSame.ExitCode | Should -Not -Be 0
+
+                # Chave distinta nao sofre contencao
+                Enter-AutomationLock -ExecId "exec-3" -LockKey ($lockKey + "_OUTRA") -TimeoutMs 500 | Should -BeTrue
+                Exit-AutomationLock -ExecId "exec-3" -LockKey ($lockKey + "_OUTRA")
+            } finally {
+                Set-Content -LiteralPath $releaseFlag -Value "go" -Encoding UTF8
+                if ($holderProc -and -not $holderProc.HasExited) {
+                    $null = $holderProc.WaitForExit(10000)
+                }
+            }
+        }
+    }
 }

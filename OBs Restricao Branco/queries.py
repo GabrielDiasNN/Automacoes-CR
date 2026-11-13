@@ -47,9 +47,10 @@ def build_finalidades_sql(
 ) -> tuple[str, dict[str, Any]]:
     """Monta a consulta das finalidades compativeis com as classificacoes alvo.
 
-    O conjunto de finalidades NAO e fixo no codigo: vem de COR_FINALIDADE, o
-    cadastro que o ERP usa para dizer o que pode ser consumido por uma cor de
-    cada classificacao.
+    O conjunto do saldo restrito e FIXO por regra de negocio em
+    FINALIDADES_PECA_ALVO = (3, 4); COR_FINALIDADE e consultada para resolver
+    as descricoes oficiais e garantir que 3 e 4 sigam compativeis com as
+    classes 6 e 9 no cadastro do ERP.
     """
     if not classificacoes:
         raise ValueError("build_finalidades_sql exige ao menos uma classificacao")

@@ -48,7 +48,7 @@ envio.
    o saldo cobre por inteiro, depois as parciais, que levam o saldo remanescente.
    Desde 01/09/2026 a cobertura integral **não é mais condição para notificar** —
    virou condição de prioridade. Uma OB com 5 peças restritas disponíveis e
-   necessidade de 55 é anunciada como *montagem parcial*: a Montagem de Lotes não
+   necessidade de 55 é anunciada como _montagem parcial_: a Montagem de Lotes não
    pode montá-la só com peça sem restrição e deixar as 5 restritas paradas no
    depósito, que é justamente a peça que precisa escoar. `MINIMO_PECAS_NOTIFICAVEL`
    é 1; saldo zero é o único motivo de não notificar. `AvaliacaoOb.alocado` é o
@@ -88,29 +88,43 @@ envio.
    O formato antigo (`{"185719": "<iso>"}`) continua legível como reserva de
    quantidade desconhecida — preserva a idempotência sem reservar saldo.
 8. O destino é o mesmo da OFST-06, via `OFST_WHATSAPP_TARGET`.
-9. A mensagem normaliza artigo para três dígitos e cor programada para dois
-   dígitos; nunca trunca códigos maiores que a largura mínima. `CDARTIGOCRU` é
-   **alfanumérico** no Oracle (`0A231` ocorre em produção) e é guardado como
-   texto: é um campo puramente cosmético, e coagi-lo para número descartava a OB
-   inteira. Quando várias OBs disputam o mesmo reduzido, a linha "Estoque
-   disponível" dos blocos seguintes traz "(após as OBs acima)" — o número é o
-   saldo no momento da avaliação daquela OB, não um segundo saldo do depósito.
+9. A apresentação normaliza o artigo para três dígitos (nunca trunca códigos
+   maiores que a largura mínima). `CDARTIGOCRU` é **alfanumérico** no Oracle
+   (`0A231` ocorre em produção) e é guardado como texto: é um campo puramente
+   cosmético, e coagi-lo para número descartava a OB inteira.
+   **Card visual + legenda enxuta paginada (13/11/2026):** para reduzir ruído de leitura
+   no WhatsApp sem perder ou truncar OBs em lotes grandes, `format_message.py`
+   (apoiado em `lib/python/card_pagination.py`) pagina a partir de `MAX_OBS_PER_PAGE = 15`
+   (e quebra antes se a legenda ultrapassar `MAX_MESSAGE_CHARS = 3500`): gera `card.png` +
+   `message.txt` quando cabe em 1 página (envio `AUTO` com legenda via arquivo temporário
+   `HUB_WA_CAPTION_FILE` em `Send-WhatsApp.ps1`) ou `card_01.png`..`card_NN.png` em lote
+   (`-Mode BATCH` com `batch_input.json`/`batch_result.json` e `cards_manifest.json`). Cada card
+   traz 2 linhas por OB (OB, Artigo, Reduzido, Restrições, ação de separação, Filial e
+   Entrega) e legenda pesquisável pelo número da OB. Campos apenas de filtro/auditoria
+   (`Fluxo`, `Cor programada`, `Classificação` e saldo bruto do depósito) ficam somente em
+   `orb_result.json`.
 10. `sendMessage` é considerado confirmado pelo ID retornado ou pelo evento
     `message_create`; no `whatsapp-web.js` instalado, o ID pode estar em `$1` em
-    vez de `_serialized`. Sem confirmação, a execução falha e o state não é
-    promovido.
+    vez de `_serialized`. Sem confirmação em envio único (ou quando 0 páginas são entregues
+    em lote), o state não é promovido; em falha parcial do lote (`Lib-WhatsAppBatch.psm1`),
+    apenas as OBs das páginas não entregues são removidas de `orb_state.json.tmp` antes do
+    commit, evitando reenvio das páginas já entregues.
 
 ## Arquitetura
 
-`run.ps1` faz preflight, lock e handoff. `extract_orb.py` consulta Oracle
-(finalidades compatíveis → OBs → estoque) e gera
+`run.ps1` faz preflight (`Import-HubEnv` e validação de `OFST_WHATSAPP_TARGET`), rotação de
+logs (`Invoke-LogRotation -KeepDays 15`), lock exclusivo nomeado (`Enter-AutomationLock
+-LockKey "ORB-07"`), limpeza de artefatos residuais já sob lock e handoff (delegando cleanup de
+Chrome do motor WhatsApp exclusivamente ao `lib/Send-WhatsApp.ps1`). `extract_orb.py`
+consulta Oracle (finalidades compatíveis → OBs → estoque) e gera
 `orb_result.json`/`orb_state.json.tmp`. A consulta de estoque
 (`SQL-EstoqueFinalidadesBranco.sql`) usa `GROUPING SETS`: a linha total é o
 `COUNT(DISTINCT)` autoritativo e as parciais por finalidade são a evidência da
 mensagem — somar as parciais contaria em dobro uma peça com mais de uma
 finalidade cadastrada. `validators.py` contém regras puras.
-`format_message.py` gera somente o texto. O envio usa o motor compartilhado em
-`lib/Send-WhatsApp.ps1` e `lib/WhatsApp-Core.js`.
+`format_message.py` + `lib/python/card_pagination.py` geram o(s) card(s) PNG e
+`cards_manifest.json`. `lib/Lib-WhatsAppBatch.psm1` valida o manifesto e reconcilia o commit
+parcial em conjunto com `lib/Send-WhatsApp.ps1` e `lib/WhatsApp-Core.js`.
 
 ## Guardrails
 
@@ -118,23 +132,30 @@ finalidade cadastrada. `validators.py` contém regras puras.
 - Nenhuma credencial ou ID real em arquivos versionados.
 - Classificação não resolvida é rejeitada com WARN e sem envio; quebra de
   schema ou finalidade também é observável e falha segura.
-- **OB sem classificação na view é transitório, não dado corrompido**
-  (`ClassificacaoNaoResolvidaError`, 03/09/2026). A OB sai de
-  `VW_EXC_OB_PROD_CLASS_COR` antes de `OBMONTADA` virar para `'1'`, então por
-  alguns segundos ela ainda entra na query sem classificação. Quando **todas**
-  as linhas do lote são rejeitadas por esse motivo, a execução termina em
-  `exit 2` (nada a notificar) — antes era `exit 1`, e em 03/09 as duas únicas
-  OBs do universo estavam nessa janela ao mesmo tempo: 3 tentativas, `ExitCode=3`
-  e alerta HIGH no dashboard por um caso que se resolve sozinho no ciclo
-  seguinte. Basta **uma** linha rejeitada por outro motivo para o lote voltar a
-  ser tratado como dado fora do contrato (`exit 1`). Nos dois caminhos o state
-  permanece intocado — as OBs sumiram da query por estarem montando, e commitar
-  um state vazio apagaria as reservas vivas das demais.
-- Lock/cooldown do WhatsApp não consolida state nem abre falso incidente.
+- **OB sem classificação resolvida é transitória, não dado corrompido**
+  (`ClassificacaoNaoResolvidaError`, 03/09/2026). Quando a OB inicia a
+  montagem, o vínculo nas tabelas físicas de receita/status (que substituíram a
+  antiga `VW_EXC_OB_PROD_CLASS_COR`) se desfaz antes de `OBMONTADA` virar para
+  `'1'`, então por alguns segundos ela ainda entra na query sem classificação.
+  Quando **todas** as linhas do lote são rejeitadas por esse motivo, a execução
+  termina em `exit 2` (nada a notificar) — antes era `exit 1`, e em 03/09 as
+  duas únicas OBs do universo estavam nessa janela ao mesmo tempo: 3 tentativas,
+  `ExitCode=3` e alerta HIGH no dashboard por um caso que se resolve sozinho no
+  ciclo seguinte. Basta **uma** linha rejeitada por outro motivo para o lote
+  voltar a ser tratado como dado fora do contrato (`exit 1`). Nos dois caminhos
+  o state permanece intocado — as OBs sumiram da query por estarem montando, e
+  commitar um state vazio apagaria as reservas vivas das demais.
+- Os ramos mortos `40`/`23` e o código `22` foram removidos do `run.ps1`; falhas de despacho
+  no `lib/WhatsApp-Core.js` saem com `21` (reautenticação) ou `4` no orquestrador sem
+  consolidar páginas não entregues. `Send-WhatsApp.ps1` também respeita `app.enabled` e
+  `target.enabled` de `whatsapp-config.json`.
 - Alterações futuras nas classes 6/9 exigem nova confrontação com
-  `CLASSIFICACAO_COR`, `TIPO_FINALIDADE_FIO` e `COR_FINALIDADE`. Mudanças no
-  cadastro de finalidades, ao contrário, são absorvidas sozinhas — é justamente
-  por isso que o conjunto deixou de ser constante no código.
+  `CLASSIFICACAO_COR`, `TIPO_FINALIDADE_FIO` e `COR_FINALIDADE`. O conjunto do
+  saldo restrito permanece **fixo** em `FINALIDADES_PECA_ALVO = (3, 4)` e o de
+  complemento sem restrição em `FINALIDADES_COMPLEMENTO = (1, 8)`, não
+  derivados dinamicamente de `COR_FINALIDADE`; mudanças em `COR_FINALIDADE` fora
+  de `(3, 4)` são ignoradas por regra de negócio, enquanto remoção de `3` ou `4`
+  falha de forma observável em `_fetch_finalidades`.
 - A finalidade 1 (SEM RESTRIÇÃO) é a única finalidade da OFST-06
   (`SQL-EstoqueDeposito95.sql`, `FINALIDADE = 1`) e está **fora** do escopo da
   ORB-07, que só conta 3 e 4. As duas automações não disputam as mesmas peças
