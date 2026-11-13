@@ -1,6 +1,7 @@
 # Cognitive Context: Automações Hub v1.0.0 (Operational Baseline)
 
 ## Repository Philosophy
+
 Este repositório é um ecossistema de automações **AI-Native**, operando na versão **v1.0.0 (Operational Baseline)**. O sistema segue o **Protocolo V.A.L.E.G.** (Validação, Arquitetura, Logging, Escala e Governança) com foco em resiliência, stack 100% nativa, segurança Zero-Trust e diagnóstico operacional acionável.
 
 ## System Architecture (v1.0.0 Operational Baseline)
@@ -25,7 +26,7 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Baseline Operacional compartilhado:** `GET /api/system/baseline`, `diagnostics.operational_baseline` e `history.baseline_status` usam os mesmos thresholds para worker, fila, WAL, execuções acima do limite e ownership órfão.
 - **Ownership + Histórico v9.2.7 alinhados:** execuções agora registram `claimed_at`, `worker_instance_id` e `worker_pid`; o runtime passa a persistir snapshots em `system_health_snapshots` e expor tendência em `/api/system/history` e `trend_summary` no diagnóstico.
 - **Portfólio Governado v9.3.0 alinhado:** cada automação ativa passa a possuir `automation.manifest.json` como fonte canônica de criticidade, SLA, owner, dependências e smoke tests; o Orchestrator cruza catálogo, docs e banco em `/api/portfolio/health` e `/api/portfolio/drift`.
-- **ORB-07 ativa (25/08/2026, Orchestrator `id=6`):** `OBs Restricao Branco/` identifica OBs abertas e não montadas pela classificação Oracle da cor (`VW_EXC_OB_PROD_CLASS_COR.CD_CLASSIFICACAO_COR IN (6, 9)`), cruza saldo físico do depósito 95 com finalidades 3 (`CORES CLARAS`) e 4 (`BRANCO`) e compartilha o destino WhatsApp da OFST-06 por `OFST_WHATSAPP_TARGET`. A mensagem normaliza artigo para 3 dígitos e cor para 2 dígitos. O primeiro envio foi confirmado no grupo com ACK 1; o ciclo seguinte retornou código 2 sem reenviar.
+- **ORB-07 ativa (25/08/2026, Orchestrator `id=6`):** `OBs Restricao Branco/` identifica OBs abertas e não montadas pela classificação Oracle da cor (`CD_CLASSIFICACAO_COR IN (6, 9)` via tabelas físicas `OB_FASES`, `CADASTRO_RECEITAS`, `CLASSIFICACAO_COR`, `OB_PRODUTO`, `OB`, `ITENS_ESTOQUE`, `XX2_ENUMERATES`, `XX2_ENUMITEM` em substituição à antiga `VW_EXC_OB_PROD_CLASS_COR`), cruza saldo físico restrito do depósito 95 com `FINALIDADES_PECA_ALVO = (3, 4)` (e complemento sem restrição `FINALIDADES_COMPLEMENTO = (1, 8)` para fechamento de lote parcial) e compartilha o destino WhatsApp da OFST-06 por `OFST_WHATSAPP_TARGET`. Desde 13/11/2026 gera card PNG + legenda enxuta com artigo normalizado para 3 dígitos (`CODIGO_COR_TINGIMENTO` permanece somente em `orb_result.json`). O primeiro envio foi confirmado no grupo com ACK 1; o ciclo seguinte retornou código 2 sem reenviar.
 - **Padrão Arquitetural Governado:** `docs/architecture-standard.md` descreve as camadas oficiais do Hub, enquanto `Tools/Test-ArchitectureStandard.ps1` valida violações críticas e avisos arquiteturais dentro do quality gate.
 - **Resumo operacional do portfólio no overview:** `GET /api/portfolio/health.summary` e `GET /api/system/overview.portfolio` agora publicam um status operacional único para drift, docs obrigatórias, runtime não reconciliado e violações de SLA, permitindo que o dashboard principal priorize governança sem heurística distribuída no front-end.
 - **Preflight governado no cadastro administrativo:** quando `automation.manifest.json` existe na pasta alvo, `POST /api/automations/preflight` valida nome, `script_path`, `queue_group`, SLA, retries, canais, runbook, README, CONTEXT, entrypoint e smoke tests antes de permitir `create/update`.
@@ -33,6 +34,7 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **Shared Skills Model**: `.github/skills/` é a fonte canônica das 9 skills ativas; `.gemini/skills/` existe apenas como espelho por junction/symlink para compatibilidade com Gemini CLI e Antigravity.
 
 ## 🧠 Gestão de Contexto (AI-Native)
+
 - **Migração de Banco de Dados com Alembic v9.0.0 (20/05/2026):** Transição de migrações manuais inline para o ecossistema robusto e estruturado do Alembic. As migrações são aplicadas de forma dinâmica no startup (`upgrade head` programático). Ativamos o **Modo Batch** no `env.py` para compatibilidade com SQLite, blindamos os testes em memória com desvio resiliente de runner, e ajustamos a fixture do Playwright E2E para preparar o banco de homologação físico via Alembic, eliminando colisões. **73/73 testes verdes** e **100% aprovado** no Quality Gate (`Tools/ValidarAutomacoes.ps1`).
 - **Observabilidade histórica e preflight administrativo (24/05/2026):** Orchestrator passa a manter snapshots operacionais a cada 5 minutos, identificar `RUNNING` órfão por ownership do worker e oferecer `POST /api/automations/preflight` como fonte única de validação antes de `create/update`. Suite do Orchestrator fechada em **146/146 testes verdes** após a consolidação do catálogo governado.
 - **Governança do portfólio elevada ao overview (26/05/2026):** `/api/portfolio/health` passa a sintetizar `status`, `top_issue`, `recommended_action` e contagem de itens `healthy` / `attention` / `incident`; `/api/system/overview` replica esse resumo para o painel principal e o dashboard passa a exibir o risco primário combinando baseline operacional com governança do catálogo. Validação fechada em **151/151 testes verdes**, governança agregada aprovada e Playwright E2E validado por último.
@@ -77,4 +79,5 @@ Este repositório é um ecossistema de automações **AI-Native**, operando na v
 - **ADR-017 (16/05/2026):** Shared Skills Canonicalization: Consolidada a fonte canonica das skills em `.github/skills/`, com `.gemini/skills/` mantido apenas como espelho de compatibilidade para Gemini CLI e Antigravity. Adicionadas regras explicitas para agentes em `AGENTS.md` e validacao automatica de mirrors.
 
 ---
+
 Mantido pela equipe de Automações & Antigravity AI

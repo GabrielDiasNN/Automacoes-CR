@@ -16,21 +16,23 @@ Classificações aceitas: `6 = BRANCO` e `9 = BRANCO 2 FIBRAS`. A cor `00001`
 isolada não autoriza notificação.
 
 O saldo é `COUNT(DISTINCT IDPECASPRODUTO)` por reduzido, com contagens de
-auditoria separadas para as finalidades 3 e 4. A mensagem usa artigo com três
-dígitos (`32` → `032`) e cor programada com dois (`00001` → `01`), sem
-truncar códigos maiores que a largura mínima.
+auditoria separadas para as finalidades 3 e 4. Desde 13/11/2026 o aviso vai em
+**card(s) PNG paginado(s)** (`MAX_OBS_PER_PAGE = 15`: `card.png` + `message.txt` em
+1 página via `AUTO`, ou `card_01.png`..`card_NN.png` + `cards_manifest.json` em
+lote `-Mode BATCH` quando acima de 15 OBs ou do limite de caracteres da legenda),
+exibindo artigo com três dígitos (`32` → `032`) sem truncar códigos maiores nem
+descartar OBs, e mantendo os números de OB pesquisáveis no WhatsApp.
 
 ## Códigos de saída
 
-| Código | Significado |
-|---|---|
-| 0 | Envio confirmado e state consolidado |
-| 2 | Nada novo a enviar; state reconciliado |
-| 3 | Falha definitiva de extração Oracle |
-| 4 | Falha de mensagem, canal ou orquestração |
-| 9 | Falha de preflight |
-| 21 | Sessão WhatsApp requer reautenticação |
-| 22 | Canal ocupado/cooldown; state não consolidado |
+| Código | Significado                                                                                                                                                                             |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0      | Envio confirmado e state consolidado                                                                                                                                                    |
+| 2      | Nada novo a enviar; state reconciliado                                                                                                                                                  |
+| 3      | Falha definitiva de extração Oracle                                                                                                                                                     |
+| 4      | Falha de mensagem, canal ou orquestração (em envio paginado parcial, `Lib-WhatsAppBatch.psm1` preserva no state as páginas entregues e remete só as páginas com falha no próximo ciclo) |
+| 9      | Falha de preflight                                                                                                                                                                      |
+| 21     | Sessão WhatsApp requer reautenticação                                                                                                                                                   |
 
 ## Promoção
 
@@ -61,7 +63,11 @@ Desde 25/08/2026 o state guarda, além do carimbo do aviso, **quanto** cada OB
 notificada reservou:
 
 ```json
-{ "notified": { "185719": { "em": "2026-08-25T16:54:40", "reduzido": 26, "reservado": 55 } } }
+{
+  "notified": {
+    "185719": { "em": "2026-08-25T16:54:40", "reduzido": 26, "reservado": 55 }
+  }
+}
 ```
 
 - A reserva é descontada do saldo do depósito antes da alocação do ciclo

@@ -14,7 +14,7 @@ Fluxo: OBs (fluxo 204, emitidas, nao montadas, pedido comercial sem sufixo R/S)
 (validators.avaliar_ob) -> ofst_result.json.
 
 Idempotencia por OB, nao por lote: `ofst_state.json` guarda os IDs ja
-notificados. Com execucao a cada 60 min, um hash do lote inteiro re-notificaria
+notificados. Com execucao a cada 120 min, um hash do lote inteiro re-notificaria
 a mesma OB a cada flutuacao de estoque — aqui so entra na mensagem OB que ainda
 nao foi avisada. O commit do state e do run.ps1 (tmp -> final), so apos o envio
 confirmado.

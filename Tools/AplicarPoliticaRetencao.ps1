@@ -31,31 +31,31 @@ $script:PreservePathRegexes = @(
 )
 $script:CategoryRules = @(
     @{
-        Name = "Python Cache"
-        Type = "DirectoryName"
-        Names = @("__pycache__", ".pytest_cache", ".mypy_cache", "htmlcov")
+        Name       = "Python Cache"
+        Type       = "DirectoryName"
+        Names      = @("__pycache__", ".pytest_cache", ".mypy_cache", "htmlcov")
         MinAgeDays = 0
-        Recurse = $true
+        Recurse    = $true
     },
     @{
-        Name = "Python Coverage"
-        Type = "FileName"
-        Names = @(".coverage")
+        Name       = "Python Coverage"
+        Type       = "FileName"
+        Names      = @(".coverage")
         MinAgeDays = 0
-        Recurse = $true
+        Recurse    = $true
     },
     @{
-        Name = "Playwright Artifacts"
-        Type = "DirectoryName"
-        Names = @(".playwright-cli", ".playwright-mcp", "playwright-report", "test-results")
+        Name       = "Playwright Artifacts"
+        Type       = "DirectoryName"
+        Names      = @(".playwright-cli", ".playwright-mcp", "playwright-report", "test-results")
         MinAgeDays = 0
-        Recurse = $true
+        Recurse    = $true
     },
     @{
-        Name = "Orchestrator E2E Artifacts"
-        Type = "Pattern"
+        Name              = "Orchestrator E2E Artifacts"
+        Type              = "Pattern"
         RelativeDirectory = "Orchestrator\tests"
-        IncludeFiles = @(
+        IncludeFiles      = @(
             "test-e2e-automacoes-*.db",
             "test-e2e-automacoes-*.db-shm",
             "test-e2e-automacoes-*.db-wal",
@@ -63,47 +63,63 @@ $script:CategoryRules = @(
             "uvicorn-stderr-*.log",
             "fix_tests*.py"
         )
-        MinAgeDays = 0
+        MinAgeDays        = 0
     },
     @{
-        Name = "Operational Logs"
-        Type = "Pattern"
-        RelativeDirectories = @("Logs", "Orchestrator\Logs", "Montagem de Terceirizados\Logs", "Receitas Bloqueadas\Logs", "Receitas Emitidas\Logs")
-        IncludeFiles = @("*.log", "*.jsonl", "*.txt")
-        MinAgeDays = $LogRetentionDays
+        Name                = "Operational Logs"
+        Type                = "Pattern"
+        RelativeDirectories = @("Logs", "Orchestrator\Logs", "Montagem de Terceirizados\Logs", "Receitas Bloqueadas\Logs", "Receitas Emitidas\Logs", "OBs Restricao Branco\Logs", "OBs Fluxo Sem Tingimento\Logs")
+        IncludeFiles        = @("*.log", "*.jsonl", "*.txt")
+        MinAgeDays          = $LogRetentionDays
     },
     @{
-        Name = "Operational Backups"
-        Type = "Pattern"
+        Name                = "Operational Backups"
+        Type                = "Pattern"
         RelativeDirectories = @("Backups", "Orchestrator\Backups")
-        IncludeFiles = @("*")
-        MinAgeDays = $BackupRetentionDays
+        IncludeFiles        = @("*")
+        MinAgeDays          = $BackupRetentionDays
     },
     @{
-        Name = "Orchestrator Runtime Transients"
-        Type = "Pattern"
+        Name              = "Orchestrator Runtime Transients"
+        Type              = "Pattern"
         RelativeDirectory = "Orchestrator"
-        IncludeFiles = @(
+        IncludeFiles      = @(
             "*.pid",
             "*.db-shm",
             "*.db-wal",
             "debug.log"
         )
-        MinAgeDays = 0
-        Recurse = $false
+        MinAgeDays        = 0
+        Recurse           = $false
     },
     @{
-        Name = "Automation Temporary State"
-        Type = "Pattern"
+        Name                = "Automation Temporary State"
+        Type                = "Pattern"
         RelativeDirectories = @("Montagem de Terceirizados", "Receitas Bloqueadas", "Receitas Emitidas")
-        IncludeFiles = @(
+        IncludeFiles        = @(
             "email_body.html",
             ".cache_erros.json",
             "delivery_state.json",
             "email_state.json",
             "receitas_state.json"
         )
-        MinAgeDays = $TransientStateRetentionDays
+        MinAgeDays          = $TransientStateRetentionDays
+    },
+    @{
+        Name                = "OBs Cards Runtime Artifacts"
+        Type                = "Pattern"
+        RelativeDirectories = @("OBs Restricao Branco", "OBs Fluxo Sem Tingimento")
+        IncludeFiles        = @(
+            "card.png",
+            "card_*.png",
+            "message.txt",
+            "cards_manifest.json",
+            "batch_input.json",
+            "batch_result.json",
+            "orb_result.json",
+            "ofst_result.json"
+        )
+        MinAgeDays          = $TransientStateRetentionDays
     }
 )
 
@@ -193,7 +209,7 @@ function Test-IsWithinRoot {
 
     $fullPath = [System.IO.Path]::GetFullPath($Path)
     return $fullPath.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase) -or
-        $fullPath.Equals($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)
+    $fullPath.Equals($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function Get-ItemAgeDays {
@@ -279,11 +295,11 @@ function Get-CandidateItemsByPattern {
 
         foreach ($include in $IncludeFiles) {
             $getChildItemParams = @{
-                LiteralPath   = $directoryPath
-                File          = $true
-                Filter        = $include
-                Force         = $true
-                ErrorAction   = "SilentlyContinue"
+                LiteralPath = $directoryPath
+                File        = $true
+                Filter      = $include
+                Force       = $true
+                ErrorAction = "SilentlyContinue"
             }
             if ($Recurse) {
                 $getChildItemParams.Recurse = $true
@@ -361,7 +377,8 @@ function Remove-CandidateItem {
     try {
         if ($Item.PSIsContainer) {
             Remove-Item -LiteralPath $fullPath -Recurse -Force -ErrorAction Stop
-        } else {
+        }
+        else {
             Remove-Item -LiteralPath $fullPath -Force -ErrorAction Stop
         }
 
@@ -430,25 +447,25 @@ function Write-ResultsSummary {
     }
 
     $summary = $script:Results |
-        Group-Object Category, Status |
-        Sort-Object Name |
-        ForEach-Object {
-            $parts = $_.Name -split ',\s*', 2
-            [pscustomobject]@{
-                Category = $parts[0]
-                Status   = $parts[1]
-                Count    = $_.Count
-            }
+    Group-Object Category, Status |
+    Sort-Object Name |
+    ForEach-Object {
+        $parts = $_.Name -split ',\s*', 2
+        [pscustomobject]@{
+            Category = $parts[0]
+            Status   = $parts[1]
+            Count    = $_.Count
         }
+    }
 
     $summary | Format-Table -AutoSize | Out-Host
     Write-Host ""
 
     $script:Results |
-        Sort-Object Category, Status, Path |
-        Select-Object Category, Status, Path, Reason |
-        Format-Table -Wrap -AutoSize |
-        Out-Host
+    Sort-Object Category, Status, Path |
+    Select-Object Category, Status, Path, Reason |
+    Format-Table -Wrap -AutoSize |
+    Out-Host
 }
 
 Initialize-TrackedFiles

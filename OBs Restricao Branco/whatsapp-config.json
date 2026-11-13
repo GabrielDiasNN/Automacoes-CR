@@ -5,7 +5,7 @@
   "auth": {
     "clientId": "hub-global"
   },
-  "_comentario_target": "Destino compartilhado com OFST-06: o grupo Expedição Tinturaria vem de OFST_WHATSAPP_TARGET no .env. contactId é apenas placeholder/fallback.",
+  "_comentario_target": "Destino compartilhado com OFST-06: o grupo Expedição Tinturaria vem de OFST_WHATSAPP_TARGET no .env. contactId é exclusivamente placeholder de schema, nunca um destino real.",
   "target": {
     "enabled": true,
     "type": "group",
@@ -13,9 +13,10 @@
     "contactId": "550000000000-0000000000@g.us"
   },
   "message": {
-    "textFile": "message.txt"
+    "textFile": "message.txt",
+    "sendAttachment": true
   },
-  "idempotency": {
-    "enabled": true
+  "paths": {
+    "attachmentPath": "card.png"
   }
 }

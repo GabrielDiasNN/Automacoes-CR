@@ -174,8 +174,9 @@ class ResumoExecucao:  # pylint: disable=too-many-instance-attributes
     total_notificaveis: int = 0
     # Subconjunto de total_notificaveis: OBs anunciadas com cobertura parcial.
     total_parciais: int = 0
-    # OBs sem NENHUMA peca restrita disponivel — desde a mudanca de 01/09/2026,
-    # o unico motivo de nao notificar (antes: qualquer cobertura < 100%).
+    # OBs nao notificadas por falta de estoque: saldo restrito zerado ou
+    # complemento sem restricao (finalidades 1 e 8) insuficiente para fechar o
+    # lote parcial (regras de 01/09/2026 e 02/09/2026).
     total_sem_estoque: int = 0
     falhas: list[str] = field(default_factory=list)
     # True quando TODA linha rejeitada foi OB sem classificação na view

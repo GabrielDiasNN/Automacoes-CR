@@ -21,6 +21,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from PIL import Image
 from tests.carregadores_modulos import carregar_modulo_automacao as _load_module
 
 ROOT = Path(__file__).parent.parent.parent
@@ -221,6 +222,10 @@ def test_whatsapp_config_valido() -> None:
         cfg["target"]["contactIdEnv"] == "OFST_WHATSAPP_TARGET"
     ), "destino real deve vir do .env, nunca do config versionado"
     assert re.match(r"^[\d\-]+@g\.us$", cfg["target"]["contactId"])
+    assert cfg["message"]["textFile"] == "message.txt"
+    assert cfg["message"]["sendAttachment"] is True
+    assert cfg["paths"]["attachmentPath"] == "card.png"
+    assert "idempotency" not in cfg
 
 
 def test_sql_obs_respeita_o_contrato_de_negocio() -> None:
@@ -291,10 +296,11 @@ def test_sql_estoque_filtra_deposito_95_e_conta_distinto() -> None:
     )
     assert "SELECT *" not in sql
     assert "CODIGO_DEPOSITO = 95" in sql
-    # Regressão da subcontagem de 26/08/2026: as finalidades aceitas NÃO podem
-    # voltar a ser fixas no SQL. Vêm por bind, derivadas de COR_FINALIDADE — o
-    # conjunto fixo {3, 4} descartava a finalidade 1 (SEM RESTRIÇÃO), maioria do
-    # estoque do depósito, e o saldo anunciado saía menor que o físico.
+    # Regressão da subcontagem de 26/08/2026: o conjunto contabilizado no
+    # saldo restrito é fixo por regra de negócio em FINALIDADES_PECA_ALVO=(3, 4),
+    # enquanto o complemento sem restrição (FINALIDADES_COMPLEMENTO=(1, 8)) é
+    # consultado separado em /*FIN_BINDS*/ — a finalidade 1 não pode voltar a
+    # entrar no saldo restrito, e a query continua parametrizada por binds.
     assert "GPC.FINALIDADE IN (3, 4)" not in sql
     assert "GPC.FINALIDADE IN (/*FIN_BINDS*/)" in sql
     assert "GROUPING SETS" in sql
@@ -642,12 +648,13 @@ def test_validate_estoque_rows_sem_fan_out() -> None:
 
 
 def test_validate_estoque_rows_conta_finalidade_1_sem_restricao() -> None:
-    """Regressão da subcontagem de 26/08/2026.
+    """Regressão da subcontagem de 26/08/2026 (papel do complemento sem restrição).
 
-    A finalidade 1 (SEM RESTRIÇÃO) é compatível com as classes brancas em
-    COR_FINALIDADE e é a maioria do estoque do depósito 95. Enquanto o SQL
-    filtrava {3, 4}, ela ficava fora do saldo e a mensagem prometia à Expedição
-    menos peças do que existiam fisicamente.
+    A finalidade 1 (SEM RESTRIÇÃO) é o grosso do depósito 95 e hoje compõe
+    FINALIDADES_COMPLEMENTO=(1, 8), consultada separadamente do saldo restrito
+    FINALIDADES_PECA_ALVO=(3, 4) para fechar lotes parciais. O teste garante que
+    validate_estoque_rows aceita qualquer mapa de finalidades recebido por
+    contrato.
     """
     v = _validators()
     estoque = v.validate_estoque_rows(
@@ -1569,7 +1576,11 @@ def test_chunk_codigos_respeita_o_limite_do_oracle() -> None:
 def test_sql_diagnostico_classifica_aceites_e_rejeicoes() -> None:
     q = _queries()
     sql = Path(q.SQL_DIAGNOSTICO_CLASSIFICACOES_PATH).read_text(encoding="utf-8")
-    assert "VW_EXC_OB_PROD_CLASS_COR" in sql
+    assert "FROM SGTPRD.VW_EXC_OB_PROD_CLASS_COR" not in sql
+    assert "SGTPRD.CADASTRO_RECEITAS REC" in sql
+    assert "SGTPRD.CLASSIFICACAO_COR CCC" in sql
+    assert "SGTPRD.OB_FASES OBF" in sql
+    assert "SGTPRD.XX2_ENUMERATES ENU" in sql
     assert "CD_CLASSIFICACAO_COR IN (6, 9)" in sql
     assert "THEN 'ACEITA'" in sql
     assert "ELSE 'REJEITA'" in sql
@@ -1585,7 +1596,7 @@ def _row_mensagem(**overrides: Any) -> dict[str, Any]:
     row: dict[str, Any] = {
         "NUMERO_OB": 1001,
         "CODIGO_REDUZIDO_CRU": 12345,
-        "CODIGO_ARTIGO_CRU": 489,
+        "CODIGO_ARTIGO_CRU": "00489",
         "CODIGO_FLUXO": 102,
         "CODIGO_COR_TINGIMENTO": "00001",
         "CD_CLASSIFICACAO_COR": 6,
@@ -1594,7 +1605,11 @@ def _row_mensagem(**overrides: Any) -> dict[str, Any]:
             {"codigo": 4, "descricao": "BRANCO"},
         ],
         "TOTAL_PECAS": 50,
+        "KILOS_PROGRAMADOS": 120.5,
         "QTD_PECAS_DISPONIVEIS": 75,
+        "QTD_PECAS_ALOCADAS": 50,
+        "QTD_PECAS_FALTANTES": 0,
+        "QTD_PECAS_COMPLEMENTO": 0,
         "DT_ENTREGA": "2026-07-20T00:00:00",
         "NOME_CLIENTE": "CR-LOJA BLUMENAU",
     }
@@ -1608,56 +1623,35 @@ def test_build_message_monta_o_template_do_grupo() -> None:
         {"rows": [_row_mensagem()], "resumo": {"tempo_consulta_ms": 1200}}
     )
     assert "Depósito 95 - OBs Restrição Branco" in msg
-    assert "*OB: 1001*" in msg
-    assert "Artigo: 489" in msg
-    assert "Fluxo: 102" in msg
-    assert "Cor programada: 01" in msg
-    assert "Classificação: BRANCO" in msg
-    assert "Restrição da peça: 4 — BRANCO" in msg
-    assert "Reduzido: 12345" in msg
-    assert "Quantidade necessária: 50 peças" in msg
-    assert "Estoque disponível: 75 peças" in msg
-    assert "Data de entrega: 20/07/2026" in msg
-    assert "Filial destino: CR-LOJA BLUMENAU" in msg
-
-
-def test_build_message_explica_o_estoque_ja_descontado_das_obs_anteriores() -> None:
-    """Várias OBs disputando o mesmo reduzido faziam a linha "Estoque disponível"
-    cair a cada bloco (809 → 754 → 699...), como se o mesmo depósito tivesse seis
-    saldos diferentes na mesma mensagem. O número é o saldo no momento da
-    avaliação daquela OB (ver `alocar_estoque`) — a ressalva torna isso legível.
-    """
-    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
-    msg = module.build_message(
-        {
-            "rows": [
-                _row_mensagem(
-                    NUMERO_OB=1, CODIGO_REDUZIDO_CRU=26, QTD_PECAS_DISPONIVEIS=809
-                ),
-                _row_mensagem(
-                    NUMERO_OB=2, CODIGO_REDUZIDO_CRU=26, QTD_PECAS_DISPONIVEIS=754
-                ),
-                _row_mensagem(
-                    NUMERO_OB=3, CODIGO_REDUZIDO_CRU=99, QTD_PECAS_DISPONIVEIS=40
-                ),
-            ]
-        }
+    assert (
+        "• *OB 1001* (Art. 489 · Red. 12345) — 50 pçs → usar 50 restr. (Completa)"
+        in msg
     )
-    # Primeira OB do reduzido: saldo cheio, sem ressalva.
-    assert "Estoque disponível: 809 peças\n" in msg
-    assert "Estoque disponível: 754 peças (após as OBs acima)" in msg
-    # Reduzido diferente: saldo próprio, também sem ressalva.
-    assert "Estoque disponível: 40 peças\n" in msg
+
+
+def test_build_message_corta_campos_de_auditoria_e_redundancias() -> None:
+    """Legenda do WhatsApp deve ser enxuta (apenas OB, Artigo, Reduzido e ação)."""
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    msg = module.build_message({"rows": [_row_mensagem()]})
+    for campo_cortado in (
+        "Fluxo:",
+        "Cor programada:",
+        "Classificação:",
+        "Estoque disponível:",
+        "Data de entrega:",
+        "Filial destino:",
+    ):
+        assert campo_cortado not in msg
 
 
 def test_build_message_aceita_artigo_alfanumerico_sem_truncar() -> None:
     """`0A231` é o valor real que fazia a OB ser descartada na coerção."""
     module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
     msg = module.build_message({"rows": [_row_mensagem(CODIGO_ARTIGO_CRU="0A231")]})
-    assert "Artigo: 0A231" in msg
+    assert "Art. 0A231" in msg
 
 
-def test_build_message_normaliza_artigo_e_cor_para_o_padrao_interno() -> None:
+def test_build_message_normaliza_artigo_para_o_padrao_interno() -> None:
     module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
     msg = module.build_message(
         {
@@ -1669,25 +1663,21 @@ def test_build_message_normaliza_artigo_e_cor_para_o_padrao_interno() -> None:
             ]
         }
     )
-    assert "Artigo: 032" in msg
-    assert "Cor programada: 01" in msg
+    assert "Art. 032" in msg
 
 
-def test_build_message_mostra_as_duas_finalidades_do_estoque() -> None:
+def test_fmt_restricoes_mostra_as_duas_finalidades_do_estoque() -> None:
     module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
-    msg = module.build_message(
-        {
-            "rows": [
-                _row_mensagem(
-                    RESTRICOES_DISPONIVEIS=[
-                        {"codigo": 3, "descricao": "CORES CLARAS"},
-                        {"codigo": 4, "descricao": "BRANCO"},
-                    ]
-                )
+    rotulo, valor = module._fmt_restricoes(
+        _row_mensagem(
+            RESTRICOES_DISPONIVEIS=[
+                {"codigo": 3, "descricao": "CORES CLARAS"},
+                {"codigo": 4, "descricao": "BRANCO"},
             ]
-        }
+        )
     )
-    assert "Restrições da peça: 3 — CORES CLARAS; 4 — BRANCO" in msg
+    assert rotulo == "Restrições da peça"
+    assert valor == "3 — CORES CLARAS; 4 — BRANCO"
 
 
 def test_build_message_nao_expoe_tempo_de_consulta_nem_grupo() -> None:
@@ -1716,9 +1706,8 @@ def test_build_message_mostra_travessao_para_campos_nulos() -> None:
             "resumo": {"tempo_consulta_ms": 10},
         }
     )
-    assert "Artigo: —" in msg
-    assert "Data de entrega: —" in msg
-    assert "Filial destino: —" in msg
+    assert "Art. —" in msg
+    assert module._fmt_entrega(None) == "—"
 
 
 def test_build_message_agrega_multiplas_obs_na_ordem_recebida() -> None:
@@ -1735,7 +1724,244 @@ def test_build_message_agrega_multiplas_obs_na_ordem_recebida() -> None:
         }
     )
     assert "2 OBs prontas" in msg
-    assert msg.index("*OB: 2*") < msg.index("*OB: 1*")
+    assert msg.index("*OB 2*") < msg.index("*OB 1*")
+
+
+def test_build_card_image_gera_png_com_dimensoes_esperadas(tmp_path: Path) -> None:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    out_path = tmp_path / "card.png"
+    rows = [
+        _row_mensagem(
+            NUMERO_OB=193362,
+            CODIGO_ARTIGO_CRU="00042",
+            CODIGO_REDUZIDO_CRU=17,
+            TOTAL_PECAS=60,
+            QTD_PECAS_DISPONIVEIS=1,
+            QTD_PECAS_ALOCADAS=1,
+            QTD_PECAS_FALTANTES=59,
+            RESTRICOES_DISPONIVEIS=[
+                {"codigo": 3, "descricao": "CORES CLARAS"},
+                {"codigo": 4, "descricao": "BRANCO"},
+            ],
+        ),
+        _row_mensagem(
+            NUMERO_OB=193374,
+            CODIGO_ARTIGO_CRU=None,
+            CODIGO_REDUZIDO_CRU=2149,
+            TOTAL_PECAS=50,
+            QTD_PECAS_DISPONIVEIS=50,
+            QTD_PECAS_ALOCADAS=50,
+            QTD_PECAS_FALTANTES=0,
+            DT_ENTREGA=None,
+            NOME_CLIENTE=None,
+        ),
+    ]
+    module.build_card_image({"rows": rows}, str(out_path))
+    assert out_path.exists()
+    with Image.open(out_path) as img:
+        assert img.format == "PNG"
+        assert img.width == module.CARD_W
+        assert img.height == (
+            module.HEADER_H + module.OB_ROW_H * len(rows) + module.FOOTER_H
+        )
+
+
+def test_format_message_load_font_fallback_e_bold_sem_regular(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    tentativas_bold: list[str] = []
+    chamadas_default: list[int | None] = []
+
+    def fake_truetype(path: str, _size: int) -> Any:
+        tentativas_bold.append(path)
+        raise OSError("sem fonte")
+
+    def fake_load_default(*, size: int | None = None) -> Any:
+        chamadas_default.append(size)
+        return "default-font"
+
+    monkeypatch.setattr(module.ImageFont, "truetype", fake_truetype)
+    monkeypatch.setattr(module.ImageFont, "load_default", fake_load_default)
+
+    assert module._load_font(18, bold=True) == "default-font"
+    assert not any(Path(p).name.lower() == "arial.ttf" for p in tentativas_bold)
+    assert chamadas_default == [18]
+
+
+def test_format_message_is_parcial_defensivo_e_formatadores() -> None:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    assert module._is_parcial(_row_mensagem(QTD_PECAS_FALTANTES="0")) is False
+    assert (
+        module._is_parcial(
+            _row_mensagem(QTD_PECAS_ALOCADAS=None, QTD_PECAS_FALTANTES=10)
+        )
+        is False
+    )
+    assert (
+        module._is_parcial(
+            _row_mensagem(QTD_PECAS_ALOCADAS="12", QTD_PECAS_FALTANTES="8")
+        )
+        is True
+    )
+    assert module._fmt_codigo("1_2", 3) == "1_2"
+    assert module._fmt_codigo("١٢", 3) == "١٢"
+    assert module._fmt_entrega("  2026-07-20T00:00:00  ") == "20/07/2026"
+    assert module._fmt_entrega("data-invalida") == "—"
+
+    msg = module.build_message(
+        {"rows": [_row_mensagem(CODIGO_REDUZIDO_CRU=None, NOME_CLIENTE='LOJA "X"\nA')]}
+    )
+    assert "Red. —" in msg
+    assert '"' not in msg
+
+
+def _capturar_desenhos_card(
+    module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    rows: list[dict[str, Any]],
+    out_path: Path,
+) -> list[tuple[float, float, str, Any]]:
+    desenhos: list[tuple[float, float, str, Any]] = []
+    orig_text = module.ImageDraw.ImageDraw.text
+
+    def spy_text(
+        self: Any,
+        xy: tuple[float, float],
+        text: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        desenhos.append((xy[0], xy[1], text, kwargs.get("font")))
+        return orig_text(self, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(module.ImageDraw.ImageDraw, "text", spy_text)
+    module.build_card_image({"rows": rows}, str(out_path))
+    return desenhos
+
+
+def test_format_message_anti_colisao_restricoes_longas_e_centralizacao(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    rows = [
+        _row_mensagem(
+            NUMERO_OB="193362-EXTREMO-1234567890",
+            CODIGO_ARTIGO_CRU="ARTIGO_SUPER_LONGO_0123456789ABCDEFGH",
+            CODIGO_REDUZIDO_CRU="99999999999999",
+            RESTRICOES_DISPONIVEIS=[
+                {"codigo": 3, "descricao": "CORES CLARAS EXTRA LONGA"},
+                {"codigo": 4, "descricao": "BRANCO ALVEJADO ESPECIAL"},
+            ],
+            QTD_PECAS_ALOCADAS=10,
+            QTD_PECAS_FALTANTES=40,
+        )
+    ]
+    desenhos = _capturar_desenhos_card(
+        module, monkeypatch, rows, tmp_path / "card_colisao.png"
+    )
+
+    with Image.new("RGB", (module.CARD_W, 100)) as probe:
+        draw = module.ImageDraw.Draw(probe)
+        acao_item = next(item for item in desenhos if "usar " in item[2])
+        ob_item = next(item for item in desenhos if item[2].startswith("OB "))
+        ob_bbox = draw.textbbox((ob_item[0], ob_item[1]), ob_item[2], font=ob_item[3])
+        assert ob_bbox[2] <= acao_item[0] - module.COL_GAP
+
+        for r_item in [item for item in desenhos if "Restr." in item[2]]:
+            assert r_item[2].strip() not in {"·  Restr. …", "· Restr. …", "Restr. …"}
+            rb = draw.textbbox((r_item[0], r_item[1]), r_item[2], font=r_item[3])
+            assert rb[2] <= acao_item[0] - module.COL_GAP
+
+        assert (
+            module._fit_prefixed_detail(
+                draw, "  ·  Restr. ", "4 — BRANCO", ob_item[3], 65
+            )
+            == ""
+        )
+
+        header_item = next(item for item in desenhos if "DEPÓSITO 95" in item[2])
+        hb = draw.textbbox(
+            (header_item[0], header_item[1]), header_item[2], font=header_item[3]
+        )
+        assert abs(hb[1] - (module.HEADER_H - hb[3])) <= 2
+
+
+def test_format_message_teto_altura_e_legenda(tmp_path: Path) -> None:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    rows = [
+        _row_mensagem(
+            NUMERO_OB=2000 + i,
+            NOME_CLIENTE=f'CR-LOJA "ORB"\nFILIAL {i}',
+            QTD_PECAS_ALOCADAS=20,
+            QTD_PECAS_FALTANTES=30,
+        )
+        for i in range(100)
+    ]
+    msg = module.build_message({"rows": rows})
+    assert '"' not in msg
+    assert "… e mais " in msg
+    assert len(msg) <= module.MAX_MESSAGE_CHARS
+
+    out_path = tmp_path / "card_teto.png"
+    module.build_card_image({"rows": rows}, str(out_path))
+    with Image.open(out_path) as img:
+        assert img.height < 4800
+
+
+def test_format_message_main_exit_codes_e_escrita_atomica(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    result_file = tmp_path / "orb_result.json"
+    message_file = tmp_path / "message.txt"
+    card_file = tmp_path / "card.png"
+    monkeypatch.setattr(module, "RESULT_FILE", str(result_file))
+    monkeypatch.setattr(module, "MESSAGE_FILE", str(message_file))
+    monkeypatch.setattr(module, "CARD_FILE", str(card_file))
+    monkeypatch.setattr(module.sys, "argv", ["format_message.py", "TESTE"])
+
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 1
+
+    result_file.write_text('["nao-objeto"]', encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 1
+
+    result_file.write_text('{"rows": []}', encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 2
+
+    fechamentos: list[bool] = []
+    orig_exit = module.Image.Image.__exit__
+
+    def spy_exit(self: Any, *args: Any) -> Any:
+        fechamentos.append(True)
+        return orig_exit(self, *args)
+
+    monkeypatch.setattr(module.Image.Image, "__exit__", spy_exit)
+    result_file.write_text(json.dumps({"rows": [_row_mensagem()]}), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 0
+    assert fechamentos == [True]
+    assert message_file.exists() and message_file.stat().st_size > 0
+    assert card_file.exists() and card_file.stat().st_size > 0
+    assert not (tmp_path / "message.txt.tmp").exists()
+    assert not (tmp_path / "card.png.tmp").exists()
+
+    def falha_replace(_src: str, _dst: str) -> None:
+        raise OSError("disco cheio")
+
+    monkeypatch.setattr(module.os, "replace", falha_replace)
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 1
+    assert not (tmp_path / "message.txt.tmp").exists()
+    assert not (tmp_path / "card.png.tmp").exists()
 
 
 # --------------------------------------------------------------------------
@@ -1883,8 +2109,8 @@ def test_ob_parcial_ja_avisada_nao_e_reanunciada_no_ciclo_seguinte() -> None:
 
 
 def test_build_message_status_parcial_explica_o_complemento() -> None:
-    """A Montagem precisa ler, no bloco, que aquela OB não fecha só com peça
-    restrita — senão o '✅ Pronta para montagem' seria falso."""
+    """A Montagem precisa ler, na linha, que aquela OB não fecha só com peça
+    restrita — quantas com restrição e quantas sem restrição completar."""
     module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
     msg = module.build_message(
         {
@@ -1901,15 +2127,13 @@ def test_build_message_status_parcial_explica_o_complemento() -> None:
         }
     )
     assert (
-        "Status: ⚠️ Montagem parcial — usar as 5 peças com restrição e "
-        "completar as 50 restantes com peças sem restrição" in msg
+        "• *OB 185719* (Art. 489 · Red. 26) — 55 pçs → usar 5 restr. + 50 s/ restr."
+        in msg
     )
-    assert "✅" not in msg
+    assert "Completa" not in msg
 
 
-def test_build_message_status_parcial_concorda_no_singular() -> None:
-    """Saldo de uma peça só é o caso comum (o piso para notificar é 1): a
-    primeira mensagem em produção com a regra nova saiu com "usar as 1 peças"."""
+def test_build_message_status_parcial_formata_quantidades_unitarias() -> None:
     module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
     msg = module.build_message(
         {
@@ -1923,10 +2147,7 @@ def test_build_message_status_parcial_concorda_no_singular() -> None:
             ]
         }
     )
-    assert (
-        "usar a 1 peça com restrição e completar as 49 restantes "
-        "com peças sem restrição" in msg
-    )
+    assert "50 pçs → usar 1 restr. + 49 s/ restr." in msg
 
     unica_faltante = module.build_message(
         {
@@ -1940,10 +2161,7 @@ def test_build_message_status_parcial_concorda_no_singular() -> None:
             ]
         }
     )
-    assert (
-        "usar as 49 peças com restrição e completar a 1 restante "
-        "com peças sem restrição" in unica_faltante
-    )
+    assert "50 pçs → usar 49 restr. + 1 s/ restr." in unica_faltante
 
 
 def test_build_message_status_integral_quando_nada_falta() -> None:
@@ -1957,8 +2175,8 @@ def test_build_message_status_integral_quando_nada_falta() -> None:
             ]
         }
     )
-    assert "Status: ✅ Pronta para montagem" in msg
-    assert "Montagem parcial" not in msg
+    assert "50 pçs → usar 50 restr. (Completa)" in msg
+    assert "s/ restr." not in msg
 
 
 def test_build_message_subtitulo_conta_completas_e_parciais() -> None:
@@ -2155,7 +2373,7 @@ def test_build_message_status_parcial_diz_que_o_complemento_existe() -> None:
             ]
         }
     )
-    assert "com peças sem restrição (disponíveis no depósito)" in msg
+    assert "55 pçs → usar 53 restr. + 2 s/ restr." in msg
 
 
 # --------------------------------------------------------------------------
@@ -2267,3 +2485,153 @@ def test_extract_ainda_aborta_quando_ha_dado_realmente_quebrado(
     assert excinfo.value.code == 1
     assert not (tmp_path / "orb_state.json.tmp").exists()
     assert state_file.read_text(encoding="utf-8") == state_original
+
+
+def _preparar_format_tmp(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[ModuleType, Path, Path, Path, Path]:
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    result_file = tmp_path / "orb_result.json"
+    message_file = tmp_path / "message.txt"
+    card_file = tmp_path / "card.png"
+    manifest_file = tmp_path / "cards_manifest.json"
+    monkeypatch.setattr(module, "RESULT_FILE", str(result_file))
+    monkeypatch.setattr(module, "MESSAGE_FILE", str(message_file))
+    monkeypatch.setattr(module, "CARD_FILE", str(card_file))
+    monkeypatch.setattr(module, "CARDS_MANIFEST_FILE", str(manifest_file))
+    monkeypatch.setattr(module.sys, "argv", ["format_message.py", "TESTE-PAG"])
+    return module, result_file, message_file, card_file, manifest_file
+
+
+def test_format_message_pagina_em_lote_sem_truncamento(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Acima de 15 OBs, gera multiplos cards PNG (`card_01.png`..) e manifesto sem perder OBs."""
+    module, result_file, message_file, card_file, manifest_file = _preparar_format_tmp(
+        monkeypatch, tmp_path
+    )
+    card_file.write_bytes(b"stale")
+    message_file.write_text("stale", encoding="utf-8")
+    (tmp_path / "card_99.png").write_bytes(b"stale")
+
+    rows = [_row_mensagem(NUMERO_OB=2001 + i) for i in range(32)]
+    result_file.write_text(json.dumps({"rows": rows}), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 0
+
+    assert not card_file.exists()
+    assert not message_file.exists()
+    assert not (tmp_path / "card_99.png").exists()
+
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    assert len(manifest) == 3
+    assert [len(p["ob_ids"]) for p in manifest] == [15, 15, 2]
+    assert [p["phase_key"] for p in manifest] == ["page_01", "page_02", "page_03"]
+
+    collected_ids: list[str] = []
+    for entry in manifest:
+        img_path = tmp_path / entry["image_path"]
+        assert img_path.exists() and img_path.stat().st_size > 0
+        with Image.open(img_path) as img:
+            assert img.width == module.CARD_W
+            assert img.height <= 932
+        assert "… e mais " not in entry["caption"]
+        assert len(entry["caption"]) <= module.MAX_MESSAGE_CHARS
+        for ob_id in entry["ob_ids"]:
+            assert ob_id in entry["caption"]
+        collected_ids.extend(entry["ob_ids"])
+
+    assert collected_ids == [str(2001 + i) for i in range(32)]
+
+
+def test_format_message_divide_pagina_por_limite_de_caracteres(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Se as legendas ultrapassarem MAX_MESSAGE_CHARS antes de 15 OBs, quebra sem truncar."""
+    module, result_file, _, _, manifest_file = _preparar_format_tmp(
+        monkeypatch, tmp_path
+    )
+    monkeypatch.setattr(module, "MAX_MESSAGE_CHARS", 420)
+    rows = [_row_mensagem(NUMERO_OB=3001 + i) for i in range(8)]
+    result_file.write_text(json.dumps({"rows": rows}), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 0
+
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    assert len(manifest) >= 2
+    assert all(len(entry["caption"]) <= 420 for entry in manifest)
+    all_ids = [ob_id for entry in manifest for ob_id in entry["ob_ids"]]
+    assert all_ids == [str(3001 + i) for i in range(8)]
+
+
+def test_format_message_remove_cards_paginados_ao_voltar_para_uma_pagina(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ao cair de >15 para <=15 OBs, remove card_*.png antigos e restaura card.png/message.txt."""
+    module, result_file, message_file, card_file, manifest_file = _preparar_format_tmp(
+        monkeypatch, tmp_path
+    )
+    result_file.write_text(
+        json.dumps({"rows": [_row_mensagem(NUMERO_OB=4001 + i) for i in range(16)]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit) as exc_multi:
+        module.main()
+    assert exc_multi.value.code == 0
+    assert (tmp_path / "card_01.png").exists()
+    assert (tmp_path / "card_02.png").exists()
+
+    result_file.write_text(
+        json.dumps({"rows": [_row_mensagem(NUMERO_OB=5001 + i) for i in range(2)]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit) as exc_single:
+        module.main()
+    assert exc_single.value.code == 0
+
+    assert card_file.exists() and message_file.exists()
+    assert not (tmp_path / "card_01.png").exists()
+    assert not (tmp_path / "card_02.png").exists()
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    assert len(manifest) == 1
+    assert manifest[0]["image_path"] == "card.png"
+    assert manifest[0]["ob_ids"] == ["5001", "5002"]
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {},
+        {"NUMERO_OB": ""},
+        {"NUMERO_OB": "   ", "ob": None, "id_ob": ""},
+    ],
+)
+def test_extract_ob_id_lanca_value_error_sem_identificador(row: dict[str, Any]) -> None:
+    """card_pagination.extract_ob_id deve falhar explicitamente quando nao houver ID de OB."""
+    card_pagination = _load_module(
+        "card_pagination", ROOT / "lib" / "python" / "card_pagination.py"
+    )
+    with pytest.raises(ValueError, match="OB"):
+        card_pagination.extract_ob_id(row)
+
+
+def test_card_render_sanitize_text_e_monkeypatch_max_chars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Modulo compartilhado card_render expoe sanitize_text e ORB preserva monkeypatch de MAX_MESSAGE_CHARS."""
+    card_render = _load_module(
+        "card_render", ROOT / "lib" / "python" / "card_render.py"
+    )
+    assert card_render.sanitize_text('  linha\n\t"limpa"  ') == "linha 'limpa'"
+    assert card_render.sanitize_text(None) == "—"
+
+    module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
+    rows = [_row_mensagem(NUMERO_OB=6001 + i) for i in range(6)]
+    monkeypatch.setattr(module, "MAX_MESSAGE_CHARS", 260)
+    msg = module.build_message({"rows": rows})
+    assert len(msg) <= 260
+    assert "… e mais" in msg

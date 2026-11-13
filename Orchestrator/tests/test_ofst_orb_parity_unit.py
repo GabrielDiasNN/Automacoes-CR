@@ -248,18 +248,19 @@ def test_ambos_tem_o_bloco_de_reconciliacao_de_state_no_run_ps1() -> None:
         assert (
             "$StateTmp" in conteudo and "$StateFile" in conteudo
         ), f"{nome}: run.ps1 nao declara $StateTmp/$StateFile"
-        assert "$pyResult.Idempotent" in conteudo, (
+        assert "if ($pyResult.Idempotent)" in conteudo, (
             f"{nome}: run.ps1 perdeu o ramo de reconciliacao idempotente "
-            "($pyResult.Idempotent) que faz Move-Item $StateTmp $StateFile"
+            "(if ($pyResult.Idempotent)) que faz Move-Item $StateTmp $StateFile"
         )
         # Presenca de `Move-Item $StateTmp $StateFile` no arquivo NAO basta:
         # os dois run.ps1 tem DUAS ocorrencias (o ramo idempotente e o caminho
         # de sucesso normal). Uma assercao de substring global fica verde com o
         # bloco do ramo idempotente inteiro removido -- ou seja, com a correcao
-        # do achado 2 desfeita. E preciso ancorar dentro do ramo.
-        corpo_idempotente = conteudo.split("$pyResult.Idempotent", 1)[1].split("}", 1)[
-            0
-        ]
+        # do achado 2 desfeita. E preciso ancorar na abertura do ramo `if`, pois
+        # `$pyResult.Idempotent` tambem e lido antes em `$extractOk`.
+        corpo_idempotente = conteudo.split("if ($pyResult.Idempotent)", 1)[1].split(
+            "}", 1
+        )[0]
         assert "Move-Item $StateTmp $StateFile" in corpo_idempotente, (
             f"{nome}: o ramo $pyResult.Idempotent nao reconcilia mais "
             "$StateTmp em $StateFile via Move-Item -- e esse bloco, e nao "

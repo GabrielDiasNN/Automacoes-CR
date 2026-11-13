@@ -10,7 +10,7 @@ Registrada no Orchestrator central (`id=5`, `catalog_id=OFST-06`, `enabled=true`
 
 Checklist de ativação (ver runbook) 100% concluído:
 
-1. [x] `OFST_WHATSAPP_TARGET` encontrado (`554796989039-1616873564@g.us`, via `LIST_GROUPS`) e gravado no `.env` **local desta máquina**. Como `.env` não é versionado, **quem fizer o deploy em outra máquina precisa gravar essa mesma linha lá** — não é algo que "já vem pronto" com o clone do repo.
+1. [x] `OFST_WHATSAPP_TARGET` encontrado (`<id-do-grupo>@g.us` do grupo _Expedição Tinturaria_, via `LIST_GROUPS`) e gravado no `.env` **local desta máquina**. Como `.env` não é versionado, **quem fizer o deploy em outra máquina precisa gravar essa mesma linha lá** — não é algo que "já vem pronto" com o clone do repo.
 2. [x] Janela do cron confirmada com o Gabriel: `05:00–20:00`, Seg–Sáb — ver decisão D4.
 3. [x] Renomeação + filtro de pedido comercial + artigo cru na mensagem (ver "Renomeação e novo escopo" abaixo).
 4. [x] `test_ofst_simulation.py` rodado múltiplas vezes ao longo do dia contra Oracle real, sem fan-out.
@@ -28,18 +28,18 @@ Na mesma leva, dois pedidos de negócio foram incorporados à query principal:
 1. **Filtro de pedido comercial**: excluir OBs cujo `PEDIDOCLIENTE` (`SGTPRD.PEDIDOCOMERCIAL`) termina em `R` ou `S`. Ver decisão D7.
 2. **Artigo cru na mensagem**: além do reduzido (`CODIGO_REDUZIDO_CRU`, já existente), a mensagem agora informa o artigo cru (`CODIGO_ARTIGO_CRU`, de `SGTPRD.ENGEITEMESTOARTCRU.CDARTIGOCRU`). Ver decisão D8.
 
-A mensagem WhatsApp também mudou de formato: quantidade agora é reportada em **peças** (não mais "un"), o número da OB vem em **negrito**, e o corpo lista Artigo + Reduzido em vez de só "Peça (Reduzido)". Ver `format_message.py`.
+A mensagem WhatsApp também mudou de formato: em 16/07/2026 passou a reportar peças em vez de "un" e listar Artigo + Reduzido; em 13/11/2026 `format_message.py` (com `lib/python/card_pagination.py`) passou a paginar as OBs em **cards visuais PNG** (`MAX_OBS_PER_PAGE = 15`, `Pillow` com fontes TrueType `Arial`/`DejaVuSans` e fallback proporcional) sem truncar OBs: gera `card.png` + `message.txt` em 1 página (`AUTO`, legenda repassada via arquivo temporário `HUB_WA_CAPTION_FILE` em `Send-WhatsApp.ps1`) ou `card_01.png`..`card_NN.png` + `cards_manifest.json` em lote (`-Mode BATCH` com `Lib-WhatsAppBatch.psm1`). Cada card traz OB, Artigo, Reduzido, Filial, Entrega e ação de montagem com legenda pesquisável pelo número da OB. Campos de auditoria (`Estoque disponível` bruto e `Status` verboso) ficam apenas em `ofst_result.json`. No `run.ps1`, a automação usa lock nomeado `-LockKey "OFST-06"`, `Invoke-LogRotation -KeepDays 15`, delegação exclusiva do cleanup de Chrome ao `Send-WhatsApp.ps1` e remoção dos ramos mortos `40`/`23`/`22`. Ver `format_message.py`.
 
 ## Validação real (16/07/2026)
 
 Rodado com acesso direto ao Oracle de produção (`SRVDB02:1521/dbprd`), não apenas lido do spec:
 
 - **O spec errou os nomes de coluna/join.** `SGTPRD.OB` não tem coluna `ID` — a PK é `NUMERO_OB`. `SGTPRD.PEDPRODUCAOOB` não tem `ID_OB` — a FK para a OB é `NUMEROOB` (sem underscore). As queries, `validators.py`, `extract_ofst.py`, `format_message.py` e os testes já usam os nomes reais; se reintroduzir `ID`/`ID_OB` em qualquer lugar, a query falha com `ORA-00904`.
-- **Cardinalidade OB→OB_PRODUTO→PEDPRODUCAOOB confirmada 1:1, sem fan-out real.** Não duplica linhas para fluxo 204/status 1 (checado com `GROUP BY ... HAVING COUNT(*) > 1`, zero ocorrências). Na query de estoque, `IDPECASPRODUTO`/`NUMERO_FINALIDADE`/`CODIGO_REDUZIDO` são PK das tabelas do lado direito dos joins, então a cardinalidade é 1:1 por construção — o otimizador confirma isso via *join elimination* do acesso a `ITENS_ESTOQUE` (ver plano de execução no cabeçalho de `SQL-EstoqueDeposito95.sql`). `QTD_PECAS_DISPONIVEIS` e `QTD_LINHAS_BRUTAS` deram idênticos em todos os testes.
+- **Cardinalidade OB→OB_PRODUTO→PEDPRODUCAOOB confirmada 1:1, sem fan-out real.** Não duplica linhas para fluxo 204/status 1 (checado com `GROUP BY ... HAVING COUNT(*) > 1`, zero ocorrências). Na query de estoque, `IDPECASPRODUTO`/`NUMERO_FINALIDADE`/`CODIGO_REDUZIDO` são PK das tabelas do lado direito dos joins, então a cardinalidade é 1:1 por construção — o otimizador confirma isso via _join elimination_ do acesso a `ITENS_ESTOQUE` (ver plano de execução no cabeçalho de `SQL-EstoqueDeposito95.sql`). `QTD_PECAS_DISPONIVEIS` e `QTD_LINHAS_BRUTAS` deram idênticos em todos os testes.
 - **`ENGEITEMESTOARTCRU` (artigo cru) confirmado 1:1 sem nulos** para 1293 OBs históricas de fluxo 204 (mesma amostragem da decisão D7/D8).
 - **Planos de execução sem full table scan**, custo baixo (19 para a query de OBs, 6 para a de estoque com 2 códigos), usando os índices existentes (`OB_INDOB_DTENTRPEDIDO`, `OB_PROD_PK_OB_PRODUTO`, `PPRODUOB_IND_OB_NUMERO`, `GRPCPROD_INDPECASPRODUTOSIT`). Nenhum índice novo foi necessário.
 - **`extract_ofst.py` e `test_ofst_simulation.py` rodaram de ponta a ponta** contra produção em múltiplas rodadas ao longo do dia — a contagem de OBs varia entre execuções porque a produção real muda em tempo real (OBs são montadas, novas são emitidas). Isso é esperado: não fixar um número de OBs como "o valor correto" em runbooks ou testes de integração manual.
-- **Grupo WhatsApp "Expedição Tinturaria" encontrado** via `LIST_GROUPS`, inicialmente contornando um bug de serialização em `client.getChats()` do whatsapp-web.js (mesma classe de problema do CHANGELOG [1.1.7] para `sendMessage`) com um script de leitura descartável. O bug foi depois corrigido de vez em `lib/WhatsApp-Core.js` v2.8.1 (ver CHANGELOG [1.2.0]) — o comando documentado no README volta a funcionar sem workaround.
+- **Grupo WhatsApp "Expedição Tinturaria" encontrado** via `LIST_GROUPS`. Em versões 1.34.7+ do `whatsapp-web.js`, `window.Store` foi removido e `getChats()`/`Collections` podem lançar `r: r`/`t: t` na serialização; em `lib/WhatsApp-Core.js`, `LIST_GROUPS` tenta o método padrão com timeout curto e faz fallback automático para captura de eventos de protocolo (`LIST_GROUPS_CAPTURE_MS`).
 
 ## Decisões
 
@@ -63,7 +63,7 @@ A query devolve `QTD_PECAS_DISPONIVEIS` (distinct, autoritativo) **e** `QTD_LINH
 
 `ofst_state.json` guarda IDs de OB já notificados; só OB nova entra na mensagem. O state é podado para conter apenas OBs ainda notificáveis (OB montada sai da query e some do state; se voltar a ficar pendente, avisa de novo).
 
-**Por quê:** o padrão hash-de-lote do OBP-04 não serve aqui. Com execução a cada 60 min e estoque flutuando, o hash mudaria sozinho e a mesma OB seria reavisada de hora em hora.
+**Por quê:** o padrão hash-de-lote do OBP-04 não serve aqui. Com execução recorrente (hoje a cada 120 min) e estoque flutuando ao longo do dia, o hash mudaria sozinho e a mesma OB seria reavisada em seguida.
 
 O commit do state é do `run.ps1` (`.tmp` → final) e **só após envio confirmado** — falha de WhatsApp nunca engole um aviso.
 
@@ -121,9 +121,9 @@ PEDPRODUCAOOB -> OFORDENS (NUMEROPEDPRODUCAO+REDUZIDO)
 
 ### D8 — Artigo cru via `SGTPRD.ENGEITEMESTOARTCRU`, mesmo padrão de Receitas Emitidas/OBs Paradas Fase
 
-O Gabriel pediu para informar "Artigo Cru" na mensagem, ao lado do reduzido já existente. `SGTPRD.ENGEITEMESTOARTCRU.CDARTIGOCRU` (join por `CDREDUZIDO = CODIGO_REDUZIDO_CRU`) é o mesmo campo já usado em `Receitas Emitidas/SQL-ReceitasEmitidas.sql` (`ART.CDARTIGOCRU AS ARTIGO`) e `OBs Paradas Fase/SQL-ObsParadasFase.sql` (`TRIM(MAX(ART.CDARTIGOCRU)) AS CD_ARTIGO`). Validado contra o exemplo real do Gabriel: OB 181323, reduzido 152 → `CDARTIGOCRU='00489'` (a automação usa `int()` na coerção, que descarta os zeros à esquerda automaticamente → `489`, batendo com o exemplo).
+O Gabriel pediu para informar "Artigo Cru" na mensagem, ao lado do reduzido já existente. `SGTPRD.ENGEITEMESTOARTCRU.CDARTIGOCRU` (join por `CDREDUZIDO = CODIGO_REDUZIDO_CRU`) é o mesmo campo já usado em `Receitas Emitidas/SQL-ReceitasEmitidas.sql` (`ART.CDARTIGOCRU AS ARTIGO`) e `OBs Paradas Fase/SQL-ObsParadasFase.sql` (`TRIM(MAX(ART.CDARTIGOCRU)) AS CD_ARTIGO`). Validado contra o exemplo real do Gabriel: OB 181323, reduzido 152 → `CDARTIGOCRU='00489'`.
 
-Confirmado 1:1 sem nulos nas 1293 OBs históricas de fluxo 204 — tratado como campo obrigatório em `coerce_ob_row` (mesmo padrão dos demais campos), não como opcional.
+Como o campo é texto no Oracle e pode trazer valores alfanuméricos em produção (`'0A231'`), `coerce_ob_row` trata `CODIGO_ARTIGO_CRU` como **texto opcional** (`str | None`), preservando OB sem cadastro (`'—'`) e sem coagir para inteiro na entrada. A remoção de zeros à esquerda apenas quando composto somente por dígitos ASCII acontece somente na camada de apresentação (`format_message._fmt_artigo`: `'00489'` → `'489'`, `'0A231'` permanece `'0A231'`).
 
 ## Armadilhas conhecidas
 

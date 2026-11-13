@@ -35,7 +35,21 @@ $script:SkipPathFragments = @(
     # Arquivos de estado runtime gerados pelo Orchestrator (ignorados pelo .gitignore)
     "email_state.json",
     "receitas_state.json",
-    "delivery_state.json"
+    "delivery_state.json",
+    "ofst_state.json",
+    "orb_state.json",
+    "obs_state.json",
+    "obs_seen_state.json",
+    "ofst_result.json",
+    "orb_result.json",
+    "obs_result.json",
+    "rb_result.json",
+    "re_result.json",
+    "cards_manifest.json",
+    "batch_input.json",
+    "batch_result.json",
+    "OBs Fluxo Sem Tingimento\message.txt",
+    "OBs Restricao Branco\message.txt"
 )
 
 function Convert-ToRelativePath {
