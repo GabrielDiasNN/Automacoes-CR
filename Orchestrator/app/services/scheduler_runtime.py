@@ -596,13 +596,27 @@ def register_enterprise_jobs(retention_days: int) -> None:
 
 def _live_interval_seconds(name: str, default: int) -> int:
     raw = os.environ.get(name)
-    if raw is None:
+    if raw is None or not raw.strip():
         return default
     try:
         value = int(raw)
     except ValueError:
+        logger.warning(
+            "Intervalo inválido em %s=%r; usando padrão de %ds.",
+            name,
+            raw,
+            default,
+        )
         return default
-    return value if value > 0 else default
+    if value <= 0:
+        logger.warning(
+            "Intervalo não positivo em %s=%r; usando padrão de %ds.",
+            name,
+            raw,
+            default,
+        )
+        return default
+    return value
 
 
 def register_beneficiamento_live_jobs() -> None:
@@ -619,19 +633,29 @@ def register_beneficiamento_live_jobs() -> None:
         "BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS", 600
     )
 
+    # Primeira execução logo após subir (escalonada: diário em 60 s, mensal em 180 s):
+    # IntervalTrigger só dispara depois de um intervalo inteiro (com mensal em 24 h,
+    # cada reinício adiaria o dado um dia), e escalonar evita disputa simultânea no
+    # Oracle/fila SMB e no lock de escrita do SQLite histórico.
+    agora = datetime.now(scheduler.timezone)
+    primeira_execucao_diario = agora + timedelta(seconds=60)
+    primeira_execucao_mensal = agora + timedelta(seconds=180)
+
     scheduler.add_job(
         lambda: run_beneficiamento_refresh("diario"),
-        IntervalTrigger(seconds=diario_interval),
+        IntervalTrigger(seconds=diario_interval, timezone=scheduler.timezone),
         id="beneficiamento_live_diario",
+        next_run_time=primeira_execucao_diario,
         replace_existing=True,
         max_instances=1,
         coalesce=True,
-        misfire_grace_time=30,
+        misfire_grace_time=120,
     )
     scheduler.add_job(
         lambda: run_beneficiamento_refresh("mensal"),
-        IntervalTrigger(seconds=mensal_interval),
+        IntervalTrigger(seconds=mensal_interval, timezone=scheduler.timezone),
         id="beneficiamento_mensal_rollup",
+        next_run_time=primeira_execucao_mensal,
         replace_existing=True,
         max_instances=1,
         coalesce=True,

@@ -5,10 +5,18 @@
 O refresh deixou de ser batch espaçado e passou a ser um loop contínuo curto
 gerenciado pelo Orquestrador (APScheduler):
 
-- **Diário**: reprocessado a cada ~90s (`BENEFICIAMENTO_LIVE_INTERVAL_SECONDS`).
-  É o que torna o dashboard "ao vivo": o write-through mantém o SQLite e o
+- **Diário**: reprocessado a cada 30 min (`BENEFICIAMENTO_LIVE_INTERVAL_SECONDS=1800`
+  no `.env`; padrão do código: 90 s). O write-through mantém o SQLite e o
   `diario.analytics.json` frescos, e os GETs do dashboard leem do SQLite.
-- **Mensal**: reprocessado a cada ~10min (`BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS`).
+- **Mensal**: reprocessado 1 vez por dia (`BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS=86400`;
+  padrão do código: 600 s).
+- **Ao subir o Orquestrador**: os jobs rodam de forma escalonada após o início (diário em
+  60 s e mensal em 180 s, evitando disputa simultânea no Oracle e no SQLite) e então
+  seguem o intervalo (um `IntervalTrigger` sozinho só dispararia após um intervalo inteiro).
+- **Validade do snapshot** (`max_age_minutes` em `settings.py`): derivada
+  automaticamente de `BENEFICIAMENTO_LIVE_INTERVAL_SECONDS` e
+  `BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS` com folga mínima de 15 min (ou ~1/12 do
+  intervalo): com `1800` s e `86400` s resulta em **45 min** (diário) e **1560 min / 26 h** (mensal).
 - **On-demand**: `POST /api/beneficiamento/refresh?period=diario|mensal` ("Atualizar agora").
 - **Períodos descontinuados**: `semanal` e `anual` foram removidos.
 

@@ -30,7 +30,7 @@ from oracle_queue import (  # noqa: E402
 )
 
 TIMEOUT = 110
-VERSAO_ESPERADA = os.environ.get("WORKER_VERSAO", "2.5.4")
+VERSAO_ESPERADA = os.environ.get("WORKER_VERSAO", "2.5.6")
 resultados: list[tuple[str, bool]] = []
 
 
@@ -67,6 +67,12 @@ def espera(sql: str, exc: type[OracleQueueError], kind: str) -> str:
 
 
 print("Fila:", get_queue_dir())
+try:
+    _arquivos_previos = {
+        f for f in os.listdir(get_queue_dir()) if f.lower().startswith(("req_", "res_"))
+    }
+except OSError:
+    _arquivos_previos = set()
 
 
 @caso(f"worker v{VERSAO_ESPERADA} respondendo")
@@ -158,9 +164,9 @@ def _() -> str:
     dt = datetime(2026, 11, 8, 17, 5, 9)
     r = q(
         "SELECT :N AS N, :S AS S, :D AS D, :Z AS Z FROM DUAL",
-        {"N": -1.5, "S": "ação, \"x\"", "D": dt, "Z": None},
+        {"N": -1.5, "S": 'ação, "x"', "D": dt, "Z": None},
     )
-    assert r.rows == [(-1.5, "ação, \"x\"", dt, None)], r.rows
+    assert r.rows == [(-1.5, 'ação, "x"', dt, None)], r.rows
     return str(r.rows[0])
 
 
@@ -224,12 +230,14 @@ if "--bench" in sys.argv:
         caso(f"volume {volume} linhas (melhor de 3)")(partial(_bench_volume, volume))
 
 
-@caso("fila limpa ao final (sem req_/res_ sobrando)")
+@caso("fila limpa ao final (sem req_/res_ novos sobrando)")
 def _() -> None:
     time.sleep(1.5)
-    sobra = [
-        f for f in os.listdir(get_queue_dir()) if f.lower().startswith(("req_", "res_"))
-    ]
+    sobra = sorted(
+        f
+        for f in os.listdir(get_queue_dir())
+        if f.lower().startswith(("req_", "res_")) and f not in _arquivos_previos
+    )
     assert not sobra, sobra
 
 

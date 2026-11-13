@@ -2,6 +2,22 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.111] - 13/11/2026
+
+Endurecimento do scheduler live de `Produção Beneficimento`, timeout de escrita no SQLite, alinhamento dinâmico de `max_age_minutes` e ajuste da conferência final do E2E da fila Oracle.
+
+### Corrigido
+
+- **`Orchestrator/app/services/scheduler_runtime.py`**: escalonamento da inicialização dos jobs live (`beneficiamento_live_diario` em `+60s`, `beneficiamento_live_mensal` em `+180s`), propagação de `timezone=scheduler.timezone` nos `IntervalTrigger`, `misfire_grace_time=120` no job diário e aviso em log quando variáveis de intervalo tiverem valor inválido ou não positivo.
+- **`Produção Beneficimento/src/beneficiamento/data/schema.py` e `writer.py`**: definição explícita de `SQLITE_TIMEOUT_SECONDS = 15.0` e `PRAGMA busy_timeout=15000` (`SQLITE_BUSY_TIMEOUT_MS`) para reduzir contenção de escrita concorrente no SQLite.
+- **`Produção Beneficimento/src/beneficiamento/settings.py`**: cálculo dinâmico de `max_age_minutes` em `get_period_config` a partir de `BENEFICIAMENTO_LIVE_INTERVAL_SECONDS` e `BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS` com margem `max(15, ceil(intervalo / 12))`, e aviso em `_int_env` para valores inválidos.
+- **`Tools/oracle/teste_e2e_fila_oracle.py`**: restrição da asserção `"fila limpa ao final"` para falhar apenas com novos arquivos `req_*`/`res_*` criados durante a execução do teste, ignorando resíduos pré-existentes.
+
+### Documentação e Testes
+
+- **`.env.example`, `Produção Beneficimento/CONTEXT.md` e `Produção Beneficimento/docs/runbook-refresh.md`**: documentação das variáveis de intervalo live, inicialização escalonada e `max_age_minutes` dinâmico.
+- **`Orchestrator/tests/test_scheduler_runtime_unit.py` e `Orchestrator/tests/test_beneficiamento_unit.py`**: inclusão de 4 testes unitários cobrindo intervalos inválidos, escalonamento/timezone do scheduler, `PRAGMA busy_timeout` e derivação dinâmica de `max_age_minutes`.
+
 ## [1.3.110] - 09/11/2026
 
 Padronização dos seis `run.ps1` e do `_Template/run.ps1`, validada com as automações rodando pelo Orchestrator contra o worker real (v2.5.4). Mudanças só de formato foram conferidas por comparação de tokens do PowerShell (idênticos aos originais).

@@ -298,3 +298,41 @@ def test_compute_health_status_has_explicit_precedence() -> None:
     assert status is HealthStatus.ATTENTION
     assert reason == "snapshot_missing"
     assert action == "Executar refresh."
+
+
+def test_get_period_config_deriva_max_age_do_ambiente(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from beneficiamento.settings import (  # pylint: disable=import-outside-toplevel
+        get_period_config,
+    )
+
+    monkeypatch.delenv("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", raising=False)
+    monkeypatch.delenv("BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS", raising=False)
+    assert get_period_config("diario").max_age_minutes == 17
+    assert get_period_config("mensal").max_age_minutes == 25
+
+    monkeypatch.setenv("BENEFICIAMENTO_LIVE_INTERVAL_SECONDS", "1800")
+    monkeypatch.setenv("BENEFICIAMENTO_MENSAL_INTERVAL_SECONDS", "86400")
+    assert get_period_config("diario").max_age_minutes == 45
+    assert get_period_config("mensal").max_age_minutes == 1560
+
+
+def test_apply_pragmas_define_busy_timeout(tmp_path: Path) -> None:
+    from types import SimpleNamespace  # pylint: disable=import-outside-toplevel
+    from typing import cast  # pylint: disable=import-outside-toplevel
+
+    from beneficiamento.data.schema import (  # pylint: disable=import-outside-toplevel
+        SQLITE_BUSY_TIMEOUT_MS,
+        apply_pragmas,
+        init_db,
+    )
+
+    executed: list[str] = []
+    fake_conn = cast(Any, SimpleNamespace(execute=executed.append))
+    apply_pragmas(fake_conn)
+
+    assert f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS};" in executed
+    # Garante tambem em conexao real via init_db que o PRAGMA e aceito pelo SQLite.
+    db = init_db(tmp_path / "h.db")
+    assert db.exists()
