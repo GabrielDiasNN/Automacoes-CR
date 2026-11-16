@@ -12,7 +12,6 @@ chega pelo worker como `OracleQueueError` genérico.
 
 # lib/python entra no sys.path pelo `pythonpath` do pytest.ini.
 import pytest
-
 from oracle_extract import classify_oracle_exit_code, enforce_queue_deadline
 from oracle_queue import (
     OracleQueueBlockedError,
