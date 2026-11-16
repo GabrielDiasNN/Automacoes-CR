@@ -1,4 +1,3 @@
-# pylint: disable=line-too-long, broad-exception-caught, import-error, wrong-import-position
 # {
 #   "version": "1.2.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
@@ -17,6 +16,7 @@ sys.path.insert(
 from automation_log import ensure_utf8_streams, make_logger
 from oracle_extract import (
     OracleCredentials,
+    classify_oracle_exit_code,
     compute_hash,
     fetch_all,
     init_thick_mode,
@@ -106,10 +106,13 @@ def extract() -> None:
 
     except CircuitBreakerError:
         log("Circuit Breaker aberto: falhas persistentes no Oracle.", "ERROR", exec_id)
+        # Breaker aberto é falha transitória: exit 1 deixa o Invoke-OraclePythonScript
+        # repetir com espera.
         sys.exit(1)
-    except Exception as e:
+    # Residual: fronteira de processo; falha fora das classificadas sairia como traceback sem o log `Erro fatal na extracao` e sem a linha ERROR no log estruturado que a triagem lê; o exit code de exceção não classificada seria 1 de qualquer forma, mas OracleQueueError e TimeoutError precisam passar por classify_oracle_exit_code (5/6/7; TimeoutError genérico vira 1, só OracleQueueTimeoutError vira 7).
+    except Exception as e:  # pylint: disable=broad-exception-caught
         log(f"Erro fatal na extracao: {e}", "ERROR", exec_id)
-        sys.exit(1)
+        sys.exit(classify_oracle_exit_code(e))
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess  # nosec B404 - execução controlada de script próprio do projeto
+import subprocess
 
 from .. import schemas
 from ..security import ENV_MASK_PLACEHOLDER
@@ -43,7 +43,7 @@ def sync_global_test_mode_env(enabled: bool, project_root: str) -> bool:
         comando.append("-Remover")
 
     try:
-        subprocess.run(  # nosec B603 - argv fixo, sem shell
+        subprocess.run(
             comando,
             env=build_subprocess_env(),
             timeout=_SYNC_TIMEOUT_SECONDS,
@@ -56,7 +56,9 @@ def sync_global_test_mode_env(enabled: bool, project_root: str) -> bool:
             _SYNC_TIMEOUT_SECONDS,
         )
         return False
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except (subprocess.CalledProcessError, OSError, ValueError) as exc:
+        # CalledProcessError: script saiu com erro (check=True); OSError:
+        # powershell.exe ausente; ValueError: argumento inválido para o exec.
         logger.error("Erro ao sincronizar variavel AUTOMACAO_TEST_EMAIL: %s", exc)
         return False
 

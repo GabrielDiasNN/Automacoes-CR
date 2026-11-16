@@ -17,19 +17,19 @@ sys.path.insert(
     ),
 )
 
-from beneficiamento.core.coercion import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento.core.coercion import (
     round_or_zero,
     safe_text,
     to_float,
 )
-from beneficiamento.core.metrics import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento.core.metrics import (
     time_efficiency,
     weighted_average,
 )
-from beneficiamento.core.schema import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento.core.schema import (
     first_present,
 )
-from beneficiamento.core.shifts import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento.core.shifts import (
     normalize_shift,
 )
 

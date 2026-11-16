@@ -16,8 +16,8 @@ sys.path.insert(
     ),
 )
 
-import oracle_extract  # noqa: E402  pylint: disable=wrong-import-position
-from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position
+import oracle_extract
+from oracle_extract import (
     OracleCredentials,
     _extrair_host_porta_dsn,
     _registrar_saude_wan,

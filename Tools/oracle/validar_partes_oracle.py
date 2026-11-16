@@ -20,23 +20,22 @@ from typing import Any
 import oracledb
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lib" / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from guard_sql import verificar_objetos  # noqa: E402
-from oracle_catalog import (  # noqa: E402
+from guard_sql import verificar_objetos
+from oracle_catalog import (
     _raise_if_expired,
     _run_with_timeout,
     log_avisos_stderr,
 )
-from oracle_extract import (  # noqa: E402
+from oracle_extract import (
     connect_from_creds,
     init_thick_mode,
     resolve_oracle_credentials,
 )
-from oracle_session import connect_within, is_session_drop  # noqa: E402
-from validar_sql_oracle import (  # noqa: E402
+from oracle_session import connect_within, is_session_drop
+from validar_sql_oracle import (
     GUARD_LIBERADO,
     GUARD_OUTPUT_MAX_CHARS,
     _guard_texto,
@@ -44,6 +43,8 @@ from validar_sql_oracle import (  # noqa: E402
     portable_command,
     resolve_guard,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
 
 VALIDATOR_VERSION = "2.1.0"
 

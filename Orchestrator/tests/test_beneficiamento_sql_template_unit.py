@@ -9,7 +9,7 @@ _SRC_ROOT = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from beneficiamento import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento import (
     settings,
 )
 

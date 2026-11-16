@@ -1,4 +1,7 @@
-# pylint: disable=import-outside-toplevel,import-error,broad-exception-caught
+# RESIDUAL (import-outside-toplevel): os pacotes OpenTelemetry sao opcionais e so
+# sao importados quando OTEL_ENABLED=true; o import tardio e o contrato (testes
+# injetam modulos em sys.modules antes de chamar setup_telemetry).
+# pylint: disable=import-outside-toplevel
 """
 OpenTelemetry — setup opt-in do Orchestrator (3.3/Fase 3).
 
@@ -46,7 +49,12 @@ def setup_telemetry(app: Any) -> bool:
         return False
 
     try:
-        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+        try:
+            from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+        except ImportError as exc:
+            # Mesmo tratamento do bloco externo: falha de configuracao, nao de rota.
+            logger.error("Falha ao configurar OpenTelemetry: %s", exc)
+            return False
 
         resource = Resource(
             attributes={
@@ -93,7 +101,12 @@ def setup_telemetry(app: Any) -> bool:
 
         return True
 
-    except Exception as exc:
+    # Residual: setup_telemetry e chamado sem try externo no import de main.py
+    # (startup da API). A configuracao do SDK e do exporter OTLP e de terceiros e
+    # pode levantar tipos nao enumeraveis; se escapasse, a API nao subiria por
+    # causa de um recurso opcional (OTEL_ENABLED). Fixado por
+    # tests/test_telemetry_unit.py::test_setup_telemetry_excecao_generica_retorna_false_com_log_erro.
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Falha ao configurar OpenTelemetry: %s", exc)
         return False
 

@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { usePolling, type PollingOptions, type PollingState } from "./usePolling";
 
 /** Fetch sob demanda com cancelamento real — reaproveita toda a lógica já
@@ -19,10 +18,8 @@ export function useAsyncResource<T>(
   deps: unknown[] = [],
   options: PollingOptions = {},
 ): PollingState<T | null> {
-  const wrapped = useCallback(
-    (signal?: AbortSignal) => (fetcher ? fetcher(signal) : Promise.resolve(null)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps do chamador entram como array dinâmico (spread); fetcher já está explícito
-    [fetcher, ...deps],
-  );
+  // `usePolling` lê o fetcher por ref a cada chamada, então este wrapper não
+  // precisa de identidade estável (e memoizá-lo exigiria spread em deps).
+  const wrapped = (signal?: AbortSignal) => (fetcher ? fetcher(signal) : Promise.resolve(null));
   return usePolling<T | null>(wrapped, 0, deps, options);
 }

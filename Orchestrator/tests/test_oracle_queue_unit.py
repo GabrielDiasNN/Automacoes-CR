@@ -6,6 +6,7 @@ falha transitória entra no retry, resposta órfã é limpa, SQL nunca é altera
 silêncio e binds ambíguos são recusados.
 """
 
+import json
 import os
 import sys
 import threading
@@ -22,18 +23,22 @@ _SRC_BENEF = _REPO / "Produção Beneficimento" / "src"
 if str(_SRC_BENEF) not in sys.path:
     sys.path.insert(0, str(_SRC_BENEF))
 
-import oracle_queue  # noqa: E402  pylint: disable=wrong-import-position
-from beneficiamento import (  # noqa: E402  pylint: disable=wrong-import-position
+import oracle_extract
+import oracle_queue
+from beneficiamento import (
     oracle as benef_oracle,
 )
-from oracle_queue import (  # noqa: E402  pylint: disable=wrong-import-position
+from carregadores_modulos import acessar_privado
+from oracle_queue import (
     OracleQueueBlockedError,
     OracleQueueError,
     OracleQueueTransientError,
+    QueueRequestOptions,
     QueueResult,
+    build_queue_payload,
     execute_query,
 )
-from oracle_retry import (  # noqa: E402  pylint: disable=wrong-import-position
+from oracle_retry import (
     make_oracle_retry,
 )
 
@@ -75,16 +80,39 @@ def test_execute_query_ida_e_volta_com_binds(tmp_path: Path) -> None:
     finally:
         parar.set()
     assert r.columns == ["UM", "TXT"] and r.rows == [(1, "a")] and r.worker == "2.4.0"
-    assert recebidos[0].startswith("--#param:TXT=s:a%u00E7%u00E3o\n")
+    assert "--#param:TXT=s:a%u00E7%u00E3o\n" in recebidos[0]
+    assert recebidos[0].index("--#ttl:") < recebidos[0].index("--#param:")
     assert not list(tmp_path.iterdir()), "fila deve ficar limpa"
 
 
 def test_timeout_remove_pedido_nao_atendido(tmp_path: Path) -> None:
-    with pytest.raises(TimeoutError):
+    with pytest.raises(oracle_queue.OracleQueueWorkerOfflineError):
         execute_query(
             "SELECT 1 FROM DUAL", timeout_seconds=0.1, queue_dir=str(tmp_path)
         )
     assert not list(tmp_path.glob("req_*")), "pedido não atendido deve ser apagado"
+
+
+def test_timeout_quando_reivindicado_sem_resposta_levanta_timeout_error(
+    tmp_path: Path,
+) -> None:
+    parar = threading.Event()
+
+    def reivindicar_sem_responder() -> None:
+        while not parar.is_set():
+            for req in tmp_path.glob("req_*.sql"):
+                req.replace(req.with_suffix(".proc"))
+                return
+            time.sleep(0.01)
+
+    threading.Thread(target=reivindicar_sem_responder, daemon=True).start()
+    try:
+        with pytest.raises(TimeoutError):
+            execute_query(
+                "SELECT 1 FROM DUAL", timeout_seconds=0.15, queue_dir=str(tmp_path)
+            )
+    finally:
+        parar.set()
 
 
 def test_res_orfa_velha_e_apagada_e_recente_preservada(
@@ -97,7 +125,7 @@ def test_res_orfa_velha_e_apagada_e_recente_preservada(
     recente.write_bytes(b"x")
     antigo = time.time() - oracle_queue.ORPHAN_MAX_AGE_SECONDS - 60
     os.utime(velha, (antigo, antigo))
-    oracle_queue._sweep_orphans(str(tmp_path))  # pylint: disable=protected-access
+    acessar_privado(oracle_queue, "_sweep_orphans")(str(tmp_path))
     assert not velha.exists() and recente.exists()
 
 
@@ -130,10 +158,10 @@ def test_varredura_roda_no_maximo_uma_vez_por_intervalo(
     monkeypatch.setattr(oracle_queue, "_last_sweep", {})
     velha = tmp_path / "res_velha.csv"
     antigo = time.time() - oracle_queue.ORPHAN_MAX_AGE_SECONDS - 60
-    oracle_queue._sweep_orphans(str(tmp_path))  # pylint: disable=protected-access
+    acessar_privado(oracle_queue, "_sweep_orphans")(str(tmp_path))
     velha.write_bytes(b"x")
     os.utime(velha, (antigo, antigo))
-    oracle_queue._sweep_orphans(str(tmp_path))  # pylint: disable=protected-access
+    acessar_privado(oracle_queue, "_sweep_orphans")(str(tmp_path))
     assert velha.exists(), "segunda varredura dentro do intervalo não deve rodar"
 
 
@@ -162,7 +190,7 @@ def test_classificacao_dos_erros(
     resposta: bytes, classe: type[OracleQueueError], kind: str
 ) -> None:
     with pytest.raises(classe) as exc:
-        oracle_queue._parse_response(resposta)  # pylint: disable=protected-access
+        acessar_privado(oracle_queue, "_parse_response")(resposta)
     assert exc.value.kind == kind
     if classe is OracleQueueError:
         assert not isinstance(exc.value, OracleQueueTransientError)
@@ -181,23 +209,23 @@ def test_classificacao_dos_erros(
 def test_serial_ole_segue_a_especificacao_nos_dois_sentidos(
     serial: str, esperado: datetime
 ) -> None:
-    # pylint: disable-next=protected-access
-    assert oracle_queue._to_datetime(serial) == esperado
-    # pylint: disable-next=protected-access
-    codificado = oracle_queue._encode_param("D", esperado).split("=d:")[1]
+    assert acessar_privado(oracle_queue, "_to_datetime")(serial) == esperado
+    codificado = acessar_privado(oracle_queue, "_encode_param")("D", esperado).split(
+        "=d:"
+    )[1]
     assert abs(float(codificado) - float(serial)) < 1e-9
 
 
 def test_binds_que_colidem_na_caixa_sao_recusados() -> None:
     with pytest.raises(ValueError, match="repetidos"):
-        # pylint: disable-next=protected-access
-        oracle_queue._encode_params({"a": 1, "A": 2})
+        acessar_privado(oracle_queue, "_encode_params")({"a": 1, "A": 2})
 
 
 def test_datetime_com_fuso_e_recusado() -> None:
     with pytest.raises(TypeError, match="fuso"):
-        # pylint: disable-next=protected-access
-        oracle_queue._encode_param("D", datetime(2026, 1, 1, tzinfo=UTC))
+        acessar_privado(oracle_queue, "_encode_param")(
+            "D", datetime(2026, 1, 1, tzinfo=UTC)
+        )
 
 
 def test_prazo_da_extracao_vem_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -233,14 +261,15 @@ def test_share_fora_do_ar_na_espera_vira_falha_transitoria(
 def test_soluco_de_rede_na_espera_nao_derruba_a_consulta(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    original = oracle_queue._try_take  # pylint: disable=protected-access
+    original = acessar_privado(oracle_queue, "_try_take")
     falhas = iter([OSError("solucao"), OSError("solucao")])
 
     def instavel(path: str) -> bytes | None:
         falha = next(falhas, None)
         if falha is not None:
             raise falha
-        return original(path)
+        resultado: bytes | None = original(path)
+        return resultado
 
     monkeypatch.setattr(oracle_queue, "_try_take", instavel)
     parar = threading.Event()
@@ -257,13 +286,12 @@ def test_soluco_de_rede_na_espera_nao_derruba_a_consulta(
 def test_fetch_all_na_fila_usa_prazo_configurado(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import oracle_extract  # pylint: disable=import-outside-toplevel
 
     capturado: dict[str, Any] = {}
 
     def falso(sql: str, timeout_seconds: float, params: Any = None) -> QueueResult:
         capturado.update(sql=sql, timeout=timeout_seconds, params=params)
-        return QueueResult(columns=["X"], types=["number"], rows=[(1,)], row_count=1)
+        return QueueResult(columns=["X"], types=["number"], rows=[(1,)])
 
     monkeypatch.setenv("ORACLE_DRIVER_MODE", "queue")
     monkeypatch.setenv(oracle_queue.QUEUE_TIMEOUT_ENV, "600")
@@ -305,7 +333,6 @@ def test_retry_das_extracoes_nao_repete_erro_de_sql() -> None:
 
 
 def test_init_thick_mode_registra_modo_queue(monkeypatch: pytest.MonkeyPatch) -> None:
-    import oracle_extract  # pylint: disable=import-outside-toplevel
 
     mensagens: list[str] = []
     monkeypatch.setenv("ORACLE_DRIVER_MODE", "queue")
@@ -335,3 +362,250 @@ def test_beneficiamento_repete_falha_transitoria_da_fila(
         "SELECT 1 X FROM DUAL", wall_clock_budget_seconds=30
     )
     assert result.metadata["attempts"] == 2
+
+
+def test_check_worker_liveness_le_heartbeat_fresco_e_velho(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(oracle_queue, "_check_unc_port_reachable", lambda *_a: True)
+    hb = tmp_path / "_worker_heartbeat.json"
+    hb.write_text(
+        json.dumps({"version": "2.6.1", "state": "idle", "oracle_ok": True}),
+        encoding="utf-8",
+    )
+    fresco = oracle_queue.check_worker_liveness(str(tmp_path), probe_signal_seconds=0.0)
+    assert fresco["alive"] is True
+    assert fresco["version"] == "2.6.1"
+    assert fresco["oracle_ok"] is True
+
+    antigo = time.time() - 120.0
+    os.utime(hb, (antigo, antigo))
+    velho = oracle_queue.check_worker_liveness(str(tmp_path), probe_signal_seconds=0.0)
+    assert velho["alive"] is False
+
+
+def test_execute_query_falha_rapido_quando_heartbeat_offline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        oracle_queue,
+        "check_worker_liveness",
+        lambda *_a, **_k: {
+            "reachable": True,
+            "alive": False,
+            "source": "heartbeat",
+            "age_seconds": 120.0,
+            "state": "idle",
+        },
+    )
+    with pytest.raises(oracle_queue.OracleQueueWorkerOfflineError):
+        execute_query(
+            "SELECT 1 FROM DUAL",
+            timeout_seconds=10,
+            queue_dir=str(tmp_path),
+        )
+    assert not list(tmp_path.iterdir())
+
+
+def test_strip_sql_comments_preserva_hints_e_literais_unicode() -> None:
+    sql = "-- cabeçalho ≥\n/* comentário → */\nSELECT /*+ INDEX(T IDX) */ '-- manter' FROM DUAL"
+    limpo = oracle_queue.strip_sql_comments(sql)
+    assert "≥" not in limpo
+    assert "→" not in limpo
+    assert "/*+ INDEX(T IDX) */" in limpo
+    assert "'-- manter'" in limpo
+
+
+def test_classify_oracle_exit_code_mapeia_worker_timeout_bloqueio() -> None:
+
+    assert (
+        oracle_extract.classify_oracle_exit_code(
+            oracle_queue.OracleQueueWorkerOfflineError("worker", "offline")
+        )
+        == 6
+    )
+    # Prazo da fila com worker vivo: 7. TimeoutError genérico (Bridge/thick/auto): 1.
+    assert (
+        oracle_extract.classify_oracle_exit_code(
+            oracle_queue.OracleQueueTimeoutError("timeout fila")
+        )
+        == 7
+    )
+    assert oracle_extract.classify_oracle_exit_code(TimeoutError("timeout fila")) == 1
+    assert (
+        oracle_extract.classify_oracle_exit_code(
+            oracle_queue.OracleQueueBlockedError("blocked", "DELETE")
+        )
+        == 5
+    )
+    assert oracle_extract.classify_oracle_exit_code(RuntimeError("outro")) == 1
+
+
+def test_cleanup_requests_for_exec_id_remove_somente_correspondentes(
+    tmp_path: Path,
+) -> None:
+    alvo = tmp_path / "req_123_abc.sql"
+    alvo.write_text("--#meta:exec_id=EXEC_99\nSELECT 1 FROM DUAL", encoding="utf-8")
+    outro = tmp_path / "req_124_def.sql"
+    outro.write_text("--#meta:exec_id=EXEC_OTHER\nSELECT 1 FROM DUAL", encoding="utf-8")
+
+    removidos = oracle_queue.cleanup_requests_for_exec_id("EXEC_99", str(tmp_path))
+    assert removidos == 1
+    assert not alvo.exists()
+    assert outro.exists()
+
+
+def test_get_queue_timeout_deadline_expirado_e_restante_curto(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(oracle_queue.QUEUE_TIMEOUT_ENV, raising=False)
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() - 5))
+    with pytest.raises(TimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"):
+        oracle_queue.get_queue_timeout()
+
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() + 1.2))
+    restante = oracle_queue.get_queue_timeout()
+    assert 0.5 <= restante <= 1.3
+
+
+def test_apply_queue_deadline_sem_env_devolve_o_mesmo_valor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ORACLE_QUEUE_DEADLINE_EPOCH", raising=False)
+    assert oracle_queue.apply_queue_deadline(42.0) == 42.0
+
+
+def test_apply_queue_deadline_futuro_menor_limita(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() + 10))
+    restante = oracle_queue.apply_queue_deadline(300.0)
+    assert 9.0 < restante <= 10.0
+
+
+def test_apply_queue_deadline_futuro_maior_nao_aumenta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() + 1000))
+    assert oracle_queue.apply_queue_deadline(5.0) == 5.0
+
+
+def test_apply_queue_deadline_vencido_levanta_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() - 5))
+    with pytest.raises(TimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"):
+        oracle_queue.apply_queue_deadline(300.0)
+
+
+@pytest.mark.parametrize("valor", ["abc", "nan", "inf"])
+def test_apply_queue_deadline_invalido_e_ignorado(
+    monkeypatch: pytest.MonkeyPatch, valor: str
+) -> None:
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", valor)
+    assert oracle_queue.apply_queue_deadline(42.0) == 42.0
+
+
+def test_get_queue_timeout_mantem_comportamento_com_e_sem_prazo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(oracle_queue.QUEUE_TIMEOUT_ENV, raising=False)
+    monkeypatch.delenv("ORACLE_QUEUE_DEADLINE_EPOCH", raising=False)
+    assert oracle_queue.get_queue_timeout(default=7.0) == 7.0
+
+    monkeypatch.setenv(oracle_queue.QUEUE_TIMEOUT_ENV, "45")
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() + 1000))
+    assert oracle_queue.get_queue_timeout() == 45.0
+
+    monkeypatch.setenv(oracle_queue.QUEUE_TIMEOUT_ENV, "-1")
+    with pytest.raises(ValueError):
+        oracle_queue.get_queue_timeout()
+
+
+def test_fetch_all_queue_respeita_deadline_expirado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "queue")
+    monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() - 5))
+    monkeypatch.setattr(
+        oracle_queue,
+        "execute_query",
+        lambda *_a, **_k: pytest.fail("execute_query não deve rodar após deadline"),
+    )
+    creds = oracle_extract.OracleCredentials(
+        user="", password="", dsn="dbprd", client_lib="", tns_admin=None
+    )
+    with pytest.raises(TimeoutError):
+        oracle_extract.fetch_all(creds, "SELECT 1 FROM DUAL", "exec", lambda *_: None)
+
+
+def test_check_worker_liveness_heartbeat_expirado_nao_mascarado_por_proc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(oracle_queue, "_check_unc_port_reachable", lambda *_a: True)
+    hb = tmp_path / "_worker_heartbeat.json"
+    hb.write_text(
+        json.dumps({"version": "2.6.2", "state": "busy", "oracle_ok": True}),
+        encoding="utf-8",
+    )
+    antigo = time.time() - (oracle_queue.BUSY_HEARTBEAT_MAX_AGE_SECONDS + 30.0)
+    os.utime(hb, (antigo, antigo))
+    (tmp_path / "req_123_abc.proc").write_text("SELECT 1 FROM DUAL", encoding="utf-8")
+
+    info = oracle_queue.check_worker_liveness(str(tmp_path), probe_signal_seconds=0.0)
+    assert info["source"] == "heartbeat"
+    assert info["active_procs"] == 1
+    assert info["alive"] is False
+
+
+def test_cleanup_requests_for_exec_id_muitos_binds_colisao_e_fallback_exec_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HUB_EXEC_ID", raising=False)
+    monkeypatch.delenv("HUB_AUTOMATION", raising=False)
+    monkeypatch.setenv("EXEC_ID", "EXEC_9")
+
+    muitos_params = {f"P{i}": i for i in range(70)}
+    payload_9 = build_queue_payload(
+        "SELECT 1 FROM DUAL",
+        60.0,
+        muitos_params,
+        QueueRequestOptions(ttl_seconds=60),
+    )
+    assert payload_9.startswith("--#meta:exec_id=EXEC_9\n")
+    assert payload_9.index("--#meta:") < payload_9.index("--#param:")
+
+    req_9 = tmp_path / "req_100_aaa.sql"
+    req_9.write_text(payload_9, encoding="cp1252")
+    req_99 = tmp_path / "req_101_bbb.sql"
+    req_99.write_text("--#meta:exec_id=EXEC_99\nSELECT 1 FROM DUAL", encoding="cp1252")
+
+    removidos = oracle_queue.cleanup_requests_for_exec_id("EXEC_9", str(tmp_path))
+    assert removidos == 1
+    assert not req_9.exists()
+    assert req_99.exists()
+
+
+def test_strip_sql_comments_preserva_q_quote() -> None:
+    sql = "SELECT q'[texto -- ; /* literal */]' AS A, nq'!outro -- /* !' AS B FROM DUAL -- fim"
+    limpo = oracle_queue.strip_sql_comments(sql)
+    assert "q'[texto -- ; /* literal */]'" in limpo
+    assert "nq'!outro -- /* !'" in limpo
+    assert "-- fim" not in limpo
+
+
+def test_build_queue_payload_emite_max_rows_no_topo() -> None:
+    com_limite = build_queue_payload(
+        "SELECT 1 FROM DUAL",
+        30.0,
+        {"A": 1},
+        QueueRequestOptions(meta="exec_id=T1", max_rows=15),
+    )
+    assert "--#max_rows:15\n" in com_limite
+    assert com_limite.index("--#max_rows:15") < com_limite.index("--#param:A=")
+
+    sem_limite = build_queue_payload(
+        "SELECT 1 FROM DUAL", 30.0, options=QueueRequestOptions(max_rows=0)
+    )
+    assert "--#max_rows:" not in sem_limite

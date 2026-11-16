@@ -27,32 +27,47 @@ from typing import Any
 import oracledb
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lib" / "python"))
+# Só `sys.path` antes dos imports do repositório (qualquer outro comando aqui faria
+# os imports abaixo violarem o E402); ROOT vem logo depois deles.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from guard_sql import (  # noqa: E402
+from guard_sql import (
     canonical_guard_file,
     ler_veredito,
     so_chamada_de_funcao,
     verificar_objetos,
 )
-from oracle_catalog import (  # noqa: E402
+from oracle_catalog import (
     GuardError,
     log_avisos_stderr,
     sql_guard_text,
     strip_sql_comments,
 )
-from oracle_extract import (  # noqa: E402
+from oracle_extract import (
     connect_from_creds,
     init_thick_mode,
     resolve_oracle_credentials,
 )
-from oracle_session import (  # noqa: E402
+from oracle_queue import (
+    OracleQueueError,
+    OracleQueueTransientError,
+    OracleQueueWorkerOfflineError,
+)
+from oracle_queue_tools import (
+    QUEUE_MODE_SENTINEL,
+    executar_consulta_fila,
+    explicar_plano_fila,
+    usar_fila_oracle,
+    verificar_objetos_fila,
+)
+from oracle_session import (
     connect_within,
     is_session_drop,
     run_with_cancel,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
 
 # Fonte única do caminho do acervo de consultas: as demais ferramentas importam daqui.
 CONSULTAS_ROOT = ROOT / "docs" / "oracle-schema" / "consultas"
@@ -213,12 +228,20 @@ def _default_binds(sql: str) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for name in _bind_names(sql):
         upper = name.upper()
-        if upper in {"DT_INICIO", "DATA_INICIO", "DATA_INICIAL"}:
+        if upper in {"DT_INICIO", "DATA_INICIO", "DATA_INICIAL", "DT_INI"}:
             values[name] = now - timedelta(days=30)
         elif upper in {"DT_FIM", "DATA_FIM", "DATA_FINAL"}:
             values[name] = now
+        elif upper.startswith(("DT_", "DATA_")) or upper.endswith("_DATA"):
+            values[name] = now - timedelta(days=7)
         elif upper in {"NF_ENTRADA", "NUMERO_NOTA", "NOTA", "FILIAL", "IDPESSOAFJ"}:
             values[name] = 1 if upper in {"FILIAL", "IDPESSOAFJ"} else 35919
+        elif upper.startswith(("ST_", "TP_")) or upper in {
+            "STATUS",
+            "SITUACAO",
+            "TURNO",
+        }:
+            values[name] = "A"
         else:
             values[name] = 1
     return values
@@ -330,17 +353,17 @@ def _connect(creds: Any) -> Any:
     return connect_from_creds(creds)
 
 
-def _run_with_watchdog(  # pylint: disable=too-many-arguments
+def _run_with_watchdog(
     connection: Any,
     sql: str,
     timeout: float,
-    binds: dict[str, Any],
-    execute: bool = True,
+    binds: dict[str, Any] | None,
     *,
     consulta_verificacao: str | None = None,
 ) -> dict[str, Any]:
-    """Parseia e (se `execute`) roda o smoke; cancela a sessão se exceder o prazo.
+    """Parseia e, se `binds` não for None, roda o smoke; cancela a sessão se exceder o prazo.
 
+    `binds=None` pede só o parse (sem executar o SQL); um dict, mesmo vazio, pede o smoke.
     Antes do smoke, a `consulta_verificacao` do guard confere no catálogo se algum nome
     é função/pacote/tipo (função sem argumentos dispensa parênteses e o guard não a vê).
     """
@@ -353,7 +376,7 @@ def _run_with_watchdog(  # pylint: disable=too-many-arguments
         cursor.parse(sql)
         parse_ms = round((time.perf_counter() - started) * 1000, 1)
         result.update({"parse": "pass", "parse_ms": parse_ms})
-        if not execute:
+        if binds is None:
             return
         motivo = verificar_objetos(cursor, consulta_verificacao)
         if motivo is not None:
@@ -416,6 +439,127 @@ def _finish(result: dict[str, Any], started_clock: float) -> dict[str, Any]:
     return result
 
 
+def _oracle_smoke_queue(
+    sql: str, parse_ms: float, options: RunOptions
+) -> dict[str, Any]:
+    binds = _default_binds(sql)
+    binds.update({k: v for k, v in options.explicit_binds.items() if k in binds})
+    try:
+        res = executar_consulta_fila(
+            sql,
+            params=binds,
+            timeout=options.timeout,
+            meta={"exec_id": "VAL_SMOKE", "tool": "validar_sql_oracle"},
+            max_rows=1,
+        )
+        raw_db_ms = res.raw_meta.get("db_ms")
+        exec_ms = (
+            raw_db_ms
+            if raw_db_ms is not None
+            else (res.elapsed_ms if res.elapsed_ms is not None else 0.0)
+        )
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "pass",
+            "execute_ms": round(float(exec_ms), 1),
+            "rows": res.row_count,
+            "columns": len(res.columns),
+            "status": "validated",
+        }
+    except (OracleQueueWorkerOfflineError, TimeoutError) as exc:
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "timeout",
+            "status": "timeout",
+            "error": _error_summary(exc),
+        }
+    except OracleQueueTransientError:
+        # Repetida por `_oracle_stage_with_retry`, como queda de sessão.
+        raise
+    except OracleQueueError as exc:
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "error",
+            "status": "parse_ok_smoke_error",
+            "error": _error_summary(exc),
+        }
+
+
+def _verificar_objetos_stage_queue(
+    consulta: str | None, parse_ms: float, options: RunOptions
+) -> dict[str, Any] | None:
+    try:
+        motivo = verificar_objetos_fila(
+            consulta, timeout=options.timeout, exec_id="VAL_GUARD"
+        )
+    except (OracleQueueWorkerOfflineError, TimeoutError) as exc:
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "timeout",
+            "status": "timeout",
+            "error": _error_summary(exc),
+        }
+    except OracleQueueTransientError:
+        # Repetida por `_oracle_stage_with_retry`, como queda de sessão.
+        raise
+    except OracleQueueError as exc:
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "error",
+            "status": "parse_ok_smoke_error",
+            "error": _error_summary(exc),
+        }
+    if motivo is not None:
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "blocked_custom_function",
+            "error": motivo,
+            "status": "blocked_custom_function",
+        }
+    return None
+
+
+def _oracle_stage_queue(
+    sql: str,
+    guard_code: int,
+    options: RunOptions,
+    *,
+    consulta: str | None = None,
+) -> dict[str, Any]:
+    """Executa estágio parse/smoke pela fila SMB quando ORACLE_DRIVER_MODE=queue."""
+    try:
+        _, parse_ms = explicar_plano_fila(
+            sql, timeout=options.timeout, exec_id="VAL_PARSE"
+        )
+    except (OracleQueueWorkerOfflineError, TimeoutError) as exc:
+        return {"parse": "unknown", "status": "timeout", "error": _error_summary(exc)}
+    except OracleQueueTransientError:
+        # Repetida por `_oracle_stage_with_retry`, como queda de sessão.
+        raise
+    except OracleQueueError as exc:
+        return {"parse": "fail", "status": "oracle_error", "error": _error_summary(exc)}
+
+    if not options.execute or guard_code == GUARD_SO_PARSE:
+        blocked = guard_code == GUARD_SO_PARSE
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "blocked_custom_function" if blocked else "not_requested",
+            "status": "blocked_custom_function" if blocked else "parse_ok",
+        }
+
+    bloqueio = _verificar_objetos_stage_queue(consulta, parse_ms, options)
+    if bloqueio is not None:
+        return bloqueio
+    return _oracle_smoke_queue(sql, parse_ms, options)
+
+
 def _oracle_stage(
     sql: str,
     guard_code: int,
@@ -429,6 +573,8 @@ def _oracle_stage(
     `consulta` é a `consulta_verificacao` do guard: roda antes do smoke, e nome que
     seja função/pacote/tipo impede a execução (`blocked_custom_function`).
     """
+    if creds is QUEUE_MODE_SENTINEL:
+        return _oracle_stage_queue(sql, guard_code, options, consulta=consulta)
     connection = None
     abandoned = False
     try:
@@ -439,7 +585,7 @@ def _oracle_stage(
         # Conexão e execução dividem o mesmo `--timeout`, não um cada.
         remaining = options.timeout - (time.perf_counter() - started)
         if not options.execute or guard_code == GUARD_SO_PARSE:
-            outcome = _run_with_watchdog(connection, sql, remaining, {}, False)
+            outcome = _run_with_watchdog(connection, sql, remaining, None)
             abandoned = bool(outcome.pop("abandoned", False))
             if outcome.get("parse") != "pass":
                 # Smoke não foi pedido: não registrar falha de smoke.
@@ -496,27 +642,37 @@ def _oracle_stage_with_retry(
 ) -> dict[str, Any]:
     """`_oracle_stage` repetido com conexão nova em queda de sessão pela rede.
 
-    Só repete erro com marcador de queda (`SESSION_DROP_MARKERS`). Timeout de
+    Só repete erro com marcador de queda (`SESSION_DROP_MARKERS`) e, no modo queue,
+    `OracleQueueTransientError` (falha de transporte da fila SMB). Timeout de
     execução (consulta lenta) ou de conexão (sessão travada), sem marcador de queda,
     é DELIBERADAMENTE não retentado: prazo estourado não prova queda de rede, e
     retentar multiplicaria o prazo por arquivo (ver `DEFAULT_TIMEOUT`). Não mudar
     isso sem rever esse pior caso.
     """
     outcome: dict[str, Any] = {}
+    repetir = False
     for attempt in range(1, options.attempts + 1):
-        outcome = _oracle_stage(sql, guard_code, creds, options, consulta=consulta)
+        transitorio = False
+        try:
+            outcome = _oracle_stage(sql, guard_code, creds, options, consulta=consulta)
+        except OracleQueueTransientError as exc:
+            # Falha de transporte da fila (SMB inalcançável, resposta truncada): mesma
+            # repetição de queda de sessão, sem virar `parse: fail`.
+            transitorio = True
+            outcome = {"status": "timeout", "error": _error_summary(exc)}
         outcome["attempts"] = attempt
         error = str(outcome.get("error", ""))
         # A queda pode vir no parse (`error`), no smoke (`parse_ok_smoke_error`)
         # ou na conexão (`oracle_error`): decide pela mensagem, não pelo status.
-        if not is_session_drop(error):
+        repetir = transitorio or is_session_drop(error)
+        if not repetir:
             break
         if attempt < options.attempts:
             # Espera crescente: dá tempo para a rede voltar antes da nova sessão.
             time.sleep(RETRY_BACKOFF_SECONDS * attempt)
-    # Queda de rede esgotou as tentativas: o flag marca a queda na evidência, mas a
-    # rodada segue reprovada (exit 1), pois o status não está em PASSING_STATUSES.
-    if is_session_drop(str(outcome.get("error", ""))):
+    # Queda de rede (ou da fila) esgotou as tentativas: o flag marca a falha na evidência,
+    # mas a rodada segue reprovada (exit 1), pois o status não está em PASSING_STATUSES.
+    if repetir:
         outcome["network_inconclusive"] = True
     return outcome
 
@@ -669,11 +825,14 @@ def main() -> int:
         attempts=max(1, args.attempts),
     )
 
-    creds = resolve_oracle_credentials(_log, "validar-acervo-sql")
-    if creds is None:
-        print(json.dumps({"status": "credentials_unavailable"}, ensure_ascii=False))
-        return 2
-    init_thick_mode(creds, _log, "validar-acervo-sql")
+    if usar_fila_oracle():
+        creds: Any = QUEUE_MODE_SENTINEL
+    else:
+        creds = resolve_oracle_credentials(_log, "validar-acervo-sql")
+        if creds is None:
+            print(json.dumps({"status": "credentials_unavailable"}, ensure_ascii=False))
+            return 2
+        init_thick_mode(creds, _log, "validar-acervo-sql")
 
     if args.file is not None:
         paths = [_arquivo_dentro_da_raiz(args.file, args.root)]

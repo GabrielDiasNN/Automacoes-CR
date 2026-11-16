@@ -11,6 +11,14 @@ from app.schemas.executions import (
     ExecutionResponse,
     ExecutionSummary,
 )
+from pydantic import BaseModel
+from pydantic.fields import FieldInfo
+
+
+def _campos(modelo: type[BaseModel]) -> dict[str, FieldInfo]:
+    """Campos declarados do modelo (model_fields), tipados para leitura por nome."""
+    return dict(modelo.model_fields)
+
 
 OPERATOR_FIELDS = {
     "operator_attention_required",
@@ -55,10 +63,9 @@ def test_execution_response_e_summary_tem_o_mesmo_default_dos_campos_de_operador
 ):
     """Os defaults do mixin são os mesmos herdados pelas duas classes —
     garante que nenhuma delas sobrescreveu um default silenciosamente."""
-    # pylint: disable=unsubscriptable-object
     for field_name in OPERATOR_FIELDS:
-        default_response = ExecutionResponse.model_fields[field_name].default
-        default_summary = ExecutionSummary.model_fields[field_name].default
-        default_mixin = ExecutionOperatorFields.model_fields[field_name].default
+        default_response = _campos(ExecutionResponse)[field_name].default
+        default_summary = _campos(ExecutionSummary)[field_name].default
+        default_mixin = _campos(ExecutionOperatorFields)[field_name].default
         assert default_response == default_mixin
         assert default_summary == default_mixin

@@ -28,8 +28,8 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from oracle_session import is_session_drop  # noqa: E402
-from validar_sql_oracle import (  # noqa: E402
+from oracle_session import is_session_drop
+from validar_sql_oracle import (
     CONSULTAS_ROOT,
     _bind_names,
     content_sha256,

@@ -64,11 +64,16 @@ def test_mt02_fecha_a_telemetria_no_abort_do_preflight() -> None:
     """
     fonte = _run_ps1("Montagem de Terceirizados")
 
-    marcador = 'Write-Fim 9 "FALHA NO PRE-FLIGHT'
+    bloco_inicio = fonte.index("if (-not $preFlightOk)")
+    marcador = 'Write-Fim $pfCode "FALHA NO PRE-FLIGHT'
     assert marcador in fonte, "o ramo de abort do pré-flight mudou de forma"
 
-    inicio = fonte.index(marcador)
-    fim = fonte.index("exit 9", inicio)
+    inicio = fonte.index(marcador, bloco_inicio)
+    assert "Get-OraclePreFlightExitCode" in fonte[bloco_inicio:inicio], (
+        "o ramo if (-not $preFlightOk) do MT-02 precisa resolver o código via "
+        "Get-OraclePreFlightExitCode"
+    )
+    fim = fonte.index("exit $pfCode", inicio)
     ramo = fonte[inicio:fim]
 
     assert "Close-ExecutionTelemetry" in ramo, (
@@ -191,7 +196,7 @@ def test_orb_e_ofst_isolam_lock_batch_e_rotacao_sem_codigos_mortos(
     automacao: str, lock_key: str
 ) -> None:
     """Contrato Lote 2: lock nomeado por automacao, rotacao 15d ativa, sem
-    cleanup pre-Oracle de chrome.exe e sem ramos mortos 40/23/22."""
+    cleanup pre-Oracle de chrome.exe e sem ramos mortos 40/23."""
     fonte = _run_ps1(automacao)
 
     assert f'-LockKey "{lock_key}"' in fonte
@@ -202,7 +207,9 @@ def test_orb_e_ofst_isolam_lock_batch_e_rotacao_sem_codigos_mortos(
     assert "-Mode BATCH" in fonte
     assert "$waExit -eq 40" not in fonte
     assert "$waExit -eq 23" not in fonte
-    assert "22" not in re.findall(r"\$NonFailureCodes\s*=\s*@\(([^)]+)\)", fonte)[0]
+    non_failure = re.findall(r"\$NonFailureCodes\s*=\s*@\(([^)]+)\)", fonte)[0]
+    assert "22" in re.findall(r"\d+", non_failure)
+    assert "$waExit -eq 22" in fonte
 
     pos_lock = fonte.index("Enter-AutomationLock")
     pos_remove = fonte.index("Remove-Item $ResultFile")

@@ -4,13 +4,14 @@ import argparse
 import json
 import sys
 import threading
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import oracle_session
 import pytest
-from tests.carregadores_modulos import (
+from carregadores_modulos import (
     acessar_privado as _priv,
     carregar_tool_oracle as _carregar,
 )
@@ -243,9 +244,9 @@ def test_write_dump_serializa_tipos_nao_json(tmp_path: Path) -> None:
     assert payload["rows"][0]["D"] == "2026-09-29T08:30:00"
 
 
-class _TipoFalso:  # pylint: disable=too-few-public-methods
-    def __init__(self, nome: str) -> None:
-        self.name = nome
+@dataclass
+class _TipoFalso:
+    name: str
 
 
 class _CursorFalso:
@@ -268,9 +269,9 @@ class _CursorFalso:
         return None
 
 
-class _ConexaoFalsa:  # pylint: disable=too-few-public-methods
-    def __init__(self, cursor: _CursorFalso) -> None:
-        self._cursor = cursor
+@dataclass
+class _ConexaoFalsa:
+    _cursor: _CursorFalso
 
     def cursor(self) -> _CursorFalso:
         return self._cursor
@@ -323,7 +324,8 @@ def test_comparador_detecta_mudanca_na_primeira_coluna_duplicada(
 def test_explain_plan_negado_nao_derruba_a_medicao(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class Cursor:  # pylint: disable=too-few-public-methods
+    @dataclass
+    class Cursor:
         def execute(self, *_a: Any, **_k: Any) -> None:
             raise mm.oracledb.DatabaseError("ORA-01031: privilegios insuficientes")
 
@@ -407,7 +409,8 @@ def test_medir_nao_fecha_conexao_de_thread_abandonada(
 ) -> None:
     fechadas: list[bool] = []
 
-    class Conexao:  # pylint: disable=too-few-public-methods
+    @dataclass
+    class Conexao:
         def close(self) -> None:
             fechadas.append(True)
 
@@ -438,7 +441,8 @@ def test_validar_nao_fecha_conexao_de_thread_abandonada(
     vs = sys.modules["validar_sql_oracle"]
     fechadas: list[bool] = []
 
-    class Conexao:  # pylint: disable=too-few-public-methods
+    @dataclass
+    class Conexao:
         def close(self) -> None:
             fechadas.append(True)
 
@@ -470,7 +474,8 @@ def test_validar_parse_sem_execucao_respeita_o_prazo(
     vs = sys.modules["validar_sql_oracle"]
     liberar = threading.Event()
 
-    class Cursor:  # pylint: disable=too-few-public-methods
+    @dataclass
+    class Cursor:
         def parse(self, _sql: str) -> None:
             liberar.wait(timeout=5)
             raise RuntimeError("ORA-01013: cancelado")

@@ -4,14 +4,33 @@ Testes focados nas operações e endpoints de diagnóstico/informações do Sist
 
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import app.routers.system as system_router
 from app import models
 from app.constants import ORCHESTRATOR_CONTRACT_VERSION, ORCHESTRATOR_VERSION
+from app.main import (
+    SecurityHeadersMiddleware,
+)
+from app.middleware import (
+    RateLimitMiddleware,
+)
 from app.schemas import WorkerStatus
+from app.security import (
+    mask_env_content,
+)
+from app.services import system_runtime
+from app.services.system_diagnostics import (
+    build_runtime_checks,
+)
 from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
+from fastapi import FastAPI
+from fastapi.testclient import (
+    TestClient,
+)
+from sqlalchemy.exc import OperationalError
 
 
 def test_read_root(client: Any) -> None:
@@ -70,7 +89,6 @@ def test_health_nao_vaza_mensagem_de_excecao_do_banco() -> None:
     # Achado nº 4: `db_status = f"erro: {str(exc)}"` expunha o caminho absoluto
     # do .db num payload não autenticado. Agora o valor é fixo ("erro") e o
     # detalhe só vai para o logger interno.
-    from app.services import system_runtime  # pylint: disable=import-outside-toplevel
 
     class _QueryChain:
         def filter(self, *_a: Any, **_k: Any) -> "_QueryChain":
@@ -81,8 +99,12 @@ def test_health_nao_vaza_mensagem_de_excecao_do_banco() -> None:
 
     class _SessaoQuebrada:
         def execute(self, *_a: Any, **_k: Any) -> Any:
-            raise RuntimeError(
-                "unable to open database file: /caminho/secreto/automacoes.db"
+            raise OperationalError(
+                "SELECT 1",
+                {},
+                Exception(
+                    "unable to open database file: /caminho/secreto/automacoes.db"
+                ),
             )
 
         def query(self, *_a: Any, **_k: Any) -> "_QueryChain":
@@ -120,13 +142,6 @@ def test_resposta_429_do_rate_limit_recebe_headers_de_seguranca() -> None:
     # Achado #31: o 429 retorna sem chamar call_next; com SecurityHeaders como
     # camada interna ele saía sem CSP/X-Frame-Options. Reproduz a mesma ordem de
     # registro do main.py, com limite de 1 req/min.
-    from app.main import (  # pylint: disable=import-outside-toplevel
-        SecurityHeadersMiddleware,
-    )
-    from app.middleware import (  # pylint: disable=import-outside-toplevel
-        RateLimitMiddleware,
-    )
-    from fastapi import FastAPI  # pylint: disable=import-outside-toplevel
 
     app_teste = FastAPI()
 
@@ -136,10 +151,6 @@ def test_resposta_429_do_rate_limit_recebe_headers_de_seguranca() -> None:
 
     app_teste.add_middleware(RateLimitMiddleware, rpm=1)
     app_teste.add_middleware(SecurityHeadersMiddleware)
-
-    from fastapi.testclient import (  # pylint: disable=import-outside-toplevel
-        TestClient,
-    )
 
     with TestClient(app_teste) as c:
         primeira = c.get("/api/ping")
@@ -154,9 +165,6 @@ def test_resposta_429_do_rate_limit_recebe_headers_de_seguranca() -> None:
 def test_mask_env_content_mascara_apenas_chaves_sensiveis() -> None:
     # Achado #9: GET /env expunha o .env completo (credenciais Oracle e a
     # própria API Key) para qualquer portador da chave mestra.
-    from app.security import (  # pylint: disable=import-outside-toplevel
-        mask_env_content,
-    )
 
     original = (
         "# comentario\n"
@@ -566,11 +574,6 @@ def test_system_router_project_root_points_to_repo_root() -> None:
 
 
 def _queue_stalled_check(running_age_seconds: float) -> dict[str, Any]:
-    from types import SimpleNamespace  # pylint: disable=import-outside-toplevel
-
-    from app.services.system_diagnostics import (  # pylint: disable=import-outside-toplevel
-        build_runtime_checks,
-    )
 
     checks = build_runtime_checks(
         worker_status=WorkerStatus(is_alive=True),

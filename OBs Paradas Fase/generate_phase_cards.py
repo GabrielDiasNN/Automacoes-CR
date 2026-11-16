@@ -9,7 +9,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 # import-error e wrong-import-position: import de lib/python via sys.path.insert()
 # dinamico abaixo, que o pylint nao resolve em tempo de analise estatica.
-# pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
 #   "version": "1.8.0",
 #   "description": "Le obs_result.json + config.json, gera images PNG por fase e phase_cards.json"
@@ -25,7 +24,7 @@ sys.path.insert(
 # este arquivo dinamicamente via importlib e os acessa como module.<nome> — sem
 # o import ficariam ausentes.
 from automation_log import ensure_utf8_streams, make_logger
-from obp_config import (  # pylint: disable=unused-import  # noqa: F401
+from obp_config import (
     FaseConfig,
     _codigo_fase_key,
     _filter_obs,
@@ -40,6 +39,21 @@ from obp_config import (  # pylint: disable=unused-import  # noqa: F401
 )
 
 ensure_utf8_streams()
+
+# Reexportados de propósito: acessados como atributos do módulo pelos testes.
+__all__ = [
+    "FaseConfig",
+    "_codigo_fase_key",
+    "_filter_obs",
+    "_load_config",
+    "_load_contatos_from_env",
+    "_resolve_contato",
+    "fmt_dias",
+    "fmt_kg",
+    "get_fase_config",
+    "group_obs_by_phase",
+    "normalize_fase",
+]
 
 # Contrato unico de log (docs/logging-standard.md). O run.ps1 do OBP-04 invoca
 # este script com o ExecId como argv[1] e exporta HUB_* no ambiente; ate a
@@ -90,7 +104,10 @@ URGENCY_ICON_SIZE = 7
 URGENCY_ICON_W = 20
 
 
-def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+FonteCard = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+
+def _load_font(size: int, bold: bool = False) -> FonteCard:
     windir = os.environ.get("WINDIR", "C:/Windows")
     font_name = "arialbd.ttf" if bold else "arial.ttf"
     candidates = [
@@ -107,7 +124,7 @@ def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
             return font
         except OSError:
             continue
-    return ImageFont.load_default()  # type: ignore[return-value]
+    return ImageFont.load_default()
 
 
 def fmt_entrega(dt_entrega: Any) -> str:
@@ -126,7 +143,7 @@ def _draw_header(
     draw: ImageDraw.ImageDraw,
     phase_display: str,
     n_obs: int,
-    font: ImageFont.FreeTypeFont,
+    font: FonteCard,
 ) -> None:
     draw.rectangle([(0, 0), (CARD_W, HEADER_H)], fill=HEADER_COLOR)
     label = f"  {phase_display}  —  {n_obs} {'OB' if n_obs == 1 else 'OBs'} paradas"
@@ -207,7 +224,7 @@ def _draw_ob_row(  # pylint: disable=too-many-locals
     ob: dict[str, Any],
     i: int,
     threshold: float,
-    fonts: dict[str, ImageFont.FreeTypeFont],
+    fonts: dict[str, FonteCard],
 ) -> None:
     y0 = HEADER_H + i * OB_ROW_H
     if i > 0:
@@ -282,7 +299,7 @@ def _draw_footer(
     obs_fase: list[dict[str, Any]],
     threshold: float,
     n_obs: int,
-    font: ImageFont.FreeTypeFont,
+    font: FonteCard,
 ) -> None:
     footer_y = HEADER_H + n_obs * OB_ROW_H
     draw.rectangle([(0, footer_y), (CARD_W, footer_y + FOOTER_H)], fill=FOOTER_BG)
@@ -308,7 +325,7 @@ def build_phase_image(
     img_h = HEADER_H + OB_ROW_H * n_obs + FOOTER_H + PAD
     img = Image.new("RGB", (CARD_W, img_h), BG_COLOR)
     draw: ImageDraw.ImageDraw = ImageDraw.Draw(img)
-    fonts: dict[str, ImageFont.FreeTypeFont] = {
+    fonts: dict[str, FonteCard] = {
         "header": _load_font(22, bold=True),
         "ob": _load_font(13, bold=True),
         "produto": _load_font(12, bold=False),

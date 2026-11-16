@@ -175,6 +175,40 @@ def test_wakeup_para_ao_shutdown_event_set(
     mock_requests_worker["get"].assert_not_called()
 
 
+def test_wakeup_erro_inesperado_nao_mata_a_thread(
+    mock_requests_worker: dict[str, MagicMock], reset_worker_globals: None
+) -> None:
+    """Exceção fora de RequestException/ValueError espera o backoff e o loop segue."""
+    del reset_worker_globals
+    chamadas = 0
+
+    def _fake_get(*_args: Any, **_kwargs: Any) -> MagicMock:
+        nonlocal chamadas
+        chamadas += 1
+        if chamadas == 1:
+            raise RuntimeError("bug inesperado")
+        worker.shutdown_event.set()
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"status": "wakeup"}
+        return resp
+
+    mock_requests_worker["get"].side_effect = _fake_get
+
+    waits: list[float] = []
+
+    def _record_wait(timeout: float) -> bool:
+        waits.append(timeout)
+        return False
+
+    with patch.object(worker.shutdown_event, "wait", side_effect=_record_wait):
+        worker.wakeup_listener_loop()
+
+    assert chamadas == 2
+    assert waits == [5]
+    assert worker.wakeup_event.is_set()
+
+
 # ---------------------------------------------------------------------------
 # log_flusher_loop
 # ---------------------------------------------------------------------------

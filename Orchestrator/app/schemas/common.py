@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -101,7 +102,8 @@ def _validate_script_path(v: str) -> str:
     return v
 
 
-def _validate_schedule(v: str | None) -> str | None:
+def validate_schedule(v: str | None) -> str | None:
+    """Valida e normaliza o schedule (modo estrito); usado pelas rotas e schemas."""
     if not v:
         return None
     try:
@@ -114,6 +116,11 @@ def _validate_schedule(v: str | None) -> str | None:
 
     normalized = normalize_schedule_payload(obj, strict=True)
     return json.dumps(normalized, separators=(",", ":"))
+
+
+# Nome privado mantido como alias: schemas/automations.py e schemas/__init__.py
+# importam por este nome.
+_validate_schedule = validate_schedule
 
 
 def _validate_schedule_tolerant(v: str | None) -> str | None:
@@ -479,7 +486,7 @@ def _normalize_periodic_schedule(
     return _normalize_monthly_schedule(obj, base, strict, logger)
 
 
-def normalize_schedule_payload(  # pylint: disable=too-many-return-statements
+def normalize_schedule_payload(
     obj: dict[str, Any], strict: bool = True
 ) -> dict[str, Any]:
     logger = logging.getLogger("orchestrator.schemas")
@@ -521,12 +528,11 @@ def normalize_schedule_payload(  # pylint: disable=too-many-return-statements
         "timezone": timezone_name,
     }
 
-    if schedule_type == "manual":
-        return base
     if schedule_type == "cron":
         base["cron_expression"] = _normalize_cron_expression(
             obj.get("cron_expression"), strict, logger
         )
+    if schedule_type in {"manual", "cron"}:
         return base
     if schedule_type == "interval":
         return _normalize_interval_schedule(obj, base, strict, logger)
@@ -550,7 +556,87 @@ def parse_schedule(v: str | None) -> dict[str, Any] | None:
     return normalize_schedule_payload(obj, strict=False)
 
 
-def describe_schedule_payload(  # pylint: disable=too-many-return-statements
+_DAY_NAMES_PT: dict[int, str] = {
+    0: "Dom",
+    1: "Seg",
+    2: "Ter",
+    3: "Qua",
+    4: "Qui",
+    5: "Sex",
+    6: "Sáb",
+}
+
+
+def _describe_cron(schedule: dict[str, Any]) -> str:
+    expr = schedule.get("cron_expression", "")
+    if isinstance(expr, list):
+        return "Cron: " + "; ".join(expr)
+    return f"Cron: {expr}"
+
+
+def _describe_daily(schedule: dict[str, Any]) -> str:
+    times = schedule.get("times", [])
+    return "Diário às " + ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
+
+
+def _describe_weekly(schedule: dict[str, Any]) -> str:
+    days = schedule.get("days_of_week", [])
+    times = schedule.get("times", [])
+    day_label = (
+        ", ".join(_DAY_NAMES_PT.get(d, str(d)) for d in days)
+        if days
+        else "Todos os dias"
+    )
+    time_label = ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
+    return f"Semanal: {day_label} às {time_label}"
+
+
+def _describe_monthly(schedule: dict[str, Any]) -> str:
+    days = schedule.get("days_of_month", [])
+    times = schedule.get("times", [])
+    return f"Mensal dia(s) {', '.join(str(d) for d in days)} às " + ", ".join(
+        f"{t['h']:02d}:{t['m']:02d}" for t in times
+    )
+
+
+def _describe_interval(schedule: dict[str, Any]) -> str:
+    min_lbl = f"A cada {schedule.get('interval_minutes', 0)} min"
+    start_t = schedule.get("start_time")
+    end_t = schedule.get("end_time")
+    days = schedule.get("days_of_week")
+    anchor_t = schedule.get("anchor_time")
+
+    anchor_suffix = f", início da cadência às {anchor_t}" if anchor_t else ""
+
+    if start_t or end_t or days:
+        day_lbl = (
+            ", ".join(_DAY_NAMES_PT.get(d, str(d)) for d in days) if days else "Todos"
+        )
+        time_lbl = f"início {start_t or '00:00'}"
+        if end_t:
+            time_lbl += f", fim {end_t}"
+        return f"{min_lbl} ({day_lbl}, {time_lbl}{anchor_suffix})"
+
+    if anchor_t:
+        return f"{min_lbl} (início da cadência às {anchor_t})"
+    return min_lbl
+
+
+def _describe_once(schedule: dict[str, Any]) -> str:
+    return f"Execução única em {schedule.get('run_at', '-')}"
+
+
+_DESCRIBERS: dict[str, Callable[[dict[str, Any]], str]] = {
+    "cron": _describe_cron,
+    "daily": _describe_daily,
+    "weekly": _describe_weekly,
+    "monthly": _describe_monthly,
+    "interval": _describe_interval,
+    "once": _describe_once,
+}
+
+
+def describe_schedule_payload(
     schedule: dict[str, Any] | None,
 ) -> str:
     if not schedule:
@@ -558,72 +644,10 @@ def describe_schedule_payload(  # pylint: disable=too-many-return-statements
     stype = schedule.get("schedule_type")
     if stype == "manual":
         return "Manual"
-    if stype == "cron":
-        expr = schedule.get("cron_expression", "")
-        if isinstance(expr, list):
-            return "Cron: " + "; ".join(expr)
-        return f"Cron: {expr}"
-    if stype == "daily":
-        times = schedule.get("times", [])
-        return "Diário às " + ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
-    if stype == "weekly":
-        day_names = {
-            0: "Dom",
-            1: "Seg",
-            2: "Ter",
-            3: "Qua",
-            4: "Qui",
-            5: "Sex",
-            6: "Sáb",
-        }
-        days = schedule.get("days_of_week", [])
-        times = schedule.get("times", [])
-        day_label = (
-            ", ".join(day_names.get(d, str(d)) for d in days)
-            if days
-            else "Todos os dias"
-        )
-        time_label = ", ".join(f"{t['h']:02d}:{t['m']:02d}" for t in times)
-        return f"Semanal: {day_label} às {time_label}"
-    if stype == "monthly":
-        days = schedule.get("days_of_month", [])
-        times = schedule.get("times", [])
-        return f"Mensal dia(s) {', '.join(str(d) for d in days)} às " + ", ".join(
-            f"{t['h']:02d}:{t['m']:02d}" for t in times
-        )
-    if stype == "interval":
-        min_lbl = f"A cada {schedule.get('interval_minutes', 0)} min"
-        start_t = schedule.get("start_time")
-        end_t = schedule.get("end_time")
-        days = schedule.get("days_of_week")
-        anchor_t = schedule.get("anchor_time")
-
-        anchor_suffix = f", início da cadência às {anchor_t}" if anchor_t else ""
-
-        if start_t or end_t or days:
-            day_names = {
-                0: "Dom",
-                1: "Seg",
-                2: "Ter",
-                3: "Qua",
-                4: "Qui",
-                5: "Sex",
-                6: "Sáb",
-            }
-            day_lbl = (
-                ", ".join(day_names.get(d, str(d)) for d in days) if days else "Todos"
-            )
-            time_lbl = f"início {start_t or '00:00'}"
-            if end_t:
-                time_lbl += f", fim {end_t}"
-            return f"{min_lbl} ({day_lbl}, {time_lbl}{anchor_suffix})"
-
-        if anchor_t:
-            return f"{min_lbl} (início da cadência às {anchor_t})"
-        return min_lbl
-    if stype == "once":
-        return f"Execução única em {schedule.get('run_at', '-')}"
-    return "Configurada"
+    describer = _DESCRIBERS.get(stype) if isinstance(stype, str) else None
+    if describer is None:
+        return "Configurada"
+    return describer(schedule)
 
 
 def _preview_cron_runs(

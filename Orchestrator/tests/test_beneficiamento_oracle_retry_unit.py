@@ -8,12 +8,13 @@ from typing import Any
 
 import oracledb
 import pytest
+from carregadores_modulos import acessar_privado
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from beneficiamento import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento import (
     oracle,
 )
 
@@ -366,7 +367,7 @@ def test_connect_com_prazo_estourado_vira_timeout_error(
 def test_connect_rapido_devolve_a_conexao(monkeypatch: pytest.MonkeyPatch) -> None:
     conexao = _ConexaoRastreada()
     monkeypatch.setattr(oracle, "connect_readonly", lambda: conexao)
-    assert oracle._connect_within(2) is conexao  # pylint: disable=protected-access
+    assert acessar_privado(oracle, "_connect_within")(2) is conexao
 
 
 def test_connect_com_erro_repassa_a_excecao_original(
@@ -377,4 +378,4 @@ def test_connect_com_erro_repassa_a_excecao_original(
 
     monkeypatch.setattr(oracle, "connect_readonly", falha)
     with pytest.raises(oracledb.DatabaseError, match="DPY-4011"):
-        oracle._connect_within(2)  # pylint: disable=protected-access
+        acessar_privado(oracle, "_connect_within")(2)

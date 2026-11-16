@@ -12,6 +12,7 @@ import pytest
 from app import database as db_module, models
 from app.database import purge_old_executions, purge_old_snapshots
 from app.timezone import get_now_local
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 
@@ -149,13 +150,13 @@ def test_purge_snapshots_retorna_zero_quando_nada_a_remover(
     assert db_session.query(models.SystemHealthSnapshot).count() == 4
 
 
+@pytest.mark.usefixtures("db_session")
 def test_purge_snapshots_engole_excecao_mas_loga(
-    db_session: Session,  # pylint: disable=unused-argument
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     def estoura(*_a: Any, **_k: Any) -> None:
-        raise RuntimeError("banco travado")
+        raise OperationalError("SELECT 1", {}, Exception("banco travado"))
 
     monkeypatch.setattr(db_module, "session_scope", estoura)
 

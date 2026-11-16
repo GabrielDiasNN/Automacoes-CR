@@ -1,4 +1,3 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, unused-argument, import-error
 """
 Suite de Testes Unitários: Automação de Montagem de Terceirizados
 Valida o extrator Oracle Thick Mode e o processador sintático de NF/OB.
@@ -15,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import oracledb
 import pytest
+from carregadores_modulos import carregar_modulo_automacao
 
 # Salvar referência real antes de mockar
 real_exists = os.path.exists
@@ -33,9 +33,17 @@ sys.path.append(
     )
 )
 
-import extract_oracle
-import validate_and_generate_html
-from oracle_retry import make_oracle_retry
+from oracle_retry import CircuitBreakerError, make_oracle_retry
+
+# Os nomes curtos colidem com os de outras automacoes (ha dois extract_oracle.py),
+# por isso sao carregados pelo caminho desta pasta, sob o mesmo nome do modulo.
+extract_oracle = carregar_modulo_automacao(
+    "extract_oracle", Path(AUTOMATION_PATH) / "extract_oracle.py"
+)
+validate_and_generate_html = carregar_modulo_automacao(
+    "validate_and_generate_html",
+    Path(AUTOMATION_PATH) / "validate_and_generate_html.py",
+)
 
 
 def test_parse_qt_pc_nf_formats() -> None:
@@ -210,7 +218,7 @@ def test_tabelas_html_tratam_kanban_ausente_sem_quebrar_layout() -> None:
 @patch("validate_and_generate_html.os.path.exists")
 @patch("validate_and_generate_html.open")
 def test_main_tipo_notif_erro_gera_payload(
-    mock_open_fn: Any, mock_exists: Any, mock_remove: Any
+    mock_open_fn: Any, mock_exists: Any, _mock_remove: Any
 ) -> None:
     """Valida que main() determina tipo_notif=ERRO e grava o payload quando há erros novos sem cache anterior."""
     exec_id = "test_notif_err_001"
@@ -236,7 +244,7 @@ def test_main_tipo_notif_erro_gera_payload(
 
     mock_exists.side_effect = side_exists
 
-    def side_open(path: str, mode: str = "r", encoding: Any = None) -> Any:
+    def side_open(path: str, mode: str = "r", **_kwargs: Any) -> Any:
         ctx = MagicMock()
         if f".data_{exec_id}" in path and "r" in mode:
             ctx.__enter__.return_value = io.StringIO(json.dumps(data))
@@ -249,7 +257,7 @@ def test_main_tipo_notif_erro_gera_payload(
 
     captured_dumps: list[Any] = []
 
-    def fake_json_dump(obj: Any, fp: Any, **kwargs: Any) -> None:
+    def fake_json_dump(obj: Any, _fp: Any, **_kwargs: Any) -> None:
         captured_dumps.append(obj)
 
     with (
@@ -280,7 +288,7 @@ def test_main_tipo_notif_erro_gera_payload(
 @patch("validate_and_generate_html.os.path.exists")
 @patch("validate_and_generate_html.open")
 def test_main_sem_erros_nao_gera_payload(
-    mock_open_fn: Any, mock_exists: Any, mock_remove: Any
+    mock_open_fn: Any, mock_exists: Any, _mock_remove: Any
 ) -> None:
     """Valida que main() não grava payload quando não há divergências (tipo_notif=NENHUMA)."""
     exec_id = "test_notif_nenhuma_001"
@@ -303,7 +311,7 @@ def test_main_sem_erros_nao_gera_payload(
 
     mock_exists.side_effect = lambda path: f".data_{exec_id}" in path
 
-    def side_open(path: str, mode: str = "r", encoding: Any = None) -> Any:
+    def side_open(*_args: Any, **_kwargs: Any) -> Any:
         ctx = MagicMock()
         ctx.__enter__.return_value = io.StringIO()
         ctx.__exit__ = MagicMock(return_value=False)
@@ -358,7 +366,9 @@ def test_log_do_validador_delega_ao_contrato_no_step_transform() -> None:
 
 def test_validador_nao_carrega_mais_o_rotulo_legado_no_fonte() -> None:
     """A linha `[ts] [PY-VALIDATE] [LEVEL]` montada à mão sumiu do arquivo."""
-    src = Path(validate_and_generate_html.__file__).read_text(encoding="utf-8")
+    src = Path(AUTOMATION_PATH, "validate_and_generate_html.py").read_text(
+        encoding="utf-8"
+    )
     assert "[PY-VALIDATE]" not in src
     assert 'make_logger("PY-VALIDATE")' in src
 
@@ -497,7 +507,7 @@ def test_retry_do_perfil_padrao_desiste_em_segundos_nao_minutos() -> None:
     # acumulada, nao qual das duas venceu a corrida.
     with (
         patch("time.sleep", side_effect=dormidas.append),
-        pytest.raises(Exception),  # noqa: B017 - DatabaseError ou CircuitBreakerError
+        pytest.raises((oracledb.DatabaseError, CircuitBreakerError)),
     ):
         _sempre_falha()
 

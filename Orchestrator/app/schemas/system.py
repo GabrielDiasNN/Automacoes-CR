@@ -124,6 +124,7 @@ class SystemHealth(BaseModel):
     wal_size_mb: float | None = None
     cpu_usage: float | None = None
     ram_usage_percent: float | None = None
+    oracle_queue_worker: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def apply_br_format(self) -> SystemHealth:
@@ -386,6 +387,7 @@ class DiagnosticsPayload(BaseModel):
     )
     performance: DiagnosticsPerformance = Field(default_factory=DiagnosticsPerformance)
     trace: DiagnosticsTrace = Field(default_factory=DiagnosticsTrace)
+    oracle_queue_worker: dict[str, Any] | None = None
 
 
 class ScheduleValidationRequest(BaseModel):

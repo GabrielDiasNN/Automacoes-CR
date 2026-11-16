@@ -87,7 +87,7 @@ $env:HUB_EXEC_ID    = $ExecId
 $env:HUB_TRACE_ID   = $TraceId
 
 $script:RunSw = [System.Diagnostics.Stopwatch]::StartNew()
-Remove-Item $ResultFile -Force -ErrorAction SilentlyContinue
+$script:HasFreshResult = $false
 
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO", [string]$Step = "")
@@ -99,16 +99,17 @@ $NonFailureCodes = @(0)
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
+    $countsPath = if ($script:HasFreshResult) { $ResultFile } else { "" }
     Exit-AutomationWithCode -Code $Code -Msg $Msg -ExecId $ExecId -LogPath $LogFile `
         -NonFailureCodes $NonFailureCodes `
-        -RecordCountsPath $ResultFile -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
+        -RecordCountsPath $countsPath -DurationMs ([int]$script:RunSw.Elapsed.TotalMilliseconds)
 }
 
 # --- BOOTSTRAP / PRE-FLIGHT ---
 Import-HubEnv
 
 Write-HubExecutionStart -Message "INICIO — $AutomationName (RE-03). ExecId=$ExecId"
-Start-HubStep -Step "preflight" -Message "Oracle Client + ambiente"
+Start-HubStep -Step "preflight" -Message "Oracle Client e ambiente (Oracle/Python/paths)"
 
 $oracleClientLib = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_LIB_DIR", "Process")
 $oracleClientFallback = [System.Environment]::GetEnvironmentVariable("ORACLE_CLIENT_PATH", "Process")
@@ -116,44 +117,53 @@ if ([string]::IsNullOrWhiteSpace($oracleClientLib)) { $oracleClientLib = $oracle
 $oraClientPreFlightOk = $true
 $driverMode = [System.Environment]::GetEnvironmentVariable("ORACLE_DRIVER_MODE", "Process")
 if ([string]::IsNullOrWhiteSpace($driverMode)) { $driverMode = Get-EnvFileValue -Key "ORACLE_DRIVER_MODE" }
+$driverModeNormalized = if ([string]::IsNullOrWhiteSpace($driverMode)) { "auto" } else { $driverMode.Trim().ToLowerInvariant() }
 
-if ($driverMode -eq "queue") {
-    Write-Log "PRE-FLIGHT OK: Oracle Driver Mode em modo QUEUE (TSplus SMB Worker)."
-    $oraClientPreFlightOk = $true
-} elseif ([string]::IsNullOrWhiteSpace($oracleClientLib)) {
-    Write-Log "PRE-FLIGHT WARN: ORACLE_CLIENT_LIB_DIR/ORACLE_CLIENT_PATH nao definido. Thick Mode pode falhar." -Lvl "WARN"
-    $oraClientPreFlightOk = $false
-} elseif (-not (Test-Path $oracleClientLib)) {
-    Write-Log "PRE-FLIGHT WARN: Oracle Client nao encontrado em '$oracleClientLib'. Thick Mode indisponivel." -Lvl "WARN"
-    $oraClientPreFlightOk = $false
-} else {
-    $ociDll = Join-Path $oracleClientLib "oci.dll"
-    if (-not (Test-Path $ociDll)) {
-        Write-Log "PRE-FLIGHT WARN: oci.dll ausente em '$oracleClientLib'. Thick Mode invalido." -Lvl "WARN"
+# So queue dispensa Oracle Client local. Os demais modos (thick, bridge e auto, padrao do
+# .env.example) exigem oci.dll: em auto, sem cliente o fallback Thick falha na extracao com
+# exit 3 em vez de falhar aqui com 9 no pre-flight. Nao ha modo "thin" valido
+# (lib/python/oracle_client.py get_driver_mode); valor invalido tambem cai aqui.
+if ($driverModeNormalized -ne "queue") {
+    if ([string]::IsNullOrWhiteSpace($oracleClientLib)) {
+        Write-Log "PRE-FLIGHT ERRO: ORACLE_CLIENT_LIB_DIR/ORACLE_CLIENT_PATH nao definido para modo '$driverModeNormalized'." -Lvl "ERRO" -Step "preflight"
+        $oraClientPreFlightOk = $false
+    } elseif (-not (Test-Path $oracleClientLib)) {
+        Write-Log "PRE-FLIGHT ERRO: Oracle Client nao encontrado em '$oracleClientLib' para modo '$driverModeNormalized'." -Lvl "ERRO" -Step "preflight"
         $oraClientPreFlightOk = $false
     } else {
-        Write-Log "PRE-FLIGHT OK: Oracle Client Thick Mode validado em '$oracleClientLib'."
+        $ociDll = Join-Path $oracleClientLib "oci.dll"
+        if (-not (Test-Path $ociDll)) {
+            Write-Log "PRE-FLIGHT ERRO: oci.dll ausente em '$oracleClientLib' para modo '$driverModeNormalized'." -Lvl "ERRO" -Step "preflight"
+            $oraClientPreFlightOk = $false
+        } else {
+            Write-Log "PRE-FLIGHT OK: Oracle Client validado em '$oracleClientLib' (modo '$driverModeNormalized')." -Step "preflight"
+        }
     }
+} else {
+    Write-Log "PRE-FLIGHT OK: Oracle Driver Mode '$driverModeNormalized' nao exige Oracle Client local." -Step "preflight"
 }
 
-Complete-HubStep -Ok $oraClientPreFlightOk
-if (-not $oraClientPreFlightOk) {
-    Exit-WithCode 9 "ERRO CRITICO: Oracle Client invalido. Extracao vai falhar em Thin Mode. Abortando."
+$preFlight = $false
+if ($oraClientPreFlightOk) {
+    $preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($pythonExe, $extractPy, $generatePy, $configPath)
 }
-
-Start-HubStep -Step "preflight" -Message "Pre-flight do ambiente (Oracle/Python/paths)"
-$preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckOracle -CheckPaths @($pythonExe, $extractPy, $generatePy, $configPath)
-Complete-HubStep -Ok $preFlight
-if (-not $preFlight) {
-    Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
+$preFlightAllOk = ($oraClientPreFlightOk -and $preFlight)
+Complete-HubStep -Ok $preFlightAllOk
+if (-not $preFlightAllOk) {
+    $pfCode = if (Get-Command Get-OraclePreFlightExitCode -ErrorAction SilentlyContinue) { Get-OraclePreFlightExitCode -OutrosChecks { Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckPaths @($pythonExe, $extractPy, $generatePy, $configPath) } } else { 9 }
+    Exit-WithCode $pfCode "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
 }
 
 try {
     Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile -LockKey "RE-03" | Out-Null
     Complete-HubStep
 
     try {
+        if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
+            Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+        }
+        Remove-Item $ResultFile -Force -ErrorAction SilentlyContinue
         # 1. Extracao de Dados
         $useJsExtractor = (Test-Path $extractJs) -and (-not [string]::IsNullOrWhiteSpace($nodeExe))
         $extractorExe   = if ($useJsExtractor) { $nodeExe } else { $pythonExe }
@@ -165,7 +175,11 @@ try {
         $extractResult = Invoke-OraclePythonScript -PythonExe $extractorExe -ScriptPath $extractorPath `
             -ExecId $ExecId -LogPath $LogFile -OperationName "Extracao Oracle" -Step "extract" `
             -StdoutIsData -MaxAttempts 3 -BackoffSeconds @(30, 60, 120)
-        Complete-HubStep -Ok ($extractResult.Success -or $extractResult.Idempotent)
+        $extractOk = ($extractResult.Success -or $extractResult.Idempotent)
+        if ($extractOk) {
+            $script:HasFreshResult = $true
+        }
+        Complete-HubStep -Ok $extractOk
 
         if ($extractResult.Idempotent) {
             Write-Log "Extrator detectou que nao ha alteracoes relevantes (Idempotencia). Encerrando."
@@ -173,8 +187,10 @@ try {
         }
 
         if (-not $extractResult.Success) {
-            Send-AlertaFalhaDefinitiva -TaskName "Receitas Emitidas" -ExecId $ExecId -UltimoErro "Falha na extracao Oracle." -Tentativas 3 -LogPath $LogFile
-            throw "Falha definitiva na extracao Oracle ($engineName)."
+            $extractExitCode = Resolve-OracleFailureExitCode -ExitCode $extractResult.ExitCode -DefaultExitCode 3
+            $tentativasRealizadas = if ($extractResult.NonRetryable) { 1 } else { 3 }
+            Send-AlertaFalhaDefinitiva -TaskName "Receitas Emitidas" -ExecId $ExecId -UltimoErro "Falha na extracao Oracle (PythonExit=$($extractResult.ExitCode))." -Tentativas $tentativasRealizadas -LogPath $LogFile
+            Exit-WithCode $extractExitCode "Falha definitiva na extracao Oracle ($engineName) (PythonExit=$($extractResult.ExitCode))."
         }
 
         if ([string]::IsNullOrWhiteSpace($extractResult.Output)) { throw "Extracao retornou dados vazios." }
@@ -239,7 +255,7 @@ try {
 
         Exit-WithCode 0 "Processo concluido com sucesso."
     } finally {
-        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
+        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile -LockKey "RE-03"
     }
 } catch [System.Exception] {
     Exit-WithCode 1 "ERRO FATAL: $_"

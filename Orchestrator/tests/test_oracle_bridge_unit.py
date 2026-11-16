@@ -8,7 +8,7 @@ implícito e hash idêntico ao `compute_hash`.
 import json
 import os
 import shutil
-import subprocess  # nosec B404
+import subprocess
 import sys
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -24,11 +24,12 @@ _SRC_BENEF = _REPO / "Produção Beneficimento" / "src"
 if str(_SRC_BENEF) not in sys.path:
     sys.path.insert(0, str(_SRC_BENEF))
 
-import oracle_extract  # noqa: E402  pylint: disable=wrong-import-position
-from beneficiamento import (  # noqa: E402  pylint: disable=wrong-import-position
+import oracle_extract
+from beneficiamento import (
     oracle as benef_oracle,
 )
-from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position
+from carregadores_modulos import acessar_privado
+from oracle_extract import (
     OracleBridgeError,
     OracleCredentials,
     compute_hash,
@@ -54,7 +55,7 @@ def _noop_log(*_args: Any, **_kwargs: Any) -> None:
 
 
 def test_parametros_de_data_viajam_em_hora_local() -> None:
-    encode = oracle_extract._encode_bridge_param  # pylint: disable=protected-access
+    encode = acessar_privado(oracle_extract, "_encode_bridge_param")
     assert encode(date(2026, 10, 27)) == {"$date": "2026-10-27"}
     assert encode(datetime(2026, 10, 27, 8, 30)) == {"$date": "2026-10-27T08:30:00"}
     aware = datetime(2026, 10, 27, 11, 0, tzinfo=UTC)
@@ -191,7 +192,7 @@ def test_hash_e_datas_do_node_iguais_ao_python() -> None:
         "r=>[r.NUMERO_OB||'',r.FASE_ATUAL||'']);"
         "process.stdout.write(JSON.stringify({hash:oc.computeHash({rows:data}),data}));"
     )
-    proc = subprocess.run(  # nosec B603
+    proc = subprocess.run(
         [str(_NODE), "-e", script],
         capture_output=True,
         text=True,

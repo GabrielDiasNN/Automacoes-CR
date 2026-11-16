@@ -97,8 +97,8 @@ function Write-Log {
 
 # Start-HubStep / Complete-HubStep vem de lib/Lib-LogEvent.psm1.
 
-# Codes que nao representam falha operacional: 0 = envio OK, 2 = nada a notificar.
-$NonFailureCodes = @(0, 2)
+# Codes que nao representam falha operacional: 0 = envio OK, 2 = nada a notificar, 22 = WhatsApp adiado por lock/cooldown.
+$NonFailureCodes = @(0, 2, 22)
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "")
@@ -123,17 +123,29 @@ if ($preFlight) {
         $null = Resolve-WhatsAppTarget -Target $waConfig.target -ConfigPath $WaConfigPath
     }
     catch [System.Exception] {
-        Write-Log "Pre-Flight WhatsApp falhou: $_" -Lvl "ERROR" -Step "preflight"
+        Write-Log "Pre-Flight WhatsApp falhou: $_" -Lvl "ERRO" -Step "preflight"
         $preFlight = $false
     }
 }
 Complete-HubStep -Ok $preFlight
 if (-not $preFlight) {
-    Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando."
-}
-
-if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
-    Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+    # O check do WhatsApp fica dentro de -OutrosChecks: com o worker Oracle offline o pre-flight
+    # principal reprova antes de Resolve-WhatsAppTarget rodar, e config WhatsApp invalida sairia 26 em vez de 9.
+    $outrosChecks = {
+        $okBasico = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckPaths @($pythonExe, $ExtractScript, $FormatScript, $WaConfigPath)
+        if (-not $okBasico) { return $false }
+        try {
+            $waCfg = Get-Content -LiteralPath $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $null = Resolve-WhatsAppTarget -Target $waCfg.target -ConfigPath $WaConfigPath
+            return $true
+        }
+        catch [System.Exception] {
+            Write-Log "Pre-Flight WhatsApp falhou: $_" -Lvl "ERRO" -Step "preflight"
+            return $false
+        }
+    }
+    $pfCode = if (Get-Command Get-OraclePreFlightExitCode -ErrorAction SilentlyContinue) { Get-OraclePreFlightExitCode -OutrosChecks $outrosChecks } else { 9 }
+    Exit-WithCode $pfCode "FALHA NO PRE-FLIGHT CHECK. Abortando."
 }
 
 try {
@@ -143,6 +155,9 @@ try {
     Complete-HubStep
 
     try {
+        if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
+            Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+        }
         # Limpa artefatos residuais antes da extracao ja protegido pelo lock.
         Remove-Item $ResultFile, $StateTmp, $MessageFile, $CardFile, $CardsManifestFile, $BatchInputFile, $BatchResultFile -Force -ErrorAction SilentlyContinue
         Get-ChildItem -LiteralPath $ScriptDir -Filter "card_*.png" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -174,7 +189,8 @@ try {
             Exit-WithCode 2 "Nenhuma OB nova com estoque suficiente — nada a notificar."
         }
         if (-not $pyResult.Success) {
-            Exit-WithCode 3 "Falha definitiva na extracao Oracle apos 3 tentativas."
+            $extractExitCode = Resolve-OracleFailureExitCode -ExitCode $pyResult.ExitCode -DefaultExitCode 3
+            Exit-WithCode $extractExitCode "Falha definitiva na extracao Oracle (PythonExit=$($pyResult.ExitCode))."
         }
 
         # --- ETAPA 2: MONTAGEM DO(S) CARD(S) E MANIFESTO ---
@@ -238,9 +254,12 @@ try {
         Write-Log "Motor WhatsApp ExitCode=$waExit" -Step "dispatch"
 
         if ($cards.Count -eq 1) {
-            Complete-HubStep -Ok ($waExit -eq 0)
+            Complete-HubStep -Ok ($waExit -in @(0, 22))
             if ($waExit -eq 21) {
                 Exit-WithCode 21 "WhatsApp requer reautenticacao."
+            }
+            if ($waExit -eq 22) {
+                Exit-WithCode 22 "WhatsApp adiado por lock ou cooldown da sessao hub-global."
             }
             if ($waExit -ne 0) {
                 Exit-WithCode 4 "Falha no envio WhatsApp (ExitCode=$waExit). State NAO commitado — as OBs serao reavaliadas na proxima execucao."
@@ -250,7 +269,7 @@ try {
             $batchOutcome = Resolve-WhatsAppBatchDelivery -Cards $cards -BatchResultFile $BatchResultFile `
                 -StateTmpPath $StateTmp -WaExitCode $waExit `
                 -OnWarn { param($warnMsg) Write-Log $warnMsg -Lvl "WARN" -Step "dispatch" }
-            Complete-HubStep -Ok ($batchOutcome.Status -eq "AllSent")
+            Complete-HubStep -Ok (($batchOutcome.Status -eq "AllSent") -or ($batchOutcome.Status -eq "NoneSent" -and $waExit -eq 22))
 
             if ($batchOutcome.Status -eq "PartialSent") {
                 if (Test-Path $StateTmp) {
@@ -278,6 +297,9 @@ try {
             if ($batchOutcome.Status -eq "NoneSent") {
                 if ($waExit -eq 21) {
                     Exit-WithCode 21 "WhatsApp requer reautenticacao."
+                }
+                if ($waExit -eq 22) {
+                    Exit-WithCode 22 "WhatsApp adiado por lock ou cooldown da sessao hub-global."
                 }
                 Exit-WithCode 4 "Falha no envio WhatsApp em lote (ExitCode=$waExit, 0/$($batchOutcome.TotalCount) paginas entregues). State NAO commitado — as OBs serao reavaliadas na proxima execucao."
             }

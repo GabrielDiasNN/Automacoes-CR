@@ -1,20 +1,18 @@
 """Testes de Tools/log_event_validator.py contra docs/log-event.schema.json."""
 
 import json
-import os
-import sys
 from pathlib import Path
 
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Tools")
-)
+from carregadores_modulos import acessar_privado, carregar_modulo_automacao
 
-from log_event_validator import (  # noqa: E402  pylint: disable=wrong-import-position,import-error
-    _Enums,
-    _load_schema,
-    validate_event,
-    validate_file,
+_VALIDADOR = carregar_modulo_automacao(
+    "log_event_validator",
+    Path(__file__).resolve().parents[2] / "Tools" / "log_event_validator.py",
 )
+validate_event = _VALIDADOR.validate_event
+validate_file = _VALIDADOR.validate_file
+_Enums = acessar_privado(_VALIDADOR, "_Enums")
+_load_schema = acessar_privado(_VALIDADOR, "_load_schema")
 
 ENUMS = _Enums(_load_schema())
 

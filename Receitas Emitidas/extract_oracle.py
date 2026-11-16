@@ -1,6 +1,5 @@
 # import-error e wrong-import-position: import de lib/python via sys.path.insert()
 # dinamico abaixo, que o pylint nao resolve em tempo de analise estatica.
-# pylint: disable=line-too-long, too-many-locals, broad-exception-caught, import-error, wrong-import-position
 # {
 #   "version": "2.8.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
@@ -18,8 +17,10 @@ sys.path.insert(
 )
 import oracledb
 from automation_log import ensure_utf8_streams, make_logger
+from dotenv import load_dotenv
 from oracle_extract import (
     OracleCredentials,
+    classify_oracle_exit_code,
     compute_hash,
     fetch_all,
     init_thick_mode,
@@ -28,8 +29,12 @@ from oracle_extract import (
     serialize_rows,
     write_state_tmp,
 )
-from oracle_queue import OracleQueueError
 from oracle_retry import CircuitBreakerError, make_oracle_retry
+
+load_dotenv(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"),
+    override=False,
+)
 
 ensure_utf8_streams()
 
@@ -138,18 +143,14 @@ def extract() -> None:
             "ERROR",
             exec_id,
         )
+        # Breaker aberto é falha transitória: exit 1 deixa o Invoke-OraclePythonScript
+        # repetir com espera.
         sys.exit(1)
     # OracleQueueError: erro reportado pelo worker da fila (ORACLE_DRIVER_MODE=queue).
-    except (
-        oracledb.Error,
-        OracleQueueError,
-        OSError,
-        json.JSONDecodeError,
-        ValueError,
-        TypeError,
-    ) as e:
+    # Residual: fronteira de processo; falha fora das classificadas sairia como traceback sem o log `Erro fatal na extracao` e sem a linha ERROR no log estruturado que a triagem lê; o exit code de exceção não classificada seria 1 de qualquer forma, mas OracleQueueError e TimeoutError precisam passar por classify_oracle_exit_code (5/6/7; TimeoutError genérico vira 1, só OracleQueueTimeoutError vira 7).
+    except Exception as e:  # pylint: disable=broad-exception-caught
         log(f"Erro fatal na extracao: {e}", "ERROR", exec_id)
-        sys.exit(1)
+        sys.exit(classify_oracle_exit_code(e))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,5 @@
 """Agregacoes analiticas dos snapshots do Beneficiamento."""
 
-# pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-import,trailing-whitespace,line-too-long
-
 from __future__ import annotations
 
 from typing import Any
@@ -17,7 +15,8 @@ from .core import (
 
 def first_available_float(record: dict[str, Any], fields: tuple[str, ...]) -> float:
     """Primeiro campo presente convertido para float (0.0 se nenhum)."""
-    return to_float(first_present(record, fields))
+    valor: float = to_float(first_present(record, fields))
+    return valor
 
 
 def attach_share_pct(items: list[dict[str, Any]], total_kg: float) -> None:
@@ -99,46 +98,29 @@ def aggregate_group(
     return summaries
 
 
+def _dimensoes_fato(r: dict[str, Any]) -> dict[str, str]:
+    return {
+        "maq_cod": safe_text(resolve_alias(r, "maquina_cod")),
+        "maq_nom": safe_text(resolve_alias(r, "maquina_nom")),
+        "fase_cod": safe_text(resolve_alias(r, "fase_cod")),
+        "fase_nom": safe_text(resolve_alias(r, "fase_nom")),
+        "turno": safe_text(r.get("TURNO_PROD")),
+        "reduz": safe_text(resolve_alias(r, "reduz")),
+        "produto": safe_text(resolve_alias(r, "produto")),
+        "artigo_cod": safe_text(resolve_alias(r, "artigo_cod")),
+        "artigo_nom": safe_text(resolve_alias(r, "artigo_nom")),
+        "cor_nom": safe_text(resolve_alias(r, "cor_nom")),
+    }
+
+
 def build_fato_producao(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     fato: dict[Any, dict[str, Any]] = {}
     for r in records:
-        maq_cod = safe_text(resolve_alias(r, "maquina_cod"))
-        maq_nom = safe_text(resolve_alias(r, "maquina_nom"))
-        fase_cod = safe_text(resolve_alias(r, "fase_cod"))
-        fase_nom = safe_text(resolve_alias(r, "fase_nom"))
-        turno = safe_text(r.get("TURNO_PROD"))
-        reduz = safe_text(resolve_alias(r, "reduz"))
-        produto = safe_text(resolve_alias(r, "produto"))
-        artigo_cod = safe_text(resolve_alias(r, "artigo_cod"))
-        artigo_nom = safe_text(resolve_alias(r, "artigo_nom"))
-        cor_nom = safe_text(resolve_alias(r, "cor_nom"))
-
-        key = (
-            maq_cod,
-            maq_nom,
-            fase_cod,
-            fase_nom,
-            turno,
-            reduz,
-            produto,
-            artigo_cod,
-            artigo_nom,
-            cor_nom,
-        )
-
+        dimensoes = _dimensoes_fato(r)
         group = fato.setdefault(
-            key,
+            tuple(dimensoes.values()),
             {
-                "maq_cod": maq_cod,
-                "maq_nom": maq_nom,
-                "fase_cod": fase_cod,
-                "fase_nom": fase_nom,
-                "turno": turno,
-                "reduz": reduz,
-                "produto": produto,
-                "artigo_cod": artigo_cod,
-                "artigo_nom": artigo_nom,
-                "cor_nom": cor_nom,
+                **dimensoes,
                 "kg": 0.0,
                 "mt": 0.0,
                 "linhas": 0,

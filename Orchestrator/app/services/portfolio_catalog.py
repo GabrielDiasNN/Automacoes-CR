@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -21,8 +22,8 @@ from .metrics_queries import (
     get_automation_metrics_24h,
     get_latest_execution_snapshot_by_automation,
 )
-from .portfolio_manifest import (  # pylint: disable=useless-import-alias; noqa: F401
-    CatalogManifest as CatalogManifest,
+from .portfolio_manifest import (
+    CatalogManifest,
     _format_value,
     _normalize_repo_relative,
     _path_exists,
@@ -32,6 +33,10 @@ from .portfolio_manifest import (  # pylint: disable=useless-import-alias; noqa:
     load_catalog_manifests,
 )
 from .scheduler_runtime import list_scheduled_jobs
+
+# `CatalogManifest` é reexportado: `automation_preflight` e os testes o importam
+# daqui. A exportação explícita evita depender de reexportação implícita (mypy strict).
+__all__ = ["CatalogManifest"]
 
 FAILURE_STATUSES = sorted(EXECUTION_FAILED_STATUSES)
 SUCCESS_STATUSES = ["SUCCESS"]
@@ -158,9 +163,7 @@ def _manifest_runtime_mismatches(
     manifest_script = _normalize_repo_relative(
         project_root, manifest.orchestrator.script_path
     )
-    runtime_script = _normalize_repo_relative(
-        project_root, cast(str | None, auto.script_path)
-    )
+    runtime_script = _normalize_repo_relative(project_root, auto.script_path)
     if manifest_script != runtime_script:
         issues.append(
             _issue(
@@ -170,7 +173,7 @@ def _manifest_runtime_mismatches(
                 runtime_value=runtime_script,
             )
         )
-    runtime_queue_group = cast(str | None, auto.queue_group)
+    runtime_queue_group = auto.queue_group
     if (manifest.queue_group or None) != (runtime_queue_group or None):
         issues.append(
             _issue(
@@ -180,7 +183,7 @@ def _manifest_runtime_mismatches(
                 runtime_value=runtime_queue_group,
             )
         )
-    runtime_max_runtime = cast(int | None, auto.max_runtime_minutes)
+    runtime_max_runtime = auto.max_runtime_minutes
     if int(manifest.max_runtime_minutes) != int(runtime_max_runtime or 0):
         issues.append(
             _issue(
@@ -190,7 +193,7 @@ def _manifest_runtime_mismatches(
                 runtime_value=runtime_max_runtime,
             )
         )
-    runtime_max_retries = cast(int | None, auto.max_retries)
+    runtime_max_retries = auto.max_retries
     if int(manifest.max_retries) != int(runtime_max_retries or 0):
         issues.append(
             _issue(
@@ -200,7 +203,7 @@ def _manifest_runtime_mismatches(
                 runtime_value=runtime_max_retries,
             )
         )
-    runtime_sla_minutes = cast(int | None, auto.sla_minutes)
+    runtime_sla_minutes = auto.sla_minutes
     if (manifest.sla_minutes or None) != (runtime_sla_minutes or None):
         issues.append(
             _issue(
@@ -211,7 +214,7 @@ def _manifest_runtime_mismatches(
             )
         )
     manifest_channels = channels_to_csv(manifest.channels)
-    runtime_channels = cast(str | None, auto.notification_channels) or None
+    runtime_channels = auto.notification_channels or None
     if manifest_channels != runtime_channels:
         issues.append(
             _issue(
@@ -608,12 +611,10 @@ def _index_automations(
     automation_response_by_id: dict[int, schemas.AutomationResponse] = {}
     for auto in automations:
         auto_id = int(auto.id)
-        normalized_script = _normalize_repo_relative(
-            root, cast(str | None, auto.script_path)
-        )
+        normalized_script = _normalize_repo_relative(root, auto.script_path)
         if normalized_script:
             db_by_script[normalized_script] = auto
-        db_by_name[cast(str, auto.name).strip().lower()] = auto
+        db_by_name[auto.name.strip().lower()] = auto
         automation_response_by_id[auto_id] = build_automation_response(
             auto=auto,
             next_run_lookup=lookups["next_run_lookup"],
@@ -785,7 +786,7 @@ def _build_governed_row(
         queue_group=(
             manifest.queue_group
             if manifest.queue_group
-            else (cast(str | None, matched_auto.queue_group) if matched_auto else None)
+            else (matched_auto.queue_group if matched_auto else None)
         ),
         sla_minutes=manifest.sla_minutes,
         health_status=m["health_status"],
@@ -874,8 +875,8 @@ def _build_ungoverned_row(
     drift_item = schemas.PortfolioDriftItem(
         catalog_id=f"runtime-{auto_id}",
         automation_id=auto_id,
-        name=cast(str, auto.name),
-        slug=_slugify(cast(str, auto.name)),
+        name=auto.name,
+        slug=_slugify(auto.name),
         issues=issues,
     )
     review_status, review_reasons = _build_review_status(
@@ -891,17 +892,17 @@ def _build_ungoverned_row(
     health_item = schemas.PortfolioHealthItem(
         catalog_id=f"runtime-{auto_id}",
         automation_id=auto_id,
-        name=cast(str, auto.name),
-        slug=_slugify(cast(str, auto.name)),
+        name=auto.name,
+        slug=_slugify(auto.name),
         criticality="unclassified",
         owner_area=None,
         runtime="unknown",
         enabled=bool(auto.enabled),
-        queue_group=cast(str | None, auto.queue_group),
-        sla_minutes=cast(int | None, auto.sla_minutes),
+        queue_group=auto.queue_group,
+        sla_minutes=auto.sla_minutes,
         health_status="not_governed",
         sla_state=_sla_state(
-            cast(int | None, auto.sla_minutes),
+            auto.sla_minutes,
             schedule_lag_minutes=m["lag_minutes"],
             last_status=response.last_status,
             last_failure_age_minutes=_minutes_since(m["last_failure_at"]),
@@ -936,17 +937,27 @@ def _build_ungoverned_row(
     return health_item, drift_item
 
 
-def _collect_governed_rows(  # pylint: disable=too-many-arguments
+@dataclass(frozen=True)
+class _IndicesAutomacoes:
+    """Índices das automações do banco e das respostas, para a montagem governada."""
+
+    db_by_script: dict[str, models.Automation]
+    db_by_name: dict[str, models.Automation]
+    lookups: dict[str, Any]
+    automation_response_by_id: dict[int, schemas.AutomationResponse]
+
+
+def _collect_governed_rows(
     root: Path,
     manifest_entries: list[Any],
-    *,
-    db_by_script: dict[str, models.Automation],
-    db_by_name: dict[str, models.Automation],
-    lookups: dict[str, Any],
-    automation_response_by_id: dict[int, schemas.AutomationResponse],
+    indices: _IndicesAutomacoes,
 ) -> tuple[
     list[schemas.PortfolioHealthItem], list[schemas.PortfolioDriftItem], set[int]
 ]:
+    db_by_script = indices.db_by_script
+    db_by_name = indices.db_by_name
+    lookups = indices.lookups
+    automation_response_by_id = indices.automation_response_by_id
     matched_automation_ids: set[int] = set()
     health_items: list[schemas.PortfolioHealthItem] = []
     drift_items: list[schemas.PortfolioDriftItem] = []
@@ -1007,10 +1018,12 @@ def _collect_portfolio_rows(
     governed = _collect_governed_rows(
         root,
         manifest_entries,
-        db_by_script=db_by_script,
-        db_by_name=db_by_name,
-        lookups=lookups,
-        automation_response_by_id=automation_response_by_id,
+        _IndicesAutomacoes(
+            db_by_script=db_by_script,
+            db_by_name=db_by_name,
+            lookups=lookups,
+            automation_response_by_id=automation_response_by_id,
+        ),
     )
     ungoverned = _collect_ungoverned_rows(
         automations, governed[2], lookups, automation_response_by_id

@@ -41,28 +41,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Força UTF-8 nos três streams. O stdin entra no laço: em pipe no Windows (Python 3.12)
-# ele fica em cp1252, e o SQL com acento chegaria corrompido.
-for _stream in (sys.stdin, sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8")
+import oracledb
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lib" / "python"))
+# Só `sys.path` antes dos imports do repositório: qualquer outro comando aqui faria os
+# imports abaixo violarem o E402. Nenhum desses módulos lê o ambiente no import, então
+# o `.env` e o UTF-8 dos streams podem ser aplicados logo depois.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# Carrega variáveis do .env da raiz do repositório
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(ROOT / ".env")
-except ImportError:
-    pass
-
-import oracledb  # noqa: E402
-
 # Módulos compartilhados do repositório (lib/python, já no sys.path acima).
-from oracle_client import (  # noqa: E402
+from oracle_client import (
     CONNECT_PARAMS,
     DRIVER_MODE_THICK,
     LEGACY_VERIFIER_MARKER,
@@ -73,13 +61,39 @@ from oracle_client import (  # noqa: E402
     get_driver_mode,
     init_oracle_thick_mode,
 )
-from oracle_session import (  # noqa: E402
+from oracle_queue import OracleQueueError
+from oracle_queue_tools import (
+    ERROS_FILA,
+    executar_consulta_fila,
+    explicar_plano_fila,
+    preparar_sql_fila,
+    status_fila_diagnostico,
+    usar_fila_oracle,
+    verificar_objetos_fila,
+)
+from oracle_session import (
     call_deadline,
     connect_within,
     is_session_drop,
     query_deadline,
     supports_native_call_timeout,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# Força UTF-8 nos três streams. O stdin entra no laço: em pipe no Windows (Python 3.12)
+# ele fica em cp1252, e o SQL com acento chegaria corrompido.
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
+# Carrega variáveis do .env da raiz do repositório
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
 
 # Guardião SQL do acervo. Se não carregar, validate_read_only bloqueia tudo (fail-closed).
 _guard_sql: Any = None
@@ -88,6 +102,7 @@ try:
     import guard_sql
 
     _guard_sql = guard_sql
+# Residual: importar o guard executa o módulo do acervo; se a falha escapasse, o servidor não subiria, em vez de bloquear as consultas (fail-closed).
 except Exception as exc:  # pylint: disable=broad-exception-caught
     _erro_import_guard = f"{type(exc).__name__}: {exc}"
 
@@ -119,6 +134,19 @@ LIMITE_CLOB_CARACTERES = 4000
 # Acima dele não há como provar a ausência de função: a consulta é bloqueada.
 LIMITE_NOMES_VERIFICADOS = 500
 FORMATOS_EXECUCAO = ("table", "json")
+# Falhas do driver e da rede: oracledb.Error (ORA-, DPY-, DPI-) e OSError (inclui
+# ConnectionError e quedas de socket). Usado em pool e limpeza, onde só isso importa.
+ERROS_DRIVER: tuple[type[Exception], ...] = (oracledb.Error, OSError)
+# Falhas de uma chamada ao Oracle: o driver e a rede, mais TimeoutError dos prazos
+# de connect_within e ValueError/TypeError de configuração ou parâmetros inválidos.
+ERROS_ORACLE: tuple[type[Exception], ...] = (
+    *ERROS_DRIVER,
+    TimeoutError,
+    ValueError,
+    TypeError,
+)
+# Falhas de uma ferramenta: as do Oracle e as da fila SMB (OracleQueueError é RuntimeError).
+ERROS_FERRAMENTA: tuple[type[Exception], ...] = (*ERROS_ORACLE, *ERROS_FILA)
 # Cache do canônico do guard: (módulo carregado, canônico já com patch). Recarregado
 # apenas quando o módulo muda, o que exige reinício do servidor após editar o canônico.
 _cache_canonico: dict[str, tuple[Any, Any]] = {}
@@ -257,6 +285,7 @@ def _validar_pelo_guard(sql: str) -> ResultadoGuard:
             verificar_objetos=tuple(classificacao.get("verificar_objetos", ())),
             consulta_verificacao=classificacao.get("consulta_verificacao"),
         )
+    # Residual: o guard canônico é código externo carregado por exec_module e qualquer exceção dele precisa virar recusa (fail-closed); sem isso a consulta cairia no erro genérico do loop STDIO, sem a recusa do guard.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return ResultadoGuard(
             False, f"Guard SQL falhou ao validar (fail-closed): {exc}"
@@ -290,6 +319,7 @@ class _PedidoSql:
     resultado: ResultadoGuard
     max_rows: int
     formato: str
+    params: dict[str, Any] | None = None
 
 
 def _erro_seguranca(motivo: str) -> dict[str, Any]:
@@ -385,18 +415,60 @@ def _erro_rpc(req_id: Any, codigo: int, mensagem: str) -> dict[str, Any]:
     }
 
 
+def _eh_inteiro(valor: Any) -> bool:
+    return isinstance(valor, int) and not isinstance(valor, bool)
+
+
 def _motivo_argumentos_invalidos(ferramenta: str, args: dict[str, Any]) -> str | None:
     """Motivo da rejeição (-32602) quando os tipos dos argumentos não batem com o schema."""
-    if ferramenta in ("execute_sql", "get_query_plan") and not isinstance(
-        args.get("sql", ""), str
-    ):
-        return "'sql' deve ser texto."
-    if ferramenta == "execute_sql":
-        max_rows = args.get("max_rows", 100)
-        if isinstance(max_rows, bool) or not isinstance(max_rows, int):
-            return "'max_rows' deve ser um inteiro."
-        if args.get("format", "table") not in FORMATOS_EXECUCAO:
-            return "'format' deve ser 'table' ou 'json'."
+    checks_por_ferramenta: dict[str, list[tuple[bool, str]]] = {
+        "get_query_plan": [
+            (not isinstance(args.get("sql", ""), str), "'sql' deve ser texto."),
+        ],
+        "execute_sql": [
+            (not isinstance(args.get("sql", ""), str), "'sql' deve ser texto."),
+            (
+                not _eh_inteiro(args.get("max_rows", 100)),
+                "'max_rows' deve ser um inteiro.",
+            ),
+            (
+                args.get("format", "table") not in FORMATOS_EXECUCAO,
+                "'format' deve ser 'table' ou 'json'.",
+            ),
+            (
+                args.get("params") is not None
+                and not isinstance(args.get("params"), dict),
+                "'params' deve ser um objeto JSON.",
+            ),
+        ],
+        "list_tables": [
+            (
+                args.get("pattern") is not None
+                and not isinstance(args.get("pattern"), str),
+                "'pattern' deve ser texto.",
+            ),
+            (
+                args.get("owner") is not None
+                and not isinstance(args.get("owner"), str),
+                "'owner' deve ser texto.",
+            ),
+            (not _eh_inteiro(args.get("limit", 100)), "'limit' deve ser um inteiro."),
+        ],
+        "describe_table": [
+            (
+                not isinstance(args.get("table_name", ""), str),
+                "'table_name' deve ser texto.",
+            ),
+            (
+                args.get("owner") is not None
+                and not isinstance(args.get("owner"), str),
+                "'owner' deve ser texto.",
+            ),
+        ],
+    }
+    for invalido, motivo in checks_por_ferramenta.get(ferramenta, ()):
+        if invalido:
+            return motivo
     return None
 
 
@@ -485,7 +557,7 @@ class OracleConnectionManager:
                         "SessionPool Oracle inicializado com sucesso em Thick Mode."
                     )
                     return
-                except Exception as inner_exc:  # pylint: disable=broad-exception-caught
+                except ERROS_DRIVER as inner_exc:
                     log_stderr(
                         f"Falha ao recriar pool em Thick Mode ({inner_exc}). Fallback para conexões dedicadas."
                     )
@@ -495,7 +567,7 @@ class OracleConnectionManager:
                     f"Aviso: Não foi possível criar SessionPool ({exc}). Fallback para conexões dedicadas."
                 )
                 self._marcar_pool_falho()
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except ERROS_DRIVER as exc:
             log_stderr(
                 f"Aviso: Não foi possível criar SessionPool ({exc}). Fallback para conexões dedicadas."
             )
@@ -521,13 +593,13 @@ class OracleConnectionManager:
                 ),
                 seconds=15.0,
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except ERROS_ORACLE as exc:
             log_stderr(
                 f"Aviso: sondagem de conexão falhou ({exc}). Fallback para conexões dedicadas."
             )
             self._marcar_pool_falho()
             return False
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(*ERROS_DRIVER):
             sonda.close()
         return True
 
@@ -557,7 +629,7 @@ class OracleConnectionManager:
             if self._pool is not None:
                 try:
                     return self._pool.acquire()
-                except Exception as exc:  # pylint: disable=broad-exception-caught
+                except ERROS_DRIVER as exc:
                     log_stderr(
                         f"Falha ao adquirir do SessionPool ({exc}); tentando fallback dedicado..."
                     )
@@ -570,9 +642,9 @@ class OracleConnectionManager:
                     ):
                         self._conn.ping()
                     return self._conn
-                except Exception as exc:  # pylint: disable=broad-exception-caught
+                except ERROS_DRIVER as exc:
                     log_stderr(f"Sessão dedicada inválida ({exc}); reconectando...")
-                    with contextlib.suppress(Exception):
+                    with contextlib.suppress(*ERROS_DRIVER):
                         self._conn.close()
                     self._conn = None
 
@@ -616,7 +688,7 @@ class OracleConnectionManager:
             return
         with self._lock:
             if self._pool is not None:
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(*ERROS_DRIVER):
                     self._pool.release(conn)
 
     def get_connection(self) -> Any:
@@ -636,8 +708,8 @@ class OracleConnectionManager:
                         "min": getattr(self._pool, "min", 1),
                         "timeout": getattr(self._pool, "timeout", 300),
                     }
-                except Exception:  # pylint: disable=broad-exception-caught
-                    # Telemetria do pool nunca derruba o relatório de diagnóstico.
+                # Telemetria do pool nunca derruba o relatório de diagnóstico.
+                except ERROS_DRIVER:
                     return {"active": True, "open": 0, "busy": 0, "max": 4}
             return {
                 "active": False,
@@ -662,9 +734,9 @@ class OracleConnectionManager:
                 try:
                     self._pool.drop(alvo)
                     return
-                except Exception as exc:  # pylint: disable=broad-exception-caught
+                except ERROS_DRIVER as exc:
                     log_stderr(f"pool.drop falhou ({exc}); fechando a conexão.")
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(*ERROS_DRIVER):
                 alvo.close()
 
     def close(self) -> None:
@@ -674,11 +746,11 @@ class OracleConnectionManager:
                 try:
                     # force=True: conexões ocupadas não podem impedir o fechamento.
                     self._pool.close(force=True)
-                except Exception as exc:  # pylint: disable=broad-exception-caught
+                except ERROS_DRIVER as exc:
                     log_stderr(f"Falha ao fechar o SessionPool: {exc}")
                 self._pool = None
             if self._conn is not None:
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(*ERROS_DRIVER):
                     self._conn.close()
                 self._conn = None
 
@@ -701,7 +773,7 @@ def _fronteira_de_ferramenta(
         ) -> dict[str, Any]:
             try:
                 return funcao(self, *args, **kwargs)
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+            except ERROS_FERRAMENTA as exc:
                 if fecha_em_queda and is_session_drop(exc):
                     self.conn_mgr.discard_connection(None)
                 return {"error": True, "message": f"{prefixo}{exc}"}
@@ -743,7 +815,7 @@ class OracleMcpTools:
     def _liberar_conexao(self, conn: Any | None) -> None:
         """Devolve a conexão ao SessionPool após a execução da ferramenta."""
         if conn is not None and hasattr(self.conn_mgr, "release_connection"):
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(*ERROS_DRIVER):
                 self.conn_mgr.release_connection(conn)
 
     def _encerrar_uso(
@@ -796,14 +868,19 @@ class OracleMcpTools:
             if tool_name:
                 self._instrumentar_sessao(conn, tool_name)
             return conn, None
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except ERROS_ORACLE as exc:
             return None, {"error": True, "message": f"{prefixo}{exc}"}
+
+    def _usar_fila(self) -> bool:
+        """Ativa roteamento via fila SMB quando modo=queue e conn_mgr é real (não dublê)."""
+        return usar_fila_oracle() and isinstance(self.conn_mgr, OracleConnectionManager)
 
     def execute_sql(
         self,
         sql: str,
         max_rows: int = 100,
         output_format: str = "table",
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Executa consulta SELECT com prazo por chamada e cursores otimizados."""
         # Valida o texto que será executado: o `;` final passa no guard, mas o Oracle rejeita.
@@ -818,13 +895,61 @@ class OracleMcpTools:
             resultado=resultado,
             max_rows=max(1, min(max_rows, 5000)),
             formato=output_format,
+            params=params,
         )
+        if self._usar_fila():
+            return self._executar_via_fila(pedido)
         conn, erro = self._conexao(
             "Erro de conexão com o banco Oracle: ", tool_name="execute_sql"
         )
         if erro is not None:
             return erro
         return self._executar_pedido(conn, pedido)
+
+    def _executar_via_fila(self, pedido: _PedidoSql) -> dict[str, Any]:
+        """Executa SELECT read-only pela fila SMB do TSplus mantendo o contrato do MCP."""
+        start_time = time.perf_counter()
+        try:
+            bloqueio = verificar_objetos_fila(
+                pedido.resultado.consulta_verificacao,
+                timeout=min(self.config.timeout, 30.0),
+                exec_id="MCP_GUARD",
+            )
+            if bloqueio is not None:
+                return _erro_seguranca(bloqueio)
+
+            sql_limpo = preparar_sql_fila(pedido.sql)
+            res = executar_consulta_fila(
+                sql_limpo,
+                params=pedido.params,
+                timeout=min(self.config.timeout, 120.0),
+                meta={
+                    "exec_id": "MCP_EXEC_SQL",
+                    "tool": "execute_sql",
+                    "max_rows": pedido.max_rows,
+                },
+                max_rows=pedido.max_rows + 1,
+            )
+            truncado = len(res.rows) > pedido.max_rows
+            linhas = [
+                [_normalizar_valor(v) for v in row]
+                for row in res.rows[: pedido.max_rows]
+            ]
+            elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            return self._resposta_execucao(
+                res.columns,
+                linhas,
+                pedido.formato,
+                elapsed_ms,
+                truncado,
+            )
+        except OracleQueueError as exc:
+            return {"error": True, "message": f"Erro Oracle (fila SMB): {exc}"}
+        except ERROS_FILA as exc:
+            return {"error": True, "message": f"Erro na fila SMB Oracle: {exc}"}
+        except TypeError as exc:
+            # Param list/dict levantado por oracle_queue._encode_param
+            return {"error": True, "message": f"Parâmetro inválido para a fila Oracle: {exc}"}
 
     def _executar_pedido(self, conn: Any, pedido: _PedidoSql) -> dict[str, Any]:
         """Roda o pedido no cursor da conexão, dentro do prazo, e encerra o uso da conexão."""
@@ -844,7 +969,10 @@ class OracleMcpTools:
                 bloqueio = self._verificar_funcoes(cursor, pedido.resultado)
                 if bloqueio is not None:
                     return _erro_seguranca(bloqueio)
-                cursor.execute(pedido.sql)
+                if pedido.params:
+                    cursor.execute(pedido.sql, pedido.params)
+                else:
+                    cursor.execute(pedido.sql)
                 if not cursor.description:
                     return {"columns": [], "rows": [], "row_count": 0, "duration_ms": 0}
 
@@ -857,11 +985,15 @@ class OracleMcpTools:
                 round((time.perf_counter() - start_time) * 1000, 2),
                 truncado,
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except ERROS_ORACLE as exc:
             falha = exc
             return self._falha_execucao(exc, fired)
+        except Exception as exc:
+            # Fora de ERROS_ORACLE: a sessão pode ter ficado inutilizável; `finally` a trata como falha.
+            falha = exc
+            raise
         finally:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(*ERROS_DRIVER):
                 cursor.close()
             self._encerrar_uso(conn, falha, fired)
 
@@ -966,6 +1098,12 @@ class OracleMcpTools:
         if not is_safe:
             return {"error": True, "message": f"Segurança MCP: {reason}"}
 
+        if self._usar_fila():
+            linhas_plano, _ = explicar_plano_fila(
+                sql, timeout=min(self.config.timeout, 120.0), exec_id="MCP_EXPLAIN"
+            )
+            return {"text": "\n".join(linhas_plano)}
+
         stmt_id = f"mcp_plan_{int(time.time())}"
         conn, erro = self._conexao(
             "Erro de conexão Oracle: ", tool_name="get_query_plan"
@@ -1015,14 +1153,44 @@ class OracleMcpTools:
             try:
                 with call_deadline(conn, PRAZO_ROLLBACK_SEGUNDOS, threading.Event()):
                     conn.rollback()
-            except Exception:  # pylint: disable=broad-exception-caught
+            except ERROS_DRIVER:
                 descartar = True
-        with contextlib.suppress(Exception):
+            except Exception:
+                # Fora de ERROS_DRIVER: descarta a conexão antes de a falha seguir.
+                self.conn_mgr.discard_connection(conn)
+                raise
+        with contextlib.suppress(*ERROS_DRIVER):
             cursor.close()
         if descartar:
             self.conn_mgr.discard_connection(conn)
         else:
             self._liberar_conexao(conn)
+
+    @staticmethod
+    def _build_list_tables_query(
+        pattern: str | None, owner: str | None, limit: int
+    ) -> tuple[str, dict[str, Any]]:
+        clamped = max(1, min(limit, 500))
+        target_owner = (
+            owner or os.environ.get("ORACLE_DEFAULT_SCHEMA", "SGTPRD")
+        ).upper()
+        sql = (
+            "SELECT OWNER, TABLE_NAME, 'TABLE' AS OBJECT_TYPE, NUM_ROWS, TABLESPACE_NAME "
+            "FROM ALL_TABLES WHERE OWNER = :owner "
+        )
+        params: dict[str, Any] = {"owner": target_owner}
+        if pattern:
+            sql += "AND TABLE_NAME LIKE :pattern "
+            params["pattern"] = pattern.upper()
+        sql += (
+            "UNION ALL "
+            "SELECT OWNER, VIEW_NAME AS TABLE_NAME, 'VIEW' AS OBJECT_TYPE, NULL AS NUM_ROWS, NULL AS TABLESPACE_NAME "
+            "FROM ALL_VIEWS WHERE OWNER = :owner "
+        )
+        if pattern:
+            sql += "AND VIEW_NAME LIKE :pattern "
+        sql += f"ORDER BY TABLE_NAME FETCH FIRST {clamped} ROWS ONLY"
+        return sql, params
 
     @_fronteira_de_ferramenta("Erro ao listar tabelas: ")
     def list_tables(
@@ -1032,30 +1200,19 @@ class OracleMcpTools:
         limit: int = 100,
     ) -> dict[str, Any]:
         """Lista tabelas e views acessíveis com paginação e busca por padrão."""
-        limit = max(1, min(limit, 500))
-        target_owner = (
-            owner or os.environ.get("ORACLE_DEFAULT_SCHEMA", "SGTPRD")
-        ).upper()
+        sql, params = self._build_list_tables_query(pattern, owner, limit)
 
-        sql = (
-            "SELECT OWNER, TABLE_NAME, 'TABLE' AS OBJECT_TYPE, NUM_ROWS, TABLESPACE_NAME "
-            "FROM ALL_TABLES WHERE OWNER = :owner "
-        )
-        params: dict[str, Any] = {"owner": target_owner}
-
-        if pattern:
-            sql += "AND TABLE_NAME LIKE :pattern "
-            params["pattern"] = pattern.upper()
-
-        sql += (
-            "UNION ALL "
-            "SELECT OWNER, VIEW_NAME AS TABLE_NAME, 'VIEW' AS OBJECT_TYPE, NULL AS NUM_ROWS, NULL AS TABLESPACE_NAME "
-            "FROM ALL_VIEWS WHERE OWNER = :owner "
-        )
-        if pattern:
-            sql += "AND VIEW_NAME LIKE :pattern "
-
-        sql += f"ORDER BY TABLE_NAME FETCH FIRST {limit} ROWS ONLY"
+        if self._usar_fila():
+            res = executar_consulta_fila(
+                sql,
+                params=params,
+                timeout=min(self.config.timeout, 60.0),
+                meta={"exec_id": "MCP_LIST_TABLES", "tool": "list_tables"},
+            )
+            cols = ["OWNER", "TABLE_NAME", "TYPE", "NUM_ROWS", "TABLESPACE"]
+            return {
+                "text": self._render_markdown_table(cols, [list(r) for r in res.rows])
+            }
 
         conn, erro = self._conexao("Erro de conexão: ", tool_name="list_tables")
         if erro is not None:
@@ -1076,7 +1233,7 @@ class OracleMcpTools:
             falha = exc
             raise
         finally:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(*ERROS_DRIVER):
                 cursor.close()
             self._encerrar_uso(conn, falha, fired)
 
@@ -1107,6 +1264,25 @@ class OracleMcpTools:
             "ORDER BY c.COLUMN_ID"
         )
 
+        if self._usar_fila():
+            res = executar_consulta_fila(
+                sql,
+                params={"owner": target_owner, "tbl": clean_name},
+                timeout=min(self.config.timeout, 60.0),
+                meta={"exec_id": "MCP_DESC_TABLE", "tool": "describe_table"},
+            )
+            if not res.rows:
+                return {
+                    "error": True,
+                    "message": f"Objeto '{clean_name}' não encontrado no schema '{target_owner}'.",
+                }
+            return {
+                "text": f"### Tabela: {target_owner}.{clean_name}\n\n"
+                + self._render_markdown_table(
+                    CABECALHO_COLUNAS, _linhas_colunas(list(res.rows))
+                )
+            }
+
         conn, erro = self._conexao("Erro de conexão: ", tool_name="describe_table")
         if erro is not None:
             return erro
@@ -1134,7 +1310,7 @@ class OracleMcpTools:
             falha = exc
             raise
         finally:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(*ERROS_DRIVER):
                 cursor.close()
             self._encerrar_uso(conn, falha, fired)
 
@@ -1146,6 +1322,8 @@ class OracleMcpTools:
         o RTT medido só na consulta de teste (sem contar o tempo de conexão) e os
         parâmetros de WAN. `conn.version` vem do driver e não exige V$VERSION.
         """
+        if self._usar_fila():
+            return self._check_connection_fila()
         connect_start = time.perf_counter()
         conn, erro = self._conexao(
             "Erro de diagnóstico: ", tool_name="check_connection"
@@ -1156,6 +1334,33 @@ class OracleMcpTools:
 
         diagnostico = self._consultar_sessao(conn, connect_ms)
         return {"text": self._montar_relatorio(describe_driver_mode(), diagnostico)}
+
+    def _check_connection_fila(self) -> dict[str, Any]:
+        """Diagnóstico da fila SMB (TSplus Worker -> Oracle PRD)."""
+        status_fila = status_fila_diagnostico()
+        t0 = time.perf_counter()
+        res = executar_consulta_fila(
+            "SELECT SYS_CONTEXT('USERENV', 'CURRENT_USER'), "
+            "       SYS_CONTEXT('USERENV', 'DB_NAME'), "
+            "       SYS_CONTEXT('USERENV', 'SERVER_HOST') "
+            "FROM DUAL",
+            timeout=min(self.config.timeout, 30.0),
+            meta={"exec_id": "MCP_PING", "tool": "check_connection"},
+        )
+        rtt_ms = round((time.perf_counter() - t0) * 1000, 2)
+        user, db_name, host = res.rows[0] if res.rows else ("N/D", "N/D", "N/D")
+        lines = [
+            "### Status da Conexão Oracle (Fila SMB TSplus -> Oracle PRD)",
+            "- **Status:** Conectado com sucesso",
+            "- **Modo de Operação:** Queue Mode (`ORACLE_DRIVER_MODE=queue`)",
+            f"- **Worker TSplus:** v{status_fila.get('version') or res.worker or '?'} (heartbeat age={status_fila.get('age_seconds')}s)",
+            f"- **Pasta da Fila:** `{status_fila.get('queue_dir')}`",
+            f"- **Latência ponta-a-ponta (consulta de teste):** {rtt_ms} ms (banco: {res.raw_meta.get('db_ms')} ms)",
+            f"- **Usuário:** `{user}`",
+            f"- **Banco / Service:** `{db_name}`",
+            f"- **Host Remoto:** `{host}`",
+        ]
+        return {"text": "\n".join(lines)}
 
     def _consultar_sessao(self, conn: Any, connect_ms: float) -> _Diagnostico:
         """Consulta de teste (RTT e identidade da sessão). Encerra o uso da conexão no fim."""
@@ -1178,7 +1383,7 @@ class OracleMcpTools:
             falha = exc
             raise
         finally:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(*ERROS_DRIVER):
                 cursor.close()
             self._encerrar_uso(conn, falha, fired)
         return _Diagnostico(
@@ -1298,6 +1503,10 @@ class McpServer:
                             "description": "Formato de saída: 'table' (Markdown) ou 'json'.",
                             "enum": ["table", "json"],
                             "default": "table",
+                        },
+                        "params": {
+                            "type": "object",
+                            "description": "Bind parameters opcionais no formato {NOME: valor}.",
                         },
                     },
                     "required": ["sql"],
@@ -1423,8 +1632,19 @@ class McpServer:
     ) -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]]:
         """Ferramenta -> função que lê os argumentos do cliente e chama o OracleMcpTools."""
         return {
-            "execute_sql": lambda a: self.tools.execute_sql(
-                a.get("sql", ""), a.get("max_rows", 100), a.get("format", "table")
+            "execute_sql": lambda a: (
+                self.tools.execute_sql(
+                    a.get("sql", ""),
+                    a.get("max_rows", 100),
+                    a.get("format", "table"),
+                    a.get("params"),
+                )
+                if a.get("params") is not None
+                else self.tools.execute_sql(
+                    a.get("sql", ""),
+                    a.get("max_rows", 100),
+                    a.get("format", "table"),
+                )
             ),
             "get_query_plan": lambda a: self.tools.get_query_plan(a.get("sql", "")),
             "list_tables": lambda a: self.tools.list_tables(
@@ -1491,6 +1711,7 @@ class McpServer:
             )
         try:
             return self.handle_request(req)
+        # Residual: fronteira do loop STDIO; uma exceção que escapasse encerraria o servidor MCP e a sessão do cliente, sem resposta JSON-RPC.
         except Exception as exc:  # pylint: disable=broad-exception-caught
             log_stderr(f"Falha interna ao atender requisição: {exc}")
             return _erro_rpc(req.get("id"), -32603, f"Erro interno do servidor: {exc}")

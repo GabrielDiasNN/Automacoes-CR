@@ -10,8 +10,15 @@ from pathlib import Path
 import app.routers.automations as auto_router
 import pytest
 from app import models, schemas
-from app.runtime import scheduler
+from app.runtime import get_project_root, scheduler
 from app.services import scheduler_runtime
+from app.services.automation_preflight import (
+    _whatsapp_config_issues,
+    build_automation_preflight,
+)
+from app.services.portfolio_manifest import (
+    CatalogManifest,
+)
 from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
@@ -63,9 +70,6 @@ def test_preflight_automation_normalizes_channels(client: TestClient) -> None:
 
 
 def test_preflight_rejects_reserved_cleanup_script() -> None:
-    from app.services.automation_preflight import (  # pylint: disable=import-outside-toplevel
-        build_automation_preflight,
-    )
 
     with pytest.raises(ValueError, match="rotina reservada do sistema"):
         build_automation_preflight(
@@ -248,13 +252,6 @@ def test_preflight_blocks_invalid_whatsapp_config_schema(
 def test_whatsapp_config_issues_accepts_real_production_configs(
     automation_dir_name: str,
 ) -> None:
-    from app.runtime import get_project_root  # pylint: disable=import-outside-toplevel
-    from app.services.automation_preflight import (  # pylint: disable=import-outside-toplevel
-        _whatsapp_config_issues,
-    )
-    from app.services.portfolio_manifest import (  # pylint: disable=import-outside-toplevel
-        CatalogManifest,
-    )
 
     automation_dir = os.path.join(get_project_root(), automation_dir_name)
     manifest_path = os.path.join(automation_dir, "automation.manifest.json")

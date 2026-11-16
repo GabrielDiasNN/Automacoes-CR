@@ -1,4 +1,3 @@
-# pylint: disable=too-many-locals
 """Agregação cross-período dos snapshots do Beneficiamento.
 
 Consolida issues, resumo e payload de health a partir dos payloads

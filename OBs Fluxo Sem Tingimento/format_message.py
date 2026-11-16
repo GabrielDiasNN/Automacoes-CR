@@ -1,4 +1,3 @@
-# pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
 #   "version": "2.3.0",
 #   "contract": "exit-0=cards-e-manifesto-gerados, exit-2=nada-a-enviar, exit-1=erro",

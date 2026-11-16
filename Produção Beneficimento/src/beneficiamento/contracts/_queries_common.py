@@ -4,8 +4,6 @@ Extraído de ``_queries`` para isolar as camadas comuns usadas tanto pelo
 contrato de overview quanto pelo contrato de detail.
 """
 
-# pylint: disable=line-too-long
-
 from __future__ import annotations
 
 import sqlite3

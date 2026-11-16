@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
 
 from .. import schemas
@@ -29,6 +30,11 @@ router = APIRouter(tags=["WebSocket"])
 # massivos. Aplicado tanto no broadcast ao vivo quanto no replay histórico (#40).
 WS_MAX_MESSAGE_CHARS = 50_000
 _WS_TRUNCATION_SUFFIX = "\n... [TRUNCATED FOR WS PERFORMANCE]"
+
+# Falhas de envio a um cliente WebSocket (Starlette 1.4, WebSocket.send): OSError do
+# transporte vira WebSocketDisconnect(1006); envio depois de fechado ou sem accept
+# levanta RuntimeError. Ambas significam cliente morto para o broadcast.
+ERROS_DE_ENVIO_WS = (WebSocketDisconnect, RuntimeError)
 
 
 def truncate_ws_message(message: str) -> str:
@@ -119,7 +125,7 @@ class ConnectionManager:
         for ws in targets:
             try:
                 await self._safe_send(ws, message)
-            except Exception:  # pylint: disable=broad-exception-caught
+            except ERROS_DE_ENVIO_WS:
                 dead.append(ws)
         if dead:
             for ws in dead:
@@ -140,7 +146,7 @@ class ConnectionManager:
         for ws in targets:
             try:
                 await self._safe_send(ws, payload)
-            except Exception:  # pylint: disable=broad-exception-caught
+            except ERROS_DE_ENVIO_WS:
                 dead.append(ws)
         if dead:
             for ws in dead:
@@ -190,7 +196,9 @@ async def _send_log_replay(websocket: WebSocket, exec_id: str) -> None:
             # muito maior que uma linha individual (#40).
             await websocket.send_text(truncate_ws_message(logs))
             await websocket.send_text("\n--- Historico recuperado ---\n")
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    # Best-effort: consulta SQLite (SQLAlchemyError) e envio (RuntimeError/WebSocketDisconnect,
+    # os mesmos de ERROS_DE_ENVIO_WS); a falha vira warning e a conexao de log segue viva.
+    except (SQLAlchemyError, WebSocketDisconnect, RuntimeError) as e:
         logger.warning("Falha ao recuperar replay de logs para %s: %s", exec_id, e)
 
 

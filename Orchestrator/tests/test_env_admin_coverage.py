@@ -1,4 +1,3 @@
-# pylint: disable=protected-access
 """Cobertura do achado nº 11 — `env_admin.sync_global_test_mode_env`.
 
 O corpo do subprocesso (sucesso / `TimeoutExpired` / erro genérico) nunca era
@@ -16,8 +15,9 @@ from typing import Any
 
 import pytest
 from app.services import env_admin
+from carregadores_modulos import acessar_privado
 
-_TIMEOUT = env_admin._SYNC_TIMEOUT_SECONDS
+_TIMEOUT = acessar_privado(env_admin, "_SYNC_TIMEOUT_SECONDS")
 
 
 def _project_com_script(tmp_path: Path) -> str:

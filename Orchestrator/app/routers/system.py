@@ -28,6 +28,7 @@ from ..runtime import (
     trigger_worker_wakeup,
     wait_for_task_signal,
 )
+from ..schemas.common import validate_schedule
 from ..services import (
     audit_repository,
     env_admin,
@@ -436,9 +437,7 @@ def validate_schedule_payload(
 ) -> schemas.ScheduleValidationResponse:
     """Valida um schedule sem persistir alteracoes."""
     try:
-        normalized = schemas._validate_schedule(  # pylint: disable=protected-access
-            payload.schedule
-        )
+        normalized = validate_schedule(payload.schedule)
         parsed = schemas.parse_schedule(normalized) if normalized else None
         summary = schemas.describe_schedule_payload(parsed)
         return schemas.ScheduleValidationResponse(
@@ -463,9 +462,7 @@ def preview_schedule_payload(
 ) -> schemas.SchedulePreviewResponse:
     """Simula próximas execuções para uma agenda sem persistir alteração."""
     try:
-        normalized = schemas._validate_schedule(  # pylint: disable=protected-access
-            payload.schedule
-        )
+        normalized = validate_schedule(payload.schedule)
         parsed = schemas.parse_schedule(normalized) if normalized else None
         return schemas.SchedulePreviewResponse(
             valid=True,

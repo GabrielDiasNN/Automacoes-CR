@@ -1,4 +1,3 @@
-# pylint: disable=broad-exception-caught
 """Disparo isolado do refresh do Beneficiamento.
 
 Executa o runner do domínio em subprocesso (Oracle nunca é aberto no processo
@@ -15,11 +14,11 @@ import subprocess
 import sys
 from typing import Any
 
-from ..runtime import get_project_root  # pylint: disable=relative-beyond-top-level
-from ..security import (  # pylint: disable=relative-beyond-top-level
+from ..runtime import get_project_root
+from ..security import (
     sanitize_log_payload,
 )
-from ..subprocess_env import (  # pylint: disable=relative-beyond-top-level
+from ..subprocess_env import (
     build_subprocess_env,
 )
 
@@ -87,7 +86,9 @@ def run_beneficiamento_refresh(period: str) -> dict[str, Any]:
             "period": period,
             "detail": f"Refresh excedeu {_SUBPROCESS_TIMEOUT_SECONDS}s.",
         }
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
+        # OSError: runner ausente/sem permissão; ValueError: argumento inválido
+        # para o exec (ex.: byte nulo). TimeoutExpired já tratado acima.
         logger.error(
             "Falha ao disparar refresh do beneficiamento (%s): %s", period, exc
         )

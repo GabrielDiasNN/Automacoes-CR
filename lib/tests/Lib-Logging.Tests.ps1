@@ -245,4 +245,161 @@ Exit-AutomationLock -ExecId 'exec-2' -LockKey '$lockKey'
             }
         }
     }
+
+    Context "Test-OracleQueueWorkerAlive e PreFlight em modo queue" {
+        BeforeAll {
+            Import-Module ((Split-Path -Parent $PSScriptRoot) + "\Lib-Oracle.psm1") -Force
+        }
+
+        It "identifica heartbeat fresco como ativo e stale/ausente como offline" {
+            $queueDir = Join-Path $TestDrive "fila_pedidos"
+            New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
+            $hbPath = Join-Path $queueDir "_worker_heartbeat.json"
+
+            # Sem arquivo: offline
+            $resAusente = Test-OracleQueueWorkerAlive -QueueDir $queueDir
+            $resAusente.Alive | Should -BeFalse
+
+            # Heartbeat fresco: alive
+            '{"version":"2.6.1","state":"idle","oracle_ok":true}' | Set-Content -LiteralPath $hbPath -Encoding UTF8
+            $resVivo = Test-OracleQueueWorkerAlive -QueueDir $queueDir
+            $resVivo.Alive | Should -BeTrue
+            $resVivo.Version | Should -Be "2.6.1"
+
+            # Heartbeat vencido (> 45s): offline
+            (Get-Item -LiteralPath $hbPath).LastWriteTime = (Get-Date).AddMinutes(-5)
+            $resVelho = Test-OracleQueueWorkerAlive -QueueDir $queueDir -MaxAgeSeconds 45
+            $resVelho.Alive | Should -BeFalse
+        }
+
+        It "marca heartbeat expirado como offline mesmo com req_*.proc orfao" {
+            $queueDir = Join-Path $TestDrive "fila_orfao"
+            New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
+            $hbPath = Join-Path $queueDir "_worker_heartbeat.json"
+            $procPath = Join-Path $queueDir "req_orfao_001.proc"
+
+            '{"version":"2.6.1","state":"busy","oracle_ok":true}' | Set-Content -LiteralPath $hbPath -Encoding UTF8
+            '{"id":"req_orfao_001"}' | Set-Content -LiteralPath $procPath -Encoding UTF8
+
+            # Dentro do BusyMaxAgeSeconds (120s <= 240s): ainda considerado ativo
+            (Get-Item -LiteralPath $hbPath).LastWriteTime = (Get-Date).AddMinutes(-2)
+            $resBusy = Test-OracleQueueWorkerAlive -QueueDir $queueDir -MaxAgeSeconds 45 -BusyMaxAgeSeconds 240
+            $resBusy.Alive | Should -BeTrue
+
+            # Acima do BusyMaxAgeSeconds (600s > 240s): offline mesmo com .proc orfao
+            (Get-Item -LiteralPath $hbPath).LastWriteTime = (Get-Date).AddMinutes(-10)
+            $resOrfao = Test-OracleQueueWorkerAlive -QueueDir $queueDir -MaxAgeSeconds 45 -BusyMaxAgeSeconds 240
+            $resOrfao.Alive | Should -BeFalse
+            $resOrfao.Reason | Should -Match "heartbeat expirado"
+        }
+
+        It "preserva a causa quando o heartbeat esta corrompido (nao sobrescreve por 'sem heartbeat')" {
+            $queueDir = Join-Path $TestDrive "fila_hb_corrompido"
+            New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
+            $hbPath = Join-Path $queueDir "_worker_heartbeat.json"
+            '{"version":"2.6.1","state":' | Set-Content -LiteralPath $hbPath -Encoding UTF8
+
+            $res = Test-OracleQueueWorkerAlive -QueueDir $queueDir
+            $res.Alive | Should -BeFalse
+            $res.Reachable | Should -BeTrue
+            $res.Reason | Should -Match "falha ao ler heartbeat"
+            $res.Reason | Should -Match "sem sinal do worker na fila"
+            $res.Reason | Should -Not -Match "^sem heartbeat nem sinal"
+        }
+
+        It "Test-AutomationPreFlight -CheckOracle em modo queue valida worker vivo e reprova offline" {
+            $queueDir = Join-Path $TestDrive "fila_preflight"
+            New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
+            $hbPath = Join-Path $queueDir "_worker_heartbeat.json"
+            $logPf = Join-Path $TestDrive ("pf-queue-" + [guid]::NewGuid().ToString("N") + ".jsonl")
+
+            $prevMode = $env:ORACLE_DRIVER_MODE
+            $prevDir = $env:ORACLE_QUEUE_DIR
+            try {
+                $env:ORACLE_DRIVER_MODE = "queue"
+                $env:ORACLE_QUEUE_DIR = $queueDir
+
+                # Worker offline (sem heartbeat)
+                (Test-AutomationPreFlight -ExecId "pf-q-off" -LogPath $logPf -CheckOracle) | Should -BeFalse
+
+                # Worker vivo (heartbeat fresco)
+                '{"version":"2.6.1","state":"idle","oracle_ok":true}' | Set-Content -LiteralPath $hbPath -Encoding UTF8
+                (Test-AutomationPreFlight -ExecId "pf-q-on" -LogPath $logPf -CheckOracle) | Should -BeTrue
+            }
+            finally {
+                if ($null -eq $prevMode) { Remove-Item Env:\ORACLE_DRIVER_MODE -ErrorAction SilentlyContinue } else { $env:ORACLE_DRIVER_MODE = $prevMode }
+                if ($null -eq $prevDir) { Remove-Item Env:\ORACLE_QUEUE_DIR -ErrorAction SilentlyContinue } else { $env:ORACLE_QUEUE_DIR = $prevDir }
+            }
+        }
+
+        It "Get-OraclePreFlightExitCode retorna 26 para queue offline e 9 para vivo ou outro driver" {
+            $queueDir = Join-Path $TestDrive "fila_exitcode"
+            New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
+            $hbPath = Join-Path $queueDir "_worker_heartbeat.json"
+
+            $prevMode = $env:ORACLE_DRIVER_MODE
+            $prevDir = $env:ORACLE_QUEUE_DIR
+            try {
+                $env:ORACLE_DRIVER_MODE = "queue"
+                $env:ORACLE_QUEUE_DIR = $queueDir
+
+                Get-OraclePreFlightExitCode | Should -Be 26
+
+                '{"version":"2.6.1","state":"idle","oracle_ok":true}' | Set-Content -LiteralPath $hbPath -Encoding UTF8
+                Get-OraclePreFlightExitCode | Should -Be 9
+
+                $env:ORACLE_DRIVER_MODE = "thin"
+                Get-OraclePreFlightExitCode | Should -Be 9
+            }
+            finally {
+                if ($null -eq $prevMode) { Remove-Item Env:\ORACLE_DRIVER_MODE -ErrorAction SilentlyContinue } else { $env:ORACLE_DRIVER_MODE = $prevMode }
+                if ($null -eq $prevDir) { Remove-Item Env:\ORACLE_QUEUE_DIR -ErrorAction SilentlyContinue } else { $env:ORACLE_QUEUE_DIR = $prevDir }
+            }
+        }
+    }
+
+    Context "Get-OracleQueueServerNowUtc (relogio do servidor da fila)" {
+        It "devolve um instante UTC proximo do relogio local e apaga a sonda" {
+            $fila = Join-Path $TestDrive "fila_relogio"
+            New-Item -ItemType Directory -Path $fila -Force | Out-Null
+
+            $agora = Get-OracleQueueServerNowUtc -QueueDir $fila
+
+            $agora.Kind | Should -Be ([System.DateTimeKind]::Utc)
+            [math]::Abs(([DateTime]::UtcNow - $agora).TotalMinutes) | Should -BeLessThan 5
+            @(Get-ChildItem -LiteralPath $fila -Filter "_clock_probe_*" -ErrorAction SilentlyContinue).Count | Should -Be 0
+        }
+
+        It "cai para UtcNow quando a pasta da fila nao existe" {
+            $inexistente = Join-Path $TestDrive "pasta_que_nao_existe"
+
+            $agora = Get-OracleQueueServerNowUtc -QueueDir $inexistente
+
+            $agora.Kind | Should -Be ([System.DateTimeKind]::Utc)
+            [math]::Abs(([DateTime]::UtcNow - $agora).TotalMinutes) | Should -BeLessThan 5
+        }
+    }
+
+    Context "Invoke-LogRotation" {
+        It "remove registros expirados tanto com campo ts quanto com timestamp" {
+            $rotLog = Join-Path $TestDrive ("rot-" + [guid]::NewGuid().ToString("N") + ".jsonl")
+            $oldIso = (Get-Date).Date.AddDays(-20).AddHours(10).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            $newIso = (Get-Date).Date.AddHours(10).ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+            @(
+                "{`"ts`":`"${oldIso}`",`"message`":`"antigo_ts`"}"
+                "{`"timestamp`":`"${oldIso}`",`"message`":`"antigo_timestamp`"}"
+                "{`"ts`":`"${newIso}`",`"message`":`"novo_ts`"}"
+                "{`"timestamp`":`"${newIso}`",`"message`":`"novo_timestamp`"}"
+            ) | Set-Content -LiteralPath $rotLog -Encoding UTF8
+
+            Invoke-LogRotation -LogPath $rotLog -KeepDays 15
+
+            $remaining = @(Get-Content -LiteralPath $rotLog | Where-Object { $_.Trim() })
+            $remaining.Count | Should -Be 2
+            ($remaining -join "`n") | Should -Match "novo_ts"
+            ($remaining -join "`n") | Should -Match "novo_timestamp"
+            ($remaining -join "`n") | Should -Not -Match "antigo_"
+        }
+    }
 }

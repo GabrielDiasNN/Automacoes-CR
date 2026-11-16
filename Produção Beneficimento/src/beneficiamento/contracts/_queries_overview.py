@@ -5,8 +5,6 @@ usados exclusivamente pelo contrato de overview (``contracts.overview``).
 Consome os utilitários compartilhados de ``_queries_common``.
 """
 
-# pylint: disable=too-many-locals
-
 from __future__ import annotations
 
 import sqlite3

@@ -18,8 +18,8 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from medir_sql_oracle import DEFAULT_MIN_GAIN_PCT, decide  # noqa: E402
-from oracle_catalog import GuardError, sql_guard_text  # noqa: E402
+from medir_sql_oracle import DEFAULT_MIN_GAIN_PCT, decide
+from oracle_catalog import GuardError, sql_guard_text
 
 
 def _ler_json(caminho: Path) -> dict[str, Any] | None:

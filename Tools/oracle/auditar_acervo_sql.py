@@ -31,12 +31,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from medir_sql_oracle import MAX_ATTEMPTS, _check_runs  # noqa: E402
-from oracle_catalog import GuardError, sql_guard_text  # noqa: E402
-from validar_sql_oracle import CONSULTAS_ROOT, _files  # noqa: E402
+from medir_sql_oracle import MAX_ATTEMPTS, _check_runs
+from oracle_catalog import GuardError, sql_guard_text
+from validar_sql_oracle import CONSULTAS_ROOT, _files
+
+ROOT = Path(__file__).resolve().parents[2]
 
 MEDIR = Path(__file__).resolve().parent / "medir_sql_oracle.py"
 AUDIT_VERSION = "1.0.0"

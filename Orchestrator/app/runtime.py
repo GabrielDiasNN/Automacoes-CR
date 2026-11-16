@@ -23,6 +23,10 @@ scheduler = BackgroundScheduler(timezone=pytz.timezone("America/Sao_Paulo"))
 
 # Loop do servidor, registrado no lifespan. Necessário porque endpoints sync
 # rodam em threadpool e asyncio.Event.set() não é thread-safe.
+# RESIDUAL (invalid-name, global-statement): o nome `_event_loop` e lido e substituido
+# pelos testes (tests/test_scheduler_runtime_unit.py faz monkeypatch.setattr(runtime,
+# "_event_loop", ...)); renomear ou trocar por holder quebraria esse contrato fora da
+# particao. A escrita por `global` e a unica forma de rebind do modulo.
 _event_loop: asyncio.AbstractEventLoop | None = None  # pylint: disable=invalid-name
 
 

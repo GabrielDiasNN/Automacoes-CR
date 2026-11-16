@@ -24,6 +24,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import oracledb
 import pytest
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -35,7 +36,7 @@ if str(_LIB_PYTHON) not in sys.path:
 if str(_TOOLS_ORACLE) not in sys.path:
     sys.path.insert(0, str(_TOOLS_ORACLE))
 
-from oracle_client import (  # noqa: E402  pylint: disable=wrong-import-position
+from oracle_client import (
     connect_adaptive,
 )
 
@@ -215,8 +216,9 @@ def _conexao_oracle() -> Any:
             tns_admin=tns_admin,
             log_fn=lambda *a, **k: None,
         )
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        # Qualquer falha de rede ou driver significa "ambiente sem banco", não defeito do plano.
+    except (oracledb.Error, OSError) as exc:
+        # Falha de driver (oracledb.Error) ou de rede (OSError) significa "ambiente sem banco",
+        # não defeito do plano. connect_adaptive não levanta outros tipos de falha de conexão.
         pytest.skip(
             f"Conexão com Oracle na Unifique não disponível no ambiente atual ({exc})."
         )

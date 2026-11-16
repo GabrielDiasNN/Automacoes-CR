@@ -24,8 +24,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response as StarletteResponse
 
-# Força o carregamento dos modelos (registro em Base.metadata).
-from . import models  # noqa: F401 pylint: disable=unused-import
 from .constants import ORCHESTRATOR_SCHEMA_VERSION, ORCHESTRATOR_VERSION
 from .database import (
     SessionLocal,
@@ -130,6 +128,9 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
 # ---------------------------------------------------------------------------
 
 
+# RESIDUAL (too-few-public-methods): o contrato de BaseHTTPMiddleware (Starlette)
+# expoe um unico metodo publico (dispatch); app.add_middleware exige a classe, e
+# tests/test_system.py importa SecurityHeadersMiddleware pelo nome.
 class SecurityHeadersMiddleware(
     BaseHTTPMiddleware
 ):  # pylint: disable=too-few-public-methods

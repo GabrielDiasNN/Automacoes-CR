@@ -1,4 +1,3 @@
-# pylint: disable=protected-access
 """Testes unitários dos utilitários internos do worker.py (kill, env, caps de log, finalize)."""
 
 import json
@@ -6,23 +5,32 @@ import os
 import subprocess
 import threading
 import time
+from dataclasses import dataclass
 from queue import Queue
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import worker
 from app import models
+from app.logger_setup import (
+    setup_json_logger,
+)
 from app.timezone import get_now_local
+from carregadores_modulos import acessar_privado
 
 
-class _FakeAutomation:  # pylint: disable=too-few-public-methods
-    def __init__(self, test_mode: bool) -> None:
-        self.test_mode = test_mode
+@dataclass
+class _FakeAutomation:
+    test_mode: bool
 
 
-class _FakeExecution:  # pylint: disable=too-few-public-methods
-    def __init__(self, test_mode: bool) -> None:
-        self.automation = _FakeAutomation(test_mode)
+@dataclass
+class _FakeExecution:
+    test_mode: bool
+
+    @property
+    def automation(self) -> _FakeAutomation:
+        return _FakeAutomation(self.test_mode)
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +40,7 @@ class _FakeExecution:  # pylint: disable=too-few-public-methods
 
 def test_force_kill_chama_taskkill_com_args_corretos() -> None:
     with patch("worker.subprocess.run") as mock_run:
-        worker._force_kill(1234)
+        acessar_privado(worker, "_force_kill")(1234)
 
     mock_run.assert_called_once_with(
         ["taskkill", "/F", "/T", "/PID", "1234"],
@@ -48,7 +56,7 @@ def test_force_kill_timeout_expired_loga_warning() -> None:
         patch("worker.logger.warning") as mock_warning,
     ):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="taskkill", timeout=15)
-        worker._force_kill(1234)
+        acessar_privado(worker, "_force_kill")(1234)
 
     mock_warning.assert_called_once()
 
@@ -60,28 +68,40 @@ def test_force_kill_timeout_expired_loga_warning() -> None:
 
 def test_subprocess_env_nao_contem_oracle_readonly_password(monkeypatch: Any) -> None:
     monkeypatch.setenv("ORACLE_READONLY_PASSWORD", "super-secret")
-    env = worker._build_subprocess_env(_FakeExecution(test_mode=False), "EXEC-1")
+    env = acessar_privado(worker, "_build_subprocess_env")(
+        _FakeExecution(test_mode=False), "EXEC-1"
+    )
     assert "ORACLE_READONLY_PASSWORD" not in env
 
 
 def test_subprocess_env_contem_apenas_allowed_keys(monkeypatch: Any) -> None:
     monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
     monkeypatch.setenv("SOME_RANDOM_SECRET", "leak-me-not")
-    env = worker._build_subprocess_env(_FakeExecution(test_mode=False), "EXEC-1")
+    env = acessar_privado(worker, "_build_subprocess_env")(
+        _FakeExecution(test_mode=False), "EXEC-1"
+    )
     extras = {"ORCHESTRATOR_TEST_MODE", "EXEC_ID", "CORRELATION_ID"}
-    assert (set(env.keys()) - extras).issubset(worker._ALLOWED_ENV_KEYS)
+    assert (set(env.keys()) - extras).issubset(
+        acessar_privado(worker, "_ALLOWED_ENV_KEYS")
+    )
     assert "SOME_RANDOM_SECRET" not in env
 
 
 def test_subprocess_env_test_mode_propagado() -> None:
-    env_true = worker._build_subprocess_env(_FakeExecution(test_mode=True), "EXEC-1")
-    env_false = worker._build_subprocess_env(_FakeExecution(test_mode=False), "EXEC-1")
+    env_true = acessar_privado(worker, "_build_subprocess_env")(
+        _FakeExecution(test_mode=True), "EXEC-1"
+    )
+    env_false = acessar_privado(worker, "_build_subprocess_env")(
+        _FakeExecution(test_mode=False), "EXEC-1"
+    )
     assert env_true["ORCHESTRATOR_TEST_MODE"] == "true"
     assert env_false["ORCHESTRATOR_TEST_MODE"] == "false"
 
 
 def test_subprocess_env_exec_id_e_correlation_id_iguais() -> None:
-    env = worker._build_subprocess_env(_FakeExecution(test_mode=False), "EXEC-99")
+    env = acessar_privado(worker, "_build_subprocess_env")(
+        _FakeExecution(test_mode=False), "EXEC-99"
+    )
     assert env["EXEC_ID"] == "EXEC-99"
     assert env["CORRELATION_ID"] == "EXEC-99"
 
@@ -98,7 +118,7 @@ def test_drain_cap_linhas_para_em_max_log_lines() -> None:
     logs: list[str] = []
 
     with patch("worker.MAX_LOG_LINES", 3), patch("worker.broadcast_log"):
-        worker._drain_process_output(queue, logs, "EXEC-1")
+        acessar_privado(worker, "_drain_process_output")(queue, logs, "EXEC-1")
 
     assert len(logs) == 3
 
@@ -110,7 +130,7 @@ def test_drain_cap_chars_para_em_max_log_chars() -> None:
     logs: list[str] = []
 
     with patch("worker.MAX_LOG_CHARS", 25), patch("worker.broadcast_log"):
-        worker._drain_process_output(queue, logs, "EXEC-1")
+        acessar_privado(worker, "_drain_process_output")(queue, logs, "EXEC-1")
 
     assert sum(len(line) for line in logs) <= 30
 
@@ -122,7 +142,7 @@ def test_drain_retorna_total_de_chars_acumulado() -> None:
     logs: list[str] = []
 
     with patch("worker.broadcast_log"):
-        total = worker._drain_process_output(queue, logs, "EXEC-1")
+        total = acessar_privado(worker, "_drain_process_output")(queue, logs, "EXEC-1")
 
     assert total == 30
 
@@ -139,7 +159,9 @@ def test_drain_com_total_recebido_nao_recalcula_do_zero() -> None:
     logs: list[str] = []
 
     with patch("worker.MAX_LOG_CHARS", 25), patch("worker.broadcast_log") as mock_bc:
-        total = worker._drain_process_output(queue, logs, "EXEC-1", total_chars=100)
+        total = acessar_privado(worker, "_drain_process_output")(
+            queue, logs, "EXEC-1", total_chars=100
+        )
 
     assert not logs  # já acima do cap: nada acumulado
     assert total == 100
@@ -156,7 +178,7 @@ def test_drain_acima_do_cap_continua_broadcast_mas_nao_acumula() -> None:
         patch("worker.MAX_LOG_LINES", 2),
         patch("worker.broadcast_log") as mock_broadcast,
     ):
-        worker._drain_process_output(queue, logs, "EXEC-1")
+        acessar_privado(worker, "_drain_process_output")(queue, logs, "EXEC-1")
 
     assert len(logs) == 2
     assert mock_broadcast.call_count == 5
@@ -196,7 +218,9 @@ def _finalize(
         "task_start_monotonic": time.monotonic() - 1,
     }
     with patch("worker.broadcast_log"), patch("worker.broadcast_event"):
-        worker._finalize_execution(db_session, process, ["novo log"], task_ctx)
+        acessar_privado(worker, "_finalize_execution")(
+            db_session, process, ["novo log"], task_ctx
+        )
 
 
 def test_finalize_nao_sobrescreve_status_terminated(
@@ -336,9 +360,6 @@ def test_logger_sob_pytest_nao_escreve_arquivo_em_disco(tmp_path: Any) -> None:
     PermissionError no Windows quando outro handler o mantém aberto — falha
     intermitente atribuída a um teste qualquer, sem relação com ele.
     """
-    from app.logger_setup import (  # pylint: disable=import-outside-toplevel
-        setup_json_logger,
-    )
 
     alvo = tmp_path / "nao_deve_existir.jsonl"
     logger = setup_json_logger("qa-probe-sem-disco", str(alvo), component="qa")

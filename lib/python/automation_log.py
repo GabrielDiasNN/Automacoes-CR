@@ -80,7 +80,8 @@ def resolve_trace_id(slug: str) -> str:
     return inherited or new_trace_id(slug)
 
 
-def emit_event(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+# Residual: assinatura do evento usada por oracle_retry e pelos testes com estes nomes; agrupar mudaria esses pontos de chamada.
+def emit_event(  # pylint: disable=too-many-arguments
     event: str,
     level: str,
     message: str,

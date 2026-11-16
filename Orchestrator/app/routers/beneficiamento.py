@@ -1,8 +1,8 @@
 """Endpoints de PCP e OEE de Beneficiamento baseados no SQLite Histórico."""
 
-# pylint: disable=relative-beyond-top-level,line-too-long,trailing-newlines
-
 import logging
+from dataclasses import dataclass
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -14,6 +14,153 @@ from ..services.beneficiamento_refresh import run_beneficiamento_refresh
 logger = logging.getLogger("orchestrator")
 
 router = APIRouter(prefix="/api/beneficiamento", tags=["Beneficiamento"])
+
+
+# Parametros de query agrupados em dataclasses usadas via Depends(): mesmos
+# nomes, tipos, defaults e validacoes que antes ficavam na assinatura do handler.
+@dataclass
+class _HistoricoFiltros:
+    ob: Annotated[str | None, Query(description="Número da OB (busca parcial)")] = None
+    alternativo: Annotated[
+        str | None, Query(description="Código Alternativo ou Reduzido do produto")
+    ] = None
+    dt_inicio: Annotated[
+        str | None,
+        Query(description="Data final inicial (formato YYYY-MM-DD ou ISO)"),
+    ] = None
+    dt_fim: Annotated[
+        str | None,
+        Query(description="Data final limite (formato YYYY-MM-DD ou ISO)"),
+    ] = None
+    ano_sem: Annotated[
+        int | None,
+        Query(description="Código do Ano + Semana ISO (ex: 202622)"),
+    ] = None
+    ano_mes: Annotated[
+        str | None, Query(description="Código do Ano + Mês (ex: 202605)")
+    ] = None
+    limit: Annotated[
+        int,
+        Query(ge=1, le=5000, description="Limite máximo de registros retornados"),
+    ] = 500
+
+
+@dataclass
+class _OverviewRecorte:
+    dt_inicio: Annotated[
+        str | None,
+        Query(description="Data final inicial (formato YYYY-MM-DD ou ISO)"),
+    ] = None
+    dt_fim: Annotated[
+        str | None,
+        Query(description="Data final limite (formato YYYY-MM-DD ou ISO)"),
+    ] = None
+    maquina: Annotated[str | None, Query(description="Nome da máquina para filtro")] = (
+        None
+    )
+    fase: Annotated[str | None, Query(description="Nome da fase para filtro")] = None
+    turno: Annotated[str | None, Query(description="Turno específico para filtro")] = (
+        None
+    )
+
+
+@dataclass
+class _OverviewClassificacao:
+    alternativo: Annotated[
+        str | None, Query(description="Código Alternativo principal do produto")
+    ] = None
+    q: Annotated[
+        str | None, Query(description="Busca por OB, produto, artigo, cor ou código")
+    ] = None
+    setor: Annotated[str | None, Query(description="Setor industrial para filtro")] = (
+        None
+    )
+    grupo_fase: Annotated[
+        str | None, Query(description="Grupo de fase para filtro")
+    ] = None
+    tipo_maquina: Annotated[
+        str | None, Query(description="Descrição do tipo de máquina para filtro")
+    ] = None
+    reprocesso: Annotated[
+        str | None,
+        Query(
+            description="Filtra por reprocesso: '1' só reprocesso, '0' sem reprocesso"
+        ),
+    ] = None
+    status: Annotated[
+        str | None,
+        Query(description="Filtra por status de execução: 'confirmada' ou 'planejada'"),
+    ] = None
+
+
+@dataclass
+class _DetailRecorte:
+    target_type: Annotated[
+        str,
+        Query(
+            description=(
+                "Tipo do detalhe: produto, maquina_fase, fase, turno, ob, "
+                "setor, grupo_fase ou tipo_maquina"
+            ),
+        ),
+    ]
+    dt_inicio: Annotated[
+        str | None,
+        Query(description="Data final inicial (formato YYYY-MM-DD ou ISO)"),
+    ] = None
+    dt_fim: Annotated[
+        str | None,
+        Query(description="Data final limite (formato YYYY-MM-DD ou ISO)"),
+    ] = None
+    maquina: Annotated[str | None, Query(description="Nome da máquina para filtro")] = (
+        None
+    )
+    fase: Annotated[str | None, Query(description="Nome da fase para filtro")] = None
+    turno: Annotated[str | None, Query(description="Turno específico para filtro")] = (
+        None
+    )
+    alternativo: Annotated[
+        str | None, Query(description="Código Alternativo principal do produto")
+    ] = None
+
+
+@dataclass
+class _DetailClassificacao:
+    ob: Annotated[str | None, Query(description="Número da OB")] = None
+    q: Annotated[
+        str | None, Query(description="Busca por OB, produto, artigo, cor ou código")
+    ] = None
+    setor: Annotated[str | None, Query(description="Setor industrial para filtro")] = (
+        None
+    )
+    grupo_fase: Annotated[
+        str | None, Query(description="Grupo de fase para filtro")
+    ] = None
+    tipo_maquina: Annotated[
+        str | None, Query(description="Descrição do tipo de máquina para filtro")
+    ] = None
+    reprocesso: Annotated[
+        str | None,
+        Query(
+            description="Filtra por reprocesso: '1' só reprocesso, '0' sem reprocesso"
+        ),
+    ] = None
+    status: Annotated[
+        str | None,
+        Query(description="Filtra por status de execução: 'confirmada' ou 'planejada'"),
+    ] = None
+
+
+@dataclass
+class _DetailPaginacao:
+    page: Annotated[int, Query(ge=1, description="Página do detalhe")] = 1
+    limit: Annotated[
+        int, Query(ge=1, le=200, description="Limite máximo por página")
+    ] = 50
+    include_raw: Annotated[
+        bool, Query(description="Quando verdadeiro, devolve também o payload bruto")
+    ] = False
+
 
 PROJECT_ROOT = get_project_root()
 
@@ -64,30 +211,8 @@ def _ensure_snapshot_dashboard() -> None:
 
 
 @router.get("/historico", response_model=schemas.BeneficiamentoHistoricoResponse)
-# Handler FastAPI: cada parâmetro é um Query() injetado por DI, nunca posicional
-# de fato. Disable confinado à assinatura, padrão de `routers/executions.py`
-# (achado nº 21) — o gate R0913/R0917 segue ativo no resto do módulo.
-def get_beneficiamento_historico(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    ob: str | None = Query(None, description="Número da OB (busca parcial)"),
-    alternativo: str | None = Query(
-        None, description="Código Alternativo ou Reduzido do produto"
-    ),
-    dt_inicio: str | None = Query(
-        None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
-    ),
-    dt_fim: str | None = Query(
-        None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
-    ),
-    ano_sem: int | None = Query(
-        None, description="Código do Ano + Semana ISO (ex: 202622)"
-    ),
-    ano_mes: str | None = Query(None, description="Código do Ano + Mês (ex: 202605)"),
-    limit: int = Query(
-        500,
-        ge=1,
-        le=5000,
-        description="Limite máximo de registros retornados",
-    ),
+def get_beneficiamento_historico(
+    filtros_query: Annotated[_HistoricoFiltros, Depends()],
     _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoHistoricoResponse:
     """Realiza buscas rápidas no SQLite indexado local para rastreabilidade de OBs e produtos."""
@@ -99,16 +224,16 @@ def get_beneficiamento_historico(  # pylint: disable=too-many-arguments,too-many
         )
 
     filtros = {
-        "ob": ob,
-        "alternativo": alternativo,
-        "dt_inicio": dt_inicio,
-        "dt_fim": dt_fim,
-        "ano_sem": ano_sem,
-        "ano_mes": ano_mes,
+        "ob": filtros_query.ob,
+        "alternativo": filtros_query.alternativo,
+        "dt_inicio": filtros_query.dt_inicio,
+        "dt_fim": filtros_query.dt_fim,
+        "ano_sem": filtros_query.ano_sem,
+        "ano_mes": filtros_query.ano_mes,
     }
 
     try:
-        records = buscar_historico(filtros, limit=limit)
+        records = buscar_historico(filtros, limit=filtros_query.limit)
         return schemas.BeneficiamentoHistoricoResponse(
             total_records=len(records), records=records
         )
@@ -146,34 +271,9 @@ def get_beneficiamento_produtos(
 
 
 @router.get("/overview", response_model=schemas.BeneficiamentoOverviewResponse)
-def get_beneficiamento_overview(  # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
-    dt_inicio: str | None = Query(
-        None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
-    ),
-    dt_fim: str | None = Query(
-        None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
-    ),
-    maquina: str | None = Query(None, description="Nome da máquina para filtro"),
-    fase: str | None = Query(None, description="Nome da fase para filtro"),
-    turno: str | None = Query(None, description="Turno específico para filtro"),
-    alternativo: str | None = Query(
-        None, description="Código Alternativo principal do produto"
-    ),
-    q: str | None = Query(
-        None, description="Busca por OB, produto, artigo, cor ou código"
-    ),
-    setor: str | None = Query(None, description="Setor industrial para filtro"),
-    grupo_fase: str | None = Query(None, description="Grupo de fase para filtro"),
-    tipo_maquina: str | None = Query(
-        None, description="Descrição do tipo de máquina para filtro"
-    ),
-    reprocesso: str | None = Query(
-        None, description="Filtra por reprocesso: '1' só reprocesso, '0' sem reprocesso"
-    ),
-    status: str | None = Query(
-        None,
-        description="Filtra por status de execução: 'confirmada' ou 'planejada'",
-    ),
+def get_beneficiamento_overview(
+    recorte: Annotated[_OverviewRecorte, Depends()],
+    classificacao: Annotated[_OverviewClassificacao, Depends()],
     _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoOverviewResponse:
     """Retorna o contrato operacional V1 do Beneficiamento a partir do SQLite local."""
@@ -185,18 +285,18 @@ def get_beneficiamento_overview(  # pylint: disable=too-many-locals,too-many-arg
         )
 
     filtros = {
-        "dt_inicio": dt_inicio,
-        "dt_fim": dt_fim,
-        "maquina": maquina,
-        "fase": fase,
-        "turno": turno,
-        "alternativo": alternativo,
-        "q": q,
-        "setor": setor,
-        "grupo_fase": grupo_fase,
-        "tipo_maquina": tipo_maquina,
-        "reprocesso": reprocesso,
-        "status": status,
+        "dt_inicio": recorte.dt_inicio,
+        "dt_fim": recorte.dt_fim,
+        "maquina": recorte.maquina,
+        "fase": recorte.fase,
+        "turno": recorte.turno,
+        "alternativo": classificacao.alternativo,
+        "q": classificacao.q,
+        "setor": classificacao.setor,
+        "grupo_fase": classificacao.grupo_fase,
+        "tipo_maquina": classificacao.tipo_maquina,
+        "reprocesso": classificacao.reprocesso,
+        "status": classificacao.status,
     }
 
     try:
@@ -314,47 +414,10 @@ def get_beneficiamento_dashboard(
 
 
 @router.get("/detail", response_model=schemas.BeneficiamentoDetailResponse)
-def get_beneficiamento_detail(  # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
-    target_type: str = Query(
-        ...,
-        description=(
-            "Tipo do detalhe: produto, maquina_fase, fase, turno, ob, "
-            "setor, grupo_fase ou tipo_maquina"
-        ),
-    ),
-    dt_inicio: str | None = Query(
-        None, description="Data final inicial (formato YYYY-MM-DD ou ISO)"
-    ),
-    dt_fim: str | None = Query(
-        None, description="Data final limite (formato YYYY-MM-DD ou ISO)"
-    ),
-    maquina: str | None = Query(None, description="Nome da máquina para filtro"),
-    fase: str | None = Query(None, description="Nome da fase para filtro"),
-    turno: str | None = Query(None, description="Turno específico para filtro"),
-    alternativo: str | None = Query(
-        None, description="Código Alternativo principal do produto"
-    ),
-    ob: str | None = Query(None, description="Número da OB"),
-    q: str | None = Query(
-        None, description="Busca por OB, produto, artigo, cor ou código"
-    ),
-    setor: str | None = Query(None, description="Setor industrial para filtro"),
-    grupo_fase: str | None = Query(None, description="Grupo de fase para filtro"),
-    tipo_maquina: str | None = Query(
-        None, description="Descrição do tipo de máquina para filtro"
-    ),
-    reprocesso: str | None = Query(
-        None, description="Filtra por reprocesso: '1' só reprocesso, '0' sem reprocesso"
-    ),
-    status: str | None = Query(
-        None,
-        description="Filtra por status de execução: 'confirmada' ou 'planejada'",
-    ),
-    page: int = Query(1, ge=1, description="Página do detalhe"),
-    limit: int = Query(50, ge=1, le=200, description="Limite máximo por página"),
-    include_raw: bool = Query(
-        False, description="Quando verdadeiro, devolve também o payload bruto"
-    ),
+def get_beneficiamento_detail(
+    recorte: Annotated[_DetailRecorte, Depends()],
+    classificacao: Annotated[_DetailClassificacao, Depends()],
+    paginacao: Annotated[_DetailPaginacao, Depends()],
     _api_key: str = Depends(get_api_key),
 ) -> schemas.BeneficiamentoDetailResponse:
     """Retorna o drill-down operacional do Beneficiamento a partir do SQLite local."""
@@ -366,23 +429,23 @@ def get_beneficiamento_detail(  # pylint: disable=too-many-locals,too-many-argum
         )
 
     filtros = {
-        "target_type": target_type,
-        "dt_inicio": dt_inicio,
-        "dt_fim": dt_fim,
-        "maquina": maquina,
-        "fase": fase,
-        "turno": turno,
-        "alternativo": alternativo,
-        "ob": ob,
-        "q": q,
-        "setor": setor,
-        "grupo_fase": grupo_fase,
-        "tipo_maquina": tipo_maquina,
-        "reprocesso": reprocesso,
-        "status": status,
-        "page": page,
-        "limit": limit,
-        "include_raw": include_raw,
+        "target_type": recorte.target_type,
+        "dt_inicio": recorte.dt_inicio,
+        "dt_fim": recorte.dt_fim,
+        "maquina": recorte.maquina,
+        "fase": recorte.fase,
+        "turno": recorte.turno,
+        "alternativo": recorte.alternativo,
+        "ob": classificacao.ob,
+        "q": classificacao.q,
+        "setor": classificacao.setor,
+        "grupo_fase": classificacao.grupo_fase,
+        "tipo_maquina": classificacao.tipo_maquina,
+        "reprocesso": classificacao.reprocesso,
+        "status": classificacao.status,
+        "page": paginacao.page,
+        "limit": paginacao.limit,
+        "include_raw": paginacao.include_raw,
     }
 
     try:

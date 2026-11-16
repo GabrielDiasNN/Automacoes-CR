@@ -2,6 +2,87 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.114] - 15/11/2026
+
+Endurecimento ponta a ponta da arquitetura **Oracle Queue (Worker SMB `v2.6.2` no TSplus + camada Python + Orchestrator + 6 automações + `Tools/oracle/` + Catálogo SQL)**, eliminando falhas silenciosas em quedas do worker, reduzindo timeouts para detecção rápida e automatizando recuperação pós-indisponibilidade e suporte completo ao modo `queue` nas ferramentas SQL.
+
+### Adicionado
+
+- **Worker Oracle SMB `v2.6.2` (deploy no TSplus, fora do controle de versão):** escrita periódica de heartbeat em `_worker_heartbeat.json`, suporte a diretivas `--#ttl:`, `--#timeout:`, `--#max_rows:N` (eliminando wrapping `SELECT * FROM (...)` / `ORA-00918` no MCP e em `validar_sql_oracle.py`), `--#action:explain` (preservando binds `:P` via `EXECUTE IMMEDIATE`), `--#meta:`, inicialização de `tIni = Timer` em `ProcessarRequisicao`, limpeza de `req_*.sql` órfãos e validação reforçada em `ValidarSqlSeguro` (bloqueio de `;` interno, DBLinks `@` e packages bloqueados).
+- **Liveness, classificação de falhas e cleanup na fila Python (`lib/python/oracle_queue.py`, `lib/python/oracle_extract.py`, `lib/python/oracle_retry.py`):** pré-checagem de `_worker_heartbeat.json` (`check_worker_liveness`, `OracleQueueWorkerOfflineError`, sem mascaramento de heartbeat expirado por `.proc` órfão), timeout de reivindicação (`90 s`), `DEFAULT_EXTRACTION_TIMEOUT_SECONDS = 180.0`, falha imediata em `get_queue_timeout()` quando `ORACLE_QUEUE_DEADLINE_EPOCH` estiver expirado, gravação de `--#meta:` no topo do payload com match exato de `exec_id`, limpeza por `exec_id` (`cleanup_requests_for_exec_id`), preservação de hints `/*+ ... */` e literais (incluindo `q'[...]'`/`nq'[...]'`) em `strip_sql_comments`, omissão de cabeçalhos `--#param:` em `explain` e quando `body_sql` é vazio, fast-fail TCP 445, limite de campo CSV de 10 MB, classificação de saída em `classify_oracle_exit_code` e controle de deadline (`enforce_queue_deadline`).
+- **Contratos de falha e observabilidade compartilhada:** códigos `26` (`ORACLE_WORKER_OFFLINE`) e `27` (`ORACLE_QUEUE_TIMEOUT`) em `Orchestrator/app/constants.py` (`EXIT_CODE_MAP`), helpers compartilhados em `lib/Lib-Logging.psm1` (`Invoke-LogRotation` aceitando chaves `"ts"` e `"timestamp"`), `lib/Lib-Retry.psm1` e `lib/Lib-Oracle.psm1`, propagados aos 6 `run.ps1` e extratores (`OBs Paradas Fase`, `OBs Fluxo Sem Tingimento`, `OBs Restricao Branco`, `Receitas Bloqueadas`, `Receitas Emitidas`, `Montagem de Terceirizados`), com `-LockKey` adotado nas 6 automações (`MT-02`, `OBP-04`, `RB-01`, `RE-03`, `OFST-06`, `ORB-07`), `$ResultFile` e `Invoke-LogRotation` protegidos dentro do lock, tratamento explícito de `ExitCode 22` (`Send-WhatsApp.ps1` mutex/cooldown) em `OFST-06`, `ORB-07`, `OBP-04` e `RB-01`, e `Get-OraclePreFlightExitCode` aplicado também em `MT-02`.
+- **Diagnóstico e auto-recuperação no Orchestrator:** check `oracle_queue_worker` em `diagnostic_checks.py` integrado a `diagnostic_collectors.py`, `system_diagnostics.py`, `system_runtime.py` (`build_health_payload` marcando `"degraded"` quando o worker Oracle estiver offline com `enabled=True`) e `schemas/system.py`; cleanup de fila e propagação de deadline em `worker.py` e `subprocess_env.py`; mapeamento em `portfolio_catalog.py`; tarefa agendada `enterprise_oracle_worker_recovery` em `scheduler_runtime.py` (`recover_oracle_worker_outage` em FIFO via `finished_at.asc()` com 1 requeue ativo por ciclo no `queue_group="oracle"` evitando `409`/starvation, exclusão de `MAX_RUNTIME_EXCEEDED` do outage recovery, `bypass_retry_limit` restrito somente a `ORACLE_WORKER_OFFLINE` em `execution_runtime.py`, comparação cron aware/Brasília via `to_br_timezone`, janela de 2h e guarda de 20 min antes do próximo cron) e suspensão de `auto_retry_transient_failures` para `queue_group == "oracle"` enquanto o worker estiver offline.
+- **Modo `queue` unificado em `Tools/oracle/` e Catálogo SQL offline:** módulo `Tools/oracle/oracle_queue_tools.py` compartilhado entre `Tools/oracle/mcp_server.py` (`execute_sql` com `params` e `--#max_rows:N`, `get_query_plan`, `list_tables`, `describe_table`, `check_connection`), `validar_sql_oracle.py` (`--#max_rows:N`), `medir_sql_oracle.py` e `oracle_catalog.py`, além do novo subcomando offline `oracle_catalog.py queries [termo] [--pasta] [--bind] [--limit]`.
+- **Testes e E2E:** cobertura ampliada em `Orchestrator/tests/test_oracle_queue_unit.py`, `test_oracle_mcp_dual_mode_unit.py`, `test_scheduler_runtime_unit.py`, `test_worker_oracle_queue_unit.py`, `lib/tests/Lib-Logging.Tests.ps1`, `lib/tests/Lib-Retry.Tests.ps1` e `Tools/oracle/teste_e2e_fila_oracle.py` (18 cenários validados contra o worker `v2.6.1` antes dos ajustes da `v2.6.2`).
+
+### Alterado
+
+- **`.mcp.json` e `.env.example`:** removida a fixação hardcoded de `"ORACLE_DRIVER_MODE": "thick"` no `.mcp.json` para delegar ao `.env`, e documentadas as variáveis de timeout e reivindicação da fila Oracle no `.env.example`.
+- **Correções da revisão de código deste pacote (15/11/2026):**
+  - `CircuitBreakerError` volta a sair com `1` nas 6 automações. Com breaker aberto (falha transitória), o `Invoke-OraclePythonScript` repete com espera em vez de desistir na primeira tentativa.
+  - `classify_oracle_exit_code` devolve `1` para queda de sessão reportada pelo worker (`ORA-03113`, `DPY-4011`…, via `is_session_drop`).
+  - `lib/Send-WhatsApp.ps1` sai com `23` (antes `22`) quando o envio está desabilitado na configuração. O `22` fica só para adiamento por lock/cooldown: config desabilitada vira falha do canal (`4` em OFST/ORB/OBP, `24` em RB-01) e não sucesso silencioso.
+  - `Get-OraclePreFlightExitCode` devolve `9` quando nenhuma pasta da fila foi resolvida (nem `ORACLE_QUEUE_DIR` nem `DEFAULT_QUEUE_DIR`), em vez de `26`, que é reenfileirado sem limite. `Test-OracleQueueWorkerAlive` preserva a causa de heartbeat corrompido no `Reason`.
+  - `Receitas Emitidas/run.ps1` valida o Oracle Client em todo modo exceto `queue`, inclusive `auto`.
+  - Orchestrator:
+    - O auto-retry exclui o grupo `oracle` na query quando o worker está offline, evitando starvation da janela de 20.
+    - Auto-retry, recovery do worker e requeue manual da API compartilham `REQUEUE_LOCK` até o commit, o que impede PENDING duplicada.
+    - A sonda de saúde da fila foi para `app/services/oracle_queue_health.py`, sem ciclo de import, com cache de 15 s e payload degradado em falha de import/I/O, sem 500 no `/health/full` nem no `/diagnostics`.
+    - O `worker.py` deixa de injetar o `ORACLE_QUEUE_TIMEOUT_SECONDS` sem efeito, e `ORACLE_QUEUE_DEADLINE_EPOCH` passa a ser a única fonte do limite.
+    - `DATA_EXTRACTION_FAILED` sai das palavras-chave Oracle do portfólio.
+  - `Tools/oracle`:
+    - `oracle_queue_tools` respeita o timeout pedido e o prazo global (`apply_queue_deadline`), sem o teto silencioso de 120 s. `limitar_linhas_sql`, que não tinha uso, foi removida.
+    - `validar_sql_oracle` repete `OracleQueueTransientError` como queda de sessão.
+    - O E2E só conta como sobra os `res_` das próprias requisições (`QueueResult.req_id`).
+    - `QueueResult.row_count` passa a ser derivado de `rows`.
+- **Supressões de lint do pacote substituídas por correção de código (16/11/2026):** o diff não acrescenta mais nenhum `pylint: disable`, `noqa` ou `type: ignore`.
+  - `lib/python/oracle_queue.py`:
+    - As opções do pedido (`action`, TTL, `--#timeout`, `meta`, `strip_comments`, `max_rows`) vão em `QueueRequestOptions`, com a ação validada na construção.
+    - `execute_query` mantém os 4 parâmetros de antes mais `options`.
+    - `claim_timeout_seconds` e `check_heartbeat` saem por não terem chamador.
+    - `build_queue_payload` vira pública.
+    - A sonda de saúde captura só `OSError`/`ValueError`.
+  - `oracle_extract` importa `oracle_queue` no topo, sem ciclo.
+  - `Tools/oracle`:
+    - `executar_consulta_fila` recebe o `exec_id` dentro de `meta`, e o `--#meta` gerado é idêntico ao anterior.
+    - As ferramentas capturam a tupla `ERROS_FILA` em vez de `Exception`.
+    - `mcp_server`, `medir_sql_oracle` e `validar_sql_oracle` deixam só `sys.path.insert` antes dos imports, o que dispensa o `noqa: E402`.
+  - Orchestrator:
+    - O `worker.py` limpa a fila via `load_oracle_queue_module()` (`oracle_queue_health`), capturando apenas falhas de import/I/O.
+    - O job de recovery captura `SQLAlchemyError`.
+    - `_is_near_next_scheduled_run` deixa de proteger `scheduler.get_jobs()`, que não levanta.
+  - `Receitas Emitidas/extract_oracle.py` importa `python-dotenv` direto, já que é dependência declarada.
+  - Testes: dublês viram `dataclass`, membros privados são acessados via `acessar_privado` e o estado é ajustado por `query(...).update(...)`.
+- **Supressões de lint do repositório inteiro corrigidas no código (16/11/2026):** `pylint: disable` caiu de 481 para 86, `noqa` de 84 para 3, `type: ignore` de 94 para 0, `nosec` de 32 para 20 e `eslint-disable` de 9 para 1.
+  - Orchestrator:
+    - `app/models.py` migrou para `Mapped`/`mapped_column`, com schema conferido idêntico (tabelas, colunas, tipos, nulidade, índices e FKs).
+    - `app/base.py` passou a ter o `DeclarativeBase`, o que desfaz o ciclo `models`↔`database`.
+    - `app/metrics.py` define as métricas no `else` do import do `prometheus_client`.
+    - Os ids de job do scheduler foram para `app/services/scheduler_job_ids.py`.
+    - `execution_repository.apply_filters` recebe `ExecutionFilters`.
+    - O `migrations/env.py` lê o metadata de `models.Automation`.
+  - `lib/python/obp_config.py`: o `except` estreitado de `_load_config` inclui `OverflowError`, de `1e999` no JSON. Assim a mensagem `[ERROR] config.json ...` é mantida.
+  - Dashboard: o fechamento por clique fora dos overlays foi para `src/hooks/useOverlayDismiss.ts`.
+  - `Tools/Test-PythonGovernance.ps1`: `Tools\oracle` entra no `PYTHONPATH`, como em tempo de execução.
+  - `broad-exception-caught` caiu de 65 para 28:
+    - Os demais `except Exception` foram estreitados para o que o código chamado levanta de fato: `SQLAlchemyError`, `oracledb.Error`, `OSError`, `subprocess.SubprocessError` e o erro do SQLite do histórico.
+    - O erro do SQLite do histórico é exposto por `beneficiamento.data.writer` como `ErroBancoHistorico`, já que `sqlite3` só pode ser importado dentro da camada de dados.
+    - Os dublês de teste passaram a injetar esses mesmos tipos, sem mudar nenhuma expectativa.
+  - Ficam como residuais justificados no próprio código:
+    - catch-all de fronteira de processo ou job, que registra a falha e a traduz em código de saída ou status;
+    - assinaturas públicas com muitos parâmetros;
+    - `nosec B608` em SQL dinâmico com identificadores validados, já que o SQL Oracle não pode mudar;
+    - `noqa: E402` em dois scripts que ajustam o `sys.path`;
+    - `noqa: SIM118` sobre `sqlite3.Row`, onde `in row` percorre os valores.
+- **`docs/ai-native-context-monitor.md`:** atualizados o estado vigente do Oracle (`ORACLE_QUEUE_TIMEOUT_SECONDS = 180 s`, worker `v2.6.2` com heartbeat/`--#max_rows:N`/`explain`, integração em `Tools/oracle/`), a contagem do catálogo SQL (`222` validadas em `238` arquivos `.sql`), os novos códigos `26`/`27` em `EXIT_CODE_MAP`, o uso de `-LockKey`/proteção de `$ResultFile` e `Invoke-LogRotation` nos `run.ps1` e a nota de `ExitCode 22` (`Send-WhatsApp.ps1:281`).
+- **Segunda revisão de código da fila Oracle (16/11/2026):**
+  - Worker vivo e ocupado não é mais declarado offline: ao fim do prazo de reivindicação, a espera consulta o heartbeat e só falha como `worker_offline` se ele estiver parado; esgotado o prazo com o worker vivo, sai `OracleQueueTimeoutError`.
+  - `OracleQueueTimeoutError(TimeoutError)` passa a ser o único timeout que vira `7`/`27` (inclusive `apply_queue_deadline` e `enforce_queue_deadline`). Timeout do Oracle Bridge e do connect thick/auto volta a `1`, repetível.
+  - Idade do heartbeat e varredura de órfãos usam o relógio do servidor SMB, medido por arquivo de sonda (Python com cache de 600 s, sem cachear falha; PowerShell em `Get-OracleQueueServerNowUtc`). Varredura volta a 3600 s.
+  - Removida a injeção automática de `--#timeout` (teto rígido de 120 s nas extrações); heartbeat ilegível durante regravação usa a idade do arquivo; cache de 15 s para worker vivo antes de cada consulta; removido o desvio `PYTEST_CURRENT_TEST` da biblioteca.
+  - `Get-OraclePreFlightExitCode -OutrosChecks` devolve `26` só quando o worker é a única reprovação; nas 6 automações, e em OBP/OFST/ORB também com o destino do WhatsApp.
+  - `worker.py`: thread de wakeup volta a sobreviver a erro inesperado. `mcp_server.py`: `params` com lista/dict na fila vira erro de ferramenta, não erro JSON-RPC.
+
 ## [1.3.113] - 13/11/2026
 
 Endurecimento compartilhado e evolução dos envios de **ORB-07 (`OBs Restricao Branco`)** e **OFST-06 (`OBs Fluxo Sem Tingimento`)** para paginação determinística em lote (`BATCH`), isolamento de concorrência, transporte seguro de legendas via arquivo temporário, política de retenção e limpeza de artefatos/código morto (**Lote 2**).

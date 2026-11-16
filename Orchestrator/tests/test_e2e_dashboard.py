@@ -1,4 +1,3 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, import-outside-toplevel, consider-using-with, global-statement, wrong-import-order, too-many-branches, too-many-statements, too-many-lines, import-error
 """
 Teste de Ponta a Ponta (E2E) com Playwright: Dashboard React "Sala de Instrumentação".
 Valida a navegação por rotas (react-router) e as interações críticas na tela real
@@ -24,6 +23,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import requests
+from alembic import command
+from alembic.config import Config
 from PIL import Image, ImageChops
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -34,15 +36,14 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(TESTS_DIR, "..")))
 
 from app import models
+from app.timezone import get_now_local
 
 TEST_DB_PATH = Path(TESTS_DIR) / f"test-e2e-automacoes-{os.getpid()}.db"
 TEST_PORT = 8002
 TEST_HOST = "127.0.0.1"
 API_KEY = os.environ.get("ORCHESTRATOR_API_KEY", "fixture-qa-001")
 
-# Contadores globais de logs do console do navegador
-CONSOLE_ERRORS = 0
-CONSOLE_WARNINGS = 0
+# Mensagens do console do navegador (acumuladas para o diagnóstico de falha)
 CONSOLE_MESSAGES: list[Any] = []
 
 
@@ -61,8 +62,8 @@ def _inject_theme(page: Any, theme: str) -> None:
     )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_database() -> Generator[None, None, None]:
+@pytest.fixture(scope="session", autouse=True, name="setup_test_database")
+def _fixture_setup_test_database() -> Generator[None, None, None]:
     """Cria e popula o banco de dados SQLite de teste antes de subir o servidor."""
     for suffix in ["", "-shm", "-wal"]:
         fp = Path(str(TEST_DB_PATH) + suffix)
@@ -71,10 +72,6 @@ def setup_test_database() -> Generator[None, None, None]:
                 fp.unlink()
 
     # Aplica as migrações do Alembic para estruturar o banco dinamicamente
-    # pylint: disable=import-outside-toplevel
-    from alembic import command
-    from alembic.config import Config
-
     ini_path = os.path.abspath(os.path.join(TESTS_DIR, "..", "alembic.ini"))
     alembic_cfg = Config(ini_path)
     alembic_cfg.set_main_option(
@@ -140,8 +137,6 @@ def setup_test_database() -> Generator[None, None, None]:
     engine.dispose()
 
     # Cleanup robusto pós-testes com retentativas para contornar latência de I/O do Windows
-    import time
-
     for suffix in ["", "-shm", "-wal"]:
         fp = Path(str(TEST_DB_PATH) + suffix)
         for _ in range(5):
@@ -153,9 +148,50 @@ def setup_test_database() -> Generator[None, None, None]:
                     time.sleep(0.5)
 
 
-@pytest.fixture(scope="session")
-def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
-    # pylint: disable=unused-argument
+def _servidor_responde(url: str) -> bool:
+    """Espera até 5 segundos pela raiz do servidor responder HTTP 200."""
+    for _ in range(50):
+        try:
+            res = requests.get(url, timeout=0.5)
+            if res.status_code == 200:
+                return True
+        except requests.exceptions.RequestException:
+            pass
+        time.sleep(0.1)
+    return False
+
+
+def _remover_logs_com_retentativa(caminhos: list[Path]) -> None:
+    """Remove os logs físicos do uvicorn tolerando bloqueio temporário do Windows."""
+    for _ in range(5):
+        try:
+            for caminho in caminhos:
+                if caminho.exists():
+                    caminho.unlink()
+            break
+        except OSError:
+            time.sleep(0.5)
+
+
+def _erro_inicio_servidor(stdout_log: Path, stderr_log: Path) -> RuntimeError:
+    stdout_content = (
+        stdout_log.read_text(encoding="utf-8", errors="ignore")
+        if stdout_log.exists()
+        else ""
+    )
+    stderr_content = (
+        stderr_log.read_text(encoding="utf-8", errors="ignore")
+        if stderr_log.exists()
+        else ""
+    )
+    _remover_logs_com_retentativa([stdout_log, stderr_log])
+    return RuntimeError(
+        f"Servidor de teste falhou ao iniciar.\nStdout: {stdout_content}\nStderr: {stderr_content}"
+    )
+
+
+@pytest.fixture(scope="session", name="uvicorn_server")
+def _fixture_uvicorn_server() -> Generator[str, None, None]:
     """Sobe o servidor Uvicorn FastAPI em background apontando para o banco de teste."""
     env = os.environ.copy()
     env["ORCHESTRATOR_DB_PATH"] = TEST_DB_PATH.as_posix()
@@ -179,84 +215,45 @@ def uvicorn_server(setup_test_database: Any) -> Generator[str, None, None]:
     stdout_log_path = Path(TESTS_DIR) / f"uvicorn-stdout-{os.getpid()}.log"
     stderr_log_path = Path(TESTS_DIR) / f"uvicorn-stderr-{os.getpid()}.log"
 
-    # Handles vivem ate o teardown do servidor (fechados la), por isso sem `with`.
-    stdout_file = open(stdout_log_path, "w", encoding="utf-8")  # noqa: SIM115
-    stderr_file = open(stderr_log_path, "w", encoding="utf-8")  # noqa: SIM115
-
-    proc = subprocess.Popen(
-        cmd,
-        env=env,
-        stdout=stdout_file,
-        stderr=stderr_file,
-        cwd=os.path.abspath(os.path.join(TESTS_DIR, "..")),
-    )
-
-    # Espera até o servidor responder HTTP 200 na raiz
-    import requests
-
     url = f"http://{TEST_HOST}:{TEST_PORT}/"
-    success = False
-    for _ in range(50):  # até 5 segundos
-        try:
-            res = requests.get(url, timeout=0.5)
-            if res.status_code == 200:
-                success = True
-                break
-        except requests.exceptions.RequestException:
-            pass
-        time.sleep(0.1)
+    # Os handles vivem até o teardown do servidor: o ExitStack os fecha ao sair.
+    with contextlib.ExitStack() as pilha:
+        stdout_file = pilha.enter_context(open(stdout_log_path, "w", encoding="utf-8"))
+        stderr_file = pilha.enter_context(open(stderr_log_path, "w", encoding="utf-8"))
 
-    if not success:
+        # O ExitStack espera o processo no fim (Popen.__exit__); os caminhos de
+        # encerramento abaixo já o terminam antes disso.
+        proc = pilha.enter_context(
+            subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                cwd=os.path.abspath(os.path.join(TESTS_DIR, "..")),
+            )
+        )
+
+        # Espera até o servidor responder HTTP 200 na raiz
+        if not _servidor_responde(url):
+            proc.terminate()
+            stdout_file.close()
+            stderr_file.close()
+            raise _erro_inicio_servidor(stdout_log_path, stderr_log_path)
+
+        yield f"http://{TEST_HOST}:{TEST_PORT}"
+
+        # Encerra o processo uvicorn limpo
         proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+
+        # Fecha e remove os arquivos de log físicos
         stdout_file.close()
         stderr_file.close()
-        stdout_content = (
-            stdout_log_path.read_text(encoding="utf-8", errors="ignore")
-            if stdout_log_path.exists()
-            else ""
-        )
-        stderr_content = (
-            stderr_log_path.read_text(encoding="utf-8", errors="ignore")
-            if stderr_log_path.exists()
-            else ""
-        )
-        for _ in range(5):
-            try:
-                if stdout_log_path.exists():
-                    stdout_log_path.unlink()
-                if stderr_log_path.exists():
-                    stderr_log_path.unlink()
-                break
-            except OSError:
-                time.sleep(0.5)
-        raise RuntimeError(
-            f"Servidor de teste falhou ao iniciar.\nStdout: {stdout_content}\nStderr: {stderr_content}"
-        )
-
-    yield f"http://{TEST_HOST}:{TEST_PORT}"
-
-    # Encerra o processo uvicorn limpo
-    proc.terminate()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-
-    # Fecha e remove os arquivos de log físicos
-    stdout_file.close()
-    stderr_file.close()
-
-    # Deleção resiliente com retentativas para evitar bloqueio temporário do Windows
-    for _ in range(5):
-        try:
-            if stdout_log_path.exists():
-                stdout_log_path.unlink()
-            if stderr_log_path.exists():
-                stderr_log_path.unlink()
-            break
-        except OSError:
-            time.sleep(0.5)
+        _remover_logs_com_retentativa([stdout_log_path, stderr_log_path])
 
 
 # As 6 rotas do dashboard (react-router, basename /dashboard).
@@ -278,16 +275,19 @@ def test_e2e_dashboard_navigation(
 ) -> None:
     """Navega as 6 rotas do dashboard React e valida o Quality Gate de console limpo."""
 
+    erros_console = 0
+    avisos_console = 0
+
     def handle_console(msg: Any) -> None:
-        global CONSOLE_ERRORS, CONSOLE_WARNINGS
+        nonlocal erros_console, avisos_console
         txt = msg.text
         if "favicon" in txt.lower() or "icon" in txt.lower():
             return
         CONSOLE_MESSAGES.append(f"[{msg.type.upper()}] {txt}")
         if msg.type == "error":
-            CONSOLE_ERRORS += 1
+            erros_console += 1
         elif msg.type == "warning":
-            CONSOLE_WARNINGS += 1
+            avisos_console += 1
 
     page.on("console", handle_console)
     _inject_api_key(page)
@@ -333,8 +333,8 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
   - Renderização do Mímico Operacional e dos mostradores
   - Console do navegador sem erros
 - Console do navegador:
-  - Erros: {CONSOLE_ERRORS}
-  - Warnings: {CONSOLE_WARNINGS}
+  - Erros: {erros_console}
+  - Warnings: {avisos_console}
   - Resumo: Sem erros de console JS detectados na navegação
 - Resultado final:
   - Aprovado
@@ -344,7 +344,7 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
     evidence_path.write_text(report_content, encoding="utf-8")
 
     assert (
-        CONSOLE_ERRORS == 0
+        erros_console == 0
     ), f"Erros de console detectados no navegador: {CONSOLE_MESSAGES}"
     assert screenshot_path.exists(), "O screenshot de evidência não foi salvo."
     assert evidence_path.exists(), "O arquivo de evidência não foi criado."
@@ -593,9 +593,6 @@ def test_e2e_dashboard_system_audit_card(uvicorn_server: str, page: Any) -> None
 @pytest.mark.e2e
 def test_e2e_dashboard_timezone_rendering(uvicorn_server: str, page: Any) -> None:
     """Garante que o dashboard renderiza datas em BRT (DD/MM/AAAA HH:MM:SS)."""
-    import requests
-    from app.timezone import get_now_local
-
     scheduled_run_at = (get_now_local() + timedelta(hours=1)).strftime(
         "%Y-%m-%dT%H:%M:%S"
     )
@@ -901,10 +898,10 @@ def _run_axe(
     rules_option = json.dumps(
         {rule_id: {"enabled": False} for rule_id in ignore_rule_ids}
     )
-    result = page.evaluate(
+    resultado: list[dict[str, Any]] = page.evaluate(
         f"async () => (await axe.run({{ rules: {rules_option} }})).violations"
     )
-    return result  # type: ignore[no-any-return]
+    return resultado
 
 
 def _assert_no_serious_a11y_violations(

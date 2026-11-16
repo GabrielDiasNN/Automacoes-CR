@@ -1,7 +1,5 @@
 """Definicao declarativa e bootstrap do historico tipado do Beneficiamento."""
 
-# pylint: disable=line-too-long
-
 from __future__ import annotations
 
 import os

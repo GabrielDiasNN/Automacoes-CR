@@ -86,6 +86,7 @@ def connect_within(connect: Callable[[], Any], seconds: float) -> Any:
     def target() -> None:
         try:
             connection = connect()
+        # Residual: a thread repassa QUALQUER BaseException ao chamador, que a relança; estreitar faria SystemExit virar TimeoutError.
         except BaseException as exc:  # pylint: disable=broad-exception-caught
             holder["error"] = exc
             return
@@ -198,6 +199,7 @@ def run_with_cancel(
     def target() -> None:
         try:
             outcome.value = fn()
+        # Residual: a thread relaya QUALQUER BaseException ao chamador; sem este catch, uma exceção fora de uma tupla mataria a thread antes de `done=True` e o chamador leria `value=None` como sucesso.
         except BaseException as exc:  # pylint: disable=broad-exception-caught
             outcome.error = exc
         with lock:
@@ -205,7 +207,8 @@ def run_with_cancel(
             late = connection() if owns_connection or state["abandoned"] else None
             if late is not None:
                 # Dona da conexão, ou chamador desistiu: ninguém mais a fecha.
-                with contextlib.suppress(Exception):  # limpeza best effort
+                # Limpeza best effort.
+                with contextlib.suppress(oracledb.Error, OSError):
                     late.close()
 
     thread = threading.Thread(target=target, daemon=True)
@@ -215,9 +218,10 @@ def run_with_cancel(
         return outcome
     target_connection = connection()
     if target_connection is not None:
-        # Qualquer falha do cancel (não só oracledb.Error) não pode mascarar o
-        # timeout: o chamador decide pelo `timed_out`.
-        with lock, contextlib.suppress(Exception):  # cancelamento best effort
+        # Falha do cancel é erro do driver ou do socket (oracledb.Error, OSError): não mascara o timeout,
+        # porque o chamador decide pelo `timed_out` mesmo quando o cancel falha.
+        # Cancelamento best effort.
+        with lock, contextlib.suppress(oracledb.Error, OSError):
             if not state["done"]:
                 target_connection.cancel()
         thread.join(CANCEL_GRACE_SECONDS)
@@ -267,13 +271,14 @@ def call_timeout_aplicado(connection: Any, seconds: float) -> Iterator[CallTimeo
     """
     try:
         connection.call_timeout = max(1, int(seconds * 1000))
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    # DPI-1050 (Client 12.2) chega como erro do driver; OverflowError/ValueError vêm da conversão de `seconds` (ex.: inf/nan) e também viram aviso.
+    except (oracledb.Error, OverflowError, ValueError) as exc:
         yield CallTimeoutInfo(applied=False, warning=str(exc))
         return
     try:
         yield CallTimeoutInfo(applied=True)
     finally:
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(oracledb.Error):
             connection.call_timeout = 0
 
 

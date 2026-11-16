@@ -1,3 +1,4 @@
+# Residual: TEMPLATE_TEST_ID e o nome do arquivo são contrato com Tools/New-Automation.ps1 (fora desta partição).
 # pylint: disable=invalid-name
 """Smoke mínimo gerado pelo scaffold da automação."""
 

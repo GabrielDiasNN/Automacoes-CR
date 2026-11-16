@@ -18,11 +18,12 @@ from app.constants import (
     EXECUTION_STATUS_PENDING,
     EXECUTION_STATUS_RUNNING,
 )
+from app.routers import system as system_router
 from app.schemas import WorkerStatus
 from app.timezone import get_now_local
+from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from tests.conftest import AUTH_HEADERS
 
 # getattr/setattr dinamico: mypy --strict rejeita o atributo nao reexportado.
 _WAL_ATTR = "get_wal_size_mb"
@@ -86,13 +87,9 @@ def test_diagnostics_stalled_queue(client: TestClient, db_session: Session) -> N
     assert "Execução pendente há" in queue_findings[0]["message"]
 
 
-def test_diagnostics_wal_risk(
-    client: TestClient, db_session: Session  # pylint: disable=unused-argument
-) -> None:
+def test_diagnostics_wal_risk(client: TestClient) -> None:
     """Garante que um arquivo WAL do SQLite excessivamente grande seja sinalizado com risco crítico."""
     # Fazer mock do get_wal_size_mb no router de system
-    import app.routers.system as system_router  # pylint: disable=import-outside-toplevel
-
     original_get_wal = getattr(system_router, _WAL_ATTR)
     # Simular WAL gigante com 300 MB (limite para erro é 256 MB)
     setattr(system_router, _WAL_ATTR, lambda: 300.0)

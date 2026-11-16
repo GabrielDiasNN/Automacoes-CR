@@ -14,6 +14,7 @@ import shutil
 import sys
 import tempfile
 from collections.abc import Generator
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -57,18 +58,40 @@ BENEFICIAMENTO_SRC = (
 if BENEFICIAMENTO_SRC.is_dir() and str(BENEFICIAMENTO_SRC) not in sys.path:
     sys.path.insert(0, str(BENEFICIAMENTO_SRC))
 
+import app.database as db_module
+import app.main as main_module
+import app.routers.automation_config as config_router
+import app.routers.automation_ide as ide_router
+import app.routers.automations as auto_router
+import app.routers.websocket as websocket_router
 import pytest
+import worker as _worker_module
 from _pytest.config import Config
 from _pytest.nodes import Item
-
-# Import necessario para registrar as tabelas no Base.metadata.
-from app import models  # noqa: F401  # pylint: disable=unused-import
+from app import models
 from app.database import Base, get_db
+from app.main import app as fastapi_app
 from app.path_safety import is_contained
+from app.services import scheduler_runtime
+from beneficiamento.historico_db import salvar_historico
 from fastapi.testclient import TestClient
+from httpx import URL, Response
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+# Os modelos se registram em Base.metadata ao serem importados; create_all depende
+# disso. Conferir aqui deixa a dependencia explicita.
+_MODELOS_REGISTRADOS = (
+    models.Automation,
+    models.Execution,
+    models.WorkerHeartbeat,
+    models.SystemHealthSnapshot,
+    models.AuditLog,
+)
+assert all(
+    modelo.__tablename__ in Base.metadata.tables for modelo in _MODELOS_REGISTRADOS
+)
 
 _INTEGRATION_FIXTURES = {"client", "db_session"}
 
@@ -121,6 +144,70 @@ testing_session_local = sessionmaker(
 AUTH_HEADERS = {"X-API-Key": TEST_AUTH_VALUE}
 
 
+# Codigos de fase reais (Oracle FASES_FLUXO) usados nas fixtures de teste.
+_FASE_META: dict[str, tuple[int, str, str]] = {
+    "03 - TINGIMENTO": (40, "TINGIMENTO", "SETOR TINGIMENTO"),
+    "05 - ACABAMENTO": (60, "SECADOR", "SETOR ACABAMENTO"),
+    "01 - PREPARACAO": (20, "REVISAO MALHA CRUA", "SETOR PREPARACAO"),
+}
+
+
+@dataclass(frozen=True)
+class _Medicao:
+    """Produto e quantidades de uma linha do seed (alternativo, kg, metros, status)."""
+
+    alternativo: str
+    kg: float
+    mt: float
+    confirmada: bool = True
+
+
+@dataclass(frozen=True)
+class _LinhaFixture:
+    """Uma linha sintetica do historico de beneficiamento, nas colunas do Oracle."""
+
+    ob: str
+    seq: int
+    dt: datetime
+    turno: str
+    fase: str
+    maquina: str
+    medicao: _Medicao
+
+    def como_registro(self) -> dict[str, Any]:
+        codigo_fase, descr_grupo_fase, descr_setor = _FASE_META[self.fase]
+        med = self.medicao
+        return {
+            "NUMERO_OB": self.ob,
+            "SEQ": self.seq,
+            "DATA_FIM": self.dt.isoformat(),
+            "NOME_MAQUINA": self.maquina,
+            "CODIGO_FASE": codigo_fase,
+            "DESCR_FASE": self.fase,
+            "DESCR_GRUPO_FASE": descr_grupo_fase,
+            "DESCR_SETOR_INDUST": descr_setor,
+            "TIPO_MAQUINA": 22,
+            "DESCR_TIPO_MAQ": "HIDROEXTRATORA",
+            "CODIGO_ALTERNATIVO": med.alternativo,
+            "REDUZ": med.alternativo,
+            "DESCR_ITEM": f"Produto {med.alternativo}",
+            "ARTIGO": "ART-FIXTURE",
+            "DESCR_ARTIGO": "Artigo fixture",
+            "COR": "AZUL",
+            "DESCR_COR": "Azul",
+            "QT_KG": med.kg,
+            "QT_MT": med.mt,
+            "MIN_REAL": 12.0,
+            "MIN_PREV": 10.0,
+            "TURNO_PROD": self.turno,
+            "TURNO_DESC": f"TURNO {self.turno}",
+            "OPERADOR_FINAL": "QA FIXTURE",
+            "REPROCESSO": 0,
+            "STATUS_FASE": 4 if med.confirmada else 0,
+            "DS_STATUS_FASE": "CONFIRMADA" if med.confirmada else "PROGRAMADA",
+        }
+
+
 @pytest.fixture(scope="session", autouse=True)
 def beneficiamento_historico_seed() -> Generator[None, None, None]:
     """Semeia o historico de beneficiamento em banco temporario da sessao.
@@ -128,144 +215,75 @@ def beneficiamento_historico_seed() -> Generator[None, None, None]:
     Garante dados deterministas (turnos, alternativo 03212, payload bruto)
     para os contratos overview/detail e para o fluxo E2E do dashboard.
     """
-    from beneficiamento.historico_db import (  # pylint: disable=import-outside-toplevel
-        salvar_historico,
-    )
-
     agora = datetime.now()
 
-    # Codigos de fase reais (Oracle FASES_FLUXO) usados nas fixtures de teste.
-    fase_meta = {
-        "03 - TINGIMENTO": (40, "TINGIMENTO", "SETOR TINGIMENTO"),
-        "05 - ACABAMENTO": (60, "SECADOR", "SETOR ACABAMENTO"),
-        "01 - PREPARACAO": (20, "REVISAO MALHA CRUA", "SETOR PREPARACAO"),
-    }
-
-    def _row(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-        ob: str,
-        seq: int,
-        dt: datetime,
-        turno: str,
-        fase: str,
-        maquina: str,
-        alternativo: str,
-        kg: float,
-        mt: float,
-        confirmada: bool = True,
-    ) -> dict[str, Any]:
-        codigo_fase, descr_grupo_fase, descr_setor = fase_meta[fase]
-        return {
-            "NUMERO_OB": ob,
-            "SEQ": seq,
-            "DATA_FIM": dt.isoformat(),
-            "NOME_MAQUINA": maquina,
-            "CODIGO_FASE": codigo_fase,
-            "DESCR_FASE": fase,
-            "DESCR_GRUPO_FASE": descr_grupo_fase,
-            "DESCR_SETOR_INDUST": descr_setor,
-            "TIPO_MAQUINA": 22,
-            "DESCR_TIPO_MAQ": "HIDROEXTRATORA",
-            "CODIGO_ALTERNATIVO": alternativo,
-            "REDUZ": alternativo,
-            "DESCR_ITEM": f"Produto {alternativo}",
-            "ARTIGO": "ART-FIXTURE",
-            "DESCR_ARTIGO": "Artigo fixture",
-            "COR": "AZUL",
-            "DESCR_COR": "Azul",
-            "QT_KG": kg,
-            "QT_MT": mt,
-            "MIN_REAL": 12.0,
-            "MIN_PREV": 10.0,
-            "TURNO_PROD": turno,
-            "TURNO_DESC": f"TURNO {turno}",
-            "OPERADOR_FINAL": "QA FIXTURE",
-            "REPROCESSO": 0,
-            "STATUS_FASE": 4 if confirmada else 0,
-            "DS_STATUS_FASE": "CONFIRMADA" if confirmada else "PROGRAMADA",
-        }
-
     registros = [
-        _row(
+        _LinhaFixture(
             "900001",
             1,
             agora - timedelta(hours=2),
             "1",
             "03 - TINGIMENTO",
             "JET 01",
-            "03212",
-            120.5,
-            300.0,
-        ),
-        _row(
+            _Medicao("03212", 120.5, 300.0),
+        ).como_registro(),
+        _LinhaFixture(
             "900001",
             2,
             agora - timedelta(hours=1),
             "2",
             "05 - ACABAMENTO",
             "RAMA 02",
-            "03212",
-            118.0,
-            295.0,
-        ),
-        _row(
+            _Medicao("03212", 118.0, 295.0),
+        ).como_registro(),
+        _LinhaFixture(
             "900002",
             1,
             agora - timedelta(days=1, hours=3),
             "3",
             "01 - PREPARACAO",
             "PREPARADORA 01",
-            "04500",
-            80.0,
-            200.0,
-        ),
-        _row(
+            _Medicao("04500", 80.0, 200.0),
+        ).como_registro(),
+        _LinhaFixture(
             "900003",
             1,
             agora - timedelta(days=2, hours=5),
             "1",
             "03 - TINGIMENTO",
             "JET 02",
-            "05100",
-            95.0,
-            240.0,
-        ),
+            _Medicao("05100", 95.0, 240.0),
+        ).como_registro(),
         # Alternativo 02414: usado pelo fluxo E2E do dashboard (filtro de produto).
-        _row(
+        _LinhaFixture(
             "900004",
             1,
             agora - timedelta(hours=4),
             "1",
             "03 - TINGIMENTO",
             "JET 03",
-            "02414",
-            150.0,
-            360.0,
-        ),
-        _row(
+            _Medicao("02414", 150.0, 360.0),
+        ).como_registro(),
+        _LinhaFixture(
             "900004",
             2,
             agora - timedelta(hours=3),
             "2",
             "05 - ACABAMENTO",
             "RAMA 01",
-            "02414",
-            148.0,
-            355.0,
-        ),
+            _Medicao("02414", 148.0, 355.0),
+        ).como_registro(),
         # OB agendada/nao concluida (STATUS_FASE=PROGRAMADA) para cobrir o
         # filtro de status e o indicador planejado_pct.
-        _row(
+        _LinhaFixture(
             "900005",
             1,
             agora + timedelta(days=3),
             "1",
             "03 - TINGIMENTO",
             "JET 01",
-            "03212",
-            0.0,
-            0.0,
-            confirmada=False,
-        ),
+            _Medicao("03212", 0.0, 0.0, confirmada=False),
+        ).como_registro(),
     ]
     salvar_historico(registros, db_path=os.environ["BENEFICIAMENTO_HISTORICO_DB"])
     yield
@@ -282,8 +300,8 @@ def force_env_vars() -> None:
     os.environ["ORACLE_DRIVER_MODE"] = "auto"
 
 
-@pytest.fixture(scope="function")
-def db_session() -> Generator[Session, None, None]:
+@pytest.fixture(scope="function", name="db_session")
+def _fixture_db_session() -> Generator[Session, None, None]:
     Base.metadata.create_all(bind=test_engine)
     session = testing_session_local()
     yield session
@@ -291,42 +309,25 @@ def db_session() -> Generator[Session, None, None]:
     Base.metadata.drop_all(bind=test_engine)
 
 
-@pytest.fixture(scope="function")
-# pylint: disable=too-many-locals,redefined-outer-name
-# (db_session e o nome exigido pelo pytest para injetar a fixture homonima)
-def client(db_session: Session) -> Generator[TestClient, None, None]:
-    # Patch do SessionLocal no main e nos routers para usar o test engine
-    import app.database as db_module  # pylint: disable=import-outside-toplevel
-    import app.main as main_module  # pylint: disable=import-outside-toplevel
-    import app.routers.automation_config as config_router  # pylint: disable=import-outside-toplevel
-    import app.routers.automation_ide as ide_router  # pylint: disable=import-outside-toplevel
-    import app.routers.automations as auto_router  # pylint: disable=import-outside-toplevel
-    import app.routers.websocket as websocket_router  # pylint: disable=import-outside-toplevel
-    from app.services import (  # pylint: disable=import-outside-toplevel
-        scheduler_runtime,
+@pytest.fixture(scope="function", name="client")
+def _fixture_client(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> Generator[TestClient, None, None]:
+    # Patch do SessionLocal no main e nos routers para usar o test engine.
+    # monkeypatch desfaz cada patch no teardown, mesmo se o teste falhar.
+    monkeypatch.setattr(db_module, "SessionLocal", testing_session_local)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(
+        db_module, "DB_PATH", os.path.join(TESTS_DIR, "test-automacoes.db")
     )
-
-    original_session_local = db_module.SessionLocal
-    original_engine = db_module.engine
-    original_db_path = db_module.DB_PATH
+    monkeypatch.setattr(main_module, _SESSION_ATTR, testing_session_local)
+    monkeypatch.setattr(scheduler_runtime, _SESSION_ATTR, testing_session_local)
+    monkeypatch.setattr(websocket_router, _SESSION_ATTR, testing_session_local)
     # Os routers de config/IDE têm PROJECT_ROOT próprio desde a extração de
     # services/managed_file_access.py — todos precisam apontar para TESTS_DIR.
-    original_project_root = auto_router.PROJECT_ROOT
-    original_config_root = config_router.PROJECT_ROOT
-    original_ide_root = ide_router.PROJECT_ROOT
-    original_scheduler_session = getattr(scheduler_runtime, _SESSION_ATTR)
-    original_websocket_session = getattr(websocket_router, _SESSION_ATTR)
-
-    db_module.SessionLocal = testing_session_local
-    db_module.engine = test_engine
-    db_module.DB_PATH = os.path.join(TESTS_DIR, "test-automacoes.db")
-    setattr(main_module, _SESSION_ATTR, testing_session_local)
-    setattr(scheduler_runtime, _SESSION_ATTR, testing_session_local)
-    setattr(websocket_router, _SESSION_ATTR, testing_session_local)
-    # Redirecionar PROJECT_ROOT para o diretorio de testes (contem /test/*.ps1)
-    auto_router.PROJECT_ROOT = TESTS_DIR
-    config_router.PROJECT_ROOT = TESTS_DIR
-    ide_router.PROJECT_ROOT = TESTS_DIR
+    monkeypatch.setattr(auto_router, "PROJECT_ROOT", TESTS_DIR)
+    monkeypatch.setattr(config_router, "PROJECT_ROOT", TESTS_DIR)
+    monkeypatch.setattr(ide_router, "PROJECT_ROOT", TESTS_DIR)
 
     def override_get_db() -> Generator[Session, None, None]:
         try:
@@ -334,17 +335,12 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
         finally:
             pass
 
-    from app.main import app  # pylint: disable=import-outside-toplevel
+    fastapi_app.dependency_overrides[get_db] = override_get_db
 
-    app.dependency_overrides[get_db] = override_get_db
-
-    with TestClient(app) as c:
-        _governar_cadastros(c)
+    with _ClienteGovernado(fastapi_app) as c:
         yield c
 
-    app.dependency_overrides.clear()
-    db_module.SessionLocal = original_session_local
-    db_module.engine = original_engine
+    fastapi_app.dependency_overrides.clear()
 
     # Excluir fisicamente os arquivos de banco de teste temporarios criados
     for suffix in ["", "-shm", "-wal"]:
@@ -352,14 +348,6 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
         if os.path.exists(fp):
             with contextlib.suppress(OSError):
                 os.unlink(fp)
-
-    db_module.DB_PATH = original_db_path
-    setattr(main_module, _SESSION_ATTR, original_session_local)
-    auto_router.PROJECT_ROOT = original_project_root
-    config_router.PROJECT_ROOT = original_config_root
-    ide_router.PROJECT_ROOT = original_ide_root
-    setattr(scheduler_runtime, _SESSION_ATTR, original_scheduler_session)
-    setattr(websocket_router, _SESSION_ATTR, original_websocket_session)
 
 
 @pytest.fixture
@@ -378,8 +366,6 @@ def mock_popen() -> Generator[MagicMock, None, None]:
 @pytest.fixture
 def reset_worker_globals() -> Generator[None, None, None]:
     """Reseta o estado global do worker entre testes para evitar vazamento."""
-    import worker as _worker_module  # pylint: disable=import-outside-toplevel
-
     _worker_module.shutdown_event.clear()
     _worker_module.wakeup_event.clear()
     _worker_module.log_buffer.clear()
@@ -445,8 +431,6 @@ def com_manifesto(payload: dict[str, Any]) -> dict[str, Any]:
     O arquivo vive em `tests/test/` (o `PROJECT_ROOT` dos testes) e é removido
     ao fim de cada teste pela fixture autouse `_limpar_manifesto_de_teste`.
     """
-    import app.routers.automations as auto_router  # pylint: disable=import-outside-toplevel
-
     script_path = str(payload.get("script_path") or "./test/run.ps1")
     pasta = os.path.join(
         auto_router.PROJECT_ROOT, os.path.dirname(script_path.lstrip("./\\"))
@@ -529,62 +513,68 @@ def com_manifesto(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _governar_cadastros(cliente: TestClient) -> None:
-    """Faz o `client` de teste cadastrar automações governadas.
+class _ClienteGovernado(TestClient):
+    """TestClient que cadastra o manifesto antes de POST/PUT/PATCH em /api/automations.
 
     O preflight passou a EXIGIR `automation.manifest.json` (31/07/2026). As
-    dezoito fixtures que registram automações sintéticas não existem para
-    exercitar governança — existem para exercitar CRUD, execuções e filtros —
+    fixtures que registram automações sintéticas não existem para exercitar
+    governança — existem para exercitar CRUD, execuções e filtros —
     e enchê-las de bookkeeping de manifesto só afastaria cada teste do que ele
     de fato verifica.
 
-    Este wrapper escreve, antes de cada `POST`/`PATCH` em `/api/automations`, o
-    manifesto coerente com o payload. Quem verifica o bloqueio em si é
-    `test_manifesto_obrigatorio.py`, com requisição direta e sem o wrapper.
+    Antes de cada `POST`/`PATCH`/`PUT` em `/api/automations`, escreve o manifesto
+    coerente com o payload. Quem verifica o bloqueio em si é
+    `test_manifesto_obrigatorio.py`, com requisição direta e sem este cliente.
 
     `PATCH /api/automations/{id}` (achado #19: verbo corrigido de PUT, que
     tinha semântica de update parcial) é o único consumidor real do ramo de
     update deste wrapper — mantido também em `put` por segurança, caso algum
     outro endpoint em `/api/automations` volte a usar PUT no futuro.
     """
-    original_post = cliente.post
-    original_put = cliente.put
-    original_patch = cliente.patch
 
-    def _preparar(url: str, kwargs: dict[str, Any], *, atual: Any = None) -> None:
-        if not _GOVERNANCA_AUTOMATICA[0] or not url.startswith("/api/automations"):
-            return
-        payload = kwargs.get("json")
-        if not isinstance(payload, dict):
-            return
-        # `PATCH` é parcial: o preflight avalia o registro já persistido com o
-        # patch aplicado por cima, então o manifesto precisa espelhar a fusão,
-        # não só os campos enviados.
-        efetivo = {**atual, **payload} if isinstance(atual, dict) else payload
-        if efetivo.get("script_path"):
-            com_manifesto(efetivo)
+    def post(self, url: URL | str, **kwargs: Any) -> Response:
+        _preparar_manifesto(str(url), kwargs)
+        resposta: Response = super().post(url, **kwargs)
+        return resposta
 
-    def post(url: str, **kwargs: Any) -> Any:
-        _preparar(url, kwargs)
-        return original_post(url, **kwargs)
+    def put(self, url: URL | str, **kwargs: Any) -> Response:
+        _preparar_manifesto(
+            str(url), kwargs, atual=self._buscar_atual(str(url), kwargs)
+        )
+        resposta: Response = super().put(url, **kwargs)
+        return resposta
 
-    def _buscar_atual(url: str, kwargs: dict[str, Any]) -> Any:
+    def patch(self, url: URL | str, **kwargs: Any) -> Response:
+        _preparar_manifesto(
+            str(url), kwargs, atual=self._buscar_atual(str(url), kwargs)
+        )
+        resposta: Response = super().patch(url, **kwargs)
+        return resposta
+
+    def _buscar_atual(self, url: str, kwargs: dict[str, Any]) -> dict[str, Any] | None:
         if not url.startswith("/api/automations/"):
             return None
-        resposta = cliente.get(url, headers=kwargs.get("headers"))
-        return resposta.json() if resposta.status_code == 200 else None
+        resposta = self.get(url, headers=kwargs.get("headers"))
+        if resposta.status_code != 200:
+            return None
+        dado = resposta.json()
+        return dado if isinstance(dado, dict) else None
 
-    def put(url: str, **kwargs: Any) -> Any:
-        _preparar(url, kwargs, atual=_buscar_atual(url, kwargs))
-        return original_put(url, **kwargs)
 
-    def patch_request(url: str, **kwargs: Any) -> Any:
-        _preparar(url, kwargs, atual=_buscar_atual(url, kwargs))
-        return original_patch(url, **kwargs)
-
-    setattr(cliente, "post", post)  # noqa: B010
-    setattr(cliente, "put", put)  # noqa: B010
-    setattr(cliente, "patch", patch_request)  # noqa: B010
+def _preparar_manifesto(
+    url: str, kwargs: dict[str, Any], *, atual: dict[str, Any] | None = None
+) -> None:
+    if not _GOVERNANCA_AUTOMATICA[0] or not url.startswith("/api/automations"):
+        return
+    payload = kwargs.get("json")
+    if not isinstance(payload, dict):
+        return
+    # `PATCH` é parcial: o preflight avalia o registro já persistido com o
+    # patch aplicado por cima, então o manifesto precisa espelhar a fusão,
+    # não só os campos enviados.
+    efetivo = {**atual, **payload} if atual is not None else payload
+    if efetivo.get("script_path"):
+        com_manifesto(efetivo)
 
 
 @pytest.fixture(autouse=True)

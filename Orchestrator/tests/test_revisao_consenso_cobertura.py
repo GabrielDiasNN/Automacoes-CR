@@ -9,7 +9,6 @@ não entre com pontos cegos.
 
 # Este arquivo exercita deliberadamente estado e helpers privados dos módulos sob
 # teste — é o que significa cobrir os ramos internos da correção.
-# pylint: disable=protected-access
 
 import os
 from datetime import timedelta
@@ -17,6 +16,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import worker
 from app import models
 from app.constants import (
     DIAGNOSTIC_PENDING_STALLED_INCIDENT_SECONDS,
@@ -31,9 +31,16 @@ from app.constants import (
     FAILURE_REASON_TELEMETRY_ABANDONED,
     RECOVERY_ACTION_REQUEUE_MANUAL,
 )
+from app.routers.executions import (
+    _artifact_is_downloadable,
+)
 from app.services import scheduler_runtime as sr
+from app.services.env_admin import (
+    restore_masked_values,
+)
 from app.services.execution_runtime import claim_next_task, prepare_requeue
 from app.timezone import get_now_local
+from carregadores_modulos import acessar_privado
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
@@ -148,10 +155,10 @@ class _NoOpScope:
 def test_intervalo_retoma_horario_anterior() -> None:
     """Sem isso, cada reload reiniciava a contagem e a automação nunca disparava."""
     futuro = get_now_local() + timedelta(minutes=42)
-    sr._pending_interval_resume.clear()
-    sr._pending_interval_resume["job_99_interval"] = futuro
+    acessar_privado(sr, "_pending_interval_resume").clear()
+    acessar_privado(sr, "_pending_interval_resume")["job_99_interval"] = futuro
 
-    resultado = sr._resolve_interval_start_date(99, 60, None)
+    resultado = acessar_privado(sr, "_resolve_interval_start_date")(99, 60, None)
 
     assert resultado == futuro
 
@@ -160,16 +167,16 @@ def test_intervalo_retoma_horario_anterior() -> None:
 def test_intervalo_descarta_horario_passado() -> None:
     """Horário no passado cairia no misfire e seria descartado."""
     passado = get_now_local() - timedelta(minutes=10)
-    sr._pending_interval_resume.clear()
-    sr._pending_interval_resume["job_98_interval"] = passado
+    acessar_privado(sr, "_pending_interval_resume").clear()
+    acessar_privado(sr, "_pending_interval_resume")["job_98_interval"] = passado
 
-    assert sr._resolve_interval_start_date(98, 60, None) is None
+    assert acessar_privado(sr, "_resolve_interval_start_date")(98, 60, None) is None
 
 
 @pytest.mark.unitario
 def test_intervalo_sem_registro_anterior_comeca_do_zero() -> None:
-    sr._pending_interval_resume.clear()
-    assert sr._resolve_interval_start_date(97, 30, None) is None
+    acessar_privado(sr, "_pending_interval_resume").clear()
+    assert acessar_privado(sr, "_resolve_interval_start_date")(97, 30, None) is None
 
 
 # ---------------------------------------------------------------------------
@@ -344,15 +351,11 @@ def test_download_de_artefato_declarado_mas_ausente_devolve_404(
 @pytest.mark.unitario
 def test_artifacts_com_json_invalido_cai_no_fallback() -> None:
     """`artifacts` corrompido não pode liberar arquivo arbitrário."""
-    from app.routers.executions import (  # pylint: disable=import-outside-toplevel
-        _artifact_is_downloadable,
-    )
 
-    class _Exec:  # pylint: disable=too-few-public-methods
-        artifacts = "{nao é json"
+    execucao = models.Execution(artifacts="{nao é json")
 
-    assert _artifact_is_downloadable(_Exec(), "relatorio.xlsx") is True  # type: ignore[arg-type]
-    assert _artifact_is_downloadable(_Exec(), "config.json") is False  # type: ignore[arg-type]
+    assert _artifact_is_downloadable(execucao, "relatorio.xlsx") is True
+    assert _artifact_is_downloadable(execucao, "config.json") is False
 
 
 # ---------------------------------------------------------------------------
@@ -363,23 +366,21 @@ def test_artifacts_com_json_invalido_cai_no_fallback() -> None:
 @pytest.mark.unitario
 def test_sentinela_de_parada_e_detectado(tmp_path: Any) -> None:
     """`Stop-Process -Force` não entrega sinal no Windows; o arquivo entrega."""
-    import worker  # pylint: disable=import-outside-toplevel
 
     sentinela = tmp_path / "worker.shutdown"
     with patch.object(worker, "SHUTDOWN_SENTINEL_PATH", str(sentinela)):
-        assert worker._graceful_stop_requested() is False
+        assert acessar_privado(worker, "_graceful_stop_requested")() is False
         sentinela.write_text("", encoding="utf-8")
-        assert worker._graceful_stop_requested() is True
-        worker._clear_shutdown_sentinel()
+        assert acessar_privado(worker, "_graceful_stop_requested")() is True
+        acessar_privado(worker, "_clear_shutdown_sentinel")()
         assert os.path.exists(str(sentinela)) is False
 
 
 @pytest.mark.unitario
 def test_limpar_sentinela_inexistente_nao_falha(tmp_path: Any) -> None:
-    import worker  # pylint: disable=import-outside-toplevel
 
     with patch.object(worker, "SHUTDOWN_SENTINEL_PATH", str(tmp_path / "nao-existe")):
-        worker._clear_shutdown_sentinel()
+        acessar_privado(worker, "_clear_shutdown_sentinel")()
 
 
 # ---------------------------------------------------------------------------
@@ -390,9 +391,6 @@ def test_limpar_sentinela_inexistente_nao_falha(tmp_path: Any) -> None:
 @pytest.mark.unitario
 def test_env_admin_restore_ignora_comentario_e_linha_vazia() -> None:
     """Linhas sem `=` e comentários passam intactos pelo restore."""
-    from app.services.env_admin import (  # pylint: disable=import-outside-toplevel
-        restore_masked_values,
-    )
 
     atual = "# comentario\n\nCHAVE=valor\n"
     novo = "# comentario\n\nCHAVE=********\n"
@@ -405,9 +403,6 @@ def test_env_admin_restore_ignora_comentario_e_linha_vazia() -> None:
 @pytest.mark.unitario
 def test_env_admin_placeholder_de_chave_nova_fica_como_esta() -> None:
     """Placeholder sem correspondente no arquivo atual não tem o que restaurar."""
-    from app.services.env_admin import (  # pylint: disable=import-outside-toplevel
-        restore_masked_values,
-    )
 
     resultado = restore_masked_values("NOVA=********\n", "OUTRA=1\n")
     assert "NOVA=********" in resultado
@@ -543,8 +538,8 @@ def test_claim_next_task_reivindica_pending_apos_grupo_liberar(
         db_session.query(models.Execution).filter_by(id="EXEC_OCUPANTE_LIBERA").first()
     )
     assert ocupante_exec is not None
-    ocupante_exec.status = EXECUTION_STATUS_SUCCESS  # type: ignore[assignment]
-    ocupante_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    ocupante_exec.status = EXECUTION_STATUS_SUCCESS
+    ocupante_exec.finished_at = get_now_local()
     db_session.commit()
 
     assert claim_next_task(db_session) == "EXEC_PRESA_LIBERA"
@@ -682,7 +677,7 @@ def test_prepare_requeue_aceita_expired_mesmo_com_max_retries_zero(
     nunca chegou a rodar, então não deveria consumir orçamento de retry.
     """
     auto = _automacao(db_session, "ExpiradaSemRetryBudget")
-    auto.max_retries = 0  # type: ignore[assignment]
+    auto.max_retries = 0
     expirada = models.Execution(
         id="EXEC_EXPIRADA_MAX_RETRIES_ZERO",
         automation_id=auto.id,

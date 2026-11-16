@@ -343,6 +343,7 @@ def run_format_main(
             config.targets,
             config.pagination,
         )
+    # Residual: fronteira de processo; a falha de render pode vir do PIL ou dos callbacks de cada automação (tipos variados). Sem este catch, ela sairia como traceback sem a linha ERROR que o log registra antes do exit 1.
     except Exception as e:  # pylint: disable=broad-exception-caught
         config.log_fn(
             f"Falha ao gerar artefatos de mensagem/card: {e}",

@@ -97,12 +97,14 @@ function Write-Log {
 # multiplos pontos de exit (preflight/catch/pos-finally), por isso o helper em
 # vez do Exit-WithCode dos demais run.ps1. Os contadores sao capturados do
 # payload em $script:fimCounts antes de o .payload_*.json ser apagado.
+$script:ExecutionEnded = $false
 $script:fimEmitted = $false
 $script:fimCounts = $null
 function Write-Fim {
     param([int]$Code, [string]$Reason = "", [hashtable]$Counts)
     if ($script:fimEmitted) { return }
     $script:fimEmitted = $true
+    $script:ExecutionEnded = $true
     if ((Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) -and (Get-HubLogContext)) {
         $counts = if ($Counts) { $Counts } else { $script:fimCounts }
         $fimArgs = @{
@@ -130,8 +132,9 @@ $preFlightOk = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -Check
 Complete-HubStep -Ok $preFlightOk
 
 if (-not $preFlightOk) {
+    $pfCode = if (Get-Command Get-OraclePreFlightExitCode -ErrorAction SilentlyContinue) { Get-OraclePreFlightExitCode -OutrosChecks { Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckPaths $pathsToCheck } } else { 9 }
     Write-Log "FALHA NO PRE-FLIGHT (Python/Oracle/Paths). Abortando execução." -Lvl "ERRO"
-    Write-Fim 9 "FALHA NO PRE-FLIGHT (Python/Oracle/Paths)."
+    Write-Fim $pfCode "FALHA NO PRE-FLIGHT (Python/Oracle/Paths)."
     # Este exit acontece ANTES do try/finally que fecha a telemetria: sem o
     # Close aqui a execucao fica RUNNING para sempre no Orchestrator e passa a
     # rejeitar a telemetria de todos os ciclos seguintes com "ja existe uma
@@ -139,12 +142,12 @@ if (-not $preFlightOk) {
     if (Get-Command Close-ExecutionTelemetry -ErrorAction SilentlyContinue) {
         Close-ExecutionTelemetry -ExecId $ExecId -Status "ERROR" -LogPath $LogFile
     }
-    exit 9
+    exit $pfCode
 }
 
 Start-HubStep -Step "lock" -Message "Adquirindo lock global"
 try {
-    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile -LockKey "MT-02" | Out-Null
 } catch [System.Exception] {
     # Concorrencia: Enter-AutomationLock lanca excecao. Fora do try/finally
     # principal (que libera um lock que aqui nao foi adquirido), entao fecha a
@@ -163,6 +166,9 @@ $execStatus = "ERROR"
 $emailChannelFailed = $false
 
 try {
+    if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
+        Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+    }
     Import-HubEnv
     $dataFile = Join-Path $ScriptDir ".data_$ExecId.json"
 
@@ -183,7 +189,10 @@ try {
     Complete-HubStep -Ok $extractResult.Success
 
     if (-not $extractResult.Success) {
-        throw "Falha definitiva na extracao nativa ($engineName) apos 3 tentativas."
+        $extractExitCode = Resolve-OracleFailureExitCode -ExitCode $extractResult.ExitCode -DefaultExitCode 3
+        Write-Log "Falha definitiva na extracao nativa ($engineName) (PythonExit=$($extractResult.ExitCode))." -Lvl "ERRO"
+        Write-Fim $extractExitCode "Falha definitiva na extracao nativa ($engineName) (PythonExit=$($extractResult.ExitCode))."
+        exit $extractExitCode
     }
 
     if (-not (Test-Path $dataFile)) {
@@ -363,9 +372,11 @@ try {
 
     # DEBUG/cleanup: o evento terminal e o execution.end emitido por Write-Fim;
     # esta linha e apenas rastro de pos-processamento do finally.
-    Write-Log "FIM - Processo finalizado." -Lvl "DEBUG" -Step "cleanup"
+    if (-not $script:ExecutionEnded) {
+        Write-Log "FIM - Processo finalizado." -Lvl "DEBUG" -Step "cleanup"
+    }
 
-    Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
+    Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile -LockKey "MT-02"
 }
 
 if ($emailChannelFailed) {

@@ -6,8 +6,6 @@ não monta consulta ORM. `AuditLog` não tinha repositório dedicado — a rota
 `/api/system/audit` era o único ponto que ainda consultava o modelo direto.
 """
 
-# pylint: disable=relative-beyond-top-level
-
 from __future__ import annotations
 
 from sqlalchemy import desc

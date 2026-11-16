@@ -11,7 +11,8 @@ import logging
 import math
 import threading
 import time
-from typing import Any, cast
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -46,22 +47,34 @@ router = APIRouter(prefix="/api/automations", tags=["Automations"])
 PROJECT_ROOT = get_project_root()
 
 # Cache TTL de 30s para next_run_lookup — evita re-iteração do scheduler a cada request
-_NEXT_RUN_CACHE: dict[int, Any] | None = None
-_NEXT_RUN_CACHE_AT: float = 0.0
 _NEXT_RUN_CACHE_TTL = 30.0
+
+
+@dataclass
+class _NextRunCacheState:
+    """Estado mutável do cache de next_run (protegido por `_next_run_cache_lock`)."""
+
+    lookup: dict[int, Any] | None = None
+    loaded_at: float = 0.0
+
+
+_next_run_cache = _NextRunCacheState()
 _next_run_cache_lock = threading.Lock()
 
 
 def _invalidate_next_run_cache() -> None:
-    global _NEXT_RUN_CACHE, _NEXT_RUN_CACHE_AT  # pylint: disable=global-statement
     with _next_run_cache_lock:
-        _NEXT_RUN_CACHE = None
-        _NEXT_RUN_CACHE_AT = 0.0
+        _next_run_cache.lookup = None
+        _next_run_cache.loaded_at = 0.0
 
 
 def _reload_scheduler_safe() -> None:
     """Recarrega o APScheduler sem quebrar a operacao CRUD que ja foi persistida."""
     _invalidate_next_run_cache()
+    # Residual: chamado em 8 rotas depois do commit. Uma excecao escapando viraria
+    # HTTP 500 numa alteracao ja gravada, e o cliente repetiria a operacao (ex.:
+    # criar automacao duplicada). O conjunto (SQLAlchemyError, JobLookupError,
+    # erros de parse de schedule) nao e fechado, por isso o catch-all fica aqui.
     try:
         reload_scheduled_tasks()
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -70,15 +83,17 @@ def _reload_scheduler_safe() -> None:
 
 def _load_next_run_lookup() -> dict[int, Any]:
     """Mapeia proxima execucao por automacao consultando o scheduler em memoria (com cache TTL)."""
-    global _NEXT_RUN_CACHE, _NEXT_RUN_CACHE_AT  # pylint: disable=global-statement
     now = time.monotonic()
     with _next_run_cache_lock:
         if (
-            _NEXT_RUN_CACHE is not None
-            and (now - _NEXT_RUN_CACHE_AT) < _NEXT_RUN_CACHE_TTL
+            _next_run_cache.lookup is not None
+            and (now - _next_run_cache.loaded_at) < _NEXT_RUN_CACHE_TTL
         ):
-            return _NEXT_RUN_CACHE
+            return _next_run_cache.lookup
     lookup: dict[int, Any] = {}
+    # Leitura best-effort do scheduler em memoria: parse_dt_br (ValueError, TypeError)
+    # e to_br_timezone (OverflowError ao converter datas extremas). Falha vira warning
+    # e lookup parcial, para a listagem de automacoes nao cair.
     try:
         for job in scheduler.get_jobs():
             auto_id = extract_automation_id_from_job(job.id)
@@ -90,11 +105,11 @@ def _load_next_run_lookup() -> dict[int, Any]:
             current = lookup.get(auto_id)
             if current is None or candidate < current:
                 lookup[auto_id] = candidate
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OverflowError, TypeError, ValueError) as e:
         logger.warning("Nao foi possivel carregar next_run do scheduler: %s", e)
     with _next_run_cache_lock:
-        _NEXT_RUN_CACHE = lookup
-        _NEXT_RUN_CACHE_AT = now
+        _next_run_cache.lookup = lookup
+        _next_run_cache.loaded_at = now
     return lookup
 
 
@@ -161,9 +176,11 @@ def _assert_clone_allowed_or_422(payload: dict[str, Any]) -> None:
         preflight = build_automation_preflight(payload, PROJECT_ROOT)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    # `governance` é um campo Pydantic com `Field(default_factory=...)`; sem o
-    # plugin pydantic o pylint infere `FieldInfo` e acusa no-member — o membro
-    # existe (schemas.AutomationPreflightGovernance.manifest_present).
+    # RESIDUAL (no-member): `governance` e um campo Pydantic com
+    # `Field(default_factory=...)`; sem o plugin pydantic o pylint infere
+    # `FieldInfo` e acusa falso positivo. O membro existe
+    # (schemas.AutomationPreflightGovernance.manifest_present) e o mypy --strict
+    # verifica o tipo corretamente.
     if not preflight.governance.manifest_present:  # pylint: disable=no-member
         raise HTTPException(
             status_code=422,
@@ -181,8 +198,18 @@ def _assert_clone_allowed_or_422(payload: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=schemas.PaginatedResponse[schemas.AutomationResponse])
-def list_automations(  # pylint: disable=R0913,R0917
+@dataclass(frozen=True)
+class _ListagemParams:
+    """Parametros de paginacao, ordenacao e busca da listagem (query string)."""
+
+    page: int
+    per_page: int
+    sort: str
+    order: str
+    search: str | None
+
+
+def _listagem_params(
     # `per_page` negativo virava `LIMIT -1` no SQLite (sem limite) e `page`
     # negativo produzia OFFSET negativo — ambos aceitos sem validação.
     page: int = Query(1, ge=1),
@@ -190,10 +217,22 @@ def list_automations(  # pylint: disable=R0913,R0917
     sort: str = "name",
     order: str = "asc",
     search: str | None = None,
+) -> _ListagemParams:
+    """Dependencia que agrupa os query params da listagem (mesmos nomes e validacao)."""
+    return _ListagemParams(
+        page=page, per_page=per_page, sort=sort, order=order, search=search
+    )
+
+
+@router.get("", response_model=schemas.PaginatedResponse[schemas.AutomationResponse])
+def list_automations(
+    params: _ListagemParams = Depends(_listagem_params),
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> schemas.PaginatedResponse[schemas.AutomationResponse]:
     """Lista automacoes com paginacao, ordenacao e busca."""
+    page, per_page = params.page, params.per_page
+    sort, order, search = params.sort, params.order, params.search
 
     if sort not in repo.ALLOWED_SORT_FIELDS:
         raise HTTPException(
@@ -530,7 +569,7 @@ def start_automation(
 
     try:
         db_exec = prepare_manual_start(db, db_auto, requested_by=client_ip)
-        exec_id = cast(str, db_exec.id)
+        exec_id = db_exec.id
 
         db.add(db_exec)
 
@@ -595,7 +634,7 @@ def set_automation_test_mode(
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
 
     enabled = payload.enabled
-    db_auto.test_mode = enabled  # type: ignore[assignment]
+    db_auto.test_mode = enabled
 
     log_audit(
         db,
@@ -664,7 +703,7 @@ def pause_automation(
     db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
-    db_auto.enabled = False  # type: ignore[assignment]
+    db_auto.enabled = False
     log_audit(
         db,
         "PAUSE",
@@ -688,7 +727,7 @@ def resume_automation(
     db_auto = repo.get_by_id(db, automation_id)
     if not db_auto:
         raise HTTPException(status_code=404, detail="Automação não encontrada.")
-    db_auto.enabled = True  # type: ignore[assignment]
+    db_auto.enabled = True
     log_audit(
         db,
         "RESUME",

@@ -1,4 +1,3 @@
-# pylint: disable=import-error, wrong-import-position, protected-access
 """Testes de caracterização do Servidor MCP Oracle (Tools/oracle/mcp_server.py).
 
 Fixam o comportamento observável atual (formatos de saída, mensagens de erro,
@@ -18,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+import oracledb
 import pytest
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -27,7 +27,9 @@ if str(_ROOT) not in sys.path:
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
-from mcp_server import (  # noqa: E402
+import mcp_server
+from carregadores_modulos import acessar_privado
+from mcp_server import (
     DEFAULT_TIMEOUT,
     DEFAULT_TNS_ADMIN,
     McpServer,
@@ -167,7 +169,7 @@ def test_execute_sql_sem_descricao_responde_vazio() -> None:
 
 def test_execute_sql_queda_de_sessao_fecha_conexao() -> None:
     cursor = MagicMock()
-    cursor.execute.side_effect = Exception(
+    cursor.execute.side_effect = oracledb.OperationalError(
         "ORA-03113: end-of-file on communication channel"
     )
     mgr = MagicMock()
@@ -186,7 +188,9 @@ def test_execute_sql_queda_de_sessao_fecha_conexao() -> None:
 
 def test_execute_sql_erro_generico_do_banco() -> None:
     cursor = MagicMock()
-    cursor.execute.side_effect = Exception("ORA-00942: tabela ou view nao existe")
+    cursor.execute.side_effect = oracledb.DatabaseError(
+        "ORA-00942: tabela ou view nao existe"
+    )
     resultado = _tools(_conexao(cursor)).execute_sql("SELECT 1 FROM DUAL")
     assert resultado == {
         "error": True,
@@ -196,7 +200,7 @@ def test_execute_sql_erro_generico_do_banco() -> None:
 
 def test_execute_sql_falha_de_conexao_vira_mensagem() -> None:
     mgr = MagicMock()
-    mgr.get_connection.side_effect = RuntimeError("DPY-4011: rede fechou")
+    mgr.get_connection.side_effect = oracledb.OperationalError("DPY-4011: rede fechou")
     resultado = _tools(conn_mgr=mgr).execute_sql("SELECT 1 FROM DUAL")
     assert resultado == {
         "error": True,
@@ -223,7 +227,7 @@ def test_get_query_plan_devolve_linhas_do_plano() -> None:
 
 def test_get_query_plan_falha_do_explain_vira_mensagem() -> None:
     cursor = MagicMock()
-    cursor.execute.side_effect = Exception("ORA-00900: comando invalido")
+    cursor.execute.side_effect = oracledb.DatabaseError("ORA-00900: comando invalido")
     resultado = _tools(_conexao(cursor)).get_query_plan("SELECT 1 FROM DUAL")
     assert resultado == {
         "error": True,
@@ -251,7 +255,7 @@ def test_list_tables_formato_da_tabela() -> None:
 
 def test_list_tables_erro_vira_mensagem() -> None:
     cursor = MagicMock()
-    cursor.execute.side_effect = Exception("ORA-00942")
+    cursor.execute.side_effect = oracledb.DatabaseError("ORA-00942")
     assert _tools(_conexao(cursor)).list_tables() == {
         "error": True,
         "message": "Erro ao listar tabelas: ORA-00942",
@@ -282,7 +286,7 @@ def test_describe_table_formata_colunas() -> None:
 
 def test_check_connection_falha_vira_mensagem() -> None:
     mgr = MagicMock()
-    mgr.get_connection.side_effect = RuntimeError("DPY-4011")
+    mgr.get_connection.side_effect = oracledb.OperationalError("DPY-4011")
     resultado = _tools(conn_mgr=mgr).check_connection()
     assert resultado == {
         "error": True,
@@ -294,10 +298,13 @@ def test_check_connection_falha_vira_mensagem() -> None:
 
 
 def test_render_tabela_sem_colunas_e_sem_linhas() -> None:
-    assert OracleMcpTools._render_markdown_table([], []) == "*(sem colunas)*"
-    assert OracleMcpTools._render_markdown_table(["A", "B"], []) == (
-        "| A | B |\n| --- | --- |\n*(0 linhas retornadas)*"
+    assert (
+        acessar_privado(OracleMcpTools, "_render_markdown_table")([], [])
+        == "*(sem colunas)*"
     )
+    assert acessar_privado(OracleMcpTools, "_render_markdown_table")(
+        ["A", "B"], []
+    ) == ("| A | B |\n| --- | --- |\n*(0 linhas retornadas)*")
 
 
 # ------------------------------------------------------------- protocolo
@@ -523,7 +530,11 @@ def test_connection_manager_cai_para_conexao_avulsa_sem_pool(
 ) -> None:
     monkeypatch.setattr(
         "oracledb.create_pool",
-        MagicMock(side_effect=Exception("Driver não suporta pool neste ambiente")),
+        MagicMock(
+            side_effect=oracledb.NotSupportedError(
+                "Driver não suporta pool neste ambiente"
+            )
+        ),
     )
     conn = MagicMock()
     # Primeira chamada: a sondagem do modo (fechada logo). Segunda: a conexão avulsa.
@@ -566,9 +577,10 @@ def test_pool_falho_tenta_de_novo_depois_da_janela(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regressão (achado 19): _pool_failed não é permanente."""
-    import mcp_server  # pylint: disable=import-outside-toplevel
 
-    criar = MagicMock(side_effect=[RuntimeError("rede fora"), MagicMock(name="pool")])
+    criar = MagicMock(
+        side_effect=[oracledb.OperationalError("rede fora"), MagicMock(name="pool")]
+    )
     monkeypatch.setattr("oracledb.create_pool", criar)
     monkeypatch.setattr(
         "mcp_server.connect_adaptive", MagicMock(return_value=MagicMock())
@@ -612,7 +624,6 @@ def test_describe_table_usa_all_tab_columns() -> None:
 
 def test_sem_caminho_padrao_do_client_12_2() -> None:
     """Regressão (achado 8): sem adivinhar 12.2 enquanto a máquina pode ter o 19c."""
-    import mcp_server  # pylint: disable=import-outside-toplevel
 
     assert mcp_server.DEFAULT_LIB_DIR == ""
     assert "12.2" not in mcp_server.DEFAULT_TNS_ADMIN

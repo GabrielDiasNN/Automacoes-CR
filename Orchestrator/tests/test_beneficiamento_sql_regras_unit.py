@@ -16,7 +16,7 @@ _SRC_ROOT = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from beneficiamento import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento import (
     settings,
     sql_repository,
 )
@@ -75,13 +75,13 @@ def test_bind_so_em_comentario_nao_conta_como_bind() -> None:
 
 
 @pytest.mark.parametrize(
-    "trecho",
+    "sql",
     [
-        "x = '--'",
-        "x = '/* aberto'",
-        "x = 'it''s -- ok'",
-        "x = q'[it's -- ok]'",
-        "\"a--b\" = 1 AND x = 'y'",
+        "SELECT a FROM t WHERE x = '--' AND d >= :dt_inicio AND d < :dt_fim",
+        "SELECT a FROM t WHERE x = '/* aberto' AND d >= :dt_inicio AND d < :dt_fim",
+        "SELECT a FROM t WHERE x = 'it''s -- ok' AND d >= :dt_inicio AND d < :dt_fim",
+        "SELECT a FROM t WHERE x = q'[it's -- ok]' AND d >= :dt_inicio AND d < :dt_fim",
+        "SELECT a FROM t WHERE \"a--b\" = 1 AND x = 'y' AND d >= :dt_inicio AND d < :dt_fim",
     ],
     ids=[
         "traco_duplo",
@@ -91,12 +91,8 @@ def test_bind_so_em_comentario_nao_conta_como_bind() -> None:
         "identificador",
     ],
 )
-def test_marcador_de_comentario_dentro_de_literal_nao_engole_os_binds(
-    trecho: str,
-) -> None:
+def test_marcador_de_comentario_dentro_de_literal_nao_engole_os_binds(sql: str) -> None:
     # Fixture estático para o validador textual; nunca é executado no banco.
-    sql = f"SELECT a FROM t WHERE {trecho} AND d >= :dt_inicio AND d < :dt_fim"  # nosec B608
-
     assert not sql_repository.validate_static_sql(sql)
 
 
@@ -110,34 +106,30 @@ def test_bind_depois_de_comentario_de_bloco_continua_valendo() -> None:
 
 
 @pytest.mark.parametrize(
-    "where",
+    "sql",
     [
-        "x = ':dt_inicio' AND y = ':dt_fim'",
-        "x = ':dt_inicio' AND d < :dt_fim",
-        "d >= :dt_inicio AND x = ':dt_fim'",
-        "x = q'[:dt_inicio :dt_fim]'",
+        "SELECT a FROM t WHERE x = ':dt_inicio' AND y = ':dt_fim'",
+        "SELECT a FROM t WHERE x = ':dt_inicio' AND d < :dt_fim",
+        "SELECT a FROM t WHERE d >= :dt_inicio AND x = ':dt_fim'",
+        "SELECT a FROM t WHERE x = q'[:dt_inicio :dt_fim]'",
     ],
     ids=["ambos_em_literal", "inicio_em_literal", "fim_em_literal", "q_literal"],
 )
-def test_bind_so_em_literal_nao_conta_como_bind(where: str) -> None:
+def test_bind_so_em_literal_nao_conta_como_bind(sql: str) -> None:
     # Fixture estático para o validador textual; nunca é executado no banco.
-    sql = f"SELECT a FROM t WHERE {where}"  # nosec B608
-
     assert sql_repository.validate_static_sql(sql) == [BINDS_AUSENTES]
 
 
 @pytest.mark.parametrize(
-    "trecho",
+    "sql",
     [
-        "x = 'abc AND d >= :dt_inicio AND d < :dt_fim",
-        "x = q'[abc AND d >= :dt_inicio AND d < :dt_fim",
+        "SELECT a FROM t WHERE x = 'abc AND d >= :dt_inicio AND d < :dt_fim",
+        "SELECT a FROM t WHERE x = q'[abc AND d >= :dt_inicio AND d < :dt_fim",
     ],
     ids=["aspas_sem_fechamento", "q_literal_sem_fechamento"],
 )
-def test_literal_sem_fechamento_faz_acusar_bind_ausente(trecho: str) -> None:
+def test_literal_sem_fechamento_faz_acusar_bind_ausente(sql: str) -> None:
     # Fixture estático para o validador textual; nunca é executado no banco.
-    sql = f"SELECT a FROM t WHERE {trecho}"  # nosec B608
-
     assert sql_repository.validate_static_sql(sql) == [BINDS_AUSENTES]
 
 

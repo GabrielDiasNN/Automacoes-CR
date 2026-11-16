@@ -107,6 +107,16 @@ function Invoke-WithRetry {
         }
         catch [System.Exception] {
             $errMsg = $_.Exception.Message
+            $isNonRetryable = ($null -ne $_.Exception.Data) -and ($_.Exception.Data['NonRetryable'] -eq $true)
+
+            if ($isNonRetryable) {
+                if ($useHubRetry) {
+                    Write-RetryAttemptEvent $attempt "ERRO" "$OperationName - erro nao-transitorio na tentativa $attempt/$MaxAttempts (retry abortado): $errMsg"
+                } else {
+                    Write-RetryLog "[RETRY_ABORTADO] $OperationName - Erro nao-transitorio: $errMsg (sem nova tentativa)." -Lvl "ERRO"
+                }
+                return $false
+            }
 
             if ($attempt -ge $MaxAttempts) {
                 if ($useHubRetry) {

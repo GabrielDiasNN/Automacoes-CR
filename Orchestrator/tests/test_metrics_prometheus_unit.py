@@ -5,12 +5,13 @@ from typing import Any
 from unittest.mock import patch
 
 from app import metrics
+from carregadores_modulos import acessar_privado
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 
 def _metric_value(metric: Any) -> float:
     """Le o valor interno de um Counter/Gauge do prometheus_client em testes."""
-    return float(metric._value.get())  # pylint: disable=protected-access
+    return float(acessar_privado(metric, "_value").get())
 
 
 def test_is_available_retorna_true_quando_prometheus_client_instalado() -> None:

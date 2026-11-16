@@ -4,15 +4,14 @@ Extraído de ``system_diagnostics`` para isolar a camada de coleta de dados
 (queries SQLAlchemy + utilitários de tempo) da lógica de análise e montagem.
 """
 
-# pylint: disable=relative-beyond-top-level,not-callable
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import desc, func
+from sqlalchemy import desc
 from sqlalchemy.orm import Session, contains_eager
+from sqlalchemy.sql.functions import count as sa_count
 
 from .. import models, schemas
 from ..constants import (
@@ -23,7 +22,7 @@ from ..constants import (
     EXECUTION_STATUS_RUNNING,
 )
 from ..timezone import get_now_local
-from .scheduler_runtime import extract_automation_id_from_job
+from .scheduler_job_ids import extract_automation_id_from_job
 
 
 def add_finding(
@@ -185,14 +184,14 @@ def collect_retry_pressure(db: Session) -> list[dict[str, Any]]:
         db.query(
             models.Execution.queue_group,
             models.Execution.priority,
-            func.count(models.Execution.id).label("active_count"),
+            sa_count(models.Execution.id).label("active_count"),
         )
         .filter(
             models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES),
             models.Execution.retry_count > 0,
         )
         .group_by(models.Execution.queue_group, models.Execution.priority)
-        .order_by(desc(func.count(models.Execution.id)))
+        .order_by(desc(sa_count(models.Execution.id)))
         .limit(10)
         .all()
     )
@@ -214,14 +213,14 @@ def collect_timeouts_24h_by_group(
     rows = (
         db.query(
             models.Execution.queue_group,
-            func.count(models.Execution.id).label("timeouts_24h"),
+            sa_count(models.Execution.id).label("timeouts_24h"),
         )
         .filter(
             models.Execution.status == "TIMEOUT",
             models.Execution.started_at >= reference_now - timedelta(hours=24),
         )
         .group_by(models.Execution.queue_group)
-        .order_by(desc(func.count(models.Execution.id)))
+        .order_by(desc(sa_count(models.Execution.id)))
         .limit(10)
         .all()
     )

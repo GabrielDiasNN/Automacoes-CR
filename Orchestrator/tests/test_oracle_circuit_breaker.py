@@ -17,7 +17,7 @@ sys.path.insert(
     ),
 )
 
-from oracle_retry import (  # noqa: E402  pylint: disable=wrong-import-position
+from oracle_retry import (
     CircuitBreakerError,
     make_oracle_retry,
 )

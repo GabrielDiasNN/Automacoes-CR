@@ -68,14 +68,14 @@ def get_automation_configs(
 @router.put(
     "/{auto_id}/configs/{filename}",
     response_model=schemas.ManagedMutationResponse,
+    dependencies=[Depends(get_api_key)],
 )
-def update_automation_config(  # pylint: disable=R0913,R0917
+def update_automation_config(
     auto_id: int,
     filename: str,
     payload: schemas.FileContent,
     request: Request,
     db: Session = Depends(get_db),
-    _api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     auto = repo.get_by_id(db, auto_id)
     if not auto:

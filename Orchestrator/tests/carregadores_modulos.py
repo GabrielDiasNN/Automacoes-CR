@@ -56,6 +56,6 @@ def carregar_modulo_automacao(name: str, path: Path) -> ModuleType:
     return module
 
 
-def acessar_privado(modulo: ModuleType, nome: str) -> Any:
-    """Acessa membro privado do módulo sob teste sem `protected-access`."""
-    return getattr(modulo, nome)
+def acessar_privado(alvo: object, nome: str) -> Any:
+    """Acessa membro privado do módulo ou objeto sob teste sem `protected-access`."""
+    return getattr(alvo, nome)

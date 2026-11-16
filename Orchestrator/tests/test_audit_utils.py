@@ -1,27 +1,30 @@
 """Testes unitários do log_audit (auditoria best-effort com JSON válido)."""
 
 import json
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from app.utils import log_audit
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
 
-class _FakeSession:  # pylint: disable=too-few-public-methods
+@dataclass
+class _FakeSession:
     """Dublê de sessão apenas para capturar chamadas de add()."""
 
-    def __init__(self) -> None:
-        self.added: list[Any] = []
+    added: list[Any] = field(default_factory=list)
 
     def add(self, entry: Any) -> None:
         self.added.append(entry)
 
 
-class _BrokenSession:  # pylint: disable=too-few-public-methods
+@dataclass
+class _BrokenSession:
     """Dublê de sessão que simula falha de banco em add()."""
 
     def add(self, entry: Any) -> None:
-        raise RuntimeError("db indisponível")
+        raise InvalidRequestError("db indisponível")
 
 
 def test_log_audit_details_longos_geram_json_valido() -> None:

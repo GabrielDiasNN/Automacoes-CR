@@ -125,7 +125,8 @@ def _requisicao(
         BASE + rota, data=dados, headers=cabecalhos, method=metodo
     )
     # Esquema e host sao fixos (http://127.0.0.1) e nao vem de entrada externa.
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310  # nosec B310
+    # Residual B310: trocar urlopen por http.client mudaria as excecoes (HTTPError/URLError) tratadas aqui.
+    with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
         return json.loads(resp.read().decode("utf-8"))
 
 

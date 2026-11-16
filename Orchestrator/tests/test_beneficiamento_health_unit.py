@@ -8,37 +8,47 @@ load_period_payload, contornando por completo essa lógica de classificação;
 aqui ela é exercitada diretamente, sem tocar Oracle/rede.
 """
 
-# pylint: disable=too-many-arguments
-
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, Unpack, cast
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from beneficiamento.snapshot_aggregator import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento.snapshot_aggregator import (
     _build_health_from_periods,
 )
-from beneficiamento.snapshot_period_health import (  # noqa: E402  pylint: disable=wrong-import-position
+from beneficiamento.snapshot_period_health import (
     _build_period_health_context,
 )
 
 
+class _Opcoes(TypedDict, total=False):
+    """Opções de um período; o que não vier usa o padrão de `_context`."""
+
+    exists: bool
+    available: bool
+    stale: bool
+    metrics: dict[str, Any] | None
+    quality: dict[str, Any] | None
+    oracle: dict[str, Any] | None
+    snapshot: dict[str, Any] | None
+
+
 def _context(
     tmp_path: Path,
-    *,
     period: str = "diario",
     label: str = "Diário",
-    exists: bool = True,
-    available: bool = True,
-    stale: bool = False,
-    metrics: dict[str, Any] | None = None,
-    quality: dict[str, Any] | None = None,
-    oracle: dict[str, Any] | None = None,
-    snapshot: dict[str, Any] | None = None,
+    **opcoes: Unpack[_Opcoes],
 ) -> dict[str, Any]:
+    exists = opcoes.get("exists", True)
+    available = opcoes.get("available", True)
+    stale = opcoes.get("stale", False)
+    metrics = opcoes.get("metrics")
+    quality = opcoes.get("quality")
+    oracle = opcoes.get("oracle")
+    snapshot = opcoes.get("snapshot")
     analytics_path = tmp_path / f"{period}.analytics.json"
     if exists:
         analytics_path.write_text("{}", encoding="utf-8")
@@ -211,29 +221,15 @@ def _envelope(
     period: str,
     label: str,
     *,
-    exists: bool = True,
-    available: bool = True,
-    stale: bool = False,
     updated_at: str | None = "2026-08-01T00:00:00+00:00",
     age_seconds: int | None = 10,
-    metrics: dict[str, Any] | None = None,
-    quality: dict[str, Any] | None = None,
-    oracle: dict[str, Any] | None = None,
-    snapshot: dict[str, Any] | None = None,
+    **opcoes: Unpack[_Opcoes],
 ) -> dict[str, Any]:
+    available = opcoes.get("available", True)
+    stale = opcoes.get("stale", False)
+    oracle = opcoes.get("oracle")
     oracle = oracle if oracle is not None else {}
-    ctx = _context(
-        tmp_path,
-        period=period,
-        label=label,
-        exists=exists,
-        available=available,
-        stale=stale,
-        metrics=metrics,
-        quality=quality,
-        oracle=oracle,
-        snapshot=snapshot,
-    )
+    ctx = _context(tmp_path, period, label, **opcoes)
     return {
         "label": label,
         "available": available,

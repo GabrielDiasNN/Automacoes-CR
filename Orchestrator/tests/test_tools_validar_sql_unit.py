@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.carregadores_modulos import (
+from carregadores_modulos import (
     acessar_privado as _priv,
     carregar_tool_oracle as _carregar,
 )
@@ -146,7 +146,7 @@ class _Cursor:
         return None
 
 
-class _Conexao:  # pylint: disable=too-few-public-methods
+class _Conexao:
     def __init__(self, cursor: _Cursor) -> None:
         self._cursor = cursor
 
