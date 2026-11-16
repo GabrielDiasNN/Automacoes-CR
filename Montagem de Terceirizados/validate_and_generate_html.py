@@ -1,6 +1,5 @@
 # Import de lib/python via sys.path.insert() dinamico abaixo forca estas duas
 # desabilitacoes: o pylint nao resolve o path em tempo de analise estatica.
-# pylint: disable=import-error, wrong-import-position
 # {
 #   "version": "1.3.0",
 #   "skill": "ai-native-development-standard",
@@ -384,7 +383,7 @@ def main() -> (
         with open(data_file, encoding="utf-8-sig") as f:
             data: list[dict[str, Any]] = json.load(f)
         os.remove(data_file)
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, ValueError) as e:
         log(f"Falha ao ler dados do arquivo: {e}", "ERROR", exec_id)
         sys.exit(1)
 
@@ -403,7 +402,7 @@ def main() -> (
         try:
             with open(cache_file, encoding="utf-8") as f_cache:
                 cache_anterior = json.load(f_cache)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (OSError, ValueError):
             pass
 
     dic_anteriores: dict[str, Any] = cache_anterior.get("itens", {})
@@ -548,7 +547,7 @@ def main() -> (
             with open(payload_file, "w", encoding="utf-8") as f_out:
                 json.dump(result_payload, f_out, ensure_ascii=False)
             log(f"Payload gerado em arquivo: {payload_file}", "INFO", exec_id)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (OSError, TypeError, ValueError) as e:
             log(f"Falha ao gravar payload: {e}", "ERROR", exec_id)
             sys.exit(1)
         log(f"Processamento concluído ({tipo_notif}).", "INFO", exec_id)

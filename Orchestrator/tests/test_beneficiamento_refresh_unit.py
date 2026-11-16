@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from app.services import beneficiamento_refresh as br
+from carregadores_modulos import acessar_privado
 
 # ---------------------------------------------------------------------------
 # _runner_python
@@ -17,15 +18,12 @@ def test_runner_python_sem_env_var_retorna_sys_executable(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.delenv("BENEFICIAMENTO_PYTHON", raising=False)
-    assert br._runner_python() == sys.executable  # pylint: disable=protected-access
+    assert acessar_privado(br, "_runner_python")() == sys.executable
 
 
 def test_runner_python_com_env_var_retorna_valor_dela(monkeypatch: Any) -> None:
     monkeypatch.setenv("BENEFICIAMENTO_PYTHON", "C:\\custom\\python.exe")
-    assert (
-        br._runner_python()  # pylint: disable=protected-access
-        == "C:\\custom\\python.exe"
-    )
+    assert acessar_privado(br, "_runner_python")() == "C:\\custom\\python.exe"
 
 
 # ---------------------------------------------------------------------------
@@ -34,12 +32,12 @@ def test_runner_python_com_env_var_retorna_valor_dela(monkeypatch: Any) -> None:
 
 
 def test_parse_runner_output_texto_none_retorna_none() -> None:
-    assert br._parse_runner_output(None) is None  # pylint: disable=protected-access
+    assert acessar_privado(br, "_parse_runner_output")(None) is None
 
 
 def test_parse_runner_output_texto_vazio_ou_espacos_retorna_none() -> None:
-    assert br._parse_runner_output("") is None  # pylint: disable=protected-access
-    resultado = br._parse_runner_output("   \n  ")  # pylint: disable=protected-access
+    assert acessar_privado(br, "_parse_runner_output")("") is None
+    resultado = acessar_privado(br, "_parse_runner_output")("   \n  ")
     assert resultado is None
 
 
@@ -52,7 +50,7 @@ def test_parse_runner_output_pega_ultima_linha_json_valida() -> None:
             '{"status": "success", "period": "tarde"}',
         ]
     )
-    parsed = br._parse_runner_output(raw)  # pylint: disable=protected-access
+    parsed = acessar_privado(br, "_parse_runner_output")(raw)
     assert parsed == {"status": "success", "period": "tarde"}
 
 
@@ -63,11 +61,11 @@ def test_parse_runner_output_json_malformado_continua_e_retorna_none() -> None:
             "{ isso nao eh json valido",
         ]
     )
-    assert br._parse_runner_output(raw) is None  # pylint: disable=protected-access
+    assert acessar_privado(br, "_parse_runner_output")(raw) is None
 
 
 def test_parse_runner_output_lista_json_valida_mas_nao_dict_retorna_none() -> None:
-    resultado = br._parse_runner_output("[1, 2, 3]")  # pylint: disable=protected-access
+    resultado = acessar_privado(br, "_parse_runner_output")("[1, 2, 3]")
     assert resultado is None
 
 

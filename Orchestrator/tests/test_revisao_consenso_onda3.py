@@ -4,21 +4,34 @@ import concurrent.futures
 import json
 import os
 import sys
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from app import models
+from app import models, notifications
 from app.constants import (
     EXECUTION_STATUS_REQUEUED,
     EXECUTION_STATUS_RUNNING,
     EXECUTION_TERMINAL_STATUSES,
 )
+from app.database import (
+    set_sqlite_pragma,
+)
 from app.services import env_admin
 from app.services.execution_runtime import complete_process_execution, prepare_requeue
 from app.timezone import get_now_local
+from beneficiamento.snapshot_store import (
+    write_json_atomic,
+)
+from carregadores_modulos import acessar_privado
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
+from sqlalchemy import (
+    create_engine,
+    event,
+    text,
+)
 from sqlalchemy.orm import Session
 
 sys.path.insert(
@@ -229,7 +242,8 @@ def test_delete_bloqueado_com_execucao_ativa(
 # ---------------------------------------------------------------------------
 
 
-class _ExecutorSincrono:  # pylint: disable=too-few-public-methods
+@dataclass
+class _ExecutorSincrono:
     """Executa na thread do chamador e devolve um Future já concluído.
 
     O pool real tem `max_workers=2`, então submeter uma segunda tarefa não
@@ -244,7 +258,8 @@ class _ExecutorSincrono:  # pylint: disable=too-few-public-methods
         future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         try:
             future.set_result(fn(*args, **kwargs))
-        except Exception as exc:  # pylint: disable=broad-except
+        except RuntimeError as exc:
+            # O único callable submetido pelo teste levanta RuntimeError (side_effect do dispatch).
             future.set_exception(exc)
         return future
 
@@ -257,7 +272,6 @@ def test_excecao_no_dispatch_e_registrada() -> None:
     suíte reconfiguram o logging estruturado e a captura pela raiz deixa de ver
     o registro, o que fazia este teste passar isolado e reprovar na suíte.
     """
-    from app import notifications  # pylint: disable=import-outside-toplevel
 
     with (
         patch.object(
@@ -273,18 +287,15 @@ def test_excecao_no_dispatch_e_registrada() -> None:
 
 
 @pytest.mark.unitario
-def test_reset_alert_state_zera_o_contador() -> (
-    None
-):  # pylint: disable=protected-access
+def test_reset_alert_state_zera_o_contador() -> None:
     """`reset_alert_state` não tinha chamador em produção: o contador de falhas
     "consecutivas" era, na prática, "falhas desde o boot da API"."""
-    from app import notifications  # pylint: disable=import-outside-toplevel
 
-    notifications._mark_sent(4242)
-    assert 4242 in notifications._alert_state
+    acessar_privado(notifications, "_mark_sent")(4242)
+    assert 4242 in acessar_privado(notifications, "_alert_state")
 
     notifications.reset_alert_state(4242)
-    assert 4242 not in notifications._alert_state
+    assert 4242 not in acessar_privado(notifications, "_alert_state")
 
 
 # ---------------------------------------------------------------------------
@@ -296,9 +307,6 @@ def test_reset_alert_state_zera_o_contador() -> (
 def test_snapshot_usa_temporario_unico_por_processo(tmp_path: Any) -> None:
     """O `.tmp` determinístico era compartilhado entre o refresh agendado e o
     manual, que chamam a mesma função e podiam intercalar escritas."""
-    from beneficiamento.snapshot_store import (  # pylint: disable=import-outside-toplevel
-        write_json_atomic,
-    )
 
     destino = tmp_path / "diario.overview.json"
     write_json_atomic(destino, {"ok": True})
@@ -326,14 +334,6 @@ def test_set_sqlite_pragma_aplica_valores_de_producao(tmp_path: Any) -> None:
     "simplificar" o listener e esquecer a linha, o `database is locked` sob
     contenção volta em produção — e a suíte continuaria verde sem este teste.
     """
-    from app.database import (  # pylint: disable=import-outside-toplevel
-        set_sqlite_pragma,
-    )
-    from sqlalchemy import (  # pylint: disable=import-outside-toplevel
-        create_engine,
-        event,
-        text,
-    )
 
     engine = create_engine(f"sqlite:///{tmp_path / 'pragma.db'}")
     event.listen(engine, "connect", set_sqlite_pragma)

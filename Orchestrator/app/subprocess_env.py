@@ -41,6 +41,8 @@ ALLOWED_ENV_KEYS = frozenset(
         # extrações usavam a configurada.
         "ORACLE_QUEUE_DIR",
         "ORACLE_QUEUE_TIMEOUT_SECONDS",
+        "ORACLE_QUEUE_CLAIM_TIMEOUT_SECONDS",
+        "ORACLE_QUEUE_DEADLINE_EPOCH",
         # Caminho do tnsnames.ora, não credencial. Lido por
         # `beneficiamento/oracle.py`; usuário/senha/DSN vêm do `.env` via
         # `load_dotenv(override=True)`, nunca do ambiente herdado.

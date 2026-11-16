@@ -1,4 +1,4 @@
-import contextlib
+import io
 import json
 import os
 import sys
@@ -12,10 +12,9 @@ if sys.stderr.encoding != "utf-8" and hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 # Configura o stdin para ler UTF-8-SIG do PowerShell (limpando o BOM automaticamente)
-if hasattr(sys.stdin, "encoding") and sys.stdin.encoding != "utf-8-sig":
+if isinstance(sys.stdin, io.TextIOWrapper) and sys.stdin.encoding != "utf-8-sig":
     # Evita falha durante testes (ex: pytest mock de stdin)
-    with contextlib.suppress(AttributeError):
-        sys.stdin.reconfigure(encoding="utf-8-sig")  # type: ignore[union-attr]
+    sys.stdin.reconfigure(encoding="utf-8-sig")
 
 
 def log(message: str, level: str = "INFO", exec_id: str = "manual") -> None:

@@ -7,6 +7,9 @@ import sys
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
+from .middleware import automation_name_var, exec_id_var, request_id_var
+from .security import sanitize_log_payload
+
 
 def _sob_pytest() -> bool:
     """Mesma detecção usada por `worker.py` e `app/main.py` para o nome do log."""
@@ -29,18 +32,7 @@ class OrchestratorJsonFormatter(logging.Formatter):
         self._use_context_vars = use_context_vars
 
     def format(self, record: logging.LogRecord) -> str:
-        # pylint: disable=import-outside-toplevel,relative-beyond-top-level
-        from .security import (
-            sanitize_log_payload,
-        )
-
         if self._use_context_vars:
-            from .middleware import (
-                automation_name_var,
-                exec_id_var,
-                request_id_var,
-            )
-
             automation_name = automation_name_var.get("")
             exec_id = exec_id_var.get("")
             request_id = getattr(record, "request_id", request_id_var.get("SYSTEM"))

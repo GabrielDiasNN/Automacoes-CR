@@ -1,21 +1,17 @@
-# pylint: disable=too-many-arguments,too-many-positional-arguments
-# broad-exception-caught / import-outside-toplevel: o hook do stamina roda dentro
-# do retry do Oracle e nao pode derrubar a extracao por um erro no proprio log;
-# `automation_log` so entra no sys.path quando um script de dominio o insere.
-# pylint: disable=broad-exception-caught, import-outside-toplevel
 from __future__ import annotations
 
 import os
 import sys
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import oracledb
 import pybreaker
 import stamina
 import stamina.instrumentation
+from automation_log import emit_event
 from oracle_queue import OracleQueueTransientError
-from pybreaker import CircuitBreakerError  # noqa: F401
+from pybreaker import CircuitBreakerError
 from stamina.instrumentation import RetryDetails
 
 __all__ = ["make_oracle_retry", "CircuitBreakerError"]
@@ -63,26 +59,36 @@ def _on_retry_hook(details: RetryDetails) -> None:
     automation, exec_id, trace_id, step = _retry_ctx()
     upcoming = details.retry_num + 1
     max_attempts = _MAX_ATTEMPTS_BY_CALLABLE.get(details.name)
-    cause = type(details.caused_by).__name__
+    exc = details.caused_by
+    cause = type(exc).__name__
+    kind = getattr(exc, "kind", None)
+    if kind:
+        cause = f"{cause}[kind={kind}]"
+    detail = (
+        str(getattr(exc, "message", exc) or "")
+        .replace("\r", " ")
+        .replace("\n", " ")[:180]
+    )
+    cause_desc = f"{cause}: {detail}" if detail else cause
 
     if max_attempts is None:
         # Retry que nao veio de make_oracle_retry: sem limite conhecido, o
         # envelope sairia com um `max_attempts` inventado. Rastro humano so.
         sys.stderr.write(
             f"[RETRY] {details.name}: retentativa {upcoming} agendada em "
-            f"{details.wait_for:.1f}s (motivo: {cause})\n"
+            f"{details.wait_for:.1f}s (motivo: {cause_desc})\n"
         )
         sys.stderr.flush()
         return
 
     msg = (
         f"Oracle: retentativa {upcoming}/{max_attempts} agendada em "
-        f"{details.wait_for:.1f}s (motivo: {cause})"
+        f"{details.wait_for:.1f}s (motivo: {cause_desc})"
     )
     if _structured_enabled():
+        # Hook do stamina: roda dentro do retry do Oracle, e uma exceção que escape daqui
+        # cancela a retentativa. Por isso qualquer falha do próprio log cai no stderr.
         try:
-            from automation_log import emit_event
-
             emit_event(
                 "retry.attempt",
                 "WARN",
@@ -94,13 +100,15 @@ def _on_retry_hook(details: RetryDetails) -> None:
                 extra={"attempt": upcoming, "max_attempts": max_attempts},
             )
             return
-        except Exception:  # pragma: no cover - fallback defensivo
+        # Residual: hook do stamina; exceção que escape daqui cancela a retentativa do Oracle, então falha do log cai no stderr.
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
     sys.stderr.write(f"[RETRY] {msg}\n")
     sys.stderr.flush()
 
 
-def make_oracle_retry(
+# Residual: assinatura pública com nomes usados em chamadas de automações e testes.
+def make_oracle_retry(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     fail_max: int = 3,
     reset_timeout: float = 60,
     attempts: int = 3,
@@ -136,6 +144,7 @@ def make_oracle_retry(
             wait_max=wait_max,
             wait_jitter=wait_jitter,
         )(fn)
-        return breaker(retrying)  # type: ignore[return-value]
+        # pybreaker tipa o wrapper como Callable[..., Any]; ele preserva a assinatura de fn.
+        return cast(F, breaker(retrying))
 
     return decorator

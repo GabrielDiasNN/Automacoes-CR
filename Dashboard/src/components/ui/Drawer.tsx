@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { useOverlayDismiss } from "../../hooks/useOverlayDismiss";
 import { IconButton } from "./IconButton";
 import styles from "./Drawer.module.css";
 
@@ -19,16 +20,15 @@ interface DrawerProps {
 /** Painel lateral (detalhe/visor). Focus-trap + Escape + clique fora. */
 export function Drawer({ open, onClose, title, eyebrow, children, width = 560 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open, onClose);
+  useOverlayDismiss(overlayRef, open, onClose);
 
   if (!open) return null;
 
   return createPortal(
-    // Overlay de clique-fora do modal (padrão sem equivalente nativo).
-    // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
-    // de stopPropagation no filho. Escape já fecha via useFocusTrap.
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- overlay de clique-fora: padrão sem equivalente nativo, o alvo é checado no próprio overlay
-    <div className={`overlay-scrim ${styles.overlay}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    // Clique-fora via `useOverlayDismiss`; Escape já fecha via useFocusTrap.
+    <div ref={overlayRef} className={`overlay-scrim ${styles.overlay}`}>
       <aside
         ref={panelRef}
         className={`${styles.panel} animate-in`}

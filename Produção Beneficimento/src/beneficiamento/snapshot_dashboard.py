@@ -1,4 +1,3 @@
-# pylint: disable=useless-import-alias,unused-import,missing-function-docstring,duplicate-code
 """Leitura agregada dos snapshots do Beneficiamento para o Dashboard.
 
 Ponto público do módulo: ``load_period_payload``, ``build_health_payload``,
@@ -14,15 +13,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .health import HealthStatus as HealthStatus
+from .health import HealthStatus
 from .settings import PERIOD_ORDER, get_period_config
 from .snapshot_aggregator import (
     _build_health_from_periods,
     _build_period_highlights,
-    _compute_health_status as _compute_health_status,
+    _compute_health_status,
 )
 from .snapshot_period_health import _build_period_health_context
 from .snapshot_store import read_json, snapshot_path
+
+__all__ = [
+    "HealthStatus",
+    "_compute_health_status",
+    "build_dashboard_payload",
+    "build_health_payload",
+    "build_periods_payload",
+    "load_period_payload",
+]
 
 
 def _file_age_seconds(path: Path) -> int | None:

@@ -4,8 +4,6 @@ Extraído de ``system_diagnostics`` para separar a lógica de análise (check_*)
 dos coletores de dados (``diagnostic_collectors``) e da montagem de payload.
 """
 
-# pylint: disable=relative-beyond-top-level,line-too-long
-
 from __future__ import annotations
 
 from typing import Any
@@ -356,4 +354,57 @@ def check_orphaned_running(
             "priority": 1,
         },
     )
+    return findings
+
+
+def check_oracle_queue_worker_health(
+    oracle_q: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Gera findings se o worker Oracle (TSplus SMB) estiver offline ou sem conexão com o banco."""
+    findings: list[dict[str, Any]] = []
+    if not oracle_q or not oracle_q.get("enabled"):
+        return findings
+
+    if not oracle_q.get("reachable"):
+        add_finding(
+            findings,
+            SEVERITY_ERROR,
+            "oracle_queue",
+            "Pasta da fila Oracle (SMB) está inacessível.",
+            {
+                "action_hint": "Verificar conectividade SMB com o servidor da fila e conferir ORACLE_QUEUE_DIR.",
+                "impact": "Todas as automações Oracle em modo queue falharão no pré-flight ou extração.",
+                "priority": 1,
+            },
+        )
+        return findings
+
+    if not oracle_q.get("alive"):
+        age = oracle_q.get("age_seconds")
+        age_txt = f" (heartbeat parado há {age}s)" if age is not None else ""
+        add_finding(
+            findings,
+            SEVERITY_ERROR,
+            "oracle_queue",
+            f"Worker Oracle do TSplus está offline{age_txt}.",
+            {
+                "action_hint": "Iniciar ou reiniciar INICIAR_WORKER.bat no servidor TSplus (10.62.0.3).",
+                "impact": "Extrações Oracle não serão atendidas até o retorno do worker; falhas ficarão elegíveis para auto-recuperação.",
+                "priority": 1,
+            },
+        )
+        return findings
+
+    if oracle_q.get("oracle_ok") is False:
+        add_finding(
+            findings,
+            SEVERITY_WARN,
+            "oracle_queue",
+            "Worker Oracle no TSplus reportou perda de conexão com o banco Oracle PRD.",
+            {
+                "action_hint": "Verificar conectividade TCP entre TSplus (10.62.0.3) e Oracle PRD (10.62.0.2:1521).",
+                "impact": "Consultas na fila podem falhar até a reconexão do worker.",
+                "priority": 2,
+            },
+        )
     return findings

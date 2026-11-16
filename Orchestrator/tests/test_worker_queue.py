@@ -4,7 +4,10 @@ import time
 from typing import Any
 
 from app import models
-from app.middleware import RATE_LIMIT_EXEMPT_PATHS
+from app.middleware import (
+    RATE_LIMIT_EXEMPT_PATHS,
+    RateLimitMiddleware,
+)
 from app.services.execution_runtime import (
     apply_internal_worker_error,
     apply_timeout_result,
@@ -14,6 +17,10 @@ from app.services.execution_runtime import (
     mark_task_as_failed,
 )
 from app.timezone import get_now_local
+from fastapi import FastAPI
+from fastapi.testclient import (
+    TestClient,
+)
 from worker import _finalize_terminated_task, claim_next_task, classify_process_result
 
 
@@ -64,10 +71,6 @@ def test_worker_long_poll_endpoint_is_not_rate_limit_exempt() -> None:
 
 def _app_com_rate_limit(rpm: int) -> Any:
     """App mínimo com o endpoint de long-poll e uma janela de rate limit nova."""
-    from app.middleware import (  # pylint: disable=import-outside-toplevel
-        RateLimitMiddleware,
-    )
-    from fastapi import FastAPI  # pylint: disable=import-outside-toplevel
 
     app_teste = FastAPI()
 
@@ -85,9 +88,6 @@ def test_wait_for_task_isento_do_rate_limit_via_loopback() -> None:
     O long-poll é reenviado continuamente pelo Worker; sem isenção ele consome o
     bucket do IP de loopback, que é o mesmo do Dashboard servido no mesmo host.
     """
-    from fastapi.testclient import (  # pylint: disable=import-outside-toplevel
-        TestClient,
-    )
 
     with TestClient(_app_com_rate_limit(1), client=("127.0.0.1", 5000)) as c:
         assert c.get("/api/system/wait-for-task").status_code == 200
@@ -101,9 +101,6 @@ def test_wait_for_task_continua_limitado_fora_do_loopback() -> None:
     seria um vetor de exaustão barato. Por isso o path fica em
     INTERNAL_LOOPBACK_PATHS e não em RATE_LIMIT_EXEMPT_PATHS.
     """
-    from fastapi.testclient import (  # pylint: disable=import-outside-toplevel
-        TestClient,
-    )
 
     with TestClient(_app_com_rate_limit(1), client=("10.0.0.5", 5000)) as c:
         assert c.get("/api/system/wait-for-task").status_code == 200
@@ -203,6 +200,7 @@ def test_execution_runtime_applies_timeout_result(db_session: Any) -> None:
     assert result.status == "TIMEOUT"
     assert result.failure_reason == "MAX_RUNTIME_EXCEEDED"
     assert result.recovery_action == "REVIEW_TIMEOUT_AND_REQUEUE"
+    assert result.logs is not None
     assert "Tarefa excedeu" in result.logs
 
 
@@ -261,6 +259,7 @@ def test_execution_runtime_completes_process_execution(db_session: Any) -> None:
     assert result.failure_reason == "CHANNEL_DELIVERY_FAILED"
     assert result.recovery_action == "REVIEW_CHANNEL_STATE_BEFORE_REQUEUE"
     assert result.artifacts == '{"file":"out.txt"}'
+    assert result.logs is not None
     assert "token=********" in result.logs
 
 

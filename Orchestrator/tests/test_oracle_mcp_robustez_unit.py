@@ -1,4 +1,3 @@
-# pylint: disable=import-error, wrong-import-position, protected-access
 """Testes de robustez do Servidor MCP Oracle (Tools/oracle/mcp_server.py).
 
 Cada teste prova um defeito apontado na revisão: argumento não textual derrubava
@@ -13,7 +12,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -28,8 +29,9 @@ if str(_ROOT) not in sys.path:
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
-import mcp_server  # noqa: E402
-from mcp_server import (  # noqa: E402
+import mcp_server
+from carregadores_modulos import acessar_privado
+from mcp_server import (
     DEFAULT_ARRAYSIZE,
     DEFAULT_TIMEOUT,
     McpServer,
@@ -95,14 +97,15 @@ def test_ping_de_reuso_tem_prazo(monkeypatch: pytest.MonkeyPatch) -> None:
     registros: list[Any] = []
     conn = MagicMock(name="conexao")
     conn.ping.side_effect = lambda: registros.append(conn.call_timeout)
-    # A sondagem do modo não pode abrir conexão real neste teste de ping.
-    monkeypatch.setattr(
-        mcp_server, "connect_adaptive", MagicMock(return_value=MagicMock())
-    )
+    # A conexão avulsa vem do connect_within dublado; nenhuma conexão real é aberta.
+    monkeypatch.setattr(mcp_server, "connect_within", lambda _funcao, seconds: conn)
     mgr = OracleConnectionManager(_config())
-    mgr._conn = conn  # pylint: disable=protected-access
+    # Pool marcado como falho: a primeira chamada cai na conexão avulsa, sem pool.
+    acessar_privado(mgr, "_marcar_pool_falho")()
 
-    assert mgr.get_connection() is conn
+    assert mgr.get_connection() is conn  # 1a: conexão avulsa recém-criada, sem ping
+    assert not registros
+    assert mgr.get_connection() is conn  # 2a: reuso, com ping sob prazo
     assert registros == [15000]
 
 
@@ -219,7 +222,7 @@ def test_get_query_plan_nao_persiste_com_commit() -> None:
 
 def test_get_query_plan_queda_de_sessao_fecha_conexao() -> None:
     cursor = MagicMock(name="cursor")
-    cursor.execute.side_effect = Exception(
+    cursor.execute.side_effect = oracledb.OperationalError(
         "ORA-03113: end-of-file on communication channel"
     )
     conn = MagicMock(name="conexao")
@@ -237,24 +240,28 @@ def test_get_query_plan_queda_de_sessao_fecha_conexao() -> None:
     mgr.close.assert_not_called()
 
 
-class _Lob:  # pylint: disable=too-few-public-methods
+@dataclass
+class _Lob:
     """LOB falso: read(offset, amount) em caracteres, como o locator do driver."""
 
-    def __init__(self, texto: str) -> None:
-        self._texto = texto
-        self.size = len(texto)
+    texto: str
+
+    @property
+    def size(self) -> int:
+        return len(self.texto)
 
     def read(self, offset: int = 1, amount: int | None = None) -> str:
         inicio = offset - 1
         if amount is None:
-            return self._texto[inicio:]
-        return self._texto[inicio : inicio + amount]
+            return self.texto[inicio:]
+        return self.texto[inicio : inicio + amount]
 
 
-class _BlobNaoLe:  # pylint: disable=too-few-public-methods
+@dataclass
+class _BlobNaoLe:
     """BLOB falso: qualquer leitura do conteúdo falha, para provar que não é lido."""
 
-    size = 123
+    size: int = 123
 
     def read(self, *_args: Any, **_kwargs: Any) -> Any:
         raise AssertionError("BLOB não deve ser lido")
@@ -315,7 +322,7 @@ def test_rollback_roda_com_prazo_por_chamada() -> None:
 def test_rollback_que_falha_descarta_a_conexao() -> None:
     conn = MagicMock(name="conexao")
     conn.cursor.return_value.fetchall.return_value = [("PLAN",)]
-    conn.rollback.side_effect = RuntimeError("socket travado")
+    conn.rollback.side_effect = OSError("socket travado")
     mgr = MagicMock()
     mgr.get_connection.return_value = conn
 
@@ -338,7 +345,7 @@ def test_falha_de_conexao_avulsa_recusa_novas_tentativas_na_janela(
 
     monkeypatch.setattr(mcp_server, "connect_within", _conexao_fora_do_ar)
     mgr = OracleConnectionManager(_config())
-    mgr._pool_failed = True  # pylint: disable=protected-access
+    acessar_privado(mgr, "_marcar_pool_falho")()
 
     with pytest.raises(TimeoutError):
         mgr.get_connection()
@@ -360,7 +367,7 @@ def test_falha_de_conexao_avulsa_volta_a_tentar_apos_a_janela(
     monkeypatch.setattr(mcp_server, "connect_within", _conexao_fora_do_ar)
     monkeypatch.setattr(mcp_server, "JANELA_FALHA_CONEXAO_SEGUNDOS", 0.0)
     mgr = OracleConnectionManager(_config())
-    mgr._pool_failed = True  # pylint: disable=protected-access
+    acessar_privado(mgr, "_marcar_pool_falho")()
 
     for _ in range(2):
         with pytest.raises(TimeoutError):
@@ -369,7 +376,7 @@ def test_falha_de_conexao_avulsa_volta_a_tentar_apos_a_janela(
     assert len(chamadas) == 2
 
 
-class _GuardaContavel:  # pylint: disable=too-few-public-methods
+class _GuardaContavel:
     """Guard falso que conta quantas vezes o canônico é carregado."""
 
     def __init__(self) -> None:
@@ -380,7 +387,8 @@ class _GuardaContavel:  # pylint: disable=too-few-public-methods
         return object()
 
     def patch_canonical(self, _canon: Any) -> Any:
-        class _Canon:  # pylint: disable=too-few-public-methods
+        @dataclass
+        class _Canon:
             @staticmethod
             def classificar(_sql: str, **_kwargs: Any) -> dict[str, Any]:
                 return {"permitido": True, "classe": "leitura", "motivos": []}
@@ -393,7 +401,7 @@ def test_canonico_do_guard_e_carregado_uma_vez_por_modulo(
 ) -> None:
     guarda = _GuardaContavel()
     monkeypatch.setattr(mcp_server, "_guard_sql", guarda)
-    mcp_server._cache_canonico.clear()  # pylint: disable=protected-access
+    acessar_privado(mcp_server, "_cache_canonico").clear()
 
     assert mcp_server.validate_read_only("SELECT 1 FROM DUAL") == (True, "")
     assert mcp_server.validate_read_only("SELECT 2 FROM DUAL") == (True, "")
@@ -421,21 +429,21 @@ def test_causa_do_import_do_guard_aparece_na_mensagem(
 def test_argumento_de_tipo_errado_vira_32602() -> None:
     servidor = McpServer()
 
-    bool_no_max_rows = servidor._responder_tools_call(
+    bool_no_max_rows = acessar_privado(servidor, "_responder_tools_call")(
         7,
         {
             "name": "execute_sql",
             "arguments": {"sql": "SELECT 1 FROM DUAL", "max_rows": True},
         },
     )
-    formato_fora_do_enum = servidor._responder_tools_call(
+    formato_fora_do_enum = acessar_privado(servidor, "_responder_tools_call")(
         8,
         {
             "name": "execute_sql",
             "arguments": {"sql": "SELECT 1 FROM DUAL", "format": "csv"},
         },
     )
-    params_nulos = servidor._responder_tools_call(9, None)
+    params_nulos = acessar_privado(servidor, "_responder_tools_call")(9, None)
 
     assert bool_no_max_rows["error"]["code"] == -32602
     assert formato_fora_do_enum["error"]["code"] == -32602
@@ -443,9 +451,7 @@ def test_argumento_de_tipo_errado_vira_32602() -> None:
 
 
 def test_requisicao_nao_objeto_vira_32600() -> None:
-    resposta = McpServer()._responder_seguro(
-        [1, 2, 3]
-    )  # pylint: disable=protected-access
+    resposta = acessar_privado(McpServer(), "_responder_seguro")([1, 2, 3])
 
     assert resposta is not None
     assert resposta["error"]["code"] == -32600
@@ -514,7 +520,9 @@ def test_verificacao_sem_linhas_executa_a_consulta() -> None:
 
 def test_falha_da_verificacao_bloqueia_a_consulta_fail_closed() -> None:
     cursor = MagicMock(name="cursor")
-    cursor.execute.side_effect = Exception("ORA-00942: tabela ou view nao existe")
+    cursor.execute.side_effect = oracledb.DatabaseError(
+        "ORA-00942: tabela ou view nao existe"
+    )
     mgr = _mgr_com_conexao(_conexao_com_cursor(cursor))
 
     resultado = OracleMcpTools(mgr, _config()).execute_sql(SQL_COM_FUNCAO)
@@ -579,7 +587,7 @@ def test_stdin_do_processo_aceita_utf8_com_acento() -> None:
 def test_queda_na_ferramenta_descarta_a_conexao_do_pool(ferramenta: str) -> None:
     """Regressão (achado 7): a conexão que caiu sai do pool; não volta a ele."""
     cursor = MagicMock(name="cursor")
-    cursor.execute.side_effect = Exception(
+    cursor.execute.side_effect = oracledb.OperationalError(
         "ORA-03113: end-of-file on communication channel"
     )
     conn = _conexao_com_cursor(cursor)
@@ -600,7 +608,7 @@ def test_queda_na_ferramenta_descarta_a_conexao_do_pool(ferramenta: str) -> None
 
 def test_cursor_que_falha_por_queda_descarta_a_conexao() -> None:
     conn = MagicMock(name="conexao")
-    conn.cursor.side_effect = Exception("DPY-1001: not connected")
+    conn.cursor.side_effect = oracledb.InterfaceError("DPY-1001: not connected")
     mgr = _mgr_com_conexao(conn)
 
     resultado = OracleMcpTools(mgr, _config()).list_tables()
@@ -666,7 +674,6 @@ def test_arraysize_acompanha_max_rows_mais_uma() -> None:
 def test_execute_sql_tem_prazo_total_alem_do_por_chamada() -> None:
     """Regressão: com `call_timeout` nativo, cada round-trip cabia no prazo e a soma não
     tinha teto. O watchdog do total cancela a sessão e a ferramenta responde timeout."""
-    import threading  # pylint: disable=import-outside-toplevel
 
     cancelada = threading.Event()
     cursor = MagicMock(name="cursor")
@@ -692,7 +699,8 @@ def test_execute_sql_tem_prazo_total_alem_do_por_chamada() -> None:
     mgr.discard_connection.assert_called_once_with(conn)
 
 
-class _CursorQueRecusaArraysize:  # pylint: disable=too-few-public-methods
+@dataclass
+class _CursorQueRecusaArraysize:
     """Cursor cuja configuração falha (ex.: cursor já inválido)."""
 
     @property

@@ -18,6 +18,7 @@ wrapper PowerShell (`Tools/Test-LogEventSchema.ps1`), nao deste script.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 import sys
@@ -50,15 +51,23 @@ def _enum(schema: dict[str, Any], field: str) -> set[str]:
     return set(schema["properties"][field]["enum"])
 
 
-class _Enums:  # pylint: disable=too-few-public-methods
+@dataclasses.dataclass
+class _Enums:
     """Enums extraidos do schema JSON (fonte unica dos valores validos)."""
 
-    def __init__(self, schema: dict[str, Any]) -> None:
-        self.level = _enum(schema, "level")
-        self.component = _enum(schema, "component")
-        self.event = _enum(schema, "event")
-        self.step = _enum(schema, "step")
-        self.allowed = set(schema["properties"].keys())
+    schema: dict[str, Any]
+    level: set[str] = dataclasses.field(init=False)
+    component: set[str] = dataclasses.field(init=False)
+    event: set[str] = dataclasses.field(init=False)
+    step: set[str] = dataclasses.field(init=False)
+    allowed: set[str] = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.level = _enum(self.schema, "level")
+        self.component = _enum(self.schema, "component")
+        self.event = _enum(self.schema, "event")
+        self.step = _enum(self.schema, "step")
+        self.allowed = set(self.schema["properties"].keys())
 
 
 # Campos exigidos por evento, alem do envelope base.

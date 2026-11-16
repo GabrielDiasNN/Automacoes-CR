@@ -25,24 +25,24 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
-$projectRoot      = Split-Path -Parent $ScriptDir
-$ExtractScript    = Join-Path $ScriptDir "extract_obs.py"
-$ExtractJs        = Join-Path $ScriptDir "extract_obs.js"
-$GenScript        = Join-Path $ScriptDir "generate_phase_cards.py"
-$PhaseCardsFile   = Join-Path $ScriptDir "phase_cards.json"
-$ResultFile       = Join-Path $ScriptDir "obs_result.json"
-$WaConfigPath     = Join-Path $ScriptDir "whatsapp-config.json"
-$DeliveryState    = Join-Path $ScriptDir "delivery_state.json"
-$ObsStateFile     = Join-Path $ScriptDir "obs_state.json"
-$ObsStateTmp      = $ObsStateFile + ".tmp"
-$LogDir           = Join-Path $ScriptDir "Logs"
+$projectRoot = Split-Path -Parent $ScriptDir
+$ExtractScript = Join-Path $ScriptDir "extract_obs.py"
+$ExtractJs = Join-Path $ScriptDir "extract_obs.js"
+$GenScript = Join-Path $ScriptDir "generate_phase_cards.py"
+$PhaseCardsFile = Join-Path $ScriptDir "phase_cards.json"
+$ResultFile = Join-Path $ScriptDir "obs_result.json"
+$WaConfigPath = Join-Path $ScriptDir "whatsapp-config.json"
+$DeliveryState = Join-Path $ScriptDir "delivery_state.json"
+$ObsStateFile = Join-Path $ScriptDir "obs_state.json"
+$ObsStateTmp = $ObsStateFile + ".tmp"
+$LogDir = Join-Path $ScriptDir "Logs"
 
-$libLogging  = Join-Path $projectRoot "lib\Lib-Logging.psm1"
+$libLogging = Join-Path $projectRoot "lib\Lib-Logging.psm1"
 $libLogEvent = Join-Path $projectRoot "lib\Lib-LogEvent.psm1"
-$libRetry    = Join-Path $projectRoot "lib\Lib-Retry.psm1"
-$libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
-$libConfig   = Join-Path $projectRoot "lib\Lib-Config.psm1"
-$libOracle   = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
+$libRetry = Join-Path $projectRoot "lib\Lib-Retry.psm1"
+$libProcess = Join-Path $projectRoot "lib\Lib-Process.psm1"
+$libConfig = Join-Path $projectRoot "lib\Lib-Config.psm1"
+$libOracle = Join-Path $projectRoot "lib\Lib-Oracle.psm1"
 
 Import-Module $libLogging  -Force
 Import-Module $libLogEvent -Force
@@ -55,14 +55,15 @@ Import-Module $libOracle   -Force
 # so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
 $pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
 # Motor JS so com ORACLE_DRIVER_MODE=bridge (opt-in explicito); senao, Python.
-$nodeExe   = if ("$env:ORACLE_DRIVER_MODE".Trim() -eq "bridge") { (Get-Command node -ErrorAction SilentlyContinue).Source } else { $null }
+$nodeExe = if ("$env:ORACLE_DRIVER_MODE".Trim() -eq "bridge") { (Get-Command node -ErrorAction SilentlyContinue).Source } else { $null }
 
 $AutomationName = "OBs Paradas Fase"
 
 if ([string]::IsNullOrWhiteSpace($ExecId)) {
     $ExecId = if (Get-Command Register-ExecutionTelemetry -ErrorAction SilentlyContinue) {
         Register-ExecutionTelemetry -AutomationName $AutomationName
-    } else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
+    }
+    else { (Get-Date -Format 'yyyyMMdd_HHmmss') }
 }
 
 $LogFile = Get-AutomacaoLogPath -Slug "ObsParadasFase" -LogDir $LogDir
@@ -73,12 +74,13 @@ Initialize-HubLogContext -Automation $AutomationName -ExecId $ExecId -TraceId $T
     -LogPath $LogFile -Component "ps_script"
 
 $env:HUB_LOG_STRUCTURED = "1"
-$env:HUB_AUTOMATION     = $AutomationName
-$env:HUB_EXEC_ID        = $ExecId
-$env:HUB_TRACE_ID       = $TraceId
+$env:HUB_AUTOMATION = $AutomationName
+$env:HUB_EXEC_ID = $ExecId
+$env:HUB_TRACE_ID = $TraceId
 
 $script:RunSw = [System.Diagnostics.Stopwatch]::StartNew()
-Remove-Item $ResultFile -Force -ErrorAction SilentlyContinue
+$script:ExecutionEnded = $false
+$script:HasFreshResult = $false
 
 function Write-Log {
     param([string]$Msg, [string]$Lvl = "INFO", [string]$Step = "")
@@ -87,20 +89,22 @@ function Write-Log {
 
 # Start-HubStep / Complete-HubStep vem de lib/Lib-LogEvent.psm1.
 
-# Codes que NAO representam falha operacional: 2 = idempotencia (nada a enviar).
-$NonFailureCodes = @(0, 2)
+# Codes que NAO representam falha operacional: 2 = idempotencia (nada a enviar), 22 = WhatsApp adiado por lock/cooldown.
+$NonFailureCodes = @(0, 2, 22)
 
 function Exit-WithCode {
     param([int]$Code, [string]$Msg = "", [hashtable]$Counts)
+    $script:ExecutionEnded = $true
+    $countsPath = if ($script:HasFreshResult) { $ResultFile } else { "" }
     $endArgs = @{
-        Code            = $Code
-        Msg             = $Msg
-        ExecId          = $ExecId
-        LogPath         = $LogFile
-        NonFailureCodes = $NonFailureCodes
-        EndMessage      = "FIM - ExitCode=$Code"
-        RecordCountsPath = $ResultFile
-        DurationMs      = [int]$script:RunSw.Elapsed.TotalMilliseconds
+        Code             = $Code
+        Msg              = $Msg
+        ExecId           = $ExecId
+        LogPath          = $LogFile
+        NonFailureCodes  = $NonFailureCodes
+        EndMessage       = "FIM - ExitCode=$Code"
+        RecordCountsPath = $countsPath
+        DurationMs       = [int]$script:RunSw.Elapsed.TotalMilliseconds
     }
     if ($Counts) { $endArgs["RecordCounts"] = $Counts }
     Exit-AutomationWithCode @endArgs
@@ -108,28 +112,59 @@ function Exit-WithCode {
 
 Write-HubExecutionStart -Message "INICIO — $AutomationName (OBP-04). ExecId=$ExecId"
 
+try { Import-HubEnv } catch [System.Exception] { Write-Log "Aviso: falha ao carregar .env: $_" -Lvl "WARN" -Step "preflight" }
+
 # --- PRE-FLIGHT ---
 Start-HubStep -Step "preflight" -Message "Oracle, Python e WhatsApp configurados"
 $preFlight = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile `
     -CheckOracle -CheckPaths @($pythonExe, $ExtractScript, $GenScript, $WaConfigPath)
+if ($preFlight) {
+    try {
+        $waConfig = Get-Content -LiteralPath $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $null = Resolve-WhatsAppTarget -Target $waConfig.target -ConfigPath $WaConfigPath
+    }
+    catch [System.Exception] {
+        Write-Log "Pre-Flight WhatsApp falhou: $_" -Lvl "ERRO" -Step "preflight"
+        $preFlight = $false
+    }
+}
 Complete-HubStep -Ok $preFlight
 if (-not $preFlight) {
-    Exit-WithCode 9 "FALHA NO PRE-FLIGHT CHECK. Abortando."
+    # O check do WhatsApp fica dentro de -OutrosChecks: com o worker Oracle offline o pre-flight
+    # principal reprova antes de Resolve-WhatsAppTarget rodar, e config WhatsApp invalida sairia 26 em vez de 9.
+    $outrosChecks = {
+        $okBasico = Test-AutomationPreFlight -ExecId $ExecId -LogPath $LogFile -CheckPaths @($pythonExe, $ExtractScript, $GenScript, $WaConfigPath)
+        if (-not $okBasico) { return $false }
+        try {
+            $waCfg = Get-Content -LiteralPath $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $null = Resolve-WhatsAppTarget -Target $waCfg.target -ConfigPath $WaConfigPath
+            return $true
+        }
+        catch [System.Exception] {
+            Write-Log "Pre-Flight WhatsApp falhou: $_" -Lvl "ERRO" -Step "preflight"
+            return $false
+        }
+    }
+    $pfCode = if (Get-Command Get-OraclePreFlightExitCode -ErrorAction SilentlyContinue) { Get-OraclePreFlightExitCode -OutrosChecks $outrosChecks } else { 9 }
+    Exit-WithCode $pfCode "FALHA NO PRE-FLIGHT CHECK. Abortando."
 }
 
 try {
     # --- LOCK ---
     Start-HubStep -Step "lock" -Message "Adquirindo lock global"
-    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile | Out-Null
+    Enter-AutomationLock -ExecId $ExecId -LogPath $LogFile -LockKey "OBP-04" | Out-Null
     Complete-HubStep
 
     try {
-        try { Import-HubEnv } catch [System.Exception] { Write-Log "Aviso: falha ao carregar .env: $_" -Lvl "WARN" }
+        if (Get-Command Invoke-LogRotation -ErrorAction SilentlyContinue) {
+            Invoke-LogRotation -LogPath $LogFile -KeepDays 15
+        }
+        Remove-Item $ResultFile -Force -ErrorAction SilentlyContinue
 
         # --- CLEANUP CIRURGICO: Chrome zumbis do motor WhatsApp (somente user-data-dir do projeto) ---
         $waAuthDir = (Get-WhatsAppAuthPath).ToLower()
         $chromeZombies = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains($waAuthDir) }
+        Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains($waAuthDir) }
         if ($chromeZombies) {
             Write-Log "Limpando $(@($chromeZombies).Count) processo(s) Chrome zumbi do motor WhatsApp..." -Step "cleanup"
             foreach ($proc in $chromeZombies) {
@@ -141,9 +176,9 @@ try {
 
         # --- ETAPA 1: EXTRAÇÃO ORACLE ---
         $useJsExtractor = (Test-Path $ExtractJs) -and (-not [string]::IsNullOrWhiteSpace($nodeExe))
-        $extractorExe   = if ($useJsExtractor) { $nodeExe } else { $pythonExe }
-        $extractorPath  = if ($useJsExtractor) { $ExtractJs } else { $ExtractScript }
-        $engineName     = if ($useJsExtractor) { "Node.js (Oracle OCI 19c)" } else { "Python (extract_obs.py)" }
+        $extractorExe = if ($useJsExtractor) { $nodeExe } else { $pythonExe }
+        $extractorPath = if ($useJsExtractor) { $ExtractJs } else { $ExtractScript }
+        $engineName = if ($useJsExtractor) { "Node.js (Oracle OCI 19c)" } else { "Python (extract_obs.py)" }
 
         Start-HubStep -Step "extract" -Message "Extracao Oracle via $engineName"
         $pyResult = Invoke-OraclePythonScript `
@@ -155,14 +190,19 @@ try {
             -Step "extract" `
             -MaxAttempts 3 `
             -BackoffSeconds @(30, 60, 120)
-        Complete-HubStep -Ok ($pyResult.Success -or $pyResult.Idempotent)
+        $extractOk = ($pyResult.Success -or $pyResult.Idempotent)
+        if ($extractOk) {
+            $script:HasFreshResult = $true
+        }
+        Complete-HubStep -Ok $extractOk
 
         if ($pyResult.Idempotent) {
             Write-Log "Sem alteracoes nas OBs (idempotencia). Encerrando." -Step "commit"
             Exit-WithCode 2 "Idempotencia confirmada — nenhuma mudanca desde o ultimo envio."
         }
         if (-not $pyResult.Success) {
-            Exit-WithCode 3 "Falha definitiva na extracao Oracle ($engineName) apos 3 tentativas."
+            $extractExitCode = Resolve-OracleFailureExitCode -ExitCode $pyResult.ExitCode -DefaultExitCode 3
+            Exit-WithCode $extractExitCode "Falha definitiva na extracao Oracle ($engineName) (PythonExit=$($pyResult.ExitCode))."
         }
 
         # --- ETAPA 2: GERAR CARDS POR FASE ---
@@ -170,11 +210,11 @@ try {
         $genResult = Invoke-NativeProcess -FilePath $pythonExe `
             -Arguments "`"$GenScript`" `"$ExecId`"" `
             -LogAction {
-                param($msg, $lvl)
-                if (-not [string]::IsNullOrWhiteSpace($msg)) {
-                    Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "transform"
-                }
+            param($msg, $lvl)
+            if (-not [string]::IsNullOrWhiteSpace($msg)) {
+                Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "transform"
             }
+        }
         Complete-HubStep -Ok ($genResult.ExitCode -in @(0, 2))
         if ($genResult.ExitCode -eq 2) {
             Exit-WithCode 2 "Nenhuma OB qualificada — nenhum card gerado."
@@ -188,7 +228,8 @@ try {
 
         try {
             [array]$cards = Get-Content $PhaseCardsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-        } catch [System.Exception] {
+        }
+        catch [System.Exception] {
             Exit-WithCode 4 "Falha ao interpretar '$PhaseCardsFile' como JSON: $_"
         }
         if (-not $cards -or $cards.Count -eq 0) {
@@ -207,7 +248,8 @@ try {
                 $saved = Get-Content $DeliveryState -Raw -Encoding UTF8 | ConvertFrom-Json
                 if ($saved.last_sent_hash) { $state.last_sent_hash = $saved.last_sent_hash }
                 if ($saved.phases) { $state.phases = @($saved.phases) }
-            } catch [System.Exception] { Write-Log "Aviso: falha ao ler delivery_state.json. Reiniciando estado." -Lvl "WARN" }
+            }
+            catch [System.Exception] { Write-Log "Aviso: falha ao ler delivery_state.json. Reiniciando estado." -Lvl "WARN" }
         }
 
         if ($currentHash -and $currentHash -ne $state.last_sent_hash) {
@@ -228,9 +270,9 @@ try {
         # --- ETAPA 3: ENVIO EM LOTE (uma sessão Chrome para todas as fases) ---
         # Filtrar fases ainda nao entregues
         $pendentes = @($cards | Where-Object {
-            $key = $_.phase_key
-            -not ($state.phases | Where-Object { $_.key -eq $key -and $_.success })
-        })
+                $key = $_.phase_key
+                -not ($state.phases | Where-Object { $_.key -eq $key -and $_.success })
+            })
 
         if ($pendentes.Count -eq 0) {
             Write-Log "Todas as fases ja entregues para este lote. Idempotencia confirmada."
@@ -252,7 +294,7 @@ try {
             }
         }
 
-        $BatchInputFile  = Join-Path $ScriptDir "batch_input.json"
+        $BatchInputFile = Join-Path $ScriptDir "batch_input.json"
         $BatchResultFile = Join-Path $ScriptDir "batch_result.json"
         $utf8NoBOM = [System.Text.UTF8Encoding]::new($false)
         # -InputObject @(...) e obrigatorio: pelo pipeline, um unico item vira objeto (nao array) e o
@@ -264,7 +306,8 @@ try {
         # em vez de despachar o lote inteiro para o placeholder do hub.
         try {
             $waCfg = Get-Content $WaConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        } catch [System.Exception] {
+        }
+        catch [System.Exception] {
             Exit-WithCode 4 "Falha ao interpretar '$WaConfigPath' como JSON: $_"
         }
         $chatId = Resolve-WhatsAppTarget -Target $waCfg.target -ConfigPath $WaConfigPath
@@ -276,18 +319,22 @@ try {
         $waResult = Invoke-NativeProcess -FilePath "powershell.exe" -Arguments $waArgs `
             -WorkingDirectory $ScriptDir `
             -LogAction {
-                param($msg, $lvl)
-                if (-not [string]::IsNullOrWhiteSpace($msg)) {
-                    Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "dispatch"
-                }
+            param($msg, $lvl)
+            if (-not [string]::IsNullOrWhiteSpace($msg)) {
+                Write-HubForwardedLine -Line $msg -FallbackLevel $lvl -Step "dispatch"
             }
+        }
 
         $waExit = $waResult.ExitCode
         Write-Log "Motor WhatsApp Batch ExitCode=$waExit" -Step "dispatch"
-        Complete-HubStep -Ok ($waExit -eq 0)
+        Complete-HubStep -Ok ($waExit -in @(0, 22))
 
         if ($waExit -eq 21) {
             Exit-WithCode 21 "WhatsApp requer reautenticacao."
+        }
+        if ($waExit -eq 22) {
+            Remove-Item $BatchResultFile, $BatchInputFile -Force -ErrorAction SilentlyContinue
+            Exit-WithCode 22 "WhatsApp adiado por lock ou cooldown da sessao hub-global."
         }
 
         # Parsear resultados por fase
@@ -312,7 +359,8 @@ try {
             if ($entry) {
                 $entry.success = $phaseSuccess
                 $entry.sent_at = if ($phaseSuccess) { Get-Date -Format 'dd/MM/yyyy HH:mm:ss' } else { $null }
-            } else {
+            }
+            else {
                 $state.phases += [PSCustomObject]@{
                     key     = $phaseKey
                     success = $phaseSuccess
@@ -335,10 +383,10 @@ try {
         Complete-HubStep -Ok $allSent
 
         $phaseCounts = @{
-            phases_total   = $cards.Count
+            phases_total     = $cards.Count
             phases_attempted = $pendentes.Count
-            phases_sent    = @($state.phases | Where-Object { $_.success }).Count
-            phases_failed  = $failedThisRun
+            phases_sent      = @($state.phases | Where-Object { $_.success }).Count
+            phases_failed    = $failedThisRun
         }
 
         if ($anyFailure) {
@@ -347,15 +395,19 @@ try {
 
         Exit-WithCode 0 "Execucao concluida com sucesso." -Counts $phaseCounts
 
-    } finally {
+    }
+    finally {
         if (Test-Path $ObsStateTmp) {
             Remove-Item $ObsStateTmp -Force -ErrorAction SilentlyContinue
-            Write-Log "Limpeza finally: $ObsStateTmp removido." -Lvl "DEBUG" -Step "cleanup"
+            if (-not $script:ExecutionEnded) {
+                Write-Log "Limpeza finally: $ObsStateTmp removido." -Lvl "DEBUG" -Step "cleanup"
+            }
         }
-        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile
+        Exit-AutomationLock -ExecId $ExecId -LogPath $LogFile -LockKey "OBP-04"
     }
 
-} catch [System.Exception] {
+}
+catch [System.Exception] {
     # Sem sinal de controle de fluxo por mensagem (padrao "Processo finalizado" usado em
     # outras automacoes) neste script: toda excecao que chegar aqui - incluindo
     # MethodInvocationException de chamadas .NET como [System.IO.File]::WriteAllText - deve

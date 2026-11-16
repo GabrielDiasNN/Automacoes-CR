@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-[Console]::InputEncoding  = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
 $script:Lib_Utf8WithBom = [System.Text.Encoding]::UTF8
 
@@ -35,11 +35,12 @@ Import-Module (Join-Path $PSScriptRoot 'Lib-Config.psm1')
 
 try {
 
-$script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+    $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
-} catch [System.Exception] {
+}
+catch [System.Exception] {
 
-$script:ProjectRoot = "." # Fallback final
+    $script:ProjectRoot = "." # Fallback final
 
 }
 
@@ -51,7 +52,7 @@ $script:ProjectRoot = "." # Fallback final
 
 function Get-AutomacaoProjectRoot {
 
-return $script:ProjectRoot
+    return $script:ProjectRoot
 
 }
 
@@ -63,13 +64,13 @@ return $script:ProjectRoot
 
 function New-ExecId {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-[OutputType([string])]
+    [OutputType([string])]
 
-param()
+    param()
 
-return (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    return (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -Maximum 9999)
 
 }
 
@@ -81,23 +82,23 @@ return (Get-Date -Format 'yyyyMMdd_HHmmss') + "_" + (Get-Random -Minimum 1000 -M
 
 function Protect-SensitiveData {
 
-param([string]$Text)
+    param([string]$Text)
 
-if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
+    if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
 
-# Mascara E-mails
+    # Mascara E-mails
 
-$masked = $Text -replace '([a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', '$1***@$2'
+    $masked = $Text -replace '([a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', '$1***@$2'
 
-# Mascara Senhas e Tokens (Expandido)
+    # Mascara Senhas e Tokens (Expandido)
 
-$masked = $masked -replace '(?i)(token|key|password|pass|secret|credential|auth|apikey|client_secret)([:= ]\s*)([a-zA-Z0-9._%+-]{4,})', '$1$2[REDACTED]'
+    $masked = $masked -replace '(?i)(token|key|password|pass|secret|credential|auth|apikey|client_secret)([:= ]\s*)([a-zA-Z0-9._%+-]{4,})', '$1$2[REDACTED]'
 
-# Mascara Strings de Conexao Oracle
+    # Mascara Strings de Conexao Oracle
 
-$masked = $masked -replace '(DESCRIPTION\s*=\s*\(ADDRESS\s*=\s*\(PROTOCOL\s*=\s*TCP\)\(HOST\s*=\s*)[^)]+', '$1[HIDDEN]'
+    $masked = $masked -replace '(DESCRIPTION\s*=\s*\(ADDRESS\s*=\s*\(PROTOCOL\s*=\s*TCP\)\(HOST\s*=\s*)[^)]+', '$1[HIDDEN]'
 
-return $masked
+    return $masked
 
 }
 
@@ -109,25 +110,25 @@ return $masked
 
 function Get-AutomacaoApiKey {
 
-$envPath = Join-Path (Get-AutomacaoProjectRoot) ".env"
+    $envPath = Join-Path (Get-AutomacaoProjectRoot) ".env"
 
-if (Test-Path $envPath) {
+    if (Test-Path $envPath) {
 
-$content = Get-Content $envPath
+        $content = Get-Content $envPath
 
-foreach ($line in $content) {
+        foreach ($line in $content) {
 
-if ($line -match '^ORCHESTRATOR_API_KEY=(.*)$') {
+            if ($line -match '^ORCHESTRATOR_API_KEY=(.*)$') {
 
-return $Matches[1].Trim()
+                return $Matches[1].Trim()
 
-}
+            }
 
-}
+        }
 
-}
+    }
 
-return ""
+    return ""
 
 }
 
@@ -139,37 +140,38 @@ return ""
 
 function Register-ExecutionTelemetry {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-param(
+    param(
 
-[Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true)]
 
-[string]$AutomationName
+        [string]$AutomationName
 
-)
+    )
 
-$script:CurrentAutomationName = $AutomationName
+    $script:CurrentAutomationName = $AutomationName
 
-$uri = "http://localhost:8000/api/executions/telemetry/start"
+    $uri = "http://localhost:8000/api/executions/telemetry/start"
 
-$body = @{ automation_name = $AutomationName } | ConvertTo-Json
+    $body = @{ automation_name = $AutomationName } | ConvertTo-Json
 
-$headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+    $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
 
-try {
+    try {
 
-$response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction Stop
+        $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction Stop
 
-return $response.exec_id
+        return $response.exec_id
 
-} catch [System.Exception] {
+    }
+    catch [System.Exception] {
 
-Write-Warning "Falha ao registrar telemetria (Orquestrador offline?): $_"
+        Write-Warning "Falha ao registrar telemetria (Orquestrador offline?): $_"
 
-return (New-ExecId) # Fallback seguro
+        return (New-ExecId) # Fallback seguro
 
-}
+    }
 
 }
 
@@ -181,243 +183,421 @@ return (New-ExecId) # Fallback seguro
 
 function Close-ExecutionTelemetry {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-param(
+    param(
 
-[Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true)]
 
-[string]$ExecId,
+        [string]$ExecId,
 
-[Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true)]
 
-[string]$Status,
+        [string]$Status,
 
-[string]$LogPath = ""
+        [string]$LogPath = ""
 
-)
+    )
 
-# Evita chamadas caso o ID seja de Fallback ou nulo
+    # Evita chamadas caso o ID seja de Fallback ou nulo
 
-if ([string]::IsNullOrWhiteSpace($ExecId) -or $ExecId -notmatch '^TEL_') {
+    if ([string]::IsNullOrWhiteSpace($ExecId) -or $ExecId -notmatch '^TEL_') {
 
-return
+        return
+
+    }
+
+    # Garante que os logs remanescentes do buffer sejam enviados antes do fechamento
+
+    Send-AutomacaoLogBroadcast
+
+    $uri = "http://localhost:8000/api/executions/telemetry/end/$ExecId"
+
+    $logContent = $null
+
+    if (-not [string]::IsNullOrWhiteSpace($LogPath) -and (Test-Path $LogPath)) {
+
+        try {
+
+            $logContent = [System.IO.File]::ReadAllText($LogPath, $script:Lib_Utf8WithBom)
+
+        }
+        catch [System.Exception] { }
+
+    }
+
+    $body = @{
+
+        status    = $Status
+
+        logs      = $logContent
+
+        exit_code = if ($Status -eq "SUCCESS") { 0 } else { 1 }
+
+    } | ConvertTo-Json -Depth 10 -Compress
+
+    $headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+
+    try {
+
+        Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8" -ErrorAction Stop | Out-Null
+
+    }
+    catch [System.Exception] {
+
+        Write-Warning "Falha ao fechar telemetria: $_"
+
+    }
 
 }
 
-# Garante que os logs remanescentes do buffer sejam enviados antes do fechamento
+function Get-OracleQueueServerNowUtc {
+    <#
+    .SYNOPSIS
+        Estima o instante "agora" do servidor da fila (pasta SMB), em UTC.
+    .DESCRIPTION
+        Grava um arquivo de sonda na pasta da fila e le o LastWriteTimeUtc atribuido pelo
+        proprio servidor de arquivos. Assim a idade do heartbeat nao depende do relogio desta
+        maquina, que pode divergir do servidor. Em falha (pasta inacessivel, sem permissao de
+        escrita) devolve UtcNow como fallback. O arquivo de sonda e sempre apagado (finally).
+    #>
+    [CmdletBinding()]
+    [OutputType([datetime])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$QueueDir
+    )
 
-Send-AutomacaoLogBroadcast
-
-$uri = "http://localhost:8000/api/executions/telemetry/end/$ExecId"
-
-$logContent = $null
-
-if (-not [string]::IsNullOrWhiteSpace($LogPath) -and (Test-Path $LogPath)) {
-
-try {
-
-$logContent = [System.IO.File]::ReadAllText($LogPath, $script:Lib_Utf8WithBom)
-
-} catch [System.Exception] { }
-
+    $agoraLocal = [DateTime]::UtcNow
+    $guid8 = ([guid]::NewGuid().ToString("N")).Substring(0, 8)
+    $sonda = Join-Path $QueueDir ("_clock_probe_{0}_{1}.tmp" -f $PID, $guid8)
+    try {
+        [System.IO.File]::WriteAllText($sonda, "clock-probe", [System.Text.Encoding]::ASCII)
+        $item = Get-Item -LiteralPath $sonda -ErrorAction Stop
+        return $item.LastWriteTimeUtc
+    }
+    catch [System.Exception] {
+        return $agoraLocal
+    }
+    finally {
+        if (Test-Path -LiteralPath $sonda) {
+            Remove-Item -LiteralPath $sonda -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
-$body = @{
+function Test-OracleQueueWorkerAlive {
+    [CmdletBinding()]
+    param(
+        [string]$QueueDir = "",
+        [int]$MaxAgeSeconds = 45,
+        [int]$BusyMaxAgeSeconds = 240
+    )
 
-status = $Status
+    if ([string]::IsNullOrWhiteSpace($QueueDir)) {
+        $QueueDir = [System.Environment]::GetEnvironmentVariable("ORACLE_QUEUE_DIR", "Process")
+        if ([string]::IsNullOrWhiteSpace($QueueDir)) { $QueueDir = Get-EnvFileValue -Key "ORACLE_QUEUE_DIR" }
+        if ([string]::IsNullOrWhiteSpace($QueueDir)) {
+            $queuePy = Join-Path $PSScriptRoot "python\oracle_queue.py"
+            if (Test-Path -LiteralPath $queuePy) {
+                $m = [regex]::Match((Get-Content -LiteralPath $queuePy -Raw -Encoding UTF8), 'DEFAULT_QUEUE_DIR\s*=\s*\(?\s*r"([^"]+)"')
+                if ($m.Success) { $QueueDir = $m.Groups[1].Value }
+            }
+        }
+    }
 
-logs = $logContent
+    $out = [ordered]@{
+        Alive      = $false
+        Reachable  = $false
+        QueueDir   = $QueueDir
+        Source     = "none"
+        State      = $null
+        Version    = $null
+        OracleOk   = $null
+        AgeSeconds = $null
+        Reason     = "worker offline"
+    }
 
-exit_code = if ($Status -eq "SUCCESS") { 0 } else { 1 }
+    if ([string]::IsNullOrWhiteSpace($QueueDir)) {
+        $out.Reason = "ORACLE_QUEUE_DIR nao configurado"
+        return [pscustomobject]$out
+    }
 
-} | ConvertTo-Json -Depth 10 -Compress
+    if ($QueueDir -match '^\\\\([^\\]+)\\') {
+        $uncHost = $Matches[1]
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        try {
+            $iar = $tcp.BeginConnect($uncHost, 445, $null, $null)
+            if (-not $iar.AsyncWaitHandle.WaitOne(1500, $false)) {
+                $out.Reason = "servidor SMB $uncHost inacessivel (porta 445 timeout)"
+                return [pscustomobject]$out
+            }
+            $tcp.EndConnect($iar)
+        }
+        catch [System.Exception] {
+            $out.Reason = "servidor SMB $uncHost inacessivel (porta 445)"
+            return [pscustomobject]$out
+        }
+        finally {
+            $tcp.Dispose()
+        }
+    }
 
-$headers = @{ "X-API-Key" = (Get-AutomacaoApiKey) }
+    if (-not (Test-Path -LiteralPath $QueueDir)) {
+        $out.Reason = "pasta inacessivel ($QueueDir)"
+        return [pscustomobject]$out
+    }
+    $out.Reachable = $true
 
-try {
+    $activeProcs = @(Get-ChildItem -LiteralPath $QueueDir -Filter "req_*.proc" -ErrorAction SilentlyContinue)
+    $hbPath = Join-Path $QueueDir "_worker_heartbeat.json"
+    $hbFalha = $null
+    if (Test-Path -LiteralPath $hbPath) {
+        try {
+            $hbItem = Get-Item -LiteralPath $hbPath -ErrorAction Stop
+            $agoraServidor = Get-OracleQueueServerNowUtc -QueueDir $QueueDir
+            $ageSec = [math]::Round(($agoraServidor - $hbItem.LastWriteTimeUtc).TotalSeconds, 1)
+            $out.AgeSeconds = $ageSec
+            $out.Source = "heartbeat"
+            $hbRaw = Get-Content -LiteralPath $hbPath -Raw -Encoding Default
+            if (-not [string]::IsNullOrWhiteSpace($hbRaw)) {
+                $hb = $hbRaw | ConvertFrom-Json
+                $out.State = [string]$hb.state
+                $out.Version = [string]$hb.version
+                $out.OracleOk = $hb.oracle_ok
+            }
+            $limit = if (($out.State -eq "busy") -or ($activeProcs.Count -gt 0)) { $BusyMaxAgeSeconds } else { $MaxAgeSeconds }
+            if ($ageSec -le $limit) {
+                $out.Alive = $true
+                $out.Reason = "heartbeat ativo (${ageSec}s, state=$($out.State))"
+            }
+            else {
+                $out.Alive = $false
+                $out.Reason = "heartbeat expirado ha ${ageSec}s (limite ${limit}s)"
+            }
+            return [pscustomobject]$out
+        }
+        catch [System.Exception] {
+            $out.Reason = "falha ao ler heartbeat: $_"
+            $hbFalha = $out.Reason
+        }
+    }
 
-Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8" -ErrorAction Stop | Out-Null
+    if ($activeProcs.Count -gt 0) {
+        $out.Alive = $true
+        $out.Source = "proc"
+        $out.Reason = "$($activeProcs.Count) requisicao(oes) em processamento"
+        return [pscustomobject]$out
+    }
 
-} catch [System.Exception] {
+    $sigA = Join-Path $QueueDir "_worker_sinal_a.txt"
+    $sigB = Join-Path $QueueDir "_worker_sinal_b.txt"
+    if ((Test-Path -LiteralPath $sigA) -or (Test-Path -LiteralPath $sigB)) {
+        $out.Source = "signal"
+        $out.Alive = $true
+        $out.Reason = "arquivo de sinal legado presente (sem heartbeat v2.6+)"
+        return [pscustomobject]$out
+    }
 
-Write-Warning "Falha ao fechar telemetria: $_"
-
-}
-
+    # Preserva a causa da falha de leitura do heartbeat (ex.: JSON corrompido) em vez de sobrescreve-la.
+    if ($hbFalha) {
+        $out.Reason = "$hbFalha; sem sinal do worker na fila"
+    }
+    else {
+        $out.Reason = "sem heartbeat nem sinal do worker na fila"
+    }
+    return [pscustomobject]$out
 }
 
 function Test-AutomationPreFlight {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-param(
+    param(
 
-[string]$ExecId = "bootstrap",
+        [string]$ExecId = "bootstrap",
 
-[string]$LogPath,
+        [string]$LogPath,
 
-[switch]$CheckOracle,
+        [switch]$CheckOracle,
 
-[string]$OracleHost = "",
+        [string]$OracleHost = "",
 
-[string[]]$CheckPaths = @()
+        [string[]]$CheckPaths = @()
 
-)
+    )
 
-Write-AutomacaoLog -Message "Iniciando Pre-Flight Check..." -Level "INFO" -ExecId $ExecId -LogPath $LogPath
+    Write-AutomacaoLog -Message "Iniciando Pre-Flight Check..." -Level "INFO" -ExecId $ExecId -LogPath $LogPath
 
-$results = @()
+    $results = @()
 
-# Portabilidade: Detecta a unidade de disco do projeto dinamicamente
+    # Portabilidade: Detecta a unidade de disco do projeto dinamicamente
 
-$projectRoot = Get-AutomacaoProjectRoot
+    $projectRoot = Get-AutomacaoProjectRoot
 
-$driveLetter = (Split-Path -Path $projectRoot -Qualifier)
+    $driveLetter = (Split-Path -Path $projectRoot -Qualifier)
 
-if ([string]::IsNullOrWhiteSpace($driveLetter)) { $driveLetter = "C:" }
+    if ([string]::IsNullOrWhiteSpace($driveLetter)) { $driveLetter = "C:" }
 
-# Deteccao de Disco Hardened (v5.2.0)
+    # Deteccao de Disco Hardened (v5.2.0)
 
-$freeGB = 0
+    $freeGB = 0
 
-try {
+    try {
 
-# Tentativa 1: Get-CimInstance (Moderno)
+        # Tentativa 1: Get-CimInstance (Moderno)
 
-$cimDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$driveLetter'" -ErrorAction Stop
+        $cimDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$driveLetter'" -ErrorAction Stop
 
-$freeGB = [math]::Round($cimDisk.FreeSpace / 1GB, 2)
+        $freeGB = [math]::Round($cimDisk.FreeSpace / 1GB, 2)
 
-} catch [System.Exception] {
+    }
+    catch [System.Exception] {
 
-try {
+        try {
 
-# Tentativa 2: Fallback para Get-PSDrive (Nativo PS)
+            # Tentativa 2: Fallback para Get-PSDrive (Nativo PS)
 
-$psDrive = Get-PSDrive ($driveLetter.TrimEnd(':')) -ErrorAction Stop
+            $psDrive = Get-PSDrive ($driveLetter.TrimEnd(':')) -ErrorAction Stop
 
-$freeGB = [math]::Round($psDrive.Free / 1GB, 2)
+            $freeGB = [math]::Round($psDrive.Free / 1GB, 2)
 
-} catch [System.Exception] {
-
-$freeGB = -1 # Sinaliza falha na leitura
-
-}
-
-}
-
-if ($freeGB -eq -1) {
-
-$results += "WARN: Falha ao ler espaco em disco (Ignorado)"
-
-} elseif ($freeGB -lt 1) {
-
-$results += "ERRO: Disco critico ($freeGB GB)"
-
-} else {
-
-$results += "OK: Disco estavel ($freeGB GB)"
-
-}
-
-foreach ($p in $CheckPaths) {
-
-if (Test-Path $p) {
-
-$results += "OK: Path: $(Split-Path $p -Leaf)"
-
-} else {
-
-$results += "ERRO: Path inacessivel: $(Split-Path $p -Leaf)"
-
-}
-
-}
-
-if ($CheckOracle) {
-
-# Host do Oracle nunca fica hardcoded aqui: resolve de -OracleHost, senao de
-# ORACLE_CONNECT_STRING (env ou .env local), sempre parametrizado e nao versionado.
-
-$oracleHostResolved = $OracleHost
-
-if ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
-
-$connStr = [System.Environment]::GetEnvironmentVariable("ORACLE_CONNECT_STRING", "Process")
-
-if ([string]::IsNullOrWhiteSpace($connStr)) {
-
-$connStr = Get-EnvFileValue -Key "ORACLE_CONNECT_STRING"
-
-}
-
-if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ((($connStr -replace '^[A-Za-z][A-Za-z0-9+.\-]*://', '') -replace '^//', '') -split '[:/]')[0].Trim() }
-
-}
-
-$driverMode = [System.Environment]::GetEnvironmentVariable("ORACLE_DRIVER_MODE", "Process")
-if ([string]::IsNullOrWhiteSpace($driverMode)) { $driverMode = Get-EnvFileValue -Key "ORACLE_DRIVER_MODE" }
-
-if ($driverMode -eq "queue") {
-    $queueDir = [System.Environment]::GetEnvironmentVariable("ORACLE_QUEUE_DIR", "Process")
-    if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = Get-EnvFileValue -Key "ORACLE_QUEUE_DIR" }
-    if ([string]::IsNullOrWhiteSpace($queueDir)) {
-        # Fonte unica do padrao: DEFAULT_QUEUE_DIR em lib/python/oracle_queue.py
-        # (o cliente que de fato usa a pasta). Duplicar o literal aqui ja exigiu
-        # renomear a pasta em dois lugares.
-        $queuePy = Join-Path $PSScriptRoot "python\oracle_queue.py"
-        if (Test-Path -LiteralPath $queuePy) {
-            $m = [regex]::Match((Get-Content -LiteralPath $queuePy -Raw -Encoding UTF8), 'DEFAULT_QUEUE_DIR\s*=\s*\(?\s*r"([^"]+)"')
-            if ($m.Success) { $queueDir = $m.Groups[1].Value }
         }
+        catch [System.Exception] {
+
+            $freeGB = -1 # Sinaliza falha na leitura
+
+        }
+
     }
-    if ([string]::IsNullOrWhiteSpace($queueDir)) {
-        $results += "FAIL: Oracle Queue (DEFAULT_QUEUE_DIR nao encontrado em lib/python/oracle_queue.py; defina ORACLE_QUEUE_DIR)"
-    } elseif (Test-Path -LiteralPath $queueDir) {
-        $results += "OK: Oracle Queue ($queueDir) On"
-    } else {
-        $results += "WARN: Oracle Queue ($queueDir) Off (pasta inacessivel)"
+
+    if ($freeGB -eq -1) {
+
+        $results += "WARN: Falha ao ler espaco em disco (Ignorado)"
+
     }
-} elseif ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
+    elseif ($freeGB -lt 1) {
 
-$results += "WARN: Oracle host nao configurado (ORACLE_CONNECT_STRING ausente)"
+        $results += "ERRO: Disco critico ($freeGB GB)"
 
-} else {
+    }
+    else {
 
-# O alias do TNS nao resolve por DNS e o ping (ICMP) pode estar bloqueado: mede a porta TCP do endpoint real.
-$enderecoOracle = if ($connStr) { $connStr } else { $oracleHostResolved }
-$endpointOracle = Resolve-OracleEndpoint -ConnectString $enderecoOracle
+        $results += "OK: Disco estavel ($freeGB GB)"
 
-# -OracleHost informado explicitamente como host simples (sem ':' nem '/'): nao e alias de tnsnames,
-# entao testa o proprio host na porta 1521 em vez de cair no aviso de alias ausente.
-if ($null -eq $endpointOracle -and -not [string]::IsNullOrWhiteSpace($OracleHost)) {
-$endpointOracle = [pscustomobject]@{ Servidor = $OracleHost; Porta = 1521; Origem = "Parametro" }
-}
+    }
 
-if ($null -eq $endpointOracle) {
+    foreach ($p in $CheckPaths) {
 
-$results += "WARN: Oracle ($oracleHostResolved) sem endpoint resolvido (alias ausente no tnsnames.ora)"
+        if (Test-Path $p) {
 
-} elseif (Test-OracleTcpEndpoint -Servidor $endpointOracle.Servidor -Porta $endpointOracle.Porta) {
+            $results += "OK: Path: $(Split-Path $p -Leaf)"
 
-$results += "OK: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) On"
+        }
+        else {
 
-} else {
+            $results += "ERRO: Path inacessivel: $(Split-Path $p -Leaf)"
 
-$results += "WARN: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) Off (porta TCP sem resposta em 3 s)"
+        }
 
-}
+    }
 
-}
+    if ($CheckOracle) {
 
-}
+        # Host do Oracle nunca fica hardcoded aqui: resolve de -OracleHost, senao de
+        # ORACLE_CONNECT_STRING (env ou .env local), sempre parametrizado e nao versionado.
 
-$allOk = -not ($results -match "ERRO")
+        $oracleHostResolved = $OracleHost
 
-Write-AutomacaoLog -Message "Pre-Flight: $($results -join ' | ')" -Level $(if($allOk){"INFO"}else{"ERRO"}) -ExecId $ExecId -LogPath $LogPath
+        if ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
 
-return $allOk
+            $connStr = [System.Environment]::GetEnvironmentVariable("ORACLE_CONNECT_STRING", "Process")
+
+            if ([string]::IsNullOrWhiteSpace($connStr)) {
+
+                $connStr = Get-EnvFileValue -Key "ORACLE_CONNECT_STRING"
+
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($connStr)) { $oracleHostResolved = ((($connStr -replace '^[A-Za-z][A-Za-z0-9+.\-]*://', '') -replace '^//', '') -split '[:/]')[0].Trim() }
+
+        }
+
+        $driverMode = [System.Environment]::GetEnvironmentVariable("ORACLE_DRIVER_MODE", "Process")
+        if ([string]::IsNullOrWhiteSpace($driverMode)) { $driverMode = Get-EnvFileValue -Key "ORACLE_DRIVER_MODE" }
+
+        if ($driverMode -eq "queue") {
+            $queueDir = [System.Environment]::GetEnvironmentVariable("ORACLE_QUEUE_DIR", "Process")
+            if ([string]::IsNullOrWhiteSpace($queueDir)) { $queueDir = Get-EnvFileValue -Key "ORACLE_QUEUE_DIR" }
+            if ([string]::IsNullOrWhiteSpace($queueDir)) {
+                # Fonte unica do padrao: DEFAULT_QUEUE_DIR em lib/python/oracle_queue.py
+                # (o cliente que de fato usa a pasta). Duplicar o literal aqui ja exigiu
+                # renomear a pasta em dois lugares.
+                $queuePy = Join-Path $PSScriptRoot "python\oracle_queue.py"
+                if (Test-Path -LiteralPath $queuePy) {
+                    $m = [regex]::Match((Get-Content -LiteralPath $queuePy -Raw -Encoding UTF8), 'DEFAULT_QUEUE_DIR\s*=\s*\(?\s*r"([^"]+)"')
+                    if ($m.Success) { $queueDir = $m.Groups[1].Value }
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($queueDir)) {
+                $results += "ERRO: Oracle Queue (DEFAULT_QUEUE_DIR nao encontrado em lib/python/oracle_queue.py; defina ORACLE_QUEUE_DIR)"
+            }
+            else {
+                $workerStatus = Test-OracleQueueWorkerAlive -QueueDir $queueDir
+                if (-not $workerStatus.Reachable) {
+                    $results += "ERRO: Oracle Queue ($queueDir) Off ($($workerStatus.Reason))"
+                }
+                elseif (-not $workerStatus.Alive) {
+                    $results += "ERRO: Oracle Queue ($queueDir) Worker Offline ($($workerStatus.Reason))"
+                }
+                else {
+                    $verSuffix = if (-not [string]::IsNullOrWhiteSpace($workerStatus.Version)) { " worker $($workerStatus.Version)" } else { "" }
+                    $results += "OK: Oracle Queue ($queueDir) On ($($workerStatus.Reason)$verSuffix)"
+                }
+            }
+        }
+        elseif ([string]::IsNullOrWhiteSpace($oracleHostResolved)) {
+
+            $results += "WARN: Oracle host nao configurado (ORACLE_CONNECT_STRING ausente)"
+
+        }
+        else {
+
+            # O alias do TNS nao resolve por DNS e o ping (ICMP) pode estar bloqueado: mede a porta TCP do endpoint real.
+            $enderecoOracle = if ($connStr) { $connStr } else { $oracleHostResolved }
+            $endpointOracle = Resolve-OracleEndpoint -ConnectString $enderecoOracle
+
+            # -OracleHost informado explicitamente como host simples (sem ':' nem '/'): nao e alias de tnsnames,
+            # entao testa o proprio host na porta 1521 em vez de cair no aviso de alias ausente.
+            if ($null -eq $endpointOracle -and -not [string]::IsNullOrWhiteSpace($OracleHost)) {
+                $endpointOracle = [pscustomobject]@{ Servidor = $OracleHost; Porta = 1521; Origem = "Parametro" }
+            }
+
+            if ($null -eq $endpointOracle) {
+
+                $results += "WARN: Oracle ($oracleHostResolved) sem endpoint resolvido (alias ausente no tnsnames.ora)"
+
+            }
+            elseif (Test-OracleTcpEndpoint -Servidor $endpointOracle.Servidor -Porta $endpointOracle.Porta) {
+
+                $results += "OK: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) On"
+
+            }
+            else {
+
+                $results += "WARN: Oracle ($oracleHostResolved -> $($endpointOracle.Servidor):$($endpointOracle.Porta)) Off (porta TCP sem resposta em 3 s)"
+
+            }
+
+        }
+
+    }
+
+    $allOk = -not ($results -match "^(ERRO|FAIL):")
+
+    Write-AutomacaoLog -Message "Pre-Flight: $($results -join ' | ')" -Level $(if ($allOk) { "INFO" }else { "ERRO" }) -ExecId $ExecId -LogPath $LogPath
+
+    return $allOk
 
 }
 
@@ -443,7 +623,8 @@ function Send-AutomacaoLogBroadcast {
 
         Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8" -ErrorAction SilentlyContinue -TimeoutSec 2 | Out-Null
 
-    } catch [System.Exception] { }
+    }
+    catch [System.Exception] { }
 
     finally {
 
@@ -463,111 +644,114 @@ function Send-AutomacaoLogBroadcast {
 
 function Write-AutomacaoLog {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-param(
+    param(
 
-[Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true)]
 
-[string]$Message,
+        [string]$Message,
 
-[ValidateSet("INFO", "WARN", "ERRO", "DEBUG")]
+        [ValidateSet("INFO", "WARN", "ERRO", "DEBUG")]
 
-[string]$Level = "INFO",
+        [string]$Level = "INFO",
 
-[string]$ExecId = "",
+        [string]$ExecId = "",
 
-[Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true)]
 
-[string]$LogPath,
+        [string]$LogPath,
 
-# Etapa opcional (docs/log-event.schema.json) usada apenas no caminho
-# estruturado; ignorada no formato legado.
-[string]$Step = ""
+        # Etapa opcional (docs/log-event.schema.json) usada apenas no caminho
+        # estruturado; ignorada no formato legado.
+        [string]$Step = ""
 
-)
+    )
 
-# Padrao de logging estruturado (docs/logging-standard.md): quando ha contexto
-# de LogEvent ativo, toda linha e roteada para o evento JSON. Linha que ja e um
-# envelope completo (saida de processo filho migrado) e encaminhada verbatim.
-if ((Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) -and (Get-HubLogContext)) {
-    if (Get-Command Write-HubForwardedLine -ErrorAction SilentlyContinue) {
-        Write-HubForwardedLine -Line $Message -FallbackLevel $Level -Step $Step
-        return
+    # Padrao de logging estruturado (docs/logging-standard.md): quando ha contexto
+    # de LogEvent ativo, toda linha e roteada para o evento JSON. Linha que ja e um
+    # envelope completo (saida de processo filho migrado) e encaminhada verbatim.
+    if ((Get-Command Get-HubLogContext -ErrorAction SilentlyContinue) -and (Get-HubLogContext)) {
+        if (Get-Command Write-HubForwardedLine -ErrorAction SilentlyContinue) {
+            Write-HubForwardedLine -Line $Message -FallbackLevel $Level -Step $Step
+            return
+        }
     }
-}
 
-$cleanMessage = Protect-SensitiveData $Message
+    $cleanMessage = Protect-SensitiveData $Message
 
-$timestampText = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
-$execPrefix = if ([string]::IsNullOrWhiteSpace($ExecId)) { "" } else { " [ExecId:$ExecId]" }
-$line = "[$timestampText] [PS] [$Level]$execPrefix $cleanMessage"
+    $timestampText = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
+    $execPrefix = if ([string]::IsNullOrWhiteSpace($ExecId)) { "" } else { " [ExecId:$ExecId]" }
+    $line = "[$timestampText] [PS] [$Level]$execPrefix $cleanMessage"
 
-$envStr = $env:ENVIRONMENT
-if ([string]::IsNullOrWhiteSpace($envStr)) { $envStr = "PRD" }
+    $envStr = $env:ENVIRONMENT
+    if ([string]::IsNullOrWhiteSpace($envStr)) { $envStr = "PRD" }
 
-$autoName = $script:CurrentAutomationName
-if ([string]::IsNullOrWhiteSpace($autoName)) {
-    try {
-        $stack = Get-PSCallStack
-        foreach ($frame in $stack) {
-            if ($frame.ScriptName -and $frame.ScriptName -notmatch 'Lib-Logging\.psm1$') {
-                $parentDir = Split-Path -Leaf (Split-Path -Parent $frame.ScriptName)
-                if ($parentDir -eq "test") {
-                    $autoName = "Test Task"
-                    break
-                } elseif ($parentDir -and $parentDir -notmatch '^(lib|Tools|_Template)$') {
-                    $autoName = $parentDir
-                    break
+    $autoName = $script:CurrentAutomationName
+    if ([string]::IsNullOrWhiteSpace($autoName)) {
+        try {
+            $stack = Get-PSCallStack
+            foreach ($frame in $stack) {
+                if ($frame.ScriptName -and $frame.ScriptName -notmatch 'Lib-Logging\.psm1$') {
+                    $parentDir = Split-Path -Leaf (Split-Path -Parent $frame.ScriptName)
+                    if ($parentDir -eq "test") {
+                        $autoName = "Test Task"
+                        break
+                    }
+                    elseif ($parentDir -and $parentDir -notmatch '^(lib|Tools|_Template)$') {
+                        $autoName = $parentDir
+                        break
+                    }
                 }
             }
         }
-    } catch [System.Exception] { }
-}
-if ([string]::IsNullOrWhiteSpace($autoName)) { $autoName = "" }
-$logObj = [ordered]@{
-    timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    level = $Level
-    component = "ps_script"
-    environment = $envStr
-    automation_name = $autoName
-    exec_id = $ExecId
-    request_id = "SYSTEM"
-    message = $cleanMessage
-}
-$jsonLine = $logObj | ConvertTo-Json -Depth 3 -Compress
+        catch [System.Exception] { }
+    }
+    if ([string]::IsNullOrWhiteSpace($autoName)) { $autoName = "" }
+    $logObj = [ordered]@{
+        timestamp       = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        level           = $Level
+        component       = "ps_script"
+        environment     = $envStr
+        automation_name = $autoName
+        exec_id         = $ExecId
+        request_id      = "SYSTEM"
+        message         = $cleanMessage
+    }
+    $jsonLine = $logObj | ConvertTo-Json -Depth 3 -Compress
 
-try {
+    try {
 
-$logDir = Split-Path -Parent $LogPath
+        $logDir = Split-Path -Parent $LogPath
 
-if ($logDir -and -not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
+        if ($logDir -and -not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
 
-# Otimizacao de I/O: AppendAllText eh mais rapido que instanciar StreamWriter, usar e fechar linha a linha.
+        # Otimizacao de I/O: AppendAllText eh mais rapido que instanciar StreamWriter, usar e fechar linha a linha.
 
-[System.IO.File]::AppendAllText($LogPath, "$jsonLine`r`n", $script:Lib_Utf8WithBom)
-
-} catch [System.Exception] { Write-Verbose ("Falha ao persistir linha de log em disco: {0}" -f $_.Exception.Message) }
-
-$color = switch ($Level) { "ERRO" { "Red" }; "WARN" { "Yellow" }; "DEBUG" { "Gray" }; default { "Cyan" } }
-
-Write-Host $line -ForegroundColor $color
-
-# Envio de Broadcast para o Dashboard (se tiver ExecId atrelado)
-
-if (-not [string]::IsNullOrWhiteSpace($ExecId) -and $ExecId -match '^TEL_') {
-
-    if (-not $script:BroadcastQueue) { $script:BroadcastQueue = [System.Collections.Generic.List[Hashtable]]::new() }
-
-    $script:BroadcastQueue.Add(@{ message = $line; exec_id = $ExecId })
-
-    if ($script:BroadcastQueue.Count -ge 10) {
-
-        Send-AutomacaoLogBroadcast
+        [System.IO.File]::AppendAllText($LogPath, "$jsonLine`r`n", $script:Lib_Utf8WithBom)
 
     }
+    catch [System.Exception] { Write-Verbose ("Falha ao persistir linha de log em disco: {0}" -f $_.Exception.Message) }
 
-}
+    $color = switch ($Level) { "ERRO" { "Red" }; "WARN" { "Yellow" }; "DEBUG" { "Gray" }; default { "Cyan" } }
+
+    Write-Host $line -ForegroundColor $color
+
+    # Envio de Broadcast para o Dashboard (se tiver ExecId atrelado)
+
+    if (-not [string]::IsNullOrWhiteSpace($ExecId) -and $ExecId -match '^TEL_') {
+
+        if (-not $script:BroadcastQueue) { $script:BroadcastQueue = [System.Collections.Generic.List[Hashtable]]::new() }
+
+        $script:BroadcastQueue.Add(@{ message = $line; exec_id = $ExecId })
+
+        if ($script:BroadcastQueue.Count -ge 10) {
+
+            Send-AutomacaoLogBroadcast
+
+        }
+
+    }
 
 }
 
@@ -763,19 +947,19 @@ function Exit-AutomationWithCode {
 
 function Get-AutomacaoLogPath {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-param([Parameter(Mandatory = $true)][string]$Slug, [string]$LogDir = "")
+    param([Parameter(Mandatory = $true)][string]$Slug, [string]$LogDir = "")
 
-$root = Get-AutomacaoProjectRoot
+    $root = Get-AutomacaoProjectRoot
 
-if ([string]::IsNullOrWhiteSpace($LogDir)) { $LogDir = Join-Path $root "Logs" }
+    if ([string]::IsNullOrWhiteSpace($LogDir)) { $LogDir = Join-Path $root "Logs" }
 
-elseif (-not [System.IO.Path]::IsPathRooted($LogDir)) { $LogDir = Join-Path $root $LogDir }
+    elseif (-not [System.IO.Path]::IsPathRooted($LogDir)) { $LogDir = Join-Path $root $LogDir }
 
-if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
+    if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
 
-return (Join-Path $LogDir "$Slug.jsonl")
+    return (Join-Path $LogDir "$Slug.jsonl")
 
 }
 
@@ -787,13 +971,13 @@ return (Join-Path $LogDir "$Slug.jsonl")
 
 function Test-AutomationEnvironment {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-param([string]$ConfigPath, [string[]]$RequiredPaths = @())
+    param([string]$ConfigPath, [string[]]$RequiredPaths = @())
 
-$res = Test-AutomationPreFlight -CheckPaths $RequiredPaths -LogPath (Join-Path $script:ProjectRoot "Logs\EnvTest.jsonl")
+    $res = Test-AutomationPreFlight -CheckPaths $RequiredPaths -LogPath (Join-Path $script:ProjectRoot "Logs\EnvTest.jsonl")
 
-return [PSCustomObject]@{ Success = $res; Message = "Ambiente validado" }
+    return [PSCustomObject]@{ Success = $res; Message = "Ambiente validado" }
 
 }
 
@@ -805,49 +989,50 @@ return [PSCustomObject]@{ Success = $res; Message = "Ambiente validado" }
 
 function Invoke-LogRotation {
 
-[CmdletBinding()]
+    [CmdletBinding()]
 
-param([Parameter(Mandatory = $true)][string]$LogPath, [int]$KeepDays = 15)
+    param([Parameter(Mandatory = $true)][string]$LogPath, [int]$KeepDays = 15)
 
-if (-not (Test-Path $LogPath)) { return }
+    if (-not (Test-Path $LogPath)) { return }
 
-$cutoff = (Get-Date).Date.AddDays(-1 * [Math]::Abs($KeepDays))
+    $cutoff = (Get-Date).Date.AddDays(-1 * [Math]::Abs($KeepDays))
 
-try {
+    try {
 
-$lines = [System.IO.File]::ReadAllLines($LogPath, $script:Lib_Utf8WithBom)
+        $lines = [System.IO.File]::ReadAllLines($LogPath, $script:Lib_Utf8WithBom)
 
-$kept = [System.Collections.Generic.List[string]]::new($lines.Length)
+        $kept = [System.Collections.Generic.List[string]]::new($lines.Length)
 
-foreach ($line in $lines) {
+        foreach ($line in $lines) {
 
-if ($line -match '^\{"timestamp":"(\d{4}-\d{2}-\d{2})T') {
+            if ($line -match '^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T') {
 
-$dateStr = $Matches[1]
+                $dateStr = $Matches[1]
 
-$parsed = [datetime]::MinValue
+                $parsed = [datetime]::MinValue
 
-if ([datetime]::TryParseExact($dateStr, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+                if ([datetime]::TryParseExact($dateStr, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
 
-if ($parsed -lt $cutoff) { continue }
+                    if ($parsed -lt $cutoff) { continue }
 
-}
+                }
 
-}
+            }
 
-$kept.Add($line)
+            $kept.Add($line)
 
-}
+        }
 
-if ($kept.Count -lt $lines.Length) {
+        if ($kept.Count -lt $lines.Length) {
 
-$tmpPath = "$LogPath.tmp"; [System.IO.File]::WriteAllLines($tmpPath, $kept.ToArray(), $script:Lib_Utf8WithBom)
+            $tmpPath = "$LogPath.tmp"; [System.IO.File]::WriteAllLines($tmpPath, $kept.ToArray(), $script:Lib_Utf8WithBom)
 
-Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
+            Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
 
-}
+        }
 
-} catch [System.Exception] { Write-Verbose ("Falha ao aplicar retencao do arquivo de log: {0}" -f $_.Exception.Message) }
+    }
+    catch [System.Exception] { Write-Verbose ("Falha ao aplicar retencao do arquivo de log: {0}" -f $_.Exception.Message) }
 
 }
 
@@ -858,40 +1043,42 @@ Move-Item -LiteralPath $tmpPath -Destination $LogPath -Force
 # ------------------------------------------------------------------------------
 
 function Enter-AutomationLock {
-[CmdletBinding()]
-param(
-[Parameter(Mandatory = $true)][string]$ExecId,
-[string]$LogPath = "",
-[string]$LockKey = "",
-[int]$TimeoutMs = 5000
-)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecId,
+        [string]$LogPath = "",
+        [string]$LockKey = "",
+        [int]$TimeoutMs = 5000
+    )
 
-$keySource = if ([string]::IsNullOrWhiteSpace($LockKey)) { $ExecId } else { $LockKey }
-$safeKey = $keySource -replace '[^A-Za-z0-9_.-]', '_'
-$mutexName = "Global\AutomationHub_$safeKey"
-$script:AutomationMutex = New-Object System.Threading.Mutex($false, $mutexName)
+    $keySource = if ([string]::IsNullOrWhiteSpace($LockKey)) { $ExecId } else { $LockKey }
+    $safeKey = $keySource -replace '[^A-Za-z0-9_.-]', '_'
+    $mutexName = "Global\AutomationHub_$safeKey"
+    $script:AutomationMutex = New-Object System.Threading.Mutex($false, $mutexName)
 
-try {
-    if (-not $script:AutomationMutex.WaitOne($TimeoutMs)) {
-        $msg = "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId (chave: $safeKey, Mutex: $mutexName). Abortando para evitar corrupcao."
-        if ([string]::IsNullOrWhiteSpace($LogPath)) {
-            Write-Warning $msg
-        } else {
-            Write-AutomacaoLog -Message $msg -Level "ERRO" -ExecId $ExecId -LogPath $LogPath
+    try {
+        if (-not $script:AutomationMutex.WaitOne($TimeoutMs)) {
+            $msg = "CONCORRENCIA DETECTADA: Ja existe um processo rodando para o ExecId $ExecId (chave: $safeKey, Mutex: $mutexName). Abortando para evitar corrupcao."
+            if ([string]::IsNullOrWhiteSpace($LogPath)) {
+                Write-Warning $msg
+            }
+            else {
+                Write-AutomacaoLog -Message $msg -Level "ERRO" -ExecId $ExecId -LogPath $LogPath
+            }
+            throw $msg
         }
-        throw $msg
     }
-} catch [System.Threading.AbandonedMutexException] {
+    catch [System.Threading.AbandonedMutexException] {
+        if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
+            Write-AutomacaoLog -Message "Mutex anterior foi abandonado. Reciclando lock (Mutex: $mutexName)." -Level "WARN" -ExecId $ExecId -LogPath $LogPath
+        }
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
-        Write-AutomacaoLog -Message "Mutex anterior foi abandonado. Reciclando lock (Mutex: $mutexName)." -Level "WARN" -ExecId $ExecId -LogPath $LogPath
+        Write-AutomacaoLog -Message "Lock global adquirido com sucesso (Mutex: $mutexName)." -Level "DEBUG" -ExecId $ExecId -LogPath $LogPath
     }
-}
 
-if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
-    Write-AutomacaoLog -Message "Lock global adquirido com sucesso (Mutex: $mutexName)." -Level "DEBUG" -ExecId $ExecId -LogPath $LogPath
-}
-
-return $true
+    return $true
 }
 
 # ------------------------------------------------------------------------------
@@ -899,20 +1086,20 @@ return $true
 # ------------------------------------------------------------------------------
 
 function Exit-AutomationLock {
-[CmdletBinding()]
-param(
-[string]$ExecId = "",
-[string]$LogPath = "",
-[string]$LockKey = ""
-)
+    [CmdletBinding()]
+    param(
+        [string]$ExecId = "",
+        [string]$LogPath = "",
+        [string]$LockKey = ""
+    )
 
-if ($script:AutomationMutex) {
-    try { $script:AutomationMutex.ReleaseMutex() } catch [System.ApplicationException] {}
-    $script:AutomationMutex.Dispose()
-    $script:AutomationMutex = $null
-}
+    if ($script:AutomationMutex) {
+        try { $script:AutomationMutex.ReleaseMutex() } catch [System.ApplicationException] {}
+        $script:AutomationMutex.Dispose()
+        $script:AutomationMutex = $null
+    }
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-OracleQueueWorkerAlive, Get-OracleQueueServerNowUtc, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
 
 

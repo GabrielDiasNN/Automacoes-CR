@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -195,7 +196,7 @@ def _expire_if_queue_window_exceeded(
     `queued_at` nulo (linhas anteriores à migration 20260731_02) não é
     tratado como expirado: tempo de fila desconhecido, não infinito.
     """
-    queued_at = cast(Any, candidate.queued_at)
+    queued_at = candidate.queued_at
     if queued_at is None:
         return False
     age_seconds = (now - queued_at).total_seconds()
@@ -265,7 +266,7 @@ def claim_next_task(
         # `Execution.queue_group` permanece gravado como registro histórico
         # ("sob qual grupo isto foi enfileirado"), mas nenhuma decisão de
         # concorrência o consulta — ver `_has_running_execution_for_group`.
-        grupo_atual = cast(str | None, candidate.automation.queue_group)
+        grupo_atual = candidate.automation.queue_group
         bloqueado = _has_running_execution_for_group(db, grupo_atual)
 
         if bloqueado:
@@ -297,7 +298,7 @@ def claim_next_task(
         )
         db.commit()
         if updated == 1:
-            return cast(str, candidate.id)
+            return candidate.id
     return None
 
 
@@ -364,17 +365,19 @@ def mark_task_as_failed(  # pylint: disable=too-many-arguments,too-many-position
     db_exec = db.query(models.Execution).filter(models.Execution.id == exec_id).first()
     if not db_exec:
         return
-    db_exec.status = EXECUTION_STATUS_ERROR  # type: ignore[assignment]
-    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+    db_exec.status = EXECUTION_STATUS_ERROR
+    db_exec.logs = truncate_log_payload(
         str(db_exec.logs or "") + sanitize_log_payload(message)
     )
-    db_exec.exit_code = exit_code  # type: ignore[assignment]
-    db_exec.failure_reason = failure_reason or FAILURE_REASON_AUTOMATION_NOT_FOUND  # type: ignore[assignment]
-    db_exec.recovery_action = recovery_action or RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY  # type: ignore[assignment]
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_exec.exit_code = exit_code
+    db_exec.failure_reason = failure_reason or FAILURE_REASON_AUTOMATION_NOT_FOUND
+    db_exec.recovery_action = (
+        recovery_action or RECOVERY_ACTION_REVIEW_AUTOMATION_REGISTRY
+    )
+    db_exec.finished_at = get_now_local()
     duration = compute_duration_seconds(db_exec.started_at, db_exec.finished_at)
     if duration is not None:
-        db_exec.duration_seconds = duration  # type: ignore[assignment]
+        db_exec.duration_seconds = duration
     db.commit()
 
 
@@ -388,13 +391,13 @@ def finalize_terminated_task(
     if not db_exec:
         return
     termination_log = "\n[INTERROMPIDO PELO USUARIO]\n"
-    db_exec.status = EXECUTION_STATUS_TERMINATED  # type: ignore[assignment]
-    db_exec.exit_code = -15  # type: ignore[assignment]
-    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-    db_exec.failure_reason = FAILURE_REASON_USER_TERMINATED  # type: ignore[assignment]
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE  # type: ignore[assignment]
-    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+    db_exec.status = EXECUTION_STATUS_TERMINATED
+    db_exec.exit_code = -15
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)
+    db_exec.finished_at = get_now_local()
+    db_exec.failure_reason = FAILURE_REASON_USER_TERMINATED
+    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE
+    db_exec.logs = truncate_log_payload(
         sanitize_log_payload(str(db_exec.logs or "") + "".join(logs) + termination_log)
     )
     db.commit()
@@ -425,13 +428,13 @@ def finalize_reboot_interrupted_task(
         f"[RECOVERY_AUDIT] actor=WORKER_SHUTDOWN "
         f"action=MARK_FAILED_BY_REBOOT timestamp={now.strftime('%d/%m/%Y %H:%M:%S')}"
     )
-    db_exec.status = EXECUTION_STATUS_FAILED_BY_REBOOT  # type: ignore[assignment]
-    db_exec.exit_code = -1  # type: ignore[assignment]
-    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
-    db_exec.finished_at = now  # type: ignore[assignment]
-    db_exec.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT  # type: ignore[assignment]
-    db_exec.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE  # type: ignore[assignment]
-    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+    db_exec.status = EXECUTION_STATUS_FAILED_BY_REBOOT
+    db_exec.exit_code = -1
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)
+    db_exec.finished_at = now
+    db_exec.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT
+    db_exec.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE
+    db_exec.logs = truncate_log_payload(
         sanitize_log_payload(
             str(db_exec.logs or "")
             + "".join(logs)
@@ -461,14 +464,14 @@ def apply_timeout_result(
         EXECUTION_STATUS_TIMEOUT,
     ]:
         return db_exec
-    db_exec.status = EXECUTION_STATUS_TIMEOUT  # type: ignore[assignment]
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
-    db_exec.failure_reason = FAILURE_REASON_MAX_RUNTIME_EXCEEDED  # type: ignore[assignment]
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE  # type: ignore[assignment]
+    db_exec.status = EXECUTION_STATUS_TIMEOUT
+    db_exec.finished_at = get_now_local()
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)
+    db_exec.failure_reason = FAILURE_REASON_MAX_RUNTIME_EXCEEDED
+    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_TIMEOUT_AND_REQUEUE
     # Concatena para preservar a trilha `[TRACE]` do enfileiramento (ver
     # `complete_process_execution`).
-    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(
         sanitize_log_payload(
             str(db_exec.logs or "")
             + "\n"
@@ -500,22 +503,22 @@ def complete_process_execution(  # pylint: disable=too-many-arguments
         return_code,
         db_exec.automation.notification_channels if db_exec.automation else None,
     )
-    db_exec.exit_code = return_code  # type: ignore[assignment]
-    db_exec.duration_seconds = duration_seconds  # type: ignore[assignment]
-    db_exec.status = status  # type: ignore[assignment]
-    db_exec.failure_reason = failure_reason  # type: ignore[assignment]
-    db_exec.recovery_action = recovery_action  # type: ignore[assignment]
+    db_exec.exit_code = return_code
+    db_exec.duration_seconds = duration_seconds
+    db_exec.status = status
+    db_exec.failure_reason = failure_reason
+    db_exec.recovery_action = recovery_action
     # CONCATENA, não substitui. Este é o desfecho mais comum, e substituir
     # destruía a linha `[TRACE] correlation_id=... event=QUEUED requested_by=...`
     # gravada por `build_queued_execution` no enfileiramento — a única ligação
     # entre o pedido HTTP e a execução. O mesmo valia para a linha `[STOP]`
     # escrita pelo router quando o worker vence a corrida. Todos os demais
     # finalizadores já concatenavam; só este e o de timeout não.
-    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+    db_exec.logs = truncate_log_payload(
         sanitize_log_payload(str(db_exec.logs or "") + "\n" + "".join(logs))
     )
-    db_exec.artifacts = artifacts_json  # type: ignore[assignment]
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_exec.artifacts = artifacts_json
+    db_exec.finished_at = get_now_local()
     db.commit()
     return db_exec
 
@@ -532,16 +535,16 @@ def apply_internal_worker_error(
         EXECUTION_STATUS_TIMEOUT,
     ]:
         return
-    db_exec.status = EXECUTION_STATUS_ERROR  # type: ignore[assignment]
-    db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+    db_exec.status = EXECUTION_STATUS_ERROR
+    db_exec.logs = truncate_log_payload(
         str(db_exec.logs or "")
         + f"\nInternal Worker Error: {sanitize_log_payload(message)}"
     )
-    db_exec.exit_code = -1  # type: ignore[assignment]
-    db_exec.failure_reason = FAILURE_REASON_INTERNAL_WORKER_ERROR  # type: ignore[assignment]
-    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_WORKER_LOGS  # type: ignore[assignment]
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
-    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)  # type: ignore[arg-type]
+    db_exec.exit_code = -1
+    db_exec.failure_reason = FAILURE_REASON_INTERNAL_WORKER_ERROR
+    db_exec.recovery_action = RECOVERY_ACTION_REVIEW_WORKER_LOGS
+    db_exec.finished_at = get_now_local()
+    db_exec.duration_seconds = round(time.monotonic() - task_start_monotonic, 2)
     db.commit()
 
 
@@ -576,17 +579,19 @@ def mark_running_tasks_as_failed_by_reboot(db: Session) -> int:
     )
     for task in zombies:
         now = get_now_local()
-        task.status = "FAILED_BY_REBOOT"  # type: ignore[assignment]
-        task.finished_at = now  # type: ignore[assignment]
+        task.status = "FAILED_BY_REBOOT"
+        task.finished_at = now
         if task.started_at and task.duration_seconds is None:
             task.duration_seconds = compute_duration_seconds(task.started_at, now)
-        task.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT  # type: ignore[assignment]
-        task.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE  # type: ignore[assignment]
+        task.failure_reason = FAILURE_REASON_ORCHESTRATOR_REBOOT
+        task.recovery_action = RECOVERY_ACTION_REQUEUE_IF_SAFE
         reboot_audit_line = (
             f"[RECOVERY_AUDIT] actor=SYSTEM_STARTUP "
             f"action=MARK_FAILED_BY_REBOOT timestamp={now.strftime('%d/%m/%Y %H:%M:%S')}"
         )
-        task.logs = str(task.logs or "") + "\n[REBOOT] Interrompida." + f"\n{reboot_audit_line}"  # type: ignore[assignment]
+        task.logs = (
+            str(task.logs or "") + "\n[REBOOT] Interrompida." + f"\n{reboot_audit_line}"
+        )
     db.commit()
     return len(zombies)
 
@@ -595,7 +600,28 @@ class RequeueValidationError(DomainRuleError):
     """Erro de validacao de negocio do requeue, com status HTTP correspondente."""
 
 
-def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
+# `prepare_requeue` faz ler-checar-inserir sem trava de banco, e o índice único
+# parcial só cobre RUNNING: dois chamadores simultâneos podiam criar duas PENDING
+# para a mesma automação (execução e WhatsApp duplicados). Todo chamador segura
+# esta trava do `prepare_requeue` até o commit: os jobs de auto-retry e de recovery
+# do Worker Oracle (threads do BackgroundScheduler) e o requeue manual da API. Ela
+# vale só dentro do processo; o uvicorn roda com um único worker
+# (Infrastructure/Start-Orchestrator.ps1), então isso basta.
+REQUEUE_LOCK = threading.Lock()
+
+
+def _ensure_no_active_group_execution(db: Session, queue_group: str | None) -> None:
+    """Levanta RequeueValidationError (409) se o grupo operacional já tem execução ativa."""
+    group_active = get_group_active_execution(db, queue_group)
+    if group_active:
+        raise RequeueValidationError(
+            409,
+            "Já existe uma execução ativa no mesmo grupo operacional "
+            f"({group_active.id}, Grupo: {queue_group}).",
+        )
+
+
+def prepare_requeue(  # pylint: disable=too-many-arguments
     db: Session,
     db_exec: models.Execution,
     *,
@@ -603,6 +629,7 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
     payload_requested_by: str | None,
     payload_priority: str | None,
     fallback_requested_by: str,
+    bypass_retry_limit: bool = False,
 ) -> tuple[models.Execution, dict[str, Any]]:
     """Valida as regras de negocio do requeue e monta a nova execucao (nao commitada).
 
@@ -639,13 +666,7 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
     queue_group = (
         str(db_exec.automation.queue_group) if db_exec.automation.queue_group else None
     )
-    group_active = get_group_active_execution(db, queue_group)
-    if group_active:
-        raise RequeueValidationError(
-            409,
-            "Já existe uma execução ativa no mesmo grupo operacional "
-            f"({group_active.id}, Grupo: {queue_group}).",
-        )
+    _ensure_no_active_group_execution(db, queue_group)
 
     max_retries = int(
         db_exec.max_retries
@@ -661,12 +682,13 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
     # exatamente a acao recomendada.
     next_retry_count = (
         int(db_exec.retry_count or 0)
-        if db_exec.status == EXECUTION_STATUS_EXPIRED
+        if db_exec.status == EXECUTION_STATUS_EXPIRED or bypass_retry_limit
         else int(db_exec.retry_count or 0) + 1
     )
-    if next_retry_count > max_retries and db_exec.status not in (
-        "SUCCESS",
-        EXECUTION_STATUS_EXPIRED,
+    if (
+        not bypass_retry_limit
+        and next_retry_count > max_retries
+        and db_exec.status not in ("SUCCESS", EXECUTION_STATUS_EXPIRED)
     ):
         # `max_retries=0` é decisão deliberada do operador para automações com
         # efeito colateral real (WhatsApp/e-mail) — falhas exigem investigação
@@ -681,7 +703,6 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
         )
 
     new_exec_id = generate_execution_id("REQ")
-    requested_by = str(payload_requested_by or fallback_requested_by)
     priority = str(payload_priority or db_exec.priority or PRIORITY_NORMAL).upper()
     if priority not in EXECUTION_ALLOWED_PRIORITIES:
         raise RequeueValidationError(422, "Prioridade inválida para requeue.")
@@ -690,16 +711,16 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
     new_exec = build_queued_execution(
         automation=db_exec.automation,
         exec_id=new_exec_id,
-        requested_by=requested_by,
+        requested_by=payload_requested_by or fallback_requested_by,
         priority=priority,
         retry_count=int(next_retry_count),
         max_retries=int(max_retries),
         failure_reason=str(db_exec.failure_reason or db_exec.status),
         recovery_action=RECOVERY_ACTION_REQUEUE_MANUAL,
     )
-    new_exec.queue_group = queue_group  # type: ignore[assignment]
+    new_exec.queue_group = queue_group
 
-    db_exec.status = EXECUTION_STATUS_REQUEUED  # type: ignore[assignment]
+    db_exec.status = EXECUTION_STATUS_REQUEUED
     # `finished_at` precisa ser preenchido aqui: `purge_old_executions` filtra
     # por `finished_at < cutoff`, e execuções REQUEUED nasciam com essa coluna
     # nula. Somado ao fato de REQUEUED não constar de EXECUTION_TERMINAL_STATUSES,
@@ -709,10 +730,13 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
     # foi substituída pela nova.
     if db_exec.finished_at is None:
         db_exec.finished_at = get_now_local()
-    db_exec.recovery_action = RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION  # type: ignore[assignment]
-    db_exec.logs = str(db_exec.logs or "") + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"  # type: ignore[assignment]
+    db_exec.recovery_action = RECOVERY_ACTION_REQUEUED_TO_NEW_EXECUTION
+    db_exec.logs = (
+        str(db_exec.logs or "")
+        + f"\n[REQUEUE] Nova execução criada: {new_exec_id}. Motivo: {reason}"
+    )
 
-    audit_payload = {
+    return new_exec, {
         "source_exec_id": str(db_exec.id),
         "queued_exec_id": new_exec_id,
         "reason": reason,
@@ -720,7 +744,6 @@ def prepare_requeue(  # pylint: disable=too-many-arguments,too-many-locals
         "max_retries": max_retries,
         "priority": priority,
     }
-    return new_exec, audit_payload
 
 
 # ---------------------------------------------------------------------------
@@ -758,7 +781,7 @@ def prepare_manual_start(
     """Valida execução ativa, grupo operacional e cooldown e monta a execução
     enfileirada (não commitada). Levanta `DomainRuleError` (409) se alguma
     regra de concorrência for violada."""
-    automation_id = cast(int, db_auto.id)
+    automation_id = db_auto.id
     running = automation_repo.get_active_execution(db, automation_id)
     if running:
         raise DomainRuleError(
@@ -780,8 +803,8 @@ def prepare_manual_start(
     if db_auto.cooldown_minutes and db_auto.cooldown_minutes > 0:
         latest_exec = automation_repo.get_latest_execution(db, automation_id)
         remaining = cooldown_remaining_minutes(
-            cast(datetime | None, latest_exec.started_at) if latest_exec else None,
-            cast(int, db_auto.cooldown_minutes),
+            latest_exec.started_at if latest_exec else None,
+            db_auto.cooldown_minutes,
             get_now_local(),
         )
         if remaining is not None:
@@ -817,16 +840,16 @@ def terminate_execution(db_exec: models.Execution) -> str:
     _ensure_active(db_exec, 400)
 
     previous_status = str(db_exec.status)
-    db_exec.status = EXECUTION_STATUS_TERMINATED  # type: ignore[assignment]
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_exec.status = EXECUTION_STATUS_TERMINATED
+    db_exec.finished_at = get_now_local()
     duration = compute_duration_seconds(db_exec.started_at, db_exec.finished_at)
     if duration is not None:
-        db_exec.duration_seconds = duration  # type: ignore[assignment]
+        db_exec.duration_seconds = duration
     stop_log: str = (
         str(db_exec.logs or "")
         + f"\n[STOP] Interrupcao solicitada via API enquanto status={previous_status}."
     )
-    db_exec.logs = stop_log  # type: ignore[assignment]
+    db_exec.logs = stop_log
     return previous_status
 
 
@@ -843,7 +866,7 @@ def build_telemetry_execution(db_auto: models.Automation) -> models.Execution:
     )
 
 
-def finish_telemetry_execution(  # pylint: disable=too-many-arguments
+def finish_telemetry_execution(
     db_exec: models.Execution,
     *,
     status: str,
@@ -862,7 +885,7 @@ def finish_telemetry_execution(  # pylint: disable=too-many-arguments
         # Fim tardio (reaper/operador já encerraram): o status fica, mas o log
         # real é anexado para a revisão que a ação de recuperação pede. 409.
         if logs is not None:
-            db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
+            db_exec.logs = truncate_log_payload(
                 str(db_exec.logs or "")
                 + f"\n[TELEMETRY_END_TARDIO] status={str(status).upper()} "
                 f"exit_code={exit_code}\n" + sanitize_log_payload(logs)
@@ -878,20 +901,18 @@ def finish_telemetry_execution(  # pylint: disable=too-many-arguments
             f"Use um status terminal: {permitidos}.",
         )
 
-    db_exec.status = status_upper  # type: ignore[assignment]
+    db_exec.status = status_upper
     if exit_code is not None:
-        db_exec.exit_code = int(exit_code)  # type: ignore[assignment]
+        db_exec.exit_code = int(exit_code)
     if logs is not None:
         # `truncate_log_payload` também aqui: `logs` é CompressedText e cada
         # leitura descomprime a coluna inteira; um payload de dezenas de MB de
         # cliente externo inflava toda listagem que tocasse a execução.
-        db_exec.logs = truncate_log_payload(  # type: ignore[assignment]
-            sanitize_log_payload(logs)
-        )
+        db_exec.logs = truncate_log_payload(sanitize_log_payload(logs))
     if artifacts is not None:
         db_exec.artifacts = artifacts
 
-    db_exec.finished_at = get_now_local()  # type: ignore[assignment]
+    db_exec.finished_at = get_now_local()
     duration = compute_duration_seconds(db_exec.started_at, db_exec.finished_at)
     if duration is not None:
-        db_exec.duration_seconds = duration  # type: ignore[assignment]
+        db_exec.duration_seconds = duration

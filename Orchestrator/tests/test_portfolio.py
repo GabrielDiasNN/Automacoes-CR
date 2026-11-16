@@ -3,7 +3,7 @@
 import json
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 import app.routers.portfolio as portfolio_router
 from app import models
@@ -11,17 +11,29 @@ from app.timezone import get_now_local
 from conftest import AUTH_HEADERS
 
 
-def _create_catalog_automation(  # pylint: disable=too-many-arguments
-    root: Path,
-    *,
-    folder_name: str,
-    catalog_id: str,
-    slug: str,
-    criticality: str = "high",
-    queue_group: str = "oracle",
-    runbook: bool = True,
-    smoke_tests: list[str] | None = None,
+class _CatalogoBase(TypedDict):
+    folder_name: str
+    catalog_id: str
+    slug: str
+
+
+class _CatalogoOpcoes(_CatalogoBase, total=False):
+    criticality: str
+    queue_group: str
+    runbook: bool
+    smoke_tests: list[str] | None
+
+
+def _create_catalog_automation(
+    root: Path, **opcoes: Unpack[_CatalogoOpcoes]
 ) -> dict[str, Any]:
+    folder_name = opcoes["folder_name"]
+    catalog_id = opcoes["catalog_id"]
+    slug = opcoes["slug"]
+    criticality = opcoes.get("criticality", "high")
+    queue_group = opcoes.get("queue_group", "oracle")
+    runbook = opcoes.get("runbook", True)
+    smoke_tests = opcoes.get("smoke_tests")
     auto_dir = root / folder_name
     docs_dir = root / "docs" / "runbooks"
     auto_dir.mkdir(parents=True, exist_ok=True)

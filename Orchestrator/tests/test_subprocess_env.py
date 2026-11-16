@@ -17,7 +17,9 @@ import os
 from unittest.mock import patch
 
 import pytest
+import worker
 from app.subprocess_env import ALLOWED_ENV_KEYS, build_subprocess_env
+from carregadores_modulos import acessar_privado
 
 SEGREDOS = {
     "ORCHESTRATOR_API_KEY": "chave-secreta",
@@ -109,8 +111,6 @@ def test_allowlist_nao_contem_segredo_conhecido() -> None:
 @pytest.mark.unitario
 def test_worker_delega_para_a_fonte_unica() -> None:
     """O worker não pode manter uma cópia divergente da allowlist."""
-    import worker  # pylint: disable=import-outside-toplevel
 
-    # pylint: disable-next=protected-access
-    allowlist_do_worker = worker._ALLOWED_ENV_KEYS
+    allowlist_do_worker = acessar_privado(worker, "_ALLOWED_ENV_KEYS")
     assert allowlist_do_worker is ALLOWED_ENV_KEYS

@@ -14,6 +14,7 @@ import shutil
 from typing import Any
 
 from fastapi import Request
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from . import models
@@ -63,6 +64,10 @@ def _build_safe_details(details: Any, correlation_id: str) -> str:
     return safe_details
 
 
+# RESIDUAL (too-many-arguments, too-many-positional-arguments): a assinatura
+# (6 argumentos) e usada por 30 chamadas, inclusive tests/test_audit_utils.py e
+# app/services/scheduler_runtime.py, fora desta particao. Reduzir para 5 exige
+# mudar todas essas chamadas; a assinatura e preservada.
 def log_audit(  # pylint: disable=R0913,R0917
     db: Session,
     action: str,
@@ -90,7 +95,10 @@ def log_audit(  # pylint: disable=R0913,R0917
     correlation_id = request_id_var.get("SYSTEM")
     try:
         safe_details = _build_safe_details(details, correlation_id)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except (TypeError, ValueError, RecursionError) as exc:
+        # Unico ponto que pode falhar e o json.loads/json.dumps de
+        # _build_safe_details (JSONDecodeError e subclasse de ValueError;
+        # RecursionError vem de JSON profundamente aninhado).
         logger.warning("Falha ao serializar detalhes de auditoria: %s", exc)
         safe_details = json.dumps(
             {"correlation_id": correlation_id, "details_error": True}
@@ -118,7 +126,10 @@ def log_audit(  # pylint: disable=R0913,R0917
     )
     try:
         db.add(entry)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    # Session.add levanta InvalidRequestError (ou subclasses, como
+    # UnmappedInstanceError) para objeto ja ligado a outra sessao ou nao mapeado;
+    # so isso e logado, conforme o contrato documentado acima.
+    except SQLAlchemyError as exc:
         logger.warning(
             "Falha ao registrar auditoria action=%s entity=%s: %s",
             action,

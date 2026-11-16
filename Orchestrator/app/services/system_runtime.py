@@ -8,20 +8,19 @@ import re
 import subprocess
 import sys
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 import psutil
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..constants import (
-    ORCHESTRATOR_VERSION,
-    WORKER_MAX_CONCURRENCY_PADRAO,
-)
+from ..constants import ORCHESTRATOR_VERSION, WORKER_MAX_CONCURRENCY_PADRAO
 from ..database import get_db_size_mb, get_schema_version, get_wal_size_mb
 from ..runtime import get_allowed_origins, get_worker_max_concurrency, scheduler
 from ..timezone import get_now_local
+from .oracle_queue_health import collect_oracle_queue_health
 
 logger = logging.getLogger("orchestrator")
 
@@ -37,7 +36,9 @@ def _probe_database(db: Session) -> bool:
     try:
         db.execute(text("SELECT 1"))
         return True
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except SQLAlchemyError as exc:
+        # Driver, pool e sessão saem do SQLAlchemy encapsulados em SQLAlchemyError
+        # (inclusive TimeoutError do pool), então a falha vira "unhealthy" e não 500.
         logger.warning("Falha ao consultar o banco no health check: %s", exc)
         return False
 
@@ -71,15 +72,15 @@ def get_worker_status(db: Session) -> schemas.WorkerStatus:
     is_alive = (now - hb.last_ping).total_seconds() < 90
     return schemas.WorkerStatus(
         is_alive=is_alive,
-        pid=cast(int | None, hb.pid),
-        instance_id=cast(str | None, hb.instance_id),
-        host=cast(str | None, hb.host),
+        pid=hb.pid,
+        instance_id=hb.instance_id,
+        host=hb.host,
         last_ping=hb.last_ping,
-        uptime_seconds=cast(float | None, hb.uptime_seconds),
-        tasks_completed=cast(int, hb.tasks_completed),
-        tasks_failed=cast(int, hb.tasks_failed),
-        active_tasks=cast(int, hb.active_tasks),
-        pool_saturated_seconds=cast(float | None, hb.pool_saturated_seconds) or 0.0,
+        uptime_seconds=hb.uptime_seconds,
+        tasks_completed=hb.tasks_completed or 0,
+        tasks_failed=hb.tasks_failed or 0,
+        active_tasks=hb.active_tasks or 0,
+        pool_saturated_seconds=hb.pool_saturated_seconds or 0.0,
         version=str(hb.version or "unknown"),
     )
 
@@ -96,10 +97,20 @@ def build_health_payload(
     pending = (
         db.query(models.Execution).filter(models.Execution.status == "PENDING").count()
     )
+    oracle_queue_worker = collect_oracle_queue_health()
+    oracle_queue_degraded = bool(
+        oracle_queue_worker
+        and oracle_queue_worker.get("enabled")
+        and (
+            not oracle_queue_worker.get("reachable")
+            or not oracle_queue_worker.get("alive")
+            or oracle_queue_worker.get("oracle_ok") is False
+        )
+    )
     overall = "healthy"
     if db_status != "online" or not scheduler.running:
         overall = "unhealthy"
-    elif not worker_status.is_alive:
+    elif not worker_status.is_alive or oracle_queue_degraded:
         overall = "degraded"
 
     return schemas.SystemHealth(
@@ -113,6 +124,7 @@ def build_health_payload(
         wal_size_mb=get_wal_size_mb(),
         cpu_usage=psutil.cpu_percent(),
         ram_usage_percent=psutil.virtual_memory().percent,
+        oracle_queue_worker=oracle_queue_worker,
     )
 
 
@@ -133,6 +145,7 @@ def launch_orchestrator_recovery(project_root: str) -> str:
             open(stdout_log, "a", encoding="utf-8") as stdout,
             open(stderr_log, "a", encoding="utf-8") as stderr,
         ):
+            # Residual: processo destacado precisa sobreviver à resposta HTTP; um with faria o __exit__ do Popen esperar o script terminar.
             subprocess.Popen(  # pylint: disable=consider-using-with
                 [
                     "powershell.exe",

@@ -9,8 +9,9 @@ import json
 import logging
 import math
 import os
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -34,6 +35,7 @@ from ..services.execution_decoration import (
     decorate_execution_summary,
 )
 from ..services.execution_runtime import (
+    REQUEUE_LOCK,
     RequeueValidationError,
     build_telemetry_execution,
     commit_or_conflict,
@@ -59,15 +61,22 @@ PROJECT_ROOT = get_project_root()
 # ---------------------------------------------------------------------------
 
 
-def _apply_execution_filters(  # pylint: disable=R0913,R0917
+@dataclass
+class _ExecutionFiltros:
+    """Filtros da listagem global (query string), agrupados para reuso via Depends()."""
+
+    status: str | None = None
+    automation_id: int | None = None
+    queue_group: str | None = None
+    priority: str | None = None
+    requested_by: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+
+
+def _apply_execution_filters(
     query: SAQuery[models.Execution],
-    status: str | None,
-    automation_id: int | None,
-    queue_group: str | None,
-    priority: str | None,
-    requested_by: str | None,
-    date_from: str | None,
-    date_to: str | None,
+    filtros: _ExecutionFiltros,
 ) -> SAQuery[models.Execution]:
     """Valida os filtros da listagem e delega a montagem da query ORM.
 
@@ -76,6 +85,13 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0917
     SQLAlchemy vive em `execution_repository.apply_filters` — routers não
     devem construir query ORM diretamente (achado de aderência arquitetural).
     """
+    status = filtros.status
+    automation_id = filtros.automation_id
+    queue_group = filtros.queue_group
+    priority = filtros.priority
+    requested_by = filtros.requested_by
+    date_from = filtros.date_from
+    date_to = filtros.date_to
     normalized_status: str | None = None
     if status:
         normalized_status = status.upper()
@@ -114,42 +130,29 @@ def _apply_execution_filters(  # pylint: disable=R0913,R0917
         )
     return exec_repo.apply_filters(
         query,
-        status=normalized_status,
-        priority=normalized_priority,
-        automation_id=automation_id,
-        queue_group=queue_group,
-        requested_by=requested_by,
-        date_from=dt_from,
-        date_to=dt_to,
+        exec_repo.ExecutionFilters(
+            status=normalized_status,
+            priority=normalized_priority,
+            automation_id=automation_id,
+            queue_group=queue_group,
+            requested_by=requested_by,
+            date_from=dt_from,
+            date_to=dt_to,
+        ),
     )
 
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.ExecutionSummary])
-def list_executions(  # pylint: disable=R0913,R0914,R0917
+def list_executions(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=200),
-    status: str | None = None,
-    automation_id: int | None = None,
-    queue_group: str | None = None,
-    priority: str | None = None,
-    requested_by: str | None = None,
-    date_from: str | None = None,
-    date_to: str | None = None,
+    filtros: _ExecutionFiltros = Depends(),
     db: Session = Depends(get_db),
     _api_key: str = Depends(get_api_key),
 ) -> schemas.PaginatedResponse[schemas.ExecutionSummary]:
     """Lista execuções com filtros avançados e paginação. Otimizado com joinedload."""
     query = exec_repo.base_query_with_automation(db)
-    query = _apply_execution_filters(
-        query,
-        status,
-        automation_id,
-        queue_group,
-        priority,
-        requested_by,
-        date_from,
-        date_to,
-    )
+    query = _apply_execution_filters(query, filtros)
     query = query.order_by(desc(models.Execution.started_at))
 
     total = query.count()
@@ -442,35 +445,38 @@ def requeue_execution(
     if not db_exec:
         raise HTTPException(status_code=404, detail="Execução não encontrada.")
 
-    try:
-        new_exec, audit_payload = prepare_requeue(
-            db,
-            db_exec,
-            payload_reason=payload.reason,
-            payload_requested_by=payload.requested_by,
-            payload_priority=payload.priority,
-            fallback_requested_by=get_client_ip(request),
-        )
-    except RequeueValidationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    # Mesma trava dos jobs de auto-retry e recovery (ver REQUEUE_LOCK): da checagem
+    # de concorrência em `prepare_requeue` até o commit da nova PENDING.
+    with REQUEUE_LOCK:
+        try:
+            new_exec, audit_payload = prepare_requeue(
+                db,
+                db_exec,
+                payload_reason=payload.reason,
+                payload_requested_by=payload.requested_by,
+                payload_priority=payload.priority,
+                fallback_requested_by=get_client_ip(request),
+            )
+        except RequeueValidationError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    db.add(new_exec)
-    log_audit(
-        db,
-        "REQUEUE",
-        "EXECUTION",
-        exec_id,
-        get_client_ip(request),
-        json.dumps(audit_payload),
-    )
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="Já existe uma execução ativa para esta automação.",
-        ) from exc
+        db.add(new_exec)
+        log_audit(
+            db,
+            "REQUEUE",
+            "EXECUTION",
+            exec_id,
+            get_client_ip(request),
+            json.dumps(audit_payload),
+        )
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Já existe uma execução ativa para esta automação.",
+            ) from exc
 
     trigger_worker_wakeup()
 
@@ -506,7 +512,7 @@ def telemetry_start(
         )
 
     new_exec = build_telemetry_execution(db_auto)
-    exec_id = cast(str, new_exec.id)
+    exec_id = new_exec.id
     db.add(new_exec)
 
     log_audit(db, "START_TELEMETRY", "EXECUTION", exec_id, get_client_ip(request))

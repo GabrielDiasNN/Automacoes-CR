@@ -1,4 +1,3 @@
-# pylint: disable=possibly-used-before-assignment,import-outside-toplevel,relative-beyond-top-level
 """
 Métricas Prometheus do Orchestrator (3.4/Fase 3).
 
@@ -10,6 +9,8 @@ Contadores e gauges refletem o estado do sistema em tempo real via callbacks.
 
 import logging
 
+from . import database as _database, notifications as _notifications
+
 logger = logging.getLogger("orchestrator")
 
 try:
@@ -20,15 +21,13 @@ try:
         Histogram,
         generate_latest,
     )
-
-    _PROMETHEUS_AVAILABLE = True
 except ImportError:
     _PROMETHEUS_AVAILABLE = False
     logger.info(
         "prometheus_client não instalado — endpoint /metrics/prometheus desabilitado."
     )
-
-if _PROMETHEUS_AVAILABLE:
+else:
+    _PROMETHEUS_AVAILABLE = True
     EXEC_TOTAL = Counter(
         "automacoes_executions_total",
         "Execuções totais por status e automação",
@@ -83,27 +82,15 @@ def update_db_gauges() -> None:
     """Atualiza gauges de tamanho do banco e WAL."""
     if not _PROMETHEUS_AVAILABLE:
         return
-    from .database import get_db_size_mb, get_wal_size_mb
-
-    DB_SIZE_MB.set(get_db_size_mb())
-    WAL_SIZE_MB.set(get_wal_size_mb())
+    DB_SIZE_MB.set(_database.get_db_size_mb())
+    WAL_SIZE_MB.set(_database.get_wal_size_mb())
 
 
 def update_throttle_gauge() -> None:
     """Atualiza gauge de alertas em throttle ativo."""
     if not _PROMETHEUS_AVAILABLE:
         return
-    import time
-
-    from .notifications import _alert_state, _state_lock
-
-    with _state_lock:
-        active = sum(
-            1
-            for state in _alert_state.values()
-            if (time.time() - state["last_sent"]) < 600
-        )
-    ALERT_THROTTLE_ACTIVE.set(active)
+    ALERT_THROTTLE_ACTIVE.set(_notifications.count_active_throttles(600))
 
 
 def get_metrics_response() -> tuple[bytes | None, str | None]:

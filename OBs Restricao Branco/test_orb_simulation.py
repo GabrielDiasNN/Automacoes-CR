@@ -1,4 +1,3 @@
-# pylint: disable=broad-exception-caught, duplicate-code, import-error, wrong-import-position
 # pylint: disable=too-many-locals
 # {
 #   "version": "1.0.0",
@@ -357,7 +356,8 @@ def main() -> None:
 
         sys.exit(0 if estoque_ok and not falhas else 1)
 
-    except Exception as e:
+    # Residual: fronteira do script de simulacao; falha fora de tratamento sairia como traceback, sem a linha FALHA nem o log ERROR, com o mesmo exit 1.
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"\n{FALHA} Falha na simulação: {e}")
         log(f"Erro fatal na simulacao: {e}", "ERROR", EXEC_ID)
         sys.exit(1)

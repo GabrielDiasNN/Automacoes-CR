@@ -1,4 +1,3 @@
-# pylint: disable=protected-access
 """Baseline de performance (pytest-benchmark) — job não-bloqueante no CI.
 
 Não afirma limites de tempo via assert (a tolerância de hardware varia entre
@@ -8,6 +7,7 @@ detectar regressões ao longo do tempo (comparação manual/externa ao CI).
 
 import os
 import sys
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -23,13 +23,15 @@ sys.path.insert(
     ),
 )
 
-from oracle_extract import (  # noqa: E402  pylint: disable=wrong-import-position,wrong-import-order
+from carregadores_modulos import acessar_privado
+from oracle_extract import (
     serialize_rows,
 )
 
 
-class _FakeScheduler:  # pylint: disable=too-few-public-methods
-    running = True
+@dataclass
+class _FakeScheduler:
+    running: bool = True
 
     def get_jobs(self) -> list[Any]:
         return []
@@ -63,7 +65,7 @@ def test_bench_portfolio_catalog_build_summary(benchmark: Any) -> None:
         )
         for i in range(500)
     ]
-    resultado = benchmark(pc._build_portfolio_summary, itens)
+    resultado = benchmark(acessar_privado(pc, "_build_portfolio_summary"), itens)
     assert resultado.total_items == 500
 
 

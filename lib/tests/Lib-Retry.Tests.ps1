@@ -98,5 +98,58 @@ Describe "Lib-Retry Tests" {
             }
             $retry.Count | Should -Be 0
         }
+
+        It "aborta imediatamente sem novas tentativas quando NonRetryable=true" {
+            $tempLog = Join-Path $TestDrive "retry-nonretryable.jsonl"
+            $script:calls = 0
+
+            $ok = Invoke-WithRetry `
+                -Action {
+                    $script:calls++
+                    $err = [System.InvalidOperationException]::new("worker offline")
+                    $err.Data['NonRetryable'] = $true
+                    throw $err
+                } `
+                -MaxAttempts 3 `
+                -BackoffSeconds @(30, 60) `
+                -OperationName "Extracao Oracle" `
+                -ExecId "TEST_NONRETRY" `
+                -LogPath $tempLog
+
+            $ok | Should -BeFalse
+            $script:calls | Should -Be 1
+        }
+
+        It "aborta imediatamente e emite retry.attempt ERRO quando NonRetryable=true com HubLogContext ativo" {
+            $tempLog = Join-Path $TestDrive "retry-nonretryable-hub.jsonl"
+            Initialize-HubLogContext -Automation "A" -ExecId "T" -TraceId "t" -LogPath $tempLog
+            $script:calls = 0
+
+            $ok = Invoke-WithRetry `
+                -Action {
+                    $script:calls++
+                    $err = [System.InvalidOperationException]::new("worker offline")
+                    $err.Data['NonRetryable'] = $true
+                    throw $err
+                } `
+                -MaxAttempts 3 `
+                -BackoffSeconds @(30, 60) `
+                -OperationName "Extracao Oracle" `
+                -Step "extract" `
+                -ExecId "T" `
+                -LogPath $tempLog
+
+            $ok | Should -BeFalse
+            $script:calls | Should -Be 1
+
+            $events = @(Get-Content -LiteralPath $tempLog | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
+            $retry = @($events | Where-Object { $_.event -eq "retry.attempt" })
+            $retry.Count | Should -Be 1
+            $retry[0].level | Should -Be "ERRO"
+            $retry[0].step | Should -Be "extract"
+            $retry[0].attempt | Should -Be 1
+            $retry[0].max_attempts | Should -Be 3
+            $retry[0].message | Should -Match "erro nao-transitorio"
+        }
     }
 }

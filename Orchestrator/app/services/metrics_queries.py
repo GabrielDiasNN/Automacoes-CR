@@ -1,13 +1,12 @@
 """Módulo de métricas e consultas SQL centralizadas para o Orchestrator (C4)."""
 
-# pylint: disable=relative-beyond-top-level,not-callable
-
 from collections.abc import Iterable
 from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.functions import count as sa_count
 
 from .. import models, schemas
 from ..constants import EXECUTION_ACTIVE_STATUSES, EXECUTION_FAILED_STATUSES
@@ -44,7 +43,7 @@ def get_success_errors_count_24h(db: Session) -> tuple[int, int]:
 def get_global_execution_counts(db: Session) -> tuple[int, int, int, int]:
     """Retorna (total, success, errors, pending) de execuções em uma única query."""
     row = db.query(
-        func.count(models.Execution.id).label("total"),
+        sa_count(models.Execution.id).label("total"),
         func.sum(
             case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1), else_=0)
         ).label("success"),
@@ -94,12 +93,12 @@ def build_global_metrics_response(db: Session) -> schemas.MetricsResponse:
         row.automation_id: row
         for row in db.query(
             models.Execution.automation_id,
-            func.count(
+            sa_count(
                 case((models.Execution.status.in_(["SUCCESS", "PARTIAL"]), 1))
             ).label("total_success"),
-            func.count(
-                case((models.Execution.status.in_(_FAILED_STATUS_LIST), 1))
-            ).label("total_errors"),
+            sa_count(case((models.Execution.status.in_(_FAILED_STATUS_LIST), 1))).label(
+                "total_errors"
+            ),
             func.avg(
                 case(
                     (
@@ -172,7 +171,7 @@ def build_global_metrics_response(db: Session) -> schemas.MetricsResponse:
 def get_status_breakdown(db: Session) -> dict[str, int]:
     """Retorna o breakdown de execuções agrupado por status."""
     status_rows = (
-        db.query(models.Execution.status, func.count(models.Execution.id))
+        db.query(models.Execution.status, sa_count(models.Execution.id))
         .group_by(models.Execution.status)
         .all()
     )
@@ -182,7 +181,7 @@ def get_status_breakdown(db: Session) -> dict[str, int]:
 def get_active_by_priority(db: Session) -> dict[str, int]:
     """Retorna contagem de execuções ativas agrupadas por prioridade."""
     priority_rows = (
-        db.query(models.Execution.priority, func.count(models.Execution.id))
+        db.query(models.Execution.priority, sa_count(models.Execution.id))
         .filter(models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES))
         .group_by(models.Execution.priority)
         .all()
@@ -193,7 +192,7 @@ def get_active_by_priority(db: Session) -> dict[str, int]:
 def get_active_by_group(db: Session) -> dict[str, int]:
     """Retorna contagem de execuções ativas agrupadas por queue_group."""
     group_rows = (
-        db.query(models.Execution.queue_group, func.count(models.Execution.id))
+        db.query(models.Execution.queue_group, sa_count(models.Execution.id))
         .filter(models.Execution.status.in_(EXECUTION_ACTIVE_STATUSES))
         .group_by(models.Execution.queue_group)
         .all()
@@ -209,7 +208,7 @@ def get_failure_hotspots_24h(db: Session, limit: int = 5) -> list[dict[str, Any]
             models.Automation.id.label("automation_id"),
             models.Automation.name.label("automation_name"),
             models.Automation.notification_channels.label("notification_channels"),
-            func.count(models.Execution.id).label("failures"),
+            sa_count(models.Execution.id).label("failures"),
             func.max(models.Execution.started_at).label("last_failure_at"),
         )
         .join(models.Execution, models.Execution.automation_id == models.Automation.id)
@@ -222,7 +221,7 @@ def get_failure_hotspots_24h(db: Session, limit: int = 5) -> list[dict[str, Any]
             models.Automation.name,
             models.Automation.notification_channels,
         )
-        .order_by(desc(func.count(models.Execution.id)))
+        .order_by(desc(sa_count(models.Execution.id)))
         .limit(limit)
         .all()
     )

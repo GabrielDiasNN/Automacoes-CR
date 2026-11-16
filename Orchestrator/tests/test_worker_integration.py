@@ -1,10 +1,11 @@
-# pylint: disable=protected-access
 """Testes de integração de worker.run_task e worker.main_loop (fluxo mockado)."""
 
 import os
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 import worker
 from app import models
 from app.constants import (
@@ -202,25 +203,22 @@ def test_run_task_decrementa_active_tasks_no_finally(
 @patch("worker.SessionLocal")
 @patch("worker.claim_next_task")
 @patch("worker.mark_task_as_failed")
-@patch("worker.heartbeat_loop")
-@patch("worker.log_flusher_loop")
-@patch("worker.wakeup_listener_loop")
-def test_main_loop_automacao_nao_encontrada_marca_falha(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    mock_wakeup_listener: Any,
-    mock_flusher: Any,
-    mock_heartbeat: Any,
+@patch("worker.heartbeat_loop", new=MagicMock())
+@patch("worker.log_flusher_loop", new=MagicMock())
+@patch("worker.wakeup_listener_loop", new=MagicMock())
+@pytest.mark.usefixtures("reset_worker_globals")
+def test_main_loop_automacao_nao_encontrada_marca_falha(
     mock_mark_failed: Any,
     mock_claim: Any,
     mock_session_local: Any,
-    reset_worker_globals: None,
 ) -> None:
-    del reset_worker_globals, mock_wakeup_listener, mock_flusher, mock_heartbeat
     mock_db = MagicMock()
     mock_session_local.return_value = mock_db
     mock_claim.return_value = "EXEC_ORFAO"
 
-    class MockExecution:  # pylint: disable=too-few-public-methods
-        automation_id = 999
+    @dataclass
+    class MockExecution:
+        automation_id: int = 999
 
     mock_db.query().filter().first.side_effect = [MockExecution(), None]
 
@@ -238,29 +236,27 @@ def test_main_loop_automacao_nao_encontrada_marca_falha(  # pylint: disable=too-
 @patch("worker.SessionLocal")
 @patch("worker.claim_next_task")
 @patch("worker.resolve_script_path")
-@patch("worker.heartbeat_loop")
-@patch("worker.log_flusher_loop")
-@patch("worker.wakeup_listener_loop")
-def test_main_loop_max_workers_atingido_nao_consulta_banco_de_novo(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    mock_wakeup_listener: Any,
-    mock_flusher: Any,
-    mock_heartbeat: Any,
+@patch("worker.heartbeat_loop", new=MagicMock())
+@patch("worker.log_flusher_loop", new=MagicMock())
+@patch("worker.wakeup_listener_loop", new=MagicMock())
+@pytest.mark.usefixtures("reset_worker_globals")
+def test_main_loop_max_workers_atingido_nao_consulta_banco_de_novo(
     mock_resolve_path: Any,
     mock_claim: Any,
     mock_session_local: Any,
-    reset_worker_globals: None,
 ) -> None:
-    del reset_worker_globals, mock_wakeup_listener, mock_flusher, mock_heartbeat
     mock_db = MagicMock()
     mock_session_local.return_value = mock_db
 
-    class MockAutomation:  # pylint: disable=too-few-public-methods
-        name = "Robo Cheio"
-        script_path = "./run.ps1"
-        max_runtime_minutes = 10
+    @dataclass
+    class MockAutomation:
+        name: str = "Robo Cheio"
+        script_path: str = "./run.ps1"
+        max_runtime_minutes: int = 10
 
-    class MockExecution:  # pylint: disable=too-few-public-methods
-        automation_id = 1
+    @dataclass
+    class MockExecution:
+        automation_id: int = 1
 
     mock_db.query().filter().first.side_effect = [MockExecution(), MockAutomation()]
     mock_resolve_path.return_value = "C:\\run.ps1"

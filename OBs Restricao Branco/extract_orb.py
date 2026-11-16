@@ -1,6 +1,5 @@
 # import-error e wrong-import-position: import de lib/python via sys.path.insert()
 # dinamico (linhas 28-31), que o pylint nao resolve em tempo de analise estatica.
-# pylint: disable=broad-exception-caught, import-error, wrong-import-position
 # {
 #   "version": "1.1.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
@@ -49,6 +48,8 @@ from models import (
 )
 from oracle_extract import (
     OracleCredentials,
+    classify_oracle_exit_code,
+    enforce_queue_deadline,
     fetch_all,
     init_thick_mode,
     resolve_oracle_credentials,
@@ -245,6 +246,7 @@ def _fetch_estoque(  # pylint: disable=too-many-locals
     estoques: dict[int, EstoqueDeposito] = {}
     codigos_finalidades = sorted(finalidades)
     for lote in chunk_codigos(codigos):
+        enforce_queue_deadline("ORB _fetch_estoque")
         sql, params = build_estoque_sql(lote, codigos_finalidades)
         log(
             f"Consultando estoque do deposito 95 para {len(lote)} peca(s) "
@@ -558,15 +560,18 @@ def extract() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
     except SchemaInvalidoError as e:
         log(f"Contrato da query quebrado: {e}", "ERROR", exec_id)
-        sys.exit(1)
+        sys.exit(5)
     except CircuitBreakerError:
         log("Circuit Breaker aberto: falhas persistentes no Oracle.", "ERROR", exec_id)
+        # Breaker aberto é falha transitória: exit 1 deixa o Invoke-OraclePythonScript
+        # repetir com espera.
         sys.exit(1)
     # SystemExit (dos sys.exit acima) herda de BaseException e nao e capturado
     # pelo "except Exception" abaixo — propaga naturalmente.
-    except Exception as e:
+    # Residual: fronteira de processo; falha fora das classificadas sairia como traceback sem o log `Erro fatal na extracao` e sem a linha ERROR no log estruturado que a triagem lê; o exit code de exceção não classificada seria 1 de qualquer forma, mas OracleQueueError e TimeoutError precisam passar por classify_oracle_exit_code (5/6/7; TimeoutError genérico vira 1, só OracleQueueTimeoutError vira 7).
+    except Exception as e:  # pylint: disable=broad-exception-caught
         log(f"Erro fatal na extracao: {e}", "ERROR", exec_id)
-        sys.exit(1)
+        sys.exit(classify_oracle_exit_code(e))
 
 
 if __name__ == "__main__":

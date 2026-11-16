@@ -1,6 +1,7 @@
 import { useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
+import { useOverlayDismiss } from "../../hooks/useOverlayDismiss";
 import { Button } from "./Button";
 import styles from "./Modal.module.css";
 
@@ -27,17 +28,16 @@ export function ConfirmModal({
   onCancel,
 }: ConfirmModalProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   useFocusTrap(ref, open, onCancel);
+  useOverlayDismiss(overlayRef, open, onCancel);
   const titleId = useId();
 
   if (!open) return null;
 
   return createPortal(
-    // Overlay de clique-fora do modal (padrão sem equivalente nativo).
-    // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
-    // de stopPropagation no filho. Escape já fecha via useFocusTrap.
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- overlay de clique-fora: padrão sem equivalente nativo, o alvo é checado no próprio overlay
-    <div className={`overlay-scrim ${styles.overlay}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+    // Clique-fora via `useOverlayDismiss`; Escape já fecha via useFocusTrap.
+    <div ref={overlayRef} className={`overlay-scrim ${styles.overlay}`}>
       <div
         ref={ref}
         className={`${styles.box} animate-in`}

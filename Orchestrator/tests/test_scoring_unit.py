@@ -1,8 +1,7 @@
 """Testes unitários de app/services/scoring.py (compute_attention_score)."""
 
-# pylint: disable=too-many-arguments
-
 from datetime import datetime, timedelta
+from typing import TypedDict, Unpack
 
 from app import models
 from app.services.scoring import compute_attention_score
@@ -26,18 +25,28 @@ def _automation(
     )
 
 
-def _execution(
-    *,
-    execution_id: str = "ex-1",
-    automation: models.Automation | None = None,
-    status: str = "PENDING",
-    priority: str = "NORMAL",
-    retry_count: int = 0,
-    max_retries: int = 999,
-    started_at: datetime | None = None,
-    failure_reason: str | None = None,
-    queue_group: str | None = None,
-) -> models.Execution:
+class _ExecucaoOpcoes(TypedDict, total=False):
+    execution_id: str
+    automation: models.Automation | None
+    status: str
+    priority: str
+    retry_count: int
+    max_retries: int
+    started_at: datetime | None
+    failure_reason: str | None
+    queue_group: str | None
+
+
+def _execution(**opcoes: Unpack[_ExecucaoOpcoes]) -> models.Execution:
+    execution_id = opcoes.get("execution_id", "ex-1")
+    automation = opcoes.get("automation")
+    status = opcoes.get("status", "PENDING")
+    priority = opcoes.get("priority", "NORMAL")
+    retry_count = opcoes.get("retry_count", 0)
+    max_retries = opcoes.get("max_retries", 999)
+    started_at = opcoes.get("started_at")
+    failure_reason = opcoes.get("failure_reason")
+    queue_group = opcoes.get("queue_group")
     auto = automation or _automation()
     ex = models.Execution(
         id=execution_id,
@@ -93,8 +102,17 @@ def test_pending_idade_acima_do_limiar_soma_bonus_de_envelhecimento() -> None:
 
 
 def test_running_sem_automation_nao_soma_bonus_de_estouro() -> None:
-    ex = _execution(status="RUNNING", started_at=NOW - timedelta(hours=2))
-    ex.automation = None
+    # Execução transiente sem automação vinculada: o relacionamento lê None.
+    ex = models.Execution(
+        id="ex-1",
+        automation_id=1,
+        status="RUNNING",
+        priority="NORMAL",
+        retry_count=0,
+        max_retries=999,
+        started_at=NOW - timedelta(hours=2),
+    )
+    assert ex.automation is None
     score, reasons = compute_attention_score(ex, NOW, {}, {})
     assert score == 45
     assert reasons == ["Execução ativa exige acompanhamento direto"]

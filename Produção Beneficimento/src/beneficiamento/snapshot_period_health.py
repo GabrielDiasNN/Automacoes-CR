@@ -1,4 +1,4 @@
-# pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-return-statements,too-many-locals,line-too-long
+# pylint: disable=too-many-arguments,too-many-return-statements,too-many-locals
 """Análise de saúde por período do Beneficiamento.
 
 Construtores de issues e contexto de health para um único período.

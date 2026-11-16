@@ -18,6 +18,11 @@ from typing import Any, NamedTuple
 from ..core import normalize_shift, safe_strip, to_float
 from .schema import COLUMN_NAMES, SQLITE_TIMEOUT_SECONDS, apply_pragmas, init_db
 
+# Erro do SQLite do historico, exposto pela camada de dados para que quem
+# chama `salvar_historico` trate a falha sem importar sqlite3 (padrao
+# arquitetural: sqlite3 so dentro de beneficiamento/data).
+ErroBancoHistorico = sqlite3.Error
+
 
 def _text_or_none(value: Any) -> str | None:
     text = safe_strip(value)

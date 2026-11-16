@@ -1,6 +1,8 @@
 """Testes do guard padrão dos validadores: resolução, wrapper de CTE e comando portável."""
 
+import hashlib
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -172,8 +174,6 @@ def test_copia_versionada_do_guard_bate_com_o_canonico_do_perfil() -> None:
     Só roda onde o perfil existe (máquina de desenvolvimento). No CI é pulado; a
     cópia versionada é o que o CI executa, então é ela que precisa ficar atualizada.
     """
-    import hashlib  # pylint: disable=import-outside-toplevel
-    import os  # pylint: disable=import-outside-toplevel
 
     raiz = Path(__file__).resolve().parents[2]
     copia = raiz / "lib" / "vendor" / "oracle-sql-guard" / "guard_sql.py"

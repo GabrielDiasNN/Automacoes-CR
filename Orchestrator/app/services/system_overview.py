@@ -1,9 +1,7 @@
 """Serviços de visão agregada do painel operacional (C3, C4)."""
 
-# pylint: disable=relative-beyond-top-level,too-many-locals,not-callable,too-many-arguments,too-many-positional-arguments
-
 from time import perf_counter
-from typing import Any
+from typing import Any, TypedDict
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
@@ -16,6 +14,15 @@ from .automation_snapshot import (
     build_automation_response,
     build_next_run_lookup,
 )
+
+
+class _Catalogo(TypedDict):
+    """KPIs de catálogo das últimas 24h e status geral (primeira etapa)."""
+
+    success_24h: int
+    errors_24h: int
+    status_breakdown: dict[str, int]
+    top_failures: list[dict[str, Any]]
 
 
 def build_recent_payload(db: Session) -> list[schemas.ExecutionSummary]:
@@ -35,6 +42,25 @@ def build_recent_payload(db: Session) -> list[schemas.ExecutionSummary]:
     return recent_payload
 
 
+def _avaliar_sla(
+    auto: models.Automation, sla_metrics: dict[int, dict[str, Any]]
+) -> tuple[str, float | None]:
+    """Status de SLA e duração média (minutos) de uma automação."""
+    sla_minutes = auto.sla_minutes
+    if not sla_minutes:
+        return "unknown", None
+    metrics_entry = sla_metrics.get(int(auto.id))
+    if metrics_entry is None:
+        return "ok", None
+    avg_min = metrics_entry["avg_duration_minutes"]
+    ratio = avg_min / sla_minutes
+    if ratio <= 0.80:
+        return "ok", avg_min
+    if ratio <= 1.0:
+        return "at_risk", avg_min
+    return "violated", avg_min
+
+
 def build_automation_cards_payload(
     automations: list[models.Automation],
     next_run_lookup: dict[int, Any],
@@ -52,24 +78,7 @@ def build_automation_cards_payload(
             latest_execution_lookup=latest_execution_by_automation,
             metrics_24h_lookup=metrics_by_automation,
         )
-
-        sla_minutes = auto.sla_minutes
-        sla_status = "unknown"
-        sla_avg_duration_minutes: float | None = None
-        if sla_minutes:
-            metrics_entry = sla_metrics.get(auto_id)
-            if metrics_entry is not None:
-                avg_min = metrics_entry["avg_duration_minutes"]
-                sla_avg_duration_minutes = avg_min
-                ratio = avg_min / sla_minutes
-                if ratio <= 0.80:
-                    sla_status = "ok"
-                elif ratio <= 1.0:
-                    sla_status = "at_risk"
-                else:
-                    sla_status = "violated"
-            else:
-                sla_status = "ok"
+        sla_status, sla_avg_duration_minutes = _avaliar_sla(auto, sla_metrics)
 
         auto_payload = response.model_dump()
         auto_payload["sla_status"] = sla_status
@@ -81,7 +90,53 @@ def build_automation_cards_payload(
     return autos_payload
 
 
-def build_system_overview_payload(
+def _coletar_catalogo(db: Session) -> _Catalogo:
+    success_24h, errors_24h = metrics.get_success_errors_count_24h(db)
+    status_breakdown = metrics.get_status_breakdown(db)
+    top_failures = [
+        {
+            "automation_id": item["automation_id"],
+            "automation_name": item["automation_name"],
+            "failures": item["failures_24h"],
+        }
+        for item in metrics.get_failure_hotspots_24h(db)
+    ]
+    return {
+        "success_24h": success_24h,
+        "errors_24h": errors_24h,
+        "status_breakdown": status_breakdown,
+        "top_failures": top_failures,
+    }
+
+
+def _montar_cartoes(
+    db: Session, jobs: list[schemas.ScheduledJob]
+) -> tuple[list[models.Automation], list[dict[str, Any]]]:
+    """Automações e seus cartões (SLA, próximo disparo, métricas de 24h)."""
+    next_run_lookup = build_next_run_lookup(jobs)
+    automations = (
+        db.query(models.Automation).order_by(models.Automation.name.asc()).all()
+    )
+    automation_ids = [int(auto.id) for auto in automations]
+    metrics_by_automation = metrics.get_automation_metrics_24h(db, automation_ids)
+    latest_execution_by_automation = (
+        metrics.get_latest_execution_snapshot_by_automation(db, automation_ids)
+    )
+    # Buscar duração média SUCCESS para cálculo do SLA sem N+1 (C3)
+    sla_metrics = metrics.get_sla_metrics_by_automation_24h(db)
+    autos_payload = build_automation_cards_payload(
+        automations=automations,
+        next_run_lookup=next_run_lookup,
+        metrics_by_automation=metrics_by_automation,
+        latest_execution_by_automation=latest_execution_by_automation,
+        sla_metrics=sla_metrics,
+    )
+    return automations, autos_payload
+
+
+# Assinatura consumida por `routers/system.py` com argumentos nomeados: o contrato
+# do painel recebe seis entradas e não é reagrupado aqui.
+def build_system_overview_payload(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     db: Session,
     scheduler: Any,
     health_payload: dict[str, Any],
@@ -94,23 +149,7 @@ def build_system_overview_payload(
     timings_ms: dict[str, float] = {}
 
     stage_started_at = perf_counter()
-    next_run_lookup = build_next_run_lookup(jobs)
-
-    success_24h, errors_24h = metrics.get_success_errors_count_24h(db)
-
-    status_breakdown = metrics.get_status_breakdown(db)
-    pending_now = status_breakdown.get("PENDING", 0) + status_breakdown.get(
-        "RUNNING", 0
-    )
-
-    top_failures = [
-        {
-            "automation_id": item["automation_id"],
-            "automation_name": item["automation_name"],
-            "failures": item["failures_24h"],
-        }
-        for item in metrics.get_failure_hotspots_24h(db)
-    ]
+    catalogo = _coletar_catalogo(db)
     timings_ms["kpis_catalog_ms"] = round((perf_counter() - stage_started_at) * 1000, 2)
 
     stage_started_at = perf_counter()
@@ -120,28 +159,14 @@ def build_system_overview_payload(
     )
 
     stage_started_at = perf_counter()
-    automations = (
-        db.query(models.Automation).order_by(models.Automation.name.asc()).all()
-    )
-    automation_ids = [int(auto.id) for auto in automations]
-    metrics_by_automation = metrics.get_automation_metrics_24h(db, automation_ids)
-    latest_execution_by_automation = (
-        metrics.get_latest_execution_snapshot_by_automation(db, automation_ids)
-    )
-
-    # 2. Buscar duração média SUCCESS para cálculo do SLA sem N+1 (C3)
-    sla_metrics = metrics.get_sla_metrics_by_automation_24h(db)
-    autos_payload = build_automation_cards_payload(
-        automations=automations,
-        next_run_lookup=next_run_lookup,
-        metrics_by_automation=metrics_by_automation,
-        latest_execution_by_automation=latest_execution_by_automation,
-        sla_metrics=sla_metrics,
-    )
+    automations, autos_payload = _montar_cartoes(db, jobs)
     timings_ms["automation_cards_ms"] = round(
         (perf_counter() - stage_started_at) * 1000, 2
     )
 
+    pending_now = catalogo["status_breakdown"].get("PENDING", 0) + catalogo[
+        "status_breakdown"
+    ].get("RUNNING", 0)
     next_window = min(
         (job.next_run_time for job in jobs if job.next_run_time), default=None
     )
@@ -157,24 +182,24 @@ def build_system_overview_payload(
         ),
         "kpis": {
             "active_automations": sum(1 for auto in automations if auto.enabled),
-            "success_24h": success_24h,
-            "errors_24h": errors_24h,
+            "success_24h": catalogo["success_24h"],
+            "errors_24h": catalogo["errors_24h"],
             "pending_now": pending_now,
             "next_window": schemas.format_dt_br(next_window),
         },
         "health": health_payload,
-        "status_breakdown": status_breakdown,
+        "status_breakdown": catalogo["status_breakdown"],
         "jobs": [job.model_dump() for job in jobs],
         "recent": [item.model_dump() for item in recent_payload],
         "automations": autos_payload,
-        "top_failures": top_failures,
+        "top_failures": catalogo["top_failures"],
         "scheduler": {
             "running": scheduler.running,
             "jobs_loaded": len(scheduler.get_jobs()),
         },
         "queue": {
             "active_count": pending_now,
-            "by_status": status_breakdown,
+            "by_status": catalogo["status_breakdown"],
             "active_by_priority": (
                 diagnostics_payload.get("queue", {}).get("active_by_priority", {})
             ),

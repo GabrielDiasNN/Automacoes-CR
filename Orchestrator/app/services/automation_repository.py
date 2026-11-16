@@ -6,8 +6,6 @@ montar consulta ORM. As funções aqui são deliberadamente puras de HTTP — de
 padrão já adotado pelos demais serviços do Orchestrator.
 """
 
-# pylint: disable=relative-beyond-top-level
-
 from __future__ import annotations
 
 from typing import Any

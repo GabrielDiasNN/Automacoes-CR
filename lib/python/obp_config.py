@@ -214,7 +214,7 @@ def _apply_phase_filter(
     for campo, valor_esperado in regras.items():
         raw = ob.get(campo)
         try:
-            val: Any = int(raw)  # type: ignore[arg-type]
+            val: Any = int(raw) if raw is not None else raw
         except (TypeError, ValueError):
             val = raw
         if val != valor_esperado:
@@ -316,7 +316,11 @@ def _load_config(
                     responsavel=responsavel,
                     ativo=bool(dados.get("ativo", True)),
                 )
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, ValueError, TypeError, AttributeError, OverflowError) as e:
+        # Tipos do bloco acima: OSError (leitura), ValueError (JSON invalido, int/float
+        # de texto ruim), TypeError (int/float de None ou de lista) e AttributeError
+        # (.get/.items sobre valor de tipo errado no JSON) e OverflowError (int() de
+        # Infinity/1e999, que o json aceita como float inf).
         # config.json existe mas nao pode ser interpretado: falhar explicitamente em vez de
         # degradar silenciosamente para defaults hardcoded, que podem estar desatualizados
         # em relacao ao config de producao (thresholds, fases ativas).

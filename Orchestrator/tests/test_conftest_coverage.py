@@ -4,6 +4,10 @@ que silenciosamente tocariam o banco real de produção."""
 
 import os
 
+import app.database as db
+import app.main as main_module
+import app.routers.websocket as ws
+from app.services import scheduler_runtime as sched
 from conftest import (
     _SESSION_ATTR,
     TESTS_DIR,
@@ -54,11 +58,6 @@ def test_nenhum_modulo_novo_importa_sessionlocal_sem_estar_patchado_no_client() 
 
 def test_todos_os_modulos_conhecidos_usam_test_engine(client: TestClient) -> None:
     del client  # ativa os patches feitos pela fixture `client`
-    # pylint: disable=import-outside-toplevel
-    import app.database as db
-    import app.main as main_module
-    import app.routers.websocket as ws
-    from app.services import scheduler_runtime as sched
 
     assert db.SessionLocal is _testing_session_local
     assert getattr(main_module, _SESSION_ATTR) is _testing_session_local

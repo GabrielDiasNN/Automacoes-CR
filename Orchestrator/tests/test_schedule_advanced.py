@@ -20,8 +20,8 @@ from app.schemas.common import (
     parse_schedule,
     preview_next_runs,
 )
+from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
-from tests.conftest import AUTH_HEADERS
 
 # --------------------------------------------------------------------------- #
 # 1. Normalização de Cron                                                     #
@@ -174,41 +174,38 @@ class TestIntervalWithWindow:
 # --------------------------------------------------------------------------- #
 
 
-class TestDescribeSchedulePayload:  # pylint: disable=too-few-public-methods
-    """Valida a descrição textual formatada para o Dashboard (metodo unico parametrizado)."""
-
-    @pytest.mark.parametrize(
-        "schedule,expected_fragments",
-        [
-            (
-                {"schedule_type": "cron", "cron_expression": "*/10 8-18 * * 1-5"},
-                ["Cron", "*/10 8-18 * * 1-5"],
-            ),
-            (
-                {"schedule_type": "interval", "interval_minutes": 30},
-                ["30 min"],
-            ),
-            (
-                {
-                    "schedule_type": "interval",
-                    "interval_minutes": 15,
-                    "start_time": "08:00",
-                    "end_time": "18:00",
-                    "days_of_week": [1, 2, 3, 4, 5],
-                },
-                ["15 min", "08:00", "18:00"],
-            ),
-            ({"schedule_type": "manual"}, ["Manual"]),
-            (None, ["Manual"]),
-        ],
-    )
-    def test_describe_schedule_payload(
-        self, schedule: dict[str, Any] | None, expected_fragments: list[str]
-    ) -> None:
-        """Descrição gerada deve conter os fragmentos esperados para cada tipo de schedule."""
-        desc = describe_schedule_payload(schedule)
-        for fragment in expected_fragments:
-            assert fragment in desc
+@pytest.mark.parametrize(
+    "schedule,expected_fragments",
+    [
+        (
+            {"schedule_type": "cron", "cron_expression": "*/10 8-18 * * 1-5"},
+            ["Cron", "*/10 8-18 * * 1-5"],
+        ),
+        (
+            {"schedule_type": "interval", "interval_minutes": 30},
+            ["30 min"],
+        ),
+        (
+            {
+                "schedule_type": "interval",
+                "interval_minutes": 15,
+                "start_time": "08:00",
+                "end_time": "18:00",
+                "days_of_week": [1, 2, 3, 4, 5],
+            },
+            ["15 min", "08:00", "18:00"],
+        ),
+        ({"schedule_type": "manual"}, ["Manual"]),
+        (None, ["Manual"]),
+    ],
+)
+def test_describe_schedule_payload(
+    schedule: dict[str, Any] | None, expected_fragments: list[str]
+) -> None:
+    """Descrição gerada deve conter os fragmentos esperados para cada tipo de schedule."""
+    desc = describe_schedule_payload(schedule)
+    for fragment in expected_fragments:
+        assert fragment in desc
 
 
 # --------------------------------------------------------------------------- #

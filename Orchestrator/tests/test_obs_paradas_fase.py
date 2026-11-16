@@ -8,6 +8,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from carregadores_modulos import acessar_privado
 
 ROOT = Path(__file__).parent.parent.parent
 AUTOMATION_DIR = ROOT / "OBs Paradas Fase"
@@ -67,7 +68,7 @@ def test_config_json_valido() -> None:
     module = _load_module(
         "generate_phase_cards_test", AUTOMATION_DIR / "generate_phase_cards.py"
     )
-    contatos = module._load_contatos_from_env()  # pylint: disable=protected-access
+    contatos = acessar_privado(module, "_load_contatos_from_env")()
     assert "fases_monitoradas" in cfg, "config.json deve conter 'fases_monitoradas'"
     fases = cfg["fases_monitoradas"]
     assert isinstance(fases, dict), "'fases_monitoradas' deve ser um objeto"
@@ -169,7 +170,7 @@ def test_fase_inativa_e_excluida_do_envio() -> None:
         },
     ]
 
-    filtradas = module._filter_obs(obs, fases, {})  # pylint: disable=protected-access
+    filtradas = acessar_privado(module, "_filter_obs")(obs, fases, {})
 
     assert [ob["NUMERO_OB"] for ob in filtradas] == [1]
 
@@ -179,13 +180,13 @@ def test_resolve_contato_aceita_objeto_lista_e_string_legada() -> None:
         "generate_phase_cards_test", AUTOMATION_DIR / "generate_phase_cards.py"
     )
     assert (
-        module._resolve_contato(  # pylint: disable=protected-access
+        acessar_privado(module, "_resolve_contato")(
             {"nome": "Fulano de Tal", "numero": "5500000000001"}
         )
         == "5500000000001"
     )
     assert (
-        module._resolve_contato(  # pylint: disable=protected-access
+        acessar_privado(module, "_resolve_contato")(
             [
                 {"nome": "Fulano de Tal", "numero": "5500000000001"},
                 {"nome": "Ciclano da Silva", "numero": "5500000000002"},
@@ -194,8 +195,7 @@ def test_resolve_contato_aceita_objeto_lista_e_string_legada() -> None:
         == "5500000000001 @5500000000002"
     )
     assert (
-        module._resolve_contato("5500000000001")  # pylint: disable=protected-access
-        == "5500000000001"
+        acessar_privado(module, "_resolve_contato")("5500000000001") == "5500000000001"
     )
 
 
@@ -211,9 +211,7 @@ def test_config_real_resolve_contatos_por_variavel(
         "generate_phase_cards_test", AUTOMATION_DIR / "generate_phase_cards.py"
     )
     cfg_path = AUTOMATION_DIR / "config.json"
-
-    # pylint: disable-next=protected-access
-    fases, _, _, _ = module._load_config(str(cfg_path))
+    fases, _, _, _ = acessar_privado(module, "_load_config")(str(cfg_path))
 
     # Fase 26 (líder 3º turno) e fase 65 (líder reserva 1º turno) devem resolver
     # para números de telefone diferentes.
@@ -227,11 +225,10 @@ def test_config_real_resolve_contatos_por_variavel(
 def test_codigo_fase_key_normaliza_tipos_oracle() -> None:
     """CODIGO_FASE pode chegar como int, float ou str do Oracle/JSON — todos devem
     normalizar para a mesma chave string usada em fases_monitoradas."""
-    # pylint: disable=protected-access
     module = _load_module(
         "generate_phase_cards_test", AUTOMATION_DIR / "generate_phase_cards.py"
     )
-    assert module._codigo_fase_key({"CODIGO_FASE": 26}) == "26"
-    assert module._codigo_fase_key({"CODIGO_FASE": 26.0}) == "26"
-    assert module._codigo_fase_key({"CODIGO_FASE": "26"}) == "26"
-    assert module._codigo_fase_key({"CODIGO_FASE": None}) is None
+    assert acessar_privado(module, "_codigo_fase_key")({"CODIGO_FASE": 26}) == "26"
+    assert acessar_privado(module, "_codigo_fase_key")({"CODIGO_FASE": 26.0}) == "26"
+    assert acessar_privado(module, "_codigo_fase_key")({"CODIGO_FASE": "26"}) == "26"
+    assert acessar_privado(module, "_codigo_fase_key")({"CODIGO_FASE": None}) is None

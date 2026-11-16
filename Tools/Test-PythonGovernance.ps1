@@ -23,7 +23,10 @@ $ErrorActionPreference = "Stop"
 $env:PYTHONUTF8 = 1
 $env:PYLINTHOME = Join-Path $RootPath ".mypy_cache\pylint"
 $env:MYPYPATH = "$(Join-Path $RootPath "Orchestrator");$RootPath;$(Join-Path $RootPath "lib\python")"
-$env:PYTHONPATH = "$($env:PYTHONPATH);$(Join-Path $RootPath "Orchestrator");$(Join-Path $RootPath "lib\python");$(Join-Path $RootPath "Produção Beneficimento\src")"
+# Tools\oracle: os testes do Orchestrator importam as ferramentas (mcp_server etc.) pelo
+# nome, como fazem em tempo de execução; sem isto o pylint reprova com E0401 o que o
+# pytest resolve. Nenhum módulo de Tools\oracle colide com os das outras raízes.
+$env:PYTHONPATH = "$($env:PYTHONPATH);$(Join-Path $RootPath "Orchestrator");$(Join-Path $RootPath "lib\python");$(Join-Path $RootPath "Produção Beneficimento\src");$(Join-Path $RootPath "Tools\oracle")"
 New-Item -ItemType Directory -Force -Path $env:PYLINTHOME | Out-Null
 Write-Host "=== Governanca Python (Type Hints & Pylint) ==="
 

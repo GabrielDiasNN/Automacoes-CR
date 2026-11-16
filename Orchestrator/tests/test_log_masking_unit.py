@@ -10,7 +10,7 @@ sys.path.insert(
     ),
 )
 
-from log_masking import (  # noqa: E402  pylint: disable=wrong-import-position
+from log_masking import (
     mask_sensitive,
 )
 

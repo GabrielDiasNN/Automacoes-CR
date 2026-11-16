@@ -64,19 +64,27 @@ export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 20
   // resolve `var(--x)` (achado nº 1).
   const structureKey = structureSignature(theme, height, xLabels, lines);
 
+  // Último valor renderizado, lido pelos efeitos. Eles disparam pelas chaves
+  // explícitas (`lines` e `structureKey`); ler daqui evita listar xLabels e
+  // height nas deps, o que recriaria o gráfico a cada referência nova.
+  const latestRef = useRef({ xLabels, lines, height });
+  latestRef.current = { xLabels, lines, height };
+
   // Atualiza só os valores, sem recriar o gráfico. Depende da REFERÊNCIA de
   // `lines` — os call sites memoizam `lines`, então nova referência = valores
   // realmente novos. Nunca perde um update (a ref muda sempre que o conteúdo
   // muda) e não paga o custo de serializar todos os pontos a cada render.
   useEffect(() => {
-    plotRef.current?.setData(toData(xLabels, lines));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só valores: xLabels entra na recriação (structureKey); a atualização depende da referência de lines
+    const { xLabels: x, lines: l } = latestRef.current;
+    plotRef.current?.setData(toData(x, l));
   }, [lines]);
 
   // Recria o gráfico apenas quando a estrutura muda.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Valores da renderização que disparou esta recriação (ver latestRef).
+    const { xLabels, lines, height } = latestRef.current;
 
     const palette = readPalette();
 
@@ -130,7 +138,6 @@ export const TimeSeries = memo(function TimeSeries({ xLabels, lines, height = 20
     };
     // `structureKey` é a fonte de verdade da recriação; xLabels/lines/height/
     // theme entram só pelo valor serializado nela.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- structureKey é a fonte de verdade: xLabels, lines, height e theme entram serializados nela
   }, [structureKey]);
 
   // O canvas do uPlot não é exposto pela árvore de acessibilidade e

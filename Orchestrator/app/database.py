@@ -19,9 +19,18 @@ from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
 
+from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, event, func, inspect, text
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
 
+from . import models as _models
+from .base import Base
+
+# Reexporta Base explicitamente: models.py e tests importam `Base` daqui.
+__all__ = ["Base"]
 from .constants import (
     EXECUTION_STATUS_REQUEUED,
     EXECUTION_TERMINAL_STATUSES,
@@ -46,12 +55,11 @@ engine = create_engine(
 
 
 @event.listens_for(engine, "connect")
-def set_sqlite_pragma(
-    dbapi_connection: Any, connection_record: Any  # pylint: disable=unused-argument
-) -> None:
+def set_sqlite_pragma(dbapi_connection: Any, _connection_record: Any) -> None:
     """Configura pragmas de seguranca e performance em cada conexao.
 
-    connection_record e exigido pela assinatura do evento SQLAlchemy "connect".
+    _connection_record e exigido pela assinatura do evento SQLAlchemy "connect"
+    (chamado por posicao); o prefixo "_" marca que ele nao e usado.
     """
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
@@ -68,11 +76,15 @@ def set_sqlite_pragma(
     cursor.close()
 
 
+# RESIDUAL (invalid-name): o nome `SessionLocal` e contrato publico deste modulo,
+# importado por main, worker, scheduler e routers, e substituido por nome em
+# tests/conftest.py (`db_module.SessionLocal = ...`). Renomear quebraria codigo
+# fora desta particao; alias de funcao/instancia so trocaria o erro de naming
+# (pylint trata atribuicao de chamada como constante, alias de funcao como
+# variavel). Mantido por contrato, sem alterar comportamento.
 SessionLocal = sessionmaker(  # pylint: disable=invalid-name
     autocommit=False, autoflush=False, bind=engine
 )
-
-Base = declarative_base()
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -112,7 +124,7 @@ def _missing_indexes_by_table(
     for t_name, table in Base.metadata.tables.items():
         if t_name in skip or t_name not in existing_tables:
             continue
-        expected = {idx.name for idx in table.indexes if idx.name}
+        expected = {str(idx.name) for idx in table.indexes if idx.name}
         actual = {ix["name"] for ix in inspector.get_indexes(t_name) if ix.get("name")}
         gap = sorted(expected - actual)
         if gap:
@@ -133,11 +145,7 @@ def validate_database_schema() -> dict[str, Any]:
     migration 20260731_01) era invisível e o stamp a pulava para sempre.
     Triggers e views continuam fora do alcance — não vivem em ``Base.metadata``.
     """
-    # Importacao local para evitar circular import (models depende de Base)
-    from . import (  # noqa: F401, I001  # pylint: disable=import-outside-toplevel,cyclic-import
-        models as _models,
-    )
-
+    orm_tables = _models.Automation.metadata.tables
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
 
@@ -145,7 +153,7 @@ def validate_database_schema() -> dict[str, Any]:
     _skip = {"alembic_version"}
     expected = {
         t_name: {col.name for col in table.columns}
-        for t_name, table in Base.metadata.tables.items()
+        for t_name, table in orm_tables.items()
         if t_name not in _skip
     }
 
@@ -176,7 +184,8 @@ def get_schema_version() -> str:
                 text("SELECT version_num FROM alembic_version")
             ).fetchone()
             return str(row[0]) if row else "none"
-    except Exception:  # pylint: disable=broad-exception-caught
+    # Falha de banco vira 'unknown': o diagnostico de /system nao pode dar 500.
+    except SQLAlchemyError:
         return "unknown"
 
 
@@ -223,13 +232,6 @@ def run_alembic_migrations() -> dict[str, Any]:
             "schema_version": ORCHESTRATOR_SCHEMA_VERSION,
         }
 
-    # Importacao local: alembic e pesado e so e necessario neste caminho de codigo
-    from alembic import command  # pylint: disable=import-outside-toplevel
-    from alembic.config import Config  # pylint: disable=import-outside-toplevel
-    from alembic.script import (  # pylint: disable=import-outside-toplevel
-        ScriptDirectory,
-    )
-
     current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ini_path = os.path.join(current_dir, "alembic.ini")
 
@@ -241,8 +243,8 @@ def run_alembic_migrations() -> dict[str, Any]:
     # ORCHESTRATOR_SCHEMA_VERSION: adicionar uma migration sem bumpar a constante
     # fazia `upgrade head` NUNCA rodar, em silêncio. `validate_database_schema`
     # só compara tabelas e colunas, então migrations de índice, constraint ou
-    # backfill de dados passavam despercebidas. O import é gratuito aqui — o
-    # pacote alembic já foi carregado duas linhas acima.
+    # backfill de dados passavam despercebidas. O import de ScriptDirectory já
+    # está no topo do módulo.
     head = ScriptDirectory.from_config(alembic_cfg).get_current_head()
     if head is None:  # diretório de versions vazio ou ilegível
         head = ORCHESTRATOR_SCHEMA_VERSION
@@ -303,9 +305,6 @@ def purge_old_snapshots(retention_days: int = 30) -> int:
 
     Padrão 30 dias = ~8.640 registros retidos (snapshot a cada 5min).
     """
-    # Importacao local para evitar circular import (models depende de Base)
-    from . import models as _models  # pylint: disable=C0415,cyclic-import
-
     cutoff = get_now_local() - timedelta(days=retention_days)
     try:
         with session_scope() as db:
@@ -318,7 +317,7 @@ def purge_old_snapshots(retention_days: int = 30) -> int:
         if removed:
             logger.info("Purge de snapshots: %d registros removidos.", removed)
         return int(removed)
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except SQLAlchemyError as e:
         logger.error("Falha no purge de snapshots: %s", e)
         return 0
 
@@ -371,7 +370,9 @@ def run_wal_checkpoint(mode: str = "PASSIVE") -> dict[str, Any]:
                 "checkpointed": checkpointed_val,
                 "wal_size_mb": wal_size,
             }
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    # Falhas de banco ou de I/O no arquivo WAL viram log/checkpointed=-1 com 'error'
+    # (payload de /system e do startup).
+    except (SQLAlchemyError, OSError) as e:
         logger.error("Falha no WAL checkpoint (%s): %s", mode, e)
         return {"mode": mode, "log": -1, "checkpointed": -1, "error": str(e)}
 
@@ -389,9 +390,6 @@ def purge_old_executions(retention_days: int = 90) -> int:
 
     Retorna: quantidade de registros removidos.
     """
-    # Importacao local para evitar circular import (models depende de Base)
-    from . import models as _models  # pylint: disable=C0415,cyclic-import
-
     cutoff = get_now_local() - timedelta(days=retention_days)
     # Fonte única de verdade dos status terminais (inclui PARTIAL): evita que o
     # purge preserve indefinidamente execuções PARTIAL por divergência de lista.
@@ -432,6 +430,6 @@ def purge_old_executions(retention_days: int = 90) -> int:
                 retention_days,
             )
         return int(removed)
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except SQLAlchemyError as e:
         logger.error("Falha no purge de execuções: %s", e)
         return 0

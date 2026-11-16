@@ -19,7 +19,6 @@ O módulo é carregado por caminho (não é pacote instalável) e toda requisiç
 é substituída — nenhum teste aqui toca a API real.
 """
 
-# pylint: disable=protected-access
 # O coletor e um script standalone invocado por CLI: nao expoe API publica, e o
 # que ha para testar sao justamente as funcoes internas de decisao. Mesmo padrao
 # de test_env_admin_coverage.py e test_beneficiamento_refresh_unit.py.
@@ -28,12 +27,14 @@ import argparse
 import importlib.util
 import json
 import urllib.error
+from email.message import Message
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
 from app.constants import EXECUTION_DELIVERED_STATUSES, EXECUTION_FAILED_STATUSES
+from carregadores_modulos import acessar_privado
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TRIAGEM_PATH = PROJECT_ROOT / ".claude" / "skills" / "log-triage" / "triagem.py"
@@ -47,7 +48,7 @@ def _http_error(codigo: int, motivo: str) -> urllib.error.HTTPError:
         url="http://127.0.0.1/api",
         code=codigo,
         msg=motivo,
-        hdrs=None,  # type: ignore[arg-type]
+        hdrs=Message(),
         fp=None,
     )
 
@@ -90,7 +91,9 @@ def test_ordenacao_cruzando_mes_nao_usa_comparacao_de_string(
         {"finished_at": "01/10/2026 07:00:00", "automacao": "B"},
         {"finished_at": "05/01/2027 09:00:00", "automacao": "C"},
     ]
-    ordenado = sorted(falhas, key=triagem._ordenar_por_fim, reverse=True)
+    ordenado = sorted(
+        falhas, key=acessar_privado(triagem, "_ordenar_por_fim"), reverse=True
+    )
     assert [f["automacao"] for f in ordenado] == ["C", "B", "A"]
 
     # A comparação ingênua que existia antes erra este mesmo caso.
@@ -105,7 +108,9 @@ def test_ordenacao_sem_data_valida_vai_para_o_fim(
     """Data ausente ou em formato inesperado não pode virar "a mais recente"."""
     com_data = {"finished_at": "18/09/2026 10:00:00"}
     sem_data = {"finished_at": valor}
-    assert triagem._ordenar_por_fim(sem_data) < triagem._ordenar_por_fim(com_data)
+    assert acessar_privado(triagem, "_ordenar_por_fim")(sem_data) < acessar_privado(
+        triagem, "_ordenar_por_fim"
+    )(com_data)
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +129,7 @@ def test_buscar_logs_respeita_teto_de_limit_da_api(
         return {"total_lines": 10, "lines": ["linha"]}
 
     monkeypatch.setattr(triagem, "_requisicao", falso_requisicao)
-    triagem._buscar_logs("EXEC_1", 1700)
+    acessar_privado(triagem, "_buscar_logs")("EXEC_1", 1700)
 
     limites = [int(r.split("limit=")[1].split("&")[0]) for r in pedidos]
     assert max(limites) <= triagem.LIMITE_LINHAS_LOG
@@ -141,7 +146,7 @@ def test_buscar_logs_com_linhas_minimo_nao_pede_limit_zero(
         return {"total_lines": 3, "lines": ["a", "b", "c"]}
 
     monkeypatch.setattr(triagem, "_requisicao", falso_requisicao)
-    triagem._buscar_logs("EXEC_1", 1)
+    acessar_privado(triagem, "_buscar_logs")("EXEC_1", 1)
 
     limites = [int(r.split("limit=")[1].split("&")[0]) for r in pedidos]
     assert min(limites) >= 1
@@ -160,7 +165,7 @@ def test_buscar_logs_distingue_erro_de_log_vazio(
         raise _http_error(429, "Too Many Requests")
 
     monkeypatch.setattr(triagem, "_requisicao", erro_http)
-    linhas, erro = triagem._buscar_logs("EXEC_1", 60)
+    linhas, erro = acessar_privado(triagem, "_buscar_logs")("EXEC_1", 60)
 
     assert linhas == []
     assert erro is not None and "429" in erro
@@ -175,7 +180,7 @@ def test_buscar_logs_sem_erro_devolve_erro_none(
         "_requisicao",
         lambda *_a, **_k: {"total_lines": 0, "lines": []},
     )
-    linhas, erro = triagem._buscar_logs("EXEC_1", 60)
+    linhas, erro = acessar_privado(triagem, "_buscar_logs")("EXEC_1", 60)
     assert (linhas, erro) == ([], None)
 
 
@@ -201,7 +206,9 @@ def test_coletar_falhas_ordena_o_relatorio_cronologicamente(
     monkeypatch.setattr(triagem, "_listar_status", falso_listar)
     monkeypatch.setattr(triagem, "_buscar_logs", lambda *_a, **_k: ([], None))
 
-    falhas, erros = triagem._coletar_falhas("2026-09-01T00:00:00", 60, False)
+    falhas, erros = acessar_privado(triagem, "_coletar_falhas")(
+        "2026-09-01T00:00:00", 60, False
+    )
 
     assert [f["exec_id"] for f in falhas] == ["b", "a", "c"]
     assert erros == []
@@ -233,7 +240,9 @@ def test_listar_status_segue_todas_as_paginas(
         return paginas[numero]
 
     monkeypatch.setattr(triagem, "_requisicao", falso_requisicao)
-    itens, erro = triagem._listar_status("2026-09-01T00:00:00", "ERROR")
+    itens, erro = acessar_privado(triagem, "_listar_status")(
+        "2026-09-01T00:00:00", "ERROR"
+    )
 
     assert [i["id"] for i in itens] == ["a", "b", "c", "d"]
     assert erro is None
@@ -250,7 +259,9 @@ def test_listar_status_erro_devolve_o_que_ja_coletou(
         raise _http_error(422, "Unprocessable")
 
     monkeypatch.setattr(triagem, "_requisicao", falso_requisicao)
-    itens, erro = triagem._listar_status("2026-09-01T00:00:00", "ERROR")
+    itens, erro = acessar_privado(triagem, "_listar_status")(
+        "2026-09-01T00:00:00", "ERROR"
+    )
 
     assert [i["id"] for i in itens] == ["a"]
     assert erro is not None and "422" in erro
@@ -353,7 +364,7 @@ def test_recuperada_true_quando_ha_entrega_posterior(
 ) -> None:
     """Caso real da OBP-04: falhou 5x e depois entregou — não é para agir."""
     _mock_entrega(triagem, monkeypatch, ("18/09/2026 05:32:12", "SUCCESS"))
-    estado = triagem._estado_por_automacao(
+    estado = acessar_privado(triagem, "_estado_por_automacao")(
         [
             {
                 "automacao": "OBs Paradas Fase",
@@ -370,7 +381,7 @@ def test_recuperada_false_quando_a_falha_e_mais_recente(
 ) -> None:
     """Ainda quebrada: é aqui que requeue e PR se justificam."""
     _mock_entrega(triagem, monkeypatch, ("18/09/2026 05:32:12", "SUCCESS"))
-    estado = triagem._estado_por_automacao(
+    estado = acessar_privado(triagem, "_estado_por_automacao")(
         [{"automacao": "X", "automation_id": 4, "finished_at": "18/09/2026 09:00:00"}]
     )
     assert estado["X"]["recuperada"] is False
@@ -381,7 +392,7 @@ def test_automacao_que_nunca_entregou(
 ) -> None:
     """`ultimo_sucesso` nulo com `recuperada` falso distingue de "regrediu"."""
     _mock_entrega(triagem, monkeypatch, (None, None))
-    estado = triagem._estado_por_automacao(
+    estado = acessar_privado(triagem, "_estado_por_automacao")(
         [
             {
                 "automacao": "Nova",
@@ -396,7 +407,7 @@ def test_automacao_que_nunca_entregou(
 
 def test_sem_automation_id_fica_indeterminado(triagem: ModuleType) -> None:
     """`None` é indeterminado e NÃO pode ser lido como recuperada."""
-    estado = triagem._estado_por_automacao(
+    estado = acessar_privado(triagem, "_estado_por_automacao")(
         [
             {
                 "automacao": "SemId",
@@ -413,7 +424,7 @@ def test_ultima_falha_e_a_mais_recente_cruzando_mes(
 ) -> None:
     """A agregação usa a mesma chave cronológica, não ordem de chegada."""
     _mock_entrega(triagem, monkeypatch, (None, None))
-    estado = triagem._estado_por_automacao(
+    estado = acessar_privado(triagem, "_estado_por_automacao")(
         [
             {
                 "automacao": "X",
@@ -456,7 +467,7 @@ def test_ultima_entrega_prefere_a_mais_recente_entre_success_e_partial(
         return {"items": []}
 
     monkeypatch.setattr(triagem, "_requisicao", falso_requisicao)
-    entrega, status = triagem._ultima_entrega(4)
+    entrega, status = acessar_privado(triagem, "_ultima_entrega")(4)
     assert (entrega, status) == ("18/09/2026 10:00:00", "PARTIAL")
 
 
@@ -471,7 +482,7 @@ def test_ultima_entrega_ignora_janela(
         return {"items": []}
 
     monkeypatch.setattr(triagem, "_requisicao", falso_requisicao)
-    triagem._ultima_entrega(4)
+    acessar_privado(triagem, "_ultima_entrega")(4)
     assert rotas and all("date_from" not in rota for rota in rotas)
 
 
@@ -493,7 +504,7 @@ def test_defeito_do_engine_whatsapp_nao_passa_por_transitorio(
         "Bootstrap do WhatsApp sem handshake concluido em 180000ms (timeout)",
         "Data passed to getter must include an id property but got undefined",
     ]
-    assert triagem._classificar(log) == "ambigua"
+    assert acessar_privado(triagem, "_classificar")(log) == "ambigua"
 
 
 @pytest.mark.parametrize(
@@ -508,7 +519,7 @@ def test_classificacao_dos_casos_puros(
     triagem: ModuleType, linhas: list[str], esperado: str
 ) -> None:
     """Assinatura de um só lado deve dar veredito, não ambiguidade."""
-    assert triagem._classificar(linhas) == esperado
+    assert acessar_privado(triagem, "_classificar")(linhas) == esperado
 
 
 def test_envelope_extrai_execution_end_e_ignora_ruido(triagem: ModuleType) -> None:
@@ -531,7 +542,7 @@ def test_envelope_extrai_execution_end_e_ignora_ruido(triagem: ModuleType) -> No
             }
         ),
     ]
-    envelope = triagem._resumir_envelope(linhas)
+    envelope = acessar_privado(triagem, "_resumir_envelope")(linhas)
     assert envelope["outcome_code"] == 4
     assert envelope["steps_falhos"] == ["dispatch", "commit"]
     assert envelope["trace_id"] == "obp-x"
@@ -540,7 +551,7 @@ def test_envelope_extrai_execution_end_e_ignora_ruido(triagem: ModuleType) -> No
 
 def test_envelope_de_log_sem_json_fica_vazio(triagem: ModuleType) -> None:
     """Log de automação sem envelope estruturado não pode inventar campos."""
-    assert triagem._resumir_envelope(["texto", "mais texto"]) == {}
+    assert acessar_privado(triagem, "_resumir_envelope")(["texto", "mais texto"]) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -552,18 +563,18 @@ def test_envelope_de_log_sem_json_fica_vazio(triagem: ModuleType) -> None:
 def test_cli_recusa_inteiro_nao_positivo(triagem: ModuleType, valor: str) -> None:
     """Clampar em silêncio entregava relatório válido e sem diagnóstico nenhum."""
     with pytest.raises(argparse.ArgumentTypeError):
-        triagem._inteiro_positivo(valor)
+        acessar_privado(triagem, "_inteiro_positivo")(valor)
 
 
 @pytest.mark.parametrize("valor", ["1", "14", "5000"])
 def test_cli_aceita_inteiro_positivo(triagem: ModuleType, valor: str) -> None:
     """A validação não pode recusar valor legítimo."""
-    assert triagem._inteiro_positivo(valor) == int(valor)
+    assert acessar_privado(triagem, "_inteiro_positivo")(valor) == int(valor)
 
 
 def test_requeue_exige_motivo(triagem: ModuleType) -> None:
     """`--motivo` é obrigatório: vira trilha de auditoria do que o agente fez."""
-    parser = triagem._construir_parser()
+    parser = acessar_privado(triagem, "_construir_parser")()
     with pytest.raises(SystemExit):
         parser.parse_args(["requeue", "EXEC_1"])
 

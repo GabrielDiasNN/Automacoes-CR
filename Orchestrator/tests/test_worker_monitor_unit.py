@@ -1,4 +1,3 @@
-# pylint: disable=protected-access
 """Testes unitários de worker._monitor_process (timeout, término, shutdown, intervalo de DB)."""
 
 import time
@@ -16,6 +15,7 @@ from app.constants import (
     EXECUTION_STATUS_TIMEOUT,
 )
 from app.timezone import get_now_local
+from carregadores_modulos import acessar_privado
 
 
 def _seed_running_execution(db_session: Any, exec_id: str) -> Any:
@@ -75,7 +75,9 @@ def test_monitor_detecta_timeout_via_mock_de_tempo(
         patch("worker.broadcast_event"),
         patch("worker.notifications.dispatch_alerts_async"),
     ):
-        resultado = worker._monitor_process(process, Queue(), [], task_ctx)
+        resultado = acessar_privado(worker, "_monitor_process")(
+            process, Queue(), [], task_ctx
+        )
 
     assert resultado is False
     mock_force_kill.assert_called_once_with(4321)
@@ -101,7 +103,7 @@ def test_monitor_seta_status_timeout_no_banco(
         patch("worker.broadcast_event"),
         patch("worker.notifications.dispatch_alerts_async"),
     ):
-        worker._monitor_process(process, Queue(), [], task_ctx)
+        acessar_privado(worker, "_monitor_process")(process, Queue(), [], task_ctx)
 
     execucao = (
         db_session.query(models.Execution).filter_by(id="EXEC_TIMEOUT_DB").first()
@@ -129,7 +131,9 @@ def test_monitor_detecta_terminacao_pelo_usuario(
         patch("worker.broadcast_log"),
         patch("worker.broadcast_event") as mock_broadcast_event,
     ):
-        resultado = worker._monitor_process(process, Queue(), [], task_ctx)
+        resultado = acessar_privado(worker, "_monitor_process")(
+            process, Queue(), [], task_ctx
+        )
 
     assert resultado is False
     mock_force_kill.assert_called_once_with(55)
@@ -157,7 +161,9 @@ def test_monitor_chama_finalize_terminated_task(
         patch("worker.broadcast_log"),
         patch("worker.broadcast_event"),
     ):
-        worker._monitor_process(process, Queue(), ["log runtime"], task_ctx)
+        acessar_privado(worker, "_monitor_process")(
+            process, Queue(), ["log runtime"], task_ctx
+        )
 
     persistido = (
         db_session.query(models.Execution).filter_by(id="EXEC_FINALIZE_TERM").first()
@@ -185,7 +191,7 @@ def test_monitor_finaliza_reboot_em_shutdown_com_processo_vivo(
             patch("worker.broadcast_log"),
             patch("worker.broadcast_event"),
         ):
-            resultado = worker._monitor_process(
+            resultado = acessar_privado(worker, "_monitor_process")(
                 process,
                 Queue(),
                 [],
@@ -215,7 +221,7 @@ def test_monitor_retorna_true_quando_processo_finaliza_no_shutdown(
     worker.shutdown_event.set()
     try:
         with patch("worker.broadcast_log"):
-            resultado = worker._monitor_process(
+            resultado = acessar_privado(worker, "_monitor_process")(
                 process, Queue(), [], _task_ctx("EXEC_SHUTDOWN_DONE", get_now_local())
             )
     finally:
@@ -236,7 +242,9 @@ def test_monitor_db_check_interval_respeita_5s(monkeypatch: Any) -> None:
     task_ctx = _task_ctx("EXEC_INTERVAL", get_now_local(), max_runtime=30)
 
     with patch("worker.broadcast_log"), patch("worker.time.sleep"):
-        resultado = worker._monitor_process(process, Queue(), [], task_ctx)
+        resultado = acessar_privado(worker, "_monitor_process")(
+            process, Queue(), [], task_ctx
+        )
 
     assert resultado is True
     assert mock_db.query.call_count == 1
@@ -248,6 +256,8 @@ def test_monitor_retorna_true_quando_processo_finaliza_normalmente() -> None:
     task_ctx = _task_ctx("EXEC_NORMAL_END", get_now_local())
 
     with patch("worker.broadcast_log"):
-        resultado = worker._monitor_process(process, Queue(), [], task_ctx)
+        resultado = acessar_privado(worker, "_monitor_process")(
+            process, Queue(), [], task_ctx
+        )
 
     assert resultado is True

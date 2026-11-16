@@ -1,11 +1,15 @@
 """Retenção de backups automáticos e leitura de WORKER_MAX_CONCURRENCY (sem banco)."""
 
+import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 import pytest
+import worker
 from app.runtime import get_worker_max_concurrency
 from app.services import system_runtime
+from carregadores_modulos import acessar_privado
 
 pytestmark = pytest.mark.unitario
 
@@ -83,7 +87,6 @@ def test_rota_de_versao_nao_cai_com_concorrencia_invalida(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Configuração inválida é apontada pelo diagnóstico; a rota de versão segue respondendo."""
-    from datetime import datetime  # pylint: disable=import-outside-toplevel
 
     monkeypatch.setenv("WORKER_MAX_CONCURRENCY", "0")
     monkeypatch.setattr(system_runtime, "get_schema_version", lambda: "teste")
@@ -95,13 +98,10 @@ def test_worker_concorrencia_invalida_sai_com_codigo_definido_e_log_estruturado(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Regressão (achado 22): valor inválido não derruba a importação com traceback cru."""
-    import json  # pylint: disable=import-outside-toplevel
-
-    import worker  # pylint: disable=import-outside-toplevel
 
     monkeypatch.setenv("WORKER_MAX_CONCURRENCY", "abc")
     with pytest.raises(SystemExit) as info:
-        worker._ler_max_workers()  # pylint: disable=protected-access
+        acessar_privado(worker, "_ler_max_workers")()
     assert info.value.code == worker.EXIT_CONFIG_INVALIDA
     evento = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
     assert evento["event"] == "config.invalid"

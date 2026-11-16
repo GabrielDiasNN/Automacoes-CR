@@ -7,9 +7,8 @@ Valida:
 3. Segurança Zero Trust (bloqueio sem X-API-Key e não exposição de chaves privadas).
 """
 
+from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-from tests.conftest import AUTH_HEADERS
 
 
 def test_api_unauthorized_access(client: TestClient) -> None:
@@ -44,9 +43,7 @@ def test_api_not_found(client: TestClient) -> None:
     assert response.json()["code"] == "resource_not_found"
 
 
-def test_diagnostics_and_overview_contract_version(
-    client: TestClient, db_session: Session  # pylint: disable=unused-argument
-) -> None:
+def test_diagnostics_and_overview_contract_version(client: TestClient) -> None:
     """Valida a presença de contract_version e a ausência de vazamento de segredos nos payloads principais."""
     # Executar chamada do diagnostics
     response = client.get("/api/system/diagnostics", headers=AUTH_HEADERS)

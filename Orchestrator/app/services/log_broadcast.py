@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 
@@ -15,11 +16,11 @@ class BroadcastManager(Protocol):
     async def broadcast_event(self, event_type: str, data: dict[str, Any]) -> None: ...
 
 
-class LogBroadcaster:  # pylint: disable=too-few-public-methods
+@dataclass(frozen=True)
+class LogBroadcaster:
     """Agrupa entradas e emite log mais evento de preview de forma consistente."""
 
-    def __init__(self, manager: BroadcastManager) -> None:
-        self._manager = manager
+    manager: BroadcastManager
 
     async def emit_entries(self, entries: Iterable[dict[str, Any]]) -> int:
         """Emite entradas válidas agrupadas por execução e retorna as processadas."""
@@ -33,9 +34,9 @@ class LogBroadcaster:  # pylint: disable=too-few-public-methods
                 processed += 1
 
         for exec_id, messages in grouped.items():
-            await self._manager.broadcast_log("\n".join(messages), exec_id)
+            await self.manager.broadcast_log("\n".join(messages), exec_id)
             preview = messages[-1]
-            await self._manager.broadcast_event(
+            await self.manager.broadcast_event(
                 "LOG_UPDATE",
                 {
                     "exec_id": exec_id,

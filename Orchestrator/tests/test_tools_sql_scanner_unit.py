@@ -1,10 +1,11 @@
 """Testes unitarios do scanner SQL compartilhado por oracle_catalog e validar_sql_oracle."""
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.carregadores_modulos import (
+from carregadores_modulos import (
     acessar_privado as _priv,
     carregar_tool_oracle as _carregar,
 )
@@ -138,10 +139,11 @@ def test_guard_recebe_o_texto_executado_pela_entrada_padrao(
 ) -> None:
     chamada: dict[str, Any] = {}
 
-    class _Concluido:  # pylint: disable=too-few-public-methods
-        returncode = 0
-        stdout = "{}"
-        stderr = ""
+    @dataclass
+    class _Concluido:
+        returncode: int = 0
+        stdout: str = "{}"
+        stderr: str = ""
 
     def _run_falso(args: list[str], **kwargs: Any) -> _Concluido:
         chamada["args"] = args

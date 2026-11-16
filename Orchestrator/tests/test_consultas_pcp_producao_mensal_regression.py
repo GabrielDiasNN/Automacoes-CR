@@ -52,7 +52,7 @@ SRC_ROOT = REPO_ROOT / "Produção Beneficimento" / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from beneficiamento.oracle import execute_query  # noqa: E402
+from beneficiamento.oracle import execute_query
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

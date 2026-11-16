@@ -1,6 +1,7 @@
 """Testes unitarios de lib/python/oracle_session.py (sem tocar o Oracle)."""
 
 import threading
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -73,7 +74,8 @@ def test_connect_within_fecha_conexao_que_chega_depois_do_prazo() -> None:
 def test_cancel_after_espera_o_cancel_em_curso_antes_de_liberar() -> None:
     ordem: list[str] = []
 
-    class Conexao:  # pylint: disable=too-few-public-methods
+    @dataclass
+    class Conexao:
         def cancel(self) -> None:
             ordem.append("cancel-inicio")
             threading.Event().wait(0.3)
@@ -101,8 +103,12 @@ def test_run_with_cancel_devolve_valor_e_erro() -> None:
 
 def test_run_with_cancel_cancela_no_prazo() -> None:
     liberar = threading.Event()
-    conexao = _Conexao()
-    conexao.cancel = liberar.set  # type: ignore[method-assign]
+
+    class _ConexaoQueLibera(_Conexao):
+        def cancel(self) -> None:
+            liberar.set()
+
+    conexao = _ConexaoQueLibera()
 
     resultado = oracle_session.run_with_cancel(
         lambda: liberar.wait(timeout=5), lambda: conexao, 0.1
@@ -223,7 +229,7 @@ def test_cancel_tardio_depois_do_bloco_nao_cancela_a_conexao(
 ) -> None:
     disparos: list[Any] = []
 
-    class _TimerFalso:  # pylint: disable=too-few-public-methods
+    class _TimerFalso:
         def __init__(self, _segundos: float, funcao: Any) -> None:
             disparos.append(funcao)
             self.daemon = False
@@ -250,10 +256,13 @@ def test_cancel_tardio_depois_do_bloco_nao_cancela_a_conexao(
     assert not disparado.is_set()
 
 
-class _ConexaoOci:  # pylint: disable=too-few-public-methods
-    def __init__(self) -> None:
-        self.module = self.action = self.client_identifier = ""
-        self.client_info = self.db_op = ""
+@dataclass
+class _ConexaoOci:
+    module: str = ""
+    action: str = ""
+    client_identifier: str = ""
+    client_info: str = ""
+    db_op: str = ""
 
 
 def test_aplicar_metadados_oci_trunca_nos_limites_do_oracle() -> None:
@@ -274,7 +283,8 @@ def test_aplicar_metadados_oci_trunca_nos_limites_do_oracle() -> None:
 
 
 def test_aplicar_metadados_oci_falha_do_driver_vira_mensagem_sem_excecao() -> None:
-    class _Recusa:  # pylint: disable=too-few-public-methods
+    @dataclass
+    class _Recusa:
         def __setattr__(self, nome: str, valor: Any) -> None:
             raise AttributeError(f"atributo {nome} recusado pelo servidor")
 
@@ -288,7 +298,7 @@ def test_aplicar_metadados_oci_falha_do_driver_vira_mensagem_sem_excecao() -> No
 def test_cancel_after_consome_break_quando_o_prazo_coincide_com_o_fim() -> None:
     """Prazo estourado no instante em que a chamada terminou: o ping limpa o break."""
 
-    class Conexao:  # pylint: disable=too-few-public-methods
+    class Conexao:
         def __init__(self) -> None:
             self.pings = 0
 
@@ -306,9 +316,9 @@ def test_cancel_after_consome_break_quando_o_prazo_coincide_com_o_fim() -> None:
 
 
 def test_cancel_after_sem_disparo_nao_faz_ping() -> None:
-    class Conexao:  # pylint: disable=too-few-public-methods
-        def __init__(self) -> None:
-            self.pings = 0
+    @dataclass
+    class Conexao:
+        pings: int = 0
 
         def ping(self) -> None:
             self.pings += 1
@@ -329,14 +339,17 @@ def test_call_timeout_aplicado_zera_ao_sair() -> None:
 
 
 def test_call_timeout_aplicado_devolve_aviso_quando_driver_recusa() -> None:
-    class _Client122:  # pylint: disable=too-few-public-methods
+    @dataclass
+    class _Client122:
         @property
         def call_timeout(self) -> int:
             return 0
 
         @call_timeout.setter
         def call_timeout(self, _valor: int) -> None:
-            raise RuntimeError("DPI-1050: Oracle Client library is at version 12.2")
+            raise oracledb.NotSupportedError(
+                "DPI-1050: Oracle Client library is at version 12.2"
+            )
 
     with oracle_session.call_timeout_aplicado(_Client122(), 1.0) as info:
         assert info.applied is False

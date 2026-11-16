@@ -6,6 +6,7 @@ import app.main as main_module
 import pytest
 from app import models
 from app.timezone import get_now_local
+from carregadores_modulos import acessar_privado
 
 
 def _execution(
@@ -44,7 +45,7 @@ def test_startup_recovery_preserves_pending_and_fails_running(
 
     monkeypatch.setattr(main_module, "SessionLocal", lambda: db_session)
 
-    main_module._cleanup_zombie_tasks()  # pylint: disable=protected-access
+    acessar_privado(main_module, "_cleanup_zombie_tasks")()
 
     statuses = {
         row.id: row.status

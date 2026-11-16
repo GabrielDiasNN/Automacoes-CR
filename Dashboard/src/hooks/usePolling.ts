@@ -45,6 +45,17 @@ export interface PollingState<T> {
 
 const DEFAULT_RATE_LIMIT_BACKOFF_S = 30;
 
+/** Devolve a mesma referência enquanto os elementos forem os mesmos (Object.is,
+ *  a comparação que o React faz em cada dependência). Permite passar as `deps`
+ *  do chamador como UM item das deps do efeito, sem spread. */
+function useStableDeps(deps: unknown[]): unknown[] {
+  const ref = useRef(deps);
+  const prev = ref.current;
+  const same = prev.length === deps.length && deps.every((d, i) => Object.is(d, prev[i]));
+  if (!same) ref.current = deps;
+  return ref.current;
+}
+
 /** Faz polling de um endpoint com intervalo configurável.
  *  Mantém o último dado válido durante refresh (sem flicker).
  *  `deps` força um refresh imediato (reiniciando o intervalo) quando muda —
@@ -62,6 +73,7 @@ export function usePolling<T>(
   options: PollingOptions<T> = {},
 ): PollingState<T> {
   const { cacheKey, cacheTtlMs = DEFAULT_CACHE_TTL_MS, skipIfFresh = false, onData } = options;
+  const stableDeps = useStableDeps(deps);
   // Semente lida uma única vez, no mount (initializer lazy).
   const [seeded] = useState(() =>
     cacheKey ? readCache<T>(cacheKey, cacheTtlMs) : undefined,
@@ -197,8 +209,7 @@ export function usePolling<T>(
     if (intervalMs <= 0) return;
     const id = setInterval(() => void refresh(), intervalMs);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps do chamador entram como array dinâmico (spread); refresh é estável (useCallback)
-  }, [refresh, intervalMs, ...deps]);
+  }, [refresh, intervalMs, stableDeps]);
 
   return { data, loading, error, lastUpdated, rateLimitedUntil, refreshQueued, refresh };
 }

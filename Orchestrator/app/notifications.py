@@ -23,6 +23,9 @@ from app.subprocess_env import build_subprocess_env
 from app.timezone import get_now_local
 
 
+# RESIDUAL (too-few-public-methods): Protocol estrutural de atributos (sem metodos),
+# usado para tipar tanto a entidade ORM quanto os dublês de teste; nao e classe de
+# dados concreta, entao dataclass nao se aplica.
 class AlertAutomation(Protocol):  # pylint: disable=too-few-public-methods
     """Contrato mínimo de automação consumido por dispatch_alerts.
 
@@ -37,6 +40,7 @@ class AlertAutomation(Protocol):  # pylint: disable=too-few-public-methods
     notification_channels: Any
 
 
+# RESIDUAL (too-few-public-methods): mesmo caso de AlertAutomation (Protocol de atributos).
 class AlertExecution(Protocol):  # pylint: disable=too-few-public-methods
     """Contrato mínimo de execução consumido por dispatch_alerts."""
 
@@ -133,6 +137,17 @@ def reset_alert_state(automation_id: int) -> None:
         _alert_state.pop(automation_id, None)
 
 
+def count_active_throttles(window_seconds: float = 600.0) -> int:
+    """Quantas automacoes tiveram alerta enviado nos ultimos `window_seconds`."""
+    now = time.time()
+    with _state_lock:
+        return sum(
+            1
+            for state in _alert_state.values()
+            if (now - state["last_sent"]) < window_seconds
+        )
+
+
 def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = "") -> bool:
     """Dispara alerta via script nativo de WhatsApp do projeto."""
     logger.info("Enviando alerta WhatsApp para %s", task_name)
@@ -185,7 +200,7 @@ def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = "") -> bo
     except subprocess.TimeoutExpired:
         logger.error("Timeout ao enviar alerta WhatsApp para %s", task_name)
         return False
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
         logger.error("Erro ao enviar alerta WhatsApp: %s", e)
         return False
 
@@ -260,7 +275,7 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = "") -> bool:
             "E-mail retornou code %d. Stderr: %s", result.returncode, stderr_decoded
         )
         return False
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
         logger.error("Erro ao enviar alerta e-mail: %s", e)
         return False
 
@@ -340,7 +355,7 @@ def _dispatch_infra_whatsapp(component: str, full_message: str) -> bool:
             "Timeout ao enviar alerta de infraestrutura via WhatsApp: %s", component
         )
         return False
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
         logger.error("Erro ao enviar alerta de infraestrutura via WhatsApp: %s", e)
         return False
 
@@ -403,7 +418,7 @@ def send_infra_alert(component: str, message: str) -> None:
                 check=False,
             )
             email_sent = result.returncode == 0
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
             logger.error("Erro ao enviar alerta de infraestrutura via e-mail: %s", e)
 
     if whatsapp_sent or email_sent:

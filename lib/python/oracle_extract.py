@@ -27,7 +27,7 @@ import json
 import os
 import shutil
 import socket
-import subprocess  # nosec B404
+import subprocess
 import tempfile
 import time
 from collections.abc import Callable
@@ -36,6 +36,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+import oracle_queue
 import oracledb
 from oracle_client import (
     DRIVER_MODE_BRIDGE,
@@ -46,6 +47,7 @@ from oracle_client import (
     get_driver_mode,
     init_oracle_thick_mode,
 )
+from oracle_session import is_session_drop
 
 LogFn = Callable[..., None]
 
@@ -134,11 +136,11 @@ def probe_wan_health(
         try:
             sock.connect(destino[4])
             rtts.append((time.perf_counter() - start) * 1000.0)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except OSError as exc:
             failures += 1
             last_error = str(exc)
         finally:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(OSError):
                 sock.close()
 
     success_count = len(rtts)
@@ -379,6 +381,7 @@ def _registrar_saude_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> No
             "DEBUG",
             exec_id,
         )
+    # Residual: telemetria WAN nunca bloqueia a extração (contrato); o callback `log` é injetado pelo chamador e pode levantar qualquer exceção, que sem este catch abortaria a consulta.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         log(f"Aviso não-bloqueante no pre-flight WAN: {exc}", "DEBUG", exec_id)
 
@@ -463,7 +466,7 @@ def run_node_bridge(
             str(prazo),
         ]
         try:
-            proc = subprocess.run(  # nosec B603
+            proc = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
@@ -488,22 +491,89 @@ def _fetch_all_queue(
 ) -> tuple[list[str], list[Any]]:
     """`fetch_all` pela fila SMB do worker no TSplus (`ORACLE_DRIVER_MODE=queue`)."""
     log("Executando consulta via Oracle Queue SMB (TSplus Worker)...", "INFO", exec_id)
-    # pylint: disable-next=import-outside-toplevel
-    from oracle_queue import execute_query, get_queue_timeout
-
     # Tipos iguais aos do driver nativo (int/float, datetime, None). Os params
     # viajam à parte e o worker os passa ao Oracle como bind variables. O prazo
-    # vem de ORACLE_QUEUE_TIMEOUT_SECONDS (o driver nativo não tinha teto).
-    resultado_q = execute_query(sql, timeout_seconds=get_queue_timeout(), params=params)
+    # vem de ORACLE_QUEUE_TIMEOUT_SECONDS (ou ORACLE_QUEUE_DEADLINE_EPOCH).
+    t0 = time.perf_counter()
+    enforce_queue_deadline("pre-query queue")
+    resultado_q = oracle_queue.execute_query(
+        sql, timeout_seconds=oracle_queue.get_queue_timeout(), params=params
+    )
+    total_ms = int((time.perf_counter() - t0) * 1000)
+    db_ms = resultado_q.raw_meta.get("db_ms")
+    format_ms = resultado_q.raw_meta.get("format_ms")
+    smb_ms = (
+        max(0, total_ms - int(resultado_q.elapsed_ms))
+        if resultado_q.elapsed_ms is not None
+        else None
+    )
+    meta_parts = [f"worker={resultado_q.worker}"]
+    if resultado_q.elapsed_ms is not None:
+        meta_parts.append(f"worker_ms={resultado_q.elapsed_ms}")
+    if db_ms is not None:
+        meta_parts.append(f"db_ms={db_ms}")
+    if format_ms is not None:
+        meta_parts.append(f"format_ms={format_ms}")
+    if smb_ms is not None:
+        meta_parts.append(f"smb_ms={smb_ms}")
+    meta_parts.append(f"total_ms={total_ms}")
     log(
-        f"Query executada com sucesso via Queue. Linhas retornadas: {resultado_q.row_count} "
-        f"(worker {resultado_q.worker}, {resultado_q.elapsed_ms} ms no TSplus)",
+        f"Query executada com sucesso via Queue. Linhas retornadas: "
+        f"{resultado_q.row_count} ({', '.join(meta_parts)})",
         "INFO",
         exec_id,
     )
     return resultado_q.columns, list(resultado_q.rows)
 
 
+def classify_oracle_exit_code(exc: BaseException) -> int:
+    """Mapeia falha Oracle/Queue para exit code Python determinístico.
+
+    Códigos não-transitórios (não devem disparar nova rodada PowerShell):
+    - 6: Worker Oracle offline (heartbeat expirado / não reivindicado)
+    - 7: Prazo global da fila estourado (`oracle_queue.OracleQueueTimeoutError`);
+      repetir após o prazo global não faz sentido e dobraria a carga no Oracle
+    - 5: Erro determinístico (SQL bloqueado, erro ORA determinístico, configuração)
+    - 1: Demais falhas, inclusive queda de sessão Oracle (ORA-03113 etc.), que é
+      transitória, e o `TimeoutError` genérico (timeout do Oracle Bridge Node ou
+      do connect dos modos thick/auto). Ambos são repetíveis pelo
+      Invoke-OraclePythonScript.
+
+    Um OracleQueueError genérico (erro reportado pelo worker) vira 5, salvo quando a
+    mensagem indica queda de sessão (SESSION_DROP_MARKERS), que vira 1.
+    """
+    if isinstance(exc, oracle_queue.OracleQueueWorkerOfflineError):
+        return 6
+    if isinstance(exc, oracle_queue.OracleQueueTimeoutError):
+        return 7
+    if isinstance(exc, oracle_queue.OracleQueueBlockedError):
+        return 5
+    if isinstance(exc, oracle_queue.OracleQueueError) and not isinstance(
+        exc, oracle_queue.OracleQueueTransientError
+    ):
+        # Queda de sessão reportada pelo worker (ORA-03113 etc.) é transitória.
+        if is_session_drop(str(exc)) or is_session_drop(getattr(exc, "message", "")):
+            return 1
+        return 5
+    return 1
+
+
+def enforce_queue_deadline(context_label: str = "extracao") -> None:
+    """Levanta OracleQueueTimeoutError se ORACLE_QUEUE_DEADLINE_EPOCH já passou."""
+    raw = (os.environ.get("ORACLE_QUEUE_DEADLINE_EPOCH") or "").strip()
+    if not raw:
+        return
+    try:
+        deadline = float(raw)
+    except ValueError:
+        return
+    if 0 < deadline <= time.time():
+        raise oracle_queue.OracleQueueTimeoutError(
+            f"Prazo global de execução atingido antes de concluir: {context_label}."
+        )
+
+
+# Residual: assinatura usada por automações e testes com estes nomes; agrupar os parâmetros mudaria todos os pontos de chamada.
 def fetch_all(  # pylint: disable=too-many-arguments
     creds: OracleCredentials,
     sql: str,

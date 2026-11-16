@@ -9,7 +9,7 @@
 }
 
 Describe "Send-WhatsApp.ps1" {
-    It "encerra com ExitCode 22 quando app.enabled ou target.enabled esta desabilitado (bool ou string) e nao grava BatchResultFile" {
+    It "encerra com ExitCode 23 (nao 22) quando app.enabled ou target.enabled esta desabilitado (bool ou string) e nao grava BatchResultFile" {
         $dir = Join-Path $TestDrive ("send_wa_disabled_" + [guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
         try {
@@ -27,7 +27,7 @@ Describe "Send-WhatsApp.ps1" {
 
             $out = & $psExe -NoProfile -ExecutionPolicy Bypass -File $sendScript `
                 -ConfigPath $cfgPath -Mode BATCH -BatchInputFile $batchInput -BatchResultFile $batchResult 2>&1
-            $LASTEXITCODE | Should -Be 22
+            $LASTEXITCODE | Should -Be 23
             ($out -join "`n") | Should -Match "desabilitado"
             Test-Path -LiteralPath $batchResult | Should -BeFalse
         }

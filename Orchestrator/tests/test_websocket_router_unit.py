@@ -27,9 +27,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app import models
 from app.routers import websocket as websocket_router
 from app.routers.websocket import ConnectionManager, _send_log_replay, _validate_ws_key
+from app.schemas.system import (
+    WS_MAX_LOG_ENTRIES,
+)
 from app.services import ws_auth
+from conftest import AUTH_HEADERS, TEST_AUTH_VALUE
 from fastapi import WebSocketDisconnect
-from tests.conftest import AUTH_HEADERS, TEST_AUTH_VALUE
 
 # ---------------------------------------------------------------------------
 # ConnectionManager
@@ -522,9 +525,6 @@ def test_broadcast_logs_endpoint_rejeita_lote_acima_do_teto(client: Any) -> None
     # Achado #42: os endpoints aceitavam dict livre, sem schema nem limite de
     # itens. O flusher do Worker manda 1 entrada por execução ativa, então o
     # teto é folgado — serve contra payload não-limitado de chamador arbitrário.
-    from app.schemas.system import (  # pylint: disable=import-outside-toplevel
-        WS_MAX_LOG_ENTRIES,
-    )
 
     excedente = [
         {"exec_id": f"EXEC_{i}", "message": "linha"}

@@ -1,4 +1,3 @@
-# pylint: disable=protected-access
 """Testes unitários de funções puras de app/services/portfolio_catalog.py."""
 
 from datetime import timedelta
@@ -9,6 +8,7 @@ from app import models, schemas
 from app.services import portfolio_catalog as pc
 from app.services.portfolio_manifest import CatalogManifest
 from app.timezone import get_now_local
+from carregadores_modulos import acessar_privado
 
 
 def _manifest(**overrides: Any) -> CatalogManifest:
@@ -52,7 +52,7 @@ def _health_item(**overrides: Any) -> schemas.PortfolioHealthItem:
 
 def test_sla_state_sem_sla_configurado_retorna_unknown() -> None:
     assert (
-        pc._sla_state(
+        acessar_privado(pc, "_sla_state")(
             None,
             schedule_lag_minutes=100,
             last_status="ERROR",
@@ -64,7 +64,7 @@ def test_sla_state_sem_sla_configurado_retorna_unknown() -> None:
 
 def test_sla_state_violado_por_atraso_de_agendamento() -> None:
     assert (
-        pc._sla_state(
+        acessar_privado(pc, "_sla_state")(
             30, schedule_lag_minutes=45, last_status=None, last_failure_age_minutes=None
         )
         == "breached"
@@ -73,7 +73,7 @@ def test_sla_state_violado_por_atraso_de_agendamento() -> None:
 
 def test_sla_state_violado_por_falha_persistente() -> None:
     assert (
-        pc._sla_state(
+        acessar_privado(pc, "_sla_state")(
             30,
             schedule_lag_minutes=None,
             last_status="ERROR",
@@ -85,7 +85,7 @@ def test_sla_state_violado_por_falha_persistente() -> None:
 
 def test_sla_state_recovering_quando_falha_recente_dentro_do_sla() -> None:
     assert (
-        pc._sla_state(
+        acessar_privado(pc, "_sla_state")(
             30,
             schedule_lag_minutes=None,
             last_status="ERROR",
@@ -97,7 +97,7 @@ def test_sla_state_recovering_quando_falha_recente_dentro_do_sla() -> None:
 
 def test_sla_state_ok_quando_dentro_do_esperado() -> None:
     assert (
-        pc._sla_state(
+        acessar_privado(pc, "_sla_state")(
             30,
             schedule_lag_minutes=0,
             last_status="SUCCESS",
@@ -113,7 +113,7 @@ def test_sla_state_ok_quando_dentro_do_esperado() -> None:
 
 
 def test_health_status_nao_registrado_tem_prioridade_maxima() -> None:
-    resultado = pc._health_status(
+    resultado = acessar_privado(pc, "_health_status")(
         automation_registered=False,
         docs_status="complete",
         drift_count=0,
@@ -124,7 +124,7 @@ def test_health_status_nao_registrado_tem_prioridade_maxima() -> None:
 
 
 def test_health_status_sla_violado() -> None:
-    resultado = pc._health_status(
+    resultado = acessar_privado(pc, "_health_status")(
         automation_registered=True,
         docs_status="complete",
         drift_count=0,
@@ -136,7 +136,7 @@ def test_health_status_sla_violado() -> None:
 
 def test_health_status_atencao_por_docs_ou_drift() -> None:
     assert (
-        pc._health_status(
+        acessar_privado(pc, "_health_status")(
             automation_registered=True,
             docs_status="missing",
             drift_count=0,
@@ -146,7 +146,7 @@ def test_health_status_atencao_por_docs_ou_drift() -> None:
         == "attention"
     )
     assert (
-        pc._health_status(
+        acessar_privado(pc, "_health_status")(
             automation_registered=True,
             docs_status="complete",
             drift_count=2,
@@ -159,7 +159,7 @@ def test_health_status_atencao_por_docs_ou_drift() -> None:
 
 def test_health_status_usa_operational_state_como_fallback() -> None:
     assert (
-        pc._health_status(
+        acessar_privado(pc, "_health_status")(
             automation_registered=True,
             docs_status="complete",
             drift_count=0,
@@ -169,7 +169,7 @@ def test_health_status_usa_operational_state_como_fallback() -> None:
         == "running"
     )
     assert (
-        pc._health_status(
+        acessar_privado(pc, "_health_status")(
             automation_registered=True,
             docs_status="complete",
             drift_count=0,
@@ -187,22 +187,22 @@ def test_health_status_usa_operational_state_como_fallback() -> None:
 
 def test_portfolio_operational_status_incidente_por_nao_registrado() -> None:
     item = _health_item(health_status="not_registered")
-    assert pc._portfolio_operational_status(item) == "incident"
+    assert acessar_privado(pc, "_portfolio_operational_status")(item) == "incident"
 
 
 def test_portfolio_operational_status_incidente_por_drift_critico() -> None:
     item = _health_item(criticality="critical", drift_count=1, docs_status="complete")
-    assert pc._portfolio_operational_status(item) == "incident"
+    assert acessar_privado(pc, "_portfolio_operational_status")(item) == "incident"
 
 
 def test_portfolio_operational_status_atencao_por_delete_candidate() -> None:
     item = _health_item(review_status="delete_candidate")
-    assert pc._portfolio_operational_status(item) == "attention"
+    assert acessar_privado(pc, "_portfolio_operational_status")(item) == "attention"
 
 
 def test_portfolio_operational_status_saudavel_sem_pendencias() -> None:
     item = _health_item(docs_status="complete", drift_count=0, sla_state="ok")
-    assert pc._portfolio_operational_status(item) == "healthy"
+    assert acessar_privado(pc, "_portfolio_operational_status")(item) == "healthy"
 
 
 def test_count_portfolio_signals_agrega_corretamente() -> None:
@@ -233,7 +233,7 @@ def test_count_portfolio_signals_agrega_corretamente() -> None:
             drift_count=1,
         ),
     ]
-    counts = pc._count_portfolio_signals(items)
+    counts = acessar_privado(pc, "_count_portfolio_signals")(items)
 
     assert counts["incident_items"] == 1  # apenas A (not_registered)
     assert counts["drift_items"] == 2  # B e runtime-9
@@ -254,7 +254,7 @@ def test_portfolio_top_issue_prioriza_delete_candidate_sobre_o_resto() -> None:
         "drift_items": 1,
         "sla_breached_items": 1,
     }
-    top_issue, _ = pc._portfolio_top_issue(counts)
+    top_issue, _ = acessar_privado(pc, "_portfolio_top_issue")(counts)
     assert "candidatas à exclusão" in top_issue
 
 
@@ -266,7 +266,7 @@ def test_portfolio_top_issue_sem_pendencias() -> None:
         "drift_items": 0,
         "sla_breached_items": 0,
     }
-    top_issue, action = pc._portfolio_top_issue(counts)
+    top_issue, action = acessar_privado(pc, "_portfolio_top_issue")(counts)
     assert "consistente" in top_issue
     assert action is None
 
@@ -278,7 +278,7 @@ def test_portfolio_top_issue_sem_pendencias() -> None:
 
 def test_build_portfolio_summary_status_incident() -> None:
     items = [_health_item(catalog_id="X", health_status="not_registered")]
-    summary = pc._build_portfolio_summary(items)
+    summary = acessar_privado(pc, "_build_portfolio_summary")(items)
     assert summary.status == "incident"
     assert summary.total_items == 1
 
@@ -289,7 +289,7 @@ def test_build_portfolio_summary_status_incident() -> None:
 
 
 def test_build_review_status_cadastro_runtime_orfao_vira_delete_candidate() -> None:
-    status, reasons = pc._build_review_status(
+    status, reasons = acessar_privado(pc, "_build_review_status")(
         catalog_id="runtime-42",
         enabled=False,
         next_run=None,
@@ -304,7 +304,7 @@ def test_build_review_status_cadastro_runtime_orfao_vira_delete_candidate() -> N
 
 
 def test_build_review_status_ativa_sem_pendencias() -> None:
-    status, reasons = pc._build_review_status(
+    status, reasons = acessar_privado(pc, "_build_review_status")(
         catalog_id="TEST-01",
         enabled=True,
         next_run=get_now_local() + timedelta(hours=1),
@@ -327,7 +327,7 @@ def test_dependency_status_not_used_quando_dependencia_desativada() -> None:
     manifest = _manifest(
         dependencies={"oracle": False, "outlook": False, "whatsapp": False}
     )
-    resultado = pc._dependency_status(manifest, None)
+    resultado = acessar_privado(pc, "_dependency_status")(manifest, None)
     assert resultado == {
         "oracle": "not_used",
         "outlook": "not_used",
@@ -340,7 +340,7 @@ def test_dependency_status_degraded_por_palavra_chave_no_failure_reason() -> Non
         dependencies={"oracle": True, "outlook": False, "whatsapp": False}
     )
     snapshot = {"status": "ERROR", "failure_reason": "ORA-12154 timeout"}
-    resultado = pc._dependency_status(manifest, snapshot)
+    resultado = acessar_privado(pc, "_dependency_status")(manifest, snapshot)
     assert resultado["oracle"] == "degraded"
 
 
@@ -349,7 +349,7 @@ def test_dependency_status_healthy_quando_ultima_execucao_entregue() -> None:
         dependencies={"oracle": True, "outlook": False, "whatsapp": False}
     )
     snapshot = {"status": "SUCCESS", "failure_reason": None}
-    resultado = pc._dependency_status(manifest, snapshot)
+    resultado = acessar_privado(pc, "_dependency_status")(manifest, snapshot)
     assert resultado["oracle"] == "healthy"
 
 
@@ -359,29 +359,37 @@ def test_dependency_status_healthy_quando_ultima_execucao_entregue() -> None:
 
 
 def test_minutes_since_none_retorna_none() -> None:
-    assert pc._minutes_since(None) is None
+    assert acessar_privado(pc, "_minutes_since")(None) is None
 
 
 def test_minutes_since_calcula_diferenca_positiva() -> None:
     timestamp = get_now_local() - timedelta(minutes=10)
-    resultado = pc._minutes_since(timestamp)
+    resultado = acessar_privado(pc, "_minutes_since")(timestamp)
     assert resultado is not None
     assert resultado >= 9
 
 
 def test_schedule_lag_minutes_nula_com_execucao_ativa() -> None:
     next_run = get_now_local() - timedelta(minutes=5)
-    assert pc._schedule_lag_minutes(next_run, active_execution_count=1) is None
+    assert (
+        acessar_privado(pc, "_schedule_lag_minutes")(next_run, active_execution_count=1)
+        is None
+    )
 
 
 def test_schedule_lag_minutes_zero_quando_agendamento_no_futuro() -> None:
     next_run = get_now_local() + timedelta(minutes=5)
-    assert pc._schedule_lag_minutes(next_run, active_execution_count=0) == 0
+    assert (
+        acessar_privado(pc, "_schedule_lag_minutes")(next_run, active_execution_count=0)
+        == 0
+    )
 
 
 def test_schedule_lag_minutes_positivo_quando_atrasado() -> None:
     next_run = get_now_local() - timedelta(minutes=12)
-    resultado = pc._schedule_lag_minutes(next_run, active_execution_count=0)
+    resultado = acessar_privado(pc, "_schedule_lag_minutes")(
+        next_run, active_execution_count=0
+    )
     assert resultado is not None
     assert resultado >= 11
 
@@ -397,7 +405,7 @@ def test_sort_health_item_prioriza_criticidade_maior() -> None:
         _health_item(catalog_id="critical", name="Alfa", criticality="critical"),
         _health_item(catalog_id="high", name="Beta", criticality="high"),
     ]
-    ordenados = sorted(itens, key=pc._sort_health_item)
+    ordenados = sorted(itens, key=acessar_privado(pc, "_sort_health_item"))
     assert [item.catalog_id for item in ordenados] == ["critical", "high", "low"]
 
 
@@ -406,7 +414,7 @@ def test_sort_health_item_desempata_por_nome() -> None:
         _health_item(catalog_id="b", name="Zebra", criticality="high"),
         _health_item(catalog_id="a", name="Alfa", criticality="high"),
     ]
-    ordenados = sorted(itens, key=pc._sort_health_item)
+    ordenados = sorted(itens, key=acessar_privado(pc, "_sort_health_item"))
     assert [item.catalog_id for item in ordenados] == ["a", "b"]
 
 
@@ -424,7 +432,9 @@ def test_manifest_runtime_mismatches_detecta_divergencia(tmp_path: Path) -> None
         max_retries=0,
     )
 
-    issues = pc._manifest_runtime_mismatches(tmp_path, manifest, auto)
+    issues = acessar_privado(pc, "_manifest_runtime_mismatches")(
+        tmp_path, manifest, auto
+    )
 
     codigos = {issue.code for issue in issues}
     assert "max_runtime_mismatch" in codigos
@@ -445,7 +455,9 @@ def test_manifest_runtime_mismatches_retorna_vazio_quando_alinhado(
         max_retries=0,
     )
 
-    issues = pc._manifest_runtime_mismatches(tmp_path, manifest, auto)
+    issues = acessar_privado(pc, "_manifest_runtime_mismatches")(
+        tmp_path, manifest, auto
+    )
 
     assert not issues
 
@@ -462,7 +474,9 @@ def test_build_portfolio_lookups_usa_jobs_recebido_sem_reconsultar(
 
     monkeypatch.setattr(pc, "list_scheduled_jobs", _falha_se_chamado)
 
-    lookups = pc._build_portfolio_lookups(db_session, automation_ids=[], jobs=[])
+    lookups = acessar_privado(pc, "_build_portfolio_lookups")(
+        db_session, automation_ids=[], jobs=[]
+    )
 
     assert not lookups["next_run_lookup"]
 
@@ -480,6 +494,6 @@ def test_build_portfolio_lookups_sem_jobs_recalcula_internamente(
 
     monkeypatch.setattr(pc, "list_scheduled_jobs", _rastreia)
 
-    pc._build_portfolio_lookups(db_session, automation_ids=[])
+    acessar_privado(pc, "_build_portfolio_lookups")(db_session, automation_ids=[])
 
     assert len(chamadas) == 1

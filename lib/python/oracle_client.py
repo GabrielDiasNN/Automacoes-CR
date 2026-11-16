@@ -100,7 +100,7 @@ def aplicar_metadados_oci(
         connection.client_identifier = identificador[:64]
         connection.client_info = f"PID:{os.getpid()}|HOST:{node}"[:64]
         connection.db_op = db_op[:32]
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except (oracledb.Error, AttributeError, TypeError) as exc:
         return str(exc)
     return None
 
@@ -164,6 +164,8 @@ _MSG_THIN_FIXO = (
 )
 
 
+# Mantido com 6 parâmetros nomeados: a assinatura é chamada pelo Produção Beneficimento
+# e pelos testes com esses nomes, e agrupá-los mudaria todos esses pontos de chamada.
 def connect_adaptive(  # pylint: disable=too-many-arguments
     *,
     user: str,

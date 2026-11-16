@@ -2,7 +2,14 @@
 Testes unitários para o módulo de segurança e higienização de logs e payloads.
 """
 
+import json
+import logging
+import sys
+
 from app.constants import MAX_DB_LOGS_CHARS
+from app.logger_setup import (
+    OrchestratorJsonFormatter,
+)
 from app.security import (
     mask_env_content,
     sanitize_log_payload,
@@ -131,13 +138,6 @@ def test_truncate_log_payload_marks_large_payload() -> None:
 
 
 def test_json_formatter_sanitizes_exception_traceback() -> None:
-    import json  # pylint: disable=import-outside-toplevel
-    import logging  # pylint: disable=import-outside-toplevel
-    import sys  # pylint: disable=import-outside-toplevel
-
-    from app.logger_setup import (  # pylint: disable=import-outside-toplevel
-        OrchestratorJsonFormatter,
-    )
 
     formatter = OrchestratorJsonFormatter(component="QA")
     try:

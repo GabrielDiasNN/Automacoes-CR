@@ -5,9 +5,11 @@ Um teste por defeito, com a âncora do achado no docstring.
 
 import os
 import sys
+from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
+from app import models
 from app.constants import MAX_DB_LOGS_CHARS
 from app.middleware import _api_keys_match
 from app.path_safety import is_contained
@@ -25,22 +27,21 @@ _IRMAO_MESMO_PREFIXO = _RAIZ + "_bkp"
 _IRMAO_SUFIXO_NUMERICO = _RAIZ + "2"
 
 
-class _FakeClient:  # pylint: disable=too-few-public-methods
-    def __init__(self, host: str) -> None:
-        self.host = host
+@dataclass
+class _FakeClient:
+    host: str
 
 
-class _FakeRequest:  # pylint: disable=too-few-public-methods
+@dataclass
+class _FakeRequest:
     """Substituto mínimo de `fastapi.Request` para `get_client_ip`."""
 
-    def __init__(self, host: str, headers: dict[str, str] | None = None) -> None:
-        self.client = _FakeClient(host)
-        self.headers = headers or {}
+    host: str
+    headers: dict[str, str]
 
-
-class _FakeExecution:  # pylint: disable=too-few-public-methods
-    def __init__(self, artifacts: str | None) -> None:
-        self.artifacts = artifacts
+    @property
+    def client(self) -> _FakeClient:
+        return _FakeClient(self.host)
 
 
 # ---------------------------------------------------------------------------
@@ -100,25 +101,21 @@ def test_script_path_fora_do_projeto_e_rejeitado() -> None:
 @pytest.mark.unitario
 def test_config_sensivel_nao_e_baixavel_como_artefato() -> None:
     """`?filename=whatsapp-config.json` devolvia o contactId do destinatário."""
-    execucao = _FakeExecution(artifacts='["relatorio.xlsx"]')
-    assert _artifact_is_downloadable(cast(Any, execucao), "relatorio.xlsx") is True
-    assert (
-        _artifact_is_downloadable(cast(Any, execucao), "whatsapp-config.json") is False
-    )
-    assert (
-        _artifact_is_downloadable(cast(Any, execucao), "delivery_state.json") is False
-    )
+    execucao = models.Execution(artifacts='["relatorio.xlsx"]')
+    assert _artifact_is_downloadable(execucao, "relatorio.xlsx") is True
+    assert _artifact_is_downloadable(execucao, "whatsapp-config.json") is False
+    assert _artifact_is_downloadable(execucao, "delivery_state.json") is False
 
 
 @pytest.mark.unitario
 def test_execucao_legada_sem_artifacts_cai_na_allowlist_de_extensao() -> None:
     """Compatibilidade: `artifacts` nulo não pode liberar arquivo de estado."""
-    legada = _FakeExecution(artifacts=None)
-    assert _artifact_is_downloadable(cast(Any, legada), "relatorio.xlsx") is True
-    assert _artifact_is_downloadable(cast(Any, legada), "relatorio.pdf") is True
-    assert _artifact_is_downloadable(cast(Any, legada), "whatsapp-config.json") is False
-    assert _artifact_is_downloadable(cast(Any, legada), "run.ps1") is False
-    assert _artifact_is_downloadable(cast(Any, legada), "config.json.bak") is False
+    legada = models.Execution(artifacts=None)
+    assert _artifact_is_downloadable(legada, "relatorio.xlsx") is True
+    assert _artifact_is_downloadable(legada, "relatorio.pdf") is True
+    assert _artifact_is_downloadable(legada, "whatsapp-config.json") is False
+    assert _artifact_is_downloadable(legada, "run.ps1") is False
+    assert _artifact_is_downloadable(legada, "config.json.bak") is False
 
 
 # ---------------------------------------------------------------------------

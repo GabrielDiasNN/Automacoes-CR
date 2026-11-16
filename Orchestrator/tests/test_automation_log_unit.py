@@ -17,7 +17,7 @@ sys.path.insert(
     ),
 )
 
-from automation_log import (  # noqa: E402  pylint: disable=wrong-import-position
+from automation_log import (
     emit_event,
     ensure_utf8_streams,
     make_logger,

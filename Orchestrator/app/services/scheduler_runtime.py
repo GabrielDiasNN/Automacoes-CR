@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
 import subprocess
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import models, notifications, schemas
@@ -23,6 +23,8 @@ from ..constants import (
     EXECUTION_STATUS_ERROR,
     EXECUTION_STATUS_RUNNING,
     EXECUTION_STATUS_TIMEOUT,
+    FAILURE_REASON_ORACLE_QUEUE_TIMEOUT,
+    FAILURE_REASON_ORACLE_WORKER_OFFLINE,
     FAILURE_REASON_TELEMETRY_ABANDONED,
     RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE,
 )
@@ -36,18 +38,36 @@ from ..database import (
 from ..runtime import scheduler, trigger_worker_wakeup
 from ..schemas.schedule_rules import first_interval_candidate, ui_day_to_python_weekday
 from ..subprocess_env import build_subprocess_env
-from ..timezone import get_now_local
+from ..timezone import get_now_local, to_br_timezone
 from ..utils import log_audit
 from .beneficiamento_refresh import run_beneficiamento_refresh
 from .execution_runtime import (
+    REQUEUE_LOCK,
     RequeueValidationError,
     build_queued_execution,
     compute_duration_seconds,
     cooldown_remaining_minutes,
+    get_group_active_execution,
     prepare_requeue,
 )
+from .oracle_queue_health import collect_oracle_queue_health
+from .scheduler_job_ids import extract_automation_id_from_job
+from .system_diagnostics import build_diagnostics_payload
+from .system_history import capture_system_health_snapshot
+from .system_runtime import get_worker_status
+
+# Reexportação explícita: `routers/automations.py` e os testes importam o parser
+# de ids de job a partir daqui (ele mora em `scheduler_job_ids` para quebrar o ciclo).
+__all__ = ["extract_automation_id_from_job"]
 
 logger = logging.getLogger("orchestrator")
+
+# Falhas de schedule malformado e de registro de job. Mesmo conjunto que
+# `schemas.common` enumera nas normalizacoes: ValueError (int, split, CronTrigger,
+# fromisoformat), TypeError (int de tipo errado), KeyError (ConflictingIdError e
+# JobLookupError do APScheduler, UnknownTimeZoneError do pytz) e AttributeError
+# (.split/.lower sobre valor nao-string vindo do JSON).
+ERROS_DE_SCHEDULE = (ValueError, TypeError, KeyError, AttributeError)
 
 # `next_run_time` das jobs de intervalo entre a remoção e o re-registro dentro
 # de `reload_scheduled_tasks`. Preenchido e consumido no mesmo ciclo síncrono.
@@ -82,64 +102,59 @@ def _is_reserved_cleanup_automation(script_path: str | None) -> bool:
     )
 
 
-def extract_automation_id_from_job(job_id: str) -> int | None:
-    if not job_id.startswith("job_"):
-        return None
-    parts = job_id.split("_")
-    if len(parts) < 2:
-        return None
-    try:
-        return int(parts[1])
-    except (TypeError, ValueError):
-        return None
+def _motivo_fora_da_janela(
+    sched_data: dict[str, Any], now: datetime
+) -> tuple[str, tuple[Any, ...]] | None:
+    """Texto e argumentos do log quando `now` cai fora da janela; None se dentro."""
+    start_t = sched_data.get("start_time")
+    end_t = sched_data.get("end_time")
+    days = sched_data.get("days_of_week")
+    if days is not None and now.weekday() not in {
+        ui_day_to_python_weekday(d) for d in days
+    }:
+        return (
+            "Disparo de intervalo ignorado para %s: fora do dia operacional permitido.",
+            (),
+        )
+    if start_t:
+        sh, sm = map(int, start_t.split(":"))
+        if now.hour < sh or (now.hour == sh and now.minute < sm):
+            return (
+                "Disparo de intervalo ignorado para %s: antes do horário operacional permitido (%s).",
+                (start_t,),
+            )
+    if end_t:
+        eh, em = map(int, end_t.split(":"))
+        if now.hour > eh or (now.hour == eh and now.minute > em):
+            return (
+                "Disparo de intervalo ignorado para %s: após o horário operacional permitido (%s).",
+                (end_t,),
+            )
+    return None
 
 
-def _interval_window_blocks_trigger(  # pylint: disable=too-many-return-statements
+def _interval_window_blocks_trigger(
     db_auto: models.Automation,
 ) -> bool:
     if not db_auto.schedule:
         return False
     try:
-        sched_data = schemas.parse_schedule(cast(str | None, db_auto.schedule))
+        sched_data = schemas.parse_schedule(db_auto.schedule)
         if not sched_data or sched_data.get("schedule_type") != "interval":
             return False
-
-        start_t = sched_data.get("start_time")
-        end_t = sched_data.get("end_time")
-        days = sched_data.get("days_of_week")
-        if not (start_t or end_t or days):
+        if not (
+            sched_data.get("start_time")
+            or sched_data.get("end_time")
+            or sched_data.get("days_of_week")
+        ):
             return False
-
-        now = get_now_local()
-
-        if days is not None:
-            py_days = {ui_day_to_python_weekday(d) for d in days}
-            if now.weekday() not in py_days:
-                logger.info(
-                    "Disparo de intervalo ignorado para %s: fora do dia operacional permitido.",
-                    db_auto.name,
-                )
-                return True
-
-        if start_t:
-            sh, sm = map(int, start_t.split(":"))
-            if now.hour < sh or (now.hour == sh and now.minute < sm):
-                logger.info(
-                    "Disparo de intervalo ignorado para %s: antes do horário operacional permitido (%s).",
-                    db_auto.name,
-                    start_t,
-                )
-                return True
-        if end_t:
-            eh, em = map(int, end_t.split(":"))
-            if now.hour > eh or (now.hour == eh and now.minute > em):
-                logger.info(
-                    "Disparo de intervalo ignorado para %s: após o horário operacional permitido (%s).",
-                    db_auto.name,
-                    end_t,
-                )
-                return True
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+        motivo = _motivo_fora_da_janela(sched_data, get_now_local())
+        if motivo is None:
+            return False
+        logger.info(motivo[0], db_auto.name, *motivo[1])
+        return True
+    except ERROS_DE_SCHEDULE as exc:
+        # Fail-open de propósito: schedule malformado não pode impedir o disparo.
         logger.warning(
             "Falha ao validar janela operacional do disparo de %s: %s",
             db_auto.name,
@@ -158,7 +173,7 @@ def scheduled_task_wrapper(automation_id: int) -> None:
             )
             if not db_auto or not db_auto.enabled:
                 return
-            if _is_reserved_cleanup_automation(cast(str | None, db_auto.script_path)):
+            if _is_reserved_cleanup_automation(db_auto.script_path):
                 logger.warning(
                     "Agendamento ignorado para rotina reservada do sistema: %s.",
                     db_auto.name,
@@ -223,6 +238,8 @@ def scheduled_task_wrapper(automation_id: int) -> None:
                 )
                 return
             logger.info("Disparo agendado: %s -> %s", db_auto.name, exec_id)
+    # Residual: fronteira de job do APScheduler. A API nao configura o root logger, entao o erro
+    # que o APScheduler loga em 'apscheduler.executors.default' nao chegaria a Logs/orchestrator.jsonl.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Erro no disparo agendado id=%s: %s", automation_id, exc)
 
@@ -258,10 +275,10 @@ def reload_scheduled_tasks() -> None:
             len(automations_db),
         )
         for auto in automations_db:
-            if _is_reserved_cleanup_automation(cast(str | None, auto.script_path)):
-                auto.enabled = False  # type: ignore[assignment]
-                auto.schedule = None  # type: ignore[assignment]
-                auto.updated_at = get_now_local()  # type: ignore[assignment]
+            if _is_reserved_cleanup_automation(auto.script_path):
+                auto.enabled = False
+                auto.schedule = None
+                auto.updated_at = get_now_local()
                 db.commit()
                 logger.warning(
                     "Automação legada neutralizada por duplicar a rotina reservada de limpeza: %s (ID: %s).",
@@ -272,11 +289,13 @@ def reload_scheduled_tasks() -> None:
             if not auto.schedule:
                 continue
             try:
-                sched_data = schemas.parse_schedule(cast(str | None, auto.schedule))
+                sched_data = schemas.parse_schedule(auto.schedule)
                 if not sched_data:
                     continue
-                _register_schedule(cast(int, auto.id), sched_data)
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+                _register_schedule(auto.id, sched_data)
+            # Isolamento por automação: falha de parse ou de add_job numa delas não
+            # aborta o registro das demais.
+            except ERROS_DE_SCHEDULE as exc:
                 logger.error("Erro ao agendar %s: %s", auto.name, exc)
         logger.info(
             "Agendador sincronizado: %d jobs ativos no total.",
@@ -422,6 +441,14 @@ def _register_schedule(automation_id: int, sched_data: dict[str, Any]) -> None:
         )
 
 
+# `auto_retry_transient_failures` e `recover_oracle_worker_outage` são jobs
+# APScheduler independentes (cada um a cada 3 min, em threads diferentes do
+# BackgroundScheduler). Os dois seguram a mesma trava do requeue manual da API
+# (`REQUEUE_LOCK`, ver execution_runtime.py) até o commit, para não criarem duas
+# PENDING para a mesma automação.
+_REQUEUE_JOBS_LOCK = REQUEUE_LOCK
+
+
 def auto_retry_transient_failures() -> None:
     """Reenfileira automaticamente ERROR/TIMEOUT dentro do limite de retry cadastrado.
 
@@ -431,7 +458,11 @@ def auto_retry_transient_failures() -> None:
     (config explicita do operador, ver ``models.Automation``).
     """
     try:
-        with session_scope(SessionLocal) as db:
+        # Sonda chamada UMA vez por ciclo e ANTES da query: com o worker Oracle offline,
+        # o grupo oracle sai da query (não basta `continue`, que deixaria as falhas
+        # antigas do grupo ocupando a janela de 20 candidatos).
+        oracle_worker_online = _is_oracle_worker_online()
+        with _REQUEUE_JOBS_LOCK, session_scope(SessionLocal) as db:
             # Candidatos permanentemente inelegíveis são excluídos NA QUERY.
             # Antes de 31/07/2026 eles caíam num `continue` sem mudar de status
             # e, como a ordenação é pelos mais antigos, continuavam ocupando a
@@ -439,7 +470,7 @@ def auto_retry_transient_failures() -> None:
             # (automação desabilitada, `finished_at` nulo) para o auto-retry
             # parar de agir sobre QUALQUER falha nova — em silêncio, com o job
             # reportando execução normal a cada 3 minutos.
-            candidates = (
+            query = (
                 db.query(models.Execution)
                 .join(
                     models.Automation,
@@ -453,9 +484,21 @@ def auto_retry_transient_failures() -> None:
                     models.Execution.finished_at.isnot(None),
                     models.Automation.enabled.is_(True),
                 )
-                .order_by(models.Execution.finished_at.asc())
-                .limit(20)
-                .all()
+            )
+            if not oracle_worker_online:
+                # NULL é tratado explicitamente: `queue_group != "oracle"` sozinho
+                # descartaria automações sem grupo.
+                logger.info(
+                    "Auto-retry do grupo oracle adiado neste ciclo: Worker Oracle offline."
+                )
+                query = query.filter(
+                    or_(
+                        models.Automation.queue_group.is_(None),
+                        models.Automation.queue_group != "oracle",
+                    )
+                )
+            candidates = (
+                query.order_by(models.Execution.finished_at.asc()).limit(20).all()
             )
             for db_exec in candidates:
                 automation = db_exec.automation
@@ -463,7 +506,7 @@ def auto_retry_transient_failures() -> None:
                     continue
                 if (
                     cooldown_remaining_minutes(
-                        cast(datetime, db_exec.finished_at),
+                        db_exec.finished_at,
                         automation.cooldown_minutes,
                         get_now_local(),
                     )
@@ -525,8 +568,209 @@ def auto_retry_transient_failures() -> None:
                     db_exec.max_retries,
                 )
                 trigger_worker_wakeup()
+    # Residual: fronteira de job do APScheduler. A API nao configura o root logger, entao o erro
+    # que o APScheduler loga em 'apscheduler.executors.default' nao chegaria a Logs/orchestrator.jsonl.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Falha no job de auto-retry: %s", exc)
+
+
+_ORACLE_OUTAGE_FAILURE_REASONS = frozenset(
+    {
+        FAILURE_REASON_ORACLE_WORKER_OFFLINE,
+        FAILURE_REASON_ORACLE_QUEUE_TIMEOUT,
+    }
+)
+_ORACLE_OUTAGE_LOOKBACK_HOURS = 2
+_ORACLE_OUTAGE_CRON_GUARD_MINUTES = 20
+_ORACLE_OUTAGE_MAX_REQUEUES_PER_CYCLE = 1
+
+
+def _get_oracle_queue_health(use_cache: bool = True) -> dict[str, Any]:
+    """Status da fila Oracle (cache curto em `oracle_queue_health`).
+
+    ``use_cache=False`` força sonda nova: as decisões de recovery usam dado fresco.
+    """
+    return collect_oracle_queue_health(use_cache=use_cache)
+
+
+def _is_oracle_worker_online() -> bool:
+    """Retorna True se o modo queue nao estiver ativo ou se o worker TSplus estiver vivo."""
+    health = _get_oracle_queue_health()
+    if not health.get("enabled"):
+        return True
+    return bool(health.get("alive")) and health.get("oracle_ok") is not False
+
+
+def _is_near_next_scheduled_run(
+    automation_id: int,
+    now: datetime,
+    min_gap_minutes: int = _ORACLE_OUTAGE_CRON_GUARD_MINUTES,
+) -> bool:
+    """Evita auto-requeue quando o próximo disparo agendado está iminente."""
+    now_br = to_br_timezone(now)
+    if now_br is None:
+        return False
+    for job in scheduler.get_jobs():
+        job_id = str(getattr(job, "id", "") or "")
+        if extract_automation_id_from_job(job_id) != automation_id:
+            continue
+        next_run = getattr(job, "next_run_time", None)
+        next_run_br = to_br_timezone(next_run)
+        if next_run_br is None:
+            continue
+        gap_seconds = (next_run_br - now_br).total_seconds()
+        if 0 <= gap_seconds < min_gap_minutes * 60:
+            return True
+    return False
+
+
+def _find_eligible_outage_execution(
+    db: Session,
+    automation: models.Automation,
+    cutoff: datetime,
+    now: datetime,
+) -> models.Execution | None:
+    latest = (
+        db.query(models.Execution)
+        .filter(models.Execution.automation_id == automation.id)
+        .order_by(models.Execution.started_at.desc(), models.Execution.id.desc())
+        .first()
+    )
+    if not latest or not latest.finished_at:
+        return None
+    eligible = (
+        latest.status in (EXECUTION_STATUS_ERROR, EXECUTION_STATUS_TIMEOUT)
+        and latest.failure_reason in _ORACLE_OUTAGE_FAILURE_REASONS
+        and str(latest.requested_by or "") != "ORACLE_WORKER_RECOVERY"
+        and latest.finished_at >= cutoff
+    )
+    if not eligible:
+        return None
+    if _is_near_next_scheduled_run(int(automation.id), now):
+        logger.info(
+            "Recovery Oracle adiado para %s: cron programado em menos de %dm.",
+            automation.name,
+            _ORACLE_OUTAGE_CRON_GUARD_MINUTES,
+        )
+        return None
+    return latest
+
+
+def _try_requeue_outage_automation(
+    db: Session,
+    automation: models.Automation,
+    cutoff: datetime,
+    now: datetime,
+    latest: models.Execution | None = None,
+) -> bool:
+    if latest is None:
+        latest = _find_eligible_outage_execution(db, automation, cutoff, now)
+    if latest is None:
+        return False
+    try:
+        new_exec, audit_payload = prepare_requeue(
+            db,
+            latest,
+            payload_reason=(
+                "Auto-recuperacao apos retorno do Worker Oracle do TSplus."
+            ),
+            payload_requested_by="ORACLE_WORKER_RECOVERY",
+            payload_priority=None,
+            fallback_requested_by="ORACLE_WORKER_RECOVERY",
+            bypass_retry_limit=(
+                str(latest.failure_reason or "") == FAILURE_REASON_ORACLE_WORKER_OFFLINE
+            ),
+        )
+    except RequeueValidationError as exc:
+        logger.info(
+            "Recovery Oracle ignorado para %s (%s): %s",
+            latest.id,
+            automation.name,
+            exc.detail,
+        )
+        return False
+
+    db.add(new_exec)
+    log_audit(
+        db,
+        "ORACLE_WORKER_RECOVERY",
+        "EXECUTION",
+        str(new_exec.id),
+        "SYSTEM",
+        json.dumps(audit_payload, default=str),
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return False
+    logger.info(
+        "Recovery Oracle disparado para %s: %s -> %s",
+        automation.name,
+        latest.id,
+        new_exec.id,
+    )
+    trigger_worker_wakeup()
+    return True
+
+
+def recover_oracle_worker_outage(
+    max_requeues: int = _ORACLE_OUTAGE_MAX_REQUEUES_PER_CYCLE,
+) -> int:
+    """Reenfileira falhas recentes por queda/timeout do Worker Oracle quando ele retornar."""
+    if max_requeues <= 0:
+        return 0
+    # Decisão de recovery com dado fresco (sem cache de 15 s).
+    health = _get_oracle_queue_health(use_cache=False)
+    if (
+        not health.get("enabled")
+        or not health.get("alive")
+        or health.get("oracle_ok") is False
+    ):
+        return 0
+
+    now = get_now_local()
+    cutoff = now - timedelta(hours=_ORACLE_OUTAGE_LOOKBACK_HOURS)
+    requeued = 0
+    try:
+        # Mesma trava de `auto_retry_transient_failures` (ver _REQUEUE_JOBS_LOCK).
+        with _REQUEUE_JOBS_LOCK, session_scope(SessionLocal) as db:
+            if get_group_active_execution(db, "oracle") is not None:
+                return 0
+            automations = (
+                db.query(models.Automation)
+                .filter(
+                    models.Automation.enabled.is_(True),
+                    models.Automation.queue_group == "oracle",
+                )
+                .order_by(models.Automation.id.asc())
+                .all()
+            )
+            # `_find_eligible_outage_execution` só devolve execução com
+            # `finished_at` preenchido; o instante vai na tupla já estreitado
+            # para a ordenação (mais antiga primeiro, desempate pelo id).
+            candidates: list[tuple[datetime, models.Automation, models.Execution]] = []
+            for automation in automations:
+                latest = _find_eligible_outage_execution(db, automation, cutoff, now)
+                if latest is not None and latest.finished_at is not None:
+                    candidates.append((latest.finished_at, automation, latest))
+            candidates.sort(key=lambda item: (item[0], int(item[1].id)))
+            for _finished_at, automation, latest in candidates:
+                if requeued >= max_requeues:
+                    break
+                if _try_requeue_outage_automation(
+                    db, automation, cutoff, now, latest=latest
+                ):
+                    requeued += 1
+                    # `prepare_requeue` impõe exclusão mútua no queue_group="oracle":
+                    # após 1 requeue bem-sucedido, novas tentativas no mesmo ciclo
+                    # sempre falhariam com 409.
+                    break
+    # Falha operacional esperada aqui é de banco; erro de programação sobe para o
+    # APScheduler, que registra o traceback completo do job.
+    except SQLAlchemyError as exc:
+        logger.error("Falha no job de recovery do Worker Oracle: %s", exc)
+    return requeued
 
 
 def register_enterprise_jobs(retention_days: int) -> None:
@@ -565,6 +809,14 @@ def register_enterprise_jobs(retention_days: int) -> None:
         "interval",
         minutes=3,
         id="enterprise_auto_retry",
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+    scheduler.add_job(
+        recover_oracle_worker_outage,
+        "interval",
+        minutes=3,
+        id="enterprise_oracle_worker_recovery",
         replace_existing=True,
         misfire_grace_time=120,
     )
@@ -704,11 +956,11 @@ def reap_orphaned_telemetry() -> None:
             )
             for execucao in orfas:
                 agora = get_now_local()
-                execucao.status = EXECUTION_STATUS_ERROR  # type: ignore[assignment]
-                execucao.finished_at = agora  # type: ignore[assignment]
-                execucao.failure_reason = FAILURE_REASON_TELEMETRY_ABANDONED  # type: ignore[assignment]
-                execucao.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE  # type: ignore[assignment]
-                execucao.duration_seconds = compute_duration_seconds(  # type: ignore[assignment]
+                execucao.status = EXECUTION_STATUS_ERROR
+                execucao.finished_at = agora
+                execucao.failure_reason = FAILURE_REASON_TELEMETRY_ABANDONED
+                execucao.recovery_action = RECOVERY_ACTION_REVIEW_LOGS_BEFORE_REQUEUE
+                execucao.duration_seconds = compute_duration_seconds(
                     execucao.started_at, agora
                 )
                 nota_reaper = (
@@ -717,7 +969,7 @@ def reap_orphaned_telemetry() -> None:
                     f"{TELEMETRY_ORPHAN_TIMEOUT_MINUTES} min. Encerrada para "
                     "liberar o grupo operacional."
                 )
-                execucao.logs = nota_reaper  # type: ignore[assignment]
+                execucao.logs = nota_reaper
                 logger.warning(
                     "Telemetria orfa encerrada: %s (automacao %s)",
                     execucao.id,
@@ -726,6 +978,8 @@ def reap_orphaned_telemetry() -> None:
             if orfas:
                 db.commit()
                 trigger_worker_wakeup()
+    # Residual: fronteira de job do APScheduler. A API nao configura o root logger, entao o erro
+    # que o APScheduler loga em 'apscheduler.executors.default' nao chegaria a Logs/orchestrator.jsonl.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Falha no reaper de telemetria orfa: %s", exc)
 
@@ -757,13 +1011,14 @@ def run_file_cleanup() -> None:
             "Limpeza de arquivos excedeu %ds e foi interrompida.",
             FILE_CLEANUP_TIMEOUT_SECONDS,
         )
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (subprocess.CalledProcessError, OSError, ValueError) as e:
+        # CalledProcessError: script saiu com erro (check=True); OSError:
+        # powershell.exe ausente; ValueError: argumento inválido para o exec.
         logger.error("Erro ao executar limpeza de arquivos: %s", e)
 
 
 def safe_scheduler_heartbeat() -> None:
-    with contextlib.suppress(Exception):
-        logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
+    logger.info("Heartbeat do Agendador: OK", extra={"request_id": "SYSTEM"})
 
 
 # Mapeamento de slo_breaches para alerta de infraestrutura (fora do dashboard):
@@ -788,11 +1043,6 @@ def _dispatch_infra_alerts_from_payload(payload: dict[str, Any]) -> None:
 def capture_system_history_snapshot_job() -> None:
     try:
         with session_scope(SessionLocal) as db:
-            # pylint: disable=import-outside-toplevel,cyclic-import
-            from .system_diagnostics import build_diagnostics_payload
-            from .system_history import capture_system_health_snapshot
-            from .system_runtime import get_worker_status
-
             payload = build_diagnostics_payload(
                 db,
                 scheduler,
@@ -801,6 +1051,8 @@ def capture_system_history_snapshot_job() -> None:
             )
             capture_system_health_snapshot(db, payload, retention_days=30)
             _dispatch_infra_alerts_from_payload(payload)
+    # Residual: fronteira de job do APScheduler. A API nao configura o root logger, entao o erro
+    # que o APScheduler loga em 'apscheduler.executors.default' nao chegaria a Logs/orchestrator.jsonl.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Falha ao capturar snapshot operacional: %s", exc)
 
@@ -823,7 +1075,7 @@ def list_scheduled_jobs(db: Session) -> list[schemas.ScheduledJob]:
             .filter(models.Automation.id.in_(auto_ids))
             .all()
         )
-        names_by_id = {int(row.id): cast(str, row.name) for row in rows}
+        names_by_id = {int(row.id): row.name for row in rows}
 
     entries: list[tuple[tuple[int, datetime | int], schemas.ScheduledJob]] = []
     for job in jobs:

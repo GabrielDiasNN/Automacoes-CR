@@ -1,6 +1,6 @@
 """Runner controlado para gerar snapshots e carregar histórico do Beneficiamento."""
 
-# pylint: disable=too-many-arguments,too-many-locals,broad-exception-caught,line-too-long,trailing-whitespace
+# pylint: disable=too-many-arguments,too-many-locals
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
+import oracledb
+
 from .analytics import build_analytics
-from .data.writer import salvar_historico
+from .data.writer import ErroBancoHistorico, salvar_historico
 from .oracle import QueryResult, execute_query
 from .profile import profile_rows, rows_to_records, summarize_profiles
 from .quality import assess_quality
@@ -28,6 +30,21 @@ from .sql_repository import (
     bind_parameters,
     load_sql_template,
     period_window,
+)
+
+# Gravacao do historico SQLite e best-effort: falha de banco, de caminho/disco ou de
+# serializacao vira partial_failure. Qualquer outra falha e de programacao e nao e engolida.
+ERROS_GRAVACAO_HISTORICO = (ErroBancoHistorico, OSError, TypeError, ValueError)
+# Fatia da carga retroativa: falha do Oracle (driver, bridge, fila, prazo, incluindo
+# OracleBridgeError e OracleQueueError, subclasses de RuntimeError), de SQLite ou de
+# serializacao vai para `erros` e o laco segue para o dia seguinte.
+ERROS_FATIA_HISTORICA = (
+    oracledb.Error,
+    RuntimeError,
+    OSError,
+    ValueError,
+    TypeError,
+    ErroBancoHistorico,
 )
 
 
@@ -130,7 +147,9 @@ def run_period(
         qt_salvos = salvar_historico(records)
         snapshot_meta["historico_rows_saved"] = qt_salvos
         snapshot_meta["historico_write_status"] = "ok"
-    except Exception as exc:
+    # Gravacao no SQLite historico e best-effort: falha vira partial_failure no
+    # snapshot e aviso no stderr, sem abortar a geracao dos demais artefatos.
+    except ERROS_GRAVACAO_HISTORICO as exc:
         history_write_failed = True
         history_write_error = str(exc)
         snapshot_meta["historico_rows_saved"] = 0
@@ -203,7 +222,8 @@ def run_historical_range(
                 f"OK ({len(records)} linhas lidas, {inserted} salvas/atualizadas no SQLite).",
                 flush=True,
             )
-        except Exception as exc:
+        # Falha de uma fatia diaria vai para erros; o laco segue para as demais datas.
+        except ERROS_FATIA_HISTORICA as exc:
             erros.append({"data": current.isoformat(), "erro": str(exc)})
             print(f"FALHA: {exc}", flush=True)
 
@@ -294,7 +314,8 @@ def main(argv: list[str] | None = None) -> int:
             sample_limit=args.sample_limit,
             use_rownum_limit=args.use_rownum_limit,
         )
-    except Exception as exc:
+    # Residual: fronteira do runner; qualquer falha vira JSON status=error em stderr, que o Orchestrator le. Sem este catch a saida seria so traceback, sem o payload.
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         print(
             json.dumps(
                 {

@@ -3,9 +3,9 @@
 Os 13 pontos que o bandit acusa como `B608` foram revisados um a um em
 31/07/2026 e todos seguem o mesmo padrão: a cláusula WHERE é concatenada a
 partir de fragmentos LITERAIS, e todo valor de request vai por parâmetro (`?`).
-Cada ponto ganhou `# nosec B608`.
+Cada ponto ganhou a marcação de supressão do B608 no call site.
 
-`nosec` silencia o scanner — quem protege de fato é este arquivo. Se alguém
+A supressão silencia o scanner — quem protege de fato é este arquivo. Se alguém
 passar a interpolar um valor de filtro direto no SQL, o bandit continuará
 calado e estes testes é que devem reprovar.
 """
@@ -51,7 +51,7 @@ def test_filtro_nunca_entra_no_sql(campo: str, carga: str) -> None:
     where_sql, params = _build_filtered_where({campo: carga}, None, None)
 
     assert carga not in where_sql, (
-        f"O valor do filtro '{campo}' foi interpolado no SQL. O `# nosec B608` "
+        f"O valor do filtro '{campo}' foi interpolado no SQL. A supressão do B608 "
         "nos call sites pressupõe que isso nunca aconteça."
     )
     assert _marcadores(where_sql) == len(params), (

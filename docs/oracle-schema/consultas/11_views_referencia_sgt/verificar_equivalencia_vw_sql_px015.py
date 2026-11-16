@@ -20,17 +20,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(REPO_ROOT / "lib" / "python"))
-from dotenv import load_dotenv  # noqa: E402
-from oracle_extract import (  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "lib" / "python"))
+from dotenv import load_dotenv
+from oracle_extract import (
     connect_from_creds,
     init_thick_mode,
     resolve_oracle_credentials,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[4]
 FAILURES: list[str] = []
-CREDS: Any = None
 
 
 def _log(msg: str, level: str = "INFO", exec_id: str = "teste-px015") -> None:
@@ -38,13 +37,13 @@ def _log(msg: str, level: str = "INFO", exec_id: str = "teste-px015") -> None:
     print(f"[{level}] {msg}")
 
 
-def _connect() -> Any:
-    return connect_from_creds(CREDS, _log)
+def _connect(creds: Any) -> Any:
+    return connect_from_creds(creds, _log)
 
 
-def _scalar(sql: str) -> Any:
+def _scalar(creds: Any, sql: str) -> Any:
     """Valor escalar da consulta. None vem de agregado sem linhas ou de coluna NULL."""
-    with _connect() as conn:
+    with _connect(creds) as conn:
         cur = conn.cursor()
         cur.execute(sql)
         row = cur.fetchone()
@@ -72,24 +71,28 @@ def _record(
         )
 
 
-def check(nome: str, sql_original: str, sql_novo: str, params: dict[str, Any]) -> None:
+def check(
+    creds: Any, nome: str, sql_original: str, sql_novo: str, params: dict[str, Any]
+) -> None:
     """Compara o valor escalar de duas queries (uma por chave em `params`)."""
     for label, value in params.items():
-        original = _scalar(sql_original.format(v=value))
-        novo = _scalar(sql_novo.format(v=value))
+        original = _scalar(creds, sql_original.format(v=value))
+        novo = _scalar(creds, sql_novo.format(v=value))
         _record(nome, label, value, (original, novo), ("original", "novo"))
 
 
-def check_expected(nome: str, sql: str, params: dict[str, tuple[Any, Any]]) -> None:
+def check_expected(
+    creds: Any, nome: str, sql: str, params: dict[str, tuple[Any, Any]]
+) -> None:
     """Confere UMA query contra um valor esperado conhecido. Usado quando não
     há versão "original" para comparar — comparar a query com ela mesma seria
     tautologia e passaria sempre."""
     for label, (value, esperado) in params.items():
-        obtido = _scalar(sql.format(v=value))
+        obtido = _scalar(creds, sql.format(v=value))
         _record(nome, label, value, (esperado, obtido), ("esperado", "obtido"))
 
 
-def _caso_1() -> None:
+def _caso_1(creds: Any) -> None:
     print("=" * 70)
     print("1) OBQ — LISTAGG com dedupe vs OPTSTRAGGR(DISTINCT) original")
     print("   (regressão do bug achado em 20/09/2026: perda de DISTINCT)")
@@ -109,6 +112,7 @@ def _caso_1() -> None:
     # OBs com múltiplos registros de qualidade no mesmo SEQUENCIA_OB_QUALIDA
     # (caso que expôs o bug original) + algumas OBs "normais" (1 registro só).
     check(
+        creds,
         "OBQ.SQ_OB_QUALIDADE",
         obq_original,
         obq_novo,
@@ -121,7 +125,7 @@ def _caso_1() -> None:
     )
 
 
-def _caso_2() -> None:
+def _caso_2(creds: Any) -> None:
     print("=" * 70)
     print("2) TIN — RECEITA_PESADA_NATIVA (única coluna mantida após remover REF)")
     print("=" * 70)
@@ -142,6 +146,7 @@ def _caso_2() -> None:
     # documentado no cabeçalho de vw_sql_px015.sql (pesagem só em
     # SEQUENCIAFASEOB=0, nenhuma na sequência atual da fase 40).
     check_expected(
+        creds,
         "TIN.RECEITA_PESADA_NATIVA",
         receita_sql,
         {
@@ -151,7 +156,7 @@ def _caso_2() -> None:
     )
 
 
-def _caso_3() -> None:
+def _caso_3(creds: Any) -> None:
     print("=" * 70)
     print("3) QT1 — subqueries escalares vs join com GROUP BY original")
     print("=" * 70)
@@ -167,6 +172,7 @@ def _caso_3() -> None:
          WHERE O1.NUMERO_OB = {v}
     """
     check(
+        creds,
         "QT1.QT_CRU_ORIG_OB",
         qt1_original,
         qt1_novo,
@@ -177,7 +183,7 @@ def _caso_3() -> None:
     )
 
 
-def _caso_4() -> None:
+def _caso_4(creds: Any) -> None:
     print("=" * 70)
     print("4) DEFP — CTE deduplicada/sem nulos vs OPTSTRAGGR direto original")
     print("=" * 70)
@@ -197,6 +203,7 @@ def _caso_4() -> None:
     # 187426/187425: 2 grupos de defeito distintos (exercita DISTINCT e ordem
     # do LISTAGG). 18439 não tem mais revisão e dava None == None.
     check(
+        creds,
         "DEFP.GR_DEFEITO",
         defp_original,
         defp_novo,
@@ -207,7 +214,7 @@ def _caso_4() -> None:
     )
 
 
-def _caso_5() -> None:
+def _caso_5(creds: Any) -> None:
     print("=" * 70)
     print("5) OB_FAT_TOTAL — CTEs pré-agregadas vs GROUP BY+HAVING original")
     print("=" * 70)
@@ -241,6 +248,7 @@ def _caso_5() -> None:
     # 187335: faturada 50/50 em 29/09/2026 (entra, COUNT=1).
     # 188005: 0/16 faturadas (não entra, COUNT=0).
     check(
+        creds,
         "OB_FAT_TOTAL (aparece só se contagens batem)",
         obft_original,
         obft_novo,
@@ -251,6 +259,7 @@ def _caso_5() -> None:
         },
     )
     check_expected(
+        creds,
         "OB_FAT_TOTAL (novo) contra esperado",
         obft_novo,
         {
@@ -261,7 +270,7 @@ def _caso_5() -> None:
     )
 
 
-def _caso_6() -> None:
+def _caso_6(creds: Any) -> None:
     print("=" * 70)
     print("6) TERC — ST_TERCEIROS direto (F.STATUS) vs SYSENUMERATE original")
     print("=" * 70)
@@ -281,6 +290,7 @@ def _caso_6() -> None:
            AND F.SEQUENCIA = (SELECT MAX(L.SEQUENCIA) FROM SGTPRD.OB_FASES L WHERE L.NUMERO_OB = F.NUMERO_OB AND L.CODIGO_FASE = F.CODIGO_FASE)
     """
     check(
+        creds,
         "TERC.ST_TERCEIROS",
         terc_original,
         terc_novo,
@@ -292,7 +302,7 @@ def _caso_6() -> None:
     )
 
 
-def _caso_7() -> None:
+def _caso_7(creds: Any) -> None:
     print("=" * 70)
     print("7) TIN — Bloco Lateral Direto vs 3 níveis de subqueries original")
     print("=" * 70)
@@ -329,6 +339,7 @@ def _caso_7() -> None:
          FETCH FIRST 1 ROWS ONLY
     """
     check(
+        creds,
         "TIN.CD_GR_TINGIMENTO",
         tin_original,
         tin_novo,
@@ -341,26 +352,25 @@ def _caso_7() -> None:
 
 
 def main() -> None:
-    global CREDS  # pylint: disable=global-statement
     load_dotenv(REPO_ROOT / ".env", override=True)
-    CREDS = resolve_oracle_credentials(_log, "teste-px015")
-    if CREDS is None:
+    creds = resolve_oracle_credentials(_log, "teste-px015")
+    if creds is None:
         print("Credenciais Oracle ausentes/invalidas no ambiente (.env).")
         sys.exit(1)
-    init_thick_mode(CREDS, _log, "teste-px015")
-    _caso_1()
+    init_thick_mode(creds, _log, "teste-px015")
+    _caso_1(creds)
     print()
-    _caso_2()
+    _caso_2(creds)
     print()
-    _caso_3()
+    _caso_3(creds)
     print()
-    _caso_4()
+    _caso_4(creds)
     print()
-    _caso_5()
+    _caso_5(creds)
     print()
-    _caso_6()
+    _caso_6(creds)
     print()
-    _caso_7()
+    _caso_7(creds)
 
     print()
     print("=" * 70)

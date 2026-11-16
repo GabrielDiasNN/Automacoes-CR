@@ -1,6 +1,5 @@
 # Import de lib/python via sys.path.insert() dinamico abaixo forca estas duas
 # desabilitacoes: o pylint nao resolve o path em tempo de analise estatica.
-# pylint: disable=import-error, wrong-import-position
 # {
 #   "version": "1.3.0",
 #   "skill": "python-oracle-migration, protocolo-valeg",
@@ -20,6 +19,7 @@ from automation_log import ensure_utf8_streams, make_logger
 from dotenv import load_dotenv
 from oracle_extract import (
     OracleCredentials,
+    classify_oracle_exit_code,
     fetch_all,
     init_thick_mode,
     resolve_oracle_credentials,
@@ -80,7 +80,8 @@ def extract() -> None:
         )
         sys.exit(1)
 
-    os.environ["TNS_ADMIN"] = str(creds.tns_admin)
+    if creds.tns_admin:
+        os.environ["TNS_ADMIN"] = str(creds.tns_admin)
 
     init_thick_mode(creds, log, exec_id)
 
@@ -96,10 +97,13 @@ def extract() -> None:
         columns, rows = _fetch(creds, sql, exec_id)
     except CircuitBreakerError:
         log("Circuit Breaker Aberto: Banco de dados inacessivel.", "ERROR", exec_id)
+        # Breaker aberto é falha transitória: exit 1 deixa o Invoke-OraclePythonScript
+        # repetir com espera.
         sys.exit(1)
+    # Residual: fronteira de processo; falha fora das classificadas sairia como traceback sem o log `Extracao falhou` e sem a linha ERROR no log estruturado que a triagem lê; o exit code de exceção não classificada seria 1 de qualquer forma, mas OracleQueueError e TimeoutError precisam passar por classify_oracle_exit_code (5/6/7; TimeoutError genérico vira 1, só OracleQueueTimeoutError vira 7).
     except Exception as e:  # pylint: disable=broad-exception-caught
         log(f"Extracao falhou: {e}", "ERROR", exec_id)
-        sys.exit(1)
+        sys.exit(classify_oracle_exit_code(e))
 
     if not columns:
         log("Nenhum dado retornado da consulta.", "WARN", exec_id)

@@ -4,7 +4,19 @@ import json
 from pathlib import Path
 from typing import Any
 
+import app.routers.beneficiamento as router
 import pytest
+from beneficiamento import (
+    runner,
+    snapshot_dashboard,
+)
+from beneficiamento.historico_db import (
+    ErroBancoHistorico,
+    buscar_historico,
+    descrever_schema_historico,
+    init_db,
+    salvar_historico,
+)
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 
@@ -13,10 +25,6 @@ def test_beneficiamento_historico_init_db_maintains_derived_columns_and_indexes(
     tmp_path: Path,
 ) -> None:
     """Schema local deve garantir colunas derivadas e índices idempotentes do overview."""
-    from beneficiamento.historico_db import (  # pylint: disable=import-outside-toplevel
-        descrever_schema_historico,
-        init_db,
-    )
 
     db_path = tmp_path / "beneficiamento_historico.db"
     resolved = init_db(db_path)
@@ -381,7 +389,6 @@ def test_beneficiamento_overview_empty_cut_returns_no_data(client: TestClient) -
 
 def test_beneficiamento_get_endpoints_do_not_import_oracle_runner() -> None:
     """GETs do Dashboard devem permanecer restritos ao SQLite local."""
-    import app.routers.beneficiamento as router  # pylint: disable=import-outside-toplevel
 
     source_names = set(router.get_beneficiamento_overview.__code__.co_names)
     assert "runner" not in source_names
@@ -489,9 +496,6 @@ def test_beneficiamento_snapshot_dashboard_reuses_period_reads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """O dashboard de snapshots não deve reler os períodos ao montar health e overview."""
-    from beneficiamento import (  # pylint: disable=import-outside-toplevel
-        snapshot_dashboard,
-    )
 
     call_count = {"count": 0}
 
@@ -547,9 +551,6 @@ def test_beneficiamento_health_payload_structures_attention_causes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Health deve expor causa estruturada e ação recomendada quando um período entra em atenção."""
-    from beneficiamento import (  # pylint: disable=import-outside-toplevel
-        snapshot_dashboard,
-    )
 
     fake_periods = {
         "diario": {
@@ -705,9 +706,6 @@ def test_beneficiamento_health_prefers_most_severe_issue_as_reason(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Quando houver mais de um desvio, o health deve expor a causa principal mais grave."""
-    from beneficiamento import (  # pylint: disable=import-outside-toplevel
-        snapshot_dashboard,
-    )
 
     fake_periods = {
         "diario": {
@@ -876,9 +874,6 @@ def test_beneficiamento_health_expands_quality_blocked_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Quality blocked deve descrever o tipo de bloqueio operacional com detalhe."""
-    from beneficiamento import (  # pylint: disable=import-outside-toplevel
-        snapshot_dashboard,
-    )
 
     fake_periods = {
         "diario": {
@@ -986,10 +981,6 @@ def test_beneficiamento_historico_date_filter_includes_end_of_day(
     tmp_path: Path,
 ) -> None:
     """A busca histórica deve considerar o fim do dia quando o filtro recebe só a data."""
-    from beneficiamento.historico_db import (  # pylint: disable=import-outside-toplevel
-        buscar_historico,
-        salvar_historico,
-    )
 
     db_path = tmp_path / "beneficiamento_historico.db"
     salvar_historico(
@@ -1027,7 +1018,6 @@ def test_beneficiamento_runner_marks_partial_failure_when_history_write_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Falha ao persistir o histórico deve ser refletida no status final do refresh."""
-    from beneficiamento import runner  # pylint: disable=import-outside-toplevel
 
     def fake_build_snapshot_payloads(
         *_unused_args: Any, **_unused_kwargs: Any
@@ -1066,7 +1056,7 @@ def test_beneficiamento_runner_marks_partial_failure_when_history_write_fails(
         return profile, analytics, records
 
     def fake_salvar_historico(*args: Any, **kwargs: Any) -> int:
-        raise RuntimeError("SQLite indisponivel")
+        raise ErroBancoHistorico("SQLite indisponivel")
 
     monkeypatch.setattr(runner, "build_snapshot_payloads", fake_build_snapshot_payloads)
     monkeypatch.setattr(runner, "salvar_historico", fake_salvar_historico)
@@ -1092,7 +1082,6 @@ def test_beneficiamento_runner_marks_partial_failure_when_history_write_fails(
 @pytest.mark.parametrize("valor", ["0", "-5"])
 def test_runner_recusa_oracle_timeout_ms_nao_positivo(valor: str) -> None:
     """0 ms viraria 1 ms no driver (o piso) e toda consulta estouraria o prazo."""
-    from beneficiamento import runner  # pylint: disable=import-outside-toplevel
 
     with pytest.raises(SystemExit):
         runner.main(["--oracle-timeout-ms", valor])

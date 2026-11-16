@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
-from typing import Any, cast
+from datetime import timedelta
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -125,7 +125,7 @@ def build_trend_summary(
         if int(row.orphaned_running_count or 0) > 0:
             orphaned_running_events += 1
         baseline = build_snapshot_operational_baseline(
-            evaluated_at=cast(datetime | None, row.timestamp),
+            evaluated_at=row.timestamp,
             pending_count=int(row.pending_count or 0),
             running_count=int(row.running_count or 0),
             pending_age_seconds=float(row.oldest_pending_age_seconds or 0.0),
@@ -133,9 +133,7 @@ def build_trend_summary(
             running_over_runtime_count=int(row.running_over_runtime_count or 0),
             orphaned_running_count=int(row.orphaned_running_count or 0),
             wal_size_mb=float(row.wal_size_mb or 0.0),
-            worker_last_ping_age_seconds=cast(
-                float | None, row.worker_last_ping_age_seconds
-            ),
+            worker_last_ping_age_seconds=row.worker_last_ping_age_seconds,
         )
         if baseline.status == "attention":
             baseline_attention_points += 1
@@ -197,7 +195,7 @@ def _build_history_point(
     row: models.SystemHealthSnapshot,
 ) -> schemas.SystemHistoryPoint:
     baseline = build_snapshot_operational_baseline(
-        evaluated_at=cast(datetime | None, row.timestamp),
+        evaluated_at=row.timestamp,
         pending_count=int(row.pending_count or 0),
         running_count=int(row.running_count or 0),
         pending_age_seconds=float(row.oldest_pending_age_seconds or 0.0),
@@ -205,9 +203,7 @@ def _build_history_point(
         running_over_runtime_count=int(row.running_over_runtime_count or 0),
         orphaned_running_count=int(row.orphaned_running_count or 0),
         wal_size_mb=float(row.wal_size_mb or 0.0),
-        worker_last_ping_age_seconds=cast(
-            float | None, row.worker_last_ping_age_seconds
-        ),
+        worker_last_ping_age_seconds=row.worker_last_ping_age_seconds,
     )
     return schemas.SystemHistoryPoint(
         timestamp=row.timestamp,
@@ -217,20 +213,16 @@ def _build_history_point(
         oldest_pending_age_seconds=float(row.oldest_pending_age_seconds or 0.0),
         oldest_running_age_seconds=float(row.oldest_running_age_seconds or 0.0),
         wal_size_mb=float(row.wal_size_mb or 0.0),
-        worker_last_ping_age_seconds=cast(
-            float | None, row.worker_last_ping_age_seconds
-        ),
+        worker_last_ping_age_seconds=row.worker_last_ping_age_seconds,
         running_over_runtime_count=int(row.running_over_runtime_count or 0),
         orphaned_running_count=int(row.orphaned_running_count or 0),
         active_queue_groups=[
-            str(item)
-            for item in _loads_json_array(cast(str | None, row.active_queue_groups))
+            str(item) for item in _loads_json_array(row.active_queue_groups)
         ],
         failure_hotspots=[
-            str(item)
-            for item in _loads_json_array(cast(str | None, row.failure_hotspots))
+            str(item) for item in _loads_json_array(row.failure_hotspots)
         ],
-        slo_breaches=_loads_json_object(cast(str | None, row.slo_breaches)),
+        slo_breaches=_loads_json_object(row.slo_breaches),
         baseline_status=baseline.status,
         baseline_attention_count=baseline.attention_count,
         baseline_incident_count=baseline.incident_count,

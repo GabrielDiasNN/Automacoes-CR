@@ -1,4 +1,3 @@
-# pylint: disable=R0903,W1203
 """
 Middleware Stack do Orchestrator Central de Automacoes v1.0.0.
 
@@ -110,8 +109,10 @@ def get_api_key(request: Request, api_key: str = Depends(api_key_header)) -> str
         client_ip = request.client.host if request.client else "unknown"
         req_id = getattr(request.state, "request_id", "UNK")
         logger.warning(
-            f"[{req_id}] [AUTH_FAIL] Tentativa de acesso inválida de IP={client_ip} "
-            f"path={request.url.path}"
+            "[%s] [AUTH_FAIL] Tentativa de acesso inválida de IP=%s path=%s",
+            req_id,
+            client_ip,
+            request.url.path,
         )
         raise HTTPException(
             status_code=403, detail="Acesso negado: API Key inválida ou ausente."
@@ -124,7 +125,8 @@ def get_api_key(request: Request, api_key: str = Depends(api_key_header)) -> str
 # ---------------------------------------------------------------------------
 
 
-class RequestIdMiddleware(BaseHTTPMiddleware):
+# RESIDUAL (too-few-public-methods): o contrato de BaseHTTPMiddleware (Starlette) expoe um unico metodo publico (dispatch) e app.add_middleware exige a classe.
+class RequestIdMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-methods
     """Injeta um X-Request-Id unico em toda requisicao para rastreabilidade."""
 
     async def dispatch(
@@ -151,7 +153,8 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
-class TimingMiddleware(BaseHTTPMiddleware):
+# RESIDUAL (too-few-public-methods): o contrato de BaseHTTPMiddleware (Starlette) expoe um unico metodo publico (dispatch) e app.add_middleware exige a classe.
+class TimingMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-methods
     """Loga o tempo de resposta e adiciona header X-Process-Time."""
 
     async def dispatch(
@@ -168,7 +171,12 @@ class TimingMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api") and path != "/api/system/health":
             req_id = getattr(request.state, "request_id", "?")
             logger.info(
-                f"[{req_id}] {request.method} {path} -> {response.status_code} ({elapsed_ms}ms)"
+                "[%s] %s %s -> %s (%sms)",
+                req_id,
+                request.method,
+                path,
+                response.status_code,
+                elapsed_ms,
             )
 
         return response
@@ -179,7 +187,8 @@ class TimingMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+# RESIDUAL (too-few-public-methods): o contrato de BaseHTTPMiddleware (Starlette) expoe um unico metodo publico (dispatch) e app.add_middleware exige a classe.
+class RateLimitMiddleware(BaseHTTPMiddleware):  # pylint: disable=too-few-public-methods
     """
     Sliding window rate limiter por IP de origem.
     Limite: RATE_LIMIT_RPM requisicoes por minuto (default: 120).
@@ -216,7 +225,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._last_seen.pop(ip, None)
         if stale:
             logger.debug(
-                f"[RATE_LIMIT] Removidas {len(stale)} entradas inativas da janela deslizante."
+                "[RATE_LIMIT] Removidas %d entradas inativas da janela deslizante.",
+                len(stale),
             )
 
     async def dispatch(
@@ -253,8 +263,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if len(dq) >= self.rpm:
             logger.warning(
-                f"[RATE_LIMIT] IP={client_ip} excedeu {self.rpm} req/min "
-                f"path={request.url.path}"
+                "[RATE_LIMIT] IP=%s excedeu %s req/min path=%s",
+                client_ip,
+                self.rpm,
+                request.url.path,
             )
             return Response(
                 content='{"detail":"Rate limit excedido. Tente novamente em 60 segundos."}',

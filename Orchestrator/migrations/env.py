@@ -1,4 +1,7 @@
-# pylint: disable=no-member, wrong-import-position, unused-import
+# RESIDUAL (no-member): `alembic.context` e um proxy criado em runtime por
+# EnvironmentContext.create_module_class_proxy; o pylint nao enxerga seus membros
+# (config, configure, run_migrations...), que existem em tempo de execucao.
+# pylint: disable=no-member
 import os
 import sys
 from logging.config import fileConfig
@@ -30,12 +33,12 @@ if not db_url or db_url == "sqlite:///orchestrator.db":
         db_path = os.path.abspath(os.path.join(project_root, db_path))
     db_url = f"sqlite:///{db_path}"
 
-import app.models  # noqa: F401 (força o carregamento dos modelos)
+# 3. Importar os modelos SQLAlchemy do Hub para suporte ao autogenerate.
+# Importar app.models registra as tabelas no metadata compartilhado antes do
+# autogenerate; o metadata e lido de um modelo para o import ser de uso real.
+from app import models
 
-# 3. Importar os modelos SQLAlchemy do Hub para suporte ao autogenerate
-from app.database import Base
-
-target_metadata = Base.metadata
+target_metadata = models.Automation.metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -1,7 +1,5 @@
 """Helpers compartilhados para snapshots operacionais de automações."""
 
-# pylint: disable=relative-beyond-top-level,no-name-in-module
-
 from typing import Any
 
 from sqlalchemy.orm import Session

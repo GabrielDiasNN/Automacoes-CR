@@ -1,6 +1,6 @@
 """Profiling leve de colunas para snapshots do Beneficiamento."""
 
-# pylint: disable=missing-class-docstring,too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes
 
 from __future__ import annotations
 

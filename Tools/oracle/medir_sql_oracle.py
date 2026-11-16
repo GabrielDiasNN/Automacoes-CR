@@ -32,31 +32,39 @@ from typing import Any
 import oracledb
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lib" / "python"))
+# Só `sys.path` antes dos imports do repositório (qualquer outro comando aqui faria
+# os imports abaixo violarem o E402); ROOT vem logo depois deles.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from guard_sql import (  # noqa: E402
+from guard_sql import (
     ler_veredito,
     so_chamada_de_funcao,
     verificar_objetos,
 )
-from oracle_catalog import (  # noqa: E402
-    GuardError,
-    sql_guard_text,
-)
-from oracle_extract import (  # noqa: E402
+from oracle_catalog import GuardError, sql_guard_text
+from oracle_client import get_driver_mode
+from oracle_extract import (
     compute_hash,
     init_thick_mode,
     resolve_oracle_credentials,
     serialize_rows,
 )
-from oracle_session import (  # noqa: E402
+from oracle_queue import OracleQueueError
+from oracle_queue_tools import (
+    ERROS_FILA,
+    QUEUE_MODE_SENTINEL,
+    executar_consulta_fila,
+    explicar_plano_fila,
+    usar_fila_oracle,
+    verificar_objetos_fila,
+)
+from oracle_session import (
     connect_within,
     is_session_drop,
     run_with_cancel,
 )
-from validar_sql_oracle import (  # noqa: E402
+from validar_sql_oracle import (
     GUARD_LIBERADO,
     GUARD_SO_PARSE,
     _bind_names,
@@ -70,6 +78,8 @@ from validar_sql_oracle import (  # noqa: E402
     consulta_verificacao_do_guard,
     resolve_guard,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
 
 MEASURE_VERSION = "1.0.0"
 DEFAULT_RUNS = 5
@@ -197,17 +207,26 @@ def _timed_fetch(
     }
 
 
-def _run_watched(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+@dataclass(frozen=True)
+class _Execucao:
+    """O que executar numa rodada: o SQL, seus binds e se as primeiras linhas ficam."""
+
+    sql: str
+    binds: dict[str, Any]
+    keep: bool
+
+
+def _run_watched(
     connection: Any,
-    sql: str,
-    binds: dict[str, Any],
+    execucao: _Execucao,
     options: MeasureOptions,
-    keep: bool,
     timeout: float,
 ) -> dict[str, Any]:
     """Executa numa thread e cancela a sessão se passar do prazo."""
     outcome = run_with_cancel(
-        lambda: _timed_fetch(connection, sql, binds, options, keep),
+        lambda: _timed_fetch(
+            connection, execucao.sql, execucao.binds, options, execucao.keep
+        ),
         lambda: connection,
         timeout,
     )
@@ -224,6 +243,57 @@ def _run_watched(  # pylint: disable=too-many-arguments,too-many-positional-argu
     return result
 
 
+def _attempt_queue(
+    sql: str,
+    binds: dict[str, Any],
+    options: MeasureOptions,
+    keep: bool,
+) -> dict[str, Any]:
+    """Mede execução completa pela fila SMB TSplus."""
+    started = time.perf_counter()
+    try:
+        res = executar_consulta_fila(
+            sql,
+            params=binds,
+            timeout=float(options.timeout),
+            meta={"exec_id": "MEDIR_SQL", "tool": "medir_sql"},
+        )
+        total_ms = round((time.perf_counter() - started) * 1000, 1)
+        raw_db_ms = res.raw_meta.get("db_ms")
+        db_ms = (
+            float(raw_db_ms)
+            if raw_db_ms is not None
+            else (float(res.elapsed_ms) if res.elapsed_ms is not None else 0.0)
+        )
+        columns = _unique_names(list(res.columns))
+        types = (
+            dict(zip(columns, res.types, strict=True))
+            if len(res.types) == len(columns)
+            else dict.fromkeys(columns, "ANY")
+        )
+        smb_ms = (
+            round(max(0.0, total_ms - float(res.elapsed_ms)), 1)
+            if res.elapsed_ms is not None
+            else None
+        )
+        return {
+            "status": "ok",
+            "execute_ms": round(db_ms, 1),
+            "total_ms": total_ms,
+            "db_ms": raw_db_ms,
+            "format_ms": res.raw_meta.get("format_ms"),
+            "smb_ms": smb_ms,
+            "rows": res.row_count,
+            "columns": columns,
+            "types": types,
+            "data": res.rows if keep else [],
+        }
+    except TimeoutError:
+        return {"status": "timeout"}
+    except OracleQueueError as exc:
+        return _failure(exc)
+
+
 def _attempt(
     creds: Any,
     sql: str,
@@ -231,6 +301,8 @@ def _attempt(
     options: MeasureOptions,
     keep: bool,
 ) -> dict[str, Any]:
+    if creds is QUEUE_MODE_SENTINEL:
+        return _attempt_queue(sql, binds, options, keep)
     started = time.perf_counter()
     try:
         connection = connect_within(lambda: _connect(creds), options.timeout)
@@ -242,7 +314,9 @@ def _attempt(
     try:
         # Conexão e execução dividem o mesmo `--timeout`, não um cada.
         remaining = options.timeout - (time.perf_counter() - started)
-        outcome = _run_watched(connection, sql, binds, options, keep, remaining)
+        outcome = _run_watched(
+            connection, _Execucao(sql, binds, keep), options, remaining
+        )
         return outcome
     finally:
         if not outcome.get("abandoned", False):
@@ -328,6 +402,14 @@ def explain_plan(
     creds: Any, sql: str, binds: dict[str, Any], timeout: float = DEFAULT_TIMEOUT
 ) -> list[str]:
     """Plano estimado (EXPLAIN PLAN + DBMS_XPLAN.DISPLAY): hipótese, não métrica."""
+    if creds is QUEUE_MODE_SENTINEL:
+        try:
+            linhas, _ = explicar_plano_fila(
+                sql, timeout=timeout, exec_id="MEDIR_EXPLAIN"
+            )
+            return [str(linha) for linha in linhas]
+        except ERROS_FILA as exc:
+            return [f"plano indisponível: {_error_summary(exc)}"]
     started = time.perf_counter()
     try:
         connection = connect_within(lambda: _connect(creds), timeout)
@@ -513,6 +595,11 @@ def verificar_funcoes_no_oracle(
     """
     if consulta is None:
         return None
+    if creds is QUEUE_MODE_SENTINEL:
+        motivo_fila = verificar_objetos_fila(
+            consulta, timeout=timeout, exec_id="MEDIR_GUARD"
+        )
+        return str(motivo_fila) if motivo_fila is not None else None
     started = time.perf_counter()
     connection = connect_within(lambda: _connect(creds), timeout)
     outcome = run_with_cancel(
@@ -566,6 +653,8 @@ def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
     binds = _default_binds(sql)
     explicit = _parse_bind_args(args.bind)
     binds.update({k: v for k, v in explicit.items() if k in binds})
+    if usar_fila_oracle():
+        return sql, binds, QUEUE_MODE_SENTINEL
     creds = resolve_oracle_credentials(lambda *_a, **_k: None, "medir-sql")
     if creds is None:
         raise SystemExit("Credenciais Oracle indisponíveis")
@@ -580,6 +669,7 @@ def _report(
     return {
         "schema": "oracle-measure/v1",
         "measure_version": MEASURE_VERSION,
+        "driver_mode": get_driver_mode(),
         "file": str(args.file),
         "bind_names": _bind_names(sql),
         "generated_at_utc": datetime.now(UTC).isoformat(),

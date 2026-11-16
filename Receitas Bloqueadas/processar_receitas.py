@@ -3,13 +3,13 @@
 # limites de complexidade (too-many-locals/branches/statements) foram removidos deste
 # disable amplo apos o refactor de process() em helpers dedicados (achado de revisao
 # RB-01 G1); bare-except tambem removido apos tipar a excecao em formatar_excel (RB-01 Q1).
-# pylint: disable=line-too-long, missing-class-docstring, consider-using-max-builtin, broad-exception-caught, import-error, wrong-import-position
 # {
 #   "name": "processar-receitas-bloqueadas",
 #   "version": "2.3.2",
 #   "skill": "python-oracle-migration",
 #   "description": "Use when processing blocked recipes with state control, visual highlighting, and Excel generation."
 # }
+import contextlib
 import json
 import os
 import sys
@@ -27,11 +27,13 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from oracle_extract import (
     OracleCredentials,
+    classify_oracle_exit_code,
     compute_hash,
     fetch_all,
     init_thick_mode,
     resolve_oracle_credentials,
 )
+from oracle_queue import OracleQueueError
 from oracle_retry import CircuitBreakerError, make_oracle_retry
 from pydantic import BaseModel, Field, ValidationError
 
@@ -221,10 +223,7 @@ def gerar_html_artistico(  # pylint: disable=too-many-locals
     return html
 
 
-# too-many-branches: laco de formatacao percorre celula a celula aplicando varias
-# regras condicionais de estilo (fill, formato de data, borda); nao coberto pelo
-# refactor de RB-01 G1 (escopo daquele achado era process()); disable localizado aqui.
-def formatar_excel(file_path: str) -> None:  # pylint: disable=too-many-branches
+def formatar_excel(file_path: str) -> None:
     wb = load_workbook(file_path)
     header_fill = PatternFill(
         start_color="0F4C81", end_color="0F4C81", fill_type="solid"
@@ -275,11 +274,8 @@ def formatar_excel(file_path: str) -> None:  # pylint: disable=too-many-branches
             max_length = 0
             column = str(getattr(col[0], "column_letter", "A"))
             for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except (TypeError, ValueError, AttributeError):
-                    pass
+                with contextlib.suppress(TypeError, ValueError, AttributeError):
+                    max_length = max(max_length, len(str(cell.value)))
             ws.column_dimensions[column].width = max_length + 2
     wb.save(file_path)
 
@@ -352,7 +348,7 @@ def _carregar_ultimo_state(state_path: str, exec_id: str) -> list[Any]:
         except ValidationError as ve:
             log(f"Contrato de Dados Violado no Estado: {ve}", "ERROR", exec_id)
             last_state_data = {}
-        except Exception as e:
+        except (OSError, ValueError) as e:
             log(f"Erro ao carregar estado: {e}", "WARN", exec_id)
             last_state_data = {}
 
@@ -483,7 +479,8 @@ def _gerar_saidas(
     try:
         formatar_excel(excel_path)
         log("Excel formatado.", "INFO", exec_id)
-    except Exception as e:
+    # Residual: formatacao do Excel e cosmetica e vem antes do HTML de notificacao; openpyxl levanta classes variadas (zipfile.BadZipFile, InvalidFileException, KeyError de estilo) e nenhuma pode impedir o envio.
+    except Exception as e:  # pylint: disable=broad-exception-caught
         log(f"Aviso Excel: {e}", "WARN", exec_id)
 
     df_display = _montar_df_display(df_agreg, diff_rows)
@@ -502,6 +499,17 @@ def _write_result_counts(read: int, changed: int, new: int) -> None:
         )
 
 
+def _install_excepthook(exec_id: str) -> None:
+    def handle_exception(exc_type: Any, exc_value: Any, exc_traceback: Any) -> None:
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        log(f"FALHA NAO TRATADA: {exc_value}", "ERROR", exec_id)
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+    sys.excepthook = handle_exception
+
+
 def process() -> None:
     exec_id = sys.argv[1] if len(sys.argv) > 1 else "manual"
     log(
@@ -511,19 +519,9 @@ def process() -> None:
     )
 
     html_path = os.path.join(os.path.dirname(__file__), "email_body.html")
-    if os.path.exists(html_path):
-        os.remove(html_path)
 
     creds = resolve_oracle_credentials(log, exec_id, require_tns_admin=True)
-
-    def handle_exception(exc_type: Any, exc_value: Any, exc_traceback: Any) -> None:
-        if issubclass(exc_type, KeyboardInterrupt):
-            sys.__excepthook__(exc_type, exc_value, exc_traceback)
-            return
-        log(f"FALHA NAO TRATADA: {exc_value}", "ERROR", exec_id)
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-
-    sys.excepthook = handle_exception
+    _install_excepthook(exec_id)
 
     if creds is None:
         log("Credenciais ou caminhos Oracle invalidos no ambiente.", "ERROR", exec_id)
@@ -550,6 +548,8 @@ def process() -> None:
                     exec_id,
                 )
                 sys.exit(0)
+            if os.path.exists(html_path):
+                os.remove(html_path)
             log("Sem alteracoes relevantes detectadas (Idempotencia).", "INFO", exec_id)
             sys.exit(2)
 
@@ -561,7 +561,12 @@ def process() -> None:
 
     except CircuitBreakerError:
         log("Circuit Breaker Aberto: Banco de dados inacessivel.", "ERROR", exec_id)
+        # Breaker aberto é falha transitória: exit 1 deixa o Invoke-OraclePythonScript
+        # repetir com espera.
         sys.exit(1)
+    except OracleQueueError as qe:
+        log(f"Erro na fila Oracle ({qe.kind}): {qe.message}", "ERROR", exec_id)
+        sys.exit(classify_oracle_exit_code(qe))
     except oracledb.DatabaseError as de:
         if de.args:
             error_obj = de.args[0]
@@ -569,9 +574,10 @@ def process() -> None:
         else:
             log(f"Erro DB desconhecido: {de}", "ERROR", exec_id)
         sys.exit(1)
-    except Exception as e:
+    # Residual: fronteira de processo; falha fora das classificadas sairia como traceback sem o log `Erro fatal` e sem a linha ERROR no log estruturado que a triagem lê; o exit code de exceção não classificada seria 1 de qualquer forma, mas OracleQueueError e TimeoutError precisam passar por classify_oracle_exit_code (5/6/7; TimeoutError genérico vira 1, só OracleQueueTimeoutError vira 7).
+    except Exception as e:  # pylint: disable=broad-exception-caught
         log(f"Erro fatal: {str(e)}", "ERROR", exec_id)
-        sys.exit(1)
+        sys.exit(classify_oracle_exit_code(e))
 
 
 if __name__ == "__main__":

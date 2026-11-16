@@ -3,6 +3,7 @@ Testes unitários focados no loop principal e comportamento de backoff do Worker
 """
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -22,18 +23,15 @@ def reset_worker_state() -> Iterator[None]:
 
 @patch("worker.SessionLocal")
 @patch("worker.claim_next_task")
-@patch("worker.heartbeat_loop")
-@patch("worker.log_flusher_loop")
-@patch("worker.wakeup_listener_loop")
+@patch("worker.heartbeat_loop", new=MagicMock())
+@patch("worker.log_flusher_loop", new=MagicMock())
+@patch("worker.wakeup_listener_loop", new=MagicMock())
 @patch("worker.POLL_INTERVAL", 2.0)
 @patch("worker.MAX_POLL_INTERVAL", 15.0)
-def test_worker_backoff_exponential(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    mock_wakeup_listener: Any,  # pylint: disable=unused-argument
-    mock_flusher: Any,  # pylint: disable=unused-argument
-    mock_heartbeat: Any,  # pylint: disable=unused-argument
+@pytest.mark.usefixtures("reset_worker_state")
+def test_worker_backoff_exponential(
     mock_claim: Any,
     mock_session_local: Any,
-    reset_worker_state: None,  # pylint: disable=unused-argument,redefined-outer-name
 ) -> None:
     """Garante que o intervalo de polling do worker cresce exponencialmente (backoff) quando não há tarefas."""
     mock_db = MagicMock()
@@ -71,34 +69,32 @@ def test_worker_backoff_exponential(  # pylint: disable=too-many-arguments,too-m
 
 @patch("worker.SessionLocal")
 @patch("worker.claim_next_task")
-@patch("worker.run_task")
+@patch("worker.run_task", new=MagicMock())
 @patch("worker.resolve_script_path")
-@patch("worker.heartbeat_loop")
-@patch("worker.log_flusher_loop")
-@patch("worker.wakeup_listener_loop")
+@patch("worker.heartbeat_loop", new=MagicMock())
+@patch("worker.log_flusher_loop", new=MagicMock())
+@patch("worker.wakeup_listener_loop", new=MagicMock())
 @patch("worker.POLL_INTERVAL", 2.0)
-def test_worker_consumes_task_and_resets_backoff(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
-    mock_wakeup_listener: Any,  # pylint: disable=unused-argument
-    mock_flusher: Any,  # pylint: disable=unused-argument
-    mock_heartbeat: Any,  # pylint: disable=unused-argument
+@pytest.mark.usefixtures("reset_worker_state")
+def test_worker_consumes_task_and_resets_backoff(
     mock_resolve_path: Any,
-    mock_run_task: Any,  # pylint: disable=unused-argument
     mock_claim: Any,
     mock_session_local: Any,
-    reset_worker_state: None,  # pylint: disable=unused-argument,redefined-outer-name
 ) -> None:
     """Garante que quando uma tarefa é encontrada, o backoff de polling é resetado para o valor inicial."""
     mock_db = MagicMock()
     mock_session_local.return_value = mock_db
 
     # Mock das entidades no banco
-    class MockAutomation:  # pylint: disable=too-few-public-methods
-        name = "Robo Teste"
-        script_path = "./run.ps1"
-        max_runtime_minutes = 10
+    @dataclass
+    class MockAutomation:
+        name: str = "Robo Teste"
+        script_path: str = "./run.ps1"
+        max_runtime_minutes: int = 10
 
-    class MockExecution:  # pylint: disable=too-few-public-methods
-        automation_id = 1
+    @dataclass
+    class MockExecution:
+        automation_id: int = 1
 
     mock_automation = MockAutomation()
     mock_exec = MockExecution()

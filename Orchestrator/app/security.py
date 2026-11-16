@@ -6,8 +6,6 @@ Fornece higienização central de logs e payloads para evitar o vazamento de seg
 Pilar de Segurança (Fase 6).
 """
 
-# pylint: disable=relative-beyond-top-level
-
 import re
 from typing import Any
 

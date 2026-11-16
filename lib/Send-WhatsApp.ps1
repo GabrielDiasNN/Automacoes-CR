@@ -58,14 +58,17 @@ if ($ConfigPath -and (Test-Path $ConfigPath)) {
     $resolvedConfig = Convert-Path $ConfigPath
     $base = Split-Path -Parent $resolvedConfig
 
+    # Distincao de exit codes: 22 = adiado por lock/cooldown (comportamento normal, o chamador
+    # reavalia no proximo ciclo); 23 = desabilitado na configuracao (nada enviado, falha de config
+    # que o chamador deve tratar como falha, nunca como sucesso silencioso).
     if (-not (Test-WhatsAppConfigEnabled -Config $json)) {
         if ($Mode -eq "BATCH" -and -not [string]::IsNullOrWhiteSpace($BatchResultFile)) {
-            Write-Host "Envio WhatsApp desabilitado na configuracao ($resolvedConfig) em modo BATCH (BatchResultFile='$BatchResultFile' nao gravado com success: true). Encerrando com exit 22." -ForegroundColor Yellow
+            Write-Host "Envio WhatsApp desabilitado na configuracao ($resolvedConfig) em modo BATCH (BatchResultFile='$BatchResultFile' nao gravado com success: true). Encerrando com exit 23." -ForegroundColor Yellow
         }
         else {
-            Write-Host "Envio WhatsApp desabilitado na configuracao ($resolvedConfig). Encerrando com exit 22 sem enviar." -ForegroundColor Yellow
+            Write-Host "Envio WhatsApp desabilitado na configuracao ($resolvedConfig). Encerrando com exit 23 sem enviar." -ForegroundColor Yellow
         }
-        exit 22
+        exit 23
     }
 
     # Resolve o destino real (contactId/contactPhone do JSON, ou o override via .env em

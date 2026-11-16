@@ -1,4 +1,3 @@
-# pylint: disable=protected-access, reimported, redefined-outer-name, unused-variable, line-too-long, wrong-import-position, too-many-locals, wrong-import-order, unused-argument, import-error
 """
 Suite de Testes Unitários: Automação de Receitas Bloqueadas
 Mapeamento de Regras de Negócio e resiliência via Pytest com Mocks.
@@ -7,12 +6,14 @@ Mapeamento de Regras de Negócio e resiliência via Pytest com Mocks.
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import openpyxl
 import pandas as pd
 import pytest
+from carregadores_modulos import carregar_modulo_automacao
 
 # Adicionar pasta da automacao ao PYTHONPATH dinamicamente
 AUTOMATION_PATH = os.path.abspath(
@@ -20,11 +21,13 @@ AUTOMATION_PATH = os.path.abspath(
 )
 sys.path.append(AUTOMATION_PATH)
 
-import processar_receitas
+processar_receitas = carregar_modulo_automacao(
+    "processar_receitas", Path(AUTOMATION_PATH) / "processar_receitas.py"
+)
 
 
-@pytest.fixture
-def mock_df_receitas() -> Any:
+@pytest.fixture(name="mock_df_receitas")
+def _fixture_df_receitas() -> Any:
     """Retorna dados de teste estruturados para as receitas."""
     return pd.DataFrame(
         [
@@ -66,6 +69,13 @@ def mock_df_receitas() -> Any:
             },
         ]
     )
+
+
+def _context_file(file_obj: Any) -> Any:
+    wrapper = MagicMock()
+    wrapper.__enter__.return_value = file_obj
+    wrapper.__exit__.return_value = None
+    return wrapper
 
 
 def test_gerar_html_artistico_badges(mock_df_receitas: Any) -> None:
@@ -198,7 +208,7 @@ def test_process_sem_alteracoes_exit_2(
         w.__exit__.return_value = None
         return w
 
-    def side_open(path: str, mode: str = "r", encoding: Any = None) -> Any:
+    def side_open(path: str, *_args: Any, **_kwargs: Any) -> Any:
         if "SQL-ReceitasBloqueadas" in path:
             return _ctx(sql_file)
         if "receitas_state.json" in path:
@@ -291,14 +301,7 @@ def test_process_sucesso_com_novos_bloqueios(
     mock_file_state.read.return_value = state_content
 
     # Retorna o arquivo correto de acordo com a abertura
-    def _context_file(file_obj: Any) -> Any:
-        wrapper = MagicMock()
-        wrapper.__enter__.return_value = file_obj
-        wrapper.__exit__.return_value = None
-        return wrapper
-
-    def side_open(path: str, mode: str = "r", encoding: Any = None) -> Any:
-        # pylint: disable=unused-argument
+    def side_open(path: str, *_args: Any, **_kwargs: Any) -> Any:
         if "SQL-ReceitasBloqueadas" in path:
             return _context_file(mock_file_sql)
         if "receitas_state.json" in path and "tmp" not in path:

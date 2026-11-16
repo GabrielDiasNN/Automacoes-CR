@@ -10,7 +10,6 @@ manual, via "OBs Restricao Branco/test_orb_simulation.py".
 # de proposito — sao a unidade sob teste, nao detalhe de outro objeto.
 # unused-argument: os dubles de `fetch_*` precisam repetir a assinatura real
 # (creds, exec_id, resumo) mesmo quando ignoram os parametros.
-# pylint: disable=protected-access, unused-argument
 
 import json
 import re
@@ -21,8 +20,11 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from carregadores_modulos import (
+    acessar_privado,
+    carregar_modulo_automacao as _load_module,
+)
 from PIL import Image
-from tests.carregadores_modulos import carregar_modulo_automacao as _load_module
 
 ROOT = Path(__file__).parent.parent.parent
 AUTOMATION_DIR = ROOT / "OBs Restricao Branco"
@@ -69,15 +71,18 @@ def _isolar_modulos_genericos() -> Any:
 
 
 def _validators() -> ModuleType:
-    return _load_module("validators", AUTOMATION_DIR / "validators.py")
+    modulo: ModuleType = _load_module("validators", AUTOMATION_DIR / "validators.py")
+    return modulo
 
 
 def _queries() -> ModuleType:
-    return _load_module("queries", AUTOMATION_DIR / "queries.py")
+    modulo: ModuleType = _load_module("queries", AUTOMATION_DIR / "queries.py")
+    return modulo
 
 
 def _errors() -> ModuleType:
-    return _load_module("errors", AUTOMATION_DIR / "errors.py")
+    modulo: ModuleType = _load_module("errors", AUTOMATION_DIR / "errors.py")
+    return modulo
 
 
 def _ob_row(**overrides: Any) -> dict[str, Any]:
@@ -1279,7 +1284,7 @@ def test_extract_orb_le_o_state_legado_do_disco(tmp_path: Any) -> None:
         json.dumps(_STATE_LEGADO_PRODUCAO, ensure_ascii=False), encoding="utf-8"
     )
 
-    estado = extract._read_notified(str(state_file))
+    estado = acessar_privado(extract, "_read_notified")(str(state_file))
 
     assert sorted(estado) == [
         "185719",
@@ -1296,7 +1301,7 @@ def test_read_notified_trata_json_invalido_como_vazio(tmp_path: Any) -> None:
     extract = _load_module("extract_orb_state", AUTOMATION_DIR / "extract_orb.py")
     state_file = tmp_path / "orb_state.json"
     state_file.write_text("{nao é json", encoding="utf-8")
-    assert extract._read_notified(str(state_file)) == {}
+    assert acessar_privado(extract, "_read_notified")(str(state_file)) == {}
 
 
 def _stub_extract_ate_fetch_obs(
@@ -1348,7 +1353,7 @@ def test_extract_aborta_sem_tocar_state_quando_todas_as_linhas_falham_validacao(
     state_file.write_text(state_original, encoding="utf-8")
     monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
 
-    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+    def fake_fetch_obs(_creds: Any, _exec_id: str, resumo: Any) -> list[Any]:
         resumo.falhas.append("OB #1: CD_CLASSIFICACAO_COR=7, esperado 6 ou 9")
         return []
 
@@ -1376,7 +1381,7 @@ def test_extract_trata_query_realmente_vazia_como_nada_a_notificar(
     state_file = tmp_path / "orb_state.json"
     monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
 
-    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+    def fake_fetch_obs(_creds: Any, _exec_id: str, _resumo: Any) -> list[Any]:
         return []
 
     _stub_extract_ate_fetch_obs(extract, monkeypatch, fake_fetch_obs, tmp_path)
@@ -1442,7 +1447,7 @@ def test_extract_grava_state_podado_mesmo_sem_ob_nova_a_notificar(
     ob_2002 = _ob_row(NUMERO_OB=2002)
     avaliacao_2002 = _avaliacao(2002, notificar=True)
 
-    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+    def fake_fetch_obs(_creds: Any, _exec_id: str, _resumo: Any) -> list[Any]:
         v = _validators()
         return [v.coerce_ob_row(ob_2002)]
 
@@ -1488,7 +1493,7 @@ def test_record_counts_usa_chaves_canonicas_e_read_conta_linhas_cruas() -> None:
     resumo.total_sem_estoque = 9
     resumo.falhas = ["OB #185248: CD_CLASSIFICACAO_COR nulo"] * 5
 
-    rc = extract._record_counts(resumo, novas_count=1)
+    rc = acessar_privado(extract, "_record_counts")(resumo, novas_count=1)
 
     assert "failures" not in rc
     assert rc["read"] == 14
@@ -1507,7 +1512,7 @@ def test_record_counts_read_cai_para_total_obs_quando_total_lidas_ausente() -> N
     extract = _load_module("extract_orb_state", AUTOMATION_DIR / "extract_orb.py")
     resumo = extract.ResumoExecucao()
     resumo.total_obs = 3
-    rc = extract._record_counts(resumo, novas_count=0)
+    rc = acessar_privado(extract, "_record_counts")(resumo, novas_count=0)
     assert rc["read"] == 3
 
 
@@ -1668,7 +1673,7 @@ def test_build_message_normaliza_artigo_para_o_padrao_interno() -> None:
 
 def test_fmt_restricoes_mostra_as_duas_finalidades_do_estoque() -> None:
     module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
-    rotulo, valor = module._fmt_restricoes(
+    rotulo, valor = acessar_privado(module, "_fmt_restricoes")(
         _row_mensagem(
             RESTRICOES_DISPONIVEIS=[
                 {"codigo": 3, "descricao": "CORES CLARAS"},
@@ -1707,7 +1712,7 @@ def test_build_message_mostra_travessao_para_campos_nulos() -> None:
         }
     )
     assert "Art. —" in msg
-    assert module._fmt_entrega(None) == "—"
+    assert acessar_privado(module, "_fmt_entrega")(None) == "—"
 
 
 def test_build_message_agrega_multiplas_obs_na_ordem_recebida() -> None:
@@ -1784,30 +1789,36 @@ def test_format_message_load_font_fallback_e_bold_sem_regular(
     monkeypatch.setattr(module.ImageFont, "truetype", fake_truetype)
     monkeypatch.setattr(module.ImageFont, "load_default", fake_load_default)
 
-    assert module._load_font(18, bold=True) == "default-font"
+    assert acessar_privado(module, "_load_font")(18, bold=True) == "default-font"
     assert not any(Path(p).name.lower() == "arial.ttf" for p in tentativas_bold)
     assert chamadas_default == [18]
 
 
 def test_format_message_is_parcial_defensivo_e_formatadores() -> None:
     module = _load_module("format_message", AUTOMATION_DIR / "format_message.py")
-    assert module._is_parcial(_row_mensagem(QTD_PECAS_FALTANTES="0")) is False
     assert (
-        module._is_parcial(
+        acessar_privado(module, "_is_parcial")(_row_mensagem(QTD_PECAS_FALTANTES="0"))
+        is False
+    )
+    assert (
+        acessar_privado(module, "_is_parcial")(
             _row_mensagem(QTD_PECAS_ALOCADAS=None, QTD_PECAS_FALTANTES=10)
         )
         is False
     )
     assert (
-        module._is_parcial(
+        acessar_privado(module, "_is_parcial")(
             _row_mensagem(QTD_PECAS_ALOCADAS="12", QTD_PECAS_FALTANTES="8")
         )
         is True
     )
-    assert module._fmt_codigo("1_2", 3) == "1_2"
-    assert module._fmt_codigo("١٢", 3) == "١٢"
-    assert module._fmt_entrega("  2026-07-20T00:00:00  ") == "20/07/2026"
-    assert module._fmt_entrega("data-invalida") == "—"
+    assert acessar_privado(module, "_fmt_codigo")("1_2", 3) == "1_2"
+    assert acessar_privado(module, "_fmt_codigo")("١٢", 3) == "١٢"
+    assert (
+        acessar_privado(module, "_fmt_entrega")("  2026-07-20T00:00:00  ")
+        == "20/07/2026"
+    )
+    assert acessar_privado(module, "_fmt_entrega")("data-invalida") == "—"
 
     msg = module.build_message(
         {"rows": [_row_mensagem(CODIGO_REDUZIDO_CRU=None, NOME_CLIENTE='LOJA "X"\nA')]}
@@ -1874,7 +1885,7 @@ def test_format_message_anti_colisao_restricoes_longas_e_centralizacao(
             assert rb[2] <= acao_item[0] - module.COL_GAP
 
         assert (
-            module._fit_prefixed_detail(
+            acessar_privado(module, "_fit_prefixed_detail")(
                 draw, "  ·  Restr. ", "4 — BRANCO", ob_item[3], 65
             )
             == ""
@@ -2442,7 +2453,7 @@ def test_extract_trata_lote_todo_em_montagem_como_nada_a_notificar(
     state_file.write_text(state_original, encoding="utf-8")
     monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
 
-    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+    def fake_fetch_obs(_creds: Any, _exec_id: str, resumo: Any) -> list[Any]:
         resumo.falhas.append("OB #186003: campo 'CD_CLASSIFICACAO_COR' esta nulo")
         resumo.falhas.append("OB #186101: campo 'CD_CLASSIFICACAO_COR' esta nulo")
         resumo.todas_falhas_por_montagem = True
@@ -2471,7 +2482,7 @@ def test_extract_ainda_aborta_quando_ha_dado_realmente_quebrado(
     state_file.write_text(state_original, encoding="utf-8")
     monkeypatch.setattr(extract, "STATE_FILE", str(state_file))
 
-    def fake_fetch_obs(creds: Any, exec_id: str, resumo: Any) -> list[Any]:
+    def fake_fetch_obs(_creds: Any, _exec_id: str, resumo: Any) -> list[Any]:
         resumo.falhas.append("OB #1: campo 'CD_CLASSIFICACAO_COR' esta nulo")
         resumo.falhas.append("OB #2: CD_CLASSIFICACAO_COR=7, esperado 6 ou 9")
         resumo.todas_falhas_por_montagem = False

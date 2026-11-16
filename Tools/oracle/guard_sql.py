@@ -21,19 +21,25 @@ import json
 import os
 import re
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
+
+try:
+    from dotenv import dotenv_values as _dotenv_values_impl
+except ImportError:  # dotenv e opcional: sem ele o .env simplesmente nao e lido
+    _DOTENV_VALUES: Callable[[Path], Mapping[str, str | None]] | None = None
+else:
+    _DOTENV_VALUES = _dotenv_values_impl
 
 CANONICAL_MODULE_NAME = "guard_sql_canonico"
 
 
 def _dotenv_value(name: str) -> str | None:
     """Lê `name` do `.env` da raiz quando o wrapper roda direto (sem validador pai)."""
-    try:
-        from dotenv import dotenv_values  # pylint: disable=import-outside-toplevel
-    except ImportError:
+    if _DOTENV_VALUES is None:
         return None
-    value = dotenv_values(Path(__file__).resolve().parents[2] / ".env").get(name)
+    value = _DOTENV_VALUES(Path(__file__).resolve().parents[2] / ".env").get(name)
     return value or None
 
 

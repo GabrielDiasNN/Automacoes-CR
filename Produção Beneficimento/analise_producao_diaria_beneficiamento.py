@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# pylint: disable=wrong-import-position
 import sys
 from pathlib import Path
 

@@ -29,18 +29,18 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
 )
 
-from errors import (  # noqa: E402  pylint: disable=wrong-import-position
+from errors import (
     ClassificacaoNaoResolvidaError,
     DadoIncompletoError,
     SchemaInvalidoError,
 )
-from models import (  # noqa: E402  pylint: disable=wrong-import-position
+from models import (
     AvaliacaoOb,
     EstoqueDeposito,
     ObRestricaoBranco,
     ReservaNotificacao,
 )
-from oracle_coerce import (  # noqa: E402  pylint: disable=wrong-import-position,import-error
+from oracle_coerce import (
     coerce_float,
     coerce_int,
 )

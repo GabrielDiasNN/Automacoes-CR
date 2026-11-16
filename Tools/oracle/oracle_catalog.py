@@ -31,6 +31,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import importlib
 import re
 import sqlite3
 import sys
@@ -41,14 +42,23 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib" / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
+    import oracledb
     from dotenv import load_dotenv
     from oracle_extract import (
-        OracleCredentials,
         connect_from_creds,
         init_thick_mode,
         resolve_oracle_credentials,
+    )
+    from oracle_queue_tools import (
+        ERROS_FILA,
+        QUEUE_MODE_SENTINEL,
+        executar_consulta_fila,
+        explicar_plano_fila,
+        usar_fila_oracle,
+        verificar_objetos_fila,
     )
     from oracle_session import is_session_drop, run_with_cancel
 except ImportError as exc:
@@ -59,6 +69,9 @@ except ImportError as exc:
     sys.exit(1)
 
 CATALOG_PATH = ROOT / "docs" / "oracle-schema" / "schema.db"
+QUERIES_CATALOG_PATH = (
+    ROOT / "docs" / "oracle-schema" / "consultas" / "CATALOGO_QUERIES.md"
+)
 MAX_SAMPLE_ROWS = 100
 DEFAULT_SAMPLE_ROWS = 20
 DEFAULT_DISTINCT_ROWS = 50
@@ -389,6 +402,45 @@ def cmd_view(args: argparse.Namespace) -> int:
 _SCHEMA_PREFIX_RE = re.compile(r"\bSGTPRD\.([A-Za-z_][A-Za-z0-9_]*)\b", re.IGNORECASE)
 
 
+def cmd_queries(args: argparse.Namespace) -> int:
+    """Busca consultas no catalogo gerado CATALOGO_QUERIES.md (offline)."""
+    if not QUERIES_CATALOG_PATH.is_file():
+        print(f"[ERRO] Catalogo de queries nao encontrado: {QUERIES_CATALOG_PATH}")
+        return 1
+    pasta_atual = ""
+    termo = (args.termo or "").strip().lower()
+    filtro_pasta = (args.pasta or "").strip().lower()
+    filtro_bind = (args.bind or "").strip().lower().lstrip(":")
+    encontrados: list[str] = []
+
+    for line in QUERIES_CATALOG_PATH.read_text(encoding="utf-8").splitlines():
+        if line.startswith("### "):
+            pasta_atual = line[4:].split(" (", 1)[0].strip()
+            continue
+        if not line.startswith("| `"):
+            continue
+        parts = [p.strip() for p in line.strip("|").split("|")]
+        if len(parts) < 5:
+            continue
+        arquivo = parts[0].strip("`")
+        objetivo, categoria, binds, status = parts[1], parts[2], parts[3], parts[4]
+        if filtro_pasta and filtro_pasta not in pasta_atual.lower():
+            continue
+        if filtro_bind and filtro_bind not in binds.lower():
+            continue
+        haystack = f"{pasta_atual} {arquivo} {objetivo} {categoria} {binds}".lower()
+        if termo and termo not in haystack:
+            continue
+        encontrados.append(
+            f"- {pasta_atual}/{arquivo} [{status}] | binds: {binds} | {objetivo}"
+        )
+
+    print(f"Consultas encontradas: {len(encontrados)}")
+    for item in encontrados[: max(1, args.limit)]:
+        print(item)
+    return 0
+
+
 def cmd_usage(_args: argparse.Namespace) -> int:
     conn = _connect_catalog()
     known = {r["object_name"] for r in conn.execute("SELECT object_name FROM objects")}
@@ -535,13 +587,12 @@ def sql_guard_text(sql: str) -> str:
 def _carregar_guard() -> Any:
     """Modulo do guard SQL do acervo (wrapper versionado). Ausente = fail-closed."""
     try:
-        import guard_sql  # pylint: disable=import-outside-toplevel
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return importlib.import_module("guard_sql")
+    except Exception as exc:
         raise GuardError(
             f"guard_sql indisponivel ({type(exc).__name__}: {exc}); "
             "consulta bloqueada por seguranca (fail-closed)."
         ) from exc
-    return guard_sql
 
 
 def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> str | None:
@@ -556,7 +607,8 @@ def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> str | N
     try:
         canon = guard.patch_canonical(guard.load_canonical())
         classificacao = canon.classificar(sql, exigir_limite=False)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    # Qualquer falha do guard vira GuardError (fail-closed).
+    except Exception as exc:
         raise GuardError(f"guard_sql falhou ao validar (fail-closed): {exc}") from exc
     if (
         not classificacao.get("permitido", False)
@@ -633,8 +685,10 @@ def log_avisos_stderr(msg: str, level: str = "INFO", _exec_id: str = "") -> None
         print(f"[{level}] {msg}", file=sys.stderr)
 
 
-def _resolve_online_creds() -> OracleCredentials:
+def _resolve_online_creds() -> Any:
     load_dotenv(ROOT / ".env")
+    if usar_fila_oracle():
+        return QUEUE_MODE_SENTINEL
     creds = resolve_oracle_credentials(log_avisos_stderr, EXEC_ID)
     if creds is None:
         print("[ERRO] Credenciais Oracle ausentes ou invalidas. Verifique .env.")
@@ -684,6 +738,14 @@ def _raise_if_expired(holder: dict[str, Any]) -> None:
 # Retry so em queda de sessao (`is_session_drop`, fonte unica): erro de SQL
 # falha na hora, e DPY-1001 (InterfaceError) tambem e repetido.
 _MAX_ATTEMPTS = 3
+# Queda de sessão chega como oracledb.Error (ORA-/DPY-) ou OSError (rede): só isso repete.
+_ERROS_DE_SESSAO: tuple[type[Exception], ...] = (oracledb.Error, OSError)
+# Falhas de um subcomando online: driver, rede, prazo, guard (ValueError) e fila SMB.
+ERROS_SUBCOMANDO: tuple[type[Exception], ...] = (
+    oracledb.Error,
+    TimeoutError,
+    *ERROS_FILA,
+)
 
 
 def _run_guarded(fn: Any, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> Any:
@@ -695,7 +757,7 @@ def _run_guarded(fn: Any, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> Any
             return _run_with_timeout(
                 lambda h=holder: fn(h), timeout_seconds, holder=holder
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except _ERROS_DE_SESSAO as exc:
             if attempt >= _MAX_ATTEMPTS or not is_session_drop(exc):
                 raise
     raise AssertionError("inalcancavel")
@@ -718,14 +780,30 @@ def _find_description_column(
     return None
 
 
+def _run_catalog_queue_query(
+    sql: str,
+    consulta: str | None,
+    guard_exec_id: str,
+    exec_id: str,
+) -> tuple[list[str], list[tuple[Any, ...]]]:
+    motivo = verificar_objetos_fila(
+        consulta, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id=guard_exec_id
+    )
+    if motivo is not None:
+        raise GuardError(f"Bloqueado: {motivo}")
+    res = executar_consulta_fila(
+        sql, timeout=DEFAULT_TIMEOUT_SECONDS, meta={"exec_id": exec_id}
+    )
+    return list(res.columns), list(res.rows)
+
+
 def cmd_distinct(args: argparse.Namespace) -> int:
     conn = _connect_catalog()
     table, column = args.table.upper(), args.column.upper()
-    col_exists = conn.execute(
+    if not conn.execute(
         "SELECT 1 FROM columns WHERE table_name = ? AND column_name = ?",
         (table, column),
-    ).fetchone()
-    if not col_exists:
+    ).fetchone():
         print(
             f"[ERRO] {table}.{column} nao existe no catalogo. Rode 'cols {table}' para conferir."
         )
@@ -733,33 +811,31 @@ def cmd_distinct(args: argparse.Namespace) -> int:
 
     desc_col = _find_description_column(conn, table, column) if args.with_desc else None
     select_cols = f"{column}, {desc_col}" if desc_col else column
-    limit = min(args.limit, DEFAULT_DISTINCT_ROWS * 4)
+    limit = max(1, min(args.limit, DEFAULT_DISTINCT_ROWS * 4))
     sql = (
         f"SELECT DISTINCT {select_cols} FROM {_catalog_owner(conn)}.{table} "  # nosec B608 - identificadores validados contra o catalogo, nunca texto livre do usuario
         f"WHERE {column} IS NOT NULL ORDER BY 1 FETCH FIRST {limit} ROWS ONLY"
     )
     try:
-        # mesma validacao do SQL que sera executado
         sql, consulta = _preparar_para_execucao(sql)
-    except GuardError as exc:
-        print(f"[ERRO] {exc}")
-        return 1
+        creds = _resolve_online_creds()
+        if creds is QUEUE_MODE_SENTINEL:
+            _, rows = _run_catalog_queue_query(
+                sql, consulta, "CAT_DISTINCT_G", "CAT_DISTINCT"
+            )
+        else:
 
-    creds = _resolve_online_creds()
+            def _run(holder: dict[str, Any]) -> list[tuple[Any, ...]]:
+                connection = connect_from_creds(creds)
+                holder["connection"] = connection
+                _raise_if_expired(holder)
+                cursor = connection.cursor()
+                _sem_funcao_no_catalogo(cursor, consulta)
+                cursor.execute(sql)
+                return list(cursor.fetchall())
 
-    def _run(holder: dict[str, Any]) -> list[tuple[Any, ...]]:
-        # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
-        connection = connect_from_creds(creds)
-        holder["connection"] = connection
-        _raise_if_expired(holder)
-        cursor = connection.cursor()
-        _sem_funcao_no_catalogo(cursor, consulta)
-        cursor.execute(sql)
-        return list(cursor.fetchall())
-
-    try:
-        rows = _run_guarded(_run)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+            rows = _run_guarded(_run)
+    except ERROS_SUBCOMANDO as exc:
         print(f"[ERRO] {exc}")
         return 1
     for row in rows:
@@ -824,35 +900,33 @@ def cmd_sample(args: argparse.Namespace) -> int:
     if not ok:
         return 1
 
-    max_rows = min(args.max_rows, MAX_SAMPLE_ROWS)
+    max_rows = max(1, min(args.max_rows, MAX_SAMPLE_ROWS))
     sql = (
         f"SELECT {select_cols} FROM {_catalog_owner(conn)}.{table}{where_clause} "  # nosec B608 - tabela/colunas validadas contra o catalogo; --where validado pelo guard_sql
         f"FETCH FIRST {max_rows} ROWS ONLY"
     )
     try:
-        # valida o SQL final, com o FETCH FIRST
         sql, consulta = _preparar_para_execucao(sql)
-    except GuardError as exc:
-        print(f"[ERRO] --where rejeitado: {exc}")
-        return 1
+        creds = _resolve_online_creds()
+        if creds is QUEUE_MODE_SENTINEL:
+            cols, rows = _run_catalog_queue_query(
+                sql, consulta, "CAT_SAMPLE_G", "CAT_SAMPLE"
+            )
+        else:
 
-    creds = _resolve_online_creds()
+            def _run(holder: dict[str, Any]) -> tuple[list[str], list[tuple[Any, ...]]]:
+                connection = connect_from_creds(creds)
+                holder["connection"] = connection
+                _raise_if_expired(holder)
+                cursor = connection.cursor()
+                _sem_funcao_no_catalogo(cursor, consulta)
+                cursor.execute(sql)
+                return [d[0] for d in (cursor.description or [])], list(
+                    cursor.fetchall()
+                )
 
-    def _run(holder: dict[str, Any]) -> tuple[list[str], list[tuple[Any, ...]]]:
-        # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
-        connection = connect_from_creds(creds)
-        holder["connection"] = connection
-        _raise_if_expired(holder)
-        cursor = connection.cursor()
-        # `--where` livre: `PKG.FN = 1` (função sem parênteses) passa no guard.
-        _sem_funcao_no_catalogo(cursor, consulta)
-        cursor.execute(sql)
-        cols = [d[0] for d in (cursor.description or [])]
-        return cols, list(cursor.fetchall())
-
-    try:
-        cols, rows = _run_guarded(_run)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+            cols, rows = _run_guarded(_run)
+    except ERROS_SUBCOMANDO as exc:
         print(f"[ERRO] {exc}")
         return 1
     print(" | ".join(cols))
@@ -883,6 +957,16 @@ def cmd_check(args: argparse.Namespace) -> int:
         return 1
 
     creds = _resolve_online_creds()
+    if creds is QUEUE_MODE_SENTINEL:
+        try:
+            explicar_plano_fila(
+                sql, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id="CAT_CHECK"
+            )
+        except ERROS_FILA as exc:
+            print(f"[INVALIDO] {exc}")
+            return 1
+        print("[OK] SQL parseado com sucesso (nomes e sintaxe validos).")
+        return 0
 
     def _run(holder: dict[str, Any]) -> None:
         # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
@@ -893,7 +977,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     try:
         _run_guarded(_run)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except ERROS_SUBCOMANDO as exc:
         print(f"[INVALIDO] {exc}")
         return 1
     print("[OK] SQL parseado com sucesso (nomes e sintaxe validos).")
@@ -911,6 +995,17 @@ def cmd_explain(args: argparse.Namespace) -> int:
         return 1
 
     creds = _resolve_online_creds()
+    if creds is QUEUE_MODE_SENTINEL:
+        try:
+            linhas, _ = explicar_plano_fila(
+                sql, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id="CAT_EXPLAIN"
+            )
+        except ERROS_FILA as exc:
+            print(f"[ERRO] Nao foi possivel gerar o plano: {exc}")
+            return 1
+        for linha in linhas:
+            print(linha)
+        return 0
 
     def _run(holder: dict[str, Any]) -> list[str]:
         # Fechada por `run_with_cancel` (owns_connection), nunca aqui.
@@ -924,7 +1019,7 @@ def cmd_explain(args: argparse.Namespace) -> int:
 
     try:
         linhas = _run_guarded(_run)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except ERROS_SUBCOMANDO as exc:
         print(f"[ERRO] Nao foi possivel gerar o plano: {exc}")
         return 1
     for linha in linhas:
@@ -969,6 +1064,15 @@ def _add_offline_subparsers(sub: Any) -> None:
         "usage", help="Cruza os .sql do repo com o catalogo (drift)"
     )
     p_usage.set_defaults(func=cmd_usage)
+
+    p_queries = sub.add_parser(
+        "queries", help="Busca consultas catalogadas em CATALOGO_QUERIES.md"
+    )
+    p_queries.add_argument("termo", nargs="?", default=None)
+    p_queries.add_argument("--pasta", default=None)
+    p_queries.add_argument("--bind", default=None)
+    p_queries.add_argument("--limit", type=int, default=25)
+    p_queries.set_defaults(func=cmd_queries)
 
 
 def _add_online_subparsers(sub: Any) -> None:

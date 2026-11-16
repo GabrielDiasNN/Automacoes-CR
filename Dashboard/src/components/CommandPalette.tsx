@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Search, Workflow } from "lucide-react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useOverlayDismiss } from "../hooks/useOverlayDismiss";
 import { useAsyncResource } from "../hooks/useAsyncResource";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { orchestratorApi, type Automation } from "../api/orchestrator";
@@ -28,6 +29,7 @@ type PaletteEntry =
 export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps) {
   const navigate = useNavigate();
   const boxRef = useRef<HTMLDivElement>(null!);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -36,6 +38,7 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   const buscaAtiva = open && debouncedQuery.trim().length >= 2;
 
   useFocusTrap(boxRef, open, onClose);
+  useOverlayDismiss(overlayRef, open, onClose);
 
   useEffect(() => {
     if (!open) return;
@@ -88,11 +91,8 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   };
 
   return createPortal(
-    // Overlay de clique-fora do modal (padrão sem equivalente nativo).
-    // Fecha só quando o próprio overlay é o alvo do evento — evita precisar
-    // de stopPropagation no filho. Escape já fecha via useFocusTrap.
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- overlay de clique-fora: padrão sem equivalente nativo, o alvo é checado no próprio overlay
-    <div className={`overlay-scrim ${styles.overlay}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    // Clique-fora via `useOverlayDismiss`; Escape já fecha via useFocusTrap.
+    <div ref={overlayRef} className={`overlay-scrim ${styles.overlay}`}>
       <div
         ref={boxRef}
         className={`${styles.box} animate-in`}

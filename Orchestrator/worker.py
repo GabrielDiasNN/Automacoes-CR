@@ -46,20 +46,20 @@ try:
     from app.services.execution_runtime import (
         apply_internal_worker_error,
         apply_timeout_result,
+        claim_next_task,
+        classify_process_result,
         complete_process_execution,
         finalize_reboot_interrupted_task,
         finalize_terminated_task,
         mark_task_as_failed,
         resolve_script_path,
     )
-    from app.services.execution_runtime import (  # pylint: disable=useless-import-alias
-        claim_next_task as claim_next_task,
-    )
-    from app.services.execution_runtime import (  # pylint: disable=useless-import-alias,unused-import
-        classify_process_result as classify_process_result,
-    )
 
     # isort: on
+    from app.services.oracle_queue_health import (
+        ORACLE_QUEUE_LOAD_ERRORS,
+        load_oracle_queue_module,
+    )
     from app.timezone import get_now_local
 except ImportError as e:
     print(f"CRITICAL: Falha ao importar componentes do app: {e}")
@@ -67,6 +67,10 @@ except ImportError as e:
 
 # Alias de compatibilidade para os testes (test_worker_queue.py) durante a refatoração.
 _finalize_terminated_task = finalize_terminated_task
+
+# Reexportados de app.services.execution_runtime: tests/test_worker_queue.py e
+# tests/test_worker_integration.py importam estes nomes do modulo worker.
+__all__ = ["claim_next_task", "classify_process_result"]
 
 # ---------------------------------------------------------------------------
 # Configuracao de Ambiente
@@ -239,7 +243,8 @@ def wakeup_listener_loop() -> None:
                 shutdown_event.wait(backoff)
                 backoff = min(backoff * 2, max_backoff)
                 continue
-            if res.json().get("status") == "wakeup":
+            payload = res.json()
+            if isinstance(payload, dict) and payload.get("status") == "wakeup":
                 logger.info("Sinal de wakeup recebido!")
                 wakeup_event.set()
             backoff = 5  # reset em sucesso
@@ -247,8 +252,16 @@ def wakeup_listener_loop() -> None:
             # Falha de rede esperada (API offline/reiniciando)
             shutdown_event.wait(backoff)
             backoff = min(backoff * 2, max_backoff)
+        except ValueError as exc:
+            # Corpo de resposta que nao e JSON valido
+            logger.warning("Resposta invalida do wait-for-task: %s", exc)
+            shutdown_event.wait(backoff)
+            backoff = min(backoff * 2, max_backoff)
+        # Residual: a thread de wakeup nao pode morrer por erro inesperado; sem este catch,
+        # qualquer excecao fora das anteriores encerraria a thread em silencio e o worker
+        # seguiria so por polling.
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.warning("Erro inesperado no wakeup listener: %s", exc)
+            logger.exception("Falha inesperada no listener de wakeup: %s", exc)
             shutdown_event.wait(backoff)
             backoff = min(backoff * 2, max_backoff)
 
@@ -265,6 +278,9 @@ def heartbeat_loop() -> None:
         try:
             with session_scope(SessionLocal) as db:
                 _update_heartbeat(db)
+        # Residual: excecao nao prevista em _update_heartbeat (ex.: bug de atributo)
+        # escapando mataria a thread em silencio; o worker seguiria processando
+        # tarefas mas o Dashboard mostraria o heartbeat parado sem log do motivo.
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("Erro no heartbeat: %s", e)
         shutdown_event.wait(HEARTBEAT_INTERVAL)
@@ -470,24 +486,56 @@ def scan_for_artifacts(
 _ALLOWED_ENV_KEYS = ALLOWED_ENV_KEYS
 
 
-def _build_subprocess_env(db_exec: Any, exec_id: str) -> dict[str, str]:
+def _cleanup_oracle_queue_requests(exec_id: str) -> None:
+    """Remove pedidos req_*.sql órfãos na fila SMB quando uma tarefa sofre stop/timeout."""
+    if os.environ.get("ORACLE_DRIVER_MODE", "").strip().lower() != "queue":
+        return
+    try:
+        removed = load_oracle_queue_module().cleanup_requests_for_exec_id(exec_id)
+    # ValueError: host UNC malformado (UnicodeError na resolução de nome).
+    except (*ORACLE_QUEUE_LOAD_ERRORS, ValueError) as exc:
+        logger.debug("Falha ao limpar fila Oracle para exec_id=%s: %s", exec_id, exc)
+        return
+    if removed:
+        logger.info(
+            "Limpeza pós-aborto removeu %d requisição(ões) órfã(s) da fila Oracle (exec_id=%s).",
+            removed,
+            exec_id,
+        )
+
+
+def _build_subprocess_env(
+    db_exec: Any, exec_id: str, max_runtime: int = 30
+) -> dict[str, str]:
     """Ambiente mínimo para subprocesso — exclui secrets sensíveis (D3/1.5)."""
-    return build_subprocess_env(
-        {
-            "ORCHESTRATOR_TEST_MODE": (
-                "true" if db_exec.automation.test_mode else "false"
-            ),
-            "EXEC_ID": exec_id,
-            "CORRELATION_ID": exec_id,  # propaga correlation_id (E1)
-        }
-    )
+    extra: dict[str, str] = {
+        "ORCHESTRATOR_TEST_MODE": ("true" if db_exec.automation.test_mode else "false"),
+        "EXEC_ID": exec_id,
+        "CORRELATION_ID": exec_id,  # propaga correlation_id (E1)
+    }
+    queue_group = getattr(
+        getattr(db_exec, "automation", None), "queue_group", None
+    ) or getattr(db_exec, "queue_group", None)
+    if queue_group == "oracle" and max_runtime > 0:
+        # Subprocesso Oracle deve expirar ANTES do kill forçado do Orchestrator
+        # para fechar telemetria/lock limpos e emitir ExitCode canonico.
+        # O prazo global (ORACLE_QUEUE_DEADLINE_EPOCH) é a ÚNICA fonte do limite do
+        # subprocesso. Não injetamos ORACLE_QUEUE_TIMEOUT_SECONDS: o Import-HubEnv
+        # e o load_dotenv(override=True) dos extract_* sobrescreveriam qualquer
+        # valor injetado com o do .env, tornando o cap sem efeito.
+        budget_sec = max(30, int(max_runtime) * 60 - 90)
+        extra["ORACLE_QUEUE_DEADLINE_EPOCH"] = f"{time.time() + budget_sec:.3f}"
+    return build_subprocess_env(extra)
 
 
 def _start_process(
-    db_exec: Any, script_path: str, exec_id: str
+    db_exec: Any, script_path: str, exec_id: str, max_runtime: int = 30
 ) -> "subprocess.Popen[str]":
     """Inicia o PowerShell e registra o processo ativo para shutdown seguro."""
-    env = _build_subprocess_env(db_exec, exec_id)
+    env = _build_subprocess_env(db_exec, exec_id, max_runtime=max_runtime)
+    # RESIDUAL (consider-using-with): o Popen e devolvido ao chamador e segue vivo
+    # para monitoramento, leitura de stdout e kill (stats['active_processes']);
+    # um `with` fecharia os pipes e esperaria o processo ao sair deste escopo.
     process = subprocess.Popen(  # pylint: disable=consider-using-with
         [
             "powershell.exe",
@@ -568,7 +616,63 @@ def _drain_final_output(
     return _drain_process_output(output_queue, logs, exec_id, total_chars)
 
 
-def _monitor_process(  # pylint: disable=too-many-locals
+def _encerrada_pelo_banco(
+    process: "subprocess.Popen[str]",
+    exec_id: str,
+    logs: list[str],
+    task_start_monotonic: float,
+    max_runtime: int,
+) -> bool:
+    """Checa no banco interrupcao pelo usuario e timeout.
+
+    Retorna True quando a execucao foi encerrada aqui (o monitor deve retornar False).
+    """
+    timeout_delta = timedelta(minutes=max_runtime)
+    with session_scope(SessionLocal) as check_db:
+        db_status: Any = (
+            check_db.query(models.Execution.status)
+            .filter(models.Execution.id == exec_id)
+            .scalar()
+        )
+        if db_status == EXECUTION_STATUS_TERMINATED:
+            _force_kill(process.pid)
+            _cleanup_oracle_queue_requests(exec_id)
+            broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
+            finalize_terminated_task(check_db, exec_id, logs, task_start_monotonic)
+            broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
+            return True
+
+        # Relógio MONOTÔNICO, não wall-clock. Até 31/07/2026 a
+        # comparação era `get_now_local() - task_start`, ambos datetimes
+        # de relógio de parede: um acerto de NTP para trás adiava o
+        # timeout pelo mesmo delta (processo travado seguia vivo,
+        # segurando um slot e bloqueando o queue_group), e um acerto
+        # para a frente derrubava execução saudável, gravando TIMEOUT
+        # com `duration_seconds` MENOR que o max_runtime declarado — um
+        # estado internamente contraditório. Todo o resto da medição
+        # desta execução já usava `task_start_monotonic`.
+        if (time.monotonic() - task_start_monotonic) > timeout_delta.total_seconds():
+            _force_kill(process.pid)
+            _cleanup_oracle_queue_requests(exec_id)
+            broadcast_log(f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id)
+            db_exec_upd = apply_timeout_result(
+                check_db, exec_id, logs, task_start_monotonic
+            )
+            if db_exec_upd:
+                auto = (
+                    check_db.query(models.Automation)
+                    .filter(models.Automation.id == db_exec_upd.automation_id)
+                    .first()
+                )
+                if auto:
+                    notifications.dispatch_alerts_async(auto, db_exec_upd)
+            update_stat("tasks_failed", 1)
+            broadcast_event("TASK_TIMEOUT", {"exec_id": exec_id})
+            return True
+    return False
+
+
+def _monitor_process(
     process: "subprocess.Popen[str]",
     output_queue: Queue[str],
     logs: list[str],
@@ -577,10 +681,9 @@ def _monitor_process(  # pylint: disable=too-many-locals
     """Monitora saída, interrupção e timeout; retorna True para finalização normal."""
     exec_id: str = task_ctx["exec_id"]
     # `task_start` (wall-clock) permanece no task_ctx para exibição, mas o corte
-    # por max_runtime usa exclusivamente o relógio monotônico — ver abaixo.
+    # por max_runtime usa exclusivamente o relógio monotônico — ver _encerrada_pelo_banco.
     task_start_monotonic: float = task_ctx["task_start_monotonic"]
     max_runtime: int = task_ctx["max_runtime"]
-    timeout_delta = timedelta(minutes=max_runtime)
     last_db_check = 0.0
 
     reader_thread = task_ctx.get("reader_thread")
@@ -595,51 +698,10 @@ def _monitor_process(  # pylint: disable=too-many-locals
         now_ts = time.time()
         if (now_ts - last_db_check) >= _DB_CHECK_INTERVAL:
             last_db_check = now_ts
-            with session_scope(SessionLocal) as check_db:
-                db_status: Any = (
-                    check_db.query(models.Execution.status)
-                    .filter(models.Execution.id == exec_id)
-                    .scalar()
-                )
-                if db_status == EXECUTION_STATUS_TERMINATED:
-                    _force_kill(process.pid)
-                    broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
-                    finalize_terminated_task(
-                        check_db, exec_id, logs, task_start_monotonic
-                    )
-                    broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
-                    return False
-
-                # Relógio MONOTÔNICO, não wall-clock. Até 31/07/2026 a
-                # comparação era `get_now_local() - task_start`, ambos datetimes
-                # de relógio de parede: um acerto de NTP para trás adiava o
-                # timeout pelo mesmo delta (processo travado seguia vivo,
-                # segurando um slot e bloqueando o queue_group), e um acerto
-                # para a frente derrubava execução saudável, gravando TIMEOUT
-                # com `duration_seconds` MENOR que o max_runtime declarado — um
-                # estado internamente contraditório. Todo o resto da medição
-                # desta execução já usava `task_start_monotonic`.
-                if (
-                    time.monotonic() - task_start_monotonic
-                ) > timeout_delta.total_seconds():
-                    _force_kill(process.pid)
-                    broadcast_log(
-                        f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id
-                    )
-                    db_exec_upd = apply_timeout_result(
-                        check_db, exec_id, logs, task_start_monotonic
-                    )
-                    if db_exec_upd:
-                        auto = (
-                            check_db.query(models.Automation)
-                            .filter(models.Automation.id == db_exec_upd.automation_id)
-                            .first()
-                        )
-                        if auto:
-                            notifications.dispatch_alerts_async(auto, db_exec_upd)
-                    update_stat("tasks_failed", 1)
-                    broadcast_event("TASK_TIMEOUT", {"exec_id": exec_id})
-                    return False
+            if _encerrada_pelo_banco(
+                process, exec_id, logs, task_start_monotonic, max_runtime
+            ):
+                return False
 
         time.sleep(1)
 
@@ -652,6 +714,7 @@ def _monitor_process(  # pylint: disable=too-many-locals
     # Processo ainda vivo: encerra e finaliza como interrupção por reboot, para
     # não deixar a execução presa em RUNNING até o recovery do próximo boot.
     _force_kill(process.pid)
+    _cleanup_oracle_queue_requests(exec_id)
     _drain_final_output(reader_thread, output_queue, logs, exec_id, total_chars)
     broadcast_log("\n[INTERROMPIDO POR SHUTDOWN DO ORQUESTRADOR]\n", exec_id)
     with session_scope(SessionLocal) as shutdown_db:
@@ -736,9 +799,107 @@ def _finalize_execution(
     )
 
 
-def run_task(  # pylint: disable=too-many-locals
-    exec_id: str, script_path: str, max_runtime: int = 30
+def _iniciar_tarefa(
+    exec_id: str,
+    script_path: str,
+    max_runtime: int,
+    log_extra: dict[str, str],
+) -> "subprocess.Popen[str] | None":
+    """Fase 1 — janela curta: valida o status, reivindica e inicia o processo.
+
+    Retorna None quando a tarefa nao deve rodar (inexistente ou status inesperado).
+    """
+    with session_scope(SessionLocal) as db:
+        db_exec = (
+            db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+        )
+        if not db_exec:
+            return None
+        logger.info(
+            "Iniciando tarefa %s -> %s (Timeout: %dmin)",
+            exec_id,
+            script_path,
+            max_runtime,
+            extra=log_extra,
+        )
+        if db_exec.status == EXECUTION_STATUS_PENDING:
+            db_exec.status = EXECUTION_STATUS_RUNNING
+            db_exec.started_at = get_now_local()
+            db_exec.claimed_at = db_exec.started_at
+            db_exec.worker_instance_id = WORKER_INSTANCE_ID
+            db_exec.worker_pid = os.getpid()
+            db.commit()
+        elif db_exec.status != EXECUTION_STATUS_RUNNING:
+            logger.warning(
+                "Tarefa %s ignorada: status atual=%s",
+                exec_id,
+                db_exec.status,
+                extra=log_extra,
+            )
+            return None
+
+        broadcast_event(
+            "TASK_STARTED",
+            {"exec_id": exec_id, "automation_id": db_exec.automation_id},
+        )
+        # Dentro da janela porque _build_subprocess_env lê
+        # db_exec.automation.test_mode (carga lazy do relacionamento).
+        return _start_process(db_exec, script_path, exec_id, max_runtime=max_runtime)
+
+
+def _persistir_resultado(
+    process: "subprocess.Popen[str]", logs: list[str], task_ctx: dict[str, Any]
 ) -> None:
+    """Fase 3 — janela curta para persistir o resultado."""
+    with session_scope(SessionLocal) as final_db:
+        _finalize_execution(final_db, process, logs, task_ctx)
+
+
+def _registrar_falha_tarefa(
+    exec_id: str, exc: Exception, task_start_monotonic: float
+) -> None:
+    """Grava INTERNAL_WORKER_ERROR para uma falha inesperada da tarefa."""
+    log_extra: dict[str, str] = {"correlation_id": exec_id}
+    logger.error("Erro fatal na tarefa %s: %s", exec_id, exc, extra=log_extra)
+    with session_scope(SessionLocal) as error_db:
+        apply_internal_worker_error(error_db, exec_id, str(exc), task_start_monotonic)
+    update_stat("tasks_failed", 1)
+    broadcast_event("TASK_FAILED", {"exec_id": exec_id, "error": str(exc)})
+
+
+def _encerrar_contagem_tarefa(exec_id: str, log_extra: dict[str, str]) -> None:
+    """Desconta a tarefa do contador ativo e mata processo órfão, se restar um."""
+    with cast(threading.Lock, stats["lock"]):
+        stats["active_tasks"] = max(0, stats["active_tasks"] - 1)
+        orfao = stats["active_processes"].pop(exec_id, None)
+    # Se o processo ainda está vivo quando saímos daqui, ele ficou ÓRFÃO:
+    # foi removido de `active_processes` (logo o `_terminate_active_processes`
+    # do shutdown já não o enxerga) e nenhum monitor o supervisiona. Isso
+    # acontecia quando uma exceção ocorria depois do `_start_process` — por
+    # exemplo um `OperationalError` do SQLite dentro de `_monitor_process`,
+    # que abre sessão a cada 5 s. O banco registrava INTERNAL_WORKER_ERROR
+    # enquanto o PowerShell seguia rodando e podendo enviar e-mail/WhatsApp;
+    # o operador via a falha, reenfileirava, e a entrega duplicava.
+    if orfao is not None and orfao.poll() is None:
+        logger.error(
+            "Processo da tarefa %s continuava vivo apos o encerramento do "
+            "monitor; encerrando para nao deixar orfao sem supervisao.",
+            exec_id,
+            extra=log_extra,
+        )
+        try:
+            _force_kill(orfao.pid)
+        except OSError as exc:
+            logger.warning(
+                "Falha ao encerrar processo orfao da tarefa %s: %s",
+                exec_id,
+                exc,
+                extra=log_extra,
+            )
+        _cleanup_oracle_queue_requests(exec_id)
+
+
+def run_task(exec_id: str, script_path: str, max_runtime: int = 30) -> None:
     """Orquestra as fases de início, monitoramento e finalização da tarefa.
 
     A sessão do banco é aberta em duas janelas curtas — início e finalização —
@@ -757,45 +918,9 @@ def run_task(  # pylint: disable=too-many-locals
     pre_existing_artifacts = snapshot_artifact_files(robot_dir)
     log_extra: dict[str, str] = {"correlation_id": exec_id}
     try:
-        # Fase 1 — janela curta: valida o status, reivindica e inicia o processo.
-        with session_scope(SessionLocal) as db:
-            db_exec = (
-                db.query(models.Execution)
-                .filter(models.Execution.id == exec_id)
-                .first()
-            )
-            if not db_exec:
-                return
-            logger.info(
-                "Iniciando tarefa %s -> %s (Timeout: %dmin)",
-                exec_id,
-                script_path,
-                max_runtime,
-                extra=log_extra,
-            )
-            if db_exec.status == EXECUTION_STATUS_PENDING:
-                db_exec.status = EXECUTION_STATUS_RUNNING  # type: ignore[assignment]
-                db_exec.started_at = get_now_local()  # type: ignore[assignment]
-                db_exec.claimed_at = db_exec.started_at
-                db_exec.worker_instance_id = WORKER_INSTANCE_ID  # type: ignore[assignment]
-                db_exec.worker_pid = os.getpid()  # type: ignore[assignment]
-                db.commit()
-            elif db_exec.status != EXECUTION_STATUS_RUNNING:
-                logger.warning(
-                    "Tarefa %s ignorada: status atual=%s",
-                    exec_id,
-                    db_exec.status,
-                    extra=log_extra,
-                )
-                return
-
-            broadcast_event(
-                "TASK_STARTED",
-                {"exec_id": exec_id, "automation_id": db_exec.automation_id},
-            )
-            # Dentro da janela porque _build_subprocess_env lê
-            # db_exec.automation.test_mode (carga lazy do relacionamento).
-            process = _start_process(db_exec, script_path, exec_id)
+        process = _iniciar_tarefa(exec_id, script_path, max_runtime, log_extra)
+        if process is None:
+            return
 
         output_queue: Queue[str] = Queue()
         reader_thread = threading.Thread(
@@ -823,42 +948,14 @@ def run_task(  # pylint: disable=too-many-locals
         )
         # Fase 3 — janela curta para persistir o resultado.
         if should_finalize:
-            with session_scope(SessionLocal) as final_db:
-                _finalize_execution(
-                    final_db,
-                    process,
-                    logs,
-                    task_ctx,
-                )
+            _persistir_resultado(process, logs, task_ctx)
+    # Residual: fronteira da tarefa no pool. Excecao nao prevista escapando daqui
+    # cairia no Future sem log, a execucao ficaria RUNNING ate o cleanup de zumbis
+    # do proximo boot e a contagem ativa nao seria liberada pelo caminho normal.
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error("Erro fatal na tarefa %s: %s", exec_id, exc, extra=log_extra)
-        with session_scope(SessionLocal) as error_db:
-            apply_internal_worker_error(
-                error_db, exec_id, str(exc), task_start_monotonic
-            )
-        update_stat("tasks_failed", 1)
-        broadcast_event("TASK_FAILED", {"exec_id": exec_id, "error": str(exc)})
+        _registrar_falha_tarefa(exec_id, exc, task_start_monotonic)
     finally:
-        with cast(threading.Lock, stats["lock"]):
-            stats["active_tasks"] = max(0, stats["active_tasks"] - 1)
-            orfao = stats["active_processes"].pop(exec_id, None)
-        # Se o processo ainda está vivo quando saímos daqui, ele ficou ÓRFÃO:
-        # foi removido de `active_processes` (logo o `_terminate_active_processes`
-        # do shutdown já não o enxerga) e nenhum monitor o supervisiona. Isso
-        # acontecia quando uma exceção ocorria depois do `_start_process` — por
-        # exemplo um `OperationalError` do SQLite dentro de `_monitor_process`,
-        # que abre sessão a cada 5 s. O banco registrava INTERNAL_WORKER_ERROR
-        # enquanto o PowerShell seguia rodando e podendo enviar e-mail/WhatsApp;
-        # o operador via a falha, reenfileirava, e a entrega duplicava.
-        if orfao is not None and orfao.poll() is None:
-            logger.error(
-                "Processo da tarefa %s continuava vivo apos o encerramento do "
-                "monitor; encerrando para nao deixar orfao sem supervisao.",
-                exec_id,
-                extra=log_extra,
-            )
-            with contextlib.suppress(Exception):
-                _force_kill(orfao.pid)
+        _encerrar_contagem_tarefa(exec_id, log_extra)
 
 
 # ---------------------------------------------------------------------------
@@ -877,19 +974,12 @@ def _terminate_active_processes() -> None:
         logger.warning("Terminando processo %s (Shutdown)", eid)
         try:
             _force_kill(proc.pid)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except OSError as e:
             logger.warning("Falha ao encerrar processo %s: %s", eid, e)
 
 
-def main_loop() -> None:  # pylint: disable=too-many-locals,too-many-statements
-    """Loop principal: consome tarefas PENDING e despacha para o ThreadPool."""
-    logger.info(
-        "Worker v%s iniciado (PID: %d, MaxWorkers: %d)",
-        WORKER_VERSION,
-        os.getpid(),
-        MAX_WORKERS,
-    )
-
+def _iniciar_threads_de_apoio() -> None:
+    """Inicia heartbeat, flusher de logs e listener de wakeup (daemon)."""
     hb_thread: threading.Thread = threading.Thread(target=heartbeat_loop, daemon=True)
     hb_thread.start()
 
@@ -903,6 +993,59 @@ def main_loop() -> None:  # pylint: disable=too-many-locals,too-many-statements
         target=wakeup_listener_loop, daemon=True
     )
     wk_thread.start()
+
+
+def _despachar_reivindicada(
+    db: Any,
+    exec_id: str,
+    executor: ThreadPoolExecutor,
+    active_futures: set[Future[None]],
+) -> bool:
+    """Despacha ao pool a tarefa reivindicada. False se ela sumiu do banco."""
+    claimed_task = (
+        db.query(models.Execution).filter(models.Execution.id == exec_id).first()
+    )
+    if not claimed_task:
+        return False
+
+    automation = (
+        db.query(models.Automation)
+        .filter(models.Automation.id == claimed_task.automation_id)
+        .first()
+    )
+
+    if automation:
+        script_path: str = resolve_script_path(
+            project_root, str(automation.script_path)
+        )
+        max_rt: int = int(automation.max_runtime_minutes or 30)
+
+        future = executor.submit(run_task, exec_id, script_path, max_rt)
+        active_futures.add(future)
+        logger.info(
+            "Tarefa despachada para pool: %s (%s)",
+            automation.name,
+            exec_id,
+        )
+    else:
+        mark_task_as_failed(
+            db,
+            exec_id,
+            "\nAutomacao nao encontrada no banco.",
+        )
+    return True
+
+
+def main_loop() -> None:
+    """Loop principal: consome tarefas PENDING e despacha para o ThreadPool."""
+    logger.info(
+        "Worker v%s iniciado (PID: %d, MaxWorkers: %d)",
+        WORKER_VERSION,
+        os.getpid(),
+        MAX_WORKERS,
+    )
+
+    _iniciar_threads_de_apoio()
 
     executor: ThreadPoolExecutor = ThreadPoolExecutor(
         max_workers=MAX_WORKERS, thread_name_prefix="task"
@@ -942,44 +1085,17 @@ def main_loop() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 if exec_id:
                     current_poll_interval = POLL_INTERVAL  # Reset do polling
                     wakeup_event.clear()  # Limpa sinal caso tenha sido wakeup
-
-                    claimed_task = (
-                        db.query(models.Execution)
-                        .filter(models.Execution.id == exec_id)
-                        .first()
-                    )
-                    if not claimed_task:
+                    if not _despachar_reivindicada(
+                        db, exec_id, executor, active_futures
+                    ):
                         continue
-
-                    automation = (
-                        db.query(models.Automation)
-                        .filter(models.Automation.id == claimed_task.automation_id)
-                        .first()
-                    )
-
-                    if automation:
-                        script_path: str = resolve_script_path(
-                            project_root, str(automation.script_path)
-                        )
-                        max_rt: int = int(automation.max_runtime_minutes or 30)
-
-                        future = executor.submit(run_task, exec_id, script_path, max_rt)
-                        active_futures.add(future)
-                        logger.info(
-                            "Tarefa despachada para pool: %s (%s)",
-                            automation.name,
-                            exec_id,
-                        )
-                    else:
-                        mark_task_as_failed(
-                            db,
-                            exec_id,
-                            "\nAutomacao nao encontrada no banco.",
-                        )
                 else:
                     current_poll_interval = min(
                         current_poll_interval * 1.5, MAX_POLL_INTERVAL
                     )
+        # Residual: laco principal do worker. Excecao nao prevista escapando daqui
+        # encerraria o processo sem passar pelo shutdown (sem _terminate_active_processes),
+        # deixando os powershell.exe filhos orfaos.
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Erro no loop do worker: %s", e)
 
@@ -1018,9 +1134,7 @@ def main_loop() -> None:  # pylint: disable=too-many-locals,too-many-statements
 # ---------------------------------------------------------------------------
 
 
-def _signal_handler(
-    signum: int, frame: FrameType | None  # pylint: disable=unused-argument
-) -> None:
+def _signal_handler(signum: int, _frame: FrameType | None) -> None:
     logger.info("Sinal recebido: %d. Iniciando graceful shutdown...", signum)
     shutdown_event.set()
 

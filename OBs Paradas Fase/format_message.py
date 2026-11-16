@@ -11,7 +11,6 @@ from typing import Any
 
 # import-error e wrong-import-position: import de lib/python via sys.path.insert()
 # dinamico abaixo, que o pylint nao resolve em tempo de analise estatica.
-# pylint: disable=broad-exception-caught, import-error, wrong-import-position
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "python")
 )

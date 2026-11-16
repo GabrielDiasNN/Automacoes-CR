@@ -2,19 +2,16 @@
 
 from typing import Any
 
-from app import models as _models  # pylint: disable=unused-import
+import app.database as db
+import pytest
 from app.database import Base, validate_database_schema
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
-
-assert _models  # registra tabelas no Base.metadata antes da validacao de schema
 
 _RUNNING_UNIQUE_INDEX = "ix_execucao_running_unica_por_automacao"
 
 
-def test_validate_database_schema_passes_for_current_models(
-    client: TestClient,  # pylint: disable=unused-argument
-) -> None:
+@pytest.mark.usefixtures("client")
+def test_validate_database_schema_passes_for_current_models() -> None:
     result = validate_database_schema()
 
     assert result["valid"] is True
@@ -26,13 +23,10 @@ def test_validate_database_schema_passes_for_current_models(
     assert not result["missing_indexes"]
 
 
-def test_validate_database_schema_detecta_indice_ausente(
-    client: TestClient,  # pylint: disable=unused-argument
-) -> None:
+@pytest.mark.usefixtures("client")
+def test_validate_database_schema_detecta_indice_ausente() -> None:
     # Achado nº 1: `validate_database_schema` só comparava colunas, então o
     # índice único parcial da migration 20260731_01 era invisível.
-    import app.database as db  # pylint: disable=import-outside-toplevel
-
     with db.engine.begin() as conn:
         conn.execute(text(f"DROP INDEX IF EXISTS {_RUNNING_UNIQUE_INDEX}"))
     try:
@@ -51,8 +45,6 @@ def test_run_alembic_migrations_cria_indice_ausente_antes_do_stamp(
     # parcial e sem `alembic_version` era carimbado direto como head — a
     # migration que cria o índice nunca rodava e a invariante "uma RUNNING por
     # automação" sumia do banco em silêncio.
-    import app.database as db  # pylint: disable=import-outside-toplevel
-
     db_file = tmp_path / "legacy.db"
     url = f"sqlite:///{db_file}"
     legacy_engine = create_engine(url, connect_args={"check_same_thread": False})
@@ -85,8 +77,6 @@ def test_run_alembic_migrations_stamp_simples_quando_indices_ok(
 ) -> None:
     # Contraparte: schema legado íntegro (índices inclusos) segue no caminho de
     # stamp puro, sem o passo extra de criação de índices.
-    import app.database as db  # pylint: disable=import-outside-toplevel
-
     db_file = tmp_path / "legacy_ok.db"
     url = f"sqlite:///{db_file}"
     legacy_engine = create_engine(url, connect_args={"check_same_thread": False})
