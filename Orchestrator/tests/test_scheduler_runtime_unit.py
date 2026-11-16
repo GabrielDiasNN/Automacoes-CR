@@ -424,6 +424,41 @@ def test_reload_preserva_next_run_time_do_interval_no_dispatch_real(
         acessar_privado(sr, "_pending_interval_resume").clear()
 
 
+@pytest.mark.usefixtures("client")
+def test_reload_isola_falha_inesperada_de_uma_automacao(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Falha de tipo fora de ERROS_DE_SCHEDULE (OverflowError) ao agendar uma
+    automação não pode abortar o registro das demais."""
+    agenda = json.dumps({"schedule_type": "interval", "interval_minutes": 60})
+    for auto_id in (971, 972):
+        db_session.add(
+            models.Automation(
+                id=auto_id,
+                name=f"Automacao Isolamento {auto_id}",
+                script_path=f"./test/run_{auto_id}.ps1",
+                enabled=True,
+                schedule=agenda,
+            )
+        )
+    db_session.commit()
+
+    registradas: list[int] = []
+
+    def _registrar(automation_id: int, _sched: dict[str, Any]) -> None:
+        if automation_id == 971:
+            raise OverflowError("intervalo absurdo")
+        registradas.append(automation_id)
+
+    monkeypatch.setattr(sr, "_register_schedule", _registrar)
+    try:
+        sr.reload_scheduled_tasks()
+    finally:
+        acessar_privado(sr, "_pending_interval_resume").clear()
+
+    assert 972 in registradas
+
+
 def test_register_schedule_once_no_passado_loga_aviso(
     caplog: Any, monkeypatch: Any
 ) -> None:
