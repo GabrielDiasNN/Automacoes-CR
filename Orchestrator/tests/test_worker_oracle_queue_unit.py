@@ -71,9 +71,12 @@ def test_build_subprocess_env_prioriza_automation_queue_group_oracle(
     assert "ORACLE_QUEUE_TIMEOUT_SECONDS" not in env
 
 
-def test_build_subprocess_env_ignora_queue_group_congelado_quando_automation_mudou() -> (
-    None
-):
+def test_build_subprocess_env_ignora_queue_group_congelado_quando_automation_mudou(
+    monkeypatch: Any,
+) -> None:
+    # A variável está na allowlist de subprocess_env: sem limpar o ambiente pai, o
+    # valor do .env local (carregado no import do worker) chega ao subprocesso.
+    monkeypatch.delenv("ORACLE_QUEUE_TIMEOUT_SECONDS", raising=False)
     exec_movida = _execucao(auto_queue_group="hub-global", exec_queue_group="oracle")
     env = _build_subprocess_env(exec_movida, "EXEC-MOV-1", max_runtime=10)
 
