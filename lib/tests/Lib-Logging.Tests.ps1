@@ -293,18 +293,22 @@ Exit-AutomationLock -ExecId 'exec-2' -LockKey '$lockKey'
             $resOrfao.Reason | Should -Match "heartbeat expirado"
         }
 
-        It "preserva a causa quando o heartbeat esta corrompido (nao sobrescreve por 'sem heartbeat')" {
+        It "heartbeat ilegivel (regravacao em curso) usa a idade do arquivo, como o cliente Python" {
             $queueDir = Join-Path $TestDrive "fila_hb_corrompido"
             New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
             $hbPath = Join-Path $queueDir "_worker_heartbeat.json"
             '{"version":"2.6.1","state":' | Set-Content -LiteralPath $hbPath -Encoding UTF8
 
             $res = Test-OracleQueueWorkerAlive -QueueDir $queueDir
-            $res.Alive | Should -BeFalse
             $res.Reachable | Should -BeTrue
-            $res.Reason | Should -Match "falha ao ler heartbeat"
-            $res.Reason | Should -Match "sem sinal do worker na fila"
-            $res.Reason | Should -Not -Match "^sem heartbeat nem sinal"
+            $res.Source | Should -Be "heartbeat"
+            $res.Alive | Should -BeTrue
+            $res.State | Should -BeNullOrEmpty
+
+            (Get-Item -LiteralPath $hbPath).LastWriteTimeUtc = [DateTime]::UtcNow.AddSeconds(-600)
+            $velho = Test-OracleQueueWorkerAlive -QueueDir $queueDir
+            $velho.Alive | Should -BeFalse
+            $velho.Reason | Should -Match "heartbeat expirado"
         }
 
         It "Test-AutomationPreFlight -CheckOracle em modo queue valida worker vivo e reprova offline" {

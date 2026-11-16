@@ -2,6 +2,30 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.115] - 16/11/2026
+
+Correções da revisão de código dos PRs #88 e #89 (fila Oracle e estreitamento de `except`).
+
+### Corrigido
+
+- **Classificação `26` x `27` na fila (`lib/python/oracle_queue.py`):**
+  - Worker com heartbeat expirado depois de reivindicar o pedido (`.proc`) sai como `OracleQueueWorkerOfflineError` (`26`), não como `OracleQueueTimeoutError` (`27`).
+  - Pasta inalcançável na checagem de vivacidade não conta mais como worker parado: soluço de SMB no prazo de reivindicação segue esperando.
+  - `check_worker_liveness` sem sondagem (`probe_signal_seconds=0`) dá vivo quando há arquivo de sinal legado, como o `Test-OracleQueueWorkerAlive`. Sem heartbeat e sem sinal, Orchestrator e pre-flight continuam dando offline.
+  - `cleanup_requests_for_exec_id` lê só os primeiros 1024 bytes de cada `req_*.sql`.
+- **`lib/Lib-Logging.psm1`:** `Test-OracleQueueWorkerAlive` usa a idade do arquivo quando o conteúdo do heartbeat está ilegível (regravação em curso), como o cliente Python. Antes caía em worker offline (`26`) com o worker saudável.
+- **Capturas amplas restauradas onde o isolamento depende delas** (3 `pylint: disable=broad-exception-caught` residuais a mais que o registrado em `[1.3.114]`):
+  - `lib/python/oracle_session.py`: falha de qualquer tipo no `cancel()` não mascara o timeout de `run_with_cancel`.
+  - `reload_scheduled_tasks`: falha de qualquer tipo ao agendar uma automação não aborta o registro das demais.
+  - Broadcast do WebSocket: erro de envio a um cliente não interrompe a entrega aos demais.
+- **`Orchestrator/worker.py`:** nos caminhos de stop e timeout, a limpeza da fila Oracle roda depois de a sessão do banco fechar e o status final estar gravado.
+- **`lib/python/oracle_extract.py`:** `enforce_queue_deadline` delega a `oracle_queue.apply_queue_deadline` (fonte única do prazo global); removida a chamada redundante em `_fetch_all_queue`.
+
+### Testes
+
+- `test_oracle_queue_robustez_unit.py`: worker morto após reivindicar, pasta inalcançável no prazo de reivindicação e sinal legado sem sondagem.
+- `lib/tests/Lib-Logging.Tests.ps1`: o caso de heartbeat corrompido passa a exigir decisão pela idade do arquivo (recente = vivo, velho = expirado).
+
 ## [1.3.114] - 15/11/2026
 
 Endurecimento ponta a ponta da arquitetura **Oracle Queue (Worker SMB `v2.6.2` no TSplus + camada Python + Orchestrator + 6 automações + `Tools/oracle/` + Catálogo SQL)**, eliminando falhas silenciosas em quedas do worker, reduzindo timeouts para detecção rápida e automatizando recuperação pós-indisponibilidade e suporte completo ao modo `queue` nas ferramentas SQL.

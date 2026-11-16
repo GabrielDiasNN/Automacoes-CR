@@ -495,7 +495,7 @@ def _fetch_all_queue(
     # viajam à parte e o worker os passa ao Oracle como bind variables. O prazo
     # vem de ORACLE_QUEUE_TIMEOUT_SECONDS (ou ORACLE_QUEUE_DEADLINE_EPOCH).
     t0 = time.perf_counter()
-    enforce_queue_deadline("pre-query queue")
+    # `get_queue_timeout` já levanta OracleQueueTimeoutError com o prazo global vencido.
     resultado_q = oracle_queue.execute_query(
         sql, timeout_seconds=oracle_queue.get_queue_timeout(), params=params
     )
@@ -560,17 +560,13 @@ def classify_oracle_exit_code(exc: BaseException) -> int:
 
 def enforce_queue_deadline(context_label: str = "extracao") -> None:
     """Levanta OracleQueueTimeoutError se ORACLE_QUEUE_DEADLINE_EPOCH já passou."""
-    raw = (os.environ.get("ORACLE_QUEUE_DEADLINE_EPOCH") or "").strip()
-    if not raw:
-        return
+    # Fonte única da regra do prazo: `oracle_queue.apply_queue_deadline`.
     try:
-        deadline = float(raw)
-    except ValueError:
-        return
-    if 0 < deadline <= time.time():
+        oracle_queue.apply_queue_deadline(1.0)
+    except oracle_queue.OracleQueueTimeoutError as exc:
         raise oracle_queue.OracleQueueTimeoutError(
             f"Prazo global de execução atingido antes de concluir: {context_label}."
-        )
+        ) from exc
 
 
 # Residual: assinatura usada por automações e testes com estes nomes; agrupar os parâmetros mudaria todos os pontos de chamada.

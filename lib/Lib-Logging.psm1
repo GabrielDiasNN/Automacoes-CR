@@ -359,12 +359,20 @@ function Test-OracleQueueWorkerAlive {
             $ageSec = [math]::Round(($agoraServidor - $hbItem.LastWriteTimeUtc).TotalSeconds, 1)
             $out.AgeSeconds = $ageSec
             $out.Source = "heartbeat"
-            $hbRaw = Get-Content -LiteralPath $hbPath -Raw -Encoding Default
-            if (-not [string]::IsNullOrWhiteSpace($hbRaw)) {
-                $hb = $hbRaw | ConvertFrom-Json
-                $out.State = [string]$hb.state
-                $out.Version = [string]$hb.version
-                $out.OracleOk = $hb.oracle_ok
+            # Conteudo ilegivel (worker regravando o arquivo) nao invalida a idade ja
+            # medida pelo LastWriteTime: segue so com a idade, como o cliente Python
+            # (_apply_heartbeat_entry em lib/python/oracle_queue.py).
+            try {
+                $hbRaw = Get-Content -LiteralPath $hbPath -Raw -Encoding Default -ErrorAction Stop
+                if (-not [string]::IsNullOrWhiteSpace($hbRaw)) {
+                    $hb = $hbRaw | ConvertFrom-Json
+                    $out.State = [string]$hb.state
+                    $out.Version = [string]$hb.version
+                    $out.OracleOk = $hb.oracle_ok
+                }
+            }
+            catch [System.Exception] {
+                $out.State = $null
             }
             $limit = if (($out.State -eq "busy") -or ($activeProcs.Count -gt 0)) { $BusyMaxAgeSeconds } else { $MaxAgeSeconds }
             if ($ageSec -le $limit) {

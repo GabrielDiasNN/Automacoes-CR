@@ -636,7 +636,6 @@ def _encerrada_pelo_banco(
         )
         if db_status == EXECUTION_STATUS_TERMINATED:
             _force_kill(process.pid)
-            _cleanup_oracle_queue_requests(exec_id)
             broadcast_log("\n[INTERROMPIDO PELO USUARIO]\n", exec_id)
             finalize_terminated_task(check_db, exec_id, logs, task_start_monotonic)
             broadcast_event("TASK_STOPPED", {"exec_id": exec_id})
@@ -653,7 +652,6 @@ def _encerrada_pelo_banco(
         # desta execução já usava `task_start_monotonic`.
         if (time.monotonic() - task_start_monotonic) > timeout_delta.total_seconds():
             _force_kill(process.pid)
-            _cleanup_oracle_queue_requests(exec_id)
             broadcast_log(f"\n[TIMEOUT AUTOMÁTICO: {max_runtime}min]\n", exec_id)
             db_exec_upd = apply_timeout_result(
                 check_db, exec_id, logs, task_start_monotonic
@@ -701,6 +699,9 @@ def _monitor_process(
             if _encerrada_pelo_banco(
                 process, exec_id, logs, task_start_monotonic, max_runtime
             ):
+                # Depois de a sessao do banco fechar e o status final estar gravado:
+                # a varredura SMB pode demorar e nao pode segurar a execucao em RUNNING.
+                _cleanup_oracle_queue_requests(exec_id)
                 return False
 
         time.sleep(1)
