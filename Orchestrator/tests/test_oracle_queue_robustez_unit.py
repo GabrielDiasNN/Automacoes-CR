@@ -52,7 +52,9 @@ def _estado_limpo(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(oracle_queue, "_check_unc_port_reachable", lambda *_a: True)
 
 
-def _sequencia_de_vivacidade(*respostas: dict[str, Any]) -> Callable[..., dict[str, Any]]:
+def _sequencia_de_vivacidade(
+    *respostas: dict[str, Any]
+) -> Callable[..., dict[str, Any]]:
     """Devolve uma resposta por chamada; a última se repete."""
     fila = list(respostas)
 
@@ -90,7 +92,9 @@ def test_worker_vivo_apos_claim_deadline_continua_esperando(
     """Worker vivo e ocupado: o prazo de reivindicação (0,1 s) não pode abortar o pedido
     que só é reivindicado em 0,4 s e respondido depois."""
     monkeypatch.setenv("ORACLE_QUEUE_CLAIM_TIMEOUT_SECONDS", "0.1")
-    monkeypatch.setattr(oracle_queue, "check_worker_liveness", _sequencia_de_vivacidade(VIVO))
+    monkeypatch.setattr(
+        oracle_queue, "check_worker_liveness", _sequencia_de_vivacidade(VIVO)
+    )
     parar = threading.Event()
     threading.Thread(
         target=_worker, args=(tmp_path, parar, 0.4, True), daemon=True
@@ -110,9 +114,13 @@ def test_worker_vivo_sem_resposta_no_fim_levanta_timeout_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("ORACLE_QUEUE_CLAIM_TIMEOUT_SECONDS", "0.1")
-    monkeypatch.setattr(oracle_queue, "check_worker_liveness", _sequencia_de_vivacidade(VIVO))
+    monkeypatch.setattr(
+        oracle_queue, "check_worker_liveness", _sequencia_de_vivacidade(VIVO)
+    )
     with pytest.raises(OracleQueueTimeoutError) as exc:
-        execute_query("SELECT 1 FROM DUAL", timeout_seconds=0.5, queue_dir=str(tmp_path))
+        execute_query(
+            "SELECT 1 FROM DUAL", timeout_seconds=0.5, queue_dir=str(tmp_path)
+        )
     assert isinstance(exc.value, TimeoutError)
     assert not isinstance(exc.value, OracleQueueWorkerOfflineError)
     assert not list(tmp_path.glob("req_*")), "pedido não atendido deve ser apagado"
@@ -141,7 +149,9 @@ def test_worker_morto_no_fim_do_prazo_levanta_worker_offline(
         _sequencia_de_vivacidade(VIVO, MORTO),
     )
     with pytest.raises(OracleQueueWorkerOfflineError):
-        execute_query("SELECT 1 FROM DUAL", timeout_seconds=0.2, queue_dir=str(tmp_path))
+        execute_query(
+            "SELECT 1 FROM DUAL", timeout_seconds=0.2, queue_dir=str(tmp_path)
+        )
 
 
 # ------------------------------------------------------------------ C: --#timeout
@@ -248,7 +258,9 @@ def test_falha_apos_medicao_boa_reaproveita_o_skew_antigo(
     acessar_privado(oracle_queue, "_server_now")(base)  # medicao boa: grava skew 1000.0
     instante, skew = acessar_privado(oracle_queue, "_clock_skew_cache")[base]
     expirado = (instante - oracle_queue.CLOCK_SKEW_TTL_SECONDS - 1, skew)
-    monkeypatch.setitem(acessar_privado(oracle_queue, "_clock_skew_cache"), base, expirado)
+    monkeypatch.setitem(
+        acessar_privado(oracle_queue, "_clock_skew_cache"), base, expirado
+    )
 
     # Cache expirado e sonda falhando: reaproveita o skew antigo (1000.0), sem regravar.
     agora = acessar_privado(oracle_queue, "_server_now")(base)
@@ -275,7 +287,9 @@ def test_heartbeat_usa_relogio_do_servidor(
     acessar_privado(oracle_queue, "_reset_liveness_cache")()
     monkeypatch.setattr(oracle_queue, "_clock_skew_cache", {})
     monkeypatch.setattr(oracle_queue, "_medir_skew_relogio", lambda _b: 0.0)
-    sem_skew = oracle_queue.check_worker_liveness(str(tmp_path), probe_signal_seconds=0.0)
+    sem_skew = oracle_queue.check_worker_liveness(
+        str(tmp_path), probe_signal_seconds=0.0
+    )
     assert sem_skew["alive"] is False
 
 
@@ -351,7 +365,9 @@ def test_heartbeat_com_stat_falho_devolve_false(tmp_path: Path) -> None:
     def _stat_falho() -> None:
         raise OSError("stat falhou")
 
-    entrada = SimpleNamespace(path=str(tmp_path / "_worker_heartbeat.json"), stat=_stat_falho)
+    entrada = SimpleNamespace(
+        path=str(tmp_path / "_worker_heartbeat.json"), stat=_stat_falho
+    )
     resultado: dict[str, Any] = {}
     assert (
         acessar_privado(oracle_queue, "_apply_heartbeat_entry")(
@@ -401,7 +417,9 @@ def test_vivacidade_offline_nao_e_cacheada(
     monkeypatch.setattr(oracle_queue, "check_worker_liveness", falsa)
     for _ in range(2):
         with pytest.raises(OracleQueueWorkerOfflineError):
-            acessar_privado(oracle_queue, "_ensure_worker_alive_or_raise")(str(tmp_path))
+            acessar_privado(oracle_queue, "_ensure_worker_alive_or_raise")(
+                str(tmp_path)
+            )
     assert len(chamadas) == 2
 
 
@@ -423,3 +441,56 @@ def test_snapshot_consulta_a_fila_mesmo_sob_pytest(
     assert info["enabled"] is True
     assert info["alive"] is True
     assert info["source"] == "heartbeat"
+
+
+# ------------------------------------------------- revisão 16/11/2026: 26 x 27
+
+INALCANCAVEL: dict[str, Any] = {"alive": False, "reachable": False, "source": "none"}
+
+
+def test_worker_morto_apos_reivindicar_levanta_worker_offline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pedido reivindicado (.proc) e heartbeat expirado no fim do prazo: é queda do
+    worker (26), não prazo com worker vivo (27)."""
+    monkeypatch.setattr(
+        oracle_queue, "check_worker_liveness", _sequencia_de_vivacidade(VIVO, MORTO)
+    )
+    parar = threading.Event()
+    threading.Thread(
+        target=_worker, args=(tmp_path, parar, 0.0, False), daemon=True
+    ).start()
+    try:
+        with pytest.raises(OracleQueueWorkerOfflineError):
+            execute_query(
+                "SELECT 1 FROM DUAL", timeout_seconds=0.5, queue_dir=str(tmp_path)
+            )
+    finally:
+        parar.set()
+
+
+def test_pasta_inalcancavel_no_claim_deadline_nao_vira_worker_offline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Soluço de SMB na checagem de vivacidade não é evidência de worker parado."""
+    monkeypatch.setenv("ORACLE_QUEUE_CLAIM_TIMEOUT_SECONDS", "0.1")
+    monkeypatch.setattr(
+        oracle_queue,
+        "check_worker_liveness",
+        _sequencia_de_vivacidade(VIVO, INALCANCAVEL),
+    )
+    with pytest.raises(OracleQueueTimeoutError):
+        execute_query(
+            "SELECT 1 FROM DUAL", timeout_seconds=0.5, queue_dir=str(tmp_path)
+        )
+
+
+def test_sinal_legado_sem_sondagem_conta_como_vivo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sem heartbeat e com arquivo de sinal: vivo, como no Test-OracleQueueWorkerAlive."""
+    monkeypatch.setattr(oracle_queue, "_check_unc_port_reachable", lambda *_a: True)
+    (tmp_path / "_worker_sinal_a.txt").write_text("x", encoding="utf-8")
+    info = oracle_queue.check_worker_liveness(str(tmp_path), probe_signal_seconds=0.0)
+    assert info["source"] == "signal"
+    assert info["alive"] is True

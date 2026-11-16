@@ -125,7 +125,9 @@ class ConnectionManager:
         for ws in targets:
             try:
                 await self._safe_send(ws, message)
-            except ERROS_DE_ENVIO_WS:
+            # Residual: isolamento por cliente. Erro de envio fora de ERROS_DE_ENVIO_WS
+            # num socket não pode impedir a entrega aos demais nem deixá-lo na lista.
+            except Exception:  # pylint: disable=broad-exception-caught
                 dead.append(ws)
         if dead:
             for ws in dead:
@@ -146,7 +148,8 @@ class ConnectionManager:
         for ws in targets:
             try:
                 await self._safe_send(ws, payload)
-            except ERROS_DE_ENVIO_WS:
+            # Residual: mesmo isolamento por cliente de `broadcast_log`.
+            except Exception:  # pylint: disable=broad-exception-caught
                 dead.append(ws)
         if dead:
             for ws in dead:

@@ -293,9 +293,10 @@ def reload_scheduled_tasks() -> None:
                 if not sched_data:
                     continue
                 _register_schedule(auto.id, sched_data)
-            # Isolamento por automação: falha de parse ou de add_job numa delas não
-            # aborta o registro das demais.
-            except ERROS_DE_SCHEDULE as exc:
+            # Residual: isolamento por automação. Falha de QUALQUER tipo no parse ou no
+            # add_job de uma delas (ex.: OverflowError de intervalo absurdo) não pode
+            # abortar o registro das demais, que ficariam sem job até o próximo reload.
+            except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.error("Erro ao agendar %s: %s", auto.name, exc)
         logger.info(
             "Agendador sincronizado: %d jobs ativos no total.",

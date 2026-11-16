@@ -218,10 +218,10 @@ def run_with_cancel(
         return outcome
     target_connection = connection()
     if target_connection is not None:
-        # Falha do cancel é erro do driver ou do socket (oracledb.Error, OSError): não mascara o timeout,
-        # porque o chamador decide pelo `timed_out` mesmo quando o cancel falha.
-        # Cancelamento best effort.
-        with lock, contextlib.suppress(oracledb.Error, OSError):
+        # Qualquer falha do cancel (não só oracledb.Error: com a sessão já derrubada o
+        # driver levanta AttributeError/RuntimeError) não pode mascarar o timeout: o
+        # chamador decide pelo `timed_out`. Cancelamento best effort.
+        with lock, contextlib.suppress(Exception):
             if not state["done"]:
                 target_connection.cancel()
         thread.join(CANCEL_GRACE_SECONDS)

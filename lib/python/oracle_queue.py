@@ -231,7 +231,9 @@ def _check_unc_port_reachable(path: str) -> bool:
 
 def _medir_skew_relogio(base_dir: str) -> float | None:
     """Skew `relógio local - relógio do servidor SMB` por arquivo de sonda (None se falhar)."""
-    probe = os.path.join(base_dir, f"_clock_probe_{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp")
+    probe = os.path.join(
+        base_dir, f"_clock_probe_{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"
+    )
     try:
         with open(probe, "wb"):
             pass
@@ -388,7 +390,10 @@ def check_worker_liveness(
     ]
     if signal_entries:
         result["source"] = "signal"
-        result["alive"] = probe_signal_seconds > 0 and _probe_signal_liveness(
+        # Sem sondagem (0 s), sinal legado presente conta como vivo, igual ao
+        # Test-OracleQueueWorkerAlive do Lib-Logging.psm1: worker sem heartbeat não
+        # pode aparecer offline no Orchestrator enquanto as extrações funcionam.
+        result["alive"] = probe_signal_seconds <= 0 or _probe_signal_liveness(
             base_dir, sorted(e.name for e in signal_entries), probe_signal_seconds
         )
     return result
@@ -438,11 +443,8 @@ def cleanup_requests_for_exec_id(exec_id: str, queue_dir: str | None = None) -> 
                 if not (entry.name.startswith("req_") and entry.name.endswith(".sql")):
                     continue
                 try:
-                    head = (
-                        Path(entry.path)
-                        .read_bytes()[:1024]
-                        .decode("cp1252", errors="ignore")
-                    )
+                    with open(entry.path, "rb") as req_file:
+                        head = req_file.read(1024).decode("cp1252", errors="ignore")
                     if pattern.search(head):
                         _remove_quietly(entry.path)
                         removed += 1
@@ -854,8 +856,15 @@ def _sanitize_meta(meta: str | None) -> str:
     return safe.encode("cp1252", errors="replace").decode("cp1252")[:120]
 
 
-def _worker_vivo(base_dir: str) -> bool:
-    return bool(check_worker_liveness(base_dir).get("alive"))
+def _worker_morto(base_dir: str, *, so_heartbeat: bool = False) -> bool:
+    """True só com evidência de worker parado. Pasta inalcançável não é evidência:
+    soluço de SMB fica com a tolerância de `_await_queue_response`, não vira offline.
+    `so_heartbeat` exige heartbeat expirado (pedido já reivindicado: falta de `.proc`
+    ou de heartbeat não prova nada)."""
+    info = check_worker_liveness(base_dir)
+    if not info.get("reachable") or info.get("alive"):
+        return False
+    return info.get("source") == "heartbeat" if so_heartbeat else True
 
 
 def _ensure_worker_alive_or_raise(base_dir: str) -> None:
@@ -912,7 +921,8 @@ def _await_queue_response(
     effective_claim: float,
 ) -> bytes:
     """Espera o `res_<id>.csv`. Worker vivo e ocupado não é offline: no prazo de
-    reivindicação só falha se morto; no fim do prazo, WorkerOffline se morto, Timeout se vivo."""
+    reivindicação só falha se morto; no fim do prazo, WorkerOffline se morto, Timeout se vivo.
+    """
     claim_deadline = (
         time.monotonic() + effective_claim
         if 0 < effective_claim < timeout_seconds
@@ -940,17 +950,25 @@ def _await_queue_response(
             return data
         if claim_deadline is not None and time.monotonic() >= claim_deadline:
             claim_deadline = None
-            if os.path.exists(final_req_path) and not _worker_vivo(base_dir):
+            if os.path.exists(final_req_path) and _worker_morto(base_dir):
                 raise OracleQueueWorkerOfflineError(
                     "worker_offline",
                     f"Pedido não foi reivindicado pelo worker Oracle em "
                     f"{effective_claim:.0f}s (TSplus Worker possivelmente parado).",
                 )
-    if os.path.exists(final_req_path) and not _worker_vivo(base_dir):
+    if os.path.exists(final_req_path):
+        if _worker_morto(base_dir):
+            raise OracleQueueWorkerOfflineError(
+                "worker_offline",
+                f"Pedido não foi reivindicado pelo worker Oracle em "
+                f"{timeout_seconds:g}s (TSplus Worker possivelmente parado).",
+            )
+    elif _worker_morto(base_dir, so_heartbeat=True):
+        # Pedido reivindicado e o worker parou no meio: é queda do worker, não prazo.
         raise OracleQueueWorkerOfflineError(
             "worker_offline",
-            f"Pedido não foi reivindicado pelo worker Oracle em "
-            f"{timeout_seconds:g}s (TSplus Worker possivelmente parado).",
+            f"Worker Oracle parou durante a consulta (heartbeat expirado após "
+            f"{timeout_seconds:g}s de espera).",
         )
     raise OracleQueueTimeoutError(_TIMEOUT_MSG.format(timeout=timeout_seconds))
 
