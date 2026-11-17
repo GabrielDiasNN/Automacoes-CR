@@ -2,6 +2,18 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.116] - 17/11/2026
+
+Receitas Bloqueadas (RB-01) parou com `ORA-01840` (PythonExit=5) na execução das 17:00 de 17/11/2026.
+
+### Corrigido
+
+- **`Receitas Bloqueadas/SQL-ReceitasBloqueadas.sql`:** desde 16/11/2026 o ERP grava alguns bloqueios só nas colunas novas de `LABRECEITA_BLOQUEADA` (`DTBLOQUEIO` DATE e `IDUSUBLOQUEIO`), com `DATA_BLOQUEIO = 0` e `USUARIO_BLOQUEIO` vazio (bloqueios 7658 e 7659). `TO_DATE(0, 'YYYY/MM/DD')` derrubava a consulta inteira assim que uma OB dessas receitas entrava em tingimento no dia (OB 193373).
+  - `DATA_BLOQUEIO` cai para `TRUNC(DTBLOQUEIO)` quando o campo legado é 0.
+  - `USUARIO_BLOQUEIO` cai para o nome em `CRISTAL` via `IDUSUBLOQUEIO` quando o campo legado está vazio.
+  - `DATA_ALTERACAO` zerada vira `NULL` em vez de erro (nenhuma linha hoje, mesma classe de falha).
+- **Validado contra o Oracle:** o SQL antigo reproduz o `ORA-01840`; o novo retorna 83 linhas, incluindo a OB 193373. Nos 4.990 bloqueios ativos com campos legados preenchidos, data e usuário saem idênticos aos do SQL antigo.
+
 ## [1.3.115] - 16/11/2026
 
 Correções da revisão de código dos PRs #88 e #89 (fila Oracle e estreitamento de `except`).
