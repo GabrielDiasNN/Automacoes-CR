@@ -973,24 +973,6 @@ function Get-AutomacaoLogPath {
 
 # ------------------------------------------------------------------------------
 
-# Test-AutomationEnvironment
-
-# ------------------------------------------------------------------------------
-
-function Test-AutomationEnvironment {
-
-    [CmdletBinding()]
-
-    param([string]$ConfigPath, [string[]]$RequiredPaths = @())
-
-    $res = Test-AutomationPreFlight -CheckPaths $RequiredPaths -LogPath (Join-Path $script:ProjectRoot "Logs\EnvTest.jsonl")
-
-    return [PSCustomObject]@{ Success = $res; Message = "Ambiente validado" }
-
-}
-
-# ------------------------------------------------------------------------------
-
 # Invoke-LogRotation
 
 # ------------------------------------------------------------------------------
@@ -1108,6 +1090,6 @@ function Exit-AutomationLock {
     }
 }
 
-Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-AutomationEnvironment, Test-OracleQueueWorkerAlive, Get-OracleQueueServerNowUtc, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
+Export-ModuleMember -Function Get-AutomacaoProjectRoot, New-ExecId, Protect-SensitiveData, Write-AutomacaoLog, Get-ForwardedLogLevel, Get-AutomationExitStatus, Exit-AutomationWithCode, Get-AutomacaoLogPath, Invoke-LogRotation, Test-OracleQueueWorkerAlive, Get-OracleQueueServerNowUtc, Test-AutomationPreFlight, Enter-AutomationLock, Exit-AutomationLock, Register-ExecutionTelemetry, Close-ExecutionTelemetry, Send-AutomacaoLogBroadcast
 
 

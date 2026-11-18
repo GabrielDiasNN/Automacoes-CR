@@ -2,6 +2,22 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.118] - 18/11/2026
+
+Limpeza da duplicação PowerShell que ficou sem chamador depois que as seis automações passaram ao runner Python (1.3.117). Só saiu código sem chamador de runtime; o `_Template/run.ps1` continua consumindo a pilha `Lib-*` e por isso ela fica.
+
+### Removido
+
+- **`lib/Lib-WhatsAppBatch.psm1`:** `Read-CardsManifest`, `Write-WhatsAppBatchInput`, `Resolve-WhatsAppBatchDelivery`, `Update-WhatsAppResultRecordCounts` e o helper `Write-Utf8NoBomFile`. O manifesto e a reconciliação do lote estão em `lib/python/hub_whatsapp.py`; o módulo fica só com o cliente do daemon (`Get-WhatsAppDaemon*`, `Invoke-WhatsAppDaemon*`, `Select-WhatsAppStaleProcessIds`), usado por `Send-WhatsApp.ps1`, `Keep-WhatsApp-Open.ps1` e `Authenticate-WhatsApp.bat`.
+- **`lib/Lib-Oracle.psm1`:** `Get-OraclePreFlightExitCode`, `Test-OraclePreFlightOutrosChecksOk` e `Resolve-OracleFailureExitCode` (equivalentes em `hub_runner.py`). `Invoke-OraclePythonScript` fica: é o caminho Oracle indicado no `_Template/run.ps1`.
+- **`lib/Lib-Logging.psm1`:** `Test-AutomationEnvironment`, sem nenhum chamador.
+- **Testes:** `lib/tests/Lib-Oracle.PreFlight.Tests.ps1`, o `Describe "Lib-WhatsAppBatch"` do `Lib-WhatsAppBatch.Tests.ps1` e o caso `Get-OraclePreFlightExitCode` do `Lib-Logging.Tests.ps1`. O comportamento segue coberto em `test_hub_oracle_preflight_unit.py` e `test_hub_whatsapp_unit.py`. A trava textual `test_lib_whatsapp_batch_serializa_o_lote_sempre_como_array` (`test_run_ps1_bootstrap_unit.py`) virou `test_write_batch_input_um_card_continua_lista`, que exercita o `hub_whatsapp` de verdade.
+
+### Alterado
+
+- **Paridade do lote WhatsApp (`Orchestrator/tests/test_hub_whatsapp_unit.py`):** os testes que executavam o `Lib-WhatsAppBatch.psm1` em `powershell.exe` passaram a comparar com `Orchestrator/tests/fixtures/lib_whatsappbatch_ps51_paridade.json`, gravado a partir da saída real do PS 5.1 antes da remoção (pasta base normalizada para `<BASE>`). Agora rodam também fora do Windows.
+- **Docs de OFST-06 e ORB-07 (README, CONTEXT e runbooks):** o commit parcial do lote aponta para `lib/python/hub_whatsapp.py` em vez do módulo PowerShell.
+
 ## [1.3.117] - 18/11/2026
 
 Revisão de linguagens do monorepo: o JavaScript fica onde só ele serve (WhatsApp), sai onde duplicava o Python (Oracle), e a orquestração das seis automações sai do PowerShell para um runner Python (RE-03 como piloto, depois RB-01, MT-02, OBP-04, OFST-06 e ORB-07).

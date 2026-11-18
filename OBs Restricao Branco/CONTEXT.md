@@ -106,7 +106,7 @@ envio.
 10. `sendMessage` é considerado confirmado pelo ID retornado ou pelo evento
     `message_create`; no `whatsapp-web.js` instalado, o ID pode estar em `$1` em
     vez de `_serialized`. Sem confirmação em envio único (ou quando 0 páginas são entregues
-    em lote), o state não é promovido; em falha parcial do lote (`Lib-WhatsAppBatch.psm1`),
+    em lote), o state não é promovido; em falha parcial do lote (`lib/python/hub_whatsapp.py`),
     apenas as OBs das páginas não entregues são removidas de `orb_state.json.tmp` antes do
     commit, evitando reenvio das páginas já entregues.
 
@@ -126,8 +126,8 @@ mensagem — somar as parciais contaria em dobro uma peça com mais de uma
 finalidade cadastrada. `validators.py` contém regras puras.
 `format_message.py` + `lib/python/card_pagination.py` geram o(s) card(s) PNG e
 `cards_manifest.json`. `lib/python/hub_whatsapp.py` valida o manifesto e reconcilia o commit
-parcial em conjunto com `lib/Send-WhatsApp.ps1` e `lib/WhatsApp-Core.js` (porte de
-`lib/Lib-WhatsAppBatch.psm1`, que segue no repositorio para as demais automacoes).
+parcial em conjunto com `lib/Send-WhatsApp.ps1` e `lib/WhatsApp-Core.js` (porte das
+funções de lote do antigo `lib/Lib-WhatsAppBatch.psm1`, removidas na 1.3.118).
 
 ## Guardrails
 

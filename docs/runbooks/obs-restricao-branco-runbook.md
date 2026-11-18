@@ -30,7 +30,7 @@ descartar OBs, e mantendo os números de OB pesquisáveis no WhatsApp.
 | 0      | Envio confirmado e state consolidado                                                                                                                                                    |
 | 2      | Nada novo a enviar; state reconciliado                                                                                                                                                  |
 | 3      | Falha definitiva de extração Oracle                                                                                                                                                     |
-| 4      | Falha de mensagem, canal ou orquestração (em envio paginado parcial, `Lib-WhatsAppBatch.psm1` preserva no state as páginas entregues e remete só as páginas com falha no próximo ciclo) |
+| 4      | Falha de mensagem, canal ou orquestração (em envio paginado parcial, `lib/python/hub_whatsapp.py` preserva no state as páginas entregues e remete só as páginas com falha no próximo ciclo) |
 | 9      | Falha de preflight                                                                                                                                                                      |
 | 21     | Sessão WhatsApp requer reautenticação                                                                                                                                                   |
 

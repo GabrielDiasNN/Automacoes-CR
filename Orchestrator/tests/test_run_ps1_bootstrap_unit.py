@@ -137,18 +137,6 @@ def test_runner_valida_o_python_no_preflight_e_rotaciona_o_log(
     assert "_rotacionar_log(" in fonte
 
 
-def test_lib_whatsapp_batch_serializa_o_lote_sempre_como_array() -> None:
-    """Com uma unica fase, `$lote | ConvertTo-Json` gera objeto, nao array; o
-    motor Node descartava como "Lote vazio" (09/11/2026). O helper PowerShell
-    continua protegido; os runners Python gravam o lote por hub_whatsapp."""
-    modulo = (REPO_ROOT / "lib" / "Lib-WhatsAppBatch.psm1").read_text(
-        encoding="utf-8-sig"
-    )
-
-    assert "ConvertTo-Json -InputObject @($batchInput)" in modulo
-    assert "$batchInput | ConvertTo-Json" not in modulo
-
-
 @pytest.mark.parametrize(
     ("automacao", "runner"),
     [

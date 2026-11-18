@@ -1,0 +1,187 @@
+{
+  "leitura": {
+    "valido_dois_cards": {
+      "valid": true,
+      "error": "",
+      "cards": [
+        {
+          "phase_key": "FASE-A",
+          "image_path": "cards/a.png",
+          "caption": "Legenda",
+          "ob_ids": [
+            "OB1"
+          ]
+        },
+        {
+          "phase_key": "FASE-B",
+          "image_path": "cards/b.png",
+          "caption": "Legenda",
+          "ob_ids": [
+            "7",
+            "OB8"
+          ]
+        }
+      ]
+    },
+    "card_unico_com_saidas": {
+      "valid": true,
+      "error": "",
+      "cards": [
+        {
+          "phase_key": "FASE-A",
+          "image_path": "cards/a.png",
+          "caption": "Legenda",
+          "ob_ids": [
+            "OB1"
+          ]
+        }
+      ]
+    },
+    "phase_key_duplicado": {
+      "valid": false,
+      "error": "phase_key duplicado em cards_manifest.json: fase-a",
+      "cards": []
+    },
+    "ob_ids_vazio": {
+      "valid": false,
+      "error": "Entrada invalida em cards_manifest.json: ob_ids vazio em 'FASE-A'.",
+      "cards": []
+    },
+    "imagem_ausente": {
+      "valid": false,
+      "error": "Imagem do card ausente ou vazia: cards/nao_existe.png",
+      "cards": []
+    },
+    "numeros_e_objetos": {
+      "valid": true,
+      "error": "",
+      "cards": [
+        {
+          "phase_key": "FASE-A",
+          "image_path": "cards/a.png",
+          "caption": "c",
+          "ob_ids": [
+            "1.50",
+            "1.0",
+            "0.0",
+            "0",
+            "123",
+            "100000",
+            "100",
+            "1500",
+            "0.0025",
+            "0.1",
+            "3000000000",
+            "9223372036854775808",
+            "12345678901234567890",
+            "1.2345678901234567890123456789",
+            "1.79769313486232E+308",
+            "100000000000000000000.5",
+            "-12.340",
+            "5E-07",
+            "79228162514264337593543950335",
+            "7.92281625142643E+28",
+            "1E+30",
+            "1E+29",
+            "1.0000000000000000000000000000",
+            "0.0000001",
+            "0",
+            "1E+15",
+            "100000000000000",
+            "1E-05",
+            "1.5E-05",
+            "123456789123.457",
+            "NaN",
+            "Infinity",
+            "-Infinity",
+            "1 a",
+            "@{a=1}",
+            " 2",
+            "@{a=; b=System.Object[]}",
+            "1 System.Object[]  True",
+            "System.Object[]"
+          ]
+        }
+      ]
+    }
+  },
+  "batch_input": {
+    "dois_cards": "[\r\n    {\r\n        \"caption\":  \"Acentuação \\u0026 \\u003ctags\\u003e\",\r\n        \"image_path\":  \"<BASE>\\\\cards\\\\a.png\",\r\n        \"phase_key\":  \"FASE-A\"\r\n    },\r\n    {\r\n        \"caption\":  \"Segunda legenda\",\r\n        \"image_path\":  \"<BASE>\\\\cards\\\\b.png\",\r\n        \"phase_key\":  \"FASE-B\"\r\n    }\r\n]",
+    "escapes_e_phase_numerico": "[\r\n    {\r\n        \"caption\":  \"Acentuação \\u0026 \\u003ctags\\u003e \\u0027q\\u0027 \\\"d\\\" \\\\ tab\\t nl\\n cr\\r bs\\b ff\\f ctl\\u0001\\u001f del nel\\u0085 ls\\u2028 ps\\u2029 ✓ 😀 `~+é/\",\r\n        \"image_path\":  \"<BASE>\\\\cards\\\\a.png\",\r\n        \"phase_key\":  \"FASE-A\"\r\n    },\r\n    {\r\n        \"caption\":  \"Segunda\",\r\n        \"image_path\":  \"<BASE>\\\\cards\\\\b.png\",\r\n        \"phase_key\":  \"1.50\"\r\n    }\r\n]"
+  },
+  "resolucao": {
+    "todos": {
+      "saida": {
+        "status": "AllSent",
+        "sent_count": 2,
+        "total_count": 2,
+        "delivered_ob_count": 4,
+        "failed_ob_count": 0,
+        "should_commit_state": true
+      },
+      "estado": {
+        "last_hash": "h1",
+        "notified": {
+          "OB1": "ok",
+          "OB2": "ok",
+          "OB3": "ok",
+          "OB4": "ok"
+        }
+      }
+    },
+    "parcial": {
+      "saida": {
+        "status": "PartialSent",
+        "sent_count": 1,
+        "total_count": 2,
+        "delivered_ob_count": 2,
+        "failed_ob_count": 2,
+        "should_commit_state": true
+      },
+      "estado": {
+        "last_hash": "h1",
+        "notified": {
+          "OB1": "ok",
+          "OB2": "ok"
+        }
+      }
+    },
+    "nenhum": {
+      "saida": {
+        "status": "NoneSent",
+        "sent_count": 0,
+        "total_count": 2,
+        "delivered_ob_count": 0,
+        "failed_ob_count": 4,
+        "should_commit_state": false
+      },
+      "estado": {
+        "last_hash": "h1",
+        "notified": {
+          "OB1": "ok",
+          "OB2": "ok",
+          "OB3": "ok",
+          "OB4": "ok"
+        }
+      }
+    },
+    "success_valores_do_ps": {
+      "saida": {
+        "status": "PartialSent",
+        "sent_count": 3,
+        "total_count": 6,
+        "delivered_ob_count": 3,
+        "failed_ob_count": 3,
+        "should_commit_state": true
+      },
+      "estado": {
+        "last_hash": "h1",
+        "notified": {
+          "O1": "ok",
+          "O2": "ok",
+          "O4": "ok"
+        }
+      }
+    }
+  }
+}

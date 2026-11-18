@@ -247,10 +247,6 @@ Exit-AutomationLock -ExecId 'exec-2' -LockKey '$lockKey'
     }
 
     Context "Test-OracleQueueWorkerAlive e PreFlight em modo queue" {
-        BeforeAll {
-            Import-Module ((Split-Path -Parent $PSScriptRoot) + "\Lib-Oracle.psm1") -Force
-        }
-
         It "identifica heartbeat fresco como ativo e stale/ausente como offline" {
             $queueDir = Join-Path $TestDrive "fila_pedidos"
             New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
@@ -329,31 +325,6 @@ Exit-AutomationLock -ExecId 'exec-2' -LockKey '$lockKey'
                 # Worker vivo (heartbeat fresco)
                 '{"version":"2.6.1","state":"idle","oracle_ok":true}' | Set-Content -LiteralPath $hbPath -Encoding UTF8
                 (Test-AutomationPreFlight -ExecId "pf-q-on" -LogPath $logPf -CheckOracle) | Should -BeTrue
-            }
-            finally {
-                if ($null -eq $prevMode) { Remove-Item Env:\ORACLE_DRIVER_MODE -ErrorAction SilentlyContinue } else { $env:ORACLE_DRIVER_MODE = $prevMode }
-                if ($null -eq $prevDir) { Remove-Item Env:\ORACLE_QUEUE_DIR -ErrorAction SilentlyContinue } else { $env:ORACLE_QUEUE_DIR = $prevDir }
-            }
-        }
-
-        It "Get-OraclePreFlightExitCode retorna 26 para queue offline e 9 para vivo ou outro driver" {
-            $queueDir = Join-Path $TestDrive "fila_exitcode"
-            New-Item -ItemType Directory -Path $queueDir -Force | Out-Null
-            $hbPath = Join-Path $queueDir "_worker_heartbeat.json"
-
-            $prevMode = $env:ORACLE_DRIVER_MODE
-            $prevDir = $env:ORACLE_QUEUE_DIR
-            try {
-                $env:ORACLE_DRIVER_MODE = "queue"
-                $env:ORACLE_QUEUE_DIR = $queueDir
-
-                Get-OraclePreFlightExitCode | Should -Be 26
-
-                '{"version":"2.6.1","state":"idle","oracle_ok":true}' | Set-Content -LiteralPath $hbPath -Encoding UTF8
-                Get-OraclePreFlightExitCode | Should -Be 9
-
-                $env:ORACLE_DRIVER_MODE = "thin"
-                Get-OraclePreFlightExitCode | Should -Be 9
             }
             finally {
                 if ($null -eq $prevMode) { Remove-Item Env:\ORACLE_DRIVER_MODE -ErrorAction SilentlyContinue } else { $env:ORACLE_DRIVER_MODE = $prevMode }
