@@ -43,6 +43,7 @@ $templateDir = Join-Path $resolvedBasePath "_Template"
 $runbookTemplatePath = Join-Path $resolvedBasePath "docs\templates\automation-runbook-template.md"
 $smokeTestTemplatePath = Join-Path $resolvedBasePath "docs\templates\automation-smoke-test-template.py"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$utf8Bom = New-Object System.Text.UTF8Encoding($true)
 
 function Write-Step {
     param(
@@ -96,7 +97,8 @@ function Invoke-SafeWrite {
         New-Item -ItemType Directory -Force -Path $directory | Out-Null
     }
 
-    $writer = New-Object System.IO.StreamWriter($FilePath, $false, $utf8NoBom)
+    $encoding = if ($FilePath -match '\.(ps1|psm1)$') { $utf8Bom } else { $utf8NoBom }
+    $writer = New-Object System.IO.StreamWriter($FilePath, $false, $encoding)
     try {
         $writer.Write($Content)
         $writer.Flush()

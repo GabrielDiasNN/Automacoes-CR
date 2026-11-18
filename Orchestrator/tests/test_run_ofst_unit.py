@@ -938,7 +938,7 @@ def test_ler_linha_env_segue_convert_from_env_line(
     linha: str, esperado: tuple[str, str] | None
 ) -> None:
     """ConvertFrom-EnvLine: chave e valor com aparagem; comentario e linha vazia ficam fora."""
-    assert rr._ler_linha_env(linha) == esperado  # pylint: disable=protected-access
+    assert hr.parse_env_line(linha) == esperado
 
 
 def test_sessao_padrao_nao_confirma_estado_nem_encerra(tmp_path: Path) -> None:

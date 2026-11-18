@@ -39,6 +39,7 @@ from oracle_client import (
 from oracle_extract import OracleCredentials
 from oracle_queue import (
     OracleQueueTransientError,
+    QueueRequestOptions,
     execute_query as queue_execute_query,
 )
 from oracle_session import (
@@ -140,10 +141,14 @@ def _execute_once_queue(
     como bind variables. O worker já roda em transação somente leitura.
     """
     query_started_at = time.perf_counter()
+    options = (
+        QueueRequestOptions(max_rows=max_rows) if max_rows and max_rows > 0 else None
+    )
     result = queue_execute_query(
         sql,
         timeout_seconds=max(wall_clock_budget_seconds, 1.0),
         params=dict(parameters or {}),
+        options=options,
     )
     rows = result.rows
     if max_rows and max_rows > 0:
@@ -183,6 +188,7 @@ def execute_query(
     (`TimeoutError`) falham na hora. `wall_clock_budget_seconds` limita o total
     de todas as tentativas: cada uma recebe apenas o orçamento restante (e um
     `call_timeout` no máximo igual a ele)."""
+    load_dotenv(REPO_ROOT / ".env", override=False)
     modo = get_driver_mode()
     executar = {
         DRIVER_MODE_QUEUE: _execute_once_queue,

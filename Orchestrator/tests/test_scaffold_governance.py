@@ -88,17 +88,43 @@ def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
         in smoke_content
     )
     assert 'automation_dir = root / "Auto Scaffold Governado"' in smoke_content
+    assert "TEMPLATE_RUNNER" not in smoke_content
+    assert (
+        'assert (automation_dir / "run_auto_scaffold_governado.py").exists()'
+        in smoke_content
+    )
 
-    # Automacao nova nasce no runner Python: o shim aponta para ele e o runner
-    # gerado nao carrega mais o placeholder do template.
+    _assert_runner_e_shim_gerados(automation_dir)
+
+
+def _assert_runner_e_shim_gerados(automation_dir: Path) -> None:
+    """Automacao nova nasce no runner Python: o shim aponta para ele e nenhum
+    arquivo gerado carrega placeholder do template."""
     runner = automation_dir / "run_auto_scaffold_governado.py"
     assert runner.exists(), "scaffold deve gerar o runner Python"
     runner_content = runner.read_text(encoding="utf-8")
     assert "TEMPLATE_SLUG" not in runner_content
-    assert 'AUTOMACAO: Final[str] = "auto-scaffold-governado"' in runner_content
+    assert "TEMPLATE_RUNNER" not in runner_content
+    assert 'AUTOMACAO: Final[str] = "Auto Scaffold Governado"' in runner_content
+    assert 'SLUG_LOG: Final[str] = "auto-scaffold-governado"' in runner_content
+    assert "RETENCAO_LOG_DIAS: Final[int] = 15" in runner_content
+    assert "_rotacionar_log(ctx.log_path)" in runner_content
     compile(runner_content, str(runner), "exec")
 
-    shim = (automation_dir / "run.ps1").read_text(encoding="utf-8")
+    readme_content = (automation_dir / "README.md").read_text(encoding="utf-8")
+    context_content = (automation_dir / "CONTEXT.md").read_text(encoding="utf-8")
+    assert "TEMPLATE_RUNNER" not in readme_content
+    assert "run_<id>.py" not in readme_content
+    assert "run_auto_scaffold_governado.py" in readme_content
+    assert "TEMPLATE_RUNNER" not in context_content
+    assert "run_<id>.py" not in context_content
+    assert "run_auto_scaffold_governado.py" in context_content
+
+    run_ps1_bytes = (automation_dir / "run.ps1").read_bytes()
+    assert run_ps1_bytes.startswith(
+        b"\xef\xbb\xbf"
+    ), "run.ps1 gerado deve ter UTF-8 BOM"
+    shim = run_ps1_bytes.decode("utf-8-sig")
     assert '"run_auto_scaffold_governado.py"' in shim
     assert "TEMPLATE_RUNNER" not in shim
     assert "exit $LASTEXITCODE" in shim

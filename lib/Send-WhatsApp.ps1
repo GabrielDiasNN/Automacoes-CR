@@ -225,7 +225,7 @@ try {
                 # Anexo ausente cai para texto, como o core faz no spawn.
                 $anexoDaemon = ""
                 if (-not [string]::IsNullOrWhiteSpace($finalAttachment)) {
-                    if (Test-Path -LiteralPath $finalAttachment) { $anexoDaemon = $finalAttachment }
+                    if (Test-Path -LiteralPath $finalAttachment) { $anexoDaemon = (Resolve-Path -LiteralPath $finalAttachment).ProviderPath }
                     else { Write-Host "Anexo ausente ou nao encontrado ($finalAttachment). Enviando apenas a mensagem de texto." -ForegroundColor Yellow }
                 }
                 $codigoDaemon = Invoke-WhatsAppDaemonSend -Port $daemonPort -Token $daemonToken -ExecId $ExecId -ClientId $finalClientId -ChatTarget $finalPhone -Caption $finalMessage -AttachmentPath $anexoDaemon

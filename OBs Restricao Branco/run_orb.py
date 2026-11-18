@@ -30,7 +30,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -69,16 +68,6 @@ MODO_LOTE: Final[str] = "BATCH"
 _PADRAO_TS: Final[re.Pattern[str]] = re.compile(
     r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
 )
-_COMENTARIO_INLINE: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
-_MARCADOR_NIVEL: Final[re.Pattern[str]] = re.compile(
-    r"\[(INFO|WARN|ERROR|ERRO|DEBUG)\]", re.IGNORECASE
-)
-_NIVEIS_LINHA: Final[dict[str, str]] = {
-    "ERROR": "ERRO",
-    "ERRO": "ERRO",
-    "WARN": "WARN",
-    "DEBUG": "DEBUG",
-}
 
 
 @dataclass(frozen=True)
@@ -148,42 +137,6 @@ def _aviso(ctx: hr.HubRunContext, step: str | None = None) -> Callable[[str], No
 def _texto(valor: object) -> str:
     """Campo do JSON como texto, como [string] do PS: null vira vazio."""
     return "" if valor is None else str(valor)
-
-
-def _ler_linha_env(linha: str) -> tuple[str, str] | None:
-    """Par chave/valor de uma linha do .env, como ConvertFrom-EnvLine."""
-    texto = linha.strip()
-    if not texto or texto.startswith("#"):
-        return None
-    partes = texto.split("=", 1)
-    if len(partes) != 2:
-        return None
-    chave = partes[0].strip()
-    valor = _COMENTARIO_INLINE.sub("", partes[1].strip()).strip()
-    if not chave or not valor:
-        return None
-    return chave, valor
-
-
-def _carregar_env(raiz: Path) -> None:
-    """Carrega o .env da raiz no ambiente do processo, como Import-HubEnv."""
-    caminho = raiz / ".env"
-    if not caminho.exists():
-        return
-    conteudo = caminho.read_text(encoding="utf-8-sig", errors="replace")
-    for linha in conteudo.splitlines():
-        par = _ler_linha_env(linha)
-        if par is not None:
-            os.environ[par[0]] = par[1]
-
-
-def _carregar_env_seguro(raiz: Path) -> str | None:
-    """Import-HubEnv com a falha devolvida ao chamador: a mensagem de erro, ou None."""
-    try:
-        _carregar_env(raiz)
-    except OSError as exc:
-        return str(exc)
-    return None
 
 
 def _telemetria_padrao(raiz: Path) -> hr.TelemetryClient | None:
@@ -463,80 +416,15 @@ def _etapa_extracao(sessao: _Sessao) -> int | None:
     return None
 
 
-def _ambiente_filho(ctx: hr.HubRunContext, step: str) -> dict[str, str]:
-    """Ambiente do filho: UTF-8, HUB_* e HUB_LOG_STRUCTURED herdados do processo."""
-    ambiente = dict(os.environ)
-    ambiente.update(ctx.ambiente())
-    ambiente.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "HUB_STEP": step})
-    return ambiente
-
-
-def _e_envelope(linha: str) -> bool:
-    """True quando a linha ja e um evento completo do envelope (Test-HubLogEnvelope)."""
-    texto = linha.strip()
-    if not texto.startswith("{"):
-        return False
-    try:
-        objeto: object = json.loads(texto)
-    except ValueError:
-        return False
-    return isinstance(objeto, dict) and all(
-        campo in objeto for campo in hr.CAMPOS_ENVELOPE
-    )
-
-
-def _nivel_da_linha(linha: str, padrao: str) -> str:
-    """Nivel pelo marcador [INFO]/[WARN]/[ERRO]/[ERROR]/[DEBUG] da linha, senao o padrao."""
-    casamento = _MARCADOR_NIVEL.search(linha)
-    if casamento is None:
-        return padrao
-    return _NIVEIS_LINHA.get(casamento.group(1).upper(), "INFO")
-
-
-def _anexar_bruto(caminho: Path, texto: str) -> None:
-    """Anexa um evento ja no envelope ao jsonl, em CRLF, como o Write-HubLogEvent."""
-    try:
-        caminho.parent.mkdir(parents=True, exist_ok=True)
-        with caminho.open("a", encoding="utf-8", newline="\r\n") as arquivo:
-            arquivo.write(texto + "\n")
-    except OSError as exc:
-        sys.stderr.write(f"[run_orb] Falha ao persistir evento de log: {exc}\n")
-
-
-def _encaminhar_linha(
-    ctx: hr.HubRunContext, linha: str, nivel_padrao: str, step: str
-) -> None:
-    """Encaminha uma linha de filho como Write-HubForwardedLine: envelope verbatim ou log."""
-    if not linha.strip():
-        return
-    if _e_envelope(linha):
-        texto = linha.strip()
-        _anexar_bruto(ctx.log_path, texto)
-        sys.stdout.write(texto + "\n")
-        return
-    hr.log(ctx, linha, _nivel_da_linha(linha, nivel_padrao), step=step)
-
-
 def _executar_formatador(ctx: hr.HubRunContext, caminhos: Caminhos) -> int:
-    """Roda format_message.py como processo filho (Invoke-NativeProcess) e devolve o exit code.
-
-    Sem retry, como no run.ps1: um unico processo, com stdout como INFO e stderr como WARN.
-    """
-    resultado = subprocess.run(
-        [sys.executable, str(caminhos.format_py), ctx.exec_id],
+    """Roda format_message.py como processo filho via ``hub_runner.run_python_script``."""
+    return hr.run_python_script(
+        ctx,
+        python_exe=sys.executable,
+        script_path=caminhos.format_py,
+        step="transform",
         cwd=caminhos.pasta,
-        env=_ambiente_filho(ctx, "transform"),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
     )
-    for linha in resultado.stdout.splitlines():
-        _encaminhar_linha(ctx, linha, "INFO", "transform")
-    for linha in resultado.stderr.splitlines():
-        _encaminhar_linha(ctx, linha, "WARN", "transform")
-    return int(resultado.returncode)
 
 
 def _etapa_formatacao(sessao: _Sessao) -> int | None:
@@ -879,9 +767,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     argumentos = list(sys.argv[1:] if argv is None else argv)
     dry_run = "--dry-run" in argumentos
     posicionais = [arg for arg in argumentos if arg != "--dry-run"]
-    # O run.ps1 anterior exportava HUB_LOG_STRUCTURED=1 aos filhos (extract e format).
-    os.environ["HUB_LOG_STRUCTURED"] = "1"
-    aviso_env = _carregar_env_seguro(RAIZ)
+    aviso_env = hr.load_env_file(RAIZ)
     ctx = hr.create_run_context(
         hr.AutomationSpec(
             automacao=AUTOMACAO,

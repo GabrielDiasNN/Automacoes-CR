@@ -64,7 +64,6 @@ ESPACO_MINIMO_GB: Final[float] = 1.0
 _PADRAO_TS: Final[re.Pattern[str]] = re.compile(
     r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
 )
-_COMENTARIO_INLINE: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
 
 
 class _ErroFatal(RuntimeError):
@@ -119,33 +118,6 @@ def _aviso(ctx: hr.HubRunContext, step: str | None = None) -> Callable[[str], No
 def _aguardar(segundos: float) -> None:
     """Espera entre tentativas; isolado para que os testes nao durmam de verdade."""
     time.sleep(segundos)
-
-
-def _ler_linha_env(linha: str) -> tuple[str, str] | None:
-    """Par chave/valor de uma linha do .env, como ConvertFrom-EnvLine."""
-    texto = linha.strip()
-    if not texto or texto.startswith("#"):
-        return None
-    partes = texto.split("=", 1)
-    if len(partes) != 2:
-        return None
-    chave = partes[0].strip()
-    valor = _COMENTARIO_INLINE.sub("", partes[1].strip()).strip()
-    if not chave or not valor:
-        return None
-    return chave, valor
-
-
-def _carregar_env(raiz: Path) -> None:
-    """Carrega o .env da raiz no ambiente do processo, como Import-HubEnv."""
-    caminho = raiz / ".env"
-    if not caminho.exists():
-        return
-    conteudo = caminho.read_text(encoding="utf-8-sig", errors="replace")
-    for linha in conteudo.splitlines():
-        par = _ler_linha_env(linha)
-        if par is not None:
-            os.environ[par[0]] = par[1]
 
 
 def _telemetria_padrao(raiz: Path) -> hr.TelemetryClient | None:
@@ -621,6 +593,7 @@ def executar(
 ) -> int:
     """Roda o fluxo completo e devolve o exit code (quem chama faz sys.exit)."""
     sessao = _Sessao(ctx=ctx, caminhos=caminhos, dry_run=dry_run)
+    tmp_existia = caminhos.estado_tmp.exists()
     hr.execution_start(ctx, f"INICIO — {AUTOMACAO} (RE-03). ExecId={ctx.exec_id}")
     if dry_run:
         hr.log(
@@ -644,6 +617,9 @@ def executar(
     # excecao escapa sem execution.end nem telemetria. O lock ja foi liberado pelo with.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return _encerrar(sessao, EXIT_ERRO_FATAL, f"ERRO FATAL: {exc}")
+    finally:
+        if dry_run and not tmp_existia:
+            _remover(caminhos.estado_tmp)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -652,7 +628,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     argumentos = list(sys.argv[1:] if argv is None else argv)
     dry_run = "--dry-run" in argumentos
     posicionais = [arg for arg in argumentos if arg != "--dry-run"]
-    _carregar_env(RAIZ)
+    hr.load_env_file(RAIZ)
     ctx = hr.create_run_context(
         hr.AutomationSpec(
             automacao=AUTOMACAO,

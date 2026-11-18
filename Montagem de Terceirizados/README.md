@@ -43,9 +43,9 @@ Execucao manual de validacao (nao usar em producao; nao envia e-mail nem confirm
 ## Operacao e Diagnostico
 
 ### Logs e Auditoria
-- **Localizacao**: `Logs/Montagem_Terceirizados_...log`.
-- **Rastreabilidade**: Todas as fases sao correlacionadas pelo `ExecId` unico.
-- **PT-BR Blindado**: Mensagens de log em codigo-fonte sao ASCII-Safe, convertidas em tempo de execucao via Base64.
+- **Localização**: `Logs/Montagem_Terceirizados.jsonl` (`Logs/*.jsonl`, envelope estruturado via `hub_runner`).
+- **Rastreabilidade**: Todas as fases são correlacionadas pelo `ExecId` único.
+- **UTF-8 Nativo**: Logs estruturados em UTF-8 diretamente pelo runner Python, sem Base64 Bridge.
 
 ### Performance
 A migracao para o modo nativo reduziu o tempo de execucao de minutos (via Excel COM) para **segundos** (via Python/cx_Oracle), eliminando falhas de interface e deadlocks de processos do Office.

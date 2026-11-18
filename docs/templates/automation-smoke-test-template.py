@@ -10,6 +10,7 @@ def test_TEMPLATE_TEST_ID_scaffold_contract_files_exist() -> None:
     automation_dir = root / "[Nome da Automação]"
 
     assert (automation_dir / "run.ps1").exists()
+    assert (automation_dir / "TEMPLATE_RUNNER").exists()
     assert (automation_dir / "automation.manifest.json").exists()
     assert (automation_dir / "README.md").exists()
     assert (automation_dir / "CONTEXT.md").exists()

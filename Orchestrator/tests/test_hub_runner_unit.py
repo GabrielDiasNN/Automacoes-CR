@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import secrets
 import subprocess
@@ -784,3 +785,71 @@ def test_user_environment_variable_ignora_o_ambiente_do_processo(
     nome = "HUB_TESTE_SO_NO_PROCESSO_7F3A"
     monkeypatch.setenv(nome, "valor-do-processo")
     assert hr.user_environment_variable(nome) == ""
+
+
+def test_ambiente_filho_injeta_hub_log_structured_e_remove_quando_stdout_is_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """stdout_is_data=False injeta HUB_LOG_STRUCTURED=1; stdout_is_data=True remove da env."""
+    script = _script(
+        tmp_path,
+        "env_dump.py",
+        "import os, sys\n"
+        "val = os.environ.get('HUB_LOG_STRUCTURED', 'AUSENTE')\n"
+        "sys.stderr.write(f'STRUCT={val}\\n')\n",
+    )
+    ctx_log = _ctx(tmp_path)
+    monkeypatch.delenv("HUB_LOG_STRUCTURED", raising=False)
+    hr.run_python_step(ctx_log, _passo(script, stdout_is_data=False), sleep=lambda _: None)
+    assert any(
+        e.get("event") == "log" and e.get("message") == "STRUCT=1"
+        for e in _eventos(ctx_log)
+    )
+
+    monkeypatch.setenv("HUB_LOG_STRUCTURED", "1")
+    ctx_dados = _ctx(tmp_path)
+    hr.run_python_step(ctx_dados, _passo(script, stdout_is_data=True), sleep=lambda _: None)
+    assert any(
+        e.get("event") == "log" and e.get("message") == "STRUCT=AUSENTE"
+        for e in _eventos(ctx_dados)
+    )
+
+
+def test_nivel_da_linha_reconhece_warning_prefixado_e_alert() -> None:
+    assert hr._nivel_da_linha("WARNING: rota lenta", "INFO") == "WARN"  # pylint: disable=protected-access
+    assert hr._nivel_da_linha("[ALERT] disco baixo", "INFO") == "WARN"  # pylint: disable=protected-access
+
+
+def test_run_python_script_executa_em_cwd_com_log_estruturado(tmp_path: Path) -> None:
+    subdir = tmp_path / "sub"
+    subdir.mkdir()
+    script = _script(
+        subdir,
+        "fmt.py",
+        "import os, pathlib\n"
+        "print(f'CWD={pathlib.Path.cwd().name}|STRUCT={os.environ.get(\"HUB_LOG_STRUCTURED\")}')\n",
+    )
+    ctx = _ctx(tmp_path)
+    codigo = hr.run_python_script(
+        ctx, python_exe=sys.executable, script_path=script, step="transform", cwd=subdir
+    )
+    assert codigo == 0
+    assert any(
+        e.get("message") == "CWD=sub|STRUCT=1" and e.get("step") == "transform"
+        for e in _eventos(ctx)
+    )
+
+
+def test_load_env_file_carrega_e_tolera_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HUB_TESTE_LOAD_ENV_93", raising=False)
+    (tmp_path / ".env").write_text("HUB_TESTE_LOAD_ENV_93=ok # nota\n", encoding="utf-8-sig")
+    assert hr.load_env_file(tmp_path) is None
+    assert os.environ["HUB_TESTE_LOAD_ENV_93"] == "ok"
+
+    pasta_como_arquivo = tmp_path / "nao_arquivo"
+    pasta_como_arquivo.mkdir()
+    (pasta_como_arquivo / ".env").mkdir()
+    aviso = hr.load_env_file(pasta_como_arquivo)
+    assert aviso is not None

@@ -151,7 +151,12 @@ function Send-OutlookEmail {
 
     function Write-LocalLog {
         param([string]$m, [string]$l = "INFO")
-        if ([string]::IsNullOrWhiteSpace($LogPath)) { return }
+        if ([string]::IsNullOrWhiteSpace($LogPath)) {
+            if ($l -eq "ERRO" -or $l -eq "WARN") {
+                Write-Host "[$l] [ExecId:$ExecId] $m"
+            }
+            return
+        }
 
         if (Get-Command Write-AutomacaoLog -ErrorAction SilentlyContinue) {
             Write-AutomacaoLog -Message $m -Level $l -ExecId $ExecId -LogPath $LogPath

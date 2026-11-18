@@ -74,16 +74,25 @@ try {
     }
 
     $htmlBody = Get-Content -LiteralPath $HtmlBodyFile -Raw -Encoding UTF8
-    $anexos = @($Attachments -split ";" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    foreach ($anexo in $anexos) {
+    if ([string]::IsNullOrWhiteSpace($htmlBody)) {
+        Write-Host "[ERRO] Arquivo do corpo esta vazio: $HtmlBodyFile"
+        exit 1
+    }
+    $anexosBrutos = @($Attachments -split ";" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $anexos = @()
+    foreach ($anexo in $anexosBrutos) {
         if (-not (Test-Path -LiteralPath $anexo -PathType Leaf)) {
             Write-Host "[ERRO] Anexo nao encontrado: $anexo"
             exit 1
         }
+        $anexos += (Resolve-Path -LiteralPath $anexo).ProviderPath
     }
     $saidaEnvio = @(Send-OutlookEmail -To $To -CC $Cc -BCC $Bcc -Subject $Subject -HtmlBody $htmlBody -Attachments $anexos -ExecId $ExecId -LogPath $LogPath -PreviewOnly:$PreviewOnly)
     $resultadoEnvio = $saidaEnvio[-1]
     if ($resultadoEnvio -eq $true) { exit 0 }
+    if ([string]::IsNullOrWhiteSpace($LogPath)) {
+        Write-Host "[ERRO] Falha no envio de e-mail via Outlook COM."
+    }
     exit 1
 }
 catch [System.Exception] {

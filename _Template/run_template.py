@@ -7,7 +7,7 @@ Mesmo fluxo do run.ps1 de template, sobre lib/python/hub_runner.py:
 3. extract: placeholder para a logica de negocio;
 4. entrega e commit: exemplos comentados (e-mail com idempotencia por canal, como RE-03).
 
-Uso: ``python run_<id>.py [ExecId] [--dry-run]``. O ``run.ps1`` e um shim que resolve o
+Uso: ``python TEMPLATE_RUNNER [ExecId] [--dry-run]``. O ``run.ps1`` e um shim que resolve o
 interpretador, chama este arquivo e repassa o exit code. Codigos: 0 sucesso; 2 idempotente
 (nada a fazer); 4 falha critica; 9 pre-flight. Com ``--dry-run`` nenhum envio e feito e o
 estado nao e confirmado.
@@ -22,6 +22,7 @@ import re
 import shutil
 import sys
 from collections.abc import Sequence
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -32,31 +33,45 @@ sys.path.insert(
 import hub_runner as hr  # noqa: E402
 from automation_log import ensure_utf8_streams  # noqa: E402
 
-AUTOMACAO: Final[str] = "TEMPLATE_SLUG"
+AUTOMACAO: Final[str] = "[Nome da Automação]"
+SLUG_LOG: Final[str] = "TEMPLATE_SLUG"
 CHAVE_LOCK: Final[str] = "TEMPLATE_SLUG"
 EXIT_FALHA_CRITICA: Final[int] = 4
 ESPACO_MINIMO_GB: Final[float] = 1.0
+RETENCAO_LOG_DIAS: Final[int] = 15
 PASTA: Final[Path] = Path(__file__).resolve().parent
 RAIZ: Final[Path] = PASTA.parent
-_COMENTARIO_INLINE: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
+_PADRAO_TS: Final[re.Pattern[str]] = re.compile(
+    r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
+)
 
 
-def _carregar_env() -> None:
-    """Import-HubEnv: carrega o .env da raiz no ambiente do processo."""
-    caminho = RAIZ / ".env"
+def _linha_expirada(linha: str, corte: date) -> bool:
+    """True quando o ts do evento e anterior ao corte da retencao."""
+    casamento = _PADRAO_TS.match(linha)
+    if casamento is None:
+        return False
+    try:
+        return date.fromisoformat(casamento.group(1)) < corte
+    except ValueError:
+        return False
+
+
+def _rotacionar_log(caminho: Path, dias: int = RETENCAO_LOG_DIAS) -> None:
+    """Remove do jsonl os eventos anteriores a retencao (Invoke-LogRotation)."""
     if not caminho.exists():
         return
-    with contextlib.suppress(OSError):
-        for linha in caminho.read_text(
-            encoding="utf-8-sig", errors="replace"
-        ).splitlines():
-            texto = linha.strip()
-            if not texto or texto.startswith("#") or "=" not in texto:
-                continue
-            chave, valor = texto.split("=", 1)
-            valor = _COMENTARIO_INLINE.sub("", valor.strip()).strip()
-            if chave.strip() and valor:
-                os.environ[chave.strip()] = valor
+    corte = date.today() - timedelta(days=dias)
+    with contextlib.suppress(OSError, ValueError):
+        conteudo = caminho.read_text(encoding="utf-8-sig")
+        linhas = [linha.rstrip("\r") for linha in conteudo.split("\n") if linha.strip()]
+        mantidas = [linha for linha in linhas if not _linha_expirada(linha, corte)]
+        if len(mantidas) == len(linhas):
+            return
+        temporario = caminho.with_name(caminho.name + ".tmp")
+        with temporario.open("w", encoding="utf-8-sig", newline="\r\n") as arquivo:
+            arquivo.write("".join(f"{linha}\n" for linha in mantidas))
+        os.replace(temporario, caminho)
 
 
 def _telemetria() -> hr.TelemetryClient | None:
@@ -103,6 +118,7 @@ def _preflight(ctx: hr.HubRunContext) -> bool:
 
 def _etapas(ctx: hr.HubRunContext, *, dry_run: bool) -> int:
     """Etapas extract, entrega e commit, executadas dentro do lock."""
+    _rotacionar_log(ctx.log_path)
     hr.start_step(ctx, "extract", mensagem="Executando tarefas")
     hr.log(ctx, "Executando tarefas...", step="extract")
     # --- ETAPA 1: LOGICA DE NEGOCIO AQUI ---
@@ -165,17 +181,17 @@ def executar(ctx: hr.HubRunContext, *, dry_run: bool = False) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Ponto de entrada: ``run_<id>.py [ExecId] [--dry-run]``. Devolve o exit code."""
+    """Ponto de entrada: ``TEMPLATE_RUNNER [ExecId] [--dry-run]``. Devolve o exit code."""
     ensure_utf8_streams()
     argumentos = list(sys.argv[1:] if argv is None else argv)
     dry_run = "--dry-run" in argumentos
     posicionais = [arg for arg in argumentos if arg != "--dry-run"]
-    _carregar_env()
+    hr.load_env_file(RAIZ)
     ctx = hr.create_run_context(
         hr.AutomationSpec(
             automacao=AUTOMACAO,
-            slug=AUTOMACAO,
-            trace_slug=AUTOMACAO,
+            slug=SLUG_LOG,
+            trace_slug=SLUG_LOG,
             lock_key=CHAVE_LOCK,
             log_dir=PASTA / "Logs",
             non_failure_codes=(0, hr.EXIT_IDEMPOTENTE),

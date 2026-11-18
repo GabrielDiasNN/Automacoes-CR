@@ -35,16 +35,6 @@ from typing import IO, Any, Final, Literal
 import hub_runner as hr
 
 _VALORES_DESLIGADOS: Final[frozenset[str]] = frozenset({"false", "0", "no"})
-_NIVEIS_ENCAMINHADOS: Final[dict[str, str]] = {
-    "ERROR": "ERRO",
-    "ERRO": "ERRO",
-    "WARN": "WARN",
-    "DEBUG": "DEBUG",
-}
-_MARCADOR_NIVEL: Final[re.Pattern[str]] = re.compile(
-    r"\[(INFO|WARN|ERROR|ERRO|DEBUG)\]", re.IGNORECASE
-)
-_TRAVA_ENCAMINHAMENTO = threading.Lock()
 # System.Decimal do .NET: maior inteiro representavel. Acima disso o PS 5.1 usa Double.
 _LIMITE_DECIMAL: Final[Decimal] = Decimal("79228162514264337593543950335")
 _MSG_COLECAO_VAZIA: Final[str] = (
@@ -735,57 +725,17 @@ def get_whatsapp_auth_path() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _e_envelope(linha: str) -> bool:
-    """True quando a linha ja e um evento completo do envelope (Test-HubLogEnvelope)."""
-    texto = linha.strip()
-    if not texto.startswith("{"):
-        return False
-    try:
-        objeto: object = json.loads(texto)
-    except ValueError:
-        return False
-    return isinstance(objeto, dict) and all(
-        campo in objeto for campo in hr.CAMPOS_ENVELOPE
-    )
-
-
 def _nivel_da_linha(linha: str, padrao: str) -> str:
-    """Nivel pelo marcador [INFO]/[WARN]/[ERRO]/[ERROR]/[DEBUG] da linha, senao o padrao."""
-    casamento = _MARCADOR_NIVEL.search(linha)
-    if casamento is None:
-        return padrao
-    return _NIVEIS_ENCAMINHADOS.get(casamento.group(1).upper(), "INFO")
-
-
-def _anexar_envelope(caminho: Path, texto: str) -> None:
-    """Anexa um evento ja no envelope ao .jsonl, em CRLF, como o Write-HubLogEvent."""
-    try:
-        caminho.parent.mkdir(parents=True, exist_ok=True)
-        with caminho.open("a", encoding="utf-8", newline="\r\n") as arquivo:
-            arquivo.write(texto + "\n")
-    except OSError as exc:
-        sys.stderr.write(f"[hub_whatsapp] Falha ao persistir evento de log: {exc}\n")
+    """Delega para ``hub_runner._nivel_da_linha`` (mantido como ponte para testes)."""
+    # pylint: disable=protected-access
+    return hr._nivel_da_linha(linha, padrao)
 
 
 def _encaminhar(
     ctx: hr.HubRunContext, linha: str, nivel_padrao: str, step: str
 ) -> None:
-    """Encaminha uma linha do Send-WhatsApp.ps1 como Write-HubForwardedLine no PowerShell.
-
-    Envelope completo vai verbatim ao .jsonl e ao stdout. Texto avulso vira evento ``log``
-    com o nivel do marcador da linha ou o padrao. Linha em branco e ignorada. A regra e a de
-    ``hub_runner._encaminhar_linha``, que e privado, por isso foi reescrita aqui.
-    """
-    if not linha.strip():
-        return
-    with _TRAVA_ENCAMINHAMENTO:
-        if _e_envelope(linha):
-            texto = linha.strip()
-            _anexar_envelope(ctx.log_path, texto)
-            sys.stdout.write(texto + "\n")
-            sys.stdout.flush()
-            return
-        hr.log(ctx, linha, _nivel_da_linha(linha, nivel_padrao), step=step)
+    """Encaminha uma linha do Send-WhatsApp.ps1 via ``hub_runner.forward_line``."""
+    hr.forward_line(ctx, linha, nivel_padrao, step)
 
 
 def _leitor_fluxo(
@@ -883,7 +833,12 @@ def send_whatsapp(  # pylint: disable=too-many-arguments,too-many-locals
     comando = ComandoWhatsApp(
         argv=tuple(argv),
         work_dir=work_dir,
-        ambiente={**os.environ, **ctx.ambiente()},
+        ambiente={
+            **os.environ,
+            **ctx.ambiente(),
+            "HUB_LOG_STRUCTURED": "1",
+            "HUB_STEP": step,
+        },
     )
 
     def encaminhar(linha: str, nivel_padrao: str) -> None:

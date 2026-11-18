@@ -30,7 +30,7 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 
 - `run_obs_paradas.py` (via `lib/python/hub_runner.py`) emite o envelope estruturado (`INFO`/`WARN`/`ERRO`/`DEBUG`) com `ExecId`; o `run.ps1` é só o shim.
 - `extract_obs.py` usa `make_logger` (logger Python padrão) com output para stderr; o runner encaminha as linhas ao log da execução via `hr.run_python_step`.
-- `generate_phase_cards.py` usa `print()` direto para stdout/stderr; o runner roda uma vez (sem retry) e encaminha a saída ao log.
+- `generate_phase_cards.py` usa `make_logger("OBP-CARDS")` (`automation_log`) com `HUB_LOG_STRUCTURED=1` (step `transform`), emitindo eventos JSONL direto para `Logs/ObsParadasFase.jsonl` (`Logs/*.jsonl`) via runner.
 
 ## Histórico de decisões
 
