@@ -184,10 +184,14 @@ if (Test-Path -LiteralPath $automationDir) {
     exit 1
 }
 
+# O shim (run.ps1) e o runner Python recebem o mesmo nome: run_<id>.py, derivado do slug.
+$runnerFileName = "run_$testId.py"
+
 $replacements = @{
     "[Nome da Automação]" = $Name
     "TEMPLATE_SLUG" = $slug
     "TEMPLATE_TEST_ID" = $testId
+    "TEMPLATE_RUNNER" = $runnerFileName
     "TEMPLATE_CRITICALITY" = $Criticality
     "TEMPLATE_OWNER_AREA" = $OwnerArea
     "TEMPLATE_RUNTIME" = $Runtime
@@ -197,6 +201,7 @@ $replacements = @{
 $readmeContent = Convert-Template -Content (Get-TemplateContent -TemplateName "README.md") -Replacements $replacements
 $contextContent = Convert-Template -Content (Get-TemplateContent -TemplateName "CONTEXT.md") -Replacements $replacements
 $runContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run.ps1") -Replacements $replacements
+$runnerContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run_template.py") -Replacements $replacements
 $manifestContent = Convert-Template -Content (Get-TemplateContent -TemplateName "automation.manifest.json") -Replacements $replacements
 $smokeTestContent = ""
 
@@ -236,7 +241,8 @@ $readmeContent += @"
 ## 🚀 Cadastro Operacional
 Esta automação usa o fluxo atual do Hub: primeiro faça o scaffold local, depois registre a automação pelo Dashboard (`/dashboard/`) ou pela API do Orchestrator.
 
-- **Script principal sugerido:** `run.ps1`
+- **Entrypoint (shim):** `run.ps1` resolve o Python do projeto, chama o runner e repassa o exit code
+- **Runner Python:** `$runnerFileName` (pre-flight, lock, etapas e entrega sobre `lib/python/hub_runner.py`)
 - **Logs esperados:** `Logs/`
 - **Manifesto canônico:** `automation.manifest.json`
 - **Runbook inicial:** `docs/runbooks/$slug-runbook.md`
@@ -247,6 +253,7 @@ Esta automação usa o fluxo atual do Hub: primeiro faça o scaffold local, depo
 
 $contextContent += @"
 
+- **Runner:** a logica fica em `$runnerFileName`; o `run.ps1` e so o shim. Mudanca de contrato (lock, telemetria, idempotencia) vale no runner, nao no shim.
 - **Registro no Orchestrator:** esta pasta nasce desacoplada de `config.json` legado; o cadastro operacional deve ser feito pelo Dashboard ou API.
 - **Catálogo governado:** preencha `automation.manifest.json` antes de promover a automação para operação recorrente.
 - **Smoke inicial:** o scaffold já cria `Orchestrator/tests/test_$slug.py` como prova mínima de existência dos artefatos obrigatórios.
@@ -280,6 +287,7 @@ else {
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "README.md") -Content $readmeContent -Operation "Gerar README da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "CONTEXT.md") -Content $contextContent -Operation "Gerar CONTEXT da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "run.ps1") -Content $runContent -Operation "Gerar run.ps1 da automacao"
+Invoke-SafeWrite -FilePath (Join-Path $automationDir $runnerFileName) -Content $runnerContent -Operation "Gerar runner Python da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "automation.manifest.json") -Content $manifestContent -Operation "Gerar automation.manifest.json"
 Invoke-SafeWrite -FilePath $runbookPath -Content $runbookContent -Operation "Gerar runbook operacional"
 Invoke-SafeWrite -FilePath $smokeTestPath -Content $smokeTestContent -Operation "Gerar smoke test inicial"

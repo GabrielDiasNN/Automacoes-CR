@@ -9,7 +9,11 @@ arquivos como texto e travam os contratos que a validacao em producao de
 pelos testes `test_run_<automacao>_unit.py`.
 """
 
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -173,3 +177,79 @@ def test_orb_e_ofst_so_reportam_record_counts_de_result_fresco(
     assert "resultado_fresco: bool = False" in fonte
     assert "sessao.resultado_fresco = True" in fonte
     assert "if sessao.resultado_fresco else None" in fonte
+
+
+TEMPLATE_DIR = REPO_ROOT / "_Template"
+
+
+def test_template_shim_segue_o_contrato_do_run_ps1_de_automacao() -> None:
+    """O _Template/run.ps1 e um shim como os seis: delega ao runner Python da pasta.
+
+    O scaffold troca TEMPLATE_RUNNER pelo nome run_<id>.py; o shim nao pode voltar a
+    importar a pilha Lib-* nem a tomar lock ou telemetria.
+    """
+    fonte = (TEMPLATE_DIR / "run.ps1").read_text(encoding="utf-8-sig")
+
+    assert "Resolve-HubPythonExe" in fonte
+    assert 'Join-Path $ScriptDir "TEMPLATE_RUNNER"' in fonte
+    assert "exit 9" in fonte
+    assert "exit $LASTEXITCODE" in fonte
+    assert "--dry-run" in fonte
+    assert "Enter-AutomationLock" not in fonte
+    assert "Register-ExecutionTelemetry" not in fonte
+    assert "Lib-Logging" not in fonte
+
+
+def test_template_runner_usa_o_hub_runner_e_fecha_a_execucao() -> None:
+    """O runner do template usa o mesmo contrato que os runners de dominio."""
+    fonte = (TEMPLATE_DIR / "run_template.py").read_text(encoding="utf-8")
+
+    assert "hub_runner" in fonte
+    assert 'CHAVE_LOCK: Final[str] = "TEMPLATE_SLUG"' in fonte
+    assert "hr.AutomationMutex(" in fonte
+    assert "CHAVE_LOCK, on_warning=" in fonte
+    assert "non_failure_codes=(0, hr.EXIT_IDEMPOTENTE)" in fonte
+    assert fonte.count("hr.finish(") == fonte.count("return hr.finish(")
+    assert "sys.exit(main())" in fonte
+
+
+def test_template_runner_compila() -> None:
+    """py_compile do runner do template: erro de sintaxe falha antes de qualquer scaffold."""
+    fonte = (TEMPLATE_DIR / "run_template.py").read_text(encoding="utf-8")
+
+    compile(fonte, str(TEMPLATE_DIR / "run_template.py"), "exec")
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="AutomationMutex usa o mutex nomeado do Windows"
+)
+def test_template_runner_dry_run_sai_com_zero(tmp_path: Path) -> None:
+    """Roda o runner do template em --dry-run numa copia temporaria, sem Oracle nem rede.
+
+    A copia reproduz o layout (_Template/ e lib/python/ irmaos), entao Logs/ e o
+    .env ficam fora do repositorio. Sem .env, nao ha telemetria nem chamada ao
+    Orchestrator.
+    """
+    destino = tmp_path / "_Template"
+    destino.mkdir()
+    shutil.copy2(TEMPLATE_DIR / "run_template.py", destino / "run_template.py")
+    shutil.copytree(
+        REPO_ROOT / "lib" / "python",
+        tmp_path / "lib" / "python",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+
+    resultado = subprocess.run(
+        [sys.executable, str(destino / "run_template.py"), "--dry-run"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONUTF8": "1"},
+        timeout=120,
+        check=False,
+    )
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert "[DRY-RUN]" in resultado.stdout
+    assert list((destino / "Logs").glob("*.jsonl")), "o runner deve gravar o log"

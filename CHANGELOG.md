@@ -4,17 +4,18 @@
 
 ## [1.3.118] - 18/11/2026
 
-Limpeza da duplicação PowerShell que ficou sem chamador depois que as seis automações passaram ao runner Python (1.3.117). Só saiu código sem chamador de runtime; o `_Template/run.ps1` continua consumindo a pilha `Lib-*` e por isso ela fica.
+Limpeza da duplicação PowerShell que ficou sem chamador depois que as seis automações passaram ao runner Python (1.3.117). Só saiu código sem chamador de runtime. O `_Template/run.ps1` também passou ao runner Python, então automação nova nasce no mesmo padrão das seis.
 
 ### Removido
 
 - **`lib/Lib-WhatsAppBatch.psm1`:** `Read-CardsManifest`, `Write-WhatsAppBatchInput`, `Resolve-WhatsAppBatchDelivery`, `Update-WhatsAppResultRecordCounts` e o helper `Write-Utf8NoBomFile`. O manifesto e a reconciliação do lote estão em `lib/python/hub_whatsapp.py`; o módulo fica só com o cliente do daemon (`Get-WhatsAppDaemon*`, `Invoke-WhatsAppDaemon*`, `Select-WhatsAppStaleProcessIds`), usado por `Send-WhatsApp.ps1`, `Keep-WhatsApp-Open.ps1` e `Authenticate-WhatsApp.bat`.
-- **`lib/Lib-Oracle.psm1`:** `Get-OraclePreFlightExitCode`, `Test-OraclePreFlightOutrosChecksOk` e `Resolve-OracleFailureExitCode` (equivalentes em `hub_runner.py`). `Invoke-OraclePythonScript` fica: é o caminho Oracle indicado no `_Template/run.ps1`.
+- **`lib/Lib-Oracle.psm1`:** `Get-OraclePreFlightExitCode`, `Test-OraclePreFlightOutrosChecksOk` e `Resolve-OracleFailureExitCode` (equivalentes em `hub_runner.py`). `Invoke-OraclePythonScript` fica nesta versão (o template deixou de indicá-lo; ver Alterado).
 - **`lib/Lib-Logging.psm1`:** `Test-AutomationEnvironment`, sem nenhum chamador.
 - **Testes:** `lib/tests/Lib-Oracle.PreFlight.Tests.ps1`, o `Describe "Lib-WhatsAppBatch"` do `Lib-WhatsAppBatch.Tests.ps1` e o caso `Get-OraclePreFlightExitCode` do `Lib-Logging.Tests.ps1`. O comportamento segue coberto em `test_hub_oracle_preflight_unit.py` e `test_hub_whatsapp_unit.py`. A trava textual `test_lib_whatsapp_batch_serializa_o_lote_sempre_como_array` (`test_run_ps1_bootstrap_unit.py`) virou `test_write_batch_input_um_card_continua_lista`, que exercita o `hub_whatsapp` de verdade.
 
 ### Alterado
 
+- **`_Template` no runner Python:** `_Template/run.ps1` virou shim (4.0.0), igual ao das seis, e a orquestração foi para `_Template/run_template.py`, sobre `lib/python/hub_runner.py`: pre-flight, lock com a chave do slug, etapa `extract` de exemplo, entrega com idempotência por canal comentada, `--dry-run` e exit codes 0/2/4/9. O check Oracle e o `run_python_step` ficam como exemplo comentado. `Tools/New-Automation.ps1` gera `run_<id>.py` junto do shim (placeholder `TEMPLATE_RUNNER`). Testes: `test_scaffold_governance.py` confere o runner gerado e o shim; `test_run_ps1_bootstrap_unit.py` trava o contrato do shim e do runner do template e roda o runner em `--dry-run` numa cópia temporária.
 - **Paridade do lote WhatsApp (`Orchestrator/tests/test_hub_whatsapp_unit.py`):** os testes que executavam o `Lib-WhatsAppBatch.psm1` em `powershell.exe` passaram a comparar com `Orchestrator/tests/fixtures/lib_whatsappbatch_ps51_paridade.json`, gravado a partir da saída real do PS 5.1 antes da remoção (pasta base normalizada para `<BASE>`). Agora rodam também fora do Windows.
 - **Docs de OFST-06 e ORB-07 (README, CONTEXT e runbooks):** o commit parcial do lote aponta para `lib/python/hub_whatsapp.py` em vez do módulo PowerShell.
 

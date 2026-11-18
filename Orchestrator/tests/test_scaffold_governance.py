@@ -88,3 +88,18 @@ def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
         in smoke_content
     )
     assert 'automation_dir = root / "Auto Scaffold Governado"' in smoke_content
+
+    # Automacao nova nasce no runner Python: o shim aponta para ele e o runner
+    # gerado nao carrega mais o placeholder do template.
+    runner = automation_dir / "run_auto_scaffold_governado.py"
+    assert runner.exists(), "scaffold deve gerar o runner Python"
+    runner_content = runner.read_text(encoding="utf-8")
+    assert "TEMPLATE_SLUG" not in runner_content
+    assert 'AUTOMACAO: Final[str] = "auto-scaffold-governado"' in runner_content
+    compile(runner_content, str(runner), "exec")
+
+    shim = (automation_dir / "run.ps1").read_text(encoding="utf-8")
+    assert '"run_auto_scaffold_governado.py"' in shim
+    assert "TEMPLATE_RUNNER" not in shim
+    assert "exit $LASTEXITCODE" in shim
+    assert "Enter-AutomationLock" not in shim
