@@ -112,10 +112,12 @@ envio.
 
 ## Arquitetura
 
-`run.ps1` faz preflight (`Import-HubEnv` e validação de `OFST_WHATSAPP_TARGET`), rotação de
-logs (`Invoke-LogRotation -KeepDays 15`), lock exclusivo nomeado (`Enter-AutomationLock
--LockKey "ORB-07"`), limpeza de artefatos residuais já sob lock e handoff (delegando cleanup de
-Chrome do motor WhatsApp exclusivamente ao `lib/Send-WhatsApp.ps1`). `extract_orb.py`
+`run.ps1` é um shim: resolve o `.venv` do projeto, chama `run_orb.py` e repassa o exit code.
+A orquestração está em `run_orb.py`, que usa `lib/python/hub_runner.py` (preflight, lock
+`ORB-07`, telemetria, log e commit do state) e `lib/python/hub_whatsapp.py` (manifesto de cards,
+lote e envio pelo `lib/Send-WhatsApp.ps1`). O preflight confere `OFST_WHATSAPP_TARGET`, a rotação
+do log é de 15 dias e a limpeza de artefatos residuais acontece já sob lock. O cleanup de Chrome
+do motor WhatsApp fica exclusivamente no `lib/Send-WhatsApp.ps1`. `extract_orb.py`
 consulta Oracle (finalidades compatíveis → OBs → estoque) e gera
 `orb_result.json`/`orb_state.json.tmp`. A consulta de estoque
 (`SQL-EstoqueFinalidadesBranco.sql`) usa `GROUPING SETS`: a linha total é o
@@ -123,8 +125,9 @@ consulta Oracle (finalidades compatíveis → OBs → estoque) e gera
 mensagem — somar as parciais contaria em dobro uma peça com mais de uma
 finalidade cadastrada. `validators.py` contém regras puras.
 `format_message.py` + `lib/python/card_pagination.py` geram o(s) card(s) PNG e
-`cards_manifest.json`. `lib/Lib-WhatsAppBatch.psm1` valida o manifesto e reconcilia o commit
-parcial em conjunto com `lib/Send-WhatsApp.ps1` e `lib/WhatsApp-Core.js`.
+`cards_manifest.json`. `lib/python/hub_whatsapp.py` valida o manifesto e reconcilia o commit
+parcial em conjunto com `lib/Send-WhatsApp.ps1` e `lib/WhatsApp-Core.js` (porte de
+`lib/Lib-WhatsAppBatch.psm1`, que segue no repositorio para as demais automacoes).
 
 ## Guardrails
 

@@ -8,6 +8,8 @@
     Send-AlertaFalhaDefinitiva.
 
     Modo e-mail: -To, -Subject e -HtmlBodyFile (arquivo UTF-8 com o corpo HTML).
+    Opcionais: -Cc, -Bcc, -Attachments (caminhos separados por ";", porque -File nao
+    recebe array) e -PreviewOnly (abre o rascunho sem enviar), repassados a Send-OutlookEmail.
     Modo alerta: -Alerta, com -TaskName, -UltimoErro e -Tentativas.
 
     Exit code: 0 quando o envio e confirmado (modo e-mail) ou a chamada de alerta
@@ -15,7 +17,7 @@
     excecao. O alerta nao confirma envio: Send-AlertaFalhaDefinitiva nao devolve
     valor, entao so falhas de execucao aparecem como exit 1.
 .NOTES
-    Version: 1.0.0
+    Version: 1.1.0
     Skill: powershell-automation-monitor, enterprise-orchestration-contract
     Runtime: Windows PowerShell 5.1 (powershell.exe).
 #>
@@ -25,6 +27,10 @@ param(
     [string]$To = "",
     [string]$Subject = "",
     [string]$HtmlBodyFile = "",
+    [string]$Cc = "",
+    [string]$Bcc = "",
+    [string]$Attachments = "",
+    [switch]$PreviewOnly,
     [switch]$Alerta,
     [string]$TaskName = "",
     [string]$UltimoErro = "Consulte o log para detalhes.",
@@ -68,7 +74,14 @@ try {
     }
 
     $htmlBody = Get-Content -LiteralPath $HtmlBodyFile -Raw -Encoding UTF8
-    $saidaEnvio = @(Send-OutlookEmail -To $To -Subject $Subject -HtmlBody $htmlBody -ExecId $ExecId -LogPath $LogPath)
+    $anexos = @($Attachments -split ";" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    foreach ($anexo in $anexos) {
+        if (-not (Test-Path -LiteralPath $anexo -PathType Leaf)) {
+            Write-Host "[ERRO] Anexo nao encontrado: $anexo"
+            exit 1
+        }
+    }
+    $saidaEnvio = @(Send-OutlookEmail -To $To -CC $Cc -BCC $Bcc -Subject $Subject -HtmlBody $htmlBody -Attachments $anexos -ExecId $ExecId -LogPath $LogPath -PreviewOnly:$PreviewOnly)
     $resultadoEnvio = $saidaEnvio[-1]
     if ($resultadoEnvio -eq $true) { exit 0 }
     exit 1

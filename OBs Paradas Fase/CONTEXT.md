@@ -28,12 +28,13 @@ Automação de monitoramento de OBs (Ordens de Beneficiamento) paradas por fase.
 
 ## Padrão de logging
 
-- `run.ps1` usa `Write-AutomacaoLog` (via `Lib-Logging.psm1`) para todas as mensagens estruturadas com nível (`INFO`/`WARN`/`ERRO`/`DEBUG`) e `ExecId`.
-- `extract_obs.py` usa `make_logger` (logger Python padrão) com output para stderr; o output é capturado pelo PowerShell via `Invoke-OraclePythonScript`.
-- `generate_phase_cards.py` usa `print()` direto para stdout/stderr — deliberado para simplicidade, já que o script não roda em contexto de longa duração e toda saída é capturada pelo caller PowerShell via `Invoke-NativeProcess`.
+- `run_obs_paradas.py` (via `lib/python/hub_runner.py`) emite o envelope estruturado (`INFO`/`WARN`/`ERRO`/`DEBUG`) com `ExecId`; o `run.ps1` é só o shim.
+- `extract_obs.py` usa `make_logger` (logger Python padrão) com output para stderr; o runner encaminha as linhas ao log da execução via `hr.run_python_step`.
+- `generate_phase_cards.py` usa `print()` direto para stdout/stderr; o runner roda uma vez (sem retry) e encaminha a saída ao log.
 
 ## Histórico de decisões
 
+- Orquestração migrada para `run_obs_paradas.py` (rollout do item 3, PR 93): `run.ps1` virou shim, o worker continua chamando `powershell.exe -File run.ps1 <ExecId>`. O envio usa `hub_whatsapp.send_whatsapp`; a reconciliação por fase segue a regra do `run.ps1` antigo (`delivery_state.json` por fase, `obs_state.json` só com todas as fases entregues), sem `resolve_whatsapp_batch_delivery`, que é de outro estado (`notified`).
 - BATCH mode adotado para envio (sessão Chrome única para todas as fases)
 - 40s de settle (`BATCH_SETTLE_MS_NORMAL`) após `ready` para garantir WhatsApp Web totalmente carregado antes do envio; dreno ativo com `mouse.move` a cada 3s para manter Chrome acordado durante uploads de mídia
 - `cleanProfileForRetry` remove apenas LOCK files — `.log` contêm tokens de sessão válidos

@@ -180,6 +180,26 @@ class HttpTelemetryClient:
         return carga if isinstance(carga, dict) else {}
 
 
+def user_environment_variable(nome: str) -> str:
+    """Variavel do escopo User do Windows (HKCU\\Environment): GetEnvironmentVariable(nome, 'User').
+
+    E o registro, nao o ambiente do processo. Os run.ps1 decidiam o modo teste por esse
+    valor; o ambiente do processo tambem carrega o .env, entao um AUTOMACAO_TEST_EMAIL do
+    .env nao pode ativar o teste. Fora do Windows, ou sem a chave, devolve vazio.
+    """
+    if sys.platform != "win32":
+        return ""
+    import winreg  # pylint: disable=import-outside-toplevel
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as chave:
+            valor, tipo = winreg.QueryValueEx(chave, nome)
+    except OSError:
+        return ""
+    texto = str(valor)
+    return os.path.expandvars(texto) if tipo == winreg.REG_EXPAND_SZ else texto
+
+
 def read_api_key(raiz: Path) -> str:
     """Le ORCHESTRATOR_API_KEY do .env da raiz (regra de Get-AutomacaoApiKey)."""
     try:

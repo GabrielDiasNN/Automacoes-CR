@@ -27,6 +27,7 @@
     "whatsapp": false
   },
   "smoke_tests": [
-    "Orchestrator/tests/test_montagem_terceirizados.py"
+    "Orchestrator/tests/test_montagem_terceirizados.py",
+    "Orchestrator/tests/test_run_montagem_unit.py"
   ]
 }

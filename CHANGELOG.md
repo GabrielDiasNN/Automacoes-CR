@@ -4,7 +4,7 @@
 
 ## [1.3.117] - 18/11/2026
 
-Revisão de linguagens do monorepo: o JavaScript fica onde só ele serve (WhatsApp), sai onde duplicava o Python (Oracle), e a orquestração das automações começa a sair do PowerShell, com o RE-03 como piloto.
+Revisão de linguagens do monorepo: o JavaScript fica onde só ele serve (WhatsApp), sai onde duplicava o Python (Oracle), e a orquestração das seis automações sai do PowerShell para um runner Python (RE-03 como piloto, depois RB-01, MT-02, OBP-04, OFST-06 e ORB-07).
 
 ### Adicionado
 
@@ -13,11 +13,16 @@ Revisão de linguagens do monorepo: o JavaScript fica onde só ele serve (WhatsA
   - `POST /batch` (OBP-04, OFST-06, ORB-07) e `POST /send` (modo AUTO do RB-01 e dos envios de um card só), em fila serial, com `verificarEstadoConectado` antes de cada envio, acomodação de `BATCH_SETTLE_MS_NORMAL` após o `ready`, vigia periódico por `getState` e `client_id` conferido (`409` quando difere).
   - Sem `ready` por `WHATSAPP_DAEMON_MAX_NOT_READY_MS` (padrão 10 min), o daemon destrói o cliente e encerra, e os envios voltam ao modo por processo.
   - `lib/WhatsApp-Core.js`: o corpo do envio único virou `executarEnvioUnico(client, { contato, anexo, legenda })`; o modo AUTO por processo delega a ela sem mudança de comportamento.
-- **Runner Python das automações (`lib/python/hub_runner.py`):** reproduz em Python os contratos de `Lib-Logging`, `Lib-LogEvent`, `Lib-Oracle`, `Lib-Retry` e `Lib-Idempotency` — mutex `Global\AutomationHub_<chave>` com o mesmo saneamento (PowerShell e Python se excluem), eventos estruturados `ps_script` no mesmo arquivo de log, passos Python com retry e exit 2 idempotente, `delivery_state.json` no mesmo formato, pré-flight Oracle com a decisão de `Test-AutomationPreFlight -CheckOracle` e `Get-OraclePreFlightExitCode` (limiares 45/240 s do worker da fila) e telemetria só para `ExecId` `TEL_`. `lib/Invoke-OutlookEmail.ps1` é a CLI fina sobre `Lib-Email`/`Lib-Retry`: o Outlook COM continua no PowerShell.
+- **Runner Python das automações (`lib/python/hub_runner.py`):** reproduz em Python os contratos de `Lib-Logging`, `Lib-LogEvent`, `Lib-Oracle`, `Lib-Retry` e `Lib-Idempotency` — mutex `Global\AutomationHub_<chave>` com o mesmo saneamento (PowerShell e Python se excluem), eventos estruturados `ps_script` no mesmo arquivo de log, passos Python com retry e exit 2 idempotente, `delivery_state.json` no mesmo formato, pré-flight Oracle com a decisão de `Test-AutomationPreFlight -CheckOracle` e `Get-OraclePreFlightExitCode` (limiares 45/240 s do worker da fila) e telemetria só para `ExecId` `TEL_`. `lib/Invoke-OutlookEmail.ps1` é a CLI fina sobre `Lib-Email`/`Lib-Retry` (com `-Cc`, `-Bcc`, `-Attachments` separados por `;` e `-PreviewOnly`): o Outlook COM continua no PowerShell. `user_environment_variable` lê o escopo User do Windows (registro), como o `GetEnvironmentVariable(..., "User")` que decidia o modo teste.
+- **Base WhatsApp do runner (`lib/python/hub_whatsapp.py`):** ports de `Read-CardsManifest`, `Write-WhatsAppBatchInput` (bytes iguais aos do `ConvertTo-Json` do PS 5.1), `Resolve-WhatsAppBatchDelivery`, `Update-WhatsAppResultRecordCounts`, `Test-WhatsAppConfigEnabled` e `Get-WhatsAppAuthPath`, mais `send_whatsapp`, que chama o `lib/Send-WhatsApp.ps1` (o daemon e o motor Node continuam atrás dele). Testes de paridade rodam as funções PowerShell reais e comparam resultado e arquivos.
 
 ### Alterado
 
-- **RE-03 (piloto do runner):** a orquestração saiu do `Receitas Emitidas/run.ps1` para `Receitas Emitidas/run_receitas.py`, com os mesmos steps, códigos de saída, assunto, destinatário, corpo e arquivos de estado. O `run.ps1` virou um shim de 30 linhas (worker e manifesto inalterados) e ganhou `-DryRun`, que roda preflight, extract e transform sem enviar nem gravar o state.
+- **Orquestração das seis automações no runner Python:** `run.ps1` virou shim (resolve o Python, chama o runner da pasta, repassa o exit code; worker e manifestos inalterados) e ganhou `-DryRun`, que roda preflight, extract e transform de verdade sem enviar e-mail, alerta ou WhatsApp, sem limpar processos e sem gravar o state. Steps, códigos de saída (inclusive 2, 21, 22, 25), chaves de lock, tentativas, backoffs e arquivos de estado são os mesmos de antes, com um teste por desfecho em `Orchestrator/tests/test_run_<automação>_unit.py`.
+  - RE-03 `run_receitas.py` (piloto), RB-01 `run_receitas_bloqueadas.py`, MT-02 `run_montagem.py`, OBP-04 `run_obs_paradas.py`, OFST-06 `run_ofst.py` e ORB-07 `run_orb.py`.
+  - Modo teste de RB-01 e MT-02: `AUTOMACAO_TEST_EMAIL` continua vindo só do escopo User do Windows, nunca do `.env` carregado no processo.
+  - OBP-04: a limpeza de Chrome zumbi do perfil WhatsApp poupa a árvore de processos do daemon, como o `Send-WhatsApp.ps1`.
+  - Os contratos textuais de `test_run_ps1_bootstrap_unit.py`, `test_ofst_orb_parity_unit.py` e `Lib-Idempotency.Tests.ps1` passaram a travar o shim e o runner, onde cada contrato mora agora.
 - **`lib/Send-WhatsApp.ps1`:** com um daemon vivo no mesmo perfil, todo envio passa por ele (BATCH e AUTO) e daemon não pronto devolve `22` (state preservado). VISUAL, LIST_GROUPS, `Authenticate-WhatsApp.bat` e `Keep-WhatsApp-Open.ps1` recusam enquanto o daemon segura o perfil. A limpeza de Chrome zumbi poupa a árvore de processos do daemon.
 
 ### Removido

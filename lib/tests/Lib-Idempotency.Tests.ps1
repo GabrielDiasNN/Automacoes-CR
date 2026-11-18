@@ -8,16 +8,18 @@
 # ausente, hash vazio) que sao justamente onde as copias divergiam.
 #
 
-# Receitas Emitidas migrou para o runner Python (run_receitas.py): o run.ps1 e um shim
-# e os contratos de idempotencia dela sao checados no Describe "runner Python" abaixo.
-$MigradosParaLib = @(
-    "Receitas Bloqueadas",
-    "Montagem de Terceirizados"
+# Desde a 1.3.117 os run.ps1 com idempotencia por canal (RB-01, MT-02, RE-03) sao shims:
+# a orquestracao esta no runner Python de cada pasta, sobre lib/python/hub_runner.py, e os
+# contratos sao checados nos Describe abaixo.
+$MigradosParaRunnerPython = @(
+    @{ Pasta = "Receitas Emitidas"; Runner = "run_receitas.py" },
+    @{ Pasta = "Receitas Bloqueadas"; Runner = "run_receitas_bloqueadas.py" },
+    @{ Pasta = "Montagem de Terceirizados"; Runner = "run_montagem.py" }
 )
 
-$MigradosParaRunnerPython = @(
-    "Receitas Emitidas"
-)
+# RB-01 e a excecao documentada: o exit_code do WhatsApp e diagnostico que o run.ps1 antigo
+# gravava em delivery_status.whatsapp, e o runner preserva o mesmo campo.
+$SemLeituraManualDeStatus = @($MigradosParaRunnerPython | Where-Object { $_.Pasta -ne "Receitas Bloqueadas" })
 
 BeforeAll {
     $libRoot = Split-Path -Parent $PSScriptRoot
@@ -254,41 +256,42 @@ Describe "Contrato com os run.ps1 migrados" {
         $script:RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     }
 
-    It "<_> importa Lib-Idempotency.psm1" -ForEach $MigradosParaLib {
-        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run.ps1") -Raw
-        $conteudo | Should -Match 'Import-Module \$libIdempotency'
-    }
-
-    It "<_> nao reimplementa a leitura manual de delivery_status" -ForEach $MigradosParaLib {
-        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run.ps1") -Raw
-        $conteudo | Should -Not -Match '\$savedState\.delivery_status'
-    }
-
-    It "<_> nao persiste delivery_state manualmente" -ForEach $MigradosParaLib {
-        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run.ps1") -Raw
+    It "<Pasta> e shim: a receita de idempotencia nao volta para o run.ps1" -ForEach $MigradosParaRunnerPython {
+        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$Pasta\run.ps1") -Raw
+        $conteudo | Should -Match ([regex]::Escape($Runner))
+        $conteudo | Should -Not -Match 'delivery_status'
         $conteudo | Should -Not -Match '\$deliveryState \| ConvertTo-Json'
     }
 }
 
-Describe "Idempotencia no runner Python (Receitas Emitidas)" {
+Describe "Idempotencia no runner Python" {
     BeforeAll {
         $script:RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     }
 
-    It "<_> usa o modulo de idempotencia do hub_runner" -ForEach $MigradosParaRunnerPython {
-        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run_receitas.py") -Raw
+    It "<Pasta> usa o modulo de idempotencia do hub_runner" -ForEach $MigradosParaRunnerPython {
+        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$Pasta\$Runner") -Raw
         $conteudo | Should -Match 'read_delivery_state'
         $conteudo | Should -Match 'delivery_pending'
         $conteudo | Should -Match 'save_delivery_state'
     }
 
-    It "<_> nao reimplementa a leitura manual de delivery_status" -ForEach $MigradosParaRunnerPython {
-        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run_receitas.py") -Raw
+    It "<Pasta> nao reimplementa a leitura manual de delivery_status" -ForEach $SemLeituraManualDeStatus {
+        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$Pasta\$Runner") -Raw
         $conteudo | Should -Not -Match 'delivery_status'
     }
 
-    It "<_> nao persiste delivery_state manualmente" -ForEach $MigradosParaRunnerPython {
-        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run_receitas.py") -Raw
+    It "Receitas Bloqueadas so toca delivery_status pelo exit_code do WhatsApp" {
+        $linhas = @(Get-Content -LiteralPath (Join-Path $script:RepoRoot "Receitas Bloqueadas\run_receitas_bloqueadas.py") |
+                Where-Object { $_ -match 'delivery_status' })
+        $linhas.Count | Should -BeGreaterThan 0
+        foreach ($linha in $linhas) {
+            $linha | Should -Match 'exit_code|dados\.get\("delivery_status"\)'
+        }
+    }
+
+    It "<Pasta> nao persiste delivery_state manualmente" -ForEach $MigradosParaRunnerPython {
+        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$Pasta\$Runner") -Raw
         $conteudo | Should -Not -Match 'json\.dump\('
     }
 }

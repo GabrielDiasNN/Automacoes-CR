@@ -10,16 +10,17 @@ Este projeto automatiza o processamento, a consolidação e a distribuição das
 
 A execução segue o pipeline de missão crítica:
 
-`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (Orquestrador)
-  -> **Fase 1**: `processar_receitas.py` (Python)
-     - Extração Oracle com **Retry Exponencial** via biblioteca `stamina`.
-     - Lógica SQL desacoplada em `SQL-ReceitasBloqueadas.sql`.
-     - Controle de estado (Diff) para detecção de Novas, Alteradas e Liberadas.
-  -> **Fase 2**: Idempotência Unificada (PowerShell)
-     - Verifica o hash gerado pela Fase 1. Se não houver mudanças, aborta E-mail e WhatsApp.
-  -> **Fase 3**: Distribuição Multicanal
-     - **E-mail**: Envio via Outlook (COM) com corpo HTML artístico.
-     - **WhatsApp**: Bridge via `lib/WhatsApp-Core.js` (Node.js), acionado por `lib/Send-WhatsApp.ps1`, com protocolo de Ack e tratamento gracioso de erros de contato (LID).
+`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (shim, só resolve o Python e repassa o exit code)
+  -> `run_receitas_bloqueadas.py` (orquestrador, usa `lib/python/hub_runner.py` e `hub_whatsapp.py`)
+     - Pre-flight (disco, paths e check Oracle), depois o lock global `RB-01`.
+  -> **Extract**: `processar_receitas.py` (Python)
+     - Extração Oracle com **Retry Exponencial** via biblioteca `stamina`; 3 tentativas com backoff 60/120/300.
+     - Lógica SQL desacoplada em `SQL-ReceitasBloqueadas.sql`; controle de estado (Diff) para Novas, Alteradas e Liberadas.
+  -> **Dispatch**: Idempotência granular por canal (`email_state.json`) e distribuição
+     - **E-mail**: `lib/Invoke-OutlookEmail.ps1`, 2 tentativas com backoff 15/30.
+     - **WhatsApp**: `lib/Send-WhatsApp.ps1` em modo AUTO, com exit codes 21, 22, 23, 24 e 40 tratados.
+  -> **Commit**: `receitas_state.json.tmp` vira `receitas_state.json` só sem falha de canal.
+- `--dry-run` roda pre-flight e extract de verdade, sem e-mail, WhatsApp, alerta ou commit.
 
 ---
 

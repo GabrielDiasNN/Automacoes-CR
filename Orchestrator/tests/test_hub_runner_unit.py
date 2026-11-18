@@ -766,3 +766,21 @@ def test_executar_cli_trata_timeout_como_falha(
     codigo, saida = hr.executar_cli_outlook(tmp_path / "x.ps1", ["-Alerta"])
     assert codigo == 1
     assert "excedeu" in saida
+
+
+def test_user_environment_variable_fora_do_windows_devolve_vazio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sem registro do Windows nao ha escopo User: o modo teste nunca liga por acidente."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert hr.user_environment_variable("AUTOMACAO_TEST_EMAIL") == ""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="escopo User so existe no Windows")
+def test_user_environment_variable_ignora_o_ambiente_do_processo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uma variavel so do processo (como as do .env) nao aparece no escopo User."""
+    nome = "HUB_TESTE_SO_NO_PROCESSO_7F3A"
+    monkeypatch.setenv(nome, "valor-do-processo")
+    assert hr.user_environment_variable(nome) == ""

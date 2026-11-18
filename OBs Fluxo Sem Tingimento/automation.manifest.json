@@ -27,6 +27,7 @@
     "whatsapp": true
   },
   "smoke_tests": [
-    "Orchestrator/tests/test_ofst.py"
+    "Orchestrator/tests/test_ofst.py",
+    "Orchestrator/tests/test_run_ofst_unit.py"
   ]
 }

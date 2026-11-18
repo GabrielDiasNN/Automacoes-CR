@@ -4,6 +4,7 @@
 Gerenciar o fluxo de **Receitas de Produção Retidas** no sistema Oracle por falta de insumos ou inconsistências técnicas. O foco está no acompanhamento das **Ordens de Beneficiamento (OB)**.
 
 ## Arquitetura Soberana (v2.3.2)
+- **Orquestração:** `run.ps1` é só o shim; a orquestração (pre-flight, lock `RB-01`, extract, dispatch por canal e commit) está em `run_receitas_bloqueadas.py`, sobre `lib/python/hub_runner.py` e `hub_whatsapp.py`. O worker do Orchestrator continua chamando `run.ps1 <ExecId>`.
 - **Extração:** Python com **Oracle Thick Mode** e resiliência via biblioteca `stamina` (Retry exponencial para quedas de rede ORA-00028).
 - **Separação de Preocupações:** SQL isolado no arquivo `SQL-ReceitasBloqueadas.sql` para facilitar a manutenção DBA.
 - **Inteligência de Estado:**

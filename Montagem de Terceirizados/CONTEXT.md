@@ -16,7 +16,7 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
     -   **Validation Rule 1:** A NF na observacao da OB (`NF:\d+`) deve ser igual a Ref. Cliente.
     -   **Validation Rule 2:** A NF no campo de Montagem (`QT_PC_NF` formatado como `Qtd - NF - complemento`) deve ser igual a Ref. Cliente.
     -   **Validation Rule 3:** Quando houver NF incorreta na montagem, a automacao soma a quantidade de pecas erradas para orientar a retirada fisica pela expedicao.
-4. **Delivery Layer:** PowerShell envia e-mail moderno via Outlook COM (Outlook-Safe).
+4. **Delivery Layer:** `run_montagem.py` (orquestrador Python, sobre `lib/python/hub_runner.py`) envia o e-mail pela CLI `lib/Invoke-OutlookEmail.ps1` (Outlook COM), que repassa `-Cc` e `-PreviewOnly` a `Send-OutlookEmail`. `run.ps1` e so um shim que chama o runner.
 
 ## Key Identifiers
 -   `ExecId`: Correlation ID para rastrear o fluxo entre Python e Logs.
@@ -37,3 +37,4 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
 - **Idempotência:** Mantida a lógica de Two-Phase Commit para consolidação do estado apenas após sucesso confirmado.
 - **Expedição NF x OB (17/05/2026):** O e-mail agora diferencia divergência documental e divergência física, exibindo a quantidade de peças com NF incorreta por OB e no resumo agregado da notificação.
 - **Ambiente Oracle (17/05/2026):** A execução direta do extrator foi alinhada ao Orchestrator com `load_dotenv(..., override=True)`, evitando que credenciais stale da sessão local vençam o `.env`.
+- **Estado (18/11/2026):** Orquestração migrada para `run_montagem.py` (sobre `hub_runner`); `run.ps1` virou shim. O envio com cópia (`-Cc`) e o preview passam pela CLI `lib/Invoke-OutlookEmail.ps1`. Modo teste lê `AUTOMACAO_TEST_EMAIL` do escopo User, como o run.ps1 antigo.

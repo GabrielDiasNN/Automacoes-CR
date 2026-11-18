@@ -582,6 +582,29 @@ def test_dry_run_roda_extract_e_transform_mas_nao_envia_nem_confirma(
     assert any("Commit de estado nao executado" in m for m in mensagens)
 
 
+def test_dry_run_com_falha_de_extracao_nao_envia_alerta_real(
+    pasta: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    falha = hr.PythonStepResult(
+        success=False,
+        idempotent=False,
+        non_retryable=False,
+        output="",
+        exit_code=1,
+        attempts=3,
+    )
+    duplos = _instalar(monkeypatch, {"extract": falha})
+    ctx = _contexto(pasta)
+
+    codigo = rr.executar(ctx, rr.Caminhos.da_pasta(pasta), dry_run=True)
+
+    assert codigo == 3
+    assert not duplos.alerta.chamadas
+    assert any(
+        m.startswith("[DRY-RUN] Alerta de falha nao enviado") for m in _mensagens(ctx)
+    )
+
+
 def test_falha_na_transformacao_vira_erro_fatal(
     pasta: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

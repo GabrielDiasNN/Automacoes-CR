@@ -363,12 +363,21 @@ def _falha_extracao(sessao: _Sessao, extracao: hr.PythonStepResult) -> int:
         extracao.exit_code, default_exit_code=EXIT_FALHA_EXTRACAO
     )
     tentativas = 1 if extracao.non_retryable else TENTATIVAS_EXTRACAO
-    hr.send_failure_alert(
-        sessao.ctx,
-        task_name=AUTOMACAO,
-        ultimo_erro=f"Falha na extracao Oracle (PythonExit={extracao.exit_code}).",
-        tentativas=tentativas,
-    )
+    ultimo_erro = f"Falha na extracao Oracle (PythonExit={extracao.exit_code})."
+    if sessao.dry_run:
+        hr.log(
+            sessao.ctx,
+            "[DRY-RUN] Alerta de falha nao enviado: " + ultimo_erro,
+            "WARN",
+            step="extract",
+        )
+    else:
+        hr.send_failure_alert(
+            sessao.ctx,
+            task_name=AUTOMACAO,
+            ultimo_erro=ultimo_erro,
+            tentativas=tentativas,
+        )
     return _encerrar(
         sessao,
         codigo,

@@ -7,7 +7,7 @@ Consulta as OBs de **fluxo 204** (direto para rama, sem tingimento) que já fora
 | Item | Valor |
 |---|---|
 | ID | `OFST-06` |
-| Entrypoint | `run.ps1` |
+| Entrypoint | `run.ps1` (shim) → `run_ofst.py` |
 | Agendamento | A cada 120 min, 05:00–19:00 Seg–Sex, e 05:00–13:00 Sáb (campo `schedule` do manifesto) |
 | Canal | WhatsApp — grupo Expedição Tinturaria |
 | Dependências | Oracle (somente leitura), Pillow (fontes TrueType `Arial`/`DejaVuSans` com fallback proporcional), motor WhatsApp `lib/` |
@@ -114,12 +114,16 @@ pwsh -File "OBs Fluxo Sem Tingimento\run.ps1"
 
 # Só a extração + validação, sem envio (gera ofst_result.json)
 .venv\Scripts\python.exe "OBs Fluxo Sem Tingimento\extract_ofst.py" manual
+
+# Validacao manual sem envio e sem commit de state (pre-flight, extract e transform reais)
+.venv\Scripts\python.exe "OBs Fluxo Sem Tingimento\run_ofst.py" --dry-run
 ```
 
 ### Testes automatizados (sem Oracle)
 
 ```powershell
 cd Orchestrator; ..\.venv\Scripts\pytest.exe tests\test_ofst.py -v
+..\.venv\Scripts\pytest.exe tests\test_run_ofst_unit.py -v
 ```
 
 ---
@@ -134,7 +138,7 @@ O job roda a cada 2 horas (120 min), então **não pode reavisar a mesma OB a ca
 - OB notificável **nova** → entra na mensagem;
 - OB que saiu da query (foi montada) → **removida do state**. Se voltar a ficar pendente, avisa de novo.
 
-O commit do state (`ofst_state.json.tmp` → `ofst_state.json`) acontece **somente após o envio confirmado** no `run.ps1`. Em envios em lote paginados (`> 15` OBs, via `-Mode BATCH` e `lib/Lib-WhatsAppBatch.psm1`), se alguma página falhar após entregas anteriores, apenas as OBs das páginas não entregues são removidas de `ofst_state.json.tmp` antes do commit, evitando duplicação das páginas enviadas e permitindo retentativa das faltantes. Se todas falharem, nada é commitado e as OBs são reavaliadas na execução seguinte — a falha nunca engole um aviso.
+O commit do state (`ofst_state.json.tmp` → `ofst_state.json`) acontece **somente após o envio confirmado** no `run_ofst.py`. Em envios em lote paginados (`> 15` OBs, via `-Mode BATCH` e `lib/Lib-WhatsAppBatch.psm1`), se alguma página falhar após entregas anteriores, apenas as OBs das páginas não entregues são removidas de `ofst_state.json.tmp` antes do commit, evitando duplicação das páginas enviadas e permitindo retentativa das faltantes. Se todas falharem, nada é commitado e as OBs são reavaliadas na execução seguinte — a falha nunca engole um aviso.
 
 > Um hash do lote inteiro (padrão do OBP-04) **não serviria aqui**: o estoque flutua ao longo do dia, o hash mudaria sozinho e a mesma OB seria reavisada.
 
@@ -150,6 +154,7 @@ O commit do state (`ofst_state.json.tmp` → `ofst_state.json`) acontece **somen
 | `4` | Falha na montagem da mensagem ou no envio WhatsApp (total ou parcial) |
 | `9` | Falha de pré-flight (Oracle/Python/config ausente) |
 | `21` | WhatsApp exige reautenticação (parear a sessão de novo) |
+| `22` | WhatsApp adiado por lock ou cooldown da sessão (nada commitado) |
 
 ---
 
@@ -157,7 +162,8 @@ O commit do state (`ofst_state.json.tmp` → `ofst_state.json`) acontece **somen
 
 | Arquivo | Papel |
 |---|---|
-| `run.ps1` | Orquestrador: pré-flight → rotação de logs → lock `-LockKey "OFST-06"` → extração → card(s) → envio (`AUTO`/`BATCH`) → commit do state |
+| `run.ps1` | Shim de entrada: resolve o Python do projeto, chama `run_ofst.py` e repassa o exit code ao worker |
+| `run_ofst.py` | Orquestrador em Python (sobre `lib/python/hub_runner.py` e `hub_whatsapp.py`): pré-flight → lock `OFST-06` → rotação de logs → extração → card(s) → envio (`AUTO`/`BATCH`) → commit do state |
 | `extract_ofst.py` | Oracle → validação → `ofst_result.json` (produção) |
 | `validators.py` | **Regras de confiabilidade — funções puras, sem I/O** |
 | `queries.py` | Carrega os `.sql` e monta a query de estoque com bind variables |
