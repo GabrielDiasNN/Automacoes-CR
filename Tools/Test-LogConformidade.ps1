@@ -174,7 +174,7 @@ function Get-TargetFiles {
 
     if ($StagedOnly) {
 
-        $stagedRaw = git -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR 2>$null
+        $stagedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR 2>$null
 
         if (-not $stagedRaw) { return @() }
 

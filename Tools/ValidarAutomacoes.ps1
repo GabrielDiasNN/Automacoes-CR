@@ -185,18 +185,21 @@ function Invoke-NativeGovernanceCheck {
     }
 
     $jobs = [ordered]@{}
+    $resolvedWorkDir = (Resolve-Path -LiteralPath $RootPath).Path
+    $jobs = [ordered]@{}
     foreach ($script in $parallelChecks) {
-        $path = Join-Path $RootPath "Tools\$script"
+        $path = Join-Path $resolvedWorkDir "Tools\$script"
         if (-not (Test-Path $path)) { continue }
         $jobs[$script] = Start-Job -ScriptBlock {
             param([string]$ScriptPath, [string]$WorkDir, [hashtable]$CheckArgs)
             Set-Location -LiteralPath $WorkDir
             try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
             catch [System.IO.IOException] { Write-Verbose "Sem console no job: $($_.Exception.Message)" }
+            $ErrorActionPreference = "Continue"
             $global:LASTEXITCODE = 0
             & $ScriptPath @CheckArgs *>&1 | ForEach-Object { "$_" }
             [pscustomobject]@{ GateExitCode = $LASTEXITCODE }
-        } -ArgumentList $path, (Get-Location).Path, (& $checkArgsFor $script)
+        } -ArgumentList $path, $resolvedWorkDir, (& $checkArgsFor $script)
     }
 
     foreach ($script in $checks) {
@@ -227,7 +230,7 @@ function Invoke-NativeGovernanceCheck {
 
     foreach ($script in $jobs.Keys) {
         Write-Host "--- Rodando (em paralelo): $script ---" -ForegroundColor Gray
-        $jobOutput = @(Receive-Job -Job $jobs[$script] -Wait -AutoRemoveJob)
+        $jobOutput = @(Receive-Job -Job $jobs[$script] -Wait -AutoRemoveJob -ErrorAction Continue)
         $exitRecord = @($jobOutput | Where-Object { $_ -isnot [string] -and $null -ne $_.PSObject.Properties["GateExitCode"] })
         $jobOutput | Where-Object { $_ -is [string] } | Out-Host
         # Sem o registro de saida o job morreu antes do fim: tratar como falha, nunca

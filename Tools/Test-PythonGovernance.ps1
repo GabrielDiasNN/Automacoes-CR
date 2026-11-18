@@ -33,6 +33,8 @@ if ($Paths.Count -eq 1 -and $Paths[0] -match ',') {
 
 if ([string]::IsNullOrEmpty($RootPath)) {
     $RootPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+} else {
+    $RootPath = (Resolve-Path -LiteralPath $RootPath).Path
 }
 
 $ErrorActionPreference = "Stop"
@@ -50,7 +52,7 @@ $targetFiles = @()
 if ($Paths.Count -gt 0) {
     $targetFiles = $Paths | Where-Object { $_ -match '\.py$' }
 } else {
-    $targetFiles = (git -c core.quotepath=false ls-files "*.py")
+    $targetFiles = (git -C $RootPath -c core.quotepath=false ls-files "*.py")
 }
 
 if ($targetFiles.Count -eq 0) {
@@ -136,22 +138,34 @@ $pylint = Get-PythonTool "pylint"
 function Get-PylintScope {
     param([string[]]$AllFiles, [string[]]$ChangedRelative)
 
-    $changedFull = @(
+    $changedPyRelative = @(
         $ChangedRelative |
             Where-Object { $_ -match '\.py$' } |
-            ForEach-Object { Join-Path $RootPath ($_.Trim('"')) } |
-            Where-Object { Test-Path -LiteralPath $_ }
+            ForEach-Object { $_.Trim('"') }
     )
-    if ($changedFull.Count -eq 0) { return @() }
+    if ($changedPyRelative.Count -eq 0) { return @() }
 
     $stems = @(
-        $changedFull | ForEach-Object {
+        $changedPyRelative | ForEach-Object {
             $leaf = [System.IO.Path]::GetFileNameWithoutExtension($_)
-            if ($leaf -eq '__init__') { Split-Path -Leaf (Split-Path -Parent $_) } else { $leaf }
-        } | Sort-Object -Unique
+            if ($leaf -eq '__init__') {
+                $parentDir = Split-Path -Parent $_
+                if (-not [string]::IsNullOrWhiteSpace($parentDir)) { Split-Path -Leaf $parentDir } else { $leaf }
+            } else {
+                $leaf
+            }
+        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique
     )
+    if ($stems.Count -eq 0) { return @() }
+
+    $changedFull = @(
+        $changedPyRelative |
+            ForEach-Object { Join-Path $RootPath $_ } |
+            Where-Object { Test-Path -LiteralPath $_ }
+    )
+
     $alternation = ($stems | ForEach-Object { [regex]::Escape($_) }) -join '|'
-    $importPattern = '(?m)^\s*(?:from\s+(?:[\w.]+\.)?(?:' + $alternation + ')(?:\.[\w.]+)?\s+import\b' +
+    $importPattern = '(?m)^\s*(?:from\s+(?:[\w.]*\.)?(?:' + $alternation + ')(?:\.[\w.]+)?\s+import\b' +
         '|import\s+(?:[\w.]+\.)?(?:' + $alternation + ')\b' +
         '|from\s+[\w.]+\s+import\s+(?:\([^)]*?\b(?:' + $alternation + ')\b|[^\r\n#]*\b(?:' + $alternation + ')\b))'
     $importRegex = New-Object System.Text.RegularExpressions.Regex($importPattern)
@@ -207,7 +221,7 @@ if ($mypy) {
                 Output = @($output)
             }
         }
-    } -ArgumentList $mypy, (Get-Location).Path, $mypyGroups
+    } -ArgumentList $mypy, $RootPath, $mypyGroups
 } else {
     Write-Host "[AVISO] Mypy nao instalado. Validacao de tipagem Python pulada." -ForegroundColor Yellow
 }
@@ -235,7 +249,13 @@ if (-not $pylint) {
 
     foreach ($grupoPylint in $pylintPorDiretorio) {
         $arquivosGrupo = @($grupoPylint.Group)
-        $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302,C0411 @arquivosGrupo 2>&1
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302,C0411 @arquivosGrupo 2>&1
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint) em $($grupoPylint.Name)" -ForegroundColor Red
             $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
@@ -245,7 +265,7 @@ if (-not $pylint) {
 }
 
 if ($mypyJob) {
-    $mypyResults = @(Receive-Job -Job $mypyJob -Wait -AutoRemoveJob)
+    $mypyResults = @(Receive-Job -Job $mypyJob -Wait -AutoRemoveJob -ErrorAction Continue)
     if ($mypyResults.Count -ne $mypyGroups.Count) {
         # Um job que morre no meio devolveria menos grupos; sem esta checagem o gate
         # passaria com tipagem nao verificada.

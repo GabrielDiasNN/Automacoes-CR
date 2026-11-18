@@ -165,3 +165,55 @@ Describe "Test-SourceEncoding" {
         $result.ExitCode | Should -Be 2
     }
 }
+
+Describe "Test-PythonGovernance - escopo de pylint com -LintChangedOnly" {
+    BeforeAll {
+        $script:VenvScripts = Join-Path $script:RepoRoot ".venv\Scripts"
+        $script:OriginalPath = $env:PATH
+        if (Test-Path -LiteralPath $script:VenvScripts) {
+            $env:PATH = "$script:VenvScripts;$env:PATH"
+        }
+    }
+
+    AfterAll {
+        $env:PATH = $script:OriginalPath
+    }
+
+    It "inclui dependente que usa import relativo (from .modulo import ...)" {
+        $fixture = New-GateFixture -BasePath (Join-Path $TestDrive "pygov-rel")
+        $pkgDir = New-GateFixture -BasePath (Join-Path $fixture "pkg")
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+        [System.IO.File]::WriteAllText((Join-Path $pkgDir "__init__.py"), "", $utf8NoBom)
+        [System.IO.File]::WriteAllText((Join-Path $pkgDir "modulo.py"), "def saudar() -> str:`n    return 'ok'`n", $utf8NoBom)
+        [System.IO.File]::WriteAllText((Join-Path $pkgDir "consumidor.py"), "from .modulo import saudar`n`n`ndef usar() -> str:`n    nao_usada = saudar()`n    return 'ok'`n", $utf8NoBom)
+
+        $result = Invoke-Gate -ScriptName "Test-PythonGovernance.ps1" -BasePath $fixture -ExtraArgs @(
+            "-Paths", "pkg/__init__.py,pkg/modulo.py,pkg/consumidor.py",
+            "-LintChangedOnly",
+            "-LintScopePaths", "pkg/modulo.py"
+        )
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Pylint restrito ao diff: 2 arquivo\(s\)"
+        $result.Output | Should -Match "W0612|unused-variable"
+    }
+
+    It "inclui dependente quando o modulo em -LintScopePaths foi removido" {
+        $fixture = New-GateFixture -BasePath (Join-Path $TestDrive "pygov-del")
+        $pkgDir = New-GateFixture -BasePath (Join-Path $fixture "pkg")
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+        [System.IO.File]::WriteAllText((Join-Path $pkgDir "__init__.py"), "", $utf8NoBom)
+        [System.IO.File]::WriteAllText((Join-Path $pkgDir "consumidor.py"), "from . import modulo_removido  # type: ignore[attr-defined]`n`n`ndef usar() -> str:`n    return str(modulo_removido)`n", $utf8NoBom)
+
+        $result = Invoke-Gate -ScriptName "Test-PythonGovernance.ps1" -BasePath $fixture -ExtraArgs @(
+            "-Paths", "pkg/__init__.py,pkg/consumidor.py",
+            "-LintChangedOnly",
+            "-LintScopePaths", "pkg/modulo_removido.py"
+        )
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Pylint restrito ao diff: 1 arquivo\(s\)"
+    }
+}

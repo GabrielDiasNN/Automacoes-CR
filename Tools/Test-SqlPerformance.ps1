@@ -4,13 +4,15 @@
 )
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 Write-Host "=== Governanca SQL (Performance Oracle) ==="
 
 $targetFiles = @()
 if ($Paths.Count -gt 0) {
     $targetFiles = $Paths | Where-Object { $_ -match '\.sql$' }
 } else {
-    $targetFiles = (git -c core.quotepath=false ls-files "*.sql")
+    $targetFiles = (git -C $RootPath -c core.quotepath=false ls-files "*.sql")
 }
 
 if ($targetFiles.Count -eq 0) {

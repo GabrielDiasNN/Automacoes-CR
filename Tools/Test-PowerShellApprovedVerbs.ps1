@@ -8,6 +8,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 
 function Get-RepositoryRoot {
     if (-not [string]::IsNullOrWhiteSpace($script:RootPath)) {

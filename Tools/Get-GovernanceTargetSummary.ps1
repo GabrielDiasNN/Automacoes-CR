@@ -28,10 +28,10 @@ function Get-NormalizedPaths {
 
     return @(
         $InputPaths |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { $_.Trim().Trim('"').Replace('/', '\') } |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            Sort-Object -Unique
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { $_.Trim().Trim('"').Replace('/', '\') } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Sort-Object -Unique
     )
 }
 
@@ -50,14 +50,25 @@ function Test-MatchAnyPattern {
     return $false
 }
 
+$deletedPaths = @()
 if ($StagedOnly -and $Paths.Count -eq 0) {
-    $stagedRaw = git -c core.quotepath=false diff --cached --name-only --diff-filter=ACM 2>$null
+    $stagedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR 2>$null
     if ($LASTEXITCODE -ne 0) {
         throw "Falha ao obter arquivos staged via git diff --cached."
     }
 
     if (-not [string]::IsNullOrWhiteSpace($stagedRaw)) {
-        $Paths = @($stagedRaw -split "`r?`n")
+        $Paths += @($stagedRaw -split "`r?`n")
+    }
+
+    $deletedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --name-only --diff-filter=D 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao obter arquivos removidos staged via git diff --cached."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($deletedRaw)) {
+        $deletedPaths = @(Get-NormalizedPaths -InputPaths @($deletedRaw -split "`r?`n"))
+        $Paths += $deletedPaths
     }
 }
 
@@ -87,20 +98,20 @@ $excludedLogTargetPatterns = @(
 
 $criticalPaths = @(
     $normalizedPaths |
-        Where-Object { Test-MatchAnyPattern -Path $_ -Patterns $criticalPatterns }
+    Where-Object { Test-MatchAnyPattern -Path $_ -Patterns $criticalPatterns }
 )
 
 $logTargetPaths = @(
     $normalizedPaths |
-        Where-Object { Test-MatchAnyPattern -Path $_ -Patterns $logTargetPatterns } |
-        Where-Object { -not (Test-MatchAnyPattern -Path $_ -Patterns $excludedLogTargetPatterns) }
+    Where-Object { Test-MatchAnyPattern -Path $_ -Patterns $logTargetPatterns } |
+    Where-Object { -not (Test-MatchAnyPattern -Path $_ -Patterns $excludedLogTargetPatterns) }
 )
 
 # CriticalPaths continua registrando o que foi detectado; HasCriticalPaths
 # responde a pergunta diferente de "a promocao a full_scan vale aqui?". Com
 # -NoCriticalPromotion as duas divergem, e e assim que o consumidor descobre
 # que havia caminho critico sem que o scan completo tenha sido forcado.
-$fullScanRequired = ($criticalPaths.Count -gt 0) -and (-not $NoCriticalPromotion)
+$fullScanRequired = (($criticalPaths.Count -gt 0) -or ($deletedPaths.Count -gt 0)) -and (-not $NoCriticalPromotion)
 $governancePaths = if ($fullScanRequired) { @() } else { $normalizedPaths }
 
 $selectionMode = if ($normalizedPaths.Count -eq 0) {
@@ -127,7 +138,7 @@ function Test-AreaAffected {
 
     return @(
         $normalizedPaths |
-            Where-Object { Test-MatchAnyPattern -Path $_ -Patterns $Patterns }
+        Where-Object { Test-MatchAnyPattern -Path $_ -Patterns $Patterns }
     ).Count -gt 0
 }
 

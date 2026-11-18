@@ -12,6 +12,9 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
+
 if ([string]::IsNullOrWhiteSpace($RootPath)) {
     $RootPath = Split-Path -Parent $PSScriptRoot
 }

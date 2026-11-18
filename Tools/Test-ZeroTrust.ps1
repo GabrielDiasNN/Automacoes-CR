@@ -4,6 +4,8 @@
 )
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 Write-Host "=== Governanca de Seguranca (Zero Trust) ==="
 
 $targetFiles = @()
@@ -11,7 +13,7 @@ if ($Paths.Count -gt 0) {
     # Ignora arquivos de package lock e logs
     $targetFiles = $Paths | Where-Object { $_ -notmatch 'package-lock\.json|\.log$|\.env$' }
 } else {
-    $targetFiles = (git -c core.quotepath=false ls-files | Where-Object { $_ -notmatch 'package-lock\.json|\.log$|\.env$' })
+    $targetFiles = (git -C $RootPath -c core.quotepath=false ls-files | Where-Object { $_ -notmatch 'package-lock\.json|\.log$|\.env$' })
 }
 
 if ($targetFiles.Count -eq 0) {
