@@ -168,11 +168,17 @@ Describe "Test-SourceEncoding" {
 
 Describe "Test-PythonGovernance - escopo de pylint com -LintChangedOnly" {
     BeforeAll {
-        $script:VenvScripts = Join-Path $script:RepoRoot ".venv\Scripts"
+        $script:FakeBinDir = Join-Path $TestDrive "fake-py-bin"
+        New-Item -ItemType Directory -Force -Path $script:FakeBinDir | Out-Null
+        $ascii = [System.Text.Encoding]::ASCII
+        [System.IO.File]::WriteAllText((Join-Path $script:FakeBinDir "mypy.cmd"), "@echo off`r`nexit /b 0`r`n", $ascii)
+        [System.IO.File]::WriteAllText(
+            (Join-Path $script:FakeBinDir "pylint.cmd"),
+            "@echo off`r`necho PYLINT_ARGS: %*`r`necho %* | findstr /I `"consumidor.py`" >nul && (`r`n  echo consumidor.py:1:0: W0612: Unused variable 'nao_usada' ^(unused-variable^)`r`n  exit /b 1`r`n)`r`nexit /b 0`r`n",
+            $ascii
+        )
         $script:OriginalPath = $env:PATH
-        if (Test-Path -LiteralPath $script:VenvScripts) {
-            $env:PATH = "$script:VenvScripts;$env:PATH"
-        }
+        $env:PATH = "$($script:FakeBinDir);$($env:PATH)"
     }
 
     AfterAll {
@@ -215,5 +221,6 @@ Describe "Test-PythonGovernance - escopo de pylint com -LintChangedOnly" {
 
         $result.ExitCode | Should -Be 1
         $result.Output | Should -Match "Pylint restrito ao diff: 1 arquivo\(s\)"
+        $result.Output | Should -Match "consumidor\.py"
     }
 }
