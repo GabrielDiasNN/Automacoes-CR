@@ -174,7 +174,7 @@ function Initialize-TrackedFiles {
         return
     }
 
-    $tracked = & git -C $resolvedRoot ls-files 2>$null
+    $tracked = & git -C $resolvedRoot -c core.quotepath=false ls-files 2>$null
     if ($LASTEXITCODE -ne 0) {
         return
     }

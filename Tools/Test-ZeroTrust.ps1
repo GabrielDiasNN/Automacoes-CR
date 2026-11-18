@@ -11,7 +11,7 @@ if ($Paths.Count -gt 0) {
     # Ignora arquivos de package lock e logs
     $targetFiles = $Paths | Where-Object { $_ -notmatch 'package-lock\.json|\.log$|\.env$' }
 } else {
-    $targetFiles = (git ls-files | Where-Object { $_ -notmatch 'package-lock\.json|\.log$|\.env$' })
+    $targetFiles = (git -c core.quotepath=false ls-files | Where-Object { $_ -notmatch 'package-lock\.json|\.log$|\.env$' })
 }
 
 if ($targetFiles.Count -eq 0) {

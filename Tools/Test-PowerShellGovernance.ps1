@@ -30,7 +30,7 @@ $targetFiles = @()
 if ($Paths.Count -gt 0) {
     $targetFiles = $Paths | Where-Object { $_ -match '\.(ps1|psm1)$' }
 } else {
-    $targetFiles = (git ls-files | Where-Object { $_ -match '\.(ps1|psm1)$' })
+    $targetFiles = (git -c core.quotepath=false ls-files | Where-Object { $_ -match '\.(ps1|psm1)$' })
 }
 
 if ($targetFiles.Count -eq 0) {

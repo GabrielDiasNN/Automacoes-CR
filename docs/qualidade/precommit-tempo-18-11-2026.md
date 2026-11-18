@@ -111,7 +111,7 @@ Cada caso injetou uma violação, colocou o arquivo em staged e rodou o hook rea
 | `process.exit(1)` no teste Node de `Receitas Bloqueadas` | direcionado | exit 1, falha propagada pelo job paralelo |
 | Erro de tipo em `Produção Beneficimento/.../health.py` | direcionado e full_scan | exit 1 no depois. O antes também reprovou quando rodado pelo hook, ver abaixo |
 
-Sobre o item 0: chamado pela bancada, o `ValidarAutomacoes.ps1` antigo listou os 33 arquivos de `Produção`. Já o mesmo `Test-PythonGovernance.ps1` antigo, chamado direto por `pwsh -File`, resolveu só 240 de 273, e o CI também verificou 240. A causa exata dessa diferença de contexto não foi isolada. A correção força UTF-8 nos dois caminhos e elimina a dependência do console. O CI deste PR é a confirmação que falta: o `governanca-agregada` deve listar 273 arquivos.
+Sobre o item 0: chamado pela bancada, o `ValidarAutomacoes.ps1` antigo listou os 33 arquivos de `Produção`. Já o mesmo `Test-PythonGovernance.ps1` antigo, chamado direto por `pwsh -File`, resolveu só 240 de 273, e o CI também verificou 240. O primeiro CI do PR mostrou a causa do lado do CI, graças ao `[AVISO]` novo de arquivo não encontrado. O runner usa `core.quotepath=true`, padrão do git, e o `git ls-files` devolve `Produ\303\247\303\243o...` com escapes octais. Nesta máquina vale `core.quotepath=false`, por isso o hook enxergava os arquivos. A correção final faz as duas coisas: passa `-c core.quotepath=false` nas 10 chamadas do git em `Tools\` e força UTF-8 no console.
 
 Também foram rodados `pytest` (1871 aprovados, 8 pulados) e Pester 5.7.1 sobre `lib\tests` (367 de 367).
 

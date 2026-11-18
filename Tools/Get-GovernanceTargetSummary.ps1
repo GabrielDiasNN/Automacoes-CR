@@ -51,7 +51,7 @@ function Test-MatchAnyPattern {
 }
 
 if ($StagedOnly -and $Paths.Count -eq 0) {
-    $stagedRaw = git diff --cached --name-only --diff-filter=ACM 2>$null
+    $stagedRaw = git -c core.quotepath=false diff --cached --name-only --diff-filter=ACM 2>$null
     if ($LASTEXITCODE -ne 0) {
         throw "Falha ao obter arquivos staged via git diff --cached."
     }

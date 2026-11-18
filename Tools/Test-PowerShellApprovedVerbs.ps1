@@ -34,7 +34,7 @@ function Get-StagedPowerShellFiles {
 
     Push-Location $RepositoryRoot
     try {
-        $staged = git diff --cached --name-only --diff-filter=ACMR -- '*.ps1' '*.psm1' '*.psd1'
+        $staged = git -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR -- '*.ps1' '*.psm1' '*.psd1'
     }
     finally {
         Pop-Location

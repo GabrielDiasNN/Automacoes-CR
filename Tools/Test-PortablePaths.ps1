@@ -11,7 +11,7 @@ if ($Paths.Count -gt 0) {
     # Ignora logs e arquivos compilados
     $targetFiles = $Paths | Where-Object { $_ -notmatch '\.(log|json\.bak|png|jpg)$' }
 } else {
-    $targetFiles = (git ls-files | Where-Object { $_ -notmatch '\.(log|json\.bak|png|jpg)$' })
+    $targetFiles = (git -c core.quotepath=false ls-files | Where-Object { $_ -notmatch '\.(log|json\.bak|png|jpg)$' })
 }
 
 if ($targetFiles.Count -eq 0) {

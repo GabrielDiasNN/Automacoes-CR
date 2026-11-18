@@ -89,7 +89,7 @@ function Get-TargetFiles {
     }
 
     if ($StagedOnly) {
-        $stagedRaw = git diff --cached --name-only --diff-filter=ACMR 2>$null
+        $stagedRaw = git -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR 2>$null
         if (-not $stagedRaw) { return @() }
         $files = @()
         foreach ($rel in ($stagedRaw -split "`n")) {

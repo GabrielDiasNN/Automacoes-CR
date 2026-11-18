@@ -50,7 +50,7 @@ $targetFiles = @()
 if ($Paths.Count -gt 0) {
     $targetFiles = $Paths | Where-Object { $_ -match '\.py$' }
 } else {
-    $targetFiles = (git ls-files "*.py")
+    $targetFiles = (git -c core.quotepath=false ls-files "*.py")
 }
 
 if ($targetFiles.Count -eq 0) {

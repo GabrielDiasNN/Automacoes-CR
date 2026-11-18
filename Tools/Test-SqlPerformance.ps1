@@ -10,7 +10,7 @@ $targetFiles = @()
 if ($Paths.Count -gt 0) {
     $targetFiles = $Paths | Where-Object { $_ -match '\.sql$' }
 } else {
-    $targetFiles = (git ls-files "*.sql")
+    $targetFiles = (git -c core.quotepath=false ls-files "*.sql")
 }
 
 if ($targetFiles.Count -eq 0) {
