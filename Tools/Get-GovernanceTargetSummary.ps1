@@ -16,6 +16,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# git diff --cached devolve nomes em UTF-8; com o console em ibm850 o caminho com
+# acento chegava corrompido aos gates (ver Tools\ValidarAutomacoes.ps1).
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 
 $resolvedRoot = (Resolve-Path -LiteralPath $BasePath).Path
 

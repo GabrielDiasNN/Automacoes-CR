@@ -33,7 +33,10 @@ $script:CategoryRules = @(
     @{
         Name       = "Python Cache"
         Type       = "DirectoryName"
-        Names      = @("__pycache__", ".pytest_cache", ".mypy_cache", "htmlcov")
+        # .mypy_cache saiu da lista em 18/11/2026: e' o cache incremental do mypy
+        # --strict do pre-commit (23 s quente contra 66 s frio no repositorio inteiro),
+        # e esta rotina roda tambem pelo agendador do Orchestrator, esfriando-o todo dia.
+        Names      = @("__pycache__", ".pytest_cache", "htmlcov")
         MinAgeDays = 0
         Recurse    = $true
     },

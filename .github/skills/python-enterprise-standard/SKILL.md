@@ -30,7 +30,7 @@ Fixar as decisões de implementação Python do monorepo: qual interpretador rod
 - Sessão SQLAlchemy fora do contexto de request do FastAPI usa `session_scope`, nunca `SessionLocal()` direto — reprovado por `Tools/Test-ArchitectureStandard.ps1`.
 - Acesso a Oracle vive apenas no `oracle.py` de cada domínio (Beneficiamento: `Produção Beneficimento/src/beneficiamento/oracle.py`); router ou `service` que importa `oracledb` reprova na revisão arquitetural.
 - Schema do banco do Orchestrator muda só por Alembic. Como `render_as_batch=True`, toda operação de coluna passa por `op.batch_alter_table` (o subagente `alembic-reviewer` verifica).
-- O mypy bloqueante é o do pre-commit (`Tools/Test-PythonGovernance.ps1`), não o do CI. Passar o `governanca.yml` não substitui rodar o hook antes do commit.
+- O mypy `--strict` bloqueia no pre-commit (`Tools/Test-PythonGovernance.ps1`) e também no CI (job `governanca-agregada`, varredura completa). O hook pega o erro antes do commit; não pule o hook contando com o CI.
 - Os limites numéricos exatos de mypy e pylint que reprovam estão em `docs/governanca/governance-contracts.md § Contrato Python — mypy \`--strict\`` e `§ Contrato Python — pylint` — consulte antes de refatorar; não presuma os valores.
 
 ## Repo-Specific Constraints

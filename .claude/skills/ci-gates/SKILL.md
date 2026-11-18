@@ -16,7 +16,7 @@ Pipeline único (`.github/workflows/governanca.yml`), roda em push para `main`/`
 - **`markdown`** — `Fix-MarkdownStyle.ps1 -DryRun` e `Test-AgentGuidelines.ps1` (diretrizes de agente: `CLAUDE.md` até 200 linhas, sem frases de "pensar mais", sem effort/`/fast`/`ultrathink` em arquivo de contexto, imports `@` que resolvem, `tools:` em todo subagente). Roda quando o diff altera ou **apaga** um `.md` (output `has_deleted_md`, calculado à parte com `--diff-filter=D` porque `changed_files_json` usa `ACMR` e os demais jobs validam só arquivos existentes), ou quando altera `.gitignore`, algo em `.claude/agents/` ou `Tools/Test-AgentGuidelines.ps1`. Limitação: a remoção só é detectada para `.md`; apagar qualquer outro arquivo do gate (ex.: o próprio `Tools/Test-AgentGuidelines.ps1`) não dispara o job.
 - Gitleaks, Pester, lint+build do Dashboard e a governança agregada (`ValidarAutomacoes.ps1 -OnlyGovernance`).
 
-O mypy bloqueante **não** é do CI: é o do pre-commit hook (`Test-PythonGovernance.ps1`).
+O mypy `--strict` e o pylint **também são bloqueantes no CI**: o job `governanca-agregada` roda `ValidarAutomacoes.ps1 -OnlyGovernance` em varredura completa, e ela inclui `Test-PythonGovernance.ps1` sobre todos os `.py` rastreados (168 s no run 44168117220, de 17/11/2026). O pre-commit hook roda o mesmo gate antes, no commit. Desde 18/11/2026, quando um caminho crítico promove o hook a varredura completa, pylint e PSScriptAnalyzer rodam só no diff staged (pylint também nos dependentes diretos), e o completo dos dois fica só no CI. O `main` não tem branch protection: o CI barra o merge pelo fluxo PR→CI→merge, não por regra do GitHub.
 
 ## Histórico de cobertura
 
