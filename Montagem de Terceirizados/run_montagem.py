@@ -86,7 +86,6 @@ _OPCOES_COM_VALOR: Final[frozenset[str]] = frozenset(
 _PADRAO_TS: Final[re.Pattern[str]] = re.compile(
     r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
 )
-_COMENTARIO_INLINE: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
 _SEPARADOR_DESTINOS: Final[re.Pattern[str]] = re.compile(r"[;,]")
 
 
@@ -229,33 +228,6 @@ def _primeiro_preenchido(*valores: str) -> str:
         if valor.strip():
             return valor
     return ""
-
-
-def _ler_linha_env(linha: str) -> tuple[str, str] | None:
-    """Par chave/valor de uma linha do .env, como ConvertFrom-EnvLine."""
-    texto = linha.strip()
-    if not texto or texto.startswith("#"):
-        return None
-    partes = texto.split("=", 1)
-    if len(partes) != 2:
-        return None
-    chave = partes[0].strip()
-    valor = _COMENTARIO_INLINE.sub("", partes[1].strip()).strip()
-    if not chave or not valor:
-        return None
-    return chave, valor
-
-
-def _carregar_env(raiz: Path) -> None:
-    """Carrega o .env da raiz no ambiente do processo, como Import-HubEnv."""
-    caminho = raiz / ".env"
-    if not caminho.exists():
-        return
-    conteudo = caminho.read_text(encoding="utf-8-sig", errors="replace")
-    for linha in conteudo.splitlines():
-        par = _ler_linha_env(linha)
-        if par is not None:
-            os.environ[par[0]] = par[1]
 
 
 def _telemetria_padrao(raiz: Path) -> hr.TelemetryClient | None:
@@ -853,7 +825,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Ponto de entrada: ``run_montagem.py [ExecId] [opcoes]``. Devolve o exit code."""
     ensure_utf8_streams()
     opcoes = interpretar_argumentos(list(sys.argv[1:] if argv is None else argv))
-    _carregar_env(RAIZ)
+    hr.load_env_file(RAIZ)
     ctx = hr.create_run_context(
         hr.AutomationSpec(
             automacao=AUTOMACAO,

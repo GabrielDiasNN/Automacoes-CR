@@ -11,7 +11,8 @@ $ErrorActionPreference = "Stop"
 try {
     $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
     if ([string]::IsNullOrWhiteSpace($script:ProjectRoot)) { $script:ProjectRoot = "." }
-} catch [System.Exception] {
+}
+catch [System.Exception] {
     $script:ProjectRoot = "."
 }
 
@@ -73,7 +74,7 @@ function Get-EnvFileValue {
     if (-not (Test-Path -LiteralPath $envPath)) { return $null }
     foreach ($linha in Get-Content -LiteralPath $envPath) {
         $parsed = ConvertFrom-EnvLine -Line $linha
-        if ($parsed -and $parsed.Key -eq $Key) { return $parsed.Value.Trim('"') }
+        if ($parsed -and $parsed.Key -eq $Key) { return $parsed.Value.Trim('"').Trim("'") }
     }
     return $null
 }

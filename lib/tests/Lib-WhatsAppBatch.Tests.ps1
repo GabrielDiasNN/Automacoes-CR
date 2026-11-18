@@ -233,10 +233,10 @@ Describe "Lib-WhatsAppBatch" {
             $manifestPath = Join-Path $dir "cards_manifest.json"
 
             foreach ($caso in @(
-                '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1"}]',
-                '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1","ob_ids":[]}]',
-                '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1","ob_ids":["101","  "]}]'
-            )) {
+                    '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1"}]',
+                    '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1","ob_ids":[]}]',
+                    '[{"page":1,"total_pages":1,"phase_key":"page_01","image_path":"card_01.png","caption":"Pag 1","ob_ids":["101","  "]}]'
+                )) {
                 [System.IO.File]::WriteAllText($manifestPath, $caso, (New-Object System.Text.UTF8Encoding $false))
                 $res = Read-CardsManifest -ManifestPath $manifestPath -BaseDir $dir
                 $res.Valid | Should -BeFalse
@@ -361,16 +361,41 @@ Describe "Invoke-WhatsAppDaemonBatch" {
         $parsed[1].error | Should -Be "DAEMON_ERROR"
     }
 
-    It "o corpo do lote leva client_id do perfil (contrato do daemon exige o mesmo perfil)" {
+    It "o corpo do lote leva client_id do perfil e items planos sem aninhamento no PS 5.1" {
+        $fx = New-FixturesDaemon
+        Mock Invoke-WebRequest -ModuleName Lib-WhatsAppBatch {
+            [pscustomobject]@{ StatusCode = 200; Content = '{"results":[{"phase_key":"page_01","success":true,"error":null},{"phase_key":"page_02","success":true,"error":null}]}' }
+        }
+
+        Invoke-LoteDaemonTeste -Entrada $fx.Entrada -Saida $fx.Saida | Should -Be 0
+        Should -Invoke Invoke-WebRequest -ModuleName Lib-WhatsAppBatch -Times 1 -Exactly -ParameterFilter {
+            $payload = ConvertFrom-Json ([System.Text.Encoding]::UTF8.GetString($Body))
+            ($payload.client_id -eq "hub-global") -and ($payload.items[0].phase_key -eq "page_01")
+        }
+    }
+
+    It "HTTP 200 com item success=false devolve 4 (paridade com WhatsApp-Core.js)" {
+        $fx = New-FixturesDaemon
+        Mock Invoke-WebRequest -ModuleName Lib-WhatsAppBatch {
+            [pscustomobject]@{
+                StatusCode = 200
+                Content    = '{"results":[{"phase_key":"page_01","success":true,"error":null},{"phase_key":"page_02","success":false,"error":"timeout"}]}'
+            }
+        }
+
+        $codigo = Invoke-LoteDaemonTeste -Entrada $fx.Entrada -Saida $fx.Saida
+        $codigo | Should -Be 4
+        Test-Path -LiteralPath $fx.Saida | Should -BeTrue
+    }
+
+    It "HTTP 200 com results vazio devolve 4" {
         $fx = New-FixturesDaemon
         Mock Invoke-WebRequest -ModuleName Lib-WhatsAppBatch {
             [pscustomobject]@{ StatusCode = 200; Content = '{"results":[]}' }
         }
 
-        Invoke-LoteDaemonTeste -Entrada $fx.Entrada -Saida $fx.Saida | Should -Be 0
-        Should -Invoke Invoke-WebRequest -ModuleName Lib-WhatsAppBatch -Times 1 -Exactly -ParameterFilter {
-            ([System.Text.Encoding]::UTF8.GetString($Body)) -match '"client_id":\s*"hub-global"'
-        }
+        $codigo = Invoke-LoteDaemonTeste -Entrada $fx.Entrada -Saida $fx.Saida
+        $codigo | Should -Be 4
     }
 
     It "sem resposta HTTP devolve 24 e nao grava arquivo de resultado" {

@@ -25,7 +25,7 @@ O objetivo e garantir que a Ordem de Fabricacao (OB) que esta sendo montada corr
 -   `QT_PECA_NF_INCORRETA`: Campo derivado no validador para somar as pecas ligadas a NFs divergentes na montagem.
 
 ## Security & Integrity
--   **Logging:** Todas as mensagens acentuadas utilizam o **Base64 Bridge Protocol**.
+-   **Logging:** Eventos estruturados em `Logs/Montagem_Terceirizados.jsonl` (`Logs/*.jsonl`) via `hub_runner` em UTF-8 nativo (Base64 Bridge removido).
 -   **No UI dependency:** Remocao total de dependencias do Office Excel para processamento de dados.
 -   **Encapsulamento SQL:** Regras de negocio complexas estao isoladas no arquivo SQL, facilitando o tuning sem alterar o core da aplicacao.
 

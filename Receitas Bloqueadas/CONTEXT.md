@@ -19,7 +19,7 @@ Gerenciar o fluxo de **Receitas de Produção Retidas** no sistema Oracle por fa
 ## Operação
 - **Horários:** 07:00, 11:00, 14:00 e 17:00 (Segunda a Sexta).
 - **Modo Teste:** Sincronizado com o Orquestrador (Dashboard). Fonte da verdade: `ORCHESTRATOR_TEST_MODE`. Fallback via `AUTOMACAO_TEST_EMAIL`.
-- **Diagnóstico do Canal:** O log canônico do WhatsApp é `Logs/WhatsApp_Global.log`; `Logs/ReceitasBloqueadas.log` registra apenas a orquestração de alto nível.
+- **Diagnóstico do Canal:** Os eventos estruturados da execução e do canal ficam em `Logs/ReceitasBloqueadas.jsonl` (`Logs/*.jsonl`); `Logs/WhatsApp_Global.log` permanece como fallback quando fora do modo estruturado.
 - **Streaming Online:** durante a etapa WhatsApp, o detalhamento do wrapper/bridge deve aparecer online no modal de execução do Orchestrator, sem depender do fechamento do processo para ficar visível.
 - **Falha Parcial de Canal:** se o e-mail concluir e o WhatsApp falhar, a execução deve fechar com erro de canal para triagem/requeue, preservando o estado parcial do e-mail.
 

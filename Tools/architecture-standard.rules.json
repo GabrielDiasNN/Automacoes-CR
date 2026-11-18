@@ -1,6 +1,9 @@
 {
   "version": "1.0.0",
   "python_subprocess_allowlist": [
+    "^lib\\\\python\\\\hub_runner\\.py$",
+    "^lib\\\\python\\\\hub_whatsapp\\.py$",
+    "^OBs Paradas Fase\\\\run_obs_paradas\\.py$",
     "^Orchestrator\\\\worker\\.py$",
     "^Orchestrator\\\\app\\\\notifications\\.py$",
     "^Orchestrator\\\\app\\\\services\\\\beneficiamento_refresh\\.py$",

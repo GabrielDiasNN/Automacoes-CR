@@ -238,7 +238,13 @@ def resolve_oracle_credentials(
     )
     tns_admin = os.environ.get("TNS_ADMIN")
 
-    if get_driver_mode() == DRIVER_MODE_QUEUE:
+    try:
+        driver_mode = get_driver_mode()
+    except ValueError as exc:
+        log(str(exc), "ERROR", exec_id)
+        return None
+
+    if driver_mode == DRIVER_MODE_QUEUE:
         # Na fila quem conecta é o worker do TSplus, com a credencial dele: usuário,
         # senha, TNS_ADMIN e Oracle Client desta máquina não são usados nem exigidos.
         return OracleCredentials(
@@ -252,32 +258,30 @@ def resolve_oracle_credentials(
     if not user or not password:
         log("Credenciais Oracle ausentes no ambiente.", "ERROR", exec_id)
         return None
+    erro: str | None = None
     if not dsn:
         # DSN vazio (ORACLE_CONNECT_STRING= ou force_dsn="") é configuração errada:
         # cair em silêncio no padrão apontaria para produção sem ninguém pedir.
-        log("DSN Oracle vazio (ORACLE_CONNECT_STRING ou force_dsn).", "ERROR", exec_id)
-        return None
-    # Thick explícito exige o Client já no bootstrap. No modo auto (Thin) a biblioteca só é usada no fallback do
-    # verificador legado, que valida o caminho ao ativar o Thick e falha com
-    # orientação (oracle_client.init_oracle_thick_mode).
-    if get_driver_mode() == DRIVER_MODE_THICK and (
+        erro = "DSN Oracle vazio (ORACLE_CONNECT_STRING ou force_dsn)."
+    elif driver_mode == DRIVER_MODE_THICK and (
         not client_lib or not os.path.exists(client_lib)
     ):
-        log(
-            "ORACLE_CLIENT_LIB_DIR invalido (obrigatorio com ORACLE_DRIVER_MODE=thick).",
-            "ERROR",
-            exec_id,
-        )
+        # Thick explícito exige o Client já no bootstrap. No modo auto (Thin) a biblioteca só é usada no fallback do
+        # verificador legado, que valida o caminho ao ativar o Thick e falha com
+        # orientação (oracle_client.init_oracle_thick_mode).
+        erro = "ORACLE_CLIENT_LIB_DIR invalido (obrigatorio com ORACLE_DRIVER_MODE=thick)."
+    elif require_tns_admin and not tns_admin:
+        erro = "TNS_ADMIN ausente no ambiente."
+    if erro is not None:
+        log(erro, "ERROR", exec_id)
         return None
+
     if client_lib and not os.path.exists(client_lib):
         log(
             "ORACLE_CLIENT_LIB_DIR inexistente: Thin segue; o fallback Thick falhara se for preciso.",
             "WARN",
             exec_id,
         )
-    if require_tns_admin and not tns_admin:
-        log("TNS_ADMIN ausente no ambiente.", "ERROR", exec_id)
-        return None
 
     return OracleCredentials(
         user=user,
@@ -432,7 +436,10 @@ def classify_oracle_exit_code(exc: BaseException) -> int:
         return 6
     if isinstance(exc, oracle_queue.OracleQueueTimeoutError):
         return 7
-    if isinstance(exc, oracle_queue.OracleQueueBlockedError):
+    if isinstance(
+        exc,
+        (oracle_queue.OracleQueueBlockedError, ValueError, oracledb.NotSupportedError),
+    ):
         return 5
     if isinstance(exc, oracle_queue.OracleQueueError) and not isinstance(
         exc, oracle_queue.OracleQueueTransientError

@@ -529,11 +529,7 @@ def test_destinatario_vazio_pula_o_email_e_segue_para_o_whatsapp(
 def test_falha_do_email_sai_com_25_e_adia_o_commit(
     pasta: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Desfecho 25: a CLI recusa o envio nas 2 tentativas; o WhatsApp segue e o commit fica adiado.
-
-    A CLI atual nao declara -Cc (lib/Invoke-OutlookEmail.ps1), entao a recusa do PowerShell
-    aparece no log do canal e o envio falha fechado, sem sair incompleto.
-    """
+    """Desfecho 25: quando a CLI de e-mail falha nas 2 tentativas, o WhatsApp segue e o commit fica adiado."""
     recusa = (1, "A parameter cannot be found that matches parameter name 'Cc'.")
     duplos = _instalar(monkeypatch, cli=[recusa, recusa], whatsapp=[0])
 
@@ -944,3 +940,53 @@ def test_caminhos_usam_os_nomes_de_arquivo_do_run_ps1_antigo(tmp_path: Path) -> 
     assert caminhos.entrega.name == "email_state.json"
     assert caminhos.resultado.name == "rb_result.json"
     assert caminhos.send_whatsapp == tmp_path / "lib" / "Send-WhatsApp.ps1"
+
+
+def test_excecao_inesperada_no_preflight_fecha_telemetria_com_erro(
+    pasta: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _instalar(monkeypatch)
+    monkeypatch.setattr(
+        rb,
+        "_preflight",
+        lambda _sessao: (_ for _ in ()).throw(RuntimeError("boom preflight")),
+    )
+    codigo, ctx = _rodar(pasta)
+    assert codigo == rb.CODIGO_FALHA_CRITICA
+    eventos = _eventos(ctx)
+    assert eventos[-1]["event"] == "execution.end"
+    assert "boom preflight" in eventos[-1]["outcome_reason"]
+
+
+def test_dry_run_remove_tmp_criado_na_execucao_e_loga_debug_no_lock(
+    pasta: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmp_path = pasta / "receitas_state.json.tmp"
+    tmp_path.unlink(missing_ok=True)
+    duplos = _instalar(monkeypatch)
+
+    def passo_cria_tmp(_ctx: Any, _spec: Any, **_kwargs: object) -> hr.PythonStepResult:
+        tmp_path.write_text('{"last_hash":"X"}', encoding="utf-8")
+        (pasta / "email_body.html").write_text("<html>ok</html>", encoding="utf-8")
+        return hr.PythonStepResult(
+            success=True,
+            idempotent=False,
+            non_retryable=False,
+            output="",
+            exit_code=0,
+            attempts=1,
+        )
+
+    monkeypatch.setattr(hr, "run_python_step", passo_cria_tmp)
+    _ = duplos
+    codigo, ctx = _rodar(pasta, dry_run=True)
+    assert codigo == 0
+    assert not tmp_path.exists()
+    assert any(
+        e.get("event") == "log"
+        and e.get("level") == "DEBUG"
+        and "Lock global adquirido com sucesso" in e.get("message", "")
+        for e in _eventos(ctx)
+    )
+    nivel_fn = getattr(rb, "_nivel_da_linha")
+    assert nivel_fn("[DEBUG] detalhe") == "DEBUG"

@@ -480,7 +480,8 @@ function Invoke-WhatsAppDaemonBatch {
     )
 
     try {
-        $itens = @(Get-Content -LiteralPath $BatchInputFile -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $lidos = Get-Content -LiteralPath $BatchInputFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        $itens = if ($null -ne $lidos) { @($lidos) } else { @() }
         $chatId = if ($ChatTarget.Contains("@")) { $ChatTarget } else { (($ChatTarget -replace '\D', '') + "@c.us") }
         $corpo = [pscustomobject]@{ exec_id = $ExecId; client_id = $ClientId; chat_id = $chatId; items = $itens } | ConvertTo-Json -Depth 6
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($corpo)
@@ -518,7 +519,12 @@ function Invoke-WhatsAppDaemonBatch {
             [System.IO.File]::WriteAllText($BatchResultFile, $jsonResultados, (New-Object System.Text.UTF8Encoding $false))
         }
 
-        if ($status -eq 200) { return 0 }
+        if ($status -eq 200) {
+            if ($null -eq $resultados -or $resultados.Count -eq 0) { return 4 }
+            $temFalha = @($resultados | Where-Object { -not (Get-JsonPropValue $_ "success") }).Count -gt 0
+            if ($temFalha) { return 4 }
+            return 0
+        }
         if ($status -eq 503) { return 22 }
         Write-Host "Daemon WhatsApp respondeu HTTP $status ao lote." -ForegroundColor Red
         return 24

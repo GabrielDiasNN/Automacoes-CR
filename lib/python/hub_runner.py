@@ -92,11 +92,47 @@ _WAIT_TIMEOUT: Final[int] = 0x00000102
 _WAIT_FAILED: Final[int] = 0xFFFFFFFF
 _NAO_SEGURO: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9_.-]")
 _MARCADOR_NIVEL: Final[re.Pattern[str]] = re.compile(
-    r"\[(INFO|WARN|ERROR|ERRO|DEBUG)\]", re.IGNORECASE
+    r"(?:\[(INFO|WARN|ERROR|ERRO|DEBUG|ALERT)\]|^\s*(WARNING):)", re.IGNORECASE
 )
+_COMENTARIO_INLINE_ENV: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
 _INTEIRO: Final[re.Pattern[str]] = re.compile(r"^\s*-?\d+\s*$")
 _CHAVE_API: Final[re.Pattern[str]] = re.compile(r"^ORCHESTRATOR_API_KEY=(.*)$")
 _EMISSAO = threading.Lock()
+
+
+def parse_env_line(linha: str) -> tuple[str, str] | None:
+    """Par chave/valor de uma linha do .env, como ConvertFrom-EnvLine."""
+    texto = linha.strip()
+    if not texto or texto.startswith("#"):
+        return None
+    partes = texto.split("=", 1)
+    if len(partes) != 2:
+        return None
+    chave = partes[0].strip()
+    valor = _COMENTARIO_INLINE_ENV.sub("", partes[1].strip()).strip()
+    if not chave or not valor:
+        return None
+    return chave, valor
+
+
+def load_env_file(raiz: Path) -> str | None:
+    """Carrega ``raiz/.env`` no ambiente do processo (como Import-HubEnv).
+
+    Retorna None se o arquivo nao existir ou for lido com sucesso; em erro de E/S,
+    devolve a mensagem da excecao para o chamador decidir se loga ou falha.
+    """
+    caminho = raiz / ".env"
+    try:
+        if not caminho.exists():
+            return None
+        conteudo = caminho.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError as exc:
+        return str(exc)
+    for linha in conteudo.splitlines():
+        par = parse_env_line(linha)
+        if par is not None:
+            os.environ[par[0]] = par[1]
+    return None
 
 
 class TelemetryError(RuntimeError):
@@ -680,11 +716,22 @@ class _Tentativa:
     output: str
 
 
-def _ambiente_filho(ctx: HubRunContext, step: str) -> dict[str, str]:
-    """Ambiente do filho: UTF-8 de ponta a ponta e HUB_* herdado (sem HUB_LOG_STRUCTURED)."""
+def _ambiente_filho(
+    ctx: HubRunContext, step: str, *, stdout_is_data: bool = False
+) -> dict[str, str]:
+    """Ambiente do filho: UTF-8 de ponta a ponta, HUB_* e HUB_LOG_STRUCTURED controlado.
+
+    Quando ``stdout_is_data`` e False, injeta ``HUB_LOG_STRUCTURED=1`` para que os filhos
+    emitam envelope JSON (``component="python_domain"``). Quando True, remove
+    ``HUB_LOG_STRUCTURED`` do ambiente para proteger o canal de dados em stdout (ex.: RE-03).
+    """
     ambiente = dict(os.environ)
     ambiente.update(ctx.ambiente())
     ambiente.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "HUB_STEP": step})
+    if stdout_is_data:
+        ambiente.pop("HUB_LOG_STRUCTURED", None)
+    else:
+        ambiente["HUB_LOG_STRUCTURED"] = "1"
     return ambiente
 
 
@@ -701,30 +748,36 @@ def _e_envelope(linha: str) -> bool:
 
 
 def _nivel_da_linha(linha: str, padrao: str) -> str:
-    """Nivel pelo marcador [INFO]/[WARN]/[ERRO]/[ERROR]/[DEBUG] (Get-ForwardedLogLevel)."""
+    """Nivel pelo marcador [INFO]/[WARN]/[ERRO]/[ERROR]/[DEBUG]/[ALERT] ou ^WARNING:."""
     casamento = _MARCADOR_NIVEL.search(linha)
     if casamento is None:
         return padrao
-    marcador = casamento.group(1).upper()
-    return {"ERROR": "ERRO", "ERRO": "ERRO", "WARN": "WARN", "DEBUG": "DEBUG"}.get(
-        marcador, "INFO"
-    )
+    marcador = (casamento.group(1) or casamento.group(2)).upper()
+    return {
+        "ERROR": "ERRO",
+        "ERRO": "ERRO",
+        "WARN": "WARN",
+        "WARNING": "WARN",
+        "ALERT": "WARN",
+        "DEBUG": "DEBUG",
+    }.get(marcador, "INFO")
 
 
-def _encaminhar_linha(
-    ctx: HubRunContext, linha: str, nivel_padrao: str, step: str
-) -> None:
+def forward_line(ctx: HubRunContext, linha: str, nivel_padrao: str, step: str) -> None:
     """Encaminha uma linha de filho: envelope verbatim, texto vira evento log."""
     if not linha.strip():
         return
     if _e_envelope(linha):
         texto = linha.strip()
-        _anexar_linha(ctx.log_path, texto)
         with _EMISSAO:
+            _anexar_linha(ctx.log_path, texto)
             sys.stdout.write(texto + "\n")
             sys.stdout.flush()
         return
     log(ctx, linha, _nivel_da_linha(linha, nivel_padrao), step=step)
+
+
+_encaminhar_linha = forward_line
 
 
 def _iniciar_leitor(fluxo: IO[str], tratar: Callable[[str], None]) -> threading.Thread:
@@ -741,9 +794,45 @@ def _iniciar_leitor(fluxo: IO[str], tratar: Callable[[str], None]) -> threading.
 
 def _enviar_entrada(fluxo: IO[str], dados: str) -> None:
     """Grava a entrada e fecha o stdin. O filho pode sair antes de ler: o exit code decide."""
-    with contextlib.suppress(OSError):
-        fluxo.write(dados)
-        fluxo.close()
+    try:
+        with contextlib.suppress(OSError):
+            fluxo.write(dados)
+    finally:
+        with contextlib.suppress(OSError):
+            fluxo.close()
+
+
+def run_python_script(  # pylint: disable=too-many-arguments
+    ctx: HubRunContext,
+    *,
+    python_exe: str,
+    script_path: str | Path,
+    step: str,
+    cwd: Path | None = None,
+    args: Sequence[str] | None = None,
+) -> int:
+    """Executa um script Python uma unica vez, encaminhando stdout/stderr ao log."""
+    _validar_step(step)
+    argv = [
+        python_exe,
+        str(script_path),
+        *(args if args is not None else (ctx.exec_id,)),
+    ]
+    resultado = subprocess.run(
+        argv,
+        cwd=cwd,
+        env=_ambiente_filho(ctx, step, stdout_is_data=False),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    for linha in resultado.stdout.splitlines():
+        forward_line(ctx, linha, "INFO", step)
+    for linha in resultado.stderr.splitlines():
+        forward_line(ctx, linha, "WARN", step)
+    return int(resultado.returncode)
 
 
 def _executar_processo(ctx: HubRunContext, spec: PythonStepSpec) -> _Tentativa:
@@ -754,17 +843,17 @@ def _executar_processo(ctx: HubRunContext, spec: PythonStepSpec) -> _Tentativa:
     def tratar_saida(linha: str) -> None:
         saida.append(linha)
         if not spec.stdout_is_data:
-            _encaminhar_linha(ctx, linha, "INFO", spec.step)
+            forward_line(ctx, linha, "INFO", spec.step)
 
     def tratar_erro(linha: str) -> None:
-        _encaminhar_linha(ctx, linha, "WARN", spec.step)
+        forward_line(ctx, linha, "WARN", spec.step)
 
     with subprocess.Popen(
         argv,
         stdin=subprocess.PIPE if spec.input_data else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env=_ambiente_filho(ctx, spec.step),
+        env=_ambiente_filho(ctx, spec.step, stdout_is_data=spec.stdout_is_data),
         text=True,
         encoding="utf-8",
         errors="replace",

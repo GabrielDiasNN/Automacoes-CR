@@ -982,7 +982,7 @@ def test_ler_linha_env_segue_convert_from_env_line(
     linha: str, esperado: tuple[str, str] | None
 ) -> None:
     """Linha do .env como ConvertFrom-EnvLine: comentario e valor vazio nao contam."""
-    assert ro._ler_linha_env(linha) == esperado
+    assert hr.parse_env_line(linha) == esperado
 
 
 def test_rotacao_remove_eventos_anteriores_a_retencao(tmp_path: Path) -> None:

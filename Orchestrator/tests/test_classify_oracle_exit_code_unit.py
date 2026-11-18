@@ -11,6 +11,7 @@ chega pelo worker como `OracleQueueError` genérico.
 """
 
 # lib/python entra no sys.path pelo `pythonpath` do pytest.ini.
+import oracledb
 import pytest
 from oracle_extract import classify_oracle_exit_code, enforce_queue_deadline
 from oracle_queue import (
@@ -81,3 +82,9 @@ def test_prazo_global_estourado_em_enforce_queue_deadline_sai_com_7(
     with pytest.raises(OracleQueueTimeoutError) as info:
         enforce_queue_deadline("teste")
     assert classify_oracle_exit_code(info.value) == 7
+
+
+def test_erro_configuracao_value_error_e_not_supported_saem_com_5() -> None:
+    """ValueError (ex.: modo inválido) e oracledb.NotSupportedError são determinísticos (5)."""
+    assert classify_oracle_exit_code(ValueError("ORACLE_DRIVER_MODE inválido")) == 5
+    assert classify_oracle_exit_code(oracledb.NotSupportedError("DPY-3015")) == 5

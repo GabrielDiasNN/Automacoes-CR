@@ -1352,3 +1352,23 @@ def test_paridade_success_com_valores_do_ps(tmp_path: Path) -> None:
         (py_dir / "estado.json.tmp").read_text(encoding="utf-8")
     )
     assert notificados_py["notified"] == notificados_ps["notified"]
+
+
+def test_send_whatsapp_injeta_hub_log_structured_e_hub_step_no_ambiente(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HUB_LOG_STRUCTURED", raising=False)
+    monkeypatch.delenv("HUB_STEP", raising=False)
+    ctx = _contexto(tmp_path)
+    executor = _ExecutorFalso(codigo=0)
+    codigo = hw.send_whatsapp(
+        ctx,
+        script=tmp_path / "Send-WhatsApp.ps1",
+        work_dir=tmp_path,
+        step="dispatch",
+        executor=executor,
+    )
+    assert codigo == 0
+    env = executor.comandos[0].ambiente
+    assert env["HUB_LOG_STRUCTURED"] == "1"
+    assert env["HUB_STEP"] == "dispatch"

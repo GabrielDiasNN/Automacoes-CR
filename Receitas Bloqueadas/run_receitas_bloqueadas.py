@@ -107,11 +107,15 @@ IDADE_TMP_ORFAO: Final[timedelta] = timedelta(days=1)
 _PADRAO_TS: Final[re.Pattern[str]] = re.compile(
     r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
 )
-_COMENTARIO_INLINE: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
 _MARCADOR_NIVEL: Final[re.Pattern[str]] = re.compile(
     r"\[(INFO|WARN|ERROR|ERRO|DEBUG)\]", re.IGNORECASE
 )
-_NIVEIS: Final[dict[str, str]] = {"ERROR": "ERRO", "ERRO": "ERRO", "WARN": "WARN"}
+_NIVEIS: Final[dict[str, str]] = {
+    "ERROR": "ERRO",
+    "ERRO": "ERRO",
+    "WARN": "WARN",
+    "DEBUG": "DEBUG",
+}
 
 
 @dataclass(frozen=True)
@@ -185,33 +189,6 @@ def _aviso(ctx: hr.HubRunContext, step: str | None = None) -> Callable[[str], No
 def _aguardar(segundos: float) -> None:
     """Espera entre tentativas; isolado para que os testes nao durmam de verdade."""
     time.sleep(segundos)
-
-
-def _ler_linha_env(linha: str) -> tuple[str, str] | None:
-    """Par chave/valor de uma linha do .env, como ConvertFrom-EnvLine."""
-    texto = linha.strip()
-    if not texto or texto.startswith("#"):
-        return None
-    partes = texto.split("=", 1)
-    if len(partes) != 2:
-        return None
-    chave = partes[0].strip()
-    valor = _COMENTARIO_INLINE.sub("", partes[1].strip()).strip()
-    if not chave or not valor:
-        return None
-    return chave, valor
-
-
-def _carregar_env(raiz: Path) -> None:
-    """Carrega o .env da raiz no ambiente do processo, como Import-HubEnv (carga do piloto)."""
-    caminho = raiz / ".env"
-    if not caminho.exists():
-        return
-    conteudo = caminho.read_text(encoding="utf-8-sig", errors="replace")
-    for linha in conteudo.splitlines():
-        par = _ler_linha_env(linha)
-        if par is not None:
-            os.environ[par[0]] = par[1]
 
 
 def _telemetria_padrao(raiz: Path) -> hr.TelemetryClient | None:
@@ -859,6 +836,12 @@ def _com_lock(sessao: _Sessao) -> int:
     ctx = sessao.ctx
     hr.start_step(ctx, "lock", mensagem="Adquirindo lock global")
     with hr.AutomationMutex(CHAVE_LOCK, on_warning=_aviso(ctx, "lock")):
+        hr.log(
+            ctx,
+            f"Lock global adquirido com sucesso (Mutex: {hr.nome_mutex(CHAVE_LOCK)}).",
+            "DEBUG",
+            step="lock",
+        )
         hr.complete_step(ctx)
         return _fluxo(sessao)
 
@@ -868,6 +851,7 @@ def executar(
 ) -> int:
     """Roda o fluxo completo e devolve o exit code (quem chama faz sys.exit)."""
     sessao = _Sessao(ctx=ctx, caminhos=caminhos, dry_run=dry_run)
+    tmp_existia = caminhos.estado_tmp.exists()
     _limpar_temporarios_orfaos(caminhos.pasta, datetime.now())
     hr.execution_start(ctx, f"INICIO — {AUTOMACAO} (RB-01). ExecId={ctx.exec_id}")
     if dry_run:
@@ -877,19 +861,24 @@ def executar(
             "e o estado nao sera confirmado.",
             "WARN",
         )
-    codigo_preflight = _preflight(sessao)
-    if codigo_preflight is not None:
-        return _encerrar(
-            sessao, codigo_preflight, "FALHA NO PRE-FLIGHT CHECK. Abortando execucao."
-        )
-    # Residual: o run.ps1 fecha com 4 (catch externo) qualquer falha depois do pre-flight. O
-    # lock ja foi liberado pelo with quando a excecao chega aqui.
+    # Residual: o run.ps1 fecha com 4 (catch externo) qualquer falha fora dos caminhos esperados.
+    # O pre-flight fica dentro do try para nunca deixar a telemetria RUNNING em excecao inesperada.
     try:
+        codigo_preflight = _preflight(sessao)
+        if codigo_preflight is not None:
+            return _encerrar(
+                sessao,
+                codigo_preflight,
+                "FALHA NO PRE-FLIGHT CHECK. Abortando execucao.",
+            )
         return _com_lock(sessao)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return _encerrar(
             sessao, CODIGO_FALHA_CRITICA, f"Falha critica na orquestracao: {exc}"
         )
+    finally:
+        if dry_run and not tmp_existia:
+            _remover(caminhos.estado_tmp)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -898,7 +887,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     argumentos = list(sys.argv[1:] if argv is None else argv)
     dry_run = "--dry-run" in argumentos
     posicionais = [arg for arg in argumentos if arg != "--dry-run"]
-    _carregar_env(RAIZ)
+    hr.load_env_file(RAIZ)
     ctx = hr.create_run_context(
         hr.AutomationSpec(
             automacao=AUTOMACAO,

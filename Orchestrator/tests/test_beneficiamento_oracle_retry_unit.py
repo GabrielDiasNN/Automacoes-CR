@@ -379,3 +379,43 @@ def test_connect_com_erro_repassa_a_excecao_original(
     monkeypatch.setattr(oracle, "connect_readonly", falha)
     with pytest.raises(oracledb.DatabaseError, match="DPY-4011"):
         acessar_privado(oracle, "_connect_within")(2)
+
+
+def test_execute_query_carrega_dotenv_antes_de_ler_driver_mode_queue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE_DRIVER_MODE=queue no .env deve selecionar _execute_once_queue sem connect_readonly."""
+    (tmp_path / ".env").write_text("ORACLE_DRIVER_MODE=queue\n", encoding="utf-8")
+    monkeypatch.delenv("ORACLE_DRIVER_MODE", raising=False)
+    monkeypatch.setattr(oracle, "REPO_ROOT", tmp_path)
+
+    def nao_chamar() -> Any:
+        raise AssertionError("connect_readonly nao deve ser chamado no modo queue")
+
+    monkeypatch.setattr(oracle, "connect_readonly", nao_chamar)
+
+    chamadas_fila: list[dict[str, Any]] = []
+
+    def fila_falsa(
+        sql: str, *, timeout_seconds: float, params: dict[str, Any], options: Any = None
+    ) -> Any:
+        chamadas_fila.append(
+            {
+                "sql": sql,
+                "timeout_seconds": timeout_seconds,
+                "params": params,
+                "options": options,
+            }
+        )
+        return SimpleNamespace(
+            columns=["A"], rows=[(42,)], worker="w1", elapsed_ms=5
+        )
+
+    monkeypatch.setattr(oracle, "queue_execute_query", fila_falsa)
+
+    res = oracle.execute_query("SELECT 42 FROM DUAL", max_rows=10)
+    assert res.rows == [(42,)]
+    assert res.metadata["queue"] is True
+    assert len(chamadas_fila) == 1
+    assert chamadas_fila[0]["options"] is not None
+    assert chamadas_fila[0]["options"].max_rows == 10

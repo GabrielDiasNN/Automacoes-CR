@@ -699,7 +699,36 @@ def test_disco_abaixo_de_1_gb_reprova_o_preflight(
 def test_ler_linha_env_segue_convert_from_env_line(
     linha: str, esperado: tuple[str, str] | None
 ) -> None:
-    assert rr._ler_linha_env(linha) == esperado  # pylint: disable=protected-access
+    assert hr.parse_env_line(linha) == esperado
+
+
+def test_dry_run_remove_tmp_criado_na_propria_execucao(
+    pasta: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmp_path = pasta / "receitas_state.json.tmp"
+    tmp_path.unlink(missing_ok=True)
+
+    class _PassosCriamTmp(_PassosFalsos):
+        def __call__(self, _ctx: Any, spec: Any, **_kwargs: object) -> Any:
+            if spec.step == "extract":
+                tmp_path.write_text('{"last_hash":"X"}', encoding="utf-8")
+            return super().__call__(_ctx, spec, **_kwargs)
+
+    duplos = _Duplos(
+        passos=_PassosCriamTmp({"extract": EXTRACAO_OK, "transform": HTML_OK}),
+        email=_EmailFalso([True]),
+        alerta=_AlertaFalso(),
+        esperas=[],
+    )
+    monkeypatch.setattr(hr, "run_python_step", duplos.passos)
+    monkeypatch.setattr(hr, "send_outlook_email", duplos.email)
+    monkeypatch.setattr(hr, "send_failure_alert", duplos.alerta)
+    monkeypatch.setattr(hr, "AutomationMutex", _MutexFalso)
+    monkeypatch.setattr(rr, "_aguardar", duplos.esperas.append)
+
+    codigo = rr.executar(_contexto(pasta), rr.Caminhos.da_pasta(pasta), dry_run=True)
+    assert codigo == 0
+    assert not tmp_path.exists()
 
 
 def test_rotacao_remove_eventos_anteriores_a_retencao(tmp_path: Path) -> None:
