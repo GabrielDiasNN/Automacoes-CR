@@ -15,7 +15,8 @@ Pre-commit com caminho crítico (`lib\`, `Tools\`, workflows, skills) caiu de ~3
 - **Pylint e PSScriptAnalyzer só no diff quando o hook promove a varredura completa.** Pylint sobre os `.py` staged mais os dependentes diretos (arquivos que importam um módulo alterado); PSScriptAnalyzer (que só emite aviso) sobre os `.ps1/.psm1` staged. Mypy `--strict`, o veto a `pylint: disable=all`, a regex bloqueante de `catch` genérico e as outras 13 checagens continuam completos. O CI (`governanca-agregada`) não recebe o diff e segue com pylint e PSScriptAnalyzer completos.
 - **Mypy e Node em paralelo.** `ValidarAutomacoes.ps1` roda `Test-PythonGovernance.ps1` e `Test-NodeCommunications.ps1` em jobs enquanto as demais checagens rodam in-process; dentro do gate Python, o mypy roda em job paralelo ao pylint. Job que termina sem registro de saída conta como falha.
 - **`AplicarPoliticaRetencao.ps1` não apaga mais `.mypy_cache`.** A rotina roda também pelo agendador do Orchestrator e esfriava todo dia o cache do mypy (23 s quente contra 66 s frio no repositório inteiro).
-- **Skills `ci-gates` e `python-enterprise-standard`:** o mypy `--strict` também é bloqueante no CI (`governanca-agregada`); a frase "o mypy bloqueante não é do CI" estava errada.
+- **Skills `ci-gates` e `python-enterprise-standard` e `CLAUDE.md`:** o mypy `--strict` também é bloqueante no CI (`governanca-agregada`); a frase "o mypy bloqueante não é do CI" estava errada.
+- **Branch protection no `main` (configuração do GitHub, fora do código):** os checks `Governanca agregada` e `Resumo final` passam a ser obrigatórios, inclusive para administradores, e force push e exclusão do branch ficam bloqueados. É o que torna seguro, por regra e não só pelo fluxo, restringir o pylint do hook ao diff.
 
 ### Medido (mediana de 3, cache do mypy quente)
 

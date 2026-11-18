@@ -52,7 +52,7 @@ Paralelismo interno do pylint **não ajuda**: no grupo `Orchestrator\tests`, `-j
 ## Cobertura do CI (o que pode sair do hook)
 
 - O job `governanca-agregada` (`windows-latest`, sem `if:`) roda `ValidarAutomacoes.ps1 -OnlyGovernance` **sem `-StagedOnly`**, ou seja, a varredura completa das 15 checagens, em todo push para `main`/`escalar/**` e em todo PR. Ele instala `requirements-dev.txt` + `requirements-test.txt` e faz `npm ci --prefix lib`. Falha nele derruba o `Resumo final`. No run 44168117220 (17/11/2026), o Python levou 168 s e a etapa inteira, 194 s.
-- Ressalva: **o `main` não tem branch protection** (`gh api .../branches/main/protection` → 404). O CI bloqueia o merge por disciplina do fluxo PR→CI→merge, não por regra do GitHub. Um push direto no `main` só descobre a falha depois.
+- Ressalva (situação em 18/11/2026, antes da implementação; a proteção foi ativada no mesmo dia, ver "Resultado da implementação"): **o `main` não tinha branch protection** (`gh api .../branches/main/protection` → 404). O CI bloqueia o merge por disciplina do fluxo PR→CI→merge, não por regra do GitHub. Um push direto no `main` só descobre a falha depois.
 - O que **não pode** sair do hook, porque o CI não cobre ou cobre tarde demais:
   - **Push direto no `main`.** Sem proteção de branch, o hook é a única barreira antes do commit chegar ao remoto. Ou o hook continua completo para o que é crítico, ou o `governanca-agregada` vira check obrigatório.
   - **`Test-LogConformidade.ps1`** só roda no CI quando `has_log_targets`, e o CI usa o mesmo `-Paths`. Não há ganho em mexer nele: custa milissegundos.
@@ -114,6 +114,8 @@ Cada caso injetou uma violação, colocou o arquivo em staged e rodou o hook rea
 Sobre o item 0: chamado pela bancada, o `ValidarAutomacoes.ps1` antigo listou os 33 arquivos de `Produção`. Já o mesmo `Test-PythonGovernance.ps1` antigo, chamado direto por `pwsh -File`, resolveu só 240 de 273, e o CI também verificou 240. O primeiro CI do PR mostrou a causa do lado do CI, graças ao `[AVISO]` novo de arquivo não encontrado. O runner usa `core.quotepath=true`, padrão do git, e o `git ls-files` devolve `Produ\303\247\303\243o...` com escapes octais. Nesta máquina vale `core.quotepath=false`, por isso o hook enxergava os arquivos. A correção final faz as duas coisas: passa `-c core.quotepath=false` nas 10 chamadas do git em `Tools\` e força UTF-8 no console.
 
 Também foram rodados `pytest` (1871 aprovados, 8 pulados) e Pester 5.7.1 sobre `lib\tests` (367 de 367).
+
+Por decisão do usuário, a branch protection do `main` foi ativada em 18/11/2026. Os checks `Governanca agregada` e `Resumo final` passam a ser obrigatórios, a regra vale também para administradores, e force push e exclusão do branch ficam bloqueados.
 
 ## Observações laterais
 
