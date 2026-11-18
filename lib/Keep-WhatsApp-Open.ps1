@@ -32,6 +32,15 @@ if (-not (Get-Command $NodeExe -ErrorAction SilentlyContinue)) {
     }
 }
 
+# O daemon (opt-in) segura o perfil do WhatsApp: abrir a sessao visivel aqui conflitaria com ele.
+# Mesma deteccao CIM da rota de Send-WhatsApp.ps1 (Get-WhatsAppDaemonProcess, em Lib-WhatsAppBatch.psm1).
+Import-Module (Join-Path $LibDir "Lib-WhatsAppBatch.psm1") -Force
+if (@(Get-WhatsAppDaemonProcess).Count -gt 0) {
+    Write-Host "[ERRO] O daemon WhatsApp (whatsapp-daemon.js) esta segurando a sessao do perfil." -ForegroundColor Red
+    Write-Host "  Pare o daemon antes de abrir a sessao visivel. Nada foi aberto." -ForegroundColor Yellow
+    exit 1
+}
+
 $env:NODE_PATH = Join-Path $LibDir "node_modules"
 
 # Deriva do repositorio quais automacoes usam ESTE clientId, em vez de uma lista fixa que

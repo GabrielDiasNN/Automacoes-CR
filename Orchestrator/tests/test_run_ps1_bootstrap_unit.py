@@ -23,6 +23,11 @@ AUTOMACOES = [
     "OBs Restricao Branco",
 ]
 
+# Receitas Emitidas virou shim do runner Python: os contratos textuais do run.ps1
+# antigo (lock, telemetria, $NonFailureCodes, -CheckPaths) nao se aplicam ao shim.
+# Os equivalentes sao checados nos testes test_re03_* abaixo, sobre run_receitas.py.
+AUTOMACOES_PS = [a for a in AUTOMACOES if a != "Receitas Emitidas"]
+
 
 def _run_ps1(nome: str) -> str:
     caminho = REPO_ROOT / nome / "run.ps1"
@@ -82,7 +87,7 @@ def test_mt02_fecha_a_telemetria_no_abort_do_preflight() -> None:
     )
 
 
-@pytest.mark.parametrize("automacao", AUTOMACOES)
+@pytest.mark.parametrize("automacao", AUTOMACOES_PS)
 def test_run_ps1_nao_sai_sem_fechar_telemetria(automacao: str) -> None:
     """Todo ponto de saída fecha a telemetria, por helper ou explicitamente.
 
@@ -109,7 +114,7 @@ def test_run_ps1_nao_sai_sem_fechar_telemetria(automacao: str) -> None:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("automacao", AUTOMACOES)
+@pytest.mark.parametrize("automacao", AUTOMACOES_PS)
 def test_run_ps1_adquire_o_lock_sem_vazar_true_no_log(automacao: str) -> None:
     """`Enter-AutomationLock` devolve `$true`; sem descarte, o `True` sai no log
     de cada execução como linha própria da etapa `lock`."""
@@ -127,7 +132,7 @@ def test_run_ps1_adquire_o_lock_sem_vazar_true_no_log(automacao: str) -> None:
 
 @pytest.mark.parametrize(
     "automacao",
-    [a for a in AUTOMACOES if a != "Montagem de Terceirizados"],
+    [a for a in AUTOMACOES_PS if a != "Montagem de Terceirizados"],
 )
 def test_run_ps1_declara_os_codigos_de_nao_falha(automacao: str) -> None:
     """Cada `Exit-WithCode` declara a lista de códigos que não são falha em
@@ -152,7 +157,7 @@ def test_run_ps1_nao_usa_guarda_processo_finalizado(automacao: str) -> None:
     assert '-match "Processo finalizado"' not in _run_ps1(automacao)
 
 
-@pytest.mark.parametrize("automacao", AUTOMACOES)
+@pytest.mark.parametrize("automacao", AUTOMACOES_PS)
 def test_run_ps1_valida_o_python_no_preflight(automacao: str) -> None:
     """O interpretador entra em `-CheckPaths` (ou `$pathsToCheck`): sem isso, o
     RB-01 tratava Python ausente como `exit 2` (sucesso)."""
@@ -161,6 +166,87 @@ def test_run_ps1_valida_o_python_no_preflight(automacao: str) -> None:
     assert re.search(
         r"(-CheckPaths\s+@\(\$pythonExe|\$pathsToCheck\s*=\s*@\(\$pythonExe)", fonte
     ), f"{automacao}/run.ps1 deve validar $pythonExe no pré-flight"
+
+
+# --------------------------------------------------------------------------
+# RE-03 (piloto Python): run.ps1 e shim; a orquestracao esta em run_receitas.py
+# --------------------------------------------------------------------------
+
+
+def _runner_re03() -> str:
+    """Conteudo do runner Python do RE-03 (lido como texto, sem executar)."""
+    caminho = REPO_ROOT / "Receitas Emitidas" / "run_receitas.py"
+    assert caminho.exists(), "run_receitas.py ausente em Receitas Emitidas"
+    return caminho.read_text(encoding="utf-8")
+
+
+def test_re03_shim_delega_ao_runner_e_repassa_o_exit_code() -> None:
+    """O shim resolve o python, chama o runner e sai com o mesmo exit code.
+
+    O lock, o pre-flight e o envio ficam no runner: o shim nao pode voltar a
+    te-los, senao o contrato passa a existir em dois lugares.
+    """
+    fonte = _run_ps1("Receitas Emitidas")
+
+    assert "Resolve-HubPythonExe" in fonte
+    assert '"run_receitas.py"' in fonte
+    assert "exit $LASTEXITCODE" in fonte
+    assert "--dry-run" in fonte
+    assert "Enter-AutomationLock" not in fonte
+    assert "Register-ExecutionTelemetry" not in fonte
+
+
+def test_re03_shim_valida_o_python_antes_de_delegar() -> None:
+    """Interpretador ausente sai com 9 (codigo de pre-flight), nunca com sucesso."""
+    fonte = _run_ps1("Receitas Emitidas")
+
+    assert re.search(r"Test-Path\s+-LiteralPath\s+\$pythonExe", fonte)
+    assert "exit 9" in fonte
+
+
+def test_re03_runner_fecha_a_telemetria_em_todo_ponto_de_saida() -> None:
+    """Toda saida do runner passa por _encerrar, que chama hr.finish.
+
+    hr.finish fecha o execution.end e a telemetria; e o equivalente de
+    Exit-WithCode. Uma segunda chamada direta seria um exit sem fechamento.
+    """
+    fonte = _runner_re03()
+
+    assert fonte.count("hr.finish(") == 1, "so _encerrar pode chamar hr.finish"
+    assert "return hr.finish(" in fonte
+    assert "sys.exit(main())" in fonte
+
+
+def test_re03_runner_adquire_o_lock_global_pela_chave_re03() -> None:
+    """O lock e o mutex nomeado RE-03, o mesmo de Enter-AutomationLock."""
+    fonte = _runner_re03()
+
+    assert 'CHAVE_LOCK: Final[str] = "RE-03"' in fonte
+    assert "hr.AutomationMutex(CHAVE_LOCK" in fonte
+
+
+def test_re03_runner_declara_so_zero_como_nao_falha() -> None:
+    """Como o $NonFailureCodes = @(0) do run.ps1 antigo: so 0 nao e falha."""
+    fonte = _runner_re03()
+
+    assert "non_failure_codes=(0,)" in fonte
+
+
+def test_re03_runner_valida_o_python_e_os_scripts_no_preflight() -> None:
+    """O pre-flight confere o interpretador (sys.executable) e os scripts."""
+    fonte = _runner_re03()
+
+    assert "Path(sys.executable)" in fonte
+    assert "_pre_flight_automacao(" in fonte
+    assert "checar_oracle=True" in fonte
+
+
+def test_re03_runner_rotaciona_o_log_com_retencao_de_15_dias() -> None:
+    """Invoke-LogRotation -KeepDays 15 do run.ps1 antigo, agora no runner."""
+    fonte = _runner_re03()
+
+    assert "RETENCAO_LOG_DIAS: Final[int] = 15" in fonte
+    assert "_rotacionar_log(ctx.log_path)" in fonte
 
 
 def test_obp04_serializa_o_lote_sempre_como_array() -> None:

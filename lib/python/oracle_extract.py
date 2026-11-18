@@ -25,21 +25,16 @@ import contextlib
 import hashlib
 import json
 import os
-import shutil
 import socket
-import subprocess
-import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import datetime
 from typing import Any
 
 import oracle_queue
 import oracledb
 from oracle_client import (
-    DRIVER_MODE_BRIDGE,
     DRIVER_MODE_QUEUE,
     DRIVER_MODE_THICK,
     aplicar_metadados_oci,
@@ -262,15 +257,14 @@ def resolve_oracle_credentials(
         # cair em silêncio no padrão apontaria para produção sem ninguém pedir.
         log("DSN Oracle vazio (ORACLE_CONNECT_STRING ou force_dsn).", "ERROR", exec_id)
         return None
-    # Thick explícito e bridge (node-oracledb em Thick) exigem o Client já no
-    # bootstrap. No modo auto (Thin) a biblioteca só é usada no fallback do
+    # Thick explícito exige o Client já no bootstrap. No modo auto (Thin) a biblioteca só é usada no fallback do
     # verificador legado, que valida o caminho ao ativar o Thick e falha com
     # orientação (oracle_client.init_oracle_thick_mode).
-    if get_driver_mode() in (DRIVER_MODE_THICK, DRIVER_MODE_BRIDGE) and (
+    if get_driver_mode() == DRIVER_MODE_THICK and (
         not client_lib or not os.path.exists(client_lib)
     ):
         log(
-            "ORACLE_CLIENT_LIB_DIR invalido (obrigatorio com ORACLE_DRIVER_MODE=thick ou bridge).",
+            "ORACLE_CLIENT_LIB_DIR invalido (obrigatorio com ORACLE_DRIVER_MODE=thick).",
             "ERROR",
             exec_id,
         )
@@ -302,13 +296,6 @@ def init_thick_mode(creds: OracleCredentials, log: LogFn, exec_id: str) -> None:
     `oracle_client.connect_adaptive`). A função continua existindo porque os
     extratores a chamam no bootstrap.
     """
-    if get_driver_mode() == DRIVER_MODE_BRIDGE:
-        log(
-            "Modo Oracle: bridge (node-oracledb em Thick Mode).",
-            "INFO",
-            exec_id,
-        )
-        return
     if get_driver_mode() == DRIVER_MODE_QUEUE:
         log(
             "Modo Oracle: queue (fila SMB atendida pelo worker no TSplus; sem driver local).",
@@ -386,106 +373,6 @@ def _registrar_saude_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> No
         log(f"Aviso não-bloqueante no pre-flight WAN: {exc}", "DEBUG", exec_id)
 
 
-# Prazo padrão do bridge em `fetch_all`: o processo Node encerra sozinho ao
-# estourá-lo (e a sessão junto), e o Python mata o filho logo depois.
-BRIDGE_TIMEOUT_SECONDS = 300
-_BRIDGE_SCRIPT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "node", "oracle_query.js")
-)
-
-
-class OracleBridgeError(RuntimeError):
-    """Falha do bridge Node; a mensagem traz o erro ORA/NJS original."""
-
-
-def _encode_bridge_param(value: Any) -> Any:
-    """Datas viajam como ISO local (`{"$date": ...}`); o bridge as remonta em hora local."""
-    if isinstance(value, datetime):
-        if value.tzinfo is not None:
-            value = value.astimezone().replace(tzinfo=None)
-        return {"$date": value.isoformat()}
-    if isinstance(value, date):
-        return {"$date": value.isoformat()}
-    if isinstance(value, Decimal):
-        return float(value)
-    raise TypeError(
-        f"Parametro de tipo nao suportado pelo bridge: {type(value).__name__}"
-    )
-
-
-def _decode_bridge_value(obj: dict[str, Any]) -> Any:
-    if obj.keys() == {"$date"}:
-        return datetime.fromisoformat(obj["$date"])
-    return obj
-
-
-def run_node_bridge(
-    creds: OracleCredentials,
-    sql: str,
-    params: dict[str, Any] | None = None,
-    *,
-    timeout_seconds: float = BRIDGE_TIMEOUT_SECONDS,
-    max_rows: int | None = None,
-) -> tuple[list[str], list[tuple[Any, ...]]]:
-    """Executa a consulta pelo bridge Node (`ORACLE_DRIVER_MODE=bridge`).
-
-    Fonte única do bridge para `fetch_all` e para o Beneficiamento. As `creds` do
-    chamador vão pelo ambiente do filho (DSN, alias TNS e Client incluídos), o SQL
-    vai por arquivo (o limite de linha de comando do Windows é 32.767 caracteres)
-    e as datas voltam como `datetime` local, iguais às do driver Python.
-    """
-    node_exe = shutil.which("node")
-    if not node_exe:
-        raise OracleBridgeError("Node.js nao encontrado para o bridge Oracle.")
-    if not os.path.exists(_BRIDGE_SCRIPT):
-        raise OracleBridgeError(f"Script bridge nao encontrado: {_BRIDGE_SCRIPT}")
-
-    env = dict(os.environ)
-    env.update(
-        {
-            "ORACLE_READONLY_USER": creds.user,
-            "ORACLE_READONLY_PASSWORD": creds.password,
-            "ORACLE_CONNECT_STRING": creds.dsn,
-            "ORACLE_CLIENT_LIB_DIR": creds.client_lib,
-        }
-    )
-    if creds.tns_admin:
-        env["TNS_ADMIN"] = creds.tns_admin
-    prazo = max(1, int(timeout_seconds))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        sql_path = os.path.join(tmp, "query.sql")
-        with open(sql_path, "w", encoding="utf-8") as f:
-            f.write(sql)
-        cmd = [
-            node_exe,
-            _BRIDGE_SCRIPT,
-            sql_path,
-            json.dumps(params or {}, default=_encode_bridge_param),
-            str(max_rows if max_rows and max_rows > 0 else 0),
-            str(prazo),
-        ]
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                env=env,
-                timeout=prazo + 5,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise TimeoutError(f"Oracle Bridge excedeu {prazo}s.") from exc
-
-    if proc.returncode != 0:
-        raise OracleBridgeError(f"Oracle Bridge falhou: {proc.stderr.strip()}")
-    payload = json.loads(proc.stdout, object_hook=_decode_bridge_value)
-    return list(payload.get("columns", [])), [
-        tuple(row) for row in payload.get("rows", [])
-    ]
-
-
 def _fetch_all_queue(
     sql: str, exec_id: str, log: LogFn, params: dict[str, Any] | None
 ) -> tuple[list[str], list[Any]]:
@@ -535,9 +422,8 @@ def classify_oracle_exit_code(exc: BaseException) -> int:
       repetir após o prazo global não faz sentido e dobraria a carga no Oracle
     - 5: Erro determinístico (SQL bloqueado, erro ORA determinístico, configuração)
     - 1: Demais falhas, inclusive queda de sessão Oracle (ORA-03113 etc.), que é
-      transitória, e o `TimeoutError` genérico (timeout do Oracle Bridge Node ou
-      do connect dos modos thick/auto). Ambos são repetíveis pelo
-      Invoke-OraclePythonScript.
+      transitória, e o `TimeoutError` genérico (timeout do connect dos modos
+      thick/auto). Ambos são repetíveis pelo Invoke-OraclePythonScript.
 
     Um OracleQueueError genérico (erro reportado pelo worker) vira 5, salvo quando a
     mensagem indica queda de sessão (SESSION_DROP_MARKERS), que vira 1.
@@ -608,18 +494,6 @@ def fetch_all(  # pylint: disable=too-many-arguments
     # poucos segundos, então a sessão não pode esperar pelo probe.
     effective_size = cursor_arraysize if cursor_arraysize is not None else batch_size
     _registrar_saude_wan(creds.dsn, effective_size, log, exec_id)
-
-    if get_driver_mode() == DRIVER_MODE_BRIDGE:
-        # Só por configuração explícita: falha da conexão nativa NÃO cai no bridge
-        # (dobraria logins inválidos e trocaria o formato do dado entre ciclos).
-        log("Executando consulta via Oracle Bridge (Node.js)...", "INFO", exec_id)
-        resultado = run_node_bridge(creds, sql, params)
-        log(
-            f"Query executada com sucesso via Bridge. Linhas retornadas: {len(resultado[1])}",
-            "INFO",
-            exec_id,
-        )
-        return resultado
 
     log(f"Conectando ao Oracle (DSN: {creds.dsn})...", "INFO", exec_id)
     connection: oracledb.Connection = connect_adaptive(

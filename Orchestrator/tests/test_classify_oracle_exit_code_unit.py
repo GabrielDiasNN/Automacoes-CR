@@ -2,7 +2,7 @@
 
 Contrato consumido pelo `Invoke-OraclePythonScript` (lib/Lib-Oracle.psm1):
 - 1: falha transitória, repetida com espera (30/60/120 s), inclusive o
-  `TimeoutError` genérico (timeout do Oracle Bridge ou do connect thick/auto);
+  `TimeoutError` genérico (timeout do connect thick/auto);
 - 5, 6 e 7: não repetíveis (saem na primeira tentativa). O 7 é reservado ao
   `OracleQueueTimeoutError`, isto é, o prazo global da fila estourado.
 
@@ -34,9 +34,9 @@ def test_prazo_da_fila_sai_com_7() -> None:
     assert classify_oracle_exit_code(exc) == 7
 
 
-def test_timeout_do_bridge_sai_com_1() -> None:
-    """Timeout do Oracle Bridge Node é repetível: sai com 1, não com 7."""
-    assert classify_oracle_exit_code(TimeoutError("Oracle Bridge excedeu 60s.")) == 1
+def test_timeout_generico_sai_com_1() -> None:
+    """Timeout genérico (prazo de execução do Oracle) é repetível: sai com 1, não com 7."""
+    assert classify_oracle_exit_code(TimeoutError("Oracle excedeu 60s.")) == 1
 
 
 def test_timeout_de_connect_sai_com_1() -> None:

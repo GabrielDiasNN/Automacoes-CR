@@ -344,5 +344,333 @@ function Update-WhatsAppResultRecordCounts {
     Write-Utf8NoBomFile -Path $ResultPath -Content $json
 }
 
-Export-ModuleMember -Function Read-CardsManifest, Write-WhatsAppBatchInput, Resolve-WhatsAppBatchDelivery, Update-WhatsAppResultRecordCounts
+function Get-WhatsAppDaemonRoute {
+    <#
+    .SYNOPSIS
+        Decide por qual rota um envio WhatsApp deve seguir (funcao pura, sem I/O).
+    .DESCRIPTION
+        'spawn'  : nenhum processo do daemon vivo, ou daemon vivo de OUTRO perfil (client_id do health
+                   diferente do perfil deste envio) -> fluxo atual (sobe node + WhatsApp-Core.js).
+        'defer'  : daemon vivo no MESMO perfil e nao pronto (estado diferente de 'ready'), ou health
+                   indisponivel / 401 -> nao sobe node (conflitaria com o perfil do daemon); exit 22.
+        'daemon' : daemon vivo, mesmo perfil e 'ready' -> envia pelo daemon (POST /batch ou POST /send).
+        WHATSAPP_DAEMON_ENABLED nao e' entrada desta regra: ele governa apenas a subida do daemon.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [bool]$DaemonRunning,
+
+        [string]$ClientId = "",
+
+        [string]$HealthState = "",
+
+        [string]$HealthClientId = ""
+    )
+
+    if (-not $DaemonRunning) { return "spawn" }
+    if (-not [string]::IsNullOrEmpty($HealthClientId) -and $HealthClientId -ne $ClientId) { return "spawn" }
+    if ($HealthState -ne "ready") { return "defer" }
+    return "daemon"
+}
+
+function Get-WhatsAppHttpErrorInfo {
+    <#
+    .SYNOPSIS
+        Extrai status HTTP e objeto de resposta de um erro de Invoke-WebRequest/Invoke-RestMethod.
+    .DESCRIPTION
+        No PS 5.1 o erro HTTP chega como System.Net.WebException com a propriedade Response.
+        A leitura usa PSObject.Properties: com Set-StrictMode, ler propriedade inexistente lanca erro.
+        Sem resposta HTTP (queda de conexao, sem Response) devolve Resposta = $null e Status = 0.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        $ErrorRecord
+    )
+
+    $excecao = $ErrorRecord.Exception
+    $respostaProp = $null
+    if ($null -ne $excecao) { $respostaProp = $excecao.PSObject.Properties['Response'] }
+    $resposta = $null
+    if ($null -ne $respostaProp) { $resposta = $respostaProp.Value }
+
+    $status = 0
+    if ($null -ne $resposta) {
+        $statusProp = $resposta.PSObject.Properties['StatusCode']
+        if ($null -ne $statusProp -and $null -ne $statusProp.Value) {
+            $status = [int]$statusProp.Value
+        }
+    }
+
+    return [pscustomobject]@{ Status = $status; Resposta = $resposta }
+}
+
+function Get-WhatsAppDaemonProcess {
+    <#
+    .SYNOPSIS
+        Lista os node.exe cujo CommandLine referencia whatsapp-daemon.js.
+    .DESCRIPTION
+        Usa CIM: Get-Process nao expoe CommandLine no PS 5.1. Falha de consulta devolve lista vazia.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param()
+
+    try {
+        $candidatos = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue
+        return @($candidatos | Where-Object { $_.CommandLine -and $_.CommandLine -like "*whatsapp-daemon.js*" })
+    }
+    catch [System.Exception] {
+        return @()
+    }
+}
+
+function Get-WhatsAppDaemonHealth {
+    <#
+    .SYNOPSIS
+        Consulta GET /health do daemon: estado e perfil (client_id) que ele segura.
+    .DESCRIPTION
+        State    : campo 'state' quando o health responde; 'unauthorized' quando responde HTTP 401
+                   (token do daemon nao confere); vazio nos demais casos (sem resposta ou erro).
+        ClientId : campo 'client_id' quando presente; vazio nos demais casos.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [string]$Port,
+        [string]$Token
+    )
+
+    try {
+        $saude = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -Method Get -Headers @{ "X-Hub-Daemon-Token" = $Token } -TimeoutSec 5
+        $perfilProp = $saude.PSObject.Properties["client_id"]
+        $perfil = ""
+        if ($null -ne $perfilProp) { $perfil = [string]$perfilProp.Value }
+        return [pscustomobject]@{ State = [string]$saude.state; ClientId = $perfil }
+    }
+    catch [System.Exception] {
+        $erro = Get-WhatsAppHttpErrorInfo -ErrorRecord $_
+        if ($erro.Status -eq 401) { return [pscustomobject]@{ State = "unauthorized"; ClientId = "" } }
+        return [pscustomobject]@{ State = ""; ClientId = "" }
+    }
+}
+
+function Invoke-WhatsAppDaemonBatch {
+    <#
+    .SYNOPSIS
+        Envia o lote ao daemon (POST /batch) e grava $BatchResultFile com o array results quando houver.
+    .DESCRIPTION
+        Devolve o exit code do fluxo atual: 200 -> 0; 503 -> 22; qualquer outro status ou falha de
+        conexao -> 24. Results parciais de respostas de erro (ex.: 500) tambem sao gravados.
+        O token nunca e' escrito em log.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [string]$Port,
+        [string]$Token,
+        [string]$ExecId,
+        [string]$ClientId = "",
+        [string]$ChatTarget,
+        [string]$BatchInputFile,
+        [string]$BatchResultFile
+    )
+
+    try {
+        $itens = @(Get-Content -LiteralPath $BatchInputFile -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $chatId = if ($ChatTarget.Contains("@")) { $ChatTarget } else { (($ChatTarget -replace '\D', '') + "@c.us") }
+        $corpo = [pscustomobject]@{ exec_id = $ExecId; client_id = $ClientId; chat_id = $chatId; items = $itens } | ConvertTo-Json -Depth 6
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($corpo)
+
+        $status = 0
+        $texto = ""
+        try {
+            $resposta = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/batch" -Method Post -Headers @{ "X-Hub-Daemon-Token" = $Token } -Body $bytes -ContentType "application/json; charset=utf-8" -TimeoutSec 1800 -UseBasicParsing
+            $status = [int]$resposta.StatusCode
+            $texto = [string]$resposta.Content
+        }
+        catch [System.Exception] {
+            $erro = Get-WhatsAppHttpErrorInfo -ErrorRecord $_
+            if ($null -eq $erro.Resposta) {
+                Write-Host "Daemon WhatsApp nao respondeu ao lote (sem resposta HTTP)." -ForegroundColor Red
+                return 24
+            }
+            $status = $erro.Status
+            $leitor = New-Object System.IO.StreamReader($erro.Resposta.GetResponseStream(), [System.Text.Encoding]::UTF8)
+            try { $texto = $leitor.ReadToEnd() } finally { $leitor.Dispose() }
+        }
+
+        $resultados = $null
+        if (-not [string]::IsNullOrWhiteSpace($texto)) {
+            try {
+                $objeto = $texto | ConvertFrom-Json
+                if ($null -ne $objeto.PSObject.Properties["results"]) { $resultados = @($objeto.results) }
+            }
+            catch [System.Exception] {
+                $resultados = $null
+            }
+        }
+        if ($null -ne $resultados) {
+            $jsonResultados = ConvertTo-Json -InputObject $resultados -Depth 5
+            [System.IO.File]::WriteAllText($BatchResultFile, $jsonResultados, (New-Object System.Text.UTF8Encoding $false))
+        }
+
+        if ($status -eq 200) { return 0 }
+        if ($status -eq 503) { return 22 }
+        Write-Host "Daemon WhatsApp respondeu HTTP $status ao lote." -ForegroundColor Red
+        return 24
+    }
+    catch [System.Exception] {
+        Write-Host "Falha na chamada ao daemon WhatsApp: $($_.Exception.Message)" -ForegroundColor Red
+        return 24
+    }
+}
+
+function Invoke-WhatsAppDaemonSend {
+    <#
+    .SYNOPSIS
+        Envia uma mensagem unica (texto, ou texto com anexo) ao daemon (POST /send). Usado pelo modo AUTO.
+    .DESCRIPTION
+        Devolve o exit code do fluxo atual: 200 -> 0; 503 -> 22; 409 (client_mismatch), 500, outro
+        status ou falha de conexao -> 24. AttachmentPath vazio envia so o texto. O token nunca e' escrito em log.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [string]$Port,
+        [string]$Token,
+        [string]$ExecId,
+        [string]$ClientId,
+        [string]$ChatTarget,
+        [string]$Caption,
+        [string]$AttachmentPath = ""
+    )
+
+    try {
+        $chatId = if ($ChatTarget.Contains("@")) { $ChatTarget } else { (($ChatTarget -replace '\D', '') + "@c.us") }
+        $anexo = $null
+        if (-not [string]::IsNullOrWhiteSpace($AttachmentPath)) { $anexo = $AttachmentPath }
+        $corpo = [pscustomobject]@{
+            exec_id         = $ExecId
+            client_id       = $ClientId
+            chat_id         = $chatId
+            caption         = $Caption
+            attachment_path = $anexo
+        } | ConvertTo-Json -Depth 4
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($corpo)
+
+        $status = 0
+        $texto = ""
+        try {
+            $resposta = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/send" -Method Post -Headers @{ "X-Hub-Daemon-Token" = $Token } -Body $bytes -ContentType "application/json; charset=utf-8" -TimeoutSec 1800 -UseBasicParsing
+            $status = [int]$resposta.StatusCode
+        }
+        catch [System.Exception] {
+            $erro = Get-WhatsAppHttpErrorInfo -ErrorRecord $_
+            if ($null -eq $erro.Resposta) {
+                Write-Host "Daemon WhatsApp nao respondeu ao envio (sem resposta HTTP)." -ForegroundColor Red
+                return 24
+            }
+            $status = $erro.Status
+            $leitor = New-Object System.IO.StreamReader($erro.Resposta.GetResponseStream(), [System.Text.Encoding]::UTF8)
+            try { $texto = $leitor.ReadToEnd() } finally { $leitor.Dispose() }
+        }
+
+        if ($status -eq 200) { return 0 }
+        if ($status -eq 503) { return 22 }
+        if ($status -eq 409) {
+            Write-Host "Daemon WhatsApp recusou o envio: client_id '$ClientId' nao confere com o perfil do daemon (HTTP 409). Falha de envio (exit 24)." -ForegroundColor Red
+            return 24
+        }
+
+        $motivo = ""
+        if (-not [string]::IsNullOrWhiteSpace($texto)) {
+            try {
+                $objeto = $texto | ConvertFrom-Json
+                $motivoProp = $objeto.PSObject.Properties["error"]
+                if ($null -ne $motivoProp) { $motivo = [string]$motivoProp.Value }
+            }
+            catch [System.Exception] {
+                $motivo = ""
+            }
+        }
+        $detalhe = ""
+        if (-not [string]::IsNullOrWhiteSpace($motivo)) { $detalhe = " ($motivo)" }
+        Write-Host "Daemon WhatsApp respondeu HTTP $status ao envio$detalhe." -ForegroundColor Red
+        return 24
+    }
+    catch [System.Exception] {
+        Write-Host "Falha na chamada ao daemon WhatsApp: $($_.Exception.Message)" -ForegroundColor Red
+        return 24
+    }
+}
+
+function Select-WhatsAppStaleProcessIds {
+    <#
+    .SYNOPSIS
+        Escolhe os PIDs que a limpeza pre-envio pode encerrar (funcao pura, sem I/O).
+    .DESCRIPTION
+        Recebe a lista de processos (ProcessId, ParentProcessId, Name, CommandLine, ExecutablePath,
+        CreationDate) e os PIDs do daemon WhatsApp. O proprio daemon e TODA a sua arvore de descendentes
+        (ParentProcessId recursivo, incluindo os chrome.exe do Puppeteer) ficam protegidos. Fora isso,
+        so' e' selecionado chrome.exe/node.exe de 'Automacoes' com mais de 10 s de vida.
+    #>
+    [CmdletBinding()]
+    [OutputType([int[]])]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$Processes = @(),
+
+        [AllowEmptyCollection()]
+        [int[]]$DaemonPids = @(),
+
+        [datetime]$Now = [DateTime]::Now
+    )
+
+    $filhosPorPai = @{}
+    foreach ($proc in @($Processes)) {
+        if ($null -eq $proc) { continue }
+        $pai = [int](Get-JsonPropValue $proc "ParentProcessId")
+        if (-not $filhosPorPai.ContainsKey($pai)) {
+            $filhosPorPai[$pai] = New-Object 'System.Collections.Generic.List[int]'
+        }
+        $filhosPorPai[$pai].Add([int](Get-JsonPropValue $proc "ProcessId"))
+    }
+
+    $protegidos = New-Object 'System.Collections.Generic.HashSet[int]'
+    $fila = New-Object 'System.Collections.Generic.Queue[int]'
+    foreach ($idDaemon in @($DaemonPids)) {
+        if ($protegidos.Add([int]$idDaemon)) { $fila.Enqueue([int]$idDaemon) }
+    }
+    while ($fila.Count -gt 0) {
+        $atual = $fila.Dequeue()
+        if (-not $filhosPorPai.ContainsKey($atual)) { continue }
+        foreach ($filho in $filhosPorPai[$atual]) {
+            if ($protegidos.Add($filho)) { $fila.Enqueue($filho) }
+        }
+    }
+
+    $selecionados = New-Object 'System.Collections.Generic.List[int]'
+    foreach ($proc in @($Processes)) {
+        if ($null -eq $proc) { continue }
+        $id = [int](Get-JsonPropValue $proc "ProcessId")
+        if ($protegidos.Contains($id)) { continue }
+        $nome = [string](Get-JsonPropValue $proc "Name")
+        if ($nome -ne "chrome.exe" -and $nome -ne "node.exe") { continue }
+        $cmd = [string](Get-JsonPropValue $proc "CommandLine")
+        $caminho = [string](Get-JsonPropValue $proc "ExecutablePath")
+        if ($cmd -like "*whatsapp-daemon.js*") { continue }
+        if (-not (($cmd -like "*Automacoes*") -or ($caminho -like "*Automacoes*"))) { continue }
+        $criacao = Get-JsonPropValue $proc "CreationDate"
+        if ($null -ne $criacao -and (($Now - [datetime]$criacao).TotalSeconds -lt 10)) { continue }
+        $selecionados.Add($id)
+    }
+
+    return $selecionados.ToArray()
+}
+
+Export-ModuleMember -Function Read-CardsManifest, Write-WhatsAppBatchInput, Resolve-WhatsAppBatchDelivery, Update-WhatsAppResultRecordCounts, Get-WhatsAppDaemonRoute, Get-WhatsAppDaemonProcess, Get-WhatsAppDaemonHealth, Invoke-WhatsAppDaemonBatch, Invoke-WhatsAppDaemonSend, Select-WhatsAppStaleProcessIds
 

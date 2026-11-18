@@ -32,16 +32,11 @@ if str(LIB_PYTHON_DIR) not in sys.path:
     sys.path.append(str(LIB_PYTHON_DIR))
 
 from oracle_client import (
-    DRIVER_MODE_BRIDGE,
     DRIVER_MODE_QUEUE,
     connect_adaptive,
     get_driver_mode,
 )
-from oracle_extract import (
-    OracleBridgeError,
-    OracleCredentials,
-    run_node_bridge,
-)
+from oracle_extract import OracleCredentials
 from oracle_queue import (
     OracleQueueTransientError,
     execute_query as queue_execute_query,
@@ -130,47 +125,6 @@ def connect_readonly() -> Any:
     )
 
 
-def _execute_once_bridge(
-    sql: str,
-    parameters: Mapping[str, Any] | None,
-    *,
-    oracle_timeout_ms: int,
-    wall_clock_budget_seconds: float,
-    max_rows: int | None,
-) -> QueryResult:
-    """Mesmo contrato de `_execute_once`, pelo bridge Node (`ORACLE_DRIVER_MODE=bridge`).
-
-    O orçamento restante vira o prazo do processo Node (que encerra a si e à
-    sessão) e o `max_rows` é aplicado no próprio fetch.
-    """
-    query_started_at = time.perf_counter()
-    raw_names, rows = run_node_bridge(
-        _readonly_credentials(),
-        sql,
-        dict(parameters or {}),
-        timeout_seconds=wall_clock_budget_seconds,
-        max_rows=max_rows,
-    )
-    columns, duplicate_columns = _make_unique_names(raw_names)
-    elapsed = time.perf_counter() - query_started_at
-    return QueryResult(
-        columns=columns,
-        rows=rows,
-        duplicate_columns=duplicate_columns,
-        metadata={
-            "oracle_timeout_ms": int(oracle_timeout_ms),
-            "oracle_timeout_applied": False,
-            "oracle_timeout_warning": False,
-            # O prazo do processo Node faz o papel do watchdog.
-            "oracle_watchdog_applied": True,
-            "elapsed_seconds": round(elapsed, 4),
-            "row_count": len(rows),
-            "max_rows_limit": max_rows if max_rows and max_rows > 0 else None,
-            "bridge": True,
-        },
-    )
-
-
 def _execute_once_queue(
     sql: str,
     parameters: Mapping[str, Any] | None,
@@ -231,7 +185,6 @@ def execute_query(
     `call_timeout` no máximo igual a ele)."""
     modo = get_driver_mode()
     executar = {
-        DRIVER_MODE_BRIDGE: _execute_once_bridge,
         DRIVER_MODE_QUEUE: _execute_once_queue,
     }.get(modo, _execute_once)
     started = time.perf_counter()
@@ -249,7 +202,7 @@ def execute_query(
             )
         # `oracledb.Error`, não só DatabaseError: DPY-1001 (e DPI-1010, remapeado
         # para ele) chega como InterfaceError, que não é subclasse de DatabaseError.
-        except (oracledb.Error, OracleBridgeError, OracleQueueTransientError) as exc:
+        except (oracledb.Error, OracleQueueTransientError) as exc:
             elapsed = time.perf_counter() - started
             remaining = wall_clock_budget_seconds - elapsed
             # Falha transitória da fila (SMB, worker) equivale à queda de sessão.

@@ -122,6 +122,18 @@ Write-Host "Ativando Watchdog $RuntimeVersion (Resiliencia)..." -ForegroundColor
 $monitorScript = Join-Path $InfrastructureDir "MonitorAutomacoes.ps1"
 Start-Process "powershell.exe" -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$monitorScript`""
 
+# 7. DAEMON WHATSAPP (opt-in via WHATSAPP_DAEMON_ENABLED=1). Nao fatal: falha vira aviso.
+$daemonScript = Join-Path $InfrastructureDir "Start-WhatsAppDaemon.ps1"
+try {
+    & $daemonScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[AVISO] Daemon WhatsApp nao iniciado (exit $LASTEXITCODE). O Orchestrator segue sem ele." -ForegroundColor Yellow
+    }
+}
+catch [System.Exception] {
+    Write-Host "[AVISO] Daemon WhatsApp: $($_.Exception.Message). O Orchestrator segue sem ele." -ForegroundColor Yellow
+}
+
 Write-Host "[OK] Sistema $RuntimeVersion reiniciado com sucesso." -ForegroundColor Green
 Start-Sleep -Seconds 2
 exit

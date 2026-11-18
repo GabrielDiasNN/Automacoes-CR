@@ -10,17 +10,21 @@ Este projeto automatiza a geracao e distribuicao do relatorio semanal de **Recei
 
 A execucao ocorre inteiramente em memoria, utilizando comunicacao inter-processo de alta performance:
 
-`Oracle DB` -> `extract_oracle.py` (JSON via Stdout) -> `generate_html_report.py` (HTML via Stdout) -> `run.ps1` -> `Outlook COM`
+`Oracle DB` -> `extract_oracle.py` (JSON via Stdout) -> `generate_html_report.py` (HTML via Stdout) -> `run_receitas.py` (orquestra, sobre `lib/python/hub_runner.py`) -> `lib/Invoke-OutlookEmail.ps1` -> `Outlook COM`
 
 ---
 
 ## Componentes do Projeto
 
-### 1. Orquestrador PowerShell (`run.ps1`)
-Gerencia o fluxo "Padrao Ouro":
-- Realiza o **Pre-Flight Check** completo antes da execucao.
-- Coordena a passagem de dados via *Stdio Pipes*, implementando a limpeza de BOM (`utf-8-sig`) para garantir compatibilidade entre PowerShell 5.1 e Python.
-- Dispara o e-mail via Outlook COM (Outlook-Safe), mantendo a aplicacao viva para garantir o envio total da *Outbox*.
+### 1. Orquestrador Python (`run_receitas.py`)
+Gerencia o fluxo "Padrao Ouro", sobre o runner compartilhado `lib/python/hub_runner.py`:
+- Realiza o **Pre-Flight Check** completo antes da execucao: Oracle Client (fora do modo `queue`), disco, caminhos e o check Oracle. No modo `queue`, o worker da fila e decidido como no PowerShell.
+- Mantem o **lock global RE-03** durante extracao, geracao, envio e commit do estado.
+- Coordena a passagem de dados pelo *stdout* dos filhos Python: o JSON e o HTML sao lidos como dado, com limpeza de BOM (`utf-8-sig`).
+- Dispara o e-mail pela CLI `lib/Invoke-OutlookEmail.ps1` (Outlook COM), com 2 tentativas.
+- Fecha toda execucao com o evento de fim e a telemetria. Excecao nao prevista vira `ERRO FATAL` com exit 1.
+
+`run.ps1` agora e um **shim**: resolve o interpretador do projeto, chama `run_receitas.py`, repassa o `ExecId` e o `-DryRun` e sai com o mesmo exit code, porque o worker do Orchestrator le o exit code de `powershell.exe -File run.ps1`.
 
 ### 2. Extrator de Dados (`extract_oracle.py`)
 Soberania em dados:
@@ -38,8 +42,8 @@ Inteligencia visual:
 ## Engenharia e Seguranca
 
 ### Logs e Integridade
-- **Base64 Bridge Protocol**: Todas as mensagens de log (Python -> PowerShell) sao transportadas via Base64 para garantir integridade total do Portugues (PT-BR).
-- **ASCII-Safe Source**: O codigo-fonte das mensagens utiliza apenas caracteres ASCII e sequencias de escape, tornando-o imune a erros de encoding de editores.
+- **Envelope estruturado**: os eventos seguem `docs/log-event.schema.json` e vao para `Logs/ReceitasEmitidas.jsonl`. Eventos com mais de 15 dias saem do arquivo no inicio de cada execucao.
+- **Saida em UTF-8**: os filhos Python recebem `PYTHONUTF8=1` e `PYTHONIOENCODING=utf-8`. O stdout e dado (JSON e HTML); o stderr vira evento de log.
 - **Auto-Masking**: Protecao automatica de PII e segredos nos arquivos de log.
 
 ### Protocolo V.A.L.E.G. - Idempotência e Controle de Estado
@@ -51,10 +55,32 @@ A automação possui controle rigoroso de estado para evitar execuções redunda
 ---
 
 ### Codigos de Saida (Exit Codes)
-- `0`: Sucesso Absoluto.
-- `1`: Falha tecnica tratada.
-- `2`: Sucesso / Idempotência (Sem alterações nos dados, fluxo interrompido).
+- `0`: Sucesso. Inclui a idempotencia: extracao sem alteracoes (ExitCode 2 do extrator) encerra com 0, sem e-mail.
+- `1`: Erro fatal (`ERRO FATAL`): envio sem sucesso, transformacao vazia ou excecao nao prevista.
+- `3`: Falha definitiva na extracao Oracle.
 - `9`: Falha de Ambiente (Pre-Flight).
+- `26`: Worker Oracle da fila offline. O Orchestrator reenfileira quando o heartbeat voltar.
+- `27`: Prazo da fila Oracle esgotado com o worker vivo.
+
+---
+
+## Execucao manual (validacao)
+
+Uso de validacao, nao de producao. O `--dry-run` roda pre-flight, extract e transform de verdade, mas nao envia e-mail e nao confirma o estado: a execucao so registra o que faria. Ele tambem pega o lock RE-03, entao nao rode junto com a execucao agendada.
+
+Informe um `ExecId` manual, sem o prefixo `TEL_`. Sem `ExecId`, o runner registra a telemetria no Orchestrator (quando ha `ORCHESTRATOR_API_KEY` no `.env`). Com `ExecId` manual, a execucao fica sem telemetria: nenhuma chamada ao Orchestrator na abertura nem no fechamento. O log continua em `Logs/ReceitasEmitidas.jsonl`.
+
+```powershell
+.venv\Scripts\python.exe "Receitas Emitidas\run_receitas.py" VALIDACAO_MANUAL_0001 --dry-run
+```
+
+Pelo shim, com o mesmo efeito:
+
+```powershell
+powershell.exe -NoProfile -File "Receitas Emitidas\run.ps1" -ExecId VALIDACAO_MANUAL_0001 -DryRun
+```
+
+Em worktree, use o `.venv` da raiz do repositorio principal (o shim resolve sozinho).
 
 ---
 

@@ -8,10 +8,15 @@
 # ausente, hash vazio) que sao justamente onde as copias divergiam.
 #
 
+# Receitas Emitidas migrou para o runner Python (run_receitas.py): o run.ps1 e um shim
+# e os contratos de idempotencia dela sao checados no Describe "runner Python" abaixo.
 $MigradosParaLib = @(
     "Receitas Bloqueadas",
-    "Receitas Emitidas",
     "Montagem de Terceirizados"
+)
+
+$MigradosParaRunnerPython = @(
+    "Receitas Emitidas"
 )
 
 BeforeAll {
@@ -262,6 +267,29 @@ Describe "Contrato com os run.ps1 migrados" {
     It "<_> nao persiste delivery_state manualmente" -ForEach $MigradosParaLib {
         $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run.ps1") -Raw
         $conteudo | Should -Not -Match '\$deliveryState \| ConvertTo-Json'
+    }
+}
+
+Describe "Idempotencia no runner Python (Receitas Emitidas)" {
+    BeforeAll {
+        $script:RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    }
+
+    It "<_> usa o modulo de idempotencia do hub_runner" -ForEach $MigradosParaRunnerPython {
+        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run_receitas.py") -Raw
+        $conteudo | Should -Match 'read_delivery_state'
+        $conteudo | Should -Match 'delivery_pending'
+        $conteudo | Should -Match 'save_delivery_state'
+    }
+
+    It "<_> nao reimplementa a leitura manual de delivery_status" -ForEach $MigradosParaRunnerPython {
+        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run_receitas.py") -Raw
+        $conteudo | Should -Not -Match 'delivery_status'
+    }
+
+    It "<_> nao persiste delivery_state manualmente" -ForEach $MigradosParaRunnerPython {
+        $conteudo = Get-Content -LiteralPath (Join-Path $script:RepoRoot "$_\run_receitas.py") -Raw
+        $conteudo | Should -Not -Match 'json\.dump\('
     }
 }
 

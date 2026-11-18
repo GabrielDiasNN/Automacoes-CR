@@ -27,6 +27,7 @@
     "whatsapp": false
   },
   "smoke_tests": [
-    "Orchestrator/tests/test_receitas_emitidas.py"
+    "Orchestrator/tests/test_receitas_emitidas.py",
+    "Orchestrator/tests/test_run_receitas_unit.py"
   ]
 }

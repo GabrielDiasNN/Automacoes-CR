@@ -27,7 +27,6 @@ if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.P
 
 $projectRoot = Split-Path -Parent $ScriptDir
 $ExtractScript = Join-Path $ScriptDir "extract_obs.py"
-$ExtractJs = Join-Path $ScriptDir "extract_obs.js"
 $GenScript = Join-Path $ScriptDir "generate_phase_cards.py"
 $PhaseCardsFile = Join-Path $ScriptDir "phase_cards.json"
 $ResultFile = Join-Path $ScriptDir "obs_result.json"
@@ -54,8 +53,6 @@ Import-Module $libOracle   -Force
 # O .venv nao e versionado e vive na raiz do repositorio principal: resolver
 # so por $projectRoot quebra o pre-flight quando a automacao roda de um worktree.
 $pythonExe = Resolve-HubPythonExe -ProjectRoot $projectRoot
-# Motor JS so com ORACLE_DRIVER_MODE=bridge (opt-in explicito); senao, Python.
-$nodeExe = if ("$env:ORACLE_DRIVER_MODE".Trim() -eq "bridge") { (Get-Command node -ErrorAction SilentlyContinue).Source } else { $null }
 
 $AutomationName = "OBs Paradas Fase"
 
@@ -175,10 +172,9 @@ try {
         }
 
         # --- ETAPA 1: EXTRAÇÃO ORACLE ---
-        $useJsExtractor = (Test-Path $ExtractJs) -and (-not [string]::IsNullOrWhiteSpace($nodeExe))
-        $extractorExe = if ($useJsExtractor) { $nodeExe } else { $pythonExe }
-        $extractorPath = if ($useJsExtractor) { $ExtractJs } else { $ExtractScript }
-        $engineName = if ($useJsExtractor) { "Node.js (Oracle OCI 19c)" } else { "Python (extract_obs.py)" }
+        $extractorExe = $pythonExe
+        $extractorPath = $ExtractScript
+        $engineName = "Python (extract_obs.py)"
 
         Start-HubStep -Step "extract" -Message "Extracao Oracle via $engineName"
         $pyResult = Invoke-OraclePythonScript `
