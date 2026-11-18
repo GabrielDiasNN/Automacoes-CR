@@ -800,7 +800,9 @@ def test_ambiente_filho_injeta_hub_log_structured_e_remove_quando_stdout_is_data
     )
     ctx_log = _ctx(tmp_path)
     monkeypatch.delenv("HUB_LOG_STRUCTURED", raising=False)
-    hr.run_python_step(ctx_log, _passo(script, stdout_is_data=False), sleep=lambda _: None)
+    hr.run_python_step(
+        ctx_log, _passo(script, stdout_is_data=False), sleep=lambda _: None
+    )
     assert any(
         e.get("event") == "log" and e.get("message") == "STRUCT=1"
         for e in _eventos(ctx_log)
@@ -808,7 +810,9 @@ def test_ambiente_filho_injeta_hub_log_structured_e_remove_quando_stdout_is_data
 
     monkeypatch.setenv("HUB_LOG_STRUCTURED", "1")
     ctx_dados = _ctx(tmp_path)
-    hr.run_python_step(ctx_dados, _passo(script, stdout_is_data=True), sleep=lambda _: None)
+    hr.run_python_step(
+        ctx_dados, _passo(script, stdout_is_data=True), sleep=lambda _: None
+    )
     assert any(
         e.get("event") == "log" and e.get("message") == "STRUCT=AUSENTE"
         for e in _eventos(ctx_dados)
@@ -816,8 +820,9 @@ def test_ambiente_filho_injeta_hub_log_structured_e_remove_quando_stdout_is_data
 
 
 def test_nivel_da_linha_reconhece_warning_prefixado_e_alert() -> None:
-    assert hr._nivel_da_linha("WARNING: rota lenta", "INFO") == "WARN"  # pylint: disable=protected-access
-    assert hr._nivel_da_linha("[ALERT] disco baixo", "INFO") == "WARN"  # pylint: disable=protected-access
+    nivel = hr._nivel_da_linha  # pylint: disable=protected-access
+    assert nivel("WARNING: rota lenta", "INFO") == "WARN"
+    assert nivel("[ALERT] disco baixo", "INFO") == "WARN"
 
 
 def test_run_python_script_executa_em_cwd_com_log_estruturado(tmp_path: Path) -> None:
@@ -844,7 +849,9 @@ def test_load_env_file_carrega_e_tolera_oserror(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("HUB_TESTE_LOAD_ENV_93", raising=False)
-    (tmp_path / ".env").write_text("HUB_TESTE_LOAD_ENV_93=ok # nota\n", encoding="utf-8-sig")
+    (tmp_path / ".env").write_text(
+        "HUB_TESTE_LOAD_ENV_93=ok # nota\n", encoding="utf-8-sig"
+    )
     assert hr.load_env_file(tmp_path) is None
     assert os.environ["HUB_TESTE_LOAD_ENV_93"] == "ok"
 

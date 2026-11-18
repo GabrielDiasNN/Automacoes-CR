@@ -988,5 +988,5 @@ def test_dry_run_remove_tmp_criado_na_execucao_e_loga_debug_no_lock(
         and "Lock global adquirido com sucesso" in e.get("message", "")
         for e in _eventos(ctx)
     )
-    nivel_fn = getattr(rb, "_nivel_da_linha")
+    nivel_fn = rb._nivel_da_linha  # pylint: disable=protected-access
     assert nivel_fn("[DEBUG] detalhe") == "DEBUG"

@@ -269,7 +269,9 @@ def resolve_oracle_credentials(
         # Thick explícito exige o Client já no bootstrap. No modo auto (Thin) a biblioteca só é usada no fallback do
         # verificador legado, que valida o caminho ao ativar o Thick e falha com
         # orientação (oracle_client.init_oracle_thick_mode).
-        erro = "ORACLE_CLIENT_LIB_DIR invalido (obrigatorio com ORACLE_DRIVER_MODE=thick)."
+        erro = (
+            "ORACLE_CLIENT_LIB_DIR invalido (obrigatorio com ORACLE_DRIVER_MODE=thick)."
+        )
     elif require_tns_admin and not tns_admin:
         erro = "TNS_ADMIN ausente no ambiente."
     if erro is not None:
