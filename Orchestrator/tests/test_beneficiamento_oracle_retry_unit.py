@@ -407,9 +407,7 @@ def test_execute_query_carrega_dotenv_antes_de_ler_driver_mode_queue(
                 "options": options,
             }
         )
-        return SimpleNamespace(
-            columns=["A"], rows=[(42,)], worker="w1", elapsed_ms=5
-        )
+        return SimpleNamespace(columns=["A"], rows=[(42,)], worker="w1", elapsed_ms=5)
 
     monkeypatch.setattr(oracle, "queue_execute_query", fila_falsa)
 
