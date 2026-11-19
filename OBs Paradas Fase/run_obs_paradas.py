@@ -26,14 +26,12 @@ import base64
 import contextlib
 import json
 import os
-import re
-import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Final, NoReturn
 
@@ -43,7 +41,6 @@ sys.path.insert(
 
 import hub_runner as hr  # noqa: E402
 import hub_whatsapp as hw  # noqa: E402
-import oracle_queue as fila  # noqa: E402
 from automation_log import ensure_utf8_streams  # noqa: E402
 
 AUTOMACAO: Final[str] = "OBs Paradas Fase"
@@ -81,43 +78,58 @@ MENSAGEM_DRY_RUN_FIM: Final[str] = (
 MENSAGEM_ADIADO: Final[str] = (
     "WhatsApp adiado por lock ou cooldown da sessao hub-global."
 )
-_PADRAO_TS: Final[re.Pattern[str]] = re.compile(
-    r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
-)
-_COMENTARIO_INLINE: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
-# Limpeza dos Chrome zumbis do motor WhatsApp (Invoke-CimInstance do run.ps1), em
-# EncodedCommand para nao depender de aspas. O caminho da sessao chega por HUB_WA_AUTH_DIR.
-# O daemon WhatsApp (opt-in, 1.3.117) usa o mesmo perfil e vive entre execucoes: ele e toda
-# a sua arvore de descendentes ficam fora da limpeza, como em Select-WhatsAppStaleProcessIds.
+# Limpeza dos Chrome zumbis do motor WhatsApp (Get-CimInstance), em EncodedCommand para
+# nao depender de aspas. O caminho da sessao chega por HUB_WA_AUTH_DIR e o clientId por
+# HUB_WA_CLIENT_ID. Sob mutex Global\AutomationHub_WA_<clientId> (TryEnter/WaitOne(0)),
+# poupa processos do daemon WhatsApp e processos Chrome com menos de 10 s de vida.
 _SCRIPT_LIMPEZA_CHROME: Final[str] = """\
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $pasta = $env:HUB_WA_AUTH_DIR
-$todos = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
-$filhos = @{}
-foreach ($p in $todos) {
-    $pai = [int]$p.ParentProcessId
-    if (-not $filhos.ContainsKey($pai)) { $filhos[$pai] = New-Object 'System.Collections.Generic.List[int]' }
-    $filhos[$pai].Add([int]$p.ProcessId)
-}
-$protegidos = New-Object 'System.Collections.Generic.HashSet[int]'
-$fila = New-Object 'System.Collections.Generic.Queue[int]'
-foreach ($p in $todos) {
-    if ($p.Name -eq 'node.exe' -and $p.CommandLine -and $p.CommandLine -like '*whatsapp-daemon.js*') {
-        if ($protegidos.Add([int]$p.ProcessId)) { $fila.Enqueue([int]$p.ProcessId) }
+$clientRaw = if ([string]::IsNullOrWhiteSpace($env:HUB_WA_CLIENT_ID)) { 'hub-global' } else { $env:HUB_WA_CLIENT_ID }
+$safeClient = $clientRaw -replace '[^A-Za-z0-9_.-]', '_'
+$mutex = New-Object System.Threading.Mutex($false, ('Global\\AutomationHub_WA_' + $safeClient))
+$owned = $false
+try {
+    try { $owned = $mutex.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $owned = $true }
+    if (-not $owned) {
+        Write-Output 'TOTAL 0'
+        exit 0
+    }
+    $agora = Get-Date
+    $todos = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $filhos = @{}
+    foreach ($p in $todos) {
+        $pai = [int]$p.ParentProcessId
+        if (-not $filhos.ContainsKey($pai)) { $filhos[$pai] = New-Object 'System.Collections.Generic.List[int]' }
+        $filhos[$pai].Add([int]$p.ProcessId)
+    }
+    $protegidos = New-Object 'System.Collections.Generic.HashSet[int]'
+    $fila = New-Object 'System.Collections.Generic.Queue[int]'
+    foreach ($p in $todos) {
+        if ($p.Name -eq 'node.exe' -and $p.CommandLine -and $p.CommandLine -like '*whatsapp-daemon.js*') {
+            if ($protegidos.Add([int]$p.ProcessId)) { $fila.Enqueue([int]$p.ProcessId) }
+        }
+    }
+    while ($fila.Count -gt 0) {
+        $atual = $fila.Dequeue()
+        if (-not $filhos.ContainsKey($atual)) { continue }
+        foreach ($f in $filhos[$atual]) { if ($protegidos.Add($f)) { $fila.Enqueue($f) } }
+    }
+    $zumbis = @($todos | Where-Object {
+        $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($pasta) -and
+        -not $protegidos.Contains([int]$_.ProcessId) -and
+        ($null -eq $_.CreationDate -or ($agora - [datetime]$_.CreationDate).TotalSeconds -ge 10)
+    })
+    Write-Output ('TOTAL ' + $zumbis.Count)
+    foreach ($proc in $zumbis) {
+        try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop }
+        catch [System.Exception] { Write-Output ('FALHA ' + $proc.ProcessId + ' ' + $_.Exception.Message) }
     }
 }
-while ($fila.Count -gt 0) {
-    $atual = $fila.Dequeue()
-    if (-not $filhos.ContainsKey($atual)) { continue }
-    foreach ($f in $filhos[$atual]) { if ($protegidos.Add($f)) { $fila.Enqueue($f) } }
-}
-$zumbis = @($todos | Where-Object {
-    $_.Name -eq 'chrome.exe' -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($pasta) -and
-    -not $protegidos.Contains([int]$_.ProcessId) })
-Write-Output ('TOTAL ' + $zumbis.Count)
-foreach ($proc in $zumbis) {
-    try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop }
-    catch [System.Exception] { Write-Output ('FALHA ' + $proc.ProcessId + ' ' + $_.Exception.Message) }
+finally {
+    if ($owned) { try { $mutex.ReleaseMutex() } catch [System.ApplicationException] {} }
+    $mutex.Dispose()
 }
 """
 
@@ -200,15 +212,6 @@ def _sair(
     raise _SaidaAntecipada(codigo, mensagem, contagens)
 
 
-def _aviso(ctx: hr.HubRunContext, step: str | None = None) -> Callable[[str], None]:
-    """Repassa avisos das bibliotecas ao log da execucao como evento WARN."""
-
-    def avisar(mensagem: str) -> None:
-        hr.log(ctx, mensagem, "WARN", step=step)
-
-    return avisar
-
-
 def _texto(valor: object) -> str:
     """Valor do JSON como texto, como o [string] do PowerShell: nulo vira vazio."""
     return "" if valor is None else str(valor)
@@ -273,88 +276,6 @@ def _ler_json(caminho: Path) -> object:
     return dados
 
 
-def _gravar_json(caminho: Path, dados: object) -> None:
-    """Grava JSON em UTF-8 sem BOM."""
-    caminho.write_text(
-        json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-
-def _ler_linha_env(linha: str) -> tuple[str, str] | None:
-    """Par chave/valor de uma linha do .env, como ConvertFrom-EnvLine."""
-    texto = linha.strip()
-    if not texto or texto.startswith("#"):
-        return None
-    partes = texto.split("=", 1)
-    if len(partes) != 2:
-        return None
-    chave = partes[0].strip()
-    valor = _COMENTARIO_INLINE.sub("", partes[1].strip()).strip()
-    if not chave or not valor:
-        return None
-    return chave, valor
-
-
-def _carregar_env(raiz: Path) -> str | None:
-    """Carrega o .env da raiz no ambiente (Import-HubEnv). Devolve o erro de leitura, se houver."""
-    caminho = raiz / ".env"
-    if not caminho.exists():
-        return None
-    try:
-        conteudo = caminho.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError as exc:
-        return str(exc)
-    for linha in conteudo.splitlines():
-        par = _ler_linha_env(linha)
-        if par is not None:
-            os.environ[par[0]] = par[1]
-    return None
-
-
-def _telemetria_padrao(raiz: Path) -> hr.TelemetryClient | None:
-    """Cliente HTTP da telemetria quando o .env traz ORCHESTRATOR_API_KEY."""
-    chave = hr.read_api_key(raiz)
-    return hr.HttpTelemetryClient(chave) if chave else None
-
-
-def _modo_driver() -> str:
-    """ORACLE_DRIVER_MODE normalizado; ausente vale 'auto', o padrao do .env.example."""
-    bruto = os.environ.get("ORACLE_DRIVER_MODE", "").strip().lower()
-    return bruto or "auto"
-
-
-def _resultado_oracle() -> hr.OraclePreflight:
-    """Check Oracle do pre-flight (Test-AutomationPreFlight -CheckOracle), com modo, conexao e fila."""
-    return hr.oracle_preflight(
-        modo=_modo_driver(),
-        conexao=os.environ.get("ORACLE_CONNECT_STRING", ""),
-        pasta_fila=fila.get_queue_dir(),
-    )
-
-
-def _espaco_livre_gb(caminho: Path) -> float:
-    """Espaco livre, em GB, na unidade que contem o caminho."""
-    return shutil.disk_usage(caminho.anchor or str(caminho)).free / (1024**3)
-
-
-def _linha_disco(raiz: Path) -> str:
-    """Linha de disco do pre-flight: ERRO abaixo de 1 GB livre, WARN se nao der para ler."""
-    try:
-        livre = round(_espaco_livre_gb(raiz), 2)
-    except OSError:
-        return "WARN: Falha ao ler espaco em disco (Ignorado)"
-    if livre < 1.0:
-        return f"ERRO: Disco critico ({livre} GB)"
-    return f"OK: Disco estavel ({livre} GB)"
-
-
-def _linha_caminho(caminho: Path) -> str:
-    """Linha de um path do pre-flight (CheckPaths)."""
-    if caminho.exists():
-        return f"OK: Path: {caminho.name}"
-    return f"ERRO: Path inacessivel: {caminho.name}"
-
-
 def _caminhos_preflight(caminhos: Caminhos) -> tuple[Path, ...]:
     """Interpretador e arquivos que o pre-flight confere (CheckPaths do run.ps1)."""
     return (
@@ -365,58 +286,11 @@ def _caminhos_preflight(caminhos: Caminhos) -> tuple[Path, ...]:
     )
 
 
-def _pre_flight_automacao(
-    ctx: hr.HubRunContext,
-    caminhos: Sequence[Path],
-    oracle: hr.OraclePreflight | None = None,
-) -> bool:
-    """Test-AutomationPreFlight: disco, paths e, quando pedido, as linhas do check Oracle."""
-    hr.log(ctx, "Iniciando Pre-Flight Check...")
-    resultados = [_linha_disco(ctx.raiz)]
-    resultados.extend(_linha_caminho(caminho) for caminho in caminhos)
-    if oracle is not None:
-        resultados.extend(oracle.linhas)
-    ok = not any(linha.startswith(("ERRO:", "FAIL:")) for linha in resultados)
-    hr.log(ctx, "Pre-Flight: " + " | ".join(resultados), "INFO" if ok else "ERRO")
-    return ok
-
-
-def _resolver_destino(target: object, origem: Path) -> str:
-    """Destino real do envio (Resolve-WhatsAppTarget): contactIdEnv vence; o contactId e so placeholder."""
-    sufixo = f" ({origem})"
-    if not isinstance(target, dict):
-        raise ValueError(
-            f"Destino do WhatsApp ausente: 'target'{sufixo} nao declara contactId, "
-            "contactPhone nem contactIdEnv."
-        )
-    variavel = target.get("contactIdEnv")
-    if _verdadeiro_ps(variavel):
-        valor = os.environ.get(str(variavel), "")
-        if not valor.strip():
-            raise ValueError(
-                f"Destino do WhatsApp ausente: variavel de ambiente '{variavel}'{sufixo} "
-                "nao esta definida ou esta vazia. O contactId do config e apenas "
-                "placeholder de schema, nunca um destino real."
-            )
-        return valor
-    placeholder = (
-        target.get("contactId")
-        if _verdadeiro_ps(target.get("contactId"))
-        else target.get("contactPhone")
-    )
-    if placeholder is None or not str(placeholder).strip():
-        raise ValueError(
-            f"Destino do WhatsApp ausente: 'target'{sufixo} nao declara contactId, "
-            "contactPhone nem contactIdEnv."
-        )
-    return str(placeholder)
-
-
 def _checar_whatsapp(ctx: hr.HubRunContext, caminho: Path) -> bool:
     """Check WhatsApp do pre-flight: o destino do target precisa resolver."""
     try:
-        cfg = _ler_json(caminho)
-        _resolver_destino(_campo(cfg, "target"), caminho)
+        cfg = hw.read_whatsapp_config(caminho)
+        hw.resolve_whatsapp_target(_campo(cfg, "target"), caminho)
     except (OSError, ValueError) as exc:
         hr.log(ctx, f"Pre-Flight WhatsApp falhou: {exc}", "ERRO", step="preflight")
         return False
@@ -425,7 +299,7 @@ def _checar_whatsapp(ctx: hr.HubRunContext, caminho: Path) -> bool:
 
 def _outros_checks(ctx: hr.HubRunContext, caminhos: Caminhos) -> bool:
     """OutrosChecks do pre-flight: paths e WhatsApp, sem o check Oracle (como no run.ps1)."""
-    basico = _pre_flight_automacao(ctx, _caminhos_preflight(caminhos))
+    basico = hr.run_preflight(ctx, _caminhos_preflight(caminhos), step=None)
     return basico and _checar_whatsapp(ctx, caminhos.wa_config)
 
 
@@ -434,9 +308,9 @@ def _preflight(sessao: _Sessao) -> None:
     ctx = sessao.ctx
     caminhos = sessao.caminhos
     hr.start_step(ctx, "preflight", mensagem="Oracle, Python e WhatsApp configurados")
-    oracle = _resultado_oracle()
-    passou = _pre_flight_automacao(
-        ctx, _caminhos_preflight(caminhos), oracle
+    oracle = hr.oracle_preflight_from_env()
+    passou = hr.run_preflight(
+        ctx, _caminhos_preflight(caminhos), oracle, step=None
     ) and _checar_whatsapp(ctx, caminhos.wa_config)
     hr.complete_step(ctx, ok=passou)
     if not passou:
@@ -444,40 +318,6 @@ def _preflight(sessao: _Sessao) -> None:
             oracle, outros_checks=lambda: _outros_checks(ctx, caminhos)
         )
         _sair(codigo, "FALHA NO PRE-FLIGHT CHECK. Abortando.")
-
-
-def _linha_expirada(linha: str, corte: date) -> bool:
-    """True quando o ts do evento e anterior ao corte da retencao."""
-    casamento = _PADRAO_TS.match(linha)
-    if casamento is None:
-        return False
-    try:
-        return date.fromisoformat(casamento.group(1)) < corte
-    except ValueError:
-        return False
-
-
-def _rotacionar_log(caminho: Path, dias: int = RETENCAO_LOG_DIAS) -> None:
-    """Remove do jsonl os eventos anteriores a retencao (Invoke-LogRotation -KeepDays 15)."""
-    if not caminho.exists():
-        return
-    corte = date.today() - timedelta(days=dias)
-    with contextlib.suppress(OSError, ValueError):
-        conteudo = caminho.read_text(encoding="utf-8-sig")
-        linhas = [linha.rstrip("\r") for linha in conteudo.split("\n") if linha.strip()]
-        mantidas = [linha for linha in linhas if not _linha_expirada(linha, corte)]
-        if len(mantidas) == len(linhas):
-            return
-        temporario = caminho.with_name(caminho.name + ".tmp")
-        with temporario.open("w", encoding="utf-8-sig", newline="\r\n") as arquivo:
-            arquivo.write("".join(f"{linha}\n" for linha in mantidas))
-        os.replace(temporario, caminho)
-
-
-def _remover(caminho: Path) -> None:
-    """Remove um arquivo se existir; falha de remocao e ignorada, como no run.ps1."""
-    with contextlib.suppress(OSError):
-        caminho.unlink(missing_ok=True)
 
 
 def _interpretar_limpeza(linhas: Sequence[str]) -> tuple[int, list[tuple[str, str]]]:
@@ -494,12 +334,18 @@ def _interpretar_limpeza(linhas: Sequence[str]) -> tuple[int, list[tuple[str, st
     return total, falhas
 
 
-def _executar_limpeza_chrome(pasta_auth: str) -> list[str]:
+def _executar_limpeza_chrome(
+    pasta_auth: str, client_id: str = CLIENTE_PADRAO
+) -> list[str]:
     """Roda a limpeza em powershell.exe (Get-CimInstance e Stop-Process) e devolve a saida."""
     codificado = base64.b64encode(_SCRIPT_LIMPEZA_CHROME.encode("utf-16-le")).decode(
         "ascii"
     )
-    ambiente = {**os.environ, "HUB_WA_AUTH_DIR": pasta_auth}
+    ambiente = {
+        **os.environ,
+        "HUB_WA_AUTH_DIR": pasta_auth,
+        "HUB_WA_CLIENT_ID": client_id,
+    }
     resultado = subprocess.run(
         [
             "powershell.exe",
@@ -531,8 +377,16 @@ def _limpar_chrome_zumbis(sessao: _Sessao) -> None:
         )
         return
     pasta_auth = hw.get_whatsapp_auth_path().lower()
+    client_id = CLIENTE_PADRAO
     try:
-        saida = _executar_limpeza_chrome(pasta_auth)
+        cfg = hw.read_whatsapp_config(sessao.caminhos.wa_config)
+        bruto_cid = _campo(_campo(cfg, "auth"), "clientId")
+        if _verdadeiro_ps(bruto_cid):
+            client_id = _texto(bruto_cid)
+    except (OSError, ValueError):
+        client_id = CLIENTE_PADRAO
+    try:
+        saida = _executar_limpeza_chrome(pasta_auth, client_id)
     except (OSError, subprocess.SubprocessError) as exc:
         hr.log(
             ctx,
@@ -772,13 +626,13 @@ def _destino_whatsapp(sessao: _Sessao) -> tuple[str, str]:
     """Destino (Resolve-WhatsAppTarget) e clientId da sessao do whatsapp-config.json."""
     caminho = sessao.caminhos.wa_config
     try:
-        cfg = _ler_json(caminho)
+        cfg = hw.read_whatsapp_config(caminho)
     except (OSError, ValueError) as exc:
         raise _SaidaAntecipada(
             EXIT_FALHA_CRITICA,
             f"Falha ao interpretar '{caminho}' como JSON: {exc}",
         ) from exc
-    destino = _resolver_destino(_campo(cfg, "target"), caminho)
+    destino = hw.resolve_whatsapp_target(_campo(cfg, "target"), caminho)
     cliente = _campo(_campo(cfg, "auth"), "clientId")
     return destino, (_texto(cliente) if _verdadeiro_ps(cliente) else CLIENTE_PADRAO)
 
@@ -815,13 +669,15 @@ def _ler_resultados_lote(ctx: hr.HubRunContext, caminhos: Caminhos) -> list[obje
             resultados = _como_lista(_ler_json(caminhos.batch_result))
         except (OSError, ValueError) as exc:
             hr.log(ctx, f"Aviso: falha ao ler batch_result.json: {exc}", "WARN")
-        _remover(caminhos.batch_result)
-    _remover(caminhos.batch_input)
+        hr.remove_quietly(caminhos.batch_result)
+    hr.remove_quietly(caminhos.batch_input)
     return resultados
 
 
-def _enviar_lote(sessao: _Sessao, chat_id: str, client_id: str) -> list[object]:
-    """Envio BATCH pelo Send-WhatsApp.ps1; 21 e 22 saem como no run.ps1."""
+def _enviar_lote(
+    sessao: _Sessao, chat_id: str, client_id: str
+) -> tuple[int, list[object]]:
+    """Envio BATCH pelo Send-WhatsApp.ps1; 22 sai direto, demais codigos leem e limpam o lote."""
     ctx = sessao.ctx
     caminhos = sessao.caminhos
     codigo = hw.send_whatsapp(
@@ -837,13 +693,11 @@ def _enviar_lote(sessao: _Sessao, chat_id: str, client_id: str) -> list[object]:
     )
     hr.log(ctx, f"Motor WhatsApp Batch ExitCode={codigo}", step="dispatch")
     hr.complete_step(ctx, ok=codigo in (0, EXIT_ADIADO))
-    if codigo == EXIT_REAUTENTICACAO:
-        _sair(EXIT_REAUTENTICACAO, "WhatsApp requer reautenticacao.")
     if codigo == EXIT_ADIADO:
-        _remover(caminhos.batch_result)
-        _remover(caminhos.batch_input)
+        hr.remove_quietly(caminhos.batch_result)
+        hr.remove_quietly(caminhos.batch_input)
         _sair(EXIT_ADIADO, MENSAGEM_ADIADO)
-    return _ler_resultados_lote(ctx, caminhos)
+    return codigo, _ler_resultados_lote(ctx, caminhos)
 
 
 def _sucesso_da_fase(resultados: Sequence[object], chave: str) -> bool:
@@ -892,7 +746,7 @@ def _persistir(sessao: _Sessao, estado: dict[str, Any]) -> None:
     """Etapa commit: grava delivery_state.json e promove o .tmp so com todas as fases entregues."""
     ctx = sessao.ctx
     hr.start_step(ctx, "commit", mensagem="Persistindo delivery_state e state Oracle")
-    _gravar_json(
+    hr.write_json_atomic(
         sessao.caminhos.entrega,
         {"last_sent_hash": estado["last_sent_hash"], "phases": estado["phases"]},
     )
@@ -922,7 +776,24 @@ def _despachar(
     chat_id, client_id = _destino_whatsapp(sessao)
     if sessao.dry_run:
         return _simular_envio(sessao, pendentes, chat_id, client_id)
-    resultados = _enviar_lote(sessao, chat_id, client_id)
+    codigo_envio, resultados = _enviar_lote(sessao, chat_id, client_id)
+    if codigo_envio == EXIT_REAUTENTICACAO:
+        if any(_verdadeiro_ps(_campo(item, "success")) for item in resultados):
+            _aplicar_resultados(ctx, pendentes, resultados, estado)
+            hr.start_step(
+                ctx,
+                "commit",
+                mensagem="Persistindo delivery_state parcial (reautenticacao)",
+            )
+            hr.write_json_atomic(
+                caminhos.entrega,
+                {
+                    "last_sent_hash": estado["last_sent_hash"],
+                    "phases": estado["phases"],
+                },
+            )
+            hr.complete_step(ctx, ok=False)
+        _sair(EXIT_REAUTENTICACAO, "WhatsApp requer reautenticacao.")
     falhas = _aplicar_resultados(ctx, pendentes, resultados, estado)
     _persistir(sessao, estado)
     contagens = {
@@ -939,8 +810,8 @@ def _despachar(
 def _fluxo(sessao: _Sessao) -> int:
     """Etapas extract, transform, dispatch e commit, executadas dentro do lock OBP-04."""
     ctx = sessao.ctx
-    _rotacionar_log(ctx.log_path)
-    _remover(sessao.caminhos.resultado)
+    hr.rotate_log(ctx.log_path, RETENCAO_LOG_DIAS)
+    hr.remove_quietly(sessao.caminhos.resultado)
     _limpar_chrome_zumbis(sessao)
     extracao = _extrair(sessao)
     if extracao.idempotent:
@@ -998,7 +869,7 @@ def _limpar_estado_tmp(sessao: _Sessao) -> None:
     tmp = sessao.caminhos.obs_state_tmp
     if not tmp.exists():
         return
-    _remover(tmp)
+    hr.remove_quietly(tmp)
     if not sessao.encerrado:
         hr.log(sessao.ctx, f"Limpeza finally: {tmp} removido.", "DEBUG", step="cleanup")
 
@@ -1018,7 +889,7 @@ def _com_lock(sessao: _Sessao) -> int:
     ctx = sessao.ctx
     sessao.protegida = True
     hr.start_step(ctx, "lock", mensagem="Adquirindo lock global")
-    with hr.AutomationMutex(CHAVE_LOCK, on_warning=_aviso(ctx, "lock")):
+    with hr.AutomationMutex(CHAVE_LOCK, on_warning=hr.warn_logger(ctx, "lock")):
         hr.log(
             ctx,
             f"Lock global adquirido com sucesso (Mutex: {hr.nome_mutex(CHAVE_LOCK)}).",
@@ -1073,7 +944,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     argumentos = list(sys.argv[1:] if argv is None else argv)
     dry_run = "--dry-run" in argumentos
     posicionais = [arg for arg in argumentos if arg != "--dry-run"]
-    aviso_env = _carregar_env(RAIZ)
+    aviso_env = hr.load_env_file(RAIZ)
     ctx = hr.create_run_context(
         hr.AutomationSpec(
             automacao=AUTOMACAO,
@@ -1084,7 +955,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             non_failure_codes=NAO_FALHA,
         ),
         exec_id=posicionais[0] if posicionais else "",
-        telemetry=_telemetria_padrao(RAIZ),
+        telemetry=hr.default_telemetry(RAIZ),
         project_root=RAIZ,
     )
     return executar(

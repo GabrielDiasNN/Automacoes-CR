@@ -32,13 +32,47 @@ if (-not (Get-Command $NodeExe -ErrorAction SilentlyContinue)) {
     }
 }
 
-# O daemon (opt-in) segura o perfil do WhatsApp: abrir a sessao visivel aqui conflitaria com ele.
+# O daemon (opt-in) segura o perfil do WhatsApp: abrir a sessao visivel para o mesmo perfil conflitaria com ele.
 # Mesma deteccao CIM da rota de Send-WhatsApp.ps1 (Get-WhatsAppDaemonProcess, em Lib-WhatsAppBatch.psm1).
 Import-Module (Join-Path $LibDir "Lib-WhatsAppBatch.psm1") -Force
-if (@(Get-WhatsAppDaemonProcess).Count -gt 0) {
-    Write-Host "[ERRO] O daemon WhatsApp (whatsapp-daemon.js) esta segurando a sessao do perfil." -ForegroundColor Red
-    Write-Host "  Pare o daemon antes de abrir a sessao visivel. Nada foi aberto." -ForegroundColor Yellow
+$configModule = Join-Path $LibDir "Lib-Config.psm1"
+if (Test-Path -LiteralPath $configModule) {
+    Import-Module $configModule -Force
+}
+
+$daemonsAtivos = @()
+try {
+    $daemonsAtivos = @(Get-WhatsAppDaemonProcess -ThrowOnError)
+}
+catch [System.Exception] {
+    Write-Host "[ERRO] Falha ao consultar processos do daemon WhatsApp: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  Operacao abortada por seguranca para nao conflitar com sessao ativa." -ForegroundColor Yellow
     exit 1
+}
+
+if ($daemonsAtivos.Count -gt 0) {
+    $daemonPorta = [string]$env:WHATSAPP_DAEMON_PORT
+    $daemonToken = [string]$env:WHATSAPP_DAEMON_TOKEN
+    if (Get-Command Get-EnvFileValue -ErrorAction SilentlyContinue) {
+        if ([string]::IsNullOrWhiteSpace($daemonPorta)) {
+            $daemonPorta = [string](Get-EnvFileValue -Key "WHATSAPP_DAEMON_PORT")
+        }
+        if ([string]::IsNullOrWhiteSpace($daemonToken)) {
+            $daemonToken = [string](Get-EnvFileValue -Key "WHATSAPP_DAEMON_TOKEN")
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($daemonPorta)) { $daemonPorta = "8765" }
+
+    $saudeDaemon = Get-WhatsAppDaemonHealth -Port $daemonPorta -Token $daemonToken
+    $daemonClientId = [string]$saudeDaemon.ClientId
+    if (-not [string]::IsNullOrWhiteSpace($daemonClientId) -and -not $daemonClientId.Equals($ClientId, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-Host "[AVISO] Ha daemon WhatsApp ativo em outro perfil ('$daemonClientId'); seguindo com a sessao visivel '$ClientId'." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "[ERRO] O daemon WhatsApp (whatsapp-daemon.js) esta segurando a sessao do perfil '$ClientId'." -ForegroundColor Red
+        Write-Host "  Pare o daemon antes de abrir a sessao visivel. Nada foi aberto." -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 $env:NODE_PATH = Join-Path $LibDir "node_modules"
@@ -65,7 +99,8 @@ $RepoRoot = Split-Path -Parent $LibDir
 $EnvFile = Join-Path $RepoRoot ".env"
 if (-not (Test-Path $EnvFile)) {
     Write-Host "[AVISO] .env nao encontrado — NAO foi possivel verificar automacoes em execucao." -ForegroundColor Yellow
-} else {
+}
+else {
     try {
         $apiKey = ""
         Get-Content $EnvFile | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
@@ -74,7 +109,8 @@ if (-not (Test-Path $EnvFile)) {
         }
         if (-not $apiKey) {
             Write-Host "[AVISO] ORCHESTRATOR_API_KEY ausente no .env — NAO foi possivel verificar automacoes em execucao." -ForegroundColor Yellow
-        } else {
+        }
+        else {
             $automacoesDoCanal = @(Get-AutomacoesDoCanal -ClientId $ClientId -RepoRoot $RepoRoot)
             if ($automacoesDoCanal.Count -eq 0) {
                 Write-Host "[AVISO] Nenhuma automacao encontrada usando o clientId '$ClientId' — verificacao sem alvo." -ForegroundColor Yellow
@@ -85,8 +121,8 @@ if (-not (Test-Path $EnvFile)) {
             # lista crua: filtrar $resp direto nunca casava nada e a trava ficava inoperante.
             $execucoes = if ($null -ne $resp.items) { $resp.items } else { $resp }
             $runningWhatsApp = @($execucoes | Where-Object {
-                $automacoesDoCanal -contains $_.automation_name
-            })
+                    $automacoesDoCanal -contains $_.automation_name
+                })
             if ($runningWhatsApp.Count -gt 0) {
                 Write-Host ""
                 Write-Host "[ATENCAO] Ha uma automacao WhatsApp em execucao agora:" -ForegroundColor Yellow
@@ -103,7 +139,8 @@ if (-not (Test-Path $EnvFile)) {
                 $confirm = "n"
                 try {
                     $confirm = Read-Host "  Continuar mesmo assim? (s/N)"
-                } catch [System.Exception] {
+                }
+                catch [System.Exception] {
                     Write-Host "  Console nao interativo — cancelando por seguranca." -ForegroundColor Gray
                 }
                 if ($confirm -ne "s" -and $confirm -ne "S") {
@@ -112,7 +149,8 @@ if (-not (Test-Path $EnvFile)) {
                 }
             }
         }
-    } catch [System.Exception] {
+    }
+    catch [System.Exception] {
         # Uma guarda silenciosa e indistinguivel de uma guarda que passou: Orchestrator fora
         # do ar, API Key errada e timeout de rede produziriam o mesmo "nenhuma automacao
         # rodando". O operador precisa saber que a verificacao NAO foi feita.
@@ -139,10 +177,12 @@ $nodeExit = 0
 try {
     & $NodeExe $SessionScript $ClientId
     $nodeExit = $LASTEXITCODE
-} catch [System.Exception] {
+}
+catch [System.Exception] {
     Write-Host "[ERRO] Falha ao iniciar sessao: $_" -ForegroundColor Red
     $nodeExit = 1
-} finally {
+}
+finally {
     if ($nodeExit -ne 0) {
         Write-Host ""
         Write-Host "  Sessao encerrada com falha (ExitCode: $nodeExit)." -ForegroundColor Yellow

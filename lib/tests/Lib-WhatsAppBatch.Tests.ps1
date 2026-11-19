@@ -14,6 +14,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 
 public class FakeHttpResponse
 {
@@ -32,6 +33,37 @@ public class FakeHttpResponse
     {
         return new MemoryStream(Encoding.UTF8.GetBytes(_corpo));
     }
+}
+
+public class FakePs7HttpContent
+{
+    private readonly string _corpo;
+
+    public FakePs7HttpContent(string corpo)
+    {
+        _corpo = corpo ?? "";
+    }
+
+    public Task<string> ReadAsStringAsync()
+    {
+        return Task.FromResult(_corpo);
+    }
+}
+
+public class FakePs7HttpResponse
+{
+    private readonly int _status;
+    private readonly FakePs7HttpContent _content;
+
+    public FakePs7HttpResponse(int status, string corpo)
+    {
+        _status = status;
+        _content = new FakePs7HttpContent(corpo);
+    }
+
+    public HttpStatusCode StatusCode { get { return (HttpStatusCode)_status; } }
+
+    public FakePs7HttpContent Content { get { return _content; } }
 }
 
 public class FakeHttpErrorException : Exception
@@ -333,5 +365,89 @@ Describe "Select-WhatsAppStaleProcessIds" {
         $agora = [datetime]"2026-11-18 12:00:00"
         $ids = @(Select-WhatsAppStaleProcessIds -Processes @() -DaemonPids @() -Now $agora)
         $ids.Count | Should -Be 0
+    }
+}
+
+Describe "Get-WhatsAppDaemonEnvironment" {
+    It "descarta segredos do Orchestrator/Oracle/SMTP e mantem apenas allowlist e variaveis do daemon" {
+        # Valor em variavel separada para o fixture nao disparar o gate Test-ZeroTrust,
+        # e caminhos sobre $TestDrive para nao violar Test-PortablePaths.
+        $valorFalso = "ficticio-" + "nao-deve-vazar"
+        $fakePath = Join-Path $TestDrive "bin"
+        $fakeSysRoot = Join-Path $TestDrive "win"
+        $fakeAuth = Join-Path $TestDrive "wa_auth"
+        $origem = @{
+            PATH                     = $fakePath
+            SystemRoot               = $fakeSysRoot
+            WHATSAPP_AUTH_PATH       = $fakeAuth
+            ORCHESTRATOR_API_KEY     = $valorFalso
+            ORACLE_READONLY_PASSWORD = $valorFalso
+            MT_EMAIL_TO              = "lista@empresa.local"
+            SMTP_PASSWORD            = $valorFalso
+        }
+
+        $filtrado = Get-WhatsAppDaemonEnvironment `
+            -Token ("t" * 40) `
+            -Port "8765" `
+            -ClientId "hub-global" `
+            -MaxNotReadyMs "60000" `
+            -SourceEnvironment $origem
+
+        $filtrado.ContainsKey("ORCHESTRATOR_API_KEY") | Should -BeFalse
+        $filtrado.ContainsKey("ORACLE_READONLY_PASSWORD") | Should -BeFalse
+        $filtrado.ContainsKey("MT_EMAIL_TO") | Should -BeFalse
+        $filtrado.ContainsKey("SMTP_PASSWORD") | Should -BeFalse
+
+        $filtrado["PATH"] | Should -Be $fakePath
+        $filtrado["SystemRoot"] | Should -Be $fakeSysRoot
+        $filtrado["WHATSAPP_AUTH_PATH"] | Should -Be $fakeAuth
+        $filtrado["WHATSAPP_DAEMON_TOKEN"] | Should -Be ("t" * 40)
+        $filtrado["WHATSAPP_DAEMON_PORT"] | Should -Be "8765"
+        $filtrado["WHATSAPP_DAEMON_CLIENT_ID"] | Should -Be "hub-global"
+        $filtrado["WHATSAPP_DAEMON_MAX_NOT_READY_MS"] | Should -Be "60000"
+    }
+}
+
+Describe "Read-WhatsAppHttpErrorBody e compatibilidade PS 5.1 / PS 7" {
+    It "le o corpo a partir de HttpWebResponse (PS 5.1 GetResponseStream)" {
+        $resp = [FakeHttpResponse]::new(500, '{"error":"ps51"}')
+        Read-WhatsAppHttpErrorBody -Resposta $resp | Should -Be '{"error":"ps51"}'
+    }
+
+    It "le o corpo a partir de ErrorDetails.Message (PS 7) e Content.ReadAsStringAsync" {
+        $erroComDetalhes = [pscustomobject]@{
+            ErrorDetails = [pscustomobject]@{ Message = '{"error":"ps7-details"}' }
+        }
+        Read-WhatsAppHttpErrorBody -ErrorRecord $erroComDetalhes -Resposta $null | Should -Be '{"error":"ps7-details"}'
+
+        $respPs7 = [FakePs7HttpResponse]::new(500, '{"error":"ps7-content"}')
+        Read-WhatsAppHttpErrorBody -ErrorRecord $null -Resposta $respPs7 | Should -Be '{"error":"ps7-content"}'
+    }
+
+    It "Invoke-WhatsAppDaemonBatch em resposta estilo PS 7 (sem GetResponseStream): 503 vira 22 e 500 grava results parciais" {
+        $fx = New-FixturesDaemon
+        Mock Invoke-WebRequest -ModuleName Lib-WhatsAppBatch {
+            throw ([FakeHttpErrorException]::new("HTTP 503", [FakePs7HttpResponse]::new(503, '{"error":"not_connected"}')))
+        }
+        (Invoke-LoteDaemonTeste -Entrada $fx.Entrada -Saida $fx.Saida) | Should -Be 22
+
+        $fx2 = New-FixturesDaemon
+        Mock Invoke-WebRequest -ModuleName Lib-WhatsAppBatch {
+            throw ([FakeHttpErrorException]::new("HTTP 500", [FakePs7HttpResponse]::new(500, '{"error":"boom","results":[{"phase_key":"page_01","success":true,"error":null}]}')))
+        }
+        (Invoke-LoteDaemonTeste -Entrada $fx2.Entrada -Saida $fx2.Saida) | Should -Be 24
+        Test-Path -LiteralPath $fx2.Saida | Should -BeTrue
+        $parsed = [System.IO.File]::ReadAllText($fx2.Saida, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        @($parsed).Count | Should -Be 1
+        $parsed[0].phase_key | Should -Be "page_01"
+    }
+}
+
+Describe "Get-WhatsAppDaemonProcess (-ThrowOnError)" {
+    It "sem -ThrowOnError devolve vazio se CIM falhar; com -ThrowOnError relanca a excecao" {
+        Mock Get-CimInstance -ModuleName Lib-WhatsAppBatch { throw [System.InvalidOperationException]::new("cim indisponivel") }
+
+        @(Get-WhatsAppDaemonProcess).Count | Should -Be 0
+        { Get-WhatsAppDaemonProcess -ThrowOnError } | Should -Throw "*cim indisponivel*"
     }
 }

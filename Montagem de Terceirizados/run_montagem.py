@@ -33,12 +33,11 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
 
@@ -47,7 +46,6 @@ sys.path.insert(
 )
 
 import hub_runner as hr  # noqa: E402
-import oracle_queue as fila  # noqa: E402
 from automation_log import ensure_utf8_streams  # noqa: E402
 
 AUTOMACAO: Final[str] = "Montagem de Terceirizados"
@@ -68,7 +66,6 @@ TENTATIVAS_VALIDACAO: Final[int] = 2
 BACKOFF_VALIDACAO: Final[tuple[int, ...]] = (15, 30)
 RETENCAO_LOG_DIAS: Final[int] = 15
 IDADE_TEMPORARIOS_DIAS: Final[int] = 1
-ESPACO_MINIMO_GB: Final[float] = 1.0
 CAMPOS_RESUMO: Final[tuple[str, ...]] = (
     "total_linhas",
     "total_erros",
@@ -82,9 +79,6 @@ CAMPOS_RESUMO: Final[tuple[str, ...]] = (
 )
 _OPCOES_COM_VALOR: Final[frozenset[str]] = frozenset(
     {"--email-to-test", "--email-cc-test"}
-)
-_PADRAO_TS: Final[re.Pattern[str]] = re.compile(
-    r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
 )
 _SEPARADOR_DESTINOS: Final[re.Pattern[str]] = re.compile(r"[;,]")
 
@@ -202,15 +196,6 @@ def _identidade(texto: str) -> str:
     return texto
 
 
-def _aviso(ctx: hr.HubRunContext, step: str | None = None) -> Callable[[str], None]:
-    """Repassa avisos das bibliotecas ao log da execucao como evento WARN."""
-
-    def avisar(mensagem: str) -> None:
-        hr.log(ctx, mensagem, "WARN", step=step)
-
-    return avisar
-
-
 def _texto(valor: object) -> str:
     """Campo do JSON como texto, como [string] do PS: null vira vazio."""
     return "" if valor is None else str(valor)
@@ -228,18 +213,6 @@ def _primeiro_preenchido(*valores: str) -> str:
         if valor.strip():
             return valor
     return ""
-
-
-def _telemetria_padrao(raiz: Path) -> hr.TelemetryClient | None:
-    """Cliente HTTP da telemetria quando o .env traz ORCHESTRATOR_API_KEY."""
-    chave = hr.read_api_key(raiz)
-    return hr.HttpTelemetryClient(chave) if chave else None
-
-
-def _modo_driver() -> str:
-    """ORACLE_DRIVER_MODE normalizado; ausente vale 'auto', o padrao do .env.example."""
-    bruto = os.environ.get("ORACLE_DRIVER_MODE", "").strip().lower()
-    return bruto or "auto"
 
 
 def _variavel_usuario(nome: str) -> str:
@@ -262,98 +235,9 @@ def _limpar_temporarios_orfaos(pasta: Path) -> None:
                     arquivo.unlink()
 
 
-def _linha_expirada(linha: str, corte: date) -> bool:
-    """True quando o ts do evento e anterior ao corte da retencao."""
-    casamento = _PADRAO_TS.match(linha)
-    if casamento is None:
-        return False
-    try:
-        return date.fromisoformat(casamento.group(1)) < corte
-    except ValueError:
-        return False
-
-
-def _rotacionar_log(caminho: Path, dias: int = RETENCAO_LOG_DIAS) -> None:
-    """Remove do jsonl os eventos anteriores a retencao (Invoke-LogRotation)."""
-    if not caminho.exists():
-        return
-    corte = date.today() - timedelta(days=dias)
-    with contextlib.suppress(OSError, ValueError):
-        conteudo = caminho.read_text(encoding="utf-8-sig")
-        linhas = [linha.rstrip("\r") for linha in conteudo.split("\n") if linha.strip()]
-        mantidas = [linha for linha in linhas if not _linha_expirada(linha, corte)]
-        if len(mantidas) == len(linhas):
-            return
-        temporario = caminho.with_name(caminho.name + ".tmp")
-        with temporario.open("w", encoding="utf-8-sig", newline="\r\n") as arquivo:
-            arquivo.write("".join(f"{linha}\n" for linha in mantidas))
-        os.replace(temporario, caminho)
-
-
-def _remover_quieto(caminho: Path) -> None:
-    """Remove um arquivo se existir; falha de remocao e ignorada (finally do run.ps1)."""
-    with contextlib.suppress(OSError):
-        caminho.unlink(missing_ok=True)
-
-
-def _espaco_livre_gb(caminho: Path) -> float:
-    """Espaco livre, em GB, na unidade que contem o caminho."""
-    return shutil.disk_usage(caminho.anchor or str(caminho)).free / (1024**3)
-
-
-def _linha_disco(raiz: Path) -> str:
-    """Linha de disco do pre-flight: ERRO abaixo de 1 GB livre, WARN se nao der para ler."""
-    try:
-        livre = round(_espaco_livre_gb(raiz), 2)
-    except OSError:
-        return "WARN: Falha ao ler espaco em disco (Ignorado)"
-    if livre < ESPACO_MINIMO_GB:
-        return f"ERRO: Disco critico ({livre} GB)"
-    return f"OK: Disco estavel ({livre} GB)"
-
-
-def _linha_caminho(caminho: Path) -> str:
-    """Linha de um path do pre-flight (CheckPaths)."""
-    if caminho.exists():
-        return f"OK: Path: {caminho.name}"
-    return f"ERRO: Path inacessivel: {caminho.name}"
-
-
-def _pre_flight_automacao(
-    ctx: hr.HubRunContext,
-    caminhos: Sequence[Path],
-    *,
-    checar_oracle: bool,
-    oracle: hr.OraclePreflight | None = None,
-) -> bool:
-    """Test-AutomationPreFlight: disco, paths e, se pedido, as linhas do check Oracle."""
-    hr.log(ctx, "Iniciando Pre-Flight Check...", step="preflight")
-    resultados = [_linha_disco(ctx.raiz)]
-    resultados.extend(_linha_caminho(caminho) for caminho in caminhos)
-    if checar_oracle and oracle is not None:
-        resultados.extend(oracle.linhas)
-    ok = not any(linha.startswith(("ERRO:", "FAIL:")) for linha in resultados)
-    hr.log(
-        ctx,
-        "Pre-Flight: " + " | ".join(resultados),
-        "INFO" if ok else "ERRO",
-        step="preflight",
-    )
-    return ok
-
-
 def _caminhos_preflight(caminhos: Caminhos) -> tuple[Path, ...]:
     """Interpretador e scripts que o pre-flight confere (CheckPaths do run.ps1)."""
     return (Path(sys.executable), caminhos.extract_py, caminhos.validate_py)
-
-
-def _resultado_oracle() -> hr.OraclePreflight:
-    """Check Oracle do pre-flight, com o modo, a conexao e a pasta da fila do ambiente."""
-    return hr.oracle_preflight(
-        modo=_modo_driver(),
-        conexao=os.environ.get("ORACLE_CONNECT_STRING", ""),
-        pasta_fila=fila.get_queue_dir(),
-    )
 
 
 def _preflight(sessao: _Sessao) -> int | None:
@@ -361,8 +245,8 @@ def _preflight(sessao: _Sessao) -> int | None:
     ctx = sessao.ctx
     caminhos = _caminhos_preflight(sessao.caminhos)
     hr.start_step(ctx, "preflight", mensagem="Python, Oracle e paths")
-    oracle = _resultado_oracle()
-    passou = _pre_flight_automacao(ctx, caminhos, checar_oracle=True, oracle=oracle)
+    oracle = hr.oracle_preflight_from_env()
+    passou = hr.run_preflight(ctx, caminhos, oracle)
     hr.complete_step(ctx, ok=passou)
     if passou:
         return None
@@ -371,7 +255,7 @@ def _preflight(sessao: _Sessao) -> int | None:
     )
     return hr.oracle_preflight_exit_code(
         oracle,
-        outros_checks=lambda: _pre_flight_automacao(ctx, caminhos, checar_oracle=False),
+        outros_checks=lambda: hr.run_preflight(ctx, caminhos),
     )
 
 
@@ -624,7 +508,7 @@ def _despachar(sessao: _Sessao, dados: dict[str, Any], texto: str) -> bool:
     caminhos = sessao.caminhos
     hash_atual = _hash_payload(texto)
     estado = hr.read_delivery_state(
-        caminhos.entrega, [CANAL_EMAIL], on_warning=_aviso(ctx)
+        caminhos.entrega, [CANAL_EMAIL], on_warning=hr.warn_logger(ctx)
     )
     if hr.update_delivery_state_hash(estado, hash_atual):
         hr.log(ctx, "Mudanca de conteudo detectada. Resetando status de entrega.")
@@ -685,7 +569,7 @@ def _disparar(sessao: _Sessao) -> bool:
 def _fluxo(sessao: _Sessao) -> int:
     """Etapas extract, transform e dispatch, dentro do lock (corpo do try do run.ps1)."""
     ctx = sessao.ctx
-    _rotacionar_log(ctx.log_path)
+    hr.rotate_log(ctx.log_path, RETENCAO_LOG_DIAS)
     sessao.caminhos.dados(ctx.exec_id).unlink(missing_ok=True)
     extracao = _extrair(sessao)
     if not extracao.success:
@@ -716,7 +600,7 @@ def _limpar_temporarios(sessao: _Sessao) -> None:
         sessao.caminhos.payload(ctx.exec_id),
         sessao.caminhos.cache_tmp,
     ):
-        _remover_quieto(caminho)
+        hr.remove_quietly(caminho)
 
 
 def _gravar_contagens(contagens: dict[str, int]) -> Path:
@@ -738,7 +622,7 @@ def _encerrar(sessao: _Sessao, codigo: int, mensagem: str) -> int:
     try:
         return hr.finish(sessao.ctx, codigo, mensagem, record_counts_path=caminho)
     finally:
-        _remover_quieto(caminho)
+        hr.remove_quietly(caminho)
 
 
 def _fluxo_protegido(sessao: _Sessao) -> int:
@@ -763,7 +647,7 @@ def _com_lock(sessao: _Sessao) -> int:
     with contextlib.ExitStack() as pilha:
         try:
             pilha.enter_context(
-                hr.AutomationMutex(CHAVE_LOCK, on_warning=_aviso(ctx, "lock"))
+                hr.AutomationMutex(CHAVE_LOCK, on_warning=hr.warn_logger(ctx, "lock"))
             )
         except (hr.LockTimeoutError, OSError) as exc:
             hr.complete_step(ctx, ok=False)
@@ -836,7 +720,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             non_failure_codes=(0,),
         ),
         exec_id=opcoes.exec_id,
-        telemetry=_telemetria_padrao(RAIZ),
+        telemetry=hr.default_telemetry(RAIZ),
         project_root=RAIZ,
     )
     return executar(

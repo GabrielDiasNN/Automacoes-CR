@@ -1243,3 +1243,37 @@ def test_send_whatsapp_injeta_hub_log_structured_e_hub_step_no_ambiente(
     env = executor.comandos[0].ambiente
     assert env["HUB_LOG_STRUCTURED"] == "1"
     assert env["HUB_STEP"] == "dispatch"
+
+
+def test_read_whatsapp_config_tolera_bom_e_exige_objeto(tmp_path: Path) -> None:
+    cfg = tmp_path / "whatsapp-config.json"
+    cfg.write_text('{"target": {"contactId": "1@g.us"}}', encoding="utf-8-sig")
+    assert hw.read_whatsapp_config(cfg) == {"target": {"contactId": "1@g.us"}}
+
+    lista = tmp_path / "lista.json"
+    lista.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="raiz nao e um objeto JSON"):
+        hw.read_whatsapp_config(lista)
+
+
+def test_resolve_whatsapp_target_prefere_env_e_valida_vazios(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    origem = tmp_path / "whatsapp-config.json"
+    monkeypatch.setenv("HUB_WA_TARGET_TEST", "120@g.us")
+    assert (
+        hw.resolve_whatsapp_target(
+            {"contactIdEnv": "HUB_WA_TARGET_TEST", "contactId": "placeholder"},
+            origem,
+        )
+        == "120@g.us"
+    )
+    assert hw.resolve_whatsapp_target({"contactId": "5511@g.us"}, origem) == "5511@g.us"
+
+    monkeypatch.delenv("HUB_WA_TARGET_TEST", raising=False)
+    with pytest.raises(ValueError, match="variavel de ambiente 'HUB_WA_TARGET_TEST'"):
+        hw.resolve_whatsapp_target({"contactIdEnv": "HUB_WA_TARGET_TEST"}, origem)
+    with pytest.raises(ValueError, match="Destino do WhatsApp ausente"):
+        hw.resolve_whatsapp_target({}, origem)
+    with pytest.raises(ValueError, match="Destino do WhatsApp ausente"):
+        hw.resolve_whatsapp_target(None, origem)

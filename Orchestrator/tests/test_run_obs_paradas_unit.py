@@ -149,7 +149,7 @@ class _Limpeza:
         self.saida: list[str] = []
         self.chamadas: list[str] = []
 
-    def __call__(self, pasta_auth: str) -> list[str]:
+    def __call__(self, pasta_auth: str, _client_id: str = "hub-global") -> list[str]:
         self.chamadas.append(pasta_auth)
         return list(self.saida)
 
@@ -252,7 +252,7 @@ def _duplos(monkeypatch: pytest.MonkeyPatch) -> _Duplos:
     monkeypatch.setattr(ro, "_executar_limpeza_chrome", duplos.limpeza)
     monkeypatch.setattr(hr, "send_failure_alert", duplos.alerta)
     monkeypatch.setattr(hr, "AutomationMutex", _MutexFalso)
-    monkeypatch.setattr(ro, "_espaco_livre_gb", lambda _caminho: 10.0)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 10.0)
     _MutexFalso.chaves.clear()
     _MutexFalso.saidas.clear()
     return duplos
@@ -618,14 +618,44 @@ def test_whatsapp_pedindo_reautenticacao_sai_com_21(
     pasta: Path, duplos: _Duplos
 ) -> None:
     duplos.envio.codigo = 21
+    duplos.envio.resultados = None
 
     codigo, ctx = _rodar(pasta)
 
     assert codigo == 21
-    assert not ro.Caminhos.da_pasta(pasta).entrega.exists()
+    caminhos = ro.Caminhos.da_pasta(pasta)
+    assert not caminhos.entrega.exists()
+    assert not caminhos.batch_input.exists()
+    assert not caminhos.batch_result.exists()
     fim = _fim(ctx)
     assert fim["outcome_reason"] == "WhatsApp requer reautenticacao."
     assert fim["level"] == "ERRO"
+
+
+def test_whatsapp_reautenticacao_apos_envio_parcial_salva_delivery_state_e_limpa_lote(
+    pasta: Path, duplos: _Duplos
+) -> None:
+    duplos.envio.codigo = 21
+    duplos.envio.resultados = [
+        {"phase_key": "FASE_A", "success": True},
+        {"phase_key": "FASE_B", "success": False},
+    ]
+
+    codigo, ctx = _rodar(pasta)
+
+    assert codigo == 21
+    caminhos = ro.Caminhos.da_pasta(pasta)
+    assert not caminhos.obs_state.exists()
+    assert not caminhos.obs_state_tmp.exists()
+    assert not caminhos.batch_input.exists()
+    assert not caminhos.batch_result.exists()
+    estado = _estado(pasta)
+    assert estado["last_sent_hash"] == HASH_NOVO
+    assert {f["key"]: f["success"] for f in estado["phases"]} == {
+        "FASE_A": True,
+        "FASE_B": False,
+    }
+    assert _fim(ctx)["outcome_reason"] == "WhatsApp requer reautenticacao."
 
 
 def test_falha_total_do_envio_sai_com_4_sem_confirmar_o_estado(
@@ -741,7 +771,7 @@ def test_preflight_queue_offline_com_arquivo_faltando_devolve_9(
 def test_preflight_com_disco_critico_sai_com_9(
     pasta: Path, duplos: _Duplos, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(ro, "_espaco_livre_gb", lambda _caminho: 0.4)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 0.4)
 
     codigo, ctx = _rodar(pasta)
 
@@ -773,7 +803,7 @@ def test_excecao_no_preflight_sai_com_1_sem_pegar_o_lock(
     def quebra() -> hr.OraclePreflight:
         raise RuntimeError("falha inesperada no pre-flight")
 
-    monkeypatch.setattr(ro, "_resultado_oracle", quebra)
+    monkeypatch.setattr(hr, "oracle_preflight_from_env", quebra)
 
     codigo, ctx = _rodar(pasta)
 
@@ -881,7 +911,7 @@ def test_resolver_destino_prefere_a_variavel_e_reprova_destino_vazio(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     origem = tmp_path / "whatsapp-config.json"
-    resolver = ro._resolver_destino  # pylint: disable=protected-access
+    resolver = hw.resolve_whatsapp_target
 
     assert (
         resolver({"contactIdEnv": "OBP_WHATSAPP_TARGET", "contactId": "x@g.us"}, origem)
@@ -907,7 +937,7 @@ def test_resolver_destino_prefere_a_variavel_e_reprova_destino_vazio(
 def test_ler_linha_env_segue_convert_from_env_line(
     linha: str, esperado: tuple[str, str] | None
 ) -> None:
-    assert ro._ler_linha_env(linha) == esperado  # pylint: disable=protected-access
+    assert hr.parse_env_line(linha) == esperado
 
 
 def test_rotacao_remove_eventos_anteriores_a_retencao(tmp_path: Path) -> None:
@@ -920,9 +950,11 @@ def test_rotacao_remove_eventos_anteriores_a_retencao(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    ro._rotacionar_log(caminho)  # pylint: disable=protected-access
+    hr.rotate_log(caminho, ro.RETENCAO_LOG_DIAS)
 
-    mantidas = caminho.read_text(encoding="utf-8-sig").splitlines()
+    bruto = caminho.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf")
+    mantidas = bruto.decode("utf-8").splitlines()
     assert len(mantidas) == 1
     assert "recente" in mantidas[0]
 
@@ -1033,6 +1065,9 @@ def test_limpeza_de_chrome_protege_a_arvore_do_daemon_whatsapp() -> None:
     assert "whatsapp-daemon.js" in script
     assert "-not $protegidos.Contains([int]$_.ProcessId)" in script
     assert "ParentProcessId" in script
+    assert "CreationDate" in script
+    assert "TotalSeconds" in script
+    assert "AutomationHub_WA_" in script
 
 
 @pytest.mark.skipif(os.name != "nt", reason="parser do PowerShell 5.1 so no Windows")

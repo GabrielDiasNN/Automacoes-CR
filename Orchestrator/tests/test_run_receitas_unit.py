@@ -175,7 +175,7 @@ def _pasta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (cliente / "oci.dll").write_bytes(b"")
     monkeypatch.setenv("ORACLE_DRIVER_MODE", "thick")
     monkeypatch.setenv("ORACLE_CLIENT_LIB_DIR", str(cliente))
-    monkeypatch.setattr(rr, "_espaco_livre_gb", lambda _caminho: 10.0)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 10.0)
     (tmp_path / "extract_oracle.py").write_text("# script falso\n", encoding="utf-8")
     (tmp_path / "generate_html_report.py").write_text(
         "# script falso\n", encoding="utf-8"
@@ -670,7 +670,7 @@ def test_lock_ocupado_aborta_com_erro_fatal_sem_executar_etapas(
 def test_disco_abaixo_de_1_gb_reprova_o_preflight(
     pasta: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(rr, "_espaco_livre_gb", lambda _caminho: 0.4)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 0.4)
     duplos = _instalar(monkeypatch, {"extract": EXTRACAO_OK})
     ctx = _contexto(pasta)
 
@@ -741,9 +741,11 @@ def test_rotacao_remove_eventos_anteriores_a_retencao(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    rr._rotacionar_log(caminho)  # pylint: disable=protected-access
+    hr.rotate_log(caminho, rr.RETENCAO_LOG_DIAS)
 
-    mantidas = caminho.read_text(encoding="utf-8-sig").splitlines()
+    bruto = caminho.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf")
+    mantidas = bruto.decode("utf-8").splitlines()
     assert len(mantidas) == 1
     assert "recente" in mantidas[0]
 

@@ -231,7 +231,7 @@ def _pasta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         json.dumps({"last_hash": HASH_NOVO}), encoding="utf-8"
     )
     (pasta / "email_body.html").write_text(HTML, encoding="utf-8")
-    monkeypatch.setattr(rb, "_espaco_livre_gb", lambda _caminho: 10.0)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 10.0)
     return pasta
 
 
@@ -715,7 +715,7 @@ def test_preflight_com_disco_critico_sai_com_9(
 ) -> None:
     """Desfecho 9 por disco: menos de 1 GB livre reprova o pre-flight."""
     _instalar(monkeypatch)
-    monkeypatch.setattr(rb, "_espaco_livre_gb", lambda _caminho: 0.5)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 0.5)
 
     codigo, _ctx = _rodar(pasta)
 
@@ -919,9 +919,11 @@ def test_rotacao_do_log_mantem_quinze_dias(tmp_path: Path) -> None:
     ]
     log.write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
-    rb._rotacionar_log(log)  # pylint: disable=protected-access
+    hr.rotate_log(log, rb.RETENCAO_LOG_DIAS)
 
-    restantes = log.read_text(encoding="utf-8-sig").splitlines()
+    bruto = log.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf")
+    restantes = bruto.decode("utf-8").splitlines()
     assert len(restantes) == 1
     assert recente in restantes[0]
 

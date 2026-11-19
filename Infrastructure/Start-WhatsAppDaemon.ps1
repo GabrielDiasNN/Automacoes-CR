@@ -13,6 +13,7 @@ $InfrastructureDir = $PSScriptRoot
 $ProjectRoot = Split-Path -Parent $InfrastructureDir
 
 Import-Module (Join-Path $ProjectRoot "lib\Lib-OrchestratorRuntime.psm1") -Force
+Import-Module (Join-Path $ProjectRoot "lib\Lib-WhatsAppBatch.psm1") -Force
 
 $habilitado = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "WHATSAPP_DAEMON_ENABLED"
 if ($habilitado -ne "1") {
@@ -21,8 +22,7 @@ if ($habilitado -ne "1") {
 }
 
 # Mesma deteccao da rota em Send-WhatsApp.ps1: CIM (Get-Process nao expoe CommandLine no PS 5.1).
-$jaRodando = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -and $_.CommandLine -like "*whatsapp-daemon.js*" })
+$jaRodando = @(Get-WhatsAppDaemonProcess)
 if ($jaRodando.Count -gt 0) {
     Write-Host "[WhatsApp Daemon] Ja esta em execucao (PID $($jaRodando[0].ProcessId))." -ForegroundColor Gray
     exit 0
@@ -38,6 +38,7 @@ if ([string]::IsNullOrEmpty($token) -or $token.Length -lt 32) {
 $porta = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "WHATSAPP_DAEMON_PORT" -Default "8765"
 $clientId = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "WHATSAPP_DAEMON_CLIENT_ID" -Default "hub-global"
 $maxNaoReady = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "WHATSAPP_DAEMON_MAX_NOT_READY_MS"
+$authPath = Get-OrchestratorEnvValue -ProjectRoot $ProjectRoot -Key "WHATSAPP_AUTH_PATH"
 
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 $nodeExe = "node"
@@ -50,22 +51,25 @@ else {
 $daemonScript = Join-Path $ProjectRoot "lib\whatsapp-daemon.js"
 $libDir = Join-Path $ProjectRoot "lib"
 
-# As variaveis WHATSAPP_DAEMON_* sao definidas apenas para o processo que este script
-# inicia (Start-Process herda o ambiente atual) e removidas logo em seguida.
-$env:WHATSAPP_DAEMON_TOKEN = $token
-$env:WHATSAPP_DAEMON_PORT = $porta
-$env:WHATSAPP_DAEMON_CLIENT_ID = $clientId
-# Teto sem 'ready' (ms): repassado so quando definido no .env; sem ele o daemon usa o padrao (600000).
-if (-not [string]::IsNullOrEmpty($maxNaoReady)) { $env:WHATSAPP_DAEMON_MAX_NOT_READY_MS = $maxNaoReady }
-try {
-    $processo = Start-Process -FilePath $nodeExe -ArgumentList "`"$daemonScript`"" -WorkingDirectory $libDir -WindowStyle Hidden -PassThru
-    Write-Host "[WhatsApp Daemon] Iniciado (PID $($processo.Id)) em 127.0.0.1:$porta." -ForegroundColor Green
+# Ambiente isolado por allowlist (Zero Trust): nao repassa segredos do Orchestrator/Oracle ao Node/Chromium.
+$envDaemon = Get-WhatsAppDaemonEnvironment -Token $token -Port $porta -ClientId $clientId -MaxNotReadyMs $maxNaoReady -AuthPath $authPath
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $nodeExe
+$psi.Arguments = "`"$daemonScript`""
+$psi.WorkingDirectory = $libDir
+$psi.UseShellExecute = $false
+$psi.CreateNoWindow = $true
+$psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+$psi.EnvironmentVariables.Clear()
+foreach ($par in $envDaemon.GetEnumerator()) {
+    $psi.EnvironmentVariables[[string]$par.Key] = [string]$par.Value
 }
-finally {
-    Remove-Item Env:\WHATSAPP_DAEMON_TOKEN -ErrorAction SilentlyContinue
-    Remove-Item Env:\WHATSAPP_DAEMON_PORT -ErrorAction SilentlyContinue
-    Remove-Item Env:\WHATSAPP_DAEMON_CLIENT_ID -ErrorAction SilentlyContinue
-    Remove-Item Env:\WHATSAPP_DAEMON_MAX_NOT_READY_MS -ErrorAction SilentlyContinue
+
+$processo = [System.Diagnostics.Process]::Start($psi)
+if ($null -eq $processo) {
+    Write-Host "[WhatsApp Daemon] Nao foi possivel iniciar o processo node." -ForegroundColor Red
+    exit 1
 }
+Write-Host "[WhatsApp Daemon] Iniciado (PID $($processo.Id)) em 127.0.0.1:$porta." -ForegroundColor Green
 
 exit 0

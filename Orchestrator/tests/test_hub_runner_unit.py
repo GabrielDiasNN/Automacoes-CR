@@ -17,6 +17,7 @@ import sys
 import threading
 import urllib.error
 import urllib.request
+from datetime import date, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -860,3 +861,66 @@ def test_load_env_file_carrega_e_tolera_oserror(
     (pasta_como_arquivo / ".env").mkdir()
     aviso = hr.load_env_file(pasta_como_arquivo)
     assert aviso is not None
+
+
+def test_rotate_log_remove_expirados_e_grava_utf8_sem_bom(tmp_path: Path) -> None:
+    caminho = tmp_path / "Exec.jsonl"
+    antigo = (date.today() - timedelta(days=30)).isoformat()
+    hoje = date.today().isoformat()
+    caminho.write_text(
+        f'{{"ts":"{antigo}T10:00:00Z","message":"antigo"}}\r\n'
+        f'{{"timestamp":"{antigo}T11:00:00Z","message":"antigo_ts2"}}\r\n'
+        f'{{"ts":"{hoje}T10:00:00Z","message":"recente_1"}}\r\n'
+        f'{{"timestamp":"{hoje}T12:00:00Z","message":"recente_2"}}\r\n',
+        encoding="utf-8-sig",
+    )
+    assert caminho.read_bytes().startswith(b"\xef\xbb\xbf")
+
+    hr.rotate_log(caminho, dias=15)
+
+    bruto = caminho.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf"), "rotate_log nao pode gravar BOM"
+    mantidas = bruto.decode("utf-8").splitlines()
+    assert len(mantidas) == 2
+    assert "recente_1" in mantidas[0]
+    assert "recente_2" in mantidas[1]
+
+
+def test_rotate_log_limpa_bom_preexistente_mesmo_sem_linhas_expiradas(
+    tmp_path: Path,
+) -> None:
+    caminho = tmp_path / "Bom.jsonl"
+    hoje = date.today().isoformat()
+    caminho.write_text(
+        f'{{"ts":"{hoje}T10:00:00Z","message":"ok"}}\r\n',
+        encoding="utf-8-sig",
+    )
+    assert caminho.read_bytes().startswith(b"\xef\xbb\xbf")
+
+    hr.rotate_log(caminho)
+
+    bruto = caminho.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf")
+    assert len(bruto.decode("utf-8").splitlines()) == 1
+
+
+def test_write_json_atomic_grava_utf8_sem_bom_e_sem_tmp_residual(
+    tmp_path: Path,
+) -> None:
+    destino = tmp_path / "estado.json"
+    hr.write_json_atomic(destino, {"ok": True, "texto": "ação"})
+
+    bruto = destino.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf")
+    assert json.loads(bruto.decode("utf-8")) == {"ok": True, "texto": "ação"}
+    assert [p.name for p in tmp_path.iterdir()] == ["estado.json"]
+
+
+def test_run_preflight_verifica_disco_paths_e_oracle(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    existente = tmp_path / "existe.py"
+    existente.write_text("# ok\n", encoding="utf-8")
+    oracle = hr.OraclePreflight(modo="auto", linhas=("OK: Oracle On",))
+
+    assert hr.run_preflight(ctx, (existente,), oracle) is True
+    assert hr.run_preflight(ctx, (existente, tmp_path / "falta.py"), oracle) is False

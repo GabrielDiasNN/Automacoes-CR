@@ -26,6 +26,7 @@ from typing import Any
 
 import hub_runner as hr
 import hub_whatsapp as hw
+import obs_cards_runner as ocr
 import pytest
 from tests.carregadores_modulos import carregar_modulo_automacao
 
@@ -270,7 +271,7 @@ def _config_whatsapp(*, destino_habilitado: bool = True) -> dict[str, Any]:
 @pytest.fixture(name="pasta")
 def _pasta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Pasta de automacao falsa: scripts vazios, config do WhatsApp e disco com folga."""
-    monkeypatch.setattr(ro, "_espaco_livre_gb", lambda _caminho: 10.0)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 10.0)
     (tmp_path / "extract_orb.py").write_text("# script falso\n", encoding="utf-8")
     (tmp_path / "format_message.py").write_text("# script falso\n", encoding="utf-8")
     (tmp_path / "whatsapp-config.json").write_text(
@@ -287,7 +288,7 @@ def _instalar(monkeypatch: pytest.MonkeyPatch, cenario: _Cenario) -> _Duplos:
         envio=_WhatsAppFalso(cenario.envios, cenario.lote),
     )
     monkeypatch.setattr(hr, "run_python_step", duplos.extract)
-    monkeypatch.setattr(ro, "_executar_formatador", duplos.formatador)
+    monkeypatch.setattr(ocr, "executar_formatador", duplos.formatador)
     monkeypatch.setattr(hw, "send_whatsapp", duplos.envio)
     monkeypatch.setattr(hr, "AutomationMutex", cenario.mutex)
     _MutexFalso.chaves.clear()
@@ -488,7 +489,7 @@ def test_excecao_inesperada_no_preflight_devolve_1_sem_pegar_o_lock(
     def quebra() -> hr.OraclePreflight:
         raise RuntimeError("falha inesperada no pre-flight")
 
-    monkeypatch.setattr(ro, "_resultado_oracle", quebra)
+    monkeypatch.setattr(hr, "oracle_preflight_from_env", quebra)
 
     execucao = _executar_cenario(monkeypatch, pasta, _Cenario())
 
@@ -942,14 +943,14 @@ def test_resolver_destino_devolve_o_valor_do_ambiente_ou_o_placeholder(
     alvo: dict[str, str], esperado: str
 ) -> None:
     """Resolve-WhatsAppTarget: contactIdEnv vence; sem ele, o placeholder do contactId."""
-    assert ro._resolver_destino(alvo, Path("whatsapp-config.json")) == esperado
+    assert hw.resolve_whatsapp_target(alvo, Path("whatsapp-config.json")) == esperado
 
 
 @pytest.mark.parametrize("alvo", [None, {}])
 def test_resolver_destino_recusa_destino_ausente(alvo: object) -> None:
     """Sem target util, o pre-flight falha: nunca envia para um destino vazio."""
     with pytest.raises(ValueError, match="Destino do WhatsApp ausente"):
-        ro._resolver_destino(alvo, Path("whatsapp-config.json"))
+        hw.resolve_whatsapp_target(alvo, Path("whatsapp-config.json"))
 
 
 def test_resolver_destino_recusa_env_vazia(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -957,15 +958,15 @@ def test_resolver_destino_recusa_env_vazia(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv(DESTINO_ENV)
 
     with pytest.raises(ValueError, match="variavel de ambiente 'OFST_WHATSAPP_TARGET'"):
-        ro._resolver_destino(
+        hw.resolve_whatsapp_target(
             {"contactIdEnv": DESTINO_ENV}, Path("whatsapp-config.json")
         )
 
 
 def test_mascara_mostra_so_os_quatro_ultimos_caracteres() -> None:
     """Destinatario no log de dry-run: so os 4 ultimos caracteres aparecem."""
-    assert ro._mascarar(DESTINO) == "***4417"
-    assert ro._mascarar("1234") == "***"
+    assert ocr.mascarar_destino(DESTINO) == "***4417"
+    assert ocr.mascarar_destino("1234") == "***"
 
 
 @pytest.mark.parametrize(
@@ -996,9 +997,11 @@ def test_rotacao_remove_eventos_anteriores_a_retencao(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    ro._rotacionar_log(caminho)
+    hr.rotate_log(caminho, ro.RETENCAO_LOG_DIAS)
 
-    restante = caminho.read_text(encoding="utf-8-sig").splitlines()
+    bruto = caminho.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf")
+    restante = bruto.decode("utf-8").splitlines()
     assert len(restante) == 1
     assert hoje in restante[0]
 
@@ -1023,8 +1026,10 @@ def test_shim_delega_ao_runner_e_repassa_o_exit_code() -> None:
 
 
 def test_runner_fecha_a_execucao_em_um_unico_ponto() -> None:
-    """Toda saida do runner passa por _encerrar, que chama hr.finish (execution.end e telemetria)."""
-    fonte = (ORB_DIR / "run_orb.py").read_text(encoding="utf-8")
+    """Toda saida do motor compartilhado passa por _encerrar e tem um ponto de envio."""
+    motor = (ORB_DIR.parent / "lib" / "python" / "obs_cards_runner.py").read_text(
+        encoding="utf-8"
+    )
 
-    assert fonte.count("hr.finish(") == 1, "so _encerrar pode chamar hr.finish"
-    assert fonte.count("hw.send_whatsapp(") == 1, "um unico ponto de envio"
+    assert motor.count("hr.finish(") == 1, "so _encerrar pode chamar hr.finish"
+    assert motor.count("hw.send_whatsapp(") == 1, "um unico ponto de envio"
