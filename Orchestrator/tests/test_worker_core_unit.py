@@ -45,6 +45,7 @@ def test_force_kill_chama_taskkill_com_args_corretos() -> None:
     mock_run.assert_called_once_with(
         ["taskkill", "/F", "/T", "/PID", "1234"],
         capture_output=True,
+        creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
         check=False,
         timeout=15,
     )

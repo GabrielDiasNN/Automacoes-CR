@@ -39,8 +39,8 @@ $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 $projectRoot = Split-Path -Parent $ScriptDir
-$libProcess  = Join-Path $projectRoot "lib\Lib-Process.psm1"
-$runnerPy    = Join-Path $ScriptDir "run_obs_paradas.py"
+$libProcess = Join-Path $projectRoot "lib\Lib-Process.psm1"
+$runnerPy = Join-Path $ScriptDir "run_obs_paradas.py"
 
 Import-Module $libProcess -Force
 
@@ -65,5 +65,5 @@ $runnerArgs = @($runnerPy)
 if (-not [string]::IsNullOrWhiteSpace($ExecId)) { $runnerArgs += $ExecId }
 if ($DryRun) { $runnerArgs += "--dry-run" }
 
-& $pythonExe @runnerArgs
-exit $LASTEXITCODE
+$exitCode = Invoke-HubPythonRunner -PythonExe $pythonExe -Arguments $runnerArgs -WorkingDirectory $ScriptDir
+exit $exitCode

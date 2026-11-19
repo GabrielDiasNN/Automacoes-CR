@@ -832,6 +832,7 @@ def run_python_script(  # pylint: disable=too-many-arguments
         text=True,
         encoding="utf-8",
         errors="replace",
+        creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
         check=False,
     )
     for linha in resultado.stdout.splitlines():
@@ -863,6 +864,7 @@ def _executar_processo(ctx: HubRunContext, spec: PythonStepSpec) -> _Tentativa:
         text=True,
         encoding="utf-8",
         errors="replace",
+        creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
     ) as processo:
         fluxos = [(processo.stdout, tratar_saida), (processo.stderr, tratar_erro)]
         leitores = [
@@ -1157,6 +1159,7 @@ def executar_cli_outlook(script: Path, argumentos: list[str]) -> tuple[int, str]
             text=True,
             encoding="utf-8",
             errors="replace",
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             timeout=TIMEOUT_CLI_OUTLOOK_S,
             check=False,
         )

@@ -805,6 +805,7 @@ def executar_send_whatsapp(
         text=True,
         encoding="utf-8",
         errors="replace",
+        creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
     ) as processo:
         leitores: list[threading.Thread] = []
         if processo.stdout is not None:

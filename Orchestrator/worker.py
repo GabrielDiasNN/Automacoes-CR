@@ -421,6 +421,7 @@ def _force_kill(pid: int) -> None:
         subprocess.run(
             ["taskkill", "/F", "/T", "/PID", str(pid)],
             capture_output=True,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             check=False,
             timeout=15,
         )

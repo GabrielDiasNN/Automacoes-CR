@@ -968,7 +968,8 @@ def test_shim_run_ps1_delega_ao_runner_e_repassa_os_switches_de_email() -> None:
     assert conteudo.startswith(b"\xef\xbb\xbf"), "run.ps1 deve ser UTF-8 com BOM"
     fonte = conteudo.decode("utf-8-sig")
     assert "run_montagem.py" in fonte
-    assert "exit $LASTEXITCODE" in fonte
+    assert "Invoke-HubPythonRunner" in fonte
+    assert "exit $exitCode" in fonte
     assert "Write-Log" not in fonte
     assert "Invoke-OraclePythonScript" not in fonte
     assert not re.search(r"catch\s*\{", fonte)

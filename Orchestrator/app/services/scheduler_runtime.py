@@ -1003,6 +1003,7 @@ def run_file_cleanup() -> None:
                 script_path,
             ],
             env=build_subprocess_env(),
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             timeout=FILE_CLEANUP_TIMEOUT_SECONDS,
             check=True,
         )

@@ -2,6 +2,16 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.120] - 19/11/2026
+
+Eliminação das janelas de console `python.exe` e `powershell.exe` que abriam durante a execução das automações em background após a migração dos `run.ps1` para shims Python (`[1.3.117]`–`[1.3.118]`).
+
+### Corrigido
+
+- **Shims `run.ps1` sem `CreateNoWindow` abriam console `python.exe` visível.** Como `Orchestrator/worker.py` inicia `powershell.exe` com `CREATE_NO_WINDOW`, a chamada direta `& $pythonExe @runnerArgs` fazia o Windows alocar um novo console visível para o runner Python de cada automação. Adicionada `Invoke-HubPythonRunner` em `lib/Lib-Process.psm1` (sobre `Invoke-NativeProcess`, com `CreateNoWindow = true`, quoting seguro de argumentos com espaços/aspas e repasse de saída em tempo real via `[Console]::WriteLine`) e aplicada aos 6 shims ativos (`Montagem de Terceirizados`, `OBs Fluxo Sem Tingimento`, `OBs Paradas Fase`, `OBs Restricao Branco`, `Receitas Bloqueadas`, `Receitas Emitidas`) e a `_Template/run.ps1`.
+- **Subprocessos filhos em Python sem `CREATE_NO_WINDOW`.** Adicionado `creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0))` (compatível com Windows e CI Linux) nas chamadas de runtime em `lib/python/hub_runner.py`, `lib/python/hub_whatsapp.py`, `OBs Paradas Fase/run_obs_paradas.py`, `Orchestrator/app/notifications.py`, `Orchestrator/app/services/beneficiamento_refresh.py`, `Orchestrator/app/services/env_admin.py`, `Orchestrator/app/services/scheduler_runtime.py` e `Orchestrator/worker.py` (`taskkill`).
+- **Cobertura de regressão:** testes Pester em `lib/tests/Lib-Process.Tests.ps1` (`Invoke-HubPythonRunner` com argumentos com espaços e propagação exata de exit code) e contratos em `Orchestrator/tests/test_run_ps1_bootstrap_unit.py`, `test_run_montagem_unit.py`, `test_run_obs_paradas_unit.py`, `test_run_orb_unit.py`, `test_scaffold_governance.py` e `test_worker_core_unit.py` travando o uso de `Invoke-HubPythonRunner` (proibindo `& $pythonExe` nos shims) e `CREATE_NO_WINDOW` no `taskkill`.
+
 ## [1.3.119] - 18/11/2026
 
 Pre-commit com caminho crítico (`lib\`, `Tools\`, workflows, skills) caiu de ~315 s para ~36 s sem tirar nenhum gate do pipeline, e 33 arquivos Python que nunca eram verificados entraram no mypy/pylint. Medição e plano: `docs/qualidade/precommit-tempo-18-11-2026.md`.

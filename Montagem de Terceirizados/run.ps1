@@ -78,5 +78,5 @@ if ($EmailPreviewOnly) { $runnerArgs += "--email-preview-only" }
 if (-not [string]::IsNullOrWhiteSpace($EmailToTest)) { $runnerArgs += @("--email-to-test", $EmailToTest) }
 if (-not [string]::IsNullOrWhiteSpace($EmailCcTest)) { $runnerArgs += @("--email-cc-test", $EmailCcTest) }
 
-& $pythonExe @runnerArgs
-exit $LASTEXITCODE
+$exitCode = Invoke-HubPythonRunner -PythonExe $pythonExe -Arguments $runnerArgs -WorkingDirectory $ScriptDir
+exit $exitCode

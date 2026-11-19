@@ -77,7 +77,9 @@ def test_shim_delega_ao_runner_e_repassa_o_exit_code(
     fonte = _run_ps1(automacao)
 
     assert f'"{runner}"' in fonte
-    assert "exit $LASTEXITCODE" in fonte
+    assert "Invoke-HubPythonRunner" in fonte
+    assert "exit $exitCode" in fonte
+    assert "& $pythonExe" not in fonte
     assert "--dry-run" in fonte
     assert "Enter-AutomationLock" not in fonte
     assert "Register-ExecutionTelemetry" not in fonte
@@ -224,7 +226,9 @@ def test_template_shim_segue_o_contrato_do_run_ps1_de_automacao() -> None:
     assert "Resolve-HubPythonExe" in fonte
     assert 'Join-Path $ScriptDir "TEMPLATE_RUNNER"' in fonte
     assert "exit 9" in fonte
-    assert "exit $LASTEXITCODE" in fonte
+    assert "Invoke-HubPythonRunner" in fonte
+    assert "exit $exitCode" in fonte
+    assert "& $pythonExe" not in fonte
     assert "--dry-run" in fonte
     assert "Enter-AutomationLock" not in fonte
     assert "Register-ExecutionTelemetry" not in fonte

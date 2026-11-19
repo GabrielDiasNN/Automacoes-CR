@@ -72,6 +72,7 @@ def run_beneficiamento_refresh(period: str) -> dict[str, Any]:
             env=build_subprocess_env(),
             capture_output=True,
             text=True,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             timeout=_SUBPROCESS_TIMEOUT_SECONDS,
             check=False,
         )

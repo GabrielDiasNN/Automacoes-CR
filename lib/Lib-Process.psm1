@@ -281,4 +281,48 @@ function Resolve-HubPythonExe {
     return $localVenv
 }
 
-Export-ModuleMember -Function Invoke-NativeProcess, Get-WhatsAppAuthPath, Resolve-HubPythonExe
+function Invoke-HubPythonRunner {
+    <#
+    .SYNOPSIS
+        Executa um runner Python sem abrir janela de console no Windows.
+
+    .DESCRIPTION
+        Quando o worker do Orchestrator inicia `powershell.exe` com
+        `CREATE_NO_WINDOW`, invocar `& $pythonExe` diretamente faz o Windows
+        alocar uma janela de console visivel para o processo filho. Esta funcao
+        delega a `Invoke-NativeProcess` (`CreateNoWindow = true`), preservando
+        argumentos com espacos/aspas, encaminhando stdout/stderr em tempo real
+        via `[Console]::WriteLine` (sem poluir o pipeline de retorno) e
+        devolvendo exatamente o ExitCode do runner.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PythonExe,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+        [string]$WorkingDirectory = $PWD.ProviderPath
+    )
+
+    $quotedArgs = foreach ($arg in $Arguments) {
+        if ($arg -eq "" -or $arg -match '[\s"]') {
+            '"' + ($arg -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+        } else {
+            $arg
+        }
+    }
+
+    $result = Invoke-NativeProcess `
+        -FilePath $PythonExe `
+        -Arguments ($quotedArgs -join " ") `
+        -WorkingDirectory $WorkingDirectory `
+        -LogAction {
+            param($msg)
+            [Console]::WriteLine($msg)
+        }
+
+    return [int]$result.ExitCode
+}
+
+Export-ModuleMember -Function Invoke-NativeProcess, Get-WhatsAppAuthPath, Resolve-HubPythonExe, Invoke-HubPythonRunner

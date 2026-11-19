@@ -1004,7 +1004,8 @@ def test_shim_delega_ao_runner_e_repassa_o_exit_code() -> None:
 
     assert "Resolve-HubPythonExe" in fonte
     assert '"run_obs_paradas.py"' in fonte
-    assert "exit $LASTEXITCODE" in fonte
+    assert "Invoke-HubPythonRunner" in fonte
+    assert "exit $exitCode" in fonte
     assert "--dry-run" in fonte
     assert "Enter-AutomationLock" not in fonte
     assert "Register-ExecutionTelemetry" not in fonte

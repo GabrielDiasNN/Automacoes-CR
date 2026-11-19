@@ -137,7 +137,8 @@ def _assert_runner_e_shim_gerados(automation_dir: Path) -> None:
     shim = run_ps1_bytes.decode("utf-8-sig")
     assert '"run_auto_scaffold_governado.py"' in shim
     assert "TEMPLATE_RUNNER" not in shim
-    assert "exit $LASTEXITCODE" in shim
+    assert "Invoke-HubPythonRunner" in shim
+    assert "exit $exitCode" in shim
     assert "Enter-AutomationLock" not in shim
 
 
