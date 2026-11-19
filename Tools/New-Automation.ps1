@@ -19,7 +19,7 @@ param(
     [ValidateRange(0, 10)]
     [int]$MaxRetries = 0,
     [ValidateSet("powershell", "python", "node")]
-    [string]$Runtime = "powershell",
+    [string]$Runtime = "python",
     [string]$SupportContact = "Definir suporte técnico",
 
     # Parametros legados preservados apenas para compatibilidade de chamada.
@@ -43,6 +43,7 @@ $templateDir = Join-Path $resolvedBasePath "_Template"
 $runbookTemplatePath = Join-Path $resolvedBasePath "docs\templates\automation-runbook-template.md"
 $smokeTestTemplatePath = Join-Path $resolvedBasePath "docs\templates\automation-smoke-test-template.py"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$utf8Bom = New-Object System.Text.UTF8Encoding($true)
 
 function Write-Step {
     param(
@@ -96,7 +97,8 @@ function Invoke-SafeWrite {
         New-Item -ItemType Directory -Force -Path $directory | Out-Null
     }
 
-    $writer = New-Object System.IO.StreamWriter($FilePath, $false, $utf8NoBom)
+    $encoding = if ($FilePath -match '\.(ps1|psm1)$') { $utf8Bom } else { $utf8NoBom }
+    $writer = New-Object System.IO.StreamWriter($FilePath, $false, $encoding)
     try {
         $writer.Write($Content)
         $writer.Flush()
@@ -117,7 +119,7 @@ function Get-TemplateContent {
         throw "Template obrigatorio nao encontrado: $templatePath"
     }
 
-    return Get-Content -LiteralPath $templatePath -Raw
+    return Get-Content -LiteralPath $templatePath -Raw -Encoding UTF8
 }
 
 function Convert-Template {
@@ -184,10 +186,14 @@ if (Test-Path -LiteralPath $automationDir) {
     exit 1
 }
 
+# O shim (run.ps1) e o runner Python recebem o mesmo nome: run_<id>.py, derivado do slug.
+$runnerFileName = "run_$testId.py"
+
 $replacements = @{
     "[Nome da Automação]" = $Name
     "TEMPLATE_SLUG" = $slug
     "TEMPLATE_TEST_ID" = $testId
+    "TEMPLATE_RUNNER" = $runnerFileName
     "TEMPLATE_CRITICALITY" = $Criticality
     "TEMPLATE_OWNER_AREA" = $OwnerArea
     "TEMPLATE_RUNTIME" = $Runtime
@@ -197,6 +203,7 @@ $replacements = @{
 $readmeContent = Convert-Template -Content (Get-TemplateContent -TemplateName "README.md") -Replacements $replacements
 $contextContent = Convert-Template -Content (Get-TemplateContent -TemplateName "CONTEXT.md") -Replacements $replacements
 $runContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run.ps1") -Replacements $replacements
+$runnerContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run_template.py") -Replacements $replacements
 $manifestContent = Convert-Template -Content (Get-TemplateContent -TemplateName "automation.manifest.json") -Replacements $replacements
 $smokeTestContent = ""
 
@@ -218,8 +225,8 @@ if (-not (Test-Path -LiteralPath $smokeTestTemplatePath -PathType Leaf)) {
     exit 1
 }
 
-$runbookContent = Get-Content -LiteralPath $runbookTemplatePath -Raw
-$smokeTestContent = Get-Content -LiteralPath $smokeTestTemplatePath -Raw
+$runbookContent = Get-Content -LiteralPath $runbookTemplatePath -Raw -Encoding UTF8
+$smokeTestContent = Get-Content -LiteralPath $smokeTestTemplatePath -Raw -Encoding UTF8
 $runbookContent = $runbookContent.Replace("[Nome da Automação]", $Name)
 $runbookContent = $runbookContent.Replace("[Caminho do Diretório, ex: Receitas Bloqueadas]", $Name)
 $runbookContent = $runbookContent.Replace("[CRÍTICA / ALTA / MÉDIA / BAIXA]", $Criticality.ToUpperInvariant())
@@ -236,7 +243,8 @@ $readmeContent += @"
 ## 🚀 Cadastro Operacional
 Esta automação usa o fluxo atual do Hub: primeiro faça o scaffold local, depois registre a automação pelo Dashboard (`/dashboard/`) ou pela API do Orchestrator.
 
-- **Script principal sugerido:** `run.ps1`
+- **Entrypoint (shim):** `run.ps1` resolve o Python do projeto, chama o runner e repassa o exit code
+- **Runner Python:** `$runnerFileName` (pre-flight, lock, etapas e entrega sobre `lib/python/hub_runner.py`)
 - **Logs esperados:** `Logs/`
 - **Manifesto canônico:** `automation.manifest.json`
 - **Runbook inicial:** `docs/runbooks/$slug-runbook.md`
@@ -247,6 +255,7 @@ Esta automação usa o fluxo atual do Hub: primeiro faça o scaffold local, depo
 
 $contextContent += @"
 
+- **Runner:** a logica fica em `$runnerFileName`; o `run.ps1` e so o shim. Mudanca de contrato (lock, telemetria, idempotencia) vale no runner, nao no shim.
 - **Registro no Orchestrator:** esta pasta nasce desacoplada de `config.json` legado; o cadastro operacional deve ser feito pelo Dashboard ou API.
 - **Catálogo governado:** preencha `automation.manifest.json` antes de promover a automação para operação recorrente.
 - **Smoke inicial:** o scaffold já cria `Orchestrator/tests/test_$slug.py` como prova mínima de existência dos artefatos obrigatórios.
@@ -255,7 +264,7 @@ $contextContent += @"
 $runBatContent = @"
 @echo off
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "..\lib\Send-WhatsApp.ps1" -ExecId "MANUAL_BAT" -Mode VISUAL -BaseDir "%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "..\lib\Send-WhatsApp.ps1" -ExecId "MANUAL_BAT" -Mode VISUAL -ConfigPath "%~dp0whatsapp-config.json"
 exit /b %ERRORLEVEL%
 "@
 
@@ -280,6 +289,7 @@ else {
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "README.md") -Content $readmeContent -Operation "Gerar README da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "CONTEXT.md") -Content $contextContent -Operation "Gerar CONTEXT da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "run.ps1") -Content $runContent -Operation "Gerar run.ps1 da automacao"
+Invoke-SafeWrite -FilePath (Join-Path $automationDir $runnerFileName) -Content $runnerContent -Operation "Gerar runner Python da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "automation.manifest.json") -Content $manifestContent -Operation "Gerar automation.manifest.json"
 Invoke-SafeWrite -FilePath $runbookPath -Content $runbookContent -Operation "Gerar runbook operacional"
 Invoke-SafeWrite -FilePath $smokeTestPath -Content $smokeTestContent -Operation "Gerar smoke test inicial"

@@ -1,6 +1,6 @@
 # Monitor de Contexto AI-Native
 
-Snapshot curado para bootstrap de agentes no Hub de Automações: o estado vigente e as armadilhas que ainda derrubam quem trabalha aqui. Não é histórico — esse fica no `CHANGELOG.md` e, até 07/10/2026, em `docs/historico/ai-native-context-monitor-ate-07-10-2026.md` (consulte por data/termo com `Grep`, não carregue inteiro). Cada armadilha abaixo cita a data da entrada completa naquele arquivo.
+Snapshot curado para bootstrap de agentes: o estado vigente e as armadilhas que ainda derrubam quem trabalha aqui. Histórico fica no `CHANGELOG.md` e, até 07/10/2026, em `docs/historico/ai-native-context-monitor-ate-07-10-2026.md` (busque com `Grep`, não carregue inteiro). Cada armadilha cita a data da entrada completa.
 
 ## Estado Atual
 
@@ -9,7 +9,7 @@ Snapshot curado para bootstrap de agentes no Hub de Automações: o estado vigen
 - **Automações em produção**: RB-01, MT-02, RE-03, OBP-04, OFST-06, ORB-07 (manifesto + `run.ps1` shim → runner Python, `queue_group="oracle"`) e o Beneficiamento (snapshot, sem manifesto nem `run.ps1` — exceção deliberada, não lacuna). Criticidade/SLA/cadência: `docs/governanca/automation-criticality-map.md`.
 - **Oracle**: servidor 19c, mas a conta usa verificador legado (DPY-3015); `ORACLE_DRIVER_MODE`: `auto` (Thin, Thick só se exigido), `thick` ou `queue` (produção). `bridge` (node-oracledb) foi removido em 18/11/2026 e `get_driver_mode` o recusa com `ValueError`. `queue` envia o SQL por fila SMB (`lib/python/oracle_queue.py`) ao worker `v2.6.2` no TSplus (heartbeat, claim de 90 s, `--#max_rows:N`, cleanup por `exec_id`); usam a fila `fetch_all`, Beneficiamento, preflight do RE-03 e `Tools/oracle/oracle_queue_tools.py`. Config: `ORACLE_QUEUE_DIR`, `ORACLE_QUEUE_TIMEOUT_SECONDS` (padrão 180 s); o `.mcp.json` delega o modo ao `.env`. Sem `V$SQL`/`DISPLAY_CURSOR`. MCP somente leitura: `Tools/oracle/mcp_server.py` (ferramenta `oracle`). **A rede derruba qualquer sessão em ~4-6 s** (`ORA-00028`/`DPY-1001`/`DPY-4011`): conexão nova por consulta, retry só em queda de sessão (`SESSION_DROP_MARKERS` em `lib/python/oracle_session.py`); consulta mais longa não roda daqui — reescreva-a.
 - **Skills**: padrão em `.github/skills/` (única árvore editável), operacionais em `.claude/skills/`; o Claude Code vê as de padrão por junction. Taxonomia e regras: `.github/skills/README.md`.
-- **Acervo SQL**: `docs/oracle-schema/consultas/` (referência sobre o ERP; catálogo gerado `CATALOGO_QUERIES.md`, 222 consultas validadas em 238 arquivos `.sql`; busca offline por `Tools/oracle/oracle_catalog.py queries`). SQL de runtime do Beneficiamento: `Produção Beneficimento/sql/templates/`. Promoção de consulta para runtime é `git mv`, nunca cópia.
+- **Acervo SQL**: `docs/oracle-schema/consultas/` (catálogo `CATALOGO_QUERIES.md`, 222 consultas validadas; busca por `Tools/oracle/oracle_catalog.py queries`). Runtime do Beneficiamento: `Produção Beneficimento/sql/templates/`. Promover consulta a runtime é `git mv`, nunca cópia.
 
 ## Armadilhas Vigentes
 
@@ -22,12 +22,12 @@ Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arq
 - **`Test-PythonGovernance.ps1` só enxerga arquivos rastreados** (`git ls-files`): para `.py` novo, passe `-Paths` explícito antes do `git add` (06/10/2026).
 - **Teste de mutação é o critério de "este teste protege o comportamento"**: quebre a linha de produção e confirme que o teste falha (08/09/2026).
 - **Hook `Stop`**: automatizar governança exige `-Paths` **e** `-NoCriticalPromotion`; sem o segundo, um caminho crítico promove a full scan (~340 s) e estoura o timeout (01/09/2026).
-- **Pre-commit com caminho crítico roda `pylint` (com dependentes) e `PSScriptAnalyzer` só no diff**; mypy e demais gates seguem completos, e o `governanca-agregada` do CI roda tudo. Liste caminhos do git com `git -c core.quotepath=false` e console UTF-8, senão `Produção Beneficimento/` some do gate. `.mypy_cache` não é mais apagado (18/11/2026).
+- **Pre-commit com caminho crítico roda `pylint` (com dependentes) e `PSScriptAnalyzer` só no diff**; o resto segue completo, e o `governanca-agregada` do CI roda tudo. Liste caminhos do git com `-c core.quotepath=false` e console UTF-8, senão `Produção Beneficimento/` some do gate (18/11/2026).
 - **`ruff` é pinado no workflow**, não em `requirements-dev.in` (08/09/2026). `ruff --fix` em lote já removeu imports usados por teste via `importlib` e quebrou `mypy --strict` (B009/B010) — revise o diff (26/08 e 07/10/2026).
 
 ### Orchestrator
 
-- **Regra de negócio vive em `services/`, não em routers**: o service levanta `DomainRuleError(status, detail)` e o router só traduz em `HTTPException`. `db.query(...)` em router é bloqueado por gate (`ORM_QUERY_IN_API_ROUTER`); escritas ORM restantes são exceção documentada em `docs/architecture-standard.md` (07/10/2026).
+- **Regra de negócio vive em `services/`, não em routers**: o service levanta `DomainRuleError(status, detail)` e o router traduz em `HTTPException`. `db.query(...)` em router é barrado pelo gate `ORM_QUERY_IN_API_ROUTER`; exceções em `docs/architecture-standard.md` (07/10/2026).
 - **`GET /api/system/health` é liveness público reduzido**; o payload completo é `GET /api/system/health/full`, autenticada (28/08/2026).
 - **`EXIT_CODE_MAP`**: `3` é ERROR (`DATA_EXTRACTION_FAILED`, requeue seguro), `22` é SUCCESS (adiamento), `26` é `ORACLE_WORKER_OFFLINE` e `27` é `ORACLE_QUEUE_TIMEOUT` (ambos ERROR mapeados no contrato de falha de fila Oracle).
 - **Agendador não descarta tick com `queue_group` ocupado**: cria execução que expira (`EXPIRED`) — as 6 automações compartilham `queue_group="oracle"` (26/08/2026).
@@ -36,13 +36,13 @@ Cada item custa caro quando ignorado. Detalhe na entrada da data indicada no arq
 ### Automações e WhatsApp
 
 - **Os `run.ps1` resolvem o Python por `Resolve-HubPythonExe`** (funciona em worktree); não hardcode o venv (08/09/2026).
-- **Mudança de fluxo de automação vai no `run_*.py`, não no `run.ps1`** (shim desde 18/11/2026). Validar com `run.ps1 -DryRun` (extract real, sem envio nem state). Modo teste de RB-01/MT-02 lê `AUTOMACAO_TEST_EMAIL` só do escopo User (`hr.user_environment_variable`): ler do processo desviaria e-mail de produção, porque o processo carrega o `.env`.
+- **Mudança de fluxo de automação vai no `run_*.py`, não no `run.ps1`** (shim desde 18/11/2026). Valide com `run.ps1 -DryRun` (extract real, sem envio nem state). O modo teste de RB-01/MT-02 lê `AUTOMACAO_TEST_EMAIL` só do escopo User (`hr.user_environment_variable`): o processo carrega o `.env` e desviaria e-mail de produção.
 - **OFST-06 e ORB-07 são irmãs, não simétricas**: a guarda que aborta sem tocar no state quando todas as linhas falham evita re-anunciar todas as OBs no WhatsApp; `test_ofst_orb_parity_unit.py` prende as invariantes (08/09/2026).
-- **Padrão dos `run.ps1` (15/11/2026):** os 6 e o `_Template` usam o mesmo esqueleto (log estruturado, `Exit-WithCode` com `$NonFailureCodes`, `Enter-AutomationLock | Out-Null` protegendo `$ResultFile` e `Invoke-LogRotation`, `$pythonExe`, `Get-OraclePreFlightExitCode`). `exit` não é capturável por `catch`. Array de um item: `ConvertTo-Json -InputObject @(...)`. Contratos: `test_run_ps1_bootstrap_unit.py`.
+- **`_Template` no runner Python e limpeza da camada PS legada (18/11/2026):** `Tools/New-Automation.ps1` usa `-Runtime "python"` por padrão, lê templates com `-Encoding UTF8` (inclusive no PS 5.1) e gera `run.ps1` (shim), `run_<id>.py` (sobre `hub_runner.py`) e `RunWhatsApp.bat` com `-ConfigPath "%~dp0whatsapp-config.json"`. Na 1.3.118 saíram as funções sem chamador de `Lib-WhatsAppBatch` e os módulos `Lib-Oracle`, `Lib-OracleEndpoint`, `Lib-Idempotency` e `Lib-LogEvent`; `Lib-Logging` ficou com `Protect-SensitiveData`/`Write-AutomacaoLog` e `Lib-Retry` com `Send-AlertaFalhaDefinitiva`. Paridade do lote WhatsApp: fixture do PS 5.1 em `Orchestrator/tests/fixtures/`. Scaffold grava `.ps1`/`.psm1` com BOM. Contratos: `test_run_ps1_bootstrap_unit.py`, `test_scaffold_governance.py`.
 - **Códigos de saída:** `1` (erro fatal genérico, RE/MT) e `4` (falha de orquestração/canal, ORB/OFST/OBP/RB) são contratos distintos, ambos ERROR em `EXIT_CODE_MAP`; não unifique. Os códigos `40`/`23` são mortos (`WhatsApp-Core.js` só sai com `0`, `21` e `24`), mas `22` vem de `Send-WhatsApp.ps1` (mutex/cooldown) e é SUCCESS em ORB-07, OFST-06, OBP-04 e RB-01.
 - **MT-02 fecha a telemetria sempre via `hr.finish`** (`_encerrar` no `run_montagem.py`), eliminando risco de execução `RUNNING` órfã em saída precoce (08/09/2026; migrado em 18/11/2026).
 - **Daemon WhatsApp segura o perfil** (18/11/2026): com `lib/whatsapp-daemon.js` vivo, todo envio do mesmo `clientId` passa por ele (BATCH e AUTO); daemon não pronto devolve `22` (state preservado, reenvio no próximo ciclo, status SUCCESS). VISUAL, LIST_GROUPS, `Authenticate-WhatsApp.bat` e `Keep-WhatsApp-Open.ps1` recusam com ele vivo: pare o `node ... whatsapp-daemon.js` antes de reautenticar. `WHATSAPP_DAEMON_ENABLED` só governa a subida pelo `Start-Orchestrator.ps1`.
-- **Sessão WhatsApp vive em `%LOCALAPPDATA%\Automacoes\wwebjs_auth\`** (credencial da conta; nunca na árvore do repo). Perda de sessão sai com `ExitCode 21` (27-28/07/2026).
+- **Sessão WhatsApp vive em `%LOCALAPPDATA%\Automacoes\wwebjs_auth\`** (credencial; nunca no repo). Perda de sessão sai com `ExitCode 21` (27-28/07/2026).
 - **Sucesso de envio é decidido pelo dispatch, não pelo ACK** do `whatsapp-web.js` (15/07/2026).
 
 ### Oracle e SQL

@@ -66,7 +66,7 @@ O extrator já tenta 3 vezes com backoff (30s/60s/120s) e tem circuit breaker. S
 
 ### ExitCode=4 — Falha no envio WhatsApp
 
-Em falha total (envio único ou `0` páginas entregues em lote `BATCH`), o state **não** é commitado — todas as OBs entram de novo na próxima execução. Em falha **parcial** de lote paginado (`Lib-WhatsAppBatch.psm1`), apenas as páginas efetivamente confirmadas em `batch_result.json` permanecem em `ofst_state.json`, enquanto as OBs das páginas com falha voltam para reavaliação no próximo ciclo sem duplicar páginas já enviadas. O cleanup de Chrome zumbi do motor WhatsApp é gerenciado pelo próprio `lib/Send-WhatsApp.ps1`; se precisar inspecionar manualmente:
+Em falha total (envio único ou `0` páginas entregues em lote `BATCH`), o state **não** é commitado — todas as OBs entram de novo na próxima execução. Em falha **parcial** de lote paginado (`lib/python/hub_whatsapp.py`), apenas as páginas efetivamente confirmadas em `batch_result.json` permanecem em `ofst_state.json`, enquanto as OBs das páginas com falha voltam para reavaliação no próximo ciclo sem duplicar páginas já enviadas. O cleanup de Chrome zumbi do motor WhatsApp é gerenciado pelo próprio `lib/Send-WhatsApp.ps1`; se precisar inspecionar manualmente:
 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like "*wwebjs_auth*" }
