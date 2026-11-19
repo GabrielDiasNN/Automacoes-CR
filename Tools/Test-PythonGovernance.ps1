@@ -166,7 +166,7 @@ function Get-PylintScope {
 
     $alternation = ($stems | ForEach-Object { [regex]::Escape($_) }) -join '|'
     $importPattern = '(?m)^\s*(?:from\s+(?:[\w.]*\.)?(?:' + $alternation + ')(?:\.[\w.]+)?\s+import\b' +
-        '|import\s+(?:[\w.]+\.)?(?:' + $alternation + ')\b' +
+        '|import\s+(?:[^\r\n#]*,\s*)?(?:[\w.]+\.)?(?:' + $alternation + ')\b' +
         '|from\s+[\w.]+\s+import\s+(?:\([^)]*?\b(?:' + $alternation + ')\b|[^\r\n#]*\b(?:' + $alternation + ')\b))'
     $importRegex = New-Object System.Text.RegularExpressions.Regex($importPattern)
 
@@ -203,81 +203,96 @@ if ($LintChangedOnly) {
 # porque o PowerShell 5.1 inicia jobs em Documentos, e o cache fica no cwd.
 $mypyJob = $null
 $mypyGroups = @()
-if ($mypy) {
-    $mypyGroups = @(
-        $resolvedTargetFiles | Group-Object { Split-Path -Parent $_ } |
-            ForEach-Object { , [string[]]@($_.Group) }
-    )
-    $mypyJob = Start-Job -ScriptBlock {
-        param([string]$MypyExe, [string]$WorkDir, [object[]]$Groups)
-        Set-Location -LiteralPath $WorkDir
-        $ErrorActionPreference = "Continue"
-        foreach ($groupFiles in $Groups) {
-            $files = @($groupFiles)
-            $output = & $MypyExe --strict --explicit-package-bases --namespace-packages @files 2>&1 | ForEach-Object { "$_" }
-            [pscustomobject]@{
-                Name   = Split-Path -Parent $files[0]
-                Exit   = $LASTEXITCODE
-                Output = @($output)
+$resolvedRootForJob = (Resolve-Path -LiteralPath $RootPath).Path
+try {
+    if ($mypy) {
+        $mypyGroups = @(
+            $resolvedTargetFiles | Group-Object { Split-Path -Parent $_ } |
+                ForEach-Object { , [string[]]@($_.Group) }
+        )
+        $mypyJob = Start-Job -ScriptBlock {
+            param([string]$MypyExe, [string]$WorkDir, [object[]]$Groups)
+            Set-Location -LiteralPath $WorkDir
+            try {
+                [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+                $OutputEncoding = [Console]::OutputEncoding
+            }
+            catch [System.IO.IOException] {
+                Write-Verbose "Sem console no job do mypy: $($_.Exception.Message)"
+            }
+            $ErrorActionPreference = "Continue"
+            foreach ($groupFiles in $Groups) {
+                $files = @($groupFiles)
+                $output = & $MypyExe --strict --explicit-package-bases --namespace-packages @files 2>&1 | ForEach-Object { "$_" }
+                [pscustomobject]@{
+                    Name   = Split-Path -Parent $files[0]
+                    Exit   = $LASTEXITCODE
+                    Output = @($output)
+                }
+            }
+        } -ArgumentList $mypy, $resolvedRootForJob, $mypyGroups
+    } else {
+        Write-Host "[AVISO] Mypy nao instalado. Validacao de tipagem Python pulada." -ForegroundColor Yellow
+    }
+
+    if (-not $pylint) {
+        Write-Host "[AVISO] Pylint nao instalado. Validacao de qualidade Python pulada." -ForegroundColor Yellow
+    } elseif ($pylintFiles.Count -eq 0) {
+        Write-Host "Pylint: nenhum .py alterado nem dependente no diff." -ForegroundColor Gray
+    } else {
+        # C0411 (wrong-import-order) desabilitado: a deteccao de first-party do pylint
+        # (baseada no PYTHONPATH/layout de pacotes) diverge da ordenacao real exigida
+        # pelo isort (perfil "black", sem known-first-party configurado) que roda no
+        # CI (job Lint Python). As duas ferramentas discordam sobre a mesma linha em
+        # arquivos de Orchestrator/tests/ que importam de "app.*" e de bibliotecas
+        # como fastapi/sqlalchemy/pytest — isort e o padrao real, pylint fica mudo.
+        #
+        # Agrupado por diretorio pelo MESMO motivo que o mypy acima: automacoes de
+        # dominio tem modulos homonimos (models.py, queries.py, validators.py). Num
+        # lote unico o pylint resolve `from models import ...` para o PRIMEIRO
+        # models.py da lista e reprova o outro com E0611/E1101/W0632 — achados
+        # falsos, apontando para linhas de um arquivo de outra automacao. Antes de
+        # 26/08/2026 so `OBs Fluxo Sem Tingimento` tinha esse trio de nomes, entao a
+        # colisao nao existia; a ORB-07 a tornou observavel.
+        $pylintPorDiretorio = $pylintFiles | Group-Object { Split-Path -Parent $_ }
+
+        foreach ($grupoPylint in $pylintPorDiretorio) {
+            $arquivosGrupo = @($grupoPylint.Group)
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            try {
+                $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302,C0411 @arquivosGrupo 2>&1
+            } finally {
+                $ErrorActionPreference = $prevEap
+            }
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint) em $($grupoPylint.Name)" -ForegroundColor Red
+                $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+                $hasErrors = $true
             }
         }
-    } -ArgumentList $mypy, $RootPath, $mypyGroups
-} else {
-    Write-Host "[AVISO] Mypy nao instalado. Validacao de tipagem Python pulada." -ForegroundColor Yellow
-}
+    }
 
-if (-not $pylint) {
-    Write-Host "[AVISO] Pylint nao instalado. Validacao de qualidade Python pulada." -ForegroundColor Yellow
-} elseif ($pylintFiles.Count -eq 0) {
-    Write-Host "Pylint: nenhum .py alterado nem dependente no diff." -ForegroundColor Gray
-} else {
-    # C0411 (wrong-import-order) desabilitado: a deteccao de first-party do pylint
-    # (baseada no PYTHONPATH/layout de pacotes) diverge da ordenacao real exigida
-    # pelo isort (perfil "black", sem known-first-party configurado) que roda no
-    # CI (job Lint Python). As duas ferramentas discordam sobre a mesma linha em
-    # arquivos de Orchestrator/tests/ que importam de "app.*" e de bibliotecas
-    # como fastapi/sqlalchemy/pytest — isort e o padrao real, pylint fica mudo.
-    #
-    # Agrupado por diretorio pelo MESMO motivo que o mypy acima: automacoes de
-    # dominio tem modulos homonimos (models.py, queries.py, validators.py). Num
-    # lote unico o pylint resolve `from models import ...` para o PRIMEIRO
-    # models.py da lista e reprova o outro com E0611/E1101/W0632 — achados
-    # falsos, apontando para linhas de um arquivo de outra automacao. Antes de
-    # 26/08/2026 so `OBs Fluxo Sem Tingimento` tinha esse trio de nomes, entao a
-    # colisao nao existia; a ORB-07 a tornou observavel.
-    $pylintPorDiretorio = $pylintFiles | Group-Object { Split-Path -Parent $_ }
-
-    foreach ($grupoPylint in $pylintPorDiretorio) {
-        $arquivosGrupo = @($grupoPylint.Group)
-        $prevEap = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        try {
-            $pylintOutput = & $pylint --disable=C0114,C0115,C0116,R0801,C0413,C0301,C0302,C0411 @arquivosGrupo 2>&1
-        } finally {
-            $ErrorActionPreference = $prevEap
-        }
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERRO] Falha de Qualidade de Codigo (Pylint) em $($grupoPylint.Name)" -ForegroundColor Red
-            $pylintOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    if ($mypyJob) {
+        $mypyResults = @(Receive-Job -Job $mypyJob -Wait -ErrorAction Continue)
+        if ($mypyResults.Count -ne $mypyGroups.Count) {
+            # Um job que morre no meio devolveria menos grupos; sem esta checagem o gate
+            # passaria com tipagem nao verificada.
+            Write-Host ("[ERRO] Job do Mypy devolveu {0} de {1} grupo(s)." -f $mypyResults.Count, $mypyGroups.Count) -ForegroundColor Red
             $hasErrors = $true
         }
-    }
-}
-
-if ($mypyJob) {
-    $mypyResults = @(Receive-Job -Job $mypyJob -Wait -AutoRemoveJob -ErrorAction Continue)
-    if ($mypyResults.Count -ne $mypyGroups.Count) {
-        # Um job que morre no meio devolveria menos grupos; sem esta checagem o gate
-        # passaria com tipagem nao verificada.
-        Write-Host ("[ERRO] Job do Mypy devolveu {0} de {1} grupo(s)." -f $mypyResults.Count, $mypyGroups.Count) -ForegroundColor Red
-        $hasErrors = $true
-    }
-    foreach ($result in $mypyResults) {
-        if ($result.Exit -ne 0) {
-            Write-Host "[ERRO] Falha de Tipagem Estrita (Mypy) em $($result.Name)" -ForegroundColor Red
-            $result.Output | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
-            $hasErrors = $true
+        foreach ($result in $mypyResults) {
+            if ($result.Exit -ne 0) {
+                Write-Host "[ERRO] Falha de Tipagem Estrita (Mypy) em $($result.Name)" -ForegroundColor Red
+                $result.Output | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+                $hasErrors = $true
+            }
         }
+    }
+} finally {
+    if ($mypyJob) {
+        Stop-Job -Job $mypyJob -ErrorAction SilentlyContinue
+        Remove-Job -Job $mypyJob -Force -ErrorAction SilentlyContinue
     }
 }
 

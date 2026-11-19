@@ -1,8 +1,12 @@
 ﻿param(
-    [string]$RootPath = $PSScriptRoot,
+    [string]$RootPath = "",
     [string[]]$Paths = @()
 )
 
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = Split-Path -Parent $PSScriptRoot
+    if (-not $RootPath) { $RootPath = "." }
+}
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
 catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
@@ -28,10 +32,10 @@ $secretRegex = '(?i)(password|pwd|secret|token|api_key|apikey|credencial|credent
 foreach ($file in $targetFiles) {
     $file = $file.Trim('"')
     $fullPath = Join-Path $RootPath $file
-    if (-not (Test-Path $fullPath)) { continue }
+    if (-not (Test-Path -LiteralPath $fullPath)) { continue }
 
     # Ignorando binarios/arquivos muito grandes (leitura linha a linha para nao estourar RAM)
-    $lines = Get-Content $fullPath -ErrorAction SilentlyContinue
+    $lines = Get-Content -LiteralPath $fullPath -ErrorAction SilentlyContinue
     $lineNum = 1
     foreach ($line in $lines) {
         if ($line -match $secretRegex) {

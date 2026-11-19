@@ -173,9 +173,10 @@ function Invoke-NativeGovernanceCheck {
     $parallelChecks = @("Test-PythonGovernance.ps1", "Test-NodeCommunications.ps1")
     $allOk = $true
 
+    $resolvedWorkDir = (Resolve-Path -LiteralPath $RootPath).Path
     $checkArgsFor = {
         param([string]$ScriptName)
-        $checkArgs = @{ RootPath = $RootPath }
+        $checkArgs = @{ RootPath = $resolvedWorkDir }
         if ($TargetPaths.Count -gt 0) { $checkArgs["Paths"] = [string[]]$TargetPaths }
         if ($LintChangedOnly -and ($lintAwareChecks -contains $ScriptName)) {
             $checkArgs["LintScopePaths"] = [string[]]$LintScopePaths
@@ -185,59 +186,67 @@ function Invoke-NativeGovernanceCheck {
     }
 
     $jobs = [ordered]@{}
-    $resolvedWorkDir = (Resolve-Path -LiteralPath $RootPath).Path
-    $jobs = [ordered]@{}
-    foreach ($script in $parallelChecks) {
-        $path = Join-Path $resolvedWorkDir "Tools\$script"
-        if (-not (Test-Path $path)) { continue }
-        $jobs[$script] = Start-Job -ScriptBlock {
-            param([string]$ScriptPath, [string]$WorkDir, [hashtable]$CheckArgs)
-            Set-Location -LiteralPath $WorkDir
-            try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
-            catch [System.IO.IOException] { Write-Verbose "Sem console no job: $($_.Exception.Message)" }
-            $ErrorActionPreference = "Continue"
-            $global:LASTEXITCODE = 0
-            & $ScriptPath @CheckArgs *>&1 | ForEach-Object { "$_" }
-            [pscustomobject]@{ GateExitCode = $LASTEXITCODE }
-        } -ArgumentList $path, $resolvedWorkDir, (& $checkArgsFor $script)
-    }
-
-    foreach ($script in $checks) {
-        $path = Join-Path $RootPath "Tools\$script"
-        if ($jobs.Contains($script)) {
-            continue
+    try {
+        foreach ($script in $parallelChecks) {
+            $path = Join-Path $resolvedWorkDir "Tools\$script"
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            $jobs[$script] = Start-Job -ScriptBlock {
+                param([string]$ScriptPath, [string]$WorkDir, [hashtable]$CheckArgs)
+                Set-Location -LiteralPath $WorkDir
+                try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+                catch [System.IO.IOException] { Write-Verbose "Sem console no job: $($_.Exception.Message)" }
+                $ErrorActionPreference = "Continue"
+                $global:LASTEXITCODE = 0
+                & $ScriptPath @CheckArgs *>&1 | ForEach-Object { "$_" }
+                [pscustomobject]@{ GateExitCode = $LASTEXITCODE }
+            } -ArgumentList $path, $resolvedWorkDir, (& $checkArgsFor $script)
         }
-        if (Test-Path $path) {
-            Write-Host "--- Rodando: $script ---" -ForegroundColor Gray
 
-            $checkArgs = & $checkArgsFor $script
-            & $path @checkArgs | Out-Host
+        foreach ($script in $checks) {
+            $path = Join-Path $resolvedWorkDir "Tools\$script"
+            if ($jobs.Contains($script)) {
+                continue
+            }
+            if (Test-Path -LiteralPath $path) {
+                Write-Host "--- Rodando: $script ---" -ForegroundColor Gray
 
-            if ($LASTEXITCODE -ne 0) {
+                $checkArgs = & $checkArgsFor $script
+                & $path @checkArgs | Out-Host
+
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "[FALHA] $script retornou erro." -ForegroundColor Red
+                    $allOk = $false
+                }
+            }
+            else {
+                # Ate 31/07/2026 nao havia este 'else': renomear, mover ou apagar um
+                # script de checagem fazia o gate correspondente DESAPARECER com
+                # $allOk intacto, e tanto o pre-commit quanto o job de CI reportavam
+                # sucesso. O meta-gate nao tinha manifesto do que deveria ter rodado.
+                Write-Host "[FALHA] Checagem obrigatoria ausente: Tools\$script. Se foi renomeada ou removida deliberadamente, atualize a lista `$checks no mesmo commit." -ForegroundColor Red
+                $allOk = $false
+            }
+        }
+
+        foreach ($script in $jobs.Keys) {
+            Write-Host "--- Rodando (em paralelo): $script ---" -ForegroundColor Gray
+            $jobOutput = @(Receive-Job -Job $jobs[$script] -Wait -ErrorAction Continue)
+            $exitRecord = @($jobOutput | Where-Object { $_ -isnot [string] -and $null -ne $_.PSObject.Properties["GateExitCode"] })
+            $jobOutput | Where-Object { $_ -is [string] } | Out-Host
+            # Sem o registro de saida o job morreu antes do fim: tratar como falha, nunca
+            # como sucesso por omissao.
+            if ($exitRecord.Count -ne 1 -or $exitRecord[0].GateExitCode -ne 0) {
                 Write-Host "[FALHA] $script retornou erro." -ForegroundColor Red
                 $allOk = $false
             }
         }
-        else {
-            # Ate 31/07/2026 nao havia este 'else': renomear, mover ou apagar um
-            # script de checagem fazia o gate correspondente DESAPARECER com
-            # $allOk intacto, e tanto o pre-commit quanto o job de CI reportavam
-            # sucesso. O meta-gate nao tinha manifesto do que deveria ter rodado.
-            Write-Host "[FALHA] Checagem obrigatoria ausente: Tools\$script. Se foi renomeada ou removida deliberadamente, atualize a lista `$checks no mesmo commit." -ForegroundColor Red
-            $allOk = $false
-        }
     }
-
-    foreach ($script in $jobs.Keys) {
-        Write-Host "--- Rodando (em paralelo): $script ---" -ForegroundColor Gray
-        $jobOutput = @(Receive-Job -Job $jobs[$script] -Wait -AutoRemoveJob -ErrorAction Continue)
-        $exitRecord = @($jobOutput | Where-Object { $_ -isnot [string] -and $null -ne $_.PSObject.Properties["GateExitCode"] })
-        $jobOutput | Where-Object { $_ -is [string] } | Out-Host
-        # Sem o registro de saida o job morreu antes do fim: tratar como falha, nunca
-        # como sucesso por omissao.
-        if ($exitRecord.Count -ne 1 -or $exitRecord[0].GateExitCode -ne 0) {
-            Write-Host "[FALHA] $script retornou erro." -ForegroundColor Red
-            $allOk = $false
+    finally {
+        foreach ($job in $jobs.Values) {
+            if ($null -ne $job) {
+                Stop-Job -Job $job -ErrorAction SilentlyContinue
+                Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 

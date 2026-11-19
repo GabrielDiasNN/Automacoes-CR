@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$RootPath = $PSScriptRoot,
+    [string]$RootPath = "",
     [string[]]$Paths = @(),
 
     # PSScriptAnalyzer so' no diff: com -LintChangedOnly ele roda apenas nos arquivos
@@ -10,6 +10,10 @@
     [switch]$LintChangedOnly
 )
 
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = Split-Path -Parent $PSScriptRoot
+    if (-not $RootPath) { $RootPath = "." }
+}
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
 catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
@@ -72,7 +76,7 @@ foreach ($file in $targetFiles) {
         Write-Host "[AVISO] Modulo PSScriptAnalyzer nao esta instalado. Instalacao recomendada para validacao de tipagem." -ForegroundColor Yellow
     }
 
-    $content = Get-Content $fullPath -Raw
+    $content = Get-Content -LiteralPath $fullPath -Raw
     if ($content -match 'catch\s*\{') {
         Write-Host "[ERRO] Bloco 'catch' generico detectado em '$file'." -ForegroundColor Red
         Write-Host "  Motivo: A diretriz global exige tratamento de excecoes especificas (ex: catch [System.IO.IOException] { ... })." -ForegroundColor Red

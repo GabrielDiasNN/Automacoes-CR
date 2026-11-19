@@ -17,6 +17,13 @@ Pre-commit com caminho crítico (`lib\`, `Tools\`, workflows, skills) caiu de ~3
 - **`AplicarPoliticaRetencao.ps1` não apaga mais `.mypy_cache`.** A rotina roda também pelo agendador do Orchestrator e esfriava todo dia o cache do mypy (23 s quente contra 66 s frio no repositório inteiro).
 - **Skills `ci-gates` e `python-enterprise-standard` e `CLAUDE.md`:** o mypy `--strict` também é bloqueante no CI (`governanca-agregada`); a frase "o mypy bloqueante não é do CI" estava errada.
 - **Branch protection no `main` (configuração do GitHub, fora do código):** os checks `Governanca agregada` e `Resumo final` passam a ser obrigatórios, inclusive para administradores, e force push e exclusão do branch ficam bloqueados. É o que torna seguro, por regra e não só pelo fluxo, restringir o pylint do hook ao diff.
+- **Robustez e limpeza dos gates de `Tools/` (pós-review):**
+  - `Tools/ValidarAutomacoes.ps1`: resolve `$resolvedWorkDir` antes de montar os argumentos dos gates e jobs paralelos (evitando falha com `-BasePath` relativo) e limpa os jobs em `try/finally`.
+  - `Tools/Test-ZeroTrust.ps1`, `Test-PortablePaths.ps1`, `Test-SqlPerformance.ps1` e `Test-PowerShellGovernance.ps1`: quando `-RootPath` é omitido, resolvem automaticamente a raiz do repositório (`Split-Path -Parent $PSScriptRoot`) em vez de `$PSScriptRoot`, usando `-LiteralPath` na leitura dos arquivos.
+  - `Tools/Get-GovernanceTargetSummary.ps1`: adiciona `--no-renames` aos comandos `git diff --cached` para que `git mv` exponha também o caminho antigo no `LintScopePaths`.
+  - `Tools/Test-PythonGovernance.ps1`: `Get-PylintScope` passa a cobrir multi-imports na mesma linha (`import a, b`), o job do mypy ajusta `[Console]::OutputEncoding` UTF-8 protegido em `try/catch` usando raiz absoluta, e os jobs são encerrados em `try/finally`.
+  - `Tools/Get-QualitySnapshot.ps1`: passa `-c core.quotepath=false` às chamadas `git ls-files` e protege o ajuste de `[Console]::OutputEncoding`.
+  - Cobertura adicionada em `lib/tests/Tools-GovernanceGates.Tests.ps1`.
 
 ### Medido (mediana de 3, cache do mypy quente)
 

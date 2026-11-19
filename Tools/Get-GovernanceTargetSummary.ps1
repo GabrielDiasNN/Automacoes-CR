@@ -52,7 +52,7 @@ function Test-MatchAnyPattern {
 
 $deletedPaths = @()
 if ($StagedOnly -and $Paths.Count -eq 0) {
-    $stagedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR 2>$null
+    $stagedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --no-renames --name-only --diff-filter=ACMR 2>$null
     if ($LASTEXITCODE -ne 0) {
         throw "Falha ao obter arquivos staged via git diff --cached."
     }
@@ -61,7 +61,7 @@ if ($StagedOnly -and $Paths.Count -eq 0) {
         $Paths += @($stagedRaw -split "`r?`n")
     }
 
-    $deletedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --name-only --diff-filter=D 2>$null
+    $deletedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --no-renames --name-only --diff-filter=D 2>$null
     if ($LASTEXITCODE -ne 0) {
         throw "Falha ao obter arquivos removidos staged via git diff --cached."
     }
