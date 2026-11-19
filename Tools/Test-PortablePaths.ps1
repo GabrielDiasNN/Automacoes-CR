@@ -1,9 +1,15 @@
 ﻿param(
-    [string]$RootPath = $PSScriptRoot,
+    [string]$RootPath = "",
     [string[]]$Paths = @()
 )
 
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = Split-Path -Parent $PSScriptRoot
+    if (-not $RootPath) { $RootPath = "." }
+}
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 Write-Host "=== Governanca de Portabilidade (Caminhos Relativos) ==="
 
 $targetFiles = @()
@@ -11,7 +17,7 @@ if ($Paths.Count -gt 0) {
     # Ignora logs e arquivos compilados
     $targetFiles = $Paths | Where-Object { $_ -notmatch '\.(log|json\.bak|png|jpg)$' }
 } else {
-    $targetFiles = (git ls-files | Where-Object { $_ -notmatch '\.(log|json\.bak|png|jpg)$' })
+    $targetFiles = (git -C $RootPath -c core.quotepath=false ls-files | Where-Object { $_ -notmatch '\.(log|json\.bak|png|jpg)$' })
 }
 
 if ($targetFiles.Count -eq 0) {
@@ -32,12 +38,12 @@ $absolutePathRegex = '(?i)[a-z]:[\\/](?![\\/\s])(?!instantclient)(?!Windows\b)[a
 foreach ($file in $targetFiles) {
     $file = $file.Trim('"')
     $fullPath = Join-Path $RootPath $file
-    if (-not (Test-Path $fullPath)) { continue }
+    if (-not (Test-Path -LiteralPath $fullPath)) { continue }
 
     # Ignorando scripts de setup e pastas de legado/template
     if ($file -match 'SetupMonitor|Copilot|CONTEXT|README|runbook|_Template') { continue }
 
-    $lines = Get-Content $fullPath -ErrorAction SilentlyContinue
+    $lines = Get-Content -LiteralPath $fullPath -ErrorAction SilentlyContinue
     $lineNum = 1
     foreach ($line in $lines) {
         # Ignora linhas comentadas (PowerShell, Python, JS, VBA)

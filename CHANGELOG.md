@@ -2,6 +2,37 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.119] - 18/11/2026
+
+Pre-commit com caminho crítico (`lib\`, `Tools\`, workflows, skills) caiu de ~315 s para ~36 s sem tirar nenhum gate do pipeline, e 33 arquivos Python que nunca eram verificados entraram no mypy/pylint. Medição e plano: `docs/qualidade/precommit-tempo-18-11-2026.md`.
+
+### Corrigido
+
+- **33 `.py` de `Produção Beneficimento/` fora do mypy e do pylint no CI.** O runner usa o padrão do git, `core.quotepath=true`, e o `git ls-files` devolvia `"Produ\303\247\303\243o ..."` com escapes octais. O `Trim('"')` tirava as aspas e deixava os escapes, o `Test-Path` falhava e um `continue` mudo descartava o arquivo: o `governanca-agregada` verificava 240 de 273 `.py` (run 44168117220). A máquina local tem `core.quotepath=false`, então o hook enxergava os arquivos. Há uma segunda via, independente: com o console em `ibm850`, a saída UTF-8 do git chega corrompida (reproduzido chamando `pwsh -File` direto). Correção: as 10 chamadas a `git ls-files`/`git diff --cached` de `Tools\` passam `-c core.quotepath=false`; `ValidarAutomacoes.ps1`, `Get-GovernanceTargetSummary.ps1`, `Test-PythonGovernance.ps1`, `Test-PowerShellGovernance.ps1` e `Test-LogConformidade.ps1` forçam `[Console]::OutputEncoding` UTF-8; e arquivo listado e não encontrado gera `[AVISO]` em vez de sumir (foi esse aviso, no primeiro CI deste PR, que mostrou a causa real). Os 33 passam limpos hoje.
+
+### Alterado
+
+- **Pylint e PSScriptAnalyzer só no diff quando o hook promove a varredura completa.** Pylint sobre os `.py` staged mais os dependentes diretos (arquivos que importam um módulo alterado); PSScriptAnalyzer (que só emite aviso) sobre os `.ps1/.psm1` staged. Mypy `--strict`, o veto a `pylint: disable=all`, a regex bloqueante de `catch` genérico e as outras 13 checagens continuam completos. O CI (`governanca-agregada`) não recebe o diff e segue com pylint e PSScriptAnalyzer completos.
+- **Mypy e Node em paralelo.** `ValidarAutomacoes.ps1` roda `Test-PythonGovernance.ps1` e `Test-NodeCommunications.ps1` em jobs enquanto as demais checagens rodam in-process; dentro do gate Python, o mypy roda em job paralelo ao pylint. Job que termina sem registro de saída conta como falha.
+- **`AplicarPoliticaRetencao.ps1` não apaga mais `.mypy_cache`.** A rotina roda também pelo agendador do Orchestrator e esfriava todo dia o cache do mypy (23 s quente contra 66 s frio no repositório inteiro).
+- **Skills `ci-gates` e `python-enterprise-standard` e `CLAUDE.md`:** o mypy `--strict` também é bloqueante no CI (`governanca-agregada`); a frase "o mypy bloqueante não é do CI" estava errada.
+- **Branch protection no `main` (configuração do GitHub, fora do código):** os checks `Governanca agregada` e `Resumo final` passam a ser obrigatórios, inclusive para administradores, e force push e exclusão do branch ficam bloqueados. É o que torna seguro, por regra e não só pelo fluxo, restringir o pylint do hook ao diff.
+- **Robustez e limpeza dos gates de `Tools/` (pós-review):**
+  - `Tools/ValidarAutomacoes.ps1`: resolve `$resolvedWorkDir` antes de montar os argumentos dos gates e jobs paralelos (evitando falha com `-BasePath` relativo) e limpa os jobs em `try/finally`.
+  - `Tools/Test-ZeroTrust.ps1`, `Test-PortablePaths.ps1`, `Test-SqlPerformance.ps1` e `Test-PowerShellGovernance.ps1`: quando `-RootPath` é omitido, resolvem automaticamente a raiz do repositório (`Split-Path -Parent $PSScriptRoot`) em vez de `$PSScriptRoot`, usando `-LiteralPath` na leitura dos arquivos.
+  - `Tools/Get-GovernanceTargetSummary.ps1`: adiciona `--no-renames` aos comandos `git diff --cached` para que `git mv` exponha também o caminho antigo no `LintScopePaths`.
+  - `Tools/Test-PythonGovernance.ps1`: `Get-PylintScope` passa a cobrir multi-imports na mesma linha (`import a, b`), o job do mypy ajusta `[Console]::OutputEncoding` UTF-8 protegido em `try/catch` usando raiz absoluta, e os jobs são encerrados em `try/finally`.
+  - `Tools/Get-QualitySnapshot.ps1`: passa `-c core.quotepath=false` às chamadas `git ls-files` e protege o ajuste de `[Console]::OutputEncoding`.
+  - Cobertura adicionada em `lib/tests/Tools-GovernanceGates.Tests.ps1`.
+
+### Medido (mediana de 3, cache do mypy quente)
+
+| Cenário | Antes | Depois |
+| --- | --- | --- |
+| Commit com caminho crítico | 314,9 s | 35,8 s |
+| Commit direcionado (1 `.py` + 1 `.ps1`) | 12,4 s | 8,8 s |
+| Primeiro commit em worktree novo (cache frio) | 368,5 s | 75,5 s |
+
 ## [1.3.118] - 18/11/2026
 
 Limpeza da duplicação PowerShell que ficou sem chamador depois que as seis automações passaram ao runner Python (1.3.117). Só saiu código sem chamador de runtime. O `_Template/run.ps1` também passou ao runner Python, então automação nova nasce no mesmo padrão das seis.

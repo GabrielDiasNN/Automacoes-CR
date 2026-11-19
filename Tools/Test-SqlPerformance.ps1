@@ -1,16 +1,22 @@
 ﻿param(
-    [string]$RootPath = $PSScriptRoot,
+    [string]$RootPath = "",
     [string[]]$Paths = @()
 )
 
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = Split-Path -Parent $PSScriptRoot
+    if (-not $RootPath) { $RootPath = "." }
+}
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 Write-Host "=== Governanca SQL (Performance Oracle) ==="
 
 $targetFiles = @()
 if ($Paths.Count -gt 0) {
     $targetFiles = $Paths | Where-Object { $_ -match '\.sql$' }
 } else {
-    $targetFiles = (git ls-files "*.sql")
+    $targetFiles = (git -C $RootPath -c core.quotepath=false ls-files "*.sql")
 }
 
 if ($targetFiles.Count -eq 0) {
@@ -24,9 +30,9 @@ $bannedRegex = '(?i)\bSELECT\s+\*'
 foreach ($file in $targetFiles) {
     $file = $file.Trim('"')
     $fullPath = Join-Path $RootPath $file
-    if (-not (Test-Path $fullPath)) { continue }
+    if (-not (Test-Path -LiteralPath $fullPath)) { continue }
 
-    $content = Get-Content $fullPath -Raw
+    $content = Get-Content -LiteralPath $fullPath -Raw
     if ($content -match $bannedRegex) {
         Write-Host "[ERRO] A query em '$file' contem 'SELECT *'." -ForegroundColor Red
         Write-Host "  Motivo: 'SELECT *' viola a diretriz de Performance O(n) e Custo de Plano de Execucao." -ForegroundColor Red

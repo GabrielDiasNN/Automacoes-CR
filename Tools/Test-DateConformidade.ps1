@@ -19,6 +19,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 
 if ([string]::IsNullOrWhiteSpace($RootPath)) {
     $RootPath = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
@@ -89,7 +91,7 @@ function Get-TargetFiles {
     }
 
     if ($StagedOnly) {
-        $stagedRaw = git diff --cached --name-only --diff-filter=ACMR 2>$null
+        $stagedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR 2>$null
         if (-not $stagedRaw) { return @() }
         $files = @()
         foreach ($rel in ($stagedRaw -split "`n")) {

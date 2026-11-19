@@ -45,6 +45,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Nomes do git em UTF-8; com o console em ibm850 o caminho com acento chegava
+# corrompido (ver Tools\ValidarAutomacoes.ps1).
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 
 if ([string]::IsNullOrWhiteSpace($RootPath)) {
 
@@ -170,7 +174,7 @@ function Get-TargetFiles {
 
     if ($StagedOnly) {
 
-        $stagedRaw = git diff --cached --name-only --diff-filter=ACMR 2>$null
+        $stagedRaw = git -C $resolvedRoot -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR 2>$null
 
         if (-not $stagedRaw) { return @() }
 

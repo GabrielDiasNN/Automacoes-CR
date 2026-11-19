@@ -26,6 +26,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# A saida do git (diff --cached, ls-files) e' decodificada com [Console]::OutputEncoding.
+# Disparado pelo hook (sh -> pwsh -File) ou pelo CI, o console herda ibm850 e o nome
+# "Producao" (com acento) chegava corrompido: o Test-Path das checagens falhava e os
+# arquivos de "Produção Beneficimento" saiam do gate sem aviso (18/11/2026). As
+# checagens rodam in-process, entao este ajuste vale para todas elas.
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
+
 function Add-StepTiming {
     param(
         [System.Collections.Generic.List[object]]$Collector,
@@ -146,37 +154,102 @@ function Get-GovernanceTargetSummary {
 function Invoke-NativeGovernanceCheck {
     param(
         [string]$RootPath,
-        [string[]]$TargetPaths = @()
+        [string[]]$TargetPaths = @(),
+
+        # Arquivos do diff local (staged ou -Paths) quando um caminho critico promoveu
+        # a full_scan. Com -LintChangedOnly, pylint e PSScriptAnalyzer rodam so' sobre
+        # eles (mais dependentes, no pylint); o resto das 15 checagens segue completo.
+        # O CI nao passa nada disto e continua com pylint e PSScriptAnalyzer completos.
+        [string[]]$LintScopePaths = @(),
+        [switch]$LintChangedOnly
     )
     Write-Host "`n=== Governanca Nativa (Seguranca, SQL, Python, PS, JSON) ===" -ForegroundColor Cyan
     $checks = @("Test-ZeroTrust.ps1", "Test-SqlPerformance.ps1", "Test-PythonGovernance.ps1", "Test-PowerShellGovernance.ps1", "Test-PowerShellApprovedVerbs.ps1", "Test-PortablePaths.ps1", "Test-SourceEncoding.ps1", "Test-JsonConfig.ps1", "Test-PlaywrightEvidence.ps1", "Test-AutomationCatalog.ps1", "Test-ArchitectureStandard.ps1", "Test-DateConformidade.ps1", "Test-SemanticGovernance.ps1", "Test-NodeCommunications.ps1", "Test-LogEventSchema.ps1")
+    $lintAwareChecks = @("Test-PythonGovernance.ps1", "Test-PowerShellGovernance.ps1")
+
+    # Python (mypy + pylint) e Node (npm test) sao os blocos lentos e independentes
+    # das demais checagens: rodam em jobs enquanto as outras 13 rodam in-process.
+    # Antes de 18/11/2026 tudo era serial e o tempo de parede era a soma.
+    $parallelChecks = @("Test-PythonGovernance.ps1", "Test-NodeCommunications.ps1")
     $allOk = $true
-    
-    foreach ($script in $checks) {
-        $path = Join-Path $RootPath "Tools\$script"
-        if (Test-Path $path) {
-            Write-Host "--- Rodando: $script ---" -ForegroundColor Gray
 
-            if ($TargetPaths.Count -gt 0) {
-                & $path -RootPath $RootPath -Paths $TargetPaths | Out-Host
-            } else {
-                & $path -RootPath $RootPath | Out-Host
+    $resolvedWorkDir = (Resolve-Path -LiteralPath $RootPath).Path
+    $checkArgsFor = {
+        param([string]$ScriptName)
+        $checkArgs = @{ RootPath = $resolvedWorkDir }
+        if ($TargetPaths.Count -gt 0) { $checkArgs["Paths"] = [string[]]$TargetPaths }
+        if ($LintChangedOnly -and ($lintAwareChecks -contains $ScriptName)) {
+            $checkArgs["LintScopePaths"] = [string[]]$LintScopePaths
+            $checkArgs["LintChangedOnly"] = $true
+        }
+        return $checkArgs
+    }
+
+    $jobs = [ordered]@{}
+    try {
+        foreach ($script in $parallelChecks) {
+            $path = Join-Path $resolvedWorkDir "Tools\$script"
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            $jobs[$script] = Start-Job -ScriptBlock {
+                param([string]$ScriptPath, [string]$WorkDir, [hashtable]$CheckArgs)
+                Set-Location -LiteralPath $WorkDir
+                try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+                catch [System.IO.IOException] { Write-Verbose "Sem console no job: $($_.Exception.Message)" }
+                $ErrorActionPreference = "Continue"
+                $global:LASTEXITCODE = 0
+                & $ScriptPath @CheckArgs *>&1 | ForEach-Object { "$_" }
+                [pscustomobject]@{ GateExitCode = $LASTEXITCODE }
+            } -ArgumentList $path, $resolvedWorkDir, (& $checkArgsFor $script)
+        }
+
+        foreach ($script in $checks) {
+            $path = Join-Path $resolvedWorkDir "Tools\$script"
+            if ($jobs.Contains($script)) {
+                continue
             }
+            if (Test-Path -LiteralPath $path) {
+                Write-Host "--- Rodando: $script ---" -ForegroundColor Gray
 
-            if ($LASTEXITCODE -ne 0) {
+                $checkArgs = & $checkArgsFor $script
+                & $path @checkArgs | Out-Host
+
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "[FALHA] $script retornou erro." -ForegroundColor Red
+                    $allOk = $false
+                }
+            }
+            else {
+                # Ate 31/07/2026 nao havia este 'else': renomear, mover ou apagar um
+                # script de checagem fazia o gate correspondente DESAPARECER com
+                # $allOk intacto, e tanto o pre-commit quanto o job de CI reportavam
+                # sucesso. O meta-gate nao tinha manifesto do que deveria ter rodado.
+                Write-Host "[FALHA] Checagem obrigatoria ausente: Tools\$script. Se foi renomeada ou removida deliberadamente, atualize a lista `$checks no mesmo commit." -ForegroundColor Red
+                $allOk = $false
+            }
+        }
+
+        foreach ($script in $jobs.Keys) {
+            Write-Host "--- Rodando (em paralelo): $script ---" -ForegroundColor Gray
+            $jobOutput = @(Receive-Job -Job $jobs[$script] -Wait -ErrorAction Continue)
+            $exitRecord = @($jobOutput | Where-Object { $_ -isnot [string] -and $null -ne $_.PSObject.Properties["GateExitCode"] })
+            $jobOutput | Where-Object { $_ -is [string] } | Out-Host
+            # Sem o registro de saida o job morreu antes do fim: tratar como falha, nunca
+            # como sucesso por omissao.
+            if ($exitRecord.Count -ne 1 -or $exitRecord[0].GateExitCode -ne 0) {
                 Write-Host "[FALHA] $script retornou erro." -ForegroundColor Red
                 $allOk = $false
             }
         }
-        else {
-            # Ate 31/07/2026 nao havia este 'else': renomear, mover ou apagar um
-            # script de checagem fazia o gate correspondente DESAPARECER com
-            # $allOk intacto, e tanto o pre-commit quanto o job de CI reportavam
-            # sucesso. O meta-gate nao tinha manifesto do que deveria ter rodado.
-            Write-Host "[FALHA] Checagem obrigatoria ausente: Tools\$script. Se foi renomeada ou removida deliberadamente, atualize a lista `$checks no mesmo commit." -ForegroundColor Red
-            $allOk = $false
+    }
+    finally {
+        foreach ($job in $jobs.Values) {
+            if ($null -ne $job) {
+                Stop-Job -Job $job -ErrorAction SilentlyContinue
+                Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+            }
         }
     }
+
     if ($allOk) { return 0 } else { return 1 }
 }
 
@@ -203,6 +276,10 @@ function Invoke-LogConformidadeCheck {
 # --- FLUXO PRINCIPAL ---
 $globalResult = 0
 $logTargetPaths = @()
+# Diff local (staged ou -Paths). So' e' usado para restringir pylint e
+# PSScriptAnalyzer quando a promocao a full_scan zera $Paths; sem diff local (CI,
+# execucao manual sem argumentos) os dois continuam sobre o repositorio inteiro.
+$lintScopePaths = @()
 $stepTimings = New-Object 'System.Collections.Generic.List[object]'
 $selectionMode = "full_scan"
 $changedFileCount = 0
@@ -231,6 +308,7 @@ if ($StagedOnly) {
 
         $Paths = @($targetSummary.GovernancePaths)
         $logTargetPaths = @($targetSummary.LogTargetPaths)
+        $lintScopePaths = @($targetSummary.NormalizedPaths)
 
         Write-Host ("Arquivos staged encontrados para analise: " + $targetSummary.ChangedFileCount) -ForegroundColor Gray
         Write-Host ("Modo de selecao governada: " + $targetSummary.SelectionMode) -ForegroundColor Gray
@@ -264,6 +342,7 @@ if (-not $StagedOnly -and $Paths.Count -gt 0) {
     $targetSummary = Get-GovernanceTargetSummary -RootPath $BasePath -InputPaths $Paths -SuppressCriticalPromotion:$NoCriticalPromotion
     $Paths = @($targetSummary.GovernancePaths)
     $logTargetPaths = @($targetSummary.LogTargetPaths)
+    $lintScopePaths = @($targetSummary.NormalizedPaths)
     $selectionMode = [string]$targetSummary.SelectionMode
     $changedFileCount = [int]$targetSummary.ChangedFileCount
     $governancePathCount = @($targetSummary.GovernancePaths).Count
@@ -290,7 +369,11 @@ elseif (-not $StagedOnly) {
 
 if (-not $SkipGovernance) {
     $stepWatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $res = Invoke-NativeGovernanceCheck -RootPath $BasePath -TargetPaths $Paths
+    $lintChangedOnly = ($selectionMode -eq "full_scan") -and ($lintScopePaths.Count -gt 0)
+    if ($lintChangedOnly) {
+        Write-Host "Varredura completa com pylint e PSScriptAnalyzer restritos ao diff (o CI roda os dois completos)." -ForegroundColor Gray
+    }
+    $res = Invoke-NativeGovernanceCheck -RootPath $BasePath -TargetPaths $Paths -LintScopePaths $lintScopePaths -LintChangedOnly:$lintChangedOnly
     $stepWatch.Stop()
     Add-StepTiming -Collector $stepTimings -Step "governanca_nativa" -Stopwatch $stepWatch -Status $(if ($res -eq 0) { "ok" } else { "error" })
     if ($res -ne 0) { $globalResult = 1 }

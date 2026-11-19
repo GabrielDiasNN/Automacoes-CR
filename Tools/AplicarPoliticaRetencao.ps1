@@ -12,6 +12,9 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
+
 if ([string]::IsNullOrWhiteSpace($RootPath)) {
     $RootPath = Split-Path -Parent $PSScriptRoot
 }
@@ -33,7 +36,10 @@ $script:CategoryRules = @(
     @{
         Name       = "Python Cache"
         Type       = "DirectoryName"
-        Names      = @("__pycache__", ".pytest_cache", ".mypy_cache", "htmlcov")
+        # .mypy_cache saiu da lista em 18/11/2026: e' o cache incremental do mypy
+        # --strict do pre-commit (23 s quente contra 66 s frio no repositorio inteiro),
+        # e esta rotina roda tambem pelo agendador do Orchestrator, esfriando-o todo dia.
+        Names      = @("__pycache__", ".pytest_cache", "htmlcov")
         MinAgeDays = 0
         Recurse    = $true
     },
@@ -171,7 +177,7 @@ function Initialize-TrackedFiles {
         return
     }
 
-    $tracked = & git -C $resolvedRoot ls-files 2>$null
+    $tracked = & git -C $resolvedRoot -c core.quotepath=false ls-files 2>$null
     if ($LASTEXITCODE -ne 0) {
         return
     }

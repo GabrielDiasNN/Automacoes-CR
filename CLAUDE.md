@@ -110,7 +110,7 @@ Fonte única (não duplicar aqui): `AGENTS.md § Regras de Encoding`. Aplicado m
 - Fixtures de teste que cadastram automações sintéticas recebem o manifesto automaticamente pelo wrapper `com_manifesto` do `client` (`Orchestrator/tests/conftest.py`); ele nunca sobrescreve um manifesto que o próprio teste criou. Para testar o bloqueio, use a fixture `sem_governanca_automatica`.
 
 ### CI (GitHub Actions — `.github/workflows/governanca.yml`)
-Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes, cobertura de cada diretório e o histórico das decisões: skill `ci-gates` (`.claude/skills/ci-gates/SKILL.md`). O mypy bloqueante é o do pre-commit hook (`Test-PythonGovernance.ps1`), não o do CI.
+Pipeline único, roda em push para `main`/`escalar/**` e PRs. Gates bloqueantes, cobertura de cada diretório e o histórico das decisões: skill `ci-gates` (`.claude/skills/ci-gates/SKILL.md`). O mypy `--strict` é bloqueante no pre-commit hook (`Test-PythonGovernance.ps1`) e também no CI (job `governanca-agregada`); o hook só pega o erro mais cedo, no commit.
 
 ## Contratos de Governança (Pre-Commit Hook)
 

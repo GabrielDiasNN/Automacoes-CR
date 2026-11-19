@@ -12,7 +12,11 @@ $ErrorActionPreference = 'Stop'
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 # Garantir UTF-8 para saídas de console de ferramentas externas
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+try {
+    [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+} catch [System.IO.IOException] {
+    Write-Verbose "Sem console para ajustar OutputEncoding: $($_.Exception.Message)"
+}
 $env:PYTHONUTF8 = 1
 $env:PYLINTHOME = Join-Path $PSScriptRoot ".mypy_cache\pylint"
 $env:MYPYPATH = "$(Join-Path $PSScriptRoot "..\Orchestrator");$(Join-Path $PSScriptRoot "..")"
@@ -79,7 +83,7 @@ $sourceSizeSum = ($sourceFiles | Measure-Object -Property Length -Sum).Sum
 $sourceSizeMB = [math]::Round($sourceSizeSum / 1MB, 2)
 $sourceFilesCount = $sourceFiles.Count
 
-$trackedFiles = @(git -C (Join-Path $PSScriptRoot "..") ls-files)
+$trackedFiles = @(git -C (Join-Path $PSScriptRoot "..") -c core.quotepath=false ls-files)
 $trackedPayloadSum = 0
 foreach ($trackedFile in $trackedFiles) {
     $fullPath = Join-Path "$PSScriptRoot\.." $trackedFile
@@ -128,7 +132,7 @@ $activeManifestFiles = $manifestFiles | Where-Object { $_.Directory.Name -ne "_T
 $runbooksPresent = 0
 $catalogIssues = 0
 $smokeReady = 0
-$pythonTargets = @(git -C (Join-Path $PSScriptRoot "..") ls-files "*.py")
+$pythonTargets = @(git -C (Join-Path $PSScriptRoot "..") -c core.quotepath=false ls-files "*.py")
 $resolvedPythonTargets = @()
 
 foreach ($file in $pythonTargets) {

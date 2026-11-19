@@ -8,6 +8,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+catch [System.IO.IOException] { Write-Verbose "Sem console para ajustar a codificacao: $($_.Exception.Message)" }
 
 function Get-RepositoryRoot {
     if (-not [string]::IsNullOrWhiteSpace($script:RootPath)) {
@@ -34,7 +36,7 @@ function Get-StagedPowerShellFiles {
 
     Push-Location $RepositoryRoot
     try {
-        $staged = git diff --cached --name-only --diff-filter=ACMR -- '*.ps1' '*.psm1' '*.psd1'
+        $staged = git -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR -- '*.ps1' '*.psm1' '*.psd1'
     }
     finally {
         Pop-Location
