@@ -27,6 +27,7 @@
     "whatsapp": true
   },
   "smoke_tests": [
-    "Orchestrator/tests/test_obs_paradas_fase.py"
+    "Orchestrator/tests/test_obs_paradas_fase.py",
+    "Orchestrator/tests/test_run_obs_paradas_unit.py"
   ]
 }

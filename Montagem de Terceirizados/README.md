@@ -10,20 +10,27 @@ A versao 2.0 marca a migracao definitiva para a **Arquitetura Pure-Native**, eli
 
 ## Fluxo de Execucao (Modo Nativo)
 
-`MonitorAutomacoes.ps1` (Monitor) -> `run.ps1` (Orquestrador)
-  -> **Fase 1 (Extracao)**: Executa a extracao 100% Python direta do Oracle (`extract_oracle.py`) consumindo o payload `SQL-MontagemTerceirizados.sql`.
-  -> **Fase 2 (Inteligencia)**: Python valida os dados, aplica regras de negocio e gera o relatorio HTML (`validate_and_generate_html.py`).
-  -> **Fase 3 (Entrega)**: PowerShell dispara o e-mail oficial via Outlook COM (Outlook-Safe).
+`Orchestrator` -> `run.ps1` (shim) -> `run_montagem.py` (orquestra, sobre `lib/python/hub_runner.py`)
+  -> **Fase 1 (Extracao)**: `extract_oracle.py` extrai do Oracle o SQL `SQL-MontagemTerceirizados.sql` e grava `.data_<ExecId>.json`.
+  -> **Fase 2 (Inteligencia)**: `validate_and_generate_html.py` valida os dados, aplica regras de negocio e grava `.payload_<ExecId>.json`.
+  -> **Fase 3 (Entrega)**: `run_montagem.py` envia o e-mail pela CLI `lib/Invoke-OutlookEmail.ps1` (Outlook COM), com idempotencia por hash do payload. A CLI repassa `-Cc` e `-PreviewOnly` a `Send-OutlookEmail`.
 
 ---
 
 ## Arquitetura de Componentes
 
-### 1. Orquestrador PowerShell (`run.ps1`)
-O motor de execucao nativa:
-- Gerencia o ciclo de vida sem overhead de interface grafica (Excel).
-- Utiliza o **Secure File-Payload Protocol** para garantir que dados pesados nao corrompam na memoria.
-- Implementa o **Base64 Bridge Protocol** para logs e e-mails PT-BR perfeitos.
+### 1. Orquestrador Python (`run_montagem.py`)
+Gerencia o fluxo sobre o runner compartilhado `lib/python/hub_runner.py`: pre-flight (disco, paths e check Oracle), lock global `MT-02`, extract (3 tentativas), transform (2 tentativas), dispatch por e-mail e commit do cache de erros. Fecha toda execucao com o evento de fim e a telemetria.
+
+`run.ps1` agora e um **shim**: resolve o interpretador do projeto, chama `run_montagem.py`, repassa o `ExecId`, o `-DryRun` e os switches de e-mail do run.ps1 antigo (`-EmailPreviewOnly`, `-EmailToTest`, `-EmailCcTest`) e sai com o mesmo exit code, porque o worker do Orchestrator le o exit code de `powershell.exe -File run.ps1`.
+
+Modo teste: `ORCHESTRATOR_TEST_MODE` vence; sem ele, `-EmailToTest` ou o `AUTOMACAO_TEST_EMAIL` do escopo User (registro do Windows) redirecionam o envio, como no run.ps1 antigo.
+
+Execucao manual de validacao (nao usar em producao; nao envia e-mail nem confirma o estado; pega o lock `MT-02`):
+
+```powershell
+.venv\Scripts\python.exe "Montagem de Terceirizados\run_montagem.py" VALIDACAO_MANUAL_0001 --dry-run
+```
 
 ### 2. Camada de Dados e Inteligencia
 - **`SQL-MontagemTerceirizados.sql`**: Query ultra-otimizada utilizando CTEs (Common Table Expressions) e agregados de I/O reduzido. Substitui a dependencia da View lenta do Oracle.
@@ -36,9 +43,9 @@ O motor de execucao nativa:
 ## Operacao e Diagnostico
 
 ### Logs e Auditoria
-- **Localizacao**: `Logs/Montagem_Terceirizados_...log`.
-- **Rastreabilidade**: Todas as fases sao correlacionadas pelo `ExecId` unico.
-- **PT-BR Blindado**: Mensagens de log em codigo-fonte sao ASCII-Safe, convertidas em tempo de execucao via Base64.
+- **Localização**: `Logs/Montagem_Terceirizados.jsonl` (`Logs/*.jsonl`, envelope estruturado via `hub_runner`).
+- **Rastreabilidade**: Todas as fases são correlacionadas pelo `ExecId` único.
+- **UTF-8 Nativo**: Logs estruturados em UTF-8 diretamente pelo runner Python, sem Base64 Bridge.
 
 ### Performance
 A migracao para o modo nativo reduziu o tempo de execucao de minutos (via Excel COM) para **segundos** (via Python/cx_Oracle), eliminando falhas de interface e deadlocks de processos do Office.

@@ -33,6 +33,40 @@ Pre-commit com caminho crítico (`lib\`, `Tools\`, workflows, skills) caiu de ~3
 | Commit direcionado (1 `.py` + 1 `.ps1`) | 12,4 s | 8,8 s |
 | Primeiro commit em worktree novo (cache frio) | 368,5 s | 75,5 s |
 
+## [1.3.117] - 18/11/2026
+
+Revisão de linguagens do monorepo: o JavaScript fica onde só ele serve (WhatsApp), sai onde duplicava o Python (Oracle), e a orquestração das seis automações sai do PowerShell para um runner Python (RE-03 como piloto, depois RB-01, MT-02, OBP-04, OFST-06 e ORB-07).
+
+### Adicionado
+
+- **Daemon WhatsApp opcional (`lib/whatsapp-daemon.js`):** mantém a sessão `whatsapp-web.js` aberta e recebe os envios por HTTP em `127.0.0.1`, com o token `WHATSAPP_DAEMON_TOKEN` (mínimo de 32 caracteres) comparado em tempo constante. Elimina o bootstrap do Chromium a cada envio: 10 a 25 s quando dá certo, e cerca de 1 em 5 bootstraps estourava o prazo de 3 min.
+  - Liga com `WHATSAPP_DAEMON_ENABLED=1`; o `Infrastructure/Start-WhatsAppDaemon.ps1` sobe o daemon no fim do `Start-Orchestrator.ps1` (falha não impede o Orchestrator). Desligado, nada muda.
+  - `POST /batch` (OBP-04, OFST-06, ORB-07) e `POST /send` (modo AUTO do RB-01 e dos envios de um card só), em fila serial, com `verificarEstadoConectado` antes de cada envio, acomodação de `BATCH_SETTLE_MS_NORMAL` após o `ready`, vigia periódico por `getState` e `client_id` conferido (`409` quando difere).
+  - Sem `ready` por `WHATSAPP_DAEMON_MAX_NOT_READY_MS` (padrão 10 min), o daemon destrói o cliente e encerra, e os envios voltam ao modo por processo.
+  - `lib/WhatsApp-Core.js`: o corpo do envio único virou `executarEnvioUnico(client, { contato, anexo, legenda })`; o modo AUTO por processo delega a ela sem mudança de comportamento.
+- **Runner Python das automações (`lib/python/hub_runner.py`):** reproduz em Python os contratos de `Lib-Logging`, `Lib-LogEvent`, `Lib-Oracle`, `Lib-Retry` e `Lib-Idempotency` — mutex `Global\AutomationHub_<chave>` com o mesmo saneamento (PowerShell e Python se excluem), eventos estruturados `ps_script` no mesmo arquivo de log, passos Python com retry e exit 2 idempotente, `delivery_state.json` no mesmo formato, pré-flight Oracle com a decisão de `Test-AutomationPreFlight -CheckOracle` e `Get-OraclePreFlightExitCode` (limiares 45/240 s do worker da fila) e telemetria só para `ExecId` `TEL_`. `lib/Invoke-OutlookEmail.ps1` é a CLI fina sobre `Lib-Email`/`Lib-Retry` (com `-Cc`, `-Bcc`, `-Attachments` separados por `;` e `-PreviewOnly`): o Outlook COM continua no PowerShell. `user_environment_variable` lê o escopo User do Windows (registro), como o `GetEnvironmentVariable(..., "User")` que decidia o modo teste.
+- **Base WhatsApp do runner (`lib/python/hub_whatsapp.py`):** ports de `Read-CardsManifest`, `Write-WhatsAppBatchInput` (bytes iguais aos do `ConvertTo-Json` do PS 5.1), `Resolve-WhatsAppBatchDelivery`, `Update-WhatsAppResultRecordCounts`, `Test-WhatsAppConfigEnabled` e `Get-WhatsAppAuthPath`, além de `read_whatsapp_config`, `resolve_whatsapp_target` e `send_whatsapp`, que chama o `lib/Send-WhatsApp.ps1` (o daemon e o motor Node continuam atrás dele). Testes de paridade rodam as funções PowerShell reais e comparam resultado e arquivos.
+- **Motor compartilhado de cards (`lib/python/obs_cards_runner.py`):** unifica a orquestração de OFST-06 (`run_ofst.py`) e ORB-07 (`run_orb.py`), reutilizando os helpers comuns de pré-flight, disco, rotação de log sem BOM, escrita atômica e telemetria em `lib/python/hub_runner.py` (também compartilhados por RE-03, RB-01, MT-02 e OBP-04).
+
+### Alterado
+
+- **Orquestração das seis automações no runner Python:** `run.ps1` virou shim (resolve o Python, chama o runner da pasta, repassa o exit code; worker e manifestos inalterados) e ganhou `-DryRun`, que roda preflight, extract e transform de verdade sem enviar e-mail, alerta ou WhatsApp, sem limpar processos e sem gravar o state. Steps, códigos de saída (inclusive 2, 21, 22, 25), chaves de lock, tentativas, backoffs e arquivos de estado são os mesmos de antes, com um teste por desfecho em `Orchestrator/tests/test_run_<automação>_unit.py`.
+  - RE-03 `run_receitas.py` (piloto), RB-01 `run_receitas_bloqueadas.py`, MT-02 `run_montagem.py`, OBP-04 `run_obs_paradas.py`, OFST-06 `run_ofst.py` e ORB-07 `run_orb.py`.
+  - Modo teste de RB-01 e MT-02: `AUTOMACAO_TEST_EMAIL` continua vindo só do escopo User do Windows, nunca do `.env` carregado no processo.
+  - OBP-04: a limpeza de Chrome zumbi do perfil WhatsApp poupa a árvore de processos do daemon, como o `Send-WhatsApp.ps1`.
+  - Os contratos textuais de `test_run_ps1_bootstrap_unit.py`, `test_ofst_orb_parity_unit.py` e `Lib-Idempotency.Tests.ps1` passaram a travar o shim e o runner, onde cada contrato mora agora.
+- **`lib/Send-WhatsApp.ps1`:** com um daemon vivo no mesmo perfil, todo envio passa por ele (BATCH e AUTO) e daemon não pronto devolve `22` (state preservado). VISUAL, LIST_GROUPS, `Authenticate-WhatsApp.bat` e `Keep-WhatsApp-Open.ps1` recusam enquanto o daemon segura o perfil (em `Keep-WhatsApp-Open.ps1`, confirma o `client_id` no `/health` antes de bloquear). A limpeza de Chrome zumbi poupa a árvore de processos do daemon.
+
+### Corrigido
+
+- **Isolamento de ambiente e tratamento HTTP no daemon WhatsApp:** `Infrastructure/Start-WhatsAppDaemon.ps1` passa a filtrar variáveis com allowlist (`Get-WhatsAppDaemonEnvironment`) via `ProcessStartInfo` para não propagar segredos do Orchestrator/Oracle/SMTP ao processo Node; `Lib-WhatsAppBatch.psm1` unifica a leitura de corpo de erro HTTP para PowerShell 5.1 e 7+ (`Read-WhatsAppHttpErrorBody`) e expõe `-ThrowOnError` em `Get-WhatsAppDaemonProcess` para falha fechada em `Keep-WhatsApp-Open.ps1` e `Authenticate-WhatsApp.bat`.
+- **Ciclo de vida e configuração do daemon (`lib/whatsapp-daemon.js`, `lib/Lib-Config.psm1`, `lib/Send-WhatsApp.ps1`):** `stop()` aguarda `encerrarPor()` em andamento para evitar corrida na destruição do cliente; `perfilDivergente` normaliza `client_id` com `.trim()`; `Import-HubEnv`/`Get-EnvFileValue` leem `.env` em UTF-8 removendo BOM da primeira linha; `Send-WhatsApp.ps1` prioriza `WHATSAPP_DAEMON_PORT` e `WHATSAPP_DAEMON_TOKEN` do ambiente antes do `.env`.
+- **Reconciliação de `exit 21`, mutex e encoding em `run_obs_paradas.py` e `hub_runner.py`:** `run_obs_paradas.py` reconcilia `batch_result.json` parcial no `exit 21` antes de gravar `delivery_state.json` via `write_json_atomic`, aplica corte de `CreationDate` (10 s) e mutex não-bloqueante na limpeza de Chrome zumbi e corrige `sessao.encerrado`; `hub_runner.rotate_log` remove BOM residual ao rotacionar logs JSONL.
+
+### Removido
+
+- **Motor Oracle em Node (`ORACLE_DRIVER_MODE=bridge`):** nunca validado contra o Oracle e sem uso (produção usa `queue`). Saíram `lib/node/oracle_common.js`, `lib/node/oracle_query.js`, os extratores `extract_*.js` de MT-02, OBP-04 e RE-03, `run_node_bridge`/`OracleBridgeError` de `oracle_extract.py`, o ramo bridge do Beneficiamento e a dependência `oracledb` do `package.json` da raiz. `bridge` agora é recusado por `oracle_client.get_driver_mode` com mensagem clara. O pacote continua instalado em `node_modules` da produção até um `npm install` na raiz.
+
 ## [1.3.116] - 17/11/2026
 
 Receitas Bloqueadas (RB-01) parou com `ORA-01840` (PythonExit=5) na execução das 17:00 de 17/11/2026.

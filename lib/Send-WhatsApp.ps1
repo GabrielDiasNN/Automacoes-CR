@@ -39,6 +39,7 @@ $ProcessModule = Join-Path $LibDir "Lib-Process.psm1"
 $ConfigModule = Join-Path $LibDir "Lib-Config.psm1"
 Import-Module $ProcessModule -Force
 Import-Module $ConfigModule -Force
+Import-Module (Join-Path $LibDir "Lib-WhatsAppBatch.psm1") -Force
 
 # --- Detectar Node.js ---
 $NodeExe = "node"
@@ -99,27 +100,15 @@ function Clear-StaleWhatsAppLocksAndProcesses {
     $now = [DateTime]::Now
     $authSessionDir = Get-WhatsAppAuthPath
 
-    # 1. Limpeza direcionada de processos zumbis do Chromium e Node vinculados ao repositório
+    # 1. Limpeza direcionada de processos zumbis do Chromium e Node vinculados ao repositório.
+    # O daemon WhatsApp (opt-in) e' processo de vida longa e TODA a sua arvore de descendentes
+    # (chrome.exe do Puppeteer) fica protegida: a selecao e' feita por Select-WhatsAppStaleProcessIds.
     try {
-        $processes = Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'node.exe'" -ErrorAction SilentlyContinue
-        foreach ($proc in $processes) {
-            $cmd = $proc.CommandLine
-            $path = $proc.ExecutablePath
-
-            # Filtro seguro: encerra apenas se originar de 'Automacoes' e tiver mais de 10 segundos
-            if (($cmd -and $cmd -like "*Automacoes*") -or ($path -and $path -like "*Automacoes*")) {
-                $creationDate = $proc.CreationDate
-                if ($creationDate) {
-                    $age = $now - $creationDate
-                    if ($age.TotalSeconds -lt 10) {
-                        continue
-                    }
-                }
-                try {
-                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-                }
-                catch [System.Exception] {}
-            }
+        $todosProcessos = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+        $pidsDaemon = @(Get-WhatsAppDaemonProcess | ForEach-Object { [int]$_.ProcessId })
+        $pidsEncerrar = @(Select-WhatsAppStaleProcessIds -Processes $todosProcessos -DaemonPids $pidsDaemon -Now $now)
+        foreach ($idZumbi in $pidsEncerrar) {
+            Stop-Process -Id $idZumbi -Force -ErrorAction SilentlyContinue
         }
     }
     catch [System.Exception] {}
@@ -146,6 +135,10 @@ function Clear-StaleWhatsAppLocksAndProcesses {
         }
     }
 }
+
+# --- Daemon WhatsApp (opt-in, modos AUTO e BATCH) ---
+# Get-WhatsAppDaemonProcess, Get-WhatsAppDaemonHealth, Get-WhatsAppDaemonRoute, Invoke-WhatsAppDaemonBatch e Invoke-WhatsAppDaemonSend vivem em
+# Lib-WhatsAppBatch.psm1 (importado acima) para serem testaveis; este script apenas as usa.
 
 $isBatchMode = $Mode -eq "BATCH"
 
@@ -188,6 +181,61 @@ try {
         $lockTimedOut = $true
     }
     else {
+        # Rota do daemon WhatsApp: decidida somente apos adquirir o mutex da sessao.
+        # Daemon vivo no MESMO perfil segura a sessao: envio pelo daemon (ou adiamento com 22). Sem daemon,
+        # ou com daemon de outro perfil, segue o fluxo atual ('spawn'). WHATSAPP_DAEMON_ENABLED nao entra
+        # aqui: governa apenas a subida do daemon (Start-WhatsAppDaemon.ps1).
+        $daemonPort = "8765"
+        $portaLida = $env:WHATSAPP_DAEMON_PORT
+        if ([string]::IsNullOrWhiteSpace($portaLida)) { $portaLida = Get-EnvFileValue -Key "WHATSAPP_DAEMON_PORT" }
+        if (-not [string]::IsNullOrWhiteSpace($portaLida)) { $daemonPort = $portaLida.Trim() }
+        $daemonToken = $env:WHATSAPP_DAEMON_TOKEN
+        if ([string]::IsNullOrWhiteSpace($daemonToken)) { $daemonToken = Get-EnvFileValue -Key "WHATSAPP_DAEMON_TOKEN" }
+        $daemonVivo = (@(Get-WhatsAppDaemonProcess)).Count -gt 0
+        $saudeDaemon = [pscustomobject]@{ State = ""; ClientId = "" }
+        if ($daemonVivo) {
+            $saudeDaemon = Get-WhatsAppDaemonHealth -Port $daemonPort -Token $daemonToken
+        }
+        $daemonRoute = Get-WhatsAppDaemonRoute -DaemonRunning $daemonVivo -ClientId $finalClientId -HealthState $saudeDaemon.State -HealthClientId $saudeDaemon.ClientId
+
+        # VISUAL e LIST_GROUPS abrem node proprio no perfil: com daemon vivo no mesmo perfil, recusam (exit 22).
+        if (($Mode -eq "VISUAL" -or $Mode -eq "LIST_GROUPS") -and $daemonRoute -ne "spawn") {
+            Write-Host "Daemon WhatsApp ativo no perfil '$finalClientId': pare o daemon antes de usar o modo $Mode. Adiando com exit 22 sem subir node." -ForegroundColor Yellow
+            $lockTimedOut = $true
+            $daemonRoute = "bloqueado"
+        }
+
+        if ($daemonRoute -eq "defer") {
+            # 'unauthorized' = health respondeu 401: o daemon esta vivo e segura o perfil, mas o token nao confere.
+            # Nunca subir outro node aqui (conflitaria com o perfil do daemon); o token nao e' impresso.
+            if ($saudeDaemon.State -eq "unauthorized") {
+                Write-Host "Daemon WhatsApp recusou o health (HTTP 401): token do daemon nao confere: confira WHATSAPP_DAEMON_TOKEN no .env. Adiando envio com exit 22 sem subir node." -ForegroundColor Red
+            }
+            else {
+                Write-Host "Daemon WhatsApp ativo mas nao pronto (estado: '$($saudeDaemon.State)'). Adiando envio com exit 22 sem subir node." -ForegroundColor Yellow
+            }
+            $lockTimedOut = $true
+        }
+
+        if ($daemonRoute -eq "daemon") {
+            Write-Host "Enviando pelo daemon WhatsApp (127.0.0.1:$daemonPort, perfil '$finalClientId')..." -ForegroundColor Cyan
+            if ($isBatchMode) {
+                $codigoDaemon = Invoke-WhatsAppDaemonBatch -Port $daemonPort -Token $daemonToken -ExecId $ExecId -ClientId $finalClientId -ChatTarget $finalPhone -BatchInputFile $BatchInputFile -BatchResultFile $BatchResultFile
+            }
+            else {
+                # Mesmo contato, mesma mensagem final e mesmo anexo resolvido do fluxo spawn (HUB_WA_CAPTION_FILE).
+                # Anexo ausente cai para texto, como o core faz no spawn.
+                $anexoDaemon = ""
+                if (-not [string]::IsNullOrWhiteSpace($finalAttachment)) {
+                    if (Test-Path -LiteralPath $finalAttachment) { $anexoDaemon = (Resolve-Path -LiteralPath $finalAttachment).ProviderPath }
+                    else { Write-Host "Anexo ausente ou nao encontrado ($finalAttachment). Enviando apenas a mensagem de texto." -ForegroundColor Yellow }
+                }
+                $codigoDaemon = Invoke-WhatsAppDaemonSend -Port $daemonPort -Token $daemonToken -ExecId $ExecId -ClientId $finalClientId -ChatTarget $finalPhone -Caption $finalMessage -AttachmentPath $anexoDaemon
+            }
+            $result = [pscustomobject]@{ ExitCode = $codigoDaemon }
+        }
+
+        if ($daemonRoute -eq "spawn") {
         # Executar a limpeza antes do inicio da inicializacao do canal (somente apos adquirir o mutex da sessao)
         Clear-StaleWhatsAppLocksAndProcesses
 
@@ -268,6 +316,7 @@ try {
             if ($captionTempFile -and (Test-Path -LiteralPath $captionTempFile)) {
                 Remove-Item -LiteralPath $captionTempFile -Force -ErrorAction SilentlyContinue
             }
+        }
         }
     }
 }

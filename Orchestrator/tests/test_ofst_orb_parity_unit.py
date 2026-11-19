@@ -236,34 +236,33 @@ def test_ambos_expoem_o_mesmo_conjunto_de_funcoes_de_escrita_de_state() -> None:
     )
 
 
-def test_ambos_tem_o_bloco_de_reconciliacao_de_state_no_run_ps1() -> None:
-    """Os dois `run.ps1` reconciliam `$StateTmp` -> `$StateFile` dentro do
-    mesmo ramo (`$pyResult.Idempotent`). É esse bloco que a regressão do
-    achado 2 atingia: bastou o Python escrever um `.tmp` por engano no ramo
-    idempotente para o `run.ps1` -- em qualquer uma das duas automações --
-    commitar o state vazio por cima do state vivo. Checagem textual (sem
-    `pwsh` disponível neste ambiente de auditoria)."""
-    for automation_dir, nome in ((OFST_DIR, "OFST-06"), (ORB_DIR, "ORB-07")):
-        conteudo = (automation_dir / "run.ps1").read_text(encoding="utf-8")
+def test_ambos_tem_o_bloco_de_reconciliacao_de_state_no_runner() -> None:
+    """Os dois runners delegam ao motor comum que reconcilia o state .tmp no ramo idempotente (exit 2).
+
+    E esse bloco que a regressao do achado 2 atingia: bastou o Python escrever
+    um `.tmp` por engano no ramo idempotente para o orquestrador -- em qualquer
+    uma das duas automacoes -- commitar o state vazio por cima do state vivo.
+    Desde a 1.3.117 a orquestracao de OFST-06 e ORB-07 compartilha
+    lib/python/obs_cards_runner.py. Checagem textual.
+    """
+    for automation_dir, nome, runner in (
+        (OFST_DIR, "OFST-06", "run_ofst.py"),
+        (ORB_DIR, "ORB-07", "run_orb.py"),
+    ):
+        wrapper = (automation_dir / runner).read_text(encoding="utf-8")
         assert (
-            "$StateTmp" in conteudo and "$StateFile" in conteudo
-        ), f"{nome}: run.ps1 nao declara $StateTmp/$StateFile"
-        assert "if ($pyResult.Idempotent)" in conteudo, (
-            f"{nome}: run.ps1 perdeu o ramo de reconciliacao idempotente "
-            "(if ($pyResult.Idempotent)) que faz Move-Item $StateTmp $StateFile"
-        )
-        # Presenca de `Move-Item $StateTmp $StateFile` no arquivo NAO basta:
-        # os dois run.ps1 tem DUAS ocorrencias (o ramo idempotente e o caminho
-        # de sucesso normal). Uma assercao de substring global fica verde com o
-        # bloco do ramo idempotente inteiro removido -- ou seja, com a correcao
-        # do achado 2 desfeita. E preciso ancorar na abertura do ramo `if`, pois
-        # `$pyResult.Idempotent` tambem e lido antes em `$extractOk`.
-        corpo_idempotente = conteudo.split("if ($pyResult.Idempotent)", 1)[1].split(
-            "}", 1
-        )[0]
-        assert "Move-Item $StateTmp $StateFile" in corpo_idempotente, (
-            f"{nome}: o ramo $pyResult.Idempotent nao reconcilia mais "
-            "$StateTmp em $StateFile via Move-Item -- e esse bloco, e nao "
-            "outra ocorrencia qualquer no arquivo, que a regressao do achado "
-            "2 atingia"
-        )
+            "obs_cards_runner" in wrapper
+        ), f"{nome}: runner deixou de delegar a obs_cards_runner"
+
+    motor = (ROOT / "lib" / "python" / "obs_cards_runner.py").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "if resultado.idempotent:" in motor
+    ), "obs_cards_runner perdeu o desvio do ramo idempotente"
+    # Ancorar no corpo da funcao do ramo: _promover_state tambem aparece no
+    # caminho de sucesso normal, entao a presenca no arquivo nao basta.
+    corpo = motor.split("def _encerrar_idempotente(", 1)[1].split("\ndef ", 1)[0]
+    assert (
+        "estado_tmp.exists()" in corpo and "_promover_state(sessao)" in corpo
+    ), "obs_cards_runner: o ramo idempotente nao reconcilia mais o .tmp no state"

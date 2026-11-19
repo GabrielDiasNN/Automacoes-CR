@@ -92,14 +92,19 @@ def emit_event(  # pylint: disable=too-many-arguments
     step: str | None = None,
     step_name: str | None = None,
     extra: dict[str, Any] | None = None,
-) -> None:
-    """Emite um evento JSON no envelope do schema em stdout."""
+    component: str = "python_domain",
+) -> str:
+    """Emite um evento JSON no envelope do schema em stdout e devolve a linha.
+
+    ``component`` identifica a camada emissora. O padrao e ``python_domain``; o
+    runner ``hub_runner`` passa ``ps_script``, porque substitui o run.ps1.
+    """
     if event not in _ALLOWED_EVENTS:
         event = "log"
     evt: dict[str, Any] = {
         "ts": _now_ts(),
         "level": _normalize_level(level),
-        "component": "python_domain",
+        "component": component,
         "event": event,
         "automation": automation,
         "exec_id": exec_id,
@@ -112,8 +117,10 @@ def emit_event(  # pylint: disable=too-many-arguments
         evt["step_name"] = step_name
     if extra:
         evt.update(extra)
-    sys.stdout.write(json.dumps(evt, ensure_ascii=False, separators=(",", ":")) + "\n")
+    linha = json.dumps(evt, ensure_ascii=False, separators=(",", ":"))
+    sys.stdout.write(linha + "\n")
     sys.stdout.flush()
+    return linha
 
 
 def make_logger(tag: str) -> Callable[..., None]:

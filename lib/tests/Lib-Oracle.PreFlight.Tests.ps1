@@ -77,7 +77,6 @@
     Context "modo nao-queue" {
         It "retorna 9 para o modo '<modo>' sem consultar o worker" -ForEach @(
             @{ modo = "thick" }
-            @{ modo = "bridge" }
             @{ modo = "auto" }
             @{ modo = "thin" }
         ) {

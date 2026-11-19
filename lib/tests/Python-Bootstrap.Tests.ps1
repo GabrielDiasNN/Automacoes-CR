@@ -19,6 +19,7 @@
 $ScriptsComBootstrap = @(
     "Receitas Bloqueadas\processar_receitas.py",
     "Receitas Emitidas\extract_oracle.py",
+    "Receitas Emitidas\run_receitas.py",
     "Montagem de Terceirizados\extract_oracle.py",
     "OBs Paradas Fase\extract_obs.py",
     "OBs Fluxo Sem Tingimento\extract_ofst.py",

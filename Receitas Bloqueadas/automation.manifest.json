@@ -28,6 +28,7 @@
     "whatsapp": true
   },
   "smoke_tests": [
-    "Orchestrator/tests/test_receitas_bloqueadas.py"
+    "Orchestrator/tests/test_receitas_bloqueadas.py",
+    "Orchestrator/tests/test_run_receitas_bloqueadas_unit.py"
   ]
 }

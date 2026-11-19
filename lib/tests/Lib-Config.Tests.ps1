@@ -87,10 +87,53 @@ Describe "Lib-Config Tests" {
         }
 
         It "retorna true quando ambos app.enabled e target.enabled estao ativos" {
-            Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
-                app    = [pscustomobject]@{ enabled = $true }
-                target = [pscustomobject]@{ enabled = "true" }
-            }) | Should -BeTrue
+                Test-WhatsAppConfigEnabled -Config ([pscustomobject]@{
+                    app    = [pscustomobject]@{ enabled = $true }
+                    target = [pscustomobject]@{ enabled = "true" }
+                }) | Should -BeTrue
+        }
+    }
+
+    Context "Leitura de .env com UTF-8 BOM na linha 1" {
+        It "Get-EnvFileValue e Import-HubEnv leem a chave da primeira linha mesmo com BOM" {
+            $tmpDir = Join-Path $TestDrive ("env_bom_" + [guid]::NewGuid().ToString("N"))
+            New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+            $chaveTeste = "HUB_PESTER_BOM_KEY"
+            [System.Environment]::SetEnvironmentVariable($chaveTeste, $null, "Process")
+
+            try {
+                $envPath = Join-Path $tmpDir ".env"
+                $conteudo = "$chaveTeste=valor-com-acento-çãõ`r`nOUTRA_CHAVE=123`r`n"
+                [System.IO.File]::WriteAllText($envPath, $conteudo, (New-Object System.Text.UTF8Encoding $true))
+
+                $prev = InModuleScope Lib-Config -Parameters @{ NovoRoot = $tmpDir } {
+                    param($NovoRoot)
+                    $estado = @{
+                        ProjectRoot = $script:ProjectRoot
+                        EnvLoaded   = $script:EnvLoaded
+                    }
+                    $script:ProjectRoot = $NovoRoot
+                    $script:EnvLoaded = $false
+                    $estado
+                }
+
+                try {
+                    Get-EnvFileValue -Key $chaveTeste | Should -Be "valor-com-acento-çãõ"
+                    Import-HubEnv -Force
+                    [System.Environment]::GetEnvironmentVariable($chaveTeste, "Process") | Should -Be "valor-com-acento-çãõ"
+                }
+                finally {
+                    InModuleScope Lib-Config -Parameters @{ AntigoRoot = $prev.ProjectRoot; AntigoLoaded = $prev.EnvLoaded } {
+                        param($AntigoRoot, $AntigoLoaded)
+                        $script:ProjectRoot = $AntigoRoot
+                        $script:EnvLoaded = $AntigoLoaded
+                    }
+                }
+            }
+            finally {
+                [System.Environment]::SetEnvironmentVariable($chaveTeste, $null, "Process")
+                Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 }
