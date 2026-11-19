@@ -9,7 +9,7 @@ entre as OBs e prepara um aviso para o grupo Expedição Tinturaria.
 | Item             | Valor                                                                   |
 | ---------------- | ----------------------------------------------------------------------- |
 | ID               | `ORB-07`                                                                |
-| Entrypoint       | `run.ps1`                                                               |
+| Entrypoint       | `run.ps1` (shim que chama `run_orb.py`)                                 |
 | Canal            | WhatsApp — mesmo grupo da OFST-06                                       |
 | Agenda planejada | A cada 60 min, 05:00–19:00 Seg–Sex; 05:00–13:00 Sáb                     |
 | Estado           | Ativa no Orchestrator (`id=6`); primeiro envio confirmado em 25/08/2026 |

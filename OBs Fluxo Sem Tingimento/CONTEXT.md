@@ -65,7 +65,7 @@ A query devolve `QTD_PECAS_DISPONIVEIS` (distinct, autoritativo) **e** `QTD_LINH
 
 **Por quê:** o padrão hash-de-lote do OBP-04 não serve aqui. Com execução recorrente (hoje a cada 120 min) e estoque flutuando ao longo do dia, o hash mudaria sozinho e a mesma OB seria reavisada em seguida.
 
-O commit do state é do `run.ps1` (`.tmp` → final) e **só após envio confirmado** — falha de WhatsApp nunca engole um aviso.
+O commit do state é do `run_ofst.py` (`.tmp` → final) e **só após envio confirmado** — falha de WhatsApp nunca engole um aviso.
 
 ### D4 — Cron `0 5-20 * * 0-5` (confirmado com o Gabriel em 16/07/2026)
 
@@ -88,7 +88,7 @@ Sintaxe `5-19/2` (range com step) validada com `CronTrigger.from_crontab` + `get
 
 O spec pedia `orchestrator.py` com APScheduler dentro da automação. Aqui o agendamento é do **Orchestrator central**, que lê o campo `schedule` do `automation.manifest.json`. Um APScheduler próprio criaria um segundo escalonador paralelo, fora do controle do hub (sem telemetria, sem fila, sem lock).
 
-O papel de "orchestrator" é do `run.ps1`, entrypoint declarado no manifesto.
+O papel de "orchestrator" é do `run_ofst.py`, chamado pelo shim `run.ps1` (entrypoint declarado no manifesto).
 
 ### D6 — `fetch_all` da lib compartilhada ganhou `params`
 
@@ -124,6 +124,10 @@ PEDPRODUCAOOB -> OFORDENS (NUMEROPEDPRODUCAO+REDUZIDO)
 O Gabriel pediu para informar "Artigo Cru" na mensagem, ao lado do reduzido já existente. `SGTPRD.ENGEITEMESTOARTCRU.CDARTIGOCRU` (join por `CDREDUZIDO = CODIGO_REDUZIDO_CRU`) é o mesmo campo já usado em `Receitas Emitidas/SQL-ReceitasEmitidas.sql` (`ART.CDARTIGOCRU AS ARTIGO`) e `OBs Paradas Fase/SQL-ObsParadasFase.sql` (`TRIM(MAX(ART.CDARTIGOCRU)) AS CD_ARTIGO`). Validado contra o exemplo real do Gabriel: OB 181323, reduzido 152 → `CDARTIGOCRU='00489'`.
 
 Como o campo é texto no Oracle e pode trazer valores alfanuméricos em produção (`'0A231'`), `coerce_ob_row` trata `CODIGO_ARTIGO_CRU` como **texto opcional** (`str | None`), preservando OB sem cadastro (`'—'`) e sem coagir para inteiro na entrada. A remoção de zeros à esquerda apenas quando composto somente por dígitos ASCII acontece somente na camada de apresentação (`format_message._fmt_artigo`: `'00489'` → `'489'`, `'0A231'` permanece `'0A231'`).
+
+### D10 — Orquestração em Python (`run_ofst.py`) (18/11/2026)
+
+O `run.ps1` virou shim, no mesmo desenho do RE-03. O `run_ofst.py` reproduz o fluxo anterior passo a passo: mesmas etapas, códigos de saída, arquivos de estado e mensagens principais. O envio e a reconciliação do lote usam `lib/python/hub_whatsapp.py`. O worker continua chamando `powershell.exe -File run.ps1 <ExecId>`. Sem alerta de falha definitiva, como no `run.ps1` anterior.
 
 ## Armadilhas conhecidas
 

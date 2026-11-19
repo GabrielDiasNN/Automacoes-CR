@@ -11,7 +11,8 @@ $ErrorActionPreference = "Stop"
 try {
     $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
     if ([string]::IsNullOrWhiteSpace($script:ProjectRoot)) { $script:ProjectRoot = "." }
-} catch [System.Exception] {
+}
+catch [System.Exception] {
     $script:ProjectRoot = "."
 }
 
@@ -48,9 +49,10 @@ function Import-HubEnv {
     if ($script:EnvLoaded -and -not $Force) { return }
 
     $envPath = Join-Path $script:ProjectRoot ".env"
-    if (Test-Path $envPath) {
-        Get-Content $envPath | ForEach-Object {
-            $parsed = ConvertFrom-EnvLine -Line $_
+    if (Test-Path -LiteralPath $envPath) {
+        Get-Content -LiteralPath $envPath -Encoding UTF8 | ForEach-Object {
+            $linhaLimpa = ([string]$_).TrimStart([char]0xFEFF)
+            $parsed = ConvertFrom-EnvLine -Line $linhaLimpa
             if ($parsed) {
                 [System.Environment]::SetEnvironmentVariable($parsed.Key, $parsed.Value, "Process")
             }
@@ -71,9 +73,10 @@ function Get-EnvFileValue {
 
     $envPath = Join-Path $script:ProjectRoot ".env"
     if (-not (Test-Path -LiteralPath $envPath)) { return $null }
-    foreach ($linha in Get-Content -LiteralPath $envPath) {
-        $parsed = ConvertFrom-EnvLine -Line $linha
-        if ($parsed -and $parsed.Key -eq $Key) { return $parsed.Value.Trim('"') }
+    foreach ($linha in Get-Content -LiteralPath $envPath -Encoding UTF8) {
+        $linhaLimpa = ([string]$linha).TrimStart([char]0xFEFF)
+        $parsed = ConvertFrom-EnvLine -Line $linhaLimpa
+        if ($parsed -and $parsed.Key -eq $Key) { return $parsed.Value.Trim('"').Trim("'") }
     }
     return $null
 }

@@ -432,3 +432,15 @@ def test_modo_thick_exige_client_lib_existente(monkeypatch: Any, tmp_path: Any) 
     monkeypatch.setenv("ORACLE_DRIVER_MODE", "thick")
     monkeypatch.setenv("ORACLE_CLIENT_LIB_DIR", str(tmp_path / "nao_existe"))
     assert resolve_oracle_credentials(_noop_log, "EXEC-1") is None
+
+
+def test_resolve_oracle_credentials_modo_invalido_loga_e_retorna_none(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "bridge")
+    mensagens: list[tuple[str, str]] = []
+    res = resolve_oracle_credentials(
+        lambda msg, lvl="INFO", _eid="": mensagens.append((lvl, msg)), "EXEC-1"
+    )
+    assert res is None
+    assert any(lvl == "ERROR" and "bridge" in msg for lvl, msg in mensagens)

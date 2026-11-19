@@ -295,8 +295,8 @@ def force_env_vars() -> None:
     os.environ["ORCHESTRATOR_API_KEY"] = TEST_AUTH_VALUE
     os.environ["ORCHESTRATOR_DB_PATH"] = ":memory:"
     os.environ["RATE_LIMIT_RPM"] = "10000"
-    # O .env local pode fixar ORACLE_DRIVER_MODE=bridge (produção); os testes
-    # mockam o caminho nativo (oracledb.connect), então precisam de `auto`.
+    # O .env local pode fixar outro ORACLE_DRIVER_MODE (ex.: queue em produção); os
+    # testes mockam o caminho nativo (oracledb.connect), então precisam de `auto`.
     os.environ["ORACLE_DRIVER_MODE"] = "auto"
 
 

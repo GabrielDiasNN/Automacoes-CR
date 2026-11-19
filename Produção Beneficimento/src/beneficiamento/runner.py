@@ -35,8 +35,8 @@ from .sql_repository import (
 # Gravacao do historico SQLite e best-effort: falha de banco, de caminho/disco ou de
 # serializacao vira partial_failure. Qualquer outra falha e de programacao e nao e engolida.
 ERROS_GRAVACAO_HISTORICO = (ErroBancoHistorico, OSError, TypeError, ValueError)
-# Fatia da carga retroativa: falha do Oracle (driver, bridge, fila, prazo, incluindo
-# OracleBridgeError e OracleQueueError, subclasses de RuntimeError), de SQLite ou de
+# Fatia da carga retroativa: falha do Oracle (driver, fila, prazo, incluindo
+# OracleQueueError, subclasse de RuntimeError), de SQLite ou de
 # serializacao vai para `erros` e o laco segue para o dia seguinte.
 ERROS_FATIA_HISTORICA = (
     oracledb.Error,

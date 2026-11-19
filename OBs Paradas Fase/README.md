@@ -9,6 +9,12 @@ Monitora Ordens de Beneficiamento paradas por fase no processo produtivo e envia
 3. **Idempotência** — `delivery_state.json` evita reenvio do mesmo lote
 4. **Envio WhatsApp** — sessão `hub-global` envia todas as fases em lote único (BATCH mode)
 
+## Runner Python
+
+O `run.ps1` é um shim: resolve o `.venv` do projeto e chama `run_obs_paradas.py`, que faz o pre-flight, o lock `OBP-04`, o extract, o transform (`generate_phase_cards.py`), o envio BATCH pelo `lib/Send-WhatsApp.ps1` e o commit do estado. O shim repassa o exit code ao worker.
+
+Validação manual, sem envio e sem gravação de estado: `powershell.exe -NoProfile -File "OBs Paradas Fase\run.ps1" -DryRun` (pre-flight, extract e transform rodam de verdade; o envio e o commit só são logados).
+
 ## Configuração
 
 | Arquivo | Finalidade |
@@ -40,6 +46,9 @@ Todos os dias às 05:30 e 14:00; terceiro disparo às 22:30 (Segunda a Sábado) 
 | 4 | Falha no envio WhatsApp |
 | 9 | Falha no pre-flight |
 | 21 | Sessão WhatsApp expirada — reautenticar |
+| 22 | WhatsApp adiado por lock ou cooldown da sessão — reenfileirável |
+| 26 | Worker Oracle offline no modo queue (reenfileirado quando o heartbeat voltar) |
+| 27 | Timeout da fila Oracle |
 | 24 | Chrome não inicializa — verificar processos zumbi e reautenticar |
 
 ---

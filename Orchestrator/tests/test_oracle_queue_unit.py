@@ -424,7 +424,7 @@ def test_classify_oracle_exit_code_mapeia_worker_timeout_bloqueio() -> None:
         )
         == 6
     )
-    # Prazo da fila com worker vivo: 7. TimeoutError genérico (Bridge/thick/auto): 1.
+    # Prazo da fila com worker vivo: 7. TimeoutError genérico (thick/auto): 1.
     assert (
         oracle_extract.classify_oracle_exit_code(
             oracle_queue.OracleQueueTimeoutError("timeout fila")
