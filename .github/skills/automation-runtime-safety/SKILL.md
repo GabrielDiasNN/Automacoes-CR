@@ -38,7 +38,7 @@ Centralizar os guardrails operacionais do hub que não pertencem a um runtime ú
 ## Repo-Specific Constraints
 - `.env` na raiz é a única fonte de credencial; scripts Python e `lib/Lib-Config.psm1` consomem esse contexto sem duplicar valor. Para DSN Oracle fixo, `resolve_oracle_credentials(force_dsn="dbprd")` em `lib/python/oracle_extract.py`.
 - A API Key do Dashboard vive só em `sessionStorage` (há teste dedicado proibindo `localStorage` para a credencial); preferência de UI benigna (ex.: densidade de tabela em `Dashboard/src/context/TableDensityContext.tsx`) pode usar `localStorage` — não migre isso para `sessionStorage` ao "corrigir" a regra.
-- Log compatível com `lib/Lib-Logging.psm1` e `lib/Lib-LogEvent.psm1`; destino `Logs/` (domínio) e `Orchestrator/Logs/` (motor), ambos gitignored.
+- Log compatível com `lib/python/hub_runner.py`, `lib/python/automation_log.py` e `lib/Lib-Logging.psm1` (infraestrutura PS); destino `Logs/` (domínio) e `Orchestrator/Logs/` (motor), ambos gitignored.
 - Contrato vivo de Zero-Trust e resiliência: `Tools/Test-ZeroTrust.ps1`, `Tools/Test-PortablePaths.ps1`, `Tools/Test-LogConformidade.ps1`, `Tools/Test-EncodingResilience.ps1`. Rode-os antes do push, não só no pre-commit.
 - Segredo exposto apenas em histórico local (`.jsonl`), nunca em commit, é risco aceito neste repo — antes de recomendar rotação, confirme presença em commit real com `git log -p -S '<trecho do segredo>'`.
 - Diretório novo com `.py` executável precisa entrar em `ruff` / `bandit`: veja o histórico de inclusão na skill `ci-gates` antes de assumir que já está coberto (`.claude/skills` entrou em 03/08/2026).

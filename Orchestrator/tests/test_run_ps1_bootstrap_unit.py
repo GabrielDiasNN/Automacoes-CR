@@ -283,4 +283,8 @@ def test_template_runner_dry_run_sai_com_zero(tmp_path: Path) -> None:
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
     assert "[DRY-RUN]" in resultado.stdout
-    assert list((destino / "Logs").glob("*.jsonl")), "o runner deve gravar o log"
+    logs = list((destino / "Logs").glob("*.jsonl"))
+    assert logs, "o runner deve gravar o log"
+    assert (
+        not logs[0].read_bytes().startswith(b"\xef\xbb\xbf")
+    ), "log jsonl nao pode ter BOM"

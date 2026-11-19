@@ -19,16 +19,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
-    tmp_path: Path,
-) -> None:
+def _copiar_fontes_scaffold(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
-
-    for relative in [
-        "_Template",
-        "docs/templates",
-        "Tools/New-Automation.ps1",
-    ]:
+    for relative in ["_Template", "docs/templates", "Tools/New-Automation.ps1"]:
         source = repo_root / relative
         target = tmp_path / relative
         if source.is_dir():
@@ -37,14 +30,33 @@ def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
 
-    result = subprocess.run(
+
+def _executar_scaffold(
+    tmp_path: Path, args: list[str], *, ps_bin: str = "pwsh"
+) -> subprocess.CompletedProcess[str]:
+    _copiar_fontes_scaffold(tmp_path)
+    return subprocess.run(
         [
-            "pwsh",
+            ps_bin,
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
             "-File",
             str(tmp_path / "Tools" / "New-Automation.ps1"),
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
+    tmp_path: Path,
+) -> None:
+    result = _executar_scaffold(
+        tmp_path,
+        [
             "-Name",
             "Auto Scaffold Governado",
             "-BasePath",
@@ -59,9 +71,6 @@ def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
             "180",
             "-WithOracle",
         ],
-        check=True,
-        capture_output=True,
-        text=True,
     )
 
     assert "Scaffold concluido" in result.stdout
@@ -75,6 +84,7 @@ def test_new_automation_scaffold_generates_governed_manifest_and_smoke(
     assert manifest["criticality"] == "high"
     assert manifest["queue_group"] == "oracle"
     assert manifest["sla_minutes"] == 180
+    assert manifest["runtime"] == "python"
     assert manifest["dependencies"]["oracle"] is True
     assert manifest["smoke_tests"] == [
         "Orchestrator/tests/test_auto-scaffold-governado.py"
@@ -108,7 +118,7 @@ def _assert_runner_e_shim_gerados(automation_dir: Path) -> None:
     assert 'AUTOMACAO: Final[str] = "Auto Scaffold Governado"' in runner_content
     assert 'SLUG_LOG: Final[str] = "auto-scaffold-governado"' in runner_content
     assert "RETENCAO_LOG_DIAS: Final[int] = 15" in runner_content
-    assert "_rotacionar_log(ctx.log_path)" in runner_content
+    assert "hr.rotate_log(ctx.log_path" in runner_content
     compile(runner_content, str(runner), "exec")
 
     readme_content = (automation_dir / "README.md").read_text(encoding="utf-8")
@@ -129,3 +139,59 @@ def _assert_runner_e_shim_gerados(automation_dir: Path) -> None:
     assert "TEMPLATE_RUNNER" not in shim
     assert "exit $LASTEXITCODE" in shim
     assert "Enter-AutomationLock" not in shim
+
+
+def test_new_automation_with_whatsapp_gera_run_bat_com_config_path(
+    tmp_path: Path,
+) -> None:
+    _executar_scaffold(
+        tmp_path,
+        [
+            "-Name",
+            "Auto WhatsApp Scaffold",
+            "-BasePath",
+            str(tmp_path),
+            "-OwnerArea",
+            "PCP",
+            "-WithWhatsApp",
+        ],
+    )
+
+    run_bat = (tmp_path / "Auto WhatsApp Scaffold" / "RunWhatsApp.bat").read_text(
+        encoding="utf-8"
+    )
+    assert '-ConfigPath "%~dp0whatsapp-config.json"' in run_bat
+    assert "-BaseDir" not in run_bat
+
+
+@pytest.mark.skipif(
+    shutil.which("powershell.exe") is None,
+    reason="Exercita compatibilidade de encoding no Windows PowerShell 5.1.",
+)
+def test_new_automation_ps51_substitui_placeholders_acentuados_sem_mojibake(
+    tmp_path: Path,
+) -> None:
+    _executar_scaffold(
+        tmp_path,
+        [
+            "-Name",
+            "Auto PS51 Teste",
+            "-BasePath",
+            str(tmp_path),
+            "-OwnerArea",
+            "PCP",
+        ],
+        ps_bin="powershell.exe",
+    )
+
+    automation_dir = tmp_path / "Auto PS51 Teste"
+    readme = (automation_dir / "README.md").read_text(encoding="utf-8")
+    runbook = (tmp_path / "docs" / "runbooks" / "auto-ps51-teste-runbook.md").read_text(
+        encoding="utf-8"
+    )
+    assert "[Nome da Automação]" not in readme
+    assert "[Nome da Automação]" not in runbook
+    assert "Auto PS51 Teste" in readme
+    assert "Auto PS51 Teste" in runbook
+    assert "Esta automação usa o fluxo atual do Hub" in readme
+    assert "Ã" not in readme and "Ã" not in runbook

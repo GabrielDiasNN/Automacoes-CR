@@ -19,7 +19,7 @@ param(
     [ValidateRange(0, 10)]
     [int]$MaxRetries = 0,
     [ValidateSet("powershell", "python", "node")]
-    [string]$Runtime = "powershell",
+    [string]$Runtime = "python",
     [string]$SupportContact = "Definir suporte técnico",
 
     # Parametros legados preservados apenas para compatibilidade de chamada.
@@ -119,7 +119,7 @@ function Get-TemplateContent {
         throw "Template obrigatorio nao encontrado: $templatePath"
     }
 
-    return Get-Content -LiteralPath $templatePath -Raw
+    return Get-Content -LiteralPath $templatePath -Raw -Encoding UTF8
 }
 
 function Convert-Template {
@@ -225,8 +225,8 @@ if (-not (Test-Path -LiteralPath $smokeTestTemplatePath -PathType Leaf)) {
     exit 1
 }
 
-$runbookContent = Get-Content -LiteralPath $runbookTemplatePath -Raw
-$smokeTestContent = Get-Content -LiteralPath $smokeTestTemplatePath -Raw
+$runbookContent = Get-Content -LiteralPath $runbookTemplatePath -Raw -Encoding UTF8
+$smokeTestContent = Get-Content -LiteralPath $smokeTestTemplatePath -Raw -Encoding UTF8
 $runbookContent = $runbookContent.Replace("[Nome da Automação]", $Name)
 $runbookContent = $runbookContent.Replace("[Caminho do Diretório, ex: Receitas Bloqueadas]", $Name)
 $runbookContent = $runbookContent.Replace("[CRÍTICA / ALTA / MÉDIA / BAIXA]", $Criticality.ToUpperInvariant())
@@ -264,7 +264,7 @@ $contextContent += @"
 $runBatContent = @"
 @echo off
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "..\lib\Send-WhatsApp.ps1" -ExecId "MANUAL_BAT" -Mode VISUAL -BaseDir "%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "..\lib\Send-WhatsApp.ps1" -ExecId "MANUAL_BAT" -Mode VISUAL -ConfigPath "%~dp0whatsapp-config.json"
 exit /b %ERRORLEVEL%
 "@
 

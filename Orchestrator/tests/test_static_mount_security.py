@@ -2,7 +2,7 @@
 
 Até 31/07/2026 `Orchestrator/app/main.py` montava `app.mount("/lib",
 StaticFiles(directory=lib_path))`, publicando a árvore inteira de `lib/` —
-`Lib-Oracle.psm1`, `Lib-Email.psm1`, `Send-WhatsApp.ps1`, `WhatsApp-Core.js`,
+`Lib-Process.psm1`, `Lib-Email.psm1`, `Send-WhatsApp.ps1`, `WhatsApp-Core.js`,
 `lib/python/*.py`, `package-lock.json` e `node_modules/`. O mount não passava
 por `Depends(get_api_key)` e o `RateLimitMiddleware` só age em `/api`, então o
 conteúdo era baixável sem chave e sem limite de taxa.
@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 # destes responde 200 com o conteúdo do arquivo.
 CAMINHOS_SENSIVEIS = [
     "/lib/Lib-Config.psm1",
-    "/lib/Lib-Oracle.psm1",
+    "/lib/Lib-Process.psm1",
     "/lib/Lib-Email.psm1",
     "/lib/Send-WhatsApp.ps1",
     "/lib/WhatsApp-Core.js",

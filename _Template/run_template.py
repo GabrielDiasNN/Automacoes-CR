@@ -16,13 +16,9 @@ estado nao e confirmado.
 # pylint: disable=import-error
 from __future__ import annotations
 
-import contextlib
 import os
-import re
-import shutil
 import sys
 from collections.abc import Sequence
-from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -37,88 +33,25 @@ AUTOMACAO: Final[str] = "[Nome da Automação]"
 SLUG_LOG: Final[str] = "TEMPLATE_SLUG"
 CHAVE_LOCK: Final[str] = "TEMPLATE_SLUG"
 EXIT_FALHA_CRITICA: Final[int] = 4
-ESPACO_MINIMO_GB: Final[float] = 1.0
 RETENCAO_LOG_DIAS: Final[int] = 15
 PASTA: Final[Path] = Path(__file__).resolve().parent
 RAIZ: Final[Path] = PASTA.parent
-_PADRAO_TS: Final[re.Pattern[str]] = re.compile(
-    r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
-)
-
-
-def _linha_expirada(linha: str, corte: date) -> bool:
-    """True quando o ts do evento e anterior ao corte da retencao."""
-    casamento = _PADRAO_TS.match(linha)
-    if casamento is None:
-        return False
-    try:
-        return date.fromisoformat(casamento.group(1)) < corte
-    except ValueError:
-        return False
-
-
-def _rotacionar_log(caminho: Path, dias: int = RETENCAO_LOG_DIAS) -> None:
-    """Remove do jsonl os eventos anteriores a retencao (Invoke-LogRotation)."""
-    if not caminho.exists():
-        return
-    corte = date.today() - timedelta(days=dias)
-    with contextlib.suppress(OSError, ValueError):
-        conteudo = caminho.read_text(encoding="utf-8-sig")
-        linhas = [linha.rstrip("\r") for linha in conteudo.split("\n") if linha.strip()]
-        mantidas = [linha for linha in linhas if not _linha_expirada(linha, corte)]
-        if len(mantidas) == len(linhas):
-            return
-        temporario = caminho.with_name(caminho.name + ".tmp")
-        with temporario.open("w", encoding="utf-8-sig", newline="\r\n") as arquivo:
-            arquivo.write("".join(f"{linha}\n" for linha in mantidas))
-        os.replace(temporario, caminho)
-
-
-def _telemetria() -> hr.TelemetryClient | None:
-    """Cliente HTTP da telemetria quando o .env traz ORCHESTRATOR_API_KEY."""
-    chave = hr.read_api_key(RAIZ)
-    return hr.HttpTelemetryClient(chave) if chave else None
-
-
-def _linha_disco() -> str:
-    """Linha de disco do pre-flight: ERRO abaixo de 1 GB livre."""
-    try:
-        livre = round(shutil.disk_usage(RAIZ).free / (1024**3), 2)
-    except OSError:
-        return "WARN: Falha ao ler espaco em disco (Ignorado)"
-    if livre < ESPACO_MINIMO_GB:
-        return f"ERRO: Disco critico ({livre} GB)"
-    return f"OK: Disco estavel ({livre} GB)"
-
-
-def _linha_caminho(caminho: Path) -> str:
-    """Linha de um path do pre-flight (CheckPaths do run.ps1)."""
-    if caminho.exists():
-        return f"OK: Path: {caminho.name}"
-    return f"ERRO: Path inacessivel: {caminho.name}"
 
 
 def _preflight(ctx: hr.HubRunContext) -> bool:
     """Etapa preflight: disco, interpretador e paths."""
     hr.start_step(ctx, "preflight", mensagem="Python e paths")
-    # Com Oracle: monte oracle = hr.oracle_preflight(modo=..., conexao=..., pasta_fila=...),
-    # some oracle.linhas a linhas e use hr.oracle_preflight_exit_code para o codigo de falha.
-    # Exemplo completo em Receitas Emitidas/run_receitas.py (_resultado_oracle).
-    linhas = [_linha_disco(), _linha_caminho(Path(sys.executable))]
-    ok = not any(linha.startswith("ERRO:") for linha in linhas)
-    hr.log(
-        ctx,
-        "Pre-Flight: " + " | ".join(linhas),
-        "INFO" if ok else "ERRO",
-        step="preflight",
-    )
+    # Com Oracle: monte oracle = hr.oracle_preflight_from_env() e passe em
+    # oracle=oracle de hr.run_preflight(...), usando hr.oracle_preflight_exit_code
+    # para decidir o codigo de falha. Exemplo em Receitas Emitidas/run_receitas.py.
+    ok = hr.run_preflight(ctx, [Path(sys.executable)], step="preflight")
     hr.complete_step(ctx, ok=ok)
     return ok
 
 
 def _etapas(ctx: hr.HubRunContext, *, dry_run: bool) -> int:
     """Etapas extract, entrega e commit, executadas dentro do lock."""
-    _rotacionar_log(ctx.log_path)
+    hr.rotate_log(ctx.log_path, RETENCAO_LOG_DIAS)
     hr.start_step(ctx, "extract", mensagem="Executando tarefas")
     hr.log(ctx, "Executando tarefas...", step="extract")
     # --- ETAPA 1: LOGICA DE NEGOCIO AQUI ---
@@ -167,9 +100,7 @@ def executar(ctx: hr.HubRunContext, *, dry_run: bool = False) -> int:
                 ctx, hr.EXIT_PREFLIGHT_FALHA, "FALHA NO PRE-FLIGHT CHECK. Abortando."
             )
         hr.start_step(ctx, "lock", mensagem="Adquirindo lock global")
-        mutex = hr.AutomationMutex(
-            CHAVE_LOCK, on_warning=lambda msg: hr.log(ctx, msg, "WARN", step="lock")
-        )
+        mutex = hr.AutomationMutex(CHAVE_LOCK, on_warning=hr.warn_logger(ctx, "lock"))
         with mutex:
             hr.complete_step(ctx)
             return _etapas(ctx, dry_run=dry_run)
@@ -197,7 +128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             non_failure_codes=(0, hr.EXIT_IDEMPOTENTE),
         ),
         exec_id=posicionais[0] if posicionais else "",
-        telemetry=_telemetria(),
+        telemetry=hr.default_telemetry(RAIZ),
         project_root=RAIZ,
     )
     return executar(ctx, dry_run=dry_run)

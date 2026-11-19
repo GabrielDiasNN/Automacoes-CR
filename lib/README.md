@@ -1,42 +1,38 @@
-# Biblioteca PowerShell Compartilhada (`lib/`)
+# Biblioteca Compartilhada (`lib/`)
 
 [⬅️ Voltar para o Hub Central](../README.md)
 
-Este diretorio contem os modulos e scripts utilitarios consumidos pelos orquestradores de automacao. Estes componentes formam a fundacao tecnica para a soberania e seguranca do hub.
+Este diretório contém os módulos PowerShell, drivers Node.js e o núcleo Python compartilhado consumidos pelos runners de automação, scripts de infraestrutura e CLIs operacionais.
 
-## 📝 `Lib-Logging.psm1` (v1.3)
+## 🐍 Núcleo Python dos Runners (`lib/python/`)
 
-Modulo de logging centralizado e inteligencia operacional.
-
-### Diferenciais Tecnicos:
-- **`Auto-Masking`**: `Protect-SensitiveData` protege automaticamente e-mails, senhas e chaves de API, impedindo o vazamento de segredos nos logs. Paridade textual com `lib/python/log_masking.py`.
-- **`Pre-Flight Diagnostics`**: Fornece o motor `Test-AutomationPreFlight` para validacao de saude do ambiente (Disco, Oracle Ping, Paths).
-- **`Traceability`**: Enforce o uso de `ExecId` para correlacao universal.
-
-> **Encoding:** UTF-8 ponta a ponta. O antigo "Base64 Bridge" (encoder `B64:` sem decoder correspondente) foi removido em 27/08/2026 — ver `docs/logging-standard.md`.
+- **`hub_runner.py`**: orquestração comum das automações (`run_*.py` e `_Template/run_template.py`) — lock global por mutex (`AutomationMutex`), pré-flight (disco, caminhos e fila Oracle), passos Python com retry (`run_python_step`), telemetria (`HttpTelemetryClient`), idempotência por canal (`delivery_state.json`), rotação de logs JSONL sem BOM (`rotate_log`) e escrita atômica.
+- **`hub_whatsapp.py`**: leitura de manifesto/configuração, normalização de destino, gravação do lote para o motor WhatsApp e reconciliação de entrega.
+- **`obs_cards_runner.py`**: motor comum dos runners de cards (`OFST-06` e `ORB-07`).
 
 ---
 
-## 🧾 `Lib-LogEvent.psm1` (v1.0)
+## 📝 `Lib-Logging.psm1`
 
-Emissao de eventos de log **estruturados** (JSON Lines) no contrato de `docs/log-event.schema.json`. Ciclo de vida: `Initialize-HubLogContext` -> `Write-HubExecutionStart` -> `Write-HubStepStart`/`End` (por etapa) -> `Write-HubRetryAttempt` -> `Write-HubExecutionEnd`. `Resolve-HubTraceId` herda `HUB_TRACE_ID` do processo pai para correlacao entre camadas. Adotado pela ORB-07; rollout nas demais automacoes em andamento.
+Módulo PowerShell focado nos consumidores de infraestrutura (`Infrastructure/MonitorAutomacoes.ps1` e `lib/Lib-Email.psm1`):
 
----
+- **`Protect-SensitiveData`**: mascara automaticamente e-mails, credenciais rotuladas e hosts de strings de conexão Oracle nos logs (paridade textual com `lib/python/log_masking.py`).
+- **`Write-AutomacaoLog`**: grava linha JSONL mascarada em UTF-8 sem BOM e imprime no console.
 
-## 📧 `Lib-Email.psm1` (v1.2)
-
-Interface de alta fidelidade para disparos via Outlook COM.
-
-### Diferenciais Tecnicos:
-- **`Outlook-Safe Protocol`**: O script **NUNCA** executa o comando `.Quit()`. Isso garante que o Outlook permaneca vivo e consiga esvaziar a *Outbox* (Caixa de Saida) de forma assincrona, evitando que e-mails fiquem presos.
-- **Identidade Visual**: Captura automatica da assinatura oficial com imagens (CIDs) atraves do metodo `.Display()`.
-- **Modo Teste**: Redirecionamento inteligente via variavel de ambiente `AUTOMACAO_TEST_EMAIL`.
+> **Encoding:** UTF-8 ponta a ponta em toda a biblioteca (`.ps1`/`.psm1` em UTF-8 com BOM; logs `.jsonl` e saída Python/Node em UTF-8 sem BOM).
 
 ---
 
-## 💬 `Send-WhatsApp.ps1`
+## 🚨 `Lib-Retry.psm1` & 📧 `Lib-Email.psm1`
 
-Wrapper PowerShell para o motor Node.js. Gerencia concorrencia e sessao (Pairing) do WhatsApp Web de forma transparente para os robos.
+- **`Lib-Retry.psm1`**: expõe `Send-AlertaFalhaDefinitiva`, acionado via CLI `lib/Invoke-OutlookEmail.ps1` quando uma automação esgota tentativas.
+- **`Lib-Email.psm1`**: interface para disparos via Outlook COM (preserva a sessão do Outlook aberta para esvaziar a Outbox de forma assíncrona, captura assinatura oficial e respeita `AUTOMACAO_TEST_EMAIL` no escopo User).
+
+---
+
+## 💬 WhatsApp (`Send-WhatsApp.ps1`, `Lib-WhatsAppBatch.psm1`, `whatsapp-daemon.js`)
+
+- **`Send-WhatsApp.ps1`**: wrapper PowerShell para o motor Node.js (`WhatsApp-Core.js`) e o cliente HTTP do daemon (`Lib-WhatsAppBatch.psm1`), com isolamento de ambiente por allowlist no `Start-WhatsAppDaemon.ps1` e limpeza segura de processos órfãos.
 
 ---
 
@@ -50,31 +46,8 @@ O `postinstall` aplica `lib/patches/*.patch` por `scripts/aplicar-patches.js` (s
 
 ## 🧪 Testes de Qualidade (Pester)
 
-Para garantir a resiliência industrial, a biblioteca conta com testes automatizados utilizando o framework **Pester**.
-
-- **`tests\Lib-Logging.Tests.ps1`**: Valida o motor de logging, garantindo que o registro de eventos e o tratamento de erros estejam operantes antes do deploy em produção.
-
-Execução recomendada:
-```powershell
-Invoke-Pester -Path ".\tests\Lib-Logging.Tests.ps1" -Output Detailed
-```
-
----
-
-## 🚀 Como Utilizar (Padrao Ouro)
-
-Todo novo orquestrador deve seguir o padrao:
+Para executar a suíte de testes PowerShell dos módulos ativos de `lib/`:
 
 ```powershell
-# Importacao com Caminhos Dinamicos
-$libLogging = Join-Path $projectRoot "lib\Lib-Logging.psm1"
-Import-Module $libLogging -Force
-
-# Pre-Flight (Obrigatorio)
-if (-not (Test-AutomationPreFlight -ExecId $Id -CheckOracle)) { exit 9 }
-
-# Envio de E-mail Blindado
-Send-OutlookEmail -To "fiscal@empresa.com" -Subject "Alerta" -HtmlBody "<h1>Sucesso</h1>"
+Invoke-Pester -Path ".\lib\tests\Lib-Logging.Tests.ps1", ".\lib\tests\Lib-Retry.Tests.ps1", ".\lib\tests\Lib-WhatsAppBatch.Tests.ps1" -Output Detailed
 ```
-
-> **Nota de Engenharia:** Todo o codigo-fonte deve ser **ASCII-Safe**. Termos acentuados em logs devem ser evitados ou escapados, delegando a integridade linguistica ao protocolo Base64 em tempo de execucao.
