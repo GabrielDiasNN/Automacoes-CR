@@ -189,6 +189,7 @@ def send_whatsapp_alert(task_name: str, exec_id: str, error_msg: str = "") -> bo
             ],
             env=build_subprocess_env(),
             capture_output=True,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             timeout=60,
             check=False,
         )
@@ -264,6 +265,7 @@ def send_email_alert(task_name: str, exec_id: str, error_msg: str = "") -> bool:
             ],
             env=env,
             capture_output=True,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             timeout=30,
             check=False,
         )
@@ -346,6 +348,7 @@ def _dispatch_infra_whatsapp(component: str, full_message: str) -> bool:
             ],
             env=build_subprocess_env(),
             capture_output=True,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             timeout=60,
             check=False,
         )
@@ -414,6 +417,7 @@ def send_infra_alert(component: str, message: str) -> None:
                 ],
                 env=env,
                 capture_output=True,
+                creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
                 timeout=30,
                 check=False,
             )

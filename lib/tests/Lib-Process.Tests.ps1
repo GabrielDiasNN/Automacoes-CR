@@ -55,3 +55,31 @@ Describe 'Resolve-HubPythonExe' {
         ($warnings -join "`n") | Should -Match 'venv do repositorio principal'
     }
 }
+
+Describe 'Invoke-HubPythonRunner' {
+
+    It 'repassa argumentos com espacos e devolve exatamente o exit code do runner' {
+        $pythonExe = Resolve-HubPythonExe -ProjectRoot $script:RepoRoot
+        if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
+            Set-ItResult -Skipped -Because 'venv do projeto ausente neste ambiente'
+            return
+        }
+
+        $pastaComEspaco = Join-Path $TestDrive 'Pasta Com Espaco'
+        New-Item -ItemType Directory -Force -Path $pastaComEspaco | Out-Null
+        $scriptTeste = Join-Path $pastaComEspaco 'echo_exit.py'
+        Set-Content -LiteralPath $scriptTeste -Encoding UTF8 -Value @'
+import sys
+print("ARG1=" + sys.argv[1])
+print("ARG2=" + sys.argv[2])
+sys.exit(int(sys.argv[3]))
+'@
+
+        $codigo = Invoke-HubPythonRunner `
+            -PythonExe $pythonExe `
+            -Arguments @($scriptTeste, 'valor com espaco', 'acao-utf8', '26') `
+            -WorkingDirectory $pastaComEspaco
+
+        $codigo | Should -Be 26
+    }
+}

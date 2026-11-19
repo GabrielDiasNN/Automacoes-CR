@@ -1015,7 +1015,8 @@ def test_shim_delega_ao_runner_e_repassa_o_exit_code() -> None:
 
     assert "Resolve-HubPythonExe" in fonte
     assert '"run_orb.py"' in fonte
-    assert "exit $LASTEXITCODE" in fonte
+    assert "Invoke-HubPythonRunner" in fonte
+    assert "exit $exitCode" in fonte
     assert "--dry-run" in fonte
     assert re.search(r"Test-Path\s+-LiteralPath\s+\$pythonExe", fonte)
     assert "exit 9" in fonte

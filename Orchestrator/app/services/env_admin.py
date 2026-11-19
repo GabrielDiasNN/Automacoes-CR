@@ -46,6 +46,7 @@ def sync_global_test_mode_env(enabled: bool, project_root: str) -> bool:
         subprocess.run(
             comando,
             env=build_subprocess_env(),
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
             timeout=_SYNC_TIMEOUT_SECONDS,
             check=True,
         )
