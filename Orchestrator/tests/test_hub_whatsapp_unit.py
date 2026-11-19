@@ -1,16 +1,15 @@
 """Testes unitarios de lib/python/hub_whatsapp.py.
 
 Sem WhatsApp, sem rede e sem Send-WhatsApp.ps1 de verdade: o envio usa um executor duble.
-Os testes de paridade (so Windows) executam as funcoes reais de lib/Lib-WhatsAppBatch.psm1
-em powershell.exe sobre o mesmo fixture e comparam resultado e arquivos gravados. Tudo
-fica em tmp_path; nada e gravado em Logs/ nem dentro de lib/.
+Os testes de paridade comparam com a saida congelada das antigas funcoes de lote do
+lib/Lib-WhatsAppBatch.psm1 no Windows PowerShell 5.1 (fixtures/). Tudo fica em
+tmp_path; nada e gravado em Logs/ nem dentro de lib/.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -23,13 +22,7 @@ import pytest
 # Dubles de teste sao deliberadamente minimos (um metodo cada).
 # pylint: disable=too-few-public-methods
 
-RAIZ_REPO = Path(__file__).resolve().parents[2]
-LIB_DIR = RAIZ_REPO / "lib"
 BOM_UTF8: Final[bytes] = b"\xef\xbb\xbf"
-PARIDADE_WINDOWS = pytest.mark.skipif(
-    sys.platform != "win32",
-    reason="paridade executa o Lib-WhatsAppBatch.psm1 em powershell.exe (Windows)",
-)
 
 
 # ---------------------------------------------------------------------------
@@ -431,6 +424,21 @@ def test_card_unico_exige_message_e_card_com_conteudo(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # write_whatsapp_batch_input
 # ---------------------------------------------------------------------------
+
+
+def test_write_batch_input_um_card_continua_lista(tmp_path: Path) -> None:
+    """Lote de uma pagina e lista JSON, nunca objeto: o motor Node descartava o objeto
+    como "Lote vazio" (09/11/2026, `$lote | ConvertTo-Json` no PS)."""
+    base = tmp_path / "base"
+    destino = tmp_path / "batch_input.json"
+
+    hw.write_whatsapp_batch_input(
+        (hw.CardPagina("FASE-1", "cards/a.png", "Unica", ("OB1",)),), base, destino
+    )
+
+    itens = json.loads(destino.read_bytes().decode("utf-8"))
+    assert isinstance(itens, list)
+    assert [item["phase_key"] for item in itens] == ["FASE-1"]
 
 
 def test_write_batch_input_utf8_sem_bom_e_caminhos_absolutos(tmp_path: Path) -> None:
@@ -934,84 +942,34 @@ def test_nivel_da_linha_igual_ao_do_runner(linha: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Paridade com lib/Lib-WhatsAppBatch.psm1 (executa o PowerShell real)
+# Paridade com o antigo lib/Lib-WhatsAppBatch.psm1 (saida congelada do PS 5.1)
 # ---------------------------------------------------------------------------
+# As funcoes de lote do Lib-WhatsAppBatch.psm1 sairam do repositorio depois que as
+# automacoes passaram a usar hub_whatsapp.py. Antes da remocao, a saida real delas no
+# Windows PowerShell 5.1 foi gravada em fixtures/lib_whatsappbatch_ps51_paridade.json
+# (pasta base normalizada para <BASE>); estes testes travam o Python contra ela.
 
-_CABECALHO_PS: Final[str] = (
-    "$ErrorActionPreference = 'Stop'\n"
-    "Import-Module (Join-Path $env:HUB_LIB_DIR 'Lib-WhatsAppBatch.psm1') -Force\n"
+FIXTURE_PS: Final[Path] = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "lib_whatsappbatch_ps51_paridade.json"
 )
-_ROTEIRO_LER: Final[str] = """
-$r = Read-CardsManifest -ManifestPath $env:HUB_MANIFESTO -BaseDir $env:HUB_BASE -MessageFile $env:HUB_MENSAGEM -CardFile $env:HUB_CARD
-$cards = @()
-foreach ($c in @($r.Cards)) {
-    $cards += [pscustomobject]@{
-        phase_key  = [string]$c.phase_key
-        image_path = [string]$c.image_path
-        caption    = [string]$c.caption
-        ob_ids     = @($c.ob_ids | ForEach-Object { [string]$_ })
-    }
-}
-$saida = [pscustomobject]@{ valid = [bool]$r.Valid; error = [string]$r.Error; cards = @($cards) }
-[System.IO.File]::WriteAllText($env:HUB_SAIDA, ($saida | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding $false))
-"""
-_ROTEIRO_ESCREVER: Final[str] = """
-$r = Read-CardsManifest -ManifestPath $env:HUB_MANIFESTO -BaseDir $env:HUB_BASE
-Write-WhatsAppBatchInput -Cards @($r.Cards) -BaseDir $env:HUB_BASE -BatchInputFile $env:HUB_ENTRADA_LOTE
-[System.IO.File]::WriteAllText($env:HUB_SAIDA, 'ok', (New-Object System.Text.UTF8Encoding $false))
-"""
-_ROTEIRO_RESOLVER: Final[str] = """
-$r = Read-CardsManifest -ManifestPath $env:HUB_MANIFESTO -BaseDir $env:HUB_BASE
-$res = Resolve-WhatsAppBatchDelivery -Cards @($r.Cards) -BatchResultFile $env:HUB_RESULTADO_LOTE -StateTmpPath $env:HUB_STATE_TMP -WaExitCode ([int]$env:HUB_WA_EXIT)
-$saida = [pscustomobject]@{
-    status = [string]$res.Status
-    sent_count = [int]$res.SentCount
-    total_count = [int]$res.TotalCount
-    delivered_ob_count = [int]$res.DeliveredObCount
-    failed_ob_count = [int]$res.FailedObCount
-    should_commit_state = [bool]$res.ShouldCommitState
-}
-[System.IO.File]::WriteAllText($env:HUB_SAIDA, ($saida | ConvertTo-Json -Depth 4), (New-Object System.Text.UTF8Encoding $false))
-"""
 
 
-def _executar_ps(roteiro: str, pasta: Path, env_extra: dict[str, str]) -> str:
-    """Roda um roteiro no Windows PowerShell 5.1 e devolve o texto gravado em HUB_SAIDA."""
-    arquivo = pasta / "_roteiro_paridade.ps1"
-    arquivo.write_text(_CABECALHO_PS + roteiro, encoding="utf-8-sig")
-    saida = pasta / "_saida_paridade.txt"
-    ambiente = {
-        **os.environ,
-        "HUB_LIB_DIR": str(LIB_DIR),
-        "HUB_SAIDA": str(saida),
-        **env_extra,
-    }
-    processo = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(arquivo),
-        ],
-        env=ambiente,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=180,
-        check=False,
-    )
-    assert (
-        processo.returncode == 0
-    ), f"PowerShell falhou:\n{processo.stdout}\n{processo.stderr}"
-    return saida.read_text(encoding="utf-8-sig")
+def _saida_ps() -> dict[str, Any]:
+    """Saida congelada do PowerShell 5.1 para os cenarios de paridade."""
+    dados: dict[str, Any] = json.loads(FIXTURE_PS.read_text(encoding="utf-8"))
+    return dados
+
+
+def _batch_input_ps(nome: str, base: Path) -> bytes:
+    """Bytes do batch_input.json que o PS gravou, com <BASE> trocado pela pasta do teste."""
+    texto: str = _saida_ps()["batch_input"][nome]
+    return texto.replace("<BASE>", json.dumps(str(base))[1:-1]).encode("utf-8")
 
 
 def _resultado_leitura_py(resultado: hw.ResultadoManifesto) -> dict[str, Any]:
-    """Mesma forma do JSON que o roteiro PowerShell grava para Read-CardsManifest."""
+    """Mesma forma do JSON que o roteiro PowerShell gravou para Read-CardsManifest."""
     return {
         "valid": resultado.valid,
         "error": resultado.error,
@@ -1047,28 +1005,21 @@ _CENARIOS_LEITURA: Final[list[tuple[str, object, bool]]] = [
 ]
 
 
-@PARIDADE_WINDOWS
 @pytest.mark.parametrize(
-    ("manifesto", "com_saidas"),
-    [(m, s) for _, m, s in _CENARIOS_LEITURA],
+    ("nome", "manifesto", "com_saidas"),
+    _CENARIOS_LEITURA,
     ids=[nome for nome, _, _ in _CENARIOS_LEITURA],
 )
 def test_paridade_read_cards_manifest(
-    tmp_path: Path, manifesto: object, com_saidas: bool
+    tmp_path: Path, nome: str, manifesto: object, com_saidas: bool
 ) -> None:
     base = tmp_path / "base"
     _montar_base(base)
     caminho = _manifesto(base, manifesto)
     mensagem = base / "message.txt" if com_saidas else None
     cartao = base / "card.png" if com_saidas else None
-    env = {
-        "HUB_MANIFESTO": str(caminho),
-        "HUB_BASE": str(base),
-        "HUB_MENSAGEM": str(mensagem) if mensagem else "",
-        "HUB_CARD": str(cartao) if cartao else "",
-    }
 
-    saida_ps = json.loads(_executar_ps(_ROTEIRO_LER, base, env))
+    saida_ps = _saida_ps()["leitura"][nome]
     resultado_py = hw.read_cards_manifest(
         caminho,
         base,
@@ -1079,7 +1030,6 @@ def test_paridade_read_cards_manifest(
     assert _resultado_leitura_py(resultado_py) == saida_ps
 
 
-@PARIDADE_WINDOWS
 def test_paridade_write_whatsapp_batch_input(tmp_path: Path) -> None:
     base = tmp_path / "base"
     _montar_base(base)
@@ -1088,26 +1038,14 @@ def test_paridade_write_whatsapp_batch_input(tmp_path: Path) -> None:
         _card("FASE-B", "cards/b.png", "Segunda legenda", ["OB3"]),
     ]
     caminho = _manifesto(base, manifesto)
-    entrada_ps = base / "batch_input_ps.json"
     entrada_py = base / "batch_input_py.json"
 
-    _executar_ps(
-        _ROTEIRO_ESCREVER,
-        base,
-        {
-            "HUB_MANIFESTO": str(caminho),
-            "HUB_BASE": str(base),
-            "HUB_ENTRADA_LOTE": str(entrada_ps),
-        },
-    )
     cards = hw.read_cards_manifest(caminho, base).cards
     hw.write_whatsapp_batch_input(cards, base, entrada_py)
 
-    bruto_ps = entrada_ps.read_bytes()
     bruto_py = entrada_py.read_bytes()
-    assert not bruto_ps.startswith(BOM_UTF8)
     assert not bruto_py.startswith(BOM_UTF8)
-    assert bruto_py == bruto_ps
+    assert bruto_py == _batch_input_ps("dois_cards", base)
 
 
 _CENARIOS_RESOLUCAO: Final[list[tuple[str, list[dict[str, Any]] | None, int]]] = [
@@ -1138,14 +1076,13 @@ _CENARIOS_RESOLUCAO: Final[list[tuple[str, list[dict[str, Any]] | None, int]]] =
 ]
 
 
-@PARIDADE_WINDOWS
 @pytest.mark.parametrize(
-    ("resultados", "wa_exit"),
-    [(r, w) for _, r, w in _CENARIOS_RESOLUCAO],
+    ("nome", "resultados", "wa_exit"),
+    _CENARIOS_RESOLUCAO,
     ids=[nome for nome, _, _ in _CENARIOS_RESOLUCAO],
 )
 def test_paridade_resolve_whatsapp_batch_delivery(
-    tmp_path: Path, resultados: list[dict[str, Any]], wa_exit: int
+    tmp_path: Path, nome: str, resultados: list[dict[str, Any]], wa_exit: int
 ) -> None:
     manifesto = [
         _card("FASE-A", "cards/a.png", ob_ids=["OB1", "OB2"]),
@@ -1157,46 +1094,29 @@ def test_paridade_resolve_whatsapp_batch_delivery(
             "notified": {"OB1": "ok", "OB2": "ok", "OB3": "ok", "OB4": "ok"},
         }
     )
-    ps_dir = tmp_path / "ps"
-    py_dir = tmp_path / "py"
-    for pasta in (ps_dir, py_dir):
-        _montar_base(pasta)
-        _manifesto(pasta, manifesto)
-        (pasta / "batch_result.json").write_text(
-            json.dumps(resultados), encoding="utf-8"
-        )
-        (pasta / "estado.json.tmp").write_text(dados_estado, encoding="utf-8")
-
-    saida_ps = json.loads(
-        _executar_ps(
-            _ROTEIRO_RESOLVER,
-            ps_dir,
-            {
-                "HUB_MANIFESTO": str(ps_dir / "cards_manifest.json"),
-                "HUB_BASE": str(ps_dir),
-                "HUB_RESULTADO_LOTE": str(ps_dir / "batch_result.json"),
-                "HUB_STATE_TMP": str(ps_dir / "estado.json.tmp"),
-                "HUB_WA_EXIT": str(wa_exit),
-            },
-        )
+    _montar_base(tmp_path)
+    _manifesto(tmp_path, manifesto)
+    (tmp_path / "batch_result.json").write_text(
+        json.dumps(resultados), encoding="utf-8"
     )
-    cards = hw.read_cards_manifest(py_dir / "cards_manifest.json", py_dir).cards
+    (tmp_path / "estado.json.tmp").write_text(dados_estado, encoding="utf-8")
+
+    cards = hw.read_cards_manifest(tmp_path / "cards_manifest.json", tmp_path).cards
     entrega_py = hw.resolve_whatsapp_batch_delivery(
         cards,
-        py_dir / "batch_result.json",
-        py_dir / "estado.json.tmp",
+        tmp_path / "batch_result.json",
+        tmp_path / "estado.json.tmp",
         wa_exit_code=wa_exit,
     )
 
-    assert asdict(entrega_py) == saida_ps
-    estado_ps = json.loads((ps_dir / "estado.json.tmp").read_text(encoding="utf-8-sig"))
-    estado_py = json.loads((py_dir / "estado.json.tmp").read_text(encoding="utf-8"))
-    assert estado_py == estado_ps
+    esperado = _saida_ps()["resolucao"][nome]
+    assert asdict(entrega_py) == esperado["saida"]
+    estado_py = json.loads((tmp_path / "estado.json.tmp").read_text(encoding="utf-8"))
+    assert estado_py == esperado["estado"]
 
 
-@PARIDADE_WINDOWS
 def test_paridade_numeros_e_objetos_em_ob_ids(tmp_path: Path) -> None:
-    """Toda a tabela de numeros, listas e objetos numa so leitura do PowerShell."""
+    """Toda a tabela de numeros, listas e objetos numa so leitura."""
     base = tmp_path / "base"
     _montar_base(base)
     literais = [literal for literal, _ in TABELA_NUMEROS]
@@ -1204,21 +1124,14 @@ def test_paridade_numeros_e_objetos_em_ob_ids(tmp_path: Path) -> None:
     esperados = [esperado for _, esperado in TABELA_NUMEROS]
     esperados += [esperado for _, esperado in TABELA_OBJETOS]
     caminho = _manifesto_com_ob_ids(base, ",".join(literais))
-    env = {
-        "HUB_MANIFESTO": str(caminho),
-        "HUB_BASE": str(base),
-        "HUB_MENSAGEM": "",
-        "HUB_CARD": "",
-    }
 
-    saida_ps = json.loads(_executar_ps(_ROTEIRO_LER, base, env))
+    saida_ps = _saida_ps()["leitura"]["numeros_e_objetos"]
     resultado_py = hw.read_cards_manifest(caminho, base)
 
     assert _resultado_leitura_py(resultado_py) == saida_ps
     assert resultado_py.cards[0].ob_ids == tuple(esperados)
 
 
-@PARIDADE_WINDOWS
 def test_paridade_bytes_batch_input_com_escapes_e_phase_numerico(
     tmp_path: Path,
 ) -> None:
@@ -1236,22 +1149,12 @@ def test_paridade_bytes_batch_input_com_escapes_e_phase_numerico(
         '"caption":"Segunda","ob_ids":[1.0,"OB3"]}]'
     )
     caminho = _manifesto_bruto(base, texto)
-    entrada_ps = base / "batch_input_ps.json"
     entrada_py = base / "batch_input_py.json"
 
-    _executar_ps(
-        _ROTEIRO_ESCREVER,
-        base,
-        {
-            "HUB_MANIFESTO": str(caminho),
-            "HUB_BASE": str(base),
-            "HUB_ENTRADA_LOTE": str(entrada_ps),
-        },
-    )
     cards = hw.read_cards_manifest(caminho, base).cards
     hw.write_whatsapp_batch_input(cards, base, entrada_py)
 
-    assert entrada_py.read_bytes() == entrada_ps.read_bytes()
+    assert entrada_py.read_bytes() == _batch_input_ps("escapes_e_phase_numerico", base)
 
 
 _CASOS_RECUSADOS_PELO_PS: Final[list[tuple[str, str]]] = [
@@ -1267,38 +1170,24 @@ _CASOS_RECUSADOS_PELO_PS: Final[list[tuple[str, str]]] = [
 ]
 
 
-@PARIDADE_WINDOWS
 @pytest.mark.parametrize(
-    ("nome", "texto"),
-    _CASOS_RECUSADOS_PELO_PS,
+    "texto",
+    [texto for _, texto in _CASOS_RECUSADOS_PELO_PS],
     ids=[nome for nome, _ in _CASOS_RECUSADOS_PELO_PS],
 )
-def test_paridade_erro_de_parse_mesmo_prefixo(
-    tmp_path: Path, nome: str, texto: str
-) -> None:
-    """Validade e prefixo iguais. O detalhe depois de ': ' e o texto do parser de cada runtime."""
+def test_paridade_erro_de_parse_mesmo_prefixo(tmp_path: Path, texto: str) -> None:
+    """JSON que o PS 5.1 recusava: invalido, com o prefixo de falha e o detalhe do parser."""
     base = tmp_path / "base"
     _montar_base(base)
     caminho = _manifesto_bruto(base, texto)
-    env = {
-        "HUB_MANIFESTO": str(caminho),
-        "HUB_BASE": str(base),
-        "HUB_MENSAGEM": "",
-        "HUB_CARD": "",
-    }
 
-    saida_ps = json.loads(_executar_ps(_ROTEIRO_LER, base, env))
     resultado_py = hw.read_cards_manifest(caminho, base)
 
-    assert saida_ps["valid"] is False
     assert resultado_py.valid is False
-    assert saida_ps["error"].startswith(PREFIXO_FALHA_LEITURA)
     assert resultado_py.error.startswith(PREFIXO_FALHA_LEITURA)
-    assert len(saida_ps["error"]) > len(PREFIXO_FALHA_LEITURA)
     assert len(resultado_py.error) > len(PREFIXO_FALHA_LEITURA)
 
 
-@PARIDADE_WINDOWS
 def test_paridade_success_com_valores_do_ps(tmp_path: Path) -> None:
     """Quais valores de success contam como enviados: medido no PS (-eq $true)."""
     resultados: list[dict[str, Any]] = [
@@ -1309,49 +1198,31 @@ def test_paridade_success_com_valores_do_ps(tmp_path: Path) -> None:
         {"phase_key": "K5", "success": 1.5},
     ]
     manifesto = [_card(f"K{i}", ob_ids=[f"O{i}"]) for i in range(1, 7)]
-    ps_dir = tmp_path / "ps"
-    py_dir = tmp_path / "py"
-    for pasta in (ps_dir, py_dir):
-        _montar_base(pasta)
-        _manifesto(pasta, manifesto)
-        (pasta / "batch_result.json").write_text(
-            json.dumps(resultados), encoding="utf-8"
-        )
-        estado = {"last_hash": "h1", "notified": {f"O{i}": "ok" for i in range(1, 7)}}
-        (pasta / "estado.json.tmp").write_text(json.dumps(estado), encoding="utf-8")
-
-    saida_ps = json.loads(
-        _executar_ps(
-            _ROTEIRO_RESOLVER,
-            ps_dir,
-            {
-                "HUB_MANIFESTO": str(ps_dir / "cards_manifest.json"),
-                "HUB_BASE": str(ps_dir),
-                "HUB_RESULTADO_LOTE": str(ps_dir / "batch_result.json"),
-                "HUB_STATE_TMP": str(ps_dir / "estado.json.tmp"),
-                "HUB_WA_EXIT": "24",
-            },
-        )
+    _montar_base(tmp_path)
+    _manifesto(tmp_path, manifesto)
+    (tmp_path / "batch_result.json").write_text(
+        json.dumps(resultados), encoding="utf-8"
     )
-    cards = hw.read_cards_manifest(py_dir / "cards_manifest.json", py_dir).cards
+    estado = {"last_hash": "h1", "notified": {f"O{i}": "ok" for i in range(1, 7)}}
+    (tmp_path / "estado.json.tmp").write_text(json.dumps(estado), encoding="utf-8")
+
+    cards = hw.read_cards_manifest(tmp_path / "cards_manifest.json", tmp_path).cards
     entrega_py = hw.resolve_whatsapp_batch_delivery(
         cards,
-        py_dir / "batch_result.json",
-        py_dir / "estado.json.tmp",
+        tmp_path / "batch_result.json",
+        tmp_path / "estado.json.tmp",
         wa_exit_code=24,
     )
 
     # Enviadas: K1 (1.0), K2 ("true") e K4 ([true]). K3 ("1"), K5 (1.5) e K6 (sem item) falham.
+    esperado = _saida_ps()["resolucao"]["success_valores_do_ps"]
     assert entrega_py.status == "PartialSent"
     assert entrega_py.sent_count == 3
-    assert asdict(entrega_py) == saida_ps
-    notificados_ps = json.loads(
-        (ps_dir / "estado.json.tmp").read_text(encoding="utf-8-sig")
-    )
+    assert asdict(entrega_py) == esperado["saida"]
     notificados_py = json.loads(
-        (py_dir / "estado.json.tmp").read_text(encoding="utf-8")
+        (tmp_path / "estado.json.tmp").read_text(encoding="utf-8")
     )
-    assert notificados_py["notified"] == notificados_ps["notified"]
+    assert notificados_py["notified"] == esperado["estado"]["notified"]
 
 
 def test_send_whatsapp_injeta_hub_log_structured_e_hub_step_no_ambiente(

@@ -95,7 +95,7 @@ Todas as automações que enviam WhatsApp (`Receitas Bloqueadas`, `OBs Paradas F
 
 Duas decisões registradas na revisão arquitetural de 26/07/2026 (`CHANGELOG.md` [1.3.0]).
 
-**Idempotência por canal é da `lib/Lib-Idempotency.psm1`.** Automação que suprime reenvio por hash de conteúdo (`Receitas Bloqueadas`, `Receitas Emitidas`, `Montagem de Terceirizados`) consome `Get-LastContentHash`, `Read-DeliveryState`, `Update-DeliveryStateHash`, `Test-DeliveryPending`, `Set-DeliverySuccess` e `Save-DeliveryState` — nunca reimplementa a leitura/escrita de `delivery_state.json`. `lib/tests/Lib-Idempotency.Tests.ps1` trava esse contrato.
+**Idempotência por canal é de `lib/python/hub_runner.py`.** Automação que suprime reenvio por hash de conteúdo (`Receitas Bloqueadas`, `Receitas Emitidas`, `Montagem de Terceirizados`) consome `get_last_content_hash`, `read_delivery_state`, `update_delivery_state_hash`, `delivery_pending`, `set_delivery_success` e `save_delivery_state` — nunca reimplementa a leitura/escrita de `delivery_state.json`. `Orchestrator/tests/test_hub_runner_unit.py` e os testes `test_run_*_unit.py` travam esse contrato. (Os módulos PowerShell legados `Lib-Idempotency.psm1`, `Lib-Oracle.psm1`, `Lib-OracleEndpoint.psm1` e `Lib-LogEvent.psm1` foram removidos na 1.3.118 após a migração integral para Python.)
 
 Três exceções deliberadas, por usarem modelo estruturalmente diferente: `OBs Paradas Fase` é idempotente **por fase** (array `phases` de tamanho variável por execução) e reaproveita `Get-LastContentHash`; `OBs Fluxo Sem Tingimento` e `OBs Restricao Branco` resolvem idempotência por ciclo da OB dentro do Python, sem `delivery_state`. Encaixá-las no contrato por canal seria abstração errada.
 

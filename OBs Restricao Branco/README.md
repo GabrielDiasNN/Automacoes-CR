@@ -67,7 +67,7 @@ mensagem e não envia WhatsApp.
 
 `orb_state.json` registra uma notificação por ciclo pendente da OB. O arquivo
 temporário só é consolidado após envio confirmado (e em envio em lote paginado,
-`Lib-WhatsAppBatch.psm1` preserva no state apenas as OBs das páginas entregues,
+`lib/python/hub_whatsapp.py` preserva no state apenas as OBs das páginas entregues,
 removendo as páginas com falha para reavaliação no ciclo seguinte); quando não
 há envio, o state ainda é reconciliado para remover OBs que saíram da seleção.
 

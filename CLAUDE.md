@@ -72,6 +72,7 @@ Detalhes de módulo carregados sob demanda: `Orchestrator/CLAUDE.md`, `Produçã
 ### Biblioteca compartilhada PowerShell (`lib/`)
 - `Lib-OrchestratorRuntime.psm1` — fonte única para scripts de Infrastructure: `Get-OrchestratorRuntimeVersion` (lê `ORCHESTRATOR_VERSION` de `constants.py`), `Get-OrchestratorEnvValue` (parser de `.env`), `Stop-OrchestratorProcesses` (usa `Get-CimInstance Win32_Process` — **nunca** `Get-Process`, que não expõe `CommandLine` no PS 5.1). Todo script de `Infrastructure/` que precise de versão de runtime, leitura de `.env` ou encerramento de processos deve consumi-lo em vez de reimplementar (`Install-OrchestratorTask.ps1` é exceção legítima: só registra a tarefa agendada e não usa nenhuma dessas capacidades).
 - `Lib-Config.psm1` — leitura de `.env` para scripts de automação de domínio.
+- Contratos de orquestração (lock, telemetria, retry, idempotência, lote WhatsApp) vivem em `lib/python/hub_runner.py` e `hub_whatsapp.py`. As automações e o `_Template` (shim `run.ps1` + `run_<id>.py`) usam só o runner; mudança de contrato vai no Python. Os `Lib-*.psm1` restantes servem aos scripts PowerShell de `lib/` e `Infrastructure/`: função sem chamador sai (1.3.118).
 
 ### Skills canônicas (`.github/skills/`)
 Nove skills governam decisões de implementação. `.gemini/skills/` é apenas mirror. Edite sempre a fonte canônica.

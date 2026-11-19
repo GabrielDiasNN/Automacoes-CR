@@ -138,7 +138,7 @@ O job roda a cada 2 horas (120 min), então **não pode reavisar a mesma OB a ca
 - OB notificável **nova** → entra na mensagem;
 - OB que saiu da query (foi montada) → **removida do state**. Se voltar a ficar pendente, avisa de novo.
 
-O commit do state (`ofst_state.json.tmp` → `ofst_state.json`) acontece **somente após o envio confirmado** no `run_ofst.py`. Em envios em lote paginados (`> 15` OBs, via `-Mode BATCH` e `lib/Lib-WhatsAppBatch.psm1`), se alguma página falhar após entregas anteriores, apenas as OBs das páginas não entregues são removidas de `ofst_state.json.tmp` antes do commit, evitando duplicação das páginas enviadas e permitindo retentativa das faltantes. Se todas falharem, nada é commitado e as OBs são reavaliadas na execução seguinte — a falha nunca engole um aviso.
+O commit do state (`ofst_state.json.tmp` → `ofst_state.json`) acontece **somente após o envio confirmado** no `run_ofst.py`. Em envios em lote paginados (`> 15` OBs, via `-Mode BATCH` e `lib/python/hub_whatsapp.py`), se alguma página falhar após entregas anteriores, apenas as OBs das páginas não entregues são removidas de `ofst_state.json.tmp` antes do commit, evitando duplicação das páginas enviadas e permitindo retentativa das faltantes. Se todas falharem, nada é commitado e as OBs são reavaliadas na execução seguinte — a falha nunca engole um aviso.
 
 > Um hash do lote inteiro (padrão do OBP-04) **não serviria aqui**: o estoque flutua ao longo do dia, o hash mudaria sozinho e a mesma OB seria reavisada.
 
