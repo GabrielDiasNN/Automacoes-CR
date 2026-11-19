@@ -33,6 +33,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -42,7 +43,7 @@ import time
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
 from typing import IO, Any, Final, Protocol
@@ -62,6 +63,8 @@ EXIT_ORACLE_QUEUE_TIMEOUT: Final[int] = 27
 NAO_REPETIVEIS_PADRAO: Final[tuple[int, ...]] = (5, 6, 7)
 LOCK_TIMEOUT_MS_PADRAO: Final[int] = 5000
 TIMEOUT_CLI_OUTLOOK_S: Final[float] = 300.0
+RETENCAO_LOG_DIAS_PADRAO: Final[int] = 15
+ESPACO_MINIMO_GB_PADRAO: Final[float] = 1.0
 STEPS_VALIDOS: Final[frozenset[str]] = frozenset(
     {
         "preflight",
@@ -97,6 +100,9 @@ _MARCADOR_NIVEL: Final[re.Pattern[str]] = re.compile(
 _COMENTARIO_INLINE_ENV: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
 _INTEIRO: Final[re.Pattern[str]] = re.compile(r"^\s*-?\d+\s*$")
 _CHAVE_API: Final[re.Pattern[str]] = re.compile(r"^ORCHESTRATOR_API_KEY=(.*)$")
+_PADRAO_TS_LOG: Final[re.Pattern[str]] = re.compile(
+    r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
+)
 _EMISSAO = threading.Lock()
 
 
@@ -1698,3 +1704,137 @@ def oracle_preflight_exit_code(
     if outros_checks is not None and not _outros_checks_ok(outros_checks):
         return EXIT_PREFLIGHT_FALHA
     return EXIT_ORACLE_WORKER_OFFLINE
+
+
+# ---------------------------------------------------------------------------
+# Helpers comuns aos runners (pre-flight, telemetria, log, limpeza, JSON)
+# ---------------------------------------------------------------------------
+
+
+def default_telemetry(raiz: Path) -> TelemetryClient | None:
+    """Cliente HTTP da telemetria quando o ``.env`` traz ``ORCHESTRATOR_API_KEY``."""
+    chave = read_api_key(raiz)
+    return HttpTelemetryClient(chave) if chave else None
+
+
+def driver_mode() -> str:
+    """``ORACLE_DRIVER_MODE`` normalizado; ausente vale ``auto``."""
+    bruto = os.environ.get("ORACLE_DRIVER_MODE", "").strip().lower()
+    return bruto or "auto"
+
+
+def oracle_preflight_from_env() -> OraclePreflight:
+    """Check Oracle do pre-flight a partir de ``ORACLE_DRIVER_MODE``, ``ORACLE_CONNECT_STRING`` e fila."""
+    return oracle_preflight(
+        modo=driver_mode(),
+        conexao=os.environ.get("ORACLE_CONNECT_STRING", ""),
+        pasta_fila=fila.get_queue_dir(),
+    )
+
+
+def free_disk_gb(caminho: Path) -> float:
+    """Espaco livre, em GB, na unidade que contem ``caminho``."""
+    return shutil.disk_usage(caminho.anchor or str(caminho)).free / (1024**3)
+
+
+def disk_preflight_line(raiz: Path, minimo_gb: float = ESPACO_MINIMO_GB_PADRAO) -> str:
+    """Linha de disco do pre-flight: ``ERRO`` abaixo de ``minimo_gb``, ``WARN`` em erro de E/S."""
+    try:
+        livre = round(free_disk_gb(raiz), 2)
+    except OSError:
+        return "WARN: Falha ao ler espaco em disco (Ignorado)"
+    if livre < minimo_gb:
+        return f"ERRO: Disco critico ({livre} GB)"
+    return f"OK: Disco estavel ({livre} GB)"
+
+
+def path_preflight_line(caminho: Path) -> str:
+    """Linha de existencia de caminho do pre-flight (CheckPaths)."""
+    if caminho.exists():
+        return f"OK: Path: {caminho.name}"
+    return f"ERRO: Path inacessivel: {caminho.name}"
+
+
+def run_preflight(
+    ctx: HubRunContext,
+    caminhos: Sequence[Path],
+    oracle: OraclePreflight | None = None,
+    *,
+    minimo_gb: float = ESPACO_MINIMO_GB_PADRAO,
+    step: str | None = "preflight",
+) -> bool:
+    """Check de disco, paths e linhas Oracle (Test-AutomationPreFlight)."""
+    log(ctx, "Iniciando Pre-Flight Check...", step=step)
+    resultados = [disk_preflight_line(ctx.raiz, minimo_gb=minimo_gb)]
+    resultados.extend(path_preflight_line(caminho) for caminho in caminhos)
+    if oracle is not None:
+        resultados.extend(oracle.linhas)
+    ok = not any(linha.startswith(("ERRO:", "FAIL:")) for linha in resultados)
+    log(
+        ctx,
+        "Pre-Flight: " + " | ".join(resultados),
+        "INFO" if ok else "ERRO",
+        step=step,
+    )
+    return ok
+
+
+def _linha_log_expirada(linha: str, corte: date) -> bool:
+    casamento = _PADRAO_TS_LOG.match(linha)
+    if casamento is None:
+        return False
+    try:
+        return date.fromisoformat(casamento.group(1)) < corte
+    except ValueError:
+        return False
+
+
+def rotate_log(caminho: Path, dias: int = RETENCAO_LOG_DIAS_PADRAO) -> None:
+    """Remove do ``.jsonl`` os eventos anteriores a ``dias`` e garante UTF-8 sem BOM."""
+    if not caminho.exists():
+        return
+    corte = date.today() - timedelta(days=dias)
+    with contextlib.suppress(OSError, ValueError):
+        bruto = caminho.read_bytes()
+        tinha_bom = bruto.startswith(b"\xef\xbb\xbf")
+        conteudo = bruto.decode("utf-8-sig")
+        linhas = [linha.rstrip("\r") for linha in conteudo.split("\n") if linha.strip()]
+        mantidas = [linha for linha in linhas if not _linha_log_expirada(linha, corte)]
+        if len(mantidas) == len(linhas) and not tinha_bom:
+            return
+        temporario = caminho.with_name(caminho.name + ".tmp")
+        with temporario.open("w", encoding="utf-8", newline="\r\n") as arquivo:
+            arquivo.write("".join(f"{linha}\n" for linha in mantidas))
+        os.replace(temporario, caminho)
+
+
+def remove_quietly(caminho: Path) -> None:
+    """Remove um arquivo se existir; falhas de E/S sao ignoradas."""
+    with contextlib.suppress(OSError):
+        caminho.unlink(missing_ok=True)
+
+
+def warn_logger(ctx: HubRunContext, step: str | None = None) -> Callable[[str], None]:
+    """Devolve um callback ``Callable[[str], None]`` que emite eventos ``WARN`` no log."""
+
+    def avisar(mensagem: str) -> None:
+        log(ctx, mensagem, "WARN", step=step)
+
+    return avisar
+
+
+def write_json_atomic(caminho: Path, dados: object, *, indent: int = 2) -> None:
+    """Grava JSON UTF-8 sem BOM de forma atomica (``.tmp`` no mesmo diretorio + ``os.replace``)."""
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=indent)
+    fd, nome_tmp = tempfile.mkstemp(
+        prefix=f".{caminho.name}.", suffix=".tmp", dir=str(caminho.parent)
+    )
+    temporario = Path(nome_tmp)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as arquivo:
+            arquivo.write(conteudo)
+        os.replace(temporario, caminho)
+    except Exception:
+        remove_quietly(temporario)
+        raise

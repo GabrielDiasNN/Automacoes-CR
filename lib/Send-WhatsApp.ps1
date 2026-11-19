@@ -136,7 +136,7 @@ function Clear-StaleWhatsAppLocksAndProcesses {
     }
 }
 
-# --- Daemon WhatsApp (opt-in, somente BATCH) ---
+# --- Daemon WhatsApp (opt-in, modos AUTO e BATCH) ---
 # Get-WhatsAppDaemonProcess, Get-WhatsAppDaemonHealth, Get-WhatsAppDaemonRoute, Invoke-WhatsAppDaemonBatch e Invoke-WhatsAppDaemonSend vivem em
 # Lib-WhatsAppBatch.psm1 (importado acima) para serem testaveis; este script apenas as usa.
 
@@ -186,9 +186,11 @@ try {
         # ou com daemon de outro perfil, segue o fluxo atual ('spawn'). WHATSAPP_DAEMON_ENABLED nao entra
         # aqui: governa apenas a subida do daemon (Start-WhatsAppDaemon.ps1).
         $daemonPort = "8765"
-        $portaLida = Get-EnvFileValue -Key "WHATSAPP_DAEMON_PORT"
-        if (-not [string]::IsNullOrWhiteSpace($portaLida)) { $daemonPort = $portaLida }
-        $daemonToken = Get-EnvFileValue -Key "WHATSAPP_DAEMON_TOKEN"
+        $portaLida = $env:WHATSAPP_DAEMON_PORT
+        if ([string]::IsNullOrWhiteSpace($portaLida)) { $portaLida = Get-EnvFileValue -Key "WHATSAPP_DAEMON_PORT" }
+        if (-not [string]::IsNullOrWhiteSpace($portaLida)) { $daemonPort = $portaLida.Trim() }
+        $daemonToken = $env:WHATSAPP_DAEMON_TOKEN
+        if ([string]::IsNullOrWhiteSpace($daemonToken)) { $daemonToken = Get-EnvFileValue -Key "WHATSAPP_DAEMON_TOKEN" }
         $daemonVivo = (@(Get-WhatsAppDaemonProcess)).Count -gt 0
         $saudeDaemon = [pscustomobject]@{ State = ""; ClientId = "" }
         if ($daemonVivo) {

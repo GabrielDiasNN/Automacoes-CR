@@ -24,6 +24,7 @@ from typing import Any
 
 import hub_runner as hr
 import hub_whatsapp as hw
+import obs_cards_runner as ocr
 import pytest
 from tests.carregadores_modulos import carregar_modulo_automacao
 
@@ -268,7 +269,7 @@ def _config_whatsapp(*, destino_habilitado: bool = True) -> dict[str, Any]:
 @pytest.fixture(name="pasta")
 def _pasta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Pasta de automacao falsa: scripts vazios, config do WhatsApp e disco com folga."""
-    monkeypatch.setattr(rr, "_espaco_livre_gb", lambda _caminho: 10.0)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 10.0)
     (tmp_path / "extract_ofst.py").write_text("# script falso\n", encoding="utf-8")
     (tmp_path / "format_message.py").write_text("# script falso\n", encoding="utf-8")
     (tmp_path / "whatsapp-config.json").write_text(
@@ -285,7 +286,7 @@ def _instalar(monkeypatch: pytest.MonkeyPatch, cenario: _Cenario) -> _Duplos:
         envio=_WhatsAppFalso(cenario.envios, cenario.lote),
     )
     monkeypatch.setattr(hr, "run_python_step", duplos.extract)
-    monkeypatch.setattr(rr, "_executar_formatador", duplos.formatador)
+    monkeypatch.setattr(ocr, "executar_formatador", duplos.formatador)
     monkeypatch.setattr(hw, "send_whatsapp", duplos.envio)
     monkeypatch.setattr(hr, "AutomationMutex", _MutexFalso)
     _MutexFalso.chaves.clear()
@@ -449,7 +450,7 @@ def test_excecao_inesperada_no_preflight_devolve_1_sem_pegar_o_lock(
     def quebra() -> hr.OraclePreflight:
         raise RuntimeError("falha inesperada no pre-flight")
 
-    monkeypatch.setattr(rr, "_resultado_oracle", quebra)
+    monkeypatch.setattr(hr, "oracle_preflight_from_env", quebra)
 
     execucao = _executar_cenario(monkeypatch, pasta, _Cenario())
 
@@ -871,9 +872,7 @@ def test_resolver_destino_devolve_o_valor_do_ambiente_ou_o_placeholder(
     alvo: dict[str, Any], esperado: str
 ) -> None:
     """Resolve-WhatsAppTarget: contactIdEnv vem do ambiente; sem ele, o contactId."""
-    assert (
-        rr._resolver_destino(alvo, Path("cfg.json")) == esperado
-    )  # pylint: disable=protected-access
+    assert hw.resolve_whatsapp_target(alvo, Path("cfg.json")) == esperado
 
 
 @pytest.mark.parametrize(
@@ -887,7 +886,7 @@ def test_resolver_destino_devolve_o_valor_do_ambiente_ou_o_placeholder(
 def test_resolver_destino_recusa_destino_ausente(alvo: object) -> None:
     """Resolve-WhatsAppTarget: variavel vazia, sem destino ou target que nao e objeto."""
     with pytest.raises(ValueError, match="Destino do WhatsApp ausente"):
-        rr._resolver_destino(alvo, Path("cfg.json"))  # pylint: disable=protected-access
+        hw.resolve_whatsapp_target(alvo, Path("cfg.json"))
 
 
 def test_caminhos_usam_os_nomes_de_arquivo_do_run_ps1(tmp_path: Path) -> None:
@@ -914,9 +913,11 @@ def test_rotacao_remove_eventos_anteriores_a_retencao(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    rr._rotacionar_log(caminho)  # pylint: disable=protected-access
+    hr.rotate_log(caminho, rr.RETENCAO_LOG_DIAS)
 
-    mantidas = caminho.read_text(encoding="utf-8-sig").splitlines()
+    bruto = caminho.read_bytes()
+    assert not bruto.startswith(b"\xef\xbb\xbf")
+    mantidas = bruto.decode("utf-8").splitlines()
     assert len(mantidas) == 1
     assert "recente" in mantidas[0]
 
@@ -955,14 +956,17 @@ def test_sessao_padrao_nao_confirma_estado_nem_encerra(tmp_path: Path) -> None:
         telemetry=None,
         project_root=tmp_path,
     )
-    sessao = rr._Sessao(  # pylint: disable=protected-access
+    sessao = ocr._Sessao(  # pylint: disable=protected-access
         ctx=ctx,
         caminhos=rr.Caminhos.da_pasta(tmp_path, tmp_path),
+        spec=rr.SPEC,
         dry_run=False,
     )
 
     assert sessao.estado_confirmado is False
     assert sessao.encerrada is False
     assert sessao.destino_mascarado == ""
-    assert sessao.cards == ()
-    assert sessao.config_wa == {}
+    assert not sessao.cards
+    assert isinstance(sessao.cards, tuple)
+    assert not sessao.config_wa
+    assert isinstance(sessao.config_wa, dict)

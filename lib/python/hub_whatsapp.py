@@ -720,6 +720,41 @@ def get_whatsapp_auth_path() -> str:
     return _absolutizar(_juntar(base, "Automacoes\\wwebjs_auth"), cwd)
 
 
+def read_whatsapp_config(caminho: Path) -> dict[str, Any]:
+    """Le ``whatsapp-config.json`` (tolera BOM) e exige objeto JSON na raiz."""
+    dados: object = json.loads(caminho.read_text(encoding="utf-8-sig"))
+    if not isinstance(dados, dict):
+        raise ValueError(f"{caminho.name} invalido: a raiz nao e um objeto JSON.")
+    return dados
+
+
+def resolve_whatsapp_target(alvo: object, origem: Path) -> str:
+    """Destino real (Resolve-WhatsAppTarget): ``contactIdEnv`` vence; ``contactId`` e placeholder."""
+    trecho = f" ({origem})"
+    if not isinstance(alvo, dict):
+        raise ValueError(
+            f"Destino do WhatsApp ausente: 'target' nao e um objeto em {origem}."
+        )
+    env_bruto = alvo.get("contactIdEnv")
+    nome_env = env_bruto.strip() if isinstance(env_bruto, str) else ""
+    if nome_env:
+        destino = os.environ.get(nome_env, "")
+        if not destino.strip():
+            raise ValueError(
+                f"Destino do WhatsApp ausente: variavel de ambiente '{nome_env}'{trecho} "
+                "nao esta definida ou esta vazia. O contactId do config e apenas "
+                "placeholder de schema, nunca um destino real."
+            )
+        return destino
+    placeholder = _texto(alvo.get("contactId")) or _texto(alvo.get("contactPhone"))
+    if not placeholder.strip():
+        raise ValueError(
+            f"Destino do WhatsApp ausente: 'target'{trecho} nao declara contactId, "
+            "contactPhone nem contactIdEnv."
+        )
+    return placeholder
+
+
 # ---------------------------------------------------------------------------
 # Encaminhamento de linhas e envio pelo Send-WhatsApp.ps1
 # ---------------------------------------------------------------------------

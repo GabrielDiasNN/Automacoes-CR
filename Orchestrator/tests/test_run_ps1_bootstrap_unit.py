@@ -26,6 +26,12 @@ AUTOMACOES = [
     ("OBs Restricao Branco", "run_orb.py", "ORB-07", "CODIGOS_SEM_FALHA"),
 ]
 PASTAS = [a[0] for a in AUTOMACOES]
+OBS_CARDS_MOTOR = REPO_ROOT / "lib" / "python" / "obs_cards_runner.py"
+
+
+def _motor_cards() -> str:
+    assert OBS_CARDS_MOTOR.exists(), "obs_cards_runner.py ausente"
+    return OBS_CARDS_MOTOR.read_text(encoding="utf-8")
 
 
 def _run_ps1(nome: str) -> str:
@@ -97,11 +103,12 @@ def test_runner_fecha_a_telemetria_em_todo_ponto_de_saida(
     rejeitar a telemetria dos ciclos seguintes (caso do MT-02 em 08/09/2026).
     """
     fonte = _runner(automacao, runner)
-
-    chamadas = fonte.count("hr.finish(")
-    assert chamadas == fonte.count("return hr.finish("), "hr.finish sempre com return"
-    assert 1 <= chamadas <= 2
     assert "sys.exit(main())" in fonte
+
+    alvo = _motor_cards() if runner in ("run_ofst.py", "run_orb.py") else fonte
+    chamadas = alvo.count("hr.finish(")
+    assert chamadas == alvo.count("return hr.finish("), "hr.finish sempre com return"
+    assert 1 <= chamadas <= 2
 
 
 @pytest.mark.parametrize(("automacao", "runner", "lock", "_nf"), AUTOMACOES)
@@ -112,7 +119,11 @@ def test_runner_adquire_o_lock_global_pela_chave_da_automacao(
     fonte = _runner(automacao, runner)
 
     assert f'CHAVE_LOCK: Final[str] = "{lock}"' in fonte
-    assert "hr.AutomationMutex(CHAVE_LOCK" in fonte
+    if runner in ("run_ofst.py", "run_orb.py"):
+        assert "obs_cards_runner" in fonte
+        assert "hr.AutomationMutex(chave_lock" in _motor_cards()
+    else:
+        assert "hr.AutomationMutex(CHAVE_LOCK" in fonte
 
 
 @pytest.mark.parametrize(("automacao", "runner", "_lock", "nao_falha"), AUTOMACOES)
@@ -122,7 +133,11 @@ def test_runner_declara_os_codigos_de_nao_falha_num_lugar_so(
     """Os codigos que nao sao falha vem de uma constante, como o $NonFailureCodes."""
     fonte = _runner(automacao, runner)
 
-    assert f"non_failure_codes={nao_falha}" in fonte
+    if runner in ("run_ofst.py", "run_orb.py"):
+        assert f"{nao_falha}: Final[tuple[int, ...]]" in fonte
+        assert "non_failure_codes=CODIGOS_SEM_FALHA" in _motor_cards()
+    else:
+        assert f"non_failure_codes={nao_falha}" in fonte
 
 
 @pytest.mark.parametrize(("automacao", "runner", "_lock", "_nf"), AUTOMACOES)
@@ -131,10 +146,20 @@ def test_runner_valida_o_python_no_preflight_e_rotaciona_o_log(
 ) -> None:
     """O pre-flight confere o interpretador e o log tem retencao de 15 dias."""
     fonte = _runner(automacao, runner)
+    assert "RETENCAO_LOG_DIAS: Final[int] =" in fonte
 
-    assert "Path(sys.executable)" in fonte
-    assert "RETENCAO_LOG_DIAS: Final[int] = 15" in fonte
-    assert "_rotacionar_log(" in fonte
+    if runner in ("run_ofst.py", "run_orb.py"):
+        motor = _motor_cards()
+        assert "Path(sys.executable)" in motor
+        assert "hr.rotate_log(" in motor
+        hub = (REPO_ROOT / "lib" / "python" / "hub_runner.py").read_text(
+            encoding="utf-8"
+        )
+        assert "RETENCAO_LOG_DIAS_PADRAO: Final[int] = 15" in hub
+    else:
+        assert "Path(sys.executable)" in fonte
+        assert "RETENCAO_LOG_DIAS: Final[int] = 15" in fonte
+        assert "hr.rotate_log(" in fonte
 
 
 def test_lib_whatsapp_batch_serializa_o_lote_sempre_como_array() -> None:
@@ -163,10 +188,14 @@ def test_runners_whatsapp_gravam_o_lote_pelo_helper_compartilhado(
     """O lote passa por hub_whatsapp, que grava sempre uma lista JSON."""
     fonte = _runner(automacao, runner)
 
-    assert "hub_whatsapp" in fonte
-    if runner != "run_obs_paradas.py":
-        # Lote 2: ORB/OFST nao limpam chrome.exe antes do Oracle (o OBP-04 limpa, por desenho).
-        assert "chrome.exe" not in fonte
+    if runner == "run_obs_paradas.py":
+        assert "hub_whatsapp" in fonte
+    else:
+        # Lote 2: ORB/OFST delegam ao obs_cards_runner e nao limpam chrome.exe antes do Oracle.
+        assert "obs_cards_runner" in fonte
+        motor = _motor_cards()
+        assert "hub_whatsapp" in motor
+        assert "chrome.exe" not in motor
 
 
 @pytest.mark.parametrize(
@@ -181,7 +210,9 @@ def test_orb_e_ofst_so_reportam_record_counts_de_result_fresco(
 ) -> None:
     """Como o $HasFreshResult: record_counts so sai de um result desta execucao."""
     fonte = _runner(automacao, runner)
+    assert "ocr.executar" in fonte and "ocr.rodar_cli" in fonte
 
-    assert "resultado_fresco: bool = False" in fonte
-    assert "sessao.resultado_fresco = True" in fonte
-    assert "if sessao.resultado_fresco else None" in fonte
+    motor = _motor_cards()
+    assert "resultado_fresco: bool = False" in motor
+    assert "sessao.resultado_fresco = True" in motor
+    assert "if sessao.resultado_fresco else None" in motor

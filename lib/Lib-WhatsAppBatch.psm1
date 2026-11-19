@@ -408,22 +408,158 @@ function Get-WhatsAppHttpErrorInfo {
     return [pscustomobject]@{ Status = $status; Resposta = $resposta }
 }
 
+function Read-WhatsAppHttpErrorBody {
+    <#
+    .SYNOPSIS
+        Le o corpo textual de uma resposta de erro HTTP tanto em PS 5.1 quanto em PS 7+.
+    .DESCRIPTION
+        No PS 7+, Invoke-WebRequest costuma preencher ErrorDetails.Message e a resposta e'
+        HttpResponseMessage (Content.ReadAsStringAsync); no PS 5.1 a resposta e'
+        HttpWebResponse (GetResponseStream). Em qualquer falha de leitura devolve "".
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        $ErrorRecord = $null,
+        $Resposta = $null
+    )
+
+    if ($null -ne $ErrorRecord) {
+        $detalhesProp = $ErrorRecord.PSObject.Properties['ErrorDetails']
+        if ($null -ne $detalhesProp -and $null -ne $detalhesProp.Value) {
+            $msgProp = $detalhesProp.Value.PSObject.Properties['Message']
+            if ($null -ne $msgProp -and -not [string]::IsNullOrWhiteSpace([string]$msgProp.Value)) {
+                return [string]$msgProp.Value
+            }
+        }
+    }
+
+    if ($null -eq $Resposta) { return "" }
+
+    $metodoStream = $Resposta.PSObject.Methods['GetResponseStream']
+    if ($null -ne $metodoStream) {
+        try {
+            $stream = $Resposta.GetResponseStream()
+            if ($null -ne $stream) {
+                $leitor = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+                try { return $leitor.ReadToEnd() } finally { $leitor.Dispose() }
+            }
+        }
+        catch [System.Exception] {
+            return ""
+        }
+        return ""
+    }
+
+    $contentProp = $Resposta.PSObject.Properties['Content']
+    if ($null -ne $contentProp -and $null -ne $contentProp.Value) {
+        $readAsync = $contentProp.Value.PSObject.Methods['ReadAsStringAsync']
+        if ($null -ne $readAsync) {
+            try {
+                return [string]$contentProp.Value.ReadAsStringAsync().GetAwaiter().GetResult()
+            }
+            catch [System.Exception] {
+                return ""
+            }
+        }
+    }
+
+    return ""
+}
+
+function Get-WhatsAppDaemonEnvironment {
+    <#
+    .SYNOPSIS
+        Monta o ambiente minimo (Zero Trust) para o processo node do daemon WhatsApp.
+    .DESCRIPTION
+        Filtra o ambiente do processo pai por uma allowlist estrita de variaveis de
+        sistema, Node e Chrome/WhatsApp, descartando credenciais do Orchestrator e do
+        Oracle (ORCHESTRATOR_API_KEY, ORACLE_*, etc.) e anexando WHATSAPP_DAEMON_*.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Token,
+
+        [Parameter(Mandatory)]
+        [string]$Port,
+
+        [Parameter(Mandatory)]
+        [string]$ClientId,
+
+        [string]$MaxNotReadyMs = "",
+
+        [string]$AuthPath = "",
+
+        [System.Collections.IDictionary]$SourceEnvironment = $null
+    )
+
+    if ($null -eq $SourceEnvironment) {
+        $SourceEnvironment = [Environment]::GetEnvironmentVariables()
+    }
+
+    $allowlist = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($nomePermitido in @(
+            "SystemRoot", "SystemDrive", "WINDIR", "ComSpec", "PATHEXT", "PATH",
+            "TEMP", "TMP", "USERPROFILE", "HOME", "HOMEDRIVE", "HOMEPATH",
+            "LOCALAPPDATA", "APPDATA", "PROGRAMDATA", "PROGRAMFILES",
+            "PROGRAMFILES(X86)", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)",
+            "COMPUTERNAME", "USERNAME", "USERDOMAIN", "NUMBER_OF_PROCESSORS",
+            "OS", "PROCESSOR_ARCHITECTURE",
+            "NODE_PATH", "NODE_OPTIONS", "NODE_ENV",
+            "CHROME_PATH", "PUPPETEER_EXECUTABLE_PATH", "WHATSAPP_CHROME_PATH",
+            "WHATSAPP_AUTH_PATH"
+        )) {
+        $null = $allowlist.Add($nomePermitido)
+    }
+
+    $filtradas = [hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($chaveObj in $SourceEnvironment.Keys) {
+        $chave = [string]$chaveObj
+        if ($allowlist.Contains($chave)) {
+            $valor = $SourceEnvironment[$chaveObj]
+            if ($null -ne $valor) {
+                $filtradas[$chave] = [string]$valor
+            }
+        }
+    }
+
+    $filtradas["WHATSAPP_DAEMON_TOKEN"] = $Token
+    $filtradas["WHATSAPP_DAEMON_PORT"] = $Port
+    $filtradas["WHATSAPP_DAEMON_CLIENT_ID"] = $ClientId
+    if (-not [string]::IsNullOrWhiteSpace($MaxNotReadyMs)) {
+        $filtradas["WHATSAPP_DAEMON_MAX_NOT_READY_MS"] = $MaxNotReadyMs
+    }
+    if (-not [string]::IsNullOrWhiteSpace($AuthPath)) {
+        $filtradas["WHATSAPP_AUTH_PATH"] = $AuthPath
+    }
+
+    return $filtradas
+}
+
 function Get-WhatsAppDaemonProcess {
     <#
     .SYNOPSIS
         Lista os node.exe cujo CommandLine referencia whatsapp-daemon.js.
     .DESCRIPTION
-        Usa CIM: Get-Process nao expoe CommandLine no PS 5.1. Falha de consulta devolve lista vazia.
+        Usa CIM: Get-Process nao expoe CommandLine no PS 5.1. Sem -ThrowOnError, falha de consulta devolve lista vazia.
     #>
     [CmdletBinding()]
     [OutputType([object[]])]
-    param()
+    param(
+        [switch]$ThrowOnError
+    )
 
     try {
-        $candidatos = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue
+        $errorAction = if ($ThrowOnError) { "Stop" } else { "SilentlyContinue" }
+        $candidatos = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction $errorAction
         return @($candidatos | Where-Object { $_.CommandLine -and $_.CommandLine -like "*whatsapp-daemon.js*" })
     }
     catch [System.Exception] {
+        if ($ThrowOnError) { throw }
         return @()
     }
 }
@@ -500,8 +636,7 @@ function Invoke-WhatsAppDaemonBatch {
                 return 24
             }
             $status = $erro.Status
-            $leitor = New-Object System.IO.StreamReader($erro.Resposta.GetResponseStream(), [System.Text.Encoding]::UTF8)
-            try { $texto = $leitor.ReadToEnd() } finally { $leitor.Dispose() }
+            $texto = Read-WhatsAppHttpErrorBody -ErrorRecord $_ -Resposta $erro.Resposta
         }
 
         $resultados = $null
@@ -581,8 +716,7 @@ function Invoke-WhatsAppDaemonSend {
                 return 24
             }
             $status = $erro.Status
-            $leitor = New-Object System.IO.StreamReader($erro.Resposta.GetResponseStream(), [System.Text.Encoding]::UTF8)
-            try { $texto = $leitor.ReadToEnd() } finally { $leitor.Dispose() }
+            $texto = Read-WhatsAppHttpErrorBody -ErrorRecord $_ -Resposta $erro.Resposta
         }
 
         if ($status -eq 200) { return 0 }
@@ -678,5 +812,5 @@ function Select-WhatsAppStaleProcessIds {
     return $selecionados.ToArray()
 }
 
-Export-ModuleMember -Function Read-CardsManifest, Write-WhatsAppBatchInput, Resolve-WhatsAppBatchDelivery, Update-WhatsAppResultRecordCounts, Get-WhatsAppDaemonRoute, Get-WhatsAppDaemonProcess, Get-WhatsAppDaemonHealth, Invoke-WhatsAppDaemonBatch, Invoke-WhatsAppDaemonSend, Select-WhatsAppStaleProcessIds
+Export-ModuleMember -Function Read-CardsManifest, Write-WhatsAppBatchInput, Resolve-WhatsAppBatchDelivery, Update-WhatsAppResultRecordCounts, Get-WhatsAppDaemonRoute, Get-WhatsAppDaemonProcess, Get-WhatsAppDaemonHealth, Invoke-WhatsAppDaemonBatch, Invoke-WhatsAppDaemonSend, Select-WhatsAppStaleProcessIds, Read-WhatsAppHttpErrorBody, Get-WhatsAppDaemonEnvironment
 

@@ -21,16 +21,13 @@ confirmado: a execucao so loga o que faria. Uso manual de validacao.
 # pylint: disable=import-error
 from __future__ import annotations
 
-import contextlib
 import json
 import os
-import re
-import shutil
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -39,7 +36,6 @@ sys.path.insert(
 )
 
 import hub_runner as hr  # noqa: E402
-import oracle_queue as fila  # noqa: E402
 from automation_log import ensure_utf8_streams  # noqa: E402
 
 AUTOMACAO: Final[str] = "Receitas Emitidas"
@@ -60,10 +56,6 @@ BACKOFF_TRANSFORM: Final[tuple[int, ...]] = (10, 30, 60)
 TENTATIVAS_EMAIL: Final[int] = 2
 BACKOFF_EMAIL: Final[tuple[int, ...]] = (15, 30)
 RETENCAO_LOG_DIAS: Final[int] = 15
-ESPACO_MINIMO_GB: Final[float] = 1.0
-_PADRAO_TS: Final[re.Pattern[str]] = re.compile(
-    r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
-)
 
 
 class _ErroFatal(RuntimeError):
@@ -106,30 +98,9 @@ class _Sessao:
     resultado_fresco: bool = False
 
 
-def _aviso(ctx: hr.HubRunContext, step: str | None = None) -> Callable[[str], None]:
-    """Repassa avisos das bibliotecas ao log da execucao como evento WARN."""
-
-    def avisar(mensagem: str) -> None:
-        hr.log(ctx, mensagem, "WARN", step=step)
-
-    return avisar
-
-
 def _aguardar(segundos: float) -> None:
     """Espera entre tentativas; isolado para que os testes nao durmam de verdade."""
     time.sleep(segundos)
-
-
-def _telemetria_padrao(raiz: Path) -> hr.TelemetryClient | None:
-    """Cliente HTTP da telemetria quando o .env traz ORCHESTRATOR_API_KEY."""
-    chave = hr.read_api_key(raiz)
-    return hr.HttpTelemetryClient(chave) if chave else None
-
-
-def _modo_driver() -> str:
-    """ORACLE_DRIVER_MODE normalizado; ausente vale 'auto', o padrao do .env.example."""
-    bruto = os.environ.get("ORACLE_DRIVER_MODE", "").strip().lower()
-    return bruto or "auto"
 
 
 def _lib_oracle() -> str:
@@ -146,7 +117,7 @@ def _reprovar(ctx: hr.HubRunContext, mensagem: str) -> bool:
 
 def _checar_cliente_oracle(ctx: hr.HubRunContext) -> bool:
     """Oracle Client conforme o modo: so 'queue' dispensa oci.dll (PRE-FLIGHT do run.ps1)."""
-    modo = _modo_driver()
+    modo = hr.driver_mode()
     if modo == "queue":
         hr.log(
             ctx,
@@ -178,61 +149,6 @@ def _checar_cliente_oracle(ctx: hr.HubRunContext) -> bool:
     return True
 
 
-def _espaco_livre_gb(caminho: Path) -> float:
-    """Espaco livre, em GB, na unidade que contem o caminho."""
-    return shutil.disk_usage(caminho.anchor or str(caminho)).free / (1024**3)
-
-
-def _linha_disco(raiz: Path) -> str:
-    """Linha de disco do pre-flight: ERRO abaixo de 1 GB livre, WARN se nao der para ler."""
-    try:
-        livre = round(_espaco_livre_gb(raiz), 2)
-    except OSError:
-        return "WARN: Falha ao ler espaco em disco (Ignorado)"
-    if livre < ESPACO_MINIMO_GB:
-        return f"ERRO: Disco critico ({livre} GB)"
-    return f"OK: Disco estavel ({livre} GB)"
-
-
-def _linha_caminho(caminho: Path) -> str:
-    """Linha de um path do pre-flight (CheckPaths)."""
-    if caminho.exists():
-        return f"OK: Path: {caminho.name}"
-    return f"ERRO: Path inacessivel: {caminho.name}"
-
-
-def _resultado_oracle() -> hr.OraclePreflight:
-    """Check Oracle do pre-flight, com o modo, a conexao e a pasta da fila do ambiente."""
-    return hr.oracle_preflight(
-        modo=_modo_driver(),
-        conexao=os.environ.get("ORACLE_CONNECT_STRING", ""),
-        pasta_fila=fila.get_queue_dir(),
-    )
-
-
-def _pre_flight_automacao(
-    ctx: hr.HubRunContext,
-    caminhos: Sequence[Path],
-    *,
-    checar_oracle: bool,
-    oracle: hr.OraclePreflight | None = None,
-) -> bool:
-    """Test-AutomationPreFlight: disco, paths e, se pedido, as linhas do check Oracle."""
-    hr.log(ctx, "Iniciando Pre-Flight Check...", step="preflight")
-    resultados = [_linha_disco(ctx.raiz)]
-    resultados.extend(_linha_caminho(caminho) for caminho in caminhos)
-    if checar_oracle and oracle is not None:
-        resultados.extend(oracle.linhas)
-    ok = not any(linha.startswith(("ERRO:", "FAIL:")) for linha in resultados)
-    hr.log(
-        ctx,
-        "Pre-Flight: " + " | ".join(resultados),
-        "INFO" if ok else "ERRO",
-        step="preflight",
-    )
-    return ok
-
-
 def _caminhos_preflight(caminhos: Caminhos) -> tuple[Path, ...]:
     """Interpretador e scripts que o pre-flight confere (CheckPaths do run.ps1)."""
     return (
@@ -254,7 +170,7 @@ def _codigo_falha_preflight(
         return EXIT_PREFLIGHT
     return hr.oracle_preflight_exit_code(
         oracle,
-        outros_checks=lambda: _pre_flight_automacao(ctx, caminhos, checar_oracle=False),
+        outros_checks=lambda: hr.run_preflight(ctx, caminhos),
     )
 
 
@@ -266,46 +182,10 @@ def _preflight(sessao: _Sessao) -> int | None:
         ctx, "preflight", mensagem="Oracle Client e ambiente (Oracle/Python/paths)"
     )
     # Como no run.ps1: o check Oracle so roda com o cliente local validado.
-    oracle = _resultado_oracle() if _checar_cliente_oracle(ctx) else None
-    passou = oracle is not None and _pre_flight_automacao(
-        ctx, caminhos, checar_oracle=True, oracle=oracle
-    )
+    oracle = hr.oracle_preflight_from_env() if _checar_cliente_oracle(ctx) else None
+    passou = oracle is not None and hr.run_preflight(ctx, caminhos, oracle)
     hr.complete_step(ctx, ok=passou)
     return None if passou else _codigo_falha_preflight(ctx, caminhos, oracle)
-
-
-def _linha_expirada(linha: str, corte: date) -> bool:
-    """True quando o ts do evento e anterior ao corte da retencao."""
-    casamento = _PADRAO_TS.match(linha)
-    if casamento is None:
-        return False
-    try:
-        return date.fromisoformat(casamento.group(1)) < corte
-    except ValueError:
-        return False
-
-
-def _rotacionar_log(caminho: Path, dias: int = RETENCAO_LOG_DIAS) -> None:
-    """Remove do jsonl os eventos anteriores a retencao (Invoke-LogRotation)."""
-    if not caminho.exists():
-        return
-    corte = date.today() - timedelta(days=dias)
-    with contextlib.suppress(OSError, ValueError):
-        conteudo = caminho.read_text(encoding="utf-8-sig")
-        linhas = [linha.rstrip("\r") for linha in conteudo.split("\n") if linha.strip()]
-        mantidas = [linha for linha in linhas if not _linha_expirada(linha, corte)]
-        if len(mantidas) == len(linhas):
-            return
-        temporario = caminho.with_name(caminho.name + ".tmp")
-        with temporario.open("w", encoding="utf-8-sig", newline="\r\n") as arquivo:
-            arquivo.write("".join(f"{linha}\n" for linha in mantidas))
-        os.replace(temporario, caminho)
-
-
-def _remover(caminho: Path) -> None:
-    """Remove um arquivo se existir; falha de remocao e ignorada, como no run.ps1."""
-    with contextlib.suppress(OSError):
-        caminho.unlink(missing_ok=True)
 
 
 def _extrair(sessao: _Sessao) -> hr.PythonStepResult:
@@ -479,12 +359,11 @@ def _despachar(sessao: _Sessao, html: str) -> None:
         "Verificando estado de notificacoes (Idempotencia Granular)...",
         step="dispatch",
     )
+    aviso = hr.warn_logger(ctx)
     hash_atual = hr.get_last_content_hash(
-        caminhos.estado_tmp, caminhos.estado, on_warning=_aviso(ctx)
+        caminhos.estado_tmp, caminhos.estado, on_warning=aviso
     )
-    estado = hr.read_delivery_state(
-        caminhos.entrega, [CANAL_EMAIL], on_warning=_aviso(ctx)
-    )
+    estado = hr.read_delivery_state(caminhos.entrega, [CANAL_EMAIL], on_warning=aviso)
     if hr.update_delivery_state_hash(estado, hash_atual):
         hr.log(
             ctx,
@@ -552,8 +431,8 @@ def _encerrar(sessao: _Sessao, codigo: int, mensagem: str) -> int:
 def _fluxo(sessao: _Sessao) -> int:
     """Etapas extract, transform, dispatch e commit, executadas dentro do lock."""
     ctx = sessao.ctx
-    _rotacionar_log(ctx.log_path)
-    _remover(sessao.caminhos.resultado)
+    hr.rotate_log(ctx.log_path, RETENCAO_LOG_DIAS)
+    hr.remove_quietly(sessao.caminhos.resultado)
     extracao = _extrair(sessao)
     if extracao.idempotent:
         hr.log(
@@ -577,7 +456,7 @@ def _com_lock(sessao: _Sessao) -> int:
     """Executa o fluxo protegido pelo mutex RE-03 (Enter/Exit-AutomationLock)."""
     ctx = sessao.ctx
     hr.start_step(ctx, "lock", mensagem="Adquirindo lock global")
-    with hr.AutomationMutex(CHAVE_LOCK, on_warning=_aviso(ctx, "lock")):
+    with hr.AutomationMutex(CHAVE_LOCK, on_warning=hr.warn_logger(ctx, "lock")):
         hr.log(
             ctx,
             f"Lock global adquirido com sucesso (Mutex: {hr.nome_mutex(CHAVE_LOCK)}).",
@@ -619,7 +498,7 @@ def executar(
         return _encerrar(sessao, EXIT_ERRO_FATAL, f"ERRO FATAL: {exc}")
     finally:
         if dry_run and not tmp_existia:
-            _remover(caminhos.estado_tmp)
+            hr.remove_quietly(caminhos.estado_tmp)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -639,7 +518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             non_failure_codes=(0,),
         ),
         exec_id=posicionais[0] if posicionais else "",
-        telemetry=_telemetria_padrao(RAIZ),
+        telemetry=hr.default_telemetry(RAIZ),
         project_root=RAIZ,
     )
     return executar(ctx, Caminhos.da_pasta(RE_DIR), dry_run=dry_run)

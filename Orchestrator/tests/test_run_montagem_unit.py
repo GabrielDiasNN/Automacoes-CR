@@ -227,7 +227,7 @@ def _gravar_config(pasta: Path, *, to: str, cc: str) -> None:
 @pytest.fixture(name="pasta")
 def _pasta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Pasta de automacao falsa: scripts vazios e config com destinatarios de teste."""
-    monkeypatch.setattr(rmt, "_espaco_livre_gb", lambda _caminho: 10.0)
+    monkeypatch.setattr(hr, "free_disk_gb", lambda _caminho: 10.0)
     (tmp_path / "extract_oracle.py").write_text("# script falso\n", encoding="utf-8")
     (tmp_path / "validate_and_generate_html.py").write_text(
         "# script falso\n", encoding="utf-8"
