@@ -106,14 +106,15 @@ Describe "Lib-Config Tests" {
                 $conteudo = "$chaveTeste=valor-com-acento-çãõ`r`nOUTRA_CHAVE=123`r`n"
                 [System.IO.File]::WriteAllText($envPath, $conteudo, (New-Object System.Text.UTF8Encoding $true))
 
-                $script:projetoAnterior = $null
-                $script:envLoadedAnterior = $false
-                InModuleScope Lib-Config -Parameters @{ NovoRoot = $tmpDir } {
+                $prev = InModuleScope Lib-Config -Parameters @{ NovoRoot = $tmpDir } {
                     param($NovoRoot)
-                    $script:projetoAnterior = $script:ProjectRoot
-                    $script:envLoadedAnterior = $script:EnvLoaded
+                    $estado = @{
+                        ProjectRoot = $script:ProjectRoot
+                        EnvLoaded   = $script:EnvLoaded
+                    }
                     $script:ProjectRoot = $NovoRoot
                     $script:EnvLoaded = $false
+                    $estado
                 }
 
                 try {
@@ -122,7 +123,7 @@ Describe "Lib-Config Tests" {
                     [System.Environment]::GetEnvironmentVariable($chaveTeste, "Process") | Should -Be "valor-com-acento-çãõ"
                 }
                 finally {
-                    InModuleScope Lib-Config -Parameters @{ AntigoRoot = $script:projetoAnterior; AntigoLoaded = $script:envLoadedAnterior } {
+                    InModuleScope Lib-Config -Parameters @{ AntigoRoot = $prev.ProjectRoot; AntigoLoaded = $prev.EnvLoaded } {
                         param($AntigoRoot, $AntigoLoaded)
                         $script:ProjectRoot = $AntigoRoot
                         $script:EnvLoaded = $AntigoLoaded
