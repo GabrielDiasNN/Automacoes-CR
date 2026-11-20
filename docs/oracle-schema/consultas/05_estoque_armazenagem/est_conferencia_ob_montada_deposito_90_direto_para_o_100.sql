@@ -33,12 +33,9 @@ SELECT
                                 WHERE OBFX.NUMERO_OB   = GPO.NUMERO_OB
                                   AND OBFX.CODIGO_FASE = OBF.CODIGO_FASE)
     )                                                             AS OPERADOR,
-    -- HORARIO_CONFIRMADO: TEMPO_FINAL_CONFIRMA é número inteiro HHMMSS — converte sem pacote
-    -- Guarda [0, 235959]: há lixo de dados fora da faixa HHMMSS válida (ver correção acima)
-    (SELECT MIN(CASE WHEN OBF.TEMPO_FINAL_CONFIRMA BETWEEN 0 AND 235959
-                      THEN TO_CHAR(
-                             TO_DATE(LPAD(TO_CHAR(OBF.TEMPO_FINAL_CONFIRMA), 6, '0'), 'HH24MISS'),
-                             'HH24:MI:SS')
+    -- HORARIO_CONFIRMADO: TEMPO_FINAL_CONFIRMA representa minutos desde 01/01/1996
+    (SELECT MIN(CASE WHEN OBF.TEMPO_FINAL_CONFIRMA IS NOT NULL
+                      THEN TO_CHAR(DATE '1996-01-01' + (OBF.TEMPO_FINAL_CONFIRMA / 1440), 'HH24:MI:SS')
                  END)
        FROM SGTPRD.OB_FASES OBF
       WHERE OBF.NUMERO_OB   = GPO.NUMERO_OB

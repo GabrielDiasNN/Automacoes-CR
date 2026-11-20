@@ -20,7 +20,16 @@ SELECT BASE.NR_ORDEM,
        SUM(BASE.QUIMICO_USADO) QUIMICO_USADO,
        BASE.DURACAO
   FROM (
-        SELECT OBS.*,
+        SELECT OBS.NR_ORDEM,
+               OBS.SEQ_TING,
+               OBS.COD_ARTIGO,
+               OBS.COD_COR,
+               OBS.DESCR_TIPOCOR,
+               OBS.DESCR_PRODUTO,
+               OBS.RELACAOCONSUMOGRUPO,
+               OBS.QT_OB_CRU,
+               OBS.DURACAO,
+               OBS.HORA_TING_CONFIRMADO,
                CASE WHEN R.SEQUENCIAFASEOB = 0 THEN (OBS.RELACAOCONSUMOGRUPO * R.QUANTIDADEPESADA)
                  ELSE R.QUANTIDADEPESADA
                    END QUIMICO_USADO, 
@@ -58,12 +67,12 @@ SELECT BASE.NR_ORDEM,
                           OBF.CODIGO_GRUPO,
                           OBF.TEMPO_INICIAL_CONFIR,
                           OBF.TEMPO_FINAL_CONFIRMA
-               ) OBS,
-               SGTPRD.MOVTO_RECEITA R
-         WHERE R.NUMEROORDEM = OBS.NR_ORDEM
+               ) OBS
+          JOIN SGTPRD.MOVTO_RECEITA R
+            ON R.NUMEROORDEM = OBS.NR_ORDEM
            AND R.SEQUENCIAFASEOB = OBS.SEQ_TING
-           -- Janela: últimos 3 anos (antes: desde 01/08/2022, sem fim)
-           AND OBS.HORA_TING_CONFIRMADO >= TRUNC(SYSDATE) - 1095
+         WHERE -- Janela: últimos 3 anos (antes: desde 01/08/2022, sem fim)
+               OBS.HORA_TING_CONFIRMADO >= TRUNC(SYSDATE) - 1095
            AND R.CODINSREDUZIDO IN (54, 14381) -- PRODUTO QUIMICO ESPECIFICO
          ORDER BY R.QUANTIDADEPESADA DESC
         ) BASE
@@ -73,4 +82,4 @@ SELECT BASE.NR_ORDEM,
           BASE.DESCR_TIPOCOR,
           BASE.DESCR_PRODUTO,
           BASE.DURACAO
- ORDER BY 4 DESC;
+ ORDER BY BASE.DESCR_TIPOCOR DESC;

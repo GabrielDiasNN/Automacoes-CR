@@ -16,12 +16,12 @@ REVISÃO / AUDITORIA:
 WITH parametros AS (
     SELECT
         '00010' AS CDUNIDADEFABRIL,
-        TRUNC(SYSDATE) AS DATA_INICIAL,
+        TRUNC(SYSDATE) AS DT_INICIAL_PAR,
         (
             SELECT DATE '1899-12-30' + MAX(clx.DATA)
             FROM sgtprd.calendario_unifabril clx
             WHERE clx.CDUNIDADEFABRIL = '00010'
-        ) AS DATA_FINAL,
+        ) AS DT_FINAL_PAR,
         DATE '1899-12-30' AS MARCO_ZERO_DELPHI
     FROM DUAL
 ),
@@ -30,9 +30,9 @@ WITH parametros AS (
 calendario_dias AS (
     SELECT
         p.CDUNIDADEFABRIL,
-        p.DATA_INICIAL + (LEVEL - 1) AS DATA
+        p.DT_INICIAL_PAR + (LEVEL - 1) AS DATA
     FROM parametros p
-    CONNECT BY LEVEL <= (p.DATA_FINAL - p.DATA_INICIAL + 1)
+    CONNECT BY LEVEL <= (p.DT_FINAL_PAR - p.DT_INICIAL_PAR + 1)
 ),
 
 base_turnos AS (
@@ -47,8 +47,8 @@ base_turnos AS (
     FROM sgtprd.calendario_unifabril cl
     JOIN parametros p
         ON p.CDUNIDADEFABRIL = cl.CDUNIDADEFABRIL
-    WHERE cl.DATA >= (p.DATA_INICIAL - p.MARCO_ZERO_DELPHI - 1)
-      AND cl.DATA <= (p.DATA_FINAL - p.MARCO_ZERO_DELPHI)
+    WHERE cl.DATA >= (p.DT_INICIAL_PAR - p.MARCO_ZERO_DELPHI - 1)
+      AND cl.DATA <= (p.DT_FINAL_PAR - p.MARCO_ZERO_DELPHI)
       AND NVL(cl.FOLGA, '0') = '0'
       AND cl.FIM > cl.INICIO
 

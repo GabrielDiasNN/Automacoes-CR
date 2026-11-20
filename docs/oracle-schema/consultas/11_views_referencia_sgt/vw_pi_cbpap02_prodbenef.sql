@@ -8,7 +8,7 @@ TABELAS PRINCIPAIS: Não identificadas explicitamente
 CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitura salvo se DML restrito.
 ============================================================================= */
 
-...CREATE OR REPLACE VIEW VW_PI_CBPAP02_PRODBENEF AS
+CREATE OR REPLACE VIEW VW_PI_CBPAP02_PRODBENEF AS
 SELECT vup.CDFILIAL FILIAL,
        vup.DATA_FIM DATA_PROD,
        vup.TURNO_FIM TURNO_PROD,

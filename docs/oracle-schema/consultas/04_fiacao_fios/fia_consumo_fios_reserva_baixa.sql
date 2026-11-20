@@ -10,12 +10,32 @@ REVISÃO (20/09/2026 - Onda 3): a projeção usa aliases explícitos (`F.*` e
   `ITE.*`) para preservar o contrato histórico sem ambiguidade de colunas.
 ============================================================================= */
 
--- A projeção qualificada preserva o contrato histórico de exportar todas as
--- colunas das duas fontes, sem misturar nomes iguais entre os aliases.
-SELECT F.*, ITE.*
-FROM SGTPRD.FIOS_FICHA_MALHARIA_ F,
-     SGTPRD.ITENS_ESTOQUE        ITE 
-WHERE F.CODIGO_PRODUTO = ITE.CODIGO_REDUZIDO
-  AND ITE.LINHA_PRODUTO IN (30)
-  AND F.CODIGO_FIO IN (9111,8537,5461,11019,5653,5462,5460,5478,5463)
-ORDER BY F.CODIGO_PRODUTO;
+SELECT F.UN_TEMP,
+       F.CODIGO_PRODUTO,
+       F.GRUPO_MAQUINA,
+       F.CODIGO_FIO,
+       F.CONES,
+       F.AGULHAS,
+       F.PONTOS_GRAMA_RAPORT,
+       F.TENSAO_ENTRADA,
+       F.TAMANHO_PONTO_RETILI,
+       F.NUMERO_CABOS,
+       F.PERCENTUAL_PERDA,
+       F.PERCPARTICIPACAO,
+       F.INDIESTITITULO,
+       F.VELOCIDADEFIO,
+       F.POLIA,
+       ITE.CODIGO_REDUZIDO,
+       ITE.CODIGO,
+       ITE.DESCRICAO,
+       ITE.LINHA_PRODUTO,
+       ITE.IDMASCARATIPOINSUMO,
+       ITE.IDUNIDADEMEDIDA,
+       ITE.STATUS_ATIVACAO,
+       ITE.SITUACAO
+  FROM SGTPRD.FIOS_FICHA_MALHARIA_ F
+  INNER JOIN SGTPRD.ITENS_ESTOQUE ITE
+    ON ITE.CODIGO_REDUZIDO = F.CODIGO_PRODUTO
+ WHERE ITE.LINHA_PRODUTO IN (30)
+   AND F.CODIGO_FIO IN (9111,8537,5461,11019,5653,5462,5460,5478,5463)
+ ORDER BY F.CODIGO_PRODUTO;

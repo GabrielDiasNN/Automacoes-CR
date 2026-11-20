@@ -24,7 +24,7 @@ WITH RECEITAS_CORANTE AS (
         JOIN SGTPRD.ITENS_CADASTRO_RECEI ICR ON ICR.ID_LIGA_CADREC_ITEMR = LCR.ID_LIGA_CADREC_ITEMR
         JOIN SGTPRD.ITENS_ESTOQUE ITE ON ITE.CODIGO_REDUZIDO = ICR.CODINSREDUZIDO_PADRA
         LEFT JOIN SGTPRD.PROCESSO_INDUSTRIAL PI ON PI.PROCESSO_INDUSTRIAL = CR.PROCESSOINDUSTRIAL
-       WHERE CR.PROCESSO_ATIVO_PRODU = 1
+       WHERE CR.PROCESSO_ATIVO_PRODU = '1'
          AND UPPER(TRIM(ITE.GRUPO_ESTOQUE)) LIKE 'CORANTE%'
 ),
 RECEITAS AS (
@@ -65,6 +65,7 @@ ITENS_PEDIDO AS (
        WHERE IPC.SITUACAOITEM <> 6
          AND IPC.IDUMDIGITACAO <> 1
          AND ITE.TIPO_ITEM = 10
+         AND IPC.DTEMISSAO >= TO_NUMBER(TO_CHAR(TRUNC(SYSDATE, 'IW') - 7, 'YYYYMMDD'))
 )
 SELECT 
      CASE WHEN REC.PROCESSO IS NULL AND PD.TIPOCOR = 1               THEN 'PRÉ ALVEJADO (MARFIM)'
@@ -75,7 +76,26 @@ SELECT
           WHEN REC.PROCESSO = 'ENXOFRE'                              THEN 'PRETO ENXOFRE'
      ELSE REC.PROCESSO
      END PROCESSO,
-     PD.*
+     PD.NRPEDIDO,
+     PD.ITEMPEDIDO,
+     PD.PEDIDOCLIENTE,
+     PD.ITEMCLIENTE,
+     PD.CAD_CLIENTE,
+     PD.DATAEMISSAO,
+     PD.CODALTERNATIVO,
+     PD.CODREDUZIDO,
+     PD.CODINDUSTRIAL,
+     PD.DESCPRODUTO,
+     PD.FLUXO,
+     PD.EP,
+     PD.CODCOR,
+     PD.DESCCOR,
+     PD.TIPOCOR,
+     PD.DESCR_TPCOR,
+     PD.QTDEDIGITADA,
+     PD.SIGLAUNIMEDDIG,
+     PD.QTDEPADRAO,
+     PD.SIGLAUNIMEDPADRAO
 FROM (
       -- Subconsulta para obter os dados da receita
       SELECT CDR.RECEITA,
@@ -85,7 +105,7 @@ FROM (
              CDR.RECEITA_ATIVA,
              MAX(CDR.PROCESSO) PROCESSO
         FROM RECEITAS CDR
-       WHERE CDR.RECEITA_ATIVA = 1
+       WHERE CDR.RECEITA_ATIVA = '1'
          AND CDR.CORANTE       = 1
        GROUP BY CDR.RECEITA,
                 CDR.DESCR_RECEITA,
@@ -106,13 +126,11 @@ FROM (
              ITP.CODREDUZIDO,
              ITP.CODINDUSTRIAL,
              ITP.DESCPRODUTO,
-             (SELECT DECODE(TRIM(ENG.CDNIVELGENERICO),
-                            'T',
-                            'TUBULAR',
-                            'R',
-                            'RAMADO')
-                FROM SGTPRD.ENGEITEMESTONIVELGE9 ENG
-               WHERE ENG.CDREDUZIDO = ITP.CODREDUZIDO) FLUXO,                              
+             DECODE(TRIM(ENG.CDNIVELGENERICO),
+                    'T',
+                    'TUBULAR',
+                    'R',
+                    'RAMADO') FLUXO,                              
              ITE.ESPECIFICACAOPRODUTO EP,
              ITP.CODCOR,
              ITP.DESCCOR,
@@ -127,6 +145,8 @@ FROM (
           ON TRIM(COR.CODIGO_COR) = ITP.CODCOR
         LEFT JOIN SGTPRD.COML_TIPOSCOR        TPC
           ON TPC.TIPOCOR = COR.TIPOCOR
+        LEFT JOIN SGTPRD.ENGEITEMESTONIVELGE9 ENG
+          ON ENG.CDREDUZIDO = ITP.CODREDUZIDO
         JOIN SGTPRD.PEDIDOCOMERCIAL           PED
           ON PED.PEDIDO = ITP.NRPEDIDO
         JOIN SGTPRD.ITENS_ESTOQUE             ITE
@@ -138,4 +158,4 @@ FROM (
      ON REC.RECEITA = PD.CODCOR 
      AND REC.EP      = PD.EP
      
-WHERE TRUNC(PD.DATAEMISSAO) >= TRUNC(SYSDATE, 'IW') - 7 --filtrar os pedidos emitidos na semana atual
+WHERE PD.DATAEMISSAO >= TRUNC(SYSDATE, 'IW') - 7 --filtrar os pedidos emitidos na semana atual

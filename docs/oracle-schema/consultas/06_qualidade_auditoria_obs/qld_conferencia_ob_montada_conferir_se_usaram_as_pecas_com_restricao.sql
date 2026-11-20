@@ -14,8 +14,7 @@
 -- =============================================================================
 
 WITH OBS_ALVO AS (
-    /*+ MATERIALIZE */
-    SELECT OB.NUMERO_OB,
+    SELECT /*+ MATERIALIZE */ OB.NUMERO_OB,
            OB.CODIGO_REDUZIDO,
            OB.CODIGO_REDUZIDO_CRU,
            OB.CODIGO_OBSERVACAO,

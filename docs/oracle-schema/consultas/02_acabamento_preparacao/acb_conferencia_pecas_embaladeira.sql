@@ -8,9 +8,26 @@ TABELAS PRINCIPAIS: SGTPRD.GERAPECADESTINOOB, SGTPRD.GERAPECAORIGEMOB, SGTPRD.GE
 CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitura salvo se DML restrito.
 ============================================================================= */
 
-WITH ORIGEM AS (
+WITH FASES_UP AS (
+                SELECT /*+ MATERIALIZE */
+                       UOM.NUMEROORDEMREAL AS NUMERO_OB,
+                       UOM.SEQUENCIAORDEMREAL AS SEQ,
+                       UPR.DTTEMPOFINAL AS DATA_HORA_FINAL
+                  FROM SGTPRD.UNIDADE_PROGRAMACAO UPR
+                  JOIN SGTPRD.UP_ORDEM_MVTO UOM ON UOM.NUMEROUP = UPR.NUMEROUP
+                  JOIN SGTPRD.OB_FASES OBF ON OBF.NUMERO_OB = UOM.NUMEROORDEMREAL
+                                          AND OBF.SEQUENCIA = UOM.SEQUENCIAORDEMREAL
+                 WHERE UPR.SETOR = 5
+                   AND UPR.EXCLUIDA = 0
+                   AND UPR.TIPOUP = 0
+                   AND UPR.DTTEMPOFINAL >= TRUNC(SYSDATE, 'MONTH')
+                   AND OBF.CODIGO_FASE = 150
+                   AND OBF.STATUS = 4
+                  ),
+     ORIGEM AS (
                 SELECT O.NUMERO_OB, COUNT(O.IDPECASPRODUTO) AS PS_ORI
                   FROM SGTPRD.GERAPECAORIGEMOB O
+                 WHERE O.NUMERO_OB IN (SELECT F.NUMERO_OB FROM FASES_UP F)
                 GROUP BY O.NUMERO_OB
                 ),
      DESTINO AS (
@@ -18,17 +35,8 @@ WITH ORIGEM AS (
                    FROM SGTPRD.GERAPECADESTINOOB D
                  INNER JOIN SGTPRD.GERAPECASPRODUTO GPP ON D.IDPECASPRODUTO = GPP.IDPECASPRODUTO
                   WHERE GPP.STPECAPRODUTO IN (13, 14, 4, 0)
+                    AND D.NUMERO_OB IN (SELECT F.NUMERO_OB FROM FASES_UP F)
                  GROUP BY D.NUMERO_OB
-                  ),
-     FASES_UP AS (
-                SELECT UOM.NUMEROORDEMREAL AS NUMERO_OB,
-                       UOM.SEQUENCIAORDEMREAL AS SEQ,
-                       UPR.DTTEMPOFINAL AS DATA_HORA_FINAL
-                  FROM SGTPRD.UNIDADE_PROGRAMACAO UPR
-                  JOIN SGTPRD.UP_ORDEM_MVTO UOM ON UOM.NUMEROUP = UPR.NUMEROUP
-                 WHERE UPR.SETOR = 5
-                   AND UPR.EXCLUIDA = 0
-                   AND UPR.TIPOUP = 0
                   ),
      PEDIDO_OB AS (
                 SELECT IPG.PEDIDO,
@@ -48,6 +56,7 @@ WITH ORIGEM AS (
                   JOIN SGTPRD.ITENSPEDIDOCOMERCIAL IPC ON IPC.PEDIDO = IPG.PEDIDO
                                                        AND IPC.ITEMPEDIDO = IPG.ITEMPEDIDO
                  WHERE OFP.QUANTIDADE_ATUAL <> 0
+                   AND PPOB.NUMEROOB IN (SELECT F.NUMERO_OB FROM FASES_UP F)
                   )
 SELECT
     OBP.PEDIDO                            AS PEDIDO,
@@ -78,7 +87,7 @@ WHERE
     OBF.CODIGO_FASE = 150
     AND (TRIM(OBP.PEDIDOCLIENTE) NOT LIKE '%S' AND TRIM(OBP.PEDIDOCLIENTE) NOT LIKE '%R')
     AND OBF.STATUS = 4
-    AND TRUNC(OBFX.DATA_HORA_FINAL) >= TRUNC(SYSDATE, 'MONTH')
+    AND OBFX.DATA_HORA_FINAL >= TRUNC(SYSDATE, 'MONTH')
     AND ORI.PS_ORI <> DES.PS_DES
 ORDER BY
     OBFX.DATA_HORA_FINAL
