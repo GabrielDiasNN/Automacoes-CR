@@ -8,12 +8,17 @@ TABELAS PRINCIPAIS: SGTPRD.UNIDADE_PROGRAMACAO, SGTPRD.UNIDADE_PROGR_PROD, SGTPR
 CUIDADOS OPERACIONAIS: Consulta atômica desmembrada para execução individual.
 ============================================================================= */
 
-select upr.*
-  from sgtprd.up_ordem_mvto       up,
-       sgtprd.up_produto          upp,
-       sgtprd.unidade_progr_prod  upr,
-       sgtprd.unidade_programacao udp
- where upp.numeroup = up.numeroup
-   and upr.numeroup = up.numeroup
-   and udp.numeroup = up.numeroup
-   and up.numeroordemreal = 60477;
+SELECT upr.NUMEROUP,
+       upr.TIPO_MAQUINA,
+       upr.CDFILIAL,
+       upr.DATA_HORA_INICIO,
+       upr.DATA_HORA_FINAL,
+       upr.DATA_INI,
+       upr.TURNO_INI,
+       upr.DATA_FIM,
+       upr.TURNO_FIM
+  FROM sgtprd.up_ordem_mvto up
+  JOIN sgtprd.up_produto upp ON upp.numeroup = up.numeroup
+  JOIN sgtprd.unidade_progr_prod upr ON upr.numeroup = up.numeroup
+  JOIN sgtprd.unidade_programacao udp ON udp.numeroup = up.numeroup
+ WHERE up.numeroordemreal = 60477;

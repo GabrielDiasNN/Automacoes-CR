@@ -56,8 +56,6 @@ lotes_elegiveis AS (
         ON PES.IDPESSOAFJ = MNE.IDPESSOAFJ_CLIENTE
     LEFT JOIN SGTPRD.GERAPECANOTAENTRADA GPN 
         ON GPN.IDLOTEITENSNFE = LOT.ID
-    LEFT JOIN SGTPRD.GERAPECASPRODUTO GPP 
-        ON GPP.IDPECASPRODUTO = GPN.IDPECASPRODUTO
     WHERE PES.IDCATEGORIFORNECEDOR = 1
       AND ITE.TIPO_ITEM = 9
       AND LOT.QUALIDADE = 1
@@ -388,35 +386,6 @@ dados_consolidados AS (
     LEFT JOIN obs_programacao OP
         ON OP.CD_DESENHO_CLIENTE = DF.NUMERO_NOTA_STR
        AND OP.CODIGO_REDUZIDO_CRU = DF.CD_REDUZIDO
-),
-
-/*
-================================================================================
-11. DIAGNÓSTICO CONTÁBIL DE PROGRAMAÇÃO (GRÃO: CHAVE DE PROGRAMAÇÃO)
-    - Grão único por ordem programada: NR_NF_STR + CD_REDUZIDO
-    - Assegura que SUM(QT_PECA_PROG_BLOQUEADA) totalize exatamente a quantidade
-      real bloqueada, sem a duplicação provocada pelo grão de múltiplas NFs.
-================================================================================
-*/
-diagnostico_programacao_ambigua AS (
-    SELECT 
-        OP.CD_DESENHO_CLIENTE AS NR_NF_STR,
-        OP.CODIGO_REDUZIDO_CRU AS CD_REDUZIDO,
-        OP.QT_PECA_PROG AS QT_PROGRAMACAO_ORIGINAL,
-        NVL(CP.QTD_NFS_CANDIDATAS_PROG, 0) AS QTD_NFS_CANDIDATAS_PROG,
-        CASE 
-            WHEN NVL(CP.QTD_NFS_CANDIDATAS_PROG, 0) >= 2 THEN 1 
-            ELSE 0 
-        END AS TEM_AMBIGUIDADE,
-        CASE 
-            WHEN NVL(CP.QTD_NFS_CANDIDATAS_PROG, 0) >= 2 THEN OP.QT_PECA_PROG 
-            ELSE 0 
-        END AS QT_PECA_PROG_BLOQUEADA
-    FROM obs_programacao OP
-    LEFT JOIN candidatos_programacao CP
-        ON TO_CHAR(CP.NR_NF) = OP.CD_DESENHO_CLIENTE
-       AND CP.CD_REDUZIDO = OP.CODIGO_REDUZIDO_CRU
-    WHERE OP.QT_PECA_PROG > 0
 )
 
 /*

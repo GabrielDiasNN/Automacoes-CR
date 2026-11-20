@@ -147,7 +147,21 @@ DADOS_CONSOLIDADOS AS (
 -- CTE 8: APLICAÇÃO DA LÓGICA DE NEGÓCIO
 CALCULOS_FINAIS AS (
     SELECT
-        D.*,
+        D.CODIGO_REDUZIDO,
+        D.CODIGO,
+        D.DESCRICAO_PRODUTO,
+        D.ARTIGO,
+        D.QT_PC_PROGRAMADA,
+        D.QT_PC_TINTURARIA_ORIGINAL,
+        D.QT_PC_MALHARIA_ORIGINAL,
+        D.KG_DIA_EFIC,
+        D.QTD_ORDENS,
+        D.PESO_PADRAO,
+        D.FATOR_DIAS_PRODUCAO,
+        D.TOTAL_DEMANDA_PRODUTO,
+        D.MIN_DEMANDA_PRODUTO,
+        D.CONTAGEM_ARTIGOS_PRODUTO,
+        D.RN_PRINCIPAL,
         -- Alocação de Estoque em Cascata e Priorizada
         CASE
             -- Cenário 1: Se o produto tem apenas um artigo, ele recebe todo o estoque da tinturaria.

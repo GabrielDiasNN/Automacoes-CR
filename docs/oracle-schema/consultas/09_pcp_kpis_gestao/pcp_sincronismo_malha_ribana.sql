@@ -164,13 +164,13 @@ UNIVERSO_OB_HORIZONTE AS (
         LEFT JOIN OB_PRODUTO_TOTAIS obp ON obp.NUMERO_OB = o.NUMERO_OB
         LEFT JOIN SGTPRD.BD_BAS_MASCPRODACAB p ON p.CODIGO_REDUZIDO = o.CODIGO_REDUZIDO
         LEFT JOIN SGTPRD.ENG_PRODG_ACABADO epa ON epa.REDUZIDO_AGRUPADOR = p.REDUZIDO_AGRUPADOR
+        WHERE (
+            o.STATUS <> 0
+            OR (o.TEMPO_EMISSAO_OB > 0 AND o.TEMPO_EMISSAO_OB >= (TRUNC(SYSDATE) - 15 - DATE '1996-01-01') * 1440)
+            OR o.DTENTRPEDIDO >= TRUNC(SYSDATE) - 15
+            OR (o.DATA_ENTREGA_PEDIDO >= TO_NUMBER(TO_CHAR(TRUNC(SYSDATE) - 15, 'YYYYMMDD')) AND o.DATA_ENTREGA_PEDIDO > 19000101)
+        )
     ) H
-    WHERE (
-        STATUS_OB <> 0
-        OR (TEMPO_EMISSAO_OB > 0 AND DT_EMISSAO >= TRUNC(SYSDATE) - 15)
-        OR DTENTRPEDIDO >= TRUNC(SYSDATE) - 15
-        OR (DATA_ENTREGA_PEDIDO >= TO_NUMBER(TO_CHAR(TRUNC(SYSDATE) - 15, 'YYYYMMDD')) AND DATA_ENTREGA_PEDIDO > 19000101)
-    )
 ),
 
 LOTES_HORIZONTE AS (
@@ -789,13 +789,86 @@ MAPA_SITUACAO AS (
 
 CLASSIFICACAO AS (
     SELECT
-        base.*,
+        base.CODIGO_GRUPO,
+        base.ID_LOJA,
+        base.NOME_LOJA,
+        base.PEDIDO,
+        base.PEDIDO_CLIENTE,
+        base.DT_ENTREGA_PROMETIDA,
+        base.DIAS_ATE_ENTREGA,
+        base.EM_PRODUCAO_MALHA,
+        base.EM_PRODUCAO_RIBANA,
+        base.OBS_MALHA,
+        base.ITEM_MALHA,
+        base.ARTIGO_MALHA,
+        base.COR_MALHA,
+        base.LARGURA_MALHA,
+        base.GRAMATURA_MALHA,
+        base.PECAS_PROG_MALHA,
+        base.KG_PROG_MALHA,
+        base.PECAS_EXP_MALHA,
+        base.KG_EXP_MALHA,
+        base.FASE_MALHA,
+        base.DEFEITO_MALHA,
+        base.ROMANEIO_MALHA,
+        base.DT_EXP_MALHA,
+        base.OBS_RIBANA,
+        base.ITEM_RIBANA,
+        base.ARTIGO_RIBANA,
+        base.COR_RIBANA,
+        base.LARGURA_RIBANA,
+        base.GRAMATURA_RIBANA,
+        base.PECAS_PROG_RIBANA,
+        base.KG_PROG_RIBANA,
+        base.PECAS_EXP_RIBANA,
+        base.KG_EXP_RIBANA,
+        base.FASE_RIBANA,
+        base.DEFEITO_RIBANA,
+        base.ROMANEIO_RIBANA,
+        base.DT_EXP_RIBANA,
+        base.SITUACAO_COD,
         m.EXIGE_ACAO,
         m.ORDEM_PRIORIDADE,
         m.PRIORIDADE_EXIBICAO
     FROM (
         SELECT
-            c.*,
+            c.CODIGO_GRUPO,
+            c.ID_LOJA,
+            c.NOME_LOJA,
+            c.PEDIDO,
+            c.PEDIDO_CLIENTE,
+            c.DT_ENTREGA_PROMETIDA,
+            c.DIAS_ATE_ENTREGA,
+            c.EM_PRODUCAO_MALHA,
+            c.EM_PRODUCAO_RIBANA,
+            c.OBS_MALHA,
+            c.ITEM_MALHA,
+            c.ARTIGO_MALHA,
+            c.COR_MALHA,
+            c.LARGURA_MALHA,
+            c.GRAMATURA_MALHA,
+            c.PECAS_PROG_MALHA,
+            c.KG_PROG_MALHA,
+            c.PECAS_EXP_MALHA,
+            c.KG_EXP_MALHA,
+            c.FASE_MALHA,
+            c.DEFEITO_MALHA,
+            c.ROMANEIO_MALHA,
+            c.DT_EXP_MALHA,
+            c.OBS_RIBANA,
+            c.ITEM_RIBANA,
+            c.ARTIGO_RIBANA,
+            c.COR_RIBANA,
+            c.LARGURA_RIBANA,
+            c.GRAMATURA_RIBANA,
+            c.PECAS_PROG_RIBANA,
+            c.KG_PROG_RIBANA,
+            c.PECAS_EXP_RIBANA,
+            c.KG_EXP_RIBANA,
+            c.FASE_RIBANA,
+            c.DEFEITO_RIBANA,
+            c.ROMANEIO_RIBANA,
+            c.DT_EXP_RIBANA,
             CASE
                 -- 1. Riscos Críticos de Sincronismo (Expedição Descasada)
                 WHEN c.PECAS_EXP_MALHA > 0 AND c.PECAS_EXP_RIBANA = 0

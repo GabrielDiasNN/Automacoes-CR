@@ -4,7 +4,7 @@ DOMÍNIO: 01_beneficiamento_tingimento
 ARQUIVO ORIGINAL: Comandos SQL - CR\OB_s com receitas pesadas (com detalhes produtos Júlio inventário).sql
 TIPO: Tingimento e Tinturaria
 PARÂMETROS / BINDS: Nenhum (filtros diretos na query)
-TABELAS PRINCIPAIS: SGTPRD.FASES_FLUXO, SGTPRD.ITENS_ESTOQUE, SGTPRD.MOVTO_RECEITA, SGTPRD.OB_FASES, SGTPRD.OB_PRODUTO, SGTPRD.UNIDADE_PROGRAMACAO, SGTPRD.UP_ORDEM_MVTO
+TABELAS PRINCIPAIS: SGTPRD.FASES_FLUXO, SGTPRD.ITENS_ESTOQUE, SGTPRD.MOVTO_RECEITA, SGTPRD.OB_FASES, SGTPRD.OB_PRODUTO, SGTPRD.OPERADOR, SGTPRD.UNIDADE_PROGRAMACAO, SGTPRD.UP_ORDEM_MVTO
 CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. 100% nativa sem views. Execução somente leitura salvo se DML restrito.
 ============================================================================= */
 
@@ -17,6 +17,26 @@ WITH FASE_ATUAL AS (
       JOIN SGTPRD.FASES_FLUXO FFL ON FFL.CODIGO_FASE = OBF.CODIGO_FASE
      WHERE OBF.STATUS <> 4
      GROUP BY OBF.NUMERO_OB
+),
+MAQ_TING AS (
+    SELECT /*+ MATERIALIZE */
+           OBZ.NUMERO_OB,
+           SUBSTR(MAX(OBZ.NUMERO_MAQUINA), 7, 4) AS MQ_TING
+      FROM SGTPRD.OB_FASES OBZ
+     WHERE OBZ.CODIGO_FASE = 40
+     GROUP BY OBZ.NUMERO_OB
+),
+UP_TINGIMENTO AS (
+    SELECT /*+ MATERIALIZE */
+           UPO.NUMEROORDEMREAL     AS NUMERO_OB,
+           MAX(UNP.DTTEMPOINICIAL) AS INICIO_TING,
+           MAX(UNP.DTTEMPOFINAL)   AS FINAL_TING
+      FROM SGTPRD.UP_ORDEM_MVTO UPO
+      JOIN SGTPRD.UNIDADE_PROGRAMACAO UNP ON UNP.NUMEROUP = UPO.NUMEROUP
+     WHERE UNP.TIPO_MAQUINA = 19
+       AND UNP.EXCLUIDA = 0
+       AND UNP.TIPOUP = 0
+     GROUP BY UPO.NUMEROORDEMREAL
 )
 SELECT OBF.CODIGO_GRUPO                                              GRUPO,
        OBF.NUMERO_OB                                                 NUMERO_OB,
@@ -26,40 +46,13 @@ SELECT OBF.CODIGO_GRUPO                                              GRUPO,
        M.QUANTIDADE                                                  QUANTIDADE,
        M.SEQUENCIA                                                   SEQUENCIA,
        M.CODINSREDUZIDO                                              REDUZIDO_INSUMO,
-       (SELECT TRIM(ITE.DESCRICAO)
-          FROM SGTPRD.ITENS_ESTOQUE ITE 
-         WHERE ITE.CODIGO_REDUZIDO = M.CODINSREDUZIDO)               DESCRICAO_INSUMO,
-           
-       (SELECT SUBSTR(MAX(OBZ.NUMERO_MAQUINA),7,4) MQ 
-          FROM SGTPRD.OB_FASES OBZ 
-         WHERE OBZ.NUMERO_OB = OBF.NUMERO_OB 
-           AND OBZ.CODIGO_FASE = 40 
-         GROUP BY OBZ.NUMERO_OB)                                     MQ_TING,
-       (SELECT MAX(UNP.DTTEMPOINICIAL)
-          FROM SGTPRD.UP_ORDEM_MVTO UPO, 
-               SGTPRD.UNIDADE_PROGRAMACAO UNP
-         WHERE UPO.NUMEROUP = UNP.NUMEROUP
-           AND UPO.NUMEROORDEMREAL = OBF.NUMERO_OB
-           AND UNP.TIPO_MAQUINA = 19
-           AND UNP.EXCLUIDA = 0
-           AND UNP.TIPOUP = 0)                                       INICIO_TING,
-           
-       (SELECT MAX(UNP.DTTEMPOFINAL)
-          FROM SGTPRD.UP_ORDEM_MVTO UPO, 
-               SGTPRD.UNIDADE_PROGRAMACAO UNP
-         WHERE UPO.NUMEROUP = UNP.NUMEROUP
-           AND UPO.NUMEROORDEMREAL = OBF.NUMERO_OB
-           AND UNP.TIPO_MAQUINA = 19
-           AND UNP.EXCLUIDA = 0
-           AND UNP.TIPOUP = 0)                                       FINAL_TING,
-           
+       MAX(TRIM(ITE_INS.DESCRICAO))                                  DESCRICAO_INSUMO,
+       MAX(MTG.MQ_TING)                                              MQ_TING,
+       MAX(UPT.INICIO_TING)                                          INICIO_TING,
+       MAX(UPT.FINAL_TING)                                           FINAL_TING,
        OBP.CODPRO_REDUZIDO                                           REDUZIDO_PRODUTO,
-       (SELECT TRIM(ITE.DESCRICAO) 
-          FROM SGTPRD.ITENS_ESTOQUE ITE 
-         WHERE ITE.CODIGO_REDUZIDO = OBP.CODPRO_REDUZIDO)            DESCRICAO_PRODUTO,
-         
+       MAX(TRIM(ITE_PRD.DESCRICAO))                                  DESCRICAO_PRODUTO,
        FAS.DESCR_FASE                                                FASE_ATUAL,
-         
        CASE FAS.STATUS_FASE
             WHEN 0 THEN 'PROGRAMADA'
             WHEN 1 THEN 'EMITIDA'
@@ -67,12 +60,17 @@ SELECT OBF.CODIGO_GRUPO                                              GRUPO,
             WHEN 3 THEN 'EM EXECUCAO'
             ELSE TO_CHAR(FAS.STATUS_FASE)
        END                                                           STATUS_FASE,
-       MAX(M.USUARIO_PESO_RECEITA)                                   USUARIO_QUE_PESOU
+       MAX(TRIM(OPE.NOME))                                           USUARIO_QUE_PESOU
   FROM SGTPRD.OB_FASES           OBF
-  JOIN FASE_ATUAL                FAS ON FAS.NUMERO_OB = OBF.NUMERO_OB
-  JOIN SGTPRD.OB_PRODUTO         OBP ON OBP.NUMERO_OB = OBF.NUMERO_OB
-  JOIN SGTPRD.MOVTO_RECEITA      M   ON M.NUMEROORDEM = DECODE(OBF.CODIGO_GRUPO, 0, OBF.NUMERO_OB, OBF.CODIGO_GRUPO)
-                                    AND M.SEQUENCIAFASEOB = DECODE(OBF.CODIGO_GRUPO, 0, OBF.SEQUENCIA, 0)
+  JOIN FASE_ATUAL                FAS     ON FAS.NUMERO_OB = OBF.NUMERO_OB
+  JOIN SGTPRD.OB_PRODUTO         OBP     ON OBP.NUMERO_OB = OBF.NUMERO_OB
+  JOIN SGTPRD.MOVTO_RECEITA      M       ON M.NUMEROORDEM = DECODE(OBF.CODIGO_GRUPO, 0, OBF.NUMERO_OB, OBF.CODIGO_GRUPO)
+                                        AND M.SEQUENCIAFASEOB = DECODE(OBF.CODIGO_GRUPO, 0, OBF.SEQUENCIA, 0)
+  LEFT JOIN SGTPRD.OPERADOR      OPE     ON OPE.IDOPERADOR = M.IDOPE_PESAGEM
+  LEFT JOIN SGTPRD.ITENS_ESTOQUE ITE_INS ON ITE_INS.CODIGO_REDUZIDO = M.CODINSREDUZIDO
+  LEFT JOIN SGTPRD.ITENS_ESTOQUE ITE_PRD ON ITE_PRD.CODIGO_REDUZIDO = OBP.CODPRO_REDUZIDO
+  LEFT JOIN MAQ_TING             MTG     ON MTG.NUMERO_OB = OBF.NUMERO_OB
+  LEFT JOIN UP_TINGIMENTO        UPT     ON UPT.NUMERO_OB = OBF.NUMERO_OB
  WHERE OBF.CODIGO_FASE = 40
    AND OBF.STATUS IN (1, 2)
  GROUP BY OBF.NUMERO_OB,

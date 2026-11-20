@@ -42,9 +42,11 @@ FASE_ATUAL AS (
 SELECT CASE WHEN NVL(PED.NRO_PEDIDOS, 0) = 1 THEN PED.PEDIDO_CLIENTE ELSE '' END AS P_CLIENTE,
        OB.STATUS,
        CASE OB.STATUS
-            WHEN 0 THEN 'CANCELADA'
-            WHEN 1 THEN 'EM PROCESSO'
-            WHEN 2 THEN 'CONCLUIDA'
+            WHEN 0 THEN 'Encerrada'
+            WHEN 1 THEN 'Emitida'
+            WHEN 2 THEN 'Pré OB'
+            WHEN 3 THEN 'Programada'
+            WHEN 5 THEN 'Interditada Kanban'
             ELSE TO_CHAR(OB.STATUS)
        END                                            AS STATUS_OB,
        OB.NUMERO_OB                                   AS OB,

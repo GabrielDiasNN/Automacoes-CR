@@ -9,10 +9,9 @@ CUIDADOS OPERACIONAIS: Query operacional do acervo SGT. Execução somente leitu
 ============================================================================= */
 
 WITH PERIODO AS (
-    SELECT MIN(DAT.DATA) AS DATA_INICIO,
-           MAX(DAT.DATA) + 1 AS DATA_FIM
-      FROM SGTPRD.TABELA_DATAS DAT
-     WHERE DAT.ANO_MES = 202203
+    SELECT TRUNC(ADD_MONTHS(SYSDATE, -1), 'MONTH') AS DATA_INICIO,
+           TRUNC(SYSDATE, 'MONTH') AS DATA_FIM
+      FROM DUAL
 ),
 MAL_SUBQUERY AS (
     SELECT 
@@ -102,7 +101,7 @@ LEFT JOIN MAL_SUBQUERY MAL ON MAL.DATA_ENTRADA = DAT.DATA
 LEFT JOIN TERC_SUBQUERY TERC ON TERC.DATA_ENTRADA = DAT.DATA
 LEFT JOIN TIN_SUBQUERY TIN ON TIN.DATA_FIM = DAT.DATA
 WHERE 
-    DAT.DATA >= TRUNC(ADD_MONTHS(SYSDATE, -1), 'MONTH') -- Primeiro dia do ms anterior
-    AND DAT.DATA < TRUNC(SYSDATE, 'MONTH')              -- ltimo dia do ms anterior
+    DAT.DATA >= TRUNC(ADD_MONTHS(SYSDATE, -1), 'MONTH') -- Primeiro dia do mês anterior
+    AND DAT.DATA < TRUNC(SYSDATE, 'MONTH')              -- Último dia do mês anterior
 ORDER BY 
     DAT.DATA;
