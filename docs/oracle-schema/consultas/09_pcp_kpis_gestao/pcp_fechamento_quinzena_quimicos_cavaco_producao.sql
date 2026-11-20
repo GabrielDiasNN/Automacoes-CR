@@ -29,9 +29,9 @@ PENDENCIAS (ver relatorio): estoque final e consumo fisicos de cavaco e ETA/ETE 
 ============================================================================= */
 
 WITH PARAM AS (
-    SELECT TRUNC(TO_DATE(:MES_REF, 'YYYY-MM'))                                   AS DT_INI,
-           TRUNC(TO_DATE(:MES_REF, 'YYYY-MM')) + 15                              AS DT_FIM_EXCL,
-           TO_NUMBER(TO_CHAR(ADD_MONTHS(TRUNC(TO_DATE(:MES_REF, 'YYYY-MM')), -1), 'YYYYMM')) AS AM_ANT
+    SELECT TRUNC(NVL(TO_DATE(:MES_REF DEFAULT NULL ON CONVERSION ERROR, 'YYYY-MM'), TRUNC(SYSDATE, 'MM'))) AS DT_INI,
+           TRUNC(NVL(TO_DATE(:MES_REF DEFAULT NULL ON CONVERSION ERROR, 'YYYY-MM'), TRUNC(SYSDATE, 'MM'))) + 15 AS DT_FIM_EXCL,
+           TO_NUMBER(TO_CHAR(ADD_MONTHS(TRUNC(NVL(TO_DATE(:MES_REF DEFAULT NULL ON CONVERSION ERROR, 'YYYY-MM'), TRUNC(SYSDATE, 'MM'))), -1), 'YYYYMM')) AS AM_ANT
       FROM DUAL
 ),
 CLASSIF AS (

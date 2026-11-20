@@ -73,7 +73,8 @@ FASE_ATUAL AS (
                OBF.NUMERO_MAQUINA,
                ROW_NUMBER() OVER (
                    PARTITION BY OBF.NUMERO_OB
-                   ORDER BY CASE WHEN OBF.STATUS IN (1,2,3) THEN 1 WHEN OBF.STATUS = 0 THEN 2 ELSE 3 END,
+                   ORDER BY CASE WHEN OBF.STATUS <> 4 THEN 1 ELSE 2 END,
+                            CASE WHEN OBF.STATUS <> 4 THEN OBF.SEQUENCIA END ASC,
                             OBF.SEQUENCIA DESC
                ) AS RN
           FROM SGTPRD.OB_FASES OBF

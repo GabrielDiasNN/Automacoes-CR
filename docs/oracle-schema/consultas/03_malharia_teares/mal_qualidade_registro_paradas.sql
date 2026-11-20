@@ -128,4 +128,4 @@ SELECT 'AGULHAS_POR_EVENTO_' || ANO || '_' || TO_CHAR(COUNT(DISTINCT MES_REF)) |
        'Comparar só anos com meses equivalentes; mudança de registro possível'
   FROM QUEBRAS
  GROUP BY ANO
- ORDER BY TESTE;
+ ORDER BY 1;

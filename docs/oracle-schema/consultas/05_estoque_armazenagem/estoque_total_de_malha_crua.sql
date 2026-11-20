@@ -17,7 +17,8 @@ WITH FASE_ATUAL AS (
                              OBF.STATUS,
                              ROW_NUMBER() OVER (
                                PARTITION BY OBF.NUMERO_OB
-                               ORDER BY CASE WHEN OBF.STATUS IN (1,2,3) THEN 1 WHEN OBF.STATUS = 0 THEN 2 ELSE 3 END,
+                               ORDER BY CASE WHEN OBF.STATUS <> 4 THEN 1 ELSE 2 END,
+                                        CASE WHEN OBF.STATUS <> 4 THEN OBF.SEQUENCIA END ASC,
                                         OBF.SEQUENCIA DESC
                              ) RN
                         FROM SGTPRD.OB O
@@ -25,6 +26,7 @@ WITH FASE_ATUAL AS (
                         JOIN SGTPRD.FASES_FLUXO FF ON FF.CODIGO_FASE = OBF.CODIGO_FASE
                         LEFT JOIN SGTPRD.GRUPO_FASES GF ON GF.CODIGO = FF.CODIGO_GRUPO
                        WHERE O.TIPO_ORDEM IN (0, 6)
+                         AND O.STATUS <> 0
                     )
                    WHERE RN = 1
 ), ESTOQUE AS (
@@ -42,7 +44,7 @@ WITH FASE_ATUAL AS (
                       AND TRIM(MAS.IDMASCARATIPOINSUMO) IN ('MCP', 'MCR', 'MCT')
                   GROUP BY
                       CASE WHEN TRIM(MAS.CDNIVELGENERICO) = 'T' THEN 'TUBULAR' ELSE 'RAMADO' END
-                 ), 
+                 ),
      MONTADO_REVISADO AS (
                   SELECT
                       CASE WHEN TRIM(EG.CDNIVELGENERICO) = 'T' THEN 'TUBULAR' ELSE 'RAMADO' END AS FLUXO,

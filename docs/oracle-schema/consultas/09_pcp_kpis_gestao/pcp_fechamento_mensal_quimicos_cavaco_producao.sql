@@ -29,9 +29,9 @@ FECHAMENTO: o estoque final e o do ultimo dia do mes. Se o mes ainda estiver em 
 ============================================================================= */
 
 WITH PARAM AS (
-    SELECT TRUNC(TO_DATE(:MES_REF, 'YYYY-MM'))                                   AS DT_INI,
-           ADD_MONTHS(TRUNC(TO_DATE(:MES_REF, 'YYYY-MM')), 1)                   AS DT_FIM_EXCL,
-           TO_NUMBER(TO_CHAR(ADD_MONTHS(TRUNC(TO_DATE(:MES_REF, 'YYYY-MM')), -1), 'YYYYMM')) AS AM_ANT
+    SELECT TRUNC(NVL(TO_DATE(:MES_REF DEFAULT NULL ON CONVERSION ERROR, 'YYYY-MM'), TRUNC(SYSDATE, 'MM'))) AS DT_INI,
+           ADD_MONTHS(TRUNC(NVL(TO_DATE(:MES_REF DEFAULT NULL ON CONVERSION ERROR, 'YYYY-MM'), TRUNC(SYSDATE, 'MM'))), 1) AS DT_FIM_EXCL,
+           TO_NUMBER(TO_CHAR(ADD_MONTHS(TRUNC(NVL(TO_DATE(:MES_REF DEFAULT NULL ON CONVERSION ERROR, 'YYYY-MM'), TRUNC(SYSDATE, 'MM'))), -1), 'YYYYMM')) AS AM_ANT
       FROM DUAL
 ),
 CLASSIF AS (

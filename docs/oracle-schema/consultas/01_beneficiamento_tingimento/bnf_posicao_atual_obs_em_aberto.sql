@@ -35,7 +35,7 @@ WITH
             OB.CODIGO_REDUZIDO,
             OB.TIPO_ORDEM,
             COALESCE(
-                MIN(CASE WHEN OBF.STATUS IN (1, 2, 3) THEN OBF.SEQUENCIA END),
+                MIN(CASE WHEN OBF.STATUS <> 4 THEN OBF.SEQUENCIA END),
                 MAX(OBF.SEQUENCIA)
             ) AS SEQ_ATUAL,
             SYSDATE - (
