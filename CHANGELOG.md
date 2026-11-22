@@ -2,6 +2,14 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.124] - 22/11/2026
+
+Fase 2b do roadmap (`docs/roadmap/roadmap-2026-2027.md`): avaliação arquitetural de generalidade do motor `lib/python/promovidas/` frente à automação `OBs Paradas Fase` (`OBP-04`).
+
+### Alterado
+
+- **ADR-021 (`CONTEXT.md`) e `docs/roadmap/roadmap-2026-2027.md`:** registrada a decisão fundamentada de manter `OBP-04` como automação standalone (sem migração para `lib/python/promovidas/`), pois exige roteamento multi-destino por fase com resolução de menções, estado duplo de novidade/entrega parcial (`obs_seen_state.json` + `delivery_state.json`) e layout PNG customizado por fase (`FaseConfig` em `generate_phase_cards.py`).
+
 ## [1.3.123] - 22/11/2026
 
 Fase 1b do roadmap (`docs/roadmap/roadmap-2026-2027.md`): exposição da aba **PCP & Consultas** (`/pcp`) no Dashboard React consumindo a API snapshot-first `/api/promovidas/*`.
