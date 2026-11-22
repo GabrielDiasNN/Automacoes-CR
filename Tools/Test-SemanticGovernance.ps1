@@ -147,14 +147,21 @@ function Test-RootNodeLock {
 function Test-CatalogMap {
     $mapPath = "docs/governanca/automation-criticality-map.md"
     $map = Get-RepoText -RelativePath $mapPath
-    $manifestFiles = Get-ChildItem -LiteralPath $base -Directory |
-        Where-Object { $_.Name -notlike ".*" -and $_.Name -ne "_Template" } |
-        ForEach-Object {
-            $candidate = Join-Path $_.FullName "automation.manifest.json"
-            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                Get-Item -LiteralPath $candidate
+    $searchRoots = @($base)
+    $promovidasDir = Join-Path $base "Consultas Promovidas"
+    if (Test-Path -LiteralPath $promovidasDir -PathType Container) {
+        $searchRoots += $promovidasDir
+    }
+    $manifestFiles = $searchRoots | ForEach-Object {
+        Get-ChildItem -LiteralPath $_ -Directory |
+            Where-Object { $_.Name -notlike ".*" -and $_.Name -ne "_Template" } |
+            ForEach-Object {
+                $candidate = Join-Path $_.FullName "automation.manifest.json"
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    Get-Item -LiteralPath $candidate
+                }
             }
-        }
+    }
 
     foreach ($manifestFile in $manifestFiles) {
         $manifest = Get-Content -LiteralPath $manifestFile.FullName -Raw | ConvertFrom-Json

@@ -10,11 +10,11 @@
 
 ## Resumo
 
-**238 arquivos `.sql` em 13 pastas.**
+**232 arquivos `.sql` em 13 pastas.**
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 224 |
+| ✅ validada | 218 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
 
@@ -22,7 +22,7 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 
 ## Inventário por pasta
 
-### 01_beneficiamento_tingimento (43)
+### 01_beneficiamento_tingimento (42)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -34,7 +34,6 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `bnf_consumo_quimico_por_kg_tingido.sql` | Consumo de produtos químicos por kg de tecido tingido, por partida de tingimento confirmada nos últimos 30 dias (g/kg), com cor, artigo e máquina para agregação | Painel/KPI | — | ✅ validada | com dados | 86 ms |
 | `bnf_fechamento_mes_obs_em_aberto_com_origens.sql` | Acompanhamento de Fechamento do Mês no Beneficiamento - Monitoramento de OBs em Aberto por Grupo de Programação, Estágio Produtivo, Macro-Setor, Origens, Avanço de Fases, Pesagem Real e Risco Operacional | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 289 ms |
 | `bnf_fila_programada_por_maquina_tingimento.sql` | Fila programada por máquina de tingimento (UPs ainda não iniciadas): quantidade de partidas, kg, horas previstas à frente e atrasadas | Monitoramento operacional | — | ✅ validada | com dados | 117 ms |
-| `bnf_gargalo_receitas_obs_aguardando.sql` | OBs abertas aguardando receita no tingimento (sem receita ativa, receita bloqueada ou receita não emitida), com dias de espera e kg programado | Monitoramento operacional | — | ✅ validada | com dados | 562 ms |
 | `bnf_lavacao_de_maquina_ultimas_lavacoes_feitas.sql` | Lavação de Máquina - (Últimas lavações feitas) | Tingimento e Tinturaria | — | ✅ validada | com dados | 117 ms |
 | `bnf_lavacao_maquinas_historico.sql` | Histórico detalhado de todas as lavações de máquinas | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 78 ms |
 | `bnf_lavacao_maquinas_ultimas.sql` | Últimas lavações realizadas por máquina | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 70 ms |
@@ -70,7 +69,7 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `bnf_up_ordem_movimento_vinculo.sql` | Vínculo detalhado entre Unidade de Programação (UP) e Ordem de Movimento | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 8 ms |
 | `bnf_up_ordem_mvto_por_tipo_maquina.sql` | Unidades de Programação (UP) e movimentações por tipo de máquina | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 539 ms |
 
-### 02_acabamento_preparacao (17)
+### 02_acabamento_preparacao (15)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -85,10 +84,8 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `acb_monitora_rama_quanto_precisa_fazer_para_fechar_o_mes.sql` | Monitora - Rama (quanto precisa fazer para fechar o mês) | Acabamento e Preparação | — | ✅ validada | com dados | 78 ms |
 | `acb_ordens_de_manutencao_programadas_e_planejadas.sql` | Ordens de Manutenção - Programadas e Planejadas | Acabamento e Preparação | — | ✅ validada | com dados | 0 ms |
 | `acb_programacoes_em_aberto.sql` | Programações em aberto | Acabamento e Preparação | — | ✅ validada | com dados | 367 ms |
-| `acb_rama_fila_risco_expedicao_pedidos.sql` | Risco de Atraso de Pedidos e Clientes por OB Pendente nas Ramas | Monitoramento operacional | — | ✅ validada | com dados | 55 ms |
 | `acb_rama_perda_artigos_desvio_engenharia.sql` | Identificação de Produtos com Maior Desvio de Tempo entre o Real e o Previsto pela Engenharia, com Minutos por Tonelada | Painel/KPI | — | ✅ validada | com dados | 23 ms |
 | `acb_rama_producao_mensal_sem_tingimento.sql` | Produção mensal de malha crua na Rama (sem tingimento prévio na própria OB ou em ancestrais) | Painel/KPI | — | ✅ validada | com dados | 2372 ms |
-| `acb_rama_pulmao_buffer_vs_pipeline.sql` | Monitoramento do Pulmão de Entrada das Ramas e Indicador de Autonomia em Horas | Monitoramento operacional | — | ✅ validada | com dados | 94 ms |
 | `acb_rama_ritmo_liquido_setups_gaps.sql` | Diagnóstico Diário de Ritmo Líquido, Tempos de Setup e Gaps Ociosos nas Ramas | Painel/KPI | — | ✅ validada | com dados | 23 ms |
 | `acb_trocar_grupo_de_programacao.sql` | Trocar grupo de programação | Acabamento e Preparação | — | ✅ validada | com dados | 8 ms |
 
@@ -158,7 +155,7 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `estoque_total_de_malha_crua.sql` | Estoque total de malha crua | Estoque e Depósitos | — | ✅ validada | com dados | 70 ms |
 | `estoques_totais.sql` | Estoques Totais | Estoque e Depósitos | — | ✅ validada | com dados | 31 ms |
 
-### 06_qualidade_auditoria_obs (30)
+### 06_qualidade_auditoria_obs (28)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -169,7 +166,6 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `qld_conferencia_composicao_acabado_x_cru.sql` | Conferência - Composição (acabado x cru) | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 47 ms |
 | `qld_conferencia_entrada_de_nf_x_pesagem_das_pecas_data_entrada_x_pesagem.sql` | Conferência - Entrada de NF x Pesagem das peças (DATA ENTRADA x PESAGEM) | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 234 ms |
 | `qld_conferencia_grupoitem_gerargrupodinamico_no_pedidocomercial.sql` | Conferência - GrupoItem (gerargrupodinamico) no PedidoComercial | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 31 ms |
-| `qld_conferencia_ob_montada_conferir_se_usaram_as_pecas_com_restricao.sql` | Conferência - OB montada (conferir se usaram as peças com restrição) | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 117 ms |
 | `qld_conferencia_ob_montada_consulta_nf_de_entrada_das_pecas_faccao.sql` | Conferência - OB montada consulta NF de entrada das peças (facção) | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 0 ms |
 | `qld_conferencia_ob_montada_status_peca_e_ob_s_alocadas_por_nf.sql` | Conferência - OB montada (status peça e OB_s alocadas, por NF) | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 211 ms |
 | `qld_conferencia_pecas_com_peso_menor_que_17kg.sql` | Conferência - Peças com peso menor que 17kg | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 31 ms |
@@ -191,7 +187,6 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `qld_ob_s_com_peso_maior_que_a_carga_maquina.sql` | OB_s com peso maior que a carga máquina | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 47 ms |
 | `qld_ob_s_com_peso_menor_que_8kg.sql` | OB_s com peso menor que 8kg | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 492 ms |
 | `qld_ob_s_com_pesos_iguais_nas_pecas.sql` | OB_s com pesos iguais nas peças (Auditoria de Balança e Pesagem) | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 305 ms |
-| `qld_obs_montadas_fora_da_regra_de_separacao.sql` | OBs montadas fora da regra de separação | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 211 ms |
 
 ### 07_expedicao_pedidos_comercial (24)
 
@@ -232,7 +227,7 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `fac_saldo_nf_faccao.sql` | Controle consolidado de saldo físico e disponível de NFs de terceirização/facção | Monitoramento operacional | — | ✅ validada | com dados | 2664 ms |
 | `fac_tabela_reduzidos_com_servicos_em_terceiros.sql` | Tabela - Reduzidos com serviços em terceiros | Facção e Serviços Terceiros | — | ✅ validada | com dados | 109 ms |
 
-### 09_pcp_kpis_gestao (38)
+### 09_pcp_kpis_gestao (37)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -265,7 +260,6 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `pcp_producao_por_fases_e_turnos_diario.sql` | Produção por fases e turnos (diário) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 8 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase.sql` | Quantidade de KGs em cada fase | PCP e Indicadores Fabris | — | ✅ validada | com dados | 641 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase_antigo.sql` | Quantidade de KGs em cada fase (antigo) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 328 ms |
-| `pcp_sentinela_quimicos_ruptura_compra.sql` | Sentinela de quimicos: estoque, consumo previsto, ruptura projetada e necessidade de compra por produto | Auditoria/Sentinela | — | ✅ validada | com dados | 4438 ms |
 | `pcp_sincronismo_malha_ribana.sql` | Monitoramento analítico e operacional do sincronismo entre malha principal e ribana para rede de lojas | SELECT (Painel Analítico / Operacional PCP) | — | ✅ validada | com dados | 1898 ms |
 | `pcp_top5_faturamento_matriz_mensal.sql` | TOP 5 - Faturamento Matriz Mensal | PCP e Indicadores Fabris | — | ✅ validada | com dados | 312 ms |
 | `pcp_top5_producao_diaria_por_data.sql` | TOP 5 - Produção Diária por Data | PCP e Indicadores Fabris | — | ✅ validada | com dados | 297 ms |

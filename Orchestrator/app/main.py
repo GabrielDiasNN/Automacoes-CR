@@ -42,6 +42,7 @@ from .routers import (
     beneficiamento,
     executions,
     portfolio,
+    promovidas,
     system,
     websocket,
 )
@@ -209,6 +210,7 @@ app.include_router(automation_config.router)
 app.include_router(automation_ide.router)
 app.include_router(executions.router)
 app.include_router(beneficiamento.router)
+app.include_router(promovidas.router)
 app.include_router(portfolio.router)
 app.include_router(system.router)
 app.include_router(websocket.router)

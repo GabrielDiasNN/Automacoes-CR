@@ -1,0 +1,33 @@
+{
+  "id": "CP-03",
+  "name": "Gargalo Receitas Tingimento",
+  "slug": "gargalo-receitas-tingimento",
+  "criticality": "high",
+  "sla_minutes": 120,
+  "owner_area": "Laboratorio de Receitas / Tinturaria",
+  "entrypoint": "run.ps1",
+  "runtime": "promovida",
+  "channels": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "queue_group": "oracle",
+  "max_runtime_minutes": 15,
+  "max_retries": 0,
+  "schedule_summary": "Seg-Sex as 07:30, 11:30, 14:30 e 17:30 [modo sombra]",
+  "schedule": "{\"schedule_version\": 2, \"schedule_type\": \"cron\", \"cron_expression\": [\"30 7,11,14,17 * * 1-5\"], \"timezone\": \"America/Sao_Paulo\"}",
+  "runbook_path": "docs/runbooks/gargalo-receitas-tingimento-runbook.md",
+  "context_path": "Consultas Promovidas/gargalo-receitas-tingimento/CONTEXT.md",
+  "readme_path": "Consultas Promovidas/gargalo-receitas-tingimento/README.md",
+  "orchestrator": {
+    "script_path": "./Consultas Promovidas/gargalo-receitas-tingimento/run.ps1"
+  },
+  "dependencies": {
+    "oracle": true,
+    "outlook": false,
+    "whatsapp": true
+  },
+  "smoke_tests": [
+    "Orchestrator/tests/test_consultas_promovidas_smoke.py"
+  ]
+}

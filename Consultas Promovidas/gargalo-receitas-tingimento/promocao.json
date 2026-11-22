@@ -1,0 +1,43 @@
+{
+  "slug": "gargalo-receitas-tingimento",
+  "nome": "Gargalo Receitas Tingimento",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "NUMERO_OB"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Gargalo de Receitas no Tingimento",
+    "kpis": [
+      "count",
+      "sum:KG_PROGRAMADO",
+      "max:DIAS_DESDE_EMISSAO"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Gargalo de Receitas no Tingimento",
+    "condicoes": [
+      {
+        "coluna": "SITUACAO_RECEITA",
+        "op": "in",
+        "valor": [
+          "SEM RECEITA ATIVA",
+          "BLOQUEADA"
+        ]
+      }
+    ],
+    "renotificar_apos_horas": 24,
+    "colunas_card": [
+      "NUMERO_OB",
+      "SITUACAO_RECEITA",
+      "DIAS_DESDE_EMISSAO",
+      "COR",
+      "KG_PROGRAMADO"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "slug": "qualidade-separacao-montagem",
+  "nome": "Qualidade Separacao Montagem",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "NUMERO_OB"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "OBs Montadas Fora da Regra de Separação",
+    "kpis": [
+      "count"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "OBs Montadas Fora da Regra de Separação",
+    "condicoes": [],
+    "renotificar_apos_horas": 24,
+    "colunas_card": [
+      "NUMERO_OB",
+      "ARTIGO",
+      "FASE_ATUAL",
+      "OPERADOR",
+      "HORARIO_CONFIRMADO"
+    ]
+  }
+}

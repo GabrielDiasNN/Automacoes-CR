@@ -2,6 +2,17 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.122] - 21/11/2026
+
+Fase 1a do roadmap (`docs/roadmap/roadmap-2026-2027.md`): implementação do **motor declarativo de consultas promovidas** (ADR-021, Modelo 2), API `/api/promovidas/*` e promoção inicial das 6 consultas aprovadas (`CP-01` a `CP-06`) em modo sombra.
+
+### Adicionado
+
+- **Motor `lib/python/promovidas/`:** `config.py`, `regras.py`, `estado.py` (idempotência por chave com TTL `renotificar_apos_horas`), `snapshot.py` (`latest/<slug>.json` atômico + `promovidas.db` SQLite WAL), `extracao.py` (`guard_sql` + `oracle_extract`), `card.py` (cards PNG paginados sobre `card_render`/`card_pagination`) e `run_promocao.py` (orquestração sobre `hub_runner` e `hub_whatsapp`, com roteamento de `"modo": "sombra"` para `AUTOMACAO_ALERT_WHATSAPP`).
+- **Modelo 2 no portfólio e scaffold:** `portfolio_manifest.py`, `schemas/automations.py`, `Tools/Test-AutomationCatalog.ps1` e `Tools/Test-SemanticGovernance.ps1` passam a descobrir manifestos em `Consultas Promovidas/*/` e aceitar o canal `"dashboard"`; `Tools/New-Automation.ps1` ganha `-Runtime "promovida"`.
+- **API `/api/promovidas/*`:** `Orchestrator/app/services/promovidas.py` e `Orchestrator/app/routers/promovidas.py` expõem `GET /api/promovidas/`, `GET /api/promovidas/{slug}/latest` e `GET /api/promovidas/{slug}/history` exclusivamente sobre snapshots locais.
+- **6 consultas promovidas em `Consultas Promovidas/` (via `git mv` do acervo):** `CP-01` (`rama-risco-atraso`), `CP-02` (`rama-pulmao-autonomia`), `CP-03` (`gargalo-receitas-tingimento`), `CP-04` (`quimicos-ruptura-compra`), `CP-05` (`qualidade-separacao-montagem`) e `CP-06` (`qualidade-pecas-restricao-montagem`), todas com manifesto, runbook, `promocao.json` em modo `sombra` e smoke tests.
+
 ## [1.3.121] - 21/11/2026
 
 Fase 0 do planejamento estratégico ([`docs/roadmap/roadmap-2026-2027.md`](docs/roadmap/roadmap-2026-2027.md)): correção de vulnerabilidades de dependências runtime (`pillow` e `certifi`), deduplicação da issue semanal de `pip-audit` e correção de `get_client_ip` atrás de proxy reverso (`issue #8`).

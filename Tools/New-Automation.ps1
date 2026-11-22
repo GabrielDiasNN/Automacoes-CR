@@ -18,7 +18,7 @@ param(
     [int]$MaxRuntimeMinutes = 30,
     [ValidateRange(0, 10)]
     [int]$MaxRetries = 0,
-    [ValidateSet("powershell", "python", "node")]
+    [ValidateSet("powershell", "python", "node", "promovida")]
     [string]$Runtime = "python",
     [string]$SupportContact = "Definir suporte técnico",
 
@@ -160,25 +160,35 @@ if ($legacyArgsUsed.Count -gt 0) {
     Write-Step "Parametros legados ignorados no fluxo atual: $($legacyArgsUsed -join ', ')." -Type "WARN"
 }
 
-$automationDir = Join-Path $resolvedBasePath $Name
+$slug = Get-AutomationSlug -AutomationName $Name
+$testId = $slug.Replace("-", "_")
+$isPromovida = ($Runtime -eq "promovida")
+$automationRelDir = if ($isPromovida) { "Consultas Promovidas\$slug" } else { $Name }
+$automationRelPosix = $automationRelDir.Replace("\", "/")
+$automationDir = Join-Path $resolvedBasePath $automationRelDir
 $logsDir = Join-Path $automationDir "Logs"
 $runbookDir = Join-Path $resolvedBasePath "docs\runbooks"
 $orchestratorTestsDir = Join-Path $resolvedBasePath "Orchestrator\tests"
-$slug = Get-AutomationSlug -AutomationName $Name
-$testId = $slug.Replace("-", "_")
 $runbookPath = Join-Path $runbookDir "$slug-runbook.md"
 $smokeTestPath = Join-Path $orchestratorTestsDir "test_$slug.py"
-$effectiveQueueGroup = if ([string]::IsNullOrWhiteSpace($QueueGroup)) { $slug.Replace("-", "_") } else { $QueueGroup.Trim() }
+$effectiveQueueGroup = if ($isPromovida -and [string]::IsNullOrWhiteSpace($QueueGroup)) {
+    "oracle"
+} elseif ([string]::IsNullOrWhiteSpace($QueueGroup)) {
+    $slug.Replace("-", "_")
+} else {
+    $QueueGroup.Trim()
+}
 $channels = New-Object System.Collections.Generic.List[string]
-if (-not $WithoutEmail) { $channels.Add("email") }
+if ($isPromovida) { $channels.Add("dashboard") }
+if (-not $WithoutEmail -and -not $isPromovida) { $channels.Add("email") }
 if ($WithWhatsApp) { $channels.Add("whatsapp") }
 $channelsJson = if ($channels.Count -gt 0) {
     ($channels | ConvertTo-Json -Compress)
 } else {
     "[]"
 }
-$dependencyOracle = if ($WithOracle) { "true" } else { "false" }
-$dependencyOutlook = if (-not $WithoutEmail) { "true" } else { "false" }
+$dependencyOracle = if ($WithOracle -or $isPromovida) { "true" } else { "false" }
+$dependencyOutlook = if (-not $WithoutEmail -and -not $isPromovida) { "true" } else { "false" }
 $dependencyWhatsApp = if ($WithWhatsApp) { "true" } else { "false" }
 
 if (Test-Path -LiteralPath $automationDir) {
@@ -186,8 +196,7 @@ if (Test-Path -LiteralPath $automationDir) {
     exit 1
 }
 
-# O shim (run.ps1) e o runner Python recebem o mesmo nome: run_<id>.py, derivado do slug.
-$runnerFileName = "run_$testId.py"
+$runnerFileName = if ($isPromovida) { "promocao.json" } else { "run_$testId.py" }
 
 $replacements = @{
     "[Nome da Automação]" = $Name
@@ -202,9 +211,72 @@ $replacements = @{
 
 $readmeContent = Convert-Template -Content (Get-TemplateContent -TemplateName "README.md") -Replacements $replacements
 $contextContent = Convert-Template -Content (Get-TemplateContent -TemplateName "CONTEXT.md") -Replacements $replacements
-$runContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run.ps1") -Replacements $replacements
-$runnerContent = Convert-Template -Content (Get-TemplateContent -TemplateName "run_template.py") -Replacements $replacements
+$runContent = if ($isPromovida) {
+@"
+[CmdletBinding()]
+param(
+    [string]`$ExecId = "",
+    [switch]`$DryRun
+)
+
+`$ErrorActionPreference = "Stop"
+`$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+`$ScriptDir = `$PSScriptRoot
+if (-not `$ScriptDir) { `$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path }
+
+`$projectRoot = Split-Path -Parent (Split-Path -Parent `$ScriptDir)
+`$libProcess  = Join-Path `$projectRoot "lib\Lib-Process.psm1"
+`$configPath  = Join-Path `$ScriptDir "promocao.json"
+
+Import-Module `$libProcess -Force
+
+`$pythonExe = Resolve-HubPythonExe -ProjectRoot `$projectRoot
+if (-not (Test-Path -LiteralPath `$pythonExe -PathType Leaf)) {
+    Write-Host "[ERRO] Python do projeto nao encontrado em '`$pythonExe'."
+    exit 9
+}
+
+`$env:PYTHONUTF8 = "1"
+`$env:PYTHONIOENCODING = "utf-8"
+`$env:PYTHONPATH = Join-Path `$projectRoot "lib\python"
+
+`$runnerArgs = @("-m", "promovidas.run_promocao", "--config", `$configPath)
+if (-not [string]::IsNullOrWhiteSpace(`$ExecId)) { `$runnerArgs += `$ExecId }
+if (`$DryRun) { `$runnerArgs += "--dry-run" }
+
+`$exitCode = Invoke-HubPythonRunner -PythonExe `$pythonExe -Arguments `$runnerArgs -WorkingDirectory `$ScriptDir
+exit `$exitCode
+"@
+} else {
+    Convert-Template -Content (Get-TemplateContent -TemplateName "run.ps1") -Replacements $replacements
+}
+$runnerContent = if ($isPromovida) {
+@"
+{
+  "slug": "$slug",
+  "nome": "$Name",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": ["NUMERO_OB"],
+  "destinos": $($channelsJson),
+  "painel": {
+    "titulo": "$Name",
+    "kpis": ["count"],
+    "colunas": []
+  }
+}
+"@
+} else {
+    Convert-Template -Content (Get-TemplateContent -TemplateName "run_template.py") -Replacements $replacements
+}
 $manifestContent = Convert-Template -Content (Get-TemplateContent -TemplateName "automation.manifest.json") -Replacements $replacements
+if ($isPromovida) {
+    $manifestContent = $manifestContent.Replace("$Name/CONTEXT.md", "$automationRelPosix/CONTEXT.md")
+    $manifestContent = $manifestContent.Replace("$Name/README.md", "$automationRelPosix/README.md")
+    $manifestContent = $manifestContent.Replace("./$Name/run.ps1", "./$automationRelPosix/run.ps1")
+}
 $smokeTestContent = ""
 
 $manifestContent = $manifestContent.Replace('"__TEMPLATE_SLA_MINUTES__"', [string]$SlaMinutes)
@@ -237,6 +309,9 @@ $runbookContent = $runbookContent.Replace("[Contato TI, ex: suporte.automacoes@e
 $runbookContent = $runbookContent.Replace("<CAMINHO_AUTOMACAO>", "$BasePath\$Name")
 $runbookContent = $runbookContent.Replace("[Versão]", "0.1.0")
 $smokeTestContent = Convert-Template -Content $smokeTestContent -Replacements $replacements
+if ($isPromovida) {
+    $smokeTestContent = $smokeTestContent.Replace("root / `"$Name`"", "root / `"Consultas Promovidas`" / `"$slug`"")
+}
 
 $readmeContent += @"
 

@@ -81,7 +81,7 @@ function Test-ManifestShape {
         }
 
         foreach ($channel in @($Manifest.channels)) {
-            if ($channel -notin @("email", "whatsapp")) {
+            if ($channel -notin @("email", "whatsapp", "dashboard")) {
                 throw "Canal inválido '$channel' em $ManifestPath"
             }
         }
@@ -94,15 +94,23 @@ $base = (Resolve-Path -LiteralPath $RootPath).Path
 $issues = 0
 $validated = 0
 
+$searchRoots = @($base)
+$promovidasDir = Join-Path $base "Consultas Promovidas"
+if (Test-Path -LiteralPath $promovidasDir -PathType Container) {
+    $searchRoots += $promovidasDir
+}
+
 $manifestPaths = @(
-    Get-ChildItem -LiteralPath $base -Directory |
-        Where-Object { $_.Name -notlike ".*" } |
-        ForEach-Object {
-            $candidate = Join-Path $_.FullName "automation.manifest.json"
-            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                Get-Item -LiteralPath $candidate
+    $searchRoots | ForEach-Object {
+        Get-ChildItem -LiteralPath $_ -Directory |
+            Where-Object { $_.Name -notlike ".*" } |
+            ForEach-Object {
+                $candidate = Join-Path $_.FullName "automation.manifest.json"
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    Get-Item -LiteralPath $candidate
+                }
             }
-        }
+    }
 )
 
 if ($Paths.Count -gt 0) {

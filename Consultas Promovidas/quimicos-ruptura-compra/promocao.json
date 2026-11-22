@@ -1,0 +1,42 @@
+{
+  "slug": "quimicos-ruptura-compra",
+  "nome": "Sentinela Ruptura Quimicos",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "CD_REDUZIDO"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Sentinela de Ruptura de Químicos",
+    "kpis": [
+      "count",
+      "sum:QTD_SUGERIDA_COMPRA_KG"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Sentinela de Ruptura de Químicos",
+    "condicoes": [
+      {
+        "coluna": "SITUACAO_ALERTA",
+        "op": "in",
+        "valor": [
+          "CRITICO",
+          "ALERTA"
+        ]
+      }
+    ],
+    "renotificar_apos_horas": 24,
+    "colunas_card": [
+      "CD_REDUZIDO",
+      "DESCRICAO",
+      "SITUACAO_ALERTA",
+      "DIAS_COBERTURA",
+      "QTD_SUGERIDA_COMPRA_KG"
+    ]
+  }
+}
