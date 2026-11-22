@@ -2,6 +2,14 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.126] - 22/11/2026
+
+Limpeza pós-conclusão do ciclo de entregas das consultas promovidas e remoção do roadmap temporário.
+
+### Removido
+
+- **Roadmap estratégico (`docs/roadmap/roadmap-2026-2027.md`):** arquivo removido do repositório após a entrega das fases previstas (`#98` a `#102`), mantendo a documentação permanente no [CONTEXT.md](CONTEXT.md) (ADR-021), [automation-criticality-map.md](docs/governanca/automation-criticality-map.md) e [CHANGELOG.md](CHANGELOG.md).
+
 ## [1.3.125] - 22/11/2026
 
 Fase 3 do roadmap (`docs/roadmap/roadmap-2026-2027.md`, primeira leva de expansão pelo backlog): promoção de 3 novas consultas sem adição de código Python no motor `lib/python/promovidas/`.
@@ -45,7 +53,7 @@ Fase 1a do roadmap (`docs/roadmap/roadmap-2026-2027.md`): implementação do **m
 
 ## [1.3.121] - 21/11/2026
 
-Fase 0 do planejamento estratégico ([`docs/roadmap/roadmap-2026-2027.md`](docs/roadmap/roadmap-2026-2027.md)): correção de vulnerabilidades de dependências runtime (`pillow` e `certifi`), deduplicação da issue semanal de `pip-audit` e correção de `get_client_ip` atrás de proxy reverso (`issue #8`).
+Fase 0 do planejamento estratégico (`docs/roadmap/roadmap-2026-2027.md`): correção de vulnerabilidades de dependências runtime (`pillow` e `certifi`), deduplicação da issue semanal de `pip-audit` e correção de `get_client_ip` atrás de proxy reverso (`issue #8`).
 
 ### Adicionado
 
