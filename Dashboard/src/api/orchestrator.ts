@@ -847,4 +847,52 @@ export const orchestratorApi = {
     api.get<BeneficiamentoTingimento>(`/api/beneficiamento/tingimento${qs({ ...params })}`, signal),
   refreshBeneficiamento: (period: string) =>
     api.post<Record<string, unknown>>(`/api/beneficiamento/refresh${qs({ period })}`),
+
+  // ── Consultas Promovidas (PCP / Modelo 2) ──
+  getPromovidas: (signal?: AbortSignal) =>
+    api.get<{ items: PromovidaResumo[] }>("/api/promovidas/", signal),
+  getPromovidaLatest: (slug: string, signal?: AbortSignal) =>
+    api.get<PromovidaSnapshot>(`/api/promovidas/${encodeURIComponent(slug)}/latest`, signal),
+  getPromovidaHistory: (slug: string, limit = 20, signal?: AbortSignal) =>
+    api.get<{ slug: string; items: PromovidaHistoricoItem[] }>(
+      `/api/promovidas/${encodeURIComponent(slug)}/history${qs({ limit })}`,
+      signal,
+    ),
 };
+
+export interface PromovidaResumo {
+  slug: string;
+  nome: string;
+  titulo: string;
+  modo: "sombra" | "producao" | string;
+  destinos: string[];
+  has_snapshot: boolean;
+  generated_at: string | null;
+  age_minutes: number | null;
+  total_rows: number;
+  excecoes_count: number;
+  kpis: Record<string, number | string | null>;
+}
+
+export interface PromovidaSnapshot {
+  slug: string;
+  nome: string;
+  titulo: string;
+  modo: "sombra" | "producao" | string;
+  generated_at: string;
+  age_minutes: number | null;
+  total_rows: number;
+  excecoes_count: number;
+  kpis: Record<string, number | string | null>;
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
+export interface PromovidaHistoricoItem {
+  slug: string;
+  generated_at: string;
+  modo: string;
+  total_rows: number;
+  excecoes_count: number;
+  kpis: Record<string, number | string | null>;
+}

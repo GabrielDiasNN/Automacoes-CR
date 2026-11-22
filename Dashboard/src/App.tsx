@@ -21,6 +21,9 @@ const MonitorPage = lazy(() => import("./pages/MonitorPage").then((m) => ({ defa
 const BeneficiamentoPage = lazy(() =>
   import("./pages/BeneficiamentoPage").then((m) => ({ default: m.BeneficiamentoPage })),
 );
+const PcpPage = lazy(() =>
+  import("./pages/PcpPage").then((m) => ({ default: m.PcpPage })),
+);
 const SystemPage = lazy(() => import("./pages/SystemPage").then((m) => ({ default: m.SystemPage })));
 
 export default function App() {
@@ -45,6 +48,7 @@ export default function App() {
                     <Route path="monitor" element={<MonitorPage />} />
                     <Route path="observabilidade" element={<Navigate to="/monitor" replace />} />
                     <Route path="beneficiamento" element={<BeneficiamentoPage />} />
+                    <Route path="pcp" element={<PcpPage />} />
                     <Route path="automacoes" element={<AutomacoesPage />} />
                     <Route path="sistema" element={<SystemPage />} />
                     <Route path="*" element={<NotFoundPage />} />

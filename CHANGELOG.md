@@ -2,6 +2,16 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.123] - 22/11/2026
+
+Fase 1b do roadmap (`docs/roadmap/roadmap-2026-2027.md`): exposição da aba **PCP & Consultas** (`/pcp`) no Dashboard React consumindo a API snapshot-first `/api/promovidas/*`.
+
+### Adicionado
+
+- **Tela `PCP & Consultas` (`Dashboard/src/pages/PcpPage.tsx`, `PcpPage.module.css`):** lista o catálogo ativo de consultas promovidas, indica frescor e modo (`sombra`/`producao`), exibe KPIs dinâmicos via `StatTile`, tabela paginada (`DataTable` + `Pager`) com filtro local e estado vazio explícito quando ainda não há snapshot.
+- **Cliente API e navegação (`Dashboard/src/api/orchestrator.ts`, `App.tsx`, `Shell.tsx`):** adicionados `getPromovidas`, `getPromovidaLatest` e `getPromovidaHistory`, rota lazy `/pcp` e entrada `"PCP & Consultas"` na seção `"Análise"` da barra lateral.
+- **Cobertura de testes (`Dashboard/src/__tests__/PcpPage.test.tsx`, `Orchestrator/tests/test_e2e_dashboard.py`):** testes unitários/render em Vitest e teste Playwright E2E (`test_e2e_pcp_consultas_promovidas_sem_violacoes_serias`) validando carregamento, zero erros de console e conformidade de acessibilidade (axe-core).
+
 ## [1.3.122] - 21/11/2026
 
 Fase 1a do roadmap (`docs/roadmap/roadmap-2026-2027.md`): implementação do **motor declarativo de consultas promovidas** (ADR-021, Modelo 2), API `/api/promovidas/*` e promoção inicial das 6 consultas aprovadas (`CP-01` a `CP-06`) em modo sombra.

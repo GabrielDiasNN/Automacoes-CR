@@ -1098,3 +1098,26 @@ def test_a11y_sistema_sem_violacoes_serias(uvicorn_server: str, page: Any) -> No
     page.wait_for_selector("text=trilha de auditoria", timeout=15_000)
 
     _assert_no_serious_a11y_violations(page, "Sistema")
+
+
+@pytest.mark.e2e
+def test_e2e_pcp_consultas_promovidas_sem_violacoes_serias(
+    uvicorn_server: str, page: Any
+) -> None:
+    """Valida a tela `/dashboard/pcp`: listagem do catálogo de consultas promovidas,
+    seleção de item, estado vazio ou snapshot e ausência de erros de console / a11y."""
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda msg: console_errors.append(msg.text) if msg.type == "error" else None,
+    )
+    page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+
+    _inject_api_key(page)
+    page.goto(f"{uvicorn_server}/dashboard/pcp")
+    page.get_by_role("heading", name="PCP & Consultas").wait_for(timeout=30_000)
+    page.wait_for_selector("text=Catálogo ativo", timeout=15_000)
+    page.get_by_text("Risco Atraso Ramas").first.wait_for(timeout=15_000)
+
+    assert not console_errors, f"Erros de console na rota /pcp: {console_errors}"
+    _assert_no_serious_a11y_violations(page, "PCP & Consultas")
