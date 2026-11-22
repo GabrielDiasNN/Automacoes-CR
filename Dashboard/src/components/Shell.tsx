@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Factory, LayoutDashboard, ListChecks, Menu, Monitor, Moon, Radio, Rows3, Rows4, Search, Server, Sun, Workflow, X } from "lucide-react";
+import { ClipboardList, Factory, LayoutDashboard, ListChecks, Menu, Monitor, Moon, Radio, Rows3, Rows4, Search, Server, Sun, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
 import { nextTheme, useTheme, type Theme } from "../context/ThemeContext";
@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
   { to: "/execucoes", label: "Execuções", icon: <ListChecks size={16} /> },
   { to: "/monitor", label: "Monitor", icon: <Radio size={16} /> },
   { to: "/beneficiamento", label: "Beneficiamento", icon: <Factory size={16} />, section: "Análise" },
+  { to: "/pcp", label: "PCP & Consultas", icon: <ClipboardList size={16} /> },
   { to: "/automacoes", label: "Automações", icon: <Workflow size={16} />, section: "Administração" },
   { to: "/sistema", label: "Sistema", icon: <Server size={16} /> },
 ];
