@@ -15,7 +15,20 @@
     "kpis": [
       "count"
     ],
-    "colunas": []
+    "colunas": [
+      "NUMERO_OB",
+      "TP_ORDEM",
+      "ARTIGO",
+      "COR",
+      "REGRA_LOTE_PRODUTO",
+      "REGRA_LOTE_FIO",
+      "REGRA_AGULHAS",
+      "REGRA_FABRICANTE_MODELO",
+      "FASE_ATUAL",
+      "ST_FASE",
+      "OPERADOR",
+      "HORARIO_CONFIRMADO"
+    ]
   },
   "excecao": {
     "titulo_alerta": "OBs Montadas Fora da Regra de Separação",

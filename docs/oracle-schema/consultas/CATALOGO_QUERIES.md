@@ -10,19 +10,19 @@
 
 ## Resumo
 
-**232 arquivos `.sql` em 13 pastas.**
+**229 arquivos `.sql` em 13 pastas.**
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 218 |
+| ✅ validada | 215 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
 
-Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros padrão (sentinelas de anomalia ou filtros sem dados no momento — não é erro).
+Amostra vazia: 8 consulta(s) validadas não retornaram linhas na janela/filtros padrão (sentinelas de anomalia ou filtros sem dados no momento — não é erro).
 
 ## Inventário por pasta
 
-### 01_beneficiamento_tingimento (42)
+### 01_beneficiamento_tingimento (41)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -33,7 +33,6 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `bnf_consumo_quimico_historico_partida_produto.sql` | Historico de consumo de quimicos por partida de tingimento e produto (rastreio/auditoria): consumo real pesado x quantidade emitida na receita, com desvio. | Auditoria/Sentinela | — | ✅ validada | com dados | 570 ms |
 | `bnf_consumo_quimico_por_kg_tingido.sql` | Consumo de produtos químicos por kg de tecido tingido, por partida de tingimento confirmada nos últimos 30 dias (g/kg), com cor, artigo e máquina para agregação | Painel/KPI | — | ✅ validada | com dados | 86 ms |
 | `bnf_fechamento_mes_obs_em_aberto_com_origens.sql` | Acompanhamento de Fechamento do Mês no Beneficiamento - Monitoramento de OBs em Aberto por Grupo de Programação, Estágio Produtivo, Macro-Setor, Origens, Avanço de Fases, Pesagem Real e Risco Operacional | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 289 ms |
-| `bnf_fila_programada_por_maquina_tingimento.sql` | Fila programada por máquina de tingimento (UPs ainda não iniciadas): quantidade de partidas, kg, horas previstas à frente e atrasadas | Monitoramento operacional | — | ✅ validada | com dados | 117 ms |
 | `bnf_lavacao_de_maquina_ultimas_lavacoes_feitas.sql` | Lavação de Máquina - (Últimas lavações feitas) | Tingimento e Tinturaria | — | ✅ validada | com dados | 117 ms |
 | `bnf_lavacao_maquinas_historico.sql` | Histórico detalhado de todas as lavações de máquinas | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 78 ms |
 | `bnf_lavacao_maquinas_ultimas.sql` | Últimas lavações realizadas por máquina | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 70 ms |
@@ -188,7 +187,7 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `qld_ob_s_com_peso_menor_que_8kg.sql` | OB_s com peso menor que 8kg | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 492 ms |
 | `qld_ob_s_com_pesos_iguais_nas_pecas.sql` | OB_s com pesos iguais nas peças (Auditoria de Balança e Pesagem) | Auditoria e Qualidade de OBs | — | ✅ validada | com dados | 305 ms |
 
-### 07_expedicao_pedidos_comercial (24)
+### 07_expedicao_pedidos_comercial (23)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -206,7 +205,6 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `com_obs_e_romaneios_em_aberto.sql` | Romaneios e status de expedição para OBs em aberto no processo | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 203 ms |
 | `com_obs_e_romaneios_historico_completo.sql` | Histórico consolidado de OBs e Romaneios de expedição | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 578 ms |
 | `com_pecas_destino_ob_romaneio.sql` | Rastreabilidade de peças de destino da OB vinculadas a romaneio | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 539 ms |
-| `com_precos_carteira_pedidos_abertos.sql` | Preços dos Pedidos em Aberto (Sentinela de Integridade de Preço R$ 0,01) | Comercial, Pedidos e Expedição (Auditoria / Sentinela de Preços) | — | ✅ validada | vazia | 31 ms |
 | `com_rastreabilidade_ob_romaneio_nfe.sql` | Rastreabilidade ponta-a-ponta entre OB, Romaneio e Nota Fiscal | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 523 ms |
 | `com_romaneados_artigos.sql` | Romaneados - Artigos | Comercial, Pedidos e Expedição | — | ✅ validada | com dados | 102 ms |
 | `com_romaneados_pecas_e_kg.sql` | Romaneados - Peças e (kg) | Comercial, Pedidos e Expedição | — | ✅ validada | com dados | 180 ms |
@@ -227,7 +225,7 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `fac_saldo_nf_faccao.sql` | Controle consolidado de saldo físico e disponível de NFs de terceirização/facção | Monitoramento operacional | — | ✅ validada | com dados | 2664 ms |
 | `fac_tabela_reduzidos_com_servicos_em_terceiros.sql` | Tabela - Reduzidos com serviços em terceiros | Facção e Serviços Terceiros | — | ✅ validada | com dados | 109 ms |
 
-### 09_pcp_kpis_gestao (37)
+### 09_pcp_kpis_gestao (36)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -260,7 +258,6 @@ Amostra vazia: 9 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `pcp_producao_por_fases_e_turnos_diario.sql` | Produção por fases e turnos (diário) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 8 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase.sql` | Quantidade de KGs em cada fase | PCP e Indicadores Fabris | — | ✅ validada | com dados | 641 ms |
 | `pcp_quantidade_de_kgs_em_cada_fase_antigo.sql` | Quantidade de KGs em cada fase (antigo) | PCP e Indicadores Fabris | — | ✅ validada | com dados | 328 ms |
-| `pcp_sincronismo_malha_ribana.sql` | Monitoramento analítico e operacional do sincronismo entre malha principal e ribana para rede de lojas | SELECT (Painel Analítico / Operacional PCP) | — | ✅ validada | com dados | 1898 ms |
 | `pcp_top5_faturamento_matriz_mensal.sql` | TOP 5 - Faturamento Matriz Mensal | PCP e Indicadores Fabris | — | ✅ validada | com dados | 312 ms |
 | `pcp_top5_producao_diaria_por_data.sql` | TOP 5 - Produção Diária por Data | PCP e Indicadores Fabris | — | ✅ validada | com dados | 297 ms |
 | `pcp_top5_producao_diaria_por_operador.sql` | TOP 5 - Produção Diária por Operador | PCP e Indicadores Fabris | — | ✅ validada | com dados | 203 ms |

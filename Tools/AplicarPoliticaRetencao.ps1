@@ -114,7 +114,7 @@ $script:CategoryRules = @(
     @{
         Name                = "OBs Cards Runtime Artifacts"
         Type                = "Pattern"
-        RelativeDirectories = @("OBs Restricao Branco", "OBs Fluxo Sem Tingimento")
+        RelativeDirectories = @("OBs Restricao Branco", "OBs Fluxo Sem Tingimento", "Consultas Promovidas")
         IncludeFiles        = @(
             "card.png",
             "card_*.png",

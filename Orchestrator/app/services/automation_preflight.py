@@ -181,6 +181,39 @@ def _manifest_docs_issues(
     return blocking_issues
 
 
+def _promocao_config_issues(automation_dir: str) -> list[schemas.AutomationPreflightIssue]:
+    promocao_path = os.path.join(automation_dir, "promocao.json")
+    if not os.path.isfile(promocao_path):
+        return [
+            _issue(
+                "promocao_config_missing",
+                "Runtime 'promovida' com canal whatsapp exige promocao.json "
+                "na pasta da automação.",
+                severity="ERROR",
+            )
+        ]
+    try:
+        with open(promocao_path, encoding="utf-8-sig") as f:
+            promocao_payload: Any = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return [
+            _issue(
+                "promocao_config_invalid",
+                "promocao.json não é um JSON válido.",
+                severity="ERROR",
+            )
+        ]
+    if not isinstance(promocao_payload, dict):
+        return [
+            _issue(
+                "promocao_config_invalid",
+                "promocao.json precisa ter um objeto JSON na raiz.",
+                severity="ERROR",
+            )
+        ]
+    return []
+
+
 def _whatsapp_config_issues(
     *,
     automation_dir: str,
@@ -188,6 +221,9 @@ def _whatsapp_config_issues(
 ) -> list[schemas.AutomationPreflightIssue]:
     if "whatsapp" not in manifest.channels:
         return []
+
+    if manifest.runtime == "promovida":
+        return _promocao_config_issues(automation_dir)
 
     config_path = os.path.join(automation_dir, "whatsapp-config.json")
     if not os.path.isfile(config_path):

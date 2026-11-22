@@ -256,12 +256,13 @@ def _fixture_uvicorn_server() -> Generator[str, None, None]:
         _remover_logs_com_retentativa([stdout_log_path, stderr_log_path])
 
 
-# As 6 rotas do dashboard (react-router, basename /dashboard).
+# As 7 rotas do dashboard (react-router, basename /dashboard).
 ROUTES = [
     ("painel", "Painel"),
     ("execucoes", "Execuções"),
     ("monitor", "Monitor"),
     ("beneficiamento", "Beneficiamento"),
+    ("pcp", "PCP & Consultas"),
     ("automacoes", "Automações"),
     ("sistema", "Sistema"),
 ]
@@ -326,10 +327,11 @@ Preencha este bloco ao final de cada entrega que exija validação E2E Playwrigh
   - Execuções
   - Monitor
   - Beneficiamento
+  - PCP & Consultas
   - Automações
   - Sistema
 - Ações críticas validadas:
-  - Navegação por todas as 6 rotas (react-router)
+  - Navegação por todas as 7 rotas (react-router)
   - Renderização do Mímico Operacional e dos mostradores
   - Console do navegador sem erros
 - Console do navegador:

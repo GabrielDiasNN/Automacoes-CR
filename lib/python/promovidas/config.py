@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
@@ -107,8 +108,10 @@ def _parse_excecao(
     ):
         raise ValueError(f"'excecao.colunas_card' invalido em {origem}.")
     horas = float(raw.get("renotificar_apos_horas", 24.0))
-    if horas < 0:
-        raise ValueError(f"'renotificar_apos_horas' nao pode ser negativo em {origem}.")
+    if not math.isfinite(horas) or horas < 0:
+        raise ValueError(
+            f"'renotificar_apos_horas' invalido (negativo ou nao finito) em {origem}."
+        )
     return ConfigExcecao(
         condicoes=_parse_condicoes(raw.get("condicoes"), origem),
         renotificar_apos_horas=horas,
@@ -130,6 +133,11 @@ def carregar_config(caminho: Path) -> ConfigPromocao:
     slug = _texto_obrigatorio(bruto, "slug", caminho)
     nome = _texto_obrigatorio(bruto, "nome", caminho)
     consulta = _texto_obrigatorio(bruto, "consulta", caminho)
+    consulta_path = Path(consulta)
+    if consulta_path.is_absolute() or ".." in consulta_path.parts:
+        raise ValueError(
+            f"'consulta' deve ser caminho relativo dentro da pasta em {caminho}."
+        )
 
     modo = str(bruto.get("modo") or "sombra").strip().lower()
     if modo not in _MODOS_VALIDOS:
@@ -139,8 +147,14 @@ def carregar_config(caminho: Path) -> ConfigPromocao:
     if not isinstance(chave_raw, list) or not chave_raw:
         raise ValueError(f"'chave' deve listar ao menos uma coluna em {caminho}.")
     chave = tuple(str(c).strip() for c in chave_raw if str(c).strip())
+    if not chave:
+        raise ValueError(f"'chave' deve conter ao menos uma coluna valida em {caminho}.")
 
-    destinos_raw = bruto.get("destinos") or ["dashboard"]
+    destinos_raw = bruto.get("destinos")
+    if destinos_raw is None:
+        destinos_raw = ["dashboard"]
+    if not isinstance(destinos_raw, list):
+        raise ValueError(f"'destinos' deve ser uma lista em {caminho}.")
     destinos = tuple(str(d).strip().lower() for d in destinos_raw if str(d).strip())
     if not destinos or any(d not in _DESTINOS_VALIDOS for d in destinos):
         raise ValueError(f"'destinos' invalido em {caminho}: {destinos_raw}.")

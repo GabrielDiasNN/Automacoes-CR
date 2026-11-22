@@ -7,7 +7,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import hub_runner as hr
 import hub_whatsapp as hw
+import oracle_queue
 import pytest
 from app.services.promovidas import obter_historico
 from promovidas import (
@@ -23,7 +25,11 @@ from promovidas import (
 from promovidas.card import gerar_artefatos_whatsapp
 from promovidas.estado import gravar_estado, ler_estado, selecionar_pendentes
 from promovidas.extracao import validar_sql_somente_leitura
-from promovidas.run_promocao import _resolver_destino_whatsapp
+from promovidas.run_promocao import (
+    _despachar_excecoes,
+    _executar_promocao,
+    _resolver_destino_whatsapp,
+)
 from promovidas.snapshot import gravar_snapshot
 
 
@@ -193,3 +199,98 @@ def test_modo_sombra_forca_grupo_alerta_e_guard_bloqueia_dml(
     root = Path(__file__).resolve().parents[2]
     with pytest.raises(ValueError, match="bloqueado"):
         validar_sql_somente_leitura(root, "DELETE FROM SGTPRD.OB")
+
+
+@pytest.mark.unitario
+def test_carregar_config_rejeita_chave_vazia_destinos_invalido_e_traversal(
+    tmp_path: Path,
+) -> None:
+    base = {
+        "slug": "x",
+        "nome": "X",
+        "consulta": "consulta.sql",
+        "modo": "sombra",
+        "chave": ["  "],
+        "destinos": ["dashboard"],
+        "painel": {"titulo": "X"},
+    }
+    cfg_path = tmp_path / "promocao.json"
+    cfg_path.write_text(json.dumps(base), encoding="utf-8")
+    with pytest.raises(ValueError, match="chave"):
+        carregar_config(cfg_path)
+
+    base["chave"] = ["ID"]
+    base["destinos"] = "dashboard"
+    cfg_path.write_text(json.dumps(base), encoding="utf-8")
+    with pytest.raises(ValueError, match="destinos"):
+        carregar_config(cfg_path)
+
+    base["destinos"] = ["dashboard"]
+    base["consulta"] = "../fora.sql"
+    cfg_path.write_text(json.dumps(base), encoding="utf-8")
+    with pytest.raises(ValueError, match="caminho relativo"):
+        carregar_config(cfg_path)
+
+
+@pytest.mark.unitario
+def test_run_promocao_reconciliacao_parcial_e_exit_codes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("AUTOMACAO_ALERT_WHATSAPP", "grupo-alerta@g.us")
+    cfg = _cfg_exemplo(tmp_path, modo="sombra")
+    spec = hr.AutomationSpec(
+        automacao=cfg.nome,
+        slug=cfg.slug,
+        trace_slug=cfg.slug,
+        lock_key="TEST",
+        log_dir=tmp_path / "Logs",
+        non_failure_codes=(0, 2, 22),
+    )
+    ctx = hr.create_run_context(spec, exec_id="TEST-1", project_root=tmp_path)
+
+    # 17 excecoes -> 2 paginas (MAX_OBS_PER_PAGE=15 + 2)
+    excecoes = [
+        {"NUMERO_OB": str(i), "RISCO": "CRITICO", "AUTONOMIA": 1.0, "KG_OB": 10.0}
+        for i in range(1, 18)
+    ]
+
+    def _fake_send_partial(*_args: Any, **kwargs: Any) -> int:
+        batch_out = Path(kwargs["batch_result_file"])
+        batch_out.write_text(
+            json.dumps(
+                [
+                    {"phase_key": f"{cfg.slug}_p01", "success": True},
+                    {"phase_key": f"{cfg.slug}_p02", "success": False},
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return 1
+
+    monkeypatch.setattr(hw, "send_whatsapp", _fake_send_partial)
+    code = _despachar_excecoes(ctx, cfg, tmp_path, excecoes, dry_run=False)
+    assert code == 4
+    notified = ler_estado(tmp_path / "seen_state.json")
+    assert set(notified.keys()) == {str(i) for i in range(1, 16)}
+    assert not (tmp_path / "seen_state.json.tmp").exists()
+
+    # Exit 22 preserva codigo 22 sem gravar os restantes
+    monkeypatch.setattr(hw, "send_whatsapp", lambda *_a, **_k: 22)
+    code22 = _despachar_excecoes(ctx, cfg, tmp_path, excecoes[15:], dry_run=False)
+    assert code22 == 22
+    assert set(ler_estado(tmp_path / "seen_state.json").keys()) == {
+        str(i) for i in range(1, 16)
+    }
+
+    # Falha de extracao com OracleQueueWorkerOfflineError devolve 26 (canonico)
+    (tmp_path / "consulta.sql").write_text("SELECT 1 FROM DUAL", encoding="utf-8")
+    (tmp_path / "card.png").write_bytes(b"stale")
+    monkeypatch.setattr(hr, "run_preflight", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        "promovidas.extracao.executar_consulta_promovida",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            oracle_queue.OracleQueueWorkerOfflineError("WORKER_OFFLINE", "offline")
+        ),
+    )
+    assert _executar_promocao(ctx, cfg, tmp_path, dry_run=False) == 26
+    assert not (tmp_path / "card.png").exists()

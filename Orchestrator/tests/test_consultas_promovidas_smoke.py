@@ -14,6 +14,9 @@ _SLUGS = (
     "quimicos-ruptura-compra",
     "qualidade-separacao-montagem",
     "qualidade-pecas-restricao-montagem",
+    "fila-maquina-tingimento",
+    "sincronismo-malha-ribana",
+    "sentinela-preco-zero-pedidos",
 )
 
 

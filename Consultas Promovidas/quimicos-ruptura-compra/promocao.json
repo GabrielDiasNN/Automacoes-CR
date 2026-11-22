@@ -16,7 +16,18 @@
       "count",
       "sum:QTD_SUGERIDA_COMPRA_KG"
     ],
-    "colunas": []
+    "colunas": [
+      "CD_REDUZIDO",
+      "DESCRICAO",
+      "ESTOQUE_DISPONIVEL_KG",
+      "PREVISTO_CONFIRMADO_KG",
+      "CONSUMO_MEDIO_DIA_KG",
+      "DIAS_COBERTURA",
+      "DATA_RUPTURA_PROJETADA",
+      "QTD_SUGERIDA_COMPRA_KG",
+      "SITUACAO_ALERTA",
+      "OBSERVACAO_DADOS"
+    ]
   },
   "excecao": {
     "titulo_alerta": "Sentinela de Ruptura de Químicos",

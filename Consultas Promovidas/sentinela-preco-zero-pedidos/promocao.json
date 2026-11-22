@@ -1,0 +1,41 @@
+{
+  "slug": "sentinela-preco-zero-pedidos",
+  "nome": "Sentinela Preco Zero Pedidos",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "CDPEDIDO",
+    "CDITEMPEDIDO"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Sentinela de Preço R$ 0,01 em Pedidos Abertos",
+    "kpis": [
+      "count"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Pedido Aberto com Preço R$ 0,01",
+    "condicoes": [
+      {
+        "coluna": "VLDIGITACAO",
+        "op": "lte",
+        "valor": 0.01
+      }
+    ],
+    "renotificar_apos_horas": 24,
+    "colunas_card": [
+      "CDPEDIDO",
+      "PEDIDOCLIENTE",
+      "NOME_FANTASIA",
+      "CDITEMPEDIDO",
+      "DSPRODUTO",
+      "VLDIGITACAO",
+      "VLPADRAO"
+    ]
+  }
+}

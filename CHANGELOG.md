@@ -2,6 +2,18 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.125] - 22/11/2026
+
+Fase 3 do roadmap (`docs/roadmap/roadmap-2026-2027.md`, primeira leva de expansão pelo backlog): promoção de 3 novas consultas sem adição de código Python no motor `lib/python/promovidas/`.
+
+### Adicionado
+
+- **3 novas consultas promovidas em `Consultas Promovidas/` (via `git mv` do acervo, modo `sombra`):**
+  - `CP-07` (`fila-maquina-tingimento`, ex-`bnf_fila_programada_por_maquina_tingimento.sql`): fila programada e UPs atrasadas por máquina de tingimento (`QT_ATRASADAS > 0`).
+  - `CP-08` (`sincronismo-malha-ribana`, ex-`pcp_sincronismo_malha_ribana.sql`): sincronismo entre malha principal e ribana para lojas Costa Rica (`STATUS_CONTROLE_ACAO` crítico).
+  - `CP-09` (`sentinela-preco-zero-pedidos`, ex-`com_precos_carteira_pedidos_abertos.sql`): sentinela de pedidos em aberto com preço simbólico `R$ 0,01` (`VLDIGITACAO <= 0.01`).
+- **Governança e smoke tests:** registrados `CP-07`, `CP-08` e `CP-09` em `docs/governanca/automation-criticality-map.md`, `Orchestrator/tests/test_consultas_promovidas_smoke.py` e `docs/oracle-schema/consultas/CATALOGO_QUERIES.md`.
+
 ## [1.3.124] - 22/11/2026
 
 Fase 2b do roadmap (`docs/roadmap/roadmap-2026-2027.md`): avaliação arquitetural de generalidade do motor `lib/python/promovidas/` frente à automação `OBs Paradas Fase` (`OBP-04`).
