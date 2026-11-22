@@ -38,6 +38,9 @@ A tabela abaixo consolida a governança, cadência e prazos operacionais das aut
 | **`CP-04`** | **[Sentinela Ruptura Quimicos](../runbooks/quimicos-ruptura-compra-runbook.md)** | **⚠️ ALTA** | **180 min** | Seg-Sex as 08:00 [modo sombra] | PCP / Compras / Tinturaria | Ruptura de corante/auxiliar gerando parada de tingimento ou compra emergencial. |
 | **`CP-05`** | **[Qualidade Separacao Montagem](../runbooks/qualidade-separacao-montagem-runbook.md)** | **⚠️ ALTA** | **60 min** | A cada 2h das 06:00 as 18:00 (Seg-Sab) [modo sombra] | Qualidade / Beneficiamento | OBs montadas fora da regra de separacao seguem para tingimento gerando reprocesso. |
 | **`CP-06`** | **[Pecas Restricao Montagem](../runbooks/qualidade-pecas-restricao-montagem-runbook.md)** | **⚠️ ALTA** | **60 min** | A cada 2h das 06:00 as 18:00 (Seg-Sab) [modo sombra] (CP-06) | Qualidade / Beneficiamento | Uso indevido de pecas com restricao em OBs brancas antes do tingimento. |
+| **`CP-07`** | **[Fila Maquina Tingimento](../runbooks/fila-maquina-tingimento-runbook.md)** | **💡 MÉDIA** | **60 min** | A cada 2h das 05:00 as 19:00 (Seg-Sex) e 05:00 as 13:00 (Sab) [modo sombra] | PCP / Tinturaria | Falta de visibilidade da fila programada e UPs atrasadas por máquina de tingimento. |
+| **`CP-08`** | **[Sincronismo Malha Ribana](../runbooks/sincronismo-malha-ribana-runbook.md)** | **💡 MÉDIA** | **120 min** | Seg-Sab as 07:00 e 14:00 [modo sombra] | PCP / Lojas | Descasamento entre malha principal e ribana travando expedição das lojas. |
+| **`CP-09`** | **[Sentinela Preco Zero Pedidos](../runbooks/sentinela-preco-zero-pedidos-runbook.md)** | **⚠️ ALTA** | **60 min** | A cada 2h das 07:00 as 19:00 (Seg-Sex) [modo sombra] | Comercial / Faturamento | Pedidos em aberto cadastrados com preço simbólico R$ 0,01 chegam ao faturamento. |
 
 ---
 

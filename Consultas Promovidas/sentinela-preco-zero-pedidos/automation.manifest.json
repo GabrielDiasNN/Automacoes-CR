@@ -1,0 +1,33 @@
+{
+  "id": "CP-09",
+  "name": "Sentinela Preco Zero Pedidos",
+  "slug": "sentinela-preco-zero-pedidos",
+  "criticality": "high",
+  "sla_minutes": 60,
+  "owner_area": "Comercial / Faturamento",
+  "entrypoint": "run.ps1",
+  "runtime": "promovida",
+  "channels": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "queue_group": "oracle",
+  "max_runtime_minutes": 15,
+  "max_retries": 0,
+  "schedule_summary": "A cada 2h das 07:00 as 19:00 (Seg-Sex) [modo sombra]",
+  "schedule": "{\"schedule_version\": 2, \"schedule_type\": \"cron\", \"cron_expression\": [\"0 7-19/2 * * 1-5\"], \"timezone\": \"America/Sao_Paulo\"}",
+  "runbook_path": "docs/runbooks/sentinela-preco-zero-pedidos-runbook.md",
+  "context_path": "Consultas Promovidas/sentinela-preco-zero-pedidos/CONTEXT.md",
+  "readme_path": "Consultas Promovidas/sentinela-preco-zero-pedidos/README.md",
+  "orchestrator": {
+    "script_path": "./Consultas Promovidas/sentinela-preco-zero-pedidos/run.ps1"
+  },
+  "dependencies": {
+    "oracle": true,
+    "outlook": false,
+    "whatsapp": true
+  },
+  "smoke_tests": [
+    "Orchestrator/tests/test_consultas_promovidas_smoke.py"
+  ]
+}

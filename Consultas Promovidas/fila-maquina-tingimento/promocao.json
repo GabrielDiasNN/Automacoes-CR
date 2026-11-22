@@ -1,0 +1,43 @@
+{
+  "slug": "fila-maquina-tingimento",
+  "nome": "Fila Máquina Tingimento",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "MQ"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Fila Programada por Máquina de Tingimento",
+    "kpis": [
+      "count",
+      "sum:QT_UPS_FILA",
+      "sum:QT_ATRASADAS",
+      "sum:KG_FILA",
+      "sum:HORAS_FILA"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Fila Programada por Máquina de Tingimento (Atrasos)",
+    "condicoes": [
+      {
+        "coluna": "QT_ATRASADAS",
+        "op": "gt",
+        "valor": 0
+      }
+    ],
+    "renotificar_apos_horas": 12,
+    "colunas_card": [
+      "MQ",
+      "NOME_MAQUINA",
+      "QT_UPS_FILA",
+      "QT_ATRASADAS",
+      "KG_FILA",
+      "HORAS_FILA"
+    ]
+  }
+}

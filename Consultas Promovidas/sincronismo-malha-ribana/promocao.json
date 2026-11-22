@@ -1,0 +1,40 @@
+{
+  "slug": "sincronismo-malha-ribana",
+  "nome": "Sincronismo Malha x Ribana",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "CODIGO_GRUPO"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Sincronismo Malha x Ribana (Lojas CR)",
+    "kpis": [
+      "count",
+      "sum:KG_PROG_MALHA",
+      "sum:KG_PROG_RIBANA"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Descasamento Crítico Malha x Ribana",
+    "condicoes": [
+      {
+        "coluna": "ORDEM_PRIORIDADE",
+        "op": "lte",
+        "valor": 2
+      }
+    ],
+    "renotificar_apos_horas": 24,
+    "colunas_card": [
+      "CODIGO_GRUPO",
+      "NOME_LOJA",
+      "PEDIDO",
+      "DIAS_ATE_ENTREGA",
+      "STATUS_CONTROLE_ACAO"
+    ]
+  }
+}
