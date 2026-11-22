@@ -6,7 +6,7 @@
 
 ## Sintomas e diagnóstico rápido
 
-1. Verificar o log da execução no Dashboard (`/execucoes`) ou em `Consultas Promovidas/fila-maquina-tingimento/Logs/`.
+1. Verificar o log da execução no Dashboard (`/execucoes`) ou em `Logs/fila-maquina-tingimento.jsonl`.
 2. Validar manualmente sem envio de WhatsApp:
    ```powershell
    pwsh -File ".\Consultas Promovidas\fila-maquina-tingimento\run.ps1" -DryRun

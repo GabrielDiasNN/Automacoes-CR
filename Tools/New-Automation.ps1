@@ -145,12 +145,12 @@ if (-not (Test-Path -LiteralPath $templateDir -PathType Container)) {
 
 $legacyArgsUsed = @()
 foreach ($pair in @(
-    @{ Name = "MacroName"; Value = $MacroName },
-    @{ Name = "XlsmName"; Value = $XlsmName },
-    @{ Name = "DaysOfWeek"; Value = $DaysOfWeek },
-    @{ Name = "Hours"; Value = $Hours },
-    @{ Name = "Minutes"; Value = $Minutes }
-)) {
+        @{ Name = "MacroName"; Value = $MacroName },
+        @{ Name = "XlsmName"; Value = $XlsmName },
+        @{ Name = "DaysOfWeek"; Value = $DaysOfWeek },
+        @{ Name = "Hours"; Value = $Hours },
+        @{ Name = "Minutes"; Value = $Minutes }
+    )) {
     if (-not [string]::IsNullOrWhiteSpace([string]$pair.Value)) {
         $legacyArgsUsed += $pair.Name
     }
@@ -173,9 +173,11 @@ $runbookPath = Join-Path $runbookDir "$slug-runbook.md"
 $smokeTestPath = Join-Path $orchestratorTestsDir "test_$slug.py"
 $effectiveQueueGroup = if ($isPromovida -and [string]::IsNullOrWhiteSpace($QueueGroup)) {
     "oracle"
-} elseif ([string]::IsNullOrWhiteSpace($QueueGroup)) {
+}
+elseif ([string]::IsNullOrWhiteSpace($QueueGroup)) {
     $slug.Replace("-", "_")
-} else {
+}
+else {
     $QueueGroup.Trim()
 }
 $channels = New-Object System.Collections.Generic.List[string]
@@ -184,7 +186,8 @@ if (-not $WithoutEmail -and -not $isPromovida) { $channels.Add("email") }
 if ($WithWhatsApp) { $channels.Add("whatsapp") }
 $channelsJson = if ($channels.Count -gt 0) {
     ($channels | ConvertTo-Json -Compress)
-} else {
+}
+else {
     "[]"
 }
 $dependencyOracle = if ($WithOracle -or $isPromovida) { "true" } else { "false" }
@@ -199,20 +202,20 @@ if (Test-Path -LiteralPath $automationDir) {
 $runnerFileName = if ($isPromovida) { "promocao.json" } else { "run_$testId.py" }
 
 $replacements = @{
-    "[Nome da Automação]" = $Name
-    "TEMPLATE_SLUG" = $slug
-    "TEMPLATE_TEST_ID" = $testId
-    "TEMPLATE_RUNNER" = $runnerFileName
+    "[Nome da Automação]"  = $Name
+    "TEMPLATE_SLUG"        = $slug
+    "TEMPLATE_TEST_ID"     = $testId
+    "TEMPLATE_RUNNER"      = $runnerFileName
     "TEMPLATE_CRITICALITY" = $Criticality
-    "TEMPLATE_OWNER_AREA" = $OwnerArea
-    "TEMPLATE_RUNTIME" = $Runtime
+    "TEMPLATE_OWNER_AREA"  = $OwnerArea
+    "TEMPLATE_RUNTIME"     = $Runtime
     "TEMPLATE_QUEUE_GROUP" = $effectiveQueueGroup
 }
 
 $readmeContent = Convert-Template -Content (Get-TemplateContent -TemplateName "README.md") -Replacements $replacements
 $contextContent = Convert-Template -Content (Get-TemplateContent -TemplateName "CONTEXT.md") -Replacements $replacements
 $runContent = if ($isPromovida) {
-@"
+    @"
 [CmdletBinding()]
 param(
     [string]`$ExecId = "",
@@ -249,11 +252,12 @@ if (`$DryRun) { `$runnerArgs += "--dry-run" }
 `$exitCode = Invoke-HubPythonRunner -PythonExe `$pythonExe -Arguments `$runnerArgs -WorkingDirectory `$ScriptDir
 exit `$exitCode
 "@
-} else {
+}
+else {
     Convert-Template -Content (Get-TemplateContent -TemplateName "run.ps1") -Replacements $replacements
 }
 $runnerContent = if ($isPromovida) {
-@"
+    @"
 {
   "slug": "$slug",
   "nome": "$Name",
@@ -268,7 +272,8 @@ $runnerContent = if ($isPromovida) {
   }
 }
 "@
-} else {
+}
+else {
     Convert-Template -Content (Get-TemplateContent -TemplateName "run_template.py") -Replacements $replacements
 }
 $manifestContent = Convert-Template -Content (Get-TemplateContent -TemplateName "automation.manifest.json") -Replacements $replacements
@@ -276,6 +281,7 @@ if ($isPromovida) {
     $manifestContent = $manifestContent.Replace("$Name/CONTEXT.md", "$automationRelPosix/CONTEXT.md")
     $manifestContent = $manifestContent.Replace("$Name/README.md", "$automationRelPosix/README.md")
     $manifestContent = $manifestContent.Replace("./$Name/run.ps1", "./$automationRelPosix/run.ps1")
+    $manifestContent = $manifestContent.Replace("Orchestrator/tests/test_$slug.py", "Orchestrator/tests/test_consultas_promovidas_smoke.py")
 }
 $smokeTestContent = ""
 
@@ -300,13 +306,13 @@ if (-not (Test-Path -LiteralPath $smokeTestTemplatePath -PathType Leaf)) {
 $runbookContent = Get-Content -LiteralPath $runbookTemplatePath -Raw -Encoding UTF8
 $smokeTestContent = Get-Content -LiteralPath $smokeTestTemplatePath -Raw -Encoding UTF8
 $runbookContent = $runbookContent.Replace("[Nome da Automação]", $Name)
-$runbookContent = $runbookContent.Replace("[Caminho do Diretório, ex: Receitas Bloqueadas]", $Name)
+$runbookContent = $runbookContent.Replace("[Caminho do Diretório, ex: Receitas Bloqueadas]", $(if ($isPromovida) { $automationRelPosix } else { $Name }))
 $runbookContent = $runbookContent.Replace("[CRÍTICA / ALTA / MÉDIA / BAIXA]", $Criticality.ToUpperInvariant())
 $runbookContent = $runbookContent.Replace("[Tempo de recuperação tolerado, ex: 2 horas]", "$SlaMinutes minutos")
 $runbookContent = $runbookContent.Replace("[Horários cron, ex: Seg-Sex às 07:30, 10:00, 14:00]", "Definir no cadastro operacional")
 $runbookContent = $runbookContent.Replace("[Nome / Setor, ex: Laboratório de Receitas / PCP]", $OwnerArea)
 $runbookContent = $runbookContent.Replace("[Contato TI, ex: suporte.automacoes@empresa.com]", $SupportContact)
-$runbookContent = $runbookContent.Replace("<CAMINHO_AUTOMACAO>", "$BasePath\$Name")
+$runbookContent = $runbookContent.Replace("<CAMINHO_AUTOMACAO>", $(if ($isPromovida) { "$BasePath\$automationRelDir" } else { "$BasePath\$Name" }))
 $runbookContent = $runbookContent.Replace("[Versão]", "0.1.0")
 $smokeTestContent = Convert-Template -Content $smokeTestContent -Replacements $replacements
 if ($isPromovida) {
@@ -349,16 +355,16 @@ if (-not $DryRun) {
         Write-Step "Diretorio criado: $automationDir"
     }
 
-    if ($PSCmdlet.ShouldProcess($logsDir, "Criar diretorio de logs")) {
+    if (-not $isPromovida -and $PSCmdlet.ShouldProcess($logsDir, "Criar diretorio de logs")) {
         New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
         Write-Step "Diretorio criado: $logsDir"
     }
 }
 else {
     Write-Step "Criaria diretorio: $automationDir"
-    Write-Step "Criaria diretorio: $logsDir"
+    if (-not $isPromovida) { Write-Step "Criaria diretorio: $logsDir" }
     Write-Step "Criaria diretorio: $runbookDir"
-    Write-Step "Criaria diretorio: $orchestratorTestsDir"
+    if (-not $isPromovida) { Write-Step "Criaria diretorio: $orchestratorTestsDir" }
 }
 
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "README.md") -Content $readmeContent -Operation "Gerar README da automacao"
@@ -367,9 +373,11 @@ Invoke-SafeWrite -FilePath (Join-Path $automationDir "run.ps1") -Content $runCon
 Invoke-SafeWrite -FilePath (Join-Path $automationDir $runnerFileName) -Content $runnerContent -Operation "Gerar runner Python da automacao"
 Invoke-SafeWrite -FilePath (Join-Path $automationDir "automation.manifest.json") -Content $manifestContent -Operation "Gerar automation.manifest.json"
 Invoke-SafeWrite -FilePath $runbookPath -Content $runbookContent -Operation "Gerar runbook operacional"
-Invoke-SafeWrite -FilePath $smokeTestPath -Content $smokeTestContent -Operation "Gerar smoke test inicial"
+if (-not $isPromovida) {
+    Invoke-SafeWrite -FilePath $smokeTestPath -Content $smokeTestContent -Operation "Gerar smoke test inicial"
+}
 
-if ($WithWhatsApp) {
+if ($WithWhatsApp -and -not $isPromovida) {
     Invoke-SafeWrite -FilePath (Join-Path $automationDir "RunWhatsApp.bat") -Content $runBatContent -Operation "Gerar RunWhatsApp.bat"
 }
 

@@ -18,6 +18,14 @@
     "unknown_references": 8
   },
   "referenced_by_file": {
+    "Consultas Promovidas/fila-maquina-tingimento/consulta.sql": [
+      "MAQUINA",
+      "OB",
+      "OB_FASES",
+      "OB_PRODUTO",
+      "UNIDADE_PROGRAMACAO",
+      "UP_ORDEM_MVTO"
+    ],
     "Consultas Promovidas/gargalo-receitas-tingimento/consulta.sql": [
       "CADASTRO_RECEITAS",
       "LABRECEITA_BLOQUEADA",
@@ -86,6 +94,38 @@
       "PEDPRODUCAO",
       "PEDPRODUCAOOB",
       "PESSOASFJ"
+    ],
+    "Consultas Promovidas/sentinela-preco-zero-pedidos/consulta.sql": [
+      "FILIAIS",
+      "ITENSPEDIDOCOMERCIAL",
+      "ITENSPEDIDOGRADE",
+      "ITENS_ESTOQUE",
+      "PEDIDOCOMERCIAL",
+      "PESSOASFJ",
+      "XX2_ENUMERATES",
+      "XX2_ENUMITEM"
+    ],
+    "Consultas Promovidas/sincronismo-malha-ribana/consulta.sql": [
+      "BD_BAS_MASCPRODACAB",
+      "ENG_PRODG_ACABADO",
+      "FASES_FLUXO",
+      "GERAPECADESTINOOB",
+      "ITENSPEDIDOCOMERCIAL",
+      "ITENSPEDIDOGRADE",
+      "ITENSPEDIDOQTDES",
+      "ITENS_ESTOQUE",
+      "LOTES_PRODUTO",
+      "OB",
+      "OBSERVACAO",
+      "OB_FASES",
+      "OB_PRODUTO",
+      "OFORDENS",
+      "OFPEDIDO",
+      "PECAS_ROMANEIO_SAIDA",
+      "PEDIDOCOMERCIAL",
+      "PEDPRODUCAOOB",
+      "PESSOASFJ",
+      "VW_BNF_FASEATUALOB"
     ],
     "Montagem de Terceirizados/SQL-MontagemTerceirizados.sql": [
       "ENGEITEMESTOARTCRU",
@@ -344,14 +384,6 @@
       "PEDIDOCOMERCIAL",
       "PEDPRODUCAOOB",
       "PESSOASFJ"
-    ],
-    "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_fila_programada_por_maquina_tingimento.sql": [
-      "MAQUINA",
-      "OB",
-      "OB_FASES",
-      "OB_PRODUTO",
-      "UNIDADE_PROGRAMACAO",
-      "UP_ORDEM_MVTO"
     ],
     "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_lavacao_de_maquina_ultimas_lavacoes_feitas.sql": [
       "PARADAS_MAQUINA",
@@ -1844,16 +1876,6 @@
       "XX2_ENUMERATES",
       "XX2_ENUMITEM"
     ],
-    "docs/oracle-schema/consultas/07_expedicao_pedidos_comercial/com_precos_carteira_pedidos_abertos.sql": [
-      "FILIAIS",
-      "ITENSPEDIDOCOMERCIAL",
-      "ITENSPEDIDOGRADE",
-      "ITENS_ESTOQUE",
-      "PEDIDOCOMERCIAL",
-      "PESSOASFJ",
-      "XX2_ENUMERATES",
-      "XX2_ENUMITEM"
-    ],
     "docs/oracle-schema/consultas/07_expedicao_pedidos_comercial/com_rastreabilidade_ob_romaneio_nfe.sql": [
       "BD_FAT_FATURAMENTO",
       "GERAPECADESTINOOB",
@@ -2258,28 +2280,6 @@
       "PEDPRODUCAOOB",
       "UNIDADE_MEDIDA",
       "VW_PI_CBPAP01_PROCBENEF"
-    ],
-    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_sincronismo_malha_ribana.sql": [
-      "BD_BAS_MASCPRODACAB",
-      "ENG_PRODG_ACABADO",
-      "FASES_FLUXO",
-      "GERAPECADESTINOOB",
-      "ITENSPEDIDOCOMERCIAL",
-      "ITENSPEDIDOGRADE",
-      "ITENSPEDIDOQTDES",
-      "ITENS_ESTOQUE",
-      "LOTES_PRODUTO",
-      "OB",
-      "OBSERVACAO",
-      "OB_FASES",
-      "OB_PRODUTO",
-      "OFORDENS",
-      "OFPEDIDO",
-      "PECAS_ROMANEIO_SAIDA",
-      "PEDIDOCOMERCIAL",
-      "PEDPRODUCAOOB",
-      "PESSOASFJ",
-      "VW_BNF_FASEATUALOB"
     ],
     "docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_top5_faturamento_matriz_mensal.sql": [
       "BD_FAT_FATURAMENTO",

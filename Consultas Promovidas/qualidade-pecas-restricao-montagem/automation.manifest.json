@@ -14,7 +14,7 @@
   "queue_group": "oracle",
   "max_runtime_minutes": 15,
   "max_retries": 0,
-  "schedule_summary": "A cada 2h das 06:00 as 18:00 (Seg-Sab) [modo sombra] (CP-06)",
+  "schedule_summary": "A cada 2h das 06:00 as 18:00 (Seg-Sab) [modo sombra]",
   "schedule": "{\"schedule_version\": 2, \"schedule_type\": \"cron\", \"cron_expression\": [\"0 6-18/2 * * 1-6\"], \"timezone\": \"America/Sao_Paulo\"}",
   "runbook_path": "docs/runbooks/qualidade-pecas-restricao-montagem-runbook.md",
   "context_path": "Consultas Promovidas/qualidade-pecas-restricao-montagem/CONTEXT.md",

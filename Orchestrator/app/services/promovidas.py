@@ -52,6 +52,27 @@ def _ler_snapshot_latest(project_root: Path, slug: str) -> dict[str, Any] | None
     return dados if isinstance(dados, dict) else None
 
 
+def _int_seguro(valor: Any, padrao: int = 0) -> int:
+    if isinstance(valor, bool):
+        return padrao
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return padrao
+
+
+def _kpis_seguros(valor: Any) -> dict[str, Any]:
+    if isinstance(valor, dict):
+        return dict(valor)
+    if isinstance(valor, str):
+        try:
+            parsed: Any = json.loads(valor)
+            return dict(parsed) if isinstance(parsed, dict) else {}
+        except ValueError:
+            return {}
+    return {}
+
+
 def listar_promocoes(project_root: Path) -> list[dict[str, Any]]:
     """Lista todas as promocoes configuradas em ``Consultas Promovidas/*/promocao.json``."""
     base = _promovidas_dir(project_root)
@@ -78,6 +99,10 @@ def listar_promocoes(project_root: Path) -> list[dict[str, Any]]:
         snap = _ler_snapshot_latest(project_root, slug)
         cfg_painel = cfg.get("painel")
         painel: dict[str, Any] = cfg_painel if isinstance(cfg_painel, dict) else {}
+        destinos_raw = cfg.get("destinos")
+        destinos = (
+            list(destinos_raw) if isinstance(destinos_raw, list) else ["dashboard"]
+        )
         generated_at = (
             str(snap["generated_at"]) if snap and snap.get("generated_at") else None
         )
@@ -87,13 +112,15 @@ def listar_promocoes(project_root: Path) -> list[dict[str, Any]]:
                 "nome": str(cfg.get("nome") or slug),
                 "titulo": str(painel.get("titulo") or cfg.get("nome") or slug),
                 "modo": str(cfg.get("modo") or "sombra"),
-                "destinos": list(cfg.get("destinos") or ["dashboard"]),
+                "destinos": destinos,
                 "has_snapshot": snap is not None,
                 "generated_at": generated_at,
                 "age_minutes": _idade_minutos(generated_at),
-                "total_rows": int(snap.get("total_rows", 0)) if snap else 0,
-                "excecoes_count": int(snap.get("excecoes_count", 0)) if snap else 0,
-                "kpis": dict(snap.get("kpis") or {}) if snap else {},
+                "total_rows": _int_seguro(snap.get("total_rows"), 0) if snap else 0,
+                "excecoes_count": (
+                    _int_seguro(snap.get("excecoes_count"), 0) if snap else 0
+                ),
+                "kpis": _kpis_seguros(snap.get("kpis")) if snap else {},
             }
         )
     return itens
@@ -138,9 +165,9 @@ def obter_historico(
             "slug": str(r["slug"]),
             "generated_at": str(r["generated_at"]),
             "modo": str(r["modo"]),
-            "total_rows": int(r["total_rows"]),
-            "excecoes_count": int(r["excecoes_count"]),
-            "kpis": json.loads(str(r["kpis_json"])),
+            "total_rows": _int_seguro(r["total_rows"], 0),
+            "excecoes_count": _int_seguro(r["excecoes_count"], 0),
+            "kpis": _kpis_seguros(r["kpis_json"]),
         }
         for r in rows
     ]

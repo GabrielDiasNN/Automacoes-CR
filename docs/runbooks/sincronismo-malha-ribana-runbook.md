@@ -6,7 +6,7 @@
 
 ## Sintomas e diagnóstico rápido
 
-1. Verificar o log da execução no Dashboard (`/execucoes`) ou em `Consultas Promovidas/sincronismo-malha-ribana/Logs/`.
+1. Verificar o log da execução no Dashboard (`/execucoes`) ou em `Logs/sincronismo-malha-ribana.jsonl`.
 2. Validar manualmente sem envio de WhatsApp:
    ```powershell
    pwsh -File ".\Consultas Promovidas\sincronismo-malha-ribana\run.ps1" -DryRun

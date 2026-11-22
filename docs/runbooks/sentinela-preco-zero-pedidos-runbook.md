@@ -6,7 +6,7 @@
 
 ## Sintomas e diagnóstico rápido
 
-1. Verificar o log da execução no Dashboard (`/execucoes`) ou em `Consultas Promovidas/sentinela-preco-zero-pedidos/Logs/`.
+1. Verificar o log da execução no Dashboard (`/execucoes`) ou em `Logs/sentinela-preco-zero-pedidos.jsonl`.
 2. Validar manualmente sem envio de WhatsApp:
    ```powershell
    pwsh -File ".\Consultas Promovidas\sentinela-preco-zero-pedidos\run.ps1" -DryRun

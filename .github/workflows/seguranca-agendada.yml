@@ -104,4 +104,11 @@ jobs:
           limpeza de historico e registre a excecao em .gitleaks.toml se for
           falso positivo.
           "@
-          gh issue create --repo "${{ github.repository }}" --title $titulo --body $corpo --label seguranca
+          $abertas = gh issue list --repo "${{ github.repository }}" --label seguranca --state open --json number,title | ConvertFrom-Json
+          $existente = $abertas | Where-Object { $_.title -like 'Seguranca: gitleaks*' } | Sort-Object number -Descending | Select-Object -First 1
+          if ($existente) {
+            gh issue comment $existente.number --repo "${{ github.repository }}" --body $corpo
+          }
+          else {
+            gh issue create --repo "${{ github.repository }}" --title $titulo --body $corpo --label seguranca
+          }

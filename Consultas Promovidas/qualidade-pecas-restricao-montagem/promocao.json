@@ -16,7 +16,18 @@
       "count",
       "sum:PECAS_COM_RESTRICAO"
     ],
-    "colunas": []
+    "colunas": [
+      "NUMERO_OB",
+      "ARTIGO",
+      "DESCRICAO_ITEM",
+      "PECAS_CONFIRMADAS",
+      "PECAS_COM_RESTRICAO",
+      "PECAS_SEM_RESTRICAO",
+      "FASE_ATUAL",
+      "ST_FASE",
+      "OPERADOR",
+      "DATA_EMISSAO_ORDEM"
+    ]
   },
   "excecao": {
     "titulo_alerta": "Conferência de Peças com Restrição na Montagem",

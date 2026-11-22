@@ -127,3 +127,32 @@ def test_api_promovidas_lista_latest_historico_e_erros(
         ).status_code
         == 400
     )
+
+
+@pytest.mark.integracao
+def test_preflight_aceita_consulta_promovida_sem_whatsapp_config(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Modelo 2 usa promocao.json em vez de whatsapp-config.json."""
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.setattr("app.routers.automations.PROJECT_ROOT", str(root))
+    manifest = json.loads(
+        (
+            root / "Consultas Promovidas" / "rama-risco-atraso" / "automation.manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    payload = {
+        "name": manifest["name"],
+        "script_path": manifest["orchestrator"]["script_path"],
+        "queue_group": manifest["queue_group"],
+        "sla_minutes": manifest["sla_minutes"],
+        "max_runtime_minutes": manifest["max_runtime_minutes"],
+        "max_retries": manifest["max_retries"],
+        "notification_channels": ",".join(manifest["channels"]),
+    }
+    resp = client.post("/api/automations/preflight", json=payload, headers=AUTH_HEADERS)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["valid"] is True, body
+    assert body["governance"]["status"] != "incident"
+    assert body["governance"]["blocking_issues"] == []

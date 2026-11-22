@@ -89,9 +89,14 @@ export function PcpPage() {
     return filteredRows.slice(start, start + PAGE_SIZE);
   }, [filteredRows, currentPage]);
 
+  const rowKeyMap = useMemo(
+    () => new Map(pagedRows.map((row, index) => [row, `${currentPage}-${index}`])),
+    [pagedRows, currentPage],
+  );
+
   const columns = useMemo<Column<Record<string, unknown>>[]>(() => {
     const cols = snapRes.data?.columns ?? [];
-    return cols.slice(0, 10).map((col) => ({
+    return cols.map((col) => ({
       key: col,
       header: col,
       render: (row) => formatCellValue(row[col]),
@@ -215,14 +220,16 @@ export function PcpPage() {
                       value={formatNumber(snapRes.data.excecoes_count)}
                       tone={snapRes.data.excecoes_count > 0 ? "amber" : "green"}
                     />
-                    {Object.entries(snapRes.data.kpis).map(([key, val]) => (
-                      <StatTile
-                        key={key}
-                        label={formatKpiLabel(key)}
-                        value={formatCellValue(val)}
-                        big={false}
-                      />
-                    ))}
+                    {Object.entries(snapRes.data.kpis)
+                      .filter(([key]) => key !== "count")
+                      .map(([key, val]) => (
+                        <StatTile
+                          key={key}
+                          label={formatKpiLabel(key)}
+                          value={formatCellValue(val)}
+                          big={false}
+                        />
+                      ))}
                   </div>
                 </Card>
 
@@ -251,7 +258,7 @@ export function PcpPage() {
                       <DataTable
                         columns={columns}
                         rows={pagedRows}
-                        rowKey={(row) => JSON.stringify(row)}
+                        rowKey={(row) => rowKeyMap.get(row) ?? ""}
                       />
                       {totalPages > 1 && (
                         <Pager

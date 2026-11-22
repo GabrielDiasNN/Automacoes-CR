@@ -1,6 +1,6 @@
 {
   "slug": "fila-maquina-tingimento",
-  "nome": "Fila Máquina Tingimento",
+  "nome": "Fila Maquina Tingimento",
   "consulta": "consulta.sql",
   "modo": "sombra",
   "chave": [

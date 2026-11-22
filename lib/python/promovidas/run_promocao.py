@@ -16,6 +16,25 @@ import oracle_extract
 from . import card, config, estado, extracao, regras, snapshot
 
 RETENCAO_LOG_DIAS: Final[int] = 14
+CODIGOS_SEM_FALHA: Final[tuple[int, ...]] = (0, 2, 22)
+EXIT_REAUTENTICACAO: Final[int] = 21
+EXIT_ADIADO: Final[int] = 22
+EXIT_FALHA_ORQUESTRACAO: Final[int] = 4
+
+
+def _limpar_artefatos(pasta: Path) -> None:
+    """Remove artefatos residuais de execucoes anteriores na pasta da promocao."""
+    for nome in (
+        "card.png",
+        "message.txt",
+        "cards_manifest.json",
+        "batch_input.json",
+        "batch_result.json",
+        "seen_state.json.tmp",
+    ):
+        hr.remove_quietly(pasta / nome)
+    for cartao in pasta.glob("card_*.png"):
+        hr.remove_quietly(cartao)
 
 
 def _resolver_destino_whatsapp(cfg: config.ConfigPromocao) -> tuple[str, str]:
@@ -35,17 +54,43 @@ def _resolver_destino_whatsapp(cfg: config.ConfigPromocao) -> tuple[str, str]:
     return destino, client_id
 
 
+def _resultado_card_unico(exit_code: int) -> tuple[int, bool]:
+    if exit_code == 0:
+        return 0, True
+    if exit_code in (EXIT_REAUTENTICACAO, EXIT_ADIADO):
+        return exit_code, False
+    return EXIT_FALHA_ORQUESTRACAO, False
+
+
+def _resultado_lote(
+    entrega: hw.EntregaWhatsApp, exit_code: int
+) -> tuple[int, bool]:
+    if entrega.status == "AllSent":
+        return 0, True
+    if entrega.status == "PartialSent":
+        code_parcial = (
+            EXIT_REAUTENTICACAO
+            if exit_code == EXIT_REAUTENTICACAO
+            else EXIT_FALHA_ORQUESTRACAO
+        )
+        return code_parcial, True
+    if exit_code in (EXIT_REAUTENTICACAO, EXIT_ADIADO):
+        return exit_code, False
+    return EXIT_FALHA_ORQUESTRACAO, False
+
+
 def _enviar_whatsapp(
     ctx: hr.HubRunContext,
     cfg: config.ConfigPromocao,
     pasta: Path,
     manifest_path: Path,
+    state_tmp_path: Path,
 ) -> tuple[int, bool]:
     """Envia cards gerados via ``Send-WhatsApp.ps1`` e devolve (exit_code, commit_state)."""
     resultado = hw.read_cards_manifest(manifest_path, base_dir=pasta)
     if not resultado.valid or not resultado.cards:
         hr.log(ctx, f"Manifesto invalido: {resultado.error}", "ERROR", step="dispatch")
-        return 4, False
+        return EXIT_FALHA_ORQUESTRACAO, False
 
     destino, client_id = _resolver_destino_whatsapp(cfg)
     batch_in = pasta / "batch_input.json"
@@ -63,17 +108,18 @@ def _enviar_whatsapp(
         batch_result_file=batch_out,
         step="dispatch",
     )
-    if exit_code != 0:
-        return exit_code, False
+
+    if len(resultado.cards) == 1:
+        return _resultado_card_unico(exit_code)
 
     entrega = hw.resolve_whatsapp_batch_delivery(
         resultado.cards,
         batch_out,
-        pasta / "seen_state.json.tmp",
+        state_tmp_path,
         wa_exit_code=exit_code,
         on_warn=hr.warn_logger(ctx, "dispatch"),
     )
-    return (0 if entrega.should_commit_state else 4), entrega.should_commit_state
+    return _resultado_lote(entrega, exit_code)
 
 
 def _despachar_excecoes(
@@ -87,6 +133,7 @@ def _despachar_excecoes(
     if "whatsapp" not in cfg.destinos or cfg.excecao is None or not excecoes:
         return 0
     state_path = pasta / "seen_state.json"
+    state_tmp_path = pasta / "seen_state.json.tmp"
     pendentes, proximo_estado = estado.selecionar_pendentes(
         excecoes,
         cfg.chave,
@@ -109,14 +156,18 @@ def _despachar_excecoes(
         hr.log(ctx, "[DRY-RUN] Envio WhatsApp e commit de estado ignorados.", "INFO")
         return 0
 
+    estado.gravar_estado(state_tmp_path, proximo_estado, exec_id=ctx.exec_id)
     hr.start_step(
         ctx, "dispatch", mensagem=f"Enviando alerta WhatsApp (modo={cfg.modo})"
     )
-    code, commit = _enviar_whatsapp(ctx, cfg, pasta, manifest_path)
-    hr.complete_step(ctx, ok=code == 0)
-    if commit:
-        estado.gravar_estado(state_path, proximo_estado, exec_id=ctx.exec_id)
-    return code
+    try:
+        code, commit = _enviar_whatsapp(ctx, cfg, pasta, manifest_path, state_tmp_path)
+        hr.complete_step(ctx, ok=code in (0, EXIT_ADIADO))
+        if commit and state_tmp_path.exists():
+            os.replace(state_tmp_path, state_path)
+        return code
+    finally:
+        hr.remove_quietly(state_tmp_path)
 
 
 def _oracle_logger(ctx: hr.HubRunContext) -> Any:
@@ -133,14 +184,21 @@ def _executar_promocao(
     *,
     dry_run: bool,
 ) -> int:
+    _limpar_artefatos(pasta)
     sql_path = pasta / cfg.consulta
+    hr.start_step(ctx, "preflight", mensagem="Oracle e Python configurados")
+    oracle_pf = hr.oracle_preflight_from_env()
     ok_pf = hr.run_preflight(
         ctx,
         [Path(sys.executable), sql_path],
-        oracle=hr.oracle_preflight_from_env(),
+        oracle=oracle_pf,
     )
+    hr.complete_step(ctx, ok=ok_pf)
     if not ok_pf:
-        return 9
+        return hr.oracle_preflight_exit_code(
+            oracle_pf,
+            outros_checks=lambda: hr.run_preflight(ctx, [Path(sys.executable), sql_path]),
+        )
 
     hr.start_step(ctx, "extract", mensagem=f"Executando {cfg.consulta}")
     try:
@@ -154,7 +212,8 @@ def _executar_promocao(
     except Exception as exc:  # pylint: disable=broad-exception-caught
         hr.complete_step(ctx, ok=False)
         hr.log(ctx, str(exc), "ERROR", step="extract")
-        return oracle_extract.classify_oracle_exit_code(exc)
+        py_code = oracle_extract.classify_oracle_exit_code(exc)
+        return hr.resolve_oracle_failure_exit_code(py_code, default_exit_code=3)
     hr.complete_step(ctx, ok=True)
 
     kpis = regras.calcular_kpis(rows, cfg.painel.kpis)
@@ -187,6 +246,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         trace_slug=cfg.slug,
         lock_key=f"PROM-{cfg.slug.upper()}",
         log_dir=raiz / "Logs",
+        non_failure_codes=CODIGOS_SEM_FALHA,
     )
     ctx = hr.create_run_context(
         spec,

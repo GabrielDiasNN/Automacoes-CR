@@ -77,6 +77,8 @@ describe("PcpPage — consultas promovidas snapshot-first", () => {
     expect(screen.getByText("Pulmão Ramas")).toBeInTheDocument();
     expect(await screen.findByText("MALHAS SUL")).toBeInTheDocument();
     expect(screen.getByText("TEXTIL NORTE")).toBeInTheDocument();
+    expect(screen.getByText("Linhas no snapshot")).toBeInTheDocument();
+    expect(screen.queryByText("Total de linhas")).not.toBeInTheDocument();
 
     const search = screen.getByLabelText("Filtrar linhas do snapshot");
     fireEvent.change(search, { target: { value: "NORTE" } });

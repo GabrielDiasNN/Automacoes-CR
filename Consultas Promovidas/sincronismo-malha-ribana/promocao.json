@@ -1,6 +1,6 @@
 {
   "slug": "sincronismo-malha-ribana",
-  "nome": "Sincronismo Malha x Ribana",
+  "nome": "Sincronismo Malha Ribana",
   "consulta": "consulta.sql",
   "modo": "sombra",
   "chave": [
@@ -17,7 +17,18 @@
       "sum:KG_PROG_MALHA",
       "sum:KG_PROG_RIBANA"
     ],
-    "colunas": []
+    "colunas": [
+      "CODIGO_GRUPO",
+      "NOME_LOJA",
+      "PEDIDO",
+      "DIAS_ATE_ENTREGA",
+      "STATUS_CONTROLE_ACAO",
+      "OBS_MALHA",
+      "FASE_MALHA",
+      "OBS_RIBANA",
+      "FASE_RIBANA",
+      "RECOMENDACAO_OPERACIONAL"
+    ]
   },
   "excecao": {
     "titulo_alerta": "Descasamento Crítico Malha x Ribana",
