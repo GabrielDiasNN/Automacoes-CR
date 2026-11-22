@@ -64,14 +64,14 @@ class CatalogManifest(BaseModel):
     @field_validator("channels")
     @classmethod
     def v_channels(cls, value: list[str]) -> list[str]:
-        allowed = ["email", "whatsapp"]
+        allowed = ["email", "whatsapp", "dashboard"]
         normalized: list[str] = []
         for item in value:
             current = str(item or "").strip().lower()
             if not current:
                 continue
             if current not in allowed:
-                raise ValueError("channels aceita apenas email e whatsapp.")
+                raise ValueError("channels aceita apenas email, whatsapp e dashboard.")
             if current not in normalized:
                 normalized.append(current)
         return normalized
@@ -132,7 +132,7 @@ def _format_value(value: Any) -> str | None:
 def channels_to_csv(channels: list[str]) -> str | None:
     if not channels:
         return None
-    allowed = ["email", "whatsapp"]
+    allowed = ["email", "whatsapp", "dashboard"]
     ordered = [item for item in allowed if item in channels]
     return ",".join(ordered) if ordered else None
 
@@ -146,9 +146,18 @@ def _path_exists(project_root: Path, raw_path: str | None) -> bool:
         return False
 
 
-def _load_manifest(manifest_path: Path) -> CatalogEntry:
+def _load_manifest(
+    manifest_path: Path, project_root: Path | None = None
+) -> CatalogEntry:
     payload: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
-    payload["directory_name"] = manifest_path.parent.name
+    if project_root is not None:
+        payload["directory_name"] = (
+            manifest_path.parent.resolve()
+            .relative_to(project_root.resolve())
+            .as_posix()
+        )
+    else:
+        payload["directory_name"] = manifest_path.parent.name
     manifest = CatalogManifest.model_validate(payload)
     return CatalogEntry(manifest=manifest, manifest_path=manifest_path)
 
@@ -158,20 +167,32 @@ def _load_manifest(manifest_path: Path) -> CatalogEntry:
 _MANIFESTS_CACHE: list[tuple[dict[str, float], list[CatalogEntry]]] = []
 
 
+def _iter_manifest_paths(root: Path, include_template: bool) -> list[Path]:
+    bases = [root]
+    promovidas_root = root / "Consultas Promovidas"
+    if promovidas_root.is_dir():
+        bases.append(promovidas_root)
+    paths: list[Path] = []
+    for base in bases:
+        for child in sorted(base.iterdir(), key=lambda item: item.name.lower()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            if child.name == "_Template" and not include_template:
+                continue
+            manifest_path = child / "automation.manifest.json"
+            if manifest_path.exists():
+                paths.append(manifest_path)
+    return paths
+
+
 def _build_manifests_mtime_snapshot(
     root: Path, include_template: bool
 ) -> dict[str, float]:
     """Coleta os mtimes dos manifests presentes no disco."""
-    snapshot: dict[str, float] = {}
-    for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
-        if not child.is_dir() or child.name.startswith("."):
-            continue
-        if child.name == "_Template" and not include_template:
-            continue
-        manifest_path = child / "automation.manifest.json"
-        if manifest_path.exists():
-            snapshot[str(manifest_path)] = manifest_path.stat().st_mtime
-    return snapshot
+    return {
+        str(manifest_path): manifest_path.stat().st_mtime
+        for manifest_path in _iter_manifest_paths(root, include_template)
+    }
 
 
 def load_catalog_manifests(
@@ -185,18 +206,10 @@ def load_catalog_manifests(
         if cached_mtimes == current_mtimes:
             return cached_entries
 
-    manifests: list[CatalogEntry] = []
-    for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
-        if not child.is_dir():
-            continue
-        if child.name.startswith("."):
-            continue
-        if child.name == "_Template" and not include_template:
-            continue
-        manifest_path = child / "automation.manifest.json"
-        if not manifest_path.exists():
-            continue
-        manifests.append(_load_manifest(manifest_path))
+    manifests = [
+        _load_manifest(manifest_path, root)
+        for manifest_path in _iter_manifest_paths(root, include_template)
+    ]
 
     _MANIFESTS_CACHE[:] = [(current_mtimes, manifests)]
     return manifests

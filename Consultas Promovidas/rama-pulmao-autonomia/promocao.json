@@ -1,0 +1,47 @@
+{
+  "slug": "rama-pulmao-autonomia",
+  "nome": "Pulmao e Autonomia Ramas",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "RAMA",
+    "CODIGO_FASE",
+    "LOCALIZACAO_FISICA_WIP"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Pulmão e Autonomia das Ramas",
+    "kpis": [
+      "count",
+      "sum:TOTAL_KG",
+      "min:AUTONOMIA_HORAS"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Pulmão e Autonomia das Ramas",
+    "condicoes": [
+      {
+        "coluna": "LOCALIZACAO_FISICA_WIP",
+        "op": "eq",
+        "valor": "1. BUFFER: ABRIDOR CONCLUÍDO (PRONTA PARA A RAMA)"
+      },
+      {
+        "coluna": "AUTONOMIA_HORAS",
+        "op": "lt",
+        "valor": 6.0
+      }
+    ],
+    "renotificar_apos_horas": 6,
+    "colunas_card": [
+      "RAMA",
+      "CODIGO_FASE",
+      "AUTONOMIA_HORAS",
+      "TOTAL_KG",
+      "QTD_OBS"
+    ]
+  }
+}

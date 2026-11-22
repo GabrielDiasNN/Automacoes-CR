@@ -259,3 +259,14 @@ Orchestrator/tests/test/whatsapp-config.json
 
 # Saída local de execuções manuais dos validadores do acervo SQL
 Tools/evidencias/
+
+# Consultas Promovidas — snapshots e estados runtime (nao versionar)
+Consultas Promovidas/snapshots/
+Consultas Promovidas/*/seen_state.json
+Consultas Promovidas/*/seen_state.json.tmp
+Consultas Promovidas/*/message.txt
+Consultas Promovidas/*/card.png
+Consultas Promovidas/*/card_*.png
+Consultas Promovidas/*/cards_manifest.json
+Consultas Promovidas/*/batch_input.json
+Consultas Promovidas/*/batch_result.json

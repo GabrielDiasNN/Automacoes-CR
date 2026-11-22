@@ -12,18 +12,90 @@
     "total_indexes": 10873
   },
   "stats": {
-    "sql_files_with_refs": 232,
-    "core_objects": 211,
-    "fk_edges_among_core_objects": 268,
-    "unknown_references": 7
+    "sql_files_with_refs": 246,
+    "core_objects": 223,
+    "fk_edges_among_core_objects": 281,
+    "unknown_references": 8
   },
   "referenced_by_file": {
+    "Consultas Promovidas/gargalo-receitas-tingimento/consulta.sql": [
+      "CADASTRO_RECEITAS",
+      "LABRECEITA_BLOQUEADA",
+      "LIGA_CADREC_ITEMREC",
+      "OB",
+      "OB_FASES",
+      "OB_PRODUTO"
+    ],
+    "Consultas Promovidas/qualidade-pecas-restricao-montagem/consulta.sql": [
+      "COR",
+      "ENGEITEMESTOARTCRU",
+      "ENGEITEMESTOCOR",
+      "FASES_FLUXO",
+      "GERAPECACOMPLPECA",
+      "GERAPECAORIGEMOB",
+      "GERAPECASPRODUTO",
+      "ITENS_ESTOQUE",
+      "OB",
+      "OBSERVACAO",
+      "OB_FASES",
+      "OB_PRODUTO",
+      "OPERADOR"
+    ],
+    "Consultas Promovidas/qualidade-separacao-montagem/consulta.sql": [
+      "DESTINO",
+      "ENGEITEMESTOARTCRU",
+      "ENGEITEMESTOCOR",
+      "FASES_FLUXO",
+      "GERAPECACOMPLPECA",
+      "GERAPECACRU",
+      "GERAPECAORIGEMOB",
+      "GERAPECASPRODUTO",
+      "GRUPO_MAQUINAS",
+      "LOTES_FIO_PRODUTO",
+      "MAQUINA",
+      "OB",
+      "OBSERVACAO",
+      "OB_FASES",
+      "OPERADOR"
+    ],
+    "Consultas Promovidas/quimicos-ruptura-compra/consulta.sql": [
+      "AR_ESTOQUE_QUIMICO",
+      "ENTREGAS_PEDIDO_COMP",
+      "ITENS_ESTOQUE",
+      "ITENS_PEDIDO_COMPRA",
+      "MOVTO_RECEITA",
+      "UNIDADE_MEDIDA",
+      "VW_ESTO_SALDO"
+    ],
+    "Consultas Promovidas/rama-pulmao-autonomia/consulta.sql": [
+      "BD_BNF_PRODUCAO_FASE",
+      "MAQUINA",
+      "OB_FASES",
+      "OB_PRODUTO"
+    ],
+    "Consultas Promovidas/rama-risco-atraso/consulta.sql": [
+      "ITENSPEDIDOCOMERCIAL",
+      "ITENSPEDIDOGRADE",
+      "ITENSPEDIDOQTDES",
+      "MAQUINA",
+      "OB_FASES",
+      "OB_PRODUTO",
+      "OFORDENS",
+      "OFPEDIDO",
+      "PEDIDOCOMERCIAL",
+      "PEDPRODUCAO",
+      "PEDPRODUCAOOB",
+      "PESSOASFJ"
+    ],
     "Montagem de Terceirizados/SQL-MontagemTerceirizados.sql": [
+      "ENGEITEMESTOARTCRU",
+      "ENG_PRODG_ACABADO",
       "FASES_FLUXO",
       "GERAPECADESTINOOB",
       "GERAPECANOTAENTRADA",
       "GERAPECAORIGEMOB",
       "GERAPECAPEDCOMERCIAL",
+      "GERAPECASPRODUTO",
       "ITENSPEDIDOCOMERCIAL",
       "ITENSPEDIDOGRADE",
       "ITENSPEDIDOQTDES",
@@ -34,14 +106,15 @@
       "OB_PRODUTO",
       "OFORDENS",
       "OFPEDIDO",
-      "OPTSTRAGGR",
-      "OPTSTRAGGRSEMVIRGULA",
       "PECAS_ROMANEIO_SAIDA",
       "PEDIDOCOMERCIAL",
       "PEDPRODUCAOOB",
+      "PESO_PADRAO_PECA",
       "PRODUTO_ROMANEIO",
-      "VW_ENU_STATUS_OB_FASES",
-      "VW_ESP_PESO_PADRAO"
+      "UNIDADE_PROGRAMACAO",
+      "UP_ORDEM_MVTO",
+      "XX2_ENUMERATES",
+      "XX2_ENUMITEM"
     ],
     "OBs Fluxo Sem Tingimento/SQL-EstoqueDeposito95.sql": [
       "GERAPECACOMPLPECA",
@@ -82,18 +155,27 @@
       "PEDPRODUCAO",
       "PEDPRODUCAOOB",
       "PESSOASFJ",
-      "VW_ENU_STATUS_OB_FASES"
+      "UNIDADE_PROGRAMACAO",
+      "UP_ORDEM_MVTO",
+      "XX2_ENUMERATES",
+      "XX2_ENUMITEM"
     ],
     "OBs Restricao Branco/SQL-DiagnosticoClassificacoes.sql": [
+      "CADASTRO_RECEITAS",
+      "CLASSIFICACAO_COR",
       "ITENSPEDIDOCOMERCIAL",
       "ITENSPEDIDOGRADE",
       "ITENSPEDIDOQTDES",
+      "ITENS_ESTOQUE",
       "OB",
+      "OB_FASES",
+      "OB_PRODUTO",
       "OFORDENS",
       "OFPEDIDO",
       "PEDIDOCOMERCIAL",
       "PEDPRODUCAOOB",
-      "VW_EXC_OB_PROD_CLASS_COR"
+      "XX2_ENUMERATES",
+      "XX2_ENUMITEM"
     ],
     "OBs Restricao Branco/SQL-EstoqueFinalidadesBranco.sql": [
       "COR_FINALIDADE",
@@ -108,10 +190,13 @@
       "TIPO_FINALIDADE_FIO"
     ],
     "OBs Restricao Branco/SQL-ObsRestricaoBranco.sql": [
+      "CADASTRO_RECEITAS",
+      "CLASSIFICACAO_COR",
       "ENGEITEMESTOARTCRU",
       "ITENSPEDIDOCOMERCIAL",
       "ITENSPEDIDOGRADE",
       "ITENSPEDIDOQTDES",
+      "ITENS_ESTOQUE",
       "OB",
       "OB_FASES",
       "OB_PRODUTO",
@@ -120,7 +205,8 @@
       "PEDIDOCOMERCIAL",
       "PEDPRODUCAOOB",
       "PESSOASFJ",
-      "VW_EXC_OB_PROD_CLASS_COR"
+      "XX2_ENUMERATES",
+      "XX2_ENUMITEM"
     ],
     "Produção Beneficimento/sql/templates/bnf_producao_beneficiamento_detalhado.sql": [
       "BD_BAS_MASCPRODACAB",
@@ -156,26 +242,30 @@
     "Receitas Bloqueadas/SQL-ReceitasBloqueadas.sql": [
       "CADASTRO_RECEITAS",
       "CLASSIFICACAO_COR",
+      "CRISTAL",
       "LABRECEITA_BLOQUEADA",
+      "LIGACAO_COLORMASTER",
       "LIGA_CADREC_ITEMREC",
       "OB",
       "OB_FASES",
+      "RECEITAS_ALTERAR",
+      "RECEITA_VARIAVEL",
+      "REC_VARIAVEL_MESTRE",
       "UNIDADE_PROGRAMACAO",
-      "UP_ORDEM_MVTO",
-      "VW_LAC_RECPRD_RECLAB",
-      "VW_SIS_SENHA_USUARIO"
+      "UP_ORDEM_MVTO"
     ],
     "Receitas Emitidas/SQL-ReceitasEmitidas.sql": [
       "ENGEITEMESTOARTCRU",
+      "FASES_FLUXO",
       "FNC_ESP_REC_PES",
       "ITENS_ESTOQUE",
       "MOVTO_RECEITA",
+      "OB",
       "OB_FASES",
       "OB_PRODUTO",
       "OPERADOR",
       "UNIDADE_PROGRAMACAO",
-      "UP_ORDEM_MVTO",
-      "VW_BNF_FASEATUALOB"
+      "UP_ORDEM_MVTO"
     ],
     "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_acumulado_montagem_tingimento_por_dia.sql": [
       "DESTINO",
@@ -215,6 +305,16 @@
       "ESPECIFICACAO_PRODUT",
       "LIGA_CADREC_ITEMREC"
     ],
+    "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_consumo_quimico_historico_mensal_produto.sql": [
+      "ITENS_ESTOQUE",
+      "MOVTO_RECEITA",
+      "OB_FASES"
+    ],
+    "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_consumo_quimico_historico_partida_produto.sql": [
+      "ITENS_ESTOQUE",
+      "MOVTO_RECEITA",
+      "OB_FASES"
+    ],
     "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_consumo_quimico_por_kg_tingido.sql": [
       "ITENS_ESTOQUE",
       "MOVTO_RECEITA",
@@ -252,14 +352,6 @@
       "OB_PRODUTO",
       "UNIDADE_PROGRAMACAO",
       "UP_ORDEM_MVTO"
-    ],
-    "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_gargalo_receitas_obs_aguardando.sql": [
-      "CADASTRO_RECEITAS",
-      "LABRECEITA_BLOQUEADA",
-      "LIGA_CADREC_ITEMREC",
-      "OB",
-      "OB_FASES",
-      "OB_PRODUTO"
     ],
     "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_lavacao_de_maquina_ultimas_lavacoes_feitas.sql": [
       "PARADAS_MAQUINA",
@@ -374,6 +466,10 @@
       "UP_ORDEM_MVTO"
     ],
     "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql": [
+      "OB_FASES"
+    ],
+    "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_ob_fases_ultima_sequencia_fase_ultimos_365d.sql": [
+      "OB",
       "OB_FASES"
     ],
     "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_obs_abertas_por_codigo_reduzido.sql": [
@@ -533,6 +629,7 @@
       "MOVTO_RECEITA",
       "OB_FASES",
       "OB_PRODUTO",
+      "OPERADOR",
       "UNIDADE_PROGRAMACAO",
       "UP_ORDEM_MVTO"
     ],
@@ -718,20 +815,6 @@
       "PEDIDOCOMERCIAL",
       "PEDPRODUCAOOB"
     ],
-    "docs/oracle-schema/consultas/02_acabamento_preparacao/acb_rama_fila_risco_expedicao_pedidos.sql": [
-      "ITENSPEDIDOCOMERCIAL",
-      "ITENSPEDIDOGRADE",
-      "ITENSPEDIDOQTDES",
-      "MAQUINA",
-      "OB_FASES",
-      "OB_PRODUTO",
-      "OFORDENS",
-      "OFPEDIDO",
-      "PEDIDOCOMERCIAL",
-      "PEDPRODUCAO",
-      "PEDPRODUCAOOB",
-      "PESSOASFJ"
-    ],
     "docs/oracle-schema/consultas/02_acabamento_preparacao/acb_rama_perda_artigos_desvio_engenharia.sql": [
       "BD_BNF_PRODUCAO_FASE",
       "ITENS_ESTOQUE",
@@ -743,12 +826,6 @@
       "GERAPECAORIGEM",
       "GERAPECAORIGEMOB",
       "OB"
-    ],
-    "docs/oracle-schema/consultas/02_acabamento_preparacao/acb_rama_pulmao_buffer_vs_pipeline.sql": [
-      "BD_BNF_PRODUCAO_FASE",
-      "MAQUINA",
-      "OB_FASES",
-      "OB_PRODUTO"
     ],
     "docs/oracle-schema/consultas/02_acabamento_preparacao/acb_rama_ritmo_liquido_setups_gaps.sql": [
       "BD_BNF_PRODUCAO_FASE",
@@ -813,7 +890,6 @@
     ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_eficiencia_global_engenharia.sql": [
       "ENGEITEMESTOARTCRU",
-      "ENG_AGRUPAITENSESTOQ",
       "ENG_PRODG_CRU",
       "FICHA_MALHA",
       "FICHA_RETILINEA",
@@ -823,7 +899,6 @@
       "ITENS_ESTOQUE"
     ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_eficiencia_ordens_em_aberto.sql": [
-      "ENG_AGRUPAITENSESTOQ",
       "ENG_PRODG_CRU",
       "FICHA_MALHA",
       "FICHA_RETILINEA",
@@ -835,16 +910,18 @@
       "ORDEM_PRODUCAO_MALHA"
     ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_eficiencia_por_grupo_maquinas.sql": [
-      "ENG_AGRUPAITENSESTOQ",
       "ENG_PRODG_CRU",
       "FICHA_MALHA",
       "FICHA_RETILINEA",
       "FIOS_FICHA_MALHARIA_",
       "ITENS_COMPLEMENTO",
-      "ITENS_COMPLEMENTO_FI"
+      "ITENS_COMPLEMENTO_FI",
+      "ITENS_ESTOQUE"
     ],
     "docs/oracle-schema/consultas/03_malharia_teares/mal_eficiencia_teorico_vs_realizado.sql": [
+      "ENG_PRODG_CRU",
       "FICHA_MALHA",
+      "FICHA_RETILINEA",
       "FIOS_FICHA_MALHARIA_",
       "GERAPECAORDEMMALHA",
       "GERAPECASPRODUTO",
@@ -1310,21 +1387,6 @@
       "XX2_ENUMERATES",
       "XX2_ENUMITEM"
     ],
-    "docs/oracle-schema/consultas/06_qualidade_auditoria_obs/qld_conferencia_ob_montada_conferir_se_usaram_as_pecas_com_restricao.sql": [
-      "COR",
-      "ENGEITEMESTOARTCRU",
-      "ENGEITEMESTOCOR",
-      "FASES_FLUXO",
-      "GERAPECACOMPLPECA",
-      "GERAPECAORIGEMOB",
-      "GERAPECASPRODUTO",
-      "ITENS_ESTOQUE",
-      "OB",
-      "OBSERVACAO",
-      "OB_FASES",
-      "OB_PRODUTO",
-      "OPERADOR"
-    ],
     "docs/oracle-schema/consultas/06_qualidade_auditoria_obs/qld_conferencia_ob_montada_consulta_nf_de_entrada_das_pecas_faccao.sql": [
       "GERAPECANOTAENTRADA",
       "GERAPECAORIGEMOB",
@@ -1335,6 +1397,7 @@
       "GERAPECAORIGEMOB",
       "GERAPECASPRODUTO",
       "ITENSPEDIDOGRADE",
+      "ITENSPEDIDOQTDES",
       "OB",
       "OFORDENS",
       "OFPEDIDO",
@@ -1552,23 +1615,6 @@
       "GERAPECADESTINOOB",
       "GERAPECAORIGEM",
       "GERAPECASPRODUTO"
-    ],
-    "docs/oracle-schema/consultas/06_qualidade_auditoria_obs/qld_obs_montadas_fora_da_regra_de_separacao.sql": [
-      "DESTINO",
-      "ENGEITEMESTOARTCRU",
-      "ENGEITEMESTOCOR",
-      "FASES_FLUXO",
-      "GERAPECACOMPLPECA",
-      "GERAPECACRU",
-      "GERAPECAORIGEMOB",
-      "GERAPECASPRODUTO",
-      "GRUPO_MAQUINAS",
-      "LOTES_FIO_PRODUTO",
-      "MAQUINA",
-      "OB",
-      "OBSERVACAO",
-      "OB_FASES",
-      "OPERADOR"
     ],
     "docs/oracle-schema/consultas/07_expedicao_pedidos_comercial/com_acondicionamento_grade_quantidades.sql": [
       "GERAPECACOMPLPECA",
@@ -1843,15 +1889,11 @@
     ],
     "docs/oracle-schema/consultas/07_expedicao_pedidos_comercial/com_tabela_precos_comunicacao_comercial.sql": [
       "BD_BAS_MASCPRODACAB",
-      "COML_CONDICOESPAGAME",
       "FILIAIS",
       "ITENSPEDIDOCOMERCIAL",
       "ITENS_ESTOQUE",
       "PEDIDOCOMERCIAL",
-      "PESSOASFJ",
-      "QUALIDADECOMERCIAL",
-      "REPRESENTANTES",
-      "UNIDADE_MEDIDA"
+      "PESSOASFJ"
     ],
     "docs/oracle-schema/consultas/07_expedicao_pedidos_comercial/com_tabela_precos_itens_servico_tingimento.sql": [
       "BD_BAS_MASCPRODACAB",
@@ -1975,6 +2017,29 @@
       "MAQUINA",
       "UNIDADE_FABRIL"
     ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/kpi_custo_nao_conformidade_reprocesso_mensal.sql": [
+      "CUSTO_PRODUCAO_QUANT",
+      "CUSTO_PRODUCAO_VALOR"
+    ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/kpi_manutencao_backlog_om_aberta.sql": [
+      "ORDEMMANUTENCAO"
+    ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/kpi_manutencao_mttr_mensal.sql": [
+      "ORDEMMANUTENCAO"
+    ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/kpi_otif_compras_mensal.sql": [
+      "ENTREGAS_PEDIDO_COMP",
+      "ITENS_NOTA_ENTRADA",
+      "MESTRE_NOTA_ENTRADA"
+    ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/kpi_paradas_uniao_fontes_mensal.sql": [
+      "BD_PRD_PARADAS_MAQ",
+      "PARADAS_MAQUINA"
+    ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/kpi_reprocesso_montagem_mensal.sql": [
+      "BD_BNF_REPROC_UNICO",
+      "OB_FASES"
+    ],
     "docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_aging_obs_por_fase_vs_sla.sql": [
       "FASES_FLUXO",
       "GERAPECAORIGEMOB",
@@ -2036,6 +2101,26 @@
       "PARADAS_MAQUINA",
       "UNIDADE_PROGRAMACAO",
       "UP_ORDEM_MVTO"
+    ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_fechamento_mensal_quimicos_cavaco_producao.sql": [
+      "BD_BNF_PRODUCAO_FASE",
+      "ENGEITEMESTOCLASSE",
+      "FECHAMENTO_ESTOQUE_A",
+      "FECHAMENTO_VALOR",
+      "GERAMOVIMENTOESTOQUE",
+      "ITENS_ESTOQUE",
+      "MOVIMENTACAO_VALOR",
+      "MOVIMENTO_MAQUINA"
+    ],
+    "docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_fechamento_quinzena_quimicos_cavaco_producao.sql": [
+      "BD_BNF_PRODUCAO_FASE",
+      "ENGEITEMESTOCLASSE",
+      "FECHAMENTO_ESTOQUE_A",
+      "FECHAMENTO_VALOR",
+      "GERAMOVIMENTOESTOQUE",
+      "ITENS_ESTOQUE",
+      "MOVIMENTACAO_VALOR",
+      "MOVIMENTO_MAQUINA"
     ],
     "docs/oracle-schema/consultas/09_pcp_kpis_gestao/pcp_lead_time_obs_encerradas.sql": [
       "OB",
@@ -2578,6 +2663,21 @@
       "CRISTAL",
       "ORABLOQUEIO_USUARIOS",
       "SETOR_USUARIO"
+    ],
+    "docs/oracle-schema/propostas/indice_bd_prd_movprod_cobertura_kpi.sql": [
+      "BD_PRD_MOVPROD"
+    ],
+    "docs/oracle-schema/quimicos/diagnostico_mapeamento_quimicos.sql": [
+      "AR_ESTOQUE_QUIMICO",
+      "CUSTMOVICONSUMOQUIM",
+      "ENTREGAS_PEDIDO_COMP",
+      "ITENS_ESTOQUE",
+      "ITENS_PEDIDO_COMPRA",
+      "MOVTO_RECEITA",
+      "OB_FASES",
+      "PEDIDO_COMPRA",
+      "UNIDADE_MEDIDA",
+      "VW_ESTO_SALDO"
     ]
   },
   "unknown_references": {
@@ -2597,9 +2697,27 @@
       "FNC_ESP_DT_ENT_PED",
       "MOTIVO_BLOQ_OB",
       "VW_ESP_DT_ENTR_PEDCOM"
+    ],
+    "docs/oracle-schema/propostas/indice_bd_prd_movprod_cobertura_kpi.sql": [
+      "BDMOVPR_IND_KPI_COBERTURA"
     ]
   },
   "nodes": [
+    {
+      "id": "AR_ESTOQUE_QUIMICO",
+      "type": "VIEW",
+      "columns": [
+        "SETOR_FABRIL:CHAR",
+        "CD_REDUZIDO:NUMBER",
+        "DS_PRODUTO:VARCHAR2",
+        "CD_GRUPO:VARCHAR2",
+        "CD_SUBGRUPO:VARCHAR2",
+        "CD_CLASSE:VARCHAR2",
+        "DS_SUBGRUPO:VARCHAR2",
+        "DS_CLASSE:VARCHAR2",
+        "QT_ESTOQUE:NUMBER"
+      ]
+    },
     {
       "id": "BD_BAS_MASCPRODACAB",
       "type": "TABLE",
@@ -2724,6 +2842,16 @@
       ]
     },
     {
+      "id": "BD_BNF_REPROC_UNICO",
+      "type": "TABLE",
+      "num_rows": 12210,
+      "description": "BD_BNF_REPROC_UNICO",
+      "columns": [
+        "NUMERO_OB:NUMBER",
+        "SEQUENCIA:NUMBER"
+      ]
+    },
+    {
       "id": "BD_FAT_FATURAMENTO",
       "type": "TABLE",
       "num_rows": 229647,
@@ -2819,6 +2947,27 @@
         "TIPOPRODUTO:NUMBER",
         "TIPO_PRODUCAO:NUMBER",
         "TPUNIDADEMEDIDA:NUMBER"
+      ]
+    },
+    {
+      "id": "BD_PRD_PARADAS_MAQ",
+      "type": "TABLE",
+      "num_rows": 190477,
+      "description": "BD_PRD_PARADAS_MAQ",
+      "columns": [
+        "ID:NUMBER",
+        "NUMEROUP:NUMBER",
+        "SETOR:NUMBER",
+        "NUMERO_MAQUINA:VARCHAR2",
+        "DATA:DATE",
+        "TURNO:NUMBER",
+        "CODIGO_PARADA:VARCHAR2",
+        "GRUPO:VARCHAR2",
+        "DURACAO:NUMBER",
+        "CODIGO_OPERADOR:VARCHAR2",
+        "DATA_HORA_INI:DATE",
+        "DATA_HORA_FIM:DATE",
+        "CODIGO_OPERADOR_FIM:VARCHAR2"
       ]
     },
     {
@@ -3031,42 +3180,6 @@
         "DSFAMILIAPOV:VARCHAR2",
         "DESCRICAO_ITEM:VARCHAR2",
         "TIPOESTOQPROJDESEJ:NUMBER"
-      ]
-    },
-    {
-      "id": "COML_CONDICOESPAGAME",
-      "type": "TABLE",
-      "num_rows": 111,
-      "description": "Tabela do Comercial/Condicoes Pagamento",
-      "columns": [
-        "CONDICAO:NUMBER",
-        "SITUACAO:NUMBER",
-        "DESCRICAO:VARCHAR2",
-        "PARCELAS:NUMBER",
-        "PERCENTUALACUMULADO:NUMBER",
-        "DIASINICIO:NUMBER",
-        "INTERVALODIAS:NUMBER",
-        "PRAZOMEDIO:NUMBER",
-        "CODIGOALTERNATIVO:VARCHAR2",
-        "NECESSITAANALISE:NUMBER",
-        "DESCONTOVINCULADO:FLOAT",
-        "ACRESCIMOVINCULADO:FLOAT",
-        "CONDICAOANTECIPADA:VARCHAR2",
-        "VALOR_DESDOBRAMENTO:FLOAT",
-        "TIFORMAPAGAM:NUMBER",
-        "TPCONDICAO:NUMBER",
-        "FL_INTEGRADO:NUMBER",
-        "EH_VENDOR:VARCHAR2",
-        "EH_BNDES:VARCHAR2",
-        "QTDESDOBRAMENTO:NUMBER",
-        "IDMOTIVOFATU:NUMBER",
-        "EXCLUSIVA_CLIENTE:VARCHAR2",
-        "TIGERAPAGAMENTO:VARCHAR2",
-        "CDFORMPAGA:NUMBER",
-        "TICARTCRED:VARCHAR2",
-        "PERC_ATENCIPADO:FLOAT",
-        "EH_ANTECIPADO:VARCHAR2",
-        "TIPOTITULO:NUMBER"
       ]
     },
     {
@@ -3521,6 +3634,18 @@
       ]
     },
     {
+      "id": "CUSTMOVICONSUMOQUIM",
+      "type": "TABLE",
+      "num_rows": 35288,
+      "description": "Custo movimento consumo quimicos",
+      "columns": [
+        "ID:NUMBER",
+        "IDGERAMOVIESTO:NUMBER",
+        "DATA_ORIGINAL:DATE",
+        "DATA_NOVA:DATE"
+      ]
+    },
+    {
       "id": "CUSTO_PRODUCAO_QUANT",
       "type": "TABLE",
       "num_rows": 40448,
@@ -3542,6 +3667,44 @@
         "TEMPO_REPROCESSO:FLOAT",
         "QTD_NC_REPROCESSO:FLOAT",
         "TEMPO_NC_REPROCESSO:FLOAT"
+      ]
+    },
+    {
+      "id": "CUSTO_PRODUCAO_VALOR",
+      "type": "TABLE",
+      "num_rows": 40447,
+      "description": "Custo de Produção - Valores",
+      "columns": [
+        "ID_CUSTO_PRODUCAO_QT:NUMBER",
+        "TIPO_VALORIZACAO:NUMBER",
+        "OPCAO_MOEDA:NUMBER",
+        "CUSTO_GGF:FLOAT",
+        "CUSTO_MP:FLOAT",
+        "CUSTO_FACCAO:FLOAT",
+        "CREDITO_RESIDUO:FLOAT",
+        "CUSTO_QUIMICO:FLOAT",
+        "CUSTO_TRAMA:FLOAT",
+        "CUSTO_URDUME:FLOAT",
+        "CUSTO_AVIAMENTO:FLOAT",
+        "CUSTO_EMBALAGEM:FLOAT",
+        "CUSTO_GGF_TRANSITADO:FLOAT",
+        "CUSTO_MP_TRANSITADO:FLOAT",
+        "CUSTO_RESIDUO:FLOAT",
+        "CUSTO_NC_MP:FLOAT",
+        "CUSTO_NC_GGF:FLOAT",
+        "CUSTO_NC_QUIMICO:FLOAT",
+        "CUSTO_NC_EMB:FLOAT",
+        "CUSTO_NC_FACCAO:FLOAT",
+        "CUSTO_GGF_REPROC:FLOAT",
+        "CUSTO_MP_REPROC:FLOAT",
+        "CUSTO_QUIM_REPROC:FLOAT",
+        "CUSTO_EMB_REPROC:FLOAT",
+        "CUSTO_FAC_REPROC:FLOAT",
+        "CUSTO_NC_GGF_REPROC:FLOAT",
+        "CUSTO_NC_MP_REPROC:FLOAT",
+        "CUSTO_NC_QUIM_REPROC:FLOAT",
+        "CUSTO_NC_EMB_REPROC:FLOAT",
+        "CUSTO_NC_FAC_REPROC:FLOAT"
       ]
     },
     {
@@ -3910,6 +4073,28 @@
       ]
     },
     {
+      "id": "ENTREGAS_PEDIDO_COMP",
+      "type": "TABLE",
+      "num_rows": 81747,
+      "description": "Entregas Pedido Compra",
+      "columns": [
+        "ID:NUMBER",
+        "TIPO:NUMBER",
+        "NUMERO:NUMBER",
+        "IDPESSOAFJ:NUMBER",
+        "DATAPEDIDO:NUMBER",
+        "SEQUENCIADIGITACAO:NUMBER",
+        "DATAENTREGA:NUMBER",
+        "NUMEROCONTRATO:NUMBER",
+        "QTDPEDIDA:FLOAT",
+        "QTDRECEBIDA:FLOAT",
+        "QTDORIGINAL:FLOAT",
+        "CDFILIAL:NUMBER",
+        "DTENTRORIG:NUMBER",
+        "IDITENSPEDIDOCOMPRA:NUMBER"
+      ]
+    },
+    {
       "id": "ESPECIFICACAO_PRODUT",
       "type": "TABLE",
       "num_rows": 60,
@@ -3999,6 +4184,51 @@
         "RATEIA_DIF_PECA_ORIG:VARCHAR2",
         "TROCA_COR_EMISS_RECE:VARCHAR2",
         "OBRIGAMONTAGEMCARROL:VARCHAR2"
+      ]
+    },
+    {
+      "id": "FECHAMENTO_ESTOQUE_A",
+      "type": "TABLE",
+      "num_rows": 781349,
+      "description": "Fechamento Estoque Analitico",
+      "columns": [
+        "IDFECHAMENTO:NUMBER",
+        "CDUNIDADENEGOCIO:NUMBER",
+        "CDFILIAL:NUMBER",
+        "ANO_MES_FECHAMENTO:NUMBER",
+        "DATA_FECHAMENTO:NUMBER",
+        "CODIGO_REDUZIDO_INSU:NUMBER",
+        "CODIGO_DEPOSITO:NUMBER",
+        "IDGERAATRIESTO:NUMBER",
+        "CONTA_CONTABIL:VARCHAR2",
+        "SALDO_ANTERIOR:FLOAT",
+        "TOTAL_ENTRADAS:FLOAT",
+        "TOTAL_SAIDAS:FLOAT",
+        "SALDO_ATUAL:FLOAT",
+        "QTDADE_BLOQ_ANTERIOR:FLOAT",
+        "QUANTIDADE_BLOQUEADA:FLOAT",
+        "QTDADEVOLUMEANTERIOR:NUMBER",
+        "QUANTIDADE_VOLUMES:NUMBER",
+        "QTCONSUMO:FLOAT"
+      ]
+    },
+    {
+      "id": "FECHAMENTO_VALOR",
+      "type": "TABLE",
+      "num_rows": 332134,
+      "description": "Valores do Fechamento de Estoque",
+      "columns": [
+        "CDFILIAL:NUMBER",
+        "ANO_MES_FECHAMENTO:NUMBER",
+        "TIPO_VALORIZACAO:NUMBER",
+        "OPCAO_MOEDA:NUMBER",
+        "CODIGO_REDUZIDO_INSU:NUMBER",
+        "CONTA_CONTABIL:VARCHAR2",
+        "CDUNIDADENEGOCIO:NUMBER",
+        "VLANTERIOR:FLOAT",
+        "VLENTRADAS:FLOAT",
+        "VLSAIDAS:FLOAT",
+        "VLFINAL:FLOAT"
       ]
     },
     {
@@ -5763,6 +5993,56 @@
       ]
     },
     {
+      "id": "ITENS_PEDIDO_COMPRA",
+      "type": "TABLE",
+      "num_rows": 82353,
+      "description": "Itens Pedido Compra",
+      "columns": [
+        "ID:NUMBER",
+        "TIPO:NUMBER",
+        "NUMERO:NUMBER",
+        "IDPESSOAFJ:NUMBER",
+        "DATAPEDIDO:NUMBER",
+        "SEQUENCIADIGITACAO:NUMBER",
+        "CODINSREDUZIDO:NUMBER",
+        "IDPROCEDENCIA:NUMBER",
+        "PRECO:FLOAT",
+        "PEDIDOENCERRADO:NUMBER",
+        "DESCONTOS:FLOAT",
+        "ACRESCIMOSFINANCEIRO:FLOAT",
+        "PRAZOENTREGA:NUMBER",
+        "QTDMAXIMA:FLOAT",
+        "ALIQUOTAIPI:FLOAT",
+        "IPITRIBUTADO:VARCHAR2",
+        "CODIGO_DEPOSITO:NUMBER",
+        "SECAO:VARCHAR2",
+        "PRECOBRUTO:FLOAT",
+        "PERCTRIBUTOINTERNO:FLOAT",
+        "CDFILIAL:NUMBER",
+        "VALORTRIBUTOINTERNO:FLOAT",
+        "DATAEMBARQUE:NUMBER",
+        "NRDIASGARANTIA:NUMBER",
+        "IDUNIDADEMEDIDA:NUMBER",
+        "IDPESSOAFJORIGINAL:NUMBER",
+        "ALIQUOTAICMS:FLOAT",
+        "TIPO_FINALIDADE:NUMBER",
+        "IDPRODUTOR:NUMBER",
+        "IDDIMENSAO:NUMBER",
+        "DSOBSEEMBALAGEM:VARCHAR2",
+        "IDREFERENCIA_COML:NUMBER",
+        "IDPEDIDOCOMPRA:NUMBER",
+        "TIOPERACAO:NUMBER",
+        "IDITEMPEDIDOORIG:NUMBER",
+        "IDCLASFISCAL:NUMBER",
+        "IDITEMCONTRATO:NUMBER",
+        "VLSEGURO:FLOAT",
+        "VLFRETE:FLOAT",
+        "VLUNITARIOLIQUIDO:FLOAT",
+        "VLTOTALLIQUIDO:FLOAT",
+        "IDCENTROCUSTO:NUMBER"
+      ]
+    },
+    {
       "id": "LABOGRUPOPADROESQUAL",
       "type": "TABLE",
       "num_rows": 355,
@@ -5838,6 +6118,29 @@
         "IDUSUDESBLOQUEIO:NUMBER",
         "OBSDESBLOQUEIO:VARCHAR2",
         "CBRECEITALIBERADA:VARCHAR2"
+      ]
+    },
+    {
+      "id": "LIGACAO_COLORMASTER",
+      "type": "TABLE",
+      "num_rows": 5177,
+      "description": "Tabela de ligação do SGT com o Colormast",
+      "columns": [
+        "ID_LIGACAOCOLORMASTE:NUMBER",
+        "TIPO_RECEITA:NUMBER",
+        "PI_PRODUCAO:NUMBER",
+        "CODCOR:VARCHAR2",
+        "ESPECIFICACAO_PRODUT:NUMBER",
+        "PROCESSO_ESPECIFICO:NUMBER",
+        "IDLOTE_PADRAO:NUMBER",
+        "ID_FAIXARELACAOBANHO:NUMBER",
+        "SEQ_LIGA_REPROCESSO:NUMBER",
+        "ID_LIGA_CADREC_ITEMR:NUMBER",
+        "ID_LIGACAOMESTRECOLO:NUMBER",
+        "IDPESSOASFJ:NUMBER",
+        "TIPO_DE_RECEITA:NUMBER",
+        "NUMEROORDEMMOVIMENTO:NUMBER",
+        "SEQUENCIAORDEMMOVIME:NUMBER"
       ]
     },
     {
@@ -6684,6 +6987,25 @@
       ]
     },
     {
+      "id": "MOVIMENTACAO_VALOR",
+      "type": "TABLE",
+      "num_rows": 114986164,
+      "description": "Valor da Movimentação",
+      "columns": [
+        "NUMERO_MOVIMENTO:NUMBER",
+        "TIPO_VALORIZACAO:NUMBER",
+        "OPCAO_MOEDA:NUMBER",
+        "VLMOVIMENTO:FLOAT",
+        "VLMP:FLOAT",
+        "VLGGF:FLOAT",
+        "VLEMB:FLOAT",
+        "DTCOTACAO_MOEDA_EXT:DATE",
+        "VLCOTACAO_MOEDA_EXT:FLOAT",
+        "ID:NUMBER",
+        "ID_CUSTO_PRODUCAO:NUMBER"
+      ]
+    },
+    {
       "id": "MOVIMENTO_MAQUINA",
       "type": "TABLE",
       "num_rows": 1481561,
@@ -7511,6 +7833,69 @@
       ]
     },
     {
+      "id": "ORDEMMANUTENCAO",
+      "type": "TABLE",
+      "num_rows": 30451,
+      "description": "Ordem Manutencao",
+      "columns": [
+        "NUMERO_OM:NUMBER",
+        "NUMERO_MAQUINA:VARCHAR2",
+        "MANUTENCAO:VARCHAR2",
+        "COMPONENTE:VARCHAR2",
+        "TIPO_DE_ORDEM:NUMBER",
+        "SITUACAO:NUMBER",
+        "NOME_DO_SOLICITANTE:VARCHAR2",
+        "NUMERO_PARADA_MAQUIN:NUMBER",
+        "CODIGO_ALTERNATIVO:NUMBER",
+        "DEFEITO:VARCHAR2",
+        "CAUSA:VARCHAR2",
+        "SOLUCAO:VARCHAR2",
+        "SECAO:VARCHAR2",
+        "LUBRIFICADOR:VARCHAR2",
+        "STATUS_MAQUINA:NUMBER",
+        "TIPO_MANUTENCAO:VARCHAR2",
+        "GRUPO_OM:NUMBER",
+        "AUTORIZADA:VARCHAR2",
+        "CDFILIAL:NUMBER",
+        "PRIORIDADE:NUMBER",
+        "ID_COND_PRODUCAO:NUMBER",
+        "CDTIPOMANUTENCAO:NUMBER",
+        "CDCAUSACANCELAMENTO:NUMBER",
+        "PROBLEMA_OCORRIDO:VARCHAR2",
+        "SERVICO_EXECUTADO:VARCHAR2",
+        "CODIGO_COMPONENTE:VARCHAR2",
+        "CODIGO_OBSER:NUMBER",
+        "SETOR_EXECUTANTE:VARCHAR2",
+        "MOTIVO_CANCELAMENTO:NUMBER",
+        "IDPLANOMANUTENCAO:NUMBER",
+        "CODIGOMANRELACIONADA:VARCHAR2",
+        "CODIGO_INSTRUMENTO:VARCHAR2",
+        "VALORMEDIDO:FLOAT",
+        "SUBCOMPONENTE:NUMBER",
+        "USUARIOSGTCONF:VARCHAR2",
+        "IDMECANICOCONF:NUMBER",
+        "CODIGO_MEDIDOR:VARCHAR2",
+        "SUSPENSA_DATA:DATE",
+        "SUSPENSA_MOTIVO:VARCHAR2",
+        "SUSPENSA_USUARIO:NUMBER",
+        "IDUSUARIOEMISSAO:NUMBER",
+        "NUMERO_OM_ORIGEM:NUMBER",
+        "DTINICIO_PREVISTO:DATE",
+        "DTTERMINO_PREVIST:DATE",
+        "DTINICIO_REAL:DATE",
+        "DTTERMINO_REAL:DATE",
+        "DTCONFIRMACAO:DATE",
+        "DTSOLICITACAO:DATE",
+        "DTINICIO_PARADA:DATE",
+        "DTTERMINO_PARADA:DATE",
+        "DTBASE_CALENDARIO:DATE",
+        "DTINICIO_REAL_GERAL:DATE",
+        "DTTERMINO_REAL_GERAL:DATE",
+        "REDUZIDOFIGURA:NUMBER",
+        "STGERAITEMESTOQUE:VARCHAR2"
+      ]
+    },
+    {
       "id": "ORDEM_PRODUCAO_MALHA",
       "type": "TABLE",
       "num_rows": 15579,
@@ -7956,6 +8341,51 @@
       ]
     },
     {
+      "id": "PEDIDO_COMPRA",
+      "type": "TABLE",
+      "num_rows": 33423,
+      "description": "Pedido Compra",
+      "columns": [
+        "ID:NUMBER",
+        "TIPO:NUMBER",
+        "NUMERO:NUMBER",
+        "IDPESSOAFJ_FORNECEDO:NUMBER",
+        "DATA:NUMBER",
+        "DATAVALIDADE:NUMBER",
+        "PESSOACONTATO:VARCHAR2",
+        "FILIAL:NUMBER",
+        "CONDICOESPAGAMENTO:NUMBER",
+        "IDPESSOAFJ_TRANSPORT:NUMBER",
+        "DEPOSITO:NUMBER",
+        "STATUS:NUMBER",
+        "ID_TIPO_COMPRA:NUMBER",
+        "DESCONTO_GERAL:FLOAT",
+        "STATUS_INTEGRACAO:NUMBER",
+        "PEDIDO_IMPRESSO:VARCHAR2",
+        "PED_ENV_FORNECEDOR:VARCHAR2",
+        "CODIGOMOEDA:NUMBER",
+        "CODIGOTIPOFRETE:NUMBER",
+        "VALORSEGURO:FLOAT",
+        "VIATRANSPORTE:NUMBER",
+        "AUTORIZANTE:NUMBER",
+        "CDFILIAL:NUMBER",
+        "NRCONTRATO:VARCHAR2",
+        "ORDEMSERVICO:NUMBER",
+        "VALORFRETE:FLOAT",
+        "IDDATABINARY:NUMBER",
+        "CDFORMPAGA:NUMBER",
+        "STREGRACONVERSAOMOED:NUMBER",
+        "VLCOTACAOMOEDAFIXA:FLOAT",
+        "IDPESSOAFJ_LOCALENTR:NUMBER",
+        "NUMERO_ALTERNATIVO:VARCHAR2",
+        "DTVENCFIXA:DATE",
+        "IDCOMLCONTPESS:NUMBER",
+        "IDLISTAPRCOMPRA:NUMBER",
+        "NRDOCEXTERNO:VARCHAR2",
+        "STGRUPDESP:NUMBER"
+      ]
+    },
+    {
       "id": "PEDPRODUCAO",
       "type": "TABLE",
       "num_rows": 195188,
@@ -8326,21 +8756,6 @@
       ]
     },
     {
-      "id": "QUALIDADECOMERCIAL",
-      "type": "TABLE",
-      "num_rows": 2,
-      "description": "Qualidade para Desconto no Faturamento",
-      "columns": [
-        "QUALIDADECOMERCIAL:NUMBER",
-        "QUALIDADE:VARCHAR2",
-        "DESCRICAOQUALIDADE:VARCHAR2",
-        "TIPODESCONTO:NUMBER",
-        "VALOR:FLOAT",
-        "DESCONTO_QUALIDADE:FLOAT",
-        "SITUACAO:NUMBER"
-      ]
-    },
-    {
       "id": "QUEBRA_AGULHA_MALHAR",
       "type": "TABLE",
       "num_rows": 102619,
@@ -8357,6 +8772,50 @@
       ]
     },
     {
+      "id": "RECEITAS_ALTERAR",
+      "type": "TABLE",
+      "num_rows": 864,
+      "description": "Receitas de Produção a serem alteradas",
+      "columns": [
+        "REDUZIDO_RECVARIAVEL:NUMBER",
+        "ID_LIGACAOCOLORMASTE:NUMBER",
+        "CODIGO_GRAFICO:VARCHAR2",
+        "ID_PROCEDIMENTO:NUMBER",
+        "RECEITA_ALTERADA:VARCHAR2"
+      ]
+    },
+    {
+      "id": "RECEITA_VARIAVEL",
+      "type": "TABLE",
+      "num_rows": 792,
+      "description": "Tabela Variavel das Receitas",
+      "columns": [
+        "REDUZIDO_RECEITA:NUMBER",
+        "CONCENTRACAO_INICIAL:NUMBER",
+        "CONCENTRACAO_FINAL:NUMBER",
+        "CLASSIFICACAO_COR:NUMBER",
+        "IDRECVARIAVELMESTRE:NUMBER"
+      ]
+    },
+    {
+      "id": "REC_VARIAVEL_MESTRE",
+      "type": "TABLE",
+      "num_rows": 290,
+      "description": "Receita variavel mestre",
+      "columns": [
+        "ID:NUMBER",
+        "CDFILIAL:NUMBER",
+        "GRUPO_INSUMO:VARCHAR2",
+        "SUBGRUPO_INSUMO:VARCHAR2",
+        "CLASSE_INSUMO:VARCHAR2",
+        "CODIGO_TABELA:VARCHAR2",
+        "INSREDUZIDO_PADRAO:NUMBER",
+        "EP_RECEITA:NUMBER",
+        "DESCR_TABELA:VARCHAR2",
+        "ATIVA:VARCHAR2"
+      ]
+    },
+    {
       "id": "RELACAO_BANHO_EP",
       "type": "TABLE",
       "num_rows": 931,
@@ -8366,37 +8825,6 @@
         "PROCESSO_INDUSTRIAL:NUMBER",
         "RELACAO_BANHO:FLOAT",
         "ESPECIFICACAO_PRODUT:NUMBER"
-      ]
-    },
-    {
-      "id": "REPRESENTANTES",
-      "type": "TABLE",
-      "num_rows": 56,
-      "description": "REPRESENTANTES(Sem Descricao no ERwin)",
-      "columns": [
-        "IDREPRESENTANTE:NUMBER",
-        "NOME:VARCHAR2",
-        "IDPESSOAFJ:NUMBER",
-        "QTDAMOSTRAS:NUMBER",
-        "COMISSAONAAREA:FLOAT",
-        "COMISSAOFORAAREA:FLOAT",
-        "ADMINISTRADOR:NUMBER",
-        "IDAREA:NUMBER",
-        "IDUEN:NUMBER",
-        "REGIAO:NUMBER",
-        "SITUACAO:NUMBER",
-        "PERCCOMISSAOFATURA:FLOAT",
-        "PERCCOMISSAOBAIXA:FLOAT",
-        "CODREDUSUARIO:NUMBER",
-        "IDREPRES_ALTERNATIVO:NUMBER",
-        "FL_INTEGRADO:NUMBER",
-        "REDCONTABREPREST:NUMBER",
-        "FLAGIMPORTACAO:NUMBER",
-        "IDREPRESSUPERIOR:NUMBER",
-        "COMISSAOREPSUPERIOR:FLOAT",
-        "IDFORMPAGA_PADRAO:NUMBER",
-        "DIA_PREVISAO_PAGAMEN:NUMBER",
-        "PERCENT_IRPJ:FLOAT"
       ]
     },
     {
@@ -9533,50 +9961,16 @@
       ]
     },
     {
-      "id": "VW_EXC_OB_PROD_CLASS_COR",
+      "id": "VW_ESTO_SALDO",
       "type": "VIEW",
       "columns": [
-        "NR_OB:NUMBER",
-        "DS_ST_OB:VARCHAR2",
-        "CD_REDUZIDO_CRU:NUMBER",
-        "CD_ARTIGO:VARCHAR2",
-        "CD_COR:VARCHAR2",
-        "CD_CLASSIFICACAO_COR:NUMBER",
-        "DS_CLASSIFICACAO_COR:VARCHAR2",
-        "DS_PRODUTO:VARCHAR2",
-        "QT_PROGRAMADO:FLOAT",
-        "QT_PC_PROGRAMADO:NUMBER"
-      ]
-    },
-    {
-      "id": "VW_LAC_RECPRD_RECLAB",
-      "type": "VIEW",
-      "columns": [
-        "PI_PRD:NUMBER",
-        "CODCOR_PRD:VARCHAR2",
-        "EP_PRD:NUMBER",
-        "IDPFJ_PRD:NUMBER",
-        "PE_PRD:NUMBER",
-        "IDLOTE_PRD:NUMBER",
-        "IDRB_PRD:NUMBER",
-        "REDREC_PRD:NUMBER",
-        "IDLCRIR_PRD:NUMBER",
-        "PI_LAB:NUMBER",
-        "CODCOR_LAB:VARCHAR2",
-        "EP_LAB:NUMBER",
-        "IDPFJ_LAB:NUMBER",
-        "PE_LAB:NUMBER",
-        "IDLOTE_LAB:NUMBER",
-        "IDRB_LAB:NUMBER",
-        "REDREC_LAB:NUMBER",
-        "IDLCRIR_LAB:NUMBER",
-        "RECEITA_ALTERADA:VARCHAR2",
-        "GRAFICO:VARCHAR2",
-        "TIPO_REC_PRD:NUMBER",
-        "TIPO_REC_LAB:NUMBER",
-        "ID_LIGACAOCOLORMASTE:NUMBER",
-        "EH_COR_PROVISORIA:VARCHAR2",
-        "COR_DEFINITIVA:VARCHAR2"
+        "CD_REDUZIDO:NUMBER",
+        "CODIGO_DEPOSITO:NUMBER",
+        "CD_QUALIDADE_SGT:NUMBER",
+        "CD_ACONDICION_SGT:NUMBER",
+        "QT_PED_ABERTO:NUMBER",
+        "QT_ESTOQUE_DISP:NUMBER",
+        "QT_SALDO:NUMBER"
       ]
     },
     {
@@ -10341,14 +10735,6 @@
     },
     {
       "from": "COML_TABELAPRECOS",
-      "to": "QUALIDADECOMERCIAL",
-      "fk_name": "FK_CMTABPRE_QUALIDADECOMERCIAL",
-      "columns": [
-        "QUALIDADECOMERCIAL"
-      ]
-    },
-    {
-      "from": "COML_TABELAPRECOS",
       "to": "COML_TABELAPRECOS",
       "fk_name": "FK_CMTABPRE_TABELAPRECOBASE",
       "columns": [
@@ -10401,6 +10787,14 @@
       "fk_name": "FK_PESSOASFJ_COR",
       "columns": [
         "IDPESSOAFJ"
+      ]
+    },
+    {
+      "from": "CUSTMOVICONSUMOQUIM",
+      "to": "GERAMOVIMENTOESTOQUE",
+      "fk_name": "FK_CMCQ_IDGERAMOVIESTOQUE",
+      "columns": [
+        "IDGERAMOVIESTO"
       ]
     },
     {
@@ -10558,6 +10952,26 @@
       ]
     },
     {
+      "from": "ENTREGAS_PEDIDO_COMP",
+      "to": "ITENS_PEDIDO_COMPRA",
+      "fk_name": "FKITEMPEDICOMPENTRPEDICOMP",
+      "columns": [
+        "TIPO",
+        "NUMERO",
+        "IDPESSOAFJ",
+        "DATAPEDIDO",
+        "SEQUENCIADIGITACAO"
+      ]
+    },
+    {
+      "from": "ENTREGAS_PEDIDO_COMP",
+      "to": "ITENS_PEDIDO_COMPRA",
+      "fk_name": "FK_INDITENSPEDIDOCOMP",
+      "columns": [
+        "IDITENSPEDIDOCOMPRA"
+      ]
+    },
+    {
       "from": "FASES_FLUXO",
       "to": "FILIAIS",
       "fk_name": "FKFASES_FLUXO_CDFILIAL_FILIAIS",
@@ -10571,6 +10985,22 @@
       "fk_name": "FK_FASESFLUXO_NDDEP",
       "columns": [
         "NADA_DEPOSITO"
+      ]
+    },
+    {
+      "from": "FECHAMENTO_ESTOQUE_A",
+      "to": "DEPOSITO",
+      "fk_name": "FK_FECHAMENTO_CDDEP",
+      "columns": [
+        "CODIGO_DEPOSITO"
+      ]
+    },
+    {
+      "from": "FECHAMENTO_ESTOQUE_A",
+      "to": "GERAATRIBUTOESTOQUE",
+      "fk_name": "FK_FECHESTOANAL_GERAATRIESTO",
+      "columns": [
+        "IDGERAATRIESTO"
       ]
     },
     {
@@ -11502,10 +11932,85 @@
     },
     {
       "from": "ITENS_NOTA_ENTRADA",
+      "to": "ITENS_PEDIDO_COMPRA",
+      "fk_name": "FKITENSPEDIDOCOMPRA",
+      "columns": [
+        "IDITENSPEDIDOCOMPRAS"
+      ]
+    },
+    {
+      "from": "ITENS_NOTA_ENTRADA",
       "to": "DEPOSITO",
       "fk_name": "FK_ITENS_NOTA_DEPOS",
       "columns": [
         "DEPOSITO"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "UNIDADE_MEDIDA",
+      "fk_name": "FKPEDCOMPUNIDMED",
+      "columns": [
+        "IDUNIDADEMEDIDA"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "PEDIDO_COMPRA",
+      "fk_name": "FKPEDICOMPITEMPEDICOMP",
+      "columns": [
+        "TIPO",
+        "NUMERO",
+        "IDPESSOAFJ",
+        "DATAPEDIDO"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "PESSOASFJ",
+      "fk_name": "FKPEDICOMPITEMPESSOAFJ",
+      "columns": [
+        "IDPESSOAFJORIGINAL"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "PEDIDO_COMPRA",
+      "fk_name": "FK_IDPEDIDOCOMPRA",
+      "columns": [
+        "IDPEDIDOCOMPRA"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "DEPOSITO",
+      "fk_name": "FK_ITENS_PED_CDDEP",
+      "columns": [
+        "CODIGO_DEPOSITO"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "SECAO",
+      "fk_name": "FK_ITENS_PED_IDCENTROCUSTO",
+      "columns": [
+        "IDCENTROCUSTO"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "ITENS_PEDIDO_COMPRA",
+      "fk_name": "FK_ITENS_PED_IDITEMPEDIDOORIG",
+      "columns": [
+        "IDITEMPEDIDOORIG"
+      ]
+    },
+    {
+      "from": "ITENS_PEDIDO_COMPRA",
+      "to": "PESSOASFJ",
+      "fk_name": "FK_ITENS_PED_IDPRODUTOR",
+      "columns": [
+        "IDPRODUTOR"
       ]
     },
     {
@@ -11717,6 +12222,24 @@
       ]
     },
     {
+      "from": "MOVIMENTACAO_VALOR",
+      "to": "GERAMOVIMENTOESTOQUE",
+      "fk_name": "FK_MOVIMENTACAO_GME",
+      "columns": [
+        "NUMERO_MOVIMENTO"
+      ]
+    },
+    {
+      "from": "MOVIMENTACAO_VALOR",
+      "to": "CUSTO_PRODUCAO_VALOR",
+      "fk_name": "FK_MOVIMENTACAO_VLCL_MOVIMCLAS",
+      "columns": [
+        "ID_CUSTO_PRODUCAO",
+        "TIPO_VALORIZACAO",
+        "OPCAO_MOEDA"
+      ]
+    },
+    {
       "from": "MOVTO_RECEITA",
       "to": "DEPOSITO",
       "fk_name": "FKI_MOVTO_DEPOSITO",
@@ -11758,14 +12281,6 @@
     },
     {
       "from": "NOTAFISCALCAPA",
-      "to": "QUALIDADECOMERCIAL",
-      "fk_name": "FK_NOTAFISCALCAPA_IDQUALCOMERC",
-      "columns": [
-        "IDQUALCOMERC"
-      ]
-    },
-    {
-      "from": "NOTAFISCALCAPA",
       "to": "NATUREZA_OPERACAO",
       "fk_name": "FK_NOTAFISCALCAPA_NATOPERACAO",
       "columns": [
@@ -11790,26 +12305,10 @@
     },
     {
       "from": "NOTAFISCALCAPA",
-      "to": "COML_CONDICOESPAGAME",
-      "fk_name": "FK_NOTAFISCAL_CONDICAOPAGAMENT",
-      "columns": [
-        "IDCONDICAOPAGAMENTO"
-      ]
-    },
-    {
-      "from": "NOTAFISCALCAPA",
       "to": "PESSOASFJ",
       "fk_name": "FK_NOTAFISCAL_ENTREGA",
       "columns": [
         "IDENTREGA"
-      ]
-    },
-    {
-      "from": "NOTAFISCALCAPA",
-      "to": "REPRESENTANTES",
-      "fk_name": "FK_NOTAFISCAL_REPRESENTANTANTE",
-      "columns": [
-        "IDREPRESENTANTE"
       ]
     },
     {
@@ -11901,6 +12400,40 @@
       ]
     },
     {
+      "from": "ORDEMMANUTENCAO",
+      "to": "CRISTAL",
+      "fk_name": "FKORDEMMAN_IDUSUARIOEMISSAO",
+      "columns": [
+        "IDUSUARIOEMISSAO"
+      ]
+    },
+    {
+      "from": "ORDEMMANUTENCAO",
+      "to": "MANUTENCAO_MAQUINA",
+      "fk_name": "FKORDEMMAN_MANUTENCAOMAQ",
+      "columns": [
+        "NUMERO_MAQUINA",
+        "MANUTENCAO",
+        "COMPONENTE"
+      ]
+    },
+    {
+      "from": "ORDEMMANUTENCAO",
+      "to": "ORDEMMANUTENCAO",
+      "fk_name": "FK_OMDEST_OMORIGEM",
+      "columns": [
+        "NUMERO_OM_ORIGEM"
+      ]
+    },
+    {
+      "from": "ORDEMMANUTENCAO",
+      "to": "CRISTAL",
+      "fk_name": "FK_USUARIO_CRISTAL_CDREDUSUARI",
+      "columns": [
+        "SUSPENSA_USUARIO"
+      ]
+    },
+    {
       "from": "ORDEM_PRODUCAO_MALHA",
       "to": "MAQUINA",
       "fk_name": "FKORDEMPRODUCAOMALHAMAQUINA",
@@ -11956,22 +12489,6 @@
       "fk_name": "FK_PEDCOM_COLECOES",
       "columns": [
         "COLECAO"
-      ]
-    },
-    {
-      "from": "PEDIDOCOMERCIAL",
-      "to": "COML_CONDICOESPAGAME",
-      "fk_name": "FK_PEDCOM_COML_CONDICOESPAGAM1",
-      "columns": [
-        "CONDICAO_PAGAMENTO"
-      ]
-    },
-    {
-      "from": "PEDIDOCOMERCIAL",
-      "to": "COML_CONDICOESPAGAME",
-      "fk_name": "FK_PEDCOM_COML_CONDICOESPAGAM2",
-      "columns": [
-        "CONDICAO_PRECO"
       ]
     },
     {
@@ -12055,27 +12572,35 @@
       ]
     },
     {
-      "from": "PEDIDOCOMERCIAL",
-      "to": "QUALIDADECOMERCIAL",
-      "fk_name": "FK_PEDCOM_QUALIDADECOMERCIAL",
+      "from": "PEDIDO_COMPRA",
+      "to": "DEPOSITO",
+      "fk_name": "FK_CONTRATO_DEPOSIT",
       "columns": [
-        "QUALIDADE_COMERCIAL"
+        "DEPOSITO"
       ]
     },
     {
-      "from": "PEDIDOCOMERCIAL",
-      "to": "REPRESENTANTES",
-      "fk_name": "FK_PEDCOM_REPRESENTANTES1",
+      "from": "PEDIDO_COMPRA",
+      "to": "PESSOASFJ",
+      "fk_name": "FK_IDPESSOAFJ_LOCALENTR",
       "columns": [
-        "IDREPRESENTANTE"
+        "IDPESSOAFJ_LOCALENTR"
       ]
     },
     {
-      "from": "PEDIDOCOMERCIAL",
-      "to": "REPRESENTANTES",
-      "fk_name": "FK_PEDCOM_REPRESENTANTES2",
+      "from": "PEDIDO_COMPRA",
+      "to": "FILIAIS",
+      "fk_name": "FK_PEDIDO_COMPRA_CDFILIAL",
       "columns": [
-        "IDREPRESENT_INTERNO"
+        "CDFILIAL"
+      ]
+    },
+    {
+      "from": "PEDIDO_COMPRA",
+      "to": "FILIAIS",
+      "fk_name": "FK_PEDIDO_COMPRA_FILIAL",
+      "columns": [
+        "FILIAL"
       ]
     },
     {
@@ -12095,22 +12620,6 @@
       ]
     },
     {
-      "from": "PESSOASFJ",
-      "to": "COML_CONDICOESPAGAME",
-      "fk_name": "FK_PESSOASFJ_CONDPAGFORNECEDOR",
-      "columns": [
-        "CONDICPAGAMEFORNECED"
-      ]
-    },
-    {
-      "from": "PESSOASFJ",
-      "to": "REPRESENTANTES",
-      "fk_name": "FK_PESSOASF_IDREPRESENTANTE",
-      "columns": [
-        "IDREPRESENTANTE"
-      ]
-    },
-    {
       "from": "PESSOASFJ_FILIAIS",
       "to": "FILIAIS",
       "fk_name": "FK_PESFJFIL_FILIAL",
@@ -12124,14 +12633,6 @@
       "fk_name": "FK_PESFJFIL_IDPESSOAFJ",
       "columns": [
         "IDPESSOAFJ"
-      ]
-    },
-    {
-      "from": "PESSOASFJ_FILIAIS",
-      "to": "REPRESENTANTES",
-      "fk_name": "FK_PESFJFIL_IDREPRESENTANTE",
-      "columns": [
-        "IDREPRESENTANTE"
       ]
     },
     {
@@ -12167,6 +12668,14 @@
       ]
     },
     {
+      "from": "PRODUTO_ROMANEIO",
+      "to": "ITENS_PEDIDO_COMPRA",
+      "fk_name": "FK_ITENSPEDIDOCOMPRA",
+      "columns": [
+        "IDITENSPEDIDOCOMPRA"
+      ]
+    },
+    {
       "from": "QUEBRA_AGULHA_MALHAR",
       "to": "ITENS_ESTOQUE",
       "fk_name": "FK_QUEBRA_AGULHA_ITENS",
@@ -12183,11 +12692,11 @@
       ]
     },
     {
-      "from": "REPRESENTANTES",
-      "to": "PESSOASFJ",
-      "fk_name": "PK_REPRESENTANTES_PESSOASFJ",
+      "from": "RECEITA_VARIAVEL",
+      "to": "REC_VARIAVEL_MESTRE",
+      "fk_name": "FK_RV_REC_VAR_MESTRE",
       "columns": [
-        "IDPESSOAFJ"
+        "IDRECVARIAVELMESTRE"
       ]
     },
     {

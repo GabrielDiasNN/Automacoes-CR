@@ -26,14 +26,16 @@ def _normalize_queue_group(value: str | None) -> str | None:
 def _normalize_notification_channels(value: str | None) -> str | None:
     if value is None:
         return None
-    allowed_order = ["email", "whatsapp"]
+    allowed_order = ["email", "whatsapp", "dashboard"]
     seen: list[str] = []
     for raw in value.split(","):
         channel = raw.strip().lower()
         if not channel:
             continue
         if channel not in allowed_order:
-            raise ValueError("notification_channels aceita apenas: email, whatsapp.")
+            raise ValueError(
+                "notification_channels aceita apenas: email, whatsapp, dashboard."
+            )
         if channel not in seen:
             seen.append(channel)
     if not seen:

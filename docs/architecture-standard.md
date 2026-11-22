@@ -80,6 +80,8 @@ Auditoria de 08/09/2026 encontrou 3 entradas órfãs em `Tools/architecture-stan
 
 `Tools\oracle\build_oracle_catalog.py` e `Tools\oracle\oracle_catalog.py` (14/09/2026) também estão na allowlist, por um motivo diferente: `docs/oracle-schema/schema.db` **não é dado de aplicação do Orchestrator** — é um catálogo local, gitignored e reconstruível, do dicionário de dados do Oracle SGTPRD (3.608 tabelas), usado só para consulta de schema por ferramentas de linha de comando fora do runtime do Hub. Não há `session_scope` nem engine SQLAlchemy para essa base porque ela nunca é lida ou escrita pelo Orchestrator — só por scripts standalone: o builder, o CLI de consulta e `Tools\oracle\gerar_core_graph.py` (24/09/2026), que abre a base em modo somente leitura (`mode=ro`) para regenerar `docs/oracle-schema/core-graph.json`.
 
+`lib\python\promovidas\snapshot.py` e `Orchestrator\app\services\promovidas.py` (21/11/2026) seguem o mesmo desenho isolado do Beneficiamento: leem e gravam exclusivamente `Consultas Promovidas\snapshots\promovidas.db` (histórico WAL de snapshots locais, fora do `automacoes.db` do Orchestrator).
+
 ## Canal WhatsApp — Sessão Única e Concorrência
 
 Todas as automações que enviam WhatsApp (`Receitas Bloqueadas`, `OBs Paradas Fase`, `OBs Fluxo Sem Tingimento` e a ORB-07 ativa `OBs Restricao Branco`) e o alerta de falhas do Orchestrator (`Orchestrator/app/notifications.py`) compartilham a mesma sessão autenticada `hub-global`, acionada através do motor único `lib/WhatsApp-Core.js` (invocado sempre via `lib/Send-WhatsApp.ps1`).

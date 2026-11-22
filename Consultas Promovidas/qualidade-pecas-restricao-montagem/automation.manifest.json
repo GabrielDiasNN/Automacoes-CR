@@ -1,0 +1,33 @@
+{
+  "id": "CP-06",
+  "name": "Pecas Restricao Montagem",
+  "slug": "qualidade-pecas-restricao-montagem",
+  "criticality": "high",
+  "sla_minutes": 60,
+  "owner_area": "Qualidade / Beneficiamento",
+  "entrypoint": "run.ps1",
+  "runtime": "promovida",
+  "channels": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "queue_group": "oracle",
+  "max_runtime_minutes": 15,
+  "max_retries": 0,
+  "schedule_summary": "A cada 2h das 06:00 as 18:00 (Seg-Sab) [modo sombra] (CP-06)",
+  "schedule": "{\"schedule_version\": 2, \"schedule_type\": \"cron\", \"cron_expression\": [\"0 6-18/2 * * 1-6\"], \"timezone\": \"America/Sao_Paulo\"}",
+  "runbook_path": "docs/runbooks/qualidade-pecas-restricao-montagem-runbook.md",
+  "context_path": "Consultas Promovidas/qualidade-pecas-restricao-montagem/CONTEXT.md",
+  "readme_path": "Consultas Promovidas/qualidade-pecas-restricao-montagem/README.md",
+  "orchestrator": {
+    "script_path": "./Consultas Promovidas/qualidade-pecas-restricao-montagem/run.ps1"
+  },
+  "dependencies": {
+    "oracle": true,
+    "outlook": false,
+    "whatsapp": true
+  },
+  "smoke_tests": [
+    "Orchestrator/tests/test_consultas_promovidas_smoke.py"
+  ]
+}

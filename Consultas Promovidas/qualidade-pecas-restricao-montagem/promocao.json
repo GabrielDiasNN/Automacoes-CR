@@ -1,0 +1,39 @@
+{
+  "slug": "qualidade-pecas-restricao-montagem",
+  "nome": "Pecas Restricao Montagem",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "NUMERO_OB"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Conferência de Peças com Restrição na Montagem",
+    "kpis": [
+      "count",
+      "sum:PECAS_COM_RESTRICAO"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Conferência de Peças com Restrição na Montagem",
+    "condicoes": [
+      {
+        "coluna": "PECAS_COM_RESTRICAO",
+        "op": "gt",
+        "valor": 0
+      }
+    ],
+    "renotificar_apos_horas": 24,
+    "colunas_card": [
+      "NUMERO_OB",
+      "ARTIGO",
+      "PECAS_COM_RESTRICAO",
+      "OPERADOR",
+      "FASE_ATUAL"
+    ]
+  }
+}

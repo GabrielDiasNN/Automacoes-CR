@@ -1,0 +1,42 @@
+{
+  "slug": "rama-risco-atraso",
+  "nome": "Risco Atraso Ramas",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "NUMERO_OB"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Risco de Atraso de Pedidos nas Ramas",
+    "kpis": [
+      "count",
+      "sum:KG_OB"
+    ],
+    "colunas": []
+  },
+  "excecao": {
+    "titulo_alerta": "Risco de Atraso de Pedidos nas Ramas",
+    "condicoes": [
+      {
+        "coluna": "CLASSIFICACAO_RISCO",
+        "op": "in",
+        "valor": [
+          "1. CRÍTICO: DATA DE EXPEDIÇÃO JÁ VENCIDA",
+          "2. ALTO RISCO: EXPEDIÇÃO EM ATÉ 5 DIAS"
+        ]
+      }
+    ],
+    "renotificar_apos_horas": 24,
+    "colunas_card": [
+      "NUMERO_OB",
+      "RAMA",
+      "CLIENTE",
+      "DIAS_ATE_EXPEDICAO",
+      "KG_OB"
+    ]
+  }
+}
