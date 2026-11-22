@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 
 import pytest
+from app.services.automation_preflight import _promocao_config_issues
 from app.services.portfolio_manifest import CatalogManifest, load_catalog_manifests
+from app.services.promovidas import _int_seguro, _kpis_seguros
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from promovidas import ConfigPainel, ConfigPromocao
@@ -156,3 +158,32 @@ def test_preflight_aceita_consulta_promovida_sem_whatsapp_config(
     assert body["valid"] is True, body
     assert body["governance"]["status"] != "incident"
     assert body["governance"]["blocking_issues"] == []
+
+
+@pytest.mark.unitario
+def test_promocao_config_issues_e_helpers_defensivos(tmp_path: Path) -> None:
+    """Cobre branches defensivos de _promocao_config_issues, _int_seguro e _kpis_seguros."""
+    vazio = tmp_path / "sem_promocao"
+    vazio.mkdir()
+    issues_missing = _promocao_config_issues(str(vazio))
+    assert [i.code for i in issues_missing] == ["promocao_config_missing"]
+
+    invalido = tmp_path / "json_invalido"
+    invalido.mkdir()
+    (invalido / "promocao.json").write_text("{invalido", encoding="utf-8")
+    issues_invalid = _promocao_config_issues(str(invalido))
+    assert [i.code for i in issues_invalid] == ["promocao_config_invalid"]
+
+    lista = tmp_path / "json_lista"
+    lista.mkdir()
+    (lista / "promocao.json").write_text("[]", encoding="utf-8")
+    issues_lista = _promocao_config_issues(str(lista))
+    assert [i.code for i in issues_lista] == ["promocao_config_invalid"]
+
+    assert _int_seguro(True, 7) == 7
+    assert _int_seguro("nao-int", 5) == 5
+    assert _int_seguro(None, 3) == 3
+    assert _kpis_seguros('{"count": 2}') == {"count": 2}
+    assert _kpis_seguros("[1, 2]") == {}
+    assert _kpis_seguros("{quebrado") == {}
+    assert _kpis_seguros(123) == {}

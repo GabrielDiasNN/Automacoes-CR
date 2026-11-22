@@ -259,8 +259,8 @@ def test_run_promocao_reconciliacao_parcial_e_exit_codes(
         batch_out.write_text(
             json.dumps(
                 [
-                    {"phase_key": "teste-promovida_p01", "success": True},
-                    {"phase_key": "teste-promovida_p02", "success": False},
+                    {"phase_key": f"{cfg.slug}_p01", "success": True},
+                    {"phase_key": f"{cfg.slug}_p02", "success": False},
                 ]
             ),
             encoding="utf-8",
