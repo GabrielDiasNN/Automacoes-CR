@@ -44,7 +44,7 @@ jobs:
         run: |
           python -m pip_audit -r requirements.txt
 
-      - name: Abrir issue em caso de vulnerabilidade
+      - name: Abrir ou atualizar issue em caso de vulnerabilidade
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -59,7 +59,14 @@ jobs:
           Revise o log do job 'Auditoria de Dependencias (pip-audit)' e atualize
           os pacotes afetados em requirements*.in (recompilar com pip-compile).
           "@
-          gh issue create --repo "${{ github.repository }}" --title $titulo --body $corpo --label seguranca
+          $abertas = gh issue list --repo "${{ github.repository }}" --label seguranca --state open --json number,title | ConvertFrom-Json
+          $existente = $abertas | Where-Object { $_.title -like 'Seguranca: pip-audit*' } | Sort-Object number -Descending | Select-Object -First 1
+          if ($existente) {
+            gh issue comment $existente.number --repo "${{ github.repository }}" --body $corpo
+          }
+          else {
+            gh issue create --repo "${{ github.repository }}" --title $titulo --body $corpo --label seguranca
+          }
 
   gitleaks-historico:
     name: Gitleaks (historico completo)

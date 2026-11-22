@@ -2,6 +2,20 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.121] - 21/11/2026
+
+Fase 0 do planejamento estratégico ([`docs/roadmap/roadmap-2026-2027.md`](docs/roadmap/roadmap-2026-2027.md)): correção de vulnerabilidades de dependências runtime (`pillow` e `certifi`), deduplicação da issue semanal de `pip-audit` e correção de `get_client_ip` atrás de proxy reverso (`issue #8`).
+
+### Adicionado
+
+- **Roadmap estratégico 2026–2027 (`docs/roadmap/roadmap-2026-2027.md`):** plano aprovado em 4 fases para transformar consultas validadas do catálogo Oracle (`docs/oracle-schema/consultas/`) em entregas híbridas (exceção no WhatsApp + painel snapshot-first no Dashboard), definindo o Modelo 2 (motor declarativo em `Consultas Promovidas/<slug>/`), piloto (`C1`, `C2`, `C3` + sentinelas `B1`, `B2`) em modo sombra via `AUTOMACAO_ALERT_WHATSAPP`, indicadores e riscos abertos.
+
+### Corrigido
+
+- **Spoofing à esquerda em `X-Forwarded-For` (`Orchestrator/app/utils.py`, `issue #8`):** `get_client_ip` agora percorre a lista de hops da direita para a esquerda e devolve o primeiro IP que não pertence a `ORCHESTRATOR_TRUSTED_PROXIES` (com fallback para `socket_ip` se todos os hops forem proxies confiáveis ou o header estiver vazio), em vez de retornar `forwarded.split(",")[0]`. Cobertura adicionada em `Orchestrator/tests/test_revisao_consenso_onda2.py`.
+- **Dependências vulneráveis no runtime (`requirements.in` / `requirements*.txt`):** atualizado `Pillow` (`12.3.0` → `13.0.0`, piso `Pillow>=13.0` em `requirements.in`) e `certifi` (`2026.7.22` → `2026.11.20`), zerando as 44 vulnerabilidades reportadas pelo `pip-audit` (`issues #73`, `#79`, `#81`, `#83` e `#90`). Cards PNG de `OBP-04`, `OFST-06` e `ORB-07` validados sem diferença de pixels entre `12.3.0` e `13.0.0`.
+- **Acúmulo semanal de issues de `pip-audit` (`.github/workflows/seguranca-agendada.yml`):** quando já existe uma issue aberta com label `seguranca` e título iniciado por `Seguranca: pip-audit`, o workflow passa a comentar na issue existente em vez de abrir uma nova toda semana.
+
 ## [1.3.120] - 19/11/2026
 
 Eliminação das janelas de console `python.exe` e `powershell.exe` que abriam durante a execução das automações em background após a migração dos `run.ps1` para shims Python (`[1.3.117]`–`[1.3.118]`).

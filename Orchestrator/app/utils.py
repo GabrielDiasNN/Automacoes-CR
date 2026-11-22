@@ -173,20 +173,24 @@ def get_client_ip(request: Request) -> str:
     Até 31/07/2026 esta função retornava incondicionalmente o primeiro elemento
     de `X-Forwarded-For` quando o header existia, sem lista de proxies
     confiáveis — e o valor é gravado como `AuditLog.actor`, o artefato de
-    não-repúdio, e como `Execution.requested_by`. Qualquer cliente com a API Key
-    podia forjar o autor de CREATE/UPDATE/DELETE de automação, UPDATE_ENV,
-    UPDATE_SCRIPT, STOP e REQUEUE mandando o header.
+    não-repúdio, e como `Execution.requested_by`.
 
-    O `RateLimitMiddleware` e a detecção de brute-force já usavam
-    deliberadamente `request.client.host` por esse motivo; a trilha de auditoria
-    ficara de fora dessa decisão. O suporte a proxy continua disponível, agora
-    explícito: declare os IPs em `ORCHESTRATOR_TRUSTED_PROXIES`.
+    Depois da adição de `ORCHESTRATOR_TRUSTED_PROXIES`, ainda retornava o
+    elemento mais à esquerda (`[0]`), que é controlável pelo cliente quando o
+    proxy apenas acrescenta o IP real ao final (`<forjado>, <ip-real>`). Agora
+    percorre da direita para a esquerda e devolve o primeiro hop que não seja
+    proxy confiável (ou o `socket_ip` se todos os hops forem confiáveis ou o
+    header estiver vazio).
     """
     socket_ip = request.client.host if request.client else "unknown"
 
     forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded and socket_ip in _trusted_proxies():
-        return forwarded.split(",")[0].strip()[:_MAX_ACTOR_LENGTH]
+    trusted_proxies = _trusted_proxies()
+    if forwarded and socket_ip in trusted_proxies:
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        for hop in reversed(hops):
+            if hop not in trusted_proxies:
+                return hop[:_MAX_ACTOR_LENGTH]
     return socket_ip[:_MAX_ACTOR_LENGTH]
 
 
