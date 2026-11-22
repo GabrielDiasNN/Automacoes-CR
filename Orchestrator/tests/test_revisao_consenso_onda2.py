@@ -168,10 +168,36 @@ def test_x_forwarded_for_e_ignorado_sem_proxy_confiavel() -> None:
 def test_x_forwarded_for_e_aceito_atras_de_proxy_declarado(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """O suporte a proxy continua, agora explícito."""
+    """Atravessa proxies confiáveis da direita para a esquerda (issue #8)."""
     monkeypatch.setenv("ORCHESTRATOR_TRUSTED_PROXIES", "10.0.0.1, 10.0.0.2")
     request = _FakeRequest("10.0.0.1", {"X-Forwarded-For": "1.2.3.4, 10.0.0.1"})
     assert get_client_ip(cast(Any, request)) == "1.2.3.4"
+
+
+@pytest.mark.unitario
+def test_x_forwarded_for_ignora_prefixo_forjado_a_esquerda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Header enviado pelo cliente (`9.9.9.9`) fica à esquerda do IP anexado pelo proxy."""
+    monkeypatch.setenv("ORCHESTRATOR_TRUSTED_PROXIES", "10.0.0.1, 10.0.0.2")
+    request = _FakeRequest(
+        "10.0.0.1", {"X-Forwarded-For": "9.9.9.9, 203.0.113.5, 10.0.0.2"}
+    )
+    assert get_client_ip(cast(Any, request)) == "203.0.113.5"
+
+
+@pytest.mark.unitario
+@pytest.mark.parametrize(
+    "forwarded",
+    ["10.0.0.2", "10.0.0.1, 10.0.0.2", " , ", ""],
+)
+def test_x_forwarded_for_faz_fallback_para_socket_quando_sem_cliente_nao_confiavel(
+    monkeypatch: pytest.MonkeyPatch, forwarded: str
+) -> None:
+    """Se todos os hops são proxies confiáveis ou o header é vazio, usa socket_ip."""
+    monkeypatch.setenv("ORCHESTRATOR_TRUSTED_PROXIES", "10.0.0.1, 10.0.0.2")
+    request = _FakeRequest("10.0.0.1", {"X-Forwarded-For": forwarded})
+    assert get_client_ip(cast(Any, request)) == "10.0.0.1"
 
 
 @pytest.mark.unitario
