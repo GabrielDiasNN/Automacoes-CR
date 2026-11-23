@@ -12,10 +12,18 @@ from app.services.automation_preflight import _promocao_config_issues
 from app.services.portfolio_manifest import CatalogManifest, load_catalog_manifests
 from app.services.promovidas import (
     _AUTOMACOES_POR_SLUG,
+    _coletar_cards_automacao,
+    _extrair_linhas_automacao,
+    _float_seguro,
     _idade_minutos,
     _int_seguro,
+    _kpis_linhas_automacao,
     _kpis_seguros,
+    _montar_item_promovida,
+    _obter_snapshot_automacao,
+    _setor_por_owner,
     _validar_card_manifesto,
+    resolver_card_png,
 )
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
@@ -312,3 +320,113 @@ def test_idade_minutos_naive_brt_e_manifesto_cards_sem_traversal(
     assert _validar_card_manifesto(pasta, spec, "images/OK.png") == "OK.png"
     assert _validar_card_manifesto(pasta, spec, "RAIZ.png") is None
     assert _validar_card_manifesto(pasta, spec, "../FORA.png") is None
+    assert _validar_card_manifesto(pasta, spec, "images/NAO_EXISTE.png") is None
+    assert _validar_card_manifesto(pasta, spec, "images/OK.jpg") is None
+    assert _idade_minutos("data-invalida") is None
+
+
+@pytest.mark.unitario
+def test_promovidas_helpers_conversao_e_setores() -> None:
+    assert _float_seguro(True) == 0.0
+    assert _float_seguro("12.5") == 12.5
+    assert _float_seguro("invalido") == 0.0
+    assert _int_seguro(False) == 0
+
+    assert _setor_por_owner("Ramagem") == "Acabamento & Ramas"
+    assert _setor_por_owner("Tinturaria") == "Tinturaria & Receitas"
+    assert _setor_por_owner("Montagem") == "Qualidade & Montagem"
+    assert _setor_por_owner("Faturamento") == "Comercial & Expedição"
+    assert _setor_por_owner("Outro") == "Beneficiamento & PCP"
+
+    assert _kpis_seguros({"itens": "abc", "qtd": 5}) == {"itens": "abc", "qtd": 5}
+    assert _kpis_linhas_automacao("outra", [], {"record_counts": {"read": 9}}) == {
+        "count": 0,
+        "lidos": 9,
+    }
+
+
+@pytest.mark.unitario
+def test_promovidas_extracao_montagem_e_cards(tmp_path: Path) -> None:
+    pasta_mt = tmp_path / "Montagem de Terceirizados"
+    pasta_mt.mkdir(parents=True)
+    spec_mt = _AUTOMACOES_POR_SLUG["montagem-terceirizados"]
+    (pasta_mt / ".cache_erros.json").write_text(
+        json.dumps(
+            {
+                "itens": {
+                    "OB-1": {"OB": "OB-1", "QTD": 2},
+                    "invalido": "ignorar",
+                },
+                "timestamp": "2026-11-23T12:00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    rows_mt, kpis_mt, ts_mt, total_mt = _extrair_linhas_automacao(pasta_mt, spec_mt)
+    assert len(rows_mt) == 2
+    assert total_mt == 2
+    assert ts_mt == "2026-11-23T12:00:00"
+    assert kpis_mt["count"] == 2
+
+    pasta_obs = tmp_path / "OBs Paradas Fase"
+    (pasta_obs / "images").mkdir(parents=True)
+    (pasta_obs / "images" / "A.png").write_bytes(b"png")
+    (pasta_obs / "images" / "B.png").write_bytes(b"png")
+    (pasta_obs / "phase_cards.json").write_text(
+        json.dumps(["ignorar", {"image": "images/A.png"}, {"image": "images/A.png"}]),
+        encoding="utf-8",
+    )
+    cards_obs = _coletar_cards_automacao(
+        pasta_obs, _AUTOMACOES_POR_SLUG["obs-paradas-fase"]
+    )
+    assert [c["filename"] for c in cards_obs] == ["A.png", "B.png"]
+
+
+@pytest.mark.unitario
+def test_promovidas_extracao_receitas_e_erros_404(tmp_path: Path) -> None:
+    pasta_rb = tmp_path / "Receitas Bloqueadas"
+    pasta_rb.mkdir(parents=True)
+    (pasta_rb / "receitas_state.json").write_text(
+        json.dumps({"records": {"1": {"REC": "1"}}}),
+        encoding="utf-8",
+    )
+    (pasta_rb / "rb_result.json").write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-11-23T13:00:00",
+                "record_counts": {"read": 1, "new": 2, "changed": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rows_rb, kpis_rb, _, _ = _extrair_linhas_automacao(
+        pasta_rb, _AUTOMACOES_POR_SLUG["receitas-bloqueadas"]
+    )
+    assert isinstance(rows_rb, list)
+    assert kpis_rb["lidos"] == 1
+
+    pasta_re = tmp_path / "Receitas Emitidas"
+    pasta_re.mkdir(parents=True)
+    spec_re = _AUTOMACOES_POR_SLUG["receitas-emitidas"]
+    (pasta_re / "re_result.json").write_text(
+        json.dumps({"record_counts": {"read": 4}, "timestamp": "2026-11-23T14:00:00"}),
+        encoding="utf-8",
+    )
+    rows_re, kpis_re, _, total_re = _extrair_linhas_automacao(pasta_re, spec_re)
+    assert rows_re == []
+    assert isinstance(total_re, int)
+    assert kpis_re == {"count": 4, "lidos": 4}
+
+    assert _montar_item_promovida(tmp_path, tmp_path / "nao_existe") is None
+
+    with pytest.raises(Exception) as exc_pasta:
+        _obter_snapshot_automacao(tmp_path / "inexistente", spec_re)
+    assert getattr(exc_pasta.value, "status_code", None) == 404
+
+    with pytest.raises(Exception) as exc_slug:
+        resolver_card_png(tmp_path, "slug-inexistente", "a.png")
+    assert getattr(exc_slug.value, "status_code", None) == 404
+
+    with pytest.raises(Exception) as exc_card:
+        resolver_card_png(tmp_path, "obs-paradas-fase", "../invalido.png")
+    assert getattr(exc_card.value, "status_code", None) in {400, 404}

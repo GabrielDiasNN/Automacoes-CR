@@ -1141,6 +1141,55 @@ def test_e2e_pcp_cards_png_sem_bloqueio_csp(uvicorn_server: str, page: Any) -> N
         "console",
         lambda msg: console_errors.append(msg.text) if msg.type == "error" else None,
     )
+
+    buf = BytesIO()
+    Image.new("RGBA", (4, 4), (245, 158, 11, 255)).save(buf, format="PNG")
+    png_bytes = buf.getvalue()
+
+    def _interceptar_cards_promovidas(route: Any) -> None:
+        url = route.request.url
+        if "/api/promovidas/obs-paradas-fase/cards/" in url:
+            route.fulfill(
+                status=200,
+                content_type="image/png",
+                body=png_bytes,
+            )
+            return
+        response = route.fetch()
+        if response.ok and url.endswith("/api/promovidas/obs-paradas-fase/latest"):
+            payload = response.json()
+            payload["cards"] = [
+                {
+                    "key": "TESTE_E2E",
+                    "title": "TESTE_E2E",
+                    "filename": "TESTE_E2E.png",
+                    "caption": "",
+                }
+            ]
+            payload["cards_count"] = 1
+            payload["has_snapshot"] = True
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(payload),
+            )
+            return
+        if response.ok and url.rstrip("/").endswith("/api/promovidas"):
+            data = response.json()
+            items = data.get("items", []) if isinstance(data, dict) else data
+            for item in items:
+                if isinstance(item, dict) and item.get("slug") == "obs-paradas-fase":
+                    item["has_snapshot"] = True
+                    item["cards_count"] = max(int(item.get("cards_count") or 0), 1)
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(data),
+            )
+            return
+        route.fulfill(response=response)
+
+    page.route("**/api/promovidas**", _interceptar_cards_promovidas)
     _inject_api_key(page)
     page.goto(f"{uvicorn_server}/dashboard/pcp?slug=obs-paradas-fase")
     page.get_by_role("heading", name="Central de Consultas & PCP").wait_for(
@@ -1154,11 +1203,10 @@ def test_e2e_pcp_cards_png_sem_bloqueio_csp(uvicorn_server: str, page: Any) -> N
         timeout=15_000
     )
 
-    if page.locator("img[src^='blob:']").count() > 0:
-        page.wait_for_function(
-            "() => { const img = document.querySelector(\"img[src^='blob:']\"); return Boolean(img && img.complete && img.naturalWidth > 0); }",
-            timeout=15_000,
-        )
+    page.wait_for_function(
+        "() => { const img = document.querySelector(\"img[src^='blob:']\"); return Boolean(img && img.complete && img.naturalWidth > 0); }",
+        timeout=15_000,
+    )
 
     assert not console_errors, f"Erros de console ao carregar cards PNG: {console_errors}"
 
@@ -1235,6 +1283,26 @@ def test_e2e_visao_geral_radar_pcp_navega_para_consulta(
     uvicorn_server: str, page: Any
 ) -> None:
     """Clicar no primeiro item do Radar de PCP na Visao Geral navega para /pcp?slug=..."""
+
+    def _interceptar_radar(route: Any) -> None:
+        response = route.fetch()
+        if response.ok and route.request.url.rstrip("/").endswith("/api/promovidas"):
+            data = response.json()
+            items = data.get("items", []) if isinstance(data, dict) else data
+            for item in items:
+                if isinstance(item, dict) and item.get("slug") == "rama-risco-atraso":
+                    item["has_snapshot"] = True
+                    item["excecoes_count"] = max(int(item.get("excecoes_count") or 0), 5)
+                    item["total_rows"] = max(int(item.get("total_rows") or 0), 5)
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(data),
+            )
+            return
+        route.fulfill(response=response)
+
+    page.route("**/api/promovidas**", _interceptar_radar)
     _inject_api_key(page)
     page.goto(f"{uvicorn_server}/dashboard/painel")
     page.get_by_role("heading", name="Visão Geral").wait_for(timeout=30_000)
