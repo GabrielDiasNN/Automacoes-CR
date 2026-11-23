@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { BookOpen, Pause, Play, RefreshCw, Workflow, Zap } from "lucide-react";
+import { BookOpen, CalendarClock, ClipboardList, FlaskConical, Pause, Play, RefreshCw, Workflow, Zap } from "lucide-react";
 import {
   orchestratorApi,
   type Automation,
   type PortfolioHealthItem,
+  type PromovidaResumo,
 } from "../api/orchestrator";
 import {
   Button,
@@ -21,6 +22,9 @@ import {
   Skeleton,
   StatusTag,
 } from "../components/ui";
+import { OrquestradorSubNav } from "../components/OrquestradorSubNav";
+import { ScheduleEditorDrawer } from "../components/ScheduleEditorDrawer";
+import { ScheduleTimeline24h } from "../components/ScheduleTimeline24h";
 import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { useAsyncResource } from "../hooks/useAsyncResource";
@@ -34,16 +38,14 @@ interface AutomacoesData {
   /** por `automation_id` — `null` quando o portfólio falhou (best-effort: a
    *  tela não perde os cards, só a camada de criticidade/SLA/runbook). */
   portfolio: Record<number, PortfolioHealthItem> | null;
+  snapshotsByName: Record<string, PromovidaResumo>;
 }
 
 async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData> {
-  // As duas chamadas não dependem uma da outra — paralelizadas via Promise.all
-  // em vez de sequenciais (a versão anterior esperava listAllAutomations
-  // terminar antes de sequer iniciar getPortfolioHealth, dobrando a latência
-  // de cada tick de polling à toa).
-  const [items, portfolioResult] = await Promise.all([
+  const [items, portfolioResult, promovidasResult] = await Promise.all([
     orchestratorApi.listAllAutomations(signal),
     orchestratorApi.getPortfolioHealth(signal).catch(() => null),
+    orchestratorApi.getPromovidas(signal).catch(() => ({ items: [] })),
   ]);
   const portfolio = portfolioResult
     ? Object.fromEntries(
@@ -52,7 +54,11 @@ async function fetchAutomacoesData(signal?: AbortSignal): Promise<AutomacoesData
           .map((it) => [it.automation_id as number, it]),
       )
     : null;
-  return { items, portfolio };
+  const snapshotsByName: Record<string, PromovidaResumo> = {};
+  for (const snap of promovidasResult.items) {
+    snapshotsByName[(snap.automation_name ?? snap.nome).toLowerCase()] = snap;
+  }
+  return { items, portfolio, snapshotsByName };
 }
 
 /** Ordena por atenção — quem precisa de olhar primeiro no topo — em vez da
@@ -135,10 +141,13 @@ export function AutomacoesPage() {
   } = usePolling(fetchAutomacoesData, 15_000);
   const items = useMemo(() => data?.items ?? [], [data]);
   const portfolio = data?.portfolio ?? null;
+  const snapshotsByName = useMemo(() => data?.snapshotsByName ?? {}, [data]);
   const portfolioFailed = data !== null && data.portfolio === null;
   const { busyKey: busy, run } = useAction<number>();
   const [confirm, setConfirm] = useState<{ id: number; name: string; kind: "dispatch" | "pause" } | null>(null);
   const [runbookTarget, setRunbookTarget] = useState<{ catalogId: string; name: string } | null>(null);
+  const [editingSchedule, setEditingSchedule] = useState<Automation | null>(null);
+  const allInTestMode = items.length > 0 && items.every((a) => a.test_mode);
   // Último exec_id disparado por automação nesta sessão — o backend devolve
   // no POST /start e antes era descartado (`.then((r) => ({ message: r.message }))`).
   const [lastExecId, setLastExecId] = useState<Record<number, string>>({});
@@ -215,8 +224,9 @@ export function AutomacoesPage() {
 
   return (
     <div className={page.page}>
+      <OrquestradorSubNav />
       <Nameplate
-        eyebrow="// administração"
+        eyebrow="Orquestrador & Sistema · Agendas e Sandbox"
         title="Automações"
         actions={
           <div className={page.toolbar}>
@@ -231,6 +241,21 @@ export function AutomacoesPage() {
                 criticidade indisponível
               </StatusTag>
             )}
+            <Button
+              size="sm"
+              variant={allInTestMode ? "primary" : "ghost"}
+              icon={<FlaskConical size={13} />}
+              disabled={busy === -1}
+              onClick={() =>
+                void run(-1, () => orchestratorApi.setGlobalTestMode(!allInTestMode), {
+                  fallbackMessage: allInTestMode ? "Modo teste global desativado" : "Modo teste global ativado",
+                  onDone: load,
+                  invalidate: "overview",
+                })
+              }
+            >
+              {allInTestMode ? "Sandbox Global: ON" : "Sandbox Global: OFF"}
+            </Button>
             <Button size="sm" icon={<RefreshCw size={13} />} onClick={() => void load()}>
               Atualizar
             </Button>
@@ -247,7 +272,12 @@ export function AutomacoesPage() {
           hint="Use Tools/New-Automation.ps1 para criar uma automação com manifesto válido."
         />
       ) : (
-        <div className={styles.grid}>
+        <>
+          <ScheduleTimeline24h
+            automations={items}
+            onSelectAutomation={(automation) => setEditingSchedule(automation)}
+          />
+          <div className={styles.grid}>
           {sortedItems.map((a) => {
             const p = portfolio?.[a.id];
             const total24h = a.success_24h + a.failures_24h;
@@ -365,7 +395,7 @@ export function AutomacoesPage() {
                       <button
                         type="button"
                         className={styles.linkBtn}
-                        onClick={() => void navigate(`/execucoes?automation_id=${a.id}`)}
+                        onClick={() => void navigate(`/execucoes?exec_id=${encodeURIComponent(execId)}`)}
                       >
                         {execId}
                       </button>
@@ -379,9 +409,45 @@ export function AutomacoesPage() {
                         <BookOpen size={11} style={{ verticalAlign: "-1px" }} /> runbook
                       </button>
                     )}
+                    {snapshotsByName[a.name.toLowerCase()] && (
+                      <button
+                        type="button"
+                        className={styles.linkBtn}
+                        onClick={() =>
+                          void navigate(`/pcp?slug=${encodeURIComponent(snapshotsByName[a.name.toLowerCase()]!.slug)}`)
+                        }
+                      >
+                        <ClipboardList size={11} style={{ verticalAlign: "-1px" }} /> resultado / cards
+                      </button>
+                    )}
                   </div>
 
                   <div className={styles.actions}>
+                    <Button
+                      size="sm"
+                      variant="subtle"
+                      icon={<CalendarClock size={13} />}
+                      aria-label={`Configurar agenda de ${a.name}`}
+                      onClick={() => setEditingSchedule(a)}
+                    >
+                      Agenda
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={a.test_mode ? "primary" : "subtle"}
+                      icon={<FlaskConical size={13} />}
+                      disabled={busy === a.id}
+                      aria-label={`Alternar modo sandbox de ${a.name}`}
+                      onClick={() =>
+                        void run(a.id, () => orchestratorApi.setAutomationTestMode(a.id, !a.test_mode), {
+                          fallbackMessage: `${a.name}: sandbox ${!a.test_mode ? "ativado" : "desativado"}`,
+                          onDone: load,
+                          invalidate: "overview",
+                        })
+                      }
+                    >
+                      {a.test_mode ? "Sandbox ON" : "Sandbox"}
+                    </Button>
                     {/* aria-label único por card: com N automações, N botões
                      *  "Disparar" idênticos são indistinguíveis para leitor
                      *  de tela sem depender de navegação visual. */}
@@ -432,7 +498,8 @@ export function AutomacoesPage() {
               </Card>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       <ConfirmModal
@@ -456,6 +523,11 @@ export function AutomacoesPage() {
       />
 
       <RunbookDrawer target={runbookTarget} onClose={() => setRunbookTarget(null)} />
+      <ScheduleEditorDrawer
+        automation={editingSchedule}
+        onClose={() => setEditingSchedule(null)}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }

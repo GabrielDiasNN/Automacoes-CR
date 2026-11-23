@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from app.services.automation_preflight import _promocao_config_issues
 from app.services.portfolio_manifest import CatalogManifest, load_catalog_manifests
-from app.services.promovidas import _int_seguro, _kpis_seguros
+from app.services.promovidas import (
+    _AUTOMACOES_POR_SLUG,
+    _idade_minutos,
+    _int_seguro,
+    _kpis_seguros,
+    _validar_card_manifesto,
+)
 from conftest import AUTH_HEADERS
 from fastapi.testclient import TestClient
 from promovidas import ConfigPainel, ConfigPromocao
@@ -187,3 +195,120 @@ def test_promocao_config_issues_e_helpers_defensivos(tmp_path: Path) -> None:
     assert _kpis_seguros("[1, 2]") == {}
     assert _kpis_seguros("{quebrado") == {}
     assert _kpis_seguros(123) == {}
+
+
+@pytest.mark.integracao
+def test_api_promovidas_inclui_automacoes_e_serve_cards_png(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Valida leitura unificada de snapshots das automacoes e entrega segura de cards PNG."""
+    pasta_obp = tmp_path / "OBs Paradas Fase"
+    (pasta_obp / "images").mkdir(parents=True)
+    png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+    (pasta_obp / "images" / "FELPAGEM.png").write_bytes(png_bytes)
+    (pasta_obp / "obs_result.json").write_text(
+        json.dumps(
+            {
+                "rows": [
+                    {
+                        "NUMERO_OB": 193374,
+                        "FASE_ATUAL": "FEL-FELPAGEM",
+                        "DIAS_PARADO": 4.1,
+                        "QT_KILOS_REAL": 1042.8,
+                    }
+                ],
+                "total": 1,
+                "extracted_at": "2026-11-22T14:00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (pasta_obp / "phase_cards.json").write_text(
+        json.dumps(
+            [
+                {
+                    "phase_key": "FELPAGEM",
+                    "phase_display": "Felpagem",
+                    "image_path": "images/FELPAGEM.png",
+                    "caption": "Felpagem - 1 OB parada",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    pasta_rb = tmp_path / "Receitas Bloqueadas"
+    pasta_rb.mkdir(parents=True)
+    (pasta_rb / "receitas_state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-11-22T11:00:00",
+                "records": [{"Cor Rec.": "00001", "EP Rec.": 19}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "app.routers.promovidas.get_project_root", lambda: str(tmp_path)
+    )
+
+    resp = client.get("/api/promovidas/", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    slugs = [i["slug"] for i in items]
+    assert "obs-paradas-fase" in slugs
+    assert "receitas-bloqueadas" in slugs
+
+    obp = next(i for i in items if i["slug"] == "obs-paradas-fase")
+    assert obp["origem"] == "automacao"
+    assert obp["codigo"] == "OBP-04"
+    assert obp["cards_count"] == 1
+    assert obp["total_rows"] == 1
+
+    snap = client.get("/api/promovidas/obs-paradas-fase/latest", headers=AUTH_HEADERS)
+    assert snap.status_code == 200
+    body = snap.json()
+    assert body["kpis"]["sum:KG_PARADO"] == 1042.8
+    assert len(body["cards"]) == 1
+    assert body["cards"][0]["filename"] == "FELPAGEM.png"
+
+    card_ok = client.get(
+        "/api/promovidas/obs-paradas-fase/cards/FELPAGEM.png", headers=AUTH_HEADERS
+    )
+    assert card_ok.status_code == 200
+    assert card_ok.headers["content-type"] == "image/png"
+    assert card_ok.content == png_bytes
+
+    card_bad_ext = client.get(
+        "/api/promovidas/obs-paradas-fase/cards/obs_result.json", headers=AUTH_HEADERS
+    )
+    assert card_bad_ext.status_code == 400
+
+    card_not_found = client.get(
+        "/api/promovidas/obs-paradas-fase/cards/INEXISTENTE.png", headers=AUTH_HEADERS
+    )
+    assert card_not_found.status_code == 404
+
+
+@pytest.mark.unitario
+def test_idade_minutos_naive_brt_e_manifesto_cards_sem_traversal(
+    tmp_path: Path,
+) -> None:
+    agora_brt_naive = (
+        datetime.now(ZoneInfo("America/Sao_Paulo")).replace(tzinfo=None).isoformat()
+    )
+    idade = _idade_minutos(agora_brt_naive)
+    assert idade is not None
+    assert 0.0 <= idade < 5.0
+
+    pasta = tmp_path / "OBs Paradas Fase"
+    (pasta / "images").mkdir(parents=True)
+    (pasta / "images" / "OK.png").write_bytes(b"png")
+    (pasta / "RAIZ.png").write_bytes(b"png")
+    (tmp_path / "FORA.png").write_bytes(b"png")
+    spec = _AUTOMACOES_POR_SLUG["obs-paradas-fase"]
+
+    assert _validar_card_manifesto(pasta, spec, "images/OK.png") == "OK.png"
+    assert _validar_card_manifesto(pasta, spec, "RAIZ.png") is None
+    assert _validar_card_manifesto(pasta, spec, "../FORA.png") is None

@@ -1,0 +1,175 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-heading);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--track-mid);
+  color: var(--text-hi);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-lo);
+}
+
+.scrollArea {
+  overflow-x: auto;
+  padding-bottom: var(--sp-1);
+}
+
+.ruler {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(72px, 1fr));
+  gap: 6px;
+}
+
+@media (min-width: 1800px) {
+  .ruler {
+    grid-template-columns: repeat(24, minmax(60px, 1fr));
+    gap: 5px;
+  }
+}
+
+.hourCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 76px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.hourActive {
+  border-color: var(--border-strong, var(--border));
+}
+
+.hourCongested {
+  border-color: var(--amber);
+  background: var(--amber-tint);
+}
+
+.hourHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hourLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-lo);
+}
+
+.hourCongested .hourLabel {
+  color: var(--amber, #f59e0b);
+  font-weight: var(--fw-semibold);
+}
+
+.hourCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--border);
+  color: var(--text-mid);
+}
+
+.hourCongested .hourCount {
+  background: var(--amber-tint);
+  border: 1px solid var(--amber-glow);
+  color: var(--amber);
+  font-weight: var(--fw-semibold);
+}
+
+.slots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slotBtn {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+  padding: 4px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-up);
+  color: var(--text-hi);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.slotTime {
+  color: var(--cyan);
+  font-weight: var(--fw-semibold);
+}
+
+.slotName {
+  color: var(--text-hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slotBtn:hover {
+  border-color: var(--cyan);
+}
+
+.slotBtn:focus-visible {
+  border-color: var(--cyan);
+  outline: 2px solid var(--cyan);
+  outline-offset: 1px;
+}
+
+.hourCongested .slotBtn {
+  border-color: var(--amber-glow);
+}
+
+.empty {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-lo);
+}

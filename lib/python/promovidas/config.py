@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
@@ -12,6 +13,8 @@ ModoOperacao = Literal["sombra", "producao"]
 OperadorFiltro = Literal["eq", "ne", "in", "not_in", "lt", "lte", "gt", "gte"]
 
 _MODOS_VALIDOS: Final[frozenset[str]] = frozenset({"sombra", "producao"})
+_SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_COR_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _DESTINOS_VALIDOS: Final[frozenset[str]] = frozenset({"whatsapp", "dashboard"})
 _OPS_VALIDOS: Final[frozenset[str]] = frozenset(
     {"eq", "ne", "in", "not_in", "lt", "lte", "gt", "gte"}
@@ -37,7 +40,7 @@ class ConfigPainel:
 
 
 @dataclass(frozen=True)
-class ConfigExcecao:
+class ConfigExcecao:  # pylint: disable=too-many-instance-attributes
     """Regra de excecao para disparo de alerta WhatsApp."""
 
     condicoes: tuple[CondicaoFiltro, ...]
@@ -46,6 +49,9 @@ class ConfigExcecao:
     titulo_alerta: str
     destino_whatsapp_env: str = "AUTOMACAO_ALERT_WHATSAPP"
     client_id_whatsapp: str = "hub-global"
+    coluna_unidade: str = "UM"
+    colunas_unidade: tuple[str, ...] = ()
+    cor_header: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +118,21 @@ def _parse_excecao(
         raise ValueError(
             f"'renotificar_apos_horas' invalido (negativo ou nao finito) em {origem}."
         )
+    colunas_unidade_raw = raw.get("colunas_unidade") or []
+    if not isinstance(colunas_unidade_raw, list) or not all(
+        isinstance(c, str) and c.strip() for c in colunas_unidade_raw
+    ):
+        raise ValueError(f"'excecao.colunas_unidade' invalido em {origem}.")
+    cor_header_raw = raw.get("cor_header")
+    cor_header: str | None = None
+    if cor_header_raw is not None:
+        cor_txt = str(cor_header_raw).strip()
+        if cor_txt:
+            if not _COR_HEX_RE.match(cor_txt):
+                raise ValueError(
+                    f"'excecao.cor_header' invalido em {origem}: esperado #RRGGBB."
+                )
+            cor_header = cor_txt.upper()
     return ConfigExcecao(
         condicoes=_parse_condicoes(raw.get("condicoes"), origem),
         renotificar_apos_horas=horas,
@@ -121,7 +142,35 @@ def _parse_excecao(
             bruto.get("destino_whatsapp_env") or "AUTOMACAO_ALERT_WHATSAPP"
         ).strip(),
         client_id_whatsapp=str(bruto.get("client_id_whatsapp") or "hub-global").strip(),
+        coluna_unidade=str(raw.get("coluna_unidade") or "UM").strip(),
+        colunas_unidade=tuple(c.strip() for c in colunas_unidade_raw),
+        cor_header=cor_header,
     )
+
+
+def _parse_lista_strings(
+    raw: Any, campo: str, origem: Path, *, padrao: list[str]
+) -> tuple[str, ...]:
+    valores = padrao if raw is None else raw
+    if not isinstance(valores, list) or not all(
+        isinstance(item, str) and item.strip() for item in valores
+    ):
+        raise ValueError(f"'{campo}' deve ser uma lista de strings em {origem}.")
+    return tuple(item.strip() for item in valores)
+
+
+def _parse_painel(bruto: dict[str, Any], origem: Path) -> ConfigPainel:
+    painel_raw = bruto.get("painel")
+    if not isinstance(painel_raw, dict):
+        raise ValueError(f"Campo 'painel' obrigatorio em {origem}.")
+    titulo = _texto_obrigatorio(painel_raw, "titulo", origem)
+    kpis = _parse_lista_strings(
+        painel_raw.get("kpis"), "painel.kpis", origem, padrao=["count"]
+    )
+    colunas = _parse_lista_strings(
+        painel_raw.get("colunas"), "painel.colunas", origem, padrao=[]
+    )
+    return ConfigPainel(titulo=titulo, kpis=kpis, colunas=colunas)
 
 
 def carregar_config(caminho: Path) -> ConfigPromocao:
@@ -131,6 +180,10 @@ def carregar_config(caminho: Path) -> ConfigPromocao:
         raise ValueError(f"Raiz de {caminho} deve ser um objeto JSON.")
 
     slug = _texto_obrigatorio(bruto, "slug", caminho)
+    if not _SLUG_RE.match(slug):
+        raise ValueError(
+            f"'slug' invalido ('{slug}') em {caminho}: use apenas minusculas, digitos e hifens."
+        )
     nome = _texto_obrigatorio(bruto, "nome", caminho)
     consulta = _texto_obrigatorio(bruto, "consulta", caminho)
     consulta_path = Path(consulta)
@@ -159,17 +212,7 @@ def carregar_config(caminho: Path) -> ConfigPromocao:
     if not destinos or any(d not in _DESTINOS_VALIDOS for d in destinos):
         raise ValueError(f"'destinos' invalido em {caminho}: {destinos_raw}.")
 
-    painel_raw = bruto.get("painel")
-    if not isinstance(painel_raw, dict):
-        raise ValueError(f"Campo 'painel' obrigatorio em {caminho}.")
-    titulo = _texto_obrigatorio(painel_raw, "titulo", caminho)
-    kpis = tuple(
-        str(k).strip() for k in (painel_raw.get("kpis") or ["count"]) if str(k).strip()
-    )
-    colunas = tuple(
-        str(c).strip() for c in (painel_raw.get("colunas") or []) if str(c).strip()
-    )
-
+    painel = _parse_painel(bruto, caminho)
     return ConfigPromocao(
         slug=slug,
         nome=nome,
@@ -177,6 +220,6 @@ def carregar_config(caminho: Path) -> ConfigPromocao:
         modo=cast(ModoOperacao, modo),
         chave=chave,
         destinos=destinos,
-        painel=ConfigPainel(titulo=titulo, kpis=kpis, colunas=colunas),
-        excecao=_parse_excecao(bruto, titulo, caminho),
+        painel=painel,
+        excecao=_parse_excecao(bruto, painel.titulo, caminho),
     )

@@ -29,17 +29,16 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={styles.page}>
-      <div className={`hazard ${styles.rail}`} aria-hidden="true" />
       <div className={styles.center}>
         <form onSubmit={handleSubmit} className={styles.form}>
           <div>
             <div className={styles.brand}>ORQUESTRADOR</div>
-            <div className={styles.subtitle}>// autenticação zero-trust</div>
+            <div className={styles.subtitle}>Acesso autenticado</div>
           </div>
 
           <div className={styles.divider} />
 
-          <p className={styles.hint}>Informe a API Key do Orchestrator para acessar a sala de instrumentação.</p>
+          <p className={styles.hint}>Informe a API Key para acessar o painel de operações e consultas.</p>
 
           <input
             type="password"

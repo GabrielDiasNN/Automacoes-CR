@@ -153,7 +153,7 @@ class SecurityHeadersMiddleware(
             "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data:; "
+            "img-src 'self' data: blob:; "
             # 'self' já cobre o WebSocket same-origin (CSP3): o Dashboard monta a
             # URL a partir de location.host com o protocolo casado. Os esquemas
             # abertos "ws: wss:" permitiam exfiltração via WS para qualquer host
@@ -194,7 +194,7 @@ app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 # Registrado por ÚLTIMO de propósito: add_middleware empilha em LIFO, então o

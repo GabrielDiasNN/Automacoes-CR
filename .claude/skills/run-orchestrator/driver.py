@@ -38,7 +38,7 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 ROOT = Path(__file__).resolve().parents[3]
 SHOT_DIR = ROOT / "Logs" / "driver"
 
-ROTAS = ["painel", "execucoes", "monitor", "beneficiamento", "automacoes", "sistema"]
+ROTAS = ["painel", "beneficiamento", "pcp", "automacoes", "execucoes", "monitor", "sistema"]
 
 # Ruido conhecido do console que nao caracteriza falha do app.
 IGNORAR_CONSOLE = (
@@ -224,7 +224,7 @@ def cmd_login() -> int:
             gate.fill(API_KEY)
             pagina.get_by_role("button", name=re.compile("Entrar")).click()
             # O shell so aparece depois que o gate cede; ancoramos na navegacao real.
-            pagina.get_by_role("link", name=re.compile("Painel", re.I)).wait_for(
+            pagina.get_by_role("link", name=re.compile("Visão Geral|Painel", re.I)).wait_for(
                 timeout=15000
             )
             pagina.wait_for_timeout(2500)

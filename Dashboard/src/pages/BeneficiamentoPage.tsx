@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Factory, RefreshCw } from "lucide-react";
+import { BarChart3, Droplets, Factory, Flame, RefreshCw } from "lucide-react";
 import {
   orchestratorApi,
   type BeneficiamentoFaseCritica,
@@ -22,7 +22,9 @@ import {
   Sparkline,
   StatTile,
   StatusTag,
+  Tabs,
   type Column,
+  type TabItem,
 } from "../components/ui";
 import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
 import { DetailDrawer, type DetailDrawerRequest } from "../components/beneficiamento/DetailDrawer";
@@ -149,8 +151,10 @@ function RankingSection<T>({ title, rows, columns, rowKey, onRowClick }: Ranking
   );
 }
 
-export function BeneficiamentoPage() {
+type BeneficiamentoTab = "visao" | "rankings" | "tingimento";
 
+export function BeneficiamentoPage() {
+  const [activeTab, setActiveTab] = useState<BeneficiamentoTab>("visao");
   const [filters, setFilters] = useState<BeneficiamentoFiltersState>(DEFAULT_BENEFICIAMENTO_FILTERS);
   const debouncedQ = useDebouncedValue(filters.q, 350);
   const [refreshPeriod, setRefreshPeriod] = useState<"diario" | "mensal">("diario");
@@ -335,11 +339,22 @@ export function BeneficiamentoPage() {
   const { volumeSeries, efficiencySeries, xLabels, volumeLines, efficiencyLines, planejadoHint, kgHint, efficiencyHint } =
     derived;
 
+  const tabItems: TabItem<BeneficiamentoTab>[] = [
+    { id: "visao", label: "Visão Executiva & Tendências", icon: <BarChart3 size={14} /> },
+    {
+      id: "rankings",
+      label: "Rankings & Gargalos",
+      icon: <Flame size={14} />,
+      badge: overview.rankings.gargalos.length || undefined,
+    },
+    { id: "tingimento", label: "Painel de Tingimento", icon: <Droplets size={14} /> },
+  ];
+
   return (
     <div className={page.page}>
       <Nameplate
-        eyebrow="// análise"
-        title="Beneficiamento"
+        eyebrow="Gestão & BI · Produção Industrial"
+        title="Produção & Beneficiamento"
         actions={
           <div className={page.toolbar}>
             <FreshnessTag
@@ -366,136 +381,147 @@ export function BeneficiamentoPage() {
         }
       />
 
-      <TingimentoPanel />
+      <Tabs
+        items={tabItems}
+        activeId={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Visões de Produção e Beneficiamento"
+      />
 
-      <FilterBar filters={filters} options={overview.filter_options} onChange={patchFilters} onReset={resetFilters} />
-
-      {!health && healthError && (
-        <Card label="saúde do snapshot" alert>
-          <ErrorState message={healthError} />
-        </Card>
-      )}
-
-      {health && (
-        <Card
-          label="saúde do snapshot"
-          alert={healthTone(health.status) === "red"}
-          actions={<FreshnessTag lastUpdated={healthUpdated} error={healthError} />}
-        >
-          <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", alignItems: "center" }}>
-            <StatusTag tone={healthTone(health.status)} dot>
-              {healthLabel(health.status)}
-            </StatusTag>
-            {health.latest_period && (
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                último: {health.latest_period.label} · {health.latest_period.updated_at ?? "—"}
-              </span>
-            )}
-          </div>
-          {health.recommended_action && (
-            <p style={{ marginTop: "var(--sp-3)", marginBottom: 0, fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-              {health.recommended_action}
-            </p>
-          )}
-        </Card>
-      )}
-
-      {overview.health.status === "no_data" ? (
-        <Card>
-          <EmptyState
-            icon={<Factory size={22} />}
-            title="Nenhum registro para este recorte"
-            hint="Ajuste os filtros de data, máquina, fase, turno ou produto."
-          />
-        </Card>
+      {activeTab === "tingimento" ? (
+        <TingimentoPanel />
       ) : (
         <>
-          <div className={page.tiles}>
-            <StatTile label="OBs distintas" value={formatNumber(kpis.ob_distintas)} />
-            <StatTile
-              label="Fases concluídas"
-              value={formatNumber(kpis.fases_concluidas)}
-              hint={planejadoHint}
-              tone={kpis.planejado_pct > 20 ? "amber" : undefined}
-            />
-            <StatTile
-              label="KG total"
-              value={formatNumber(kpis.kg_total)}
-              hint={kgHint}
-            />
-            <StatTile label="MT total" value={formatNumber(kpis.mt_total)} />
-            <StatTile
-              label="Eficiência de tempo"
-              value={formatPercent(kpis.eficiencia_tempo_pct, 1)}
-              hint={efficiencyHint}
-            />
-            <StatTile
-              label="Reprocesso"
-              value={formatPercent(kpis.reprocesso_kg_pct, 1)}
-              tone={kpis.reprocesso_kg_pct > 10 ? "amber" : undefined}
-            />
-            <StatTile label="Desvio médio (min)" value={formatNumber(kpis.desvio_tempo_min)} />
-            <StatTile label="Produtividade" value={`${formatNumber(kpis.produtividade_kg_h)} kg/h`} />
-          </div>
+          <FilterBar filters={filters} options={overview.filter_options} onChange={patchFilters} onReset={resetFilters} />
 
-          {(volumeSeries.length > 1 || efficiencySeries.length > 1) && (
-            <div className={page.split}>
-              {volumeSeries.length > 1 && (
-                <Card label="volume diário (kg)">
-                  <TimeSeries xLabels={xLabels} lines={volumeLines} height={180} />
-                </Card>
-              )}
-              {efficiencySeries.length > 1 && (
-                <Card label="eficiência diária (%)">
-                  <TimeSeries xLabels={xLabels} lines={efficiencyLines} height={180} />
-                </Card>
-              )}
-            </div>
-          )}
-
-          {overview.treemap.length > 0 && (
-            <Card label="volume por setor → fase → máquina">
-              <Treemap nodes={overview.treemap} onCellClick={openFaseDetail} />
+          {!health && healthError && (
+            <Card label="saúde do snapshot" alert>
+              <ErrorState message={healthError} />
             </Card>
           )}
 
-          <div className={page.split}>
-            <RankingSection
-              title="por setor industrial"
-              rows={overview.rankings.setores}
-              columns={SETOR_COLUMNS}
-              rowKey={rankingHandlers.setores.rowKey}
-              onRowClick={rankingHandlers.setores.onRowClick}
-            />
-            <RankingSection
-              title="fases críticas"
-              rows={overview.rankings.fases_criticas}
-              columns={FASE_CRITICA_COLUMNS}
-              rowKey={rankingHandlers.fasesCriticas.rowKey}
-              onRowClick={rankingHandlers.fasesCriticas.onRowClick}
-            />
-            <RankingSection
-              title="gargalos (máquina + fase)"
-              rows={overview.rankings.gargalos}
-              columns={GARGALO_COLUMNS}
-              rowKey={rankingHandlers.gargalos.rowKey}
-              onRowClick={rankingHandlers.gargalos.onRowClick}
-            />
-            <RankingSection
-              title="produtos principais"
-              rows={overview.rankings.produtos_principais}
-              columns={PRODUTO_COLUMNS}
-              rowKey={rankingHandlers.produtos.rowKey}
-              onRowClick={rankingHandlers.produtos.onRowClick}
-            />
-            <RankingSection
-              title="por turno"
-              rows={overview.turnos}
-              columns={TURNO_COLUMNS}
-              rowKey={rankingHandlers.turnos.rowKey}
-              onRowClick={rankingHandlers.turnos.onRowClick}
-            />
-          </div>
+          {health && (
+            <Card
+              label="saúde do snapshot"
+              alert={healthTone(health.status) === "red"}
+              actions={<FreshnessTag lastUpdated={healthUpdated} error={healthError} />}
+            >
+              <div style={{ display: "flex", gap: "var(--sp-3)", flexWrap: "wrap", alignItems: "center" }}>
+                <StatusTag tone={healthTone(health.status)} dot>
+                  {healthLabel(health.status)}
+                </StatusTag>
+                {health.latest_period && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
+                    último: {health.latest_period.label} · {health.latest_period.updated_at ?? "—"}
+                  </span>
+                )}
+              </div>
+              {health.recommended_action && (
+                <p style={{ marginTop: "var(--sp-3)", marginBottom: 0, fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
+                  {health.recommended_action}
+                </p>
+              )}
+            </Card>
+          )}
+
+          {overview.health.status === "no_data" ? (
+            <Card>
+              <EmptyState
+                icon={<Factory size={22} />}
+                title="Nenhum registro para este recorte"
+                hint="Ajuste os filtros de data, máquina, fase, turno ou produto."
+              />
+            </Card>
+          ) : activeTab === "visao" ? (
+            <>
+              <div className={page.tiles}>
+                <StatTile label="OBs distintas" value={formatNumber(kpis.ob_distintas)} />
+                <StatTile
+                  label="Fases concluídas"
+                  value={formatNumber(kpis.fases_concluidas)}
+                  hint={planejadoHint}
+                  tone={kpis.planejado_pct > 20 ? "amber" : undefined}
+                />
+                <StatTile
+                  label="KG total"
+                  value={formatNumber(kpis.kg_total)}
+                  hint={kgHint}
+                />
+                <StatTile label="MT total" value={formatNumber(kpis.mt_total)} />
+                <StatTile
+                  label="Eficiência de tempo"
+                  value={formatPercent(kpis.eficiencia_tempo_pct, 1)}
+                  hint={efficiencyHint}
+                />
+                <StatTile
+                  label="Reprocesso"
+                  value={formatPercent(kpis.reprocesso_kg_pct, 1)}
+                  tone={kpis.reprocesso_kg_pct > 10 ? "amber" : undefined}
+                />
+                <StatTile label="Desvio médio (min)" value={formatNumber(kpis.desvio_tempo_min)} />
+                <StatTile label="Produtividade" value={`${formatNumber(kpis.produtividade_kg_h)} kg/h`} />
+              </div>
+
+              {(volumeSeries.length > 1 || efficiencySeries.length > 1) && (
+                <div className={page.split}>
+                  {volumeSeries.length > 1 && (
+                    <Card label="volume diário (kg)">
+                      <TimeSeries xLabels={xLabels} lines={volumeLines} height={180} />
+                    </Card>
+                  )}
+                  {efficiencySeries.length > 1 && (
+                    <Card label="eficiência diária (%)">
+                      <TimeSeries xLabels={xLabels} lines={efficiencyLines} height={180} />
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {overview.treemap.length > 0 && (
+                <Card label="volume por setor → fase → máquina">
+                  <Treemap nodes={overview.treemap} onCellClick={openFaseDetail} />
+                </Card>
+              )}
+            </>
+          ) : (
+            <div className={page.split}>
+              <RankingSection
+                title="por setor industrial"
+                rows={overview.rankings.setores}
+                columns={SETOR_COLUMNS}
+                rowKey={rankingHandlers.setores.rowKey}
+                onRowClick={rankingHandlers.setores.onRowClick}
+              />
+              <RankingSection
+                title="fases críticas"
+                rows={overview.rankings.fases_criticas}
+                columns={FASE_CRITICA_COLUMNS}
+                rowKey={rankingHandlers.fasesCriticas.rowKey}
+                onRowClick={rankingHandlers.fasesCriticas.onRowClick}
+              />
+              <RankingSection
+                title="gargalos (máquina + fase)"
+                rows={overview.rankings.gargalos}
+                columns={GARGALO_COLUMNS}
+                rowKey={rankingHandlers.gargalos.rowKey}
+                onRowClick={rankingHandlers.gargalos.onRowClick}
+              />
+              <RankingSection
+                title="produtos principais"
+                rows={overview.rankings.produtos_principais}
+                columns={PRODUTO_COLUMNS}
+                rowKey={rankingHandlers.produtos.rowKey}
+                onRowClick={rankingHandlers.produtos.onRowClick}
+              />
+              <RankingSection
+                title="por turno"
+                rows={overview.turnos}
+                columns={TURNO_COLUMNS}
+                rowKey={rankingHandlers.turnos.rowKey}
+                onRowClick={rankingHandlers.turnos.onRowClick}
+              />
+            </div>
+          )}
         </>
       )}
 

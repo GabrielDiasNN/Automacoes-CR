@@ -17,6 +17,7 @@ _SLUGS = (
     "fila-maquina-tingimento",
     "sincronismo-malha-ribana",
     "sentinela-preco-zero-pedidos",
+    "quimicos-atributo-4",
 )
 
 

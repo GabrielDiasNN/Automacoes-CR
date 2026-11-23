@@ -34,6 +34,7 @@ import {
   type Column,
 } from "../components/ui";
 import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
+import { OrquestradorSubNav } from "../components/OrquestradorSubNav";
 import { useAction } from "../hooks/useAction";
 import { healthTone, healthLabel } from "../lib/status";
 import { extractTimeBr, formatAge } from "../lib/format";
@@ -186,8 +187,9 @@ export function SystemPage() {
 
   return (
     <div className={page.page}>
+      <OrquestradorSubNav />
       <Nameplate
-        eyebrow="// administração"
+        eyebrow="Orquestrador & Sistema · Infraestrutura e Auditoria"
         title="Sistema"
         actions={
           <div className={page.toolbar}>

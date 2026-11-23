@@ -16,6 +16,7 @@ import {
   StatusTag,
 } from "../components/ui";
 import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
+import { OrquestradorSubNav } from "../components/OrquestradorSubNav";
 import selectStyles from "../components/ui/Select.module.css";
 import { healthTone, healthLabel, type Tone } from "../lib/status";
 import { extractTimeBr } from "../lib/format";
@@ -333,8 +334,9 @@ export function MonitorPage() {
 
   return (
     <div className={page.page}>
+      <OrquestradorSubNav />
       <Nameplate
-        eyebrow="// operação"
+        eyebrow="Orquestrador & Sistema · Telemetria ao Vivo"
         title="Monitor"
         actions={
           <StatusTag tone={wsTone} dot pulse={status === "connecting"}>

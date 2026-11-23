@@ -157,11 +157,65 @@ def test_snapshot_e_card_png_validado_por_hub_whatsapp(tmp_path: Path) -> None:
 
     png_path, msg_path, manifest_path = gerar_artefatos_whatsapp(cfg, rows, tmp_path)
     assert png_path.is_file()
-    assert "[MODO SOMBRA]" in msg_path.read_text(encoding="utf-8")
+    msg_texto = msg_path.read_text(encoding="utf-8")
+    assert "*Alerta Teste*" in msg_texto
+    assert "[MODO SOMBRA]" not in msg_texto
+    assert "[SOMBRA]" not in msg_texto
     manifest = hw.read_cards_manifest(manifest_path, base_dir=tmp_path)
     assert manifest.valid is True
     assert len(manifest.cards) == 1
     assert manifest.cards[0].ob_ids == ("9001",)
+
+
+@pytest.mark.unitario
+def test_legenda_whatsapp_inclui_ate_seis_colunas(tmp_path: Path) -> None:
+    cfg = ConfigPromocao(
+        slug="teste-seis-colunas",
+        nome="Teste Seis Colunas",
+        consulta="consulta.sql",
+        modo="sombra",
+        chave=("NF", "REDUZIDO"),
+        destinos=("whatsapp",),
+        painel=ConfigPainel(titulo="Teste", kpis=("count",), colunas=()),
+        excecao=ConfigExcecao(
+            condicoes=(),
+            renotificar_apos_horas=4.0,
+            colunas_card=(
+                "NF",
+                "DEPOSITO",
+                "REDUZIDO",
+                "DESCRICAO",
+                "QUANTIDADE",
+                "RESERVA_RECEITAS",
+            ),
+            colunas_unidade=("QUANTIDADE", "RESERVA_RECEITAS"),
+            cor_header="#8B5CF6",
+            titulo_alerta="Alerta 6 Campos",
+        ),
+    )
+    rows = [
+        {
+            "NF": "234762",
+            "DEPOSITO": 20,
+            "REDUZIDO": 21796,
+            "DESCRICAO": "COLOREMULG EL 60 N",
+            "QUANTIDADE": 600.13313,
+            "RESERVA_RECEITAS": 220.0023,
+            "UM": "KG",
+        }
+    ]
+    png_path, msg_path, _ = gerar_artefatos_whatsapp(cfg, rows, tmp_path)
+    assert png_path.is_file()
+    texto = msg_path.read_text(encoding="utf-8")
+    for campo in (
+        "NF: 234762",
+        "DEPOSITO: 20",
+        "REDUZIDO: 21796",
+        "DESCRICAO: COLOREMULG EL 60 N",
+        "QUANTIDADE: 600.13313 kg",
+        "RESERVA_RECEITAS: 220.0023 kg",
+    ):
+        assert campo in texto
 
 
 @pytest.mark.unitario
@@ -230,6 +284,21 @@ def test_carregar_config_rejeita_chave_vazia_destinos_invalido_e_traversal(
     cfg_path.write_text(json.dumps(base), encoding="utf-8")
     with pytest.raises(ValueError, match="caminho relativo"):
         carregar_config(cfg_path)
+
+    base["consulta"] = "consulta.sql"
+    base["slug"] = "Slug_Invalido"
+    cfg_path.write_text(json.dumps(base), encoding="utf-8")
+    with pytest.raises(ValueError, match="slug"):
+        carregar_config(cfg_path)
+
+    base["slug"] = "x"
+    base["painel"] = {"titulo": "X", "kpis": "count"}
+    cfg_path.write_text(json.dumps(base), encoding="utf-8")
+    with pytest.raises(ValueError, match="painel.kpis"):
+        carregar_config(cfg_path)
+
+    with pytest.raises(ValueError, match="ao menos uma linha"):
+        gerar_artefatos_whatsapp(_cfg_exemplo(tmp_path), [], tmp_path)
 
 
 @pytest.mark.unitario

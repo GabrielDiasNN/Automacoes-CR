@@ -23,10 +23,11 @@ import {
 import { useAction } from "../hooks/useAction";
 import { usePolling } from "../hooks/usePolling";
 import { useAsyncResource } from "../hooks/useAsyncResource";
-import { executionTone, severityTone, toneVar } from "../lib/status";
+import { executionLabel, executionTone, severityTone, toneVar } from "../lib/status";
 import { formatDuration, shortId } from "../lib/format";
 import { errMessage } from "../lib/errors";
 import { ExecDetailBody } from "./ExecucoesPage.ExecDetailBody";
+import { OrquestradorSubNav } from "../components/OrquestradorSubNav";
 import page from "./page.module.css";
 
 // Derivado do union `ExecutionStatus` (não um array literal solto): o objeto
@@ -69,26 +70,36 @@ export function appendCappedLog(prev: string, chunk: string): string {
 export function ExecucoesPage() {
   const toast = useToast();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
-  // Vem do card de Automações ("ver execuções") — filtra sem exigir que o
-  // operador conheça o nome exato para digitar em algum campo de busca.
-  // `setAutomationId` (não só o valor inicial) é necessário para o botão
-  // "Limpar filtro" funcionar: `navigate()` sozinho muda a URL, mas não
-  // remonta este componente (mesma rota), então um automationId lido só
-  // uma vez no initializer nunca seria atualizado.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusParam = searchParams.get("status") ?? "";
+  const autoIdParam = searchParams.get("automation_id");
+  const execIdParam = searchParams.get("exec_id");
+
+  const [status, setStatus] = useState(() => statusParam);
   const [automationId, setAutomationId] = useState<number | undefined>(() => {
-    const raw = searchParams.get("automation_id");
-    const n = raw ? Number(raw) : NaN;
+    const n = autoIdParam ? Number(autoIdParam) : NaN;
     return Number.isFinite(n) ? n : undefined;
   });
   const [pageNum, setPageNum] = useState(1);
-
-  // Vem do card "últimas execuções" do Painel (`?exec_id=`) — mesmo padrão de
-  // `status`/`automationId` acima: lido uma vez no initializer, a navegação
-  // do Painel para cá sempre monta ExecucoesPage de novo (troca de rota).
-  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("exec_id"));
+  const [selectedId, setSelectedId] = useState<string | null>(() => execIdParam);
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
+
+  const closeDrawer = useCallback(() => {
+    setSelectedId(null);
+    if (searchParams.has("exec_id")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("exec_id");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    setStatus(statusParam);
+    const n = autoIdParam ? Number(autoIdParam) : NaN;
+    setAutomationId(Number.isFinite(n) ? n : undefined);
+    setSelectedId(execIdParam);
+    setPageNum(1);
+  }, [statusParam, autoIdParam, execIdParam]);
 
   const fetchExecutions = useCallback(
     (signal?: AbortSignal) =>
@@ -132,9 +143,9 @@ export function ExecucoesPage() {
   useEffect(() => {
     if (detailError) {
       toast(detailError, "red");
-      setSelectedId(null);
+      closeDrawer();
     }
-  }, [detailError, toast]);
+  }, [detailError, toast, closeDrawer]);
 
   // Só renderiza o detalhe que corresponde ao alvo atual.
   const detail = detailData && detailData.id === selectedId ? detailData : null;
@@ -260,7 +271,7 @@ export function ExecucoesPage() {
       header: "Status",
       render: (r) => (
         <StatusTag tone={executionTone(r.status)} dot pulse={r.status === "RUNNING"}>
-          {r.status}
+          {executionLabel(r.status)}
         </StatusTag>
       ),
     },
@@ -369,8 +380,9 @@ export function ExecucoesPage() {
 
   return (
     <div className={page.page}>
+      <OrquestradorSubNav />
       <Nameplate
-        eyebrow="// operação"
+        eyebrow="Orquestrador & Sistema · Histórico e Logs"
         title="Execuções"
         actions={
           <div className={page.toolbar}>
@@ -454,7 +466,7 @@ export function ExecucoesPage() {
 
       <Drawer
         open={!!selectedId}
-        onClose={() => setSelectedId(null)}
+        onClose={closeDrawer}
         eyebrow={selectedId ? shortId(selectedId, 22) : ""}
         title={detail?.automation_name ?? "Execução"}
         width={860}

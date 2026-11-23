@@ -1,0 +1,55 @@
+{
+  "slug": "quimicos-atributo-4",
+  "nome": "Quimicos Atributo 4",
+  "consulta": "consulta.sql",
+  "modo": "sombra",
+  "chave": [
+    "NF",
+    "REDUZIDO"
+  ],
+  "destinos": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "painel": {
+    "titulo": "Produtos Químicos com Atributo 4 (Depósito 20)",
+    "kpis": [
+      "count",
+      "sum:QUANTIDADE"
+    ],
+    "colunas": [
+      "NF",
+      "DEPOSITO",
+      "REDUZIDO",
+      "DESCRICAO",
+      "QUANTIDADE",
+      "QT_ENTRADA_PERIODO",
+      "DT_ULTIMA_ENTRADA",
+      "DT_ULTIMO_MOVIMENTO"
+    ]
+  },
+  "excecao": {
+    "titulo_alerta": "Químico com Atributo 4 (Dep. 20)",
+    "cor_header": "#14B8AD",
+    "condicoes": [
+      {
+        "coluna": "QUANTIDADE",
+        "op": "gt",
+        "valor": 0
+      }
+    ],
+    "renotificar_apos_horas": 4,
+    "colunas_card": [
+      "NF",
+      "DEPOSITO",
+      "REDUZIDO",
+      "DESCRICAO",
+      "QUANTIDADE",
+      "RESERVA_RECEITAS"
+    ],
+    "colunas_unidade": [
+      "QUANTIDADE",
+      "RESERVA_RECEITAS"
+    ]
+  }
+}

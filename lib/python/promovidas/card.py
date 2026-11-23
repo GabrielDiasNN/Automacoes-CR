@@ -40,10 +40,36 @@ from .regras import extrair_chave
 
 _COR_HEADER_SOMBRA = (245, 158, 11)
 _COR_HEADER_PRODUCAO = (56, 189, 248)
+_COR_TEXTO_CLARO = (255, 255, 255)
 
 
-def _formatar_linha_legenda(row: Mapping[str, Any], colunas: Sequence[str]) -> str:
-    partes = [f"{col}: {sanitize_text(row.get(col))}" for col in colunas[:4]]
+def _resolver_cores_header(cfg: ConfigPromocao) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    cor_hex = cfg.excecao.cor_header if cfg.excecao else None
+    if cor_hex:
+        r = int(cor_hex[1:3], 16)
+        g = int(cor_hex[3:5], 16)
+        b = int(cor_hex[5:7], 16)
+        luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+        texto = HEADER_TEXT if luminancia > 0.6 else _COR_TEXTO_CLARO
+        return (r, g, b), texto
+    bg = _COR_HEADER_SOMBRA if cfg.modo == "sombra" else _COR_HEADER_PRODUCAO
+    return bg, HEADER_TEXT
+
+
+def _valor_card(cfg: ConfigPromocao, row: Mapping[str, Any], col: str) -> str:
+    texto = sanitize_text(row.get(col))
+    exc = cfg.excecao
+    if exc and col in exc.colunas_unidade and texto != "—":
+        um = sanitize_text(row.get(exc.coluna_unidade))
+        if um and um != "—":
+            return f"{texto} {um.lower()}"
+    return texto
+
+
+def _formatar_linha_legenda(
+    cfg: ConfigPromocao, row: Mapping[str, Any], colunas: Sequence[str]
+) -> str:
+    partes = [f"{col}: {_valor_card(cfg, row, col)}" for col in colunas[:6]]
     return "• " + " | ".join(partes)
 
 
@@ -53,29 +79,29 @@ def _montar_legenda(
     page_info: tuple[int, int] | None,
     total_geral: int,
 ) -> str:
-    prefixo = "[MODO SOMBRA] " if cfg.modo == "sombra" else ""
     pag = f" (Pág. {page_info[0]}/{page_info[1]})" if page_info else ""
     titulo = (
-        f"{prefixo}*{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}*"
+        f"*{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}*"
         f"{pag} — {total_geral} item(ns)"
     )
     cols = cfg.excecao.colunas_card if cfg.excecao else cfg.painel.colunas
-    linhas = [_formatar_linha_legenda(r, cols) for r in rows]
+    linhas = [_formatar_linha_legenda(cfg, r, cols) for r in rows]
     return truncate_message(titulo, linhas, max_chars=DEFAULT_MAX_MESSAGE_CHARS)
 
 
 def _desenhar_linha_card(
+    cfg: ConfigPromocao,
     draw: ImageDraw.ImageDraw,
     row: Mapping[str, Any],
     idx: int,
-    cols: Sequence[str],
     fonts: dict[str, Any],
 ) -> None:
+    cols = cfg.excecao.colunas_card if cfg.excecao else cfg.painel.colunas
     y0 = HEADER_H + idx * OB_ROW_H
     if idx > 0:
         draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
-    principal = sanitize_text(row.get(cols[0])) if cols else "—"
-    detalhes = " · ".join(f"{c}: {sanitize_text(row.get(c))}" for c in cols[1:5])
+    principal = _valor_card(cfg, row, cols[0]) if cols else "—"
+    detalhes = " · ".join(f"{c}: {_valor_card(cfg, row, c)}" for c in cols[1:6])
     prim = truncate_text(draw, principal, fonts["ob"], CARD_W - 2 * PAD)
     sec = truncate_text(draw, detalhes, fonts["detalhe"], CARD_W - 2 * PAD)
     draw.text((PAD, y0 + 8), prim, font=fonts["ob"], fill=TEXT_MAIN)
@@ -91,12 +117,10 @@ def _render_pagina_png(
     total_geral: int,
 ) -> None:
     fonts = load_card_fonts()
-    cols = cfg.excecao.colunas_card if cfg.excecao else cfg.painel.colunas
     footer_y = HEADER_H + OB_ROW_H * len(page_rows)
-    header_bg = _COR_HEADER_SOMBRA if cfg.modo == "sombra" else _COR_HEADER_PRODUCAO
-    tag_sombra = "[SOMBRA] " if cfg.modo == "sombra" else ""
+    header_bg, header_fg = _resolver_cores_header(cfg)
     titulo = (
-        f"{tag_sombra}{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}"
+        f"{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}"
     )
 
     def _draw(draw: ImageDraw.ImageDraw) -> None:
@@ -108,10 +132,10 @@ def _render_pagina_png(
             (PAD, center_text_y(draw, cabecalho, fonts["header"], 0, HEADER_H)),
             cabecalho,
             font=fonts["header"],
-            fill=HEADER_TEXT,
+            fill=header_fg,
         )
         for idx, row in enumerate(page_rows):
-            _desenhar_linha_card(draw, row, idx, cols, fonts)
+            _desenhar_linha_card(cfg, draw, row, idx, fonts)
         draw.rectangle([(0, footer_y), (CARD_W, footer_y + FOOTER_H)], fill=FOOTER_BG)
         pag_txt = f"Pág. {page_info[0]}/{page_info[1]}  ·  " if page_info else ""
         rodape = f"{pag_txt}{datetime.now().strftime('%d/%m/%Y às %H:%M')}"
@@ -131,6 +155,8 @@ def gerar_artefatos_whatsapp(
     pasta_trabalho: Path,
 ) -> tuple[Path, Path, Path]:
     """Gera PNG(s), ``message.txt`` e ``cards_manifest.json`` na pasta da promocao."""
+    if not pendentes:
+        raise ValueError("gerar_artefatos_whatsapp exige ao menos uma linha pendente.")
     cleanup_stale_page_images(str(pasta_trabalho))
     paginas = [
         list(pendentes[i : i + MAX_OBS_PER_PAGE])

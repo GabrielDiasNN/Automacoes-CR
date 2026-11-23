@@ -1,0 +1,33 @@
+{
+  "id": "CP-10",
+  "name": "Quimicos Atributo 4",
+  "slug": "quimicos-atributo-4",
+  "criticality": "high",
+  "sla_minutes": 60,
+  "owner_area": "Laboratorio de Receitas / Tinturaria / Almoxarifado",
+  "entrypoint": "run.ps1",
+  "runtime": "promovida",
+  "channels": [
+    "whatsapp",
+    "dashboard"
+  ],
+  "queue_group": "oracle",
+  "max_runtime_minutes": 15,
+  "max_retries": 0,
+  "schedule_summary": "Seg-Sex a cada 1h das 07:00 as 17:00 [modo sombra]",
+  "schedule": "{\"schedule_version\": 2, \"schedule_type\": \"cron\", \"cron_expression\": [\"0 7-17 * * 1-5\"], \"timezone\": \"America/Sao_Paulo\"}",
+  "runbook_path": "docs/runbooks/quimicos-atributo-4-runbook.md",
+  "context_path": "Consultas Promovidas/quimicos-atributo-4/CONTEXT.md",
+  "readme_path": "Consultas Promovidas/quimicos-atributo-4/README.md",
+  "orchestrator": {
+    "script_path": "./Consultas Promovidas/quimicos-atributo-4/run.ps1"
+  },
+  "dependencies": {
+    "oracle": true,
+    "outlook": false,
+    "whatsapp": true
+  },
+  "smoke_tests": [
+    "Orchestrator/tests/test_consultas_promovidas_smoke.py"
+  ]
+}
