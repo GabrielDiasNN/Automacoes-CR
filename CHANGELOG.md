@@ -2,6 +2,14 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.130] - 24/11/2026
+
+Correção da consulta da automação **Químicos Atributo 4** (`CP-10`) após falha `ORA-00904` no Oracle.
+
+### Corrigido
+
+- **Filtro de data em `RESERVA_RECEITAS` (`Consultas Promovidas/quimicos-atributo-4/consulta.sql`):** removida a referência à coluna inexistente `R.DATAEMISSAO` na tabela `SGTPRD.MOVTO_RECEITA` (`ORA-00904: "R"."DATAEMISSAO": identificador inválido`), mantendo apenas o filtro sargável válido `R.DT_EMISSAO >= TRUNC(SYSDATE) - 30`.
+
 ## [1.3.129] - 23/11/2026
 
 Correções dos 20 achados de revisão de código (`stateless-code-reviewer`) e adaptação do layout do Dashboard para todas as resoluções (mobile até ultrawide/4K).
